@@ -1,4 +1,4 @@
-/* Look extras (features/lookx.js adds this sheet when it first needs it): the pointer and stickers. */
+/* Look extras (looks/page/lookx.js adds this sheet when it first needs it): the pointer and stickers. */
 
 /* The pointer: the set's arrow everywhere, its hand where the page is clickable. --gz-cursor ends in a system fallback.
    No set has a text cursor, so text fields keep the system's I-beam. */

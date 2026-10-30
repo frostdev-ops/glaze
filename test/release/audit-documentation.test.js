@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const G = require('../../extension/lib/gcal.js');
+const G = require('../../extension/planner/gcal.js');
 
 const root = path.join(__dirname, '../../extension');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
@@ -49,7 +49,7 @@ test('GZ-04 control: availability wording distinguishes a build gate from an ord
 
 test('GZ-07: named contributor and feature-decision documents resolve in a fresh checkout', () => {
   const missing = [];
-  for (const file of ['../CONTRIBUTING.md', 'lib/gcal.js']) {
+  for (const file of ['../CONTRIBUTING.md', 'planner/gcal.js']) {
     for (const name of new Set(read(file).match(/\b[A-Z][A-Z0-9_-]*\.md\b/g) || [])) {
       if (!fs.existsSync(path.join(root, name))) missing.push(`${file} refers to missing ${name}`);
     }
@@ -61,7 +61,7 @@ test('GZ-07: named contributor and feature-decision documents resolve in a fresh
 const code = (file) => read(file);
 
 test('BLD-3: the policy lists Ultra file-preview ticket renewals with the code\'s own pace', () => {
-  const docs = code('features/docs.js');
+  const docs = code('courses/page/docs.js');
   assert.match(docs, /tries < 20\) setTimeout\(\(\) => renew\(f, tries \+ 1\), 15000\)/, 'renewal pace changed: update PRIVACY.md and this test');
   assert.match(docs, /slice\(0, 5\)/, 'renewal address count changed: update PRIVACY.md and this test');
   const bullet = paragraphs(policy.slice(policy.indexOf('## Network requests'))).find((s) => /File previews on Blackboard Ultra/.test(s));
@@ -70,7 +70,7 @@ test('BLD-3: the policy lists Ultra file-preview ticket renewals with the code\'
 });
 
 test('WP-B1 item 12: the policy states the request queue\'s limits', () => {
-  const q = code('lib/lmsq.js');
+  const q = code('courses/lmsq.js');
   assert.match(q, /const MAX = 3, CAP = 600000;/, 'queue limits changed: update PRIVACY.md and this test');
   assert.match(q, /Retry-After/);
   assert.match(policy, /at most three requests at a time/);
@@ -99,5 +99,5 @@ test('BLD-5: the permission text matches the manifest and the packaging scripts'
   assert.match(policy, /`identity` \(Chrome only, optional\) — not requested by released builds/);
   assert.match(policy, /Chrome sync \(or Firefox Sync\)/);
   assert.match(policy, /\*\*Music widget\*\* \(Canvas and Blackboard Ultra/);
-  assert.ok(/music/.test(code('lib/widgets.js').match(/const TILES = \[[^\]]*\]/)[0]), 'the music tile is a widget on both sites');
+  assert.ok(/music/.test(code('core/widgets.js').match(/const TILES = \[[^\]]*\]/)[0]), 'the music tile is a widget on both sites');
 });

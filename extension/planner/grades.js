@@ -1,6 +1,6 @@
 // Working with Ultra's gradebook records (gradebook/grades?expand=column), for the extras: what's
 // newly graded and what was handed in late; and what's new in a course's content. Pure, so node can test it.
-// The what-if calculator, which only a gradebook needs, is in lib/gradecalc.js, loaded on demand.
+// The what-if calculator, which only a gradebook needs, is in planner/gradecalc.js, loaded on demand.
 // Classic script for the content script; module.exports for node.
 const GZ_GRADES = (() => {
   // An item's own column: not the overall grade, not another calculated column.

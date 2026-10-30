@@ -1,5 +1,5 @@
-// Glaze's pop-up: one modal dialog over the page, for announcements (features/announce.js) and rubrics. Loaded on demand,
-// through GZ_CTX; the parts node tests are lib/popup.js. A second injection keeps the first.
+// Glaze's pop-up: one modal dialog over the page, for announcements (courses/page/announce.js) and rubrics. Loaded on demand,
+// through GZ_CTX; the parts node tests are core/popup.js. A second injection keeps the first.
 //
 //   await GZ_POPUP.ready;                       // its library and the sanitizer are in
 //   const h = GZ_POPUP.open({
@@ -16,13 +16,13 @@
 //   h.loaded                                    // body's promise: rejects when an async body failed (the pop-up stays;
 //                                               // the caller closes it or says why)
 //   h.close(instant?), h.set(body), h.say(text), h.head(title, meta), h.isOpen(), h.closed (a promise)
-//   GZ_POPUP.safe(html, origin)                 // a site's HTML as elements, through the one sanitizer (lib/notes.js)
+//   GZ_POPUP.safe(html, origin)                 // a site's HTML as elements, through the one sanitizer (planner/notes.js)
 //   GZ_POPUP.current()                          // the open handle, or null; GZ_POPUP.kind() the motion it would use
 //
 // A real modal <dialog> (the rest of the page inert, focus inside it from the start), named by its title, closed by Escape,
 // its Close button or a click outside it, focus then going back where it came from at once, before the closing motion.
 // It lives in a closed shadow root, so the school's styles and scripts can't reach in, and wears the Look's tokens (the
-// page's --gz-* custom properties), light and dark. Motion (lib/popup.js motion): the genie out of `source` on Expressive,
+// page's --gz-* custom properties), light and dark. Motion (core/popup.js motion): the genie out of `source` on Expressive,
 // a scale and fade on Subtle, a fade or nothing as the "Pop-up animation" setting says, nothing with motion off or reduced.
 // Only transform, opacity and clip-path move. The expressive genie uses a temporary, inert sheet of projective strips;
 // the real dialog keeps its semantics and focus throughout, and the sheet is removed as soon as the transition ends.
@@ -31,9 +31,9 @@ var GZ_POPUP = globalThis.GZ_POPUP || (() => {
   const t = (k, v) => ctx.t(k, v);
   let L = globalThis.GZ_POPUP_LIB || null;
   const ready = Promise.all([
-    ctx.need('lib/popup.js', () => globalThis.GZ_POPUP_LIB),
-    ctx.need('lib/lmsq.js', () => globalThis.GZ_LMSQ),
-    ctx.need('lib/doctext.js', () => globalThis.GZ_DOCTEXT).then(() => ctx.need('lib/notes.js', () => globalThis.GZ_NOTES)),
+    ctx.need('core/popup.js', () => globalThis.GZ_POPUP_LIB),
+    ctx.need('courses/lmsq.js', () => globalThis.GZ_LMSQ),
+    ctx.need('core/doctext.js', () => globalThis.GZ_DOCTEXT).then(() => ctx.need('planner/notes.js', () => globalThis.GZ_NOTES)),
   ]).then(() => { L = globalThis.GZ_POPUP_LIB; });
 
   const CSS = `:host { all: initial; position: fixed; top: 0; left: 0; width: 0; height: 0; z-index: 2147483647; }
@@ -307,7 +307,7 @@ h2:focus-visible { outline-offset: 4px; }`;
     return h;
   };
 
-  // A site's HTML as elements, through lib/notes.js's sanitizer (after ready).
+  // A site's HTML as elements, through planner/notes.js's sanitizer (after ready).
   const safe = (htmlText, origin = location.origin) => L.safe(htmlText, origin, globalThis.GZ_NOTES, document);
 
   return { open, ready, safe, current: () => cur, kind };

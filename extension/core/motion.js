@@ -4,7 +4,7 @@
 // means the change happens in one frame and nothing animates. Moves use the translate and scale properties, never
 // transform (Ultra positions with it, and a hover lift owns it: motion.css) and never composite 'add' (which keeps an
 // animation off the compositor). Local changes happen first; native page swaps defer their update for the old snapshot.
-// Classic script; module.exports for node. The worker injects it ahead of the features that use it (lib/background.js
+// Classic script; module.exports for node. The worker injects it ahead of the features that use it (background/background.js
 // MOVERS), and the preview loads it; a feature without it just changes in one frame. A second injection keeps the first.
 var GZ_MOTION = globalThis.GZ_MOTION || (() => {
   // A CSS time ('0.25s', '250ms') in ms; anything else 0.
@@ -169,7 +169,7 @@ var GZ_MOTION = globalThis.GZ_MOTION || (() => {
   const asked = () => (typeof navigator === 'undefined' || !navigator.userActivation ? true : navigator.userActivation.isActive);
   // Chrome rejects a skipped or timed-out transition's ready in the page's own world too, not only in this content script's,
   // and only the page can handle it there (a school's error tracker would collect it). In a school's page a crossfade waits
-  // for the guard lib/background.js puts in that world (transitionGuard): asked before it starts (it cancels the event), it
+  // for the guard background/background.js puts in that world (transitionGuard): asked before it starts (it cancels the event), it
   // is told once one has. Glaze's own pages are that world, and a browser without activeViewTransition can't be guarded.
   const guarded = () => {
     try {

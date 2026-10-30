@@ -2,7 +2,7 @@
 // opens it (open). One search over the site's pages, your courses, this course's tabs and items, what is due and Glaze's
 // own switches. Courses and items are asked of Ultra's own APIs once per page, when it first opens. On Canvas it searches
 // Canvas's pages, your courses, this course's tabs, what is due and Glaze's switches; with search on, your courses' content
-// too (features/search.js). Classic script, through GZ_CTX; a second injection keeps the first.
+// too (navigation/page/search.js). Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_CMD = globalThis.GZ_CMD || (() => {
   const ctx = globalThis.GZ_CTX;
   const ultra = ctx.site === 'ultra';
@@ -29,17 +29,17 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     try { u = new URL(url, location.origin); } catch { return; }
     if (u.protocol === 'https:' || u.protocol === 'http:') globalThis.GZ_CTABS?.bar?.open(u.href, { native: true }) || location.assign(u.href); // this site's pages through the course tabs when they run
   };
-  // Ultra's Institution page is Glaze's Dashboard while its switch is on (features/dashboard.js).
+  // Ultra's Institution page is Glaze's Dashboard while its switch is on (courses/page/dashboard.js).
   const dash = () => (ctx.settings().enhance.dashboard ? [['/ultra/institution-page', 'Dashboard']] : []);
   const pages = () => (moodle ? [] : ultra ? [...dash(), ...TOOLS] : CANVAS_TOOLS).map(([path, label]) => ({ label: t(label), hint: ultra ? 'Blackboard' : 'Canvas', group: 'Go to', run: go(path) }));
-  // The student's saved and gallery Looks (lib/looks.js: the worker's storage.local lookCatalog), as they change; each is put on
+  // The student's saved and gallery Looks (looks/looks.js: the worker's storage.local lookCatalog), as they change; each is put on
   // by the worker from its code, as Settings' "Use this theme" puts it on.
   let kept = [];
-  const keep = () => Promise.resolve().then(() => need('lib/looks.js', () => globalThis.GZ_CATALOG)).then(() => chrome.storage.local.get(GZ_CATALOG.KEY)).then((r) => { kept = GZ_CATALOG.looks(r?.[GZ_CATALOG.KEY]); }, () => {});
+  const keep = () => Promise.resolve().then(() => need('looks/looks.js', () => globalThis.GZ_CATALOG)).then(() => chrome.storage.local.get(GZ_CATALOG.KEY)).then((r) => { kept = GZ_CATALOG.looks(r?.[GZ_CATALOG.KEY]); }, () => {});
   let keeping = keep();
   try { chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c.lookCatalog) keeping = keep(); }); } catch { /* extension reloaded under the tab */ }
   const wear = (id) => () => { try { chrome.runtime.sendMessage({ type: 'glaze:looks', op: 'wear', id }).catch(() => {}); } catch { /* extension reloaded under the tab */ } };
-  // A built-in Look comes with its own extras (parts) in place of the one before's, in the same write (lib/lookparts.js).
+  // A built-in Look comes with its own extras (parts) in place of the one before's, in the same write (looks/lookparts.js).
   const store = (patch, look) => () => { try { if (look) chrome.runtime.sendMessage({ type: 'glaze:look', parts: null, look: look.name, patch: { version: 2, ...patch } }).catch(() => {}); else chrome.storage.sync.set({ version: 2, ...patch }); } catch { /* extension reloaded under the tab */ } };
   const paletteItems = (cid) => courseItems(cid).p.then((all) => {
     const title = new Map(all.map((c) => [c.id, c.title]));
@@ -81,44 +81,44 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
       ...dueCmds(due),
       ...(globalThis.GZ_TODO_UI?.cmds() || []),
       ...(globalThis.GZ_REMIND_UI?.cmds() || []),
-      // Your class schedule (features/classes.js): import, review, edit.
-      { label: t('Class schedule'), hint: 'Glaze', group: 'Glaze', run: () => need('features/classes.js', () => globalThis.GZ_CLASSES_UI).then(() => GZ_CLASSES_UI.open()).catch(() => {}) },
-      { label: t('Export calendar (.ics)'), hint: 'Glaze', group: 'Glaze', run: () => need('features/calexport.js', () => globalThis.GZ_CAL_UI).then(() => GZ_CAL_UI.open(), () => {}) },
-      // Opens the GPA's past terms, trends and goal (features/grades.js), on the Dashboard.
+      // Your class schedule (planner/page/classes.js): import, review, edit.
+      { label: t('Class schedule'), hint: 'Glaze', group: 'Glaze', run: () => need('planner/page/classes.js', () => globalThis.GZ_CLASSES_UI).then(() => GZ_CLASSES_UI.open()).catch(() => {}) },
+      { label: t('Export calendar (.ics)'), hint: 'Glaze', group: 'Glaze', run: () => need('planner/page/calexport.js', () => globalThis.GZ_CAL_UI).then(() => GZ_CAL_UI.open(), () => {}) },
+      // Opens the GPA's past terms, trends and goal (planner/page/grades.js), on the Dashboard.
       ...(ctx.settings().enhance.gpa ? [{ label: t('GPA: past terms, trends and goal'), hint: 'Glaze', group: 'Glaze', run: () => (location.pathname === '/' && globalThis.GZ_GRADES_UI ? GZ_GRADES_UI.open() : go('/#gz-gpa')()) }] : []),
-      // Insights (features/insights.js): this term in numbers, on any Canvas page.
-      ...(ctx.settings().enhance.insights ? [{ label: t('Insights: your term in numbers'), hint: 'Glaze', group: 'Glaze', run: () => need('features/insights.js', () => globalThis.GZ_INSIGHTS_UI).then(() => GZ_INSIGHTS_UI.open(), () => {}) }] : []),
+      // Insights (planner/page/insights.js): this term in numbers, on any Canvas page.
+      ...(ctx.settings().enhance.insights ? [{ label: t('Insights: your term in numbers'), hint: 'Glaze', group: 'Glaze', run: () => need('planner/page/insights.js', () => globalThis.GZ_INSIGHTS_UI).then(() => GZ_INSIGHTS_UI.open(), () => {}) }] : []),
       ...apps(cid),
-      ...(cid && ctx.settings().enhance.syllabus ? [{ label: t('Import a syllabus'), hint: t('This course'), group: 'Glaze', run: () => need('features/syllabus.js', () => globalThis.GZ_SYL_UI).then(() => GZ_SYL_UI.open(), () => {}) }] : []),
+      ...(cid && ctx.settings().enhance.syllabus ? [{ label: t('Import a syllabus'), hint: t('This course'), group: 'Glaze', run: () => need('planner/page/syllabus.js', () => globalThis.GZ_SYL_UI).then(() => GZ_SYL_UI.open(), () => {}) }] : []),
     ];
   };
   // Glaze Writer's Documents (papers.html), on every site while Writer is on, for the student's own click or Enter on its row:
-  // as a page of the site, as the bar's item opens it (features/settingspage.js), else in a tab the worker opens.
+  // as a page of the site, as the bar's item opens it (settings/page/settingspage.js), else in a tab the worker opens.
   const papersTab = () => { try { Promise.resolve(chrome.runtime.sendMessage('papers')).catch(() => {}); } catch { /* extension reloaded under the tab */ } };
   const documents = () => (ctx.settings().enhance.writer === false ? [] : [{ label: t('Documents'), hint: 'Glaze', group: 'Glaze', run: (e) => {
-    if (e?.isTrusted) need('features/settingspage.js', () => globalThis.GZ_SETTINGS_PAGE).then(() => globalThis.GZ_SETTINGS_PAGE.open('', 'papers')).then((opened) => { if (!opened) papersTab(); }, papersTab);
+    if (e?.isTrusted) need('settings/page/settingspage.js', () => globalThis.GZ_SETTINGS_PAGE).then(() => globalThis.GZ_SETTINGS_PAGE.open('', 'papers')).then((opened) => { if (!opened) papersTab(); }, papersTab);
   } }]);
-  // Canvas and Ultra alike: Documents, the notes app (features/notes.js: the library, a new note, and this course's notes),
-  // Glaze's own commands, and every extra with its switch (features/widgets.js), whether or not the widgets are on.
+  // Canvas and Ultra alike: Documents, the notes app (planner/page/notes.js: the library, a new note, and this course's notes),
+  // Glaze's own commands, and every extra with its switch (core/page/widgets.js), whether or not the widgets are on.
   const apps = (cid) => [
     ...documents(),
-    ...(ctx.settings().enhance.pet ? [{ label: t('Pet habitat'), hint: 'Glaze', group: 'Glaze', run: () => need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => need('features/pet.js', () => globalThis.GZ_PET_UI)).then(() => GZ_PET_UI.open(), () => {}) }] : []),
+    ...(ctx.settings().enhance.pet ? [{ label: t('Pet habitat'), hint: 'Glaze', group: 'Glaze', run: () => need('core/page/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => need('pet/page/pet.js', () => globalThis.GZ_PET_UI)).then(() => GZ_PET_UI.open(), () => {}) }] : []),
     ...(ctx.settings().enhance.notes ? [
       { label: t('Notes'), hint: 'Glaze', group: 'Glaze', run: (e) => notes({ event: e }) },
       { label: t('New note'), hint: cid ? t('This course') : 'Glaze', group: 'Glaze', run: (e) => notes({ create: true, course: cid, event: e }) },
       ...(cid ? [{ label: t('Course notes'), hint: t('This course'), group: 'Glaze', run: (e) => notes({ course: cid, event: e }) }] : []),
     ] : []),
     ...glazeCmds(),
-    { label: t('What Glaze can do'), hint: 'Glaze', group: 'Glaze', run: () => need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.hub(), () => {}) },
+    { label: t('What Glaze can do'), hint: 'Glaze', group: 'Glaze', run: () => need('core/page/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.hub(), () => {}) },
   ];
   // Notes opens only for the student's own click or Enter on its row: that event goes with the request, through loading
-  // features/notes.js, and open() checks it.
-  const notes = (o) => o.event?.isTrusted && need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open(o), () => {});
+  // planner/page/notes.js, and open() checks it.
+  const notes = (o) => o.event?.isTrusted && need('planner/page/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open(o), () => {});
   // Everything the palette can do, built when it opens.
   const commands = async () => {
-    // Stickers, pointers and Look rotation (features/lookx.js) bring their own switches (glazeCmds), the pointer picture's
+    // Stickers, pointers and Look rotation (looks/page/lookx.js) bring their own switches (glazeCmds), the pointer picture's
     // once lookx knows there is one.
-    await need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => globalThis.GZ_LOOKX?.ready(), () => {});
+    await need('looks/page/lookx.js', () => globalThis.GZ_LOOKX).then(() => globalThis.GZ_LOOKX?.ready(), () => {});
     await keeping;
     if (moodle) {
       // A failed Moodle loader or course list leaves Glaze's own commands available, as well as the cached due items.
@@ -147,13 +147,13 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
       // Planning, as on Canvas: Better To Do's Add task and the reminders hub where they're on, the class schedule, the calendar file.
       ...(globalThis.GZ_TODO_UI?.cmds() || []),
       ...(globalThis.GZ_REMIND_UI?.cmds() || []),
-      { label: t('Class schedule'), hint: 'Glaze', group: 'Glaze', run: () => need('features/classes.js', () => globalThis.GZ_CLASSES_UI).then(() => GZ_CLASSES_UI.open()).catch(() => {}) },
-      { label: t('Export calendar (.ics)'), hint: 'Glaze', group: 'Glaze', run: () => need('features/calexport.js', () => globalThis.GZ_CAL_UI).then(() => GZ_CAL_UI.open(), () => {}) },
+      { label: t('Class schedule'), hint: 'Glaze', group: 'Glaze', run: () => need('planner/page/classes.js', () => globalThis.GZ_CLASSES_UI).then(() => GZ_CLASSES_UI.open()).catch(() => {}) },
+      { label: t('Export calendar (.ics)'), hint: 'Glaze', group: 'Glaze', run: () => need('planner/page/calexport.js', () => globalThis.GZ_CAL_UI).then(() => GZ_CAL_UI.open(), () => {}) },
       ...gradeCmds(cid),
       ...apps(cid),
     ];
   };
-  // Ultra's GPA (on its Grades page, features/grades.js), Insights and, in a course, syllabus import, where each is on.
+  // Ultra's GPA (on its Grades page, planner/page/grades.js), Insights and, in a course, syllabus import, where each is on.
   const gradeCmds = (cid) => {
     const e = ctx.settings().enhance;
     const open = (file, name) => () => need(file, () => globalThis[name]).then(() => globalThis[name].open(), () => {});
@@ -163,8 +163,8 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
         try { sessionStorage.setItem('gz-gpa-open', '1'); } catch { /* blocked */ }
         go('/ultra/grades')();
       } }] : []),
-      ...(e.insights ? [{ label: t('Insights: your term in numbers'), hint: 'Glaze', group: 'Glaze', run: open('features/insights.js', 'GZ_INSIGHTS_UI') }] : []),
-      ...(cid && e.syllabus ? [{ label: t('Import a syllabus'), hint: t('This course'), group: 'Glaze', run: open('features/syllabus.js', 'GZ_SYL_UI') }] : []),
+      ...(e.insights ? [{ label: t('Insights: your term in numbers'), hint: 'Glaze', group: 'Glaze', run: open('planner/page/insights.js', 'GZ_INSIGHTS_UI') }] : []),
+      ...(cid && e.syllabus ? [{ label: t('Import a syllabus'), hint: t('This course'), group: 'Glaze', run: open('planner/page/syllabus.js', 'GZ_SYL_UI') }] : []),
     ];
   };
   let cmd = null; // { box, input, list, all, shown, active, back }
@@ -186,7 +186,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     cmd.shown = q.trim()
       ? cmd.all.map((c) => [c, Math.max(GZ_PAGE.fuzzy(q, c.label), GZ_PAGE.fuzzy(q, `${c.hint} ${c.label}`) - 2)]).filter(([, s]) => s >= 0).sort((a, b) => b[1] - a[1]).slice(0, cmd.found ? 12 : 40).map(([c]) => c)
       : [...cmd.all.filter((c) => c.group !== 'In this course' && c.group !== 'Glaze'), ...cmd.all.filter((c) => c.group === 'In this course').slice(0, 8)];
-    // Searching your courses too (features/search.js): what has the query as typed, then what it finds, each arrival below
+    // Searching your courses too (navigation/page/search.js): what has the query as typed, then what it finds, each arrival below
     // the last, so no row moves under the pointer; the looser matches (its letters in order) follow once it's done.
     // Its "Searching…" row is where the next ones go. Until the next keystroke, rows once shown keep their places
     // (cmd.head above the results, cmd.tail below), even when the palette's own list arrives late: anything new from it
@@ -286,7 +286,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     showCmd();
     // While your courses are being searched, what is on screen stays (showCmd's keep); otherwise the list starts afresh.
     commands().then((all) => { if (cmd !== mine) return; cmd.all = all; cmd.loading = false; showCmd(!!cmd.found); });
-    if (searchHere()) need('features/search.js', () => globalThis.GZ_SEARCH).then(() => GZ_SEARCH.attach(mine, showCmd), () => {});
+    if (searchHere()) need('navigation/page/search.js', () => globalThis.GZ_SEARCH).then(() => GZ_SEARCH.attach(mine, showCmd), () => {});
   };
 
   return { open: () => { if (!cmd) openCmd(); }, close: closeCmd, isOpen: () => !!cmd };

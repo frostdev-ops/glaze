@@ -1,4 +1,4 @@
-// The features that reach hosts beyond the manifest's own, in the real worker (lib/background.js) with chrome.permissions
+// The features that reach hosts beyond the manifest's own, in the real worker (background/background.js) with chrome.permissions
 // stood in (test/helpers/worker-env.cjs): Canvas's Download all asks for its file server's host before the first fetch there,
 // Look media and mods' network hosts are refused when the grant isn't held, and a local Canvas or Moodle runs on a held
 // localhost grant alike. Without <all_urls> a fetch to a host Glaze lacks fails on CORS; here it is never made.

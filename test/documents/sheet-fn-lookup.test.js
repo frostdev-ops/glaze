@@ -1,4 +1,4 @@
-// Lookup and reference functions (lib/sheet-fn-lookup.js). Function cases are the worked examples on Microsoft's page
+// Lookup and reference functions (documents/sheets/sheet-fn-lookup.js). Function cases are the worked examples on Microsoft's page
 // for each function, support.microsoft.com/en-us/excel/functions/<name>-function (vlookup, hlookup, xlookup, xmatch,
 // match, index, lookup, offset, indirect, choose, row, rows, column, columns, address, transpose, unique, sort, sortby,
 // filter, sequence, hyperlink), with their data where the page gives it in text; where it shows its data only in an
@@ -8,13 +8,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../../extension/lib/sheet-model.js');
-const C = require('../../extension/lib/sheet-calc.js');
-require('../../extension/lib/sheet-fn-math.js');
-require('../../extension/lib/sheet-fn-logical.js');
-require('../../extension/lib/sheet-fn-text.js');
-require('../../extension/lib/sheet-fn-date.js');
-require('../../extension/lib/sheet-fn-lookup.js');
+const M = require('../../extension/documents/sheets/sheet-model.js');
+const C = require('../../extension/documents/sheets/sheet-calc.js');
+require('../../extension/documents/sheets/sheet-fn-math.js');
+require('../../extension/documents/sheets/sheet-fn-logical.js');
+require('../../extension/documents/sheets/sheet-fn-text.js');
+require('../../extension/documents/sheets/sheet-fn-date.js');
+require('../../extension/documents/sheets/sheet-fn-lookup.js');
 
 const book = (cells = {}, { sheets = ['Sheet1'], date1904 = false, names = [] } = {}) => {
   const wb = M.workbook({ date1904 });
@@ -54,7 +54,7 @@ test('the lookup functions are registered, OFFSET and INDIRECT volatile, and not
   for (const name of NAMES) assert.ok(C.fn(name), name);
   assert.ok(C.fn('OFFSET').volatile && C.fn('INDIRECT').volatile);
   assert.ok(!C.fn('INDEX').volatile && !C.fn('XLOOKUP').volatile);
-  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-fn-lookup.js'), 'utf8')));
+  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/documents/sheets/sheet-fn-lookup.js'), 'utf8')));
 });
 
 // VLOOKUP's page shows its employee table only in an image; these are the cells its alt text names (Fontana's first name

@@ -1,4 +1,4 @@
-// Absorbing an assignment's side panels into the sidebar's This page (features/sidebar.js absorbable / absorb /
+// Absorbing an assignment's side panels into the sidebar's This page (navigation/page/sidebar.js absorbable / absorb /
 // syncAbsorbed / restoreAbsorbed), on stand-in Ultra structures: an assignment's overview with
 // Grades / Attempts as its grid's side column, an unverified attempt with details and its footer, and pages
 // that don't match. Ultra's nodes are never moved, copied or listened to; what is put on them comes off exactly; nothing

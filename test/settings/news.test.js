@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const N = require('../../extension/lib/news.js');
+const N = require('../../extension/settings/news.js');
 const { version } = require('../../extension/manifest.json');
 
 test('versions compare number by number', () => {
@@ -30,5 +30,5 @@ test('notes are short', () => {
 
 const newest = Object.keys(N.NOTES).sort((a, b) => N.cmp(b, a))[0];
 test('release: the newest notes are for a version that has shipped', {
-  todo: N.cmp(newest, version) > 0 && `lib/news.js has ${newest} notes but manifest.json says ${version}; they show once it's bumped`,
+  todo: N.cmp(newest, version) > 0 && `settings/news.js has ${newest} notes but manifest.json says ${version}; they show once it's bumped`,
 }, () => assert.ok(N.cmp(newest, version) <= 0));

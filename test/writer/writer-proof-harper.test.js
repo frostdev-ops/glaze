@@ -1,4 +1,4 @@
-// lib/harper/shared.js with the real Harper (lib/harper, the slim wasm), run here as the SharedWorker it is: two frames'
+// vendor/harper/shared.js with the real Harper (vendor/harper, the slim wasm), run here as the SharedWorker it is: two frames'
 // ports, the fixture texts' issues, each frame's words and ignores, the shared dictionary, a newer lint replacing a queued
 // one, frames served in turn, one Harper for both, and the worker closing when idle. In the browser:
 // checks/writer/writer-proof-check.js.
@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const P = require('../../extension/lib/writer-proof.js');
+const P = require('../../extension/writer/writer-proof.js');
 
 const root = path.join(__dirname, '../../extension');
 const fixtures = JSON.parse(fs.readFileSync(path.join(__dirname, '../fixtures/writer-proof-texts.json'), 'utf8')).texts;
@@ -28,7 +28,7 @@ const start = (async () => {
   globalThis.close = () => { closed++; };
   const real = globalThis.fetch;
   globalThis.fetch = async (u) => (String(u).startsWith('file:') ? new Response(fs.readFileSync(new URL(String(u))), { headers: { 'content-type': 'application/wasm' } }) : real(u));
-  await import(pathToFileURL(path.join(root, 'lib/harper/shared.js')).href);
+  await import(pathToFileURL(path.join(root, 'vendor/harper/shared.js')).href);
   const a = port(), b = port();
   globalThis.onconnect({ ports: [a] });
   globalThis.onconnect({ ports: [b] });

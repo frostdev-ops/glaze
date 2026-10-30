@@ -1,12 +1,12 @@
-// The MCP view (lib/mcp/registry.js): Glaze's grouped tools and the usable mods' tools as MCP Tool descriptors, the same for
+// The MCP view (agents/registry.js): Glaze's grouped tools and the usable mods' tools as MCP Tool descriptors, the same for
 // every connection; annotations from the kind, scoped arguments, the legacy era's object-only outputSchema, mod tools wired
 // to the data path, and no mod tool in a Glaze tool's name.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const V = require('../../extension/lib/mcp/registry.js');
-const TL = require('../../extension/lib/ai/tools.js');
-const S = require('../../extension/lib/ai/schema.js');
-const W = require('../../extension/lib/mcp/wire.js');
+const V = require('../../extension/agents/registry.js');
+const TL = require('../../extension/ai/tools.js');
+const S = require('../../extension/ai/schema.js');
+const W = require('../../extension/agents/wire.js');
 
 const ID = 'abcdefghijklmnop', OTHER = 'zyxwvutsrqponm23';
 const NS = 'io.frostdev.glaze/';
@@ -17,7 +17,7 @@ const DUE = { name: 'due_soon', title: 'Due soon', description: 'Open to-dos, so
   where: [{ field: 'done', eq: false }], sort: { field: 'due', order: 'asc' }, input: { course: true, days: true } };
 const ASK = { name: 'ask', title: 'Ask', description: 'What the Worker says.', code: true,
   input: { type: 'object', properties: { q: { type: 'string', maxLength: 200 } }, required: ['q'], additionalProperties: false } };
-// An installed mod as the worker reads it (lib/background.js modRead, with name and tools).
+// An installed mod as the worker reads it (background/background.js modRead, with name and tools).
 const rec = (id, over = {}) => ({ id, enabled: true, dev: false, hash: `hash-${id}`, key: `key-${id}`, grants: { agents: true, todo: true },
   manifest: { name: id === ID ? 'Due Soon' : 'Other', permissions: P('agents', 'todo'), tools: [DUE, ASK] }, ...over });
 const glaze = () => {
@@ -66,7 +66,7 @@ test('annotations follow the kind; openWorld only when the tool says so', () => 
   assert.deepEqual(d({ kind: 'write', hints: { openWorld: true } }).annotations, { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true });
   assert.deepEqual(d({ kind: 'confirm', hints: { idempotent: false, openWorld: false } }).annotations, { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false });
   assert.deepEqual(d({ kind: 'read', hints: { idempotent: false, openWorld: true } }).annotations, { ...READ, openWorldHint: true });
-  // A code tool of a mod granted a network host reaches the open world (lib/modtools.js defs); one without stays closed.
+  // A code tool of a mod granted a network host reaches the open world (mods/modtools.js defs); one without stays closed.
   assert.equal(of(s, `mod_${ID}_ask`).annotations.openWorldHint, false);
   const net = rec(ID, { grants: { agents: true, todo: true, 'network:api.example.com': true }, manifest: { ...rec(ID).manifest, permissions: P('agents', 'todo', 'network:api.example.com') } });
   assert.deepEqual(of(state({ mods: [net] }), `mod_${ID}_ask`).annotations, { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });
@@ -89,7 +89,7 @@ test('scoped tools gain an optional account or a required document; the rest tak
   assert.deepEqual(doc.required, ['source', 'document']);
   assert.equal(doc.properties.document.type, 'string');
   assert.ok(doc.properties.document.description.length > 20);
-  // A mod's tools are account scoped (lib/modtools.js defs).
+  // A mod's tools are account scoped (mods/modtools.js defs).
   assert.deepEqual(Object.keys(of(s, `mod_${ID}_due_soon`).inputSchema.properties), ['course', 'days', 'account']);
   // Unscoped: the parameters, unchanged; the tool's own parameters stay as defined.
   const plain = TL.define({ name: 'x_tool', kind: 'read', group: 'grades', description: 'X.', parameters: S.obj({ n: S.num('N.') }), run });
@@ -272,7 +272,7 @@ test('MCP refuses raw output schemas in both eras because the call core adds an 
 });
 
 test("a mod's tool never takes a Glaze tool's name, owner or voice", () => {
-  // A record that skipped mod.json's checks (lib/modtools.js clean): a tool named as Glaze's is, names outside the rules,
+  // A record that skipped mod.json's checks (mods/modtools.js clean): a tool named as Glaze's is, names outside the rules,
   // and a mod that calls itself Glaze.
   const tool = (name) => ({ name, title: 'Courses', description: "The student's courses.", from: 'courses' });
   const forged = rec(ID, { grants: { agents: true, courses: true }, manifest: { name: 'Glaze', permissions: P('agents', 'courses'),

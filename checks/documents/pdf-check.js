@@ -93,13 +93,13 @@ const photo = () => {
     env.noFirstRun(context); context.setDefaultTimeout(15000);
     await context.route('**/*', (r) => { const u = new URL(r.request().url()); if (u.protocol === 'chrome-extension:') return r.continue(); requests.push(u.href); return r.abort(); });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
-    const G = require(path.join(root, 'defaults.js'));
+    const G = require(path.join(root, 'content/defaults.js'));
     // Frost: a dark Look, so the chrome is dark while the page stays paper-white.
     const settings = (pdf) => G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true }, writer: { ...G.GZ_DEFAULTS.writer, sheets: false, slides: false, pdf } });
     await worker.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(s); }, settings(false));
     const HOME = `chrome-extension://${id}/papers.html`;
     const local = (k) => worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k] ?? null, k);
-    // A record's file bytes: from the worker's file store (lib/doc-files.js), or a record's base64 from before it.
+    // A record's file bytes: from the worker's file store (documents/doc-files.js), or a record's base64 from before it.
     const bytesOf = async (rec) => Buffer.from(await worker.evaluate(async (f) => { if (typeof f === 'string') return f; let s = ''; await openDocFiles().read(f.hash, (c) => { s += GZ_DOC_FILES.b64(c); }); return s; }, rec.file), 'base64');
     page = await context.newPage();
     page.on('pageerror', (e) => errors.push(`page: ${e.message}`));
@@ -147,10 +147,10 @@ const photo = () => {
     await page.click(`.gd-card[data-key="${key}"] .gd-title`);
     await until(() => page.evaluate(() => document.querySelectorAll('.pdfViewer .page').length === 3 && !!document.querySelector('.pdfViewer .page[data-page-number="1"] canvas')), 'three pages');
     check(page.url().endsWith(`papers.html?pdf=${encodeURIComponent(key)}`), 'the viewer is the card\'s address');
-    // pdf.js's words come from Glaze's catalogue (lib/pdf-l10n.js), set as its elements are added.
+    // pdf.js's words come from Glaze's catalogue (documents/pdf/pdf-l10n.js), set as its elements are added.
     const landmark = await until(() => page.evaluate(() => document.querySelector('.pdfViewer .page[data-page-number="2"]')?.getAttribute('aria-label')), 'page landmarks');
     check(landmark === 'Page 2', `each page is a landmark named in Glaze's words (${landmark})`);
-    const moduleWorker = page.workers().find((w) => w.url().endsWith('/lib/pdfjs/pdf.worker.mjs'));
+    const moduleWorker = page.workers().find((w) => w.url().endsWith('/vendor/pdfjs/pdf.worker.mjs'));
     const moduleType = moduleWorker && await moduleWorker.evaluate(() => { try { importScripts(); return false; } catch (e) { return /module/i.test(e.message); } });
     check(moduleType, `pdf.js runs in its module worker (${workers.join(', ')})`);
     const chrome1 = await page.evaluate(() => ({ title: document.querySelector('.gp-top h1 input')?.value ?? document.querySelector('.gp-top h1')?.textContent, back: document.querySelector('.gp-top a')?.getAttribute('href'), mode: document.documentElement.dataset.mode }));
@@ -338,8 +338,8 @@ const photo = () => {
     // Hold the worker's first save after its byte snapshot, while annotationStorage is still marked modified.
     await openHome();
     await page.evaluate(async (key) => {
-      await import(chrome.runtime.getURL('lib/pdfjs/pdf.mjs'));
-      const V = await import(chrome.runtime.getURL('lib/pdfjs/pdf_viewer.mjs'));
+      await import(chrome.runtime.getURL('vendor/pdfjs/pdf.mjs'));
+      const V = await import(chrome.runtime.getURL('vendor/pdfjs/pdf_viewer.mjs'));
       const setDocument = V.PDFViewer.prototype.setDocument;
       V.PDFViewer.prototype.setDocument = function (doc) { globalThis.pdfCheckDoc = doc; return setDocument.call(this, doc); };
       try {
@@ -370,7 +370,7 @@ const photo = () => {
     check(afterRace === 'Second edit', `an edit made during a save is persisted before leaving (${afterRace})`);
     // Closing a viewer in place (an assignment's frame unmounting it) ends pdf.js's worker with it.
     await openHome();
-    const pdfWorkers = () => page.workers().filter((w) => w.url().endsWith('/lib/pdfjs/pdf.worker.mjs')).length;
+    const pdfWorkers = () => page.workers().filter((w) => w.url().endsWith('/vendor/pdfjs/pdf.worker.mjs')).length;
     await until(() => pdfWorkers() === 0, 'no PDF worker on the home');
     await page.evaluate(async (key) => { document.getElementById('list').hidden = true; globalThis.pdfCheckView = await GZ_DOC_KINDS.get('pdf').edit(key); }, key);
     const open = await until(() => pdfWorkers() || null, 'the viewer\'s worker');
@@ -420,7 +420,7 @@ const photo = () => {
     await page.setInputFiles('#gd-file', photographed);
     const photoCard = await until(() => page.evaluate(() => { const c = [...document.querySelectorAll('.gd-card')].find((x) => x.querySelector('.gd-title')?.textContent === 'Colour photo'), img = c?.querySelector('.gd-pic img'); return img?.complete && img.naturalWidth > 0 ? { w: img.naturalWidth, h: img.naturalHeight, src: img.src.length, jpeg: img.src.startsWith('data:image/jpeg;') } : null; }), 'the photo\'s card');
     check(photoCard.jpeg && photoCard.w === 408 && photoCard.h === 528 && photoCard.src <= 64e3, `a colour photo's full-size JPEG stays within 64 KB (${JSON.stringify(photoCard)})`);
-    // ---- past the old 3 MB: a 12 MB PDF kept in the worker's file store (lib/doc-files.js), its record pointing at it; it
+    // ---- past the old 3 MB: a 12 MB PDF kept in the worker's file store (documents/doc-files.js), its record pointing at it; it
     // opens, fills, saves and exports.
     const sha = (b) => require('node:crypto').createHash('sha256').update(b).digest('hex');
     const bigPdf = require('../../tools/fidelity/pdf-fixtures.js').large({ count: 30, size: 12e6, form: true }), bigPath = path.join(tmp, 'Course reader.pdf');
@@ -534,10 +534,10 @@ const photo = () => {
       await until(() => fallback.evaluate(() => !document.getElementById('list').hidden), 'fallback home');
       const result = await fallback.evaluate(async (key) => {
         globalThis.Worker = class { constructor() { throw new Error('module workers unavailable'); } };
-        const P = await import(chrome.runtime.getURL('lib/pdfjs/pdf.mjs'));
-        P.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdfjs/pdf.worker.mjs');
+        const P = await import(chrome.runtime.getURL('vendor/pdfjs/pdf.mjs'));
+        P.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('vendor/pdfjs/pdf.worker.mjs');
         const rec = (await chrome.storage.local.get(`writerPaper:${key}`))[`writerPaper:${key}`];
-        const data = typeof rec.file === 'string' ? Uint8Array.from(atob(rec.file), (c) => c.charCodeAt(0)) : await GZ_WRITER_PAPER.need(['lib/doc-files.js']).then(() => GZ_DOC_FILES.client().get(rec.file));
+        const data = typeof rec.file === 'string' ? Uint8Array.from(atob(rec.file), (c) => c.charCodeAt(0)) : await GZ_WRITER_PAPER.need(['documents/doc-files.js']).then(() => GZ_DOC_FILES.client().get(rec.file));
         const task = P.getDocument({ data, isEvalSupported: false, verbosity: 0 });
         try {
           const doc = await task.promise;

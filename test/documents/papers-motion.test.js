@@ -1,15 +1,15 @@
 // The Documents page in motion (papers-motion.js): which motion each level and setting gives, the keyframes a document
-// opens and closes with (lib/popup.js's genie, scale and fade, one implementation), and what a page leaving tells the next.
+// opens and closes with (core/popup.js's genie, scale and fade, one implementation), and what a page leaving tells the next.
 // The page itself is checks/documents/documents-check.js's motion section.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const PM = require('../../extension/papers-motion.js');
-const P = require('../../extension/lib/popup.js');
+const PM = require('../../extension/documents/papers-motion.js');
+const P = require('../../extension/core/popup.js');
 
 const view = { left: 0, top: 0, width: 1280, height: 900, right: 1280, bottom: 900 };
 const card = { left: 320, top: 400, width: 224, height: 300, right: 544, bottom: 700 };
 
-test('each level, setting and switch gets lib/popup.js\'s choice, and none with transitions or entrances off', () => {
+test('each level, setting and switch gets core/popup.js\'s choice, and none with transitions or entrances off', () => {
   assert.equal(PM.kind({ anim: 'genie', level: 'expressive' }), 'genie');
   assert.equal(PM.kind({ anim: 'genie', level: 'subtle' }), 'scale');
   assert.equal(PM.kind({ anim: 'genie', level: 'off' }), 'none');
@@ -38,7 +38,7 @@ test('the genie opens out of the card\'s box: its first frame is a strip the car
   assert.equal(f.kind, 'genie');
   assert.deepEqual(f.timing, P.timing('genie', false));
   const g = P.genie(card, view);
-  assert.deepEqual(f.frames.map(({ transformOrigin, ...x }) => x), g.frames, 'lib/popup.js\'s keyframes, as they are');
+  assert.deepEqual(f.frames.map(({ transformOrigin, ...x }) => x), g.frames, 'core/popup.js\'s keyframes, as they are');
   assert.ok(f.frames.every((x) => x.transformOrigin === g.origin));
   const first = f.frames[0], last = f.frames.at(-1);
   const xs = first.clipPath.match(/polygon\(([-\d.]+)% ([-\d.]+)%, ([-\d.]+)% ([-\d.]+)%/).slice(1).map(Number);

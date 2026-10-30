@@ -1,5 +1,5 @@
 const test = require('node:test'), assert = require('node:assert/strict');
-const S = require('../../extension/lib/stream.js'), D = require('../../extension/defaults.js');
+const S = require('../../extension/courses/stream.js'), D = require('../../extension/content/defaults.js');
 
 test('only deadline notifications use due dates, not grades or newly posted assignment content', () => {
   for (const type of ['GB:DUE', 'DF:DUE', 'AS:OVERDUE']) assert.equal(S.deadline(type), true);
@@ -31,7 +31,7 @@ test('US 24-hour deadlines retain their time in relative mode', () => {
 
 test('a Stream module injected before bootstrap does not retain an unusable context', () => {
   const vm = require('node:vm'), fs = require('node:fs');
-  const source = fs.readFileSync(require.resolve('../../extension/features/stream.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../../extension/courses/page/stream.js'), 'utf8');
   const c = vm.createContext({ GZ_CTX: undefined });
   assert.doesNotThrow(() => vm.runInContext(source, c));
   assert.equal(c.GZ_STREAM_UI, undefined);

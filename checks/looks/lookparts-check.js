@@ -11,7 +11,7 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.resolve(__dirname, '../../extension'), ['https://school.example.test/*']);
-const G = require(path.join(ext, 'defaults.js')), S = require(path.join(ext, 'lib/share.js')), X = require(path.join(ext, 'lib/lookparts.js'));
+const G = require(path.join(ext, 'content/defaults.js')), S = require(path.join(ext, 'sharing/share.js')), X = require(path.join(ext, 'looks/lookparts.js'));
 const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const LMS = 'https://school.example.test';
 const PAGE = `${LMS}/ultra/courses/_1_1/outline`, QUIZ = `${LMS}/ultra/courses/_1_1/assessment/_9_1`;
@@ -132,7 +132,7 @@ const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() +
     await popup.click('#look');
     await popup.waitForSelector('#looks .look');
     await popup.click('#looks .look:text-is("Clear")'); // one with a bundled font: Looks with web fonts ask Google Fonts, blocked here
-    const own = require(path.join(ext, 'lib/lookset.js'))(G.GZ_LOOKS.find((L) => L.name === 'Clear'));
+    const own = require(path.join(ext, 'looks/lookset.js'))(G.GZ_LOOKS.find((L) => L.name === 'Clear'));
     const worn = await until(async () => { const v = await stored(); return { v, P: typeof v.sync.lookX === 'string' && v.sync.lookX ? await X.unpack(v.sync.lookX) : null }; }, ({ P }) => P && X.same(P, own));
     check('a built-in Look from the popup puts its own parts in place of the ones before, in sync, and none left in local', !!worn.P && X.same(worn.P, own) && !worn.v.local.lookX, JSON.stringify(worn.v).slice(0, 160));
     s = await until(() => state(), (v) => v.parts?.pointer === 'clear');

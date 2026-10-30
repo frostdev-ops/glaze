@@ -1,8 +1,8 @@
 // Glaze Writer's editor tools, declared for a later MCP integration (plan: "editor tools exposed as hooks"): what a model
 // could read of the document being written and the two things it could propose, in the AI harness's tool shape
-// (lib/ai/tools.js define: name, kind, description, parameters, run, summarize). Nothing offers them to a model yet and
+// (ai/tools.js define: name, kind, description, parameters, run, summarize). Nothing offers them to a model yet and
 // there is no transport: tools(bridge) builds them over a bridge the page would provide, register(registry, bridge) adds
-// them to a lib/ai/tools.js registry.
+// them to a ai/tools.js registry.
 // bridge: { text() → string (blocks joined by '\n'), outline() → [{ level, text, offset }], issues() → [GZ_WRITER_ISSUES issue
 //   with its text], sources() → [source (CSL-JSON subset)], assignment() → { title, instructions, rubric } | null,
 //   cite(sourceId, page) → { inText } | null (what insertCitation would put at the caret), insertCitation(sourceId, page) →
@@ -83,7 +83,7 @@ var GZ_WRITER_TOOLS = globalThis.GZ_WRITER_TOOLS || (() => {
       },
     },
   ];
-  // Adds them to a lib/ai/tools.js registry (its define checks each) → the tools as added.
+  // Adds them to a ai/tools.js registry (its define checks each) → the tools as added.
   const register = (registry, bridge) => tools(bridge).map((t) => registry.add(t));
   return { LIMIT, tools, register, pages };
 })();

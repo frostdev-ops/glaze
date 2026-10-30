@@ -1,6 +1,6 @@
 // WP-C2 (audit CORE-2, ULT-4, CORE-8): Glaze asks before it runs on a site it doesn't know, keeps each site's records
-// apart, and takes a page's requests only from the sites it runs on. The real lib/background.js in a VM with Chrome
-// stubbed; content.js, content-ultra.js's record(), features/consent.js and the popup's due list on stand-in pages.
+// apart, and takes a page's requests only from the sites it runs on. The real background/background.js in a VM with Chrome
+// stubbed; content.js, content-ultra.js's record(), settings/page/consent.js and the popup's due list on stand-in pages.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -14,8 +14,8 @@ const plain = (x) => JSON.parse(JSON.stringify(x));
 const settle = async (n = 10) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const ID = 'glaze';
-const CANVAS_FIRST = manifest.content_scripts.find((c) => c.js.includes('content-canvas.js')).js;
-const ULTRA_FIRST = manifest.content_scripts.find((c) => c.js.includes('content-ultra.js')).js;
+const CANVAS_FIRST = manifest.content_scripts.find((c) => c.js.includes('content/content-canvas.js')).js;
+const ULTRA_FIRST = manifest.content_scripts.find((c) => c.js.includes('content/content-ultra.js')).js;
 // Safari's manifest, as tools/build/safari-manifest.sh makes it.
 const SAFARI = (() => {
   const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'glaze-consent-safari-'));
@@ -27,7 +27,7 @@ const SAFARI = (() => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 })();
-const ASK = ['lib/i18n.js', 'features/consent.js'];
+const ASK = ['core/i18n.js', 'settings/page/consent.js'];
 
 // ---- the worker -----------------------------------------------------------------------------------------------------
 // `granted`: the hosts Glaze holds (chrome.permissions), every one unless named; `m`: the manifest, Chrome's unless named.
@@ -50,7 +50,7 @@ const worker = ({ local = {}, sync = {}, granted = () => true, m = manifest } = 
   });
   const context = vm.createContext({
     URL, console, setTimeout, clearTimeout, TextEncoder, TextDecoder, structuredClone, crypto: globalThis.crypto, atob, btoa, navigator: {},
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('lib', f)), context, { filename: f }); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('background', f)), context, { filename: f }); },
     chrome: {
       runtime: {
         id: ID, getURL: (p = '') => `chrome-extension://${ID}/${p}`, getManifest: () => m,
@@ -71,7 +71,7 @@ const worker = ({ local = {}, sync = {}, granted = () => true, m = manifest } = 
       },
     },
   });
-  vm.runInContext(read('lib/background.js'), context, { filename: 'lib/background.js' });
+  vm.runInContext(read('background/background.js'), context, { filename: 'background/background.js' });
   // A message as the browser hands it on: its reply, or 'ignored' once nothing has answered.
   w.send = (m, s) => new Promise((res) => {
     let kept = false;
@@ -98,7 +98,7 @@ test('CORE-2: spoofed Canvas, Moodle and Ultra markup on an unknown site gets th
   await settle();
   assert.deepEqual(w.registered, [], 'no host registered');
   assert.deepEqual(w.store.local, {}, 'no site on a list, nothing recorded');
-  // On Chrome an Ultra page off Blackboard's hosts reports through lib/detect.js, which has none of Glaze's words.
+  // On Chrome an Ultra page off Blackboard's hosts reports through content/detect.js, which has none of Glaze's words.
   assert.deepEqual(w.files(), [ASK, ASK, ASK], 'the question in Glaze\'s words; nothing of Glaze itself');
   assert.deepEqual(w.ran.filter((r) => r.func?.includes('.show(')).map((r) => r.args[0]), ['canvas', 'moodle', 'ultra']);
   assert.ok(w.ran.every((r) => r.target.documentIds?.[0] === 'doc-1'), 'into the page that asked');
@@ -118,7 +118,7 @@ test('CORE-2: spoofed Canvas, Moodle and Ultra markup on an unknown site gets th
   const safari = worker({ m: SAFARI });
   await safari.send('ultra', page('https://evil.test/ultra/'));
   await settle();
-  assert.deepEqual(safari.files(), [['features/consent.js']]);
+  assert.deepEqual(safari.files(), [['settings/page/consent.js']]);
 });
 
 test('CORE-2: the student\'s yes approves the site, registers it and puts Glaze in that page; on Safari an Ultra page then starts by itself', async () => {
@@ -131,7 +131,7 @@ test('CORE-2: the student\'s yes approves the site, registers it and puts Glaze 
   assert.deepEqual(w.store.local.canvas, ['https://shop.test/*']);
   assert.deepEqual(w.hosts(), ['https://shop.test/*']);
   assert.deepEqual(w.registered.find((s) => s.id === 'https://shop.test/*').js, CANVAS_FIRST);
-  assert.deepEqual(w.files().at(-1), CANVAS_FIRST.filter((f) => f !== 'lib/i18n.js'), 'Glaze into the page, but for the words the question brought');
+  assert.deepEqual(w.files().at(-1), CANVAS_FIRST.filter((f) => f !== 'core/i18n.js'), 'Glaze into the page, but for the words the question brought');
   assert.deepEqual(w.ran.filter((r) => r.files).at(-1).target, { tabId: 7, documentIds: ['doc-1'] });
   // Ultra: on the list, and Ultra's first content script into that page (on Chrome nothing of Glaze waits there).
   const bb = page('https://bb.school.edu/ultra/course');
@@ -139,7 +139,7 @@ test('CORE-2: the student\'s yes approves the site, registers it and puts Glaze 
   assert.deepEqual(await w.send(yes('ultra'), bb), { ok: true });
   await settle();
   assert.deepEqual(w.store.local.ultra, ['https://bb.school.edu']);
-  assert.deepEqual(w.files().slice(n), [ULTRA_FIRST.filter((f) => f !== 'lib/i18n.js')]);
+  assert.deepEqual(w.files().slice(n), [ULTRA_FIRST.filter((f) => f !== 'core/i18n.js')]);
   // Safari: nothing injected (its content.js is in the page, waiting for the list).
   const safari = worker({ m: SAFARI });
   assert.deepEqual(await safari.send(yes('ultra'), bb), { ok: true });
@@ -194,14 +194,14 @@ test('review: trust uses hostname suffix boundaries and HTTPS origin/port bounda
   const w = worker({ local: { canvas: ['https://a.edu/*'], ultra: ['https://bb.edu:8443'] } });
   for (const url of ['https://evil-blackboard.com/ultra/', 'https://blackboard.com.evil.test/ultra/', 'https://schοol.blackboard.cοm/ultra/', 'http://school.blackboard.com/ultra/',
     'http://a.edu/', 'https://a.edu:8443/', 'https://school.instructure.com:8443/', 'https://school.blackboard.com:8443/ultra/']) {
-    assert.deepEqual(await w.send({ type: 'glaze:load', files: ['lib/zip.js'] }, page(url)), denied, url);
+    assert.deepEqual(await w.send({ type: 'glaze:load', files: ['core/zip.js'] }, page(url)), denied, url);
   }
-  assert.deepEqual(await w.send({ type: 'glaze:load', files: ['lib/zip.js'] }, page('https://bb.edu:8443/ultra/')), { ok: true }, 'explicit Ultra origin keeps its port');
+  assert.deepEqual(await w.send({ type: 'glaze:load', files: ['core/zip.js'] }, page('https://bb.edu:8443/ultra/')), { ok: true }, 'explicit Ultra origin keeps its port');
   assert.deepEqual(await w.send(yes('canvas'), page('https://a.edu:8443/')), { ok: true });
   assert.ok(w.store.local.canvas.includes('https://a.edu:8443/*'));
   assert.deepEqual(w.registered.find((s) => s.id === 'https://a.edu:8443/*').matches, ['https://a.edu/*']);
   assert.ok(w.registered.every((s) => s.matches.every((p) => !/:8443/.test(p))), 'browser match patterns never include a port');
-  assert.deepEqual(await w.send({ type: 'glaze:load', files: ['lib/zip.js'] }, page('https://a.edu:9443/')), denied, 'approval still does not widen to another port');
+  assert.deepEqual(await w.send({ type: 'glaze:load', files: ['core/zip.js'] }, page('https://a.edu:9443/')), denied, 'approval still does not widen to another port');
 });
 
 test('review: Reset clears scoped records and planner cache while retaining notes and tasks', async () => {
@@ -218,7 +218,7 @@ test('review: Reset clears scoped records and planner cache while retaining note
 
 test('review: Glaze extension preview frames retain code-on-demand access', async () => {
   const w = worker();
-  assert.deepEqual(await w.send({ type: 'glaze:load', files: ['lib/zip.js'] }, { ...editor, url: `chrome-extension://${ID}/preview.html`, frameId: 2 }), { ok: true });
+  assert.deepEqual(await w.send({ type: 'glaze:load', files: ['core/zip.js'] }, { ...editor, url: `chrome-extension://${ID}/preview.html`, frameId: 2 }), { ok: true });
 });
 
 test('Not now: no question on that site for a week; a yes clears it; kept for the 50 sites put off last', async () => {
@@ -327,12 +327,12 @@ test('Firefox gives each content script file as its full address in getManifest:
   assert.deepEqual(w.hosts(), [`${A}/*`, `${M}/*`]);
   assert.deepEqual(w.registered.find((s) => s.id === `ultra:${B}`).js, ULTRA_FIRST);
   assert.deepEqual(w.registered.find((s) => s.id === `${A}/*`).js, CANVAS_FIRST);
-  assert.deepEqual(w.registered.find((s) => s.id === `${M}/*`).js, CANVAS_FIRST.filter((f) => f !== 'content-canvas.js'));
+  assert.deepEqual(w.registered.find((s) => s.id === `${M}/*`).js, CANVAS_FIRST.filter((f) => f !== 'content/content-canvas.js'));
   const S = 'https://bb.other.edu';
   assert.deepEqual(await w.send(yes('ultra'), page(`${S}/ultra/course`)), { ok: true });
   await settle();
   assert.deepEqual(w.ultra(), [`ultra:${S}`, `ultra:${B}`].sort());
-  assert.deepEqual(w.files().at(-1), ULTRA_FIRST.filter((f) => f !== 'lib/i18n.js'), 'Glaze into the page with the package\'s files');
+  assert.deepEqual(w.files().at(-1), ULTRA_FIRST.filter((f) => f !== 'core/i18n.js'), 'Glaze into the page with the package\'s files');
 });
 
 test('approved Ultra sites stay registered while Glaze is off, as the manifest\'s Ultra entry does; Canvas and Moodle sites don\'t', async () => {
@@ -351,11 +351,11 @@ test('Ultra approvals on two ports share one script and removing either keeps th
   const scripts = () => w.registered.filter((s) => s.id.startsWith('ultra:'));
   assert.equal(scripts().length, 1, 'portless browser matches must not inject the same bundle twice');
   assert.deepEqual(scripts()[0].matches, [`${host}/ultra`, `${host}/ultra/*`]);
-  for (const origin of [port, host]) assert.deepEqual(await w.send({ type: 'glaze:load', files: ['lib/zip.js'] }, page(`${origin}/ultra/course`)), { ok: true });
+  for (const origin of [port, host]) assert.deepEqual(await w.send({ type: 'glaze:load', files: ['core/zip.js'] }, page(`${origin}/ultra/course`)), { ok: true });
   assert.deepEqual(await w.send({ type: 'glaze:sites', op: 'remove', origin: host }, editor), { ok: true });
   assert.equal(scripts().length, 1);
-  assert.deepEqual(await w.send({ type: 'glaze:load', files: ['lib/zip.js'] }, page(`${port}/ultra/course`)), { ok: true });
-  assert.deepEqual(await w.send({ type: 'glaze:load', files: ['lib/zip.js'] }, page(`${host}/ultra/course`)), denied);
+  assert.deepEqual(await w.send({ type: 'glaze:load', files: ['core/zip.js'] }, page(`${port}/ultra/course`)), { ok: true });
+  assert.deepEqual(await w.send({ type: 'glaze:load', files: ['core/zip.js'] }, page(`${host}/ultra/course`)), denied);
   assert.deepEqual(await w.send({ type: 'glaze:sites', op: 'remove', origin: port }, editor), { ok: true });
   assert.deepEqual(scripts(), []);
 });
@@ -409,33 +409,33 @@ test('on Chrome a yes approves nothing on a site whose host Glaze doesn\'t hold'
 test('MoodleCloud is built in: trusted with no yes, and an approval from before is never registered over the manifest\'s entry', async () => {
   const M = 'https://school.moodlecloud.com', O = 'https://moodle.school.edu';
   const w = worker({ local: { moodle: [`${M}/*`, `${O}/*`] } });
-  w.registered.push({ id: `${M}/*`, matches: [`${M}/*`], js: CANVAS_FIRST.filter((f) => f !== 'content-canvas.js') }, { id: `ultra:https://gone.edu`, matches: ['https://gone.edu/ultra'], js: ULTRA_FIRST });
+  w.registered.push({ id: `${M}/*`, matches: [`${M}/*`], js: CANVAS_FIRST.filter((f) => f !== 'content/content-canvas.js') }, { id: `ultra:https://gone.edu`, matches: ['https://gone.edu/ultra'], js: ULTRA_FIRST });
   assert.deepEqual(await w.send({ type: 'glaze:sites', op: 'remove', origin: 'https://other.edu' }, editor), { ok: true });
   assert.deepEqual(w.hosts(), [`${O}/*`], 'the old registration goes: the manifest\'s entry runs there');
   assert.deepEqual(w.ultra(), [], 'and an Ultra site no longer listed');
   const fresh = worker();
-  assert.deepEqual(await fresh.send({ type: 'glaze:load', files: ['lib/zip.js'] }, page('https://other.moodlecloud.com/my/')), { ok: true });
+  assert.deepEqual(await fresh.send({ type: 'glaze:load', files: ['core/zip.js'] }, page('https://other.moodlecloud.com/my/')), { ok: true });
   for (const url of ['https://other.moodlecloud.com:8443/my/', 'http://other.moodlecloud.com/my/', 'https://moodlecloud.com.evil.test/my/']) {
-    assert.deepEqual(await fresh.send({ type: 'glaze:load', files: ['lib/zip.js'] }, page(url)), denied, url);
+    assert.deepEqual(await fresh.send({ type: 'glaze:load', files: ['core/zip.js'] }, page(url)), denied, url);
   }
 });
 
 test('local Canvas (http://localhost) is Glaze\'s where the manifest lists it or its optional grant is held; Safari unchanged', async () => {
   const local = page('http://localhost:3000/courses/1');
-  const load = (w) => w.send({ type: 'glaze:load', files: ['lib/zip.js'] }, local);
+  const load = (w) => w.send({ type: 'glaze:load', files: ['core/zip.js'] }, local);
   assert.deepEqual(await load(worker({ granted: () => false })), denied, 'not granted');
   assert.deepEqual(await load(worker({ granted: (o) => o === 'http://localhost/*' })), { ok: true }, 'granted');
   assert.deepEqual(await load(worker({ m: { ...manifest, host_permissions: [...manifest.host_permissions, 'http://localhost/*'] }, granted: () => false })), { ok: true }, 'a dev build that lists it');
   assert.deepEqual(await load(worker({ m: SAFARI })), denied, 'Safari\'s <all_urls> is no dev build');
 });
 
-test('CORE-8: a Look, a rotation turn, Settings and code on demand are refused to a tab where only lib/detect.js runs', async () => {
+test('CORE-8: a Look, a rotation turn, Settings and code on demand are refused to a tab where only content/detect.js runs', async () => {
   const w = worker({ local: { moodle: ['https://moodle.school.edu/*'] } });
   const look = { type: 'glaze:look', parts: null, patch: { version: 2, colors: { '--gz-accent': '#123456' } } };
   for (const s of [page('https://shop.test/'), page('https://evil.test/ultra/course')]) {
     assert.deepEqual(await w.send(look, s), denied, s.url);
     assert.deepEqual(await w.send({ type: 'glaze:rotate', now: true }, s), denied, s.url);
-    assert.deepEqual(await w.send({ type: 'glaze:load', files: ['lib/zip.js'] }, s), denied, s.url);
+    assert.deepEqual(await w.send({ type: 'glaze:load', files: ['core/zip.js'] }, s), denied, s.url);
     await w.send('options', s);
   }
   await settle();
@@ -445,7 +445,7 @@ test('CORE-8: a Look, a rotation turn, Settings and code on demand are refused t
   // A site Glaze runs on, in any frame it is in, and Glaze's own pages: as before.
   const canvas = page('https://school.instructure.com/courses/1');
   for (const s of [canvas, page('https://moodle.school.edu/course/view.php?id=2', { frameId: 4 }), page('https://school.blackboard.com/ultra/course')]) {
-    assert.deepEqual(await w.send({ type: 'glaze:load', files: ['lib/zip.js'] }, s), { ok: true }, s.url);
+    assert.deepEqual(await w.send({ type: 'glaze:load', files: ['core/zip.js'] }, s), { ok: true }, s.url);
   }
   assert.deepEqual(await w.send(look, canvas), { ok: true });
   assert.deepEqual(await w.send(look, popup), { ok: true });
@@ -457,7 +457,7 @@ test('CORE-8: a Look, a rotation turn, Settings and code on demand are refused t
   // Gradescope's own pages load their catalogue, and nothing else.
   const gs = page('https://www.gradescope.com/courses/1');
   assert.deepEqual(await w.send({ type: 'glaze:load', files: ['i18n/de.js'] }, gs), { ok: true });
-  assert.deepEqual(await w.send({ type: 'glaze:load', files: ['lib/zip.js'] }, gs), denied);
+  assert.deepEqual(await w.send({ type: 'glaze:load', files: ['core/zip.js'] }, gs), denied);
 });
 
 test('the update from 3.3.4 files the one due list under its site and drops the shared Ultra gate; a Canvas planner list lands per site', async () => {
@@ -468,7 +468,7 @@ test('the update from 3.3.4 files the one due list under its site and drops the 
   assert.deepEqual(w.store.local['dueWeek:https://a.edu'], { at: 123, list: [{ title: 'Essay', due: now + 1 }] });
   for (const k of ['dueWeek', 'dueWeekAt', 'dueWeekFrom', 'seenCoursesAt']) assert.ok(!(k in w.store.local), k);
   assert.deepEqual(w.store.local.seenCourses, { _1_1: { name: 'kept', site: 'https://a.edu' } });
-  // lib/todo.js still hands a planner's due list over the old way: the worker keeps it per site.
+  // planner/todo.js still hands a planner's due list over the old way: the worker keeps it per site.
   const key = 'todo:https://school.instructure.com/42';
   const r = await w.send({ type: 'glaze:todo', key, cache: { key, at: now, items: [] }, due: [{ title: 'Lab', due: now + 5 }] }, page('https://school.instructure.com/'));
   assert.equal(r.ok, true);
@@ -494,10 +494,10 @@ const ultraPart = ({ origin, local, courses }) => {
     addEventListener() {}, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     chrome: { runtime: { id: ID, sendMessage: (m) => { sent.push(m); return Promise.resolve(); } },
       storage: { local: { get: (k, cb) => cb(structuredClone(local)), set: (o) => { Object.assign(local, structuredClone(o)); calls.push(['set', Object.keys(o)]); } }, sync: { get: (k, cb) => cb({}) }, onChanged: { addListener() {} } } },
-    GZ_NAV: { native: () => null }, GZ_GRADES: require('../../extension/lib/grades.js'), GZ_PAGE: require('../../extension/lib/page.js'), GZ_COURSES: require('../../extension/defaults.js').GZ_COURSES,
+    GZ_NAV: { native: () => null }, GZ_GRADES: require('../../extension/planner/grades.js'), GZ_PAGE: require('../../extension/core/page.js'), GZ_COURSES: require('../../extension/content/defaults.js').GZ_COURSES,
   });
   ctx.globalThis = ctx; ctx.window = ctx; ctx.top = ctx; ctx.self = ctx;
-  vm.runInContext(read('content-ultra.js'), ctx, { filename: 'content-ultra.js' });
+  vm.runInContext(read('content/content-ultra.js'), ctx, { filename: 'content/content-ultra.js' });
   const api = (p) => {
     calls.push(['api', p]);
     if (/users\/me$/.test(p)) return Promise.resolve({ id: '_9_1' });
@@ -535,7 +535,7 @@ test('ULT-4: two Ultra schools keep their own course records, each with its own 
 });
 
 // ---- the due list: content.js keeps it per site, the popup shows the right site's ---------------------------------------
-const dueBlock = () => { const src = read('content.js'); const at = src.indexOf('  const DUE ='); return src.slice(at, src.indexOf('  }));\n', at) + 6); };
+const dueBlock = () => { const src = read('content/content.js'); const at = src.indexOf('  const DUE ='); return src.slice(at, src.indexOf('  }));\n', at) + 6); };
 const dueWeekAt = (origin, stored, items) => {
   const asked = [];
   const ctx = vm.createContext({ ultra: true, moodle: false, location: { origin }, Date, Promise, Array,
@@ -563,10 +563,10 @@ test('ULT-4: due this week is kept per site; one site\'s list is never read as a
 const el = () => ({ children: [], textContent: '', title: '', className: '', append(...k) { this.children.push(...k); }, replaceChildren(...k) { this.children = k; } });
 const popupDue = async (here, stored) => {
   const els = { '#due-n': el(), '#due-list': el() };
-  const src = read('popup.js');
+  const src = read('settings/popup.js');
   const ctx = vm.createContext({ URL, Date, Promise, Object, Array, els, document: { createElement: el },
     chrome: { tabs: { query: async () => [{ url: here }] }, storage: { local: { getKeys: async () => Object.keys(stored), get: async (k) => structuredClone(Object.fromEntries([].concat(k).filter((x) => x in stored).map((x) => [x, stored[x]]))) } } },
-    GZ_UI: { load: async () => require('../../extension/defaults.js').GZ_SANITIZE({}) }, GZ_PAGE: require('../../extension/lib/page.js'), GZ_I18N: require('../../extension/lib/i18n.js') });
+    GZ_UI: { load: async () => require('../../extension/content/defaults.js').GZ_SANITIZE({}) }, GZ_PAGE: require('../../extension/core/page.js'), GZ_I18N: require('../../extension/core/i18n.js') });
   vm.runInContext(`const $ = (s) => els[s]; const t = (k, v) => GZ_I18N.t(k, v, 'en'); ${src.slice(src.indexOf('// Due this week'))}`, ctx);
   await settle();
   return els;
@@ -600,7 +600,7 @@ test('Settings lists the sites said yes to, with their LMS and a Remove only the
   const html = read('options.html');
   assert.match(html, /<section id="sites" data-editor-section="backup\/sites"[\s\S]*?<ul class="courses sites" id="site-list"><\/ul>[\s\S]*?id="site-empty"[\s\S]*?id="site-status" role="status" aria-live="polite"[\s\S]*?<\/section>/);
   assert.match(html, /<a href="#backup\/sites" data-editor-alias>Sites<\/a>/, 'in the panel\'s section links');
-  const src = read('options.js');
+  const src = read('settings/options.js');
   const reset = src.slice(src.indexOf("$('#reset-all').addEventListener"), src.indexOf('// ---- Sites:'));
   assert.match(reset, /chrome\.runtime\.sendMessage\(\{ type: 'glaze:sites', op: 'reset' \}\)/, 'Reset everything clears the list');
   const block = src.slice(src.indexOf('  // ---- Sites:'), src.indexOf('\n', src.indexOf('  const readSites')));
@@ -608,8 +608,8 @@ test('Settings lists the sites said yes to, with their LMS and a Remove only the
   const mk = (tag) => Object.assign(el(), { tagName: tag.toUpperCase(), attrs: {}, on: {}, setAttribute(k, v) { this.attrs[k] = v; }, addEventListener(t, f) { this.on[t] = f; }, focus() { this.focused = true; } });
   for (const id of ['#site-list', '#site-empty', '#site-status', '#heading-backup-sites', '#site-add', '#site-address', '#site-allow', '#site-note', '#site-error', '#site-picks']) nodes[id] = mk('x');
   const lists = { canvas: ['https://canvas.school.edu/*', 'https://school.instructure.com/*', 'https://both.school.edu/*'], moodle: ['https://moodle.school.edu/*', 'https://both.school.edu/*'], ultra: ['https://bb.school.edu', 'https://school.blackboard.com', 'nonsense'] };
-  const ctx = vm.createContext({ URL, Object, Array, Set, Map, document: { createElement: mk }, $: (s) => nodes[s], t: (k, v) => require('../../extension/lib/i18n.js').t(k, v, 'en'), GZ_BUILT_IN: require('../../extension/defaults.js').GZ_BUILT_IN,
-    GZ_SITE: { address: require('../../extension/lib/site.js').address, handBack: async () => false },
+  const ctx = vm.createContext({ URL, Object, Array, Set, Map, document: { createElement: mk }, $: (s) => nodes[s], t: (k, v) => require('../../extension/core/i18n.js').t(k, v, 'en'), GZ_BUILT_IN: require('../../extension/content/defaults.js').GZ_BUILT_IN,
+    GZ_SITE: { address: require('../../extension/core/site.js').address, handBack: async () => false },
     chrome: { storage: { local: { get: (k, cb) => cb(structuredClone(lists)) } }, runtime: { getManifest: () => ({ host_permissions: [] }), sendMessage: async (m) => { sent.push(plain(m)); return { ok: true }; } } } });
   vm.runInContext(`${block}; this.readSites = readSites;`, ctx);
   ctx.readSites();
@@ -681,11 +681,11 @@ const ultraPage = ({ origin = 'https://evil.test', local = {}, frame = false, ki
     },
   });
   c.window = c; c.top = frame ? {} : c; c.globalThis = c;
-  for (const f of ['lib/color.js', 'lib/i18n.js', 'lib/page.js', 'lib/grades.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/nav.js', 'content-ultra.js']) vm.runInContext(read(f), c, { filename: f });
+  for (const f of ['core/color.js', 'core/i18n.js', 'core/page.js', 'planner/grades.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'navigation/nav.js', 'content/content-ultra.js']) vm.runInContext(read(f), c, { filename: f });
   // content-ultra.js's early sheets, as it puts them in before <body> (here, after: the test puts them in by hand).
-  const early = ['theme.css', 'motion.css', 'extras.css', 'features/apps.css'].map((f) => Object.assign(new Node('link'), { href: `chrome-extension://${ID}/${f}` }));
+  const early = ['content/theme.css', 'content/motion.css', 'content/extras.css', 'core/page/apps.css'].map((f) => Object.assign(new Node('link'), { href: `chrome-extension://${ID}/${f}` }));
   c.GZ_SITE_ULTRA.sheets = [...early];
-  vm.runInContext(read('content.js'), c, { filename: 'content.js' });
+  vm.runInContext(read('content/content.js'), c, { filename: 'content/content.js' });
   const sheets = () => head.kids.map((l) => String(l.href || '').split('/').pop()).filter((f) => f.endsWith('.css'));
   const approve = (list) => { for (const f of [...storeListeners]) f({ ultra: { newValue: list } }, 'local'); };
   return { c, sent, swept, fetched, writes, sheets, early, approve };
@@ -724,7 +724,7 @@ test('CORE-2: Ultra on Blackboard\'s own host, or on a site approved before, sta
 });
 
 // A local Canvas or Moodle (http on localhost or 127.0.0.1) has content.js only where Glaze holds that host, and the worker
-// lets it through on that grant alone (lib/background.js approved): no list entry, as on the LMSs' own hosts. One rule,
+// lets it through on that grant alone (background/background.js approved): no list entry, as on the LMSs' own hosts. One rule,
 // the worker's held-grant policy, for both.
 test('a local Canvas or Moodle passes content.js\'s gate on its own host, as the worker\'s; Ultra there, or https, still waits', async () => {
   for (const kind of ['canvas', 'moodle']) {
@@ -754,15 +754,15 @@ test('review: unknown /ultra pages claiming Canvas or Moodle also remain passive
 });
 
 test('review: unknown Ultra has no early render-blocking theme before storage answers', () => {
-  const src = read('content-ultra.js');
+  const src = read('content/content-ultra.js');
   const inserted = [];
   const context = vm.createContext({ document: { contentType: 'text/html', body: null, head: { appendChild: (l) => inserted.push(l) }, createElement: () => ({ setAttribute() {} }) },
-    location: new URL('https://evil.test/ultra/'), GZ_SITE_ULTRA: {}, GZ_BUILT_IN: require('../../extension/defaults.js').GZ_BUILT_IN, chrome: { runtime: { getURL: (s) => s } }, setTimeout() {} });
+    location: new URL('https://evil.test/ultra/'), GZ_SITE_ULTRA: {}, GZ_BUILT_IN: require('../../extension/content/defaults.js').GZ_BUILT_IN, chrome: { runtime: { getURL: (s) => s } }, setTimeout() {} });
   vm.runInContext(src.slice(src.indexOf('// Known Ultra entry:')), context);
   assert.deepEqual(inserted, []);
 });
 
-// ---- the question (features/consent.js) ----------------------------------------------------------------------------
+// ---- the question (settings/page/consent.js) ----------------------------------------------------------------------------
 class Dom {
   constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.parent = null; this.attrs = {}; this.on = {}; this.text = ''; this.props = {}; this.style = { setProperty: (k, v) => { this.props[k] = v; } }; }
   get textContent() { return this.text + this.children.map((c) => c.textContent).join(''); }
@@ -787,11 +787,11 @@ const consentPage = ({ lang = 'en', frame = false, io = false, reply = { ok: tru
     Intl, Object, Date, setTimeout, performance: { now: () => clock }, matchMedia: () => ({ matches: true }),
     CSSStyleSheet: class { replaceSync(css) { this.css = css; } },
     ...(io && { IntersectionObserver: class { constructor(f, o) { this.f = f; this.trackVisibility = o.trackVisibility; watcher = this; } observe(e) { observed.push(e); } unobserve() {} disconnect() {} } }),
-    GZ_I18N: require('../../extension/lib/i18n.js'),
+    GZ_I18N: require('../../extension/core/i18n.js'),
     chrome: { runtime: { sendMessage: async (m) => { sent.push(plain(m)); return reply; } }, storage: { onChanged: { addListener: (f) => heard.push(f), removeListener: (f) => heard.splice(heard.indexOf(f), 1) } } },
   });
   ctx.window = ctx; ctx.top = frame ? {} : ctx; ctx.globalThis = ctx;
-  const C = vm.runInContext(read('features/consent.js'), ctx, { filename: 'features/consent.js' });
+  const C = vm.runInContext(read('settings/page/consent.js'), ctx, { filename: 'settings/page/consent.js' });
   const host = () => doc.body.children.find((n) => n.tagName === 'GLAZE-CONSENT');
   const button = (label) => host()?.all().find((n) => n.tagName === 'BUTTON' && n.textContent === label);
   const tell = (c, area = 'local') => { for (const f of [...heard]) f(c, area); };

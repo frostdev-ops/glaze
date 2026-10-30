@@ -1,16 +1,16 @@
-// The editor's no-code builders for two Look parts: the Look's own nav layout (x.nav, lib/navlayout.js)
-// and its page tweaks (x.rules, named parts from lib/parts.js). Both edit s.parts ({ x, m } or null) and save it the way
+// The editor's no-code builders for two Look parts: the Look's own nav layout (x.nav, navigation/navlayout.js)
+// and its page tweaks (x.rules, named parts from looks/parts.js). Both edit s.parts ({ x, m } or null) and save it the way
 // the rest of a Look is saved (save(['parts'])), so a theme code carries them (glaze2:) and the worker cleans them again.
 // Every edit goes through the part's own cleaner before it is kept, so what is stored is already what a code decodes to.
 // The student's own Ultra items (navItems, edited under Navigation while Glaze navigation is off) are a different thing: theirs on every
 // Look. A Look's layout replaces them only while that Look is worn, and the copy here says so.
 // Extension options page only (mount); the pure helpers are for node tests. English through t(); catalogues come later.
 var GZ_XEDIT = globalThis.GZ_XEDIT || (() => {
-  const L = typeof GZ_NAV_LAYOUT !== 'undefined' ? GZ_NAV_LAYOUT : require('./navlayout.js');
-  const N = typeof GZ_NAV_ITEMS !== 'undefined' ? GZ_NAV_ITEMS : require('./nav-items.js');
-  const P = typeof GZ_PARTS !== 'undefined' ? GZ_PARTS : require('./parts.js');
-  const D = typeof GZ_COLORS !== 'undefined' ? { GZ_COLORS } : require('../defaults.js');
-  const F = typeof GZ_FONTS !== 'undefined' ? GZ_FONTS : require('./fonts.js');
+  const L = typeof GZ_NAV_LAYOUT !== 'undefined' ? GZ_NAV_LAYOUT : require('../navigation/navlayout.js');
+  const N = typeof GZ_NAV_ITEMS !== 'undefined' ? GZ_NAV_ITEMS : require('../navigation/nav-items.js');
+  const P = typeof GZ_PARTS !== 'undefined' ? GZ_PARTS : require('../looks/parts.js');
+  const D = typeof GZ_COLORS !== 'undefined' ? { GZ_COLORS } : require('../content/defaults.js');
+  const F = typeof GZ_FONTS !== 'undefined' ? GZ_FONTS : require('../looks/fonts.js');
 
   // s.parts with one part replaced (null takes it out); null once nothing is left.
   const put = (parts, key, value) => {
@@ -81,7 +81,7 @@ var GZ_XEDIT = globalThis.GZ_XEDIT || (() => {
   // One site's parts for the picker, grouped, with labels in the editor's language.
   const parts = (site, t) => GROUPS.map(([g]) => [g, P.list(site, t).filter((p) => groupOf(p.name) === g)]).filter(([, l]) => l.length);
   const ACTS = { hide: 'Hide', show: 'Show', move: 'Move', style: 'Restyle', label: 'Rename' };
-  // Which actions a part takes, by lib/parts.js's own flags.
+  // Which actions a part takes, by looks/parts.js's own flags.
   const can = (name) => { const p = P.get(name); return { hide: p.hide, show: p.hide, move: !!p.in, style: p.st.length > 0, label: p.text }; };
   // The parts `name` may be moved beside: same LMS, same container.
   const beside = (name, t) => { const p = P.get(name); return P.list(p.site, t).filter((o) => o.name !== name && P.get(o.name).in === p.in && p.in); };

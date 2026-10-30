@@ -1,13 +1,13 @@
-// Announcements in Glaze's pop-up: lib/announce.js (settings, clicks, references, each site's answer) and lib/popup.js
+// Announcements in Glaze's pop-up: courses/announce.js (settings, clicks, references, each site's answer) and core/popup.js
 // (the safe HTML path, the preview's place, the pop-up's motion), against hostile input. The page side is
 // test/courses/announce-ui.test.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const D = require('../../extension/defaults.js');
-const P = require('../../extension/lib/popup.js');
-const A = require('../../extension/lib/announce.js');
-const N = require('../../extension/lib/notes.js');
+const D = require('../../extension/content/defaults.js');
+const P = require('../../extension/core/popup.js');
+const A = require('../../extension/courses/announce.js');
+const N = require('../../extension/planner/notes.js');
 const { El } = require('../stand-in-dom.js');
 
 const O = 'https://school.instructure.com';

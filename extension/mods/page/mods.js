@@ -2,26 +2,26 @@
 // the worker names an installed mod that is on, in the top frame of a page Glaze is on; the Documents page (papers.js)
 // loads it with a GZ_CTX of its own (site 'documents'), which applies the documents calls (GZ_CTX.documents). It frames
 // mods/host.html inside a closed shadow root, hands it one port with a one-use nonce, starts the mods' Workers there and
-// passes their calls on to the worker ('glaze:mod'), which checks every one (lib/modbroker.js). A frame UI (a slot with an
+// passes their calls on to the worker ('glaze:mod'), which checks every one (mods/modbroker.js). A frame UI (a slot with an
 // HTML file of its own) gets a host of its own in its slot, the same way, while the slot is on the page. It owns the
 // watchdog, with heartbeats while
 // the page is shown: a Worker that stops answering is ended alone; a host that stops answering froze on a frame UI (they
 // share a thread), so it is removed and the other mods start again without that mod. A mod stopped so is kept for the
 // editor (storage.local modStops). Never on a quiz or a tool's page; everything stops when Glaze is reloaded or turned off.
 //
-// What mods show and change here is only what the worker's answer to a call carries (cleaned there, lib/modapi.js and
-// lib/lookparts.js): a slot's component tree (features/modui.js draws it), a card's decoration, palette commands, Look
+// What mods show and change here is only what the worker's answer to a call carries (cleaned there, mods/modapi.js and
+// looks/lookparts.js): a slot's component tree (mods/page/modui.js draws it), a card's decoration, palette commands, Look
 // rules, a nav layout or Look parts laid over the student's Look while the mod runs (GZ_CTX.parts reads parts()), and
-// effects. Slots: tiles on the widget boards (features/widgets.js declare), rail widgets on the nav (features/nav.js),
+// effects. Slots: tiles on the widget boards (core/page/widgets.js declare), rail widgets on the nav (navigation/page/nav.js),
 // and, where the student turned the replacement on (modReplace, the worker's list says which), the nav and the background.
 // Where two mods claim one, the student's order (modOrder) decides, and transforms are taken in that order. Agent apps'
-// calls to a mod's code tools reach its Worker from the worker here ('glaze:modtool', lib/mcp/modroute.js).
+// calls to a mod's code tools reach its Worker from the worker here ('glaze:modtool', agents/modroute.js).
 var GZ_MODS = globalThis.GZ_MODS || (() => {
   const BEAT = 2000, HANG = 5000, SLOW = 2000, RESTARTS = 3, INFLIGHT = 64, MIB = 1 << 20;
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
   const alive = () => !!globalThis.chrome?.runtime?.id;
   const ctx = () => globalThis.GZ_CTX;
-  // lib/lookx.js quiet's routes with features/rules.js's wider ones (whole quiz and tool routes), and a tool's frame.
+  // looks/lookx.js quiet's routes with looks/page/rules.js's wider ones (whole quiz and tool routes), and a tool's frame.
   const QUIET = /\/(quizzes|external_tools|assessment|attempt|lti)(\/|$)|\/mod\/(quiz|lti)(\/|$)/;
   const quiet = () => QUIET.test(location.pathname) || !!document.getElementById('tool_content');
 
@@ -222,7 +222,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
   };
 
   // ---- agent apps' calls to code tools --------------------------------------------------------------------------------------
-  // From the worker (lib/mcp/modroute.js) to this top frame: 'call' hands an agent app's call to a running mod's Worker as a
+  // From the worker (agents/modroute.js) to this top frame: 'call' hands an agent app's call to a running mod's Worker as a
   // 'tool.call' event, for a code tool its mod.json declares, when this page is the account's on that school's site (Glaze's
   // own GZ_CTX.account, as the worker's account checks read it), and says at once whether it did. 'wait' answers when the call
   // has ended here: its answer taken by the worker's checks (forward), refused there (the code), the mod stopped, or TOOL_WAIT.
@@ -312,7 +312,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
   const overlays = new Map(); // mod → { cards, nav, rules, look, cmds }
   const assets = new Map(); // `${mod}|${path}` → Promise<ImageBitmap>
   const slotOf = (id, key) => list.find((m) => m.id === id)?.slots?.find((s) => s.key === key);
-  const ui = () => (globalThis.GZ_MODUI ? Promise.resolve(globalThis.GZ_MODUI) : ctx()?.need('features/modui.js', () => globalThis.GZ_MODUI).then(() => globalThis.GZ_MODUI));
+  const ui = () => (globalThis.GZ_MODUI ? Promise.resolve(globalThis.GZ_MODUI) : ctx()?.need('mods/page/modui.js', () => globalThis.GZ_MODUI).then(() => globalThis.GZ_MODUI));
   const motionOff = () => document.documentElement.getAttribute('data-gz-motion') === 'off';
   // A slot's element `el` takes the mod's UI: its frame UI (a host of its own, once the Workers' host has said mods run
   // here), or its tree, drawn in a closed root. → stop().
@@ -422,11 +422,11 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
       o[{ 'nav.set': 'nav', 'nav.layout': 'layout', 'rules.set': 'rules', 'look.override': 'look' }[call]] = Array.isArray(v) && !v.length ? null : v;
       reparts();
     } else if (call === 'effects.play') {
-      // At most one effect a mod every 200 ms, and none with motion off or the page hidden (features/motionx.js checks).
+      // At most one effect a mod every 200 ms, and none with motion off or the page hidden (looks/page/motionx.js checks).
       const now = performance.now();
       if (now - (lastFx.get(id) ?? -1e9) < 200 || motionOff() || document.hidden) return;
       lastFx.set(id, now);
-      ctx()?.need('features/motionx.js', () => globalThis.GZ_MOTIONX).then(() => GZ_MOTIONX.burst(v.fx, v.x * innerWidth, v.y * innerHeight), () => {});
+      ctx()?.need('looks/page/motionx.js', () => globalThis.GZ_MOTIONX).then(() => GZ_MOTIONX.burst(v.fx, v.x * innerWidth, v.y * innerHeight), () => {});
     } else if (call === 'broadcast') emit(id, 'broadcast', v, via);
   };
   // What one mod showed or changed, gone with it.
@@ -496,8 +496,8 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
   };
 
   // ---- the nav: items for transforms, rail widgets, a replacement -----------------------------------------------------------
-  // The page's native items shown in Glaze's bar (features/navbar.js), else in the older rail, by id, each with Glaze's own
-  // name for it (lib/navlayout.js NAMES, loaded with either). These go to every mod, frames included, with no permission, so
+  // The page's native items shown in Glaze's bar (navigation/page/navbar.js), else in the older rail, by id, each with Glaze's own
+  // name for it (navigation/navlayout.js NAMES, loaded with either). These go to every mod, frames included, with no permission, so
   // nothing the student typed (a renamed item, their own links), the account item (their name), Glaze's own items or other
   // mods' items is in them: the bar as drawn is nav.read's, personal data for a granted Worker. A layout needs no more: it
   // names native items by these ids.
@@ -575,7 +575,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
   // The first running mod, in the student's order, that has `key` turned on (and the slot to fill it, for nav and bg).
   const claimant = (key) => (run && runtime === true ? running().find((m) => m.on?.includes(key) && (key === 'bg' ? slotOf(m.id, 'background') : key === 'nav' || key.startsWith('tile:') ? slotOf(m.id, key) : true)) : null);
   const railBoxes = new Map(); // `${mod}|${slot}` → the rail's element for it
-  // Rail widgets of the running mods, for features/nav.js to put among its own, or for Glaze navigation's dock (features/navbar.js).
+  // Rail widgets of the running mods, for navigation/page/nav.js to put among its own, or for Glaze navigation's dock (navigation/page/navbar.js).
   const rail = () => {
     const want = run && runtime === true ? running().flatMap((m) => (m.slots || []).filter((s) => s.key.startsWith('rail:')).map((s) => [m, s])) : [];
     for (const k of [...railBoxes.keys()]) if (!want.some(([m, s]) => `${m.id}|${s.key}` === k)) { detach(k); railBoxes.get(k).remove(); railBoxes.delete(k); }
@@ -598,7 +598,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
   const NAV_ROOT = { ultra: 'nav[class*="makeStylesnavigation-"], nav#base_tools', canvas: '#header .ic-app-header__main-navigation', moodle: '.primary-navigation' };
   let navTaken = null; // { mode: 'bar' | 'native', root, display, box, k }
   // Where Glaze's bar is drawn, the mod's nav stands in its place (the rail, the top bar or a phone's tabs), over the room
-  // the bar keeps; Glaze's bar hides (features/navbar.js asks navStands) and the school's own stays hidden. The box is put
+  // the bar keeps; Glaze's bar hides (navigation/page/navbar.js asks navStands) and the school's own stays hidden. The box is put
   // in once and only restyled (a frame moved loads again). Without Glaze's bar, it takes the school's own nav's place.
   const placeBox = () => {
     const v = bar()?.model(), wide = globalThis.matchMedia?.('(min-width: 900px)')?.matches ?? true;
@@ -657,8 +657,8 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     ctx()?.background?.(box);
   };
 
-  // Tiles of the running mods for features/widgets.js: { tile id: { name, size, fill } }. A tile's id is the board's kind
-  // of id (lib/widgets.js MORE_ID): m, the mod id's first 14 characters and the tile's place in its manifest.
+  // Tiles of the running mods for core/page/widgets.js: { tile id: { name, size, fill } }. A tile's id is the board's kind
+  // of id (core/widgets.js MORE_ID): m, the mod id's first 14 characters and the tile's place in its manifest.
   const tiles = () => Object.fromEntries((run && runtime === true ? running() : []).flatMap((m) => (m.slots || []).filter((s) => s.key.startsWith('tile:')).map((s, i) => [claimant(s.key)?.id === m.id ? s.key.slice(5) : `m${m.id.slice(0, 14)}${i}`, {
     name: s.name, size: s.size || 's', owner: `${m.id}|${s.key}`,
     fill: (body) => {
@@ -676,7 +676,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     const railWant = on && running().some((m) => m.slots?.some((s) => s.key.startsWith('rail:')));
     if (railWant || railBoxes.size) {
       if (!railWant) rail();
-      ctx().need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync(), () => {}).then(() => globalThis.GZ_NAVBAR_UI?.sync());
+      ctx().need('navigation/page/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync(), () => {}).then(() => globalThis.GZ_NAVBAR_UI?.sync());
     }
     syncNavSlot();
     syncBg();
@@ -700,7 +700,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     paintCards();
     paused();
   };
-  // The palette's commands from the mods, in the student's order (features/palette.js).
+  // The palette's commands from the mods, in the student's order (navigation/page/palette.js).
   const cmds = () => running().flatMap((m) => (overlays.get(m.id)?.cmds || []).map((c) => ({ label: c.title, hint: c.hint || m.name, group: 'Glaze', run: () => emit(m.id, 'palette.run', { id: c.id }) })));
   // Whether a running mod takes over `key` (effect:<moment>, nav, bg) where the student turned that on.
   const replaces = (key) => !!claimant(key);

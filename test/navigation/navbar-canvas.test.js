@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const L = require('../../extension/lib/navlayout.js'), M = require('../../extension/lib/navbar.js'), G = require('../../extension/defaults.js');
+const L = require('../../extension/navigation/navlayout.js'), M = require('../../extension/navigation/navbar.js'), G = require('../../extension/content/defaults.js');
 const read = (f) => fs.readFileSync(require.resolve(`../../extension/${f}`), 'utf8');
 const plain = (v) => JSON.parse(JSON.stringify(v));
 const origin = 'https://school.instructure.com';
@@ -29,7 +29,7 @@ function setup({ links = [], tools = [], cached = [], path = '/', answers = {} }
     chrome: { storage: { local: { get: (k, cb) => cb({ [k]: cached }), set: (v) => writes.push(v) } } },
     fetch: async (u, o) => { calls.push([u, o]); const a = answers[u] ?? answers[new URL(u, origin).pathname]; if (a instanceof Error) throw a; if (a instanceof Response) return a.clone(); return new Response(JSON.stringify(a ?? [])); },
   };
-  const adapter = vm.runInNewContext(read('features/navbar-canvas.js') + '\nGZ_NAVBAR_CANVAS(X);', ctx);
+  const adapter = vm.runInNewContext(read('navigation/page/navbar-canvas.js') + '\nGZ_NAVBAR_CANVAS(X);', ctx);
   return { adapter, calls, writes, assigned, document, observations, ctx };
 }
 
@@ -180,15 +180,15 @@ test('logout sends only Canvas DELETE with its decoded CSRF token and then retur
 });
 
 test('Canvas first-paint words exactly match the shared layout for every course, menu, tabs and placement setting', () => {
-  const code = read('content-canvas.js').match(/    const b = I\.settings\.navbar, c = [\s\S]*?(?=    setAttr\('data-gz-nav-size')/)[0];
+  const code = read('content/content-canvas.js').match(/    const b = I\.settings\.navbar, c = [\s\S]*?(?=    setAttr\('data-gz-nav-size')/)[0];
   const base = G.GZ_SANITIZE().navbar;
   for (const course of [false, true]) for (const menu of [false, true]) for (const tabs of [false, true]) for (const place of ['rail', 'top']) for (const state of ['same', 'icons', 'top', 'hide']) for (const style of ['float', 'embed']) for (const cmenu of [false, true]) {
     const navbar = { ...base, place, course: state, style, cmenu }, attrs = {};
     vm.runInNewContext(code, { I: { settings: { navbar, enhance: { tabs } } }, location: { pathname: course ? '/courses/12/modules' : '/' }, document: { querySelector: () => menu ? {} : null }, globalThis: {}, setAttr: (k, v) => { attrs[k] = v; } });
     assert.equal(attrs['data-gz-navbar'], M.layout(navbar, { course, menu, tabs }).words, JSON.stringify({ course, menu, tabs, place, state, style, cmenu }));
   }
-  const source = read('lib/background.js');
-  assert.ok(source.includes("files.includes('features/navbar-canvas.js') ? ['lib/nav.js', 'lib/nav-items.js', 'lib/navlayout.js']"));
+  const source = read('background/background.js');
+  assert.ok(source.includes("files.includes('navigation/page/navbar-canvas.js') ? ['navigation/nav.js', 'navigation/nav-items.js', 'navigation/navlayout.js']"));
 });
 
 test('Help falls back to tray DOM and account API without leaking role-restricted or executable links', async () => {
@@ -230,11 +230,11 @@ test('failed logout does not redirect or leave an unhandled action rejection', a
 });
 
 test('the lazy adapter returns a serializable completion marker to the worker', () => {
-  assert.equal(vm.runInNewContext(read('features/navbar-canvas.js')), true);
+  assert.equal(vm.runInNewContext(read('navigation/page/navbar-canvas.js')), true);
 });
 
 test('tray items render as buttons so modifier and middle clicks cannot jump to a native tray page', () => {
-  const src = read('features/navbar.js'), node = src.slice(src.indexOf('  const node ='), src.indexOf('  const badgeOf ='));
+  const src = read('navigation/page/navbar.js'), node = src.slice(src.indexOf('  const node ='), src.indexOf('  const badgeOf ='));
   const make = (tag, props) => ({ tag, ...props, dataset: {}, setAttribute() {} });
   const build = vm.runInNewContext(node + '\nnode;', { make, part: () => {} });
   assert.equal(build({ id: 'course', href: '/courses', panel: true }, 'item', 'item').tag, 'button');
@@ -242,7 +242,7 @@ test('tray items render as buttons so modifier and middle clicks cannot jump to 
 });
 
 test('Canvas login and logout pages do not reserve authenticated navigation room', () => {
-  const code = read('content-canvas.js').match(/    const b = I\.settings\.navbar, c = [\s\S]*?(?=    setAttr\('data-gz-nav-size')/)[0];
+  const code = read('content/content-canvas.js').match(/    const b = I\.settings\.navbar, c = [\s\S]*?(?=    setAttr\('data-gz-nav-size')/)[0];
   for (const pathname of ['/login', '/login/canvas', '/logout']) {
     const attrs = {};
     vm.runInNewContext(code, { I: { settings: G.GZ_SANITIZE() }, location: { pathname }, globalThis: {}, document: {}, setAttr: (k, v) => { attrs[k] = v; } });
@@ -251,7 +251,7 @@ test('Canvas login and logout pages do not reserve authenticated navigation room
 });
 
 test('what focus scrolls to stops clear of the fixed bar on Canvas and Moodle (WCAG 2.4.11)', () => {
-  const canvas = read('canvas.css'), moodle = read('moodle.css');
+  const canvas = read('content/canvas.css'), moodle = read('content/moodle.css');
   const phone = (css) => css.slice(css.indexOf('@media (max-width: 899.98px)', css.indexOf('html[data-gz-navbar] {')));
   assert.match(canvas, /^html\[data-gz-navbar\] \{ scroll-padding-top: var\(--gz-navbar-top\); \}$/m, 'under the top bar');
   assert.match(phone(canvas).slice(0, phone(canvas).indexOf('\n}')), /html\[data-gz-navbar\]:not\(\[data-gz-navbar~="none"\]\) \{ scroll-padding-bottom: calc\(96px \+ env\(safe-area-inset-bottom, 0px\)\); \}/, "above a phone's bottom bar");
@@ -260,7 +260,7 @@ test('what focus scrolls to stops clear of the fixed bar on Canvas and Moodle (W
 });
 
 test('a failed lazy navbar load restores native Canvas navigation', async () => {
-  const source = read('content-canvas.js'), start = source.indexOf('  const syncNav =');
+  const source = read('content/content-canvas.js'), start = source.indexOf('  const syncNav =');
   const window = {}; window.top = window;
   const attrs = {};
   vm.runInNewContext(source.slice(start, source.indexOf('\n\n  return {', start)) + '\nsyncNav();', {

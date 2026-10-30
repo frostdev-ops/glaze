@@ -7,9 +7,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const PA = require('../../extension/lib/writer-papers.js');
-const L = require('../../extension/lib/writer-submit.js');
-globalThis.GZ_WRITER_STYLES = require('../../extension/lib/writer-styles.js');
+const PA = require('../../extension/writer/writer-papers.js');
+const L = require('../../extension/writer/writer-submit.js');
+globalThis.GZ_WRITER_STYLES = require('../../extension/writer/writer-styles.js');
 
 const store = () => {
   const data = {};
@@ -103,7 +103,7 @@ const kinds = (w = {}) => {
     GZ_WRITER_FRAME: { t: (k) => k, on: () => {}, mode: () => 'paper', kind: () => 'assignment', item: () => null, say: () => {} },
     GZ_WRITER_SETTINGS: { now: () => w }, GZ_WRITER_SUBMIT_LIB: L });
   ctx.globalThis = ctx;
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/writer-kinds.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/writer/frame/writer-kinds.js'), 'utf8'), ctx);
   return ctx.GZ_WRITER_KINDS;
 };
 
@@ -114,7 +114,7 @@ test('a brought file opens as its kind only while that kind is switched on and h
   assert.deepEqual([...kinds({ pdf: true, slides: true, sheets: true }).opens()], ['pdf', 'slides', 'sheet'], 'the grid is in the frame');
   assert.deepEqual([...kinds({ sheets: true }).opens()], ['sheet']);
   assert.deepEqual(Object.keys(kinds().FRAME), ['pdf', 'slides', 'sheet']);
-  assert.deepEqual([...kinds().FRAME.sheet.scripts], ['lib/doc-kinds.js', 'lib/doctext.js', 'lib/zip.js', 'lib/sheet-xlsx.js', 'sheet-kind.js'], 'the .xlsx codecs with the grid, on demand');
+  assert.deepEqual([...kinds().FRAME.sheet.scripts], ['documents/doc-kinds.js', 'core/doctext.js', 'core/zip.js', 'documents/sheets/sheet-xlsx.js', 'documents/sheets/sheet-kind.js'], 'the .xlsx codecs with the grid, on demand');
   assert.ok(Object.isFrozen(kinds().FRAME));
   const K = kinds(), { sheet: _, ...noGrid } = K.FRAME;
   assert.deepEqual([...K.opens({ sheets: true }, noGrid)], [], 'a build without the grid offers no spreadsheet');
@@ -132,7 +132,7 @@ test('Document or Spreadsheet: offered only with the spreadsheet kind here and w
 test('a frame without Writer\'s host makes no kinds module', () => {
   const ctx = vm.createContext({ console });
   ctx.globalThis = ctx;
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/writer-kinds.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/writer/frame/writer-kinds.js'), 'utf8'), ctx);
   assert.equal(ctx.GZ_WRITER_KINDS, null);
 });
 
@@ -146,12 +146,12 @@ const viewer = async (id = 'pdf') => {
   const implementation = { ...(id === 'sheet' && { version: async (key, reason) => { calls.versions.push([key, reason]); return { version: { id: 'packed', gz: 'workbook' } }; } }),
     view: async () => ({ save: async () => { calls.save++; return true; }, file: async () => ({ bytes: new Uint8Array([1]) }), dispose: () => { calls.dispose++; } }),
     into: async () => (await P.save(KEY, { kind: 'pdf', file: 'TkVX', size: 3 }, { reason: 'import' })).paper };
-  const DK = require('../../extension/lib/doc-kinds.js');
+  const DK = require('../../extension/documents/doc-kinds.js');
   const ctx = vm.createContext({ console: { error() {} }, document, GZ_WRITER_PAPERS: { open: () => P },
     GZ_DOC_KINDS: { KINDS: DK.KINDS, kindOf: DK.kindOf, settled: async () => {}, get: (id) => ({ ...DK.KINDS[id], ...implementation }) },
     GZ_WRITER_FRAME: { t: (s) => s, say() {}, on() {} }, GZ_WRITER_SETTINGS: { now: () => ({ pdf: true }) },
     GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_PAPER: { need: async () => {}, submit() {} } });
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/writer-kinds.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/writer/frame/writer-kinds.js'), 'utf8'), ctx);
   const K = ctx.GZ_WRITER_KINDS, surface = await K.mount(id, KEY, paper);
   return { K, P, surface, paper, calls };
 };

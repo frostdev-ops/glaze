@@ -1,6 +1,6 @@
 // Videos and AVIF pictures are kept and shared without the details a phone or an editor puts in them (LOOK-11): where it was shot, what
 // shot it, when, who named the track, the program that wrote the file. They are not decoded or rebuilt, so the containers around the
-// stream are cleaned in place (lib/media.js "metadata"): the file keeps its length, nothing in it moves, and cleaning twice changes
+// stream are cleaned in place (looks/media.js "metadata"): the file keeps its length, nothing in it moves, and cleaning twice changes
 // nothing more. Each format is tried on real encoder output that carries metadata (test/fixtures/media/meta.*: an MP4 with user data,
 // a Quick Time style meta box, a creation time, a GPS box and a subtitle track whose text is a position; a WebM with a title, dates and
 // tags; an AVIF still with Exif and XMP items) and on files built to be taken apart wrongly.
@@ -10,7 +10,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
-const M = require('../../extension/lib/media.js');
+const M = require('../../extension/looks/media.js');
 
 const fx = (f) => new Uint8Array(fs.readFileSync(path.join(__dirname, '../fixtures/media', f)));
 const text = (b) => Buffer.from(b).toString('latin1');
@@ -168,7 +168,7 @@ test('fixed-size timed metadata samples cannot make a tiny file run billions of 
   b.set(put32(1), sz.at + 4);
   b.set(put32(0xffffffff), sz.at + 8);
   b.set(put32(0xffffffff), sc.at + 12);
-  const script = `const M = require(${JSON.stringify(require.resolve('../../extension/lib/media.js'))}); process.stdout.write(String(M.check(new Uint8Array(Buffer.from(process.argv[1], 'base64')), 'bg')));`;
+  const script = `const M = require(${JSON.stringify(require.resolve('../../extension/looks/media.js'))}); process.stdout.write(String(M.check(new Uint8Array(Buffer.from(process.argv[1], 'base64')), 'bg')));`;
   const r = spawnSync(process.execPath, ['-e', script, Buffer.from(b).toString('base64')], { timeout: 750, encoding: 'utf8' });
   assert.equal(r.signal, null, 'the parser must finish without an attacker-controlled sample loop');
   assert.equal(r.status, 0, r.stderr);

@@ -1,12 +1,12 @@
 // What a mod shows: the component tree a data mod's Worker sends with glaze.ui.render(slot, tree), or the one Glaze makes
-// from a declarative widget's blocks (features/modwidgets.js, on every browser), drawn by Glaze in a
-// closed shadow root of the slot. The tree arrives cleaned (lib/modapi.js, in the worker's broker); it is drawn with
+// from a declarative widget's blocks (mods/page/modwidgets.js, on every browser), drawn by Glaze in a
+// closed shadow root of the slot. The tree arrives cleaned (mods/modapi.js, in the worker's broker); it is drawn with
 // createElement, textContent, fixed attribute names and style.setProperty only, never from markup, and themed by the
 // palette Glaze wears (--gz-* on <html> reach into the shadow root). Buttons and inputs say what happened through
-// send(kind, id, value) (features/mods.js routes it to that mod as a 'ui' event). The tree's canvas is the one element
-// kept from one drawing to the next, since its control has gone to the mod's Worker (features/mods.js). Pictures are the
+// send(kind, id, value) (mods/page/mods.js routes it to that mod as a 'ui' event). The tree's canvas is the one element
+// kept from one drawing to the next, since its control has gone to the mod's Worker (mods/page/mods.js). Pictures are the
 // mod's own files, decoded here and drawn on a canvas, so no address of the mod's choosing ever loads. Classic script,
-// loaded on demand by features/mods.js and features/modwidgets.js; a second injection keeps the first.
+// loaded on demand by mods/page/mods.js and mods/page/modwidgets.js; a second injection keeps the first.
 var GZ_MODUI = globalThis.GZ_MODUI || (() => {
   const SVG = 'http://www.w3.org/2000/svg';
   const CSS = `:host{display:block;color:var(--gz-ink,inherit);font:inherit;min-width:0}

@@ -1,14 +1,14 @@
 // Ported from Rimeward src/lib/agent/tools.ts (ToolKind, ToolDef, aiTools, invokeReadTool) and tasks.ts (toolFailure) (MIT).
-// The AI harness's tools (docs/ai-harness.md): what a model may call while a task runs (lib/ai/loop.js). A tool:
-//   { name: 'courses_list' (snake_case), kind: 'read' | 'write' | 'confirm', description, parameters (lib/ai/schema.js, an
+// The AI harness's tools (docs/ai-harness.md): what a model may call while a task runs (ai/loop.js). A tool:
+//   { name: 'courses_list' (snake_case), kind: 'read' | 'write' | 'confirm', description, parameters (ai/schema.js, an
 //     object at the root), run(args, ctx) → data, summarize?(args, ctx) → the sentence a confirm shows, built from data }
 // 'read' answers with data; 'write' changes something; 'confirm' does something the student must see first: Glaze's
-// proposals. Whether a kind runs, waits for the student or is refused is the run's policy (lib/ai/loop.js). Every call
+// proposals. Whether a kind runs, waits for the student or is refused is the run's policy (ai/loop.js). Every call
 // carries a `reason` (aiTools adds it to each tool's parameters); arguments come from the model and are checked against
 // parameters before run sees them. Glaze's own tools in H1 are read or confirm only; a write tool needs its own review.
-// What the MCP view reads (lib/mcp/*.js), each optional: title (≤ 120), group (courses, grades, writer, assignments, or a
+// What the MCP view reads (agents/*.js), each optional: title (≤ 120), group (courses, grades, writer, assignments, or a
 // mod's mod:<id>), owner ('glaze' when absent, or mod:<id>), scope ('account' | 'document'), needs ('tab' | 'writer': what
-// must be open), output (a schema accepted by lib/ai/schema.js), hints ({ idempotent?, openWorld? }: booleans). A mod's tool
+// must be open), output (a schema accepted by ai/schema.js), hints ({ idempotent?, openWorld? }: booleans). A mod's tool
 // is named mod_<id>_<local> (local [a-z][a-z0-9_]{0,23}) in the group mod:<id>; Glaze's names never start with mod_.
 // Classic script for the worker; module.exports for node.
 var GZ_AI_TOOLS = globalThis.GZ_AI_TOOLS || (() => {

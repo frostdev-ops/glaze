@@ -1,8 +1,8 @@
-// The document kinds the Documents home knows (lib/doc-kinds.js): each kind's fixed facts, a stored row's kind, a file's
+// The document kinds the Documents home knows (documents/doc-kinds.js): each kind's fixed facts, a stored row's kind, a file's
 // kind by its extension, and the page code each kind's script attaches.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const DK = require('../../extension/lib/doc-kinds.js');
+const DK = require('../../extension/documents/doc-kinds.js');
 
 test('paper, sheet, pdf and slides are the kinds, frozen', () => {
   assert.deepEqual(Object.keys(DK.KINDS), ['paper', 'sheet', 'pdf', 'slides']);
@@ -52,7 +52,7 @@ test('a kind\'s page code registers onto its facts', () => {
 // What the page opens is what its scripts registered: a kind with no importFile (writer.pdf or writer.slides off: its script
 // registers nothing) takes no file, and its extensions leave the file chooser's accept.
 test('only a registered kind with importFile opens files', async () => {
-  const fresh = () => { delete require.cache[require.resolve('../../extension/lib/doc-kinds.js')]; delete globalThis.GZ_DOC_KINDS; return require('../../extension/lib/doc-kinds.js'); };
+  const fresh = () => { delete require.cache[require.resolve('../../extension/documents/doc-kinds.js')]; delete globalThis.GZ_DOC_KINDS; return require('../../extension/documents/doc-kinds.js'); };
   const K = fresh();
   assert.equal(K.opens('Essay.docx'), null, 'nothing registered: nothing opens');
   assert.equal(K.accept(), '');
@@ -81,7 +81,7 @@ test('only a registered kind with importFile opens files', async () => {
 // A kind's script may decide late whether it registers (pdf-kind.js reads writer.pdf, slides-kind.js writer.slides first);
 // the page waits for every such decision before it routes or draws, and a script that fails doesn't hold the page.
 test('settled waits for every kind script, failed ones included', async () => {
-  const fresh = () => { delete require.cache[require.resolve('../../extension/lib/doc-kinds.js')]; delete globalThis.GZ_DOC_KINDS; return require('../../extension/lib/doc-kinds.js'); };
+  const fresh = () => { delete require.cache[require.resolve('../../extension/documents/doc-kinds.js')]; delete globalThis.GZ_DOC_KINDS; return require('../../extension/documents/doc-kinds.js'); };
   const K = fresh();
   let late, later;
   K.wait(new Promise((ok) => { late = ok; }).then(() => K.register('pdf', { importFile: () => 'k' })));
@@ -103,7 +103,7 @@ test('settled waits for every kind script, failed ones included', async () => {
   fresh();
 });
 
-const freshSheet = () => { delete require.cache[require.resolve('../../extension/lib/doc-kinds.js')]; delete globalThis.GZ_DOC_KINDS; return require('../../extension/lib/doc-kinds.js'); };
+const freshSheet = () => { delete require.cache[require.resolve('../../extension/documents/doc-kinds.js')]; delete globalThis.GZ_DOC_KINDS; return require('../../extension/documents/doc-kinds.js'); };
 
 // What the page opens is what its scripts registered: a kind with no importFile (writer.sheets off: sheet-kind.js registers
 // viewing and editing only) takes no file, and its extensions leave the file chooser's accept.
@@ -148,7 +148,7 @@ test('settled waits for the sheet kind\'s late registration', async () => {
 // saysOf), as Open in Glaze and an attachment do (writer-kinds.js into).
 test('a PDF and a deck open up to what their record holds (pdf-kind.js, slides-kind.js STORE.max)', () => {
   const fs = require('node:fs'), path = require('node:path');
-  for (const [id, f] of [['pdf', 'pdf-kind.js'], ['slides', 'slides-kind.js']]) {
+  for (const [id, f] of [['pdf', 'documents/pdf/pdf-kind.js'], ['slides', 'documents/slides/slides-kind.js']]) {
     const m = /const STORE = \{\s*max: ([^,]+),/.exec(fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8'));
     assert.ok(m, `${f} STORE.max`);
     assert.equal(m[1].trim(), `GZ_DOC_KINDS.KINDS.${id}.max`, `${f} reads the kind's own number`);

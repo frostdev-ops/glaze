@@ -94,7 +94,7 @@ test("the test's Save / Submit footer lifts the drawer's opener, though Ultra pl
 });
 
 test("sidebar.css lays the test's questions and its details column out as the attempt's", () => {
-  const css = read('features/sidebar.css');
+  const css = read('navigation/page/sidebar.css');
   const grid = css.match(/html\[data-gz-sb-assessment="test"\]\[data-gz-sidebar\][^{]*\.panel-content-flex:has\(> \[data-gz-sidebar-host\]\)\s*\{([^}]*)\}/);
   assert.ok(grid, 'the details\' row is a grid while it holds the sidebar');
   assert.match(grid[1], /grid-template-columns: minmax\(0, 1fr\) var\(--gz-sidebar-w\)/);

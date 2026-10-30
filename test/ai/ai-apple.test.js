@@ -1,4 +1,4 @@
-// The AI harness's `apple` provider (lib/ai/providers/apple.js): Apple's Foundation Models through Safari's native handler
+// The AI harness's `apple` provider (ai/providers/apple.js): Apple's Foundation Models through Safari's native handler
 // (safari/Glaze/Glaze Extension/GlazeAI.swift), here against a stand-in browser.runtime.sendNativeMessage. Only on Safari;
 // one message, one reply (no streaming); the status words; the run's message; failures as categories; a cancel reaching
 // the native side; and a connection kept by the broker with no host to hold.
@@ -11,11 +11,11 @@ let native = async () => { throw new Error('no native handler'); };
 const sent = [];
 globalThis.chrome = { runtime: { getURL: (p = '') => `safari-web-extension://ABC/${p}` } };
 globalThis.browser = { runtime: { sendNativeMessage: async (app, m) => { sent.push({ app, m: structuredClone(m) }); return native(m); } } };
-const P = require('../../extension/lib/ai/providers.js');
-const A = require('../../extension/lib/ai/providers/apple.js');
-const B = require('../../extension/lib/ai/broker.js');
-const T = require('../../extension/lib/ai/task.js');
-const S = require('../../extension/lib/ai/schema.js');
+const P = require('../../extension/ai/providers.js');
+const A = require('../../extension/ai/providers/apple.js');
+const B = require('../../extension/ai/broker.js');
+const T = require('../../extension/ai/task.js');
+const S = require('../../extension/ai/schema.js');
 test.beforeEach(() => { sent.length = 0; native = async () => { throw new Error('no native handler'); }; B._reset(); });
 
 const SCHEMA = { type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'], additionalProperties: false };
@@ -26,7 +26,7 @@ test('only on Safari: elsewhere the file adds no provider', () => {
   assert.equal(P.get('apple'), A, 'added on Safari');
   const out = execFileSync(process.execPath, ['-e', `
     globalThis.chrome = { runtime: { getURL: () => 'chrome-extension://abc/' } };
-    const P = require('./lib/ai/providers.js'); require('./lib/ai/providers/apple.js');
+    const P = require('./ai/providers.js'); require('./ai/providers/apple.js');
     process.stdout.write(String(P.get('apple')));`], { cwd: path.join(__dirname, '../../extension') }).toString();
   assert.equal(out, 'null');
 });
@@ -203,8 +203,8 @@ test('Settings offers Apple only on Safari, including when only the browser name
   for (const [scheme, namespace, want] of [['chrome-extension:', 'chrome', false], ['moz-extension:', 'browser', false], ['safari-web-extension:', 'chrome', true], ['safari-web-extension:', 'browser', true]]) {
     const out = execFileSync(process.execPath, ['-e', `
       globalThis.${namespace} = { runtime: { getURL: () => '${scheme}//abc/' } };
-      const P = require('./lib/ai/providers.js'); require('./lib/ai/providers/apple.js');
-      const A = require('./lib/ai/settings.js');
+      const P = require('./ai/providers.js'); require('./ai/providers/apple.js');
+      const A = require('./ai/settings.js');
       process.stdout.write(JSON.stringify([!!P.get('apple'), A.PROVIDERS.includes('apple')]));`], { cwd: path.join(__dirname, '../../extension') }).toString();
     assert.deepEqual(JSON.parse(out), [want, want], `${namespace} ${scheme}`);
   }
@@ -233,7 +233,7 @@ test('an already cancelled adapter call sends no text and timeout cancels a pend
   await assert.rejects(A.run(ask(), { model: 'on-device' }, { signal: stopped.signal }));
   assert.equal(sent.length, 0);
   native = async (m) => m.type === 'ai.cancel' ? { ok: true, cancelled: false } : new Promise(() => {});
-  await assert.rejects(P.run('apple', ask({ timeoutMs: require('../../extension/lib/ai/request.js').LIMIT.timeout[0] }), { model: 'on-device' }), { category: 'timeout' });
+  await assert.rejects(P.run('apple', ask({ timeoutMs: require('../../extension/ai/request.js').LIMIT.timeout[0] }), { model: 'on-device' }), { category: 'timeout' });
   assert.deepEqual(sent.map((s) => s.m.type), ['ai.run', 'ai.cancel']);
   assert.equal(sent[0].m.id, sent[1].m.id);
 });
@@ -243,7 +243,7 @@ test('the catalog offers only the model on this device, and nothing names Privat
   assert.deepEqual(list.models.map((m) => m.id), ['on-device']);
   assert.match(list.models[0].name, /on this device/i);
   const fs = require('node:fs');
-  for (const f of ['lib/ai/providers/apple.js', '../safari/Glaze/Glaze Extension/GlazeAI.swift', '../docs/ai-harness.md'])
+  for (const f of ['ai/providers/apple.js', '../safari/Glaze/Glaze Extension/GlazeAI.swift', '../docs/ai-harness.md'])
     assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8'), /private.?cloud|PrivateCloudCompute|\bPCC\b/i, f);
 });
 
@@ -289,7 +289,7 @@ test('a changed connection asks the native side to drop its warm sessions', asyn
 });
 
 // "On this device" (connection id 'device') is one choice: Apple Intelligence where Safari offers it and this Mac can run
-// it, else the browser's own model. A stand-in for that model (lib/ai/providers/device.js isn't loaded here).
+// it, else the browser's own model. A stand-in for that model (ai/providers/device.js isn't loaded here).
 let browserModel = { state: 'unavailable', reason: 'browser' };
 P.add({ id: 'device', config: () => ({}), caps: () => ({ text: true, json: true, stream: true, local: true }), status: async () => browserModel,
   run: async () => ({ text: 'from the browser', model: 'gemini-nano', finish: 'stop' }) });
@@ -377,9 +377,9 @@ test('changing either kept connection immediately cancels an Apple run on On thi
 test('On this device is the browser\'s model outside Safari, and Apple is never asked', () => {
   const out = execFileSync(process.execPath, ['-e', `
     globalThis.chrome = { runtime: { getURL: () => 'chrome-extension://abc/' } };
-    const P = require('./lib/ai/providers.js'); require('./lib/ai/providers/apple.js');
+    const P = require('./ai/providers.js'); require('./ai/providers/apple.js');
     P.add({ id: 'device', config: () => ({}), caps: () => ({ text: true, local: true }), status: async () => ({ state: 'ready' }), run: async () => ({ text: '', finish: 'stop' }) });
-    const B = require('./lib/ai/broker.js');
+    const B = require('./ai/broker.js');
     const env = { enabled: async () => true, settings: async () => ({ on: true, use: 'device', features: { syllabus: true } }), vault: { get: async () => ({}) } };
     B.status({ feature: 'syllabus' }, env).then((st) => process.stdout.write(JSON.stringify([st.provider, st.ready])));`], { cwd: path.join(__dirname, '../../extension') }).toString();
   assert.deepEqual(JSON.parse(out), ['device', true]);

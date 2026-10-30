@@ -2,12 +2,12 @@
 // paper's key (school, student, course, assignment), the student's name (/users/me), the course's name (the student's
 // memberships), the assignment's title and due date (the course's gradebook column), its instructions (the attempt page's
 // read-only editor, else the content item's), its description (the content item's and its assessment's) and its rubric
-// (lib/rubric.js, read as features/rubric.js reads it) and the files attached in its instructions and description
+// (courses/rubric.js, read as courses/page/rubric.js reads it) and the files attached in its instructions and description
 // (attached(): names only until Feedback asks, attachments()) for the AI. The instructor is left for the student to type:
 // no read-only source for a course's instructors was seen on the owner's Ultra.
-// Every Ultra read is a GET through the site's queue (lib/lmsq.js). build() and read() are pure over what they're handed
+// Every Ultra read is a GET through the site's queue (courses/lmsq.js). build() and read() are pure over what they're handed
 // (node tests).
-// Classic script, loaded on demand (features/writer.js); module.exports for node.
+// Classic script, loaded on demand (writer/page/writer.js); module.exports for node.
 var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || (() => {
   const ID = /^_\d+_\d+$/;
   const str = (v, n = 200) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, n) : '');
@@ -24,7 +24,7 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
     return { take(value, preserve = false) { const all = preserve ? String(value) : str(value, Infinity), kept = all.slice(0, left); left -= kept.length; if (kept.length < all.length) incomplete = true; return kept; },
       mark() { incomplete = true; }, get incomplete() { return incomplete; } };
   };
-  // The rubric as the AI reads it: criteria with their complete levels, from lib/rubric.js's model.
+  // The rubric as the AI reads it: criteria with their complete levels, from courses/rubric.js's model.
   const rubricOf = (m) => {
     if (!m || !Array.isArray(m.criteria)) return null;
     const collect = collector();
@@ -73,7 +73,7 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
   // The files an assignment attaches: Ultra's attachment links in its HTML, <a data-bbtype="attachment" data-bbfile="{…}"
   // href="…/bbcswebdav/…"> (seen live 2026-10-27: an image, render "inline", isDecorative true however it was meant, so
   // that flag gates nothing). The href on the site's own /bbcswebdav/ is the file; data-bbfile's resourceUrl is a session's.
-  // Pictures Writer can send a model (PNG, JPEG, GIF, WebP), documents lib/doctext.js or the reader can read, and
+  // Pictures Writer can send a model (PNG, JPEG, GIF, WebP), documents core/doctext.js or the reader can read, and
   // spreadsheets (Open in Glaze's, never read for Feedback); others are left out. → [{ url, name, image }], each file once,
   // ATTACH.files at most.
   // Bytes: one document, one picture, the pictures (8 MB as base64, what the worker keeps and well within the broker's
@@ -109,7 +109,7 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
   };
   // The attached files read, within ATTACH: a picture as itself (its type from its bytes, at least ATTACH.side pixels a
   // side: an icon or a spacer says nothing), anything else as its text. images: false leaves pictures unread. o: { get(url,
-  // max) → bytes (null or a throw: left out), text({ name, bytes }) → its text, D (lib/doctext.js), images }.
+  // max) → bytes (null or a throw: left out), text({ name, bytes }) → its text, D (core/doctext.js), images }.
   // → [{ name, text } | { name, image: { mime, data (base64) } }]
   const MIME = [['image/png', [0x89, 0x50, 0x4e, 0x47]], ['image/jpeg', [0xff, 0xd8, 0xff]], ['image/gif', [0x47, 0x49, 0x46, 0x38]], ['image/webp', [0x52, 0x49, 0x46, 0x46]]];
   const b64 = (b) => { let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000)); return btoa(s); };
@@ -146,7 +146,7 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
   };
 
   // o: { school, path, uid() → id, me() → /users/me, courses() → memberships, rows() → gradebook rows (expand=column),
-  // get(url) → JSON (the content item, the rubric), instructions() → text, R (lib/rubric.js), url, origin }. Each read that
+  // get(url) → JSON (the content item, the rubric), instructions() → text, R (courses/rubric.js), url, origin }. Each read that
   // fails leaves its part empty. → the context (assignment.files: attached()'s, with their addresses).
   const build = async (o) => {
     const at = /^\/ultra\/courses\/(_\d+_\d+)\/(?:.*\/)?assessment\/(_\d+_\d+)\/attempt(?:\/|$)/.exec(o.path || '');
@@ -195,9 +195,9 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
   // On the attempt page: reads through GZ_CTX and the site's queue, then hands the frame its context (and keeps it on the
   // box, so a reopened frame starts with it). alive(): whether the box is still this one.
   const send = async (X, box, alive = () => true) => {
-    await X.need('lib/lmsq.js', () => globalThis.GZ_LMSQ);
-    await X.need('lib/ultra.js', () => globalThis.GZ_ULTRA);
-    await X.need('lib/rubric.js', () => globalThis.GZ_RUBRIC_LIB).catch(() => {});
+    await X.need('courses/lmsq.js', () => globalThis.GZ_LMSQ);
+    await X.need('courses/ultra.js', () => globalThis.GZ_ULTRA);
+    await X.need('courses/rubric.js', () => globalThis.GZ_RUBRIC_LIB).catch(() => {});
     const live = () => alive() && X.on();
     const reader = GZ_ULTRA.read({ origin: location.origin, live, f: (...a) => GZ_LMSQ.fetch(...a, 0, live), maxPages: 2, maxRequests: 6 });
     const cid = /\/courses\/(_\d+_\d+)\//.exec(location.pathname)?.[1];
@@ -229,12 +229,12 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
     box.reading = null;
     box.context = { ...box.context, ...context };
     box.port?.postMessage({ type: 'context', context: box.context });
-    if (box.files.some((f) => !f.image)) X.need('lib/writer-submit.js', () => globalThis.GZ_WRITER_SUBMIT_LIB).then(() => { if (alive()) decorate(X, box); }, () => {});
+    if (box.files.some((f) => !f.image)) X.need('writer/writer-submit.js', () => globalThis.GZ_WRITER_SUBMIT_LIB).then(() => { if (alive()) decorate(X, box); }, () => {});
     return context;
   };
 
   // A file's bytes, streamed and stopped past max (→ null, said.big set), with the session as the page would ask for it,
-  // through the site's queue (lib/lmsq.js, loaded by the caller). Ultra answers a /bbcswebdav/ file with a redirect to its
+  // through the site's queue (courses/lmsq.js, loaded by the caller). Ultra answers a /bbcswebdav/ file with a redirect to its
   // file store (*.prod.files.blackboard.com), which lets the page read it (live, 2026-10-27).
   const fetchBounded = (url, max, live, said = {}) => GZ_LMSQ.run(async () => {
     if (!live()) throw new Error('stale');
@@ -263,19 +263,19 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
   }, 1);
 
   // ---- an attached PDF, deck or spreadsheet opened in Glaze. openable: the box's files of a kind whose Settings → Writer
-  // switch is on (w: storage.sync writer; L: lib/writer-submit.js), never a picture or a Word file (Feedback reads those).
+  // switch is on (w: storage.sync writer; L: writer/writer-submit.js), never a picture or a Word file (Feedback reads those).
   const OPENS = ['pdf', 'slides', 'sheet'];
   const openable = (files, w, L) => (Array.isArray(files) ? files : []).filter((f) => !f.image && OPENS.includes(L.kindOf(f.name)) && L.switched(w).includes(L.kindOf(f.name)));
   // The file's bytes to the paper's frame as import:file { open } (writer-import.js opens it in Glaze, the paper kept as a
   // version first), or import:failed when it can't be read within what the submit sheet sends (L.MAX_FILE, the kinds' max:
-  // lib/doc-kinds.js FILE), why: 'size' past it. → whether it went.
+  // documents/doc-kinds.js FILE), why: 'size' past it. → whether it went.
   const open = async (X, box, id, L, alive = () => true) => {
     if (box.kind === 'test' || box.context?.kind !== 'assignment') return false;
     const f = openable(box.files, X.settings()?.writer, L).find((x) => x.id === id);
     if (!f) return false;
     const port = box.port;
     const live = () => alive() && X.on() && box.port === port && openable(box.files, X.settings()?.writer, L).some((x) => x.id === f.id && x.url === f.url);
-    await X.need('lib/lmsq.js', () => globalThis.GZ_LMSQ);
+    await X.need('courses/lmsq.js', () => globalThis.GZ_LMSQ);
     let bytes = null;
     const said = {};
     try { bytes = await fetchBounded(f.url, L.MAX_FILE, live, said); } catch { bytes = null; }
@@ -289,7 +289,7 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
   };
   // Open in Glaze after each link on the page to an openable attachment (any link to its address: how Ultra draws an
   // attachment on the attempt page wasn't probed, only the API's <a data-bbtype="attachment">); the buttons go when the
-  // switch does. Runs on features/writer.js's passes: it adds a button only where one is missing.
+  // switch does. Runs on writer/page/writer.js's passes: it adds a button only where one is missing.
   const decorate = (X, box, L = globalThis.GZ_WRITER_SUBMIT_LIB, doc = document) => {
     const want = L && X.on() && box.context?.kind === 'assignment' ? openable(box.files, X.settings()?.writer, L) : [];
     box.openers ||= new Map();
@@ -315,7 +315,7 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
   };
 
   // The frame asks for the files when Feedback runs (writer-ai.js attachments { id, images }): read once for the box, as
-  // features/syllabus.js reads a document's linked files (a document's text by features/import.js, a PDF in Glaze's
+  // planner/page/syllabus.js reads a document's linked files (a document's text by planner/page/import.js, a PDF in Glaze's
   // reader), each a GET through the site's queue, and answered on the box's port. A test's box is never read.
   const attachments = async (X, box, m, alive = () => true) => {
     const say = (files) => { try { box.port?.postMessage({ type: 'attachments', id: m.id, files, ...(files.incomplete && { incomplete: true }) }); } catch { /* the frame went */ } };
@@ -324,9 +324,9 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
     if (!box.reading || (images && !box.reading.images)) {
       const live = () => alive() && X.on();
       box.reading = { images, files: (async () => {
-        await X.need('lib/lmsq.js', () => globalThis.GZ_LMSQ);
-        await X.need('lib/doctext.js', () => globalThis.GZ_DOCTEXT);
-        await X.need('features/import.js', () => globalThis.GZ_IMPORT);
+        await X.need('courses/lmsq.js', () => globalThis.GZ_LMSQ);
+        await X.need('core/doctext.js', () => globalThis.GZ_DOCTEXT);
+        await X.need('planner/page/import.js', () => globalThis.GZ_IMPORT);
         const get = (url, max) => fetchBounded(url, max, live);
         const text = async ({ name, bytes }) => GZ_IMPORT.read(new File([bytes], name));
         return read(box.files, { get, text, D: GZ_DOCTEXT, images });

@@ -1,9 +1,9 @@
 // Glaze Writer's submit sheet (glaze-plans/writer/mockups D), in an assignment's paper frame: the first two pages as
 // they're laid out and the .docx it makes, a note to the instructor, "Also paste the text in the text box", the open
-// checks, Cancel and Submit. It opens from the paper's Submit… and from Ultra's own Submit (features/writer-submit.js
-// catches it). Its Submit, the student's click, runs the steps in order (lib/writer-submit.js): the paper saved as a
+// checks, Cancel and Submit. It opens from the paper's Submit… and from Ultra's own Submit (writer/page/writer-submit.js
+// catches it). Its Submit, the student's click, runs the steps in order (writer/writer-submit.js): the paper saved as a
 // 'sending' version, the .docx built, then the page attaches it through Ultra's upload, writes the note and text into
-// Ultra's box and clicks Ultra's Submit once, the worker marking that version Submitted as it does (lib/writer-papers.js
+// Ultra's box and clicks Ultra's Submit once, the worker marking that version Submitted as it does (writer/writer-papers.js
 // submitted). Every failure stops before that click, says why here, and the paper stays.
 // Submit as is (a file the student brought, writer-import.js): the file large in place of the pages, the note, Cancel and
 // Submit; the file's own bytes go to the page unchanged, and the paper is neither saved nor built. A PDF or deck shown in
@@ -16,7 +16,7 @@
 //   submit:save (Ultra's Save and Close), submit:step { run, step }, submit:done { run, ok, error }. A test's box is
 //   compose, never a paper: it gets none of this.
 // "Also paste the text" starts as it was at the last Submit while Settings → Writer → Submitting's remember is on
-// (writer.submit: rememberText, text; lib/writer-settings.js), else off. Cancel and Escape keep nothing.
+// (writer.submit: rememberText, text; writer/writer-settings.js), else off. Cancel and Escape keep nothing.
 // Classic script after writer-paper.js.
 var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
   const frame = globalThis.GZ_WRITER_FRAME;
@@ -95,9 +95,9 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     if (!api || api.importing?.() || frame.mode() !== 'paper' || frame.kind() !== 'assignment' || (!file && api.compact?.())) return;
     if (sheet) { sheet.first.focus(); return; }
     const opening = ++openings;
-    await P().need(['lib/writer-submit.js']);
+    await P().need(['writer/writer-submit.js']);
     // The sheet names the assignment (its heading, the file's name, the .docx's title): it waits for the page to say
-    // which one this is (lib/writer-context-assignment.js), ten seconds at most.
+    // which one this is (writer/writer-context-assignment.js), ten seconds at most.
     for (let i = 0; i < 50 && !api.context?.()?.assignment && opening === openings && P()?.current() === api; i++) await new Promise((r) => setTimeout(r, 200));
     if (sheet || opening !== openings || P()?.current() !== api || api.importing?.() || frame.mode() !== 'paper' || frame.kind() !== 'assignment') return;
     if (file) { const error = L().fileError(file); if (error) { api.notify?.(error); return; } }

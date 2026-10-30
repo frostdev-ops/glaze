@@ -1,12 +1,12 @@
 // Glaze Writer's proofing in the editor frame (writer.html), on GZ_WRITER_FRAME: Harper through the one shared worker
-// (lib/harper/shared.js), started on the box's first focus; each changed paragraph linted as you type (~2 ms), the whole
+// (vendor/harper/shared.js), started on the box's first focus; each changed paragraph linted as you type (~2 ms), the whole
 // document on a pause; the issues in GZ_WRITER_ISSUES, drawn by its plugin; the hover card (mockup B "Suggestion"), the
 // autocorrect pop with its Undo, and the issue count in the bar's issues slot. Alt+Enter opens the card at the caret.
 // The student's dictionary is chrome.storage.local 'writerWords' (a list of words, the newest last), shared by every box;
 // each box adds its context's words (course, prompt, names in the thread) to its own.
-// Settings → Writer (lib/writer-settings.js): proofing on or off, the dialect Harper reads and the autocorrect classes
+// Settings → Writer (writer/writer-settings.js): proofing on or off, the dialect Harper reads and the autocorrect classes
 // (writer.autocorrect), each followed at once; while it proofs, the browser's own spellcheck is off. Smart quotes and
-// dashes and compose's Markdown shortcuts are lib/writer-editor.js's input rules, which read their settings themselves
+// dashes and compose's Markdown shortcuts are writer/writer-editor.js's input rules, which read their settings themselves
 // (ruleOff).
 (() => {
   const F = globalThis.GZ_WRITER_FRAME, P = GZ_WRITER_PROOF, I = GZ_WRITER_ISSUES;
@@ -44,7 +44,7 @@
     try {
       if (!sharedFailed && typeof SharedWorker === 'function') {
         try {
-          worker = new SharedWorker('lib/harper/shared.js', { type: 'module', name: 'glaze-harper' });
+          worker = new SharedWorker('vendor/harper/shared.js', { type: 'module', name: 'glaze-harper' });
           worker.addEventListener('error', fail);
           port = worker.port;
           port.start();
@@ -52,7 +52,7 @@
         } catch { sharedFailed = true; }
       }
       if (!port) {
-        worker = port = new Worker('lib/harper/shared.js', { type: 'module', name: 'glaze-harper' });
+        worker = port = new Worker('vendor/harper/shared.js', { type: 'module', name: 'glaze-harper' });
         port.addEventListener('error', fail);
         P.mode = 'worker';
       }
@@ -156,7 +156,7 @@
     const maps = p.line === P.key.getState(view.state).line && P.since(view.state, p.ver);
     if (!maps) return;
     const doc = view.state.doc;
-    // A spelling lint on a word that reads as a name (lib/writer-proof.js nameLike) is left out: the heading block's names
+    // A spelling lint on a word that reads as a name (writer/writer-proof.js nameLike) is left out: the heading block's names
     // and a paper's people aren't misspellings (owner, 2026-10-27: "we are flagging names all over the place").
     const place = (l, base, text) => {
       const i = P.toIssue(l), from = P.mapPos(maps, base(l.start), 1), to = P.mapPos(maps, base(l.end), -1);

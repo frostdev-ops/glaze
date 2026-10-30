@@ -1,13 +1,13 @@
-// Settings → Agents (lib/editor-agents.js) on stand-in elements, with a stand-in worker answering glaze:mcp-config as
-// lib/background.js does: off by default, nativeMessaging asked for first in the switch's click (never on Safari), off sent
+// Settings → Agents (settings/editor-agents.js) on stand-in elements, with a stand-in worker answering glaze:mcp-config as
+// background/background.js does: off by default, nativeMessaging asked for first in the switch's click (never on Safari), off sent
 // before the permission goes, the link's state read from storage.session mcpLink and asked of the worker only as the page
-// opens and once after a wait on Starting… (Chrome), a line for every state lib/agent-link.js reports, the apps' cards and their groups, the activity list (metadata only),
+// opens and once after a wait on Starting… (Chrome), a line for every state agents/agent-link.js reports, the apps' cards and their groups, the activity list (metadata only),
 // hidden on iOS and Android, and every word in every language.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const I = require('../../extension/lib/i18n.js');
-const L = require('../../extension/lib/agent-link.js');
+const I = require('../../extension/core/i18n.js');
+const L = require('../../extension/agents/agent-link.js');
 
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
@@ -19,7 +19,7 @@ const A = 'aaaaaaaaaaaaaaaa', B = 'bbbbbbbbbbbbbbbb', C = 'cccccccccccccccc', D 
 const tEn = (k, v) => I.t(k, v, 'en');
 
 // page({ browser, os, on, link, apps, mods, calls, grant, fail, embedded }): Settings with the Agents section mounted.
-//   on: the worker's consent; link: storage.session mcpLink; apps: the worker's paired apps (lib/mcp/grants.js records);
+//   on: the worker's consent; link: storage.session mcpLink; apps: the worker's paired apps (agents/grants.js records);
 //   mods: glaze:mods list's records; calls: storage.local mcpCalls; grant: the browser's answer to the permission request;
 //   fail: config ops the worker refuses.
 const page = ({ browser = 'chrome', os = 'mac', on = false, link, apps = [], mods = [], calls, grant = true, fail = [], embedded = false, next, reply = (m, r) => r, readStorage = (area, keys, r) => r } = {}) => {
@@ -51,7 +51,7 @@ const page = ({ browser = 'chrome', os = 'mac', on = false, link, apps = [], mod
   });
   const local = area('local', { mcp: { on }, ...(calls && { mcpCalls: structuredClone(calls) }) });
   const session = area('session', link ? { mcpLink: structuredClone(link) } : {});
-  // The worker, as lib/background.js mcpConfig answers.
+  // The worker, as background/background.js mcpConfig answers.
   const worker = { on, apps: structuredClone(apps), link: link || { state: 'off', at: null } };
   const config = async (m) => {
     if (fail.includes(m.op)) return { ok: false, error: 'failed' };
@@ -97,7 +97,7 @@ const page = ({ browser = 'chrome', os = 'mac', on = false, link, apps = [], mod
   // The page's timers run only when a test says the time has passed (elapse).
   const setTimeout = (f, ms) => { timers.set(++timer, { f, ms }); return timer; }, clearTimeout = (id) => { timers.delete(id); };
   const ctx = vm.createContext({ chrome, window, navigator, document: doc, URL, Promise, Date, Number, Array, Object, Math, Map, Set, JSON, structuredClone, setTimeout, clearTimeout });
-  vm.runInContext(read('lib/editor-agents.js'), ctx);
+  vm.runInContext(read('settings/editor-agents.js'), ctx);
   ctx.GZ_AGENTSEDIT.mount({ t: tEn, when: (at) => `@${at}`, day: (at) => `#${at}`, hint: (s) => hints.push(s) });
   const $ = (id) => doc.getElementById(id);
   const target = (x) => (typeof x === 'string' ? $(x) : x);
@@ -127,7 +127,7 @@ const page = ({ browser = 'chrome', os = 'mac', on = false, link, apps = [], mod
 };
 const text = (e) => (e && typeof e === 'object' ? `${e.textContent}${e.children.map(text).join('')}` : '');
 const open = async (opts) => { const p = page(opts); await settle(); return p; };
-const E = () => require('../../extension/lib/editor-agents.js');
+const E = () => require('../../extension/settings/editor-agents.js');
 
 test('off by default: the switch is off, no state shows, and the worker is asked once for its state and apps', async () => {
   const p = await open();
@@ -285,7 +285,7 @@ test('the link state follows storage.session mcpLink; a state change asks the wo
   assert.match(p.line(), /^The helper stopped/);
   assert.equal(p.sent.length, sent, 'a state change sends nothing');
   assert.deepEqual(p.waits(), [], 'no timer outside Starting…');
-  const js = read('lib/editor-agents.js').replace(/\/\/[^\n]*/g, '');
+  const js = read('settings/editor-agents.js').replace(/\/\/[^\n]*/g, '');
   assert.doesNotMatch(js, /setInterval|requestIdleCallback/, 'no poll');
   assert.equal(js.match(/setTimeout\(/g).length, 1, 'one timer: Starting…\'s wait');
 });
@@ -423,7 +423,7 @@ test('Settings has no control that reloads Glaze, on any browser', async () => {
   }
 });
 
-test('every state lib/agent-link.js reports has its line, with the command to run and Copy', async () => {
+test('every state agents/agent-link.js reports has its line, with the command to run and Copy', async () => {
   const { line, NO_NODE } = E();
   const states = [...L.STATES, NO_NODE];
   for (const browser of ['chrome', 'firefox']) {
@@ -600,7 +600,7 @@ test('Forget all apps asks first: Cancel (which has the focus) and Esc keep ever
   assert.deepEqual(forgets(), ['forget']);
   assert.equal(p.cards().length, 0);
 
-  const html = read('options.html'), js = read('lib/editor-agents.js').replace(/\/\/[^\n]*/g, '');
+  const html = read('options.html'), js = read('settings/editor-agents.js').replace(/\/\/[^\n]*/g, '');
   assert.doesNotMatch(js, /\bconfirm\(/);
   assert.match(html, /<button type="button" class="wr-danger" id="agents-forget">Forget all apps<\/button>/, 'drawn as Clear all papers and documents is');
   const dialog = html.slice(html.indexOf('<dialog id="agents-forget-ask"'), html.indexOf('</dialog>', html.indexOf('<dialog id="agents-forget-ask"')));
@@ -634,7 +634,7 @@ test('the activity list: time, app, tool and outcome, newest first, and nothing 
   assert.equal(p.rows()[0], 'schedule_list · Claude Code | @400 · Timed out', 'a new row shows as it is recorded');
   assert.ok(p.ops().filter((o) => o === 'apps').length >= 2, 'and the apps are read again, for their last use');
   const { outcome, OUTCOMES } = E();
-  assert.deepEqual(OUTCOMES, require('../../extension/lib/mcp/grants.js').OUTCOMES, 'every outcome lib/mcp/grants.js records');
+  assert.deepEqual(OUTCOMES, require('../../extension/agents/grants.js').OUTCOMES, 'every outcome agents/grants.js records');
   for (const o of OUTCOMES) assert.notEqual(outcome(o, tEn), o, o);
   assert.equal(outcome('invalid', tEn), 'Invalid request', "an app's malformed call is not the student's refusal");
   assert.notEqual(outcome('invalid', tEn), outcome('refused', tEn));
@@ -655,7 +655,7 @@ test('embedded Settings mounts nothing: the AI panel opens in a tab of its own',
 });
 
 test('the page: Agents is the AI tab\'s last section, Extension only, with a jump link, local controls, every id once and its script before options.js', () => {
-  const html = read('options.html'), js = read('lib/editor-agents.js'), opts = read('options.js');
+  const html = read('options.html'), js = read('settings/editor-agents.js'), opts = read('settings/options.js');
   const panel = html.slice(html.indexOf('<div id="panel-ai"'), html.indexOf('<div id="panel-backup"'));
   assert.match(panel, /<section id="agents" data-editor-section="ai\/agents" data-sites="Extension only" aria-labelledby="heading-ai-agents">/);
   const routes = [...panel.matchAll(/data-editor-section="([^"]+)"/g)].map((m) => m[1]);
@@ -667,14 +667,14 @@ test('the page: Agents is the AI tab\'s last section, Extension only, with a jum
   const used = new Set([...js.matchAll(/\$\('([\w-]+)'\)/g)].map((m) => m[1]).filter((id) => !drawn.has(id)));
   assert.ok(used.size >= 12, String([...used]));
   for (const id of used) assert.equal(html.split(`id="${id}"`).length - 1, 1, id);
-  const order = ['lib/editor-agents.js', 'options.js'].map((f) => html.indexOf(`<script src="${f}"></script>`));
+  const order = ['settings/editor-agents.js', 'settings/options.js'].map((f) => html.indexOf(`<script src="${f}"></script>`));
   assert.ok(order[0] > 0 && order[1] > order[0], String(order));
   assert.match(panel, /id="agents-line" role="status" aria-live="polite"/);
   assert.match(panel, /id="agents-said" role="status" aria-live="polite"/);
 });
 
 test('every word of Settings → Agents is in every language', () => {
-  const html = read('options.html'), js = read('lib/editor-agents.js').replace(/\/\/[^\n]*/g, '');
+  const html = read('options.html'), js = read('settings/editor-agents.js').replace(/\/\/[^\n]*/g, '');
   const section = html.slice(html.indexOf('<section id="agents"'), html.indexOf('</section>', html.indexOf('<section id="agents"')));
   const fromHtml = [...section.replace(/<(\w+)[^>]*translate="no"[^>]*>[\s\S]*?<\/\1>/g, '').matchAll(/>([^<]+)</g)].map((m) => m[1].replace(/\s+/g, ' ').trim()).filter((s) => /\p{L}/u.test(s));
   const fromJs = [...js.matchAll(/\bt\('((?:\\.|[^'\\])*)'/g)].map((m) => m[1].replace(/\\(.)/g, '$1'));

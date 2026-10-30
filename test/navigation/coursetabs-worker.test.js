@@ -4,10 +4,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const root = process.env.GZ_B8_REPO || path.join(__dirname, '../../extension');
-const L = require(path.join(root, 'lib/coursetabs.js'));
+const L = require(path.join(root, 'navigation/coursetabs.js'));
 const site = 'https://bb.school.test';
 const uid = '_42_1', cid = '_1_1';
-// A sketch the page sends of what it shows (lib/coursetabs.js sketch): `boxes` of its boxes, 60 at most.
+// A sketch the page sends of what it shows (navigation/coursetabs.js sketch): `boxes` of its boxes, 60 at most.
 const box = (i) => [i % 20 * 70, Math.floor(i / 20) * 300, 64, 280, 'btic'[i % 4], '#1a2b3cff', 4];
 const boxes = (n = 3) => Array.from({ length: n }, (_, i) => box(i));
 const sketch = (c = cid, extra = {}) => ({ op: 'sketch', cid: c, path: `/ultra/courses/${c}/outline`, size: [1400, 900], top: 0, name: 'Computer Science I', strip: null, boxes: boxes(), ...extra });
@@ -20,7 +20,7 @@ function worker({ keys = false, canvas = false } = {}) {
   const store = { failStore: false }, captures = { calls: 0 };
   const born = Date.now() - 10000, epochs = new Map();
   let message, changed;
-  const source = fs.readFileSync(path.join(root, 'lib/background.js'), 'utf8');
+  const source = fs.readFileSync(path.join(root, 'background/background.js'), 'utf8');
   const section = source.slice(source.indexOf('const SNAP_MEM'), source.indexOf('// A Gradescope course page for a Canvas or Ultra page'));
   const reads = { all: 0 };
   const area = {
@@ -35,7 +35,7 @@ function worker({ keys = false, canvas = false } = {}) {
   };
   let on = true;
   const context = vm.createContext({
-    GZ_CTABS_LIB: L, GZ_CARDS: require('../../extension/lib/cards.js'), Map, Date, URL, JSON,
+    GZ_CTABS_LIB: L, GZ_CARDS: require('../../extension/courses/cards.js'), Map, Date, URL, JSON,
     fromCanvas: async (s) => canvas && s.id === 'extension' && s.url.startsWith(host + '/') ? host : null,
     fromUltra: async (s) => !canvas && s.id === 'extension' && s.tab && s.url.startsWith(site + '/ultra/') ? site : null,
     switchOn: async () => on,

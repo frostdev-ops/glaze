@@ -127,7 +127,7 @@ test('Excel helper: a script write failure removes the temporary directory', () 
 });
 
 test('fidelity: a missing error reading and an unexpected formula difference fail the run', async () => {
-  const M = require('../../extension/lib/sheet-model.js');
+  const M = require('../../extension/documents/sheets/sheet-model.js');
   for (const cell of [{ t: 'e', v: '#VALUE!' }, { t: 'n', v: 5, f: '2+3' }]) {
     const model = M.workbook();
     model.sheets[0].rows.set(0, new Map([[0, cell]]));
@@ -138,11 +138,11 @@ test('fidelity: a missing error reading and an unexpected formula difference fai
 });
 
 test('fidelity: expected models come from the source, before serialization', async () => {
-  const M = require('../../extension/lib/sheet-model.js');
+  const M = require('../../extension/documents/sheets/sheet-model.js');
   let reads = 0;
   const context = { __dirname: path.join(root, '../tools/fidelity'), module: { exports: {} }, require: (id) => {
-    if (id === 'node:fs') return { readdirSync: (p) => p.endsWith('/lib') ? [] : ['sample.xlsx'], readFileSync: () => new Uint8Array() };
-    if (id === '../../extension/lib/sheet-xlsx.js') return { read: async () => { const wb = M.workbook(); wb.sheets[0].rows.set(0, new Map([[0, { t: 'n', v: ++reads }]])); return wb; }, write: async () => new Uint8Array() };
+    if (id === 'node:fs') return { readdirSync: (p) => p.endsWith('/documents/sheets') ? [] : ['sample.xlsx'], readFileSync: () => new Uint8Array() };
+    if (id === '../../extension/documents/sheets/sheet-xlsx.js') return { read: async () => { const wb = M.workbook(); wb.sheets[0].rows.set(0, new Map([[0, { t: 'n', v: ++reads }]])); return wb; }, write: async () => new Uint8Array() };
     return require(id);
   } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../tools/fidelity/sheet-fidelity-books.js'), 'utf8'), context);

@@ -3,7 +3,7 @@
 //     vec4 scene(vec2 uv)    // uv 0..1, y up, as the built-in scenes' vUv; rgb is colour, a is coverage over the ground
 // wrap() puts the shared uniforms, helpers and `#line 1` in front and the dither and main() behind, so compiler errors carry
 // the author's own line numbers. check() refuses what the compiler would accept but a background must not do, before any GL
-// exists: it runs in the editor, in the sanitizer for theme codes and again in lib/scene.js. Pure functions, no DOM, so node
+// exists: it runs in the editor, in the sanitizer for theme codes and again in looks/scene.js. Pure functions, no DOM, so node
 // tests it; compile() is the only part that wants a WebGL2 context. Classic script, loaded on demand (content.js need()).
 //
 // Why each refusal: it is there because Chrome's ANGLE accepts the thing (checked on 151, spike S2), not as a style rule.
@@ -11,7 +11,7 @@ var GZ_GLSL = globalThis.GZ_GLSL || (() => {
   const MAX = 8192; // characters, and ASCII only, so also bytes
   const MAX_LOOP = 256; // passes of one for loop
   const COST_LIMIT = 4096; // operations per pixel, including built-ins and arithmetic; see estimate()
-  // What the author may rely on: the uniforms every built-in scene reads and the helpers they share (lib/scene.js COMMON and
+  // What the author may rely on: the uniforms every built-in scene reads and the helpers they share (looks/scene.js COMMON and
   // FLAT, the same text), plus px(). One string, so its line count is fixed.
   const PRELUDE = [
     'precision highp float;',

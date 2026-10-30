@@ -8,7 +8,7 @@
 // apply(issue, i) puts suggestion i in, ignore(issue) hides it and its like (same source, kind, text and message) for this box.
 // bind(view) gives the same over any view-like { state, dispatch }; plugin(onChange) is the plugin. writer-proof.js draws
 // the hover card.
-// Classic script after lib/pm.js; module.exports for node.
+// Classic script after vendor/pm.js; module.exports for node.
 var GZ_WRITER_ISSUES = globalThis.GZ_WRITER_ISSUES || (() => {
   const PM = typeof GZ_PM !== 'undefined' ? GZ_PM : (require('./writer-schema.js'), GZ_PM);
   const { Plugin, PluginKey } = PM.state;

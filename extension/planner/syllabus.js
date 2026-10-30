@@ -1,10 +1,10 @@
 // Syllabus import (W15): the facts a student wants from a syllabus, read out of its plain text on the device. The
-// text comes from lib/doctext.js (DOCX, PPTX, HTML, Canvas's own Syllabus page) or is pasted; a PDF text layer or an
+// text comes from core/doctext.js (DOCX, PPTX, HTML, Canvas's own Syllabus page) or is pasted; a PDF text layer or an
 // on-device model can later feed extract() the same way, or fill in what it left empty: every field says how sure it
-// is (conf 'sure' or 'check') and which line it came from (src), and features/syllabus.js shows all of it for review
+// is (conf 'sure' or 'check') and which line it came from (src), and planner/page/syllabus.js shows all of it for review
 // before anything is kept. Heuristics only: labelled layouts in English, German, Spanish,
 // French, Dutch and Portuguese. Dates are worked out here, by code, in the course's term year.
-// Classic script; the page gets it on demand (lib/background.js LOADABLE), the worker and node take it whole.
+// Classic script; the page gets it on demand (background/background.js LOADABLE), the worker and node take it whole.
 var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   const DAYS = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
   const DAY = 86400000;
@@ -20,7 +20,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   const any = (words) => new RegExp(`(?<![\\p{L}])(?:${words})(?![\\p{L}])`, 'iu');
 
   // ---- days and times -----------------------------------------------------------------------------------------
-  // Class and office-hour times come from W14's reader (lib/classes.js meetings, loaded before this file in a page).
+  // Class and office-hour times come from W14's reader (planner/classes.js meetings, loaded before this file in a page).
   // Here only weekday names, to tidy a date's title ("Wednesday, October 14") and to tell a name from a day.
   const CL = () => globalThis.GZ_CLASSES || require('./classes.js');
   const DAY_WORDS = [
@@ -70,7 +70,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   ];
   // A day in the course's term: an explicit year as written, else the year that puts it no earlier than 45 days before
   // the term starts (a spring term's January after a December syllabus date, say). With no term start known (known
-  // false), today stands in for it and the year is the one that puts the day nearest today, as lib/classes.js reads a
+  // false), today stands in for it and the year is the one that puts the day nearest today, as planner/classes.js reads a
   // class date: in October a September date is this year's, and a January one next year's.
   const dayOf = ({ y, mo, d }, { start, known }) => {
     if (mo < 0 || mo > 11 || d < 1 || d > 31) return null;
@@ -1205,7 +1205,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
   };
   const weightsText = (list) => (list || []).map((w) => `${w.name} ${w.weight}%`).join(', ');
 
-  // Kept per Canvas or Ultra site, user and course, in storage.local through the worker (lib/background.js 'glaze:syllabus').
+  // Kept per Canvas or Ultra site, user and course, in storage.local through the worker (background/background.js 'glaze:syllabus').
   const key = (origin, uid, cid) => `syllabus:${origin}/${uid}/${cid}`;
   const KEY = /^syllabus:https?:\/\/[a-z\d.-]+(?::\d+)?\/(?:\d{1,20}|_\d{1,20}_\d{1,20})\/(?:\d{1,20}|_\d{1,20}_\d{1,20})$/i;
   const str = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
@@ -1303,7 +1303,7 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
     const course = `syl-${cid}-${rid}`.length <= 40 ? cid : seed({ day: cid, title: '' }) + seed({ day: '', title: cid });
     return `syl-${course}-${rid}`;
   };
-  // What saving the record does to To Do, as lib/todo.js edits: was and now are the record's dates before and as saved,
+  // What saving the record does to To Do, as planner/todo.js edits: was and now are the record's dates before and as saved,
   // picked the ids of the rows ticked "Add to To Do", tasks what To Do holds ({ id, done }…), note the tasks' notes. A
   // ticked row is added, or brought up to date where its task is there already (whether it is done, its notes and its steps
   // stay the student's). A row whose day or title was edited moves its task with it, ticked or not, if it has one. A row that
@@ -1331,5 +1331,5 @@ var GZ_SYLLABUS = globalThis.GZ_SYLLABUS || (() => {
 })();
 
 // Node takes the module; a page that loaded this on demand gets it as the script's last value, which is how
-// lib/background.js knows it ran to the end.
+// background/background.js knows it ran to the end.
 if (typeof module !== 'undefined') module.exports = GZ_SYLLABUS; else GZ_SYLLABUS;

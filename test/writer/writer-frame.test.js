@@ -1,5 +1,5 @@
-// Glaze Writer's frame protocol: the worker's one-use pass and the page-world helper it puts in (lib/background.js
-// 'glaze:writer'), lib/writer-main.js's events, and writer.js's side of the channel, with a stand-in editor. What the frame
+// Glaze Writer's frame protocol: the worker's one-use pass and the page-world helper it puts in (background/background.js
+// 'glaze:writer'), writer/writer-main.js's events, and writer.js's side of the channel, with a stand-in editor. What the frame
 // does in a browser, against the real Quill, is checks/writer/writer-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -14,7 +14,7 @@ const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 
 // ---- the worker -----------------------------------------------------------------------------------------------------
-test('a writer pass: only from an Ultra page Glaze runs on, which also gets lib/writer-main.js in its own world', async () => {
+test('a writer pass: only from an Ultra page Glaze runs on, which also gets writer/writer-main.js in its own world', async () => {
   const w = worker();
   const injected = [];
   w.context.chrome.scripting.executeScript = async (x) => { injected.push(x); return [{}]; };
@@ -25,7 +25,7 @@ test('a writer pass: only from an Ultra page Glaze runs on, which also gets lib/
   assert.deepEqual(await w.send({ type: 'glaze:writer', op: 'job', pass: 'short' }, ultra), { ok: false }, 'not a guessable pass');
   assert.equal(injected.length, 0);
   assert.deepEqual(await w.send({ type: 'glaze:writer', op: 'job', pass }, ultra), { ok: true });
-  assert.deepEqual(JSON.parse(JSON.stringify(injected)), [{ target: { tabId: 7, documentIds: ['doc-1'] }, files: ['lib/writer-main.js'], world: 'MAIN', injectImmediately: true }], 'into the document that asked, in the page\'s world');
+  assert.deepEqual(JSON.parse(JSON.stringify(injected)), [{ target: { tabId: 7, documentIds: ['doc-1'] }, files: ['writer/writer-main.js'], world: 'MAIN', injectImmediately: true }], 'into the document that asked, in the page\'s world');
   // Without a documentId (Firefox, Safari), the frame that asked.
   await w.send({ type: 'glaze:writer', op: 'job', pass: crypto.randomUUID() }, { ...ultra, documentId: undefined, frameId: 4 });
   assert.deepEqual(JSON.parse(JSON.stringify(injected[1].target)), { tabId: 7, frameIds: [4] });
@@ -65,16 +65,16 @@ test('a claimed writer pass tells the AI broker the frame and the page it works 
   assert.deepEqual(Object.keys(w.store.session.aiHosts), ['7|5'], 'no host for a pass that fails');
 });
 
-test('both frames load on demand: lib/writer-ultra.js and features/writer.js are loadable; the helper is not', () => {
-  const list = JSON.parse(read('lib/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"'));
-  assert.ok(list.includes('lib/writer-ultra.js') && list.includes('features/writer.js'));
-  assert.ok(!list.includes('lib/writer-main.js'), 'the page-world helper goes in only with a pass');
+test('both frames load on demand: writer/writer-ultra.js and writer/page/writer.js are loadable; the helper is not', () => {
+  const list = JSON.parse(read('background/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"'));
+  assert.ok(list.includes('writer/writer-ultra.js') && list.includes('writer/page/writer.js'));
+  assert.ok(!list.includes('writer/writer-main.js'), 'the page-world helper goes in only with a pass');
   const m = require('../../extension/manifest.json');
   assert.ok(m.web_accessible_resources.some((w) => w.resources.includes('writer.html') && !w.use_dynamic_url));
   assert.ok(!m.content_scripts.some((c) => c.world === 'MAIN'), 'no manifest MAIN-world entry (Safari 18 only)');
 });
 
-// ---- lib/writer-main.js -----------------------------------------------------------------------------------------------
+// ---- writer/writer-main.js -----------------------------------------------------------------------------------------------
 const pageWorld = () => {
   const doc = new EventTarget();
   const attrs = new Set(), calls = [];
@@ -89,7 +89,7 @@ const pageWorld = () => {
   for (const b of Object.values(boxes)) { const root = b.__quill.root; b.querySelector = () => root; }
   doc.querySelector = (sel) => boxes[sel.match(/data-gz-writer-id="([^"]+)"/)?.[1]] || null;
   const ctx = vm.createContext({ document: doc, CustomEvent, JSON });
-  const run = () => vm.runInContext(read('lib/writer-main.js'), ctx);
+  const run = () => vm.runInContext(read('writer/writer-main.js'), ctx);
   const ask = (type, detail) => {
     const got = [];
     const hear = (e) => got.push(JSON.parse(e.detail));
@@ -124,7 +124,7 @@ test('page world: ops outside what compose writes are refused before Quill sees 
 });
 
 test('page world: telephone links accepted by compose sync to native Quill', () => {
-  const S = require('../../extension/lib/writer-schema.js');
+  const S = require('../../extension/writer/writer-schema.js');
   const p = pageWorld(); p.run();
   const doc = S.parse(S.compose, '<p>Call <a href="tel:+15551234567">the office</a>.</p>');
   const delta = S.delta(doc);
@@ -184,12 +184,12 @@ const frame = ({ claim = true, host = 'https://school.blackboard.com', readyStat
     addEventListener: (type, f) => { if (type === 'message') listeners.push(f); else if (type === 'load') loads.push(f); },
     chrome: { runtime: { sendMessage: async (m) => { asked.push(m); return { ok: claim }; } } },
     GZ_WRITER_EDITOR: { create: editor },
-    // lib/writer-schema.js as the frame uses it: compose's ops for a doc, and what a box holds that compose can't keep.
+    // writer/writer-schema.js as the frame uses it: compose's ops for a doc, and what a box holds that compose can't keep.
     GZ_WRITER_SCHEMA: { compose: 'compose', paper: 'paper', delta: (doc) => [{ insert: `ops of ${doc}\n` }], loses: (schema, h) => [...(/class="attachment"/.test(h) ? ['attachment'] : []), ...(h.length > 5000 ? ['limit'] : [])] },
   });
   ctx.globalThis = ctx;
-  vm.runInContext(read('lib/i18n.js'), ctx);
-  vm.runInContext(read('writer.js'), ctx);
+  vm.runInContext(read('core/i18n.js'), ctx);
+  vm.runInContext(read('writer/frame/writer.js'), ctx);
   const port = () => { const p = { sent: [], closed: false, postMessage(m) { this.sent.push(JSON.parse(JSON.stringify(m))); }, close() { this.closed = true; } }; return p; };
   const hand = async (data, p = port()) => { for (const f of listeners) await f({ data, ports: [p] }); return p; };
   const to = (p, m) => p.onmessage({ data: m });

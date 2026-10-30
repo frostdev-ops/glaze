@@ -26,11 +26,11 @@ const frame = (url, button) => ({ url: () => url, evaluate: async (fn, arg) => r
 test('download-check: the Allow frame names the first of its four states not reached', async () => {
   const idle = node([0, 0, 24, 24], { textContent: '' }), busy = node([0, 0, 24, 24], { textContent: '1 of 1 · Cancel', 'data-busy': true });
   const header = { '#context_module_74 .ig-header > .gz-dl-allow': {} };
-  const url = 'chrome-extension://ext/features/allow.html#files.cdn-c.test';
+  const url = 'chrome-extension://ext/courses/allow.html#files.cdn-c.test';
   const hidden = { textContent: 'Allow files.cdn-c.test', hidden: true }, shown = { textContent: 'Allow files.cdn-c.test', hidden: false };
   await assert.rejects(allowFrame(page({ top: doc({ 'gz-dl-74': idle }) }), 74, 'files.cdn-c.test'), /the Allow frame: no download running, Download all idle/);
   await assert.rejects(allowFrame(page({ top: doc({ 'gz-dl-74': busy }) }), 74, 'files.cdn-c.test'), /no frame in module 74's header, Download all says "1 of 1 · Cancel"/);
-  await assert.rejects(allowFrame(page({ top: doc({ 'gz-dl-74': busy }, header), frames: [frame('about:blank', shown)] }), 74, 'files.cdn-c.test'), /no chrome-extension:\/\/ext\/features\/allow\.html in the frame/);
+  await assert.rejects(allowFrame(page({ top: doc({ 'gz-dl-74': busy }, header), frames: [frame('about:blank', shown)] }), 74, 'files.cdn-c.test'), /no chrome-extension:\/\/ext\/courses\/allow\.html in the frame/);
   await assert.rejects(allowFrame(page({ top: doc({ 'gz-dl-74': busy }, header), frames: [frame(url, hidden)] }), 74, 'files.cdn-c.test'), /its button not shown \(no ticket from the worker\)/);
   const f = frame(url, shown);
   assert.equal(await allowFrame(page({ top: doc({ 'gz-dl-74': busy }, header), frames: [f] }), 74, 'files.cdn-c.test'), f);
@@ -94,7 +94,7 @@ test('download-check: the Allow click rests both its button and its module frame
 test('download-check: a loaded Allow page elsewhere cannot stand in for the module frame', async () => {
   const busy = node([0, 0, 24, 24], { textContent: 'Finding files · Cancel', 'data-busy': true });
   const shown = { textContent: 'Allow files.cdn-c.test', hidden: false };
-  const f = frame('chrome-extension://ext/features/allow.html#files.cdn-c.test', shown);
+  const f = frame('chrome-extension://ext/courses/allow.html#files.cdn-c.test', shown);
   const p = page({ top: doc({ 'gz-dl-74': busy }, { '#context_module_74 .ig-header > .gz-dl-allow': {} }), frames: [f], headerFrame: frame('about:blank', shown) });
-  await assert.rejects(allowFrame(p, 74, 'files.cdn-c.test'), /no chrome-extension:\/\/ext\/features\/allow.html in the frame/);
+  await assert.rejects(allowFrame(p, 74, 'files.cdn-c.test'), /no chrome-extension:\/\/ext\/courses\/allow.html in the frame/);
 });

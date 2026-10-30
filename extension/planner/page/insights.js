@@ -2,13 +2,13 @@
 // Dashboard's header and the command palette open it. It reads, read-only and with the student's own session, this
 // term's courses' work and grades from their own Canvas (each course's assignment groups with their submissions, and its
 // grading periods where it has them), plus Better To Do's plans and the streak's best (W11, when that is on) from this
-// device. The arithmetic is lib/insights.js (grades by lib/gradecalc.js). What it works out is kept in storage.local
+// device. The arithmetic is planner/insights.js (grades by planner/gradecalc.js). What it works out is kept in storage.local
 // as one small record for this term, written by the service worker's queue ('glaze:insights'), so the view opens at
 // once next time; "Clear saved insights" drops it. Every chart is inline SVG beside a table of the same figures; the
 // summary card saves as a PNG made on the device. Nothing is sent anywhere, and nothing is compared with anyone.
 // On Blackboard Ultra (content-ultra.js syncInsights; B4): a button on the Courses page and Ctrl+K, this term's courses from
-// your course list (lib/ultra.js current), each one's gradebook with where each piece of work stands (lib/ultra.js work and
-// excepts, [I] rules) and its overall grade over the term (lib/ultra.js trend: the course's own recipe, or its share of
+// your course list (courses/ultra.js current), each one's gradebook with where each piece of work stands (courses/ultra.js work and
+// excepts, [I] rules) and its overall grade over the term (courses/ultra.js trend: the course's own recipe, or its share of
 // points); dates in the browser's time zone, which Ultra doesn't give.
 // Loaded on demand: a second injection keeps the first.
 var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
@@ -20,8 +20,8 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
   const svg = (tag, attrs = {}, ...kids) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); e.append(...kids); return e; };
   const FRESH = 6 * 36e5; // a saved summary younger than this opens as it is; Refresh asks again
   const alive = () => { const s = ctx.settings(); return ctx.on() && s.enabled !== false && !!s.enhance.insights; };
-  const libs = () => ctx.need('lib/todo.js', () => globalThis.GZ_TODO)
-    .then(() => Promise.all([ctx.need('lib/gradecalc.js', () => globalThis.GZ_GRADECALC), ctx.need('lib/insights.js', () => globalThis.GZ_INSIGHTS)]));
+  const libs = () => ctx.need('planner/todo.js', () => globalThis.GZ_TODO)
+    .then(() => Promise.all([ctx.need('planner/gradecalc.js', () => globalThis.GZ_GRADECALC), ctx.need('planner/insights.js', () => globalThis.GZ_INSIGHTS)]));
   const send = (m) => { try { return Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:insights', ...m })).catch(() => null); } catch { return Promise.resolve(null); } };
   // A storage read that worked (an empty one too), or null.
   const get = (keys) => new Promise((res) => {
@@ -55,7 +55,7 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
 
   // ---- the Dashboard's button --------------------------------------------------------------------------------------
   let btn = null;
-  // Ultra: in Glaze's toolbar on the Courses page (features/widgets.js, in the page's header), beside What Glaze can do,
+  // Ultra: in Glaze's toolbar on the Courses page (core/page/widgets.js, in the page's header), beside What Glaze can do,
   // where the board is on (notes, widgets or the pet); otherwise in the page's header, where Ultra keeps its own header
   // tools (B4 [M]: empty but for a hidden catalog link). Chosen by the switches, so the button never moves once the
   // toolbar arrives.
@@ -113,9 +113,9 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
   };
 
   // Ultra: who you are, this term's courses and your time zone, as Canvas's profile and course list give them; and one
-  // course read through lib/ultra.js (one request for its gradebook, one more only for due-date exceptions).
+  // course read through courses/ultra.js (one request for its gradebook, one more only for due-date exceptions).
   const ultraTerm = async () => {
-    await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA);
+    await ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA);
     const mem = await ctx.myCourses();
     if (mem.complete === false) throw new Error('Incomplete Ultra memberships');
     const uid = mem.find((m) => /^_\d+_\d+$/.test(m?.userId || ''))?.userId;
@@ -163,7 +163,7 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
         ]);
         const q = !!c.restrict_quantitative_data;
         const work = groups.flatMap((g) => g.assignments || []).filter((a) => a.published !== false && a.workflow_state !== 'unpublished');
-        // Canvas's current score is the current grading period's, where the course has one (as features/grades.js reads it).
+        // Canvas's current score is the current grading period's, where the course has one (as planner/page/grades.js reads it).
         const gp = c.enrollments?.find((e) => e?.type === 'student')?.current_grading_period_id;
         const trend = q ? [] : I.trend(groups, { weighted: c.apply_assignment_group_weights, periods, weightedPeriods: c.has_weighted_grading_periods }, tz, gp);
         return { id: String(c.id), name: c.name, q, more: groups.more, items: work.map((a) => I.item(a, at)), trend, gp: trend.some((x) => x[2]) ? String(gp) : '' };

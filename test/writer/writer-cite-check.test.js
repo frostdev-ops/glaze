@@ -1,9 +1,9 @@
-// lib/writer-cite.js check/cites/count: citations found in the text (parenthetical, narrative, footnotes), and the issues
-// they raise, anchored on document positions through lib/writer-schema.js text().
+// writer/writer-cite.js check/cites/count: citations found in the text (parenthetical, narrative, footnotes), and the issues
+// they raise, anchored on document positions through writer/writer-schema.js text().
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const C = require('../../extension/lib/writer-cite.js');
-const W = require('../../extension/lib/writer-schema.js');
+const C = require('../../extension/writer/writer-cite.js');
+const W = require('../../extension/writer/writer-schema.js');
 
 const d = (y) => ({ 'date-parts': [[y]] });
 const MORRISON = { id: 'morrison', type: 'book', author: [{ family: 'Morrison', given: 'Toni' }], title: 'Beloved', publisher: 'Alfred A. Knopf', issued: d(1987) };
@@ -159,7 +159,7 @@ test('paper format checks can own citation shape while cite checks still find mi
 });
 
 test('recovering unreviewed bibliography metadata does not invent uncited-source warnings', () => {
-  const B = require('../../extension/lib/writer-bibliography.js');
+  const B = require('../../extension/writer/writer-bibliography.js');
   const FX = require('../fixtures/writer-paper-fixtures.js');
   for (const style of ['mla9', 'apa7', 'chicago17']) {
     const node = W.paper.nodeFromJSON(FX.papers[style]());

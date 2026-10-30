@@ -1,4 +1,4 @@
-// Glaze's own navigation bar (features/navbar.js), headless, in the editor's Ultra preview (preview.html runs Ultra's real
+// Glaze's own navigation bar (navigation/page/navbar.js), headless, in the editor's Ultra preview (preview.html runs Ultra's real
 // content scripts on a mock page). Settings reach it as the editor sends them (gzPreview); nothing is saved.
 // It checks that the bar stands in for Ultra's drawer (hidden, keeping the page's room), its items, order, current item
 // and badges; that an item opens through Ultra's own link; the rail's icons state, tooltips, hover peek, keyboard and
@@ -10,8 +10,8 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const G = require('../../extension/defaults.js');
-require('../../extension/lib/coursetabs.js'); require('../../extension/lib/nav.js'); // their settings, so GZ_SANITIZE keeps them
+const G = require('../../extension/content/defaults.js');
+require('../../extension/navigation/coursetabs.js'); require('../../extension/navigation/nav.js'); // their settings, so GZ_SANITIZE keeps them
 
 const src = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-navbar-'));

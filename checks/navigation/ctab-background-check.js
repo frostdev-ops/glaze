@@ -9,7 +9,7 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
 // A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
 const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
 const site = 'https://bb.school.test', key = `ctabs:${site}:_42_1`;
-const G = require(path.join(ext, 'defaults.js'));
+const G = require(path.join(ext, 'content/defaults.js'));
 const html = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-course.html'), 'utf8');
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-ctab-bg-'));
@@ -50,7 +50,7 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
       enhance: Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, ['tabs', 'place'].includes(k)])), tabs: G.GZ_SANITIZE({}).tabs };
     await opts.evaluate(async ({ settings, key, site }) => {
       await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings);
-      await chrome.storage.local.set({ ultra: [site] }); // the student's yes to this Ultra site (lib/background.js approved)
+      await chrome.storage.local.set({ ultra: [site] }); // the student's yes to this Ultra site (background/background.js approved)
       await chrome.storage.local.set({ [key]: { tabs: [1, 2].map((i) => ({ cid: `_10${i}_1`, name: `Synthetic course ${i}`, path: `/ultra/courses/_10${i}_1/outline`, top: 0, at: i, pin: false })) } });
     }, { settings, key, site });
     await require('../../tools/dev/check-env.js').ultraReady(opts);

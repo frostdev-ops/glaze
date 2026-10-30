@@ -88,7 +88,7 @@ test('review: changed native text while Submit enables never sends a partial not
 });
 
 test('review: Save and Close replies are correlated, including timers and double clicks', async () => {
-  const p = page(); const L = require('../../extension/lib/writer-submit.js'), b = L.footer(p.box.editor).save;
+  const p = page(); const L = require('../../extension/writer/writer-submit.js'), b = L.footer(p.box.editor).save;
   b.disabled = false; b.removeAttribute('disabled'); b.className = '';
   p.fire(b, 'click'); p.fire(b, 'click');
   const saves = p.sent.filter((m) => m.type === 'submit:save');
@@ -109,7 +109,7 @@ test('review: cancelling the sheet while upload runs prevents the final native c
 
 test('review: replacing a listed row with the same name does not prove the original upload', async () => {
   const p = page({ enabled: false }); await p.go(); await p.tick(16000);
-  const L = require('../../extension/lib/writer-submit.js');
+  const L = require('../../extension/writer/writer-submit.js');
   L.listings(L.areaOf(p.box.editor), 'Rivera_Essay2.docx')[0].remove();
   p.addRow('Rivera_Essay2.docx'); p.setEnabled(true); await p.go({ run: 2 });
   assert.equal(p.clicks.length, 0, 'a replacement same-named file has unknown bytes');

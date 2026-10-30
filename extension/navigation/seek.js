@@ -1,4 +1,4 @@
-// Content search for the command palette (features/search.js): what each course is asked, in what order, and
+// Content search for the command palette (navigation/page/search.js): what each course is asked, in what order, and
 // how the answers are ranked and kept. Canvas's REST lists take a search_term (titles, 2 characters or more), so a course
 // is one GET per kind. Classic script; module.exports for node. Loaded on demand: a second injection keeps the first.
 var GZ_SEEK = globalThis.GZ_SEEK || (() => {
@@ -94,5 +94,5 @@ var GZ_SEEK = globalThis.GZ_SEEK || (() => {
   return { KINDS, PER, term, order, rank, read, cache, search, fold, current };
 })();
 
-// Node takes the module; a page that loaded this on demand gets it as the script's last value (lib/background.js).
+// Node takes the module; a page that loaded this on demand gets it as the script's last value (background/background.js).
 if (typeof module !== 'undefined') module.exports = GZ_SEEK; else GZ_SEEK;

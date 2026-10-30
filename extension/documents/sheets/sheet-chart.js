@@ -1,4 +1,4 @@
-// A sheet's charts drawn on the grid (sheet-grid.js): scene() lays a resolved chart (lib/sheet-chart-xml.js resolve) out
+// A sheet's charts drawn on the grid (sheet-grid.js): scene() lays a resolved chart (documents/sheets/sheet-chart-xml.js resolve) out
 // in a w×h box as plain shapes (pure, for node: bars, lines, areas, pies and doughnuts, scatter, axes with nice ticks,
 // titles, the legend), svg() builds them with DOM calls, and layer() keeps a chart layer in each of the grid's panes, each
 // chart at its anchor's cells, moving and sizing with them and with the frozen panes, drawn again a moment after the

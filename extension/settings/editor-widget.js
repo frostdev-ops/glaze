@@ -1,12 +1,12 @@
-// The editor's widget builder (the Mods tab): a widget with no code, made from blocks (lib/modwidget.js) bound to the data
+// The editor's widget builder (the Mods tab): a widget with no code, made from blocks (mods/modwidget.js) bound to the data
 // Glaze already has, with a live preview from the student's own data on this device (or example data until there is any).
-// Saving signs it with the student's author key (lib/modbundle.js, the same key export uses) and installs it as a local mod
+// Saving signs it with the student's author key (mods/modbundle.js, the same key export uses) and installs it as a local mod
 // of source 'builder'; exporting or copying a code is the same signed bundle. The widget is checked by the same cleaner the
 // worker and the page use, so nothing the form holds can reach a page unchecked. Extension options page only (mount); the
 // pure helpers (norm, blank, need, manifestOf, bump) are for node tests.
 var GZ_WIDGETEDIT = globalThis.GZ_WIDGETEDIT || (() => {
-  const B = () => (typeof GZ_MODBUNDLE !== 'undefined' ? GZ_MODBUNDLE : require('./modbundle.js'));
-  const W = () => (typeof GZ_MODWIDGET !== 'undefined' ? GZ_MODWIDGET : require('./modwidget.js'));
+  const B = () => (typeof GZ_MODBUNDLE !== 'undefined' ? GZ_MODBUNDLE : require('../mods/modbundle.js'));
+  const W = () => (typeof GZ_MODWIDGET !== 'undefined' ? GZ_MODWIDGET : require('../mods/modwidget.js'));
   const E = () => (typeof GZ_MODSEDIT !== 'undefined' ? GZ_MODSEDIT : require('./editor-mods.js'));
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
   const TYPES = ['text', 'number', 'list', 'ring', 'countdown', 'image', 'button'];

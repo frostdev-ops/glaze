@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const K = require('../../extension/lib/cards.js');
+const K = require('../../extension/courses/cards.js');
 
 const A = 'canvas:https://school.instructure.com/25';
 const B = 'canvas:http://localhost:3000/26';
@@ -80,7 +80,7 @@ test('contrast is measured, never corrected', () => {
 });
 
 // canvas.css rules, as [selector, body], comments removed; @media blocks flattened.
-const cssRules = (file = 'canvas.css') => {
+const cssRules = (file = 'content/canvas.css') => {
   const css = require('fs').readFileSync(require('path').join(__dirname, '../../extension', file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const out = [];
   const walk = (text) => {
@@ -113,7 +113,7 @@ test('motion off stills the pet and the particles; hover motion off stops what a
 });
 
 test('Ultra board cards share the existing hover effects and the pet motion-Off rule', () => {
-  const rules = cssRules('theme.css');
+  const rules = cssRules('content/theme.css');
   assert.ok(rules.some(([sel, body]) => sel.includes('.gz-course-card') && sel.includes('data-gz-motion="off"]') && /animation:\s*none\s*!important/.test(body)), 'reduced motion stops the board pet');
   for (const effect of ['grow', 'tilt', 'glow', 'shine']) assert.ok(rules.some(([sel]) => sel.includes(`data-gz-card-hover="${effect}"`) && sel.includes('.gz-course-card')), effect);
   assert.ok(rules.some(([sel, body]) => sel.includes('.gz-course-card') && /animation:\s*gz-card-fall/.test(body)), 'board particles use the guarded shared rule');
@@ -165,8 +165,8 @@ test('local pictures: scaled down, capped each and in all, and dropped with thei
 });
 
 test('theme codes carry how cards look and linked card styles, never a picture from this computer', async () => {
-  const G = require('../../extension/defaults.js');
-  const S = require('../../extension/lib/share.js');
+  const G = require('../../extension/content/defaults.js');
+  const S = require('../../extension/sharing/share.js');
   const s = { ...G.GZ_SANITIZE({}), card: K.settings({ hover: 'glow', pet: 'cat', create: true, width: 300 }) };
   const cards = { [A]: { k: 'image', i: 'abcdef123456' }, [B]: { k: 'image', u: 'https://pics.example/a.jpg', f: 'warm' }, 'canvas:https://s.instructure.com/9': { k: 'solid', c: '#123456' } };
   const got = await S.decode(await S.encode(s, cards));
@@ -192,8 +192,8 @@ test('theme codes carry how cards look and linked card styles, never a picture f
 });
 
 test('every valid saved state gives a code that decodes back to it, or a clear "too long" at copy time', async () => {
-  const G = require('../../extension/defaults.js');
-  const S = require('../../extension/lib/share.js');
+  const G = require('../../extension/content/defaults.js');
+  const S = require('../../extension/sharing/share.js');
   // Deterministic states: settings at their edges, and card styles with every optional field, including the longest
   // links the cards item can hold (signed links: no repeats for deflate to fold).
   let seed = 7;

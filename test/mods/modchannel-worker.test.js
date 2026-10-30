@@ -14,7 +14,7 @@ const worker = (globals = {}, permissions) => {
   const context = vm.createContext({
     URL, URLSearchParams, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, AbortController, AbortSignal, Response, crypto: globalThis.crypto, atob, btoa, navigator: {},
     Blob, CompressionStream, DecompressionStream, DOMException, setTimeout, clearTimeout, ...globals,
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), context); },
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         openOptionsPage: async () => { opened.push('options'); }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
@@ -24,7 +24,7 @@ const worker = (globals = {}, permissions) => {
       scripting: { getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {} },
     },
   });
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   const send = (m, sender) => new Promise((res) => { let n = 0; for (const f of listeners) if (f(structuredClone(m), sender, (r) => res(structuredClone(r))) === true) n++; if (!n) setTimeout(res, 0); });
   const settle = async () => { for (let i = 0; i < 50; i++) await new Promise((r) => setTimeout(r, 2)); };
   return { local, send, settle, opened };
@@ -59,7 +59,7 @@ test('an invalid Check now id never expands into checking every mod', async () =
 });
 
 // A channel on a relay of the student's own (a link names its server): reached only while Glaze holds that relay's host,
-// as Sharing's relays are (lib/sessions.js); Glaze's own relay is a required host.
+// as Sharing's relays are (sharing/sessions.js); Glaze's own relay is a required host.
 test('a channel on a relay Glaze does not hold is refused before any request; Glaze\'s own relay is always reached', async () => {
   const fetched = [];
   const held = new Set(require('../../extension/manifest.json').host_permissions);

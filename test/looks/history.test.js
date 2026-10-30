@@ -2,10 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const H = require('../../extension/lib/history.js');
-const G = require('../../extension/defaults.js');
+const H = require('../../extension/looks/history.js');
+const G = require('../../extension/content/defaults.js');
 const m = require('../../extension/manifest.json');
-const M = require('../../extension/lib/media.js');
+const M = require('../../extension/looks/media.js');
 const { fakeIDB } = require('../helpers/fake-idb.cjs');
 
 const looks = Object.fromEntries(G.GZ_LOOKS.map((L) => [L.name, L]));
@@ -80,7 +80,7 @@ const worker = ({ fetch, manifest = m } = {}) => {
       scripting: { getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {} },
     },
   });
-  vm.runInContext(fs.readFileSync(require.resolve('../../extension/lib/background.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/background/background.js'), 'utf8'), context);
   const send = (msg, sender, reply = () => {}) => on.message.forEach((f) => f(msg, sender, reply));
   const change = (changes) => on.changed.forEach((f) => f(changes, 'sync'));
   const tick = () => new Promise(setImmediate);
@@ -124,7 +124,7 @@ test('editor history checkpoints merge on the recording/clear queue and reject u
 });
 
 test('the gallery content script runs only on the gallery, and the background takes codes only from there', async () => {
-  const entry = m.content_scripts.find((c) => c.js.includes('lib/gallery.js'));
+  const entry = m.content_scripts.find((c) => c.js.includes('looks/gallery.js'));
   assert.deepEqual(entry.matches, ['https://frostdev.io/glaze/looks', 'https://frostdev.io/glaze/looks/*', 'https://frostdev.io/glaze/mods', 'https://frostdev.io/glaze/mods/*']);
   assert.ok(!entry.all_frames);
   assert.deepEqual(m.permissions, ['storage', 'scripting', 'unlimitedStorage', 'activeTab', 'declarativeContent'], 'no permission for the gallery');
@@ -256,7 +256,7 @@ test('a burst that starts after Clear history, while older writes are still queu
 });
 
 // ---- Look parts ---------------------------------------------------------------------------------------------------
-const XP = require('../../extension/lib/lookparts.js');
+const XP = require('../../extension/looks/lookparts.js');
 const GLOW = { x: { cursor: { kind: 'glow' } } };
 
 test('a Look\'s parts are part of the theme: wearing it brings them, and a theme without any clears them', () => {
@@ -350,7 +350,7 @@ test('gallery Look names and authors lose bidi and control characters before sto
 // A gallery Look whose background is a file: the worker fetches that one file from the gallery and keeps it, pending, before
 // the editor opens (test/looks/media-store.test.js follows it there); anything wrong with it still offers the Look, without the file.
 test('a gallery Look\'s background file is fetched from the gallery and kept by its name, pending, before the offer', async () => {
-  const S = require('../../extension/lib/share.js'), M = require('../../extension/lib/media.js');
+  const S = require('../../extension/sharing/share.js'), M = require('../../extension/looks/media.js');
   const bytes = fs.readFileSync(require.resolve('../fixtures/media/spin.json'));
   const h = await M.sha(M.check(new Uint8Array(bytes), 'bg').bytes);
   const code = await S.encode(G.GZ_SANITIZE({ bg: { kind: 'media' } }), {}, { x: { bg: { media: { type: 'lottie', src: `file:${h}` } } } });

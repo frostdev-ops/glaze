@@ -4,7 +4,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const source = fs.readFileSync(path.join(process.env.EXT || path.join(__dirname, '../../extension'), 'features/coursetabs.js'), 'utf8');
+const source = fs.readFileSync(path.join(process.env.EXT || path.join(__dirname, '../../extension'), 'navigation/page/coursetabs.js'), 'utf8');
 const part = (a, b) => source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a)));
 const origin = 'https://bb.test';
 

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const D = require('../../extension/lib/download.js');
+const D = require('../../extension/courses/download.js');
 
 test('download URLs permit HTTPS and only the exact scratch development origin', () => {
   assert.equal(D.url('https://files.example/file?token=a%2Fb'), 'https://files.example/file?token=a%2Fb');
@@ -14,7 +14,7 @@ test('only our content script on a course Modules page, or in a frame of one on 
   assert.equal(D.sender(s, 'ours'), true);
   assert.equal(D.sender({...s,url:'https://canvas.school.edu/courses/25'}, 'ours'), true);
   for (const patch of [{id:'other'}, {tab:null}, {url:'https://canvas.example/'}, {url:'bad'}]) assert.equal(D.sender({...s,...patch}, 'ours'), false);
-  // A course tab's frame (features/coursetabs.js): the page around it is the same site's, and its own address passes the path check.
+  // A course tab's frame (navigation/page/coursetabs.js): the page around it is the same site's, and its own address passes the path check.
   const frame = { ...s, frameId: 3, tab: { id: 1, url: 'https://canvas.example/' } };
   assert.equal(D.sender(frame, 'ours'), true);
   assert.equal(D.sender({ ...frame, url: 'https://canvas.example/courses/25' }, 'ours'), true);

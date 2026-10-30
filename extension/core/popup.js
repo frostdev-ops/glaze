@@ -1,7 +1,7 @@
-// Glaze's pop-up (features/popup.js), the parts that don't touch the page, so node can test them: how it comes and
+// Glaze's pop-up (courses/page/popup.js), the parts that don't touch the page, so node can test them: how it comes and
 // goes (the motion each setting and motion level gets, the genie's keyframes), where a preview beside a link
-// goes, and the safe path for a site's HTML: lib/notes.js's sanitizer (GZ_NOTES.parse) into elements made one by one.
-// Announcements (features/announce.js) and rubrics use it. Classic script; module.exports for node. Loaded on demand: a
+// goes, and the safe path for a site's HTML: planner/notes.js's sanitizer (GZ_NOTES.parse) into elements made one by one.
+// Announcements (courses/page/announce.js) and rubrics use it. Classic script; module.exports for node. Loaded on demand: a
 // second injection keeps the first.
 var GZ_POPUP_LIB = globalThis.GZ_POPUP_LIB || (() => {
   // An address on this site (origin), made absolute (Ultra's <base href> is its CDN, so nothing is left relative), or null.
@@ -13,9 +13,9 @@ var GZ_POPUP_LIB = globalThis.GZ_POPUP_LIB || (() => {
   };
 
   // ---- a site's HTML ------------------------------------------------------------------------------------------------------
-  // Through lib/notes.js's sanitizer (N: GZ_NOTES): its allowlist, links http(s) and mailto only, scripts, styles, frames,
+  // Through planner/notes.js's sanitizer (N: GZ_NOTES): its allowlist, links http(s) and mailto only, scripts, styles, frames,
   // forms, media and every attribute it doesn't name dropped. Pictures from this site stay pictures; any other site's
-  // becomes a link to it. Kept pictures are loaded by features/popup.js with redirects refused. → the tree's children.
+  // becomes a link to it. Kept pictures are loaded by courses/page/popup.js with redirects refused. → the tree's children.
   const tree = (html, origin, N) => N.parse(html, { base: `${origin}/`, pictures: (h) => own(h, origin) !== null }).kids;
   const ATTRS = ['href', 'alt', 'title', 'colspan', 'rowspan', 'start'];
   const pictures = new WeakMap();

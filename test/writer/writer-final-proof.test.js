@@ -1,11 +1,11 @@
-// lib/writer-proof.js's sure fixes, final review: the capital-I fix keeps abbreviations, list markers and maths variables
+// writer/writer-proof.js's sure fixes, final review: the capital-I fix keeps abbreviations, list markers and maths variables
 // as typed; the doubled-word fix keeps names and real reduplications. Typing goes through the plugins' handleTextInput.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../../extension/lib/writer-schema.js');
-const E = require('../../extension/lib/writer-editor.js');
-const P = require('../../extension/lib/writer-proof.js');
-const I = require('../../extension/lib/writer-issues.js');
+const S = require('../../extension/writer/writer-schema.js');
+const E = require('../../extension/writer/writer-editor.js');
+const P = require('../../extension/writer/writer-proof.js');
+const I = require('../../extension/writer/writer-issues.js');
 
 const editor = () => {
   const view = { composing: false, state: null, dispatch(tr) { this.state = this.state.apply(tr); } };

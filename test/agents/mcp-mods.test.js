@@ -1,15 +1,15 @@
-// Mods' code tools for agent apps (C14): an agent app's call to a mod's code tool, routed by the worker (lib/mcp/modroute.js)
-// to Glaze's content script in a tab of the account's school (features/mods.js, 'glaze:modtool'), handed to the mod's Worker
+// Mods' code tools for agent apps (C14): an agent app's call to a mod's code tool, routed by the worker (agents/modroute.js)
+// to Glaze's content script in a tab of the account's school (mods/page/mods.js, 'glaze:modtool'), handed to the mod's Worker
 // as a 'tool.call' event and answered by its glaze.tools.handle (mods/host.js), and the answer back through the broker's
-// 'tools.result' (lib/modbroker.js) to the one call waiting for it. First with stand-in tabs; then the real page side, mods
-// host, glaze client and broker over real MessagePorts; then the real worker (lib/background.js) with C14's wiring.
+// 'tools.result' (mods/modbroker.js) to the one call waiting for it. First with stand-in tabs; then the real page side, mods
+// host, glaze client and broker over real MessagePorts; then the real worker (background/background.js) with C14's wiring.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const R = require('../../extension/lib/mcp/modroute.js');
-const B = require('../../extension/lib/modbroker.js');
+const R = require('../../extension/agents/modroute.js');
+const B = require('../../extension/mods/modbroker.js');
 const worker = require('../helpers/worker-env.cjs');
 const { fakeIDB } = require('../helpers/fake-idb.cjs');
 
@@ -241,7 +241,7 @@ const hostVM = () => {
   return { workers, post: (data, ports) => { for (const f of [...listeners]) f({ source: parent, data, ports }); } };
 };
 
-// A school's tab: Glaze's content script with the mods runtime (features/mods.js) and its host, on a stand-in DOM and clock.
+// A school's tab: Glaze's content script with the mods runtime (mods/page/mods.js) and its host, on a stand-in DOM and clock.
 // toWorker(message) answers what the page sends the worker; deliver(message, sender) is a message to the page's top frame,
 // as tabs.sendMessage gives it (a reply, or a rejection when nothing there answers or the page goes); leave() is the page going.
 const school = ({ path = '/courses/1', origin = SCHOOL, uid = '5', toWorker }) => {
@@ -264,7 +264,7 @@ const school = ({ path = '/courses/1', origin = SCHOOL, uid = '5', toWorker }) =
     performance: { now: () => clock }, setTimeout: (f, ms) => { const t = { at: clock + ms, f }; timers.add(t); return t; }, clearTimeout: (t) => timers.delete(t),
     GZ_CTX: { site: 'canvas', account: async () => uid, need: async () => {} } });
   ctx.globalThis = ctx;
-  vm.runInContext(read('features/mods.js'), ctx);
+  vm.runInContext(read('mods/page/mods.js'), ctx);
   const deliver = (m, sender = { id: 'glaze' }) => new Promise((resolve, reject) => {
     if (left) return reject(new Error('Could not establish connection. Receiving end does not exist.'));
     let kept = false, done = false;
@@ -514,7 +514,7 @@ const wiredWorker = async ({ record = modRec() } = {}) => {
   w.context.chrome.tabs.sendMessage = (id, m, o) => { sent.push([id, plain(m), plain(o)]); return id === 7 && o?.frameId === 0 ? s.deliver(m) : Promise.reject(new Error('no such frame')); };
   await s.start();
   const inWorker = (code) => vm.runInContext(code, w.context);
-  // A tool as the registry lists it, run as lib/mcp/calls.js runs it (inside the broker's turn, for a change, with `turn`).
+  // A tool as the registry lists it, run as agents/calls.js runs it (inside the broker's turn, for a change, with `turn`).
   const run = (name, args, { turn = false } = {}) => inWorker(`(async () => {
     if (typeof GZ_MCP_REGISTRY === 'undefined') mcpFiles();
     const t = GZ_MCP_REGISTRY.get(${JSON.stringify(name)}, await mcpRead());
@@ -548,7 +548,7 @@ test('the real worker, wired: the registry\'s code tool runs in the school\'s ta
   assert.deepEqual(plain(await run(`mod_${MOD}_echo`, { text: 'hi' })), { said: 'hi' });
   assert.deepEqual(sent.map(([id, m, o]) => [id, m.op, o]), [[7, 'call', { frameId: 0 }], [7, 'wait', { frameId: 0 }]]);
   assert.equal(inWorker('typeof GZ_MCP_MODROUTE'), 'object', 'loaded with the agent files');
-  // The Worker's answer took the worker's own route (lib/background.js glaze:mod), as the tab's top frame.
+  // The Worker's answer took the worker's own route (background/background.js glaze:mod), as the tab's top frame.
   assert.ok(s.sent.some((m) => m.call === 'tools.result'));
   assert.deepEqual(plain(await run(`mod_${MOD}_boom`, {})), fail("The mod's tool failed: boom"));
   // An answer from no agent call, or from a frame UI, is refused there.

@@ -40,7 +40,7 @@ html:where([data-gz-bg]:not([data-gz-bg="solid"]))::before,
 html:where([data-gz-bg]:not([data-gz-bg="solid"])) :where(.panel-wrap, .bb-offcanvas-panel):where(:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *))::before {
   content: "";
   position: fixed;
-  /* The viewport, or in a course tab's frame the page's (lib/scene-host.js --gz-vx/vy/vw/vh), so its copy lines up. */
+  /* The viewport, or in a course tab's frame the page's (looks/scene-host.js --gz-vx/vy/vw/vh), so its copy lines up. */
   left: calc(var(--gz-vx, 0px) - var(--gz-bg-blur, 0px) * 2);
   top: calc(var(--gz-vy, 0px) - var(--gz-bg-blur, 0px) * 2);
   width: calc(var(--gz-vw, 100%) + var(--gz-bg-blur, 0px) * 4);
@@ -339,7 +339,7 @@ html:not([data-gz-enhance-newgrades]) .gz-new[data-kind="grades"], html:not([dat
 #site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe { transition: filter var(--gz-t-slow) var(--gz-ease); }
 html[data-gz-dark-theme][data-gz-enhance-docPages="dim"] #site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe:not(.gz-pv) { filter: brightness(0.8); }
 html[data-gz-dark-theme][data-gz-enhance-docPages="dark"] #site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe:not(.gz-pv) { filter: invert(0.9) hue-rotate(180deg); }
-/* A preview in Glaze's PDF viewer (features/bbpreview.js): Blackboard's frame hidden while Glaze's shows in its place, and
+/* A preview in Glaze's PDF viewer (courses/page/bbpreview.js): Blackboard's frame hidden while Glaze's shows in its place, and
    the box around them as tall as Glaze's frame. Dark documents leaves Glaze's frame alone (its pages stay print white). */
 #site-wrap iframe[data-gz-pv-hidden] { display: none !important; }
 #site-wrap [data-gz-pv-box] { height: auto !important; max-height: none !important; }
@@ -502,7 +502,7 @@ html[data-gz-hide-tab-messages] .bb-ui-navigation-list-horizontal li:has(> a[hre
 html[data-gz-hide-tab-groups] .bb-ui-navigation-list-horizontal li:has(> a[href*="/groups/"]),
 html[data-gz-hide-tab-achievements] .bb-ui-navigation-list-horizontal li:has(> a[href*="/achievements"]) { display: none !important; }
 
-/* ---- the card editor (features/cards.js): a modal dialog, and the course menu's way into it ---- */
+/* ---- the card editor (courses/page/cards.js): a modal dialog, and the course menu's way into it ---- */
 #gz-cm .gz-cm-more {
   margin-top: 0.5rem; padding: 0.4rem 0.7rem; cursor: pointer; text-align: left; font-weight: 600; color: var(--gz-accent);
   background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm);
@@ -562,7 +562,7 @@ html[data-gz-hide-tab-achievements] .bb-ui-navigation-list-horizontal li:has(> a
 
 #gz-ce svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-/* ---- course tabs (features/coursetabs.js) ----
+/* ---- course tabs (navigation/page/coursetabs.js) ----
    One tab per course opened, in the course's sticky top bar (above its two rows, between them or below them), at the
    header of an item opened over the course, or above a page outside a course. Until the file is in, data-gz-ctabs
    (content-ultra.js: this browser tab's last strip, else the defaults) holds the strip's place, so nothing jumps when

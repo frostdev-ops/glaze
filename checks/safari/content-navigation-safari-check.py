@@ -24,13 +24,13 @@ def part(source, start, end):
 with tempfile.TemporaryDirectory(prefix="glaze-nav-safari-") as directory:
     file = pathlib.Path(directory) / "navigation.html"
     url = file.as_uri()
-    ctabs = (ROOT / "features/coursetabs.js").read_text()
-    palette = (ROOT / "features/palette.js").read_text()
+    ctabs = (ROOT / "navigation/page/coursetabs.js").read_text()
+    palette = (ROOT / "navigation/page/palette.js").read_text()
     bar = part(ctabs, "  const bar = {", "  return { sync")
     open_at = part(ctabs, "  const openAt = ", "  // A page outside a course:")
     go = part(palette, "  const go = (url)", "  // Ultra's Institution")
     imports = "".join('<script>' + (ROOT / p).read_text().replace('</script', '<\\/script') + '</script>' for p in
-                      ["lib/color.js", "lib/i18n.js", "lib/page.js", "lib/fonts.js", "lib/surfaces.js", "defaults.js", "lib/coursetabs.js", "lib/ultra.js"])
+                      ["core/color.js", "core/i18n.js", "core/page.js", "looks/fonts.js", "looks/surfaces.js", "defaults.js", "navigation/coursetabs.js", "courses/ultra.js"])
     script = """
     const rows = document.getElementById('outline');
     for (let f=0; f<100; f++) {
@@ -73,7 +73,7 @@ with tempfile.TemporaryDirectory(prefix="glaze-nav-safari-") as directory:
     };
     """.replace("OPEN_AT", open_at).replace("BAR", bar).replace("GO", go)
     # The test deliberately includes the production legacy-injection guard as well.
-    guard = (ROOT / "features/place.js").read_text()
+    guard = (ROOT / "navigation/page/place.js").read_text()
     file.write_text('<!doctype html><meta charset="utf-8"><title>Glaze navigation check</title>'
                     '<p role="status">AI agent is controlling this tab</p>'
                     '<button id="select">Open selected result</button><div id="outline"></div>'

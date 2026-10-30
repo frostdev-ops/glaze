@@ -13,7 +13,7 @@ test('the course panel keeps the bar\'s room when it holds the course section, a
   assert.match(fixture, /el\('course-content-container', `<div class="panel-wrap hide-in-background modern"><section class="course /);
   assert.match(fixture, /\.panel-wrap \{ position: absolute;/);
   assert.doesNotMatch(fixture, /inner-wrap/);
-  const css = read('theme.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = read('content/theme.css').replace(/\/\*[\s\S]*?\*\//g, '');
   const wide = css.slice(css.indexOf('@media (min-width: 900px) {\n  html[data-gz-navbar~="rail"]'));
   const rule = 'html[data-gz-navbar] .course-content-container:not(.inner-wrap > section.course *) > .panel-wrap { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }';
   assert.ok(wide.includes(rule), 'the panel pads for the rail and the top bar, beside the course section\'s rule');

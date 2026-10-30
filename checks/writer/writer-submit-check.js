@@ -6,7 +6,7 @@
 // without its input), gone (no file area), never (files never listed), stuck (Submit never enables).
 // Checked: the sheet's look (screenshots beside the mockup), focus trap, Escape and Cancel changing nothing, Ultra's
 // Submit (disabled or not) and Save and Close caught, the .docx landing in the input with its name, type and bytes (read
-// back with lib/doctext.js), the note and text in Quill, Submit clicked exactly once and only after the file is listed,
+// back with core/doctext.js), the note and text in Quill, Submit clicked exactly once and only after the file is listed,
 // each failure stopping before Submit, a test untouched, the keyboard flow, and Settings → Writer's remembered paste switch. Bringing a file (writer-import.js): a .docx
 // dropped on the paper asks, Open in Writer replaces the paper (a version first, Undo in the toast); one chosen in Ultra's
 // own file area reaches the frame before Ultra and Submit as is attaches its very bytes (hashes compared) with the note; a PDF
@@ -32,7 +32,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
 const FX = require('../../test/fixtures/writer-paper-fixtures.js');
-const DT = require('../../extension/lib/doctext.js');
+const DT = require('../../extension/core/doctext.js');
 const site = 'https://bb.school.test';
 const QUILL = { url: 'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js', sha256: 'c675f57388d3598637c4e0f9fe154bd61dfb1c2086271f944a0bb2b9b059b074' };
 const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
@@ -107,7 +107,7 @@ const HARNESS = require('../mocks/ultra-attempt-harness.js');
       return r.fulfill({ contentType: 'application/json', body: JSON.stringify(data) });
     });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
-    const G = require(path.join(root, 'defaults.js'));
+    const G = require(path.join(root, 'content/defaults.js'));
     const settings = G.GZ_SANITIZE({ navbar: { on: false }, footer: false, preset: 'Frost', enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, writerUploads: true, drafts: true }, writer: { full: true } });
     await worker.evaluate(async ({ settings, site }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings); await chrome.storage.local.set({ ultra: [site] }); }, { settings, site });
     const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/popup.html`); await env.ultraReady(opts); await opts.close();
@@ -266,7 +266,7 @@ const HARNESS = require('../mocks/ultra-attempt-harness.js');
     const paras = docText.split('\n').map(squash).filter((x) => x.length > 20);
     const missing = paras.filter((x) => !read.includes(x));
     if (missing.length) console.log('missing from the .docx:', JSON.stringify(missing));
-    check(paras.length >= 15 && !missing.length && bytes.length === run.uploads[0].size, `its bytes read back (lib/doctext.js) as the paper: all ${paras.length} paragraphs`);
+    check(paras.length >= 15 && !missing.length && bytes.length === run.uploads[0].size, `its bytes read back (core/doctext.js) as the paper: all ${paras.length} paragraphs`);
     check(run.text.startsWith('Thank you for the extension.\n\nAlex Rivera\n') && squash(run.text).includes(paras.at(-1)), 'the note, then the paper\'s text, land in Ultra\'s Quill');
     check(run.clicks.join() === 'assignment.attempt.authoring.footer.submit', 'Ultra\'s Submit clicked exactly once');
     check(run.log.indexOf('row') > run.log.indexOf('upload') && run.log.indexOf('click:assignment.attempt.authoring.footer.submit') > run.log.indexOf('row'), `and only after Ultra listed the file (${run.log.join(' → ')})`);
@@ -530,7 +530,7 @@ const HARNESS = require('../mocks/ultra-attempt-harness.js');
     // In the frame, a .docx of the APA fixture as Writer writes one: what a student brings.
     ({ p, el, fr } = await openAttempt('empty'));
     const essay = Buffer.from(await fr.evaluate(async (json) => {
-      await GZ_WRITER_PAPER.need(['lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js']);
+      await GZ_WRITER_PAPER.need(['core/zip.js', 'core/doctext.js', 'writer/writer-docx.js']);
       return Array.from((await GZ_WRITER_DOCX.exportDocx(GZ_WRITER_SCHEMA.paper.nodeFromJSON(json), { format: GZ_WRITER_STYLES.get('apa7'), surname: 'Rivera', title: 'Essay 2' })).bytes);
     }, FX.papers.apa7()));
     const pdf = Buffer.concat([Buffer.from('%PDF-1.4\n%synthetic\n'), crypto.randomBytes(4096), Buffer.from('\n%%EOF\n')]);

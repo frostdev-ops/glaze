@@ -1,9 +1,9 @@
-// Declarative widgets on the page: mods with no code whose tiles and rail widgets are blocks in their mod.json (lib/modwidget.js).
-// Unlike features/mods.js this runs wherever Glaze does, Firefox and Safari too, since it starts no frame, Worker or sandbox.
+// Declarative widgets on the page: mods with no code whose tiles and rail widgets are blocks in their mod.json (mods/modwidget.js).
+// Unlike mods/page/mods.js this runs wherever Glaze does, Firefox and Safari too, since it starts no frame, Worker or sandbox.
 // content.js loads it when the worker's list names such a mod that is on, in the top frame of a page Glaze is on. For each of
-// their tiles on the widget boards (features/widgets.js declare) and rail widgets on the nav (features/nav.js) it asks the
+// their tiles on the widget boards (core/page/widgets.js declare) and rail widgets on the nav (navigation/page/nav.js) it asks the
 // worker for the widget's tree ('widget': the worker reads only the data the mod declared and the student granted, for this
-// site, and cleans the tree) and draws it in a closed root with features/modui.js, which sets text and properties only. A button
+// site, and cleans the tree) and draws it in a closed root with mods/page/modui.js, which sets text and properties only. A button
 // runs one of Glaze's own actions, a page of this LMS, never an address a mod chose. Nothing polls: a widget is asked for
 // again when its data, the mods or the page's visibility change, and once at the time its answer next changes by itself.
 var GZ_MODWIDGETS = globalThis.GZ_MODWIDGETS || (() => {
@@ -19,7 +19,7 @@ var GZ_MODWIDGETS = globalThis.GZ_MODWIDGETS || (() => {
   const railBoxes = new Map(); // `${mod}|${slot}` → the rail's element
   const assets = new Map(); // `${mod}|${path}` → Promise<ImageBitmap>
 
-  const ui = () => (globalThis.GZ_MODUI ? Promise.resolve(globalThis.GZ_MODUI) : ctx()?.need('features/modui.js', () => globalThis.GZ_MODUI).then(() => globalThis.GZ_MODUI));
+  const ui = () => (globalThis.GZ_MODUI ? Promise.resolve(globalThis.GZ_MODUI) : ctx()?.need('mods/page/modui.js', () => globalThis.GZ_MODUI).then(() => globalThis.GZ_MODUI));
   // One of the mod's pictures, asked of the worker (which gives only that mod's own files), decoded here.
   const asset = (id, path) => {
     const k = `${id}|${path}`;
@@ -104,9 +104,9 @@ var GZ_MODWIDGETS = globalThis.GZ_MODWIDGETS || (() => {
   const redraw = () => { clearTimeout(drawing); drawing = setTimeout(() => { for (const k of mounts.keys()) draw(k); }, 300); };
 
   // ---- where they go ----------------------------------------------------------------------------------------------------------
-  // Tiles for features/widgets.js: { tile id: { name, size, owner, fill } }, an id of the kind the layout keeps for a mod's tiles
-  // (lib/widgets.js change): m, the mod id's first 14 characters and the tile's place in its manifest. A mod is code or
-  // declarative, never both, so these never meet features/mods.js's.
+  // Tiles for core/page/widgets.js: { tile id: { name, size, owner, fill } }, an id of the kind the layout keeps for a mod's tiles
+  // (core/widgets.js change): m, the mod id's first 14 characters and the tile's place in its manifest. A mod is code or
+  // declarative, never both, so these never meet mods/page/mods.js's.
   const tiles = () => Object.fromEntries(list.flatMap((m) => m.slots.filter((s) => s.key.startsWith('tile:')).map((s, i) => [`m${m.id.slice(0, 14)}${i}`, {
     name: s.name, size: s.size, owner: `${m.id}|${s.key}`,
     fill: (body) => {
@@ -116,7 +116,7 @@ var GZ_MODWIDGETS = globalThis.GZ_MODWIDGETS || (() => {
       return { stop: attach(m.id, s.key, el) };
     },
   }])));
-  // Rail widgets for features/nav.js to put among its own, or for Glaze navigation's dock (features/navbar.js).
+  // Rail widgets for navigation/page/nav.js to put among its own, or for Glaze navigation's dock (navigation/page/navbar.js).
   const rail = () => {
     const want = list.flatMap((m) => m.slots.filter((s) => s.key.startsWith('rail:')).map((s) => [m, s]));
     for (const k of [...railBoxes.keys()]) if (!want.some(([m, s]) => `${m.id}|${s.key}` === k)) { detach(k); railBoxes.get(k).remove(); railBoxes.delete(k); }
@@ -142,7 +142,7 @@ var GZ_MODWIDGETS = globalThis.GZ_MODWIDGETS || (() => {
     const want = list.some((m) => m.slots.some((s) => s.key.startsWith('rail:')));
     if (want || railBoxes.size) {
       if (!want) rail();
-      ctx().need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync(), () => {}).then(() => globalThis.GZ_NAVBAR_UI?.sync());
+      ctx().need('navigation/page/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync(), () => {}).then(() => globalThis.GZ_NAVBAR_UI?.sync());
     }
   };
 

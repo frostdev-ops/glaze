@@ -18,7 +18,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     for (const id of order) { const c = cards.get(id); if (!c) continue; const rows = groups.get(c.term || '') || []; rows.push({ ...c, key: `course:${location.origin}/${id}` }); groups.set(c.term || '', rows); }
     return [...groups.values()].flat();
   };
-  // A Look's card rules reach these cards too (features/rules.js): a label stays over what is written here until that
+  // A Look's card rules reach these cards too (looks/page/rules.js): a label stays over what is written here until that
   // changes, and what is written gets the rules back at once (on Ultra the board's changes start no pass of their own).
   let ruling = false;
   const rules = () => {
@@ -127,7 +127,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       if (asked !== identity) return;
       if (!/^_\d+_\d+$/.test(String(id))) return;
       uid = String(id);
-      ctx.need('lib/todo.js', () => globalThis.GZ_TODO).then(() => { if (live()) { L = GZ_TODO; gs ||= L.gradescope(render); read(); } }, () => {});
+      ctx.need('planner/todo.js', () => globalThis.GZ_TODO).then(() => { if (live()) { L = GZ_TODO; gs ||= L.gradescope(render); read(); } }, () => {});
     });
     if (before !== JSON.stringify([...cards])) notify();
     render();
@@ -201,7 +201,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     };
     let painted = '', rowFrom = '', actions = null;
     mounted.add(update); update(); rules();
-    ctx.need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => { if (alive && live()) GZ_CARD_UI.paint(); }, () => {});
+    ctx.need('courses/page/cards.js', () => globalThis.GZ_CARD_UI).then(() => { if (alive && live()) GZ_CARD_UI.paint(); }, () => {});
     return { update, wake: update, stop: () => { alive = false; mounted.delete(update); } };
   };
   const fill = (body, api) => {
@@ -255,14 +255,14 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       setText(grade, g?.label || ''); if (grade.hidden !== !g) grade.hidden = !g;
       if (g && grade.dataset.tone !== g.tone) grade.dataset.tone = g.tone;
       if (uid && L && cache && ctx.settings().enhance.cardTasks) {
-        ctx.need('features/cardtasks.js', () => globalThis.GZ_CARD_TASKS).then(() => {
+        ctx.need('courses/page/cardtasks.js', () => globalThis.GZ_CARD_TASKS).then(() => {
           if (alive && live() && ctx.settings().enhance.cardTasks) GZ_CARD_TASKS.render(card, id, details, name, { L, o: prefs, data, cache, uid, extra: gs?.(Date.now(), uid) || [] });
         }, () => {});
       } else card.querySelector('.gz-ct')?.remove();
     };
     if (!mounted.size && uid && L) read();
     mounted.add(update); update(); rules();
-    ctx.need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => { if (alive && live()) GZ_CARD_UI.paint(); }, () => {});
+    ctx.need('courses/page/cards.js', () => globalThis.GZ_CARD_UI).then(() => { if (alive && live()) GZ_CARD_UI.paint(); }, () => {});
     return { update, wake: update, stop: () => { alive = false; mounted.delete(update); } };
   };
   chrome.storage.onChanged.addListener((ch, area) => {
@@ -273,11 +273,11 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     if (area === 'local' && (ch.todoCache || ch[`todo:${location.origin}/${uid}`]) || area === 'sync' && ch.todo) { if (L && uid) read(); }
     else if (area === 'sync') render();
   });
-  // ---- the Course cards dialog: features/widgets.js opens it from a board's Add row, while its layout is edited ----
-  // Every course this page knows, by term, each a small copy of its card (painted by features/cards.js as the board's
+  // ---- the Course cards dialog: core/page/widgets.js opens it from a board's Add row, while its layout is edited ----
+  // Every course this page knows, by term, each a small copy of its card (painted by courses/page/cards.js as the board's
   // cards are, but marked data-gz-card-preview), ticked while it is on this board. A tick, Select all or Select none is one
   // change of the layout (o.set, all its courses at once). A course's Style shows its quick looks below it: its course
-  // color, a color, a gradient or a picture (from this computer or a link), saved as features/cards.js's editor saves
+  // color, a color, a gradient or a picture (from this computer or a link), saved as courses/page/cards.js's editor saves
   // them, and that editor ("Card style and bookmarks", over this dialog) for everything else.
   // o: { board, on(key) (on this board now), has(key) (a saved record), count(), room() (how many more fit), set(keys, on), back() (the button it came from) }.
   let pick = null; // { dlg, o, list, items: Map(key -> { li, box, card, c, look }), terms: [{ sec, its }], count, empty, all, none, query, keys }
@@ -340,7 +340,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       if (s?.c && color.value !== s.c) color.value = s.c;
       url.value = s?.u || '';
     };
-    // One save (features/cards.js), then what it says: the reason when it isn't kept.
+    // One save (courses/page/cards.js), then what it says: the reason when it isn't kept.
     const run = async (save) => {
       const ui = UI();
       if (!ui) return;
@@ -492,7 +492,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     dlg.showModal();
     query.focus();
     // The previews wear their styles once the card painter is in (it is on any page with board cards).
-    ctx.need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => {
+    ctx.need('courses/page/cards.js', () => globalThis.GZ_CARD_UI).then(() => {
       if (pick?.dlg !== dlg) return;
       for (const it of pick.items.values()) it.li.querySelector('.gz-ccm-style').disabled = false;
       UI().paint();

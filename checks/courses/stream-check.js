@@ -18,9 +18,9 @@ const check = (ok, message) => { if (!ok) throw Error(message); checks++; consol
     await page.route('**/*', (r) => r.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' }));
     await page.goto('https://bb.school.test/ultra/stream');
     await page.setContent(`<div id="site-wrap"><h1>Activity Stream</h1><div id="activity-stream"><div class="activity-group"><h2>Upcoming</h2><ul class="activity-feed">${row('deadline', 'GB:DUE')}${row('invalid', 'DF:DUE')}${row('content', 'CO:CO_AVAIL')}${row('grade', 'bb_mygrades', false)}</ul></div><div class="activity-group" id="today"><h2>Today</h2><ul>${row('kudos', 'bb_tel:stu_grade', false)}</ul></div></div></div><div id="notification-settings"><form><div id="panel-stream"><h2>Stream Notifications</h2><label><input id="native" type="checkbox" checked>New grades</label></div></form></div>`);
-    await page.addStyleTag({ path: path.join(root, 'theme.css') });
+    await page.addStyleTag({ path: path.join(root, 'content/theme.css') });
     await page.addStyleTag({ content: ':root{--gz-ink:#e8f2fa;--gz-surface:#0d1b2e;--gz-surface-2:#060d18;--gz-line:#24405f;--gz-line-strong:#57748c;--gz-accent:#17c8f4;--gz-radius:12px}body{background:#060d18;color:#e8f2fa;font:16px system-ui;padding:24px}#notification-settings{max-width:500px}li{list-style:none}' });
-    for (const file of ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'lib/i18n.js', 'defaults.js', 'lib/page.js', 'lib/stream.js']) await page.addScriptTag({ path: path.join(root, file) });
+    for (const file of ['core/color.js', 'looks/surfaces.js', 'looks/fonts.js', 'core/i18n.js', 'content/defaults.js', 'core/page.js', 'courses/stream.js']) await page.addScriptTag({ path: path.join(root, file) });
     await page.evaluate(() => {
       document.querySelector('#invalid [translate-values]').setAttribute('translate-values', '{bad');
       window.state = GZ_SANITIZE({}); window.disk = structuredClone(state.stream); window.saved = []; window.nativeEvents = 0; window.failSave = false; window.holdSave = false; window.holdAck = false;
@@ -41,7 +41,7 @@ const check = (ok, message) => { if (!ok) throw Error(message); checks++; consol
       document.querySelector('form').addEventListener('change', () => nativeEvents++);
       document.querySelector('form').addEventListener('submit', (e) => { e.preventDefault(); nativeEvents++; });
     });
-    await page.addScriptTag({ path: path.join(root, 'features/stream.js') });
+    await page.addScriptTag({ path: path.join(root, 'courses/page/stream.js') });
     await page.evaluate(() => GZ_STREAM_UI.sync(true));
     check(await page.locator('#deadline .gz-stream-date .date').first().textContent() === 'Due Oct 25', 'deadline notifications display the due date');
     check(await page.locator('#deadline .timestamp > div').isHidden(), 'the posted timestamp is visually replaced');

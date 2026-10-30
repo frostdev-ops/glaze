@@ -9,7 +9,7 @@
 // pause in typing. A screen reader hears the count and each replace (a polite live region).
 // The search and replace are plain functions over a document and an EditorState, for node tests; then the frame.
 var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
-  const S = () => globalThis.GZ_WRITER_SCHEMA || require('./lib/writer-schema.js');
+  const S = () => globalThis.GZ_WRITER_SCHEMA || require('../writer-schema.js');
   const PM = () => { S(); return globalThis.GZ_PM; };
   const MAX = 500, LIMIT = 20000;
   const QUOTES = { "'": "['‘’]", '‘': "['‘’]", '’': "['‘’]", '"': '["“”]', '“': '["“”]', '”': '["“”]' };

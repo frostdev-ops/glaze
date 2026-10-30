@@ -3,12 +3,12 @@
 // two small tables as characters offset from numbers. Packed strings decoded at run time are how hidden code is
 // usually smuggled, and the Chrome Web Store reviews Glaze for obfuscation (2026-10-26). Written out as text, the
 // dictionary would not do either: it is cut from web pages, so it is full of "javascript:", "<iframe src=" and
-// "document.write(". So the dictionary becomes a data file, lib/pdfjs/brotli-dictionary.bin (google/brotli's own
+// "document.write(". So the dictionary becomes a data file, vendor/pdfjs/brotli-dictionary.bin (google/brotli's own
 // dictionary.bin, which tools/vendor/vendor-pdfjs.sh fetches by a pinned hash), read when the worker starts, the way pdf.js
 // already reads its image decoders from files beside it; the tables become their numbers. Without the file only
 // Brotli-compressed streams fail. The rewrite proves itself before writing: the file is byte for byte the dictionary
 // pdf.js packs, and the old and new decoders both turn Node's own Brotli output back into the original bytes.
-// Usage (from tools/vendor/vendor-pdfjs.sh): node tools/vendor/vendor-pdfjs-brotli.js lib/pdfjs/pdf.worker.mjs lib/pdfjs/brotli-dictionary.bin
+// Usage (from tools/vendor/vendor-pdfjs.sh): node tools/vendor/vendor-pdfjs-brotli.js vendor/pdfjs/pdf.worker.mjs vendor/pdfjs/brotli-dictionary.bin
 const fs = require('node:fs');
 const vm = require('node:vm');
 const zlib = require('node:zlib');

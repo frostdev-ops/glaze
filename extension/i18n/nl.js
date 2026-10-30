@@ -1,4 +1,4 @@
-// Dutch for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
+// Dutch for Glaze's own text: each key is the English, as written in the code (core/i18n.js).
 // Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {}).nl = {
   "in": "inch",
@@ -1154,7 +1154,7 @@
   "Range": "Periode",
   "Download": "Downloaden",
   "Planned work": "Gepland werk",
-  // Past terms, trends and the GPA goal (features/gpaterms.js).
+  // Past terms, trends and the GPA goal (planner/page/gpaterms.js).
   "this term": "deze periode",
   "Fall 2025": "Najaar 2025",
   "Term name": "Naam van de periode",
@@ -2265,7 +2265,7 @@
   "The graphics driver rejected the shader. {message}": "Het grafische stuurprogramma heeft de shader geweigerd. {message}",
   "This device cannot measure shader drawing time safely.": "Dit apparaat kan de tekentijd van shaders niet veilig meten.",
   "There is nothing to draw: this Look has no shader or layers.": "Er is niets te tekenen: deze Look heeft geen shader of lagen.",
-  "The shader checker (lib/glsl.js) is not loaded.": "De shadercontrole (lib/glsl.js) is niet geladen.",
+  "The shader checker (looks/glsl.js) is not loaded.": "De shadercontrole (looks/glsl.js) is niet geladen.",
   "This widget’s data is turned off. Turn it on in the Mods tab of Glaze’s editor.": "De gegevens van deze widget staan uit. Zet ze aan op het tabblad Mods in de editor van Glaze.",
   "Nothing to show yet.": "Nog niets om te laten zien.",
   "Widget builder": "Widgetbouwer",

@@ -5,7 +5,7 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 // A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
 const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
-const G = require(path.join(ext, 'defaults.js')); require(path.join(ext, 'lib/coursetabs.js'));
+const G = require(path.join(ext, 'content/defaults.js')); require(path.join(ext, 'navigation/coursetabs.js'));
 const site = 'https://bb.school.test', key = `ctabs:${site}:_42_1`;
 const out = process.argv[2];
 let html = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-course.html'), 'utf8')
@@ -50,7 +50,7 @@ const measure = (p) => p.evaluate(() => {
     const opts = await ctx.newPage(); await opts.goto(`chrome-extension://${id}/options.html`);
     // Simulate an engine rejecting the scroll-timeline @supports block. No polyfill or runtime reads.
     const fallback = await ctx.newPage();
-    const css = fs.readFileSync(path.join(ext, 'theme.css'), 'utf8').replace('@supports (animation-timeline: scroll())', '@supports (glaze-no-scroll: unsupported)');
+    const css = fs.readFileSync(path.join(ext, 'content/theme.css'), 'utf8').replace('@supports (animation-timeline: scroll())', '@supports (glaze-no-scroll: unsupported)');
     await fallback.setContent(`<style>${css}</style><style>
       :root { --gz-surface: #fff; --gz-surface-2: #eee; --gz-line: #999; --gz-radius: 12px; --gz-glass: 0px; }
       body { margin: 0; } .scroller { height: 400px; overflow: auto; }
@@ -98,7 +98,7 @@ const measure = (p) => p.evaluate(() => {
     await setup(look);
     check((await measure(page)).veil[1] === '0', 'scroll timeline leaves the background visible at the top');
     await page.locator('.course-content-container > .panel-wrap').evaluate((e) => { e.scrollTop = 200; }); await pause(200);
-    // Scrolled, the bar folds to its tools with no veil (features/sticky-fold.js); shown whole under keyboard focus, the veil
+    // Scrolled, the bar folds to its tools with no veil (navigation/page/sticky-fold.js); shown whole under keyboard focus, the veil
     // is behind it again.
     check((await measure(page)).veil[2] === 'none', 'scrolled, the folded bar has no veil');
     await page.locator('bb-course-navigation a').first().focus(); await pause(200);

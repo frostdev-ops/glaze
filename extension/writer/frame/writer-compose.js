@@ -1,11 +1,11 @@
 // Glaze Writer's compose bar (writer.html, after writer.js), as the mockup draws it: the target ring in the `target` slot
 // (progress toward the prompt's minimum, "182 / 250"; green once there, amber past a maximum; plain "N words" without a
 // target), the sources pill in `sources` when the prompt asks for sources ("❝ 1 / 2"), and the replies asked for only in
-// the ring's tooltip. Targets come in the page's context (lib/writer-context-discussion.js → requirements). It also takes
-// the page's `quote { text, author }` (features/writer-quote.js) into the editor, and draws compose's quotes (indented
+// the ring's tooltip. Targets come in the page's context (writer/writer-context-discussion.js → requirements). It also takes
+// the page's `quote { text, author }` (writer/page/writer-quote.js) into the editor, and draws compose's quotes (indented
 // italic lines, then "— Name": Ultra's Quill has no blockquote) as the mockup's quote block. Nothing here animates.
-// Settings → Writer → Discussions (lib/writer-settings.js writer.compose): target off draws the plain count without the ring;
-// quote off takes no quote (features/writer-quote.js shows no pop then). Markdown off is lib/writer-editor.js's ruleOff.
+// Settings → Writer → Discussions (writer/writer-settings.js writer.compose): target off draws the plain count without the ring;
+// quote off takes no quote (writer/page/writer-quote.js shows no pop then). Markdown off is writer/writer-editor.js's ruleOff.
 // Pure helpers first (module.exports for node), then the frame.
 var GZ_WRITER_COMPOSE = globalThis.GZ_WRITER_COMPOSE || (() => {
   const R = 15, CIRCLE = 2 * Math.PI * R;
@@ -35,8 +35,8 @@ var GZ_WRITER_COMPOSE = globalThis.GZ_WRITER_COMPOSE || (() => {
   const WHERE = "(?:\\d{4}[a-z]?|n\\.d\\.|\\d{1,5}(?:[-–]\\d{1,5})?|[ivxlcdm]{1,8}|(?:pp?|para|ch)\\. ?\\d{1,5}(?:[-–]\\d{1,5})?)";
   const ONE = new RegExp(`^(?:(?:see|cf\\.|e\\.g\\.,?) )?(${WHO})(?:,? ${WHERE}(?:[,:] ?${WHERE})*)?$`, 'u');
   const LOCATED = new RegExp(`,? ${WHERE}`, 'u');
-  // Parentheses that point inside a text, not to a source ("(Figure 2)", "(May 1945)"): lib/writer-cite.js's list.
-  const INSIDE = (typeof GZ_WRITER_CITE !== 'undefined' ? GZ_WRITER_CITE : require('./lib/writer-cite.js')).INSIDE;
+  // Parentheses that point inside a text, not to a source ("(Figure 2)", "(May 1945)"): writer/writer-cite.js's list.
+  const INSIDE = (typeof GZ_WRITER_CITE !== 'undefined' ? GZ_WRITER_CITE : require('../writer-cite.js')).INSIDE;
   const NARRATIVE = new RegExp(`(${NAME}(?: et al\\.)?) \\((?:\\d{4}[a-z]?|n\\.d\\.)(?:, (?:pp?\\. ?)?\\d{1,5}(?:[-–]\\d{1,5})?)?\\)`, 'gu');
   const citations = (text) => {
     const s = String(text || '').slice(0, 200000), seen = new Set();
@@ -50,7 +50,7 @@ var GZ_WRITER_COMPOSE = globalThis.GZ_WRITER_COMPOSE || (() => {
     for (const m of s.matchAll(NARRATIVE)) if (!INSIDE.test(m[1])) seen.add(m[1].toLowerCase());
     return seen.size;
   };
-  // Compose's quote shape (lib/writer-editor.js quote: indented, wholly italic paragraphs, then "— Name"), found in a
+  // Compose's quote shape (writer/writer-editor.js quote: indented, wholly italic paragraphs, then "— Name"), found in a
   // document as the blocks to draw: [{ from, to, by, end }]. None in paper mode, which has real blockquotes.
   const quoted = (node) => node.type.name === 'paragraph' && node.attrs.indent === 1 && node.childCount > 0 && node.content.content.every((c) => c.isText && c.marks.some((k) => k.type.name === 'italic'));
   const byline = (node) => node.type.name === 'paragraph' && node.attrs.indent === 1 && /^— \S/.test(node.textContent);

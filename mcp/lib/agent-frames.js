@@ -1,4 +1,4 @@
-// The frames between the worker (lib/agent-link.js) and the glaze-mcp host, one native message each. The browser takes at
+// The frames between the worker (agents/agent-link.js) and the glaze-mcp host, one native message each. The browser takes at
 // most 1 MB from the host, so every frame is kept to 1,000,000 bytes of UTF-8 JSON: an MCP line goes as `line` frames
 // whose `d` holds at most 160,000 UTF-16 units (all escaped, as `\u0001`, that's 960,000 bytes), never cut inside a
 // surrogate pair, every piece but the last marked m:1. The joiner puts a line back together per connection, up to 64 MiB.

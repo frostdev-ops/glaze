@@ -5,9 +5,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
+const D = require('../../extension/content/defaults.js');
 const manifest = require('../../extension/manifest.json');
-const files = manifest.content_scripts.find((s) => s.js.includes('content-canvas.js')).js;
+const files = manifest.content_scripts.find((s) => s.js.includes('content/content-canvas.js')).js;
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(setImmediate); };
 const quiet = () => D.GZ_SANITIZE({
@@ -209,7 +209,7 @@ test('Canvas releases a stalled stylesheet render blocker after one second', asy
 test('Canvas reinjection does not duplicate storage reads, sheets or observers', async () => {
   const p = await boot();
   const before = [p.storage.length, p.sheets().length, p.observers.length];
-  await vm.runInContext(read('content.js'), p.c); await settle();
+  await vm.runInContext(read('content/content.js'), p.c); await settle();
   assert.deepEqual([p.storage.length, p.sheets().length, p.observers.length], before);
 });
 
@@ -418,7 +418,7 @@ test('the editor\'s writing area keeps Canvas\'s white and ink on a dark palette
   p.sweep().deliver([added(p, [frame])]); await p.advance(150);
   assert.deepEqual(head.children, [], 'no style in the writing area');
   assert.equal(body.attrs.size, 0);
-  for (const [f, rule] of [['canvas.css', /\.tox\.tox-tinymce \.tox-edit-area__iframe \{([^}]*)\}/], ['moodle.css', /html \.tox \.tox-edit-area__iframe \{([^}]*)\}/]]) {
+  for (const [f, rule] of [['content/canvas.css', /\.tox\.tox-tinymce \.tox-edit-area__iframe \{([^}]*)\}/], ['content/moodle.css', /html \.tox \.tox-edit-area__iframe \{([^}]*)\}/]]) {
     const css = read(f).match(rule)?.[1] || '';
     assert.match(css, /background: #fff;/, `${f}: the frame is white behind the page in it`);
     assert.match(css, /color-scheme: light;/, `${f}: and light, so the page's own canvas stays clear`);

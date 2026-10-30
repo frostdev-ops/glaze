@@ -1,11 +1,11 @@
-// lib/ultra.js: Blackboard Ultra's answers in the shapes Glaze's features use, on the synthetic fixtures
+// courses/ultra.js: Blackboard Ultra's answers in the shapes Glaze's features use, on the synthetic fixtures
 // (test/fixtures/ultra-*.json).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const U = require('../../extension/lib/ultra.js');
-const Z = require('../../extension/lib/zip.js');
+const U = require('../../extension/courses/ultra.js');
+const Z = require('../../extension/core/zip.js');
 
 const load = (n) => JSON.parse(fs.readFileSync(path.join(__dirname, '../fixtures', `ultra-${n}.json`), 'utf8'));
 const src = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
@@ -17,20 +17,20 @@ const LTI = /synthetic-lti-(secret|key)/;
 // ---- the LTI credential fields (the B0 spike's safety notes) ---------------------------------------------------
 test('private content is asked for without contentDetail, by both callers', () => {
   for (const f of [U.PEEK_FIELDS, U.FILES_FIELDS]) assert.doesNotMatch(f, /contentDetail|\//);
-  assert.match(src('features/previews.js'), /\/children\?fields=\$\{GZ_ULTRA\.PEEK_FIELDS\}/);
-  assert.match(src('features/download.js'), /\/children\?limit=200&fields=\$\{GZ_ULTRA\.FILES_FIELDS\}/);
+  assert.match(src('courses/page/previews.js'), /\/children\?fields=\$\{GZ_ULTRA\.PEEK_FIELDS\}/);
+  assert.match(src('courses/page/download.js'), /\/children\?limit=200&fields=\$\{GZ_ULTRA\.FILES_FIELDS\}/);
   // Neither caller reads contentDetail, nor does anything else Glaze ships.
-  for (const f of ['content.js', 'features/previews.js', 'features/download.js', 'lib/page.js', 'lib/ultra.js', 'lib/grades.js']) {
+  for (const f of ['content/content.js', 'courses/page/previews.js', 'courses/page/download.js', 'core/page.js', 'courses/ultra.js', 'planner/grades.js']) {
     assert.doesNotMatch(src(f).replace(/^\s*\/\/.*$/gm, ''), /contentDetail/, f);
   }
 });
 
 test('metadata reads refuse redirects: previews and Download all ask through the reader; only file bytes may follow one', async () => {
   // The only fetch left in either is Download all's file bytes, which Blackboard hands to its file CDN by a redirect.
-  assert.doesNotMatch(src('features/previews.js'), /\bfetch\(/);
-  assert.deepEqual(src('features/download.js').match(/\bfetch\([^,]+/g), ['fetch(f.url']);
-  assert.match(src('features/previews.js'), /GZ_ULTRA\.read\(\{ origin: location\.origin \}\)\.get\(`\/learn\/api\/v1\/courses\/\$\{cid\}\/contents\/\$\{fid\}\/children\?fields=/);
-  assert.match(src('features/download.js'), /const get = \(path\) => GZ_ULTRA\.read\(\{ origin: location\.origin, signal: ctl\.signal \}\)\.get\(/);
+  assert.doesNotMatch(src('courses/page/previews.js'), /\bfetch\(/);
+  assert.deepEqual(src('courses/page/download.js').match(/\bfetch\([^,]+/g), ['fetch(f.url']);
+  assert.match(src('courses/page/previews.js'), /GZ_ULTRA\.read\(\{ origin: location\.origin \}\)\.get\(`\/learn\/api\/v1\/courses\/\$\{cid\}\/contents\/\$\{fid\}\/children\?fields=/);
+  assert.match(src('courses/page/download.js'), /const get = \(path\) => GZ_ULTRA\.read\(\{ origin: location\.origin, signal: ctl\.signal \}\)\.get\(/);
   // A signed-out answer (a redirect, which fetch then refuses) fails the read, recoverably, with nothing else asked.
   const asked = [];
   const f = async (url, init) => { asked.push([url, init.redirect]); throw new TypeError('Failed to fetch'); };
@@ -100,10 +100,10 @@ test('a File item whose attachments cannot be read counts as failed; attachment 
 });
 
 // ---- the data layer -----------------------------------------------------------------------------------------------
-const T = require('../../extension/lib/todo.js');
-const R = require('../../extension/lib/remind.js');
-const I = require('../../extension/lib/insights.js');
-const C = require('../../extension/lib/calexport.js');
+const T = require('../../extension/planner/todo.js');
+const R = require('../../extension/planner/remind.js');
+const I = require('../../extension/planner/insights.js');
+const C = require('../../extension/planner/calexport.js');
 const NOW = Date.parse('2026-10-15T12:00:00Z');
 const LATER = Date.parse('2026-10-24T12:00:00Z');
 const clone = (v) => JSON.parse(JSON.stringify(v));
@@ -126,7 +126,7 @@ test('courses: GZ_COURSES with code, term dates as Canvas names them, and a bann
   assert.equal(d._101_1.term.name, 'Fall 2026');
   assert.equal(d._102_1.banner, null);
   assert.equal(d._103_1.banner, null);
-  // lib/calexport.js reads the term's end for "to the end of term".
+  // planner/calexport.js reads the term's end for "to the end of term".
   const r = C.range('term', NOW, 'UTC', Object.values(c));
   assert.equal(r.guessed, false);
   assert.equal(r.last, T.dayOf(Date.parse('2026-12-22T04:59:00.000Z'), 'UTC') + 1);
@@ -179,7 +179,7 @@ test('where work stands: a table of measured and synthetic rows ([I] rules, unkn
 });
 
 test('saved drafts stay open in Better To Do despite attempt dates or multiple attempt ids', () => {
-  const T = require('../../extension/lib/todo.js');
+  const T = require('../../extension/planner/todo.js');
   const column = { dueDate: '2026-10-20T12:00:00Z', contentId: '_703_1' };
   const base = { columnId: '_603_1', column, firstAttemptId: '_810_1', lastAttemptId: '_813_1', lastAttempt: { status: 'IN_PROGRESS', attemptDate: '2026-10-21T12:00:00Z' } };
   const cases = [
@@ -222,17 +222,17 @@ test('due items: To Do and the calendar as planner items, twins deduped, joined 
   assert.equal(by._606_1.sub.graded, true); // graded LTI work: done, though when it was handed in is unknown
   assert.equal(by._613_1.course, 'English');
   assert.equal(by._603_1.at, Date.parse('2026-10-19T03:59:00.000Z'));
-  // lib/todo.js lists them as they are, keeps marks on them, and counts graded work as done.
+  // planner/todo.js lists them as they are, keeps marks on them, and counts graded work as done.
   const data = T.clean({ items: { 'assignment:_603_1': { done: true }, 'assignment:_699_1': { on: '2026-10-16' } } });
   assert.deepEqual(Object.keys(data.items), ['assignment:_603_1', 'assignment:_699_1']);
   const b = T.build({ items, data, o: { ...todoO, span: 'custom', n: 2, unit: 'weeks', past: 'always' }, now: NOW, tz: 'UTC' });
   assert.deepEqual(b.groups.map(([g, l]) => [g, l.map((r) => r.key)]), [['tomorrow', ['assignment:_699_1']], ['week', ['assignment:_699_1']], ['later', ['assignment:_613_1']]]);
   assert.deepEqual(b.done.map((r) => r.key), ['assignment:_603_1']);
   assert.deepEqual(b.graded.map((r) => r.key).sort(), ['assignment:_606_1', 'discussion_topic:_605_1']);
-  // lib/remind.js: an item of unknown standing never counts toward a streak; Ultra keys stay in the reminder state.
+  // planner/remind.js: an item of unknown standing never counts toward a streak; Ultra keys stay in the reminder state.
   assert.ok(!(R.streak(b, null, T.dayOf(NOW, 'UTC')).keys || []).includes('assignment:_699_1'));
   assert.deepEqual(Object.keys(R.clean({ mute: { 'discussion_topic:_605_1': NOW } }, NOW).mute), ['discussion_topic:_605_1']);
-  // lib/calexport.js: each item an event with a link on this site.
+  // planner/calexport.js: each item an event with a link on this site.
   const r = C.range('4w', NOW, 'UTC');
   const ev = C.events({ items, data, o: { ...todoO, icsDue: true }, ...r, site: o, host: 'lms.example.edu', words: { plan: (t) => t, focus: (t) => t, untitled: '?' } });
   assert.ok(ev.some((e) => e.summary === 'Lab Report 3' && e.url === `${o}/ultra/redirect?redirectType=nautilus&courseId=_101_1&contentId=_703_1`));
@@ -266,7 +266,7 @@ test("grades: B0's calibration (weighted categories, discrepancy 0), and the est
   assert.deepEqual([g.kind, g.estimate, g.overall], ['weighted', false, 88]);
   assert.equal(g.percent() - g.overall, 0);
   // The what-if reads the same course through the calculator Canvas uses: still no discrepancy.
-  assert.equal(require('../../extension/lib/gradecalc.js').calc(g.course, {}).current - g.overall, 0);
+  assert.equal(require('../../extension/planner/gradecalc.js').calc(g.course, {}).current - g.overall, 0);
   assert.deepEqual(g.course.groups.map((x) => [x.id, x.name, x.weight]), [['_201_1', 'Assignment', 40], ['_202_1', 'Test', 40], ['_203_1', 'Discussion', 20]]);
   assert.equal(g.scale, null); // the overall column's schema is a percent scale
   // A letter scale as a student gets it (B4, measured): letters and the value an entered letter stands for, no bounds.
@@ -325,7 +325,7 @@ test('the overall column\'s text is the course letter only for a letter scale or
   assert.equal(U.grade(withText('B', '_403_1'), schemas).letter, 'B');
   assert.equal(U.grade(withText('', '_403_1'), schemas).letter, null);
   // The GPA row then computes its letter from the score on a common scale, instead of "88.00%" with no points.
-  const C = require('../../extension/lib/gradecalc.js');
+  const C = require('../../extension/planner/gradecalc.js');
   const g = U.grade(withText('88.00%'), schemas);
   const e = { computed_current_score: g.overall, computed_current_grade: g.letter || (g.overall != null && g.scale ? C.letter(g.overall, g.scale) : null) };
   const row = C.gpaRow(e, {}, null, { plus: true });
@@ -489,7 +489,7 @@ test('a due-date exception counts for its own column only, not one whose id star
 });
 
 test('the due-date chips\' late check takes an exception for its own column only, as excepts does', async () => {
-  const part = src('content-ultra.js'), lateIn = part.slice(part.indexOf('  const lateIn = '), part.indexOf('  // Per-course gradebook cache.'));
+  const part = src('content/content-ultra.js'), lateIn = part.slice(part.indexOf('  const lateIn = '), part.indexOf('  // Per-course gradebook cache.'));
   const row = (columnId) => ({ columnId, column: { dueDate: '2026-10-01T03:59:00.000Z' }, lastAttempt: { attemptDate: '2026-10-02T03:59:00.000Z' } });
   const late = await require('node:vm').runInNewContext(`${lateIn}\nlateIn`, {
     GZ_GRADES: { awaiting: (r) => r, late: () => true }, GZ_PAGE: { submitted: () => true }, I: { settings: { enhance: { inline: true } } }, Set, Promise,

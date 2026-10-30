@@ -28,7 +28,7 @@ test('Restore sanitizes legacy HTML at the native editing boundary', { skip: !pr
       try {
         await page.route('**/*', (r) => r.fulfill({ contentType: 'text/html', body: '<html><body><div id="ed1" class="ql-editor" contenteditable="true"></div></body></html>' }));
         await page.goto('https://bb.school.test/ultra/courses/_5_1/outline');
-        await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../../extension/lib/drafts.js'), 'utf8') });
+        await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../../extension/writer/drafts.js'), 'utf8') });
         await page.evaluate((html) => {
           const key = GZ_DRAFTS.ultraKey({ origin: location.origin, user: '_7_1', path: location.pathname, near: '_12_3', id: 'ed1' });
           const store = { [key]: { html, text: 'A sufficiently long recovery paragraph.', at: Date.now() } };
@@ -41,7 +41,7 @@ test('Restore sanitizes legacy HTML at the native editing boundary', { skip: !pr
             account: async () => '_7_1', local: (f) => f(chrome.storage.local), draftEditor: '.ql-editor[contenteditable="true"]',
             draftAt: (ed) => ({ ed, id: ed.id, near: '_12_3', path: location.pathname, text: ed.textContent, html: ed.innerHTML, at: Date.now() }) };
         }, html);
-        await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../../extension/features/drafts.js'), 'utf8') });
+        await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../../extension/writer/page/drafts.js'), 'utf8') });
         await page.evaluate(() => GZ_DRAFT_UI.watch());
         await page.getByRole('button', { name: 'Restore', exact: true }).click();
         const got = await page.evaluate(() => {

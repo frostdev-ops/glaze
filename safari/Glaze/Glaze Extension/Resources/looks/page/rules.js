@@ -1,0 +1,191 @@
+// LMS rules on the page: the worn Look's x.rules, folded by looks/parts.js into each named part's
+// end state, put on that part's elements. Hide and style are attributes and --gz-r-* variables that looks/page/rules.css
+// reads (never inline display); a move leaves a marker where the element was; a label swaps the element's first text and
+// puts it back exactly, as nicknames do (content-ultra.js). content.js loads this once the Look has rules and calls
+// sync() on every pass (flush), on glaze:parts and on disable; with the theme off, on a quiz or a tool's page, or with
+// no rules for this LMS, sync() takes everything back off. Classic script, through GZ_CTX; a second injection keeps the first.
+var GZ_RULES = globalThis.GZ_RULES || (() => {
+  const ctx = globalThis.GZ_CTX;
+  if (!ctx) return null; // a frame-only injection can outlive its document
+  const html = document.documentElement;
+  const libs = () => Promise.all([ctx.need('looks/parts.js', () => globalThis.GZ_PARTS), ctx.need('looks/lookx.js', () => globalThis.GZ_LX)]);
+  // Rules stay off whole quiz and tool routes, including their overview and entry pages.
+  const quiet = () => GZ_LX.quiet(location.pathname, document) || /\/(quizzes|external_tools)(\/|$)|\/mod\/(quiz|lti)(\/|$)/.test(location.pathname)
+    || (ctx.site === 'ultra' && /\/(assessment|attempt|lti)(\/|$)/.test(location.pathname));
+  // Glaze's own pieces are never a part's, and nothing that holds Glaze settings is hidden. The boards' course cards are
+  // the exception looks/parts.js names (a part's b): Glaze's, drawn from the LMS's card, so a Look's card rules reach them, but
+  // never a Glaze piece inside one.
+  const OWN = '[id^="gz-"], [class^="gz-"], [class*=" gz-"]';
+  const ownIn = (el, card) => { for (let e = el; e && e !== card; e = e.parentElement) if (e.matches(OWN)) return true; return false; };
+  const GLAZE_ITEM = 'a[href="#glaze"]';
+  const CONTROL = 'a[href], button, input, select, textarea, summary, [contenteditable], [role="button"], [tabindex]';
+
+  const done = new Map(); // element -> { hide, st: 'bg r', vars: {name: value}, mark: Comment | null, moves }
+  const labels = new Map(); // text node -> { real, mine }
+  const sheet = (on) => {
+    const l = document.getElementById('gz-rules-css');
+    if (on && !l) (document.head || html).append(Object.assign(document.createElement('link'), { id: 'gz-rules-css', rel: 'stylesheet', href: chrome.runtime.getURL('looks/page/rules.css') }));
+    else if (!on) l?.remove();
+  };
+
+  const unlabel = (n, r) => {
+    if (n.data === r.mine) n.data = r.real;
+    // A nickname swapped in over the label keeps the real name to put back (content-ultra.js unname).
+    const p = n.parentElement;
+    if (p?.dataset.gzReal === r.mine) p.dataset.gzReal = r.real;
+  };
+  // The element's first text that isn't Glaze's (in it: a board card's own is all inside Glaze's board). Kept once found,
+  // so a label that changes swaps the same text.
+  const textOf = (el, was) => {
+    if (was && el.contains(was)) return was;
+    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: (n) => {
+      const own = n.data.trim() ? n.parentElement?.closest(OWN) : el;
+      return !own || !el.contains(own) ? 1 : 3;
+    } });
+    return walk.nextNode();
+  };
+  // What the page wrote under the labels: el's text with each label's put back (courses/page/coursecards.js writes its card's
+  // text only when this isn't it already, so it doesn't write over a label on every pass).
+  const real = (el) => {
+    let s = '';
+    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: () => 1 });
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) { const r = labels.get(n); s += r && n.data === r.mine ? r.real : n.data; }
+    return s;
+  };
+  const label = (el, text, was) => {
+    const n = textOf(el, was);
+    if (!n) return null;
+    let r = labels.get(n);
+    // A course's nickname (content-ultra.js; a board card marks its own, courses/page/coursecards.js) is the student's own: it
+    // wins, before or after the label.
+    if (n.parentElement?.dataset.gzReal !== undefined || n.parentElement?.dataset.gzNick !== undefined) {
+      if (r) { unlabel(n, r); labels.delete(n); }
+      return null;
+    }
+    if (!r) labels.set(n, (r = { real: n.data, mine: null }));
+    else if (n.data !== r.mine) r.real = n.data; // the LMS wrote it again: that is the text to put back
+    // The real text's own spacing stays around the label, so the layout doesn't shift.
+    const [, a, , b] = r.real.match(/^(\s*)([\s\S]*?)(\s*)$/);
+    r.mine = a + text + b;
+    if (n.data !== r.mine) n.data = r.mine;
+    return n;
+  };
+
+  // Out of the way of the page: the element's own attributes and variables, and its place back from the marker.
+  const undo = (el, d) => {
+    el.removeAttribute('data-gz-r-hide');
+    el.removeAttribute('data-gz-r-st');
+    for (const k of Object.keys(d.vars)) el.style.removeProperty(k);
+    if (el.getAttribute('style') === '') el.removeAttribute('style');
+    if (d.mark) { if (el.isConnected && d.mark.isConnected) d.mark.replaceWith(el); else d.mark.remove(); }
+  };
+  const clear = () => {
+    for (const [el, d] of done) undo(el, d);
+    done.clear();
+    for (const [n, r] of labels) unlabel(n, r);
+    labels.clear();
+    sheet(false);
+  };
+
+  // A rule's colour as the page draws it: a palette token through its --gz-* value on the page, a hex as it is.
+  const css = (el) => (typeof getComputedStyle === 'function' ? getComputedStyle(el) : null);
+  const drawn = (v) => (/^var\(--gz-[\w-]+\)$/.test(v) ? css(html)?.getPropertyValue(v.slice(4, -1)).trim() || v : v);
+  // What the page itself draws there, for the side a rule leaves alone: Glaze's item's text, and the first solid background
+  // from the element up ('' when a picture is behind it, or nothing is).
+  const ink = (el) => css(el.matches(GLAZE_ITEM) ? el : el.querySelector(GLAZE_ITEM) || el)?.color || '';
+  const behind = (el) => {
+    for (let e = el; e; e = e.parentElement) {
+      const s = css(e);
+      if (!s || (s.backgroundImage && s.backgroundImage !== 'none')) return '';
+      if ((GZ_COLOR.parse(s.backgroundColor)?.a ?? 0) >= 0.5) return s.backgroundColor;
+    }
+    return '';
+  };
+  // A foreground on (nearly) its own background hides text as surely as opacity 0. Below 3:1, the least a control needs
+  // (WCAG 1.4.11), a Look's colours give way where they would hide Glaze settings.
+  const unreadable = (el, vars) => {
+    const fg = vars['--gz-r-fg'], bg = vars['--gz-r-bg'];
+    if (!fg && !bg) return false;
+    if (fg === bg) return true;
+    const a = fg ? drawn(fg) : ink(el), b = bg ? drawn(bg) : behind(el);
+    return !!GZ_COLOR.parse(a) && !!GZ_COLOR.parse(b) && GZ_COLOR.contrast(a, b) < 3;
+  };
+  // Each part's elements on the page now, with what its end state asks of them; an element two parts name takes both.
+  const want = (plan) => {
+    const els = new Map(), card = GZ_PARTS.BOARD[ctx.site];
+    const add = (el, s, part, board) => {
+      const w = els.get(el) || { hide: false, vars: {}, st: [], t: '', move: null, part, board };
+      els.set(el, w);
+      if (s.hide) w.hide = true;
+      Object.assign(w.vars, s.vars);
+      w.st.push(...Object.keys(s.st));
+      if (s.t) w.t = s.t;
+      if (s.move) w.move = s.move;
+    };
+    for (const [name, s] of plan) {
+      const part = GZ_PARTS.get(name);
+      for (const el of document.querySelectorAll(part.s)) if (!el.closest(OWN)) add(el, s, part, false);
+      if (part.b) for (const el of document.querySelectorAll(part.b)) if (!ownIn(el, el.closest(card))) add(el, s, part, el.matches(card));
+      for (const f of s.fonts) GZ_FONTS.load(f);
+    }
+    for (const [el, w] of els) {
+      // A board's card itself stays: hidden or faded, its tile would be left on the board, empty.
+      if (w.board) { w.hide = false; delete w.vars['--gz-r-o']; w.st = w.st.filter((k) => k !== 'o'); }
+      const paints = w.st.includes('fg') || w.st.includes('bg');
+      if ((w.hide || w.st.includes('o') || paints) && (el.matches(GLAZE_ITEM) || el.querySelector(GLAZE_ITEM)
+        || [...el.querySelectorAll(OWN)].some((node) => node.matches(CONTROL) || node.querySelector(CONTROL)))) {
+        w.hide = false;
+        const drop = paints && unreadable(el, w.vars) ? ['o', 'fg', 'bg'] : ['o'];
+        for (const k of drop) delete w.vars[`--gz-r-${k}`];
+        w.st = w.st.filter((k) => !drop.includes(k));
+      }
+    }
+    return els;
+  };
+  // Beside the first element of the other part in the same container. An LMS that keeps putting it back wins after a few
+  // tries, rather than the two of them moving it on every pass.
+  const move = (el, m, part, d) => {
+    if (d.move?.to !== m.to || d.move?.at !== m.at) { d.moves = 0; d.move = m; }
+    const board = el.closest(GZ_PARTS.BOARD[ctx.site] || ':not(*)');
+    const box = board || el.parentElement?.closest(part.in);
+    const target = GZ_PARTS.get(m.to);
+    const selector = board ? target.b : target.s;
+    const to = box && selector && [...box.querySelectorAll(selector)].find((b) => b !== el && !b.contains(el) && !el.contains(b) && (!board || !ownIn(b, board)));
+    if (!to || (m.at === 'before' ? to.previousElementSibling : to.nextElementSibling) === el || d.moves > 3) return;
+    if (!d.mark) { d.mark = document.createComment('gz-rule'); el.before(d.mark); }
+    d.moves++;
+    if (m.at === 'before') to.before(el); else to.after(el);
+  };
+
+  const apply = (plan) => {
+    sheet(true);
+    const els = want(plan);
+    const texts = new Set();
+    for (const [el, d] of done) if (!els.has(el)) { undo(el, d); done.delete(el); }
+    for (const [el, w] of els) {
+      const d = done.get(el) || { vars: {}, mark: null, moves: 0, text: null };
+      done.set(el, d);
+      if (el.hasAttribute('data-gz-r-hide') !== w.hide) el.toggleAttribute('data-gz-r-hide', w.hide);
+      const st = [...new Set(w.st)].join(' ');
+      if (!st) el.removeAttribute('data-gz-r-st'); else if (el.getAttribute('data-gz-r-st') !== st) el.setAttribute('data-gz-r-st', st);
+      for (const k of Object.keys(d.vars)) if (!(k in w.vars)) el.style.removeProperty(k);
+      for (const [k, v] of Object.entries(w.vars)) if (el.style.getPropertyValue(k) !== v) el.style.setProperty(k, v);
+      d.vars = w.vars;
+      if (w.t) { d.text = label(el, w.t, d.text); if (d.text) texts.add(d.text); }
+      if (w.move) move(el, w.move, w.part, d);
+      else if (d.mark) { if (d.mark.isConnected) d.mark.replaceWith(el); d.mark = null; d.moves = 0; }
+    }
+    for (const [n, r] of labels) if (!texts.has(n)) { unlabel(n, r); labels.delete(n); }
+  };
+
+  const sync = () => {
+    const x = ctx.on() && ctx.parts();
+    if (!x?.rules?.length) return clear();
+    if (!globalThis.GZ_PARTS || !globalThis.GZ_LX) { libs().then(sync, () => {}); return; }
+    const plan = quiet() ? null : GZ_PARTS.plan(x.rules, ctx.site);
+    if (!plan?.size) return clear();
+    apply(plan);
+  };
+  return { sync, real };
+})();
+GZ_RULES;

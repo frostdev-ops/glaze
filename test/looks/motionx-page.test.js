@@ -1,15 +1,15 @@
-// Look parts that move, on the page (features/motionx.js): how the animations reach the page and what a quiz page gets.
+// Look parts that move, on the page (looks/page/motionx.js): how the animations reach the page and what a quiz page gets.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const M = require('../../extension/lib/motionx.js');
+const M = require('../../extension/looks/motionx.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const ENTER = { s: [{ at: 0, y: 20, o: 0 }, { at: 1, y: 0, o: 1 }], ms: 500, ease: 'spring', delay: 0, stagger: 80 };
 
-// ---- features/motionx.js ----------------------------------------------------------------------------------------------------------
+// ---- looks/page/motionx.js ----------------------------------------------------------------------------------------------------------
 const feature = ({ adopt = true, parts = null, level = 'subtle', quiet = false, extras = { pointer: 'look', pointerAnim: true } } = {}) => {
   const styles = [], listeners = {}, handlers = {}, queue = new Map(), switches = new Set(), canvases = [];
   let on = true, fills = 0, styleReads = 0;
@@ -39,7 +39,7 @@ const feature = ({ adopt = true, parts = null, level = 'subtle', quiet = false, 
   ctx.GZ_LX = { quiet: () => quiet };
   const settings = { extras };
   ctx.GZ_CTX = { on: () => on, need: () => Promise.resolve(), parts: () => parts, settings: () => settings };
-  vm.runInContext(read('features/motionx.js'), ctx);
+  vm.runInContext(read('looks/page/motionx.js'), ctx);
   // Frames the browser would run: every callback asked for, 16 ms apart.
   const tick = (ms = 16) => { now += ms; const run = [...queue]; queue.clear(); if (run.length > 4) throw new Error(`${run.length} frame loops running at once`); for (const [, f] of run) f(now); };
   return { settings, api: ctx.GZ_MOTIONX, adopted: () => adopted, styles, listeners, handlers, document, ctx, queue, tick, now: () => now, canvases, switches, fills: () => fills, setOn: (v) => { on = v; }, setParts: (v) => { parts = v; }, setQuiet: (v) => { quiet = v; }, styleReads: () => styleReads };
@@ -108,9 +108,9 @@ test('has() says whether the Look has an effect for an event', async () => {
 });
 
 test('motionx never reads the page\'s styles or sweeps it, and runs no timer under a minute', () => {
-  const src = read('features/motionx.js').replace(/\/\/[^\n]*/g, '');
+  const src = read('looks/page/motionx.js').replace(/\/\/[^\n]*/g, '');
   assert.doesNotMatch(src, /getComputedStyle|querySelectorAll|setInterval|innerHTML|insertAdjacentHTML|outerHTML/);
-  assert.doesNotMatch(read('lib/motionx.js').replace(/\/\/[^\n]*/g, ''), /document|window|innerHTML|eval|Function\(/);
+  assert.doesNotMatch(read('looks/motionx.js').replace(/\/\/[^\n]*/g, ''), /document|window|innerHTML|eval|Function\(/);
 });
 
 test('the pointer effect runs one frame loop while the pointer moves, and none once everything has faded', async () => {

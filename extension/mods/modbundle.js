@@ -8,14 +8,14 @@
 var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
   const S = globalThis.crypto.subtle;
   const te = new TextEncoder();
-  const Z = () => (typeof GZ_ZIP !== 'undefined' ? GZ_ZIP : require('./zip.js'));
-  const X = () => (typeof GZ_XPARTS !== 'undefined' ? GZ_XPARTS : require('./lookparts.js'));
-  const MX = () => (typeof GZ_MX !== 'undefined' ? GZ_MX : require('./motionx.js'));
-  const W = () => (typeof GZ_WIDGETS !== 'undefined' ? GZ_WIDGETS : require('./widgets.js'));
-  // The packs a mod carries are read with lib/media.js; the worker brings it on first use.
-  const MEDIA = () => (typeof GZ_MEDIA !== 'undefined' ? GZ_MEDIA : typeof require === 'function' ? require('./media.js') : (importScripts('media.js'), GZ_MEDIA));
+  const Z = () => (typeof GZ_ZIP !== 'undefined' ? GZ_ZIP : require('../core/zip.js'));
+  const X = () => (typeof GZ_XPARTS !== 'undefined' ? GZ_XPARTS : require('../looks/lookparts.js'));
+  const MX = () => (typeof GZ_MX !== 'undefined' ? GZ_MX : require('../looks/motionx.js'));
+  const W = () => (typeof GZ_WIDGETS !== 'undefined' ? GZ_WIDGETS : require('../core/widgets.js'));
+  // The packs a mod carries are read with looks/media.js; the worker brings it on first use.
+  const MEDIA = () => (typeof GZ_MEDIA !== 'undefined' ? GZ_MEDIA : typeof require === 'function' ? require('../looks/media.js') : (importScripts('../looks/media.js'), GZ_MEDIA));
   const WG = () => (typeof GZ_MODWIDGET !== 'undefined' ? GZ_MODWIDGET : require('./modwidget.js'));
-  // Only a manifest with `tools` needs lib/modtools.js.
+  // Only a manifest with `tools` needs mods/modtools.js.
   const T = () => (typeof GZ_MODTOOLS !== 'undefined' ? GZ_MODTOOLS : require('./modtools.js'));
 
   // Files in a bundle, bytes of them all (mod.json and mod.sig too), bytes of .js, bytes of mod.json, a path's characters
@@ -240,7 +240,7 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
   const DATA = ['courses', 'todo', 'grades', 'nav.read', 'documents', 'documents.read'];
   // What Glaze's navigation bar lets a mod change (no personal data).
   const NAV = ['nav.items', 'nav.layout'];
-  // Agent apps the student connects may use the mod's `tools` (lib/modtools.js).
+  // Agent apps the student connects may use the mod's `tools` (mods/modtools.js).
   const AGENTS = 'agents';
   const HOSTS_MAX = 8;
   // A DNS name as a browser asks for it: lowercase ASCII (punycode for the rest), two labels at least, a top label that
@@ -261,7 +261,7 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
   };
   const isFile = (files, p, e) => typeof p === 'string' && own(files, p) && ext(p) === e;
   // Slots: tiles and rail widgets drawn from the mod's Worker (a component tree and a canvas), or, for a mod without data
-  // permissions, an HTML file of its own (frame UI), or, with no code at all, `blocks` Glaze draws itself (lib/modwidget.js).
+  // permissions, an HTML file of its own (frame UI), or, with no code at all, `blocks` Glaze draws itself (mods/modwidget.js).
   // nav and background: null, {} (drawn from the Worker) or { file }.
   const SLOT_ID = /^[a-z][a-z0-9-]{0,31}$/;
   const PICTURES = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif'];
@@ -339,7 +339,7 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
     // Tools for agent apps, behind agents, each source's data permission and, for code tools, the hooks that answer them.
     if (own(raw, 'tools')) T().clean(raw.tools, raw);
     if (own(raw, 'parts')) { const p = X().clean(raw.parts); if (!p || !X().same(p, raw.parts)) bad('parts'); }
-    // A background file of its own: `./<path>`, there, and what lib/media.js keeps for a Look's background of its declared
+    // A background file of its own: `./<path>`, there, and what looks/media.js keeps for a Look's background of its declared
     // type (as cleaned, within the background's limits). A video is carried only as that file.
     const bg = bgMedia(raw);
     // Never `file:` (the student's own kept file, which no bundle carries and no reviewer sees) or `mod:` (the worker's spelling).
@@ -362,7 +362,7 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
     if (own(raw, 'hooks') && !isFile(files, raw.hooks, 'js')) bad('hooks');
     if (own(raw, 'replaces') && (!Array.isArray(raw.replaces) || !raw.replaces.every(replaceOk) || new Set(raw.replaces).size !== raw.replaces.length)) bad('replaces');
     if (own(raw, 'settings')) settings(raw.settings);
-    // Stickers and pets it carries, as lib/media.js cleans them; each file is one of the bundle's.
+    // Stickers and pets it carries, as looks/media.js cleans them; each file is one of the bundle's.
     if (own(raw, 'packs')) { const p = MEDIA().packs(raw.packs, (f) => own(files, f)); if (!p || !X().same(p, raw.packs)) bad('packs'); }
     // A declarative widget is the whole of a mod without code: no hooks and no page of any slot's own.
     if (hasBlocks(raw) && (own(raw, 'hooks') || [...(raw.ui.tiles || []), ...(raw.ui.rail || []), raw.ui.nav, raw.ui.background].some((s) => s && own(s, 'file')))) bad('ui');
@@ -377,7 +377,7 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
     if (!b || typeof b.src !== 'string') return null;
     return { type: b.type, src: b.src, path: b.src.startsWith('./') ? X().MEDIA.mod(b.src) : null };
   };
-  // Manifest entry points mean code (as lib/blocklist.js counts them): hooks, or a page of its own in any slot.
+  // Manifest entry points mean code (as mods/blocklist.js counts them): hooks, or a page of its own in any slot.
   const hasCode = (m) => {
     const file = (v) => typeof v === 'string' && v.length > 0;
     return file(m?.hooks) || [...(m?.ui?.tiles || []), ...(m?.ui?.rail || []), m?.ui?.nav, m?.ui?.background].some((s) => file(s?.file));
@@ -521,7 +521,7 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
 
   // ---- install and update rules ----------------------------------------------------------------------------------
   // installed: the stored record (or null); incoming: read()'s answer; dev: dev mode is on; blocked: what the blocklist
-  // says about incoming (lib/blocklist.js: its reason, or '' when it isn't blocked; the caller asks, since the list lives
+  // says about incoming (mods/blocklist.js: its reason, or '' when it isn't blocked; the caller asks, since the list lives
   // in storage). → { action: 'install'|'update'|'refuse', reason, newPermissions, prompt }, plus `blocked` when that is
   // why. newPermissions: what the student hasn't been asked about ('code' and 'frame' included); an install always prompts, an
   // update only when that list isn't empty. trust: the separate author pin and highest signed version/hash, kept after removal.
@@ -551,16 +551,16 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
   };
 
   // ---- the worker's 'glaze:mods' operations ----------------------------------------------------------------------
-  // Only lib/background.js calls this, for the editor's top frame, inside the broker's queue. Every bundle is read and
+  // Only background/background.js calls this, for the editor's top frame, inside the broker's queue. Every bundle is read and
   // checked again here, whatever the editor showed: the editor sends the zip, the hash the student saw and the grants
   // they gave. Records: storage.local `mod:<id>` = { id, manifest, files: { path: base64 }, hash, key, version,
   // grants: { permission: true }, source, installedAt, enabled, dev }; `mods` = [id], in the student's order. The
-  // blocklist (lib/blocklist.js) marks a blocked record `enabled: false, blocked: <reason>`; the list keeps
+  // blocklist (mods/blocklist.js) marks a blocked record `enabled: false, blocked: <reason>`; the list keeps
   // that field, and nothing blocked installs, updates or turns back on. Dev mode is storage.local `modDev: true`, set by
   // the editor's dev mode switch.
   const ID = /^[a-z2-7]{16}$/;
   const SOURCES = ['file', 'code', 'link', 'gallery', 'dev', 'builder'];
-  // A mod channel's read link (lib/modchannel.js), kept on the record of a mod installed from one.
+  // A mod channel's read link (mods/modchannel.js), kept on the record of a mod installed from one.
   const channelOk = (text) => {
     if (typeof text !== 'string' || text.length > 600) return false;
     try {
@@ -577,7 +577,7 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
   const trustSlot = (id) => `modTrust:${id}`;
   const pin = ({ key, version, hash }) => ({ key, version, hash });
   const summary = ({ files, ...r }) => ({ ...r, prompt: prompt(r.manifest) });
-  // The broker loads lib/blocklist.js before every decision; a missing module is an error, never an empty list.
+  // The broker loads mods/blocklist.js before every decision; a missing module is an error, never an empty list.
   const change = async (m, { local }, { blocked = (r) => GZ_BLOCKLIST.blocked(local, r) } = {}) => {
     if (m.op === 'author') {
       const { modAuthor } = await local.get('modAuthor');
@@ -677,7 +677,7 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
   };
 
   // ---- the gallery's "Use in Glaze" -------------------------------------------------------------------------------
-  // The worker's one request to the gallery, made on the student's click there (lib/gallery.js): the signed bundle for
+  // The worker's one request to the gallery, made on the student's click there (looks/gallery.js): the signed bundle for
   // exactly that id and hash, with no cookies, no referrer and no redirects, read up to the zip cap. It must verify, be
   // that id and hash, and not be blocked. → storage.local `modOffer`: { id, hash, zip (base64), at } for the editor's
   // prompt, or { error, vars, at } with English for t().

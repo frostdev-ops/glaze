@@ -1,10 +1,10 @@
 // A Look's nav layout (x.nav): its cleaner, and the one ordered, grouped model every site's rail draws
-// (features/nav.js). Site-neutral and pure: the sites only say which native items they have.
+// (navigation/page/nav.js). Site-neutral and pure: the sites only say which native items they have.
 var GZ_NAV_LAYOUT = globalThis.GZ_NAV_LAYOUT || (() => {
   const N = typeof GZ_NAV_ITEMS === 'undefined' ? require('./nav-items.js') : GZ_NAV_ITEMS;
   // One name per kind of native item across the LMSes, so a Look hides "calendar" everywhere. Ultra's names come first.
   const NATIVE = [...N.NATIVE, 'dashboard', 'home', 'history', 'help', 'groups', 'admin', 'notifications'];
-  // Glaze's own English name for each, the same on every page: what a mod is told the bar holds (features/mods.js, the
+  // Glaze's own English name for each, the same on every page: what a mod is told the bar holds (mods/page/mods.js, the
   // nav.items event), never what the page or the student calls it. None for the account item, whose label is the
   // student's name, nor for Glaze's settings item in Ultra's own nav, which the bar never shows.
   const NAMES = { 'institution-page': 'Institution page', stream: 'Activity', course: 'Courses', organization: 'Organizations', calendar: 'Calendar', messages: 'Messages', grades: 'Grades',
@@ -143,7 +143,7 @@ var GZ_NAV_LAYOUT = globalThis.GZ_NAV_LAYOUT || (() => {
     return out;
   };
 
-  // The shape features/nav.js's rail already draws (navItems): a worn layout stands in for the student's own items.
+  // The shape navigation/page/nav.js's rail already draws (navItems): a worn layout stands in for the student's own items.
   const rail = (nav) => ({
     links: (nav.links || []).map((l) => ({ ...l, i: nav.icons?.[`link:${l.id}`] || l.i, tab: false })),
     order: [], hidden: nav.hidden || [],

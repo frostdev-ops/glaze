@@ -1,4 +1,4 @@
-// Glaze Writer's side of agent apps' document tools (lib/mcp/writer.js) in an open paper (writer.html after writer-ai.js,
+// Glaze Writer's side of agent apps' document tools (agents/writer.js) in an open paper (writer.html after writer-ai.js,
 // and papers.html's editor): what the worker asks over port 'glaze:mcp-writer' about the paper open here, answered from the
 // editor. key: its key (GZ_WRITER_PAPER.current()); issues: GZ_WRITER_ISSUES's list; cite: what a citation of one of its
 // sources (GZ_WRITER_CITE) would put at the caret; and, once the student allowed it in Glaze's approval window, insert (that

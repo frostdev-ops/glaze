@@ -145,7 +145,7 @@ var GZ_STREAM_UI = globalThis.GZ_STREAM_UI || (() => {
     if (!current()) return clear();
     document.addEventListener('visibilitychange', visibility);
     if (globalThis.GZ_STREAM) return paint();
-    loading ||= C.need('lib/stream.js', () => globalThis.GZ_STREAM).then(() => { loading = null; if (current()) paint(); }, () => { loading = null; });
+    loading ||= C.need('courses/stream.js', () => globalThis.GZ_STREAM).then(() => { loading = null; if (current()) paint(); }, () => { loading = null; });
   };
   return { sync };
 })();

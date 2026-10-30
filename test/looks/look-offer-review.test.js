@@ -2,15 +2,15 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const G = require('../../extension/defaults.js');
-const F = require('../../extension/lib/fonts.js');
-const S = require('../../extension/lib/share.js');
-const X = require('../../extension/lib/lookparts.js');
-const K = require('../../extension/lib/cards.js');
-const P = require('../../extension/lib/parts.js');
+const G = require('../../extension/content/defaults.js');
+const F = require('../../extension/looks/fonts.js');
+const S = require('../../extension/sharing/share.js');
+const X = require('../../extension/looks/lookparts.js');
+const K = require('../../extension/courses/cards.js');
+const P = require('../../extension/looks/parts.js');
 
 const offer = async (code) => {
-  const source = fs.readFileSync(require.resolve('../../extension/options.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../../extension/settings/options.js'), 'utf8');
   const section = source.slice(source.indexOf('  const tryCode ='), source.indexOf("  $('#share-try').addEventListener"));
   const notes = [], paints = [], hints = [];
   const controls = {
@@ -46,7 +46,7 @@ test('malformed rule font data never reaches the offer preview', async () => {
 });
 
 test('an offer from the gallery is taken by the editor tab the worker opens, not by Settings framed in a school page', async () => {
-  const source = fs.readFileSync(require.resolve('../../extension/options.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../../extension/settings/options.js'), 'utf8');
   const take = source.slice(source.indexOf('  const takeOffer = '), source.indexOf("  local.get(['lookFavorites', 'lookHistory']"));
   for (const embedded of [true, false]) {
     const stored = { galleryOffer: { code: 'glaze1:abc', name: 'Garden' } }, tried = [];
@@ -60,7 +60,7 @@ test('an offer from the gallery is taken by the editor tab the worker opens, not
 });
 
 test('a background picture link the settings would drop is refused when typed, not lost when saved', () => {
-  const source = fs.readFileSync(require.resolve('../../extension/options.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../../extension/settings/options.js'), 'utf8');
   const handler = source.slice(source.indexOf("  $('#bg-image').addEventListener"), source.indexOf("  $('#save-preset').addEventListener"));
   for (const [link, kept] of [['https://example.com/a.jpg', true], [`https://example.com/${'a'.repeat(2100)}.jpg`, false], ['https://example.com/a.jpg?x\\', false]]) {
     let change;

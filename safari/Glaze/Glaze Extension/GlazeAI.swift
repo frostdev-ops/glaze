@@ -2,7 +2,7 @@
 //  GlazeAI.swift
 //  Glaze Extension
 //
-//  The `apple` AI provider's native side (lib/ai/providers/apple.js, docs/ai-harness.md): Apple's Foundation Models, on
+//  The `apple` AI provider's native side (ai/providers/apple.js, docs/ai-harness.md): Apple's Foundation Models, on
 //  this device, answering browser.runtime.sendNativeMessage. One message, one reply; nothing streams. Messages:
 //    { type: 'ai.status', model: 'on-device' }
 //      → { ok: true, state: 'ready' | 'downloading' | 'unavailable', reason?, context?, images? }
@@ -12,10 +12,10 @@
 //    { type: 'ai.release' } → { ok: true }: the warm sessions dropped (a connection changed)
 //    { type: 'ai.warm', model, instructions } → { ok: true }: a session with these instructions made and prewarmed for the
 //      next run that has them (one already warm stays, its time renewed); nothing is asked of the model
-//  messages are lib/ai/request.js's (system → instructions; earlier turns → the transcript; the last user message → the
-//  prompt; images as base64). schema is lib/ai/schema.js's subset, each object with its keys' order (x-order: a dictionary
+//  messages are ai/request.js's (system → instructions; earlier turns → the transcript; the last user message → the
+//  prompt; images as base64). schema is ai/schema.js's subset, each object with its keys' order (x-order: a dictionary
 //  keeps none, and the model writes them in that order), turned into a DynamicGenerationSchema so the model is held to it;
-//  the answer goes back as JSON text and the worker checks it again. error is one of lib/ai/failure.js's
+//  the answer goes back as JSON text and the worker checks it again. error is one of ai/failure.js's
 //  categories, or 'refusal'. Needs macOS or iOS 27; earlier systems answer unavailable ('os').
 //  A request with no earlier turns starts on a warm session: one that has read only the same instructions, made and
 //  prewarmed when the last such request came. A session answers once (its transcript would carry that answer into the
@@ -52,9 +52,9 @@ enum GlazeAI {
 #if canImport(FoundationModels)
 @available(macOS 27.0, iOS 27.0, *)
 private enum Native {
-    // Glaze's own limits (lib/ai/request.js LIMIT): checked again here, since a message is data.
+    // Glaze's own limits (ai/request.js LIMIT): checked again here, since a message is data.
     static let maxMessages = 64, maxChars = 2_000_000, maxImages = 8, maxImageBytes = 6 << 20, maxSchemaDepth = 12
-    // A picture's tokens in the budget, an estimate: the worker's own allowance (lib/ai/task.js fits). Measured, one took 19
+    // A picture's tokens in the budget, an estimate: the worker's own allowance (ai/task.js fits). Measured, one took 19
     // to 195 on macOS 27.0.1, by its size; Foundation Models publishes no fixed cost.
     static let imageTokens = 1024
 
@@ -230,7 +230,7 @@ private enum Native {
         }
     }
 
-    /// An error as one of lib/ai/failure.js's categories (or 'refusal'), with a reason word for a developer.
+    /// An error as one of ai/failure.js's categories (or 'refusal'), with a reason word for a developer.
     static func failure(_ error: Error) -> [String: Any] {
         if Task.isCancelled || error is CancellationError { return ["ok": false, "error": "cancelled"] }
         if let e = error as? LanguageModelError {
@@ -325,7 +325,7 @@ private enum Native {
         return image
     }
 
-    // ---- lib/ai/schema.js → DynamicGenerationSchema ---------------------------------------------------------------------
+    // ---- ai/schema.js → DynamicGenerationSchema ---------------------------------------------------------------------
 
     private final class Schema {
         private var names = 0

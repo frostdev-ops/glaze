@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// The owner's tool for the mod blocklist (lib/blocklist.js). Run it on the owner's own computer, offline: the private key
+// The owner's tool for the mod blocklist (mods/blocklist.js). Run it on the owner's own computer, offline: the private key
 // never goes on a server, in the repo or in a backup the key's owner doesn't control (RELEASING.md).
 //   node tools/release/blocklist-sign.mjs keygen <keyfile>
 //       Makes the Ed25519 key pair. The private key goes in <keyfile> (mode 600, outside the repo, never overwritten);
-//       the public key is printed, to paste over PENDING_OWNER_KEY in lib/blocklist.js.
+//       the public key is printed, to paste over PENDING_OWNER_KEY in mods/blocklist.js.
 //   node tools/release/blocklist-sign.mjs sign <keyfile> <list.json> [<signed.json>] [--force-unpinned]
 //       Signs the list in <list.json> { mods: [id], bundles: [hash], authors: [key], reasons: { entry: text }, seq }:
 //       seq one higher than the file's (and written back to it), issued now, expires 30 days later. <signed.json>
@@ -14,7 +14,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const B = createRequire(import.meta.url)('../../extension/lib/blocklist.js');
+const B = createRequire(import.meta.url)('../../extension/mods/blocklist.js');
 const repo = fs.realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'));
 const LIFETIME = 30 * 864e5;
 
@@ -40,7 +40,7 @@ export const sign = (keyFile, listFile, outFile, { now = Date.now(), force = fal
   const key = crypto.createPrivateKey(fs.readFileSync(keyFile));
   const pub = crypto.createPublicKey(key).export({ format: 'jwk' }).x;
   // A list the extension would ignore is worse than none: the owner thinks it is in force.
-  if (pub !== B.OWNER_KEY && !force) throw new Error('this is not the key pinned as OWNER_KEY in lib/blocklist.js, so the extension would ignore the list (paste the public key there, or --force-unpinned to test)');
+  if (pub !== B.OWNER_KEY && !force) throw new Error('this is not the key pinned as OWNER_KEY in mods/blocklist.js, so the extension would ignore the list (paste the public key there, or --force-unpinned to test)');
   const input = JSON.parse(fs.readFileSync(listFile, 'utf8'));
   const seen = input.seq ?? 0;
   if (!Number.isSafeInteger(seen) || seen < 0) throw new Error('seq must be a whole number');
@@ -63,7 +63,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   try {
     if (cmd === 'keygen' && a && args.length === 2) {
       const pub = keygen(a);
-      console.log(`Private key written to ${a} (mode 600). Keep it offline and back it up; it can't be recovered.\nPublic key, to paste over PENDING_OWNER_KEY in lib/blocklist.js, and into BLOCKLIST_KEY for gallery.mjs:\n${pub}`);
+      console.log(`Private key written to ${a} (mode 600). Keep it offline and back it up; it can't be recovered.\nPublic key, to paste over PENDING_OWNER_KEY in mods/blocklist.js, and into BLOCKLIST_KEY for gallery.mjs:\n${pub}`);
     } else if (cmd === 'sign' && a && b && args.length <= 4) {
       const out = c || b.replace(/(\.json)?$/, '.signed.json');
       const { list } = sign(a, b, out, { force: process.argv.includes('--force-unpinned') });

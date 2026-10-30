@@ -1,6 +1,6 @@
 // Slides on the Documents page (slides-kind.js, papers.html): loaded after papers.js and packaged, available for viewing with
 // Settings → Writer → Slides off; importing needs writer.slides on, its one storage seam (the deck's bytes in the worker's file store,
-// lib/doc-files.js, a record from before it holding them as base64), what it keeps for search and a copy, and the files it refuses. The
+// documents/doc-files.js, a record from before it holding them as base64), what it keeps for search and a copy, and the files it refuses. The
 // viewer itself is checks/documents/slides-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -10,25 +10,25 @@ const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 
 test('papers.html loads the kind registry first and slides-kind.js after papers.js; both package lists ship it', () => {
   const html = read('papers.html');
   const at = (src) => html.indexOf(`<script src="${src}"></script>`);
-  assert.ok(at('lib/doc-kinds.js') > 0 && at('lib/doc-kinds.js') < at('papers.js'), 'the registry before papers.js');
-  assert.ok(at('slides-kind.js') > at('papers.js'), 'slides-kind.js after papers.js');
-  assert.ok(html.includes('<link rel="stylesheet" href="slides-kind.css">'));
+  assert.ok(at('documents/doc-kinds.js') > 0 && at('documents/doc-kinds.js') < at('documents/papers.js'), 'the registry before papers.js');
+  assert.ok(at('documents/slides/slides-kind.js') > at('documents/papers.js'), 'slides-kind.js after papers.js');
+  assert.ok(html.includes('<link rel="stylesheet" href="documents/slides/slides-kind.css">'));
   assert.match(html, /img-src 'self' data: blob:;/, 'pictures from blob: URLs');
-  const pkg = read('../tools/build/package.sh').split('\n').filter((l) => / papers\.js /.test(l));
+  const pkg = read('../tools/build/package.sh').split('\n').filter((l) => / documents /.test(l));
   assert.equal(pkg.length, 2, 'chmod and zip');
-  for (const line of pkg) for (const f of ['slides-kind.js', 'slides-kind.css']) assert.ok(line.includes(` ${f} `), `${f} in: ${line.slice(0, 40)}…`);
+  for (const line of pkg) for (const f of ['documents/slides/slides-kind.js', 'documents/slides/slides-kind.css']) assert.ok(line.includes(` ${f.split('/')[0]} `), `${f} in: ${line.slice(0, 40)}…`);
 });
 
 // defaults.js's GZ_SANITIZE with writer.slides defaulting to `on`, as a page has it.
 const sanitizer = (on) => {
-  const src = read('defaults.js'), flipped = src.replace(/slides: \[(?:true|false), 'bool'\]/, `slides: [${on}, 'bool']`);
+  const src = read('content/defaults.js'), flipped = src.replace(/slides: \[(?:true|false), 'bool'\]/, `slides: [${on}, 'bool']`);
   assert.notEqual(flipped, on ? src.replace(/slides: \[true/, 'x') : src.replace(/slides: \[false/, 'x'), 'writer.slides in defaults.js');
-  const c = vm.createContext({ require: require('node:module').createRequire(path.join(__dirname, '../../extension/defaults.js')), TextEncoder, Intl });
+  const c = vm.createContext({ require: require('node:module').createRequire(path.join(__dirname, '../../extension/content/defaults.js')), TextEncoder, Intl });
   vm.runInContext(`${flipped}\nthis.GZ_SANITIZE = GZ_SANITIZE;`, c);
   return c.GZ_SANITIZE;
 };
-const { GZ_SANITIZE, GZ_DEFAULTS } = require('../../extension/defaults.js');
-const F = require('../../extension/lib/doc-files.js');
+const { GZ_SANITIZE, GZ_DEFAULTS } = require('../../extension/content/defaults.js');
+const F = require('../../extension/documents/doc-files.js');
 const { fakeIDB } = require('../helpers/fake-idb.cjs');
 // The worker's file store over a fake IndexedDB, reached through ports that carry JSON as Chrome's do.
 const worker = (idb) => {
@@ -48,16 +48,16 @@ const worker = (idb) => {
 // slides-kind.js in a context of its own: the registry, defaults.js's sanitizer, a storage.sync answering writer.slides, and
 // need() as a no-op.
 const load = (writer, overrides = {}) => {
-  delete require.cache[require.resolve('../../extension/lib/doc-kinds.js')];
+  delete require.cache[require.resolve('../../extension/documents/doc-kinds.js')];
   delete globalThis.GZ_DOC_KINDS;
-  const DK = require('../../extension/lib/doc-kinds.js');
+  const DK = require('../../extension/documents/doc-kinds.js');
   let ctx;
-  const need = async (files) => { if (files.includes('lib/doc-files.js') && !ctx.GZ_DOC_FILES) vm.runInContext(read('lib/doc-files.js'), ctx); };
+  const need = async (files) => { if (files.includes('documents/doc-files.js') && !ctx.GZ_DOC_FILES) vm.runInContext(read('documents/doc-files.js'), ctx); };
   ctx = vm.createContext({ GZ_DOC_KINDS: DK, GZ_SANITIZE, GZ_WRITER_PAPER: { need }, console, URL, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, DataView, RangeError, Error, Promise, Object, Array, String, Number, Math, JSON, Map, Set, btoa, atob, ...overrides,
     chrome: { storage: { sync: { get: async () => (writer === undefined ? {} : { writer }) } }, runtime: { getURL: (f) => `chrome-extension://x/${f}`, connect: overrides.connect || worker() } } });
   ctx.globalThis = ctx;
   if (ctx.GZ_SANITIZE === undefined) delete ctx.GZ_SANITIZE;
-  vm.runInContext(read('slides-kind.js'), ctx);
+  vm.runInContext(read('documents/slides/slides-kind.js'), ctx);
   return { DK, ctx };
 };
 const imports = async (DK) => {
@@ -83,14 +83,14 @@ test('with no choice stored, import follows writer.slides\'s default in defaults
 });
 
 test('defaults.js loads through need() only where the page lacks it', async () => {
-  assert.ok(!read('papers.html').includes('src="defaults.js"'), 'papers.html loads it on demand');
-  assert.ok(read('writer.html').includes('<script src="defaults.js"></script>'), 'writer.html has it');
+  assert.ok(!read('papers.html').includes('src="content/defaults.js"'), 'papers.html loads it on demand');
+  assert.ok(read('writer.html').includes('<script src="content/defaults.js"></script>'), 'writer.html has it');
   const asked = [];
   let ctx;
-  const need = async (files) => { asked.push(...files); if (files.includes('defaults.js')) ctx.GZ_SANITIZE = sanitizer(true); };
+  const need = async (files) => { asked.push(...files); if (files.includes('content/defaults.js')) ctx.GZ_SANITIZE = sanitizer(true); };
   ({ ctx } = load(undefined, { GZ_SANITIZE: undefined, GZ_WRITER_PAPER: { need } }));
   assert.equal(await imports(ctx.GZ_DOC_KINDS), true);
-  assert.deepEqual(asked, ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js'], 'what defaults.js uses at load, first');
+  assert.deepEqual(asked, ['core/color.js', 'looks/surfaces.js', 'looks/fonts.js', 'content/defaults.js'], 'what defaults.js uses at load, first');
   asked.length = 0;
   ({ ctx } = load(undefined, { GZ_SANITIZE: sanitizer(true), GZ_WRITER_PAPER: { need } }));
   assert.equal(await imports(ctx.GZ_DOC_KINDS), true);

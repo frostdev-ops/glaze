@@ -3,9 +3,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
-const W = require('../../extension/lib/widgets.js');
-const C = require('../../extension/lib/color.js');
+const D = require('../../extension/content/defaults.js');
+const W = require('../../extension/core/widgets.js');
+const C = require('../../extension/core/color.js');
 const { El } = require('../stand-in-dom.js');
 const read = (f) => fs.readFileSync(require.resolve(`../../extension/${f}`), 'utf8');
 const origin = 'https://audit.instructure.com', cid = `canvas:${origin}/31`;
@@ -60,7 +60,7 @@ const widgets = ({ frame = false, raw = only('notes'), where = '/', pet = false 
   } };
   doc.boxOf = (e) => e.className === 'gz-dash-grid' ? { left: 24, top: 140, width: 1232, height: parseFloat(e.style.height) || 0 }
     : e.className === 'gz-w-body' ? { left: 0, top: 0, width: 200, height: 150 } : null;
-  const ui = vm.runInContext(read('features/widgets.js'), p.context); ui.sync(true);
+  const ui = vm.runInContext(read('core/page/widgets.js'), p.context); ui.sync(true);
   return { ...p, ui, loads, counts, tile: (id) => doc.querySelector(`section[data-tile="${id}"]`) };
 };
 
@@ -77,7 +77,7 @@ test('a Dashboard page frame keeps its board but does not duplicate top-page flo
   const p = widgets({ frame: true, raw, pet: true }); await settle();
   assert.ok(p.tile('timer'), 'the frame still owns its Dashboard board'); assert.equal(p.tile('notes'), null);
   assert.equal(p.doc.querySelector('#gz-floats'), null); assert.equal(p.counts.profile, 0); assert.equal(p.counts.resume, 0);
-  assert.ok(!p.loads.includes('features/pet.js'));
+  assert.ok(!p.loads.includes('pet/page/pet.js'));
 });
 
 test('a course frame creates no floating widgets and asks for no identity', async () => {
@@ -90,9 +90,9 @@ test('the Canvas widgets loader permits Dashboard page frames and rejects course
   const p = environment(), calls = [], loads = []; p.c.top = {}; p.c.location.pathname = '/';
   p.c.GZ_WIDGETS_UI = { sync: (on) => calls.push(on) };
   const input = { links: [{}], tabFrame: '31', settings: { enhance: { widgets: true } }, need: async (f) => loads.push(f) };
-  const site = vm.runInContext(read('content-canvas.js'), p.context)(input);
+  const site = vm.runInContext(read('content/content-canvas.js'), p.context)(input);
   site.syncWidgets(); await settle(); assert.deepEqual(calls, [false]); assert.deepEqual(loads, []);
-  input.tabFrame = 'page'; site.syncWidgets(); await settle(); assert.deepEqual(calls, [false, true]); assert.deepEqual(loads, ['features/widgets.js']);
+  input.tabFrame = 'page'; site.syncWidgets(); await settle(); assert.deepEqual(calls, [false, true]); assert.deepEqual(loads, ['core/page/widgets.js']);
 });
 
 const courseWidget = () => {
@@ -106,7 +106,7 @@ const courseWidget = () => {
   c.chrome = { runtime: { id: 'audit' }, storage: { onChanged: { addListener() {} } } };
   c.GZ_CTX = { site: 'canvas', on: () => true, t: (k) => k, nickOf: () => '', courseList: () => ({ [cid]: { name: 'API course', code: 'CODE', color: '#123456' } }),
     settings: () => D.GZ_SANITIZE({}), canvasCourses: async () => { reads++; return [{ id: '31', name: 'API course' }]; }, need: async () => {} };
-  const ui = vm.runInContext(read('features/coursecards.js'), p.context); ui.sync();
+  const ui = vm.runInContext(read('courses/page/coursecards.js'), p.context); ui.sync();
   const body = make('div'); doc.body.append(body); const tile = ui.fill(body, { id: `course:${origin}/31`, term: () => '' });
   return { ...p, ui, body, native, tile, reads: () => reads };
 };
@@ -141,7 +141,7 @@ const menu = ({ answer = async () => ({ ok: true, json: async () => ({}) }) } = 
     canvasCourses: async () => [{ id: '31', name: 'Original course' }], setCourses: (courses) => { settings.courses = courses; }, cardUI() {} };
   c.GZ_COURSE_CARDS = { canvasEdit: (id, patch) => edits.push([id, patch]) };
   c.fetch = async (url, options) => { calls.push({ url, options }); return answer(url, options); };
-  const ui = vm.runInContext(read('features/coursemenu.js'), p.context); ui.toggle(button);
+  const ui = vm.runInContext(read('navigation/page/coursemenu.js'), p.context); ui.toggle(button);
   return { ...p, ui, calls, edits, hero, title, button, custom: () => doc.querySelector('.gz-cm-custom'), note: () => doc.querySelector('.gz-cm-note') };
 };
 

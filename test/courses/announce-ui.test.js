@@ -1,4 +1,4 @@
-// The pop-up (features/popup.js) and announcements' page side (features/announce.js) in a VM with the stand-in DOM: the
+// The pop-up (courses/page/popup.js) and announcements' page side (courses/page/announce.js) in a VM with the stand-in DOM: the
 // dialog's focus, labels and loading state, the motion each setting gets, one request per open and the read mark, falling
 // back to the site's page, clicks with modifiers, and the hover preview's timing, cancelling, cache and Escape.
 const test = require('node:test');
@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
+const D = require('../../extension/content/defaults.js');
 const { El } = require('../stand-in-dom.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
@@ -38,9 +38,9 @@ const page = ({ site = 'canvas', origin = O, anim = 'genie', motion = 'subtle', 
   const ctx = vm.createContext({
     GZ_CTX: { site, t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? ''), locale: () => 'en', settings: () => settings, need: async () => {},
       moodleIn: async () => ({ session: () => ({ root: origin, sesskey: 'sk' }) }) },
-    GZ_I18N: require('../../extension/lib/i18n.js'), GZ_SANITIZE: D.GZ_SANITIZE,
-    GZ_POPUP_LIB: require('../../extension/lib/popup.js'), GZ_ANNOUNCE_LIB: require('../../extension/lib/announce.js'), GZ_NOTES: require('../../extension/lib/notes.js'), GZ_DOCTEXT: require('../../extension/lib/doctext.js'),
-    GZ_ULTRA: require('../../extension/lib/ultra.js'),
+    GZ_I18N: require('../../extension/core/i18n.js'), GZ_SANITIZE: D.GZ_SANITIZE,
+    GZ_POPUP_LIB: require('../../extension/core/popup.js'), GZ_ANNOUNCE_LIB: require('../../extension/courses/announce.js'), GZ_NOTES: require('../../extension/planner/notes.js'), GZ_DOCTEXT: require('../../extension/core/doctext.js'),
+    GZ_ULTRA: require('../../extension/courses/ultra.js'),
     GZ_LMSQ: { fetch: (url, init = {}, prio = 0) => {
       asked.push({ url, method: init.method || 'GET', prio, init });
       return Promise.resolve(answer ? answer(url, init) : { status: 200, body: TOPIC }).then((a) => {
@@ -54,8 +54,8 @@ const page = ({ site = 'canvas', origin = O, anim = 'genie', motion = 'subtle', 
     URL, AbortController, Promise, JSON, Date, Intl, Map, Set, WeakMap, setTimeout, clearTimeout, console,
   });
   ctx.globalThis = ctx;
-  vm.runInContext(read('features/popup.js'), ctx);
-  vm.runInContext(read('features/announce.js'), ctx);
+  vm.runInContext(read('courses/page/popup.js'), ctx);
+  vm.runInContext(read('courses/page/announce.js'), ctx);
   const host = (id) => doc.body.children.find((c) => c.id === id) || null;
   const dialog = () => host('gz-popup')?.shadowForTest.querySelector('dialog') || null;
   const tip = () => host('gz-ann-tip')?.shadowForTest.querySelector('.tip') || null;
@@ -332,20 +332,20 @@ test('preview on Moodle asks nothing (its answer would mark the posts read): wha
   assert.equal(text(p.dialog().querySelector('.body')), 'Pencils.');
 });
 
-// features/routes.js: what content.js's one hook runs on each pass, so a routed feature (rubrics, the LMS's own
+// content/routes.js: what content.js's one hook runs on each pass, so a routed feature (rubrics, the LMS's own
 // announcement lists) adds nothing to the first content script.
 test('routes: a matching page loads its feature and syncs it each pass; leaving calls off() once', async () => {
   const loaded = [], calls = [];
   const location = { pathname: '/ultra/courses/_1_1/outline' };
   const ctx = vm.createContext({ GZ_CTX: { site: 'ultra', need: async (f, ready) => { loaded.push(f); ctx.GZ_RUBRIC ||= { sync: () => calls.push('sync'), off: () => calls.push('off') }; ctx.GZ_STICKY_FOLD ||= { sync() {} }; assert.ok(ready()); } }, location, Set, Promise });
   ctx.globalThis = ctx;
-  vm.runInContext(read('features/routes.js'), ctx);
+  vm.runInContext(read('content/routes.js'), ctx);
   const R = ctx.GZ_ROUTES;
-  R.add((l, site) => site === 'ultra' && /\/assessment\//.test(l.pathname), 'features/rubric.js', 'GZ_RUBRIC');
+  R.add((l, site) => site === 'ultra' && /\/assessment\//.test(l.pathname), 'courses/page/rubric.js', 'GZ_RUBRIC');
   R.add(() => { throw new Error('broken'); }, 'features/x.js', 'GZ_X');
   R.sync(); await settle();
   // A course page: only the course bar's fold, which every one of them loads.
-  assert.deepEqual(loaded, ['features/sticky-fold.js'], 'not this page');
+  assert.deepEqual(loaded, ['navigation/page/sticky-fold.js'], 'not this page');
   location.pathname = '/ultra/courses/_1_1/outline/assessment/_5_1/overview';
   R.sync(); await settle(); R.sync(); await settle();
   assert.deepEqual(calls, ['sync', 'sync']);
@@ -355,15 +355,15 @@ test('routes: a matching page loads its feature and syncs it each pass; leaving 
   // Before its bootstrap (no GZ_CTX), it keeps nothing, so the next document's content.js loads it again.
   const bare = vm.createContext({});
   bare.globalThis = bare;
-  vm.runInContext(read('features/routes.js'), bare);
+  vm.runInContext(read('content/routes.js'), bare);
   assert.equal(bare.GZ_ROUTES, null);
 });
 
 test('content.js asks the router on its passes, and the router is loadable', () => {
-  const src = read('content.js');
-  assert.match(src, /const routes = \(\) => need\('features\/routes\.js', \(\) => globalThis\.GZ_ROUTES\)\.then\(\(\) => GZ_ROUTES\.sync\(\), no\);/);
+  const src = read('content/content.js');
+  assert.match(src, /const routes = \(\) => need\('content\/routes\.js', \(\) => globalThis\.GZ_ROUTES\)\.then\(\(\) => GZ_ROUTES\.sync\(\), no\);/);
   assert.equal(src.match(/\n {4}routes\(\);\n/g).length, 2, 'the first sweep and every pass');
-  for (const f of ['features/routes.js', 'features/popup.js', 'lib/popup.js', 'features/announce.js', 'lib/announce.js']) assert.ok(read('lib/background.js').includes(`'${f}'`), f);
+  for (const f of ['content/routes.js', 'courses/page/popup.js', 'core/popup.js', 'courses/page/announce.js', 'courses/announce.js']) assert.ok(read('background/background.js').includes(`'${f}'`), f);
 });
 
 test('opening during a preview keeps its pending request, including the link click before the async open', async () => {

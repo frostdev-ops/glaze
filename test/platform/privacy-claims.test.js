@@ -12,13 +12,13 @@ test('media policy bounds container cleanup and preserves the local-only legacy 
 });
 
 test('Moodle navigation retention names the actual site and user cache dimensions', () => {
-  assert.ok(read('features/navbar-moodle.js').includes('`navbarSeen:${root()}:${userId() || name()}`'));
+  assert.ok(read('navigation/page/navbar-moodle.js').includes('`navbarSeen:${root()}:${userId() || name()}`'));
   assert.match(policy, /navbarSeen:<site-root>:<user-id-or-name>/);
   assert.doesNotMatch(policy, /navbarSeen:<origin>`/);
 });
 
 test('LMS request limits describe the document-local bulk queue and header boundary', () => {
-  assert.match(read('lib/lmsq.js'), /const sites = new Map\(\)/);
+  assert.match(read('courses/lmsq.js'), /const sites = new Map\(\)/);
   const paragraph = policy.slice(policy.indexOf('**How often Glaze asks'), policy.indexOf("The extension's own links"));
   assert.match(paragraph, /per document/);
   assert.match(paragraph, /Separate tabs and frames/);
@@ -40,7 +40,7 @@ test('share identifier wording separates derived ids from staged protocol enforc
 });
 
 test('kept background backups and older-browser reset limits are disclosed', () => {
-  assert.match(read('options.js'), /if \(mediaMissing\) next.bg.kind = 'gradient'/);
+  assert.match(read('settings/options.js'), /if \(mediaMissing\) next.bg.kind = 'gradient'/);
   assert.match(policy, /Settings backups omit[^.]*background file bytes/);
   assert.match(policy, /same computer[^.]*gradient/);
   assert.match(policy, /without[\s\S]{0,70}getKeys[\s\S]{0,70}unknown legacy/);

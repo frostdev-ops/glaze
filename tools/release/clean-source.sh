@@ -1,6 +1,6 @@
 # Sourced by publish-chrome.sh and release.sh (POSIX sh). The recovery tools package the committed HEAD in a fresh
 # checkout, as CI does for a tag, instead of zipping a working tree that can carry edits and untracked files: a scratch
-# file in lib/ would otherwise go to the Chrome Web Store, and the zip would differ from the one CI attaches.
+# file in <area>/ would otherwise go to the Chrome Web Store, and the zip would differ from the one CI attaches.
 
 # glaze_require_clean REPO TOOL: exit unless the working tree matches HEAD. Edits and untracked files both count;
 # gitignored files (dist/, release/) do not.

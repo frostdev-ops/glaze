@@ -1,5 +1,5 @@
 // Dashboard notes, widgets and the feature hub (Canvas): the parts that don't touch the page, so node can test them.
-// Classic script; module.exports for node. Loaded on demand (features/widgets.js asks for it), by the editor for its
+// Classic script; module.exports for node. Loaded on demand (core/page/widgets.js asks for it), by the editor for its
 // settings, and by the background worker for the notes' writes: a second injection keeps the first.
 var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
   const DAY = 864e5;
@@ -17,12 +17,12 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     // Blackboard Ultra: go on to the Dashboard when Ultra opens on its start page after sign-in (landing, below).
     land: [false, 'bool'],
   };
-  (typeof GZ_SPEC !== 'undefined' ? GZ_SPEC : require('../defaults.js').GZ_SPEC).widgets = SPEC;
+  (typeof GZ_SPEC !== 'undefined' ? GZ_SPEC : require('../content/defaults.js').GZ_SPEC).widgets = SPEC;
 
   // ---- the layout (storage.local widgetLayout: this device's screen, so not synced) ------------------------------
   // The old Canvas tiles in their order, each on or off, small/medium/large, in the Dashboard or floating (x, y: where in the
   // room the screen leaves, 0–1, so a smaller window still shows it). The music link too.
-  // todo: Better To Do (features/todo.js) as a tile on both sites' boards, on from the start where the list was.
+  // todo: Better To Do (planner/page/todo.js) as a tile on both sites' boards, on from the start where the list was.
   const TILES = ['notes', 'agenda', 'timer', 'quotes', 'music', 'breathe', 'buddy', 'todo', 'settings', 'pet'];
   // Fresh Dashboards get a small starter row above their course cards (owner, 2026-10-20), superseding the
   // 2026-10-19 empty-layout decision. Stored layouts, including empty ones, never get seeded again.
@@ -31,7 +31,7 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
   const SIZES = ['s', 'm', 'l'];
   const SIZE = { notes: 'm', agenda: 'm', timer: 's', quotes: 'm', music: 'm', breathe: 's', buddy: 's', todo: 'm', settings: 's', pet: 'm' };
   const frac = (v) => (Number.isFinite(v) && v >= 0 && v <= 1 ? v : null);
-  // more: tiles other files add (features/widgets.js MORE: { id: { size } }), after the built-in ones and off until added.
+  // more: tiles other files add (core/page/widgets.js MORE: { id: { size } }), after the built-in ones and off until added.
   const MORE_ID = /^[a-z][a-z0-9]{1,15}$/;
   const COURSE_MAX = 48, COURSE_TOTAL = 384; // eight full school boards, bounded together
   // A course card's tile: course:<site>/<course id>, Ultra's _1_1 ids or Canvas's numbers (canvas). Sites are https, but
@@ -121,7 +121,7 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     boards.pages = each(Array.isArray(raw?.boards?.pages) ? raw.boards.pages : tiles.map((x) => ({ ...x, on: x.on && x.float })), ids, (x) => ptile(x, more));
     // The room's width each board (and the floating tiles) was last arranged in (arrange's and floating's w0).
     const widths = Object.fromEntries([...BOARDS, 'pages', 'canvas'].map((b) => [b, px(raw?.widths?.[b]) || 0]));
-    // filled: the boards that were given their first tiles already (features/widgets.js fillCourses), so one emptied since
+    // filled: the boards that were given their first tiles already (core/page/widgets.js fillCourses), so one emptied since
     // stays empty.
     const filled = BOARDS.filter((b) => Array.isArray(raw?.filled) && raw.filled.includes(b));
     // Layouts kept before auto-fill had no marker. Their board, including an intentionally empty one, stays as it was.
@@ -129,8 +129,8 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     // Ultra auto-fill began with the starter layout. Earlier Dashboards, even empty ones, keep their cards as saved.
     if (!fresh && raw.starter !== true && !filled.includes('dash')) filled.push('dash');
     // starter records the initial seed; it never enables a removed widget.
-    // sidebarFresh: this device's layout began with a new install (lib/background.js keepWidgets), for the sidebar's
-    // one-time move of To Do (lib/sidebar.js migrate). Kept as it is; nothing here reads it.
+    // sidebarFresh: this device's layout began with a new install (background/background.js keepWidgets), for the sidebar's
+    // one-time move of To Do (navigation/sidebar.js migrate). Kept as it is; nothing here reads it.
     return { tiles, music: music(raw?.music) ? raw.music.trim() : '', boards, widths, todo: true, canvasTodo: true, filled: BOARDS.filter((b) => filled.includes(b)), ...(raw?.starter === true && { starter: true }), ...(raw?.sidebarFresh === true && { sidebarFresh: true }) };
   };
   // Only onInstalled authorizes the starter layout. Missing storage on an update, restore or another page is not proof.
@@ -556,7 +556,7 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     const text = typeof raw?.text === 'string' ? raw.text.slice(0, NOTES_MAX) : '';
     return { text, at: Number.isFinite(raw?.at) && raw.at > 0 && raw.at <= Date.now() ? raw.at : text ? 1 : 0 };
   };
-  // In the worker's write queue (lib/background.js 'glaze:notes'): m { key, text, at } is kept unless what's stored is
+  // In the worker's write queue (background/background.js 'glaze:notes'): m { key, text, at } is kept unless what's stored is
   // newer (another tab typed later), which comes back instead. An emptied note is kept as its time alone ({ text: '', at }),
   // as what-if's Clear all keeps its time: a text typed before the clearing that arrives after it is refused.
   const saveNote = async (m, local) => {
@@ -570,8 +570,8 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
   // ---- your place in a course (storage.local coursePlace, written through the worker) ------------------------------
   // { cid: { open: [folder ids], top, item?, at } }: the 30 courses most recently left, each with its last 100 open folders
   // (Ultra's), how far down the outline or Modules list, and Canvas's module item opened last. The same rules as
-  // lib/page.js place, which the page uses for its own tab's copy and the worker can't load (it needs lib/i18n.js):
-  // test/widgets.test.js keeps the two equal. In the worker's write queue (lib/background.js 'glaze:place'), m { cid,
+  // core/page.js place, which the page uses for its own tab's copy and the worker can't load (it needs core/i18n.js):
+  // test/widgets.test.js keeps the two equal. In the worker's write queue (background/background.js 'glaze:place'), m { cid,
   // open?, top?, item? } changes only the fields it has, in what is stored when its turn comes: a tab scrolling one course
   // never writes back another's place from an older read, nor an item opened in one tab the scroll of another.
   const PLACE_CID = /^(?:canvas:https?:\/\/[a-z\d.-]+(?::\d+)?\/\d+|_\d+_\d+)$/i; // Canvas's (origin and course) or Ultra's _N_N
@@ -616,12 +616,12 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     return out;
   };
 
-  // ---- the agenda: one day of Better To Do's data (lib/todo.js, L) ----------------------------------------------
+  // ---- the agenda: one day of Better To Do's data (planner/todo.js, L) ----------------------------------------------
   // items: slim planner items (L.slim); data: the student's own ({ tasks, items }); day: a day number in tz; o, sync: Better
   // To Do's settings and whether its marks go to Canvas, as L.build takes them, so a row is done as the list says.
   // Due that day, planned for it ("do on"), and the focus sessions on it, soonest first; whole days first.
   const KINDS = new Set(['assignment', 'quiz', 'discussion_topic', 'wiki_page', 'planner_note', 'assessment_request', 'sub_assignment']);
-  // extra: rows other packages add for the day (the class schedule's classes, lib/classes.js), already in this shape.
+  // extra: rows other packages add for the day (the class schedule's classes, planner/classes.js), already in this shape.
   const agenda = (L, { items = [], data, day, tz, extra = [], o = {}, sync = false }) => {
     const d = L.clean(data);
     const done = (i, local) => L.isDone(i, o.done, sync ? undefined : local?.done);

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const F = require('../../extension/lib/fonts.js');
-const G = require('../../extension/defaults.js');
+const F = require('../../extension/looks/fonts.js');
+const G = require('../../extension/content/defaults.js');
 
 test('font settings: catalog ids and typed family names, nothing that could break out of CSS', () => {
   const look = (o) => G.GZ_SANITIZE({ look: o }).look;

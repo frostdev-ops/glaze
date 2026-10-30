@@ -11,8 +11,8 @@ const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
-const M = require(path.join(root, 'lib/sheet-model.js'));
-const SD = require(path.join(root, 'sheet-data.js'));
+const M = require(path.join(root, 'documents/sheets/sheet-model.js'));
+const SD = require(path.join(root, 'documents/sheets/sheet-data.js'));
 const out = process.argv[2] || path.join(os.tmpdir(), 'gz-sheets-check');
 const checks = [], errors = [], requests = [], shots = [];
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -53,7 +53,7 @@ const seeded = (key, wb = M.workbook()) => {
     const first = env.noFirstRun(context); context.setDefaultTimeout(15000);
     await context.route('**/*', (r) => { const u = new URL(r.request().url()); if (u.protocol === 'chrome-extension:' || u.protocol === 'blob:' || u.protocol === 'data:') return r.continue(); requests.push(u.href); return r.abort(); });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
-    const G = require(path.join(root, 'defaults.js'));
+    const G = require(path.join(root, 'content/defaults.js'));
     const settings = (sheets) => G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true }, writer: { ...G.GZ_DEFAULTS.writer, pdf: false, slides: false, sheets } });
     const HOME = `chrome-extension://${id}/papers.html`;
     const page = await context.newPage();
@@ -400,7 +400,7 @@ const seeded = (key, wb = M.workbook()) => {
     await worker.evaluate(async (o) => { await chrome.storage.local.set(o); }, seeded(wideKey, wide));
     await openHome();
     const cardCols = await until(() => page.evaluate((k) => { const hs = [...document.querySelectorAll(`.gd-card[data-key="${k}"] .gx-thumb > .gx-th-h`)].slice(1, 7); return hs.length === 6 ? hs.map((e) => e.getBoundingClientRect().width) : null; }, wideKey), 'the wide card\'s columns');
-    const { px } = require(path.join(root, 'sheet-grid.js')), wantCols = [px.col(24), 64, px.col(4), 64, 64, 64];
+    const { px } = require(path.join(root, 'documents/sheets/sheet-grid.js')), wantCols = [px.col(24), 64, px.col(4), 64, 64, 64];
     const cardSum = cardCols.reduce((a, b) => a + b, 0), wantSum = wantCols.reduce((a, b) => a + b, 0);
     check(cardCols.every((w, i) => Math.abs(w - (cardSum * wantCols[i]) / wantSum) <= 1.5),
       `the card's columns follow the sheet's widths (card ${cardCols.map((w) => w.toFixed(1)).join(', ')}; grid ${wantCols.join(', ')})`);
@@ -438,7 +438,7 @@ const seeded = (key, wb = M.workbook()) => {
     // ---- an .xlsx through Glaze: a golden workbook (Excel's own, test/fixtures/sheets/info.xlsx) imported, one cell typed,
     // exported, and the export read back by the codec equal to it but for that cell, the parts Glaze keeps still there; the
     // export imported again holds as many cells
-    const XL = require('../../extension/lib/sheet-xlsx.js'), golden = path.join(__dirname, '../../test/fixtures/sheets/info.xlsx');
+    const XL = require('../../extension/documents/sheets/sheet-xlsx.js'), golden = path.join(__dirname, '../../test/fixtures/sheets/info.xlsx');
     const original = await XL.read(new Uint8Array(fs.readFileSync(golden)));
     const count = (wb) => wb.sheets.reduce((n, sh) => n + [...sh.rows.values()].reduce((m, row) => m + row.size, 0), 0);
     await openHome();
@@ -565,7 +565,7 @@ const seeded = (key, wb = M.workbook()) => {
     const [cdl] = await Promise.all([page.waitForEvent('download'), page.click('.gx-menu [data-act="export"]')]);
     const cfile = path.join(tmp, `charts-${cdl.suggestedFilename()}`);
     await cdl.saveAs(cfile);
-    const D = require(path.join(root, 'lib/doctext.js'));
+    const D = require(path.join(root, 'core/doctext.js'));
     const zin = D.unzip(new Uint8Array(fs.readFileSync(chartsFile))), zout = D.unzip(new Uint8Array(fs.readFileSync(cfile)));
     const chartParts = zin.names.filter((n) => /^xl\/(charts|drawings)\//.test(n));
     const same = [];
@@ -603,7 +603,7 @@ const seeded = (key, wb = M.workbook()) => {
     const [idl] = await Promise.all([page.waitForEvent('download'), page.click('.gx-menu [data-act="export"]')]);
     const ifile = path.join(tmp, `inserted-${idl.suggestedFilename()}`);
     await idl.saveAs(ifile);
-    const CXL = require(path.join(root, 'lib/sheet-chart-xml.js'));
+    const CXL = require(path.join(root, 'documents/sheets/sheet-chart-xml.js'));
     const ibook = await XL.read(new Uint8Array(fs.readFileSync(ifile)));
     const ilist = CXL.charts(ibook, ibook.sheets[0]);
     const sixth = ilist[5]?.chart.groups?.[0];

@@ -12,15 +12,16 @@ extension reload. Run `node --test` before sending a change.
 ## Layout
 
 - `extension/` — the extension as the stores ship it; the paths below are inside it. `checks/` holds the browser checks and `test/` the unit tests, each by feature area; `tools/` the build, release, vendor, fidelity and dev scripts.
-- `content.js` — runs on Ultra, Canvas and Moodle pages: adds the stylesheets, applies settings, the DOM sweep, tooltips and the extras. What only one site does is in its part, `content-ultra.js` or `content-canvas.js`, listed before `content.js` for that site (Moodle has none); each site's first script has its own budget (`test/platform/perf-budget.test.js`).
-- `theme.css` (palette and page polish), `motion.css` (motion levels), `extras.css` (backgrounds and extras).
-- `defaults.js` — the settings schema, defaults, presets and `GZ_SANITIZE`. `lib/` — pure helpers with tests in `test/`, plus `scene.js` (the animated backgrounds) and the vendored `three.js`.
-- `popup.*`, `options.*`, `ui.*` — the popup, the editor and what they share. `preview.html` is the editor's mock Ultra page.
+- `content/content.js` — runs on Ultra, Canvas and Moodle pages: adds the stylesheets, applies settings, the DOM sweep, tooltips and the extras. What only one site does is in its part, `content/content-ultra.js` or `content/content-canvas.js`, listed before `content.js` for that site (Moodle has none); each site's first script has its own budget (`test/platform/perf-budget.test.js`).
+- `content/theme.css` (palette and page polish), `content/motion.css` (motion levels), `content/extras.css` (backgrounds and extras).
+- `content/defaults.js` — the settings schema, defaults, presets and `GZ_SANITIZE`.
+- One folder per feature area: `looks/`, `navigation/`, `courses/`, `planner/`, `writer/`, `documents/`, `ai/`, `agents/`, `sharing/`, `mods/`, `pet/`, `settings/`, with `core/` shared by all and `background/` the worker. An area's helpers sit at its top, with tests in `test/<area>/`; the code that touches the LMS page is in `<area>/page/`. `looks/scene.js` draws the animated backgrounds; third-party code (three.js, pdf.js, ProseMirror …) is in `vendor/`.
+- `popup.html`, `options.html` (their scripts in `settings/`) and `core/ui.*` — the popup, the editor and what they share. `preview.html` is the editor's mock Ultra page.
 - [Development](docs/development.md) — architecture, supported build paths, feature gates and release requirements.
 
 ## Conventions
 
-- No build step, no dependencies, no bundler. Vanilla JS, plain CSS, files loaded directly. The exceptions are `lib/three.js`, a checked-in, tree-shaken, readable three.js (`tools/vendor/vendor-three.sh` rebuilds it), lottie-web's official readable light canvas player in `lib/lottie/` (`tools/vendor/vendor-lottie.sh` fetches it by a pinned hash), pdf.js in `lib/pdfjs/` and Tesseract in `lib/tesseract/` (`tools/vendor/vendor-pdfjs.sh`, `tools/vendor/vendor-tesseract.sh`), ProseMirror as one readable bundle in `lib/pm.js` and `lib/pm.css` (`tools/vendor/vendor-prosemirror.sh`), harper.js in `lib/harper/` (`tools/vendor/vendor-harper.sh`), and Writer's paper fonts in `lib/fonts/` (`tools/vendor/vendor-paper-fonts.sh`); only an upgrade needs any of them.
+- No build step, no dependencies, no bundler. Vanilla JS, plain CSS, files loaded directly. The exceptions are `vendor/three.js`, a checked-in, tree-shaken, readable three.js (`tools/vendor/vendor-three.sh` rebuilds it), lottie-web's official readable light canvas player in `vendor/lottie/` (`tools/vendor/vendor-lottie.sh` fetches it by a pinned hash), pdf.js in `vendor/pdfjs/` and Tesseract in `vendor/tesseract/` (`tools/vendor/vendor-pdfjs.sh`, `tools/vendor/vendor-tesseract.sh`), ProseMirror as one readable bundle in `vendor/pm.js` and `vendor/pm.css` (`tools/vendor/vendor-prosemirror.sh`), harper.js in `vendor/harper/` (`tools/vendor/vendor-harper.sh`), and Writer's paper fonts in `vendor/fonts/` (`tools/vendor/vendor-paper-fonts.sh`); only an upgrade needs any of them.
 - Keep diffs small and focused. One change per PR.
 - Defaults live in exactly one place: `defaults.js`. Don't duplicate a colour or a toggle elsewhere.
 - Every setting reaches the page as a `--gz-*` variable or an `html[data-gz-*]` attribute. CSS matches on those; it never waits on JavaScript.

@@ -1,7 +1,7 @@
 // The AI harness's one request and one result (docs/ai-harness.md), whatever the provider. A request:
 //   { messages: [{ role: 'system' | 'user' | 'assistant' | 'tool', content: [{ type: 'text', text, cache?: true } | { type: 'image', mime,
 //     data (base64) }], toolCalls?: [{ id, name, args }] (assistant), toolCallId? (tool) }],
-//     schema? (lib/ai/schema.js, an object at the root), tools?: [{ name, description, parameters }], temperature?,
+//     schema? (ai/schema.js, an object at the root), tools?: [{ name, description, parameters }], temperature?,
 //     maxTokens?, timeoutMs?, effort? (how much a reasoning model thinks first: EFFORTS) }
 // A message's content may be given as a string (one text part) and an image's data as bytes (Uint8Array or ArrayBuffer):
 // clean() turns them into the form above, which is plain JSON, so it crosses a runtime port and goes into an eval's log as
@@ -9,7 +9,7 @@
 // model, finish: 'stop' | 'length' | 'tool' }.
 // Everything here may have come from a page, a model or a document, so a cleaner refuses (null) on an unknown key, a wrong
 // type, or a count or size over its limit; nothing is truncated. Errors are { code } (CODES): what a page is told, never a
-// provider's own words; a model request's failure is one of lib/ai/failure.js CATEGORIES, with a reference.
+// provider's own words; a model request's failure is one of ai/failure.js CATEGORIES, with a reference.
 // Classic script for the worker; module.exports for node.
 var GZ_AI_REQUEST = globalThis.GZ_AI_REQUEST || (() => {
   const S = () => (typeof GZ_AI_SCHEMA !== 'undefined' ? GZ_AI_SCHEMA : require('./schema.js'));
@@ -20,7 +20,7 @@ var GZ_AI_REQUEST = globalThis.GZ_AI_REQUEST || (() => {
   const ROLES = ['system', 'user', 'assistant', 'tool'];
   const MIME = { 'image/png': [0x89, 0x50, 0x4e, 0x47], 'image/jpeg': [0xff, 0xd8, 0xff], 'image/gif': [0x47, 0x49, 0x46, 0x38], 'image/webp': [0x52, 0x49, 0x46, 0x46] };
   const FINISH = ['stop', 'length', 'tool'];
-  // What went wrong, as a page or the eval is told: a model request's failure category (lib/ai/failure.js), then the
+  // What went wrong, as a page or the eval is told: a model request's failure category (ai/failure.js), then the
   // harness's own refusals: the request, the connection and caps, the broker's (off … often; attempt: the writer's features
   // on an Ultra attempt not known to be an assignment), the tasks' and the loop's.
   const CATEGORIES = ['cancelled', 'timeout', 'provider-unavailable', 'request-rejected', 'invalid-response', 'connection-lost'];

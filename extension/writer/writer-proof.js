@@ -1,12 +1,12 @@
-// Glaze Writer's proofing without a page: Harper's lints as issues (lib/writer-issues.js's shape), the sure fixes autocorrect
+// Glaze Writer's proofing without a page: Harper's lints as issues (writer/writer-issues.js's shape), the sure fixes autocorrect
 // makes as you type and the plugin that makes them (each fix its own undo step), the text Harper reads (each textblock,
 // code left out) and the words a box's context adds to its dictionary. writer-proof.js draws it in the frame;
-// lib/harper/shared.js runs Harper, once for the whole browser.
+// vendor/harper/shared.js runs Harper, once for the whole browser.
 // GZ_WRITER_PROOF.decide: async ({ text, from, to, suggestions, context }) → 'apply' | 'suggest' | null, or { verdict: 'apply'
 // | 'suggest' | 'keep', choice } (choice: an index into suggestions), the AI stream's ruling on a fix that isn't sure (text:
 // the paragraph, from/to: UTF-16 offsets into it). 'apply' puts the choice in as autocorrect, 'suggest' moves it to the
 // front of the card, 'keep' and null leave the issue as it is. null by default: nobody rules.
-// Classic script after lib/pm.js; module.exports for node.
+// Classic script after vendor/pm.js; module.exports for node.
 var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
   const PM = typeof GZ_PM !== 'undefined' ? GZ_PM : (require('./writer-schema.js'), GZ_PM);
   const { Plugin, PluginKey } = PM.state;

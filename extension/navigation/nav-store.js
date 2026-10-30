@@ -1,8 +1,8 @@
 // Runs only in the storage broker's existing queue. Custom logos use their own namespace so older card cleanup is safe.
 var GZ_NAV_STORE = globalThis.GZ_NAV_STORE || (() => {
-  const K = typeof GZ_CARDS === 'undefined' ? require('./cards.js') : GZ_CARDS;
+  const K = typeof GZ_CARDS === 'undefined' ? require('../courses/cards.js') : GZ_CARDS;
   const N = typeof GZ_NAV_ITEMS === 'undefined' ? require('./nav-items.js') : GZ_NAV_ITEMS;
-  const sanitize = (raw) => (typeof GZ_SANITIZE === 'undefined' ? require('../defaults.js').GZ_SANITIZE : GZ_SANITIZE)({ nav: raw }).nav;
+  const sanitize = (raw) => (typeof GZ_SANITIZE === 'undefined' ? require('../content/defaults.js').GZ_SANITIZE : GZ_SANITIZE)({ nav: raw }).nav;
   const cleanup = async (area) => {
     const nav = (await area.sync.get(['nav'])).nav;
     const gone = Object.keys(await area.local.get(null)).filter((k) => /^navLogo:/.test(k) && k !== `navLogo:${nav?.li}`);
@@ -33,9 +33,9 @@ var GZ_NAV_STORE = globalThis.GZ_NAV_STORE || (() => {
   };
   const timer = async (op, area, now = Date.now()) => {
     if (!['toggle', 'reset', 'advance'].includes(op)) return { ok: false, error: 'bad' };
-    const W = typeof GZ_WIDGETS === 'undefined' ? require('./widgets.js') : GZ_WIDGETS;
+    const W = typeof GZ_WIDGETS === 'undefined' ? require('../core/widgets.js') : GZ_WIDGETS;
     const raw = await area.sync.get(['widgets']);
-    const o = (typeof GZ_SANITIZE === 'undefined' ? require('../defaults.js').GZ_SANITIZE : GZ_SANITIZE)(raw).widgets;
+    const o = (typeof GZ_SANITIZE === 'undefined' ? require('../content/defaults.js').GZ_SANITIZE : GZ_SANITIZE)(raw).widgets;
     const before = W.cleanTimer((await area.local.get(['widgetTimer'])).widgetTimer);
     let timer = W.advance(before, now, o);
     if (op === 'reset') timer = W.IDLE;

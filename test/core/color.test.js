@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const C = require('../../extension/lib/color.js');
+const C = require('../../extension/core/color.js');
 
 test('parses hex in every length', () => {
   assert.deepEqual(C.parse('#fff'), { r: 255, g: 255, b: 255, a: 1 });

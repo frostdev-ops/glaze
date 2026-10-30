@@ -15,9 +15,9 @@ const root = path.resolve(__dirname, '../../extension'), filter = new RegExp(pro
     const page = await browser.newPage(), errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.setContent('<!doctype html><meta charset="utf-8"><div id="ed"></div>');
-    await page.addStyleTag({ content: fs.readFileSync(path.join(root, 'writer-paper.css'), 'utf8').replace(/@font-face\s*\{[^}]*\}/g, '') });
-    for (const file of ['lib/pm.js', 'lib/writer-schema.js', 'lib/writer-editor.js', 'lib/writer-styles.js', 'lib/writer-paginate.js']) {
-      const content = process.env.WRITER_REVIEW_BASE && file !== 'lib/pm.js'
+    await page.addStyleTag({ content: fs.readFileSync(path.join(root, 'writer/frame/writer-paper.css'), 'utf8').replace(/@font-face\s*\{[^}]*\}/g, '') });
+    for (const file of ['vendor/pm.js', 'writer/writer-schema.js', 'writer/writer-editor.js', 'writer/writer-styles.js', 'writer/writer-paginate.js']) {
+      const content = process.env.WRITER_REVIEW_BASE && file !== 'vendor/pm.js'
         ? execFileSync('git', ['show', `${process.env.WRITER_REVIEW_BASE}:${file}`], { cwd: root, encoding: 'utf8' })
         : fs.readFileSync(path.join(root, file), 'utf8');
       await page.addScriptTag({ content });
@@ -73,7 +73,7 @@ const root = path.resolve(__dirname, '../../extension'), filter = new RegExp(pro
     });
     await check('native sync verifies fragment whitespace and head-like text exactly', async () => {
       // Exercise the shipped verifier with the browser parser, rather than stand-in-dom's innerHTML stand-in.
-      const source = fs.readFileSync(path.join(root, 'features/writer.js'), 'utf8');
+      const source = fs.readFileSync(path.join(root, 'writer/page/writer.js'), 'utf8');
       const start = source.indexOf('  const sameText ='), end = source.indexOf('  // h: what the frame shows;', start);
       assert.ok(start >= 0 && end > start);
       await page.addScriptTag({ content: `{ ${source.slice(start, end)} window.writerSameText = sameText; }` });

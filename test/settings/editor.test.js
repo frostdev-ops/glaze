@@ -1,10 +1,10 @@
 // Editor ownership and safe-reset regressions; real generated DOM ownership is also checked by the browser gate.
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
 const vm = require('node:vm');
-const root = path.resolve(__dirname, '../../extension'), D = require(path.join(root, 'defaults.js'));
-for (const file of ['todo', 'widgets', 'remind', 'nav', 'coursetabs']) require(path.join(root, `lib/${file}.js`));
-const N = require(path.join(root, 'lib/nav-items.js')), E = require(path.join(root, 'lib/editor.js'));
-const cards = require(path.join(root, 'lib/cards.js'));
+const root = path.resolve(__dirname, '../../extension'), D = require(path.join(root, 'content/defaults.js'));
+for (const file of ['planner/todo', 'core/widgets', 'planner/remind', 'navigation/nav', 'navigation/coursetabs']) require(path.join(root, `${file}.js`));
+const N = require(path.join(root, 'navigation/nav-items.js')), E = require(path.join(root, 'settings/editor.js'));
+const cards = require(path.join(root, 'courses/cards.js'));
 const TABS = ['look', 'navigation', 'courses', 'study', 'pages', 'writer', 'sharing', 'mods', 'ai', 'backup', 'about'];
 const GROUP = { stream: 'pages/dashboard', docreview: 'pages/documents', auto: 'look/palette', look: 'look/type', bg: 'look/background', motion: 'look/motion', extras: 'look/extras', nav: 'navigation/bar', navbar: 'navigation/bar', sidebar: 'navigation/sidebar', tabs: 'navigation/tabs', todo: 'study/todo', widgets: 'study/widgets', remind: 'study/reminders', declutter: 'pages/declutter', card: 'courses/cards', courses: 'courses/list', mods: 'backup/privacy', announce: 'pages/popups', popup: 'pages/popups', rubric: 'pages/popups' };
 const ENHANCE = {
@@ -188,13 +188,13 @@ test('E1 section and global preference resets preserve pictures, preset librarie
   E.reset(state, Object.keys(defaults), defaults);
   assert.equal(state.nav.i, 'background-image'); assert.equal(state.nav.li, 'logo-image');
   assert.equal(state.presets[0].name, 'My palette'); assert.equal(state.device, device);
-  const js = fs.readFileSync(path.join(root, 'options.js'), 'utf8').split("$('#reset-all').addEventListener")[1];
+  const js = fs.readFileSync(path.join(root, 'settings/options.js'), 'utf8').split("$('#reset-all').addEventListener")[1];
   assert.doesNotMatch(js, /cardsOp\(\{[^}]*reset: true|glaze:stickers[^\n]*reset: true/);
   assert.ok(js.includes('GZ_EDITOR.reset'));
 });
 
 test('resets give back the defaults this device started with: a fresh install keeps Notes and the pet habitat on', () => {
-  const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
+  const source = fs.readFileSync(path.join(root, 'settings/options.js'), 'utf8');
   const helper = source.slice(source.indexOf('  let freshHere = false'), source.indexOf('  // Two clicks, so a stray one'));
   for (const fresh of [true, false]) {
     const defaults = vm.runInNewContext(`${helper}\ndefaultsHere()`, { GZ_SANITIZE: D.GZ_SANITIZE, GZ_CARDS: { settings: () => ({}) }, showResets() {},
@@ -209,7 +209,7 @@ test('resets give back the defaults this device started with: a fresh install ke
 });
 
 test('resets follow this device\'s defaults when the install marks it after Settings opened, or a restore unmarks it', () => {
-  const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
+  const source = fs.readFileSync(path.join(root, 'settings/options.js'), 'utf8');
   const helper = source.slice(source.indexOf('  let freshHere = false'), source.indexOf('  // Two clicks, so a stray one'));
   // The read answers before the install's write, or (another process) only after its change event.
   for (const late of [false, true]) {
@@ -232,7 +232,7 @@ test('resets follow this device\'s defaults when the install marks it after Sett
 });
 
 test('E1 Ultra preview carries the chosen course color and nickname without saving a pending Look', () => {
-  const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
+  const source = fs.readFileSync(path.join(root, 'settings/options.js'), 'utf8');
   const preview = source.slice(source.indexOf('  const preview = () => {') + '  const preview = '.length, source.indexOf('\n  const contextPreview =')).replace(/;\s*$/, '');
   const state = D.GZ_SANITIZE({ courses: { tint: true, tinted: ['_1_1'], names: { '_1_1': 'My course' }, colors: { '_1_1': '#c03050' } } });
   const offer = D.GZ_SANITIZE({ ...state, courses: { ...state.courses, colors: { '_1_1': '#20a080' } } });
@@ -241,7 +241,7 @@ test('E1 Ultra preview carries the chosen course color and nickname without savi
     frame: { contentDocument: { querySelector: () => section }, contentWindow: { postMessage: (m) => messages.push(m) } },
     $: (selector) => ({ value: selector === '#preview-size' ? 'desktop' : 'current' }), location: { origin: 'chrome-extension://fixture' },
     previewSite: 'ultra', previewPage: 'outline', previewCourse: '', renderNav() {}, renderContrast() {}, sizePreview() {}, paintBackdrop() {}, previewItems: () => ({}),
-    GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_COURSE_COLORS: D.GZ_COURSE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_COURSE_LOOK_ID: D.GZ_COURSE_LOOK_ID, GZ_COURSE_TINTED: D.GZ_COURSE_TINTED, GZ_LOOK_PARTS: require('../../extension/lib/lookset.js'), catalog: require('../../extension/lib/looks.js').list(),
+    GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_COURSE_COLORS: D.GZ_COURSE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_COURSE_LOOK_ID: D.GZ_COURSE_LOOK_ID, GZ_COURSE_TINTED: D.GZ_COURSE_TINTED, GZ_LOOK_PARTS: require('../../extension/looks/lookset.js'), catalog: require('../../extension/looks/looks.js').list(),
   });
   vm.runInContext(`(${preview})()`, context);
   assert.equal(section.className, 'course course-color-2'); assert.equal(name.textContent, 'My course');
@@ -259,7 +259,7 @@ test('E1 Ultra preview carries the chosen course color and nickname without savi
 });
 
 test('E1 preview site changes replace the frame history so editor Back and Forward remain intact', () => {
-  const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
+  const source = fs.readFileSync(path.join(root, 'settings/options.js'), 'utf8');
   const change = source.slice(source.indexOf('  const contextPreview = (site, page) => {') + '  const contextPreview = '.length, source.indexOf('\n  followSection =')).replace(/;\s*$/, '');
   const navigations = [], controls = new Map();
   const control = (selector) => { if (!controls.has(selector)) controls.set(selector, { options: [], selectedOptions: [{ textContent: selector }] }); return controls.get(selector); };
@@ -274,7 +274,7 @@ test('E1 preview site changes replace the frame history so editor Back and Forwa
 });
 
 test('E1 switching an open phone preview to desktop removes modal semantics', () => {
-  const source = fs.readFileSync(path.join(root, 'lib/editor-preview.js'), 'utf8');
+  const source = fs.readFileSync(path.join(root, 'settings/editor-preview.js'), 'utf8');
   const apply = source.slice(source.indexOf('  const applyContext = () => {') + '  const applyContext = '.length, source.indexOf("\n  addEventListener('message'")).replace(/;\s*$/, '');
   const drawer = { role: 'dialog', 'aria-modal': 'true', removeAttribute(key) { delete this[key]; } }, menu = { setAttribute() {} };
   const context = vm.createContext({ site: 'ultra', context: { viewport: 'desktop', page: 'outline' }, html: { dataset: {}, removeAttribute() {} },
@@ -305,7 +305,7 @@ test('E1 routes, remembered tabs, legacy entry points and tab-only keyboard hand
   } };
   const ctx = vm.createContext({ document: doc, structuredClone, location: { hash: '#pages/declutter' }, scrollY: 50, scrollTo() {}, requestAnimationFrame: (f) => f(),
     addEventListener: (k, f) => { events[k] = f; }, chrome: { storage: { local: { get: async () => ({ editorTab: 'about' }), set: async (v) => { kept.push(v); } } } } });
-  vm.runInContext(fs.readFileSync(path.join(root, 'lib/editor.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(root, 'settings/editor.js'), 'utf8'), ctx);
   const ui = ctx.GZ_EDITOR.mount();
   assert.equal(scrolled?.dataset.editorSection, 'pages/declutter', 'an initial deep link scrolls its section into view');
   for (const [hash, route] of Object.entries({ '#bb-folders': 'pages/declutter', '#canvas-quizzes': 'pages/documents', '#canvas-shared': 'pages/content', '#moodle-courses': 'look/palette', '#tabs': 'navigation/tabs', '#blackboard/tabs': 'navigation/tabs', '#sidebar': 'navigation/bar', '#todo': 'study/todo', '#gcal': 'sharing/calendar', '#data': 'backup/privacy', '#background': 'look/background', '#blackboard/nav': 'navigation/bar', '#look/cards': 'courses/cards', '#canvas/shared': 'pages/content', '#study/tools': 'pages/content', '#blackboard': 'pages/dashboard', '#unknown/section': 'look/palette' })) {
@@ -429,8 +429,8 @@ test('IA: one navigation section swaps its body on Glaze navigation, with one lo
 
 test('IA: a control shows only where it has an effect', () => {
   const S = (over = {}) => { const s = D.GZ_SANITIZE({}); for (const [k, v] of Object.entries(over)) { const [g, key] = k.split('.'); s[g][key] = v; } return s; };
-  const SURF = require(path.join(root, 'lib/surfaces.js'));
-  // Surface opacity: shown exactly where its value changes what lib/surfaces.js paints.
+  const SURF = require(path.join(root, 'looks/surfaces.js'));
+  // Surface opacity: shown exactly where its value changes what looks/surfaces.js paints.
   for (const glass of [0, 12]) for (const kind of ['solid', 'gradient', 'image', 'scene']) {
     const s = S({ 'look.glass': glass, 'bg.kind': kind });
     const paint = (o) => JSON.stringify(SURF.vars({ look: { ...s.look, surfaceOpacity: o }, bg: s.bg }));
@@ -467,7 +467,7 @@ test('IA: the side list marks the top-most section still showing below the heade
   assert.equal(E.spy(rects, 100, true), 'study/reminders', 'at the end the last wins');
   assert.equal(E.spy([{ route: 'about/glaze', top: -50, bottom: -10 }], 100, false), 'about/glaze');
   assert.equal(E.spy([], 100, false), '');
-  const js = fs.readFileSync(path.join(root, 'lib/editor.js'), 'utf8'), css = fs.readFileSync(path.join(root, 'options.html'), 'utf8');
+  const js = fs.readFileSync(path.join(root, 'settings/editor.js'), 'utf8'), css = fs.readFileSync(path.join(root, 'options.html'), 'utf8');
   assert.match(js, /className: 'jump-mark'/, 'one mark element');
   assert.match(css, /\.jump-mark \{[^}]*transition: transform [^}]*var\(--gz-ease\)/);
   assert.match(css, /html\[data-gz-motion="off"\] \.jump-mark \{ transition: none; \}/);
@@ -508,13 +508,13 @@ test('IA: long descriptions move behind a "?", short ones and privacy disclosure
   assert.match(html, /<span id="info-more" hidden>More about<\/span>/);
   // Search counts a popover's words for its setting: each one sits in its setting's row, or is a note the control names.
   for (const [, , id] of pops) assert.ok(main.includes(`aria-describedby="${id}"`) || new RegExp(`aria-describedby="[^"]*\\b${id}\\b`).test(main), `#${id}`);
-  const filter = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
+  const filter = fs.readFileSync(path.join(root, 'settings/options.js'), 'utf8');
   assert.match(filter, /querySelectorAll\('\.info-pop'\)[\s\S]*?GZ_FIND\.spans\(pop\.textContent, words\)[\s\S]*?classList\.add\('found'\)/);
 });
 
 
 for (const [route, keys] of [['look/pointer', ['pointer', 'cursor']], ['look/motion', ['anim', 'fx', 'type']]]) test(`${route} Reset shows for every Look part it clears, even with default settings`, () => {
-  const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
+  const source = fs.readFileSync(path.join(root, 'settings/options.js'), 'utf8');
   const block = source.slice(source.indexOf('  const LOOK_PART'), source.indexOf('  // Look parts builders'));
   const s = D.GZ_SANITIZE({}), defaults = D.GZ_SANITIZE({});
   const button = { dataset: { resetSection: route }, closest: () => ({}), addEventListener() {} };
@@ -537,7 +537,7 @@ for (const [route, keys] of [['look/pointer', ['pointer', 'cursor']], ['look/mot
 });
 
 test('builder saves update Reset visibility before storage answers, without refreshing focused controls', () => {
-  const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
+  const source = fs.readFileSync(path.join(root, 'settings/options.js'), 'utf8');
   const mount = source.slice(source.indexOf('  GZ_EDITOR_X.mount('), source.indexOf("  $('#editor-version')"));
   let api, resets = 0;
   const saved = [];

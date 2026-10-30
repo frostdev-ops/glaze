@@ -7,12 +7,12 @@ const path = require('node:path');
 const manifest = require('../../extension/manifest.json');
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 // The DocViewer's own entry matches instructure.com too (regional canvadocs hosts): this is Glaze's first script.
-const canvas = manifest.content_scripts.filter((s) => s.js.includes('content-canvas.js'));
-const css = read('canvas.css').replace(/\/\*[\s\S]*?\*\//g, '');
+const canvas = manifest.content_scripts.filter((s) => s.js.includes('content/content-canvas.js'));
+const css = read('content/canvas.css').replace(/\/\*[\s\S]*?\*\//g, '');
 
 test('Canvas has one all-frame document_start entry, ordered dependencies, site adapter, shared startup', () => {
   assert.equal(canvas.length, 1); assert.equal(canvas[0].run_at, 'document_start'); assert.equal(canvas[0].all_frames, true);
-  assert.deepEqual(canvas[0].js, ['lib/color.js', 'lib/i18n.js', 'lib/page.js', 'lib/grades.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'content-canvas.js', 'content.js']);
+  assert.deepEqual(canvas[0].js, ['core/color.js', 'core/i18n.js', 'core/page.js', 'planner/grades.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'content/content-canvas.js', 'content/content.js']);
   assert.ok(canvas[0].exclude_matches.includes('https://canvadocs.instructure.com/*'));
 });
 
@@ -20,7 +20,7 @@ test('Canvas sheets avoid blocking CSS imports and keep bundled font loading at 
   assert.doesNotMatch(css, /@import\b/i);
   const fonts = [...css.matchAll(/@font-face\s*\{([^}]+)\}/g)]; assert.equal(fonts.length, 3);
   for (const [, body] of fonts) assert.match(body, /font-display:\s*swap\s*;/);
-  assert.ok(manifest.web_accessible_resources.some((r) => r.resources.includes('canvas.css') && r.resources.includes('motion.css')));
+  assert.ok(manifest.web_accessible_resources.some((r) => r.resources.includes('content/canvas.css') && r.resources.includes('content/motion.css')));
 });
 
 test('Canvas CSS keeps native palette mapping and cached course-tab space available at first paint', () => {

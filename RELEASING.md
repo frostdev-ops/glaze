@@ -48,10 +48,10 @@ It never moves a published tag or replaces a published asset with different byte
      Given no zip, the script packages a fresh checkout of the committed `HEAD` and refuses a dirty working tree.
    - Firefox Add-ons: upload `release/<v>/firefox/glaze-v<v>-firefox.zip` at addons.mozilla.org. When it asks for source
      code, upload `glaze-v<v>-source.zip` from the same Firefox commit: pdf.js is the readable legacy build with a compatibility
-     shim and core-js's old-IE fallback cut, three.js is a custom build, lottie-web's player is the official light canvas build with one comment line on top, ProseMirror (`lib/pm.js`) is an unminified esbuild bundle of its published packages, and harper.js (`lib/harper/`) is the published modules and slim wasm with two unused paths cut. Reviewers rebuild them with `tools/vendor/vendor-pdfjs.sh`, `tools/vendor/vendor-three.sh`, `tools/vendor/vendor-lottie.sh`, `tools/vendor/vendor-prosemirror.sh` and `tools/vendor/vendor-harper.sh`.
+     shim and core-js's old-IE fallback cut, three.js is a custom build, lottie-web's player is the official light canvas build with one comment line on top, ProseMirror (`vendor/pm.js`) is an unminified esbuild bundle of its published packages, and harper.js (`vendor/harper/`) is the published modules and slim wasm with two unused paths cut. Reviewers rebuild them with `tools/vendor/vendor-pdfjs.sh`, `tools/vendor/vendor-three.sh`, `tools/vendor/vendor-lottie.sh`, `tools/vendor/vendor-prosemirror.sh` and `tools/vendor/vendor-harper.sh`.
      `vendor-three.sh` and `vendor-prosemirror.sh` install exact versions with install scripts off, check every installed
      package against a pinned SHA-512 integrity before running anything, and compare the result with the recorded hash of
-     `lib/three.js` or `lib/pm.js` and `lib/pm.css`; `vendor-harper.sh` checks the npm tarball and its wasm against pinned SHA-256s.
+     `vendor/three.js` or `vendor/pm.js` and `vendor/pm.css`; `vendor-harper.sh` checks the npm tarball and its wasm against pinned SHA-256s.
    - App Store: `sh tools/build/appstore-safari.sh` (Mac) and `APPSTORE_UPLOAD=1 sh tools/build/appstore-ios.sh`.
 
 ### CI
@@ -64,7 +64,7 @@ annotated tag), replace the SHA and the comment together, and let `test/release/
 
 ## The mod blocklist
 
-Glaze stops mods that a list names, and only the owner can sign the list (`lib/blocklist.js`). The private
+Glaze stops mods that a list names, and only the owner can sign the list (`mods/blocklist.js`). The private
 key lives on the owner's own computer: never in the repo, on a server, or in a backup others can read.
 
 Once, before the first release that includes mods:
@@ -72,8 +72,8 @@ Once, before the first release that includes mods:
 1. `node tools/release/blocklist-sign.mjs keygen ~/glaze-blocklist.key` (any path outside the repo). The file is made mode 600; an
    existing file is never overwritten and a path inside the repo is refused. Back it up offline: with the key lost, only a
    new release with a new key can block anything again.
-2. Paste the public key it prints over `PENDING_OWNER_KEY` in `lib/blocklist.js` (`OWNER_KEY`) and release that. Until
-   then the extension accepts no list at all. Release check: `grep PENDING_OWNER_KEY lib/blocklist.js` finds nothing.
+2. Paste the public key it prints over `PENDING_OWNER_KEY` in `mods/blocklist.js` (`OWNER_KEY`) and release that. Until
+   then the extension accepts no list at all. Release check: `grep PENDING_OWNER_KEY mods/blocklist.js` finds nothing.
 3. Put the same public key in `BLOCKLIST_KEY` in the gallery server's `/etc/glaze-gallery.env` and restart its container
    (frostdev.io `docs/looks-gallery.md`, "Mod blocklist").
 

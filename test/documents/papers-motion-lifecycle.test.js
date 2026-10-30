@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm'), fs = require('node:fs');
 const { El } = require('../stand-in-dom.js');
-const source = fs.readFileSync(process.env.PAPERS_MOTION_SOURCE || require.resolve('../../extension/papers-motion.js'), 'utf8');
+const source = fs.readFileSync(process.env.PAPERS_MOTION_SOURCE || require.resolve('../../extension/documents/papers-motion.js'), 'utf8');
 const KEY = 'gz-documents-route';
 const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
 const page = ({ raw, anim = 'genie', ready = true, failAnimation = false, name = '' } = {}) => {
@@ -26,7 +26,7 @@ const page = ({ raw, anim = 'genie', ready = true, failAnimation = false, name =
   const media = { matches: false, addEventListener(t, f) { this.change = f; } };
   const ctx = vm.createContext({ document: doc, innerWidth: 1280, innerHeight: 900, scrollY: 0, name,
     location: new URL('https://extension.test/papers.html?paper=doc:a'), history: {}, URL, URLSearchParams, CSS: { escape: (x) => x },
-    GZ_POPUP_LIB: require('../../extension/lib/popup.js'), GZ_MOTION: { enter: (e) => { try { return e.animate([], {}); } catch { return null; } }, exit: (e) => { e.remove(); return Promise.resolve(); } },
+    GZ_POPUP_LIB: require('../../extension/core/popup.js'), GZ_MOTION: { enter: (e) => { try { return e.animate([], {}); } catch { return null; } }, exit: (e) => { e.remove(); return Promise.resolve(); } },
     chrome: { storage: { sync: { get: async () => ({ popup: { anim } }) }, onChanged: { addListener: (f) => { changed = f; } } } },
     matchMedia: () => media, sessionStorage: { getItem: (k) => data.get(k) || null, removeItem: (k) => data.delete(k), setItem: (k, v) => data.set(k, v) },
     performance: { now: () => clock }, Date, requestAnimationFrame: (f) => { raf.set(++frame, f); return frame; }, cancelAnimationFrame: (id) => raf.delete(id),

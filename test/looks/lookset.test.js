@@ -1,15 +1,15 @@
-// The built-in Looks' own parts (lib/lookset.js), and moving the pointer that used to be a setting into the Look worn.
+// The built-in Looks' own parts (looks/lookset.js), and moving the pointer that used to be a setting into the Look worn.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const G = require('../../extension/defaults.js');
-const MX = require('../../extension/lib/motionx.js');
-const X = require('../../extension/lib/lookparts.js');
-const S = require('../../extension/lib/share.js');
-const LOOK_PARTS = require('../../extension/lib/lookset.js');
-const L = require('../../extension/lib/lookx.js');
+const G = require('../../extension/content/defaults.js');
+const MX = require('../../extension/looks/motionx.js');
+const X = require('../../extension/looks/lookparts.js');
+const S = require('../../extension/sharing/share.js');
+const LOOK_PARTS = require('../../extension/looks/lookset.js');
+const L = require('../../extension/looks/lookx.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 
@@ -61,7 +61,7 @@ test('pointer and typing parts: names from the tables, values clamped, anything 
   assert.equal(X.clean({ bg: { layers: [{ k: 'particles', shape: 'bat' }] } }), null, 'a background layer only its own shapes');
 });
 
-// The real worker (lib/background.js) over stand-in storage.
+// The real worker (background/background.js) over stand-in storage.
 const worker = (sync, local = {}, hooks = {}) => {
   const later = (fn) => new Promise((res) => setTimeout(() => res(fn())));
   const area = (s) => ({
@@ -72,13 +72,13 @@ const worker = (sync, local = {}, hooks = {}) => {
   const noop = { addListener() {} };
   const context = vm.createContext({
     URL, console, TextEncoder, TextDecoder, Blob, CompressionStream, DecompressionStream, btoa, atob, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto,
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), context); },
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: noop, onInstalled: noop, onStartup: noop, onConnect: noop },
       storage: { local: area(local), sync: area(sync), onChanged: noop },
     },
   });
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   return { move: () => vm.runInContext('pointerToLook()', context), sync, local, context };
 };
 

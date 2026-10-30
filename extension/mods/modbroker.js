@@ -1,19 +1,19 @@
 // Code mods' permission broker. Every call a mod makes reaches the service worker as
-// { type: 'glaze:mod', mod, call, args, via } from Glaze's content script (features/mods.js), and this is the one place it is
-// checked: the sender is Glaze in an LMS tab (lib/background.js resolves it to env.site) or the Documents page (env.site
+// { type: 'glaze:mod', mod, call, args, via } from Glaze's content script (mods/page/mods.js), and this is the one place it is
+// checked: the sender is Glaze in an LMS tab (background/background.js resolves it to env.site) or the Documents page (env.site
 // 'documents', which has its own calls), the mod is installed, on and not
 // blocklisted, the call is in the API, its permission is declared and granted, and its arguments and answer are within
 // limits. The page side asks here too for the mods to start ({ type: 'glaze:modpage' }). Classic script: the worker imports it
 // on first use; module.exports for node.
 var GZ_MODBROKER = globalThis.GZ_MODBROKER || (() => {
   // The worker's own copies (classic scripts it imports: top-level consts, not globalThis properties), else node's.
-  const sanitize = () => (typeof GZ_SANITIZE !== 'undefined' ? GZ_SANITIZE : require('../defaults.js').GZ_SANITIZE);
-  const color = () => (typeof GZ_COLOR !== 'undefined' ? GZ_COLOR : require('./color.js'));
+  const sanitize = () => (typeof GZ_SANITIZE !== 'undefined' ? GZ_SANITIZE : require('../content/defaults.js').GZ_SANITIZE);
+  const color = () => (typeof GZ_COLOR !== 'undefined' ? GZ_COLOR : require('../core/color.js'));
   const api = () => (typeof GZ_MODAPI !== 'undefined' ? GZ_MODAPI : require('./modapi.js'));
-  const X = () => (typeof GZ_XPARTS !== 'undefined' ? GZ_XPARTS : require('./lookparts.js'));
-  const NL = () => (typeof GZ_NAV_LAYOUT !== 'undefined' ? GZ_NAV_LAYOUT : require('./navlayout.js'));
-  // The stickers a mod carries are read with lib/media.js: the worker brings it on first use, as it brings this file.
-  const media = () => (typeof GZ_MEDIA !== 'undefined' ? GZ_MEDIA : typeof require === 'function' ? require('./media.js') : (importScripts('media.js'), GZ_MEDIA));
+  const X = () => (typeof GZ_XPARTS !== 'undefined' ? GZ_XPARTS : require('../looks/lookparts.js'));
+  const NL = () => (typeof GZ_NAV_LAYOUT !== 'undefined' ? GZ_NAV_LAYOUT : require('../navigation/navlayout.js'));
+  // The stickers a mod carries are read with looks/media.js: the worker brings it on first use, as it brings this file.
+  const media = () => (typeof GZ_MEDIA !== 'undefined' ? GZ_MEDIA : typeof require === 'function' ? require('../looks/media.js') : (importScripts('../looks/media.js'), GZ_MEDIA));
   const WG = () => (typeof GZ_MODWIDGET !== 'undefined' ? GZ_MODWIDGET : require('./modwidget.js'));
   const KIB = 1024, MIB = 1024 * KIB;
   // args: what one call may carry (a storage value up to the quota, with room for its key); value: what an answer may.
@@ -76,8 +76,8 @@ var GZ_MODBROKER = globalThis.GZ_MODBROKER || (() => {
   const site = (env) => env.site;
   const own = (k, env) => k.startsWith(`${site(env)}/`);
   // And only the plans and grades of the account signed in on the page that asked: env.account(), which the worker answers
-  // from Glaze's own content script in that document (lib/background.js modAccount), never from what a mod sends. → its id,
-  // or null while it is unknown (nothing is read). Glaze's editor preview (lib/editor-widget.js) has no page and passes no
+  // from Glaze's own content script in that document (background/background.js modAccount), never from what a mod sends. → its id,
+  // or null while it is unknown (nothing is read). Glaze's editor preview (settings/editor-widget.js) has no page and passes no
   // env.account: '', this site's newest record.
   const UID = /^(\d{1,20}|_\d{1,20}_\d{1,20})$/;
   const account = async (env) => {
@@ -99,7 +99,7 @@ var GZ_MODBROKER = globalThis.GZ_MODBROKER || (() => {
     done: !!i.ov?.done, submitted: !!i.sub?.submitted, graded: !!i.sub?.graded, late: !!i.sub?.late, missing: !!i.sub?.missing,
   });
   // A nav layout from a mod's code (nav.set, nav.layout, a nav in look.override) needs nav.layout granted, and its links go
-  // only to pages of this tab's school site, as nav.add's do (lib/navlayout.js onSite): a link elsewhere refuses the whole
+  // only to pages of this tab's school site, as nav.add's do (navigation/navlayout.js onSite): a link elsewhere refuses the whole
   // call, so none of the layout applies. Otherwise any mod could hide the student's Grades item and put its own in its place
   // with what it read in the address, and send that off-site with no network permission. A bundle's static parts.nav ('parts'
   // below) carries none of the student's data, so its links may go anywhere. Withdrawing a layout (null) needs nothing:
@@ -151,7 +151,7 @@ var GZ_MODBROKER = globalThis.GZ_MODBROKER || (() => {
     fetch: { perm: (a) => { const u = target(a[0]); return u ? `network:${u.hostname}` : null; }, run: (a, env) => get(target(a[0]), a[1], env) },
     // The mod's settings schema with the student's values (storage.local modSettings:<id>), or each default.
     settings: { perm: '', run: async (a, env) => api().values((await env.local.get(`modSettings:${env.mod}`))[`modSettings:${env.mod}`], env.rec.manifest) },
-    // The calls below answer with what the page then shows or does (features/mods.js applies only an answer): each is
+    // The calls below answer with what the page then shows or does (mods/page/mods.js applies only an answer): each is
     // cleaned here, so a page never acts on what a mod sent unless it passed.
     // (slot, tree | null) → { slot, tree }: a slot the manifest declares and draws from its Worker (no file of its own, and
     // not a declarative widget's, which Glaze draws from its blocks), and a tree whose pictures are the mod's own.
@@ -170,7 +170,7 @@ var GZ_MODBROKER = globalThis.GZ_MODBROKER || (() => {
     // A nav layout (Look parts' x.nav) standing in for the student's own while this mod is first to give one, or null:
     // glaze.nav.items' answer, nav.layout's by another name.
     'nav.set': { perm: (a) => layoutPerm(a[0]), run: layout },
-    // nav.read: the bar's model, filled in by the page (features/mods.js) once this says the mod may have it; a Worker only.
+    // nav.read: the bar's model, filled in by the page (mods/page/mods.js) once this says the mod may have it; a Worker only.
     'nav.model': { perm: 'nav.read', run: () => true },
     // nav.items: the mod's own items in Glaze's bar, cleaned here; a link only to a page of this LMS site.
     'nav.add': { perm: 'nav.items', run: (a, env) => api().navItem(a[0], env.site) ?? no('args') },
@@ -213,7 +213,7 @@ var GZ_MODBROKER = globalThis.GZ_MODBROKER || (() => {
     'documents.remove': { perm: 'documents', run: (a) => api().docSlot(a[0], a[1]) ?? no('args') },
     'documents.style': { perm: 'documents', run: (a) => (a[0] === null ? null : api().docStyle(a[0]) ?? no('args')) },
     // (call, value, error?): a code tool's answer (glaze.tools.handle), to the agent app's call waiting for it from this tab
-    // (env.tool: lib/mcp/modroute.js settle), which takes only its own, still on the account it was called for. An error is
+    // (env.tool: agents/modroute.js settle), which takes only its own, still on the account it was called for. An error is
     // the handler's text, at most 500 characters. The answer is held to a call's own argument limit, below LIMIT.value.
     'tools.result': { perm: 'agents', worker: true, run: async (a, env) => {
       if ((a.length !== 2 && a.length !== 3) || typeof a[0] !== 'string' || !/^[\w-]{1,64}$/.test(a[0])) no('args');
@@ -265,7 +265,7 @@ var GZ_MODBROKER = globalThis.GZ_MODBROKER || (() => {
     }
     if (init.body !== undefined && (method !== 'POST' || typeof init.body !== 'string')) no('args');
     // The student granted the host to the mod; the browser must hold it for Glaze too (asked for at install, or when the
-    // permission was switched on: lib/editor-mods.js). Not held, the request would fail on CORS: refused before it.
+    // permission was switched on: settings/editor-mods.js). Not held, the request would fail on CORS: refused before it.
     if (!await env.reach(u.href)) no('permission');
     let r;
     try {
@@ -334,7 +334,7 @@ var GZ_MODBROKER = globalThis.GZ_MODBROKER || (() => {
   };
 
   // ---- the page's own asks ----------------------------------------------------------------------------------------------
-  // 'list' → { mods: [...], plain: [{ id, name, slots: [{ key, name, size }] }] }. plain: the mods with declarative widgets (lib/modwidget.js),
+  // 'list' → { mods: [...], plain: [{ id, name, slots: [{ key, name, size }] }] }. plain: the mods with declarative widgets (mods/modwidget.js),
   // on and not blocklisted; they start nothing. mods: [{ id, name, worker (its hooks' code, or null), slots, on, events, text }]: the mods to start in this
   // tab, those installed, on, not blocklisted and with code or a slot, in the student's order (modOrder).
   // slots: [{ key (tile:<id>, rail:<id>, nav, background), name, size (a tile's first size), file: its HTML (frame UI) or
@@ -343,8 +343,8 @@ var GZ_MODBROKER = globalThis.GZ_MODBROKER || (() => {
   // may hear (its granted courses, todo, grades). text: its html, js and css sources, when a slot has a file. tools: the code
   // tools mod.json declares, by name, for its Worker's glaze.tools.handle (none: no key); the worker routes a call to one only
   // while the student lets apps use it.
-  // 'parts' → { parts: [x] }: the Look parts (lib/lookparts.js, cleaned here) of every mod that is on and not blocklisted, code
-  // or none, in the student's order, for features/lookparts.js to lay over the student's Look on every browser.
+  // 'parts' → { parts: [x] }: the Look parts (looks/lookparts.js, cleaned here) of every mod that is on and not blocklisted, code
+  // or none, in the student's order, for looks/page/lookparts.js to lay over the student's Look on every browser.
   // 'stopped' (mod, why): the watchdog stopped one; kept for the editor (storage.local modStops). 'asset' (mod, path): one
   // of an on mod's pictures as { type, b64 }, for an image in its tree.
   const WHY = ['hung', 'error', 'navigated'];
@@ -406,7 +406,7 @@ var GZ_MODBROKER = globalThis.GZ_MODBROKER || (() => {
       }
       return { ok: true, mods, plain };
     }
-    // 'widget' (mod, slot, lang) → a declarative widget's tree for this page (lib/modwidget.js): its blocks, resolved with only
+    // 'widget' (mod, slot, lang) → a declarative widget's tree for this page (mods/modwidget.js): its blocks, resolved with only
     // the data its mod declared and the student granted, read for this site and this page's account. No code of the mod's runs, in any tab.
     if (m?.op === 'widget' && typeof m.mod === 'string' && ID.test(m.mod) && typeof m.slot === 'string') {
       const rec = await env.record(m.mod);
@@ -426,7 +426,7 @@ var GZ_MODBROKER = globalThis.GZ_MODBROKER || (() => {
       const type = PICTURE[m.path.slice(m.path.lastIndexOf('.') + 1).toLowerCase()];
       if (!type || !isObj(rec.files) || !Object.hasOwn(rec.files, m.path) || typeof rec.files[m.path] !== 'string') return fail('asset');
       try {
-        const D = typeof GZ_DOCTEXT !== 'undefined' ? GZ_DOCTEXT : require('./doctext.js');
+        const D = typeof GZ_DOCTEXT !== 'undefined' ? GZ_DOCTEXT : require('../core/doctext.js');
         const size = D.imageSize(Uint8Array.from(atob(rec.files[m.path]), (c) => c.charCodeAt(0)));
         if (!size || size.w > LIMIT.picture || size.h > LIMIT.picture) return fail('asset');
       } catch { return fail('asset'); }
@@ -454,8 +454,8 @@ var GZ_MODBROKER = globalThis.GZ_MODBROKER || (() => {
       }
       return m.op === 'packs' ? { ok: true, packs: out } : fail('asset');
     }
-    // 'media' (src: `mod:<id>/<path>`): the background file a mod carries, for lib/scene-media.js, read again and cleaned on
-    // the way out as lib/media.js keeps a Look's: { kind: 'lottie', json, canvases } or { kind: 'video' | 'image', mime, b64 }.
+    // 'media' (src: `mod:<id>/<path>`): the background file a mod carries, for looks/scene-media.js, read again and cleaned on
+    // the way out as looks/media.js keeps a Look's: { kind: 'lottie', json, canvases } or { kind: 'video' | 'image', mime, b64 }.
     // Only the file the mod's own parts name as their background, of that type, and only while the mod is on and not blocked.
     if (m?.op === 'media' && typeof m.src === 'string') {
       const [, id, path] = /^mod:([a-z2-7]{16})\/(.+)$/.exec(m.src) || [];
@@ -476,7 +476,7 @@ var GZ_MODBROKER = globalThis.GZ_MODBROKER || (() => {
         return { ok: await env.local.set({ modStops: Object.fromEntries([...kept, [m.mod, { why: m.why, at: Date.now() }]]) }) };
       });
     }
-    // 'runtime' (ok): whether a page found the mods host to be a working sandbox (features/mods.js), kept for the editor,
+    // 'runtime' (ok): whether a page found the mods host to be a working sandbox (mods/page/mods.js), kept for the editor,
     // which shows code mods as needing Chrome where it isn't (or where the package has no sandbox). Written only on a change.
     if (m?.op === 'runtime' && typeof m.ok === 'boolean') {
       return env.queue(async () => {

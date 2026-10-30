@@ -112,7 +112,7 @@ test('review: Step 4 copy discloses redirected Download all files in every langu
 });
 
 test('Writer disclosures describe the complete Feedback material budget and automatic picture preparation', () => {
-  const budget = require('../../extension/lib/ai/tasks/writer-feedback.js').LIMIT.material;
+  const budget = require('../../extension/ai/tasks/writer-feedback.js').LIMIT.material;
   assert.equal(budget, 200000);
   const policy = read('../PRIVACY.md').split('**Feedback**')[1].split('- **PDFs')[0];
   assert.match(policy, /200,000 characters/);

@@ -7,7 +7,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const B = require('../../extension/lib/blocklist.js');
+const B = require('../../extension/mods/blocklist.js');
 
 const root = path.resolve(__dirname, '../../extension');
 const tool = path.join(__dirname, '../../tools/release/blocklist-sign.mjs');

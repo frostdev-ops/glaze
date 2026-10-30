@@ -25,7 +25,7 @@ test('ordinary Ultra mutation flushes refresh late cards and replacement navigat
     createElement: (t) => new El(t), createElementNS: (_, t) => new El(t), createTextNode: () => new El('#text'),
     createTreeWalker: () => ({ nextNode: () => null }), createRange: () => ({ selectNodeContents() {}, getBoundingClientRect: () => ({}) }),
     addEventListener() {}, removeEventListener() {}, fonts: { load: () => Promise.resolve([]), add() {} } };
-  // school.test: an Ultra site the student said yes to (lib/background.js approved).
+  // school.test: an Ultra site the student said yes to (background/background.js approved).
   const area = () => ({ get: (k, cb) => (cb ? cb({ ultra: ['https://school.test'] }) : Promise.resolve({})), set: (o, cb) => { cb?.(); return Promise.resolve(); }, remove: (k, cb) => { cb?.(); return Promise.resolve(); } });
   const location = { protocol: 'https:', origin: 'https://school.test', pathname: '/ultra/stream', href: 'https://school.test/ultra/stream', search: '', hash: '' };
   let paints = 0, navs = 0, loads = [];
@@ -40,20 +40,20 @@ test('ordinary Ultra mutation flushes refresh late cards and replacement navigat
     performance: { now: () => 0 }, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} }, innerHeight: 900, innerWidth: 1400,
     fetch: () => Promise.resolve({ ok: true, url: 'https://school.test/', text: () => Promise.resolve('[]'), json: () => Promise.resolve([]), headers: { get: () => null } }),
     chrome: { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://glaze/${p}`, lastError: undefined,
-      sendMessage: (m) => { if (m?.type === 'glaze:load') { loads.push(...m.files); if (m.files.includes('features/cards.js')) c.GZ_CARD_UI = { paint: () => { paints++; } }; if (m.files.includes('features/nav.js')) c.GZ_NAV_UI = { sync: () => navs++ }; return Promise.resolve({ ok: true }); } return Promise.resolve({ ok: false }); } },
+      sendMessage: (m) => { if (m?.type === 'glaze:load') { loads.push(...m.files); if (m.files.includes('courses/page/cards.js')) c.GZ_CARD_UI = { paint: () => { paints++; } }; if (m.files.includes('navigation/page/nav.js')) c.GZ_NAV_UI = { sync: () => navs++ }; return Promise.resolve({ ok: true }); } return Promise.resolve({ ok: false }); } },
       storage: { sync: { get: (k, cb) => cb({ nav: { labels: 'icons' }, navbar: { on: false } }) }, local: area(), onChanged: { addListener() {} } } } });
   c.window = c; c.top = c; c.globalThis = c;
-  for (const f of ['lib/color.js', 'lib/i18n.js', 'lib/page.js', 'lib/grades.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/nav.js', 'content-ultra.js']) vm.runInContext(read(f), c, { filename: f });
-  vm.runInContext(read('content.js'), c, { filename: 'content.js' });
+  for (const f of ['core/color.js', 'core/i18n.js', 'core/page.js', 'planner/grades.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'navigation/nav.js', 'content/content-ultra.js']) vm.runInContext(read(f), c, { filename: f });
+  vm.runInContext(read('content/content.js'), c, { filename: 'content/content.js' });
   await settle();
   const runTimers = async () => { while (timers.length) { const t = timers.shift(); if (t.ms <= 1000) t.f(); } await settle(); };
   await runTimers();
-  assert.equal(loads.includes('features/cards.js'), false, 'no card code on stream');
+  assert.equal(loads.includes('courses/page/cards.js'), false, 'no card code on stream');
   // SPA navigation to Courses: Ultra adds the page (a few subtrees) and later its cards.
   location.pathname = '/ultra/course'; location.href = 'https://school.test/ultra/course';
   const recs = (n) => Array.from({ length: n }, () => ({ type: 'childList', addedNodes: [new El('article')], target: body }));
   mo.f(recs(40)); await runTimers();
-  assert.ok(loads.includes('features/cards.js') && paints > 0, 'SPA navigation loads and paints card appearance');
+  assert.ok(loads.includes('courses/page/cards.js') && paints > 0, 'SPA navigation loads and paints card appearance');
   // Pretend it was loaded (e.g. landed on /ultra/course): new cards rendered later (term filter, load more, re-render).
   if (!c.GZ_CARD_UI) c.GZ_CARD_UI = { paint: () => { paints++; } };
   const before = paints;

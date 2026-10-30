@@ -1,6 +1,6 @@
 // Search in the command palette on Canvas and Ultra (enhance.search), loaded on demand when the palette opens. The palette
 // calls attach(cmd, show). From 2 characters, after a 150 ms pause, your courses are asked for pages, assignments,
-// discussions, announcements, modules and files whose titles match (lib/seek.js). Ultra uses its public content tree,
+// discussions, announcements, modules and files whose titles match (navigation/seek.js). Ultra uses its public content tree,
 // announcements and discussion lists, matching titles and their public body text on the device: this course and this term's first. What
 // comes back joins the list as it arrives below what is already there, so nothing moves under the cursor, and each
 // keystroke cancels what was still being asked. Turning the setting (or Glaze) off stops it at once. Answers are kept in
@@ -15,7 +15,7 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
   let quit = null; // stops the open palette's search
   // Whether Glaze and this search are on, as storage has it: content.js's own copy of the settings can lag behind a
   // change. Read from storage when the palette attaches, then followed through every change, even one that comes while
-  // lib/seek.js is still loading (a change seen wins over the read, which only fills in what no change has said).
+  // navigation/seek.js is still loading (a change seen wins over the read, which only fills in what no change has said).
   // Unknown is off: a read that fails leaves it off. content.js's copy saying off is off too. Switched off in the popup
   // or the editor while the palette is open, what is running stops at once.
   const stored = { enabled: undefined, search: undefined };
@@ -35,17 +35,17 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
     .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status))))).then((s) => JSON.parse(s.replace(/^while\(1\);/, '')));
 
   const go = (url) => { globalThis.GZ_PLACE?.stop(); return globalThis.GZ_CTABS?.bar?.open(url, { native: true }) || location.assign(ultra ? new URL(url, location.origin).href : url); };
-  // An announcement opens in Glaze's pop-up (features/announce.js) where the settings say so, for the student's own Enter or
+  // An announcement opens in Glaze's pop-up (courses/page/announce.js) where the settings say so, for the student's own Enter or
   // click; with Ctrl, Cmd, Shift or Alt, or the pop-up unavailable, its page opens as before.
   const announce = (r, e) => {
     if (!e?.isTrusted || e.button > 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return go(r.url);
-    ctx.need('features/announce.js', () => globalThis.GZ_ANNOUNCE).then(() => GZ_ANNOUNCE.ready)
+    ctx.need('courses/page/announce.js', () => globalThis.GZ_ANNOUNCE).then(() => GZ_ANNOUNCE.ready)
       .then(() => GZ_ANNOUNCE.go({ site: ultra ? 'ultra' : 'canvas', entry: 'glaze', courseId: r.cid, id: r.aid, url: new URL(r.url, location.origin).href, title: r.title, course: r.course }), () => go(r.url));
   };
   // cmd is the open palette ({ input, list, found, seeking, stop }); show(true) redraws it keeping the choice where it is.
   const attach = async (cmd, show) => {
-    const [, r] = await Promise.all([ctx.need('lib/seek.js', () => globalThis.GZ_SEEK), fromStorage(),
-      ...(ultra ? [ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA), ctx.need('lib/doctext.js', () => globalThis.GZ_DOCTEXT)] : [])]);
+    const [, r] = await Promise.all([ctx.need('navigation/seek.js', () => globalThis.GZ_SEEK), fromStorage(),
+      ...(ultra ? [ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA), ctx.need('core/doctext.js', () => globalThis.GZ_DOCTEXT)] : [])]);
     if (r) {
       stored.enabled ??= r.enabled !== false;
       stored.search ??= r.enhance?.search !== false;

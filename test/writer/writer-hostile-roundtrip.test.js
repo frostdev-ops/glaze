@@ -1,11 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../../extension/lib/writer-schema.js');
-const E = require('../../extension/lib/writer-editor.js');
-const X = require('../../extension/lib/writer-docx.js');
-const PA = require('../../extension/lib/writer-papers.js');
+const S = require('../../extension/writer/writer-schema.js');
+const E = require('../../extension/writer/writer-editor.js');
+const X = require('../../extension/writer/writer-docx.js');
+const PA = require('../../extension/writer/writer-papers.js');
 const { fixtures } = require('../fixtures/writer-hostile.js');
-globalThis.GZ_WRITER_OBJECTS_DOCX = require('../../extension/lib/writer-objects-docx.js');
+globalThis.GZ_WRITER_OBJECTS_DOCX = require('../../extension/writer/writer-objects-docx.js');
 const storage = () => {
   const data = {};
   return { get: async (k) => ({ [k]: structuredClone(data[k]) }), set: async (p) => Object.assign(data, structuredClone(p)), remove: async () => {} };

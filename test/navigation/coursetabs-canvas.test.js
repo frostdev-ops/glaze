@@ -2,8 +2,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const L = require('../../extension/lib/coursetabs.js');
-const source = fs.readFileSync(path.join(__dirname, '../../extension/features/coursetabs.js'), 'utf8');
+const L = require('../../extension/navigation/coursetabs.js');
+const source = fs.readFileSync(path.join(__dirname, '../../extension/navigation/page/coursetabs.js'), 'utf8');
 const part = (a, b) => source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a)));
 const origin = 'https://school.instructure.com';
 
@@ -61,7 +61,7 @@ test('Canvas strip wraps above or below the single breadcrumb row, also outside 
 });
 
 test('Canvas numeric frame names receive the full theme bootstrap; other frame names do not', () => {
-  const core = fs.readFileSync(path.join(__dirname, '../../extension/content.js'), 'utf8');
+  const core = fs.readFileSync(path.join(__dirname, '../../extension/content/content.js'), 'utf8');
   const block = core.slice(core.indexOf('  const tabFrame = '), core.indexOf('  const solo = '));
   for (const [name, expected] of [['gz-ctab:12', '12'], ['gz-ctab:_12_1', '_12_1'], ['gz-ctab:12evil', ''], ['course_12', ''], ['gz-ctab:12/grades', '']]) {
     assert.equal(vm.runInNewContext(block + '\ntabFrame;', { window: { name, top: {} } }), expected);
@@ -101,15 +101,15 @@ test('Canvas frame commands require an owned same-origin frame and numeric IDs',
 
 test('the shared strip stylesheet is shipped and available to both Canvas and Ultra', () => {
   const manifest = require('../../extension/manifest.json');
-  assert.ok(manifest.web_accessible_resources.some((r) => r.resources.includes('features/coursetabs.css')));
-  const core = fs.readFileSync(path.join(__dirname, '../../extension/content.js'), 'utf8');
-  assert.match(core, /moodle \? \[\] : \['features\/apps.css', 'features\/coursetabs.css'/);
+  assert.ok(manifest.web_accessible_resources.some((r) => r.resources.includes('navigation/page/coursetabs.css')));
+  const core = fs.readFileSync(path.join(__dirname, '../../extension/content/content.js'), 'utf8');
+  assert.match(core, /moodle \? \[\] : \['core\/page\/apps.css', 'navigation\/page\/coursetabs.css'/);
 });
 
 
 test('Ultra’s provisional sheets keep their order in the shared core’s complete stylesheet list', () => {
-  const core = fs.readFileSync(path.join(__dirname, '../../extension/content.js'), 'utf8');
-  const ultra = fs.readFileSync(path.join(__dirname, '../../extension/content-ultra.js'), 'utf8');
+  const core = fs.readFileSync(path.join(__dirname, '../../extension/content/content.js'), 'utf8');
+  const ultra = fs.readFileSync(path.join(__dirname, '../../extension/content/content-ultra.js'), 'utf8');
   const line = core.split('\n').find((s) => s.includes('const SHEETS = '));
   const sheets = vm.runInNewContext(line + '\nSHEETS;', { ultra: true, moodle: false, site: 'ultra' });
   const early = vm.runInNewContext(ultra.match(/GZ_SITE_ULTRA\.sheets = (\[[^\n]+?\])\.map/)[1]);

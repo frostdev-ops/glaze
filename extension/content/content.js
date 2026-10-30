@@ -47,7 +47,7 @@
   }
   if (site !== 'ultra') globalThis.GZ_SITE_ULTRA?.sheets?.forEach((l) => l.remove());
   if (!site) return;
-  // Glaze's toolbar icon for this tab, and the guard for its crossfades in this frame (lib/background.js).
+  // Glaze's toolbar icon for this tab, and the guard for its crossfades in this frame (background/background.js).
   if (!isPreview) try { chrome.runtime.sendMessage({ type: 'glaze:here' }).catch(() => {}); } catch { /* reloaded */ }
   const ultra = site === 'ultra';
   const moodle = site === 'moodle';
@@ -70,7 +70,7 @@
   let accentInk = null; // dark text Glaze itself puts on accent fills; the sweep leaves it alone
   let enhanced = {};
   // Each site's theme, shared motion and surfaces; Canvas and Ultra also share tabs and apps.
-  const SHEETS = [...ultra ? ['theme.css', 'motion.css', 'extras.css'] : [`${site}.css`, 'motion.css'], ...moodle ? [] : ['features/apps.css', 'features/coursetabs.css', 'features/sidebar.css'], 'features/surfaces.css'];
+  const SHEETS = [...ultra ? ['content/theme.css', 'content/motion.css', 'content/extras.css'] : [`content/${site}.css`, 'content/motion.css'], ...moodle ? [] : ['core/page/apps.css', 'navigation/page/coursetabs.css', 'navigation/page/sidebar.css'], 'looks/page/surfaces.css'];
   // What only one site does: its part puts its own over these (the site's part, below). Moodle's: nothing.
   const no = () => {};
   const X = { record: () => Promise.resolve(), planner: no, tagCards: no, tagExtras: no, lift: no, gate: no, stop: no, renderProgress: no,
@@ -78,12 +78,12 @@
     unname: no, holding: () => false, syncTodo: no, syncCardTasks: no, syncWidgets: no, syncRemind: no, syncSyl: no, syncInsights: no, ctx: {} };
 
   const hasText = (e) => { for (const n of e.childNodes) if (n.nodeType === 3 && n.textContent.trim()) return true; return false; };
-  // On Canvas, the whole document: put on a school's own host by lib/background.js mid-load, the body can be
+  // On Canvas, the whole document: put on a school's own host by background/background.js mid-load, the body can be
   // there before Canvas's wrapper (isCanvas) is.
   const onBody = (fn) => (document.body && (ultra || document.readyState !== 'loading') ? fn() : document.addEventListener('DOMContentLoaded', fn, { once: true }));
   // Keep the head marker check when enabling after settings change too.
   const isUltra = () => isPreview || !!document.head?.querySelector(ULTRA);
-  // Likewise `https://*.instructure.com/*`, and each school's own Canvas host that lib/detect.js found, is
+  // Likewise `https://*.instructure.com/*`, and each school's own Canvas host that content/detect.js found, is
   // every page and frame on that host. Canvas's own pages sit in this wrapper; a tool framed inside one
   // doesn't, and stays as it is.
   // Moodle's: its page id and layout on <body>.
@@ -253,7 +253,7 @@
   });
 
   // ---- moments and the completion burst --------------------------------------------------------
-  // 'glaze:moment' on the document: something happened that a Look's effect (features/motionx.js) or a mod may answer,
+  // 'glaze:moment' on the document: something happened that a Look's effect (looks/page/motionx.js) or a mod may answer,
   // with its name and, if it has a place, where. `once` keys one that must not repeat on this page.
   const told = new Set();
   const moment = (name, el, once) => {
@@ -262,11 +262,11 @@
     document.dispatchEvent(new CustomEvent('glaze:moment', { detail: r?.width ? { name, x: r.left + r.width / 2, y: r.top + r.height / 2 } : { name } }));
   };
   // A Look with animations, effects, a pointer effect (unless the student turned it off) or a typing effect (GZ_CTX.parts())
-  // brings features/motionx.js in, and a pointer, the Look's or the student's own choice of one, features/lookx.js.
+  // brings looks/page/motionx.js in, and a pointer, the Look's or the student's own choice of one, looks/page/lookx.js.
   const moveParts = () => {
     const p = GZ_CTX.parts(), x = settings.extras;
-    if (globalThis.GZ_MOTIONX || p?.anim || p?.fx || p?.cursor && x.pointerOn && x.pointerAnim || p?.type) need('features/motionx.js', () => globalThis.GZ_MOTIONX).then(() => GZ_MOTIONX.sync(), () => {});
-    if (globalThis.GZ_LOOKX || x.pointerOn && (x.pointer === 'look' ? p?.pointer || lookHere() : partsOn())) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {});
+    if (globalThis.GZ_MOTIONX || p?.anim || p?.fx || p?.cursor && x.pointerOn && x.pointerAnim || p?.type) need('looks/page/motionx.js', () => globalThis.GZ_MOTIONX).then(() => GZ_MOTIONX.sync(), () => {});
+    if (globalThis.GZ_LOOKX || x.pointerOn && (x.pointer === 'look' ? p?.pointer || lookHere() : partsOn())) need('looks/page/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {});
   };
   document.addEventListener('glaze:parts', moveParts);
   // Ultra's review circle is role=checkbox; aria-checked turning "true" is the item being completed. The dots are
@@ -300,7 +300,7 @@
   // ---- the student's courses -------------------------------------------------------------------
   // Every course and its color, for the editor's course list, the course menu and the tint on pages that don't show
   // it: once a page load, from the site's own list (Ultra's and Canvas's are their parts', X.record; Moodle's is
-  // features/moodle.js). Stored locally; nothing leaves the device.
+  // courses/page/moodle.js). Stored locally; nothing leaves the device.
   let canvasRecorded = false;
   // Moodle's: <body>'s course (1 is the site) under its theme sheet's root.
   const canvasCourseKey = (id = moodle ? document.body?.className.match(/\bcourse-(?!1\b)(\d+)/)?.[1] : canvasCourseId()) => id ? `${site}:${moodle ? document.querySelector('link[href*="/theme/styles"]')?.href.split('/theme/')[0] : location.origin}/${id}` : null;
@@ -344,12 +344,12 @@
   const dueLabelled = (el) => /\bdue\b/i.test(el?.parentElement?.previousElementSibling?.textContent || '') || !!el?.closest(DUE_AT);
   // The locale Ultra renders in: <html lang> is bound to it ("{{index.locale}}" until Ultra starts).
   const locale = () => { try { return Intl.getCanonicalLocales(html.lang.replace(/_/g, '-'))[0] || navigator.language; } catch { return navigator.language; } };
-  // Glaze's own words on the page are in that language too (lib/i18n.js), English where it has none.
+  // Glaze's own words on the page are in that language too (core/i18n.js), English where it has none.
   const t = (key, vars) => GZ_I18N.t(key, vars, locale());
 
   // ---- code on demand ------------------------------------------------------------------------------
   // What only some pages need isn't in the first content script: it runs in this frame the first time it's needed,
-  // put there by lib/background.js ('glaze:load', its LOADABLE list). The options preview has it as <script> tags.
+  // put there by background/background.js ('glaze:load', its LOADABLE list). The options preview has it as <script> tags.
   // `ready` says whether what the file defines is here: before asking (the preview), and after the worker says it ran.
   // One request per file at a time. A failed one is asked again by itself (1 s, 2 s, 4 s… 30 s apart, about four minutes)
   // and the page syncs once it is in (recover); a refusal that won't change, by a sync after a minute.
@@ -376,8 +376,8 @@
     }
     return loading.get(file);
   };
-  // Moodle's extras, on first use: its data read (lib/moodle.js), then asked of the page's own Moodle.
-  const moodleIn = () => need('lib/moodle.js', () => globalThis.GZ_MOODLE).then(() => need('features/moodle.js', () => globalThis.GZ_MOODLE_PAGE)).then(() => GZ_MOODLE_PAGE);
+  // Moodle's extras, on first use: its data read (courses/moodle.js), then asked of the page's own Moodle.
+  const moodleIn = () => need('courses/moodle.js', () => globalThis.GZ_MOODLE).then(() => need('courses/page/moodle.js', () => globalThis.GZ_MOODLE_PAGE)).then(() => GZ_MOODLE_PAGE);
   // Load the page's catalogue once. Text extras wait for it; the theme doesn't. A failure keeps English for this page.
   let wordsFor = null; // the catalogue the words are ready for ('' for none)
   let wordsLate = false; // a pass skipped its extras while waiting: the next one covers the whole page
@@ -413,7 +413,7 @@
 
   // ---- grades on course cards (Extras) ---------------------------------------------------------
   // A course card's overall grade, drawn by CSS from attributes: Ultra's Courses page and Canvas's Dashboard (X.tagCards),
-  // Moodle's Dashboard and My courses (features/moodle.js).
+  // Moodle's Dashboard and My courses (courses/page/moodle.js).
   const tagCards = () => {
     if (!observer || !settings.enhance.overall) return;
     if (moodle) return document.querySelector('[data-region="course-content"]') && moodleIn().then((m) => m.cards(), () => {});
@@ -443,11 +443,11 @@
   let dirty = new Set();
   let full = false;
   const hid = () => tabFrame && html.hasAttribute('data-gz-ctab-framed');
-  // The Look's LMS rules (features/rules.js), once it has any: each pass puts them back on what the page redrew.
-  const syncRules = () => { if (globalThis.GZ_RULES) GZ_RULES.sync(); else if (GZ_CTX.parts()?.rules?.length) need('features/rules.js', () => globalThis.GZ_RULES).then(() => GZ_RULES.sync(), () => {}); };
+  // The Look's LMS rules (looks/page/rules.js), once it has any: each pass puts them back on what the page redrew.
+  const syncRules = () => { if (globalThis.GZ_RULES) GZ_RULES.sync(); else if (GZ_CTX.parts()?.rules?.length) need('looks/page/rules.js', () => globalThis.GZ_RULES).then(() => GZ_RULES.sync(), () => {}); };
   document.addEventListener('glaze:parts', syncRules);
-  // Features of some pages only (features/routes.js).
-  const routes = () => need('features/routes.js', () => globalThis.GZ_ROUTES).then(() => GZ_ROUTES.sync(), no);
+  // Features of some pages only (content/routes.js).
+  const routes = () => need('content/routes.js', () => globalThis.GZ_ROUTES).then(() => GZ_ROUTES.sync(), no);
   const flush = () => {
     timer = 0;
     if (hid()) { dirty.clear(); full = true; return; }
@@ -722,13 +722,13 @@
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideTip(); }, true);
 
   // ---- folder previews (Extras) ----------------------------------------------------------------
-  // Hovering a collapsed folder lists what is inside (features/previews.js). What it shares with Download all and
+  // Hovering a collapsed folder lists what is inside (courses/page/previews.js). What it shares with Download all and
   // the rest of this script is here: the course, a folder's toggle, and Canvas's lists, kept for a minute.
   const courseId = () => location.pathname.match(/\/ultra\/courses\/(_\d+_\d+)\//)?.[1];
   // A folder's or learning module's own fold toggle, by the id Ultra gives it in every language; null for
   // anything else (an Ultra document is a folder to the API, but has none).
   const toggleOf = (item) => item?.querySelector(`[id="folder-title-${item.dataset.contentId}"], [id="learning-module-title-${item.dataset.contentId}"]`);
-  // What a folder or module holds, shown when the pointer rests on its row: features/previews.js (Canvas's lists are
+  // What a folder or module holds, shown when the pointer rests on its row: courses/page/previews.js (Canvas's lists are
   // content-canvas.js'), loaded the first time it does (or, on Canvas, focus reaches one), then handed that event if
   // the row is still where it was.
   const PEEK_AT = ultra ? '.content-list-item[data-content-id]' : '.context_module .expand_module_link, a[href*="/files/folder/"]';
@@ -736,7 +736,7 @@
     if (globalThis.GZ_PEEK || !settings.enhance.previews || !observer || !(e.target instanceof Element)) return;
     const { target, type } = e;
     if (!(ultra ? courseId() : canvasCourseId()) || !target.closest(PEEK_AT)) return;
-    need('features/previews.js', () => globalThis.GZ_PEEK).then(() => { if (observer && settings.enhance.previews && (type === 'focusin' ? document.activeElement === target : target.matches(':hover'))) GZ_PEEK.on({ target, type }); }, () => {});
+    need('courses/page/previews.js', () => globalThis.GZ_PEEK).then(() => { if (observer && settings.enhance.previews && (type === 'focusin' ? document.activeElement === target : target.matches(':hover'))) GZ_PEEK.on({ target, type }); }, () => {});
   };
   document.addEventListener('pointerover', peekIn, { capture: true, passive: true });
   document.addEventListener('focusin', (e) => { if (!ultra) peekIn(e); }, true);
@@ -808,7 +808,7 @@
 
   // ---- your place in a course (Extras) --------------------------------------------------------
   // Canvas: how far down a course's Modules list,
-  // and the item opened last. Put back when you return: features/place.js, loaded where there is a place to keep or put
+  // and the item opened last. Put back when you return: navigation/page/place.js, loaded where there is a place to keep or put
   // back. Anything you do first (wheel, touch, a key, a click) ends putting it back, so that is watched from the start.
   const ROWS = '.content-list-item[data-content-id]';
   let tapped = null; // { id, at }: the row of your last click
@@ -820,7 +820,7 @@
     if (!settings.enhance.place || !solo || !observer) return;
     if (canvasCourseKey() && (new URLSearchParams(location.search).get('module_item_id') || (/^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) && document.getElementById('context_modules_sortable_container')))) {
       placeAsked ||= Date.now();
-      need('features/place.js', () => globalThis.GZ_PLACE).then(() => GZ_PLACE.sync(), () => {});
+      need('navigation/page/place.js', () => globalThis.GZ_PLACE).then(() => GZ_PLACE.sync(), () => {});
     }
   };
   document.addEventListener('click', (e) => { if (e.isTrusted && e.target instanceof Element) tapped = { id: e.target.closest(ROWS)?.dataset.contentId, at: Date.now() }; }, true);
@@ -828,12 +828,12 @@
 
   // ---- what-if calculator (Extras) -----------------------------------------------------------
   // On a course's gradebook: scores typed for work not graded yet give the overall grade they'd make, and a target what
-  // it takes: features/grades.js, asked for by each site's part (X.renderCalc).
+  // it takes: planner/page/grades.js, asked for by each site's part (X.renderCalc).
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 
   // ---- draft backup (Extras) ------------------------------------------------------------------
   // What you write in Ultra's editors, or in Canvas's Inbox compose, is kept on this device until it posts, and offered
-  // back when that editor turns up empty again: features/drafts.js (with lib/drafts.js), loaded once such an editor is on
+  // back when that editor turns up empty again: writer/page/drafts.js (with writer/drafts.js), loaded once such an editor is on
   // the page or written in. An editor written in before it arrives (one paste can be all there is) is taken up when it
   // does, as if just written in; from then on it gets every keydown, input and paste, and the passes (watchDrafts).
   const DRAFT_ED = ultra ? '.ql-editor[contenteditable="true"]' : '#compose-message-modal textarea[data-testid="message-body"]';
@@ -859,7 +859,7 @@
     if (was && (was.id !== now.id || was.near !== now.near || was.path !== now.path)) draftsOld.push(was);
     draftsWaiting.set(ed, now);
   };
-  const draftsIn = () => need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => need('features/drafts.js', () => globalThis.GZ_DRAFT_UI)).then(() => {
+  const draftsIn = () => need('writer/drafts.js', () => globalThis.GZ_DRAFTS).then(() => need('writer/page/drafts.js', () => globalThis.GZ_DRAFT_UI)).then(() => {
     const eds = [...draftsOld.splice(0), ...draftsWaiting.values()];
     draftsWaiting.clear();
     for (const at of eds) GZ_DRAFT_UI.take(at);
@@ -871,10 +871,10 @@
     const ed = e.target.closest(DRAFT_ED);
     if (ed) { draftWait(ed); draftsIn(); } else if (!ultra && e.target.closest('#compose-message-modal')) watchDrafts();
   }, true);
-  // Glaze Writer (enhance.writer): Glaze's editor in place of Ultra's editor boxes (features/writer.js), on the same cue.
+  // Glaze Writer (enhance.writer): Glaze's editor in place of Ultra's editor boxes (writer/page/writer.js), on the same cue.
   const writerIn = () => {
     if (globalThis.GZ_WRITER) GZ_WRITER.pass();
-    else if (ultra && settings.enhance.writer && observer && document.querySelector(DRAFT_ED)) need('features/writer.js', () => globalThis.GZ_WRITER).then(() => GZ_WRITER.pass(), () => {});
+    else if (ultra && settings.enhance.writer && observer && document.querySelector(DRAFT_ED)) need('writer/page/writer.js', () => globalThis.GZ_WRITER).then(() => GZ_WRITER.pass(), () => {});
   };
   // Canvas owns RCE recovery and assignment/quiz drafts. Only its plain-text new Inbox compose lacks it.
   const watchDrafts = () => {
@@ -889,7 +889,7 @@
     if (window.top !== window || !settings.enabled) return;
     const sweep = (s, all) => {
       if (!Object.keys(all || {}).some((k) => k.startsWith('draft:'))) return;
-      need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => { if (settings.enabled) GZ_DRAFTS.tidy(s, all, settings.enhance.drafts); }, () => {});
+      need('writer/drafts.js', () => globalThis.GZ_DRAFTS).then(() => { if (settings.enabled) GZ_DRAFTS.tidy(s, all, settings.enhance.drafts); }, () => {});
     };
     local((s) => Promise.resolve(s.getKeys?.()).catch(() => null).then((ks) => {
       if (!settings.enabled) return;
@@ -901,19 +901,19 @@
 
   // ---- download all (Extras) -------------------------------------------------------------------
   // A button on each folder and learning module in course content saves the files inside as one zip:
-  // features/download.js, loaded on a course page that has one (Ultra) or a course's modules (Canvas) while the
+  // courses/page/download.js, loaded on a course page that has one (Ultra) or a course's modules (Canvas) while the
   // switch is on. The previews' pass rides along.
   const dlHere = () => settings.enhance.download && (ultra ? !!courseId() && !!document.querySelector('.content-list-item [id^="folder-title-"], .content-list-item [id^="learning-module-title-"]')
     : typeof chrome.runtime.connect === 'function' && !!canvasCourseId() && /^\/courses\/\d+(?:\/modules)?\/?$/.test(location.pathname));
   const syncDownloads = () => {
     globalThis.GZ_PEEK?.sync();
-    if (dlHere()) need('features/download.js', () => globalThis.GZ_DOWNLOAD).then(() => { if (observer && dlHere()) GZ_DOWNLOAD.sync(); }, () => {});
+    if (dlHere()) need('courses/page/download.js', () => globalThis.GZ_DOWNLOAD).then(() => { if (observer && dlHere()) GZ_DOWNLOAD.sync(); }, () => {});
     else globalThis.GZ_DOWNLOAD?.sync();
   };
 
   // ---- document buttons (Extras) ---------------------------------------------------------------
   // Round buttons in the bottom-right gutter, top frame only: dark documents while a file preview is on screen (dark
-  // palettes only), focus mode on a course document. features/docs.js, loaded where they can appear: a course document
+  // palettes only), focus mode on a course document. courses/page/docs.js, loaded where they can appear: a course document
   // with the switch on, or a file preview (on Ultra, in any frame: a same-origin preview's images are turned back).
   const PREVIEWS = ultra ? '#site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe:not(.gz-pv)' : '#doc_preview iframe, #file-preview-iframe, iframe.ef-file-preview-frame:not(.annotated-document-submission), .file_preview iframe';
   const DOC = ultra ? '#site-wrap .document-content-root' : '#wiki_page_show .show-content, #assignment_show .description';
@@ -944,19 +944,19 @@
   };
   const syncDocTools = () => {
     // Read-only review is independently lazy, including when the reading tools are off.
-    if (observer && /\/(?:student-submission-view|submissions\/\d+)\/?$/.test(location.pathname)) need('features/docreview.js', () => globalThis.GZ_DOCREVIEW).then(() => GZ_DOCREVIEW.sync(!!observer), () => {});
+    if (observer && /\/(?:student-submission-view|submissions\/\d+)\/?$/.test(location.pathname)) need('courses/page/docreview.js', () => globalThis.GZ_DOCREVIEW).then(() => GZ_DOCREVIEW.sync(!!observer), () => {});
     else globalThis.GZ_DOCREVIEW?.sync(false);
     globalThis.GZ_KEYS?.sync();
     if (globalThis.GZ_DOCS) return GZ_DOCS.sync();
     if (observer && ((ultra && document.querySelector(PREVIEWS)) || (solo && settings.enhance.toggles && document.querySelector(`${DOC}, ${PREVIEWS}`)))) {
-      need('features/docs.js', () => globalThis.GZ_DOCS).then(() => GZ_DOCS.sync(), () => {});
+      need('courses/page/docs.js', () => globalThis.GZ_DOCS).then(() => GZ_DOCS.sync(), () => {});
     }
   };
   // Reading focus gets Escape before the site.
   addEventListener('keydown', (e) => globalThis.GZ_DOCS?.esc(e), true);
 
   // ---- keyboard shortcuts (Extras) ------------------------------------------------------------
-  // "g" then a letter goes somewhere, "/" searches, "?" lists them: features/keys.js, loaded on the first key that
+  // "g" then a letter goes somewhere, "/" searches, "?" lists them: navigation/page/keys.js, loaded on the first key that
   // starts one while the switch is on, then handed every key. Top frame only.
   const typing = (el) => el instanceof Element && (el.isContentEditable || !!el.closest('input, textarea, select, #gz-stream-settings, [contenteditable]:not([contenteditable="false"])'));
   // Whether a key is one for the shortcuts: switched on, no modifier, not typing or composing, not in a menu, list, grid or tree
@@ -981,19 +981,19 @@
       if (!keyOn(e) || !(e.key === 'g' || (ultra && (e.key === '/' || e.key === '?')))) return;
       if (ultra && e.key === '?') e.preventDefault();
       keysWaiting = [was];
-      need('features/keys.js', () => globalThis.GZ_KEYS).then(() => { for (const k of keysWaiting) GZ_KEYS.key(k); }, () => {}).finally(() => { keysWaiting = null; });
+      need('navigation/page/keys.js', () => globalThis.GZ_KEYS).then(() => { for (const k of keysWaiting) GZ_KEYS.key(k); }, () => {}).finally(() => { keysWaiting = null; });
     }, true);
   }
 
   // ---- command palette (Extras; Canvas too) --------------------------------------------------
   // Ctrl+K (⌘K on a Mac) opens one search over the site's pages, your courses, this course and Glaze's own switches:
-  // features/palette.js, loaded the first time. Never while typing (Ultra's editor uses Ctrl+K for links), top frame only.
+  // navigation/page/palette.js, loaded the first time. Never while typing (Ultra's editor uses Ctrl+K for links), top frame only.
   let cmdWanted = null; // while palette.js loads: open it when it's in? Each press meanwhile turns that over.
-  // The key's turn, here or from the page around a course tab on screen (features/coursetabs.js).
+  // The key's turn, here or from the page around a course tab on screen (navigation/page/coursetabs.js).
   const askCmd = () => {
     if (globalThis.GZ_CMD?.isOpen()) GZ_CMD.close();
     else if (cmdWanted !== null) cmdWanted = !cmdWanted;
-    else { cmdWanted = true; need('features/palette.js', () => globalThis.GZ_CMD).then(() => { if (cmdWanted && chrome.runtime?.id && observer && settings.enhance.palette) GZ_CMD.open(); }, () => {}).finally(() => { cmdWanted = null; }); }
+    else { cmdWanted = true; need('navigation/page/palette.js', () => globalThis.GZ_CMD).then(() => { if (cmdWanted && chrome.runtime?.id && observer && settings.enhance.palette) GZ_CMD.open(); }, () => {}).finally(() => { cmdWanted = null; }); }
   };
   if (solo) {
     document.addEventListener('keydown', (e) => {
@@ -1037,10 +1037,10 @@
   const partsOf = () => globalThis.GZ_CTX?.parts() ?? null;
   const bgKind = () => globalThis.GZ_XPARTS_PAGE?.bgKind(partsOf()?.bg) || worn.bg.kind;
   const sceneKind = () => { const k = bgKind(), b = partsOf()?.bg; return k === 'scene' || (k === 'shader' ? !!b?.shader?.src : k === 'media' ? !!b?.media : k === 'layers' && !!b?.layers?.length); };
-  const sceneModule = () => (bgKind() === 'media' ? 'lib/scene-media.js' : 'lib/scene.js');
+  const sceneModule = () => (bgKind() === 'media' ? 'looks/scene-media.js' : 'looks/scene.js');
   const sceneSig = () => JSON.stringify([bgKind(), worn.bg.scene, partsOf()?.bg]);
   let modBg = null;
-  // A course tab's frame wearing the page's background shows the page's through it (lib/scene-host.js through).
+  // A course tab's frame wearing the page's background shows the page's through it (looks/scene-host.js through).
   let bgSig = '', thru = false;
   const syncThrough = () => {
     if (!tabFrame) {
@@ -1049,7 +1049,7 @@
     }
     const bg = html.getAttribute('data-gz-bg'), H = globalThis.GZ_SCENE_HOST;
     const want = !!bg && bg !== 'solid' && !modBg && on(settings) && !!links.length;
-    if (want && !H) need('lib/scene-host.js', () => globalThis.GZ_SCENE_HOST).then(() => { if (globalThis.GZ_SCENE_HOST) syncScene(); }, () => {});
+    if (want && !H) need('looks/scene-host.js', () => globalThis.GZ_SCENE_HOST).then(() => { if (globalThis.GZ_SCENE_HOST) syncScene(); }, () => {});
     const now = !!H?.through(want && bgSig, ultra, hid(), syncScene);
     if (now !== thru) { thru = now; html.toggleAttribute('data-gz-through', now); }
     return now;
@@ -1137,7 +1137,7 @@
     if (!modBg && !sceneLoad[file]) { const p = sceneLoad[file] = import(chrome.runtime.getURL(`${file}?r=${docId}-${++sceneLoadId}`)).catch((error) => { if (sceneLoad[file] === p) delete sceneLoad[file]; throw error; }); }
     const load = !modBg && sceneLoad[file];
     const pending = scenePending = { key, cancel: [] };
-    Promise.all([load && sceneWait(load, () => { if (sceneLoad[file] === load) delete sceneLoad[file]; }, () => { if (sceneLoad[file] !== load) { sceneLoad[file] = load; sceneAgain(); } }), sceneNeed('lib/scene-host.js', () => globalThis.GZ_SCENE_HOST), !modBg && wait && sceneNeed('lib/glsl.js', () => globalThis.GZ_GLSL)]).then(([mod]) => {
+    Promise.all([load && sceneWait(load, () => { if (sceneLoad[file] === load) delete sceneLoad[file]; }, () => { if (sceneLoad[file] !== load) { sceneLoad[file] = load; sceneAgain(); } }), sceneNeed('looks/scene-host.js', () => globalThis.GZ_SCENE_HOST), !modBg && wait && sceneNeed('looks/glsl.js', () => globalThis.GZ_GLSL)]).then(([mod]) => {
       if (scenePending !== pending) return;
       if (!on(settings) || !chrome.runtime?.id || !links.length || document.hidden || hid() || key !== sceneSig()) { scenePending = null; return; }
       if (modBg) { scenePending = null; return placeScene(); }
@@ -1145,7 +1145,7 @@
       if (syncThrough()) return stopScene();
       pending.draw = true;
       if (!scene) {
-        sceneCanvas = document.createElement(file === 'lib/scene.js' ? 'canvas' : 'div');
+        sceneCanvas = document.createElement(file === 'looks/scene.js' ? 'canvas' : 'div');
         sceneCanvas.id = 'gz-scene';
         sceneCanvas.setAttribute('aria-hidden', 'true');
         placeScene();
@@ -1203,7 +1203,7 @@
   // student's own this device doesn't keep (looks): the theme, parts and all.
   const lookHere = () => (chrome.runtime?.id && GZ_COURSE_LOOK_ID(settings, ultra ? courseId() : canvasCourseKey(), looks)) || null;
   let looked = null; // the course look painted now
-  let looks = []; // the saved and gallery Looks a course can wear (lib/looks.js), read when one does (load)
+  let looks = []; // the saved and gallery Looks a course can wear (looks/looks.js), read when one does (load)
   let worn = settings; // the settings painted now: the student's, or a course's look over them
 
   // ---- course menu (Extras) ----------------------------------------------------------------------
@@ -1212,7 +1212,7 @@
   // the same settings.courses keys, so the card and the editor always agree, and every card and page repaints from
   // settings as it does after an edit made there. The popover lives in <body>, not in the card: a press in it can't
   // reach the card (a link) behind it. Ultra only, top frame only; off with the Extras switch (nicknames with it).
-  // The popover itself, and the edits it makes, are features/coursemenu.js, loaded when a button is first pointed at.
+  // The popover itself, and the edits it makes, are navigation/page/coursemenu.js, loaded when a button is first pointed at.
   // Nicknames, swapped into Ultra's own text, are content-ultra.js' (X.nickOf, X.syncNames).
   const CARD = 'article[id^="course-list-course-"]';
 
@@ -1244,8 +1244,8 @@
     globalThis.GZ_COURSE_MENU?.sync(on);
     if (ultra) X.syncNames(); else syncCards();
   };
-  // Canvas's dashboard cards: features/cards.js.
-  const cardUI = (f) => need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => f(GZ_CARD_UI), () => {});
+  // Canvas's dashboard cards: courses/page/cards.js.
+  const cardUI = (f) => need('courses/page/cards.js', () => globalThis.GZ_CARD_UI).then(() => f(GZ_CARD_UI), () => {});
   const syncCards = () => { if (moodle) globalThis.GZ_MOODLE_PAGE?.paint(); else if (!isPreview && location.pathname === '/') cardUI((m) => m.paint()); };
   // Nothing of the extra left on the page: the theme or the extra is off.
   const unmenu = () => {
@@ -1258,7 +1258,7 @@
   // around it, and what Ultra listens for on the way down, never see a press of it. A press opens or closes
   // the popover on its click (a key press makes one); a key press is left to make it, not repeated here.
   // Pointing at a button, or focusing it, already asks for the popover's file, so it's in by the press.
-  const menuUI = () => need('features/coursemenu.js', () => globalThis.GZ_COURSE_MENU);
+  const menuUI = () => need('navigation/page/coursemenu.js', () => globalThis.GZ_COURSE_MENU);
   const onMenuButton = (e) => {
     const b = e.target instanceof Element && e.target.closest('.gz-cm-btn');
     if (!b) return;
@@ -1309,7 +1309,7 @@
   if (!ultra) addEventListener('pagereveal', (e) => { if (e.viewTransition) setAttr('data-gz-vt-in', true); });
 
   const applySettings = () => {
-    // A course's own Look brings its own parts (features/lookparts.js read), as the theme brings its.
+    // A course's own Look brings its own parts (looks/page/lookparts.js read), as the theme brings its.
     if (looked !== (looked = lookHere())) Promise.resolve(looked).then((id) => partsIn(id));
     const s = (worn = looked ? GZ_COURSE_LOOK(settings, ultra ? courseId() : canvasCourseKey(), looks) : settings);
     setVar('--gz-surface-course', surfaceCourse());
@@ -1358,7 +1358,7 @@
     setVar('--gz-glass', `${s.look.glass}px`);
     // No blur means no glass: a see-through header without the blur just shows text behind text.
     for (const [key, value] of Object.entries(GZ_SURFACE_VARS(s))) setVar(key, value);
-    // Fonts: the stacks are vars; a web font loads into the page once chosen (lib/fonts.js).
+    // Fonts: the stacks are vars; a web font loads into the page once chosen (looks/fonts.js).
     setAttr('data-gz-font', s.look.font);
     setVar('--gz-font', GZ_FONTS.stack(s.look.font));
     setVar('--gz-font-head', s.look.head === 'auto' ? 'inherit' : GZ_FONTS.stack(s.look.head));
@@ -1386,12 +1386,12 @@
     // The system's reduced-motion setting wins unless opted out.
     const motion = s.motion.followSystem && calmMQ.matches ? 'off' : s.motion.level;
     setAttr('data-gz-motion', motion);
-    if (kind === 'aurora') need('lib/scene-host.js', () => globalThis.GZ_SCENE_HOST).then(() => globalThis.GZ_SCENE_HOST?.drift(html), () => {});
+    if (kind === 'aurora') need('looks/scene-host.js', () => globalThis.GZ_SCENE_HOST).then(() => globalThis.GZ_SCENE_HOST?.drift(html), () => {});
     // What the background is made of: a course tab's frame wearing the same shows the page's (syncThrough).
     let h = 2166136261;
     for (const c of JSON.stringify([s.bg, colors, partsOf()?.bg, html.getAttribute('data-gz-motion'), bgKind() === 'aurora' && [s.look.surfaceCustom && s.look.surfaceColor, s.look.surfaceTint, s.look.surfaceTintSource === 'course' && surfaceCourse(), s.look.surfaceFrost]])) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
     bgSig = (h >>> 0).toString(36);
-    if (settingsKnown && on(s) && motion === 'expressive') need('features/light.js', () => globalThis.GZ_LIGHT).catch(() => {});
+    if (settingsKnown && on(s) && motion === 'expressive') need('looks/page/light.js', () => globalThis.GZ_LIGHT).catch(() => {});
     moveParts();
     setAttr('data-gz-no-trans', !s.motion.transitions);
     setAttr('data-gz-no-enter', !s.motion.enter);
@@ -1431,13 +1431,13 @@
   // Scheduled dark's clock loads while a schedule is worn.
   const onSchedule = () => (links.length && worn.auto.on && worn.auto.mode === 'schedule' ? worn.auto : null);
   const armFlip = () => {
-    if (onSchedule() || globalThis.GZ_SCHEDULE) need('features/schedule.js', () => globalThis.GZ_SCHEDULE).then(() => GZ_SCHEDULE.arm({ auto: onSchedule, reapply }), () => {});
-    // Look rotation and this page's stickers (features/lookx.js) load once one is in use; the Look's pointer brings it too
+    if (onSchedule() || globalThis.GZ_SCHEDULE) need('looks/page/schedule.js', () => globalThis.GZ_SCHEDULE).then(() => GZ_SCHEDULE.arm({ auto: onSchedule, reapply }), () => {});
+    // Look rotation and this page's stickers (looks/page/lookx.js) load once one is in use; the Look's pointer brings it too
     // (moveParts).
     if (globalThis.GZ_LOOKX) return GZ_LOOKX.sync();
     const k = `stk:${location.origin}${location.pathname.replace(/(.)\/+$/, '$1')}`, x = settings.extras;
     if (!links.length || !x.stickers && x.rotate === 'off') return;
-    local((l) => l.get(k, (r) => { if (x.rotate !== 'off' || x.stickers && r?.[k]?.length) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {}); }));
+    local((l) => l.get(k, (r) => { if (x.rotate !== 'off' || x.stickers && r?.[k]?.length) need('looks/page/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {}); }));
   };
   const clearSettings = () => {
     for (const k of vars) html.style.removeProperty(k);
@@ -1529,7 +1529,7 @@
   // A file asked again came in: what wanted it syncs, the site's part too, and the sweep reads the page again.
   let recovering = false;
   const recover = () => { if (!recovering) { recovering = true; setTimeout(() => { recovering = false; takePart(); reapply(); if (observer) { full = true; if (!timer) timer = setTimeout(flush, 150); } }); } };
-  // New palettes and Looks crossfade in (lib/motion.js, where loaded).
+  // New palettes and Looks crossfade in (core/motion.js, where loaded).
   const swap = (f) => (globalThis.GZ_MOTION?.swap || ((g) => g()))(f);
 
   // ---- the site's own part -------------------------------------------------------------------------
@@ -1544,7 +1544,7 @@
   const part = { ultra: 'GZ_SITE_ULTRA', canvas: 'GZ_SITE_CANVAS' }[site];
   let took = false;
   const takePart = () => { if (!took && part && globalThis[part]) { took = true; Object.assign(X, globalThis[part](I)); } };
-  const partIn = part && !globalThis[part] && need(`content-${site}.js`, () => globalThis[part]).then(() => { takePart(); reapply(); }, () => {});
+  const partIn = part && !globalThis[part] && need(`content/content-${site}.js`, () => globalThis[part]).then(() => { takePart(); reapply(); }, () => {});
   if (!partIn) takePart();
   // Moodle: first paint and lazy navigation.
   if (moodle) {
@@ -1556,9 +1556,9 @@
     };
     X.syncNav = () => {
       if (window.top !== window) return;
-      if (globalThis.GZ_NAVBAR_UI || (links.length && settings.navbar.on)) need('features/navbar-moodle.js', () => globalThis.GZ_NAVBAR_MOODLE).then(() => need('features/navbar.js', () => globalThis.GZ_NAVBAR_UI)).then(() => GZ_NAVBAR_UI.sync(), no);
+      if (globalThis.GZ_NAVBAR_UI || (links.length && settings.navbar.on)) need('navigation/page/navbar-moodle.js', () => globalThis.GZ_NAVBAR_MOODLE).then(() => need('navigation/page/navbar.js', () => globalThis.GZ_NAVBAR_UI)).then(() => GZ_NAVBAR_UI.sync(), no);
       if (globalThis.GZ_NAV_UI) GZ_NAV_UI.sync();
-      else if (links.length && !settings.navbar.on && GZ_CTX.parts()?.nav) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync(), no);
+      else if (links.length && !settings.navbar.on && GZ_CTX.parts()?.nav) need('navigation/page/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync(), no);
     };
   }
   // Wearing or taking off a Look can change the nav's layout (GZ_CTX.parts).
@@ -1574,7 +1574,7 @@
     setCourses: (c, kept = settings.courseLooks) => { settings = { ...settings, courses: c, courseLooks: kept }; applySettings(); },
     // Draft backup, Ultra's what-if calculator, the document buttons and your place in a course (W0d).
     draftEditor: DRAFT_ED, draftAt, docButton, setVar, setDark, PREVIEWS, DOC, darkTheme: () => darkTheme,
-    // A course's own Look's parts replace the theme's (features/lookparts.js).
+    // A course's own Look's parts replace the theme's (looks/page/lookparts.js).
     partsOn, courseLook: lookHere,
     parts: () => (partsOn() && (globalThis.GZ_MODS ? GZ_MODS.parts(globalThis.GZ_XPARTS_PAGE?.now() || null) : globalThis.GZ_XPARTS_PAGE?.now())) || null,
     background: (el) => { stopScene(); if (modBg && modBg !== el) { globalThis.GZ_SCENE_HOST?.clear(modBg); modBg.remove(); } modBg = el || null; syncScene(); },
@@ -1596,7 +1596,7 @@
       lookX = raw?.lookX;
       const s = GZ_SANITIZE(raw, fresh);
       try { sessionStorage.setItem(KEPT, JSON.stringify(firstPaint(s))); } catch { /* blocked or full */ }
-      // A course wearing a saved or gallery Look needs the catalogue (lib/looks.js), read only then.
+      // A course wearing a saved or gallery Look needs the catalogue (looks/looks.js), read only then.
       if (![...Object.values(s.courses.looks), ...Object.values(s.courseLooks)].some((v) => v.startsWith('c:'))) { looks = []; return s; }
       return new Promise((res) => { try { chrome.storage.local.get('lookCatalog', (r) => res(r?.lookCatalog?.looks)); } catch { res(); } })
         .then((l) => (n !== settingsRead ? settingsPending : (looks = Array.isArray(l) ? l.filter((e) => e?.colors && e.look && e.bg) : [], s)));
@@ -1628,7 +1628,7 @@
   else early();
   // Load parts after the theme, only when present.
   const partsIn = (m) => {
-    if (solo && !isPreview && (m || lookX || globalThis.GZ_XPARTS_PAGE)) need('features/lookparts.js', () => globalThis.GZ_XPARTS_PAGE).then(() => GZ_XPARTS_PAGE.read(), () => {});
+    if (solo && !isPreview && (m || lookX || globalThis.GZ_XPARTS_PAGE)) need('looks/page/lookparts.js', () => globalThis.GZ_XPARTS_PAGE).then(() => GZ_XPARTS_PAGE.read(), () => {});
   };
   // Mods start only in the top frame; parts also reach live course tabs.
   const modsIn = (parts = false) => {
@@ -1636,8 +1636,8 @@
       if (parts) partsIn(r?.mods?.length);
       if (!r?.mods?.length || window.top !== window || (globalThis.GZ_MODS && globalThis.GZ_MODWIDGETS)) return;
       chrome.runtime.sendMessage({ type: 'glaze:modpage', op: 'list' }).then((a) => {
-        if (a?.mods?.length && !globalThis.GZ_MODS && chrome.runtime.getManifest().sandbox) need('features/mods.js', () => globalThis.GZ_MODS).then(() => GZ_MODS.start());
-        if (a?.plain?.length && !globalThis.GZ_MODWIDGETS) need('features/modwidgets.js', () => globalThis.GZ_MODWIDGETS).then(() => GZ_MODWIDGETS.start());
+        if (a?.mods?.length && !globalThis.GZ_MODS && chrome.runtime.getManifest().sandbox) need('mods/page/mods.js', () => globalThis.GZ_MODS).then(() => GZ_MODS.start());
+        if (a?.plain?.length && !globalThis.GZ_MODWIDGETS) need('mods/page/modwidgets.js', () => globalThis.GZ_MODWIDGETS).then(() => GZ_MODWIDGETS.start());
       }, no);
     }));
   };

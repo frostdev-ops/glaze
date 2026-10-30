@@ -104,10 +104,10 @@ const PROBE = ({ lang }) => {
     context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2, locale: 'en-US', timezoneId: 'America/New_York',
       reducedMotion: 'reduce', acceptDownloads: true, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(15000);
-    // A Look's web fonts load from their CDNs (lib/fonts.js): refused here like everything else, and counted apart.
+    // A Look's web fonts load from their CDNs (looks/fonts.js): refused here like everything else, and counted apart.
     await context.route('**/*', (r) => { const u = new URL(r.request().url()); if (u.protocol === 'chrome-extension:') return r.continue(); (FONT_HOSTS.has(u.hostname) ? fontRequests : requests).push(r.request().url()); return r.abort(); });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
-    const G = require(path.join(root, 'defaults.js'));
+    const G = require(path.join(root, 'content/defaults.js'));
     const settings = G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true } });
     await worker.evaluate(async ({ settings, data }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings); await chrome.storage.local.set(data); }, { settings, data: records() });
     const HOME = `chrome-extension://${id}/papers.html`;
@@ -500,7 +500,7 @@ const PROBE = ({ lang }) => {
 
     // ---- drop and import .docx; a .txt is refused
     const docx = await home.evaluate(async () => {
-      await GZ_WRITER_PAPER.need(['lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects-docx.js']);
+      await GZ_WRITER_PAPER.need(['core/zip.js', 'core/doctext.js', 'writer/writer-docx.js', 'writer/writer-objects-docx.js']);
       const doc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Imported from Word: the river keeps what the town forgets.' }] }, { type: 'paragraph', content: [{ type: 'text', text: 'A second paragraph of the dropped file.' }] }] };
       return Array.from(GZ_WRITER_DOCX.exportDocx(doc, { format: GZ_WRITER_STYLES.FORMATS.plain, surname: '', title: '' }).bytes);
     });
@@ -741,7 +741,7 @@ const PROBE = ({ lang }) => {
       return btoa(bin);
     });
     await context.route('https://photos.test/**', (r) => r.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from(photo, 'base64') }));
-    const C = require(path.join(root, 'lib/color.js')), F = require(path.join(root, 'lib/fonts.js'));
+    const C = require(path.join(root, 'core/color.js')), F = require(path.join(root, 'looks/fonts.js'));
     const lookOf = (name, over = {}) => { const L = G.GZ_LOOKS.find((x) => x.name === name); return G.GZ_SANITIZE({ ...settings, ...G.GZ_LOOK_APPLY(settings, L), ...over }); };
     const LOOKS = {
       frost: settings,
@@ -896,7 +896,7 @@ const PROBE = ({ lang }) => {
     await apiOpen.evaluate((k) => GZ_WRITER_PAPERS.open().trash(k), KEPT);
     await apiOpen.close();
 
-    // ---- a mod on the Documents page: its items, its calls and their limits (lib/modbroker.js, features/mods.js)
+    // ---- a mod on the Documents page: its items, its calls and their limits (mods/modbroker.js, mods/page/mods.js)
     const MOD = 'docsmodaaaaaaaaa';
     const hooksJs = `
       const save = (k, v) => glaze.storage.set(k, v);
@@ -979,7 +979,7 @@ const PROBE = ({ lang }) => {
     const act = await modData();
     check(act.action.slot === 'documents.card' && act.action.id === 'peek' && act.action.doc.key === md.list.value[nativeList.findIndex((d) => d.key === NOTES)].key && Object.keys(act.action.doc).sort().join() === PUBLIC, `mod: a card item's click tells the mod that card's summary (${JSON.stringify(act.action.doc)})`);
     fs.writeFileSync(path.join(out, 'mod-action.json'), JSON.stringify({ ...act, list: undefined }, null, 1));
-    const notesText = require(path.join(root, 'lib/doc-home.js')).flat((await local(`writerPaper:${NOTES}`)).doc);
+    const notesText = require(path.join(root, 'documents/doc-home.js')).flat((await local(`writerPaper:${NOTES}`)).doc);
     check(act.read.ok && act.read.value.key === act.action.doc.key && act.read.value.title === act.action.doc.title && act.read.value.text === notesText && notesText.includes('the house on Bluestone Road'), 'mod: documents.read (documents.read) gives the document\'s text, as stored');
     check(act.export.ok && /\.docx$/.test(act.export.value.name) && act.export.value.mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' && act.export.value.size > 1000 && act.export.value.zip, `mod: documents.export gives the .docx through its kind (${JSON.stringify(act.export.value)})`);
     await mp.click('.gd-extra button');
@@ -1147,7 +1147,7 @@ const PROBE = ({ lang }) => {
       let t = await clock(mo);
       await mo.focus(`${card(menuKey)} .gd-title`);
       await mo.keyboard.press('Shift+F10');
-      // The menu's box and its button's, and which edge of the menu is near the button (lib/popup.js genie's rule).
+      // The menu's box and its button's, and which edge of the menu is near the button (core/popup.js genie's rule).
       const geo = await mo.evaluate((k) => {
         const m = document.querySelector('.gd-menu'), b = document.querySelector(`.gd-card[data-key="${k}"] .gd-more`).getBoundingClientRect();
         const mt = parseFloat(m.style.top), mh = m.offsetHeight, top = b.top + b.height / 2 <= mt + mh / 2;
@@ -1281,7 +1281,7 @@ const PROBE = ({ lang }) => {
       await mo.focus(`${card(await visibleCard(mo))} .gd-title`);
       await mo.keyboard.press('Shift+F10');
       menuIn = (await since(mo, t, (x) => /gd-menu/.test(x.cls)))[0];
-      check(menuIn && menuIn.n === 2 && menuIn.first.opacity === 0 && menuIn.first.scale === 0.96, 'motion: on Subtle the ⋯ menu settles in (lib/motion.js enter)');
+      check(menuIn && menuIn.n === 2 && menuIn.first.opacity === 0 && menuIn.first.scale === 0.96, 'motion: on Subtle the ⋯ menu settles in (core/motion.js enter)');
       await mo.keyboard.press('Escape');
 
       // Off, and reduced motion followed: nothing animates, and opening a document is a plain page change.

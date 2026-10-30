@@ -1,6 +1,6 @@
 // A small in-memory IndexedDB for running the worker's own source in node: open (with an upgrade the first time), one object
 // store per name, out-of-line keys, get / put / delete / getAllKeys / getAll, and a transaction that completes once its
-// requests have. Values are stored as structured clones, as the real one does. Enough for lib/background.js's stores.
+// requests have. Values are stored as structured clones, as the real one does. Enough for background/background.js's stores.
 const later = (f) => setImmediate(f);
 
 exports.fakeIDB = () => {

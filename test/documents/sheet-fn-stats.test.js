@@ -1,4 +1,4 @@
-// The statistical functions (lib/sheet-fn-stats.js). Each group's cases are the worked examples on Microsoft's page for
+// The statistical functions (documents/sheets/sheet-fn-stats.js). Each group's cases are the worked examples on Microsoft's page for
 // the function (support.microsoft.com/en-us/excel/functions/<name>-function), its table laid out as it lands pasted at
 // A1, header rows and the formula table's own header row included: AVERAGEA(A2:A5,A7) and AVERAGEIFS(B2:B5,...) reach
 // into them, and Microsoft's results count that text. Where a page shows its example only as an image (PERCENTILE,
@@ -10,12 +10,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../../extension/lib/sheet-model.js');
-const C = require('../../extension/lib/sheet-calc.js');
-require('../../extension/lib/sheet-fn-math.js');
-require('../../extension/lib/sheet-fn-logical.js');
-require('../../extension/lib/sheet-fn-text.js');
-require('../../extension/lib/sheet-fn-stats.js');
+const M = require('../../extension/documents/sheets/sheet-model.js');
+const C = require('../../extension/documents/sheets/sheet-calc.js');
+require('../../extension/documents/sheets/sheet-fn-math.js');
+require('../../extension/documents/sheets/sheet-fn-logical.js');
+require('../../extension/documents/sheets/sheet-fn-text.js');
+require('../../extension/documents/sheets/sheet-fn-stats.js');
 
 // A calculated workbook: rows of typed input from A1 (null leaves a cell blank), then { ref: input } cells, where an
 // input { f, a } is an array formula over the range a.
@@ -64,7 +64,7 @@ test('the statistical functions are registered; legacy names are their new funct
   for (const name of names) assert.ok(C.fn(name), name);
   const legacy = { MODE: 'MODE.SNGL', STDEV: 'STDEV.S', STDEVP: 'STDEV.P', VAR: 'VAR.S', VARP: 'VAR.P', RANK: 'RANK.EQ', PERCENTILE: 'PERCENTILE.INC', QUARTILE: 'QUARTILE.INC', FORECAST: 'FORECAST.LINEAR' };
   for (const [old, name] of Object.entries(legacy)) assert.equal(C.fn(old).fn, C.fn(name).fn, old);
-  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-fn-stats.js'), 'utf8')), 'no timers');
+  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/documents/sheets/sheet-fn-stats.js'), 'utf8')), 'no timers');
 });
 
 test('AVERAGEA, MAXA, MINA: text in a range is 0, booleans 1 and 0', () => {

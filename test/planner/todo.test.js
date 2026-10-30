@@ -3,8 +3,8 @@
 process.env.TZ = 'Asia/Tokyo';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const T = require('../../extension/lib/todo.js');
-const D = require('../../extension/defaults.js');
+const T = require('../../extension/planner/todo.js');
+const D = require('../../extension/content/defaults.js');
 
 const NY = 'America/New_York';
 const at = (iso) => Date.parse(iso);

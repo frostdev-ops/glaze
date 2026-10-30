@@ -12,8 +12,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
-const G = require('../../extension/defaults.js');
-const CTABS = require('../../extension/lib/coursetabs.js');
+const G = require('../../extension/content/defaults.js');
+const CTABS = require('../../extension/navigation/coursetabs.js');
 
 // A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
 const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
@@ -70,7 +70,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     const opts = await ctx.newPage();
     await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
     let page = null;
-    // A change the page crossfades (lib/motion.js swap) takes every hit until the crossfade ends: measure after it.
+    // A change the page crossfades (core/motion.js swap) takes every hit until the crossfade ends: measure after it.
     const settings = async (o) => {
       await store(o);
       if (!page) return;
@@ -591,7 +591,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await isolated(() => {
       globalThis.__b8 = { syncs: 0, helds: 0, adds: 0, removes: 0, storeAdds: 0, storeRemoves: 0, runtimeAdds: 0, runtimeRemoves: 0, timeouts: new Set() };
       // Called from this file itself: a call it makes into another module (Glaze's navigation bar's own cleanup) is that module's.
-      const own = () => String(new Error().stack).split('\n')[3]?.includes('features/coursetabs.js');
+      const own = () => String(new Error().stack).split('\n')[3]?.includes('navigation/page/coursetabs.js');
       const sync = GZ_CTABS.sync, held = GZ_CTABS.held;
       GZ_CTABS.sync = (...a) => { __b8.syncs++; return sync(...a); };
       GZ_CTABS.held = (...a) => { __b8.helds++; return held(...a); };

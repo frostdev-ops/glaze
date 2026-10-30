@@ -1,11 +1,11 @@
-// The AI harness's `openai` provider (lib/ai/providers/openai.js) through the one way in (lib/ai/providers.js run), against a
+// The AI harness's `openai` provider (ai/providers/openai.js) through the one way in (ai/providers.js run), against a
 // stand-in server (globalThis.fetch-style stubs, as Rimeward's tests/agent-custom-tools.test.ts uses): the request it sends,
 // the typed single steps down a server's refusal names (remembered per model), the one quiet retry for a 429 and no replay
 // of inference that may have run, streamed answers, and failures as categories with a reference and no key.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const P = require('../../extension/lib/ai/providers.js');
-const O = require('../../extension/lib/ai/providers/openai.js');
+const P = require('../../extension/ai/providers.js');
+const O = require('../../extension/ai/providers/openai.js');
 
 const KEY = 'sk-test-0123456789abcdefSECRET';
 let n = 0;
@@ -370,8 +370,8 @@ test('status of a connection with no model yet: ready once its catalog answers; 
 
 
 test('OpenRouter Anthropic routes emit an explicit stable-block cache marker; other endpoints omit it', async () => {
-  const X = require('../../extension/lib/ai/text.js');
-  const C = require('../../extension/lib/ai/tasks/writer-complete.js');
+  const X = require('../../extension/ai/text.js');
+  const C = require('../../extension/ai/tasks/writer-complete.js');
   const req = C.task.build(C.task.input({ before: 'Earlier the river carried the town history.\nOur group now studies ' }), { text: X, caps: { context: 128000 } });
   for (const config of [cfg({ base: 'https://openrouter.ai/api/v1', model: 'anthropic/claude-sonnet-4.5' }), cfg({ base: 'https://api.anthropic.com/v1' }), cfg()]) {
     const s = server(done('the river.'));

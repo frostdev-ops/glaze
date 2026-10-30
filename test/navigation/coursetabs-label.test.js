@@ -1,7 +1,7 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const path = require('node:path'), fs = require('node:fs'), vm = require('node:vm');
 const root = process.env.GZ_B8_REPO || path.join(__dirname, '../../extension');
-const D = require(path.join(root, 'defaults.js')), L = require(path.join(root, 'lib/coursetabs.js'));
+const D = require(path.join(root, 'content/defaults.js')), L = require(path.join(root, 'navigation/coursetabs.js'));
 
 test('auto short name is the default and explicit old name/code choices stay unchanged', () => {
   assert.equal(D.GZ_SANITIZE({}).tabs.label, 'short');
@@ -29,7 +29,7 @@ test('very long doubtful course names keep the full value without applying term 
 });
 
 test('nickname wins, explicit full/code choices remain, and the closed-tab note shares the display label', () => {
-  const source = fs.readFileSync(path.join(root, 'features/coursetabs.js'), 'utf8');
+  const source = fs.readFileSync(path.join(root, 'navigation/page/coursetabs.js'), 'utf8');
   const a = source.indexOf('  const labelFor = '), b = source.indexOf('  const draw = ', a);
   assert.ok(a >= 0);
   let nick = '', label = 'short';

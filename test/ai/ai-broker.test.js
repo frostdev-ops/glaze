@@ -1,4 +1,4 @@
-// The AI harness's broker (lib/ai/broker.js) on a stand-in port, storage and server: every check before anything is sent, the
+// The AI harness's broker (ai/broker.js) on a stand-in port, storage and server: every check before anything is sent, the
 // model checked against the connection's catalog, the run's events and its end, one run at a time for a tab's feature, a
 // rate limit, cancel and a closed port ending the request, a connection changed mid-run sending nothing more, confirms
 // claimed once, and no address, model or key ever going to a page; then the writer's modes: plain text streamed, supersede,
@@ -6,13 +6,13 @@
 // is test/ai/ai-worker.test.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const B = require('../../extension/lib/ai/broker.js');
-const T = require('../../extension/lib/ai/task.js');
-const TL = require('../../extension/lib/ai/tools.js');
-const S = require('../../extension/lib/ai/schema.js');
-const M = require('../../extension/lib/ai/models.js');
-const E = require('../../extension/lib/ai/endpoint.js');
-require('../../extension/lib/ai/providers/openai.js');
+const B = require('../../extension/ai/broker.js');
+const T = require('../../extension/ai/task.js');
+const TL = require('../../extension/ai/tools.js');
+const S = require('../../extension/ai/schema.js');
+const M = require('../../extension/ai/models.js');
+const E = require('../../extension/ai/endpoint.js');
+require('../../extension/ai/providers/openai.js');
 
 const KEY = 'sk-live-ABCDEF0123456789';
 const CONN = { provider: 'openai', base: 'https://api.example.com/v1', model: 'gpt-x', key: KEY, generation: 'gen-1' };
@@ -61,7 +61,7 @@ const run = (input = { text: 'hello' }, extra = {}) => ({ id: 1, op: 'run', feat
 const types = (p) => p.posted.map((m) => m.type);
 
 test('image preparation persists only within the worker-verified account and assignment', async () => {
-  const image = require('../../extension/lib/ai/tasks/writer-image.js');
+  const image = require('../../extension/ai/tasks/writer-image.js');
   const reading = { description: 'The picture requires two sources.', requirements: ['Use two sources.'], complete: true, reason: '', relevance: 'relevant' };
   const local = area(), calls = [];
   let account = '_1_1', assignment = '_2_1/_3_1';
@@ -86,7 +86,7 @@ test('image preparation persists only within the worker-verified account and ass
 test.beforeEach(() => { B._reset(); M._reset(); });
 
 test('image preparation has its own running slot alongside ordinary writing', async () => {
-  const image = require('../../extension/lib/ai/tasks/writer-image.js');
+  const image = require('../../extension/ai/tasks/writer-image.js');
   let release;
   const reading = { description: 'A readable instruction.', requirements: ['Use two sources.'], complete: true, reason: '', relevance: 'relevant' };
   const e = env({ settings: async () => ({ on: true, use: 'main', features: { writing: true } }),
@@ -123,7 +123,7 @@ test('an endpoint run does not start the local inference keepalive', async (t) =
 });
 
 test('AI outline defaults on with AI configured, uses Feedback’s model, and honors its independent opt-out', async () => {
-  const O = require('../../extension/lib/ai/tasks/writer-outline.js'), calls = [];
+  const O = require('../../extension/ai/tasks/writer-outline.js'), calls = [];
   const settings = { on: true, model: { use: 'main', model: 'unused-default' }, models: { writing: { use: 'main', model: 'gpt-x' } }, features: { writing: false } };
   const e = env({ settings: async () => settings, task: async (id) => id === O.task.id ? O.task : null,
     fetch: async (url, init) => { if (url.endsWith('/models')) return models(); calls.push(JSON.parse(init.body)); return answer({ heading: 'An existing argument', role: 'body' }); } });
@@ -510,7 +510,7 @@ test('cancelling while the vault is pending releases admission without a late re
 });
 
 test('Settings lists only shipped providers registered in this browser', async () => {
-  const settings = require('../../extension/lib/ai/settings.js'), providers = require('../../extension/lib/ai/providers.js');
+  const settings = require('../../extension/ai/settings.js'), providers = require('../../extension/ai/providers.js');
   settings.PROVIDERS.push('apple'); // Safari's package can ship a provider that does not register elsewhere.
   try {
     assert.equal(providers.get('apple'), null);
@@ -519,7 +519,7 @@ test('Settings lists only shipped providers registered in this browser', async (
 });
 
 test('syllabus admission requires the disclosed destination before even fetching the catalog', async () => {
-  const task = require('../../extension/lib/ai/tasks/syllabus-read.js').task;
+  const task = require('../../extension/ai/tasks/syllabus-read.js').task;
   for (const to of [undefined, '', 'previous.example.test']) {
     const e = env({ task: async () => task }), p = open(e);
     p.say(run({ text: 'Instructor: Dr. Ada Example' }, { task: task.id, ...(to !== undefined && { to }) }));
@@ -531,7 +531,7 @@ test('syllabus admission requires the disclosed destination before even fetching
 });
 
 test('a connection changed after syllabus status cannot send to a host the dialog did not disclose', async () => {
-  const task = require('../../extension/lib/ai/tasks/syllabus-read.js').task;
+  const task = require('../../extension/ai/tasks/syllabus-read.js').task;
   const e = env({ task: async () => task, reach: async () => true }), p = open(e);
   p.say({ id: 10, op: 'status', feature: 'syllabus' });
   await flush();
@@ -546,7 +546,7 @@ test('a connection changed after syllabus status cannot send to a host the dialo
 });
 
 test('syllabus admission accepts the exact disclosed host and port without revealing a path or key', async () => {
-  const task = require('../../extension/lib/ai/tasks/syllabus-read.js').task;
+  const task = require('../../extension/ai/tasks/syllabus-read.js').task;
   const none = { text: null, quote: null };
   const output = { prof: { name: none, email: none, office: none, note: none }, hours: [], meetings: [], scale: [], weights: [], dates: [], week1: none };
   const calls = [];
@@ -587,7 +587,7 @@ test('a disclosed task retains its admitted destination when a pending tool is c
 });
 
 // ---- the writer's harness modes ---------------------------------------------------------------------------------------
-const P = require('../../extension/lib/ai/providers.js');
+const P = require('../../extension/ai/providers.js');
 const finish = T.define({ id: 'example.finish', version: 1, output: 'text', stream: true, rate: { supersede: true, perMinute: 30 },
   input: (raw) => (typeof raw?.text === 'string' ? raw : null), check: (text) => text,
   build: (input, { text }) => text.request({ system: 'Finish the sentence.', context: [{ label: 'prompt', text: 'Rivers' }], data: [{ label: 'before', text: input.text }] }) });
@@ -824,7 +824,7 @@ test('streamed text with split Unicode or mixed credential escapes never exposes
 
 
 test('cross-port supersede suppresses late output; unknown cancels and old cleanup leave the new slot alone', async () => {
-  const settings = require('../../extension/lib/ai/settings.js'), pending = [], opened = [];
+  const settings = require('../../extension/ai/settings.js'), pending = [], opened = [];
   P.add({ id: 'review-late', config: (c) => c, caps: () => ({ text: true, json: true, stream: true }), status: async () => ({ state: 'ready' }),
     run: (req, cfg, opts) => new Promise((resolve) => pending.push({ ...opts, resolve })) });
   settings.PROVIDERS.push('review-late');
@@ -971,8 +971,8 @@ test('a provider is kept at its own address with only a key; an endpoint of the 
 
 
 test('real completion bounds a 50-page request and stops the sixty-first pause in one minute', async () => {
-  const C = require('../../extension/lib/ai/tasks/writer-complete.js');
-  const X = require('../../extension/lib/ai/text.js');
+  const C = require('../../extension/ai/tasks/writer-complete.js');
+  const X = require('../../extension/ai/text.js');
   const seen = [];
   const paper = 'A paragraph about the river and the town history. '.repeat(2000) + '\nOur group studies ';
   assert.ok(paper.length > 95000);

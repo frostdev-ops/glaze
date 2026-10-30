@@ -76,7 +76,7 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
     b.toggleAttribute('data-job', !!j);
     b.style.setProperty('--gz-pct', `${j?.done ? 0 : j?.pct || 0}%`);
   };
-  // Glaze's Allow frame (features/allow.html) beside a folder's button, for a host the worker can't reach yet: its one button
+  // Glaze's Allow frame (courses/allow.html) beside a folder's button, for a host the worker can't reach yet: its one button
   // asks the browser for that host. → whether it was allowed; no when the download stops first or the button is gone.
   // Only the frame's own answer counts (a page can post anything); the worker checks the grant again either way.
   const allowFrame = (fid, host, signal, ticket) => new Promise((resolve) => {
@@ -85,7 +85,7 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
     const f = document.createElement('iframe');
     f.className = 'gz-dl-allow';
     f.title = t('Allow {host}', { host });
-    f.src = `${chrome.runtime.getURL('features/allow.html')}#${host}`;
+    f.src = `${chrome.runtime.getURL('courses/allow.html')}#${host}`;
     const channel = new MessageChannel();
     const done = (yes) => { channel.port1.close(); channel.port2.close(); signal.removeEventListener('abort', stop); f.remove(); resolve(yes); };
     const heard = (e) => {
@@ -111,7 +111,7 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
     const say = (label, pct = 0) => { Object.assign(job, { label, pct }); paintDl(fid); };
     say(job.label);
     // Only the fields used: never an item's contentDetail, where an LTI link keeps its tool's secret and key. Through
-    // lib/ultra.js's reader: GET, this site, redirects refused (one means signed out).
+    // courses/ultra.js's reader: GET, this site, redirects refused (one means signed out).
     const get = (path) => GZ_ULTRA.read({ origin: location.origin, signal: ctl.signal }).get(`/learn/api/${path}`);
     const list = (id) => get(`v1/courses/${cid}/contents/${id}/children?limit=200&fields=${GZ_ULTRA.FILES_FIELDS}`).then((j) => j.results || []);
     const found = [];
@@ -129,9 +129,9 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
     const mb = (n) => new Intl.NumberFormat(GZ_I18N.locale(locale()), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 0 }).format(n / 2 ** 20);
     const tooBig = (label) => Object.assign(new Error(label), { said: true });
     try {
-      await need('lib/zip.js', () => globalThis.GZ_ZIP);
+      await need('core/zip.js', () => globalThis.GZ_ZIP);
       if (ultra) {
-        await need('lib/ultra.js', () => globalThis.GZ_ULTRA);
+        await need('courses/ultra.js', () => globalThis.GZ_ULTRA);
         const r = await GZ_ULTRA.files({ root: fid, list, isPage, attachments, origin: location.origin, safeName: GZ_ZIP.safeName });
         found.push(...r.found);
         ({ skipped, failed: unavailable } = r);
@@ -188,7 +188,7 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
   };
   // Canvas: a module gets its button from the rows Canvas drew (a File row is `.attachment`), with no request. Only a
   // collapsed module that drew none (Canvas may draw them as it opens) is asked about: once a page, through the site's
-  // queue (lib/lmsq.js), those on screen first; a failed answer may be asked again a minute later. Nothing is asked again
+  // queue (courses/lmsq.js), those on screen first; a failed answer may be asked again a minute later. Nothing is asked again
   // on a timer: the click reads the list afresh.
   let canvasAsked = new Map(); // `${cid}/${module id}` → { at, files (undefined until answered), pending }
   const placeCanvas = (item, header, fid, files) => {
@@ -227,7 +227,7 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
         const a = { at: Date.now(), pending: true };
         canvasAsked.set(k, a);
         const prio = item.getBoundingClientRect().top < innerHeight ? 0 : 1;
-        need('lib/lmsq.js', () => globalThis.GZ_LMSQ).then(() => GZ_LMSQ.run(() => {
+        need('courses/lmsq.js', () => globalThis.GZ_LMSQ).then(() => GZ_LMSQ.run(() => {
           if (!ctx.on() || !ctx.settings().enhance.download || !item.isConnected || canvasCourseId() !== cid) throw new Error('stale');
           return moduleItems(cid, fid);
         }, prio)).then((list) => { a.files = list.some((c) => c.type === 'File'); }, () => {}).finally(() => {

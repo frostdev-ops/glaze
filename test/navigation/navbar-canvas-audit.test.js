@@ -3,8 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const { El, matches } = require('../stand-in-dom.js');
-const G = require('../../extension/defaults.js'), M = require('../../extension/lib/navbar.js');
-const L = require('../../extension/lib/navlayout.js'), N = require('../../extension/lib/nav-items.js');
+const G = require('../../extension/content/defaults.js'), M = require('../../extension/navigation/navbar.js');
+const L = require('../../extension/navigation/navlayout.js'), N = require('../../extension/navigation/nav-items.js');
 const read = (file) => fs.readFileSync(require.resolve(`../../extension/${file}`), 'utf8');
 const plain = (v) => JSON.parse(JSON.stringify(v));
 const origin = 'https://school.instructure.com';
@@ -120,9 +120,9 @@ async function setup({ path = '/', shown = '', frameDoc = null, width = 1440, na
     GZ_CTX: { site: 'canvas', t: (s) => s, settings: () => settings, on: () => true, parts: () => ({}), locale: () => 'en',
       setVar: (key, value) => document.documentElement.style.setProperty(key, value) },
   });
-  const factory = vm.runInContext(read('features/navbar-canvas.js') + '\nGZ_NAVBAR_CANVAS;', context);
+  const factory = vm.runInContext(read('navigation/page/navbar-canvas.js') + '\nGZ_NAVBAR_CANVAS;', context);
   context.GZ_NAVBAR_CANVAS = (x) => (adapter = factory(x));
-  const ui = vm.runInContext(read('features/navbar.js') + '\nGZ_NAVBAR_UI;', context);
+  const ui = vm.runInContext(read('navigation/page/navbar.js') + '\nGZ_NAVBAR_UI;', context);
   ui.sync(); await Promise.resolve();
   const host = document.getElementById('gz-navbar'), root = host.shadowRoot;
   root.querySelector('link').dispatchEvent({ type: 'load' });
@@ -200,7 +200,7 @@ test('a rail course-menu re-render restores its focused link', async () => {
 });
 
 test('in forced colours the bar still shows where you are and what is pressed', () => {
-  const css = read('features/navbar.css'), at = css.indexOf('@media screen and (forced-colors: active)');
+  const css = read('navigation/page/navbar.css'), at = css.indexOf('@media screen and (forced-colors: active)');
   assert.ok(at > 0, 'a forced-colours block');
   const fc = css.slice(at, css.indexOf('\n}\n', at));
   // The markers and the current rows are fills and shadows, which forced colours drop; Pinned is a fill too.
@@ -210,7 +210,7 @@ test('in forced colours the bar still shows where you are and what is pressed', 
 });
 
 test('rail and top room follow width boundaries and float or embed dimensions', async () => {
-  const css = read('features/navbar.css');
+  const css = read('navigation/page/navbar.css');
   const open = Number(css.match(/--open: (\d+)px/)[1]), shut = Number(css.match(/--shut: (\d+)px/)[1]);
   const gutter = Number(css.match(/--gutter: (\d+)px/)[1]);
   for (const style of ['float', 'embed']) for (const place of ['rail', 'top']) {
@@ -303,9 +303,9 @@ test('same-site custom navbar links preserve running Canvas frames', async () =>
   const link = h.root.querySelector('.rail [data-id="link:aaaaaaaaaaaa"]'), event = h.click(link);
   // The document's Canvas link handler sees the shadow host as event.target.
   // Exercise that real fallback too: it cannot rescue a shadow-root anchor.
-  const source = read('features/coursetabs.js');
+  const source = read('navigation/page/coursetabs.js');
   const outerClick = vm.runInNewContext(source.slice(source.indexOf('  const onCourseLink ='), source.indexOf('  // A course page in its course')) + '\nonCourseLink;', {
-    L: require('../../extension/lib/coursetabs.js'), Element: NavEl, on: true, preview: false, framed: '', PAGE: 'page', showing: '',
+    L: require('../../extension/navigation/coursetabs.js'), Element: NavEl, on: true, preview: false, framed: '', PAGE: 'page', showing: '',
     document: h.document, location: h.document.location, frames: new Map([['12', {}]]), here: () => '',
     openPage: (url) => h.routed.push(origin + url), openAt: (_, url) => h.routed.push(origin + url),
   });
@@ -439,18 +439,18 @@ test("Canvas's footer is in its page, above the bar's room: the bar isn't raised
   h.ui.sync();
   assert.equal(h.host.hasAttribute('data-footer'), false, 'raised for a footer that is not under it, the bar covered Canvas\'s Previous and Next');
   // Canvas fixes its Previous and Next bar to the window's bottom (inline, z-index 100), under the phone bar.
-  const css = read('canvas.css');
+  const css = read('content/canvas.css');
   const rule = 'html[data-gz-navbar]:not([data-gz-navbar~="none"]) #module_sequence_footer:is([style*="fixed"], [data-gz-fixed-bottom]) { bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }';
   assert.ok(css.match(/@media \(max-width: 899\.98px\) \{[\s\S]*?\n\}/g).some((block) => block.includes(rule)), 'lifted only where the bar runs along the bottom');
 });
 
 test("a Canvas jQuery UI dialog showing takes Glaze's layers under it with the page, and Canvas keeps its own order", () => {
-  const css = read('canvas.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = read('content/canvas.css').replace(/\/\*[\s\S]*?\*\//g, '');
   const rule = 'body:has(> .ui-widget-overlay:not([style*="display: none"]), > .ui-dialog:not([style*="display: none"])) :is(#gz-navbar, #gz-sb-launch, #gz-sb-edge, #gz-ctabs-frames, #gz-float .gz-w, #gz-float[data-stack]) { z-index: 998 !important; }';
   assert.ok(css.includes(rule), 'while a dialog or its backdrop shows (jQuery hides them with an inline display: none)');
   // jQuery UI starts its dialogs at z-index 1000, inline; each of these layers stands over that otherwise.
   const z = (file, start) => { const src = read(file), at = src.indexOf(start); return Number(src.slice(at, src.indexOf('}', at)).match(/z-index: (\d+)/)[1]); };
-  for (const [file, start] of [['features/navbar.css', ':host {'], ['features/sidebar.css', '.gz-sb-edge, .gz-sb-launch {'], ['features/coursetabs.css', '#gz-ctabs-frames {']]) assert.ok(z(file, start) > 1000, `${file} ${start}`);
+  for (const [file, start] of [['navigation/page/navbar.css', ':host {'], ['navigation/page/sidebar.css', '.gz-sb-edge, .gz-sb-launch {'], ['navigation/page/coursetabs.css', '#gz-ctabs-frames {']]) assert.ok(z(file, start) > 1000, `${file} ${start}`);
   // Canvas's own stacking among its dialogs, their backdrops and what they open is never overridden.
   assert.doesNotMatch(css, /\.ui-(dialog|widget-overlay)[^{,]*\{[^}]*z-index/);
 });
@@ -474,7 +474,7 @@ test("on a short window the rail's list keeps the open course's tab in view, and
   // Room for all of it: no fade.
   height = 300; h.events.resize();
   assert.equal(list.getAttribute('data-scroll'), null);
-  const css = read('features/navbar.css');
+  const css = read('navigation/page/navbar.css');
   for (const at of ['end', 'start']) assert.match(css, new RegExp(`\\.list\\[data-scroll~="${at}"\\] \\{ -webkit-mask-image: linear-gradient\\(to ${at === 'end' ? 'bottom' : 'top'}, #000 calc\\(100% - 28px\\), transparent\\);`));
 });
 

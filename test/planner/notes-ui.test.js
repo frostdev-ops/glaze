@@ -1,5 +1,5 @@
-// The notes app around lib/notes.js: who the service worker takes notes changes from, the rules the page keeps when it
-// asks Canvas for links, and the whole view (features/notes.js) on a small stand-in page with the real lib/notes.js as
+// The notes app around planner/notes.js: who the service worker takes notes changes from, the rules the page keeps when it
+// asks Canvas for links, and the whole view (planner/page/notes.js) on a small stand-in page with the real planner/notes.js as
 // its worker: faked events, export snapshots and settling, uploads, duplicate, and the course-home registration.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -15,7 +15,7 @@ test("the worker takes a page's notes changes for its own site's index only", as
   const area = (s) => ({ get: async (k) => Object.fromEntries([].concat(k ?? Object.keys(s)).filter((x) => x in s).map((x) => [x, structuredClone(s[x])])), set: async (v) => { Object.assign(s, structuredClone(v)); }, remove: async () => {} });
   const context = vm.createContext({
     URL, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto, atob, btoa,
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), context); },
     navigator: {}, // no IndexedDB here: a change that gets past the sender check fails on the database, closed
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
@@ -23,7 +23,7 @@ test("the worker takes a page's notes changes for its own site's index only", as
       storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener() {} } },
     },
   });
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   const send = (msg, sender) => new Promise((res) => { for (const f of listeners) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r)))) === true) return; res('ignored'); });
   const page = (url) => ({ id: 'glaze', tab: {}, url });
   const m = { type: 'glaze:notesapp', key: 'notesIdx:https://school.instructure.com/5', op: 'search', q: 'x' };
@@ -35,7 +35,7 @@ test("the worker takes a page's notes changes for its own site's index only", as
   ]) assert.deepEqual(await send(m, sender), { ok: false, error: 'sender' }, why);
   assert.deepEqual(await send({ ...m, key: 'notesIdx:https://school.instructure.com/5/../6' }, page('https://school.instructure.com/')), { ok: false, error: 'sender' }, 'a key outside the pattern');
   assert.deepEqual(await send(m, page('https://school.instructure.com/courses/1')), { ok: false, error: 'db' }, 'its own site: past the check, and the database it lacks fails it');
-  // Blackboard Ultra: a page under /ultra on https, on an Ultra site the student approved (lib/background.js approved; the
+  // Blackboard Ultra: a page under /ultra on https, on an Ultra site the student approved (background/background.js approved; the
   // yes puts its origin on storage.local `ultra`), for its own origin's accounts (Ultra's ids are _N_N).
   const u = { ...m, key: 'notesIdx:https://school.blackboard.test/_5_1' };
   // Codex B5 review: an /ultra address alone isn't Ultra. WP-C2: nor is a page that says it is ('glaze:ultra' is gone).
@@ -54,7 +54,7 @@ test("the worker takes a page's notes changes for its own site's index only", as
   ]) assert.deepEqual(await send(u, page(url)), { ok: false, error: 'sender' }, why);
   assert.deepEqual(await send({ ...u, key: 'notesIdx:https://school.blackboard.test/_5_1x' }, page('https://school.blackboard.test/ultra/course')), { ok: false, error: 'sender' }, 'a key outside the pattern');
   assert.deepEqual(await send(u, page('https://school.blackboard.test/ultra/courses/_7_1/outline')), { ok: false, error: 'db' }, 'an Ultra page, its own site');
-  // The Dashboard notes' writes (lib/widgets.js saveNote), the same rule.
+  // The Dashboard notes' writes (core/widgets.js saveNote), the same rule.
   const d = { type: 'glaze:notes', key: 'notes:https://school.blackboard.test/_5_1', text: 'hi', at: 1 };
   assert.deepEqual(await send(d, page('https://other.blackboard.test/ultra/course')), { ok: false, error: 'sender' }, "another Ultra site's notes");
   assert.equal((await send(d, page('https://school.blackboard.test/ultra/course'))).ok, true, 'its own');
@@ -66,7 +66,7 @@ test("the worker takes a page's notes changes for its own site's index only", as
 });
 
 test('the Canvas link picker: read-only GETs on this site, redirects refused, stopped when the picker or the view closes', () => {
-  const src = read('features/notes.js');
+  const src = read('planner/page/notes.js');
   const fetches = [...src.matchAll(/\bfetch\(([^;]+)\);/g)].map((x) => x[1]);
   assert.equal(fetches.length, 1, 'one place asks Canvas for anything');
   assert.match(fetches[0], /^url, \{ credentials: 'same-origin', redirect: 'error', signal,/);
@@ -80,8 +80,8 @@ test('the Canvas link picker: read-only GETs on this site, redirects refused, st
 });
 
 // ---- the whole view on a stand-in page -----------------------------------------------------------------------------
-const N = require('../../extension/lib/notes.js');
-const SOURCE = read('features/notes.js');
+const N = require('../../extension/planner/notes.js');
+const SOURCE = read('planner/page/notes.js');
 const settle = async (n = 20) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const later = () => { let resolve; const p = new Promise((r) => { resolve = r; }); return Object.assign(p, { resolve }); };
@@ -89,19 +89,19 @@ const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
 const { El } = require('../stand-in-dom.js');
 
-// A Canvas course home with Glaze and Notes on; the worker is lib/notes.js run over memory, its answers and storage's
+// A Canvas course home with Glaze and Notes on; the worker is planner/notes.js run over memory, its answers and storage's
 // change events arriving later, as in a browser. env.activation: navigator.userActivation.isActive; env.hold(m): a
-// promise the worker waits for before it runs m; env.zipHold: a promise loading lib/zip.js waits for. on: the page's own
+// promise the worker waits for before it runs m; env.zipHold: a promise loading core/zip.js waits for. on: the page's own
 // copy of the Notes switch; stored: the switch in storage.sync (the two differ just after it is turned on elsewhere);
 // live: whether Glaze has finished starting on the page (GZ_CTX.on()); enabled: the page's own copy of the master switch.
 // env.syncHold: a promise a storage.sync read answers after (with what was stored when it was asked);
 // env.changeSync(patch): those items changed in storage.sync, reported as storage reports them (only what changed).
 // env.syncFail: a storage.sync read throws (the extension reloaded, or storage failed).
-const D = require('../../extension/defaults.js');
+const D = require('../../extension/content/defaults.js');
 // ultra: an Ultra course outline instead (its right column, the student's _N_N id, Ultra's course list and the
 // course's content items as content-ultra.js hands them over).
 const ULTRA = 'https://school.blackboard.test';
-const U = require('../../extension/lib/ultra.js');
+const U = require('../../extension/courses/ultra.js');
 const page = ({ on = true, stored = on, live = true, enabled = true, ultra = false, items = [] } = {}) => {
   const doc = { activeElement: null, root: null };
   const make = (t) => {
@@ -163,16 +163,16 @@ const page = ({ on = true, stored = on, live = true, enabled = true, ultra = fal
     // The view's minute-long timers (revoking a download's address) mustn't keep the test process waiting.
     setTimeout: (f, ms) => { const h = setTimeout(f, ms); if (ms >= 1000) h.unref(); return h; },
     addEventListener() {}, URL: URLs, Blob, Date, clearTimeout, crypto: globalThis.crypto, Promise, JSON, structuredClone, AbortController,
-    GZ_NOTES: N, GZ_DOCTEXT: require('../../extension/lib/doctext.js'), GZ_ZIP: require('../../extension/lib/zip.js'), GZ_I18N: require('../../extension/lib/i18n.js'), GZ_PAGE: require('../../extension/lib/page.js'),
+    GZ_NOTES: N, GZ_DOCTEXT: require('../../extension/core/doctext.js'), GZ_ZIP: require('../../extension/core/zip.js'), GZ_I18N: require('../../extension/core/i18n.js'), GZ_PAGE: require('../../extension/core/page.js'),
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_LOOKS: D.GZ_LOOKS, GZ_ALL_PRESETS: D.GZ_ALL_PRESETS, GZ_LOOK_ON: D.GZ_LOOK_ON, GZ_LOOK_APPLY: D.GZ_LOOK_APPLY,
     GZ_CTX: {
       solo: true,
       t: (k, v) => k.replace(/\{(\w+)\}/g, (m, x) => v?.[x] ?? m), on: () => env.live, locale: () => 'en', settings: () => D.GZ_SANITIZE({ enabled, enhance: { notes: on, palette: true, search: false } }), wordsIn: new Set(),
       profile: async () => ({ id: 5 }), canvasCourses: async () => [{ id: 7, name: 'Biology' }, { id: 9, name: 'History' }],
-      need: (file) => (file === 'features/sharing.js' && env.shareHold) || (file === 'lib/zip.js' && env.zipHold) || Promise.resolve(),
-      // What the command palette (features/palette.js) asks of the page.
+      need: (file) => (file === 'sharing/page/sharing.js' && env.shareHold) || (file === 'core/zip.js' && env.zipHold) || Promise.resolve(),
+      // What the command palette (navigation/page/palette.js) asks of the page.
       site: 'canvas', capi: async () => [], canvasCourseId: () => '7', dueWeek: async () => [], nickOf: () => '', courseList: () => ({}),
-      // Ultra: everything asked of Blackboard goes through lib/ultra.js's reader; the old helpers aren't there.
+      // Ultra: everything asked of Blackboard goes through courses/ultra.js's reader; the old helpers aren't there.
       ...(ultra && { site: 'ultra', profile: undefined, canvasCourses: undefined, myCourses: undefined, courseItems: undefined }),
     },
     // The real reader over a stand-in fetch that records what it was asked and how (env.fetched).
@@ -265,7 +265,7 @@ test("a control a page script moves out of the view and fakes an event on does n
 test("the palette's Notes rows open Notes only for a real click or Enter, carried through loading the notes code", async () => {
   const P = page();
   await P.seed([{ id: id(2), title: 'Never opened', course: '7', html: '<p>Previously closed private text</p>' }]);
-  const cmd = P.run(read('features/palette.js'));
+  const cmd = P.run(read('navigation/page/palette.js'));
   const row = async () => {
     cmd.open();
     await settle();
@@ -322,7 +322,7 @@ test('turning Notes on puts the Course notes hook into course homes already open
   const tabs = [{ id: 4, url: 'https://school.instructure.com/courses/7' }, { id: 5, url: 'https://canvadocs.instructure.com/courses/1/x' }];
   const context = vm.createContext({
     URL, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto, atob, btoa, navigator: {},
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), context); },
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
@@ -337,38 +337,38 @@ test('turning Notes on puts the Course notes hook into course homes already open
       },
     },
   });
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   const toggle = async (enhance) => { store.sync.enhance = enhance; for (const f of changed) f({ enhance: {} }, 'sync'); await wait(10); };
   await toggle({ notes: true });
-  assert.deepEqual(injected, [[4, [0], 'features/notes-home.js']], 'the open course home, top frame; never the document viewer');
+  assert.deepEqual(injected, [[4, [0], 'planner/page/notes-home.js']], 'the open course home, top frame; never the document viewer');
   await toggle({ notes: true, todo: true });
   assert.equal(injected.length, 1, 'only when it is turned on');
   await toggle({ notes: false });
   await toggle({ notes: true });
   assert.equal(injected.length, 2, 'on again: again');
-  // A Canvas site found on a page (lib/detect.js): the question first (WP-C2); on Yes, Glaze, then the hook, and the site's
+  // A Canvas site found on a page (content/detect.js): the question first (WP-C2); on Yes, Glaze, then the hook, and the site's
   // pages registered for it.
   injected.length = 0;
   const found = { id: 'glaze', tab: { id: 8 }, frameId: 0, url: 'https://canvas.new.edu/courses/3' };
   for (const f of listeners) f('canvas', found, () => {});
   await wait(20);
-  assert.deepEqual(injected.map(([tab, , files]) => [tab, files]), [[8, 'lib/i18n.js,features/consent.js']]);
+  assert.deepEqual(injected.map(([tab, , files]) => [tab, files]), [[8, 'core/i18n.js,settings/page/consent.js']]);
   assert.ok(!registered.some((s) => s.id === 'https://canvas.new.edu/*' || s.matches.includes('https://canvas.new.edu/courses/*')), 'nothing registered before the yes');
   injected.length = 0;
   for (const f of listeners) f({ type: 'glaze:consent', op: 'yes', kind: 'canvas' }, found, () => {});
   await wait(20);
-  const canvasFirst = require('../../extension/manifest.json').content_scripts.find((c) => c.js.includes('content-canvas.js')).js; // Canvas's first script (B0b)
-  assert.deepEqual(injected.map(([tab, , files]) => [tab, files]), [[8, canvasFirst.filter((f) => f !== 'lib/i18n.js').join()], [8, 'features/notes-home.js']], 'lib/i18n.js came with the question');
+  const canvasFirst = require('../../extension/manifest.json').content_scripts.find((c) => c.js.includes('content/content-canvas.js')).js; // Canvas's first script (B0b)
+  assert.deepEqual(injected.map(([tab, , files]) => [tab, files]), [[8, canvasFirst.filter((f) => f !== 'core/i18n.js').join()], [8, 'planner/page/notes-home.js']], 'core/i18n.js came with the question');
   assert.ok(registered.find((s) => s.id === 'gz-notes-home').matches.includes('https://canvas.new.edu/courses/*'));
 });
 
 test("the hook in a page whose own settings haven't caught up reads the switch from storage", async () => {
   const P = page({ on: false, stored: true });
-  P.run(read('features/notes-home.js'));
+  P.run(read('planner/page/notes-home.js'));
   await settle();
   assert.ok(P.doc.getElementById('gz-nt-course'), 'Course notes is there at once');
   const Q = page({ on: true, stored: false });
-  Q.run(read('features/notes-home.js'));
+  Q.run(read('planner/page/notes-home.js'));
   await settle();
   assert.equal(Q.doc.getElementById('gz-nt-course'), null, 'and not when storage says it is off');
 });
@@ -590,7 +590,7 @@ test('the Course notes button costs the first script nothing: the worker registe
   const area = (s) => ({ get: async (k) => Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, structuredClone(s[x])])), set: async (v) => { Object.assign(s, structuredClone(v)); } });
   const context = vm.createContext({
     URL, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto, atob, btoa, navigator: {},
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), context); },
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener() {} },
         onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
@@ -603,11 +603,11 @@ test('the Course notes button costs the first script nothing: the worker registe
       },
     },
   });
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   const toggle = async (on) => { store.sync.enhance = { notes: on }; for (const f of changed) f({ enhance: {} }, 'sync'); await wait(10); };
   await toggle(true);
   const s = registered.find((x) => x.id === 'gz-notes-home');
-  assert.deepEqual([...s.js], ['features/notes-home.js']);
+  assert.deepEqual([...s.js], ['planner/page/notes-home.js']);
   assert.deepEqual([...s.matches].sort(), ['https://*.instructure.com/courses/*', 'https://canvas.school.edu/courses/*']);
   assert.deepEqual([...s.excludeMatches], ['https://canvadocs.instructure.com/*']);
   await toggle(false);
@@ -617,15 +617,15 @@ test('the Course notes button costs the first script nothing: the worker registe
     const asked = [];
     const ctx = vm.createContext({ window: {}, location: { pathname }, GZ_CTX: { solo: true, need: (f) => { asked.push(f); return Promise.resolve(); } }, GZ_NOTES_UI: { home() {} } });
     ctx.window.top = ctx.window;
-    vm.runInContext(read('features/notes-home.js'), ctx);
-    assert.deepEqual(asked, want ? ['features/notes.js'] : [], pathname);
+    vm.runInContext(read('planner/page/notes-home.js'), ctx);
+    assert.deepEqual(asked, want ? ['planner/page/notes.js'] : [], pathname);
   }
-  assert.ok(!read('content.js').includes('notes.js'), 'content.js has no notes hook');
+  assert.ok(!read('content/content.js').includes('notes.js'), 'content.js has no notes hook');
 });
 
 test('Course notes appears even when the hook runs before Glaze has finished starting on the page', async () => {
   const P = page({ on: false, stored: true, live: false });
-  P.run(read('features/notes-home.js'));
+  P.run(read('planner/page/notes-home.js'));
   await settle();
   assert.ok(P.doc.getElementById('gz-nt-course'), 'there before the page is live');
   // Opening still waits for Glaze to be running on the page.

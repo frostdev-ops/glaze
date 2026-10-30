@@ -3,7 +3,7 @@
 // both ways (Excel's mso-number-format and Google Sheets' data-sheets-* read on paste). The DOM grid is checks/documents/sheets-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../../extension/sheet-grid.js');
+const G = require('../../extension/documents/sheets/sheet-grid.js');
 
 test('offsets: a Fenwick tree of sizes, hidden ones zero, found back from a pixel', () => {
   const s = new G.Sizes(1e5, 20);

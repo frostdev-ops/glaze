@@ -1,10 +1,10 @@
-// The synced starterOff:* flags (lib/background.js defaultEdits and resumeDefaults) keep a removed starter from returning on a
+// The synced starterOff:* flags (background/background.js defaultEdits and resumeDefaults) keep a removed starter from returning on a
 // device whose Dashboard is still the untouched seed. They never reach a board its student has edited, and "the board was
 // emptied" turns off the starter widgets only: never other widgets, never course cards.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const worker = require('../helpers/worker-env.cjs');
-const W = require('../../extension/lib/widgets.js');
+const W = require('../../extension/core/widgets.js');
 
 const CANVAS = 'https://school.instructure.com', ULTRA = 'https://bb.example.edu', EXT = 'chrome-extension://x';
 const CP = { id: 'glaze', url: `${CANVAS}/`, frameId: 0, tab: { id: 1, url: `${CANVAS}/` } };

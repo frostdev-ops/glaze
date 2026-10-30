@@ -1,13 +1,13 @@
 /* Glaze — motion. Every animated rule in theme.css and extras.css reads these knobs; the level
    (html[data-gz-motion], set by content.js) and the three fine-tune switches only change knobs,
-   so no rule ever branches on motion itself. A Look's own animations (lib/motionx.js) arrive as --gz-x-* values that each
+   so no rule ever branches on motion itself. A Look's own animations (looks/motionx.js) arrive as --gz-x-* values that each
    knob reads first, so the level, the switches and reduced motion still have the last word. */
 :root {
   --gz-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --gz-spring: linear(0, 0.3538 4.1%, 0.6624 8.4%, 0.8613 12.6%, 0.9823 17%, 1.0407 21.6%, 1.0618 26.5%, 1.0532 32.2%, 1.0157 44.4%, 0.998 55.6%, 0.9954 66.9%, 1);
   --gz-t: 0.25s;
   --gz-t-slow: 0.5s;
-  --gz-t-move: 0.32s; /* Glaze's own things changing place: tabs, docked widgets, tiles (lib/motion.js flip) */
+  --gz-t-move: 0.32s; /* Glaze's own things changing place: tabs, docked widgets, tiles (core/motion.js flip) */
   --gz-enter: var(--gz-x-enter, gz-in 0.6s var(--gz-spring) backwards);
   --gz-enter-page: var(--gz-x-enter-page, gz-in 0.45s var(--gz-ease) backwards);
   --gz-enter-panel: var(--gz-x-enter-panel, gz-fade 0.3s var(--gz-ease) backwards);
@@ -94,7 +94,7 @@ html[data-gz-ctab-framed] { --gz-ambient: paused; }
 /* Page changes: content.js holds the old page while Ultra builds the next, then the two crossfade. */
 ::view-transition-group(root) { animation-duration: var(--gz-t-page); animation-timing-function: var(--gz-ease); }
 [data-gz-held] { animation: none !important; }
-/* A change Glaze crossfades in place (lib/motion.js swap: a palette, the sidebar): a plain crossfade at the transitions'
+/* A change Glaze crossfades in place (core/motion.js swap: a palette, the sidebar): a plain crossfade at the transitions'
    pace, whatever a page change would do (Expressive's settle, canvas.css). Named parts (the rail) still glide. */
 html[data-gz-swap]::view-transition-group(root) { animation-duration: var(--gz-t); }
 html[data-gz-swap]::view-transition-new(root) { animation-name: gz-fade; }
@@ -123,7 +123,7 @@ html[data-gz-swap]::view-transition-old(root), html[data-gz-swap]::view-transiti
 }
 .element-card, .content-list-item { animation: var(--gz-enter); }
 /* Dashboard tiles enter on a Look's say-so; the rail's items play theirs each time a collapsed rail opens. A course card's
-   tile (features/coursecards.js) is the board's card: it also plays the Look's card entrance, staggered among the course
+   tile (courses/page/coursecards.js) is the board's card: it also plays the Look's card entrance, staggered among the course
    cards as the LMS's are, never delaying its tile's. */
 .gz-w { animation: var(--gz-enter-tile); }
 .gz-w[data-tile^="course:"] { animation: var(--gz-enter-tile), var(--gz-enter-card); }

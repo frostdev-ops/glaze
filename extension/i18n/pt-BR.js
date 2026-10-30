@@ -1,4 +1,4 @@
-// Portuguese (Brazil) for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
+// Portuguese (Brazil) for Glaze's own text: each key is the English, as written in the code (core/i18n.js).
 // Machine translation, accepted as is; corrections come through bug reports.
 (globalThis.GZ_LANGS ||= {})['pt-BR'] = {
   "in": "pol.",
@@ -1154,7 +1154,7 @@
   "Range": "Período",
   "Download": "Baixar",
   "Planned work": "Trabalho planejado",
-  // Past terms, trends and the GPA goal (features/gpaterms.js).
+  // Past terms, trends and the GPA goal (planner/page/gpaterms.js).
   "this term": "este período",
   "Fall 2025": "Outono 2025",
   "Term name": "Nome do período",
@@ -2265,7 +2265,7 @@
   "The graphics driver rejected the shader. {message}": "O driver gráfico rejeitou o shader. {message}",
   "This device cannot measure shader drawing time safely.": "Este dispositivo não consegue medir com segurança o tempo de desenho do shader.",
   "There is nothing to draw: this Look has no shader or layers.": "Não há nada para desenhar: este Look não tem shader nem camadas.",
-  "The shader checker (lib/glsl.js) is not loaded.": "O verificador de shaders (lib/glsl.js) não está carregado.",
+  "The shader checker (looks/glsl.js) is not loaded.": "O verificador de shaders (looks/glsl.js) não está carregado.",
   "This widget’s data is turned off. Turn it on in the Mods tab of Glaze’s editor.": "Os dados deste widget estão desativados. Ative-os na aba Mods do editor do Glaze.",
   "Nothing to show yet.": "Ainda não há nada para mostrar.",
   "Widget builder": "Criador de widgets",

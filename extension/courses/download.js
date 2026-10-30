@@ -7,7 +7,7 @@ const GZ_DOWNLOAD = (() => {
       return !u.username && !u.password && (u.protocol === 'https:' || (devOrigin && u.origin === devOrigin)) && !/^\/login(?:\/|$)/.test(u.pathname) ? u.href : null;
     } catch { return null; }
   };
-  // A course page's top frame, or a frame of it on the page's own site: Glaze's course tabs (features/coursetabs.js) run a
+  // A course page's top frame, or a frame of it on the page's own site: Glaze's course tabs (navigation/page/coursetabs.js) run a
   // course's pages in frames, and Download all is drawn there. Either way the frame's own address passes the path check.
   const sender = (s, id) => {
     try {

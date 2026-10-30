@@ -3,10 +3,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
-const P = require('../../extension/lib/page.js');
-const F = require('../../extension/lib/folders.js');
-const I18N = require('../../extension/lib/i18n.js');
+const D = require('../../extension/content/defaults.js');
+const P = require('../../extension/core/page.js');
+const F = require('../../extension/courses/folders.js');
+const I18N = require('../../extension/core/i18n.js');
 const { El, matches } = require('../stand-in-dom.js');
 const read = (f) => fs.readFileSync(require.resolve(`../../extension/${f}`), 'utf8');
 const origin = 'https://audit.instructure.com';
@@ -57,7 +57,7 @@ const page = ({ where = '/', frame = '', parent = {}, enhance = {}, api = async 
   const settings = D.GZ_SANITIZE({ enhance: { progress: true, hideFolders: false, ...enhance } });
   const input = { settings, observer: {}, links: [{}], solo: true, tabFrame: frame, html: doc.root, locale: () => 'en', t: (k, v) => I18N.t(k, v, 'en'),
     canvasCourseId: () => c.location.pathname.match(/^\/courses\/(\d+)(?:\/|$)/)?.[1], canvasCourseKey: (id) => id ? `canvas:${origin}/${id}` : null,
-    need: async (f) => { loads.push(f); if (f === 'features/folders.js' && !c.GZ_FOLDER_UI) vm.runInContext(read(f), context); },
+    need: async (f) => { loads.push(f); if (f === 'courses/page/folders.js' && !c.GZ_FOLDER_UI) vm.runInContext(read(f), context); },
     setAttr: (k, v) => { if (v !== false && v != null && v !== '') doc.root.setAttribute(k, v === true ? '' : v); else doc.root.removeAttribute(k); },
     setVar: (k, v) => doc.root.style.setProperty(k, v), setCourseList: (list) => { input.courseList = list; }, courseList: {},
   };
@@ -65,10 +65,10 @@ const page = ({ where = '/', frame = '', parent = {}, enhance = {}, api = async 
     canvasCourseId: input.canvasCourseId, profile: () => site.ctx.profile(), toggleOf: () => null };
   const context = vm.createContext(c);
   // Use the actual shared progress renderer as well as the Canvas orchestration.
-  const content = read('content.js'), from = content.indexOf('  const drawProgress = '), to = content.indexOf('\n  };', from) + 5;
+  const content = read('content/content.js'), from = content.indexOf('  const drawProgress = '), to = content.indexOf('\n  };', from) + 5;
   input.capi = vm.runInContext(`${content.slice(content.indexOf('  const api = '), content.indexOf('  // The Canvas course this page'))} capi;`, context);
   input.drawProgress = vm.runInContext(`(() => { const locale = GZ_CTX.locale || (() => 'en'), t = GZ_CTX.t; ${content.slice(from, to)} return drawProgress; })()`, context);
-  const site = vm.runInContext(read('content-canvas.js'), context)(input);
+  const site = vm.runInContext(read('content/content-canvas.js'), context)(input);
   const addModules = () => {
     const row = make('div', { className: 'context_module', id: 'context_module_96' }); row.dataset.moduleId = '96';
     const header = make('div', { className: 'ig-header' });

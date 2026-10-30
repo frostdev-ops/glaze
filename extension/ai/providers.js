@@ -1,4 +1,4 @@
-// The AI harness's providers, by id (docs/ai-harness.md). A provider is one file (lib/ai/providers/<id>.js) that adds itself
+// The AI harness's providers, by id (docs/ai-harness.md). A provider is one file (ai/providers/<id>.js) that adds itself
 // here with:
 //   id: 'openai', /^[a-z][a-z0-9-]{0,31}$/
 //   config(raw) → its settings cleaned ({ base, model, key } for openai), or null. The broker keeps them in the worker only.
@@ -6,14 +6,14 @@
 //   status(cfg, { fetch, signal, cache }) → { state: 'ready' | 'download' | 'downloading' | 'unavailable', reason? }
 //   run(request, cfg, { signal, onDelta, onThinking, fetch }) → { text, toolCalls?, usage?, model, finish }
 //   origin?(cfg) → the host pattern it sends to ('https://api.example.com/*'), for one that goes over the network: the
-//     broker refuses while the browser doesn't hold it. catalog?(cfg, env) → lib/ai/models.js list(). prepare?(cfg,
+//     broker refuses while the browser doesn't hold it. catalog?(cfg, env) → ai/models.js list(). prepare?(cfg,
 //     { onProgress }) → status, for a model that downloads to this computer (device). release?() drops what it keeps warm
 //     between requests (device, apple), when a connection changes.
 // A request without a schema is plain text: its deltas go straight to onDelta (an endpoint's through its credential guard,
-// lib/ai/endpoint.js safeStream), and an answer cut off at maxTokens comes back with finish 'length'.
+// ai/endpoint.js safeStream), and an answer cut off at maxTokens comes back with finish 'length'.
 // run() below is the one way in, Rimeward's runModel (src/lib/agent/provider.ts, MIT) on Glaze's request: it cleans the
 // request, refuses what the provider is known not to do, holds the call to its own deadline raced with the caller's cancel
-// (late output never re-enters), and turns any failure into a category with a reference (lib/ai/failure.js). A schema
+// (late output never re-enters), and turns any failure into a category with a reference (ai/failure.js). A schema
 // request's answer is read and checked against the schema whatever the provider promised; an answer cut off at maxTokens is
 // a refusal, never parsed. Classic script for the worker; module.exports for node.
 var GZ_AI_PROVIDERS = globalThis.GZ_AI_PROVIDERS || (() => {
@@ -47,7 +47,7 @@ var GZ_AI_PROVIDERS = globalThis.GZ_AI_PROVIDERS || (() => {
     try { return (await p.warm(req, c, { signal })) === true; } catch { return false; }
   };
   // run(provider (id or object), request, cfg, { signal, onDelta, onThinking, fetch }) → the result, with json when the
-  // request had a schema. Throws { code } (lib/ai/request.js CODES; a failure also carries category, status?, reference).
+  // request had a schema. Throws { code } (ai/request.js CODES; a failure also carries category, status?, reference).
   const run = async (provider, request, cfg, { signal, onDelta, onThinking, fetch } = {}) => {
     const Q = R();
     const p = typeof provider === 'string' ? get(provider) : provider;

@@ -1,5 +1,5 @@
-// The LMSs' own announcement lists opening in Glaze's pop-up: lib/announce.js find() (which link is an announcement, and
-// what the page shows of it) against each site's markup, the routes that load features/announce.js on those pages, and
+// The LMSs' own announcement lists opening in Glaze's pop-up: courses/announce.js find() (which link is an announcement, and
+// what the page shows of it) against each site's markup, the routes that load courses/page/announce.js on those pages, and
 // its click and hover hooks in a VM with the stand-in DOM (a plain click taken before the site hears it; modifiers, the
 // site's page chosen, an unreadable link and Glaze switched off left alone).
 const test = require('node:test');
@@ -7,8 +7,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
-const A = require('../../extension/lib/announce.js');
+const D = require('../../extension/content/defaults.js');
+const A = require('../../extension/courses/announce.js');
 const { El } = require('../stand-in-dom.js');
 const { parse } = require('../fixture-dom.js');
 
@@ -122,16 +122,16 @@ test('Moodle: the news forum\'s discussion list and the Latest announcements blo
   assert.equal(A.find('moodle', loose.body.querySelector('a'), MD, '/course/view.php'), null);
 });
 
-// features/routes.js: the pages that load features/announce.js.
-test('routes: features/announce.js loads on the pages with a site\'s own announcement list, and nowhere else', async () => {
+// content/routes.js: the pages that load courses/page/announce.js.
+test('routes: courses/page/announce.js loads on the pages with a site\'s own announcement list, and nowhere else', async () => {
   const where = async (site, pathname, search = '') => {
     const loaded = [];
     const ctx = vm.createContext({ GZ_CTX: { site, need: async (f) => { loaded.push(f); ctx.GZ_ANNOUNCE = ctx.GZ_ANNOUNCE_READ = ctx.GZ_STICKY_FOLD = { sync() {} }; } }, location: { pathname, search }, Set, Promise });
     ctx.globalThis = ctx;
-    vm.runInContext(read('features/routes.js'), ctx);
+    vm.runInContext(read('content/routes.js'), ctx);
     ctx.GZ_ROUTES.sync(); await settle();
-    assert.equal(loaded.includes('features/announce-read.js'), site === 'ultra' && /^\/ultra\/courses\/_\d+_\d+\/announcements\/?$/.test(pathname));
-    return loaded.includes('features/announce.js');
+    assert.equal(loaded.includes('courses/page/announce-read.js'), site === 'ultra' && /^\/ultra\/courses\/_\d+_\d+\/announcements\/?$/.test(pathname));
+    return loaded.includes('courses/page/announce.js');
   };
   for (const [site, p, s] of [['ultra', '/ultra/stream'], ['ultra', '/ultra/courses/_101_1/announcements'], ['canvas', '/'], ['canvas', '/courses/25'],
     ['canvas', '/courses/25/announcements'], ['canvas', '/courses/25/discussion_topics', '?only_announcements=true'], ['moodle', '/course/view.php', '?id=16'],
@@ -140,7 +140,7 @@ test('routes: features/announce.js loads on the pages with a site\'s own announc
     ['canvas', '/ultra/stream'], ['moodle', '/mod/assign/view.php', '?id=3'], ['moodle', '/courses/25/announcements']]) assert.equal(await where(site, p, s), false, `${site} ${p}${s || ''}`);
 });
 
-// features/announce.js's hooks on a site's page, in a VM.
+// courses/page/announce.js's hooks on a site's page, in a VM.
 const hooked = ({ site = 'canvas', origin = CV, pathname = '/', html, announce = {}, on = true, slow = false, selection = null } = {}) => {
   const doc = page(html);
   doc.documentElement = new El('html', doc);
@@ -151,9 +151,9 @@ const hooked = ({ site = 'canvas', origin = CV, pathname = '/', html, announce =
   const gate = slow ? new Promise((r) => { release = r; }) : Promise.resolve();
   const ctx = vm.createContext({
     GZ_CTX: { site, on: () => on, t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? ''), locale: () => 'en', settings: () => settings,
-      need: (f) => { needed.push(f); return f === 'lib/popup.js' || f === 'lib/announce.js' ? Promise.resolve() : gate; }, courseList: () => ({}),
+      need: (f) => { needed.push(f); return f === 'core/popup.js' || f === 'courses/announce.js' ? Promise.resolve() : gate; }, courseList: () => ({}),
       moodleIn: async () => ({ session: () => ({ root: origin, sesskey: 'sk' }) }) },
-    GZ_I18N: require('../../extension/lib/i18n.js'), GZ_POPUP_LIB: require('../../extension/lib/popup.js'), GZ_ANNOUNCE_LIB: A, GZ_NOTES: require('../../extension/lib/notes.js'), GZ_DOCTEXT: require('../../extension/lib/doctext.js'),
+    GZ_I18N: require('../../extension/core/i18n.js'), GZ_POPUP_LIB: require('../../extension/core/popup.js'), GZ_ANNOUNCE_LIB: A, GZ_NOTES: require('../../extension/planner/notes.js'), GZ_DOCTEXT: require('../../extension/core/doctext.js'),
     GZ_LMSQ: { fetch: (url, init = {}) => { asked.push(`${init.method || 'GET'} ${url}`); return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ title: 'Lab moved', message: '<p>Room 2.</p>', read_state: 'read' }) }); } },
     getSelection: () => selection, document: doc, location: { origin, pathname, href: `${origin}${pathname}`, assign: (u) => assigned.push(u) },
     matchMedia: () => ({ matches: true }), innerWidth: 1440, innerHeight: 900,
@@ -161,8 +161,8 @@ const hooked = ({ site = 'canvas', origin = CV, pathname = '/', html, announce =
     URL, AbortController, Promise, JSON, Date, Intl, Map, Set, WeakMap, setTimeout, clearTimeout, console,
   });
   ctx.globalThis = ctx;
-  vm.runInContext(read('features/popup.js'), ctx);
-  vm.runInContext(read('features/announce.js'), ctx);
+  vm.runInContext(read('courses/page/popup.js'), ctx);
+  vm.runInContext(read('courses/page/announce.js'), ctx);
   // An event as the browser sends it to the window first (capture), with what the page's own handlers would see.
   const fire = (type, target, o = {}) => {
     const e = { type, target, isTrusted: true, button: 0, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, defaultPrevented: false, stopped: false, ...o };
@@ -219,11 +219,11 @@ test('hooks: the site\'s page chosen, an unreadable link, a page\'s other links 
 test('hooks: a click before the pop-up\'s files are in is taken, and opens once they are; the pop-up loads only on demand', async () => {
   const p = canvasPage({ slow: true });
   p.A.sync(); await settle();
-  assert.equal(p.needed.includes('features/popup.js'), false, 'only the recogniser libraries load on the route');
+  assert.equal(p.needed.includes('courses/page/popup.js'), false, 'only the recogniser libraries load on the route');
   const e = p.fire('click', p.doc.body.querySelector('[data-testid="announcement-item-10"] a'));
   assert.ok(e.defaultPrevented && e.stopped);
   assert.equal(p.popup(), null);
-  assert.ok(p.needed.includes('features/popup.js'), 'the first click requests the pop-up');
+  assert.ok(p.needed.includes('courses/page/popup.js'), 'the first click requests the pop-up');
   assert.equal(p.A.ready, p.A.ready, 'existing callers share the same ready promise');
   p.release(); await settle();
   assert.ok(p.popup());

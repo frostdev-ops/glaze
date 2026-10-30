@@ -1,11 +1,11 @@
 // Better To Do (Canvas): the parts that don't touch the page, so node can test them. Days are counted in the student's
 // Canvas time zone (their profile's), not the browser's, and only through Intl: nothing parses English.
-// Classic script; module.exports for node. Loaded on demand (features/todo.js asks for it): a second injection keeps the first.
+// Classic script; module.exports for node. Loaded on demand (planner/page/todo.js asks for it): a second injection keeps the first.
 var GZ_TODO = globalThis.GZ_TODO || (() => {
   const DAY = 864e5;
 
   // Its settings (storage.sync `todo`; the switch itself is enhance.todo), added to GZ_SPEC from here so the first
-  // content script doesn't carry them: the editor loads this file before it reads settings, and features/todo.js
+  // content script doesn't carry them: the editor loads this file before it reads settings, and planner/page/todo.js
   // cleans what it reads through GZ_SANITIZE once this is in. span: this week, or n days or weeks from the week
   // start; past: how long overdue work stays; done: auto (submissions) or manual; sync: marks go to Canvas's planner.
   const SPEC = {
@@ -17,10 +17,10 @@ var GZ_TODO = globalThis.GZ_TODO || (() => {
     cardN: [4, [1, 10]], cardStatus: [true, 'bool'], cardCross: [false, 'bool'],
     // Gradescope's assignments (the switch is enhance.gradescope) also read once a day from Canvas, not only on a visit.
     gsDaily: [false, 'bool'],
-    // The calendar file (lib/calexport.js): what goes in it and how far ahead, remembered from the last export.
+    // The calendar file (planner/calexport.js): what goes in it and how far ahead, remembered from the last export.
     icsDue: [true, 'bool'], icsTasks: [true, 'bool'], icsPlan: [true, 'bool'], icsGs: [true, 'bool'], icsClasses: [true, 'bool'], icsRange: ['4w', ['2w', '4w', '8w', '16w', 'term']],
   };
-  (typeof GZ_SPEC !== 'undefined' ? GZ_SPEC : require('../defaults.js').GZ_SPEC).todo = SPEC;
+  (typeof GZ_SPEC !== 'undefined' ? GZ_SPEC : require('../content/defaults.js').GZ_SPEC).todo = SPEC;
 
   // ---- days in a time zone ------------------------------------------------------------------------------------
   // A day is a number: days since 1970-01-01 of the calendar date (not of an instant), so a date is the same
@@ -89,7 +89,7 @@ var GZ_TODO = globalThis.GZ_TODO || (() => {
   // tabs and newlines, so "/\evil.example" and "/<tab>/evil.example" would leave the site: no backslash or control character.
   const path = (u) => { const p = String(u || '').replace(/^https?:\/\/[^/]+/, ''); return /^\/(?!\/)[^\\\u0000-\u001f]*$/.test(p) ? p : ''; };
   const str = (v, n) => (typeof v === 'string' ? v.slice(0, n) : '');
-  // Canvas's ids are digits; Blackboard Ultra's are _N_N (lib/ultra.js gives its items in this same shape).
+  // Canvas's ids are digits; Blackboard Ultra's are _N_N (courses/ultra.js gives its items in this same shape).
   const ID = /^(?:\d+|_\d+_\d+)$/;
   const id = (v) => (ID.test(String(v ?? '')) ? String(v) : '');
   const slim = (i) => {
@@ -210,7 +210,7 @@ var GZ_TODO = globalThis.GZ_TODO || (() => {
     out.count = { done: out.done.length + out.graded.length, all: open + out.done.length + out.graded.length };
     return out;
   };
-  // A course card's rows (features/cardtasks.js), from build() for that course: what's open on the list and has a
+  // A course card's rows (courses/page/cardtasks.js), from build() for that course: what's open on the list and has a
   // date, and with cross set, what's done and not yet past (crossed out; else left off), soonest first, up to n.
   // Work with no due date counts if it's planned (a "do on" day or a focus session), at the start of that day in tz.
   const card = (b, n, cross, tz) => {
@@ -282,7 +282,7 @@ var GZ_TODO = globalThis.GZ_TODO || (() => {
     return { tasks, items };
   };
 
-  // ---- writes: one at a time, in the background worker (lib/background.js 'glaze:todo') ----
+  // ---- writes: one at a time, in the background worker (background/background.js 'glaze:todo') ----
   // Every change to the student's own data goes through change(), run in the worker's one write queue, so the tabs of
   // every Canvas site and the editor take turns, and each change is applied to what storage holds when its turn
   // comes. area: { sync, local }, each { get(keys) → object, set(patch) → bool, remove(keys) → bool }.
@@ -337,7 +337,7 @@ var GZ_TODO = globalThis.GZ_TODO || (() => {
     return undone ? { ok: false } : { ok: false, undone: false };
   };
 
-  // The planner answer (storage.local todoCache, shared by the list and the course cards, features/todo.js and
+  // The planner answer (storage.local todoCache, shared by the list and the course cards, planner/page/todo.js and
   // cardtasks.js) and the due list made from it: m { key, cache, due }. Kept in the worker's queue turn only if what's
   // stored for the account isn't newer (at, when it was asked for), so a slow answer never replaces a newer one,
   // whichever tab or feature asked. The same answer kept again (grading counts, a Canvas mark) is not older.
@@ -387,7 +387,7 @@ var GZ_TODO = globalThis.GZ_TODO || (() => {
     return (await area.local.set({ [m.key]: next })) ? { ok: true, data: next } : { ok: false, error: 'write' };
   };
 
-  // Gradescope's assignments (lib/gradescope.js) for a list on a Canvas page, once the student has turned them on: a
+  // Gradescope's assignments (planner/gradescope.js) for a list on a Canvas page, once the student has turned them on: a
   // getter (now, uid) => that Canvas user's items, [] until that file is in; ask(uid) and answer(uid, show) for the
   // one-time "show this Gradescope account's work here?"; redraw() is called when anything arrives or changes.
   const gradescope = (redraw) => {
@@ -397,7 +397,7 @@ var GZ_TODO = globalThis.GZ_TODO || (() => {
       if (!on()) return [];
       if (!src) {
         src = () => [];
-        globalThis.GZ_CTX.need('lib/gradescope.js', () => globalThis.GZ_GRADESCOPE).then(() => { src = GZ_GRADESCOPE.source(redraw); }, () => { src = null; });
+        globalThis.GZ_CTX.need('planner/gradescope.js', () => globalThis.GZ_GRADESCOPE).then(() => { src = GZ_GRADESCOPE.source(redraw); }, () => { src = null; });
       }
       return src(now, uid);
     };

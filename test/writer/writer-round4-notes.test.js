@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../../extension/lib/writer-schema.js');
-const X = require('../../extension/lib/writer-docx.js');
+const S = require('../../extension/writer/writer-schema.js');
+const X = require('../../extension/writer/writer-docx.js');
 const { pack, r } = require('../fixtures/writer-hostile.js');
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
 const contentOf = (doc) => { let content; doc.descendants((n) => { if (n.type.name === 'footnote_ref') content = n.attrs.content; }); return content; };

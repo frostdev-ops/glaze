@@ -2,9 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const A = require('../../extension/features/navbar-moodle.js');
-const M = require('../../extension/lib/navbar.js');
-const G = require('../../extension/defaults.js');
+const A = require('../../extension/navigation/page/navbar-moodle.js');
+const M = require('../../extension/navigation/navbar.js');
+const G = require('../../extension/content/defaults.js');
 const D = A.data, root = 'https://school.test/moodle';
 
 test('Moodle session and row addresses stay on this origin, including folder installs', () => {
@@ -27,7 +27,7 @@ test('Moodle notification and conversation rows preserve data and safe destinati
 });
 
 test('Moodle first paint words exactly match layout, with no course tabs', () => {
-  const src = fs.readFileSync(require.resolve('../../extension/content.js'), 'utf8');
+  const src = fs.readFileSync(require.resolve('../../extension/content/content.js'), 'utf8');
   const paint = src.match(/X\.paintNav = \(\) => \{([\s\S]*?)\n    \};/)[1];
   for (const patch of [{}, { place: 'top' }, { rail: 'open' }, { style: 'embed' }, { course: 'icons' }, { course: 'top' }, { course: 'hide' }, { cmenu: false }, { on: false }]) {
     const b = { ...G.GZ_SANITIZE().navbar, ...patch };
@@ -45,7 +45,7 @@ test('Moodle brand and avatar reject remote and non-http images', () => {
   const img = { get currentSrc() { return src; }, alt: 'School' };
   const box = { querySelector: () => img };
   const context = vm.createContext({ URL, location: { href: root + '/my/', origin: 'https://school.test' }, document: { querySelector: () => box } });
-  vm.runInContext(fs.readFileSync(require.resolve('../../extension/features/navbar-moodle.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/navigation/page/navbar-moodle.js'), 'utf8'), context);
   const adapter = context.GZ_NAVBAR_MOODLE({ t: (s) => s });
   for (src of ['https://else.test/avatar.png', 'data:image/svg+xml,<svg/>', 'javascript:alert(1)', 'https://user:pass@school.test/avatar.png']) {
     assert.equal(adapter.brand().src, '', src);
@@ -62,7 +62,7 @@ test('Moodle panels use session-authenticated same-origin POST and reject failed
   const context = vm.createContext({ URL, AbortSignal, location: { href: root + '/my/', origin: 'https://school.test' },
     document: { querySelector: () => ({ querySelector: () => logout, querySelectorAll: () => [] }) },
     fetch: async (url, options) => { requests.push([new URL(url), options]); return { ok: true, json: async () => [{ data: { notifications: [] } }] }; } });
-  vm.runInContext(fs.readFileSync(require.resolve('../../extension/features/navbar-moodle.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/navigation/page/navbar-moodle.js'), 'utf8'), context);
   const adapter = context.GZ_NAVBAR_MOODLE({ t: (s) => s });
   assert.equal((await adapter.panel('notifications')).sections[0].rows.length, 0);
   const [url, options] = requests[0];
@@ -78,16 +78,16 @@ test('Moodle panels use session-authenticated same-origin POST and reject failed
 });
 
 test('Moodle adapter and renderer are lazy, ordered and packaged', () => {
-  const bg = fs.readFileSync(require.resolve('../../extension/lib/background.js'), 'utf8');
-  assert.match(bg, /LOADABLE = new Set\([^\n]*'features\/navbar-moodle.js'/);
-  assert.match(bg, /files.includes\('features\/navbar-moodle.js'\).*\['lib\/nav.js', 'lib\/nav-items.js', 'lib\/navlayout.js'\]/);
-  const src = fs.readFileSync(require.resolve('../../extension/content.js'), 'utf8');
-  assert.match(src, /need\('features\/navbar-moodle.js'[\s\S]*?then\(\(\) => need\('features\/navbar.js'/);
+  const bg = fs.readFileSync(require.resolve('../../extension/background/background.js'), 'utf8');
+  assert.match(bg, /LOADABLE = new Set\([^\n]*'navigation\/page\/navbar-moodle.js'/);
+  assert.match(bg, /files.includes\('navigation\/page\/navbar-moodle.js'\).*\['navigation\/nav.js', 'navigation\/nav-items.js', 'navigation\/navlayout.js'\]/);
+  const src = fs.readFileSync(require.resolve('../../extension/content/content.js'), 'utf8');
+  assert.match(src, /need\('navigation\/page\/navbar-moodle.js'[\s\S]*?then\(\(\) => need\('navigation\/page\/navbar.js'/);
   assert.match(src, /if \(moodle\) \{ globalThis.GZ_NAVBAR_UI\?\.sync\(\); html.removeAttribute\('data-gz-navbar'\); \}/);
 });
 
 test('the injected factory ends on a serializable acknowledgement for the worker', () => {
-  const source = fs.readFileSync(require.resolve('../../extension/features/navbar-moodle.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../../extension/navigation/page/navbar-moodle.js'), 'utf8');
   const context = vm.createContext({});
   const result = vm.runInContext(source, context);
   assert.equal(result.ready, true);
@@ -101,7 +101,7 @@ test('only a registered Moodle top frame can use its narrow pin permission', asy
     importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(require.resolve(`../../extension/lib/${f}`), 'utf8'), context); },
     chrome: { runtime: { id: 'ext', getURL: (p = '') => `chrome-extension://ext/${p}`, getManifest: () => require('../../extension/manifest.json'), onMessage: none, onInstalled: none, onStartup: none, onConnect: none },
       storage: { local: { get: async () => ({ moodle: ['https://school.test/*'] }) }, sync: { get: async () => ({}) }, onChanged: none } } });
-  vm.runInContext(fs.readFileSync(require.resolve('../../extension/lib/background.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/background/background.js'), 'utf8'), context);
   const from = vm.runInContext('fromMoodle', context);
   const sender = { id: 'ext', tab: {}, frameId: 0, url: root + '/my/' };
   assert.equal(await from(sender), 'https://school.test');

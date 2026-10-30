@@ -21,14 +21,14 @@ const crypto = require('crypto');
 const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://ultra.school.test/*', 'https://strict.moodle.test/*', 'https://open.moodle.test/*']); // the id is made from the real path
 const out = process.argv.slice(2).find((a) => !a.startsWith('--'));
 const only = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7);
-const G = require(path.join(ext, 'defaults.js'));
-const GLSL = require(path.join(ext, 'lib/glsl.js'));
-const PARTS = require(path.join(ext, 'lib/parts.js'));
+const G = require(path.join(ext, 'content/defaults.js'));
+const GLSL = require(path.join(ext, 'looks/glsl.js'));
+const PARTS = require(path.join(ext, 'looks/parts.js'));
 // Node cleans a code as the page does only with the checker and the registry loaded.
 globalThis.GZ_GLSL = GLSL;
 globalThis.GZ_PARTS = PARTS;
-const S = require(path.join(ext, 'lib/share.js'));
-const X = require(path.join(ext, 'lib/lookparts.js'));
+const S = require(path.join(ext, 'sharing/share.js'));
+const X = require(path.join(ext, 'looks/lookparts.js'));
 const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -164,7 +164,7 @@ const until = async (fn, ms = 10000, step = 80) => { const end = Date.now() + ms
     // The student's yes to the invented schools outside the built-in hosts, and the widget layout of a device Glaze was on
     // before: a fresh Canvas Dashboard's board takes the course cards (Glaze's own, which rules and entrances leave alone).
     await opts.evaluate(async () => { await chrome.storage.local.set({ ultra: ['https://ultra.school.test'], moodle: ['https://strict.moodle.test/*', 'https://open.moodle.test/*'] }); });
-    await opts.evaluate((o) => chrome.storage.local.set(o), { widgetLayout: require(path.join(ext, 'lib/widgets.js')).kept(false), ultra: SCENARIOS.filter((s) => s.site === 'ultra' && s.origin).map((s) => s.origin), moodle: SCENARIOS.filter((s) => s.site === 'moodle').map((s) => `${s.origin}/*`) });
+    await opts.evaluate((o) => chrome.storage.local.set(o), { widgetLayout: require(path.join(ext, 'core/widgets.js')).kept(false), ultra: SCENARIOS.filter((s) => s.site === 'ultra' && s.origin).map((s) => s.origin), moodle: SCENARIOS.filter((s) => s.site === 'moodle').map((s) => `${s.origin}/*`) });
     const baseStore = () => { const { nav, ...patch } = BASE; return opts.evaluate((p) => chrome.storage.sync.set(p), patch); };
     await baseStore();
     await opts.reload();
@@ -174,7 +174,7 @@ const until = async (fn, ms = 10000, step = 80) => { const end = Date.now() + ms
     await opts.click('#share-try');
     await opts.waitForSelector('#share-offer:not([hidden])');
     const offer = await opts.evaluate(() => document.querySelector('#share-what').textContent);
-    // Each rule's part by its name, and each text it writes word for word (lib/lookparts.js describe).
+    // Each rule's part by its name, and each text it writes word for word (looks/lookparts.js describe).
     const offered = RULES.every((r) => offer.includes(PARTS.get(r.p).label)) && RULES.filter((r) => r.do === 'label').every((r) => offer.includes(`“${r.t}”`));
     check('the editor\'s offer names what the code brings', /shader/i.test(offer) && /Rearranges the navigation/.test(offer) && offered && /cursor/i.test(offer), offer);
     await opts.click('#share-apply');

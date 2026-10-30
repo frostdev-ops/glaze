@@ -1,4 +1,4 @@
-// The approval window's page (lib/mcp/approve.js opens it as one popup for every ask): the oldest waiting ask, as Glaze
+// The approval window's page (agents/approve.js opens it as one popup for every ask): the oldest waiting ask, as Glaze
 // wrote it to storage.session, live through storage.onChanged. The app's name and program are the app's own claims and say
 // so; every other word is Glaze's, and an action's is the sentence Glaze's summarize built. A mod's name comes from its
 // installed record. Allow and Don't allow send glaze:mcp-ask with the shown ask's id, so a decision is only ever for what

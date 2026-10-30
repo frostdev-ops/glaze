@@ -85,7 +85,7 @@ const launch = async (dir) => {
     const file = path.join(scratch, download.suggestedFilename());
     await download.saveAs(file);
     await context.close(); open = null;
-    const zip = require(path.join(root, 'lib/doctext.js')).unzip(new Uint8Array(fs.readFileSync(file)));
+    const zip = require(path.join(root, 'core/doctext.js')).unzip(new Uint8Array(fs.readFileSync(file)));
     const manifest = await zip.text('glaze-backup.json');
     for (const m of markers) assert.ok(manifest.includes(m), `the backup holds ${m}`);
     for (const value of ['PRIVATE-LMS-COURSE', 'PRIVATE-LMS-CACHE', 'PRIVATE-CARD-PICTURE', 'PRIVATE-CALENDAR-TOKEN', secret]) assert.ok(!manifest.includes(value), 'caches and credentials stay out of the manifest');
@@ -147,7 +147,7 @@ const launch = async (dir) => {
     const broken = JSON.parse(manifest); broken.settings.parts = { x: { invalid: true } };
     const parts = await Promise.all(zip.names.map(async (name) => ({ name, data: name === 'glaze-backup.json' ? new TextEncoder().encode(JSON.stringify(broken)) : await zip.bytes(name) })));
     const badFile = path.join(scratch, 'invalid-settings.zip');
-    fs.writeFileSync(badFile, new Uint8Array(await new Blob(require(path.join(root, 'lib/zip.js')).zip(parts)).arrayBuffer()));
+    fs.writeFileSync(badFile, new Uint8Array(await new Blob(require(path.join(root, 'core/zip.js')).zip(parts)).arrayBuffer()));
     const badChooser = p.waitForEvent('filechooser');
     await p.locator('#import-btn').click();
     await (await badChooser).setFiles(badFile);
@@ -172,7 +172,7 @@ const launch = async (dir) => {
     console.log('ok every marker, note body and share key is back in the new profile');
     const oldFile = path.join(scratch, 'glaze-notes.zip');
     const old = await Promise.all(zip.names.filter((name) => name.startsWith('notes/1/')).map(async (name) => ({ name: name.slice(8), data: await zip.bytes(name) })));
-    fs.writeFileSync(oldFile, new Uint8Array(await new Blob(require(path.join(root, 'lib/zip.js')).zip(old)).arrayBuffer()));
+    fs.writeFileSync(oldFile, new Uint8Array(await new Blob(require(path.join(root, 'core/zip.js')).zip(old)).arrayBuffer()));
     await pick(oldFile);
     assert.equal(await p.locator('#restore-account-field').isVisible(), true, 'old Notes requires an explicit destination even with one account');
     assert.equal(await p.locator('#restore-ok').isDisabled(), true);

@@ -3,9 +3,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const U = require('../../extension/lib/ultra.js');
-const S = require('../../extension/lib/seek.js');
-const D = require('../../extension/lib/doctext.js');
+const U = require('../../extension/courses/ultra.js');
+const S = require('../../extension/navigation/seek.js');
+const D = require('../../extension/core/doctext.js');
 const fixture = require('../fixtures/ultra-search.json');
 const source = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const origin = 'https://lms.example.edu';
@@ -89,7 +89,7 @@ const ui = ({ hold = false, count = 2, loading = null, members = null, failure =
   const ctx = vm.createContext({
     GZ_CTX: { site: 'ultra', on: () => true, settings: () => settings, t: (k, v) => k.replace('{n}', v?.n),
       need: async () => { if (loading) await loading; }, courseId: () => '_102_1', myCourses: async () => memberships },
-    GZ_PAGE: require('../../extension/lib/page.js'), GZ_COURSES: require('../../extension/defaults.js').GZ_COURSES,
+    GZ_PAGE: require('../../extension/core/page.js'), GZ_COURSES: require('../../extension/content/defaults.js').GZ_COURSES,
     chrome: { runtime: {}, storage: { onChanged: { addListener: (fn) => changed.push(fn) }, sync: { get: (_, fn) => fn({ enabled: true, enhance: { search: true } }) } } },
     document: { createElement: () => live }, location: { origin, assign() {} },
     fetch: async (url, init) => {
@@ -111,7 +111,7 @@ const ui = ({ hold = false, count = 2, loading = null, members = null, failure =
     setTimeout: (fn, ms) => { const x = { fn, ms }; timers.push(x); return x; }, clearTimeout: (x) => { if (x) x.fn = null; },
     AbortController, URL, URLSearchParams, Date: class extends Date { static now() { return clock; } },
   });
-  for (const f of ['lib/seek.js', 'lib/doctext.js', 'lib/ultra.js', 'features/search.js']) vm.runInContext(source(f), ctx);
+  for (const f of ['navigation/seek.js', 'core/doctext.js', 'courses/ultra.js', 'navigation/page/search.js']) vm.runInContext(source(f), ctx);
   const type = async (value, run = true) => {
     cmd.input.value = value;
     cmd.input.change();
@@ -183,15 +183,15 @@ test('Ultra bounds empty queries to 30 requests and never asks threads, attempts
 
 test('Ultra search stays on demand, with the existing palette accessibility and translations', () => {
   const manifest = require('../../extension/manifest.json');
-  for (const c of manifest.content_scripts) assert.ok(!c.js.some((f) => /features\/search|lib\/(seek|ultra|doctext)/.test(f)));
-  assert.match(source('features/palette.js'), /const searchHere = \(\) => !moodle && ctx.settings\(\).enhance.search/);
+  for (const c of manifest.content_scripts) assert.ok(!c.js.some((f) => /navigation\/page\/search|navigation\/seek|courses\/ultra|core\/doctext/.test(f)));
+  assert.match(source('navigation/page/palette.js'), /const searchHere = \(\) => !moodle && ctx.settings\(\).enhance.search/);
   for (const name of ['de', 'es', 'fr', 'nl', 'pt-BR']) {
     const ctx = vm.createContext({});
     vm.runInContext(source(`i18n/${name}.js`), ctx);
     for (const key of ['Search in your courses', 'Searching your courses…', 'Results from your courses: {n}', 'Nothing found in your courses.', 'Document', 'Folder', 'Test', 'File', 'Link', 'Module', 'Announcement', 'Discussion']) assert.ok(ctx.GZ_LANGS[name][key], `${name}: ${key}`);
   }
-  assert.match(source('features/palette.js'), /\['role', 'combobox'\]/);
-  assert.match(source('features/search.js'), /setAttribute\('aria-live', 'polite'\)/);
+  assert.match(source('navigation/page/palette.js'), /\['role', 'combobox'\]/);
+  assert.match(source('navigation/page/search.js'), /setAttribute\('aria-live', 'polite'\)/);
 });
 
 
@@ -361,5 +361,5 @@ test('the search status is a live region with a visually-hidden class Glaze defi
   const p = ui();
   await p.attach();
   assert.equal(p.live.className, 'gz-sr');
-  assert.match(fs.readFileSync(require.resolve('../../extension/features/apps.css'), 'utf8'), /\.gz-sr \{[^}]*clip-path: inset\(50%\)/);
+  assert.match(fs.readFileSync(require.resolve('../../extension/core/page/apps.css'), 'utf8'), /\.gz-sr \{[^}]*clip-path: inset\(50%\)/);
 });

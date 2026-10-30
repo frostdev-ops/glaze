@@ -1,13 +1,13 @@
 // The worker's end of the glaze-mcp pipe, and the only code that calls connectNative (test/agent-link.test.js). One native
 // port to the helper (io.frostdev.glaze_mcp; on Safari the Glaze app) carries every agent app's connection as
-// lib/agent-frames.js frames; the worker glue attaches the MCP engine to open, line and close.
+// agents/agent-frames.js frames; the worker glue attaches the MCP engine to open, line and close.
 //
 // make(env) → { attach, send, close, ensure, stop, status }
 //   env: runtime (connectNative, lastError, getManifest; on Safari sendNativeMessage), permissions (contains), storage
 //   (local, session), browser ('chrome' | 'firefox' | 'safari'); timers, now() and random(n) default to the real ones.
 //   attach({ open(c, peer), line(c, text), close(c, why), state(status) }). send(c, text) and close(c, why) → whether it went;
 //   the link closes a connection itself as 'gone' (the helper left), 'stopped' or 'too-long' (a line over 64 MiB).
-//   ensure() brings the link to what storage.local mcp says (as lib/mcp/grants.js reads it) and runs on every trigger:
+//   ensure() brings the link to what storage.local mcp says (as agents/grants.js reads it) and runs on every trigger:
 //   worker start, onStartup, onInstalled, an mcp change either way, permissions.onAdded.
 //   stop() says bye, and disconnects the port itself unless the helper ends it within a second, as permissions.remove leaves
 //   an open port open.
@@ -39,7 +39,7 @@
 // limit so the retry timer can run. In backoff they carry the retired s: Swift must never open a session without hello,
 // and their answers/dispatches cannot restore it. Only the scheduled retry sends hello with a fresh s.
 //
-// Classic script; module.exports for node. In the worker it's loaded after lib/agent-frames.js.
+// Classic script; module.exports for node. In the worker it's loaded after agents/agent-frames.js.
 var GZ_AGENT_LINK = globalThis.GZ_AGENT_LINK || (() => {
   const F = typeof GZ_AGENT_FRAMES !== 'undefined' ? GZ_AGENT_FRAMES : require('./agent-frames.js');
   const HOST = 'io.frostdev.glaze_mcp', SAFARI = 'io.frostdev.Glaze';
@@ -61,7 +61,7 @@ var GZ_AGENT_LINK = globalThis.GZ_AGENT_LINK || (() => {
   ]);
   const ID = /^[0-9a-f]{20}$/;
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
-  const on = (raw) => isObj(raw) && raw.on === true; // lib/mcp/grants.js clean().on, without loading it at worker start
+  const on = (raw) => isObj(raw) && raw.on === true; // agents/grants.js clean().on, without loading it at worker start
   const cut = (s) => String(s).slice(0, ERROR_MAX);
   const hex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 

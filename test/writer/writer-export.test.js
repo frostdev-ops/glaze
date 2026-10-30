@@ -1,9 +1,9 @@
-// lib/writer-export.js: a paper as plain text and as Markdown, on the paper fixtures (test/fixtures/writer-paper-
+// writer/writer-export.js: a paper as plain text and as Markdown, on the paper fixtures (test/fixtures/writer-paper-
 // fixtures.js) and on small documents for each block and mark.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../../extension/lib/writer-schema.js');
-const X = require('../../extension/lib/writer-export.js');
+const S = require('../../extension/writer/writer-schema.js');
+const X = require('../../extension/writer/writer-export.js');
 const FX = require('../fixtures/writer-paper-fixtures.js');
 
 const BLOCK = { align: null, indent: 0, line: null, first: null };

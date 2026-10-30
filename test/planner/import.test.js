@@ -1,8 +1,8 @@
-// PDF and picture import (W23). lib/doctext.js's helpers for them; features/import.js handing a file to the reader's
+// PDF and picture import (W23). core/doctext.js's helpers for them; planner/page/import.js handing a file to the reader's
 // frame; then every fixture in test/fixtures/import (made by tools/fidelity/import-fixtures.js and checks/planner/import-check.js;
-// none is a real student's) through the code the reader runs: pdf.js (lib/pdfjs) for PDFs, the OCR worker itself
-// (lib/ocr.js, in a vm with a worker's globals) for pictures and scanned pages, and each import flow's extractor
-// (lib/classes.js, lib/syllabus.js, lib/gpa.js). A fixture's accuracy is the share of its known fields the extractor
+// none is a real student's) through the code the reader runs: pdf.js (vendor/pdfjs) for PDFs, the OCR worker itself
+// (planner/ocr.js, in a vm with a worker's globals) for pictures and scanned pages, and each import flow's extractor
+// (planner/classes.js, planner/syllabus.js, planner/gpa.js). A fixture's accuracy is the share of its known fields the extractor
 // got exactly right. Each is printed and must not fall below what was measured when this was written (ACCURACY).
 // What the reader does in a browser (decoding pictures, drawing scanned pages, the frame) is checks/planner/import-check.js.
 const test = require('node:test');
@@ -12,7 +12,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const zlib = require('node:zlib');
 const { pathToFileURL } = require('node:url');
-const D = require('../../extension/lib/doctext.js');
+const D = require('../../extension/core/doctext.js');
 
 const root = path.join(__dirname, '../../extension');
 const fixture = (f) => fs.readFileSync(path.join(__dirname, '../fixtures/import', f));
@@ -108,10 +108,10 @@ test('ocrText: a line it mends is reported unsure as mended, so the review still
   const r = D.ocrText({ blocks: [{ paragraphs: [{ lines: [line(...words)] }] }] });
   assert.equal(r.text, 'Office hours: Monday 11:00 AM - 12:15 PM', 'the lost dash between two times is put back');
   assert.deepEqual(r.unsure, [r.text]);
-  // The syllabus reads its office hours from that line (lib/syllabus.js, which checks/planner/import-truth.js loads with the
+  // The syllabus reads its office hours from that line (planner/syllabus.js, which checks/planner/import-truth.js loads with the
   // class-time reader it needs); the field from it is marked.
   require('../../checks/planner/import-truth.js');
-  const src = require('../../extension/lib/syllabus.js').extract(r.text).hours[0].src;
+  const src = require('../../extension/planner/syllabus.js').extract(r.text).hours[0].src;
   assert.ok(importer().I.doubt(r, src), `"${src}" is one of the unsure lines`);
 });
 
@@ -290,9 +290,9 @@ test('ocrText: a table row whose cells are several lines, or centred in it, is o
     'days.',
   ].join('\n'));
   assert.deepEqual(r.unsure, [], 'the icon is no word, so it makes nothing unsure');
-  // The syllabus reads a row's date with what is due on the same line (lib/syllabus.js is line by line).
+  // The syllabus reads a row's date with what is due on the same line (planner/syllabus.js is line by line).
   require('../../checks/planner/import-truth.js');
-  const dates = require('../../extension/lib/syllabus.js').extract(r.text, { start: Date.UTC(2026, 8, 7), hint: 'en' }).dates;
+  const dates = require('../../extension/planner/syllabus.js').extract(r.text, { start: Date.UTC(2026, 8, 7), hint: 'en' }).dates;
   assert.ok(dates.some((d) => /Lab report #1/.test(d.title)), JSON.stringify(dates));
   assert.ok(dates.some((d) => /Midterm exam/.test(d.title)), JSON.stringify(dates));
 });
@@ -307,7 +307,7 @@ test('ocrText: a chart\'s label over its value is one line; a table\'s column of
     [[['Final', 944, 1030, 436, 462], ['exam', 1045, 1150, 436, 462]]], [[['35%', 997, 1060, 484, 508]]],
   ));
   assert.equal(chart.text, 'GRADE BREAKDOWN\nProjects 40%\nWeekly quizzes 25%\nFinal exam 35%');
-  const S = require('../../extension/lib/syllabus.js');
+  const S = require('../../extension/planner/syllabus.js');
   assert.equal(S.weightsText(S.extract(chart.text).weights.value), 'Projects 40%, Weekly quizzes 25%, Final exam 35%');
   // A table: each value is its row's, under the column's heading.
   const table = D.ocrText(engineJson([
@@ -318,7 +318,7 @@ test('ocrText: a chart\'s label over its value is one line; a table\'s column of
   assert.equal(table.text, 'Category\tWeight\nLabs\t30%\nExams\t70%');
 });
 
-// ---- features/import.js: the reader's frame -------------------------------------------------------------------------
+// ---- planner/page/import.js: the reader's frame -------------------------------------------------------------------------
 const importer = () => {
   const frames = [];
   const document = {
@@ -334,12 +334,12 @@ const importer = () => {
   const ctx = vm.createContext({
     document, MessageChannel, URL, Uint8Array, Blob, Promise, crypto,
     setTimeout: (fn, ms) => timers.push({ fn, ms }), clearTimeout: () => {},
-    // The worker gives a pass for each job (lib/background.js 'glaze:reader').
+    // The worker gives a pass for each job (background/background.js 'glaze:reader').
     chrome: { runtime: { getURL: (p) => `chrome-extension://glazeid/${p}`, sendMessage: async (m) => { asked.push(m); return { ok: true }; } } },
     GZ_I18N: { locale: () => 'de' }, GZ_DOCTEXT: D,
     GZ_CTX: { t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? ''), locale: () => 'de-DE', need: async () => {} },
   });
-  vm.runInContext(fs.readFileSync(path.join(root, 'features/import.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(root, 'planner/page/import.js'), 'utf8'), ctx);
   return { I: ctx.GZ_IMPORT, frames, timers, asked };
 };
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(setImmediate); };
@@ -410,10 +410,10 @@ test('import: text, web pages and Word stay in the page; other files are refused
 
 // ---- reader.js itself, in a vm: whom it reads for, and what it refuses before decoding -------------------------------
 // A stand-in pdf.js beside a stand-in reader.html records what the reader asks of it (and refuses every PDF);
-// createImageBitmap records each decode (and fails); the worker redeems a pass once, as lib/background.js does.
+// createImageBitmap records each decode (and fails); the worker redeems a pass once, as background/background.js does.
 const stand = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'glaze-reader-test-'));
-fs.mkdirSync(path.join(stand, 'lib/pdfjs'), { recursive: true });
-fs.writeFileSync(path.join(stand, 'lib/pdfjs/pdf.mjs'), `export const GlobalWorkerOptions = {};
+fs.mkdirSync(path.join(stand, 'vendor/pdfjs'), { recursive: true });
+fs.writeFileSync(path.join(stand, 'vendor/pdfjs/pdf.mjs'), `export const GlobalWorkerOptions = {};
 export const getDocument = (opts) => { (globalThis.__glazeReaderPdf ||= []).push(opts); return { promise: Promise.reject(Object.assign(new Error('stand-in'), { name: 'InvalidPDFException' })), destroy: async () => {} }; };\n`);
 test.after(() => fs.rmSync(stand, { recursive: true, force: true }));
 const reader = () => {
@@ -427,7 +427,7 @@ const reader = () => {
     createImageBitmap: async (b) => { decoded.push(b); throw new Error('stand-in decoder'); },
     Worker: class { postMessage() {} terminate() {} },
   });
-  new vm.Script(fs.readFileSync(path.join(root, 'reader.js'), 'utf8'), { importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER }).runInContext(ctx);
+  new vm.Script(fs.readFileSync(path.join(root, 'planner/reader.js'), 'utf8'), { importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER }).runInContext(ctx);
   // A job as any page could post it, with a channel of its own; → the reader's answer, or null when it says nothing.
   const post = (data) => new Promise((resolve) => {
     const ch = new MessageChannel();
@@ -478,21 +478,21 @@ test('reader: pdf.js is held to the same pixel limit for the pictures inside a P
   assert.equal(opts.enableXfa, false);
 });
 
-// ---- lib/background.js: the reader's passes ---------------------------------------------------------------------------
+// ---- background/background.js: the reader's passes ---------------------------------------------------------------------------
 const workerPasses = () => {
   const listeners = [];
   const none = { addListener() {} };
   const ID = 'glazeid';
   const ctx = vm.createContext({
     URL, console, setTimeout, clearTimeout, TextEncoder, crypto, Date,
-    importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, 'lib', f), 'utf8'), ctx); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, 'background', f), 'utf8'), ctx); },
     chrome: {
       runtime: { id: ID, getURL: (p = '') => `chrome-extension://${ID}/${p}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: none, onStartup: none, onConnect: none },
       storage: { local: { get: async () => ({}), set: async () => {} }, sync: { get: async () => ({}), set: async () => {} }, onChanged: none },
       scripting: { executeScript: () => Promise.resolve([]) },
     },
   });
-  vm.runInContext(fs.readFileSync(path.join(root, 'lib/background.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(root, 'background/background.js'), 'utf8'), ctx);
   const send = (m, sender) => new Promise((resolve) => {
     let answered = false;
     for (const f of listeners) if (f(m, { id: ID, ...sender }, (r) => { answered = true; resolve(r && { ...r }); }) === true || answered) return;
@@ -523,8 +523,8 @@ const pdf = async (bytes) => {
   if (!pdfjs) {
     const [log, warn] = [console.log, console.warn];
     console.log = console.warn = () => {}; // pdf.js warns at import that node has no canvas; text needs none
-    try { pdfjs = await import(pathToFileURL(path.join(root, 'lib/pdfjs/pdf.mjs')).href); } finally { [console.log, console.warn] = [log, warn]; }
-    pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(path.join(root, 'lib/pdfjs/pdf.worker.mjs')).href;
+    try { pdfjs = await import(pathToFileURL(path.join(root, 'vendor/pdfjs/pdf.mjs')).href); } finally { [console.log, console.warn] = [log, warn]; }
+    pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(path.join(root, 'vendor/pdfjs/pdf.worker.mjs')).href;
   }
   return pdfjs.getDocument({ data: new Uint8Array(bytes), verbosity: 0 });
 };
@@ -538,15 +538,15 @@ const pdfText = async (bytes) => {
   } finally { await task.destroy(); }
 };
 
-// lib/ocr.js itself, in a vm with what a worker in the extension has: importScripts, fetch of its own files (anything
+// planner/ocr.js itself, in a vm with what a worker in the extension has: importScripts, fetch of its own files (anything
 // else fails the test), DecompressionStream, postMessage.
 const ocrWorker = () => {
   const asked = [], said = [];
   let answer = null, started = null;
-  const own = (u) => { const url = new URL(u); asked.push(url.href); assert.ok(url.href.startsWith('chrome-extension://glaze/lib/'), `fetched ${url.href}`); return fs.readFileSync(path.join(root, url.pathname)); };
+  const own = (u) => { const url = new URL(u); asked.push(url.href); assert.ok(url.href.startsWith('chrome-extension://glaze/vendor/'), `fetched ${url.href}`); return fs.readFileSync(path.join(root, url.pathname)); };
   const ctx = {
     console: { log: (...a) => said.push(a.join(' ')), warn: (...a) => said.push(a.join(' ')), error: (...a) => said.push(a.join(' ')) }, URL, TextDecoder, TextEncoder, WebAssembly, Response, DecompressionStream, setTimeout, clearTimeout, performance, crypto,
-    location: { href: 'chrome-extension://glaze/lib/ocr.js' },
+    location: { href: 'chrome-extension://glaze/planner/ocr.js' },
     fetch: async (u) => new Response(own(String(u)), { headers: { 'content-type': String(u).endsWith('.wasm') ? 'application/wasm' : 'application/octet-stream' } }),
     postMessage: (m) => { if (m.type !== 'progress') answer?.(m); },
     WorkerGlobalScope: function WorkerGlobalScope() {},
@@ -554,7 +554,7 @@ const ocrWorker = () => {
   ctx.self = ctx;
   ctx.importScripts = (p) => vm.runInContext(own(new URL(p, ctx.location.href)).toString(), ctx);
   vm.createContext(ctx);
-  vm.runInContext(fs.readFileSync(path.join(root, 'lib/ocr.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(root, 'planner/ocr.js'), 'utf8'), ctx);
   const ask = (m) => new Promise((r) => { answer = r; ctx.onmessage({ data: m }); });
   // Started as the reader starts it for an English page, with a language it hasn't got thrown in.
   const start = () => (started ||= ask({ type: 'start', langs: ['eng', 'klingon'] }));
@@ -621,7 +621,7 @@ const ACCURACY = [
 
 test('the OCR worker starts on the bundled models only, and refuses a language it doesn\'t have', async () => {
   assert.deepEqual({ ...await ocr.start() }, { type: 'ready' });
-  assert.deepEqual(ocr.asked.map((u) => u.replace('chrome-extension://glaze/', '')).sort(), ['lib/tesseract/eng.traineddata.gz', 'lib/tesseract/tesseract-core-simd-lstm.js', 'lib/tesseract/tesseract-core-simd-lstm.wasm']);
+  assert.deepEqual(ocr.asked.map((u) => u.replace('chrome-extension://glaze/', '')).sort(), ['vendor/tesseract/eng.traineddata.gz', 'vendor/tesseract/tesseract-core-simd-lstm.js', 'vendor/tesseract/tesseract-core-simd-lstm.wasm']);
 });
 
 test('PDFs: a locked one says so, a broken one fails, a scanned one has no text layer', async () => {

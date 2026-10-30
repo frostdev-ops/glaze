@@ -1,10 +1,10 @@
-// Dashboard notes and widgets (lib/widgets.js): music links per provider, the timer's math, breathing, quotes, the
+// Dashboard notes and widgets (core/widgets.js): music links per provider, the timer's math, breathing, quotes, the
 // layout and its sanitizer, notes' writes and links, the agenda's day and the feedback link.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const W = require('../../extension/lib/widgets.js');
-const L = require('../../extension/lib/todo.js');
-const D = require('../../extension/defaults.js');
+const W = require('../../extension/core/widgets.js');
+const L = require('../../extension/planner/todo.js');
+const D = require('../../extension/content/defaults.js');
 
 test('music: each provider\'s links become its embed, built from checked parts only', () => {
   const ok = {
@@ -92,8 +92,8 @@ test('timer: after the clock is set back it never shows more than its length, an
   assert.equal(W.advance(W.IDLE, back, o), W.IDLE);
   const paused = { phase: 'work', end: 0, left: 15 * 6e4 };
   assert.equal(W.advance(paused, back, o), paused);
-  // The worker's timer op (lib/nav-store.js) uses the same functions: the stored deadline is corrected, and Pause after it keeps its minutes.
-  const Store = require('../../extension/lib/nav-store.js');
+  // The worker's timer op (navigation/nav-store.js) uses the same functions: the stored deadline is corrected, and Pause after it keeps its minutes.
+  const Store = require('../../extension/navigation/nav-store.js');
   const values = { widgetTimer: s };
   const area = { sync: { get: async () => ({}) }, local: { get: async () => values, set: async (v) => { Object.assign(values, v); return true; } } };
   assert.deepEqual((await Store.timer('advance', area, back)).timer, a);
@@ -102,7 +102,7 @@ test('timer: after the clock is set back it never shows more than its length, an
   assert.deepEqual(paused2.timer, p);
 });
 
-// WID-15: coursePlace was read and written whole from each tab (features/place.js), so two tabs scrolling different courses
+// WID-15: coursePlace was read and written whole from each tab (navigation/page/place.js), so two tabs scrolling different courses
 // could write each other's older copy back. The worker applies each tab's fields to what is stored when its turn comes.
 test('your place: each change is applied to what is stored now, so two tabs on different courses keep both', async () => {
   const box = {};
@@ -129,8 +129,8 @@ test('your place: each change is applied to what is stored now, so two tabs on d
   assert.deepEqual(await W.placeChange({ cid: A, top: 1 }, { ...local, set: async () => false }, 4000), { ok: false, error: 'write' });
 });
 
-test('your place: the worker keeps the same rules as the page (lib/page.js place), which it cannot load', async () => {
-  const P = require('../../extension/lib/page.js');
+test('your place: the worker keeps the same rules as the page (core/page.js place), which it cannot load', async () => {
+  const P = require('../../extension/core/page.js');
   const cases = [
     { cid: '_5_1', v: { open: ['_7_1', '_7_1', 'x"]', ...Array.from({ length: 120 }, (_, i) => `_${i + 100}_1`)], top: 812.6 } },
     { cid: '_1_1', v: { open: ['_2_1'], top: -5 } },
@@ -282,7 +282,7 @@ test('notes: a note with no usable time still has one the tile can adopt; an emp
   const past = Date.now() - 1000;
   assert.deepEqual(W.cleanNote({ text: 'kept', at: past }), { text: 'kept', at: past }, 'a real time stays');
   assert.deepEqual(W.cleanNote(null), { text: '', at: 0 });
-  // The tile's rule (features/widgets.js newer): a note replaces the one shown only if its time is later; the shown one starts at 0.
+  // The tile's rule (core/page/widgets.js newer): a note replaces the one shown only if its time is later; the shown one starts at 0.
   let shown = { text: '', at: 0 };
   const newer = (x) => { if (x && x.at > shown.at) shown = x; };
   newer(W.cleanNote({ text: 'typed three days ahead', at: ahead }));

@@ -139,21 +139,21 @@ test('the practice rubric reaches Feedback as parsed criteria and level cells, n
   try {
     const mock = M.create({ quill: Buffer.alloc(0), out });
     const get = async (url) => (await call(mock, { url })).json();
-    const context = await require('../../extension/lib/writer-context-assignment.js').build({
+    const context = await require('../../extension/writer/writer-context-assignment.js').build({
       school: new URL(M.SITE).host, path: M.ROUTES.attempt, uid: async () => M.ME.id,
       me: async () => M.ME, courses: async () => (await get(`/learn/api/v1/users/${M.ME.id}/memberships`)).results,
       rows: async () => (await get('/learn/api/v1/courses/_101_1/gradebook/grades')).results,
-      get, R: require('../../extension/lib/rubric.js'), instructions: async () => 'Write 1,200 words on memory in Beloved.',
+      get, R: require('../../extension/courses/rubric.js'), instructions: async () => 'Write 1,200 words on memory in Beloved.',
     });
     const original = require('../fixtures/ultra-rubric-numeric.json').column.rubricAssociations[0].rubricDefinition;
-    const rubric = require('../../extension/lib/ai/tasks/writer-context.js').rubric(context.assignment.rubric);
+    const rubric = require('../../extension/ai/tasks/writer-context.js').rubric(context.assignment.rubric);
     assert.deepEqual(rubric.ids.map(({ id, label }) => ({ id, label })), original.rows.map((r) => ({ id: r.id, label: r.header })));
     assert.ok(rubric.ids.every((c) => c.levels.length && c.levels[0].label === 'Level A'), 'each criterion keeps its named levels');
     assert.match(rubric.text, /Level A: One A/);
-    const T = require('../../extension/lib/ai/task.js'); require('../../extension/lib/ai/tasks/writer-feedback.js');
+    const T = require('../../extension/ai/task.js'); require('../../extension/ai/tasks/writer-feedback.js');
     const task = T.get('writer.feedback');
     const input = task.input({ text: 'A synthetic draft about memory.', context });
-    const request = task.build(input, { text: require('../../extension/lib/ai/text.js') });
+    const request = task.build(input, { text: require('../../extension/ai/text.js') });
     const answer = JSON.parse(require('../../tools/dev/practice-ai.js').answer({ messages: request.messages }));
     const checked = task.check(answer, input).criteria;
     assert.deepEqual(checked.map((c) => [c.id, c.label]), rubric.ids.map((c) => [c.id, c.label]));
@@ -166,12 +166,12 @@ test('the practice assignment attaches a Word prompt and a picture, which Feedba
   try {
     const mock = M.create({ quill: Buffer.alloc(0), out });
     const get = async (url) => (await call(mock, { url })).json();
-    const C = require('../../extension/lib/writer-context-assignment.js'), D = require('../../extension/lib/doctext.js');
+    const C = require('../../extension/writer/writer-context-assignment.js'), D = require('../../extension/core/doctext.js');
     const context = await C.build({ school: new URL(M.SITE).host, path: M.ROUTES.attempt, origin: M.SITE, uid: async () => M.ME.id, me: async () => M.ME, courses: async () => [], rows: async () => [], get, instructions: async () => '' });
     assert.deepEqual(context.assignment.files.map((f) => [f.name, f.image, new URL(f.url).origin]), [['Essay 2 prompt.docx', false, M.SITE], ['explore3.png', true, M.SITE]]);
     const files = await C.read(context.assignment.files, { D, get: async (url) => { const r = await call(mock, { url }); return r.status === 200 ? new Uint8Array(r.body) : null; }, text: ({ bytes }) => D.docx(bytes) });
     assert.deepEqual(files.map((f) => [f.name, f.text ?? f.image.mime]), [['Essay 2 prompt.docx', M.PROMPT], ['explore3.png', 'image/png']]);
-    const T = require('../../extension/lib/ai/task.js'); require('../../extension/lib/ai/tasks/writer-feedback.js'); require('../../extension/lib/ai/providers/mock.js');
+    const T = require('../../extension/ai/task.js'); require('../../extension/ai/tasks/writer-feedback.js'); require('../../extension/ai/providers/mock.js');
     const task = T.get('writer.feedback'), input = { text: 'A synthetic draft about memory.', context: { ...context, assignment: { ...context.assignment, files } } };
     for (const images of [true, false]) {
       const cfg = { caps: { context: 128000, images }, seen: [], replies: (req) => ({ text: require('../../tools/dev/practice-ai.js').answer({ messages: req.messages }) }) };

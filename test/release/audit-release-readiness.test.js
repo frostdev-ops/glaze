@@ -78,9 +78,9 @@ const firefoxFixture = (branch, check) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-audit-firefox-'));
   try {
     const seed = path.join(dir, 'seed'), scripts = path.join(dir, 'tools/build');
-    fs.mkdirSync(path.join(seed, 'lib'), { recursive: true }); fs.mkdirSync(scripts, { recursive: true }); fs.mkdirSync(path.join(dir, 'extension'));
+    fs.mkdirSync(path.join(seed, 'background'), { recursive: true }); fs.mkdirSync(scripts, { recursive: true }); fs.mkdirSync(path.join(dir, 'extension'));
     fs.writeFileSync(path.join(seed, 'manifest.json'), JSON.stringify(manifest));
-    fs.writeFileSync(path.join(seed, 'lib/background.js'), '// offline fixture\n');
+    fs.writeFileSync(path.join(seed, 'background/background.js'), '// offline fixture\n');
     fs.writeFileSync(path.join(dir, 'extension/manifest.json'), JSON.stringify(manifest));
     fs.copyFileSync(path.join(__dirname, '../../tools/build/package-firefox.sh'), path.join(scripts, 'package-firefox.sh'));
     const zip = path.join(dir, 'input.zip'), marker = path.join(dir, 'packager-called');

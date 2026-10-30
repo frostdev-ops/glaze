@@ -1,4 +1,4 @@
-// Share sessions end to end (spike S6): devices (lib/sharing.js) against a relay (server/relay.js) on 127.0.0.1 only.
+// Share sessions end to end (spike S6): devices (sharing/sharing.js) against a relay (server/relay.js) on 127.0.0.1 only.
 // Each device keeps a local copy ({ note id: { title, html } }, standing in for the notes library) and its session as
 // JSON. Files go to an in-memory store, a temporary folder, or a local S3 mock standing in for R2; never a real bucket.
 const test = require('node:test');
@@ -10,7 +10,7 @@ const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const G = require('../../extension/lib/sharing.js');
+const G = require('../../extension/sharing/sharing.js');
 const { relay, backup, LIMIT, RATE, sigv4, s3Store, diskStore } = require('../../server/relay.js');
 
 const memory = () => { const m = new Map(); return { m, put: async (k, b) => { m.set(k, Buffer.from(b)); }, get: async (k) => m.get(k) || null, del: async (k) => { m.delete(k); } }; };
@@ -119,8 +119,8 @@ test('the relay keeps sessions across a restart', async (t) => {
   const db = path.join(tmp(t), 'share.db');
   let r = await up({ db });
   const a = make(r, 'look');
-  const { encode } = require('../../extension/lib/share.js');
-  const { GZ_SANITIZE } = require('../../extension/defaults.js');
+  const { encode } = require('../../extension/sharing/share.js');
+  const { GZ_SANITIZE } = require('../../extension/content/defaults.js');
   a.local = { look: { name: 'Frost', code: await encode(GZ_SANITIZE({})) } };
   await a.pump();
   const port = r.port;

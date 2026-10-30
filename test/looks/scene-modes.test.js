@@ -1,4 +1,4 @@
-// lib/scene.js in a VM (test/helpers/scene-engine.cjs): the budget guard on a fake GPU whose frame time the test sets, a
+// looks/scene.js in a VM (test/helpers/scene-engine.cjs): the budget guard on a fake GPU whose frame time the test sets, a
 // student's shader (checked before any GL; what failure reports), and layers. The real compiler and GPU are in
 // checks/looks/scene-check.mjs.
 const test = require('node:test');
@@ -6,8 +6,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { engine } = require('../helpers/scene-engine.cjs');
-const GLSL = require('../../extension/lib/glsl.js');
-const I = require('../../extension/lib/i18n.js');
+const GLSL = require('../../extension/looks/glsl.js');
+const I = require('../../extension/core/i18n.js');
 
 const base = { kind: 'scene', name: 'graveyard', ground: '#101020', colors: ['#111111', '#222222', '#333333'], dim: 0.1, amount: 0.5, speed: 1 };
 const MIN = 'vec4 scene(vec2 uv) { return vec4(uv, 0., 1.); }';
@@ -515,8 +515,8 @@ test('layer values are clamped, and a colour that means nothing falls back to th
   assert.equal(n.uniforms.uLayer.value, 0.7, 'an amount that is not a number is the default');
 });
 
-test('a key a layer leaves out means what lib/lookparts.js says it means', () => {
-  const D = require('../../extension/lib/lookparts.js').DEFAULTS.layer;
+test('a key a layer leaves out means what looks/lookparts.js says it means', () => {
+  const D = require('../../extension/looks/lookparts.js').DEFAULTS.layer;
   const drawn = (layer) => {
     const e = engine(), scene = e.start({});
     scene.update(layersOf([layer], { speed: 2 }));
@@ -530,14 +530,14 @@ test('a key a layer leaves out means what lib/lookparts.js says it means', () =>
   }
   assert.deepEqual(Object.keys(D).sort(), ['gradient', 'noise', 'particles', 'scene']);
   // And the shapes it can name are the ones this draws, in the same order (a shape is drawn by its place in the list).
-  const drawnShapes = fs.readFileSync(path.join(__dirname, '../../extension/lib/scene.js'), 'utf8').match(/const SHAPES = (\[[^\]]*\])/)[1];
-  assert.deepEqual(JSON.parse(drawnShapes.replace(/'/g, '"')), require('../../extension/lib/motionx.js').SHAPES);
-  const kinds = require('../../extension/defaults.js').GZ_SPEC.bg.kind[1];
+  const drawnShapes = fs.readFileSync(path.join(__dirname, '../../extension/looks/scene.js'), 'utf8').match(/const SHAPES = (\[[^\]]*\])/)[1];
+  assert.deepEqual(JSON.parse(drawnShapes.replace(/'/g, '"')), require('../../extension/looks/motionx.js').SHAPES);
+  const kinds = require('../../extension/content/defaults.js').GZ_SPEC.bg.kind[1];
   assert.ok(kinds.includes('shader') && kinds.includes('layers'));
 });
 
-test('what lib/lookparts.js cleans is what the scene draws, and its sanitizer asks the shader checker', () => {
-  const P = require('../../extension/lib/lookparts.js');
+test('what looks/lookparts.js cleans is what the scene draws, and its sanitizer asks the shader checker', () => {
+  const P = require('../../extension/looks/lookparts.js');
   const layers = [{ k: 'gradient', c: ['accent', '#FF0000'], style: 'conic' }, { k: 'scene', name: 'borealis', blend: 'add' }, { k: 'particles', shape: 'heart', count: 20, c: ['accent-hi'] }, { k: 'noise', scale: 10 }];
   const got = P.bundle({ x: { bg: { layers } } });
   assert.ok(got, 'the layers are a Look part');

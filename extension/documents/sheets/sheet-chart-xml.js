@@ -1,16 +1,16 @@
-// A sheet's charts as an .xlsx keeps them (lib/sheet-xlsx.js: sheet.keep.drawing, the parts in wb.keep.parts): the
+// A sheet's charts as an .xlsx keeps them (documents/sheets/sheet-xlsx.js: sheet.keep.drawing, the parts in wb.keep.parts): the
 // drawing's anchors (two-cell, one-cell, absolute) and each chart part read into a plain description, never written back.
 // charts(wb, sheet) → [{ id, path, anchor, chart }] with each anchor and every c:f reference moved through wb.keep.log
 // (the rows and columns inserted or deleted, the sheets renamed since the file was read), as the writer moves the parts.
 // A chart: { kind: 'plot' | 'frame', type (the frame's word), title, legend, groups: [{ type: bar | line | pie | doughnut |
 // scatter | area, dir, grouping, varyColors, gap, overlap, hole, first, series: [{ name, cat, val, x, y, color, line,
 // marker, points, labels }] }], axes: { cat, val, x, y } }. A series' name, cat and val are { f, cache: { pts, fmt } }:
-// resolve(chart, lookup) reads each f live (lookup: lib/sheet-model's cells through the engine's values) and falls back
+// resolve(chart, lookup) reads each f live (lookup: documents/sheets/sheet-model's cells through the engine's values) and falls back
 // to the cache. Colours are '#RRGGBB' from the theme (wb.keep.theme), the series' own, or Excel's automatic order.
 // Classic script; doctext, the model and the formula module are looked up when a function runs. module.exports for node.
 var GZ_SHEET_CHART_XML = globalThis.GZ_SHEET_CHART_XML || (() => {
   const dep = (name, file) => (typeof globalThis[name] !== 'undefined' ? globalThis[name] : typeof module !== 'undefined' ? require(file) : null);
-  const D = () => dep('GZ_DOCTEXT', './doctext.js');
+  const D = () => dep('GZ_DOCTEXT', '../../core/doctext.js');
   const M = () => dep('GZ_SHEET_MODEL', './sheet-model.js');
   const F = () => dep('GZ_SHEET_FORMULA', './sheet-formula.js');
   const EMU = 9525; // per CSS pixel
@@ -147,7 +147,7 @@ var GZ_SHEET_CHART_XML = globalThis.GZ_SHEET_CHART_XML || (() => {
     return out;
   };
 
-  // ── Moving through the log (as lib/sheet-xlsx.js moveXml moves the parts it writes) ───────────────────────────────
+  // ── Moving through the log (as documents/sheets/sheet-xlsx.js moveXml moves the parts it writes) ───────────────────────────────
   const MAXR = 1048576, MAXC = 16384;
   const moveIndex = (k, e) => { const max = e.axis === 'row' ? MAXR : MAXC; return k < e.at ? k : e.n < 0 && k < e.at - e.n ? null : k + e.n < max ? k + e.n : null; };
   // An anchor's cell (row or col) after the sheet's shifts: a deleted one lands where the deletion was.
@@ -196,7 +196,7 @@ var GZ_SHEET_CHART_XML = globalThis.GZ_SHEET_CHART_XML || (() => {
   };
   const labelsOf = (d) => d && { val: flag(d, 'showVal'), pct: flag(d, 'showPercent'), cat: flag(d, 'showCatName'), fmt: kid(d, 'numFmt')?.a.formatCode ?? null, pos: val(d, 'dLblPos') ?? null, del: flag(d, 'delete') };
   const TYPES = { barChart: 'bar', lineChart: 'line', pieChart: 'pie', doughnutChart: 'doughnut', scatterChart: 'scatter', areaChart: 'area' };
-  // Words for the frame a chart Glaze doesn't draw shows (lib/i18n catalogues).
+  // Words for the frame a chart Glaze doesn't draw shows (core/i18n catalogues).
   const OTHER = { bar3DChart: '3-D chart', line3DChart: '3-D chart', pie3DChart: '3-D chart', area3DChart: '3-D chart', surfaceChart: 'Surface chart', surface3DChart: 'Surface chart',
     radarChart: 'Radar chart', bubbleChart: 'Bubble chart', stockChart: 'Stock chart', ofPieChart: 'Pie chart' };
   const EX = { waterfall: 'Waterfall chart', funnel: 'Funnel chart', treemap: 'Treemap chart', sunburst: 'Sunburst chart', boxWhisker: 'Box and whisker chart', clusteredColumn: 'Histogram',
@@ -296,7 +296,7 @@ var GZ_SHEET_CHART_XML = globalThis.GZ_SHEET_CHART_XML || (() => {
     return m;
   };
   // The moves a kept part takes now: the log, or for a part Glaze wrote (wb.keep.bases) the log since it did, what has come
-  // off it since taken back first (lib/sheet-xlsx.js since, which writes it so).
+  // off it since taken back first (documents/sheets/sheet-xlsx.js since, which writes it so).
   const logFor = (wb, path) => {
     const log = wb.keep?.log ?? [], base = wb.keep?.bases?.[path];
     if (!base) return log;
@@ -306,7 +306,7 @@ var GZ_SHEET_CHART_XML = globalThis.GZ_SHEET_CHART_XML || (() => {
   };
   // → [{ id, path, anchor, chart }] in the drawing's order (the later ones on top).
   // The sheet a drawing part is written with: two sheets share one after Duplicate, and the file keeps it with the one it
-  // was read from (lib/sheet-xlsx.js write), else the first.
+  // was read from (documents/sheets/sheet-xlsx.js write), else the first.
   const owner = (wb, path) => { const all = wb.sheets.filter((x) => x.keep?.drawing?.path === path); return all.find((x) => x.keep.sourceId === x.id) ?? all[0] ?? null; };
   const charts = (wb, sh) => {
     const d = sh?.keep?.drawing;

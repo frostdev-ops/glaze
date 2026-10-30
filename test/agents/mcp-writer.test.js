@@ -1,24 +1,24 @@
-// Writer's document tools for agent apps (lib/mcp/writer.js, writer-mcp.js): the student's documents under opaque keys,
+// Writer's document tools for agent apps (agents/writer.js, writer-mcp.js): the student's documents under opaque keys,
 // read from Writer's own store in the broker's turn, and the three tools that need the document open in a Writer page,
-// through the page's port. Papers are made by lib/writer-papers.js's own save and sources by lib/writer-sources.js's, as
+// through the page's port. Papers are made by writer/writer-papers.js's own save and sources by writer/writer-sources.js's, as
 // the editor writes them; the page is the real writer-mcp.js over a ProseMirror state with GZ_WRITER_ISSUES's plugin, and
-// the worker is the real lib/background.js.
+// the worker is the real background/background.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const M = require('../../extension/lib/mcp/writer.js');
-const T = require('../../extension/lib/ai/tools.js');
-const R = require('../../extension/lib/mcp/registry.js');
-const CALLS = require('../../extension/lib/mcp/calls.js');
-const G = require('../../extension/lib/mcp/grants.js');
-const PA = require('../../extension/lib/writer-papers.js');
-const SRC = require('../../extension/lib/writer-sources.js');
-const DH = require('../../extension/lib/doc-home.js');
-const CITE = require('../../extension/lib/writer-cite.js');
-const SCHEMA = require('../../extension/lib/writer-schema.js');
-const ISSUES = require('../../extension/lib/writer-issues.js');
+const M = require('../../extension/agents/writer.js');
+const T = require('../../extension/ai/tools.js');
+const R = require('../../extension/agents/registry.js');
+const CALLS = require('../../extension/agents/calls.js');
+const G = require('../../extension/agents/grants.js');
+const PA = require('../../extension/writer/writer-papers.js');
+const SRC = require('../../extension/writer/writer-sources.js');
+const DH = require('../../extension/documents/doc-home.js');
+const CITE = require('../../extension/writer/writer-cite.js');
+const SCHEMA = require('../../extension/writer/writer-schema.js');
+const ISSUES = require('../../extension/writer/writer-issues.js');
 const PM = globalThis.GZ_PM;
 const worker = require('../helpers/worker-env.cjs');
 const { fakeIDB } = require('../helpers/fake-idb.cjs');
@@ -130,7 +130,7 @@ test('the tools as agent apps see them: the writer group, a document to name, an
     assert.equal(typeof env.reg.get(n).summarize, 'function');
   }
   for (const n of ['documents_list', 'document_read', 'document_sources', 'document_assignment', 'document_issues']) assert.equal(by[n].annotations.readOnlyHint, true, n);
-  // lib/writer-tools.js's own arguments, which the student's approval names.
+  // writer/writer-tools.js's own arguments, which the student's approval names.
   assert.deepEqual(by.fix_apply.inputSchema.required.sort(), ['document', 'issueId', 'suggestion']);
   assert.deepEqual(by.citation_insert.inputSchema.required.sort(), ['document', 'sourceId']);
   assert.throws(() => M.tools({ papers: env.papers }), /papers and bridge/);
@@ -266,7 +266,7 @@ const portPair = (name, sender) => {
 };
 // writer-mcp.js in a page of its own: a paper (its key once mounted), its issues in GZ_WRITER_ISSUES's plugin state,
 // Cite's sources and style, storage.local mcp, and the worker it connects to (link(name) → the page's end).
-const PAGE = fs.readFileSync(path.join(root, 'writer-mcp.js'), 'utf8');
+const PAGE = fs.readFileSync(path.join(root, 'agents/writer-mcp.js'), 'utf8');
 const writerPage = ({ key = ESSAY, html = ESSAY_HTML, kind = 'paper', mode = 'paper', context = {}, on = true, sources = [], style = 'mla9', view: shown = 'full', link } = {}) => {
   const hooks = { ready: [], context: [] }, events = {}, changes = [], messages = [], ports = [];
   const pm = { state: PM.state.EditorState.create({ doc: SCHEMA.paper.nodeFromJSON(paperDoc(html)), plugins: [ISSUES.plugin()] }), editable: true, dispatch(tr) { this.state = this.state.apply(tr); } };
@@ -285,12 +285,12 @@ const writerPage = ({ key = ESSAY, html = ESSAY_HTML, kind = 'paper', mode = 'pa
       storage: { local: { get: async () => ({ mcp: { on: page.on } }) }, onChanged: { addListener: (f) => changes.push(f) } },
     },
   });
-  vm.runInContext(PAGE, ctx, { filename: 'writer-mcp.js' });
+  vm.runInContext(PAGE, ctx, { filename: 'agents/writer-mcp.js' });
   const set = (on) => { page.on = on; for (const f of changes) f({ mcp: { newValue: { on } } }, 'local'); };
   const wake = (id = 'glaze') => { for (const f of messages) f({ type: 'glaze:mcp-writer', op: 'wake' }, { id }); };
   return { page, pm, issues, ports, hooks, events, set, wake, ready: () => { for (const f of hooks.ready) f(editor); }, context: (c) => { page.context = c; for (const f of hooks.context) f(c); } };
 };
-// A worker hub (lib/mcp/writer.js pages) that the page's ports reach, every one allowed unless refused.
+// A worker hub (agents/writer.js pages) that the page's ports reach, every one allowed unless refused.
 const hubbed = (o = {}) => {
   const hub = M.pages({ runtime: o.runtime });
   const allow = { ok: true }, pairs = [];
@@ -481,7 +481,7 @@ const opened = async (o = {}) => {
   return { ...env, h, p, key: await keyOf(env, 'Essay 2: Memory in Beloved') };
 };
 
-test('document_issues: the open editor\'s issues in lib/writer-tools.js\'s shape, a part at a time; a closed document says to open it', async () => {
+test('document_issues: the open editor\'s issues in writer/writer-tools.js\'s shape, a part at a time; a closed document says to open it', async () => {
   const env = await opened();
   const long = 'x'.repeat(400);
   env.p.issues.set('harper', [harper(env.p.pm, 'definately', ['definitely', 'defiantly'])]);
@@ -590,7 +590,7 @@ test('through calls.js: a change waits for the student, then runs in the broker\
 });
 
 // ---- the worker, wired -------------------------------------------------------------------------------------------------
-const BACKGROUND = fs.readFileSync(path.join(root, 'lib/background.js'), 'utf8');
+const BACKGROUND = fs.readFileSync(path.join(root, 'background/background.js'), 'utf8');
 // Values from the worker's realm, as plain JSON (its objects' prototypes are its own).
 const inWorker = (w, code) => { const v = vm.runInContext(code, w.context); return v && typeof v.then === 'function' ? v.then((x) => JSON.parse(JSON.stringify(x ?? null))) : v; };
 const DOCS_PAGE = { id: 'glaze', url: `chrome-extension://x/papers.html?paper=${encodeURIComponent(ESSAY)}`, frameId: 0, origin: 'chrome-extension://x', tab: { id: 9, url: `chrome-extension://x/papers.html?paper=${encodeURIComponent(ESSAY)}` } };
@@ -623,7 +623,7 @@ test('the wired worker: the writer tools listed, the core\'s wake, and Writer\'s
   assert.ok(names.includes('todo_list'), 'beside the courses tools');
   assert.deepEqual(JSON.parse(JSON.stringify(woke)), [{ type: 'glaze:mcp-writer', op: 'wake' }]);
   // One paper store: openPapers', in the broker's turn.
-  inWorker(w, "importScripts('writer-styles.js', 'writer-papers.js'); globalThis.opens = 0; const o = GZ_WRITER_PAPERS.open; GZ_WRITER_PAPERS.open = (...a) => { opens++; return o(...a); };");
+  inWorker(w, "importScripts('../writer/writer-styles.js', '../writer/writer-papers.js'); globalThis.opens = 0; const o = GZ_WRITER_PAPERS.open; GZ_WRITER_PAPERS.open = (...a) => { opens++; return o(...a); };");
   const r = await inWorker(w, "GZ_AI_TOOLS.get('documents_list').run({}, mcpCtx(null))");
   assert.deepEqual(r.items.map((i) => i.title), ['Essay 2: Memory in Beloved', 'Reading notes', 'Response paper', 'An older draft']);
   await inWorker(w, "GZ_AI_TOOLS.get('documents_list').run({}, mcpCtx(null))");
@@ -801,7 +801,7 @@ test('unknown kind values stay unreadable instead of falling back to the legacy 
 test('the copied citation insert makes the same document as Writer\'s current insert across styles, notes, and escaped italic titles', async () => {
   // Execute the owner's current insert unchanged; a new signature or boundary fails here rather than silently leaving
   // MCP on an older copy. Only the caret is supplied directly (the native popover otherwise remembers its selection).
-  const native = fs.readFileSync(path.join(root, 'writer-cite.js'), 'utf8');
+  const native = fs.readFileSync(path.join(root, 'writer/frame/writer-cite.js'), 'utf8');
   const helpers = native.slice(native.indexOf('  const unesc = '), native.indexOf('  const paint = '));
   const start = native.indexOf('  const insert = (src, page = '), end = native.indexOf('\n  // ⋯ Add references', start);
   assert.ok(start >= 0 && end > start && helpers.includes('const runs ='));

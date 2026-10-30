@@ -1,7 +1,7 @@
 // WP-A1: Glaze never hammers a school's LMS. Ultra's gradebook and content fan-outs and Canvas's module reads go through
-// one queue per site (lib/lmsq.js: three at a time, a 429's Retry-After waited out, a 401 refused until the page
+// one queue per site (courses/lmsq.js: three at a time, a 429's Retry-After waited out, a 401 refused until the page
 // changes), failures are asked again a minute later at most, and list reads follow paging to the end or say they didn't.
-// The real content-ultra.js, content-canvas.js and features/download.js in a VM, against a fake school and a fake clock.
+// The real content-ultra.js, content-canvas.js and courses/page/download.js in a VM, against a fake school and a fake clock.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -44,7 +44,7 @@ const school = (answer) => {
 };
 
 // The Ultra part as content.js calls it: its api() is content.js's (same origin, the student's session); need() puts a
-// loadable file in as lib/background.js would.
+// loadable file in as background/background.js would.
 const ultra = ({ answer, pathname = '/ultra/courses/_1_1/outline', local = {}, cards = [], rows = [], enhance = {} }) => {
   const c = clock(), s = school(answer);
   const El = class { constructor() { this.attrs = new Map(); this.dataset = {}; } setAttribute(k, v) { this.attrs.set(k, String(v)); } getAttribute(k) { return this.attrs.get(k) ?? null; } hasAttribute(k) { return this.attrs.has(k); } removeAttribute(k) { this.attrs.delete(k); } querySelector() { return null; } querySelectorAll() { return []; } addEventListener() {} append() {} };
@@ -58,10 +58,10 @@ const ultra = ({ answer, pathname = '/ultra/courses/_1_1/outline', local = {}, c
     IntersectionObserver: class { observe() {} unobserve() {} disconnect() {} }, MutationObserver: class { observe() {} disconnect() {} },
     addEventListener() {}, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     chrome: { runtime: { id: 'x' }, storage: { local: { get: (k, cb) => cb(structuredClone(local)), set: (o) => Object.assign(local, o) }, onChanged: { addListener() {} } } },
-    GZ_GRADES: require(path.join(root, 'lib/grades.js')), GZ_PAGE: require(path.join(root, 'lib/page.js')), GZ_COURSES: require(path.join(root, 'defaults.js')).GZ_COURSES,
+    GZ_GRADES: require(path.join(root, 'planner/grades.js')), GZ_PAGE: require(path.join(root, 'core/page.js')), GZ_COURSES: require(path.join(root, 'content/defaults.js')).GZ_COURSES,
   });
   ctx.globalThis = ctx; ctx.window = ctx; ctx.top = ctx;
-  vm.runInContext(read('content-ultra.js'), ctx);
+  vm.runInContext(read('content/content-ultra.js'), ctx);
   const need = (file, ready) => {
     try { if (!ready()) vm.runInContext(read(file), ctx); } catch (e) { return Promise.reject(e); }
     return ready() ? Promise.resolve() : Promise.reject(new Error('not ready'));
@@ -140,13 +140,13 @@ test('ULT-5: eight courses never have more than three requests open at once, and
   assert.deepEqual(page.s.asked.filter((p) => /gradebook/.test(p)).map((p) => p.split('/')[5]), ids.slice(0, 3), 'the cards on screen, none off it');
 });
 
-// lib/lmsq.js alone: its queue's order and its holds.
+// courses/lmsq.js alone: its queue's order and its holds.
 const lmsq = (answer) => {
   const c = clock(), s = school(answer);
   const g = { URL, Response, Promise, Map, Date: c.Date, setTimeout: c.setTimeout, fetch: s.fetch, location: { origin: ORIGIN, pathname: '/ultra/course' } };
   g.globalThis = g;
   vm.createContext(g);
-  vm.runInContext(read('lib/lmsq.js'), g);
+  vm.runInContext(read('courses/lmsq.js'), g);
   return { Q: g.GZ_LMSQ, s, c, g };
 };
 
@@ -264,7 +264,7 @@ const canvas = ({ nextLink, stopAfterFirst = false } = {}) => {
     sessionStorage: { getItem: () => null, setItem() {} }, location: { origin: 'https://canvas.test', pathname: '/courses/7/modules' }, chrome: {} };
   c.globalThis = c;
   vm.createContext(c);
-  vm.runInContext(read('content-canvas.js'), c);
+  vm.runInContext(read('content/content-canvas.js'), c);
   return { X: c.GZ_SITE_CANVAS({ capi, settings, links: [], t: (s) => s, locale: () => 'en', need: () => Promise.reject(new Error('none')) }), asked };
 };
 
@@ -300,7 +300,7 @@ const modulesPage = (mods) => {
   g.globalThis = g;
   vm.createContext(g);
   ctx.need = (file, ready) => { try { if (!ready()) vm.runInContext(read(file), g); } catch (e) { return Promise.reject(e); } return ready() ? Promise.resolve() : Promise.reject(new Error('not ready')); };
-  vm.runInContext(read('features/download.js'), g);
+  vm.runInContext(read('courses/page/download.js'), g);
   return { sync: () => g.GZ_DOWNLOAD.sync(), calls, held, buttons, c, ctx, g, peak: () => peak, open: () => open };
 };
 
@@ -434,7 +434,7 @@ test('review: identity 401 cache resets on query navigation', async () => {
 });
 
 test('review: incomplete Canvas module lists cannot become progress or new-item baselines', async () => {
-  const src = read('content-canvas.js');
+  const src = read('content/content-canvas.js');
   const a = src.indexOf('  const canvasModuleLists ='), b = src.indexOf('  // Hidden modules', a);
   const rows = Object.defineProperty([], 'complete', { value: false });
   const get = vm.runInNewContext(`${src.slice(a, b)} canvasModules`, { Map, Date, Error, canvasAll: async () => rows });
@@ -442,7 +442,7 @@ test('review: incomplete Canvas module lists cannot become progress or new-item 
 });
 
 test('review: Download all refuses an incomplete Canvas list instead of saving a partial zip', async () => {
-  const src = read('features/download.js'), a = src.indexOf('        const items = await moduleItems('), b = src.indexOf('        for (const id', a);
+  const src = read('courses/page/download.js'), a = src.indexOf('        const items = await moduleItems('), b = src.indexOf('        for (const id', a);
   const rows = Object.defineProperty([], 'complete', { value: false });
   const result = vm.runInNewContext(`(async () => { ${src.slice(a, b)} })()`, { moduleItems: async () => rows, cid: '7', fid: '42', skipped: 0, GZ_ZIP: { canvasUnopened: () => new Set() } });
   await assert.rejects(result, /Incomplete/);

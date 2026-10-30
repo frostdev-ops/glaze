@@ -3,7 +3,7 @@
 // each null unless the prompt says it plainly: a field it can't be sure of stays null, never a guess. A word or source
 // count said of replies ("each reply at least 100 words") is kept apart, in `reply`. English first; a language is a RULES
 // entry (its number words and phrase pieces), so another can follow without touching the matcher.
-// Pure. Classic script, loaded on demand (lib/writer-context-discussion.js); module.exports for node.
+// Pure. Classic script, loaded on demand (writer/writer-context-discussion.js); module.exports for node.
 var GZ_WRITER_TARGET = globalThis.GZ_WRITER_TARGET || (() => {
   const MAX_TEXT = 20000;
   const alt = (list) => list.join('|');

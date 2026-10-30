@@ -1,13 +1,13 @@
 // The popup's "Use Glaze on {host}" (popup.js): on a browser that asks for each site, the tab the popup opened over gets a
 // one-click way in when it is an LMS Glaze can't run on yet. The real popup.js runs here against a stubbed chrome; its
 // tiles never load (GZ_UI.load stays pending), so only the site row is exercised. The detector it runs in the tab is
-// lib/detect.js's own (GZ_DETECT), loaded into the popup as the popup page loads it.
+// content/detect.js's own (GZ_DETECT), loaded into the popup as the popup page loads it.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const { GZ_BUILT_IN } = require('../../extension/defaults.js');
+const { GZ_BUILT_IN } = require('../../extension/content/defaults.js');
 const NARROW = ['https://*.instructure.com/*', 'https://*.blackboard.com/*', 'https://*.moodlecloud.com/*', 'https://frostdev.io/*', 'https://share.frostdev.io/*'];
 // Objects made in the popup's context, as plain data.
 const plain = (x) => JSON.parse(JSON.stringify(x));
@@ -59,7 +59,7 @@ const popup = ({ url = 'https://bb.school.edu/ultra/stream', tabId = 7, hosts = 
   context.window = context;
   context.globalThis = context;
   // As popup.html loads them.
-  for (const f of ['lib/site.js', 'lib/detect.js', 'popup.js']) vm.runInContext(read(f), context, { filename: f });
+  for (const f of ['core/site.js', 'content/detect.js', 'settings/popup.js']) vm.runInContext(read(f), context, { filename: f });
   return {
     el, calls, observed, context, local,
     click: () => { gesture = true; try { el('#here').handlers.click?.({ isTrusted: true }); } finally { gesture = false; } },
@@ -76,7 +76,7 @@ test('popup: an LMS tab Glaze holds nothing for gets one button, and the request
   assert.equal(row.textContent, 'Use Glaze on bb.school.edu');
   const [[, ran]] = p.calls.filter(([t]) => t === 'exec');
   assert.deepEqual(plain(ran.target), { tabId: 7 }, 'the detector runs in that tab, top frame only');
-  assert.equal(ran.func, p.context.GZ_DETECT, 'the detector is lib/detect.js\'s own');
+  assert.equal(ran.func, p.context.GZ_DETECT, 'the detector is content/detect.js\'s own');
   assert.deepEqual(p.of('hostAccess').map(([, o]) => o), [{ tabId: 7 }], 'Chrome keeps an Allow entry for the tab in its menu');
   p.calls.length = 0;
   p.click();
@@ -211,16 +211,16 @@ test('popup: the site row settles after Chrome finishes its Allow entry, includi
   }
 });
 
-test('popup: the detector in the popup page itself watches nothing (lib/detect.js runs its watcher on web pages only)', async () => {
+test('popup: the detector in the popup page itself watches nothing (content/detect.js runs its watcher on web pages only)', async () => {
   const p = popup();
   await tick();
   assert.deepEqual(p.observed, []);
   assert.deepEqual(p.of('send').filter(([, m]) => typeof m === 'string'), [], 'and reports nothing');
 });
 
-test('lib/detect.js\'s check is self-contained, so the popup can hand it to executeScript', () => {
+test('content/detect.js\'s check is self-contained, so the popup can hand it to executeScript', () => {
   const sandbox = { location: new URL('chrome-extension://glaze/popup.html'), document: { contentType: 'text/html' }, MutationObserver: class { observe() {} disconnect() {} } };
-  vm.runInNewContext(read('lib/detect.js'), sandbox);
+  vm.runInNewContext(read('content/detect.js'), sandbox);
   const src = sandbox.GZ_DETECT.toString();
   const el = (hit) => ({ matches: (s) => s.split(', ').some((x) => x === hit) });
   const CANVAS = 'link[rel~="stylesheet"][href*="/dist/brandable_css/"]', ULTRA = 'base[href*="/ultra/"]', MOODLE = 'meta[name="keywords"][content^="moodle,"]';
@@ -235,15 +235,15 @@ test('lib/detect.js\'s check is self-contained, so the popup can hand it to exec
   assert.equal(page('https://www.school.edu/', MOODLE), null, 'Moodle\'s meta alone is not Moodle');
   assert.equal(page('https://www.school.edu/', null), null);
   assert.equal(page('https://canvas.school.edu/', CANVAS, undefined, true), null, 'Glaze already in the page');
-  assert.ok(fs.statSync(path.join(root, 'lib/detect.js')).size < 2048);
+  assert.ok(fs.statSync(path.join(root, 'content/detect.js')).size < 2048);
 });
 
 test('popup.html loads the site parser and the detector before popup.js, and has the row at the top', () => {
   const html = read('popup.html');
   const at = (s) => html.indexOf(s);
-  assert.ok(at('<script src="lib/site.js"></script>') > 0 && at('<script src="lib/detect.js"></script>') > 0);
-  assert.ok(at('<script src="lib/site.js"></script>') < at('<script src="popup.js"></script>'));
-  assert.ok(at('<script src="lib/detect.js"></script>') < at('<script src="popup.js"></script>'));
+  assert.ok(at('<script src="core/site.js"></script>') > 0 && at('<script src="content/detect.js"></script>') > 0);
+  assert.ok(at('<script src="core/site.js"></script>') < at('<script src="settings/popup.js"></script>'));
+  assert.ok(at('<script src="content/detect.js"></script>') < at('<script src="settings/popup.js"></script>'));
   assert.match(html, /<header class="top">[\s\S]*?<\/header>\s*<button type="button" id="here" class="primary here" hidden><\/button>\s*<main class="tiles">/);
 });
 

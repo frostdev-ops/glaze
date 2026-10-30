@@ -1,5 +1,5 @@
-// Announcements in Glaze's pop-up (features/popup.js) over the page, and their preview on hover or focus. Loaded on
-// demand, through GZ_CTX; what node tests is lib/announce.js. A second injection keeps the first.
+// Announcements in Glaze's pop-up (courses/page/popup.js) over the page, and their preview on hover or focus. Loaded on
+// demand, through GZ_CTX; what node tests is courses/announce.js. A second injection keeps the first.
 //
 // A reference is { site: 'canvas' | 'ultra' | 'moodle', courseId (Moodle: optional), id (the discussion topic, Ultra's
 // announcement, Moodle's discussion), url (the site's own page for it), title?, course?, entry?: 'glaze' | 'canvas' |
@@ -15,15 +15,15 @@
 //   GZ_ANNOUNCE.go(ref)                    // what a plain click means under the setting: open(), or the site's page
 //   GZ_ANNOUNCE.open(ref)                  // the pop-up, whatever the setting
 //   GZ_ANNOUNCE.preview(el, ref)           // previews on el; returns a function that takes them off
-//   GZ_ANNOUNCE.sync(), off()              // the site's own lists (GZ_ROUTES, features/routes.js): hooked, unhooked
+//   GZ_ANNOUNCE.sync(), off()              // the site's own lists (GZ_ROUTES, content/routes.js): hooked, unhooked
 //
-// The site's own lists: features/routes.js loads this on their pages; it then reads only lib/announce.js's recognisers
+// The site's own lists: content/routes.js loads this on their pages; it then reads only courses/announce.js's recognisers
 // (find) until the first pointerover, focus or click on one of their announcements brings the rest (ready). A plain click
 // there is taken at the window, before the site's own handlers: preventDefault and stopPropagation, then the pop-up.
 //
 // One request per open: the announcement, from this site, with the student's session, through the site's queue
-// (lib/lmsq.js), kept for the page's life and shared with previews, so a pop-up after a preview asks nothing. Then the read
-// mark, where the site marks one on opening (lib/announce.js SITES). A preview asks only after its delay, gives up when the
+// (courses/lmsq.js), kept for the page's life and shared with previews, so a pop-up after a preview asks nothing. Then the read
+// mark, where the site marks one on opening (courses/announce.js SITES). A preview asks only after its delay, gives up when the
 // pointer or focus leaves first, and never marks anything read (Moodle's answer would, so a Moodle preview asks nothing).
 // If the announcement can't be read, the site's page opens instead.
 var GZ_ANNOUNCE = globalThis.GZ_ANNOUNCE || (() => {
@@ -31,11 +31,11 @@ var GZ_ANNOUNCE = globalThis.GZ_ANNOUNCE || (() => {
   const t = (k, v) => ctx.t(k, v);
   let A = globalThis.GZ_ANNOUNCE_LIB || null;
   const prefs = () => ctx.settings().announce || {};
-  const libs = ctx.need('lib/popup.js', () => globalThis.GZ_POPUP_LIB).then(() => ctx.need('lib/announce.js', () => globalThis.GZ_ANNOUNCE_LIB))
+  const libs = ctx.need('core/popup.js', () => globalThis.GZ_POPUP_LIB).then(() => ctx.need('courses/announce.js', () => globalThis.GZ_ANNOUNCE_LIB))
     .then(() => { A = globalThis.GZ_ANNOUNCE_LIB; });
   // The pop-up's own files, asked for when first wanted (GZ_ANNOUNCE.ready, or a hover, focus or click on a site's list).
   let all = null, loaded = false;
-  const load = () => (all ||= Promise.all([libs, ctx.need('features/popup.js', () => globalThis.GZ_POPUP).then(() => GZ_POPUP.ready), ctx.need('lib/lmsq.js', () => globalThis.GZ_LMSQ)])
+  const load = () => (all ||= Promise.all([libs, ctx.need('courses/page/popup.js', () => globalThis.GZ_POPUP).then(() => GZ_POPUP.ready), ctx.need('courses/lmsq.js', () => globalThis.GZ_LMSQ)])
     .then(() => { loaded = true; }, (e) => { all = null; throw e; }));
 
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false)); return e; };
@@ -62,7 +62,7 @@ var GZ_ANNOUNCE = globalThis.GZ_ANNOUNCE || (() => {
       return S.item(await json(await q(g.url, { headers: { accept: ACCEPT } })), r.origin);
     }
     if (r.site === 'ultra') {
-      await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA);
+      await ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA);
       return S.item(await GZ_ULTRA.read({ origin: r.origin, signal, f: (u, i) => GZ_LMSQ.fetch(u, i, prio) }).get(S.path(r)), r.origin);
     }
     const s = (await ctx.moodleIn()).session();
@@ -263,7 +263,7 @@ var GZ_ANNOUNCE = globalThis.GZ_ANNOUNCE || (() => {
   };
 
   // ---- the site's own lists ---------------------------------------------------------------------------------------
-  // Their links (lib/announce.js find), hooked from the window: a hover or focus loads the rest and attaches the preview; a
+  // Their links (courses/announce.js find), hooked from the window: a hover or focus loads the rest and attaches the preview; a
   // plain click opens the pop-up where this entry point's setting says so. Anything else, a click with a modifier, a link
   // whose ids can't be read, or Glaze switched off, stays the site's.
   let hooked = null; // link -> { id, off }: the announcement its preview is for, while sync()ed

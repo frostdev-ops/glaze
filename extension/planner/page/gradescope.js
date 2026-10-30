@@ -1,12 +1,12 @@
-// Gradescope in Better To Do (W10), on www.gradescope.com: lib/background.js registers this only while Glaze (enabled)
+// Gradescope in Better To Do (W10), on www.gradescope.com: background/background.js registers this only while Glaze (enabled)
 // and enhance.gradescope are on (and it checks both again here). Two things, top frame only:
 // - Whenever the student visits Gradescope, every Gradescope course they've put with a Canvas course is read again: the
 //   page itself when it's that course's page, else its course page fetched from this same site with their own session
 //   (plain GETs, one at a time, none read in the last ten minutes, both switches asked again before each). The rows go to
 //   the worker's queue ('glaze:gradescope'), for the account signed in: read from Gradescope's account page first, only
-//   when there's something to do. Another account than the one kept starts afresh (lib/gradescope.js change 'acct').
+//   when there's something to do. Another account than the one kept starts afresh (planner/gradescope.js change 'acct').
 // - A bar at the top of the page, while courses this page lists aren't placed yet and the student hasn't said "Don't ask
-//   again": a Canvas course for each, with a guess by course code or name (lib/gradescope.js suggest). The choice can be
+//   again": a Canvas course for each, with a guess by course code or name (planner/gradescope.js suggest). The choice can be
 //   changed later in Glaze's settings. Canvas courses come from what Glaze saw on Canvas (storage.local seenCourses).
 // Its own styles in a shadow root, so neither page's CSS reaches the other. Words in the browser's language.
 (() => {
@@ -22,7 +22,7 @@
   const send = (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } });
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false)); return e; };
   const human = (e) => e.isTrusted && (navigator.userActivation?.isActive ?? true);
-  globalThis.__gzDoc = crypto.randomUUID(); // names this document to the worker's loader (lib/background.js 'glaze:load')
+  globalThis.__gzDoc = crypto.randomUUID(); // names this document to the worker's loader (background/background.js 'glaze:load')
   const on = async () => { const { enabled, enhance } = await get('sync', ['enabled', 'enhance']); return enabled !== false && enhance?.gradescope === true; };
   const own = (gid) => location.pathname.replace(/\/$/, '') === `/courses/${gid}`;
   // Who's signed in, from Gradescope's account page (a redirect, signed out, is refused), told to the worker. → what's kept
@@ -131,7 +131,7 @@
       make('p', { textContent: t("Pick the Canvas or Blackboard course each Gradescope course belongs to. Its assignments then show in Glaze's To Do, on your course cards and in reminders. Glaze reads them when you visit Gradescope, and they stay on this device.") }),
       form, say);
     box.setAttribute('aria-labelledby', 'h');
-    root.append(make('link', { rel: 'stylesheet', href: chrome.runtime.getURL('features/surfaces.css') }), make('style', { textContent: CSS }), box);
+    root.append(make('link', { rel: 'stylesheet', href: chrome.runtime.getURL('looks/page/surfaces.css') }), make('style', { textContent: CSS }), box);
     never.addEventListener('click', async (e) => {
       if (!human(e)) return;
       const r = await send({ type: 'glaze:gradescope', op: 'hide', hide: true });

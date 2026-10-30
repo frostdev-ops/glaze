@@ -128,7 +128,7 @@ var GZ_SETTINGS_PAGE = globalThis.GZ_SETTINGS_PAGE || (() => {
     globalThis.GZ_NAVBAR_UI?.sync();
     again(from)?.focus({ preventScroll: true });
   };
-  // Settings shows itself in a frame only with a one-use ticket the worker gives this tab (lib/background.js), in its address;
+  // Settings shows itself in a frame only with a one-use ticket the worker gives this tab (background/background.js), in its address;
   // Documents with a pass for each document, sent to it after its hello (greet).
   const ticket = () => new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:settings-ticket' }, (r) => res(chrome.runtime.lastError || !r?.ok || !/^[0-9a-f]{32}$/.test(r.ticket) ? '' : r.ticket)); } catch { res(''); } });
   const job = () => { const pass = crypto.randomUUID(); return Promise.resolve().then(() => chrome.runtime.sendMessage({ type: 'glaze:papers', op: 'job', pass })).then((r) => (r?.ok === true ? pass : ''), () => ''); };

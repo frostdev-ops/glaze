@@ -1,5 +1,5 @@
 {
-  "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. Shape from the owner's Ultra, 2026-10-27: gradebook/grades?expand=column rows as test/fixtures/ultra-grades.json has them. Live columns carry no assessmentSubtype: the attempt page decides (lib/writer-ultra.js pageKind).",
+  "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. Shape from the owner's Ultra, 2026-10-27: gradebook/grades?expand=column rows as test/fixtures/ultra-grades.json has them. Live columns carry no assessmentSubtype: the attempt page decides (writer/writer-ultra.js pageKind).",
   "paging": {
     "limit": 200,
     "offset": 0

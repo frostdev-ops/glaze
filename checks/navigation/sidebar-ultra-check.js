@@ -26,8 +26,8 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
       </style><div id="site-wrap"><div id="main-content-inner">${family === 'courses'
         ? '<section class="base-courses-container route-view-container"><div class="base-courses-header-container" style="display:flex;justify-content:space-between"><h1>Courses</h1><div class="base-header-tools"><button>Hide widgets</button><button id="tools-end">Edit layout</button></div></div><div class="base-courses-content"><div class="courses-panel"><button id="main-end" style="float:right">Last course</button></div><div class="todo-panel"><bb-todo>Native To Do</bb-todo></div></div><nav id="pager" style="display:flex;justify-content:flex-end"><button id="pager-end">Next page</button></nav></section>'
         : '<div class="course-content-container"><div class="panel-wrap"><div class="bb-course-navigation">Course navigation</div><section class="course-outline-content"><div class="outline-column"><button id="main-end" style="float:right">Last item</button></div><aside class="outline-actions"><button>Faculty</button></aside></section></div></div>'}</div></div>`);
-      for (const file of ['features/apps.css', 'features/sidebar.css']) await page.addStyleTag({ path: path.join(root, file) });
-      for (const file of ['lib/widgets.js', 'lib/sidebar.js']) await page.addScriptTag({ path: path.join(root, file) });
+      for (const file of ['core/page/apps.css', 'navigation/page/sidebar.css']) await page.addStyleTag({ path: path.join(root, file) });
+      for (const file of ['core/widgets.js', 'navigation/sidebar.js']) await page.addScriptTag({ path: path.join(root, file) });
       await page.evaluate((w) => {
         const rec = GZ_SIDEBAR.clean({ mig: 1, width: w, chose: { width: true }, dock: [{ id: 'notes' }], dest: { notes: 'dock' } });
         window.chrome = { storage: { local: { get: (key, cb) => cb({ [key]: rec }) }, onChanged: { addListener() {}, removeListener() {} } }, runtime: {} };
@@ -37,7 +37,7 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
         window.nativeRoot = [...document.documentElement.attributes].map((a) => [a.name, a.value]);
         window.nativeTree = document.getElementById('site-wrap').outerHTML;
       });
-      await page.addScriptTag({ path: path.join(root, 'features/sidebar.js') });
+      await page.addScriptTag({ path: path.join(root, 'navigation/page/sidebar.js') });
       await page.evaluate(async () => { GZ_SIDEBAR_UI.sync(true); await GZ_SIDEBAR_UI.ready(); });
       await page.waitForSelector('[data-gz-sidebar-host]', { state: 'attached' });
       await page.waitForTimeout(100);
@@ -80,7 +80,7 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
     // Ultra's side panel (a peek: Notification Settings) in #main-content, which a drawn background isolates (extras.css):
     // the panel, its overlay at 1010 and itself at 1011 as measured live, is over Glaze's column and its launcher.
     await setup('outline');
-    await page.addStyleTag({ path: path.join(root, 'extras.css') });
+    await page.addStyleTag({ path: path.join(root, 'content/extras.css') });
     await page.evaluate(() => {
       document.documentElement.setAttribute('data-gz-bg', 'gradient');
       document.querySelector('aside.outline-actions').remove(); GZ_SIDEBAR_UI.sync(true);
@@ -209,7 +209,7 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
     await page.evaluate(() => { document.documentElement.removeAttribute('data-gz-navbar'); document.getElementById('gz-footer').remove(); document.documentElement.removeAttribute('data-gz-footer'); });
     await page.setViewportSize({ width: 1600, height: 900 });
     await page.waitForTimeout(150);
-    // Floating keeps its inset from the window's edges (features/sidebar.css --gz-sb-inset); embedded reaches the foot.
+    // Floating keeps its inset from the window's edges (navigation/page/sidebar.css --gz-sb-inset); embedded reaches the foot.
     check(await page.evaluate(() => Math.abs(document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect().bottom + (document.documentElement.dataset.gzSbStyle === 'float' ? 12 : 0) - innerHeight) <= 1), 'footer off: the column reaches the window\'s foot (less a floating card\'s inset)');
     await setup('courses');
     await page.evaluate(() => document.documentElement.setAttribute('data-gz-sidebar-todo', ''));
@@ -231,12 +231,12 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
       check(c.mode !== 'expanded' || [c.tools, c.pager, c.list].every((x) => x <= c.left - 16 + 1), `courses ${width} @${w}: ${c.mode}; header tools, list and pager clear of the column (${Math.round(c.tools)}, ${Math.round(c.pager)}, ${Math.round(c.list)} / ${Math.round(c.left)})`);
       if (width === 1800 && w === 480) await shot('p6-ultra-courses-header');
     }
-    // Course tabs above the Courses page (features/coursetabs.js: first in #main-content-inner) keep the page's room, so
+    // Course tabs above the Courses page (navigation/page/coursetabs.js: first in #main-content-inner) keep the page's room, so
     // they never cover the column's header.
     for (const dir of ['ltr', 'rtl']) for (const mode of ['expanded', 'collapsed']) {
       await page.setViewportSize({ width: 1600, height: 900 });
       await setup('courses');
-      await page.addStyleTag({ path: path.join(root, 'features/coursetabs.css') });
+      await page.addStyleTag({ path: path.join(root, 'navigation/page/coursetabs.css') });
       const g = await page.evaluate(({ dir, mode }) => {
         const h = document.documentElement;
         h.dir = dir; h.setAttribute('data-gz-ctabs', 'page');
@@ -290,8 +290,8 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
         .course-tool-content { padding-right: 32px; } table { width: 100%; border-collapse: collapse; } td, th { padding: 8px; border-bottom: 1px solid var(--gz-line); text-align: left; }
         button { font: inherit; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--gz-line-strong); background: var(--gz-surface); color: var(--gz-ink); }
       </style><div id="site-wrap"><div id="main-content-inner">${LIVEHTML[kind]}</div></div>`);
-      for (const file of ['features/apps.css', 'features/sidebar.css']) await page.addStyleTag({ path: path.join(root, file) });
-      for (const file of ['lib/widgets.js', 'lib/sidebar.js']) await page.addScriptTag({ path: path.join(root, file) });
+      for (const file of ['core/page/apps.css', 'navigation/page/sidebar.css']) await page.addStyleTag({ path: path.join(root, file) });
+      for (const file of ['core/widgets.js', 'navigation/sidebar.js']) await page.addScriptTag({ path: path.join(root, file) });
       await page.evaluate(({ style, w, action }) => {
         const rec = GZ_SIDEBAR.clean({ mig: 1, width: w, chose: { width: true }, dock: [{ id: 'notes' }], dest: { notes: 'dock' } });
         window.chrome = { storage: { local: { get: (key, cb) => cb({ [key]: rec }) }, onChanged: { addListener() {}, removeListener() {} } }, runtime: {} };
@@ -306,7 +306,7 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
         window.nativeHTML = document.getElementById('site-wrap').outerHTML;
         window.before = [...document.querySelectorAll('#site-wrap *')].map((e) => [e, e.parentNode, [...e.parentNode.children].indexOf(e)]);
       }, { style, w, action });
-      await page.addScriptTag({ path: path.join(root, 'features/sidebar.js') });
+      await page.addScriptTag({ path: path.join(root, 'navigation/page/sidebar.js') });
       await page.evaluate(async () => { GZ_SIDEBAR_UI.sync(true); await GZ_SIDEBAR_UI.ready(); });
       await page.waitForSelector('[data-gz-sidebar-host]', { state: 'attached' });
       await page.waitForTimeout(250);

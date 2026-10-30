@@ -11,8 +11,8 @@ const assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
-const S = require('../../extension/lib/writer-schema.js');
-const G = require('../../extension/defaults.js');
+const S = require('../../extension/writer/writer-schema.js');
+const G = require('../../extension/content/defaults.js');
 const out = path.resolve(process.argv[2] || path.join(os.tmpdir(), 'gz-writer-dark-check'));
 const BASE = process.env.BASE || 'c8e99a04';
 const KEY = 'bb.school.test|_900_1|_101_1|_7_1';
@@ -191,7 +191,7 @@ const READ = () => {
           else if (r.cssRules) drop(r);
         }
       };
-      drop([...document.styleSheets].find((s) => s.href?.endsWith('/writer-paper.css')));
+      drop([...document.styleSheets].find((s) => s.href?.endsWith('/writer/frame/writer-paper.css')));
       return n;
     });
     check(removed === 1, 'the relative-colour branch is removed for the fallback check');

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rebuild lib/fonts/: the paper fonts of Glaze Writer's paper mode, metric-compatible stand-ins for the fonts Word and
+# Rebuild vendor/fonts/: the paper fonts of Glaze Writer's paper mode, metric-compatible stand-ins for the fonts Word and
 # Blackboard both have, so a line breaks in the editor where it breaks in Word on any system: Tinos (Times New Roman),
 # Arimo (Arial), Carlito (Calibri) and Cousine (Courier New), each regular, bold, italic and bold italic. Latin only:
 # writer-paper.css lays a local() face of the same family under them for the rest. The fonts' own licenses (SIL OFL 1.1)
@@ -45,7 +45,7 @@ EOF
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-out=lib/fonts
+out=vendor/fonts
 mkdir -p "$out"
 while read -r font want; do
   url="https://registry.npmjs.org/@fontsource/$font/-/$font-$version.tgz"
@@ -63,7 +63,7 @@ done <<< "$integrity"
 # The checked-in result, file by file.
 actual=$(cd "$out" && shasum -a 256 -- *.woff2 LICENSE-*.txt)
 if [ "$actual" != "$sums" ]; then
-  echo "lib/fonts differs from the pinned build:" >&2
+  echo "vendor/fonts differs from the pinned build:" >&2
   diff <(printf '%s\n' "$sums") <(printf '%s\n' "$actual") >&2 || true
   exit 1
 fi

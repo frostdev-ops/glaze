@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rebuild lib/pm.js and lib/pm.css: ProseMirror (MIT, lib/pm.LICENSE), the editor engine of Glaze's writer frame, as one
+# Rebuild vendor/pm.js and vendor/pm.css: ProseMirror (MIT, vendor/pm.LICENSE), the editor engine of Glaze's writer frame, as one
 # readable classic script that sets GZ_PM to its packages by name (model, state, view, transform, commands, keymap,
 # history, inputrules, schemaList, tables, dropcursor, gapcursor), and the packages' own stylesheets in one file. Not
 # minified, which the Chrome Web Store can take for obfuscation (2026-10-26). The output is checked in, so the extension
@@ -80,7 +80,7 @@ css="prosemirror-view/style/prosemirror.css prosemirror-tables/style/tables.css 
 { echo "/* ProseMirror's own stylesheets (MIT, lib/pm.LICENSE), for lib/pm.js. Built by scripts/vendor-prosemirror.sh. */"
   for f in $css; do echo; echo "/* $f */"; cat "$tmp/node_modules/$f"; done; } > "$tmp/pm.css"
 
-{ echo "ProseMirror, bundled in lib/pm.js and lib/pm.css. Each package's license, as it ships:"
+{ echo "ProseMirror, bundled in vendor/pm.js and vendor/pm.css. Each package's license, as it ships:"
   for p in $names; do
     lic="$(ls "$tmp/node_modules/$p" | grep -iE '^licen[cs]e' | head -1)"
     echo; echo "==== $p $(node -p "require('$tmp/node_modules/$p/package.json').version") ===="; echo
@@ -91,12 +91,12 @@ built="$(shasum -a 256 "$tmp/pm.js" | cut -d' ' -f1)"
 built_css="$(shasum -a 256 "$tmp/pm.css" | cut -d' ' -f1)"
 if [ "$built" != "$file_sha256" ] || [ "$built_css" != "$css_sha256" ]; then
   echo "vendor-prosemirror: the build is pm.js $built and pm.css $built_css, not the recorded file_sha256 $file_sha256 and" >&2
-  echo "vendor-prosemirror: css_sha256 $css_sha256; lib/ is unchanged. If you changed the pinned versions on purpose, record" >&2
+  echo "vendor-prosemirror: css_sha256 $css_sha256; vendor/ is unchanged. If you changed the pinned versions on purpose, record" >&2
   echo "vendor-prosemirror: the new hashes in this script and rerun." >&2
   exit 1
 fi
-cp "$tmp/pm.js" lib/pm.js
-cp "$tmp/pm.css" lib/pm.css
-cp "$tmp/pm.LICENSE" lib/pm.LICENSE
+cp "$tmp/pm.js" vendor/pm.js
+cp "$tmp/pm.css" vendor/pm.css
+cp "$tmp/pm.LICENSE" vendor/pm.LICENSE
 
-echo "lib/pm.js: ProseMirror ($(du -h lib/pm.js | cut -f1)), sha256 $built; lib/pm.css sha256 $built_css"
+echo "vendor/pm.js: ProseMirror ($(du -h vendor/pm.js | cut -f1)), sha256 $built; vendor/pm.css sha256 $built_css"

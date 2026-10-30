@@ -1,12 +1,12 @@
-// The grades group's MCP tools (lib/mcp/tools-grades.js): grades_list, each course's latest grade as lib/modbroker.js
+// The grades group's MCP tools (agents/tools-grades.js): grades_list, each course's latest grade as mods/modbroker.js
 // gives a mod, and course_grades, one course's work and grade over the term, both from the account's own Insights record
 // (test/helpers/mcp-caches.cjs makes them with the code that writes them). No account ever sees another's.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const GR = require('../../extension/lib/mcp/tools-grades.js');
-const B = require('../../extension/lib/modbroker.js');
-const AT = require('../../extension/lib/ai/tools.js');
-const S = require('../../extension/lib/ai/schema.js');
+const GR = require('../../extension/agents/tools-grades.js');
+const B = require('../../extension/mods/modbroker.js');
+const AT = require('../../extension/ai/tools.js');
+const S = require('../../extension/ai/schema.js');
 const C = require('../helpers/mcp-caches.cjs');
 
 const { CANVAS, ULTRA, NOW } = C;

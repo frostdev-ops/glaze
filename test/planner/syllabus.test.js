@@ -1,15 +1,15 @@
-// Syllabus import (lib/syllabus.js): the extractors on syllabi written for these tests, in several layouts and the six
-// languages Glaze speaks, the way they reach it (pasted text, Canvas's Syllabus page through lib/doctext.js). Each
+// Syllabus import (planner/syllabus.js): the extractors on syllabi written for these tests, in several layouts and the six
+// languages Glaze speaks, the way they reach it (pasted text, Canvas's Syllabus page through core/doctext.js). Each
 // field is checked exactly; a field the heuristics can't read must come back empty, never wrong.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../../extension/lib/syllabus.js');
-const D = require('../../extension/lib/doctext.js');
+const S = require('../../extension/planner/syllabus.js');
+const D = require('../../extension/core/doctext.js');
 
 test('section-like digits and contents leaders stay bounded at the input limit', () => {
   const { spawnSync } = require('node:child_process');
   const probe = spawnSync(process.execPath, ['-e', `
-    const S = require(${JSON.stringify(require.resolve('../../extension/lib/syllabus.js'))});
+    const S = require(${JSON.stringify(require.resolve('../../extension/planner/syllabus.js'))});
     for (const text of [
       ('1.' + '1'.repeat(1990) + '!\\n').repeat(101),
       ('Quiz ' + '. '.repeat(990) + '!\\n').repeat(101),
@@ -113,7 +113,7 @@ test('week arithmetic stays in UTC across both daylight saving changes', () => {
   const { spawnSync } = require('node:child_process');
   for (const TZ of ['UTC', 'America/New_York', 'Europe/Berlin', 'Pacific/Auckland']) {
     const r = spawnSync(process.execPath, ['-e', `
-      const S = require(${JSON.stringify(require.resolve('../../extension/lib/syllabus.js'))});
+      const S = require(${JSON.stringify(require.resolve('../../extension/planner/syllabus.js'))});
       console.log(JSON.stringify([
         S.weekDay('2027-03-08', 2, 6), S.weekDay('2026-10-26', 2, 6),
         S.extract('Quiz due Monday of week 2', {week1: Date.UTC(2027, 2, 10)}).dates[0].day,
@@ -202,7 +202,7 @@ The final is worth 1/3 of the exam grade.`, { start: FALL, md: true });
   assert.ok(r.dates.every((d) => d.src), 'every date shows the line it came from');
 });
 
-test('Canvas\'s Syllabus page: tables through lib/doctext.js', () => {
+test('Canvas\'s Syllabus page: tables through core/doctext.js', () => {
   const html = `<div id="course_syllabus" class="user_content">
 <h2>MATH 1350 Calculus I</h2>
 <table><tbody><tr><td><strong>Instructor</strong></td><td>Prof. Daniel Kim</td></tr>
@@ -399,9 +399,9 @@ test('dates fall in the course\'s term: the year after for a term that crosses N
   assert.deepEqual(days('Midterms: Oct 12 and Nov 16', FALL), ['2026-10-12', '2026-11-16']);
 });
 
-// Day and time reading itself is W14's (lib/classes.js meetings, tested in test/planner/classes.test.js); these check how the
+// Day and time reading itself is W14's (planner/classes.js meetings, tested in test/planner/classes.test.js); these check how the
 // syllabus uses it: labels, places, office hours apart, dated sessions left out, the text's language, guesses marked.
-test('class times come from lib/classes.js, with the line\'s label and place', () => {
+test('class times come from planner/classes.js, with the line\'s label and place', () => {
   const r = S.extract('Lecture: MWF 9:00-9:50 AM, Room 101\nOffice hours: Mon 2-3pm\nMidterm review: Monday, October 5, 6-8pm\nDiscussion: TR 2pm');
   assert.deepEqual(r.meetings.map((m) => [m.label, m.days.join(' '), m.start, m.end, m.location, m.conf]), [
     ['Lecture', 'MO WE FR', '09:00', '09:50', 'Room 101', 'sure'],
@@ -450,7 +450,7 @@ test('keys and task ids', () => {
   const a = S.taskId('25', { day: '2026-10-14', title: 'Midterm exam' });
   assert.equal(a, S.taskId('25', { day: '2026-10-14', title: 'Midterm exam' }), 'the same date makes the same task');
   assert.notEqual(a, S.taskId('25', { day: '2026-10-15', title: 'Midterm exam' }));
-  assert.match(S.taskId('12345678901234567890', { day: '2026-10-14', title: 'x' }), /^[\w-]{1,40}$/, 'fits lib/todo.js task ids');
+  assert.match(S.taskId('12345678901234567890', { day: '2026-10-14', title: 'x' }), /^[\w-]{1,40}$/, 'fits planner/todo.js task ids');
 });
 
 // ACA-3: a date row has an id of its own, so editing its day or title is the same row and the same To Do task.
@@ -460,7 +460,7 @@ test('a date row\'s task id is its own, not its day and title', () => {
   assert.equal(S.taskId('42', { ...row, day: '2026-10-14' }), S.taskId('42', row), 'a new day is the same task');
   assert.equal(S.taskId('42', { ...row, title: 'Midterm 1' }), S.taskId('42', row), 'a new title is the same task');
   assert.notEqual(S.taskId('42', { ...row, id: 'p0' }), S.taskId('42', row), 'another row is another task');
-  assert.match(S.taskId('12345678901234567890', { ...row, id: 'abcdefghij' }), /^[\w-]{1,40}$/, 'the longest fits lib/todo.js task ids');
+  assert.match(S.taskId('12345678901234567890', { ...row, id: 'abcdefghij' }), /^[\w-]{1,40}$/, 'the longest fits planner/todo.js task ids');
 });
 
 test('ids: a row keeps a good id, is told apart from its twin, matches the same row in the record, else gets the id its day and title always made', () => {
@@ -485,7 +485,7 @@ test('ids: a row keeps a good id, is told apart from its twin, matches the same 
 });
 
 test('syllabus task ids for the longest accepted Ultra course still fit the To Do contract', () => {
-  const T = require('../../extension/lib/todo.js');
+  const T = require('../../extension/planner/todo.js');
   const cid = '_12345678901234567890_12345678901234567890';
   const row = { id: 'abcdefghij', title: 'Exam', day: '2026-11-20' };
   const id = S.taskId(cid, row), data = T.clean({});
@@ -547,7 +547,7 @@ test('a record from before ids: its dates have the ids their tasks were made wit
 
 // The audit's scenario (r9), through the caller's path: the professor moves the midterm, the student edits it and saves again.
 test('moving a saved date and saving again leaves one task, not two (ACA-3)', async () => {
-  const T = require('../../extension/lib/todo.js');
+  const T = require('../../extension/planner/todo.js');
   const store = {};
   const area = { local: { get: async (ks) => Object.fromEntries(ks.map((k) => [k, store[k]])), set: async (o) => { Object.assign(store, o); return true; } } };
   const key = 'todo:https://x.instructure.com/7';
@@ -683,7 +683,7 @@ test('a damaged stored date is dropped, not thrown on', () => {
 // ACA-3: this used to send importTask a second time with the same id and a new day and title, which the caller could never
 // do (its ids were made from the day and title). A saved row keeps its id now, so the edits come from the caller's own path.
 test('a date edited and saved again to Better To Do keeps whether it was done, and its steps', () => {
-  const T = require('../../extension/lib/todo.js');
+  const T = require('../../extension/planner/todo.js');
   const [r] = S.ids([{ title: 'Midterm exam', day: '2026-11-04', kind: 'exam' }]);
   const id = S.taskId('25', r);
   const send = (d, o) => { for (const e of S.taskEdits({ cid: '25', note: 'From your syllabus', at: 1, picked: new Set(), ...o })) T.edit(d, e); };
@@ -706,7 +706,7 @@ test('a date edited and saved again to Better To Do keeps whether it was done, a
   assert.equal(T.clean(d).tasks.find((x) => x.id === 'syl-25-new').done, 0, 'whatever the caller says');
 });
 
-// Syllabi as a PDF's text layer gives them (lib/doctext.js pdfText): icon glyphs and tabs before labels, tables read cell
+// Syllabi as a PDF's text layer gives them (core/doctext.js pdfText): icon glyphs and tabs before labels, tables read cell
 // by cell, a table of contents, numbered sections. Shapes copied from real syllabi; names, courses and numbers made up.
 test('an office-hours note comes from a line the label starts, not a heading that lists it or a sentence that mentions it', () => {
   const r = S.extract(`Department secretary's telephone number and e-mail address:

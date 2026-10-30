@@ -1,4 +1,4 @@
-// Settings over the page (features/settingspage.js): nothing of the page draws over it or takes the pointer, Glaze's own
+// Settings over the page (settings/page/settingspage.js): nothing of the page draws over it or takes the pointer, Glaze's own
 // overlays included (the pet's world beside <body>, the sidebar's buttons, floating tiles), whenever they come; closing puts back
 // exactly what it changed. In a browser: checks/settings/embedded-settings-check.js.
 const test = require('node:test');
@@ -23,7 +23,7 @@ test('Settings stills and hides every overlay of the page, before and while it i
   class MutationObserver { constructor(f) { this.f = f; this.on = []; observers.push(this); } observe(t) { this.on.push(t); } disconnect() { this.on = []; } }
   const added = (parent, node) => { parent.append(node); for (const o of observers) if (o.on.includes(parent)) o.f([{ target: parent, addedNodes: [node] }]); };
   const on = {};
-  const page = vm.runInContext(read('features/settingspage.js'), vm.createContext({ document: doc, matchMedia: () => ({ matches: true }), CSS: { escape: String }, MutationObserver,
+  const page = vm.runInContext(read('settings/page/settingspage.js'), vm.createContext({ document: doc, matchMedia: () => ({ matches: true }), CSS: { escape: String }, MutationObserver,
     history: { state: null, pushState(s) { this.state = s; }, back() {} }, addEventListener: (type, f) => { on[type] = f; }, removeEventListener: (type) => { delete on[type]; },
     chrome: { runtime: { id: 'glaze', getURL: (f) => `chrome-extension://glaze/${f}`, sendMessage: (m, reply) => reply({ ok: true, ticket: 'a'.repeat(32) }) } } }));
   assert.equal(await page.open(), true);

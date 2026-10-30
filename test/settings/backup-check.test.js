@@ -16,7 +16,7 @@ const harness = (local, expired = false) => {
   } });
   const page = { setDefaultTimeout() {}, goto: async () => {}, waitForFunction: async () => {},
     evaluate: (fn, arg) => vm.runInContext(`(${fn})`, pageContext)(structuredClone(arg)) };
-  const context = { route: async () => {}, serviceWorkers: () => [{ url: () => `${origin}/lib/background.js` }],
+  const context = { route: async () => {}, serviceWorkers: () => [{ url: () => `${origin}/background/background.js` }],
     newPage: async () => page, pages: () => [], on() {} };
   let clock = 0;
   const sandbox = vm.createContext({ require: (name) => name === 'playwright' ? { chromium: { launchPersistentContext: async () => context } }

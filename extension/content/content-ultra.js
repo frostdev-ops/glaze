@@ -43,8 +43,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     const at = route();
     return (meId ||= api('/users/me').then((m) => m.id).catch((e) => { meFailed = failed(e, at); throw e; }));
   };
-  // Gradebooks and contents, fanned out over course cards: lib/ultra.js's reader through the site's queue (lib/lmsq.js).
-  const reader = () => need('lib/lmsq.js', () => globalThis.GZ_LMSQ).then(() => need('lib/ultra.js', () => globalThis.GZ_ULTRA))
+  // Gradebooks and contents, fanned out over course cards: courses/ultra.js's reader through the site's queue (courses/lmsq.js).
+  const reader = () => need('courses/lmsq.js', () => globalThis.GZ_LMSQ).then(() => need('courses/ultra.js', () => globalThis.GZ_ULTRA))
     .then(() => { const live = () => I.settings.enabled && !!I.links.length; return GZ_ULTRA.read({ origin: location.origin, live, f: (u, o) => GZ_LMSQ.fetch(u, o, 0, live) }); });
   const covered = (rows, complete) => Object.defineProperty(rows, 'complete', { value: complete });
   // One page of memberships, shared by names and due-date exceptions.
@@ -56,20 +56,20 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     return (memberships ||= me().then((id) => api(`/users/${id}/memberships?expand=course&limit=200`))
       .then((j) => covered(j.results || [], !j.paging?.nextPage)).catch((e) => { membershipsFailed = failed(e, at); return covered([], false); }));
   };
-  // Planning (features/todo.js…), as Canvas's part: lib/ultra.js reads; each file loaded once on, asked again as it lands.
-  const page = (k) => () => need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page[k]());
+  // Planning (planner/page/todo.js…), as Canvas's part: courses/ultra.js reads; each file loaded once on, asked again as it lands.
+  const page = (k) => () => need('courses/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page[k]());
   const load = (on, file, n) => (on() ? need(file, () => globalThis[n]).then(() => globalThis[n].sync(!!on()), () => {}) : globalThis[n]?.sync(false));
   const top = () => I.links.length && solo && I.settings.enhance;
-  // The sidebar (features/sidebar.js) owns To Do in the visible document while enabled on this kind of page;
+  // The sidebar (navigation/page/sidebar.js) owns To Do in the visible document while enabled on this kind of page;
   // otherwise its legacy places stay in use, including while the sidebar cannot start.
   const sidebarHere = () => !!top()?.sidebar && I.settings.sidebar?.ultra !== false && /^\/ultra(\/|$)/.test(location.pathname);
   const sidebarOn = () => sidebarHere() && (globalThis.GZ_SIDEBAR_UI?.enabled?.() ?? !I.settings.sidebar?.off?.length);
-  const syncSidebar = () => load(sidebarHere, 'features/sidebar.js', 'GZ_SIDEBAR_UI');
-  const syncStream = () => load(() => I.links.length && (isPreview ? globalThis.GZ_STREAM_UI && html.dataset.previewPage === 'stream' : solo && /^\/ultra\/stream(?:\/|$)/.test(location.pathname)), 'features/stream.js', 'GZ_STREAM_UI');
-  const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|institution-page\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname) && !(sidebarOn() && !globalThis.GZ_SIDEBAR_UI?.failed()), 'features/todo.js', 'GZ_TODO_UI');
-  const syncCardTasks = () => load(() => top()?.cardTasks && /^\/ultra\/course\/?$/.test(location.pathname) && document.querySelector(CARD), 'features/cardtasks.js', 'GZ_CARD_TASKS');
+  const syncSidebar = () => load(sidebarHere, 'navigation/page/sidebar.js', 'GZ_SIDEBAR_UI');
+  const syncStream = () => load(() => I.links.length && (isPreview ? globalThis.GZ_STREAM_UI && html.dataset.previewPage === 'stream' : solo && /^\/ultra\/stream(?:\/|$)/.test(location.pathname)), 'courses/page/stream.js', 'GZ_STREAM_UI');
+  const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|institution-page\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname) && !(sidebarOn() && !globalThis.GZ_SIDEBAR_UI?.failed()), 'planner/page/todo.js', 'GZ_TODO_UI');
+  const syncCardTasks = () => load(() => top()?.cardTasks && /^\/ultra\/course\/?$/.test(location.pathname) && document.querySelector(CARD), 'courses/page/cardtasks.js', 'GZ_CARD_TASKS');
   // Reminders and floating widgets are the page's, once: never again in a course tab's frame over it.
-  const syncRemind = () => load(() => !tabFrame && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => top()?.[k]), 'features/reminders.js', 'GZ_REMIND_UI');
+  const syncRemind = () => load(() => !tabFrame && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => top()?.[k]), 'planner/page/reminders.js', 'GZ_REMIND_UI');
 
   // Only submitted attempts have a hand-in date. A newer draft leaves earlier submission timing unknown.
   // Course and item due-date exceptions suppress lateness.
@@ -199,17 +199,17 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       for (const d of found) { const p = d.parentElement; if (p && !docs.has(p)) { p.setAttribute('data-gz-doc', ''); docs.add(p); } }
     }
   };
-  // Requests behind file previews (features/docs.js).
+  // Requests behind file previews (courses/page/docs.js).
   try { new PerformanceObserver((l) => { for (const e of l.getEntries()) if (/view(er)?Url/.test(e.name)) (self.GZ_ASKS ||= []).unshift(e.name); self.GZ_ASKS?.splice(50); }).observe({ type: 'resource', buffered: true }); } catch {}
   // Keep the course strip attached when Ultra replaces its header; no route paint hold.
   const gate = (scope) => { discoverNav(scope); tagDocs([scope]); return globalThis.GZ_CTABS?.held(); };
 
   // ---- course progress (Extras) ---------------------------------------------------------------
   // One bar above the course outline adding up what the outline already says: each folder's
-  // "N of M completed" (in any language: lib/page.js) plus each top-level item's review circle. Redrawn
+  // "N of M completed" (in any language: core/page.js) plus each top-level item's review circle. Redrawn
   // only when the numbers move. The Content page only: other course tabs (Discussions) list items too.
   const renderProgress = () => {
-    if (top()?.hideFolders && /^\/ultra\/courses\/_\d+_\d+\/outline(?:\/|$)/.test(location.pathname)) need('lib/folders.js', () => globalThis.GZ_FOLDERS).then(() => need('features/folders.js', () => globalThis.GZ_FOLDER_UI)).then(() => GZ_FOLDER_UI.sync(!!top()?.hideFolders, meId), () => {});
+    if (top()?.hideFolders && /^\/ultra\/courses\/_\d+_\d+\/outline(?:\/|$)/.test(location.pathname)) need('courses/folders.js', () => globalThis.GZ_FOLDERS).then(() => need('courses/page/folders.js', () => globalThis.GZ_FOLDER_UI)).then(() => GZ_FOLDER_UI.sync(!!top()?.hideFolders, meId), () => {});
     else globalThis.GZ_FOLDER_UI?.sync(false, meId);
     const old = document.getElementById('gz-progress');
     if (!I.settings.enhance.progress || !/^\/ultra\/courses\/_\d+_\d+\/outline(\/|$)/.test(location.pathname)) return old?.remove();
@@ -376,8 +376,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     }
   };
 
-  // ---- grades (Extras): features/grades.js (what-if, GPA), syllabus.js (outline), insights.js (Courses) ----
-  const loadIf = (want, f, name, run) => (globalThis[name] || (I.observer && want)) && need(`features/${f}.js`, () => globalThis[name]).then(() => run(globalThis[name]), () => {});
+  // ---- grades (Extras): planner/page/grades.js (what-if, GPA), syllabus.js (outline), insights.js (Courses) ----
+  const loadIf = (want, f, name, run) => (globalThis[name] || (I.observer && want)) && need(`planner/page/${f}.js`, () => globalThis[name]).then(() => run(globalThis[name]), () => {});
   const onPath = (re) => re.test(location.pathname);
   const renderCalc = () => { const e = I.settings.enhance; loadIf((e.calc && onPath(/^\/ultra\/courses\/_\d+_\d+\/grades/)) || (e.gpa && onPath(/^\/ultra\/grades\/?$/)), 'grades', 'GZ_GRADES_UI', (g) => g.render()); };
   const sylHere = () => solo && I.settings.enhance.syllabus && onPath(/^\/ultra\/courses\/_\d+_\d+\/outline/);
@@ -389,7 +389,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // Institution page, B7b; its own switch, enhance.dashboard, on by default). Ultra routes without reloading; this pass
   // also places Course notes on the outline. Until the Dashboard is drawn, Ultra's own Institution page waits hidden
   // (html[data-gz-dash], apps.css), so it doesn't show for a moment first. A page loaded at Ultra's start may go on to the
-  // Dashboard (opt-in, once: features/dashboard.js); from is its first address, kept until a pass has the settings.
+  // Dashboard (opt-in, once: courses/page/dashboard.js); from is its first address, kept until a pass has the settings.
   let from = location.pathname;
   let globalFloats = false, floatEpoch = 0;
   const floatsIn = (l) => {
@@ -405,9 +405,9 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     syncStream();
     const on = widgetsHere();
     if (!dash()) html.removeAttribute('data-gz-dash'); else if (!html.hasAttribute('data-gz-dash')) html.setAttribute('data-gz-dash', '');
-    if (on) need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => { if (dash()) html.setAttribute('data-gz-dash', 'ip'); }); else globalThis.GZ_WIDGETS_UI?.sync(false);
-    if (from && top()?.dashboard) { const f = from; from = ''; if (/^\/ultra(\/(stream|course))?\/?$/.test(f)) need('features/dashboard.js', () => globalThis.GZ_DASH_UI).then(() => GZ_DASH_UI.land(f), () => {}); }
-    if (solo && (globalThis.GZ_NOTES_UI || (I.settings.enhance.notes && /^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname)))) need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.sync(!!I.links.length && I.settings.enhance.notes), () => {});
+    if (on) need('core/page/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => { if (dash()) html.setAttribute('data-gz-dash', 'ip'); }); else globalThis.GZ_WIDGETS_UI?.sync(false);
+    if (from && top()?.dashboard) { const f = from; from = ''; if (/^\/ultra(\/(stream|course))?\/?$/.test(f)) need('courses/page/dashboard.js', () => globalThis.GZ_DASH_UI).then(() => GZ_DASH_UI.land(f), () => {}); }
+    if (solo && (globalThis.GZ_NOTES_UI || (I.settings.enhance.notes && /^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname)))) need('planner/page/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.sync(!!I.links.length && I.settings.enhance.notes), () => {});
   };
   if (window.top === window) try {
     const epoch = floatEpoch;
@@ -418,7 +418,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
 
   // Course tabs load on demand; extras.css first reserves their cached place and size.
   const tabsOn = () => !!I.links.length && (isPreview || solo) && I.settings.enhance.tabs && !globalThis.GZ_CTABS?.revoked?.();
-  const syncTabs = () => (tabsOn() ? need('lib/coursetabs.js', () => globalThis.GZ_CTABS_LIB).then(() => need('features/coursetabs.js', () => globalThis.GZ_CTABS))
+  const syncTabs = () => (tabsOn() ? need('navigation/coursetabs.js', () => globalThis.GZ_CTABS_LIB).then(() => need('navigation/page/coursetabs.js', () => globalThis.GZ_CTABS))
     .then(() => GZ_CTABS.sync(tabsOn()), () => {}) : globalThis.GZ_CTABS?.sync(false));
 
   // ---- page changes ---------------------------------------------------------------------------
@@ -447,7 +447,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       const link = e.target instanceof Element && e.target.closest(PAGE_LINKS);
       // Native fragment actions and Sign Out must keep their trusted click for later listeners (course tabs included).
       if (!link || link.matches('[aria-current="page"], .active') || /^#|^$|(?:^|\/)logout(?:[/?#]|$)|[?&](?:action|event)=logout(?:[&#]|$)/i.test((link.getAttribute('href') || '').trim())) return;
-      // The page-world guard handles ready too (lib/background.js).
+      // The page-world guard handles ready too (background/background.js).
       if ('activeViewTransition' in document && dispatchEvent(new Event('glaze:transition', { cancelable: true }))) return;
       // Ultra gets the click inside the transition, once the old page has been captured.
       e.preventDefault();
@@ -659,7 +659,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     }
   };
   // Glaze settings, last in Ultra's nav: a copy of its last item (so every nav setting styles it), Glaze's drop for its
-  // icon (theme.css); it opens the editor. Hidden and moved like Ultra's own (lib/nav.js NATIVE 'glaze').
+  // icon (theme.css); it opens the editor. Hidden and moved like Ultra's own (navigation/nav.js NATIVE 'glaze').
   const glazeItem = (on) => {
     for (const root of navRoots) {
       const g = root.isConnected && root.querySelector('a[href="#glaze"]');
@@ -746,13 +746,13 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     if (!isPreview && window.top !== window) return;
     syncDashboard();
     glazeItem(I.links.length && I.settings?.enabled);
-    if (globalThis.GZ_NAVBAR_UI || (I.links.length && I.settings?.navbar?.on)) need('features/navbar.js', () => globalThis.GZ_NAVBAR_UI).then(() => GZ_NAVBAR_UI.sync(), () => {});
-    // Under Glaze navigation features/nav.js stays off, and navItems is read only for it.
+    if (globalThis.GZ_NAVBAR_UI || (I.links.length && I.settings?.navbar?.on)) need('navigation/page/navbar.js', () => globalThis.GZ_NAVBAR_UI).then(() => GZ_NAVBAR_UI.sync(), () => {});
+    // Under Glaze navigation navigation/page/nav.js stays off, and navItems is read only for it.
     const own = I.links.length && !I.settings?.navbar?.on;
     if (globalThis.GZ_NAV_UI) GZ_NAV_UI.sync();
     else if (own && navItems) {
       const n = I.worn.nav;
-      if (n.i || n.li || n.labelOverflow === 'shrink' || n.collapsed || n.labels === 'icons' || globalThis.GZ_CTX?.parts()?.nav || ['links', 'order', 'hidden'].some((k) => Array.isArray(navItems[k]) && navItems[k].length) || (Array.isArray(navItems.widgets) && navItems.widgets.some((w) => w?.on === true))) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync()).catch(() => {});
+      if (n.i || n.li || n.labelOverflow === 'shrink' || n.collapsed || n.labels === 'icons' || globalThis.GZ_CTX?.parts()?.nav || ['links', 'order', 'hidden'].some((k) => Array.isArray(navItems[k]) && navItems[k].length) || (Array.isArray(navItems.widgets) && navItems.widgets.some((w) => w?.on === true))) need('navigation/page/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync()).catch(() => {});
     } else if (own && !navRead) {
       navRead = true;
       try { chrome.storage.sync.get('navItems', (r) => {
@@ -760,7 +760,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
         navItems ||= r?.navItems || {}; syncNav();
       }); } catch { navRead = false; }
     }
-    if (isPreview || location.pathname === '/ultra/course' || globalThis.GZ_CARD_UI) need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => GZ_CARD_UI.paint(), () => {});
+    if (isPreview || location.pathname === '/ultra/course' || globalThis.GZ_CARD_UI) need('courses/page/cards.js', () => globalThis.GZ_CARD_UI).then(() => GZ_CARD_UI.paint(), () => {});
   };
   chrome.storage.onChanged.addListener((c, area) => { if (area === 'sync' && c.navItems) { navItems = c.navItems.newValue || {}; syncNav(); } });
   // A host registered for another LMS may answer settings before Ultra's schema arrives.
@@ -785,7 +785,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
 
 // Known Ultra entry: arm before asynchronous head detection lets the parser reach <body>.
 if (/html/.test(document.contentType) && !document.body && GZ_BUILT_IN('ultra', location) && /^\/ultra(?:\/|$)/.test(location.pathname) && !GZ_SITE_ULTRA.sheets) {
-  GZ_SITE_ULTRA.sheets = ['theme.css', 'motion.css', 'extras.css', 'features/apps.css'].map((f) => {
+  GZ_SITE_ULTRA.sheets = ['content/theme.css', 'content/motion.css', 'content/extras.css', 'core/page/apps.css'].map((f) => {
     const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = chrome.runtime.getURL(f);
     l.setAttribute('blocking', 'render');
     l.onload = l.onerror = () => l.removeAttribute('blocking'); setTimeout(l.onload, 1000);

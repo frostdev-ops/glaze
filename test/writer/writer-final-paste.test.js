@@ -3,9 +3,9 @@
 // its own HTML; a footnote is never cut inside its markup; the link field keeps the schema's one rule for addresses.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../../extension/lib/writer-schema.js');
-const P = require('../../extension/writer-paste.js');
-const OBJ = require('../../extension/lib/writer-objects.js');
+const S = require('../../extension/writer/writer-schema.js');
+const P = require('../../extension/writer/frame/writer-paste.js');
+const OBJ = require('../../extension/writer/writer-objects.js');
 
 const read = (html) => S.paper.topNodeType.create(null, S.slice(S.paper, html).content);
 const paste = (html, o) => read(P.normalize(html, o).html);
@@ -82,7 +82,7 @@ test('A4: pasted text keeps its direction: a block\'s and a run\'s, from a page,
 });
 
 // ---- B20: several table cells selected
-const E = require('../../extension/lib/writer-editor.js');
+const E = require('../../extension/writer/writer-editor.js');
 const cellsState = () => {
   const base = E.state({ mode: 'paper', html: '<p>Before</p><table><tr><td><p>A1</p></td><td><p>B1</p></td></tr><tr><td><p>A2</p></td><td><p>B2</p></td></tr></table><p>After</p>' });
   const cells = [];
@@ -203,8 +203,8 @@ const linkField = async () => {
     GZ_WRITER_SCHEMA: { compose: 'compose', paper: 'paper', delta: () => [{ insert: '\n' }], loses: () => [] },
   });
   ctx.globalThis = ctx;
-  vm.runInContext(file('lib/i18n.js'), ctx);
-  vm.runInContext(file('writer.js'), ctx);
+  vm.runInContext(file('core/i18n.js'), ctx);
+  vm.runInContext(file('writer/frame/writer.js'), ctx);
   const port = { sent: [], postMessage(m) { this.sent.push(m); }, close() {} };
   for (const f of listeners) await f({ data: { type: 'glaze:writer', pass: 'p'.repeat(36) }, ports: [port] });
   port.onmessage({ data: { type: 'init', mode: 'compose', kind: 'reply', html: '<p>Hi there</p>', locale: 'en', look: {} } });
@@ -229,8 +229,8 @@ test('F6: the link field takes what the schema keeps, https:// only before an ad
 });
 
 // ---- A6: every picture in a paper is one Word takes. writer-objects.js in a stand-in DOM, its plugins over a state.
-const X = require('../../extension/lib/writer-docx.js');
-globalThis.GZ_WRITER_OBJECTS_DOCX = require('../../extension/lib/writer-objects-docx.js');
+const X = require('../../extension/writer/writer-docx.js');
+globalThis.GZ_WRITER_OBJECTS_DOCX = require('../../extension/writer/writer-objects-docx.js');
 const WEBP = 'UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA=='; // a 1×1 lossless WebP
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 const objectsFrame = (html) => {
@@ -258,7 +258,7 @@ const objectsFrame = (html) => {
     GZ_WRITER_FRAME: { t: (k) => k, mode: () => 'paper', on: (name, f) => { on[name] = f; }, plugin: (p) => plugins.push(p) },
   });
   ctx.globalThis = ctx;
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/writer-objects.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/writer/frame/writer-objects.js'), 'utf8'), ctx);
   // A view as the editor's: the state with every plugin writer-objects.js adds, and their views told of each change.
   const view = { dom: new El('div', doc), focus() {}, views: [], dispatch(tr) { const prev = this.state; this.state = this.state.apply(tr); for (const v of this.views) v.update?.(this, prev); } };
   view.state = E.state({ mode: 'paper', html: '<p>x</p>' });

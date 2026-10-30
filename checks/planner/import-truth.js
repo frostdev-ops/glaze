@@ -1,10 +1,10 @@
 // What the import fixtures (test/fixtures/import, tools/fidelity/import-fixtures.js) say, and how much of it an import flow's
 // extractor got exactly right from a text: the share of known fields, for test/planner/import.test.js (node) and
 // checks/planner/import-check.js (the browser). → { ok, of, extra }, extra being what it found that isn't there.
-const C = require('../../extension/lib/classes.js');
-globalThis.GZ_CLASSES = C; // lib/syllabus.js reads class times with it
-const S = require('../../extension/lib/syllabus.js');
-const G = require('../../extension/lib/gpa.js');
+const C = require('../../extension/planner/classes.js');
+globalThis.GZ_CLASSES = C; // planner/syllabus.js reads class times with it
+const S = require('../../extension/planner/syllabus.js');
+const G = require('../../extension/planner/gpa.js');
 
 // Class schedule: per class, its meeting (days, start, end) and its place. Extra classes are counted apart.
 const TIMETABLE = [['BIO 1100', '135', '09:00', '09:50', 'Science Hall 120'], ['BIO 1100L', '2', '14:00', '16:50', 'Science Hall 214'],

@@ -59,8 +59,8 @@ var GZ_ANNOUNCE_READ = globalThis.GZ_ANNOUNCE_READ || (() => {
   // Snapshot the course's unread IDs before changing any. Refuse incomplete/malformed pagination, so "all" never
   // silently means the first ten. Only this course's list may supply another page; no titles/bodies are retained.
   const unread = async (p, signal) => {
-    await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA);
-    await ctx.need('lib/lmsq.js', () => globalThis.GZ_LMSQ);
+    await ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA);
+    await ctx.need('courses/lmsq.js', () => globalThis.GZ_LMSQ);
     const api = GZ_ULTRA.read({ origin: location.origin, signal, live: () => live(p), f: async (url, init) => {
       const ctl = new AbortController(), abort = () => ctl.abort();
       const timer = setTimeout(abort, 10000);

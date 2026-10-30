@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Rebuild lib/tesseract/: the Tesseract OCR engine compiled to WebAssembly (tesseract.js-core, Apache-2.0) and
+# Rebuild vendor/tesseract/: the Tesseract OCR engine compiled to WebAssembly (tesseract.js-core, Apache-2.0) and
 # the tessdata_fast models (Apache-2.0) for the six languages Glaze speaks, all bundled: Glaze reads photos with
 # them on the device and never fetches a model from anywhere. Only the core is taken, not tesseract.js's wrapper
-# (lib/ocr.js drives the core itself, and the wrapper's defaults point at a CDN). One core: SIMD, LSTM only,
+# (planner/ocr.js drives the core itself, and the wrapper's defaults point at a CDN). One core: SIMD, LSTM only,
 # which every browser Glaze supports runs and which is all the fast models use. The models are kept gzipped
-# (lib/ocr.js unpacks them), which halves what the installed extension takes on disk. Every download is checked
+# (planner/ocr.js unpacks them), which halves what the installed extension takes on disk. Every download is checked
 # against the SHA-256 pinned here. The core's loader is published minified only, and the Chrome Web Store can take
 # minified code for obfuscation (2026-10-26), so esbuild (pinned and integrity-checked as in tools/vendor/vendor-three.sh)
 # re-prints it with line breaks and indentation: the same code, still under Emscripten's short names, checked against
@@ -42,27 +42,27 @@ curl -fsSL -o "$tmp/core.tgz" "https://registry.npmjs.org/tesseract.js-core/-/te
 echo "$core_sha256  $tmp/core.tgz" | shasum -a 256 -c - >/dev/null
 tar -xzf "$tmp/core.tgz" -C "$tmp"
 
-rm -rf lib/tesseract
-mkdir -p lib/tesseract
+rm -rf vendor/tesseract
+mkdir -p vendor/tesseract
 # --ignore-scripts: esbuild's install script (an optimisation only) never runs; npm-integrity.js checks it before it does.
 npm install --prefix "$tmp/esbuild" --silent --no-save --no-package-lock --ignore-scripts --no-audit --no-fund \
   --registry https://registry.npmjs.org/ "esbuild@$esbuild_version"
 printf '%s\n' "$integrity" | node ../tools/vendor/npm-integrity.js "$tmp/esbuild/node_modules/.package-lock.json" - esbuild
-# A plain script (lib/ocr.js loads it with importScripts), re-printed as it is: no bundling, no format change, no lowering.
+# A plain script (planner/ocr.js loads it with importScripts), re-printed as it is: no bundling, no format change, no lowering.
 { echo "// tesseract.js-core $core loader (Apache-2.0, lib/tesseract/tesseract-core.LICENSE), as published but re-printed with line breaks. Built by scripts/vendor-tesseract.sh."
-  "$tmp/esbuild/node_modules/.bin/esbuild" --loader=js --log-level=warning < "$tmp/package/tesseract-core-simd-lstm.js"; } > lib/tesseract/tesseract-core-simd-lstm.js
-echo "$out_sha256  lib/tesseract/tesseract-core-simd-lstm.js" | shasum -a 256 -c - >/dev/null || {
-  echo "vendor-tesseract: the loader is $(shasum -a 256 lib/tesseract/tesseract-core-simd-lstm.js | cut -d' ' -f1), not the recorded out_sha256; record it if you upgraded on purpose." >&2; exit 1; }
-cp "$tmp/package/tesseract-core-simd-lstm.wasm" lib/tesseract/
-cp "$tmp/package/LICENSE" lib/tesseract/tesseract-core.LICENSE
-chmod 644 lib/tesseract/*
+  "$tmp/esbuild/node_modules/.bin/esbuild" --loader=js --log-level=warning < "$tmp/package/tesseract-core-simd-lstm.js"; } > vendor/tesseract/tesseract-core-simd-lstm.js
+echo "$out_sha256  vendor/tesseract/tesseract-core-simd-lstm.js" | shasum -a 256 -c - >/dev/null || {
+  echo "vendor-tesseract: the loader is $(shasum -a 256 vendor/tesseract/tesseract-core-simd-lstm.js | cut -d' ' -f1), not the recorded out_sha256; record it if you upgraded on purpose." >&2; exit 1; }
+cp "$tmp/package/tesseract-core-simd-lstm.wasm" vendor/tesseract/
+cp "$tmp/package/LICENSE" vendor/tesseract/tesseract-core.LICENSE
+chmod 644 vendor/tesseract/*
 for entry in $models; do
   name="${entry%%:*}" sum="${entry#*:}"
   file="$name.traineddata"
   [ "$name" = LICENSE ] && file=LICENSE
   curl -fsSL -o "$tmp/$file" "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/$data/$file"
   echo "$sum  $tmp/$file" | shasum -a 256 -c - >/dev/null
-  if [ "$name" = LICENSE ]; then cp "$tmp/LICENSE" lib/tesseract/tessdata.LICENSE; else gzip -9n -c "$tmp/$file" > "lib/tesseract/$file.gz"; fi
+  if [ "$name" = LICENSE ]; then cp "$tmp/LICENSE" vendor/tesseract/tessdata.LICENSE; else gzip -9n -c "$tmp/$file" > "vendor/tesseract/$file.gz"; fi
 done
 
-echo "lib/tesseract: core $core (simd-lstm), tessdata_fast $(echo "$models" | grep -v LICENSE | cut -d: -f1 | tr '\n' ' ')($(du -sh lib/tesseract | cut -f1))"
+echo "vendor/tesseract: core $core (simd-lstm), tessdata_fast $(echo "$models" | grep -v LICENSE | cut -d: -f1 | tr '\n' ' ')($(du -sh vendor/tesseract | cut -f1))"

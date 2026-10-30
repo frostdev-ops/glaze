@@ -1,4 +1,4 @@
-// features/docviewer.js in a VM with a small stand-in DOM: the gestures and the import, where a real viewer can't be had.
+// courses/page/docviewer.js in a VM with a small stand-in DOM: the gestures and the import, where a real viewer can't be had.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -59,8 +59,8 @@ const viewer = () => {
     requestAnimationFrame: (f) => { f(); return 0; },
     MutationObserver: class { observe() {} disconnect() {} },
     DOMPoint: class { constructor(x, y) { this.x = x; this.y = y; } matrixTransform() { return { x: this.x, y: this.y }; } },
-    GZ_INK: require('../../extension/lib/ink.js'),
-    GZ_SURFACES: require('../../extension/lib/surfaces.js'),
+    GZ_INK: require('../../extension/courses/ink.js'),
+    GZ_SURFACES: require('../../extension/looks/surfaces.js'),
     chrome: { runtime: { id: 'glaze', getURL: (path) => `chrome-extension://test/${path}` }, storage: {
       onChanged: { addListener() {} },
       local: {
@@ -71,7 +71,7 @@ const viewer = () => {
     } },
   });
   ctx.window = ctx;
-  vm.runInContext(fs.readFileSync(path.join(root, 'features/docviewer.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(root, 'courses/page/docviewer.js'), 'utf8'), ctx);
   const fire = (t, e) => { for (const f of win[t] || []) f({ preventDefault() {}, stopPropagation() {}, ...e }); };
   const tell = async (more = {}) => { fire('message', { source: parent, origin: CANVAS, data: { gz: 'docs', on: true, ink: true, file: '21', user: '5', ...more } }); await settle(); };
   const bar = () => body.children.find((c) => c.id === 'gz-ink-bar');
@@ -120,7 +120,7 @@ test('a Canvas tool picked by keyboard (a click without a pointer) puts Glaze\'s
 const file = (pages) => {
   let resolve;
   const text = new Promise((y) => { resolve = y; });
-  return { f: { size: 100, text: () => text }, done: () => resolve(require('../../extension/lib/ink.js').exportFile('21', pages)) };
+  return { f: { size: 100, text: () => text }, done: () => resolve(require('../../extension/courses/ink.js').exportFile('21', pages)) };
 };
 const MARK = { 1: [{ t: 'pen', c: '#e11d48', w: 3, p: [1, 1, 9, 9] }] };
 
@@ -196,7 +196,7 @@ test('a held storage read cannot replace the latest open of the same document', 
   const v = viewer(), reads = [];
   v.chrome.storage.local.get = () => new Promise((resolve) => reads.push(resolve));
   await v.tell(); await v.tell({ ink: false }); await v.tell();
-  const key = require('../../extension/lib/ink.js').storeKey(CANVAS, '5', '21');
+  const key = require('../../extension/courses/ink.js').storeKey(CANVAS, '5', '21');
   reads[1]({ [key]: { pages: MARK } }); await settle();
   assert.equal(v.svg().firstChild.children[0].attrs.stroke, '#e11d48');
   reads[0]({ [key]: { pages: { 1: [{ ...MARK[1][0], c: '#112233' }] } } }); await settle();

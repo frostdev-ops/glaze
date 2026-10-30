@@ -5,7 +5,7 @@
 // Classic script; module.exports for node.
 var GZ_WRITER_STYLES = globalThis.GZ_WRITER_STYLES || (() => {
   // Word's single line for each paper font, in ems: (winAscent + winDescent + external leading) / unitsPerEm of the fonts
-  // Word has (Tinos, Arimo, Carlito and Cousine copy them; lib/fonts). Word's "double" is twice this, not twice the size.
+  // Word has (Tinos, Arimo, Carlito and Cousine copy them; vendor/fonts). Word's "double" is twice this, not twice the size.
   const LINE = { 'Times New Roman': 2355 / 2048, Arial: 2355 / 2048, Calibri: 2500 / 2048, 'Courier New': 2320 / 2048 };
   const FONTS = Object.keys(LINE);
   // An imported file's fonts Writer doesn't bundle but Word's are well known (Word 365's Aptos, Office's others): kept by
@@ -20,7 +20,7 @@ var GZ_WRITER_STYLES = globalThis.GZ_WRITER_STYLES || (() => {
   const KNOWN = [...FONTS, ...Object.keys(LOCAL)];
   // A font's CSS stack: itself, then its bundled twin where it is one of the well-known ones, then the generic family.
   const stack = (font) => (LOCAL[font] ? `"${font}", "${LOCAL[font][1]}", ${GENERIC_OF(LOCAL[font][1])}` : `"${font}", ${GENERIC_OF(font)}`);
-  // The bundled face for each (lib/fonts/<face>-<weight>-<style>.woff2).
+  // The bundled face for each (vendor/fonts/<face>-<weight>-<style>.woff2).
   const FACES = { 'Times New Roman': 'tinos', Arial: 'arimo', Calibri: 'carlito', 'Courier New': 'cousine' };
   const GENERIC = { 'Times New Roman': 'serif', Arial: 'sans-serif', Calibri: 'sans-serif', 'Courier New': 'monospace' };
   const GENERIC_OF = (font) => GENERIC[font] || 'serif';

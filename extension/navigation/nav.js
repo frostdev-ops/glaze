@@ -1,6 +1,6 @@
 // Ultra-only first-paint schema; the worker, editor and preview use this same sanitizer.
 var GZ_NAV = globalThis.GZ_NAV || (() => {
-  const G = typeof GZ_SPEC === 'undefined' ? require('../defaults.js') : { GZ_SPEC, GZ_DEFAULTS };
+  const G = typeof GZ_SPEC === 'undefined' ? require('../content/defaults.js') : { GZ_SPEC, GZ_DEFAULTS };
   const SPEC = {
     width: [200, [160, 400]], icon: [24, [16, 36]], text: [14, [10, 20]], height: [44, [36, 72]], gap: [2, [0, 16]], padding: [8, [0, 24]],
     labelOverflow: ['ellipsis', ['ellipsis', 'wrap', 'shrink']], itemStyle: ['tile', ['tile', 'pill', 'flat']], itemBackground: [false, 'bool'], activeIndicator: ['bar', ['bar', 'outline', 'background', 'none']],

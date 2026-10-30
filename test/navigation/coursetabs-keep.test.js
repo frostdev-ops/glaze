@@ -5,8 +5,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
 const root = process.env.GZ_B8_REPO || path.join(__dirname, '../../extension');
-const source = fs.readFileSync(path.join(root, 'features/coursetabs.js'), 'utf8');
-const L = require(path.join(root, 'lib/coursetabs.js'));
+const source = fs.readFileSync(path.join(root, 'navigation/page/coursetabs.js'), 'utf8');
+const L = require(path.join(root, 'navigation/coursetabs.js'));
 const part = (a, b, src = source) => src.slice(src.indexOf(a), src.indexOf(b, src.indexOf(a)));
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const fill = (s, a = {}) => s.replace(/\{(\w+)\}/g, (_, k) => a[k]);
@@ -161,7 +161,7 @@ test('the notice outside the strip is a live region over the page, made with the
   const sync = part('  const sync = (want) => {', '  const revoke = ');
   assert.match(sync, /if \(!strip\) make\(\);\s*document\.body\.append\(aside\);/, 'in the page, whatever holds the tabs, once they are on');
   assert.match(sync, /aside\?\.remove\(\)/);
-  const css = read('features/coursetabs.css');
+  const css = read('navigation/page/coursetabs.css');
   assert.match(css, /#gz-ctabs-say\s*\{[^}]*position:\s*fixed/);
   assert.match(css, /#gz-ctabs-say\s*\{[^}]*z-index:\s*1260/, 'over a shown frame too');
 });
@@ -239,7 +239,7 @@ test('in a frame, a panel of its own course that Ultra opens under another page 
 
 // content-ultra.js's page-transition click handler (WP-U1 touches only this block there).
 test('the page-transition click handler leaves Ultra\'s own Sign Out to the page and to course tabs', () => {
-  const ultra = read('content-ultra.js');
+  const ultra = read('content/content-ultra.js');
   const block = part('  if (solo && document.startViewTransition) {', '  // ---- course colors and tint', ultra);
   for (const [href, held] of [['/ultra/stream', true], ['#', false], ['#help', false], ['', false], ['/webapps/login/?action=logout', false], ['/ultra/logout', false], ['/ultra/courses/_7_1/outline?title=logout-policy', true]]) {
     let listener, transitions = 0, handled = 0;
@@ -258,8 +258,8 @@ test('the page-transition click handler leaves Ultra\'s own Sign Out to the page
 });
 
 test('Ultra\'s page-link crossfade starts only with the page world\'s guard there, and hands it the transition', () => {
-  // Chrome rejects a skipped transition's ready in the page's own world too (lib/background.js transitionGuard).
-  const ultra = read('content-ultra.js');
+  // Chrome rejects a skipped transition's ready in the page's own world too (background/background.js transitionGuard).
+  const ultra = read('content/content-ultra.js');
   const block = part('  if (solo && document.startViewTransition) {', '  // ---- course colors and tint', ultra);
   for (const guarded of [false, true]) for (const native of [false, true]) {
     let listener, transition, transitions = 0;
@@ -281,7 +281,7 @@ test('Ultra\'s page-link crossfade starts only with the page world\'s guard ther
 });
 
 test('RTL: injected Ultra UI uses logical sides, and the progress fill grows from the inline start', () => {
-  const extras = read('extras.css'), tabs = read('features/coursetabs.css');
+  const extras = read('content/extras.css'), tabs = read('navigation/page/coursetabs.css');
   const rule = (css, head) => { const i = css.indexOf(head); assert.ok(i >= 0, head); return css.slice(i, css.indexOf('}', i)); };
   const fill = rule(extras, '#gz-progress i::after');
   assert.match(fill, /inset-inline-start:\s*0/);

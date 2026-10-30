@@ -38,7 +38,7 @@
     }
   },
   "background": {
-    "service_worker": "lib/background.js"
+    "service_worker": "background/background.js"
   },
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
@@ -53,16 +53,16 @@
         "https://*/ultra/*"
       ],
       "js": [
-        "lib/color.js",
-        "lib/i18n.js",
-        "lib/page.js",
-        "lib/grades.js",
-        "lib/fonts.js",
-        "lib/surfaces.js",
-        "defaults.js",
-        "lib/nav.js",
-        "content-ultra.js",
-        "content.js"
+        "core/color.js",
+        "core/i18n.js",
+        "core/page.js",
+        "planner/grades.js",
+        "looks/fonts.js",
+        "looks/surfaces.js",
+        "content/defaults.js",
+        "navigation/nav.js",
+        "content/content-ultra.js",
+        "content/content.js"
       ],
       "exclude_matches": [
         "https://*.instructure.com/*"
@@ -75,15 +75,15 @@
         "https://*.instructure.com/*"
       ],
       "js": [
-        "lib/color.js",
-        "lib/i18n.js",
-        "lib/page.js",
-        "lib/grades.js",
-        "lib/fonts.js",
-        "lib/surfaces.js",
-        "defaults.js",
-        "content-canvas.js",
-        "content.js"
+        "core/color.js",
+        "core/i18n.js",
+        "core/page.js",
+        "planner/grades.js",
+        "looks/fonts.js",
+        "looks/surfaces.js",
+        "content/defaults.js",
+        "content/content-canvas.js",
+        "content/content.js"
       ],
       "exclude_matches": [
         "https://canvadocs.instructure.com/*"
@@ -96,14 +96,14 @@
         "https://*.moodlecloud.com/*"
       ],
       "js": [
-        "lib/color.js",
-        "lib/i18n.js",
-        "lib/page.js",
-        "lib/grades.js",
-        "lib/fonts.js",
-        "lib/surfaces.js",
-        "defaults.js",
-        "content.js"
+        "core/color.js",
+        "core/i18n.js",
+        "core/page.js",
+        "planner/grades.js",
+        "looks/fonts.js",
+        "looks/surfaces.js",
+        "content/defaults.js",
+        "content/content.js"
       ],
       "run_at": "document_start",
       "all_frames": true,
@@ -123,7 +123,7 @@
         "https://*.moodlecloud.com/*"
       ],
       "js": [
-        "lib/detect.js"
+        "content/detect.js"
       ],
       "run_at": "document_start"
     },
@@ -135,7 +135,7 @@
         "https://frostdev.io/glaze/mods/*"
       ],
       "js": [
-        "lib/gallery.js"
+        "looks/gallery.js"
       ]
     },
     {
@@ -143,9 +143,9 @@
         "https://*.instructure.com/*"
       ],
       "js": [
-        "lib/ink.js",
-        "lib/surfaces.js",
-        "features/docviewer.js"
+        "courses/ink.js",
+        "looks/surfaces.js",
+        "courses/page/docviewer.js"
       ],
       "run_at": "document_start",
       "all_frames": true
@@ -154,11 +154,11 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "theme.css",
-        "motion.css",
-        "extras.css",
-        "canvas.css",
-        "moodle.css",
+        "content/theme.css",
+        "content/motion.css",
+        "content/extras.css",
+        "content/canvas.css",
+        "content/moodle.css",
         "fonts/*.woff2",
         "assets/art/pets/*/sprites.webp",
         "assets/art/pets/*/spritesheet.webp",
@@ -166,15 +166,15 @@
         "assets/art/stickers/*/*.webp",
         "assets/art/cursors/*/*.png",
         "assets/art/cursors/*/*.svg",
-        "features/lookx.css",
-        "features/rules.css",
-        "features/navlayout.css",
-        "features/navbar.css",
-        "features/apps.css",
-        "features/surfaces.css",
-        "features/coursetabs.css",
-        "features/sidebar.css",
-        "features/docreview.css",
+        "looks/page/lookx.css",
+        "looks/page/rules.css",
+        "navigation/page/navlayout.css",
+        "navigation/page/navbar.css",
+        "core/page/apps.css",
+        "looks/page/surfaces.css",
+        "navigation/page/coursetabs.css",
+        "navigation/page/sidebar.css",
+        "courses/page/docreview.css",
         "assets/logo.svg",
         "assets/logo-dark.svg",
         "icons/icon.svg"
@@ -185,10 +185,10 @@
     },
     {
       "resources": [
-        "lib/scene.js",
-        "lib/three.js",
-        "lib/scene-media.js",
-        "lib/lottie/lottie_light_canvas.js",
+        "looks/scene.js",
+        "vendor/three.js",
+        "looks/scene-media.js",
+        "vendor/lottie/lottie_light_canvas.js",
         "reader.html",
         "writer.html",
         "fonts/*.woff2"
@@ -203,7 +203,7 @@
         "options.html",
         "papers.html",
         "preview.html",
-        "features/allow.html"
+        "courses/allow.html"
       ],
       "matches": [
         "https://*/*"

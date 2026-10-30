@@ -8,8 +8,8 @@
 // still filled. The same for a .pptx: the deck in the slides viewer, and Submit sends the very bytes brought. With
 // Spreadsheets off nothing offers a spreadsheet; on, an empty attempt offers Document or Spreadsheet (and ⋯ New
 // spreadsheet): Spreadsheet keeps the paper as a version and shows the grid, values typed are saved, and Submit sends the
-// sheet's file once (.xlsx where lib/sheet-xlsx.js is in the build, else .csv); a .csv on Ultra's file area opens in the
-// grid by Open in Glaze, as does an .xlsx (lib/sheet-xlsx.js, loaded with the grid), which edited is submitted as .xlsx.
+// sheet's file once (.xlsx where documents/sheets/sheet-xlsx.js is in the build, else .csv); a .csv on Ultra's file area opens in the
+// grid by Open in Glaze, as does an .xlsx (documents/sheets/sheet-xlsx.js, loaded with the grid), which edited is submitted as .xlsx.
 // An attached PDF (the assignment's content item, test/fixtures/ultra-writer-attach-content.json, with a PDF entry in its
 // .docx entry's shape; on the page a link to the file in the instructions, a stand-in: how Ultra draws an attachment on
 // the attempt page wasn't probed) gets Open in Glaze beside its link, PDFs on, and that alone: the file comes by the page's
@@ -25,8 +25,8 @@ const env = require('../../tools/dev/check-env.js'), root = path.resolve(process
 const HARNESS = require('../mocks/ultra-attempt-harness.js');
 const { tap } = require('../mocks/frame-tap.js');
 const PDF = require('../../tools/fidelity/pdf-fixtures.js');
-const Z = require('../../extension/lib/zip.js');
-const XL = require('../../extension/lib/sheet-xlsx.js'), SM = require('../../extension/lib/sheet-model.js');
+const Z = require('../../extension/core/zip.js');
+const XL = require('../../extension/documents/sheets/sheet-xlsx.js'), SM = require('../../extension/documents/sheets/sheet-model.js');
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const site = 'https://bb.school.test';
 const QUILL = { url: 'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js', sha256: 'c675f57388d3598637c4e0f9fe154bd61dfb1c2086271f944a0bb2b9b059b074' };
@@ -53,7 +53,7 @@ const until = async (fn, label, ms = 20000, state = null) => {
   const was = state ? await Promise.resolve().then(state).then((x) => JSON.stringify(x), (e) => `unreadable: ${e.message}`) : '';
   throw Error(`${label} timed out after ${ms} ms${last ? `: ${last.message}` : ''}${was ? `; at the deadline ${was}` : ''}`);
 };
-// features/writer.js: 15 s for the initial frame plus FRAME_RETRIES (2) reopens = 45 s, with 5 s margin for this wait.
+// writer/page/writer.js: 15 s for the initial frame plus FRAME_RETRIES (2) reopens = 45 s, with 5 s margin for this wait.
 const FRAME_SHOWN_MS = 50000;
 const check = (v, label) => { assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
 const quiet = async (fn, label, ms = 800) => { const end = Date.now() + ms; while (Date.now() < end) { if (await fn()) throw Error(`${label}: it happened`); await pause(80); } return true; };
@@ -109,13 +109,13 @@ const holds = (bytes, value) => {
       return r.fulfill({ contentType: 'application/json', body: JSON.stringify(data) });
     });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
-    const G = require(path.join(root, 'defaults.js'));
+    const G = require(path.join(root, 'content/defaults.js'));
     const settings = (w) => G.GZ_SANITIZE({ navbar: { on: false }, footer: false, preset: 'Frost', enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, writerUploads: true, drafts: true }, writer: { full: false, sheets: false, pdf: false, slides: false, ...w } });
     const reset = (w) => worker.evaluate(async ({ s, site }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(s); await chrome.storage.local.set({ ultra: [site] }); }, { s: settings(w), site });
     await reset({ pdf: true, slides: true });
     const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/popup.html`); await env.ultraReady(opts); await opts.close();
     const local = () => worker.evaluate(async () => chrome.storage.local.get(null));
-    // A record's file bytes: from the worker's file store (lib/doc-files.js), or a record's base64 from before it.
+    // A record's file bytes: from the worker's file store (documents/doc-files.js), or a record's base64 from before it.
     const bytesOf = async (rec) => Buffer.from(await worker.evaluate(async (f) => { if (typeof f === 'string') return f; let s = ''; await openDocFiles().read(f.hash, (c) => { s += GZ_DOC_FILES.b64(c); }); return s; }, rec.file), 'base64');
     const record = async () => { const all = await local(), k = Object.keys(all).find((x) => x.startsWith('writerPaper:')); return k ? all[k] : null; };
     const versions = async () => { const all = await local(), k = Object.keys(all).find((x) => x.startsWith('writerVersions:')); return all[k] || []; };
@@ -206,7 +206,7 @@ const holds = (bytes, value) => {
     check(rec.kind === 'pdf' && rec.file && holds((await bytesOf(rec)), 'Rivera Field'), `a filled field is saved into the record's PDF (${rec.size} bytes)`);
     // PDF → Word → Undo exercises the real importer, file-version restore and viewer disposal in the assignment frame.
     const word = await fr.evaluate(async () => {
-      await GZ_WRITER_PAPER.need(['lib/writer-color.js', 'lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects-docx.js']);
+      await GZ_WRITER_PAPER.need(['writer/writer-color.js', 'core/zip.js', 'core/doctext.js', 'writer/writer-docx.js', 'writer/writer-objects-docx.js']);
       const doc = GZ_WRITER_SCHEMA.paper.nodeFromJSON({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Replacement Word draft.' }] }] });
       return Array.from((await GZ_WRITER_DOCX.exportDocx(doc, { format: GZ_WRITER_STYLES.get('plain') })).bytes);
     });

@@ -1,4 +1,4 @@
-// Glaze Writer's objects in the real unpacked extension (writer-objects.js over lib/writer-objects.js), on the synthetic
+// Glaze Writer's objects in the real unpacked extension (writer-objects.js over writer/writer-objects.js), on the synthetic
 // assignment attempt (paper mode) and message box (compose mode) running the real Quill 1.3.7, as
 // checks/writer/writer-paper-check.js and checks/writer/writer-compose-check.js set them up: pictures from a file, pasted and dropped
 // (downscaled, sized, aligned, captioned, resized by a handle, deleted by key), tables (grid, toolbar, Tab, header,
@@ -80,7 +80,7 @@ const HARNESS = `(() => {
       return r.fulfill({ contentType: 'application/json', body: JSON.stringify(data) });
     });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
-    const G = require(path.join(root, 'defaults.js'));
+    const G = require(path.join(root, 'content/defaults.js'));
     const configure = async (preset) => {
       const settings = G.GZ_SANITIZE({ writer: { full: true }, navbar: { on: false }, footer: false, preset, colors: G.GZ_PRESETS?.find?.(([n]) => n === preset)?.[1], enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, drafts: true } });
       await worker.evaluate(async ({ settings, site }) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(settings); await chrome.storage.local.set({ ultra: [site] }); }, { settings, site });

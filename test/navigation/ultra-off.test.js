@@ -5,9 +5,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
+const D = require('../../extension/content/defaults.js');
 const manifest = require('../../extension/manifest.json');
-const files = manifest.content_scripts.find((s) => s.js.includes('content-ultra.js')).js;
+const files = manifest.content_scripts.find((s) => s.js.includes('content/content-ultra.js')).js;
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 12; i++) await new Promise(setImmediate); };
 // A Blackboard host, approved without asking (WP-C2): these tests are about Glaze's switch, not consent.
@@ -186,7 +186,7 @@ test('CORE-4: with Glaze on, the theme goes on from the cached copy at once and 
   assert.deepEqual(p.requests, []);
   await p.answer();
   assert.equal(p.sweeping(), true);
-  assert.ok(traces(p).loads.includes('features/sidebar.js'), 'the sidebar starts as soon as the settings are in, without waiting for a pass');
+  assert.ok(traces(p).loads.includes('navigation/page/sidebar.js'), 'the sidebar starts as soon as the settings are in, without waiting for a pass');
 });
 
 test('CORE-3: the copy in the page\'s sessionStorage holds what first paint needs and nothing else', async () => {

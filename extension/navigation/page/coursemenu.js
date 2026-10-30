@@ -14,9 +14,9 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
   // Ultra's course-color-1…10 in order, by hue, for the swatches' names.
   const TONES = ['Purple', 'Cyan', 'Yellow', 'Orange', 'Mint', 'Pink', 'Green', 'Teal', 'Magenta', 'Blue'];
   let menu = null; // { box, btn, cid, nick, edited, note, custom, reset, tint, grid, sw, looks } while the popover is open
-  // The student's saved and gallery Looks (lib/looks.js: the worker's storage.local lookCatalog), as they change, for the Looks.
+  // The student's saved and gallery Looks (looks/looks.js: the worker's storage.local lookCatalog), as they change, for the Looks.
   let kept = [], reading = 0;
-  const keep = () => { const n = ++reading; return Promise.resolve().then(() => ctx.need('lib/looks.js', () => globalThis.GZ_CATALOG)).then(() => chrome.storage.local.get(GZ_CATALOG.KEY)).then((r) => { if (n === reading) { kept = GZ_CATALOG.looks(r?.[GZ_CATALOG.KEY]); refreshLooks(); } }, () => {}); };
+  const keep = () => { const n = ++reading; return Promise.resolve().then(() => ctx.need('looks/looks.js', () => globalThis.GZ_CATALOG)).then(() => chrome.storage.local.get(GZ_CATALOG.KEY)).then((r) => { if (n === reading) { kept = GZ_CATALOG.looks(r?.[GZ_CATALOG.KEY]); refreshLooks(); } }, () => {}); };
   keep();
   try { chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c.lookCatalog) keep(); }); } catch { /* extension reloaded under the tab */ }
   let fading = null; // a closed menu may paint briefly, but must not duplicate the next menu's ids/label targets
@@ -257,7 +257,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     if ((!commitNick(m) || !saveEdits()) && !teardown) return false;
     if (canvas) colored.get(numOf(m.cid))?.save?.();
     menu = null;
-    // It fades as it closes (lib/motion.js); at once when its card or the extra has gone with it.
+    // It fades as it closes (core/motion.js); at once when its card or the extra has gone with it.
     if (teardown || !globalThis.GZ_MOTION) m.box.remove();
     else { fading?.remove(); fading = m.box; GZ_MOTION.exit(m.box).then(() => { if (fading === m.box) fading = null; }); }
     m.btn.setAttribute('aria-expanded', 'false');

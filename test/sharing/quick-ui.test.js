@@ -1,4 +1,4 @@
-// The actual Notes share UI in a small DOM, with lib/sessions.js over memory and a localhost disk relay.
+// The actual Notes share UI in a small DOM, with sharing/sessions.js over memory and a localhost disk relay.
 // Runtime messages use the broker's stop-before-delete/leave interruption rule; no live service is contacted.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -6,11 +6,11 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const vm = require('node:vm');
-const S = require('../../extension/lib/sessions.js');
-const N = require('../../extension/lib/notes.js');
-const T = require('../../extension/lib/todo.js');
-const R = require('../../extension/lib/relay.js');
-const G = require('../../extension/defaults.js');
+const S = require('../../extension/sharing/sessions.js');
+const N = require('../../extension/planner/notes.js');
+const T = require('../../extension/planner/todo.js');
+const R = require('../../extension/sharing/relay.js');
+const G = require('../../extension/content/defaults.js');
 const { relay, diskStore } = require('../../server/relay.js');
 const { El } = require('../stand-in-dom.js');
 const SOURCE = fs.readFileSync(path.join(__dirname, '../../extension/sharing/quick.js'), 'utf8');
@@ -80,7 +80,7 @@ const page = async (d, { note = '', relay: selected, observer = 'v2', permission
   Object.assign(doc, { createElement: make, querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s) });
   const handle = async (m) => {
     calls.push(clone(m));
-    // The worker opens Settings for the panel (lib/background.js): the port's settings op, or glaze:settings-at.
+    // The worker opens Settings for the panel (background/background.js): the port's settings op, or glaze:settings-at.
     if (m.op === 'settings' || m.type === 'glaze:settings-at') { opened.push(clone(m)); return { ok: true }; }
     if (['leave', 'delete'].includes(m.op)) d.worker.stop();
     await d.hold?.(m);
@@ -93,7 +93,7 @@ const page = async (d, { note = '', relay: selected, observer = 'v2', permission
     location: { search: '?t=ticket' },
     navigator: { userActivation: { isActive: true }, clipboard: { writeText: async (v) => { copied.push(v); } } },
     GZ_I18N: { page() {}, ui() {}, t: (k, vars) => k.replace(/\{(\w+)\}/g, (_, key) => vars?.[key] ?? '') }, GZ_RELAY: R,
-    ...G, GZ_COLOR: require('../../extension/lib/color.js'), GZ_FONTS: require('../../extension/lib/fonts.js'),
+    ...G, GZ_COLOR: require('../../extension/core/color.js'), GZ_FONTS: require('../../extension/looks/fonts.js'),
     matchMedia: () => ({ matches: false, addEventListener() {} }), addEventListener: (name, f) => events.set(name, f),
     chrome: { storage: { sync, onChanged: { addListener(f) { changes.push(f); } } }, ...(permissions && { permissions: { contains: async () => true, request: async () => true } }), tabs: { create: async (tab) => { created.push(tab); } },
       runtime: { id: 'glaze', getURL: (f) => `chrome-extension://glaze/${f}`, connect: () => ({ onMessage: { addListener: (f) => messages.push(f) }, onDisconnect: { addListener: (f) => disconnects.push(f) }, disconnect() {},
@@ -337,7 +337,7 @@ test('quick offline Join retains its keys and appears after the promised Setting
 
 test('a share too big to sync says so in the panel, not Offline', async (t) => {
   const server = await start(t), d = device(t, server), { id, sid } = await sharedNote(d);
-  // What the worker keeps after a sync that could not hold what it read (lib/sessions.js update()).
+  // What the worker keeps after a sync that could not hold what it read (sharing/sessions.js update()).
   await d.db.put('sessions', sid, { ...await d.db.get('sessions', sid), status: 'big', error: 'state' });
   const p = await page(d, { note: id });
   assert.equal(p.get('note-state').textContent, 'Shared · Too big to sync — local copy kept');

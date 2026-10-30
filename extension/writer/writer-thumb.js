@@ -3,7 +3,7 @@
 // render() builds the page as the editor does (the format's geometry, running header and paragraph CSS, the body through
 // the paper schema's DOMSerializer, the editor's own class names so writer-paper.css styles it) and scales it down. No
 // canvas, no measuring, no timers: each format's page CSS goes once into an adopted sheet, scoped to its own class.
-// Classic script after lib/pm.js, lib/writer-schema.js and lib/writer-styles.js; module.exports for node.
+// Classic script after vendor/pm.js, writer/writer-schema.js and writer/writer-styles.js; module.exports for node.
 var GZ_WRITER_THUMB = globalThis.GZ_WRITER_THUMB || (() => {
   const ST = () => (typeof GZ_WRITER_STYLES !== 'undefined' ? GZ_WRITER_STYLES : require('./writer-styles.js'));
   const S = () => (typeof GZ_WRITER_SCHEMA !== 'undefined' ? GZ_WRITER_SCHEMA : require('./writer-schema.js'));
@@ -73,7 +73,7 @@ var GZ_WRITER_THUMB = globalThis.GZ_WRITER_THUMB || (() => {
 
   // ---- the page
   const el = (doc, tag, cls, text) => { const e = doc.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
-  // An imported header's or footer's paragraphs (lib/writer-styles.js headerParts), as writer-paper.js draws them; a tab
+  // An imported header's or footer's paragraphs (writer/writer-styles.js headerParts), as writer-paper.js draws them; a tab
   // stays a tab character (laying stops out would need measuring).
   const parts = (doc, list, cls, L) => {
     const box = el(doc, 'div', cls);
@@ -89,7 +89,7 @@ var GZ_WRITER_THUMB = globalThis.GZ_WRITER_THUMB || (() => {
     }
     return box;
   };
-  // What lib/writer-paginate.js's styler decorates the editor's blocks with: a block's own spacing as Word counts it in px,
+  // What writer/writer-paginate.js's styler decorates the editor's blocks with: a block's own spacing as Word counts it in px,
   // and the list page's entries.
   const dress = (L, n, dom, where = {}) => {
     if (!dom || dom.nodeType !== 1) return;

@@ -1,11 +1,11 @@
 // Glaze Writer (enhance.writer), loaded on demand: content.js loads this once an Ultra editor box is on the page or
-// written in, and hands it each pass. Every box lib/writer-ultra.js knows gets Glaze's editor (writer.html) in a frame in
-// its place. Ultra's own editor stays in the page, hidden, and is kept in step through lib/writer-main.js in the page's
+// written in, and hands it each pass. Every box writer/writer-ultra.js knows gets Glaze's editor (writer.html) in a frame in
+// its place. Ultra's own editor stays in the page, hidden, and is kept in step through writer/writer-main.js in the page's
 // world (the frame's Quill ops, written as they are), so Ultra's Post, Reply, Send and Submit send what was written and
 // its word count and drafts follow. A box holding what Writer can't keep (an attachment, a table, maths, right-to-left
 // text…) stays Blackboard's, untouched: the frame checks before anything is written. Ctrl/Cmd+Enter
 // in the frame clicks Post, Reply or Send when Ultra allows it (never an attempt's Submit). ⋯ → Blackboard editor gives
-// the box back, to Ultra and to draft backup (features/drafts.js skips boxes marked data-gz-writer). Whatever fails leaves
+// the box back, to Ultra and to draft backup (writer/page/drafts.js skips boxes marked data-gz-writer). Whatever fails leaves
 // Ultra's editor, or keeps the draft in Writer until a native write succeeds. An assignment's paper is the exception, below.
 // Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_WRITER = globalThis.GZ_WRITER || (() => {
@@ -28,7 +28,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const on = () => X.on() && X.site === 'ultra' && X.settings().enabled !== false && !!X.settings().enhance?.writer;
 
   // The Look as the frame wears it: the palette, radius and font on <html>, light or dark, and the motion level; and its
-  // surfaces (features/surfaces.css), resolved: the page's ground (transparent over a background), the glass mix and edges.
+  // surfaces (looks/page/surfaces.css), resolved: the page's ground (transparent over a background), the glass mix and edges.
   // Glass only over a background: on a solid one the panels stay opaque, as the mockups draw them. An unset opacity is opaque.
   const TOKENS = [...GZ_COLORS.map(([k]) => k), '--gz-radius', '--gz-font', '--gz-ground', '--gz-surface-paint', '--gz-surface-paint-2', '--gz-surface-opacity', '--gz-glass-mix', '--gz-border-line', '--gz-border-strong'];
   const look = () => {
@@ -45,7 +45,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     for (const box of boxes.values()) { box.port?.postMessage({ type: 'look', look: l }); if (box.frame) box.frame.style.colorScheme = l.dark ? 'dark' : 'light'; }
   }).observe(html, { attributes: true, attributeFilter: ['style', 'data-gz-dark-theme', 'data-gz-motion', 'data-gz-bg'] });
 
-  // lib/writer-main.js, in the page's world: its answer comes back inside the dispatch, or not at all. Every answer for
+  // writer/writer-main.js, in the page's world: its answer comes back inside the dispatch, or not at all. Every answer for
   // the id is kept, since the page can add its own: what counts is the one the native editor bears out.
   const main = (op, m) => {
     const got = [];
@@ -57,7 +57,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const squash = (s) => String(s || '').replace(/\s+/g, ' ').trim();
 
   // ---- a box's life: asked for, opened, written in, given back -------------------------------------------------------
-  const drafts = () => X.need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => X.need('features/drafts.js', () => globalThis.GZ_DRAFT_UI));
+  const drafts = () => X.need('writer/drafts.js', () => globalThis.GZ_DRAFTS).then(() => X.need('writer/page/drafts.js', () => globalThis.GZ_DRAFT_UI));
   const remember = (box) => {
     clearTimeout(box.backup);
     if (!box.snapshot) return;
@@ -75,8 +75,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     box.container === box.editor.closest('.ql-container') && box.editor.id === box.editorId &&
     U().kindOf(box.editor, { path: location.pathname, attempt: box.kind === 'test' ? 'test' : '' }) === box.kind &&
     (box.kind !== 'reply' || U().replyTo(box.editor) === (box.context.post?.id || ''));
-  // An assignment's paper key (lib/writer-papers.js keyOf: the school, the student, the course and the assignment), as
-  // lib/writer-context-assignment.js builds it, from the student's id alone, so the frame opens the student's paper rather
+  // An assignment's paper key (writer/writer-papers.js keyOf: the school, the student, the course and the assignment), as
+  // writer/writer-context-assignment.js builds it, from the student's id alone, so the frame opens the student's paper rather
   // than a stand-in while the rest of the context is read. null when the id isn't known within a few seconds.
   const paperOf = async () => {
     const a = U().attemptAt(location.pathname);
@@ -117,7 +117,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     box.wait = setTimeout(() => reopen(box), 15000);
     // Only to Glaze's own origin (spelled out: URL.origin of an extension scheme is "null" in some engines), so a frame
     // the page navigated elsewhere gets nothing. Lowercase, as the frame's origin is: Safari's getURL keeps its UUID
-    // uppercase (lib/background.js OWN_ORIGIN).
+    // uppercase (background/background.js OWN_ORIGIN).
     const origin = src.slice(0, src.indexOf('/', src.indexOf('://') + 3)).toLowerCase();
     let offered = false, transferred = false;
     const hello = async (e) => {
@@ -211,14 +211,14 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     const selection = typing && box.mode === 'compose' && !box.recovered ? main('get', { id: box.id }).find((r) => r?.ok && r.html === ed.innerHTML && r.selection)?.selection : null;
     if (box.mode === 'paper') box.context = { ...box.context, recovery: location.origin + location.pathname };
     box.port.postMessage({ type: 'init', mode: box.mode, kind: box.kind, html: box.latest, selection, placeholder: ed.getAttribute('data-placeholder') || '', look: l, context: box.context, locale: X.locale() });
-    if (['post', 'reply', 'message', 'journal'].includes(box.kind)) X.need('lib/writer-context-discussion.js', () => globalThis.GZ_WRITER_CONTEXT_DISCUSSION).then(() => globalThis.GZ_WRITER_CONTEXT_DISCUSSION?.watch(box, X), () => {});
-    if (box.kind === 'reply') X.need('features/writer-quote.js', () => globalThis.GZ_WRITER_QUOTE).then(() => globalThis.GZ_WRITER_QUOTE?.arm(box), () => {});
+    if (['post', 'reply', 'message', 'journal'].includes(box.kind)) X.need('writer/writer-context-discussion.js', () => globalThis.GZ_WRITER_CONTEXT_DISCUSSION).then(() => globalThis.GZ_WRITER_CONTEXT_DISCUSSION?.watch(box, X), () => {});
+    if (box.kind === 'reply') X.need('writer/page/writer-quote.js', () => globalThis.GZ_WRITER_QUOTE).then(() => globalThis.GZ_WRITER_QUOTE?.arm(box), () => {});
     box.display ||= [box.root.style.getPropertyValue('display'), box.root.style.getPropertyPriority('display')];
     box.root.style.setProperty('display', 'none', 'important');
     for (const k of ['position', 'opacity', 'pointer-events']) f.style.removeProperty(k);
     if (!typing && l.motion !== 'off' && !matchMedia('(prefers-reduced-motion: reduce)').matches) f.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: 'ease-out' });
     if (typing) { f.focus(); box.port.postMessage({ type: 'focus' }); }
-    if (box.mode === 'paper') { X.need('lib/writer-context-assignment.js', () => globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT).then(() => GZ_WRITER_CONTEXT_ASSIGNMENT.send(X, box, () => boxes.get(ed) === box)).catch(() => {}); return; }
+    if (box.mode === 'paper') { X.need('writer/writer-context-assignment.js', () => globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT).then(() => GZ_WRITER_CONTEXT_ASSIGNMENT.send(X, box, () => boxes.get(ed) === box)).catch(() => {}); return; }
     // Ultra changing its own editor (a post sent and cleared, its saved draft put back): the frame shows it. Its text, not
     // its markup, says so: Quill tidies markup after each sync.
     box.observer = new MutationObserver(() => {
@@ -240,8 +240,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   };
   const hear = (box, m) => {
     if (m.type === 'ready' && !box.ready) swap(box);
-    else if (m.type.startsWith('submit:')) { if (box.mode === 'paper') X.need('lib/writer-submit.js', () => globalThis.GZ_WRITER_SUBMIT_LIB).then(() => X.need('features/writer-submit.js', () => globalThis.GZ_WRITER_SUBMIT)).then(() => boxes.get(box.editor) === box && GZ_WRITER_SUBMIT.hear(box, m, X, () => boxes.get(box.editor) === box && sameBox(box)), () => {}); }
-    else if (m.type === 'attachments') { if (box.mode === 'paper') X.need('lib/writer-context-assignment.js', () => globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT).then(() => GZ_WRITER_CONTEXT_ASSIGNMENT.attachments(X, box, m, () => boxes.get(box.editor) === box && sameBox(box)), () => {}); }
+    else if (m.type.startsWith('submit:')) { if (box.mode === 'paper') X.need('writer/writer-submit.js', () => globalThis.GZ_WRITER_SUBMIT_LIB).then(() => X.need('writer/page/writer-submit.js', () => globalThis.GZ_WRITER_SUBMIT)).then(() => boxes.get(box.editor) === box && GZ_WRITER_SUBMIT.hear(box, m, X, () => boxes.get(box.editor) === box && sameBox(box)), () => {}); }
+    else if (m.type === 'attachments') { if (box.mode === 'paper') X.need('writer/writer-context-assignment.js', () => globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT).then(() => GZ_WRITER_CONTEXT_ASSIGNMENT.attachments(X, box, m, () => boxes.get(box.editor) === box && sameBox(box)), () => {}); }
     else if (m.type === 'compact:flushed') {
       const f = box.flushing;
       if (!f || m.request !== f.request) return;
@@ -359,7 +359,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       box.sending = true;
     }
     // An attempt's Submit and Save and Close send its box: a compact paper's last edit goes in first; a full paper's
-    // press waits for its submit step (features/writer-submit.js) while the frame isn't up to have one.
+    // press waits for its submit step (writer/page/writer-submit.js) while the frame isn't up to have one.
     for (const box of boxes.values()) {
       if (box.mode !== 'paper' || !/\.footer\..*(?:submit|saveAndClose)$/.test(b.getAttribute('data-analytics-id') || '') || !box.editor.closest('bb-assignment-attempt-authoring-panel')?.contains(b) || !sameBox(box)) continue;
       if (box.full && globalThis.GZ_WRITER_SUBMIT?.armed?.(box)) continue;
@@ -475,7 +475,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     box.root.removeAttribute('data-gz-writer');
     box.container.removeAttribute('data-gz-writer-id');
   };
-  // The frame found what it can't keep in the box (lib/writer-schema.js loses) before writing anything: the box stays
+  // The frame found what it can't keep in the box (writer/writer-schema.js loses) before writing anything: the box stays
   // Blackboard's as it is, nothing synced.
   const refuse = (box) => {
     if (box.snapshot) { giveBack(box, false); return; }
@@ -497,8 +497,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (area === 'sync' && (c.enabled?.newValue === false || c.enhance?.newValue?.writer === false)) dropAll();
   });
 
-  // An attempt's kind, from the page Ultra draws and its gradebook (lib/writer-ultra.js pageKind). This document,
-  // including a course tab's frame, tells the worker, which keeps AI off tests (lib/background.js
+  // An attempt's kind, from the page Ultra draws and its gradebook (writer/writer-ultra.js pageKind). This document,
+  // including a course tab's frame, tells the worker, which keeps AI off tests (background/background.js
   // 'glaze:attempt-kind'). Once the worker has it, each frame on the page is told ('ai'): one that asked before asks again.
   let told = null;
   // A canvas can disappear while Ultra redraws. Once seen as a test, this assessment stays one for this document,
@@ -545,10 +545,10 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       else if (box.kind === 'journal' && !U().sendOf(box.editor, 'journal')) drop(box); // its Cancel, or the entry sent
       else if (box.frame && !box.frame.isConnected) { if (box.unsynced || box.mode === 'paper') reopen(box); else drop(box); }
       // An attached PDF, deck or spreadsheet: Open in Glaze beside its link while its switch is on
-      // (lib/writer-context-assignment.js).
+      // (writer/writer-context-assignment.js).
       else if (box.mode === 'paper' && (box.files?.length || box.openers?.size)) globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT?.decorate(X, box);
     }
-    if (!U()) { X.need('lib/writer-ultra.js', () => globalThis.GZ_WRITER_ULTRA).then(() => on() && pass(), () => {}); return; }
+    if (!U()) { X.need('writer/writer-ultra.js', () => globalThis.GZ_WRITER_ULTRA).then(() => on() && pass(), () => {}); return; }
     const at = { path: location.pathname, attempt: attempt() };
     if (U().attemptAt(at.path) && !at.attempt) return;
     for (const b of U().boxes(document, at, (ed) => boxes.has(ed) || declined.has(ed) || Date.now() - (failed.get(ed) || 0) < 60000)) {

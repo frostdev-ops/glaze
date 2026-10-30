@@ -50,11 +50,11 @@ const sheets = (page) => page.evaluate(() => [...document.querySelectorAll('link
     const want = [`ultra:${held}`];
     check(await until(async () => JSON.stringify((await ids()).filter((x) => x.startsWith('ultra:'))) === JSON.stringify(want)), `the listed Ultra site whose host is held is registered, the other not (${(await ids()).join(', ')})`);
     const reg = await opts.evaluate(async (x) => (await chrome.scripting.getRegisteredContentScripts({ ids: [x] }))[0], `ultra:${held}`);
-    check(JSON.stringify(reg.matches) === JSON.stringify([`${held}/ultra`, `${held}/ultra/*`]) && reg.js.at(-1) === 'content.js' && reg.js.includes('content-ultra.js') && reg.allFrames && reg.runAt === 'document_start', 'on its /ultra pages, with Ultra\'s first content script');
+    check(JSON.stringify(reg.matches) === JSON.stringify([`${held}/ultra`, `${held}/ultra/*`]) && reg.js.at(-1) === 'content/content.js' && reg.js.includes('content/content-ultra.js') && reg.allFrames && reg.runAt === 'document_start', 'on its /ultra pages, with Ultra\'s first content script');
 
     const page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e)));
     await page.goto(`${held}/ultra/courses/_101_1/outline`);
-    check(await until(async () => (await sheets(page)).includes('theme.css')), 'the held school host\'s Ultra page gets Glaze');
+    check(await until(async () => (await sheets(page)).includes('content/theme.css')), 'the held school host\'s Ultra page gets Glaze');
     if (out) { fs.mkdirSync(out, { recursive: true }); await page.screenshot({ path: path.join(out, 'held.png') }); }
 
     await page.goto(`${other}/ultra/courses/_101_1/outline`);
@@ -62,9 +62,9 @@ const sheets = (page) => page.evaluate(() => [...document.querySelectorAll('link
     check((await sheets(page)).length === 0, 'the same page on a host not held gets nothing, though its site is listed');
 
     await page.goto(`${moodle}/my/`);
-    check(await until(async () => (await sheets(page)).includes('moodle.css')), 'MoodleCloud\'s page gets Glaze\'s Moodle sheets');
+    check(await until(async () => (await sheets(page)).includes('content/moodle.css')), 'MoodleCloud\'s page gets Glaze\'s Moodle sheets');
     const there = await sheets(page);
-    check(!there.includes('canvas.css') && !there.includes('theme.css'), `and only Moodle's (${there.join(', ')})`);
+    check(!there.includes('content/canvas.css') && !there.includes('content/theme.css'), `and only Moodle's (${there.join(', ')})`);
     check(!(await ids()).some((x) => x.includes('moodlecloud')), 'from the manifest\'s entry: nothing is registered for MoodleCloud');
     if (out) await page.screenshot({ path: path.join(out, 'moodlecloud.png') });
 

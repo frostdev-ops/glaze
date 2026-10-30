@@ -1,10 +1,10 @@
-// The AI harness's failures, call record and connections (lib/ai/failure.js, lib/ai/endpoint.js), with cases ported from
+// The AI harness's failures, call record and connections (ai/failure.js, ai/endpoint.js), with cases ported from
 // Rimeward's tests/agent-diagnostics.test.ts and accounts rules (MIT): a failure is a category with a reference and no
 // payload; the record keeps the last 40 calls, metadata only; a key goes only over https or to this computer.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const F = require('../../extension/lib/ai/failure.js');
-const E = require('../../extension/lib/ai/endpoint.js');
+const F = require('../../extension/ai/failure.js');
+const E = require('../../extension/ai/endpoint.js');
 
 test('model failures distinguish causes, keep a reference and carry no payload', () => {
   for (const [error, aborted, category] of [

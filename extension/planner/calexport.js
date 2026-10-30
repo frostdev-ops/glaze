@@ -1,11 +1,11 @@
-// The calendar file (Canvas): what goes into the .ics the student saves (features/calexport.js), so node can test it.
-// lib/todo.js gives the days in the student's Canvas time zone; lib/ics.js writes the file and makes the UIDs.
+// The calendar file (Canvas): what goes into the .ics the student saves (planner/page/calexport.js), so node can test it.
+// planner/todo.js gives the days in the student's Canvas time zone; planner/ics.js writes the file and makes the UIDs.
 // Classic script, loaded on demand after those two (a second injection keeps the first); module.exports for node.
 var GZ_CALEXPORT = globalThis.GZ_CALEXPORT || (() => {
   const lib = (name, file) => globalThis[name] || require(file);
   const WEEKS = { '2w': 2, '4w': 4, '8w': 8, '16w': 16 };
 
-  // From the start of today to the end of the range, in tz, as instants and as lib/todo.js day numbers [first, last).
+  // From the start of today to the end of the range, in tz, as instants and as planner/todo.js day numbers [first, last).
   // 'term': to the last day of the current term, the latest end date among the student's courses that have begun and
   // not ended (a course's own dates when it keeps to them, else its term's), at most a year ahead. Canvas's default
   // term has no dates: with none to go by it's the next 16 weeks, and guessed says so.
@@ -22,12 +22,12 @@ var GZ_CALEXPORT = globalThis.GZ_CALEXPORT || (() => {
     return { from: T.midnight(first, tz), to: T.midnight(last, tz), first, last, guessed };
   };
 
-  // lib/ics.js events for the range. items: lib/todo.js slim planner items; gs: lib/gradescope.js items (already only
-  // those of an account that said yes); data: the student's own (lib/todo.js clean); o: the todo settings (icsDue,
+  // planner/ics.js events for the range. items: planner/todo.js slim planner items; gs: planner/gradescope.js items (already only
+  // those of an account that said yes); data: the student's own (planner/todo.js clean); o: the todo settings (icsDue,
   // icsTasks, icsPlan, icsGs); site: the Canvas origin, for links; host: in every UID, so the same item is the same
   // event in each export (re-importing updates it where the calendar supports that); cids: the courses to include
   // (null: any); names: course id -> name; words: { plan(title), focus(title), untitled } in the page's language; classes: the
-  // class periods' events, as lib/ics.js takes them (W14, once it lands).
+  // class periods' events, as planner/ics.js takes them (W14, once it lands).
   // Deadlines are instants (UTC in the file); all-day items and "do on" days are dates; focus sessions run from their
   // start for their length.
   const events = ({ items = [], gs = [], data, o, from, to, first, last, site, host, cids = null, names = {}, words, classes = [] }) => {
@@ -70,7 +70,7 @@ var GZ_CALEXPORT = globalThis.GZ_CALEXPORT || (() => {
         const it = known.get(k) || (/^(gradescope|announcement|calendar_event):/.test(k) ? null : { title: words.untitled, url: '' });
         if (!it) continue;
         const on = T.keyDay(l.on);
-        // plan, key: which plan of which item, for Google Calendar sync (lib/gcal.js), where moving one moves the plan.
+        // plan, key: which plan of which item, for Google Calendar sync (planner/gcal.js), where moving one moves the plan.
         if (on !== null && inDays(on)) out.push({ uid: uid(host, 'on', k), summary: words.plan(it.title), start: day(on), end: day(on + 1), url: it.url, plan: 'on', key: k });
         for (const s of l.sessions || []) {
           if (s.at >= from && s.at < to) out.push({ uid: uid(host, 'session', k, s.at), summary: words.focus(it.title), start: s.at, end: s.at + s.min * 6e4, url: it.url, plan: 'session', key: k });
@@ -81,7 +81,7 @@ var GZ_CALEXPORT = globalThis.GZ_CALEXPORT || (() => {
   };
 
   // The keys of the student's items with a "do on" day or a focus session in the range: what the planner read must
-  // cover for their titles (features/calexport.js asks further back for those it didn't).
+  // cover for their titles (planner/page/calexport.js asks further back for those it didn't).
   const planned = (data, { from, to, first, last }) => {
     const T = lib('GZ_TODO', './todo.js');
     return Object.entries(T.clean(data).items).filter(([, l]) => {
@@ -90,10 +90,10 @@ var GZ_CALEXPORT = globalThis.GZ_CALEXPORT || (() => {
     }).map(([k]) => k);
   };
 
-  // What a batch for Google Calendar sync was composed under (features/calexport.js compose), as one string: Glaze's
+  // What a batch for Google Calendar sync was composed under (planner/page/calexport.js compose), as one string: Glaze's
   // switch, the export's choices the batch used (o: todo.ics*), and for Gradescope work its switch and, as storage keeps
   // them, the Gradescope account and this Canvas account's answer about it (who: '<origin>/<uid>'). The worker
-  // (lib/background.js) works it out again from storage after every wait and sends nothing more once it differs. s: the
+  // (background/background.js) works it out again from storage after every wait and sends nothing more once it differs. s: the
   // settings through GZ_SANITIZE.
   const consent = (s, o, gradescope, who) => JSON.stringify([!!s.enabled, ...['icsDue', 'icsTasks', 'icsPlan', 'icsGs', 'icsClasses', 'icsRange'].map((k) => o[k] ?? null),
     !!s.enhance?.gradescope, gradescope?.acct?.id ?? null, gradescope?.bind?.[who] ?? null]);

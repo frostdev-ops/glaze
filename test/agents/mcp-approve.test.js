@@ -1,17 +1,17 @@
-// The approval window for agent apps (lib/mcp/approve.js): one popup serves every ask, oldest first; only that window's tab
+// The approval window for agent apps (agents/approve.js): one popup serves every ask, oldest first; only that window's tab
 // decides, and each ask once; the 600 s timeout, a cancel and a closed window end an ask; at most 5 wait per app; progress
-// every 15 s; a worker restart sweeps what was waiting or running. The page (lib/mcp/approve.html, approve-page.js) is
+// every 15 s; a worker restart sweeps what was waiting or running. The page (agents/approve.html, approve-page.js) is
 // checked here for what it may read and write; checks/agents/mcp-approve-check.js drives it in Chromium.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const A = require('../../extension/lib/mcp/approve.js');
+const A = require('../../extension/agents/approve.js');
 
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const URL_ = 'chrome-extension://glaze/lib/mcp/approve.html';
+const URL_ = 'chrome-extension://glaze/agents/approve.html';
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r)); };
 const CLAUDE = { id: 'q2yhd4emtekyo2kc', name: 'Claude', exe: '/Applications/Claude.app/Contents/MacOS/Claude' };
 const CODE = { id: 'ioiih44jk25fd3hj', name: 'Visual Studio Code', exe: '/usr/local/bin/code' };
@@ -132,11 +132,11 @@ test('a kind or view Glaze never sends is a programming error', async () => {
   assert.equal(e.made.length, 0);
 });
 
-// The groups are lib/ai/tools.js's: each one a tool may name is one the window asks about and names, and one Settings
+// The groups are ai/tools.js's: each one a tool may name is one the window asks about and names, and one Settings
 // switches and names, so a new group can't be refused at its first call or left without a word.
 test('every group a tool may name is asked about and named in the window, and switched and named in Settings', async () => {
-  const TL = require('../../extension/lib/ai/tools.js'), E = require('../../extension/lib/editor-agents.js');
-  const page = read('lib/mcp/approve-page.js');
+  const TL = require('../../extension/ai/tools.js'), E = require('../../extension/settings/editor-agents.js');
+  const page = read('agents/approve-page.js');
   for (const group of TL.GROUPS) {
     const e = env();
     const got = outcome(e.a.ask('grant', { ...GRANT, group }));
@@ -208,7 +208,7 @@ test('decisions come only from the window\'s own tab, top frame and page, from G
     e.from(w, { tab: { id: w.id * 100, windowId: w.id + 1 } }),
     e.from(w, { frameId: 3 }),
     e.from(w, { url: 'chrome-extension://glaze/options.html' }),
-    e.from(w, { url: 'https://school.instructure.com/lib/mcp/approve.html' }),
+    e.from(w, { url: 'https://school.instructure.com/agents/approve.html' }),
     e.from(w, { id: 'another-extension' }),
   ];
   for (const s of refused) assert.deepEqual(e.a.decide(msg, s), { ok: false }, JSON.stringify(s));
@@ -517,10 +517,10 @@ test('settled asks are pruned an hour after they were made', async () => {
 });
 
 test('the page renders from storage.session and sends only its decision', () => {
-  const html = read('lib/mcp/approve.html'), js = read('lib/mcp/approve-page.js');
+  const html = read('agents/approve.html'), js = read('agents/approve-page.js');
   assert.match(html, /<meta http-equiv="Content-Security-Policy" content="[^"]*default-src 'self'[^"]*connect-src 'none'/);
-  for (const f of ['../../ui.css', 'approve.css', '../i18n.js', '../../defaults.js', 'approve-page.js']) assert.ok(html.includes(`"${f}"`), f);
-  for (const l of ['de', 'es', 'fr', 'nl', 'pt-BR']) assert.ok(html.includes(`<script src="../../i18n/${l}.js"></script>`), l);
+  for (const f of ['../core/ui.css', 'approve.css', '../core/i18n.js', '../content/defaults.js', 'approve-page.js']) assert.ok(html.includes(`"${f}"`), f);
+  for (const l of ['de', 'es', 'fr', 'nl', 'pt-BR']) assert.ok(html.includes(`<script src="../i18n/${l}.js"></script>`), l);
   assert.ok(!/<script>/.test(html) && !/\son\w+=/.test(html), 'no inline script or handlers');
   // Don't allow comes first and has the focus; Allow is the primary button.
   const no = html.indexOf('id="no"'), yes = html.indexOf('id="yes"');
@@ -539,7 +539,7 @@ test('the page renders from storage.session and sends only its decision', () => 
 test('the approval page is not reachable from web pages', () => {
   const m = require('../../extension/manifest.json');
   const listed = (m.web_accessible_resources || []).flatMap((w) => w.resources);
-  assert.ok(!listed.some((r) => /^lib\/(?:mcp\/|\*)|approve/.test(r)), listed.join(', '));
+  assert.ok(!listed.some((r) => /^agents\/|^\*|approve/.test(r)), listed.join(', '));
 });
 
 // Execute the shipped page with a small DOM and controlled focus/clock, including native button default actions.
@@ -559,7 +559,7 @@ const pageEnv = async () => {
     for (const fn of list[type] || []) fn(e);
     return e;
   };
-  vm.runInNewContext(read('lib/mcp/approve-page.js'), { document,
+  vm.runInNewContext(read('agents/approve-page.js'), { document,
     window: { addEventListener: (type, fn) => { (handlers[type] ||= []).push(fn); } },
     GZ_I18N: { page() {}, ui: () => 'en', t: (k, values = {}) => k.replace(/\{(\w+)\}/g, (_, p) => values[p]) },
     matchMedia: () => ({ matches: false, addEventListener() {} }),

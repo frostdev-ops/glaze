@@ -1,5 +1,5 @@
 // Glaze's lit toolbar icon, headless, with the real unpacked extension: the three declarativeContent rules the worker installs
-// on install (lib/background.js LIT), and whether each fires on its LMS's page and on no other. A browser shows no extension's
+// on install (background/background.js LIT), and whether each fires on its LMS's page and on no other. A browser shows no extension's
 // icon to a check, so beside each rule the check installs a twin with the same conditions whose action marks the page
 // (RequestContentScript: Playwright's Chromium has it, stable Chrome doesn't; the twins exist only here). Synthetic pages
 // (test/fixtures; the Ultra page wears the off-canvas wrap real Ultra has), no outside network. Also: the attention icon

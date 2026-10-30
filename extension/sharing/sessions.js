@@ -1,14 +1,14 @@
-// Optional extension-side adapters and broker. lib/sharing.js remains the transport/crypto dependency; only this
+// Optional extension-side adapters and broker. sharing/sharing.js remains the transport/crypto dependency; only this
 // module knows Glaze's local data. Nothing is imported until a Sessions surface or an explicit backup asks for it.
 var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
   const C = typeof GZ_SHARING !== 'undefined' ? GZ_SHARING : require('./sharing.js');
-  const N = typeof GZ_NOTES !== 'undefined' ? GZ_NOTES : require('./notes.js');
-  const T = typeof GZ_TODO !== 'undefined' ? GZ_TODO : require('./todo.js');
-  const D = typeof GZ_SANITIZE !== 'undefined' ? GZ_SANITIZE : require('../defaults.js').GZ_SANITIZE;
+  const N = typeof GZ_NOTES !== 'undefined' ? GZ_NOTES : require('../planner/notes.js');
+  const T = typeof GZ_TODO !== 'undefined' ? GZ_TODO : require('../planner/todo.js');
+  const D = typeof GZ_SANITIZE !== 'undefined' ? GZ_SANITIZE : require('../content/defaults.js').GZ_SANITIZE;
   const L = typeof GZ_SHARE !== 'undefined' ? GZ_SHARE : require('./share.js');
-  const P = typeof GZ_XPARTS !== 'undefined' ? GZ_XPARTS : require('./lookparts.js');
+  const P = typeof GZ_XPARTS !== 'undefined' ? GZ_XPARTS : require('../looks/lookparts.js');
   const R = typeof GZ_RELAY !== 'undefined' ? GZ_RELAY : require('./relay.js');
-  const media = () => (typeof GZ_MEDIA !== 'undefined' ? GZ_MEDIA : require('./media.js'));
+  const media = () => (typeof GZ_MEDIA !== 'undefined' ? GZ_MEDIA : require('../looks/media.js'));
   const LIMIT = { sessions: 20, items: 200, state: 16 << 20, files: 64 << 20, total: 200 << 20 };
   // Presence (a last-seen device list) goes with a change; alone, at most this often.
   const PRESENCE = 5 * 60e3;
@@ -78,7 +78,7 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
   // enqueue: a turn of the storage broker's queue, for reading and writing what other features keep too (Notes, To Do,
   // the Look, media). serial: the sessions' own queue, where the worker runs handle() too: one operation at a time. The
   // relay is asked there, never in a broker turn, so a slow relay holds up sharing alone.
-  // keptFiles: the worker's store of files kept for Looks' backgrounds (lib/media.js), which a Look share reads and fills.
+  // keptFiles: the worker's store of files kept for Looks' backgrounds (looks/media.js), which a Look share reads and fills.
   const make = ({ local, sync, notes, keptFiles = null, db = database(), enqueue = (f) => f(), serial = (f) => f(), fetch, WebSocket, relay = C.SERVER, dev = false, permission = (server) => chrome.permissions.contains({ origins: [server + '/*'] }), now = Date.now, offerLook = async () => false, notify = () => {}, healthTimeout = 5000 }) => {
     check(dev || relay === C.SERVER, 'bad');
     let live = new Map(), ctl = new AbortController(), ports = 0, timer = 0, scheduled = false, generation = 0, wanted = new Set(), transfer = null;

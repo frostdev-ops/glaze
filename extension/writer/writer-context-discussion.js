@@ -1,15 +1,15 @@
 // Glaze Writer's context for a discussion post or reply, a message and a journal (the frame's `context`: what the target
-// ring, Cite and the AI know of the box). Every one names what Cite keeps its sources under (lib/writer-sources.js keyOf):
+// ring, Cite and the AI know of the box). Every one names what Cite keeps its sources under (writer/writer-sources.js keyOf):
 // the school's host, the student, the course and the item (itemOf). For a post or reply: the prompt (the public
-// discussions API's topic.body, as lib/ultra.js reads it), the thread (Ultra's messages and replies API, newest first,
+// discussions API's topic.body, as courses/ultra.js reads it), the thread (Ultra's messages and replies API, newest first,
 // within a post count and a character budget, the student's own posts marked), the post a reply answers, and the
-// requirements lib/writer-target.js reads from the prompt. A message gets its course and the student only; a journal keeps
-// what lib/writer-ultra.js read off its page (its prompt). The discussion's forum id isn't the content id in Ultra's route (probe,
+// requirements writer/writer-target.js reads from the prompt. A message gets its course and the student only; a journal keeps
+// what writer/writer-ultra.js read off its page (its prompt). The discussion's forum id isn't the content id in Ultra's route (probe,
 // 2026-10-26/27): it is found in the course's discussions list, by the gradebook column the route's content id has, else
-// by the page's title when exactly one discussion has it. Every read is a GET through the site's queue (lib/lmsq.js),
+// by the page's title when exactly one discussion has it. Every read is a GET through the site's queue (courses/lmsq.js),
 // behind visible work, once a page; whatever fails leaves its field empty. The frame gets the context when it's ready and
 // again when it changes (a new post on the page reads the thread again, at most every 20 s).
-// Pure builders, then watch(box, ctx) for features/writer.js. Classic script, loaded on demand; module.exports for node.
+// Pure builders, then watch(box, ctx) for writer/page/writer.js. Classic script, loaded on demand; module.exports for node.
 var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || (() => {
   const ID = /^_\d+_\d+$/;
   const LIMIT = { posts: 30, chars: 24000, post: 4000, prompt: 20000, name: 120, requests: 16, pages: 3, replies: 8 };
@@ -105,7 +105,7 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
     return kind === 'message' && where?.course && !where.content && !where.journal ? NEW_MESSAGE : '';
   };
   // The frame's context for one box: what its sources are kept under (school: the LMS's host, item: itemOf, the course's
-  // id and the student's), and with it, for a message, its course and the student; for a journal, what lib/writer-ultra.js
+  // id and the student's), and with it, for a message, its course and the student; for a journal, what writer/writer-ultra.js
   // read off its page (own); for a post or reply, the rest, with the requirements its kind answers to
   // (GZ_WRITER_TARGET.forKind).
   const contextOf = ({ kind, school = '', item = '', course = null, user = null, own = {}, prompt = null, requirements = null, thread = [], replyTo = null } = {}) => {
@@ -117,7 +117,7 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
   };
 
   // ---- the reads -------------------------------------------------------------------------------------------------------
-  // r: lib/ultra.js read()'s { get, all, list }. Each returns raw answers; failures are the caller's.
+  // r: courses/ultra.js read()'s { get, all, list }. Each returns raw answers; failures are the caller's.
   const FIELDS = 'id,title,available,topic.body,topic.status,gradebookColumnId';
   const discussions = async (r, cid) => {
     const result = await r.list(`/learn/api/public/v1/courses/${cid}/discussions`, FIELDS);
@@ -144,21 +144,21 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
     return out;
   };
 
-  // ---- on the page: features/writer.js's boxes -----------------------------------------------------------------------
+  // ---- on the page: writer/page/writer.js's boxes -----------------------------------------------------------------------
   const KINDS = new Set(['post', 'reply', 'message', 'journal']);
   const boxes = new Set();
   const sent = new WeakMap(); // box → { port, json } last sent
   let page = null; // { key, where, school, me, live, data, threadAt, sig, timer, authors, thread: Promise|null, abort }
   let X = null, observer = null;
   const alive = (box) => box.frame === null || !!box.frame?.isConnected;
-  // A read-only Quill body's text as lib/writer-ultra.js reads one, from HTML parsed inert (DOMParser: no scripts, no loads).
+  // A read-only Quill body's text as writer/writer-ultra.js reads one, from HTML parsed inert (DOMParser: no scripts, no loads).
   const htmlText = (h) => {
     const body = new DOMParser().parseFromString(String(h || ''), 'text/html').body;
     const blocks = [...body.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, pre')];
     return blocks.length ? blocks.map((b) => squash(b.textContent)).filter(Boolean).join('\n') : squash(body.textContent);
   };
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const reader = (live, signal) => X.need('lib/lmsq.js', () => globalThis.GZ_LMSQ).then(() => X.need('lib/ultra.js', () => globalThis.GZ_ULTRA))
+  const reader = (live, signal) => X.need('courses/lmsq.js', () => globalThis.GZ_LMSQ).then(() => X.need('courses/ultra.js', () => globalThis.GZ_ULTRA))
     .then(() => GZ_ULTRA.read({ origin: location.origin, live, signal, f: (u, o) => GZ_LMSQ.fetch(u, o, 1, live), maxPages: LIMIT.pages, maxRequests: LIMIT.requests }));
   // The course's gradebook rows as content-ultra.js has them (bookFor asks once a minute at most), waited for a little.
   const rowsOf = async (cid, live) => {
@@ -253,7 +253,7 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
     sent.delete(box);
     if (!boxes.size) clear();
   };
-  // features/writer.js, as a box's frame comes up (and again when it reopens): context for post, reply, message and journal
+  // writer/page/writer.js, as a box's frame comes up (and again when it reopens): context for post, reply, message and journal
   // boxes.
   const watch = (box, ctx) => {
     if (!box || !KINDS.has(box.kind) || !ctx) return;
@@ -271,7 +271,7 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
       // as soon as it's in, before the rest is read.
       const meP = Promise.resolve().then(() => X.me()).then((id) => (ID.test(id || '') ? { id } : null), () => null);
       meP.then((me) => { p.me = me; if (me && p.live()) sendAll(); });
-      (where.journal ? Promise.resolve() : X.need('lib/writer-target.js', () => globalThis.GZ_WRITER_TARGET).catch(() => {}))
+      (where.journal ? Promise.resolve() : X.need('writer/writer-target.js', () => globalThis.GZ_WRITER_TARGET).catch(() => {}))
         .then(() => loadBase(where, p.live, p.abort.signal, meP))
         .then((base) => { if (!p.live()) return; p.data = { base, messages: [] }; sendAll(); readThread(); }, () => {});
     }
@@ -279,7 +279,7 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
     send(box);
     observe();
   };
-  // Who wrote a message in this page's thread ('' when unknown): the Quote pop's author (features/writer-quote.js).
+  // Who wrote a message in this page's thread ('' when unknown): the Quote pop's author (writer/page/writer-quote.js).
   const author = (id) => page?.authors?.get(id) || '';
 
   return { route, discussionOf, promptOf, authorOf, threadOf, replyToOf, userOf, itemOf, contextOf, discussions, messages, forumPath, watch, unwatch, author, LIMIT };

@@ -1,5 +1,5 @@
 // Code mods' sandbox runtime, each piece in a VM with stand-ins: the host's one handshake and its per-mod routing
-// (mods/host.js), the frame UI bootstrap (mods/boot.js), and the page side's watchdog (features/mods.js). Real MessagePorts
+// (mods/host.js), the frame UI bootstrap (mods/boot.js), and the page side's watchdog (mods/page/mods.js). Real MessagePorts
 // carry the messages. The browser side, with the real sandbox and CSP, is checks/mods/mods-sandbox-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -237,8 +237,8 @@ test('a frame where an RTC* global couldn\'t be taken away never boots', async (
   ch.port1.close();
 });
 
-// ---- features/mods.js: the page side and its watchdog ------------------------------------------------------------------------
-const M = require('../../extension/features/mods.js');
+// ---- mods/page/mods.js: the page side and its watchdog ------------------------------------------------------------------------
+const M = require('../../extension/mods/page/mods.js');
 test('the watchdog\'s call: a silent host takes its frame UIs\' mods with it, a silent Worker goes alone', () => {
   const base = { now: 10000, host: 9000, ok: true, seen: [['a', 9000], ['b', 4000]], frames: ['f'] };
   eq(M.verdict(base), { host: false, kill: ['b'] });
@@ -266,7 +266,7 @@ const page = ({ path = '/courses/1', list } = {}) => {
     CustomEvent: class { constructor(type, o) { this.type = type; this.detail = o?.detail; } }, innerWidth: 1000, innerHeight: 800, devicePixelRatio: 1,
     performance: { now: () => clock }, setTimeout: (f, ms) => { const t = { at: clock + ms, f }; timers.add(t); return t; }, clearTimeout: (t) => timers.delete(t), addEventListener() {} });
   ctx.globalThis = ctx;
-  vm.runInContext(read('features/mods.js'), ctx);
+  vm.runInContext(read('mods/page/mods.js'), ctx);
   const tick = async (ms) => {
     const end = clock + ms;
     for (;;) {
@@ -300,7 +300,7 @@ const slotEl = () => ({ isConnected: true, style: {}, append(c) { c.isConnected 
 const stopsOf = (p) => p.sent.filter((m) => m.op === 'stopped').map((m) => [m.mod, m.why]);
 
 test('the scene kind follows the winning background after installed and running mod parts merge', async () => {
-  const X = require('../../extension/lib/lookparts.js');
+  const X = require('../../extension/looks/lookparts.js');
   const p = page();
   let override;
   p.chrome.runtime.sendMessage = async () => ({ ok: true, value: override });
@@ -308,12 +308,12 @@ test('the scene kind follows the winning background after installed and running 
   const { port } = await p.load();
   port.postMessage({ ready: true });
   await settle();
-  const source = read('content.js');
+  const source = read('content/content.js');
   const start = source.indexOf('  const partsOf ='), end = source.indexOf('  const sceneModule =', start);
   assert.ok(start >= 0 && end > start, 'scene kind helpers are bounded by their declarations');
   const scene = source.slice(start, end);
   p.ctx.worn = { bg: { kind: 'gradient' } };
-  vm.runInContext(`let modBg = false; (() => { ${read('features/lookparts.js').split('\n').find((l) => l.startsWith('  const bgKind ='))}\nglobalThis.GZ_XPARTS_PAGE = { bgKind }; })();`, p.ctx);
+  vm.runInContext(`let modBg = false; (() => { ${read('looks/page/lookparts.js').split('\n').find((l) => l.startsWith('  const bgKind ='))}\nglobalThis.GZ_XPARTS_PAGE = { bgKind }; })();`, p.ctx);
   vm.runInContext(`${scene}\nglobalThis.kind = bgKind; globalThis.draws = sceneKind;`, p.ctx);
   const shader = { shader: { src: 'vec4 scene(vec2 uv) { return vec4(uC1, 1.0); }' } }, layers = { layers: [{ k: 'noise' }] };
   try {
@@ -547,9 +547,9 @@ test('revocation rebuilds the host without the mod; changed code restarts it', a
   port.close();
 });
 
-// ---- content.js: when features/mods.js is asked for ------------------------------------------------------------------------
+// ---- content.js: when mods/page/mods.js is asked for ------------------------------------------------------------------------
 test('content.js loads the page side only in the top frame, where the package has the sandbox, once the worker names a mod to run', async () => {
-  const src = read('content.js');
+  const src = read('content/content.js');
   const gate = src.slice(src.indexOf('  const modsIn ='), src.indexOf('  ready.then(() => modsIn(true));'));
   const run = async ({ top = true, isPreview = false, on = true, sandbox = true, index = ['abcdefghijklmnop'], mods = [{ id: 'abcdefghijklmnop' }], loaded = false } = {}) => {
     const asked = [], started = [], messages = [];
@@ -567,7 +567,7 @@ test('content.js loads the page side only in the top frame, where the package ha
     await settle();
     return { asked, started: plain(started), messages: plain(messages) };
   };
-  eq(await run(), { asked: ['features/mods.js'], started: [null], messages: [{ type: 'glaze:modpage', op: 'list' }] });
+  eq(await run(), { asked: ['mods/page/mods.js'], started: [null], messages: [{ type: 'glaze:modpage', op: 'list' }] });
   for (const [why, opts] of [['a frame', { top: false }], ['the editor preview', { isPreview: true }], ['Glaze off or a quiz page', { on: false }], ['no sandbox in this package (Firefox, Safari)', { sandbox: false }], ['loaded already', { loaded: true }]])
     eq((await run(opts)).asked, [], why);
   eq(await run({ index: [] }), { asked: [], started: [], messages: [] }, 'nothing installed: not even a message');
@@ -1151,7 +1151,7 @@ test('Look overrides and nav layouts are immediate while full UI and effect repl
 });
 
 // ---- Glaze's bar: nav.read, nav.items, nav.layout and a replacement ---------------------------------------------------------
-// A stand-in for features/navbar.js's API: its model, the mods' items by owner, its listeners, what it was asked to open.
+// A stand-in for navigation/page/navbar.js's API: its model, the mods' items by owner, its listeners, what it was asked to open.
 const fakeBar = (model) => {
   const items = new Map(), heard = {}, went = [];
   let synced = 0;
@@ -1202,7 +1202,7 @@ test('nav.items: a mod\'s items go to the bar under its own name, at most eight,
 // links), Glaze's own items or other mods' items (a label like "Biology 91.5%").
 test('nav.items: every mod hears the native items by id with Glaze\'s names, nothing the student typed, nor their name, nor other mods\' items', async () => {
   const p = page();
-  p.ctx.GZ_NAV_LAYOUT = require('../../extension/lib/navlayout.js');
+  p.ctx.GZ_NAV_LAYOUT = require('../../extension/navigation/navlayout.js');
   const it = (id, label, more = {}) => ({ id, label, icon: 'link', href: '', badge: '', active: false, hidden: false, ...more });
   p.ctx.GZ_NAVBAR_UI = fakeBar({ ...BAR, items: [it('course', 'Courses'), it('grades', 'Jane D. grades'), it('calendar', 'Kalender'), it('tools', 'Tools', { hidden: true }),
     it('profile', 'Jane Q. Student'), it('link:aaaaaaaaaaaa', 'Counseling appointments'), it('mod:abcdefghijklmnop.bio', 'Biology 91.5%', { owner: 'abcdefghijklmnop' }),
@@ -1234,7 +1234,7 @@ test('nav.items: every mod hears the native items by id with Glaze\'s names, not
 
 test('nav.read: the model is cleaned and capped, and the bar\'s events reach only granted mods', async () => {
   const p = page();
-  p.ctx.GZ_NAV_LAYOUT = require('../../extension/lib/navlayout.js'); // loaded with the bar: Glaze's names for nav.items
+  p.ctx.GZ_NAV_LAYOUT = require('../../extension/navigation/navlayout.js'); // loaded with the bar: Glaze's names for nav.items
   p.ctx.GZ_NAVBAR_UI = fakeBar(BAR);
   p.chrome.runtime.sendMessage = async (m) => (m.type === 'glaze:mod' ? { ok: true, value: true } : { ok: true });
   p.G.start([{ ...W('a'), events: ['nav.read'] }, W('b')]);
@@ -1259,7 +1259,7 @@ test('nav.read: the model is cleaned and capped, and the bar\'s events reach onl
 // Through the real broker. This test once had a stand-in worker answer nav.set for any mod, pinning nav.set as nav.layout
 // with no permission, which made the nav.layout permission decorative (MOD-1): now both need it granted.
 test('nav.set and nav.layout lay a layout over the student\'s only with nav.layout granted; the first mod wins, and "Use my own" turns that mod\'s off', async () => {
-  const B = require('../../extension/lib/modbroker.js');
+  const B = require('../../extension/mods/modbroker.js');
   const [a, b, c] = ['aaaaaaaaaaaaaaaa', 'bbbbbbbbbbbbbbbb', 'cccccccccccccccc'];
   // c declares nav.layout, but the student didn't grant it.
   const data = { mods: [a, b, c], ...Object.fromEntries([a, b, c].map((id) => [`mod:${id}`, { id, enabled: true, manifest: { permissions: [{ id: 'nav.layout', why: 'w' }] }, grants: { 'nav.layout': id !== c } }])) };

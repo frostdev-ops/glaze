@@ -1,4 +1,4 @@
-// lib/pm.js, ProseMirror for the writer frame (tools/vendor/vendor-prosemirror.sh): the script installs exact, integrity-pinned
+// vendor/pm.js, ProseMirror for the writer frame (tools/vendor/vendor-prosemirror.sh): the script installs exact, integrity-pinned
 // versions with install scripts off and checks them before esbuild runs; the checked-in files are the recorded build; and
 // the bundle is a classic script that sets GZ_PM to working packages. These tests never run the script (it installs from
 // the network).
@@ -37,17 +37,17 @@ test('the install is exact, ignores install scripts, uses the public registry, a
 test('the integrity check runs on the installed tree before esbuild does, and the build must match the recorded hashes', () => {
   const check = code.indexOf('npm-integrity.js'), run = code.indexOf('.bin/esbuild');
   assert.ok(check > 0 && run > check, 'verify first, then execute');
-  for (const [name, file] of [['file_sha256', 'lib/pm.js'], ['css_sha256', 'lib/pm.css']]) {
+  for (const [name, file] of [['file_sha256', 'vendor/pm.js'], ['css_sha256', 'vendor/pm.css']]) {
     assert.match(variable(name), /^[0-9a-f]{64}$/, name);
     assert.equal(sha256(file), variable(name), `rebuild ${file} with scripts/vendor-prosemirror.sh and record the new hash, rather than editing it by hand`);
   }
-  assert.match(read('lib/pm.js').split('\n')[0], /^\/\/ ProseMirror \(MIT, lib\/pm\.LICENSE\): prosemirror-model@/);
-  const license = read('lib/pm.LICENSE');
+  assert.match(read('vendor/pm.js').split('\n')[0], /^\/\/ ProseMirror \(MIT, lib\/pm\.LICENSE\): prosemirror-model@/);
+  const license = read('vendor/pm.LICENSE');
   for (const p of packages()) assert.ok(license.includes(`==== ${p.replace('@', ' ')} ====`), `${p}'s license ships`);
 });
 
-test('lib/pm.js is a readable classic script: no modules, no code made from text, not minified', () => {
-  const src = read('lib/pm.js');
+test('vendor/pm.js is a readable classic script: no modules, no code made from text, not minified', () => {
+  const src = read('vendor/pm.js');
   assert.match(src, /^var GZ_PM = globalThis\.GZ_PM \|\| \(\(\) => \{$/m);
   assert.match(src.trimEnd(), /\nGZ_PM;$/);
   assert.doesNotMatch(src, /^\s*(import|export)\s/m);
@@ -58,7 +58,7 @@ test('lib/pm.js is a readable classic script: no modules, no code made from text
 
 const load = () => {
   const ctx = vm.createContext({ console });
-  vm.runInContext(read('lib/pm.js'), ctx, { filename: 'lib/pm.js' });
+  vm.runInContext(read('vendor/pm.js'), ctx, { filename: 'vendor/pm.js' });
   return ctx;
 };
 
@@ -69,7 +69,7 @@ test('GZ_PM names every package, and loading it twice keeps the first copy', () 
   assert.equal(typeof pm.model.Schema, 'function');
   assert.equal(typeof pm.view.EditorView, 'function');
   assert.equal(typeof pm.tables.tableEditing, 'function');
-  vm.runInContext(read('lib/pm.js'), ctx);
+  vm.runInContext(read('vendor/pm.js'), ctx);
   assert.equal(ctx.GZ_PM, pm);
 });
 

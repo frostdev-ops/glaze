@@ -13,7 +13,7 @@
 //   6 Agent access off: the host goes and the run folder is emptied.
 //   7 The shipped manifest (nativeMessaging optional), headed under Xvfb, the prompt answered with XTEST keys, the manifest
 //     and launcher written by hand: restart with no host, then, DevTools detached, a natural idle stop and Settings' one ask
-//     after its wait on Starting… (lib/editor-agents.js WAIT), which starts the worker that connects.
+//     after its wait on Starting… (settings/editor-agents.js WAIT), which starts the worker that connects.
 // Evidence in the folder given: results.json, log.txt, each agent's lines, the bare browsers' logs, the probe's reports,
 // the approval window and the prompt.
 //   glaze-remote -o <evidence dir> -- node checks/agents/agent-link-check.js /out
@@ -22,7 +22,7 @@ const fs = require('node:fs'), path = require('node:path'), os = require('node:o
 const { isDeepStrictEqual: same } = require('node:util');
 const { spawn, execFileSync } = require('node:child_process');
 const C = require('../../test/helpers/mcp-caches.cjs');
-const ST = require('../../extension/lib/mcp/tools-study.js');
+const ST = require('../../extension/agents/tools-study.js');
 const IDS = require('../../mcp/lib/ids.js'), BR = require('../../mcp/lib/browsers.js'), L = require('../../mcp/lib/launcher.js'), RV = require('../../mcp/lib/rendezvous.js');
 
 const src = fs.realpathSync(path.join(__dirname, '../../extension'));
@@ -31,7 +31,7 @@ const VERSION = require('../../mcp/package.json').version;
 const OUT = path.resolve(process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'agent-link-out-')));
 const IDLE = process.env.SLOW ? 360e3 : 70e3;
 const WAIT = IDLE + 15e3; // the probe page's wait: the idle, plus the agent's first call after the page opens
-const ASK = require('../../extension/lib/editor-agents.js').WAIT; // Settings' wait on Starting…, then its one ask
+const ASK = require('../../extension/settings/editor-agents.js').WAIT; // Settings' wait on Starting…, then its one ask
 const PROBE = 'io.frostdev.glaze_t9_probe';
 const NODE = fs.realpathSync(process.execPath);
 const CLIENT = { name: 'Glaze T9 check', version: '1.0.0' };
@@ -135,7 +135,7 @@ function stage(label, required) {
     m.optional_permissions = m.optional_permissions.filter((p) => p !== 'nativeMessaging');
     put(path.join(dir, 'manifest.json'), JSON.stringify(m, null, 2));
   }
-  put(path.join(dir, 'lib/background.js'), `${fs.readFileSync(path.join(src, 'lib/background.js'), 'utf8')}\nimportScripts('../t9/worker.js');\n`);
+  put(path.join(dir, 'background/background.js'), `${fs.readFileSync(path.join(src, 'background/background.js'), 'utf8')}\nimportScripts('../t9/worker.js');\n`);
   put(path.join(dir, 't9/worker.js'), `(${t9Worker})();\n`);
   put(path.join(dir, 't9/page.html'), '<!doctype html><meta charset="utf-8"><title>T9 probe</title><script src="page.js"></script>\n');
   put(path.join(dir, 't9/page.js'), `(${t9Page})();\n`);
@@ -270,7 +270,7 @@ const sc = (r) => r?.result?.structuredContent;
 const call = (a, name, era = 'modern', ms) => (era === 'modern' ? a.modern('tools/call', { name, arguments: { account: ACCOUNT } }, ms) : a.ask('tools/call', { name, arguments: { account: ACCOUNT } }, ms));
 
 // ---- the caches -------------------------------------------------------------------------------------------------------
-// One Canvas account's planner and the school's courses, through features/todo.js and content-canvas.js's own writers.
+// One Canvas account's planner and the school's courses, through planner/page/todo.js and content-canvas.js's own writers.
 const PLAN = [
   C.planner({ id: 1, course: 25, name: 'BIO 1100', title: 'Lab 4: Enzymes', at: '2026-10-16T03:59:00Z' }),
   C.planner({ type: 'quiz', id: 2, course: 26, name: 'ENG 1100', title: 'Reading quiz', at: '2026-10-20T03:59:00Z', sub: { submitted: true } }),
@@ -430,7 +430,7 @@ async function onAndAgents() {
   ok('3', 'both agents are connected at once to the one host', [a, b].every((x) => x.err.includes(`connected to Glaze in chromium (instance ${instance})`)) && hosts(P1.home).length === 1, { a: a.err, b: b.err });
 
   // The pairing, in the approval window.
-  const APPROVE = `chrome-extension://${E1.id}/lib/mcp/approve.html`;
+  const APPROVE = `chrome-extension://${E1.id}/agents/approve.html`;
   const pending = call(a, 'courses_list', 'modern', 60000);
   const win = await until(() => context.pages().find((p) => p.url() === APPROVE));
   let shown = null;

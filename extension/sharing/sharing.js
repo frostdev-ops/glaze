@@ -19,7 +19,7 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
   const T = /^[0-9a-z]{20}$/; // 9 digits of ms, 3 of counter, 8 of actor, base 36: compared as strings
   const B = /^[\w-]{22}$/, H = /^[\w-]{43}$/;
   // The codecs, as the other classic scripts declare them (GZ_SHARE is a top-level const, never on globalThis).
-  const N = () => (typeof GZ_NOTES !== 'undefined' ? GZ_NOTES : require('./notes.js'));
+  const N = () => (typeof GZ_NOTES !== 'undefined' ? GZ_NOTES : require('../planner/notes.js'));
   const L = () => (typeof GZ_SHARE !== 'undefined' ? GZ_SHARE : require('./share.js'));
 
   const b64 = (bytes) => {
@@ -241,7 +241,7 @@ var GZ_SHARING = globalThis.GZ_SHARING || (() => {
         : str(v, N().LIMIT.body) !== undefined ? (() => { const r = N().sanitized(v); return !r.cut && r.html.length <= N().LIMIT.body ? r.html : undefined; })() : undefined),
       copyOf: (ent, f, v) => ({ title: (ADAPTERS.notes.conflictTitle?.(ent.title || '') ?? `${ent.title || ''} (conflict copy)`).trim().slice(-N().LIMIT.title), html: v }),
     },
-    // A Look: its theme code (lib/share.js decode, all or nothing, as for a pasted code) and its name.
+    // A Look: its theme code (sharing/share.js decode, all or nothing, as for a pasted code) and its name.
     look: {
       fields: ['name', 'code'],
       clean: async (f, v) => (f === 'name' ? str(v, 80) : typeof v === 'string' && await L().decode(v).then(() => true, () => false) ? v : undefined),

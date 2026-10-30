@@ -20,24 +20,28 @@
 		3B8EDF02307C30D500B0DD77 /* GlazeAI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8EDF01307C30D500B0DD77 /* GlazeAI.swift */; };
 		3B8EDF03307C30D500B0DD77 /* GlazeAI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8EDF01307C30D500B0DD77 /* GlazeAI.swift */; };
 		3B8EDAA9307C30D500B0DD77 /* preview.html in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA99307C30D500B0DD77 /* preview.html */; };
-		3B8EDAAA307C30D500B0DD77 /* ui.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9A307C30D500B0DD77 /* ui.js */; };
-		3B8EDAAB307C30D500B0DD77 /* theme.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9B307C30D500B0DD77 /* theme.css */; };
-		3B8EDAAC307C30D500B0DD77 /* popup.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9C307C30D500B0DD77 /* popup.js */; };
-		3B8EDAAD307C30D500B0DD77 /* extras.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9D307C30D500B0DD77 /* extras.css */; };
 		3B8EDAAE307C30D500B0DD77 /* popup.html in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9E307C30D500B0DD77 /* popup.html */; };
-		3B8EDAAF307C30D500B0DD77 /* options.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9F307C30D500B0DD77 /* options.js */; };
-		3B8EDAB0307C30D500B0DD77 /* ui.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA0307C30D500B0DD77 /* ui.css */; };
 		3B8EDAB1307C30D500B0DD77 /* icons in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA1307C30D500B0DD77 /* icons */; };
 		3B8EDAB2307C30D500B0DD77 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA2307C30D500B0DD77 /* manifest.json */; };
-		3B8EDAB3307C30D500B0DD77 /* lib in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA3307C30D500B0DD77 /* lib */; };
+		F2A000010001000000000000 /* agents in Resources */ = {isa = PBXBuildFile; fileRef = F2A000010000000000000000 /* agents */; };
+		F2A000020001000000000000 /* ai in Resources */ = {isa = PBXBuildFile; fileRef = F2A000020000000000000000 /* ai */; };
+		F2A000030001000000000000 /* background in Resources */ = {isa = PBXBuildFile; fileRef = F2A000030000000000000000 /* background */; };
+		F2A000040001000000000000 /* content in Resources */ = {isa = PBXBuildFile; fileRef = F2A000040000000000000000 /* content */; };
+		F2A000050001000000000000 /* core in Resources */ = {isa = PBXBuildFile; fileRef = F2A000050000000000000000 /* core */; };
+		F2A000060001000000000000 /* courses in Resources */ = {isa = PBXBuildFile; fileRef = F2A000060000000000000000 /* courses */; };
+		F2A000070001000000000000 /* documents in Resources */ = {isa = PBXBuildFile; fileRef = F2A000070000000000000000 /* documents */; };
+		F2A000080001000000000000 /* looks in Resources */ = {isa = PBXBuildFile; fileRef = F2A000080000000000000000 /* looks */; };
+		F2A000090001000000000000 /* mods in Resources */ = {isa = PBXBuildFile; fileRef = F2A000090000000000000000 /* mods */; };
+		F2A000100001000000000000 /* navigation in Resources */ = {isa = PBXBuildFile; fileRef = F2A000100000000000000000 /* navigation */; };
+		F2A000110001000000000000 /* pet in Resources */ = {isa = PBXBuildFile; fileRef = F2A000110000000000000000 /* pet */; };
+		F2A000120001000000000000 /* planner in Resources */ = {isa = PBXBuildFile; fileRef = F2A000120000000000000000 /* planner */; };
+		F2A000130001000000000000 /* settings in Resources */ = {isa = PBXBuildFile; fileRef = F2A000130000000000000000 /* settings */; };
+		F2A000140001000000000000 /* vendor in Resources */ = {isa = PBXBuildFile; fileRef = F2A000140000000000000000 /* vendor */; };
+		F2A000150001000000000000 /* writer in Resources */ = {isa = PBXBuildFile; fileRef = F2A000150000000000000000 /* writer */; };
 		3B8EDDA2307C30D500B0DD77 /* i18n in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDDA0307C30D500B0DD77 /* i18n */; };
 		3B8EDDA3307C30D500B0DD77 /* _locales in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDDA1307C30D500B0DD77 /* _locales */; };
 		3B8EDAB4307C30D500B0DD77 /* options.html in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA4307C30D500B0DD77 /* options.html */; };
-		3B8EDAB5307C30D500B0DD77 /* content.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA5307C30D500B0DD77 /* content.js */; };
 		3B8EDAB6307C30D500B0DD77 /* fonts in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA6307C30D500B0DD77 /* fonts */; };
-		3B8EDAB7307C30D500B0DD77 /* motion.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA7307C30D500B0DD77 /* motion.css */; };
-		3B8EDAB8307C30D500B0DD77 /* defaults.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA8307C30D500B0DD77 /* defaults.js */; };
-		3B8EDAB9307C30D500B0DD77 /* canvas.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA9307C30D600B0DD77 /* canvas.css */; };
 		3B8EDC1A307C30D500B0DD77 /* GlazeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8EDC05307C30D500B0DD77 /* GlazeApp.swift */; };
 		3B8EDC1B307C30D500B0DD77 /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDC06307C30D500B0DD77 /* Main.html */; };
 		3B8EDC1C307C30D500B0DD77 /* iOS.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDC07307C30D500B0DD77 /* iOS.css */; };
@@ -48,116 +52,34 @@
 		3B8EDC21307C30D500B0DD77 /* Glaze Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 3B8EDC04307C30D500B0DD77 /* Glaze Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		3B8EDC22307C30D500B0DD77 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8EDA8C307C30D500B0DD77 /* SafariWebExtensionHandler.swift */; };
 		3B8EDC23307C30D500B0DD77 /* preview.html in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA99307C30D500B0DD77 /* preview.html */; };
-		3B8EDC24307C30D500B0DD77 /* ui.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9A307C30D500B0DD77 /* ui.js */; };
-		3B8EDC25307C30D500B0DD77 /* theme.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9B307C30D500B0DD77 /* theme.css */; };
-		3B8EDC26307C30D500B0DD77 /* popup.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9C307C30D500B0DD77 /* popup.js */; };
-		3B8EDC27307C30D500B0DD77 /* extras.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9D307C30D500B0DD77 /* extras.css */; };
 		3B8EDC28307C30D500B0DD77 /* popup.html in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9E307C30D500B0DD77 /* popup.html */; };
-		3B8EDC29307C30D500B0DD77 /* options.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9F307C30D500B0DD77 /* options.js */; };
-		3B8EDC2A307C30D500B0DD77 /* ui.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA0307C30D500B0DD77 /* ui.css */; };
 		3B8EDC2B307C30D500B0DD77 /* icons in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA1307C30D500B0DD77 /* icons */; };
 		3B8EDC2C307C30D500B0DD77 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA2307C30D500B0DD77 /* manifest.json */; };
-		3B8EDC2D307C30D500B0DD77 /* lib in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA3307C30D500B0DD77 /* lib */; };
+		F2A000010002000000000000 /* agents in Resources */ = {isa = PBXBuildFile; fileRef = F2A000010000000000000000 /* agents */; };
+		F2A000020002000000000000 /* ai in Resources */ = {isa = PBXBuildFile; fileRef = F2A000020000000000000000 /* ai */; };
+		F2A000030002000000000000 /* background in Resources */ = {isa = PBXBuildFile; fileRef = F2A000030000000000000000 /* background */; };
+		F2A000040002000000000000 /* content in Resources */ = {isa = PBXBuildFile; fileRef = F2A000040000000000000000 /* content */; };
+		F2A000050002000000000000 /* core in Resources */ = {isa = PBXBuildFile; fileRef = F2A000050000000000000000 /* core */; };
+		F2A000060002000000000000 /* courses in Resources */ = {isa = PBXBuildFile; fileRef = F2A000060000000000000000 /* courses */; };
+		F2A000070002000000000000 /* documents in Resources */ = {isa = PBXBuildFile; fileRef = F2A000070000000000000000 /* documents */; };
+		F2A000080002000000000000 /* looks in Resources */ = {isa = PBXBuildFile; fileRef = F2A000080000000000000000 /* looks */; };
+		F2A000090002000000000000 /* mods in Resources */ = {isa = PBXBuildFile; fileRef = F2A000090000000000000000 /* mods */; };
+		F2A000100002000000000000 /* navigation in Resources */ = {isa = PBXBuildFile; fileRef = F2A000100000000000000000 /* navigation */; };
+		F2A000110002000000000000 /* pet in Resources */ = {isa = PBXBuildFile; fileRef = F2A000110000000000000000 /* pet */; };
+		F2A000120002000000000000 /* planner in Resources */ = {isa = PBXBuildFile; fileRef = F2A000120000000000000000 /* planner */; };
+		F2A000130002000000000000 /* settings in Resources */ = {isa = PBXBuildFile; fileRef = F2A000130000000000000000 /* settings */; };
+		F2A000140002000000000000 /* vendor in Resources */ = {isa = PBXBuildFile; fileRef = F2A000140000000000000000 /* vendor */; };
+		F2A000150002000000000000 /* writer in Resources */ = {isa = PBXBuildFile; fileRef = F2A000150000000000000000 /* writer */; };
 		3B8EDDA4307C30D500B0DD77 /* i18n in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDDA0307C30D500B0DD77 /* i18n */; };
 		3B8EDDA5307C30D500B0DD77 /* _locales in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDDA1307C30D500B0DD77 /* _locales */; };
 		3B8EDC2E307C30D500B0DD77 /* options.html in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA4307C30D500B0DD77 /* options.html */; };
-		3B8EDC2F307C30D500B0DD77 /* content.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA5307C30D500B0DD77 /* content.js */; };
 		3B8EDC30307C30D500B0DD77 /* fonts in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA6307C30D500B0DD77 /* fonts */; };
-		3B8EDC31307C30D500B0DD77 /* motion.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA7307C30D500B0DD77 /* motion.css */; };
-		3B8EDC32307C30D500B0DD77 /* defaults.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA8307C30D500B0DD77 /* defaults.js */; };
-		3B8EDC33307C30D500B0DD77 /* canvas.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA9307C30D600B0DD77 /* canvas.css */; };
-		B0B1000000000000000000A1 /* content-ultra.js in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F1 /* content-ultra.js */; };
-		B0B1000000000000000000C1 /* content-ultra.js in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F1 /* content-ultra.js */; };
-		B0B1000000000000000000A2 /* content-canvas.js in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F2 /* content-canvas.js */; };
-		B0B1000000000000000000C2 /* content-canvas.js in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F2 /* content-canvas.js */; };
-		B0B1000000000000000000A3 /* moodle.css in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F3 /* moodle.css */; };
-		B0B1000000000000000000C3 /* moodle.css in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F3 /* moodle.css */; };
 		D230000000000000000000A1 /* reader.html in Resources */ = {isa = PBXBuildFile; fileRef = D230000000000000000000F1 /* reader.html */; };
 		D230000000000000000000C1 /* reader.html in Resources */ = {isa = PBXBuildFile; fileRef = D230000000000000000000F1 /* reader.html */; };
-		D230000000000000000000A2 /* reader.js in Resources */ = {isa = PBXBuildFile; fileRef = D230000000000000000000F2 /* reader.js */; };
-		D230000000000000000000C2 /* reader.js in Resources */ = {isa = PBXBuildFile; fileRef = D230000000000000000000F2 /* reader.js */; };
 		D240000000000000000000A1 /* writer.html in Resources */ = {isa = PBXBuildFile; fileRef = D240000000000000000000F1 /* writer.html */; };
 		D240000000000000000000C1 /* writer.html in Resources */ = {isa = PBXBuildFile; fileRef = D240000000000000000000F1 /* writer.html */; };
-		D240000000000000000000A2 /* writer.js in Resources */ = {isa = PBXBuildFile; fileRef = D240000000000000000000F2 /* writer.js */; };
-		D240000000000000000000C2 /* writer.js in Resources */ = {isa = PBXBuildFile; fileRef = D240000000000000000000F2 /* writer.js */; };
-		D240000000000000000000A3 /* writer.css in Resources */ = {isa = PBXBuildFile; fileRef = D240000000000000000000F3 /* writer.css */; };
-		D241000000000000000000A1 /* writer-proof.js in Resources */ = {isa = PBXBuildFile; fileRef = D241000000000000000000F1 /* writer-proof.js */; };
-		D241000000000000000000A2 /* writer-proof.css in Resources */ = {isa = PBXBuildFile; fileRef = D241000000000000000000F2 /* writer-proof.css */; };
-		D240000000000000000000C3 /* writer.css in Resources */ = {isa = PBXBuildFile; fileRef = D240000000000000000000F3 /* writer.css */; };
-		D24A100000000000000000A2 /* writer-ai.css in Resources */ = {isa = PBXBuildFile; fileRef = D24A100000000000000000F2 /* writer-ai.css */; };
-		D24A100000000000000000C2 /* writer-ai.css in Resources */ = {isa = PBXBuildFile; fileRef = D24A100000000000000000F2 /* writer-ai.css */; };
-		D24A100000000000000000A1 /* writer-ai.js in Resources */ = {isa = PBXBuildFile; fileRef = D24A100000000000000000F1 /* writer-ai.js */; };
-		D24A100000000000000000C1 /* writer-ai.js in Resources */ = {isa = PBXBuildFile; fileRef = D24A100000000000000000F1 /* writer-ai.js */; };
-		D24A100000000000000000A3 /* writer-mcp.js in Resources */ = {isa = PBXBuildFile; fileRef = D24A100000000000000000F3 /* writer-mcp.js */; };
-		D24A100000000000000000C3 /* writer-mcp.js in Resources */ = {isa = PBXBuildFile; fileRef = D24A100000000000000000F3 /* writer-mcp.js */; };
-		D24000000000000000002FA1 /* writer-compose.js in Resources */ = {isa = PBXBuildFile; fileRef = D24000000000000000002FF1 /* writer-compose.js */; };
-		D24000000000000000002FC1 /* writer-compose.js in Resources */ = {isa = PBXBuildFile; fileRef = D24000000000000000002FF1 /* writer-compose.js */; };
-		D24000000000000000002FA2 /* writer-compose.css in Resources */ = {isa = PBXBuildFile; fileRef = D24000000000000000002FF2 /* writer-compose.css */; };
-		D24000000000000000002FC2 /* writer-compose.css in Resources */ = {isa = PBXBuildFile; fileRef = D24000000000000000002FF2 /* writer-compose.css */; };
-		D241000000000000000000C1 /* writer-proof.js in Resources */ = {isa = PBXBuildFile; fileRef = D241000000000000000000F1 /* writer-proof.js */; };
-		D241000000000000000000C2 /* writer-proof.css in Resources */ = {isa = PBXBuildFile; fileRef = D241000000000000000000F2 /* writer-proof.css */; };
-		D24C170000000000000000A1 /* writer-cite.js in Resources */ = {isa = PBXBuildFile; fileRef = D24C170000000000000000F1 /* writer-cite.js */; };
-		D24C170000000000000000C1 /* writer-cite.js in Resources */ = {isa = PBXBuildFile; fileRef = D24C170000000000000000F1 /* writer-cite.js */; };
-		D24C170000000000000000A2 /* writer-cite.css in Resources */ = {isa = PBXBuildFile; fileRef = D24C170000000000000000F2 /* writer-cite.css */; };
-		D24C170000000000000000C2 /* writer-cite.css in Resources */ = {isa = PBXBuildFile; fileRef = D24C170000000000000000F2 /* writer-cite.css */; };
-		D2400000000000000000A400 /* writer-paper.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F400 /* writer-paper.js */; };
-		D2400000000000000000C400 /* writer-paper.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F400 /* writer-paper.js */; };
-		D2400000000000000000A500 /* writer-paper.css in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F500 /* writer-paper.css */; };
-		D24500000000000000000A01 /* writer-submit.js in Resources */ = {isa = PBXBuildFile; fileRef = D24500000000000000000F01 /* writer-submit.js */; };
-		D24500000000000000000C01 /* writer-submit.js in Resources */ = {isa = PBXBuildFile; fileRef = D24500000000000000000F01 /* writer-submit.js */; };
-		D24500000000000000000A02 /* writer-submit.css in Resources */ = {isa = PBXBuildFile; fileRef = D24500000000000000000F02 /* writer-submit.css */; };
-		D24500000000000000000C02 /* writer-submit.css in Resources */ = {isa = PBXBuildFile; fileRef = D24500000000000000000F02 /* writer-submit.css */; };
-		D246000000000000000000A1 /* writer-import.js in Resources */ = {isa = PBXBuildFile; fileRef = D246000000000000000000F1 /* writer-import.js */; };
-		D246000000000000000000C1 /* writer-import.js in Resources */ = {isa = PBXBuildFile; fileRef = D246000000000000000000F1 /* writer-import.js */; };
-		D246000000000000000000A2 /* writer-import.css in Resources */ = {isa = PBXBuildFile; fileRef = D246000000000000000000F2 /* writer-import.css */; };
-		D24B000000000000000000A2 /* writer-objects.css in Resources */ = {isa = PBXBuildFile; fileRef = D24B000000000000000000F2 /* writer-objects.css */; };
-		D24B000000000000000000A1 /* writer-objects.js in Resources */ = {isa = PBXBuildFile; fileRef = D24B000000000000000000F1 /* writer-objects.js */; };
-		D246000000000000000000C2 /* writer-import.css in Resources */ = {isa = PBXBuildFile; fileRef = D246000000000000000000F2 /* writer-import.css */; };
-		D24B000000000000000000C2 /* writer-objects.css in Resources */ = {isa = PBXBuildFile; fileRef = D24B000000000000000000F2 /* writer-objects.css */; };
-		D24B000000000000000000C1 /* writer-objects.js in Resources */ = {isa = PBXBuildFile; fileRef = D24B000000000000000000F1 /* writer-objects.js */; };
-		D24ED10000000000000001A0 /* writer-find.js in Resources */ = {isa = PBXBuildFile; fileRef = D24ED10000000000000001F0 /* writer-find.js */; };
-		D24ED10000000000000001C0 /* writer-find.js in Resources */ = {isa = PBXBuildFile; fileRef = D24ED10000000000000001F0 /* writer-find.js */; };
-		D24ED10000000000000002A0 /* writer-print.js in Resources */ = {isa = PBXBuildFile; fileRef = D24ED10000000000000002F0 /* writer-print.js */; };
-		D24ED10000000000000002C0 /* writer-print.js in Resources */ = {isa = PBXBuildFile; fileRef = D24ED10000000000000002F0 /* writer-print.js */; };
-		D24ED10000000000000003A0 /* writer-counts.js in Resources */ = {isa = PBXBuildFile; fileRef = D24ED10000000000000003F0 /* writer-counts.js */; };
-		D24ED10000000000000003C0 /* writer-counts.js in Resources */ = {isa = PBXBuildFile; fileRef = D24ED10000000000000003F0 /* writer-counts.js */; };
-		D24ED10000000000000004A0 /* writer-edit.css in Resources */ = {isa = PBXBuildFile; fileRef = D24ED10000000000000004F0 /* writer-edit.css */; };
-		D24ED10000000000000004C0 /* writer-edit.css in Resources */ = {isa = PBXBuildFile; fileRef = D24ED10000000000000004F0 /* writer-edit.css */; };
-		D24EF10000000000000001A0 /* writer-paste.js in Resources */ = {isa = PBXBuildFile; fileRef = D24EF10000000000000001F0 /* writer-paste.js */; };
-		D24EF10000000000000001C0 /* writer-paste.js in Resources */ = {isa = PBXBuildFile; fileRef = D24EF10000000000000001F0 /* writer-paste.js */; };
-		D24EF10000000000000002A0 /* writer-ruler.js in Resources */ = {isa = PBXBuildFile; fileRef = D24EF10000000000000002F0 /* writer-ruler.js */; };
-		D24EF10000000000000002C0 /* writer-ruler.js in Resources */ = {isa = PBXBuildFile; fileRef = D24EF10000000000000002F0 /* writer-ruler.js */; };
-		D24EF10000000000000003A0 /* writer-ruler.css in Resources */ = {isa = PBXBuildFile; fileRef = D24EF10000000000000003F0 /* writer-ruler.css */; };
-		D24EF10000000000000003C0 /* writer-ruler.css in Resources */ = {isa = PBXBuildFile; fileRef = D24EF10000000000000003F0 /* writer-ruler.css */; };
-		D2400000000000000000C500 /* writer-paper.css in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F500 /* writer-paper.css */; };
 		D2400000000000000000A600 /* papers.html in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F600 /* papers.html */; };
 		D2400000000000000000C600 /* papers.html in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F600 /* papers.html */; };
-		D2400000000000000000A700 /* papers.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F700 /* papers.js */; };
-		D2400000000000000000C700 /* papers.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F700 /* papers.js */; };
-		D2400000000000000000A780 /* papers.css in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F780 /* papers.css */; };
-		D2400000000000000000C780 /* papers.css in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F780 /* papers.css */; };
-		D2400000000000000000A790 /* papers-motion.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F790 /* papers-motion.js */; };
-		D2400000000000000000C790 /* papers-motion.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F790 /* papers-motion.js */; };
-		D2400000000000000000A7E1 /* sheet-kind.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7E1 /* sheet-kind.js */; };
-		D2400000000000000000C7E1 /* sheet-kind.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7E1 /* sheet-kind.js */; };
-		D2400000000000000000A7E2 /* sheet-grid.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7E2 /* sheet-grid.js */; };
-		D2400000000000000000C7E2 /* sheet-grid.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7E2 /* sheet-grid.js */; };
-		D2400000000000000000A7E3 /* sheet-data.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7E3 /* sheet-data.js */; };
-		D2400000000000000000C7E3 /* sheet-data.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7E3 /* sheet-data.js */; };
-		D2400000000000000000A7E4 /* sheet.css in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7E4 /* sheet.css */; };
-		D2400000000000000000C7E4 /* sheet.css in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7E4 /* sheet.css */; };
-		D2400000000000000000A791 /* pdf-kind.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F791 /* pdf-kind.js */; };
-		D2400000000000000000C791 /* pdf-kind.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F791 /* pdf-kind.js */; };
-		D2400000000000000000A792 /* pdf-kind.css in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F792 /* pdf-kind.css */; };
-		D2400000000000000000C792 /* pdf-kind.css in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F792 /* pdf-kind.css */; };
-		D2400000000000000000A7D1 /* slides-kind.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7D1 /* slides-kind.js */; };
-		D2400000000000000000A7F1 /* writer-kinds.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7F1 /* writer-kinds.js */; };
-		D2400000000000000000C7D1 /* slides-kind.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7D1 /* slides-kind.js */; };
-		D2400000000000000000C7F1 /* writer-kinds.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7F1 /* writer-kinds.js */; };
-		D2400000000000000000A7D2 /* slides-kind.css in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7D2 /* slides-kind.css */; };
-		D2400000000000000000C7D2 /* slides-kind.css in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7D2 /* slides-kind.css */; };
-		B0B1000000000000000000A4 /* features in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F4 /* features */; };
-		B0B1000000000000000000C4 /* features in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F4 /* features */; };
 		B0B1000000000000000000A5 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F5 /* assets */; };
 		B0B1000000000000000000C5 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F5 /* assets */; };
 		D6B0000000000000000000A1 /* sharing in Resources */ = {isa = PBXBuildFile; fileRef = D6B0000000000000000000F1 /* sharing */; };
@@ -218,76 +140,37 @@
 		3B8EDF01307C30D500B0DD77 /* GlazeAI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlazeAI.swift; sourceTree = "<group>"; };
 		3B8EDA8E307C30D500B0DD77 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		3B8EDA99307C30D500B0DD77 /* preview.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = preview.html; path = Resources/preview.html; sourceTree = "<group>"; };
-		3B8EDA9A307C30D500B0DD77 /* ui.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = ui.js; path = Resources/ui.js; sourceTree = "<group>"; };
-		3B8EDA9B307C30D500B0DD77 /* theme.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = theme.css; path = Resources/theme.css; sourceTree = "<group>"; };
-		3B8EDA9C307C30D500B0DD77 /* popup.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = popup.js; path = Resources/popup.js; sourceTree = "<group>"; };
-		3B8EDA9D307C30D500B0DD77 /* extras.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = extras.css; path = Resources/extras.css; sourceTree = "<group>"; };
 		3B8EDA9E307C30D500B0DD77 /* popup.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = popup.html; path = Resources/popup.html; sourceTree = "<group>"; };
-		3B8EDA9F307C30D500B0DD77 /* options.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = options.js; path = Resources/options.js; sourceTree = "<group>"; };
-		3B8EDAA0307C30D500B0DD77 /* ui.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = ui.css; path = Resources/ui.css; sourceTree = "<group>"; };
 		3B8EDAA1307C30D500B0DD77 /* icons */ = {isa = PBXFileReference; lastKnownFileType = folder; name = icons; path = Resources/icons; sourceTree = "<group>"; };
 		3B8EDAA2307C30D500B0DD77 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = manifest.json; path = Resources/manifest.json; sourceTree = "<group>"; };
-		3B8EDAA3307C30D500B0DD77 /* lib */ = {isa = PBXFileReference; lastKnownFileType = folder; name = lib; path = Resources/lib; sourceTree = "<group>"; };
+		F2A000010000000000000000 /* agents */ = {isa = PBXFileReference; lastKnownFileType = folder; name = agents; path = Resources/agents; sourceTree = "<group>"; };
+		F2A000020000000000000000 /* ai */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ai; path = Resources/ai; sourceTree = "<group>"; };
+		F2A000030000000000000000 /* background */ = {isa = PBXFileReference; lastKnownFileType = folder; name = background; path = Resources/background; sourceTree = "<group>"; };
+		F2A000040000000000000000 /* content */ = {isa = PBXFileReference; lastKnownFileType = folder; name = content; path = Resources/content; sourceTree = "<group>"; };
+		F2A000050000000000000000 /* core */ = {isa = PBXFileReference; lastKnownFileType = folder; name = core; path = Resources/core; sourceTree = "<group>"; };
+		F2A000060000000000000000 /* courses */ = {isa = PBXFileReference; lastKnownFileType = folder; name = courses; path = Resources/courses; sourceTree = "<group>"; };
+		F2A000070000000000000000 /* documents */ = {isa = PBXFileReference; lastKnownFileType = folder; name = documents; path = Resources/documents; sourceTree = "<group>"; };
+		F2A000080000000000000000 /* looks */ = {isa = PBXFileReference; lastKnownFileType = folder; name = looks; path = Resources/looks; sourceTree = "<group>"; };
+		F2A000090000000000000000 /* mods */ = {isa = PBXFileReference; lastKnownFileType = folder; name = mods; path = Resources/mods; sourceTree = "<group>"; };
+		F2A000100000000000000000 /* navigation */ = {isa = PBXFileReference; lastKnownFileType = folder; name = navigation; path = Resources/navigation; sourceTree = "<group>"; };
+		F2A000110000000000000000 /* pet */ = {isa = PBXFileReference; lastKnownFileType = folder; name = pet; path = Resources/pet; sourceTree = "<group>"; };
+		F2A000120000000000000000 /* planner */ = {isa = PBXFileReference; lastKnownFileType = folder; name = planner; path = Resources/planner; sourceTree = "<group>"; };
+		F2A000130000000000000000 /* settings */ = {isa = PBXFileReference; lastKnownFileType = folder; name = settings; path = Resources/settings; sourceTree = "<group>"; };
+		F2A000140000000000000000 /* vendor */ = {isa = PBXFileReference; lastKnownFileType = folder; name = vendor; path = Resources/vendor; sourceTree = "<group>"; };
+		F2A000150000000000000000 /* writer */ = {isa = PBXFileReference; lastKnownFileType = folder; name = writer; path = Resources/writer; sourceTree = "<group>"; };
 		3B8EDDA0307C30D500B0DD77 /* i18n */ = {isa = PBXFileReference; lastKnownFileType = folder; name = i18n; path = Resources/i18n; sourceTree = "<group>"; };
 		3B8EDDA1307C30D500B0DD77 /* _locales */ = {isa = PBXFileReference; lastKnownFileType = folder; name = _locales; path = Resources/_locales; sourceTree = "<group>"; };
 		3B8EDAA4307C30D500B0DD77 /* options.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = options.html; path = Resources/options.html; sourceTree = "<group>"; };
-		3B8EDAA5307C30D500B0DD77 /* content.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = content.js; path = Resources/content.js; sourceTree = "<group>"; };
 		3B8EDAA6307C30D500B0DD77 /* fonts */ = {isa = PBXFileReference; lastKnownFileType = folder; name = fonts; path = Resources/fonts; sourceTree = "<group>"; };
-		3B8EDAA7307C30D500B0DD77 /* motion.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = motion.css; path = Resources/motion.css; sourceTree = "<group>"; };
-		3B8EDAA8307C30D500B0DD77 /* defaults.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = defaults.js; path = Resources/defaults.js; sourceTree = "<group>"; };
-		3B8EDAA9307C30D600B0DD77 /* canvas.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = canvas.css; path = Resources/canvas.css; sourceTree = "<group>"; };
 		3B8EDC03307C30D500B0DD77 /* Glaze.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Glaze.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B8EDC04307C30D500B0DD77 /* Glaze Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Glaze Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B8EDC05307C30D500B0DD77 /* GlazeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlazeApp.swift; sourceTree = "<group>"; };
 		3B8EDC06307C30D500B0DD77 /* Main.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = Main.html; sourceTree = "<group>"; };
 		3B8EDC07307C30D500B0DD77 /* iOS.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = iOS.css; sourceTree = "<group>"; };
 		3B8EDC08307C30D500B0DD77 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		B0B1000000000000000000F1 /* content-ultra.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "content-ultra.js"; path = "Resources/content-ultra.js"; sourceTree = "<group>"; };
-		B0B1000000000000000000F2 /* content-canvas.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "content-canvas.js"; path = "Resources/content-canvas.js"; sourceTree = "<group>"; };
-		B0B1000000000000000000F3 /* moodle.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = moodle.css; path = Resources/moodle.css; sourceTree = "<group>"; };
 		D230000000000000000000F1 /* reader.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = reader.html; path = Resources/reader.html; sourceTree = "<group>"; };
-		D230000000000000000000F2 /* reader.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = reader.js; path = Resources/reader.js; sourceTree = "<group>"; };
 		D240000000000000000000F1 /* writer.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = writer.html; path = Resources/writer.html; sourceTree = "<group>"; };
-		D240000000000000000000F2 /* writer.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer.js; path = Resources/writer.js; sourceTree = "<group>"; };
-		D240000000000000000000F3 /* writer.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = writer.css; path = Resources/writer.css; sourceTree = "<group>"; };
-		D24A100000000000000000F2 /* writer-ai.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = "writer-ai.css"; path = "Resources/writer-ai.css"; sourceTree = "<group>"; };
-		D24A100000000000000000F1 /* writer-ai.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "writer-ai.js"; path = "Resources/writer-ai.js"; sourceTree = "<group>"; };
-		D24A100000000000000000F3 /* writer-mcp.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "writer-mcp.js"; path = "Resources/writer-mcp.js"; sourceTree = "<group>"; };
-		D24000000000000000002FF1 /* writer-compose.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-compose.js; path = Resources/writer-compose.js; sourceTree = "<group>"; };
-		D24000000000000000002FF2 /* writer-compose.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = writer-compose.css; path = Resources/writer-compose.css; sourceTree = "<group>"; };
-		D241000000000000000000F1 /* writer-proof.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "writer-proof.js"; path = "Resources/writer-proof.js"; sourceTree = "<group>"; };
-		D241000000000000000000F2 /* writer-proof.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = "writer-proof.css"; path = "Resources/writer-proof.css"; sourceTree = "<group>"; };
-		D24C170000000000000000F1 /* writer-cite.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-cite.js; path = Resources/writer-cite.js; sourceTree = "<group>"; };
-		D24C170000000000000000F2 /* writer-cite.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = writer-cite.css; path = Resources/writer-cite.css; sourceTree = "<group>"; };
-		D2400000000000000000F400 /* writer-paper.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-paper.js; path = Resources/writer-paper.js; sourceTree = "<group>"; };
-		D2400000000000000000F500 /* writer-paper.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = writer-paper.css; path = Resources/writer-paper.css; sourceTree = "<group>"; };
-		D24500000000000000000F01 /* writer-submit.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-submit.js; path = Resources/writer-submit.js; sourceTree = "<group>"; };
-		D24500000000000000000F02 /* writer-submit.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = writer-submit.css; path = Resources/writer-submit.css; sourceTree = "<group>"; };
-		D246000000000000000000F1 /* writer-import.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-import.js; path = Resources/writer-import.js; sourceTree = "<group>"; };
-		D246000000000000000000F2 /* writer-import.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = writer-import.css; path = Resources/writer-import.css; sourceTree = "<group>"; };
-		D24B000000000000000000F2 /* writer-objects.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = writer-objects.css; path = Resources/writer-objects.css; sourceTree = "<group>"; };
-		D24B000000000000000000F1 /* writer-objects.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-objects.js; path = Resources/writer-objects.js; sourceTree = "<group>"; };
-		D24ED10000000000000001F0 /* writer-find.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-find.js; path = Resources/writer-find.js; sourceTree = "<group>"; };
-		D24ED10000000000000002F0 /* writer-print.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-print.js; path = Resources/writer-print.js; sourceTree = "<group>"; };
-		D24ED10000000000000003F0 /* writer-counts.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-counts.js; path = Resources/writer-counts.js; sourceTree = "<group>"; };
-		D24ED10000000000000004F0 /* writer-edit.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = writer-edit.css; path = Resources/writer-edit.css; sourceTree = "<group>"; };
-		D24EF10000000000000001F0 /* writer-paste.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-paste.js; path = Resources/writer-paste.js; sourceTree = "<group>"; };
-		D24EF10000000000000002F0 /* writer-ruler.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-ruler.js; path = Resources/writer-ruler.js; sourceTree = "<group>"; };
-		D24EF10000000000000003F0 /* writer-ruler.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = writer-ruler.css; path = Resources/writer-ruler.css; sourceTree = "<group>"; };
 		D2400000000000000000F600 /* papers.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = papers.html; path = Resources/papers.html; sourceTree = "<group>"; };
-		D2400000000000000000F700 /* papers.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = papers.js; path = Resources/papers.js; sourceTree = "<group>"; };
-		D2400000000000000000F780 /* papers.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = papers.css; path = Resources/papers.css; sourceTree = "<group>"; };
-		D2400000000000000000F790 /* papers-motion.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = papers-motion.js; path = Resources/papers-motion.js; sourceTree = "<group>"; };
-		D2400000000000000000F7E1 /* sheet-kind.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = sheet-kind.js; path = Resources/sheet-kind.js; sourceTree = "<group>"; };
-		D2400000000000000000F7E2 /* sheet-grid.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = sheet-grid.js; path = Resources/sheet-grid.js; sourceTree = "<group>"; };
-		D2400000000000000000F7E3 /* sheet-data.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = sheet-data.js; path = Resources/sheet-data.js; sourceTree = "<group>"; };
-		D2400000000000000000F7E4 /* sheet.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = sheet.css; path = Resources/sheet.css; sourceTree = "<group>"; };
-		D2400000000000000000F791 /* pdf-kind.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = pdf-kind.js; path = Resources/pdf-kind.js; sourceTree = "<group>"; };
-		D2400000000000000000F792 /* pdf-kind.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = pdf-kind.css; path = Resources/pdf-kind.css; sourceTree = "<group>"; };
-		D2400000000000000000F7D1 /* slides-kind.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = slides-kind.js; path = Resources/slides-kind.js; sourceTree = "<group>"; };
-		D2400000000000000000F7F1 /* writer-kinds.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-kinds.js; path = Resources/writer-kinds.js; sourceTree = "<group>"; };
-		D2400000000000000000F7D2 /* slides-kind.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = slides-kind.css; path = Resources/slides-kind.css; sourceTree = "<group>"; };
-		B0B1000000000000000000F4 /* features */ = {isa = PBXFileReference; lastKnownFileType = folder; name = features; path = Resources/features; sourceTree = "<group>"; };
 		B0B1000000000000000000F5 /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = assets; path = Resources/assets; sourceTree = "<group>"; };
 		D6B0000000000000000000F1 /* sharing */ = {isa = PBXFileReference; lastKnownFileType = folder; name = sharing; path = Resources/sharing; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -376,71 +259,32 @@
 			isa = PBXGroup;
 			children = (
 				3B8EDA99307C30D500B0DD77 /* preview.html */,
-				3B8EDA9A307C30D500B0DD77 /* ui.js */,
-				3B8EDA9B307C30D500B0DD77 /* theme.css */,
-				3B8EDA9C307C30D500B0DD77 /* popup.js */,
-				3B8EDA9D307C30D500B0DD77 /* extras.css */,
 				3B8EDA9E307C30D500B0DD77 /* popup.html */,
-				3B8EDA9F307C30D500B0DD77 /* options.js */,
-				3B8EDAA0307C30D500B0DD77 /* ui.css */,
 				3B8EDAA1307C30D500B0DD77 /* icons */,
 				3B8EDAA2307C30D500B0DD77 /* manifest.json */,
-				3B8EDAA3307C30D500B0DD77 /* lib */,
+				F2A000010000000000000000 /* agents */,
+				F2A000020000000000000000 /* ai */,
+				F2A000030000000000000000 /* background */,
+				F2A000040000000000000000 /* content */,
+				F2A000050000000000000000 /* core */,
+				F2A000060000000000000000 /* courses */,
+				F2A000070000000000000000 /* documents */,
+				F2A000080000000000000000 /* looks */,
+				F2A000090000000000000000 /* mods */,
+				F2A000100000000000000000 /* navigation */,
+				F2A000110000000000000000 /* pet */,
+				F2A000120000000000000000 /* planner */,
+				F2A000130000000000000000 /* settings */,
+				F2A000140000000000000000 /* vendor */,
+				F2A000150000000000000000 /* writer */,
 				3B8EDDA0307C30D500B0DD77 /* i18n */,
 				3B8EDDA1307C30D500B0DD77 /* _locales */,
 				3B8EDAA4307C30D500B0DD77 /* options.html */,
-				3B8EDAA5307C30D500B0DD77 /* content.js */,
 				3B8EDAA6307C30D500B0DD77 /* fonts */,
-				3B8EDAA7307C30D500B0DD77 /* motion.css */,
-				3B8EDAA8307C30D500B0DD77 /* defaults.js */,
-				3B8EDAA9307C30D600B0DD77 /* canvas.css */,
-				B0B1000000000000000000F1 /* content-ultra.js */,
-				B0B1000000000000000000F2 /* content-canvas.js */,
-				B0B1000000000000000000F3 /* moodle.css */,
 				D230000000000000000000F1 /* reader.html */,
-				D230000000000000000000F2 /* reader.js */,
 				D240000000000000000000F1 /* writer.html */,
-				D240000000000000000000F2 /* writer.js */,
-				D240000000000000000000F3 /* writer.css */,
-				D24A100000000000000000F2 /* writer-ai.css */,
-				D24A100000000000000000F1 /* writer-ai.js */,
-				D24A100000000000000000F3 /* writer-mcp.js */,
-				D24000000000000000002FF1 /* writer-compose.js */,
-				D24000000000000000002FF2 /* writer-compose.css */,
-				D241000000000000000000F1 /* writer-proof.js */,
-				D241000000000000000000F2 /* writer-proof.css */,
-				D24C170000000000000000F1 /* writer-cite.js */,
-				D24C170000000000000000F2 /* writer-cite.css */,
-				D2400000000000000000F400 /* writer-paper.js */,
-				D2400000000000000000F500 /* writer-paper.css */,
-				D24500000000000000000F01 /* writer-submit.js */,
-				D24500000000000000000F02 /* writer-submit.css */,
-				D246000000000000000000F1 /* writer-import.js */,
-				D246000000000000000000F2 /* writer-import.css */,
-				D24B000000000000000000F2 /* writer-objects.css */,
-				D24B000000000000000000F1 /* writer-objects.js */,
-				D24ED10000000000000001F0 /* writer-find.js */,
-				D24ED10000000000000002F0 /* writer-print.js */,
-				D24ED10000000000000003F0 /* writer-counts.js */,
-				D24ED10000000000000004F0 /* writer-edit.css */,
-				D24EF10000000000000001F0 /* writer-paste.js */,
-				D24EF10000000000000002F0 /* writer-ruler.js */,
-				D24EF10000000000000003F0 /* writer-ruler.css */,
 				D2400000000000000000F600 /* papers.html */,
-				D2400000000000000000F700 /* papers.js */,
-				D2400000000000000000F780 /* papers.css */,
-				D2400000000000000000F790 /* papers-motion.js */,
-				D2400000000000000000F7E1 /* sheet-kind.js */,
-				D2400000000000000000F7E2 /* sheet-grid.js */,
-				D2400000000000000000F7E3 /* sheet-data.js */,
-				D2400000000000000000F7E4 /* sheet.css */,
-				D2400000000000000000F791 /* pdf-kind.js */,
-				D2400000000000000000F792 /* pdf-kind.css */,
-				D2400000000000000000F7D1 /* slides-kind.js */,
-				D2400000000000000000F7F1 /* writer-kinds.js */,
-				D2400000000000000000F7D2 /* slides-kind.css */,
 				D6B0000000000000000000F1 /* sharing */,
-				B0B1000000000000000000F4 /* features */,
 				B0B1000000000000000000F5 /* assets */,
 			);
 			name = Resources;
@@ -600,72 +444,33 @@
 		3B8EDA85307C30D500B0DD77 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
-				3B8EDAAA307C30D500B0DD77 /* ui.js in Resources */,
 				3B8EDAAE307C30D500B0DD77 /* popup.html in Resources */,
 				3B8EDAB2307C30D500B0DD77 /* manifest.json in Resources */,
 				3B8EDAB6307C30D500B0DD77 /* fonts in Resources */,
-				3B8EDAAD307C30D500B0DD77 /* extras.css in Resources */,
-				3B8EDAB5307C30D500B0DD77 /* content.js in Resources */,
 				3B8EDAB1307C30D500B0DD77 /* icons in Resources */,
-				3B8EDAB0307C30D500B0DD77 /* ui.css in Resources */,
-				3B8EDAAF307C30D500B0DD77 /* options.js in Resources */,
 				3B8EDAA9307C30D500B0DD77 /* preview.html in Resources */,
-				3B8EDAB3307C30D500B0DD77 /* lib in Resources */,
+				F2A000010001000000000000 /* agents in Resources */,
+				F2A000020001000000000000 /* ai in Resources */,
+				F2A000030001000000000000 /* background in Resources */,
+				F2A000040001000000000000 /* content in Resources */,
+				F2A000050001000000000000 /* core in Resources */,
+				F2A000060001000000000000 /* courses in Resources */,
+				F2A000070001000000000000 /* documents in Resources */,
+				F2A000080001000000000000 /* looks in Resources */,
+				F2A000090001000000000000 /* mods in Resources */,
+				F2A000100001000000000000 /* navigation in Resources */,
+				F2A000110001000000000000 /* pet in Resources */,
+				F2A000120001000000000000 /* planner in Resources */,
+				F2A000130001000000000000 /* settings in Resources */,
+				F2A000140001000000000000 /* vendor in Resources */,
+				F2A000150001000000000000 /* writer in Resources */,
 				3B8EDDA2307C30D500B0DD77 /* i18n in Resources */,
 				3B8EDDA3307C30D500B0DD77 /* _locales in Resources */,
-				3B8EDAB7307C30D500B0DD77 /* motion.css in Resources */,
-				3B8EDAAB307C30D500B0DD77 /* theme.css in Resources */,
-				3B8EDAAC307C30D500B0DD77 /* popup.js in Resources */,
-				3B8EDAB8307C30D500B0DD77 /* defaults.js in Resources */,
-				3B8EDAB9307C30D500B0DD77 /* canvas.css in Resources */,
 				3B8EDAB4307C30D500B0DD77 /* options.html in Resources */,
-				B0B1000000000000000000A1 /* content-ultra.js in Resources */,
-				B0B1000000000000000000A2 /* content-canvas.js in Resources */,
-				B0B1000000000000000000A3 /* moodle.css in Resources */,
 				D230000000000000000000A1 /* reader.html in Resources */,
-				D230000000000000000000A2 /* reader.js in Resources */,
 				D240000000000000000000A1 /* writer.html in Resources */,
-				D240000000000000000000A2 /* writer.js in Resources */,
-				D240000000000000000000A3 /* writer.css in Resources */,
-				D24A100000000000000000A2 /* writer-ai.css in Resources */,
-				D24A100000000000000000A1 /* writer-ai.js in Resources */,
-				D24A100000000000000000A3 /* writer-mcp.js in Resources */,
-				D24000000000000000002FA1 /* writer-compose.js in Resources */,
-				D24000000000000000002FA2 /* writer-compose.css in Resources */,
-				D241000000000000000000A1 /* writer-proof.js in Resources */,
-				D241000000000000000000A2 /* writer-proof.css in Resources */,
-				D24C170000000000000000A1 /* writer-cite.js in Resources */,
-				D24C170000000000000000A2 /* writer-cite.css in Resources */,
-				D2400000000000000000A400 /* writer-paper.js in Resources */,
-				D2400000000000000000A500 /* writer-paper.css in Resources */,
-				D24500000000000000000A01 /* writer-submit.js in Resources */,
-				D24500000000000000000A02 /* writer-submit.css in Resources */,
-				D246000000000000000000A1 /* writer-import.js in Resources */,
-				D246000000000000000000A2 /* writer-import.css in Resources */,
-				D24B000000000000000000A2 /* writer-objects.css in Resources */,
-				D24B000000000000000000A1 /* writer-objects.js in Resources */,
-				D24ED10000000000000001A0 /* writer-find.js in Resources */,
-				D24ED10000000000000002A0 /* writer-print.js in Resources */,
-				D24ED10000000000000003A0 /* writer-counts.js in Resources */,
-				D24ED10000000000000004A0 /* writer-edit.css in Resources */,
-				D24EF10000000000000001A0 /* writer-paste.js in Resources */,
-				D24EF10000000000000002A0 /* writer-ruler.js in Resources */,
-				D24EF10000000000000003A0 /* writer-ruler.css in Resources */,
 				D2400000000000000000A600 /* papers.html in Resources */,
-				D2400000000000000000A700 /* papers.js in Resources */,
-				D2400000000000000000A780 /* papers.css in Resources */,
-				D2400000000000000000A790 /* papers-motion.js in Resources */,
-				D2400000000000000000A7E1 /* sheet-kind.js in Resources */,
-				D2400000000000000000A7E2 /* sheet-grid.js in Resources */,
-				D2400000000000000000A7E3 /* sheet-data.js in Resources */,
-				D2400000000000000000A7E4 /* sheet.css in Resources */,
-				D2400000000000000000A791 /* pdf-kind.js in Resources */,
-				D2400000000000000000A792 /* pdf-kind.css in Resources */,
-				D2400000000000000000A7D1 /* slides-kind.js in Resources */,
-				D2400000000000000000A7F1 /* writer-kinds.js in Resources */,
-				D2400000000000000000A7D2 /* slides-kind.css in Resources */,
 				D6B0000000000000000000A1 /* sharing in Resources */,
-				B0B1000000000000000000A4 /* features in Resources */,
 				B0B1000000000000000000A5 /* assets in Resources */,
 			);
 		};
@@ -684,71 +489,32 @@
 			isa = PBXResourcesBuildPhase;
 			files = (
 				3B8EDC23307C30D500B0DD77 /* preview.html in Resources */,
-				3B8EDC24307C30D500B0DD77 /* ui.js in Resources */,
-				3B8EDC25307C30D500B0DD77 /* theme.css in Resources */,
-				3B8EDC26307C30D500B0DD77 /* popup.js in Resources */,
-				3B8EDC27307C30D500B0DD77 /* extras.css in Resources */,
 				3B8EDC28307C30D500B0DD77 /* popup.html in Resources */,
-				3B8EDC29307C30D500B0DD77 /* options.js in Resources */,
-				3B8EDC2A307C30D500B0DD77 /* ui.css in Resources */,
 				3B8EDC2B307C30D500B0DD77 /* icons in Resources */,
 				3B8EDC2C307C30D500B0DD77 /* manifest.json in Resources */,
-				3B8EDC2D307C30D500B0DD77 /* lib in Resources */,
+				F2A000010002000000000000 /* agents in Resources */,
+				F2A000020002000000000000 /* ai in Resources */,
+				F2A000030002000000000000 /* background in Resources */,
+				F2A000040002000000000000 /* content in Resources */,
+				F2A000050002000000000000 /* core in Resources */,
+				F2A000060002000000000000 /* courses in Resources */,
+				F2A000070002000000000000 /* documents in Resources */,
+				F2A000080002000000000000 /* looks in Resources */,
+				F2A000090002000000000000 /* mods in Resources */,
+				F2A000100002000000000000 /* navigation in Resources */,
+				F2A000110002000000000000 /* pet in Resources */,
+				F2A000120002000000000000 /* planner in Resources */,
+				F2A000130002000000000000 /* settings in Resources */,
+				F2A000140002000000000000 /* vendor in Resources */,
+				F2A000150002000000000000 /* writer in Resources */,
 				3B8EDDA4307C30D500B0DD77 /* i18n in Resources */,
 				3B8EDDA5307C30D500B0DD77 /* _locales in Resources */,
 				3B8EDC2E307C30D500B0DD77 /* options.html in Resources */,
-				3B8EDC2F307C30D500B0DD77 /* content.js in Resources */,
 				3B8EDC30307C30D500B0DD77 /* fonts in Resources */,
-				3B8EDC31307C30D500B0DD77 /* motion.css in Resources */,
-				3B8EDC32307C30D500B0DD77 /* defaults.js in Resources */,
-				3B8EDC33307C30D500B0DD77 /* canvas.css in Resources */,
-				B0B1000000000000000000C1 /* content-ultra.js in Resources */,
-				B0B1000000000000000000C2 /* content-canvas.js in Resources */,
-				B0B1000000000000000000C3 /* moodle.css in Resources */,
 				D230000000000000000000C1 /* reader.html in Resources */,
-				D230000000000000000000C2 /* reader.js in Resources */,
 				D240000000000000000000C1 /* writer.html in Resources */,
-				D240000000000000000000C2 /* writer.js in Resources */,
-				D240000000000000000000C3 /* writer.css in Resources */,
-				D24A100000000000000000C2 /* writer-ai.css in Resources */,
-				D24A100000000000000000C1 /* writer-ai.js in Resources */,
-				D24A100000000000000000C3 /* writer-mcp.js in Resources */,
-				D24000000000000000002FC1 /* writer-compose.js in Resources */,
-				D24000000000000000002FC2 /* writer-compose.css in Resources */,
-				D241000000000000000000C1 /* writer-proof.js in Resources */,
-				D241000000000000000000C2 /* writer-proof.css in Resources */,
-				D24C170000000000000000C1 /* writer-cite.js in Resources */,
-				D24C170000000000000000C2 /* writer-cite.css in Resources */,
-				D2400000000000000000C400 /* writer-paper.js in Resources */,
-				D2400000000000000000C500 /* writer-paper.css in Resources */,
-				D24500000000000000000C01 /* writer-submit.js in Resources */,
-				D24500000000000000000C02 /* writer-submit.css in Resources */,
-				D246000000000000000000C1 /* writer-import.js in Resources */,
-				D246000000000000000000C2 /* writer-import.css in Resources */,
-				D24B000000000000000000C2 /* writer-objects.css in Resources */,
-				D24B000000000000000000C1 /* writer-objects.js in Resources */,
-				D24ED10000000000000001C0 /* writer-find.js in Resources */,
-				D24ED10000000000000002C0 /* writer-print.js in Resources */,
-				D24ED10000000000000003C0 /* writer-counts.js in Resources */,
-				D24ED10000000000000004C0 /* writer-edit.css in Resources */,
-				D24EF10000000000000001C0 /* writer-paste.js in Resources */,
-				D24EF10000000000000002C0 /* writer-ruler.js in Resources */,
-				D24EF10000000000000003C0 /* writer-ruler.css in Resources */,
 				D2400000000000000000C600 /* papers.html in Resources */,
-				D2400000000000000000C700 /* papers.js in Resources */,
-				D2400000000000000000C780 /* papers.css in Resources */,
-				D2400000000000000000C790 /* papers-motion.js in Resources */,
-				D2400000000000000000C7E1 /* sheet-kind.js in Resources */,
-				D2400000000000000000C7E2 /* sheet-grid.js in Resources */,
-				D2400000000000000000C7E3 /* sheet-data.js in Resources */,
-				D2400000000000000000C7E4 /* sheet.css in Resources */,
-				D2400000000000000000C791 /* pdf-kind.js in Resources */,
-				D2400000000000000000C792 /* pdf-kind.css in Resources */,
-				D2400000000000000000C7D1 /* slides-kind.js in Resources */,
-				D2400000000000000000C7F1 /* writer-kinds.js in Resources */,
-				D2400000000000000000C7D2 /* slides-kind.css in Resources */,
 				D6B0000000000000000000C1 /* sharing in Resources */,
-				B0B1000000000000000000C4 /* features in Resources */,
 				B0B1000000000000000000C5 /* assets in Resources */,
 			);
 		};

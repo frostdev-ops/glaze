@@ -1,5 +1,5 @@
 // Media backgrounds in the real unpacked extension, headless: a video, an animated picture and a Lottie animation drawn behind an
-// Ultra-shaped page from a Look's parts (storage → features/lookparts.js → content.js syncScene → lib/scene-media.js), each
+// Ultra-shaped page from a Look's parts (storage → looks/page/lookparts.js → content.js syncScene → looks/scene-media.js), each
 // from an https address and from a file this computer keeps, and each checked for what a background must always do: muted and
 // without controls, really playing, frozen on its first frame with motion off, paused while the tab is hidden, and the
 // gradient left alone, with nothing thrown, when it can't load. Pixels are read from screenshots, so "playing" and "frozen" are
@@ -21,16 +21,16 @@ const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 // Another host, which the staged copy doesn't hold: a Look's address there is refused before any request.
 const ELSEWHERE = 'https://media.elsewhere.test';
-const D = require(path.join(ext, 'defaults.js'));
-const P = require(path.join(ext, 'lib/lookparts.js'));
+const D = require(path.join(ext, 'content/defaults.js'));
+const P = require(path.join(ext, 'looks/lookparts.js'));
 const fixtures = path.join(__dirname, '../../test/fixtures/media');
 const TYPES = { '.webm': 'video/webm', '.webp': 'image/webp', '.json': 'application/json', '.mp4': 'video/mp4' };
 const fixture = '<!doctype html><html lang="en"><head><base href="//ultra-cdn.invalid/ultra/uiv4001.0.0-rel/"><meta charset="utf-8"><title>Ultra fixture</title></head><body><div id="site-wrap"><nav id="base_tools"><a href="/ultra/institution-page"><span>Institution Page</span></a><a href="/ultra/course">Courses</a></nav><main id="main-content"><div id="main-content-inner"><h1>Stream</h1></div></main></div></body></html>';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // The frame colours of anim.webp (48x48, three frames of 100 ms), and the spin.json box (red, 40 wide, from x 40 to 160 in a 200x120 design).
 const FRAMES = [[0, 255, 80], [100, 155, 80], [200, 55, 80]];
-const M = require(path.join(ext, 'lib/media.js'));
-const S = require(path.join(ext, 'lib/share.js'));
+const M = require(path.join(ext, 'looks/media.js'));
+const S = require(path.join(ext, 'sharing/share.js'));
 const near = (a, b, tol = 24) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
 
 (async () => {

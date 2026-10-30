@@ -1,16 +1,16 @@
 // What content.js does with a scene, a shader or layers: syncScene, sliced out and run in a VM with stand-ins, as
 // test/writer/ondemand.test.js does for the loader. The parts (GZ_CTX.parts()) are the Look's x, which package A fills in after first
-// paint and announces with glaze:parts; lib/scene.js is replaced by a recorder.
+// paint and announces with glaze:parts; looks/scene.js is replaced by a recorder.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(require.resolve('../../extension/content.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../extension/content/content.js'), 'utf8');
 const a = source.indexOf('  // ---- animated background');
 const b = source.indexOf('  // ---- course colors and tint', a);
 assert.ok(a > 0 && b > a, 'markers');
-// The block imports lib/scene.js (or lib/scene-media.js) with import(), which a VM can't do without flags: the recorder stands in by name.
+// The block imports looks/scene.js (or looks/scene-media.js) with import(), which a VM can't do without flags: the recorder stands in by name.
 const block = source.slice(a, b).replace(/import\((chrome\.runtime\.getURL\((?:file|`\$\{file\}[^`]*`)\)(?: \+ `[^`]*`)?)\)/, 'importScene($1, file)');
 assert.ok(block.includes('importScene('));
 
@@ -32,14 +32,14 @@ const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, en
     GZ_SCENE_LOOK: () => ({ dim: 0.3, amount: 0.5, pace: 1 }), GZ_BG_COLORS: () => ['#111111', '#222222', '#333333'],
     document: { hidden: false, body: { append() {}, setAttribute() {}, removeAttribute() {} }, createElement: canvas, getElementById: () => null, querySelectorAll: () => [], addEventListener: (event, fn) => log.listeners.set(event, fn) },
     chrome: { runtime: { id: 'glaze', getURL: (f) => f, sendMessage: async (m) => {
-      const file = m.files[0], ran = () => { if (file === 'lib/glsl.js') ctx.GZ_GLSL = {}; else ctx.GZ_SCENE_HOST = { place() { log.placements++; }, clear() {}, share() {} }; };
+      const file = m.files[0], ran = () => { if (file === 'looks/glsl.js') ctx.GZ_GLSL = {}; else ctx.GZ_SCENE_HOST = { place() { log.placements++; }, clear() {}, share() {} }; };
       log.needs.push(file);
       // A request the worker sits on: answered (the file run, ok) only when the test calls log.answers[i].
-      if (file === 'lib/glsl.js' ? glslHangs-- > 0 : hostHangs-- > 0) {
+      if (file === 'looks/glsl.js' ? glslHangs-- > 0 : hostHangs-- > 0) {
         if (hostSilent) ran(); // the worker ran the file, and its answer was lost
         return new Promise((ok) => log.answers.push(() => { ran(); ok({ ok: true }); }));
       }
-      if (file === 'lib/glsl.js' ? glslFails-- > 0 : hostFails-- > 0) throw new Error('temporary injection failure');
+      if (file === 'looks/glsl.js' ? glslFails-- > 0 : hostFails-- > 0) throw new Error('temporary injection failure');
       ran(); return { ok: true };
     } } },
     importScene: (url, file) => {
@@ -50,7 +50,7 @@ const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, en
       if (importFails-- > 0) return Promise.reject(new Error('temporary module load failure'));
       return Promise.resolve(mod);
     },
-    need: (file, ready) => { if (file === 'lib/scene-host.js') { ctx.GZ_SCENE_HOST = { place() {}, clear() {}, share() {} }; return Promise.resolve(); } log.needs.push(file); return needFails ? Promise.reject(new Error('no')) : Promise.resolve().then(() => { if (!ready()) ctx.GZ_GLSL = {}; }); },
+    need: (file, ready) => { if (file === 'looks/scene-host.js') { ctx.GZ_SCENE_HOST = { place() {}, clear() {}, share() {} }; return Promise.resolve(); } log.needs.push(file); return needFails ? Promise.reject(new Error('no')) : Promise.resolve().then(() => { if (!ready()) ctx.GZ_GLSL = {}; }); },
     applySettings: () => ctx.api.syncScene(), // the settings paint finishes by syncing the scene
     GZ_CTX: { parts: () => ctx.parts },
     parts, GZ_GLSL: glsl ? {} : undefined,
@@ -483,7 +483,7 @@ test('a scene whose context the browser takes back starts again on a new canvas,
   assert.deepEqual([q.log.starts.length, q.api.state().sceneFailed], [5, false], 'after a minute of drawing, each one is a new start');
 });
 
-test('a built-in scene loads lib/scene.js, starts it once, and updates it from then on, as before', async () => {
+test('a built-in scene loads looks/scene.js, starts it once, and updates it from then on, as before', async () => {
   const r = rig();
   r.api.syncScene(); r.api.syncScene();
   await settle();
@@ -507,7 +507,7 @@ test('a shader Look with no parts yet draws nothing, and the gradient shows; the
   r.log.listeners.get('glaze:parts')();
   await settle();
   assert.equal(r.log.starts.length, 1);
-  assert.deepEqual(r.log.needs, ['lib/glsl.js'], 'the checker is loaded on demand, first');
+  assert.deepEqual(r.log.needs, ['looks/glsl.js'], 'the checker is loaded on demand, first');
   assert.equal(r.log.updates[0].kind, 'shader');
   assert.equal(r.log.updates[0].x.bg.shader.src, SHADER.bg.shader.src);
 });
@@ -525,7 +525,7 @@ test('with the checker already here, a shader does not ask again; a built-in sce
   q.api.syncScene();
   assert.equal(q.log.updates.length, 1, 'not updated before the checker is in: the scene would refuse the shader');
   await settle();
-  assert.deepEqual(q.log.needs, ['lib/glsl.js']);
+  assert.deepEqual(q.log.needs, ['looks/glsl.js']);
   assert.equal(q.log.updates.at(-1).kind, 'shader');
 });
 
@@ -542,7 +542,7 @@ test('a shader checker the worker failed to load is asked for again, and the sha
   r.api.syncScene(); await settle();
   assert.deepEqual([r.log.starts.length, r.api.state().sceneBad], [0, '']);
   await r.retry();
-  assert.equal(r.log.needs.filter((f) => f === 'lib/glsl.js').length, 2, 'not the failed request again');
+  assert.equal(r.log.needs.filter((f) => f === 'looks/glsl.js').length, 2, 'not the failed request again');
   assert.deepEqual([r.log.starts.length, r.log.updates[0]?.kind], [1, 'shader']);
 });
 
@@ -552,7 +552,7 @@ test('a shader checker request the worker never answers does not hold the shader
   assert.equal(r.log.starts.length, 0);
   await r.retry(); // the wait runs out
   await r.retry(); // the retry asks again
-  assert.equal(r.log.needs.filter((f) => f === 'lib/glsl.js').length, 2, 'not the lost request again');
+  assert.equal(r.log.needs.filter((f) => f === 'looks/glsl.js').length, 2, 'not the lost request again');
   assert.deepEqual([r.log.starts.length, r.log.updates[0]?.kind], [1, 'shader']);
   const q = rig({ kind: 'shader', parts: SHADER, glslHangs: 3 });
   q.api.syncScene(); await settle();
@@ -650,7 +650,7 @@ test('a media Look loads its own module (never three.js), draws into a div, and 
   assert.deepEqual([r.log.starts.length, r.log.imports], [0, 0], 'no media yet: nothing is even loaded');
   r.ctx.parts = MEDIA;
   r.log.listeners.get('glaze:parts')(); await settle();
-  assert.deepEqual(r.log.files, ['lib/scene-media.js']);
+  assert.deepEqual(r.log.files, ['looks/scene-media.js']);
   assert.equal(r.log.starts.length, 1);
   assert.equal(r.log.starts[0].tag, 'div');
   assert.deepEqual(r.log.needs, [], 'no shader checker');
@@ -665,15 +665,15 @@ test('a media Look loads its own module (never three.js), draws into a div, and 
 test('switching between media and a scene stops the one and starts the other, each from its own module', async () => {
   const r = rig({ kind: 'scene' });
   r.api.syncScene(); await settle();
-  assert.deepEqual([r.log.files, r.log.starts[0].tag], [['lib/scene.js'], 'canvas']);
+  assert.deepEqual([r.log.files, r.log.starts[0].tag], [['looks/scene.js'], 'canvas']);
   r.ctx.worn.bg.kind = 'media'; r.ctx.parts = MEDIA;
   r.api.syncScene(); await settle();
   assert.equal(r.log.stops, 1, 'the three.js scene is taken down');
-  assert.deepEqual([r.log.files, r.log.starts.length, r.log.starts[1].tag], [['lib/scene.js', 'lib/scene-media.js'], 2, 'div']);
+  assert.deepEqual([r.log.files, r.log.starts.length, r.log.starts[1].tag], [['looks/scene.js', 'looks/scene-media.js'], 2, 'div']);
   r.ctx.worn.bg.kind = 'layers'; r.ctx.parts = LAYERS;
   r.api.syncScene(); await settle();
   assert.equal(r.log.stops, 2);
-  assert.deepEqual([r.log.files, r.log.starts.at(-1).tag, r.log.starts.length], [['lib/scene.js', 'lib/scene-media.js'], 'canvas', 3], 'each module is imported once, and the first is reused');
+  assert.deepEqual([r.log.files, r.log.starts.at(-1).tag, r.log.starts.length], [['looks/scene.js', 'looks/scene-media.js'], 'canvas', 3], 'each module is imported once, and the first is reused');
 });
 
 test('a media file that cannot be shown leaves the gradient until the Look changes', async () => {

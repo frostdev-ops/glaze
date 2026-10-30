@@ -45,17 +45,17 @@
     if (site === 'moodle') { document.body.className = ['outline', 'tabs'].includes(context.page) ? 'pagelayout-course course-5' : 'pagelayout-mydashboard'; globalThis.GZ_NAVBAR_UI?.sync(); }
     if (site === 'canvas') globalThis.GZ_CTABS?.sync(settings.enabled && settings.enhance.tabs && context.page === 'tabs');
   });
-  // The editor's Play and Try it (lib/editor-x.js): 'enter' replays the entrances, an event name fires that moment as the
+  // The editor's Play and Try it (settings/editor-x.js): 'enter' replays the entrances, an event name fires that moment as the
   // page would. Taking the knobs to none for one style pass and back restarts each animation; motion off or entrances off
-  // keep them none, so nothing plays then, and features/motionx.js draws no effect while motion is off.
+  // keep them none, so nothing plays then, and looks/page/motionx.js draws no effect while motion is off.
   addEventListener('message', (e) => {
     const m = e.origin === location.origin && e.source === parent ? e.data?.gzPreviewMoment : null;
     if (m === 'enter' && !html.hasAttribute('data-gz-no-enter')) { html.setAttribute('data-gz-no-enter', ''); void document.body.offsetWidth; html.removeAttribute('data-gz-no-enter'); }
     else if (globalThis.GZ_MX?.EVENTS.includes(m)) globalThis.GZ_CTX?.moment?.(m);
   });
   if (site === 'ultra') {
-    // features/lookx.js shows the pointer worn (the student's, or the Look's), so hovering the preview uses it.
-    for (const file of ['content-ultra.js', 'content.js', 'lib/stream.js', 'features/stream.js', 'features/coursetabs.js', 'features/cards.js', 'features/nav.js', 'lib/navbar.js', 'features/navbar-widgets.js', 'features/navbar.js', 'lib/lookx.js', 'features/lookx.js', 'features/rules.js', 'lib/motionx.js', 'features/motionx.js']) await load(file);
+    // looks/page/lookx.js shows the pointer worn (the student's, or the Look's), so hovering the preview uses it.
+    for (const file of ['content/content-ultra.js', 'content/content.js', 'courses/stream.js', 'courses/page/stream.js', 'navigation/page/coursetabs.js', 'courses/page/cards.js', 'navigation/page/nav.js', 'navigation/navbar.js', 'navigation/page/navbar-widgets.js', 'navigation/page/navbar.js', 'looks/lookx.js', 'looks/page/lookx.js', 'looks/page/rules.js', 'looks/motionx.js', 'looks/page/motionx.js']) await load(file);
     // The core's theme sanitizer omits the separate card store. After its listener, keep the editor's card
     // preferences and repaint even when the motion attribute (the card painter's other trigger) is unchanged.
     addEventListener('message', (e) => {
@@ -84,10 +84,10 @@
     const template = document.getElementById(`mock-${site}`); document.querySelector('#site-wrap').replaceWith(template.content.cloneNode(true));
     if (site === 'moodle') { document.body.id = 'page-my-index'; document.body.className = 'pagelayout-mydashboard'; }
     if (backdrop) { html.setAttribute('data-preview-backdrop', ''); document.head.append(Object.assign(document.createElement('style'), { textContent: 'body > :not(#gz-scene) { visibility: hidden !important; }' })); }
-    const sheets = [`${site}.css`, 'motion.css', 'features/surfaces.css', ...(site === 'canvas' ? ['features/coursetabs.css', 'features/apps.css', 'features/sidebar.css'] : [])].map((href) => {
+    const sheets = [`content/${site}.css`, 'content/motion.css', 'looks/page/surfaces.css', ...(site === 'canvas' ? ['navigation/page/coursetabs.css', 'core/page/apps.css', 'navigation/page/sidebar.css'] : [])].map((href) => {
       const link = Object.assign(document.createElement('link'), { rel: 'stylesheet', href }); document.head.append(link); return link;
     });
-    // The sidebar as the settings dress it (features/sidebar.css): a still Glaze column at the right edge, with This page
+    // The sidebar as the settings dress it (navigation/page/sidebar.css): a still Glaze column at the right edge, with This page
     // and My widgets, the mock page kept clear of it. Nothing of an account's (where widgets sit) is shown here.
     const sidebar = (s) => {
       let aside = document.getElementById('gz-sidebar');
@@ -154,15 +154,15 @@
       globalThis.GZ_MOTIONX?.sync();
       globalThis.GZ_LOOKX?.sync();
       if (s.enabled && drawn && sig !== sceneBad) {
-        const file = kind === 'media' ? 'lib/scene-media.js' : 'lib/scene.js';
+        const file = kind === 'media' ? 'looks/scene-media.js' : 'looks/scene.js';
         if (scene && sceneFile !== file) { scene.stop(); scene = null; sceneCanvas?.remove(); }
         sceneModule[file] ||= import(chrome.runtime.getURL(file));
         try {
           const module = await sceneModule[file]; if (mine !== revision) return;
           if (!scene) {
             sceneFile = file;
-            sceneCanvas = Object.assign(document.createElement(file === 'lib/scene.js' ? 'canvas' : 'div'), { id: 'gz-scene' }); sceneCanvas.setAttribute('aria-hidden', 'true'); document.body.append(sceneCanvas);
-            // What the scene can't draw stays the gradient until the Look changes (lib/scene.js tells this frame's parent why).
+            sceneCanvas = Object.assign(document.createElement(file === 'looks/scene.js' ? 'canvas' : 'div'), { id: 'gz-scene' }); sceneCanvas.setAttribute('aria-hidden', 'true'); document.body.append(sceneCanvas);
+            // What the scene can't draw stays the gradient until the Look changes (looks/scene.js tells this frame's parent why).
             scene = module.start(sceneCanvas, () => !!chrome.runtime?.id, () => { sceneBad = sceneShown; scene = null; sceneCanvas.remove(); });
           }
           sceneShown = sig;
@@ -171,7 +171,7 @@
       } else { scene?.stop(); scene = null; sceneCanvas?.remove(); }
     };
     addEventListener('message', (e) => { if (e.origin === location.origin && e.source === parent && e.data?.gzPreview) { settings = { ...GZ_SANITIZE(e.data.gzPreview), card: GZ_CARDS.settings(e.data.gzPreview.card) }; globalThis.GZ_XPARTS_PAGE?.preview(e.data.gzPreviewParts); paint(); } });
-    // Look parts (lib/lookparts.js), handed over as the Ultra preview's content.js has them: GZ_CTX.parts() and `glaze:parts`.
+    // Look parts (looks/lookparts.js), handed over as the Ultra preview's content.js has them: GZ_CTX.parts() and `glaze:parts`.
     globalThis.GZ_CTX ||= Object.freeze({
       site, tabsPreview: () => context.page === 'tabs', settings: () => settings, t: (word, vars) => GZ_I18N.t(word, vars, settings.lang === 'auto' ? navigator.language : settings.lang),
       locale: () => settings.lang === 'auto' ? navigator.language : settings.lang, nickOf: () => '',
@@ -186,9 +186,9 @@
       moment: (name) => document.dispatchEvent(new CustomEvent('glaze:moment', { detail: { name } })),
     });
     // The Look's page tweaks, motion and pointer on the mock, through the page's own code (each reads GZ_CTX as it loads).
-    if (!backdrop) for (const file of ['lib/lookx.js', 'features/lookx.js', 'features/rules.js', 'features/motionx.js']) await load(file);
-    if (site === 'canvas' && !backdrop) for (const file of ['features/coursetabs.js', 'lib/navbar.js', 'features/navbar-canvas.js', 'features/navbar-widgets.js', 'features/navbar.js']) await load(file);
-    if (site === 'moodle') for (const file of ['lib/navbar.js', 'features/navbar-moodle.js', 'features/navbar-widgets.js', 'features/navbar.js']) await load(file);
+    if (!backdrop) for (const file of ['looks/lookx.js', 'looks/page/lookx.js', 'looks/page/rules.js', 'looks/page/motionx.js']) await load(file);
+    if (site === 'canvas' && !backdrop) for (const file of ['navigation/page/coursetabs.js', 'navigation/navbar.js', 'navigation/page/navbar-canvas.js', 'navigation/page/navbar-widgets.js', 'navigation/page/navbar.js']) await load(file);
+    if (site === 'moodle') for (const file of ['navigation/navbar.js', 'navigation/page/navbar-moodle.js', 'navigation/page/navbar-widgets.js', 'navigation/page/navbar.js']) await load(file);
     matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', paint);
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paint);
     document.addEventListener('glaze:parts', paint);

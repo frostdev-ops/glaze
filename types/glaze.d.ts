@@ -682,6 +682,6 @@ interface GlazeGradeTool extends GlazeToolBase {
 /** A tool the mod's Worker (`hooks`) answers, in Chrome, while a school page is open. */
 interface GlazeCodeTool extends GlazeToolBase {
   code: true;
-  /** The arguments' JSON Schema: an object at the root, in the subset lib/ai/schema.js checks, with no `reason` property. None when left out. */
+  /** The arguments' JSON Schema: an object at the root, in the subset ai/schema.js checks, with no `reason` property. None when left out. */
   input?: { type: 'object'; [keyword: string]: unknown };
 }

@@ -1,13 +1,13 @@
-// Stream F's editing commands at the EditorState level (lib/writer-editor.js, lib/writer-schema.js, lib/writer-styles.js):
+// Stream F's editing commands at the EditorState level (writer/writer-editor.js, writer/writer-schema.js, writer/writer-styles.js):
 // font family and size as run marks (the format's own left unmarked), size steps as Word's, text colour and Word's
 // highlighter, small caps and all caps, clear formatting, the paragraph settings the Paragraph dialog and the ruler write
 // (only what differs from the format), page break before, tab stops, and Word's and Docs' keyboard shortcuts in paper and
 // compose.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../../extension/lib/writer-schema.js');
-const E = require('../../extension/lib/writer-editor.js');
-const ST = require('../../extension/lib/writer-styles.js');
+const S = require('../../extension/writer/writer-schema.js');
+const E = require('../../extension/writer/writer-editor.js');
+const ST = require('../../extension/writer/writer-styles.js');
 const { TextSelection, AllSelection } = GZ_PM.state;
 
 const make = (html, mode = 'paper') => E.state({ html, mode });
@@ -189,7 +189,7 @@ test('the format\'s paragraph values and what the dialog stores: only what diffe
 });
 
 test('small caps and all caps export as Word\'s w:smallCaps and w:caps, in rPr\'s order', () => {
-  const X = require('../../extension/lib/writer-docx.js');
+  const X = require('../../extension/writer/writer-docx.js');
   const st = run(run(select(make('<p>one two three</p>'), 'two'), 'smallCaps').st, 'bold').st;
   const st2 = run(select(st, 'three'), 'allCaps').st;
   const xml = X.exportDocx(st2.doc, { format: 'mla9', date: new Date('2026-10-28T12:00:00Z') }).parts['word/document.xml'];

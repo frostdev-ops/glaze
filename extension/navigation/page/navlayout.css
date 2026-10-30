@@ -1,6 +1,6 @@
-/* A Look's nav layout (x.nav), on Ultra, Canvas and Moodle: features/nav.js loads this while a layout is worn.
+/* A Look's nav layout (x.nav), on Ultra, Canvas and Moodle: navigation/page/nav.js loads this while a layout is worn.
    Placement is a bar along the top or bottom, or a floating dock, on wide windows; narrow windows keep each site's own
-   drawer. Ultra's drawer is matched through the attribute features/nav.js puts on it, not :has() (test/perf-budget). */
+   drawer. Ultra's drawer is matched through the attribute navigation/page/nav.js puts on it, not :has() (test/perf-budget). */
 :root { --gz-nav-bar: 56px; }
 [data-gz-nav-id][hidden] { display: none !important; }
 

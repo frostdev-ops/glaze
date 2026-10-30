@@ -1,13 +1,13 @@
-// lib/writer-lookup.js: what a pasted DOI, ISBN or address becomes, the worker's fetch (who may ask, which hosts need the
+// writer/writer-lookup.js: what a pasted DOI, ISBN or address becomes, the worker's fetch (who may ask, which hosts need the
 // student's grant, limits), and the parsers over saved synthetic responses (test/fixtures/writer-cite-*, each _note says
-// whose shape it copies). lib/writer-sources.js normalize, add and the storage key, too.
+// whose shape it copies). writer/writer-sources.js normalize, add and the storage key, too.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const L = require('../../extension/lib/writer-lookup.js');
-const S = require('../../extension/lib/writer-sources.js');
-const C = require('../../extension/lib/writer-cite.js');
+const L = require('../../extension/writer/writer-lookup.js');
+const S = require('../../extension/writer/writer-sources.js');
+const C = require('../../extension/writer/writer-cite.js');
 
 const fixture = (f) => fs.readFileSync(path.join(__dirname, '../fixtures', f), 'utf8');
 // Node has no DOMParser: the pieces facts() reads from a parsed page, taken out of the fixture by pattern. The browser check

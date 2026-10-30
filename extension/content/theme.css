@@ -10,9 +10,9 @@
    this file is one of the tokens or a color-mix() of them. */
 /* Bundled faces (SIL OFL 1.1, see fonts/). Relative URLs resolve against this sheet's own
    chrome-extension:// URL, so they need to be web-accessible too. */
-@font-face { font-family: "Glaze Inter"; src: url("fonts/inter.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
-@font-face { font-family: "Glaze Atkinson"; src: url("fonts/atkinson-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
-@font-face { font-family: "Glaze Atkinson"; src: url("fonts/atkinson-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+@font-face { font-family: "Glaze Inter"; src: url("../fonts/inter.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Glaze Atkinson"; src: url("../fonts/atkinson-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Glaze Atkinson"; src: url("../fonts/atkinson-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
 
 /* Colors and look values are NOT defaulted here: defaults.js is the one place a default lives,
    and content.js writes every --gz-* value inline on <html> before this sheet is even added.
@@ -245,7 +245,7 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
 #site-wrap .base-header-tools { background: transparent !important; border: 0 !important; backdrop-filter: none; }
 /* The course header's toolbar is inset 16px inside it: a second glass box there showed square edges. */
 .bb-course-navigation course-page-header > header [class*="makeStylestoolbar"] { background: transparent !important; border: 0 !important; backdrop-filter: none; }
-/* The course's header and its tools row: one glass panel under the strip, inset as it is (features/coursetabs.css), the
+/* The course's header and its tools row: one glass panel under the strip, inset as it is (navigation/page/coursetabs.css), the
    current tool's underline kept and no rule between the rows. The bar's own box stays clear, so the background shows
    around them; its top gap is the strip's when the strip is above. */
 html:not([data-gz-ctabs~="above"]) div.bb-course-navigation { padding-top: var(--gz-float-gap, 12px) !important; }
@@ -273,7 +273,7 @@ div.bb-course-navigation::before, .routed-page.bb-offcanvas-container [class*="h
 }
 @keyframes gz-bar-veil { to { opacity: 1; } }
 /* Scrolled, the course bar folds to its tools: a small pill at the end, no backing, the page under it reachable beside it
-   (features/sticky-fold.js marks it and keeps its height, also as a flex item of Ultra's scroller, so nothing moves).
+   (navigation/page/sticky-fold.js marks it and keeps its height, also as a flex item of Ultra's scroller, so nothing moves).
    Glaze's course strip stays as it is, on its own glass, so a course can be switched to and back from at any place. The
    header row stays for assistive tech; keyboard focus inside the bar shows it whole. */
 div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) {
@@ -356,7 +356,7 @@ html[data-gz-stream-compact] #activity-stream .activity-group-title { margin-blo
 .content-list-item a:hover { color: var(--gz-accent) !important; }
 aside, .todo-panel { background: var(--gz-ground) !important; border-left: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
 /* The base pages' To Do column (Courses, Organizations): no rule beside it, as the outline's column, or an empty one draws a
-   line down the page. As the sidebar (features/sidebar.css) it keeps the sidebar's edge. */
+   line down the page. As the sidebar (navigation/page/sidebar.css) it keeps the sidebar's edge. */
 html:not([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) div.todo-panel, html div.todo-panel:not([data-gz-sidebar-host]) { border-left: 0 !important; }
 /* A course gradebook's student header is an <aside> too, but not a side panel: no ground behind it, and none of Ultra's
    rules (a 5px one under it, a light one drawn above it as a shadow) as a band under the course header. */
@@ -498,7 +498,7 @@ bb-assignment-attempt-authoring-panel .MuiAccordionSummary-root { border-bottom:
 bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-right: 0 !important; }
 /* The Submission heading is a pill its text's width, as the other section headings, even in a column that stretches. */
 bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2 { inline-size: fit-content; align-self: flex-start; }
-/* Glaze Writer's frame (features/writer.js) paints the Look's ground, surfaces, corners and edge itself; behind a paper over
+/* Glaze Writer's frame (writer/page/writer.js) paints the Look's ground, surfaces, corners and edge itself; behind a paper over
    a background the page adds the blur of the glass cards beside it. Nothing that clips or outlines the frame element: Chrome
    runs the frame in its own process, and with a rounded clip or an outline on it a click right after Focus ended went to
    the page instead (scripts/writer-paper-check.js, "Fix applies the citation fix"). */
@@ -968,7 +968,7 @@ html[data-gz-raw-courses] [class*="course-color-"] { --gz-course: var(--gz-pick,
 #site-wrap .outline-action-block .MuiAccordion-root { background: transparent !important; border: 0 !important; box-shadow: none !important; }
 /* The column: its panels an even gap apart (Ultra's and Glaze's own margins varied), no rule beside them, nothing
    for an empty placeholder (Ultra's course schedule without one), and no stray space inside a panel's edges. As the
-   sidebar beside the content (features/sidebar.css) it has the sidebar's edge, and Glaze's header keeps its own margins. */
+   sidebar beside the content (navigation/page/sidebar.css) it has the sidebar's edge, and Glaze's header keeps its own margins. */
 #site-wrap aside.outline-actions { gap: calc(0.75rem * var(--gz-space, 1)); }
 html:not([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap aside.outline-actions { border-left: 0 !important; }
 #site-wrap aside.outline-actions > :not(.gz-sb-head) { margin-block: 0 !important; }
@@ -1175,7 +1175,7 @@ html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml
    its top and left the rest see-through over the questions). */
 #site-wrap .assessment-attempt-panel .assessment-progress-header { top: 0 !important; z-index: 3; margin-block-end: 1rem; padding: 0.75rem 1rem !important; }
 /* Once the questions scroll under it, it folds into a pill at the column's end: a short bar and the count
-   (features/sticky-fold.js marks it and gives the folded height back below it, so nothing moves). */
+   (navigation/page/sticky-fold.js marks it and gives the folded height back below it, so nothing moves). */
 #site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] {
   display: flex !important; align-items: center; gap: 0.75rem; inline-size: fit-content; max-inline-size: 100%; margin-inline-start: auto;
   margin-block-end: calc(1rem + var(--gz-fold, 0px)); padding: 0.375rem 0.875rem !important; border-radius: 999px !important;
@@ -1447,7 +1447,7 @@ html[data-gz-card-hover="none"] #site-wrap article:is(.course-element-card, .gz-
 @keyframes gz-card-twinkle { from { opacity: 0.25; } to { opacity: 1; } }
 @keyframes gz-card-confetti { from { background-position: 20px -10px, 60px -30px, 35px -50px; } to { background-position: 30px 150px, 50px 160px, 45px 150px; } }
 
-/* The pet (features/cards.js) sits on the first card's picture: it idles through frames 0-3, and on a hover plays its
+/* The pet (courses/page/cards.js) sits on the first card's picture: it idles through frames 0-3, and on a hover plays its
    stretch or hop (4-7) once. Frame 0 alone when motion is off. Sheets: 4×2 frames of 128 px, drawn at half size. */
 #site-wrap .gz-pet {
   position: absolute; z-index: 2; right: 10px; top: calc(var(--gz-card-h, 146px) - 62px); width: 64px; height: 64px; pointer-events: none;
@@ -1550,7 +1550,7 @@ html[data-gz-nav-overflow="wrap"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav
 .gz-nav-expand:dir(rtl) svg { transform: scaleX(-1); }
 .gz-nav-expand:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 html[data-gz-nav-expanded] .gz-nav-expand { transform: rotate(180deg); }
-/* A nav item's title tip up as the nav expands repeats the label it now shows (features/nav.js tags it). */
+/* A nav item's title tip up as the nav expands repeats the label it now shows (navigation/page/nav.js tags it). */
 html[data-gz-nav-expanded] body > .gz-tip[data-gz-nav-tip] { visibility: hidden !important; }
 @media (min-width: 900px) {
   /* Over the page, as Ultra's own paper is (fixed): an in-flow full-height drawer pushes the page a screen down where Ultra stacks the side menu above it. */
@@ -1571,7 +1571,7 @@ html[data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root]
 
 html[data-gz-nav-overflow="shrink"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) :is(footer, [class*="makeStylesfooter"]) a { font-size: var(--gz-nav-fit, 10px); }
 
-/* ---- Glaze's own navigation (features/navbar.js) in place of Ultra's drawer. The drawer stays in the page, out of sight
+/* ---- Glaze's own navigation (navigation/page/navbar.js) in place of Ultra's drawer. The drawer stays in the page, out of sight
    (the bar opens its items through its links and reads its badges). The page keeps the bar's room, from the saved settings
    at first paint (data-gz-navbar, words: rail, top or none; open, icons or auto; float or embed; tabs when the course tabs
    are in the bar) and from the bar once it is drawn (--gz-navbar-left and --gz-navbar-top, inline). Ultra's own room for its
@@ -1582,7 +1582,7 @@ html[data-gz-navbar] { --gz-navbar-left: 0px; --gz-navbar-top: 0px; }
    page, its main column, a course's panel, a routed page, a box the window's height. One that doesn't scroll ignores it.
    Above the phone's bottom bar, below. */
 html[data-gz-navbar], html[data-gz-navbar] :is(#main-content, #main-content-inner, .panel-wrap, .route-view-container, .routed-page, [data-gz-vh]) { scroll-padding-top: var(--gz-navbar-top); }
-/* Course tabs only in the bar (tabs.at 'nav', worded by features/coursetabs.js): no strip, and no room kept for one. */
+/* Course tabs only in the bar (tabs.at 'nav', worded by navigation/page/coursetabs.js): no strip, and no room kept for one. */
 html[data-gz-ctabs~="nav"] { --gz-ctabs-h: 0px !important; }
 html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
 @media (min-width: 900px) {
@@ -1660,14 +1660,14 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
   html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) { scroll-padding-bottom: var(--gz-navbar-bottom); }
   html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) :is(#main-content, #main-content-inner, .panel-wrap, .route-view-container, .routed-page, [data-gz-vh]) { scroll-padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 }
-/* A window this short: the bar sits lower and is shorter (features/navbar.css), and what stands on it comes down with it. */
+/* A window this short: the bar sits lower and is shorter (navigation/page/navbar.css), and what stands on it comes down with it. */
 @media (max-width: 899.98px) and (max-height: 420px) {
   html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) { --gz-navbar-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
   html[data-gz-navbar][data-gz-footer]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) { --gz-navbar-bottom: calc(72px + var(--gz-footer-h) + env(safe-area-inset-bottom, 0px)); }
   html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) :is(#main-content, #main-content-inner, .panel-wrap, .route-view-container, .routed-page, [data-gz-vh]) { scroll-padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
   html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap { bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important; }
 }
-/* Printed, the page is Ultra's own: the bar doesn't print (features/navbar.css), and the page keeps no room for it. */
+/* Printed, the page is Ultra's own: the bar doesn't print (navigation/page/navbar.css), and the page keeps no room for it. */
 @media print {
   html[data-gz-navbar] { --gz-navbar-left: 0px !important; --gz-navbar-top: 0px !important; --gz-navbar-bottom: 0px !important; }
   html[data-gz-navbar]:not([data-gz-navbar~="none"]) :is(body, #main-content-inner, .inner-wrap > :is(section.course, .routed-page)) { padding-bottom: 0 !important; }

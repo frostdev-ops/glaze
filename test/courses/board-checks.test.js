@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { createRequire } = require('node:module');
-const W = require('../../extension/lib/widgets.js');
+const W = require('../../extension/core/widgets.js');
 const file = (name) => path.join(__dirname, '../../checks/courses', `${name}-boards-check.js`);
 const canvas = fs.readFileSync(file('canvas'), 'utf8');
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;

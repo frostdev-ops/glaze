@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Rebuild lib/harper/: Automattic's harper.js (Apache-2.0, lib/harper/LICENSE), the grammar and spelling checker Glaze
-# Writer proofs with, offline (lib/harper/shared.js runs it). Source: https://github.com/Automattic/harper/tree/v3.0.0
+# Rebuild vendor/harper/: Automattic's harper.js (Apache-2.0, vendor/harper/LICENSE), the grammar and spelling checker Glaze
+# Writer proofs with, offline (vendor/harper/shared.js runs it). Source: https://github.com/Automattic/harper/tree/v3.0.0
 # (packages/harper.js and the harper-wasm crate it builds). Only what LocalLinter needs on the slim binary: index.js,
 # its BinaryModule chunk, slimBinary.js and harper_wasm_slim_bg.wasm (the full binary loads both wasm, ~40 MB). The
 # readable modules as published, not minified: the Chrome Web Store rejects minified code. Two cuts, both code Glaze never
@@ -24,17 +24,17 @@ tar -xzf "$tmp/harper.tgz" -C "$tmp"
 src="$tmp/package/dist"
 echo "$wasm_sha256  $src/harper_wasm_slim_bg.wasm" | shasum -a 256 -c - >/dev/null
 
-keep=(lib/harper/shared.js)
+keep=(vendor/harper/shared.js)
 for f in "${keep[@]}"; do [ -f "$f" ] && cp "$f" "$tmp/"; done
-rm -rf lib/harper
-mkdir -p lib/harper
+rm -rf vendor/harper
+mkdir -p vendor/harper
 for f in "${keep[@]}"; do [ -f "$tmp/$(basename "$f")" ] && cp "$tmp/$(basename "$f")" "$f"; done
 chunk="$(cd "$src" && ls BinaryModule-*.js)"
 for f in index.js "$chunk" slimBinary.js; do
   { echo "// harper.js $version (Apache-2.0, lib/harper/LICENSE), as published on npm; source https://github.com/Automattic/harper/tree/v$version/packages/harper.js. Built by scripts/vendor-harper.sh."
-    sed '/^\/\/# sourceMappingURL=/d' "$src/$f"; } > "lib/harper/$f"
+    sed '/^\/\/# sourceMappingURL=/d' "$src/$f"; } > "vendor/harper/$f"
 done
-node - lib/harper/index.js "lib/harper/$chunk" <<'EOF'
+node - vendor/harper/index.js "vendor/harper/$chunk" <<'EOF'
 const fs = require('node:fs');
 const [index, chunk] = process.argv.slice(2);
 const edit = (file, fn) => fs.writeFileSync(file, fn(fs.readFileSync(file, 'utf8')));
@@ -63,7 +63,7 @@ for (const file of [index, chunk]) {
   if (/\beval\s*\(|new\s+Function\s*\(|(^|[^\w$.])Function\s*\(\s*['"`]/.test(src)) throw new Error(`${file}: code made from text is left`);
 }
 EOF
-cp "$src/harper_wasm_slim_bg.wasm" lib/harper/
-cp "$tmp/package/LICENSE" lib/harper/LICENSE
+cp "$src/harper_wasm_slim_bg.wasm" vendor/harper/
+cp "$tmp/package/LICENSE" vendor/harper/LICENSE
 
-echo "lib/harper: harper.js $version ($(du -sh lib/harper | cut -f1))"
+echo "vendor/harper: harper.js $version ($(du -sh vendor/harper | cut -f1))"

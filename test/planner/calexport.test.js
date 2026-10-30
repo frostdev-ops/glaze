@@ -1,12 +1,12 @@
-// The calendar file (lib/calexport.js through lib/ics.js): what goes in, the ranges, the UIDs, and that the file reads back.
+// The calendar file (planner/calexport.js through planner/ics.js): what goes in, the ranges, the UIDs, and that the file reads back.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const X = require('../../extension/lib/calexport.js');
-const T = require('../../extension/lib/todo.js');
-const ICS = require('../../extension/lib/ics.js');
+const X = require('../../extension/planner/calexport.js');
+const T = require('../../extension/planner/todo.js');
+const ICS = require('../../extension/planner/ics.js');
 
 const TZ = 'America/New_York';
 const NOW = Date.parse('2026-10-15T14:00:00Z'); // Thursday, 10:00 in New York
@@ -112,7 +112,7 @@ test('the same items give the same UIDs on every export, and the file reads back
 
 test('the on-demand files end on their module and keep the first when loaded twice', () => {
   const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
-  for (const [file, name] of [['lib/ics.js', 'GZ_ICS'], ['lib/calexport.js', 'GZ_CALEXPORT'], ['features/calexport.js', 'GZ_CAL_UI']]) {
+  for (const [file, name] of [['planner/ics.js', 'GZ_ICS'], ['planner/calexport.js', 'GZ_CALEXPORT'], ['planner/page/calexport.js', 'GZ_CAL_UI']]) {
     const ctx = vm.createContext({ TextEncoder, GZ_CTX: { t: (k) => k } });
     vm.runInContext('globalThis.globalThis = this;', ctx);
     assert.ok(vm.runInContext(read(file), ctx), `${file}: no last value`);
@@ -132,7 +132,7 @@ test('review: overdue work planned for later keeps its plan; its past deadline s
   assert.deepEqual(run({ items: [item({ ov: { id: '9', dismissed: true } })], data }), []);
 });
 
-// features/calexport.js run() in a page of its own: Canvas's answers can be held, and storage changed meanwhile.
+// planner/page/calexport.js run() in a page of its own: Canvas's answers can be held, and storage changed meanwhile.
 // failKey: a read that names this key fails, as a failed read does; need(file): what loading a file on demand does.
 const page = ({ failKey = null, need = async () => {} } = {}) => {
   const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
@@ -191,7 +191,7 @@ const page = ({ failKey = null, need = async () => {} } = {}) => {
     },
   });
   vm.runInContext('globalThis.globalThis = this; Date.UTC = Object.getPrototypeOf(Date).UTC; Date.parse = Object.getPrototypeOf(Date).parse;', c);
-  for (const f of ['lib/color.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/todo.js', 'lib/ics.js', 'lib/calexport.js', 'lib/gradescope.js', 'lib/classes.js', 'features/calexport.js']) vm.runInContext(read(f), c);
+  for (const f of ['core/color.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'planner/todo.js', 'planner/ics.js', 'planner/calexport.js', 'planner/gradescope.js', 'planner/classes.js', 'planner/page/calexport.js']) vm.runInContext(read(f), c);
   const saved = [];
   const go = (alive = () => true, more = {}) => c.GZ_CAL_UI.run({ icsDue: true, icsTasks: true, icsPlan: true, icsGs: true, icsRange: '2w', ...more }, alive, (text) => { saved.push(text); return 'f.ics'; });
   // The dialog's Download, as the page would send it: trusted either way (a real press, or a script's requestSubmit()).
@@ -313,7 +313,7 @@ test('the class schedule (W14) goes in as one event per meeting in the range, wi
   assert.match(p.saved[2], /DTSTART:20261015T160000Z\r\nDTEND:20261015T165000Z/);
 });
 
-// W14 review (P2): with the class schedule chosen, a schedule that can't be read, or lib/classes.js that can't be loaded,
+// W14 review (P2): with the class schedule chosen, a schedule that can't be read, or planner/classes.js that can't be loaded,
 // stops the export with a message and saves no file, rather than a file that quietly leaves the classes out.
 test('the class schedule chosen but unreadable or not loadable: no file, and the page says why', async () => {
   const sched = { courses: [{ id: '7', code: 'BIO 1100', name: 'Biology', periods: [{ days: [2, 4], start: 810, end: 885, loc: '', from: '', to: '', skip: [] }] }] };
@@ -323,7 +323,7 @@ test('the class schedule chosen but unreadable or not loadable: no file, and the
   await unreadable.submit({ icsClasses: 'on' });
   assert.deepEqual([unreadable.saved, unreadable.downloads], [[], []]);
   assert.match(unreadable.said(), /Couldn't read your class schedule\. Nothing was saved\./);
-  const unloadable = page({ need: async (f, ready) => { if (f === 'lib/classes.js') throw new Error('not loaded'); return ready(); } });
+  const unloadable = page({ need: async (f, ready) => { if (f === 'planner/classes.js') throw new Error('not loaded'); return ready(); } });
   unloadable.store.local[key] = sched;
   await unloadable.submit({ icsClasses: 'on' });
   assert.deepEqual(unloadable.downloads, []);
@@ -336,7 +336,7 @@ test('the class schedule chosen but unreadable or not loadable: no file, and the
 });
 
 test('another chosen source that can\'t be loaded or read (Gradescope, the plans) saves no file either', async () => {
-  const gs = page({ need: async (f, ready) => { if (f === 'lib/gradescope.js') throw new Error('not loaded'); return ready(); } });
+  const gs = page({ need: async (f, ready) => { if (f === 'planner/gradescope.js') throw new Error('not loaded'); return ready(); } });
   await gs.submit({ icsGs: 'on' });
   assert.deepEqual(gs.downloads, []);
   assert.match(gs.said(), /Couldn't make the calendar/);

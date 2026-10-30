@@ -1,4 +1,4 @@
-// Your place in a course (features/place.js): where its changes are written (the worker's one queue, 'glaze:place', which
+// Your place in a course (navigation/page/place.js): where its changes are written (the worker's one queue, 'glaze:place', which
 // applies only the fields a tab sends to what is stored then), and who the worker takes them from.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -10,7 +10,7 @@ const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(setImmediate); };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// features/place.js on a Canvas course's Modules page (or an item opened from it), with the page's storage, messages, scroll
+// navigation/page/place.js on a Canvas course's Modules page (or an item opened from it), with the page's storage, messages, scroll
 // and timers faked. env.sent: the messages it sent; env.writes: what it wrote to storage.local itself.
 const canvasPage = ({ search = '', stored = {} } = {}) => {
   const env = { sent: [], writes: [], timers: [], scroll: [], session: {}, settings: { enhance: { place: true } } };
@@ -22,7 +22,7 @@ const canvasPage = ({ search = '', stored = {} } = {}) => {
   };
   const context = vm.createContext({
     JSON, Math, Number, Date, Set, Map, Object, Array, String, URLSearchParams, console,
-    GZ_PAGE: require('../../extension/lib/page.js'),
+    GZ_PAGE: require('../../extension/core/page.js'),
     GZ_CTX: {
       site: 'canvas', local: (fn) => fn(local), courseId: () => undefined, toggleOf: () => null, ROWS: '.row', placeAsked: () => 0,
       canvasCourseKey: () => 'canvas:https://school.instructure.com/25', settings: () => env.settings, solo: true, on: () => true,
@@ -41,7 +41,7 @@ const canvasPage = ({ search = '', stored = {} } = {}) => {
   env.scroller = scroller;
   env.stored = stored;
   env.sendFails = () => { context.chrome.runtime.sendMessage = () => { throw new Error('Extension context invalidated.'); }; };
-  env.ui = vm.runInContext(read('features/place.js'), context);
+  env.ui = vm.runInContext(read('navigation/page/place.js'), context);
   return env;
 };
 
@@ -102,14 +102,14 @@ test("the worker takes a page's place changes for its own site's courses only, a
   const area = (s) => ({ get: async (k) => Object.fromEntries([].concat(k ?? Object.keys(s)).filter((x) => x in s).map((x) => [x, structuredClone(s[x])])), set: async (v) => { Object.assign(s, structuredClone(v)); }, remove: async () => {} });
   const context = vm.createContext({
     URL, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto, atob, btoa, navigator: {},
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), context); },
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener() {} } },
     },
   });
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   const send = (msg, sender) => new Promise((res) => { for (const f of listeners) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r)))) === true) return; res('ignored'); });
   const page = (url, extra = {}) => ({ id: 'glaze', tab: {}, frameId: 0, url, ...extra });
   const cid = 'canvas:https://canvas.school.edu/25';

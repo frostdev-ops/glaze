@@ -1,12 +1,12 @@
-// An assignment's paper keeps one set of sources (lib/writer-sources.js keyOf) in its attempt's frame and in Documents:
-// the frame's context as features/writer.js (paperOf, init) and lib/writer-context-assignment.js (build) make it, and
+// An assignment's paper keeps one set of sources (writer/writer-sources.js keyOf) in its attempt's frame and in Documents:
+// the frame's context as writer/page/writer.js (paperOf, init) and writer/writer-context-assignment.js (build) make it, and
 // papers.js's for the same paper's record. A standalone document keeps its local key. The page is
 // checks/documents/documents-ai-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto'), fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const S = require('../../extension/lib/writer-sources.js'), PA = require('../../extension/lib/writer-papers.js'), U = require('../../extension/lib/writer-ultra.js'), A = require('../../extension/lib/writer-context-assignment.js');
-const R = require('../../extension/lib/rubric.js');
+const S = require('../../extension/writer/writer-sources.js'), PA = require('../../extension/writer/writer-papers.js'), U = require('../../extension/writer/writer-ultra.js'), A = require('../../extension/writer/writer-context-assignment.js');
+const R = require('../../extension/courses/rubric.js');
 const grades = require('../fixtures/ultra-writer-gradebook.json'), members = require('../fixtures/ultra-memberships.json'), item = require('../fixtures/ultra-writer-content.json');
 
 const HOST = 'bb.school.test', ORIGIN = `https://${HOST}`, ATTEMPT = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
@@ -16,12 +16,12 @@ const slice = (file, from, to) => {
   return src.slice(a, b);
 };
 
-// The attempt's frame: its init context (features/writer.js mount's paper, swap's recovery) and the one it has once
-// Ultra's context arrives (lib/writer-context-assignment.js send: { ...box.context, ...build() }).
+// The attempt's frame: its init context (writer/page/writer.js mount's paper, swap's recovery) and the one it has once
+// Ultra's context arrives (writer/writer-context-assignment.js send: { ...box.context, ...build() }).
 const frame = async (host = HOST) => {
   const origin = `https://${host}`;
   const later = (fn, ms, ...a) => { const t = setTimeout(fn, ms, ...a); t.unref(); return t; };
-  const paperOf = vm.runInNewContext(`${slice('features/writer.js', '  const paperOf = async', '  let seq = 0;')}; paperOf`,
+  const paperOf = vm.runInNewContext(`${slice('writer/page/writer.js', '  const paperOf = async', '  let seq = 0;')}; paperOf`,
     { U: () => U, X: { account: async () => '_900_1' }, location: { host, origin, pathname: ATTEMPT }, setTimeout: later });
   const paper = await paperOf();
   const init = { prompt: 'Essay 2 Write 1,200 words on memory in Beloved.', ...(paper && { paper }), recovery: origin + ATTEMPT };
@@ -36,7 +36,7 @@ const recordOf = (key, ctx) => ({ key, kind: 'paper', named: false, title: ctx.a
   school: ctx.paper.school, user: ctx.paper.user, course: ctx.paper.course, content: ctx.paper.content, format: 'mla9', keep: false,
   doc: { type: 'doc', content: [{ type: 'paragraph' }] }, words: 0, created: 1, updated: 2, revision: 1 });
 // papers.js edit()'s context for papers.html?paper=<key>, the store holding `stored`.
-const standalone = (key, stored = {}) => vm.runInNewContext(`(async () => { ${slice('papers.js', '    const rec = GZ_WRITER_PAPERS.local(key)', '    // The same editor modules')}; return context; })()`,
+const standalone = (key, stored = {}) => vm.runInNewContext(`(async () => { ${slice('documents/papers.js', '    const rec = GZ_WRITER_PAPERS.local(key)', '    // The same editor modules')}; return context; })()`,
   { key, GZ_WRITER_PAPERS: PA, papers: () => ({ get: async (k) => stored[k] ?? null }) });
 const localKey = (key) => `writer:sources:local|local|papers|${encodeURIComponent(key)}`;
 
@@ -90,8 +90,8 @@ test('source key parts encode separators and unicode once without collisions', (
 });
 
 test('Documents paper identity is stripped from AI context', async () => {
-  const W = require('../../extension/lib/ai/tasks/writer-context.js');
-  const C = require('../../extension/lib/ai/tasks/writer-complete.js');
+  const W = require('../../extension/ai/tasks/writer-context.js');
+  const C = require('../../extension/ai/tasks/writer-complete.js');
   const { full } = await frame(), key = PA.keyOf(full.paper), ctx = await standalone(key, { [key]: recordOf(key, full) });
   const { paper, ...without } = ctx;
   assert.deepEqual(W.clean(ctx), W.clean(without));
@@ -101,7 +101,7 @@ test('Documents paper identity is stripped from AI context', async () => {
 });
 
 test('test boxes still have no source key', async () => {
-  // A test leaves contextOf before touching the editor (lib/writer-ultra.js); a message's key comes with its context
+  // A test leaves contextOf before touching the editor (writer/writer-ultra.js); a message's key comes with its context
   // (test/writer/writer-discussion-sources.test.js).
   for (const kind of ['test']) {
     const context = U.contextOf(null, kind);

@@ -33,7 +33,7 @@ const GZ_PAGE = (() => {
   };
 
   // How far off a moment is, in words: { rel: 'in 2 days', sub: 'Tuesday, October 13 at 11:59 PM' }, in
-  // lang where Glaze speaks it (lib/i18n.js), else English.
+  // lang where Glaze speaks it (core/i18n.js), else English.
   const rtfs = new Map();
   const describe = (at, timed, now = new Date(), tag = 'en') => {
     const lang = I.locale(tag);
@@ -329,7 +329,7 @@ const GZ_PAGE = (() => {
   };
 
   // Ultra's data-bbfile anchors on origin's /bbcswebdav/, in body.rawText or public body.
-  // Returns [{ url, name, size }], size when known. File items use lib/ultra.js.
+  // Returns [{ url, name, size }], size when known. File items use courses/ultra.js.
   const ENT = { quot: '"', amp: '&', lt: '<', gt: '>', apos: "'", '#39': "'" };
   const unentity = (s) => s.replace(/&(quot|amp|lt|gt|apos|#39);/g, (_, e) => ENT[e]);
   const files = (item, origin) => {

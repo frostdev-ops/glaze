@@ -1,10 +1,10 @@
-// What Glaze Writer's tasks (lib/ai/tasks/writer-*.js) read about the box a student writes in: the page's context
+// What Glaze Writer's tasks (ai/tasks/writer-*.js) read about the box a student writes in: the page's context
 // (interfaces: { kind, course, prompt, thread, replyTo, assignment: { title, description, instructions, rubric, files },
-// style }; files: what the page read of the assignment's attached files, lib/writer-context-assignment.js read())
-// cleaned and bounded, and written as the request's reusable context blocks (lib/ai/text.js request: fenced as data, the
+// style }; files: what the page read of the assignment's attached files, writer/writer-context-assignment.js read())
+// cleaned and bounded, and written as the request's reusable context blocks (ai/text.js request: fenced as data, the
 // tag kept while they stay the same). The student turned the feature on in Settings → AI; any connected model gets the
 // whole thread (owner, 2026-10-26). A test is never read: clean() refuses kind 'test', so a task's input() refuses it too.
-// Classic script for the worker (lib/background.js aiFiles); module.exports for node.
+// Classic script for the worker (background/background.js aiFiles); module.exports for node.
 var GZ_AI_WRITER = globalThis.GZ_AI_WRITER || (() => {
   // Characters: the prompt, one post, the whole thread, the instructions, the rubric as text, one attached file's text and
   // all of theirs; posts, criteria, files and pictures kept; a picture's base64 and all of theirs.
@@ -24,7 +24,7 @@ var GZ_AI_WRITER = globalThis.GZ_AI_WRITER || (() => {
   const str = (v, n) => (typeof v === 'string' && v.trim() ? cut(plain(v), n) : '');
   const line = (v, n = LIMIT.name) => str(v, n).replace(/\s+/g, ' ');
 
-  // A lib/rubric.js model (criteria: [{ id, label, detail, points, weight, cells: [{ level, detail, value }] }], levels:
+  // A courses/rubric.js model (criteria: [{ id, label, detail, points, weight, cells: [{ level, detail, value }] }], levels:
   // [{ id, label }]) or plain text → { text, ids: [{ id, label, points, levels: [{ label, value }] }] }.
   const rubric = (r) => {
     if (typeof r === 'string') return { text: str(r, LIMIT.rubric), ids: [] };
@@ -65,7 +65,7 @@ var GZ_AI_WRITER = globalThis.GZ_AI_WRITER || (() => {
     }
     return { files, pictures };
   };
-  // A file's block label (lib/ai/text.js LABEL: letters, digits, spaces, . _ - and at most 40 characters).
+  // A file's block label (ai/text.js LABEL: letters, digits, spaces, . _ - and at most 40 characters).
   const label = (name) => `attached file: ${name.replace(/[^\w .-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 25).trim() || 'file'}`;
 
   // → the context cleaned, or null for a test (or anything that isn't one).
