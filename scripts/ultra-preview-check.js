@@ -2,7 +2,7 @@
 // unpacked extension on the synthetic Ultra Document page and viewer chain of scripts/ultra-mock.js PREVIEW (the live probe's
 // shapes: two data-bbfile attachments, viewerUrl → 302 → basic-doc-viewer's index.html → its documents API → a presigned S3
 // converted.pdf served with Range). An expanded preview: Blackboard's frame until Glaze's viewer has drawn page 1, then
-// Glaze's in its place, page 1's text in it, its bytes read from S3 by the frame (Range); the page box jumps; collapse and
+// Glaze's in its place, page 1's text in it, its bytes read from S3 by the frame itself (Range too); the page box jumps; collapse and
 // expand; one already open when the switch comes on; the switch off, and Settings → Writer → PDFs off: Blackboard's frame;
 // "converting": Blackboard's frame while it waits, then Glaze's; the documents API failing: Blackboard's frame; an address
 // that ran out: asked again, then shown; Save to Documents: a PDF record in Documents; Open original: the file in a new
@@ -32,7 +32,7 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
 
 (async () => {
   let context, held = false, tmp;
-  const lock = env.lockPath();
+  const lock = require('./check-env.js').lockPath();
   try {
     for (let i = 0; ; i++) {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nultra-preview-check\n`); break; }
@@ -48,7 +48,7 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     const originals = [];
     const ext = env.staged(root, [`${site}/*`]);
     await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...env.chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(20000);
     await context.route('**/*', async (r) => {
       const req = r.request(), u = new URL(req.url());
@@ -103,17 +103,7 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     const glazeIn = async (f, label, ms = 30000) => {
       await until(async () => { const v = await view(f); return v.gzShown && !v.bbShown && v.bb; }, `${label}: Glaze's viewer in Blackboard's frame's place`, ms,
         async () => ({ view: await view(f), seen: { ...mock.seen, origins: [...mock.seen.origins], asks: [...mock.seen.asks] }, failed,
-          frame: await (await frameOf(f))?.evaluate(() => ({ mode: document.documentElement.dataset.mode, doc: document.documentElement.dataset.doc, said: document.querySelector('.gq-said')?.textContent, pages: document.querySelectorAll('.pdfViewer .page').length, gq: !!document.querySelector('.gq') })).catch((e) => e.message),
-          probe: await (await frameOf(f))?.evaluate(async (u) => {
-            const out = {};
-            try { const r = await fetch(u); out.full = `${r.status} ${r.headers.get('accept-ranges')} ${r.headers.get('content-length')} ${(await r.arrayBuffer()).byteLength}`; } catch (e) { out.full = String(e); }
-            try { const r = await fetch(u, { headers: { range: 'bytes=0-99' } }); out.range = `${r.status} ${r.headers.get('content-range')} ${(await r.arrayBuffer()).byteLength}`; } catch (e) { out.range = String(e); }
-            try { const P = await import(chrome.runtime.getURL('lib/pdfjs/pdf.mjs')); P.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdfjs/pdf.worker.mjs'); const t = P.getDocument({ url: u, isEvalSupported: false });
-              out.pdfjs = await Promise.race([t.promise.then((d) => `pages ${d.numPages}`, (e) => `err ${e.message}`), new Promise((r) => setTimeout(r, 8000, 'timeout'))]);
-              out.meta = await Promise.race([t.promise.then((d) => d.getMetadata()).then(() => 'meta ok', (e) => `err ${e.message}`), new Promise((r) => setTimeout(r, 5000, 'timeout'))]);
-              out.fields = await Promise.race([t.promise.then((d) => d.getFieldObjects()).then((x) => `fields ${JSON.stringify(x)}`, (e) => `err ${e.message}`), new Promise((r) => setTimeout(r, 5000, 'timeout'))]); } catch (e) { out.pdfjs = String(e); }
-            return out;
-          }, P.pdfOf(f, Date.now())).catch((e) => e.message) }));
+          frame: await (await frameOf(f))?.evaluate(() => ({ mode: document.documentElement.dataset.mode, doc: document.documentElement.dataset.doc, said: document.querySelector('.gq-said')?.textContent, pages: document.querySelectorAll('.pdfViewer .page').length, gq: !!document.querySelector('.gq') })).catch((e) => e.message) }));
       const fr = await until(() => frameOf(f), `${label}: the viewer's document`);
       return fr;
     };
@@ -126,7 +116,7 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     await toggle(SLIDES);
     await until(async () => (await view(SLIDES)).bbShown, "expanding shows Blackboard's frame at once");
     check(true, "expanding shows Blackboard's frame at once (it stays until Glaze's viewer has drawn)");
-    let fr = await glazeIn(SLIDES, 'expanded', 22000);
+    let fr = await glazeIn(SLIDES, 'expanded');
     await until(async () => (await pageText(fr)).includes('Page 1 of 6'), "page 1's text in Glaze's viewer", 20000, () => pageText(fr));
     check(true, "Glaze's viewer takes Blackboard's frame's place and shows the PDF's first page text (\"Page 1 of 6\")");
     check(mock.seen.viewer >= 1 && mock.seen.api >= 1, `the worker followed viewerUrl (${mock.seen.viewer}) and asked the documents API (${mock.seen.api})`);
