@@ -53,7 +53,7 @@ const stub = (required) => {
       ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
     });
-    const welcomed = Promise.race([env.noFirstRun(ctx), new Promise((_, no) => setTimeout(() => no(new Error('the install never opened its first screen')), 45000).unref())]);
+    const welcomed = env.noFirstRun(ctx);
     await ctx.addInitScript(stub, require('../manifest.json').host_permissions);
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
@@ -69,7 +69,10 @@ const stub = (required) => {
     const local = () => sw.evaluate(() => chrome.storage.local.get(['canvas', 'moodle', 'ultra']));
     // The install's work first: its storage writes, and its first screen, which opens as the active tab whenever it comes.
     await env.installed(sw);
-    await welcomed;
+    let welcomeTimer;
+    try {
+      await Promise.race([welcomed, new Promise((_, no) => { welcomeTimer = setTimeout(() => no(new Error('the install never closed its first screen')), 45000).unref(); })]);
+    } finally { clearTimeout(welcomeTimer); }
 
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errors.push(String(e)));

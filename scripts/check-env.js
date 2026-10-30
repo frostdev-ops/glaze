@@ -89,8 +89,9 @@ const installed = async (page, timeout = 30000) => {
 const noFirstRun = (ctx) => {
   let closed;
   const first = new Promise((r) => { closed = r; });
-  const close = (p) => { if (/^chrome-extension:\/\/[a-p]{32}\/features\/welcome\.html/.test(p.url())) p.close().catch(() => {}).then(closed); };
-  const watch = (p) => { close(p); p.waitForURL(/\/features\/welcome\.html/, { timeout: 10000 }).then(() => close(p), () => {}); };
+  const close = (p) => { if (/^chrome-extension:\/\/[a-p]{32}\/features\/welcome\.html/.test(p.url())) p.close().then(closed, () => {}); };
+  // Observe until the page closes: a caller's first-screen guard, rather than a shorter navigation wait, bounds failure.
+  const watch = (p) => { close(p); p.waitForURL(/\/features\/welcome\.html/, { timeout: 0 }).then(() => close(p), () => {}); };
   ctx.pages().forEach(watch);
   ctx.on('page', watch);
   return first;

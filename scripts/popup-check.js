@@ -72,7 +72,7 @@ const stub = (notHeld) => {
       ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 860 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1', '--remote-debugging-port=0'],
     });
-    const welcomed = Promise.race([env.noFirstRun(ctx), new Promise((_, no) => setTimeout(() => no(new Error('the install never opened its first screen')), 45000).unref())]);
+    const welcomed = env.noFirstRun(ctx);
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:') return route.continue();
@@ -89,7 +89,10 @@ const stub = (notHeld) => {
     cdp = await devtools(profile);
     // The install's work first: its storage writes, and its first screen, which opens as the active tab whenever it comes.
     await env.installed(sw);
-    await welcomed;
+    let welcomeTimer;
+    try {
+      await Promise.race([welcomed, new Promise((_, no) => { welcomeTimer = setTimeout(() => no(new Error('the install never closed its first screen')), 45000).unref(); })]);
+    } finally { clearTimeout(welcomeTimer); }
     const sheets = (p) => p.evaluate(() => [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.href).filter((h) => h.startsWith('chrome-extension://')).map((h) => new URL(h).pathname.slice(1)));
 
     // The tab, in front; the popup over it, opened by the worker; its target attached, the stub in, and reloaded so the
