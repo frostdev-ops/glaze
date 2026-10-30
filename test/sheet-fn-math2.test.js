@@ -146,6 +146,9 @@ test('RAND and RANDBETWEEN draw from the engine\'s source of randomness, again o
   cases(seq(0), [['RANDBETWEEN(1,100)', 1], ['RANDBETWEEN(-1,1)', -1], ['RAND()', 0]]);
   cases(seq(0.999999), [['RANDBETWEEN(1,100)', 100], ['RANDBETWEEN(-1,1)', 1], ['RANDBETWEEN(1.5,3.5)', 3], ['RANDBETWEEN(5,5)', 5]]);
   cases(seq(0.5), [['RANDBETWEEN(1,100)', 51], ['RANDBETWEEN(5,1)', '#NUM!'], ['RANDBETWEEN("x",1)', '#VALUE!']]);
+  const counts = [0, 0, 0, 0, 0];
+  for (let k = 0; k < 100; k++) counts[calc(seq(k / 100), 'RANDBETWEEN(1,4)')]++;
+  assert.deepEqual(counts, [0, 25, 25, 25, 25], 'each whole number as likely');
 });
 
 test('FACT, FACTDOUBLE, GCD, LCM', () => {
