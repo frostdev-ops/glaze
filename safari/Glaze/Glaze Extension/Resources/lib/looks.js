@@ -113,8 +113,15 @@ var GZ_CATALOG = globalThis.GZ_CATALOG || (() => {
     }
     return moved;
   };
+  // A course's kept Look where a 3.x device has since picked a built-in one (the newer pick, worn already) goes from
+  // courseLooks, so that device's "Your theme" later is the theme here too: whether any went. `s` sanitized, changed in place.
+  const clear = (s) => {
+    let cleared = false;
+    for (const [cid, v] of Object.entries(s.courses.looks)) if (Object.hasOwn(s.courseLooks, cid) && G.GZ_LOOKS.some((L) => L.name === v)) { delete s.courseLooks[cid]; cleared = true; }
+    return cleared;
+  };
 
-  return { KEY, ID, hash, idOf, kept, keptAll, make, sig, build, looks, list, find, groups, on, worn, tone, ids, unmap, move };
+  return { KEY, ID, hash, idOf, kept, keptAll, make, sig, build, looks, list, find, groups, on, worn, tone, ids, unmap, move, clear };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_CATALOG; else GZ_CATALOG;
