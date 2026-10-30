@@ -284,7 +284,7 @@ test('synthetic: shared and array formulas, LET parameters, table and external r
     'a defined name outside the LET keeps its name');
   assert.equal(c('E3').f, 'SUM(Table1[Qty])+[1]Other!A1');
   assert.deepEqual(c('D4'), { t: 'n', v: 7, dt: '<f t="dataTable" ref="D4:D5" dt2D="0" dtr="0" r1="A2"/>' });
-  assert.deepEqual(M.getSheet(wb, 'One').keep.locks, ['external']);
+  assert.deepEqual(M.getSheet(wb, 'One').keep.locks, ['external', 'dataTable']);
 });
 
 test('synthetic: sheets, names, sizes, merges, freeze panes, filter and sort, kept elements', async () => {
