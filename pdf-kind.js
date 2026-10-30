@@ -159,11 +159,10 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
 
   // ---- the viewer. host: an assignment's frame (writer-kinds.js view): { mount, t, title, tools }, the viewer in mount with
   // the assignment's title and the frame's tools (Submit…) before ⋯, no way back to Documents; → its surface.
-  // o: papers.js's { fresh } (a kind that opens a new document empty), or view's { host }, or show's { host, src }: a PDF
-  // at an address (src { url, expires, name, href }: a Blackboard preview, writer-kinds.js) read straight by pdf.js, its
-  // ranges as needed, nothing kept and no size cap, its fields shown but not filled; Open original (href) and Save to
-  // Documents (the bytes through importFile, the kind's cap) in place of ⋯. host then also has renew() (→ a fresh
-  // { url, expires } or null: the address lasts an hour), shown() once page 1 is drawn, failed(reason), esc().
+  // o: papers.js's { fresh } (a kind that opens a new document empty), or view's { host }, or show's { host, src }: a PDF's
+  // bytes from elsewhere (src { bytes, name, href }: a Blackboard preview the page read, writer-kinds.js) opened from
+  // memory, nothing kept, its fields shown but not filled; Open original (href) and Save to Documents (the same bytes
+  // through importFile, the kind's cap) in place of ⋯. host then also has shown() once page 1 is drawn, failed(reason), esc().
   const edit = async (key, { host = null, src = null } = {}) => {
     const root = document.documentElement;
     const life = new AbortController(), signal = life.signal;
@@ -213,29 +212,10 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     links.setViewer(viewer);
     l10n.translate(scroll);
     const refuse = () => { said.textContent = t(UNREAD); said.hidden = false; for (const b of [zoomOut, zoomB, zoomIn, findB, pageIn, saveB]) if (b) b.disabled = true; };
-    // An address: renewed first when it is about to end, and once more when pdf.js is refused (it ran out meanwhile).
-    // total: the file's length as pdf.js learns it, so Save to Documents refuses a file past the cap before reading it.
-    let total = 0;
-    const fetched = async (again = true) => {
-      if (src.expires && src.expires - Date.now() < 30e3) Object.assign(src, await host.renew?.() || {});
-      const t2 = P.getDocument({ ...GET, url: src.url, withCredentials: false });
-      t2.onProgress = ({ total: n }) => { if (n > 0) total = n; };
-      try {
-        const d = await t2.promise;
-        const [{ info }, fields] = await Promise.all([d.getMetadata(), d.getFieldObjects()]);
-        if (pureXfa(info, fields)) throw new RangeError(UNREAD);
-        await d.getPage(1);
-        return { task: t2, doc: d };
-      } catch (e) {
-        await t2.destroy().catch(() => {});
-        const fresh = again && !(e instanceof RangeError) && await host.renew?.();
-        if (fresh) { Object.assign(src, fresh); return fetched(false); }
-        throw e;
-      }
-    };
-    const bytes = src ? null : STORE.get(rec);
+    // A preview's bytes are read as a kept PDF's are (a copy: pdf.js takes what it is given; Save keeps the original).
+    const bytes = src ? (src.bytes?.length ? src.bytes.slice() : null) : STORE.get(rec);
     let task = null, doc = null;
-    try { if (src) ({ task, doc } = await fetched()); else { if (!bytes) throw new RangeError(UNREAD); ({ task, doc } = await read(bytes)); } } catch { refuse(); }
+    try { if (!bytes) throw new RangeError(UNREAD); ({ task, doc } = await read(bytes)); } catch { refuse(); }
     const inited = new Promise((ok) => bus.on('pagesinit', ok, { once: true }));
     const drawn = new Promise((ok) => bus.on('pagerendered', ok, { once: true }));
     if (doc) {
@@ -299,10 +279,8 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       saveB.disabled = true;
       say(t('Saving…'));
       try {
-        if (total > STORE.max) throw new RangeError(TOO_BIG_SAVE);
-        const data = await doc.getData();
-        if (data.length > STORE.max) throw new RangeError(TOO_BIG_SAVE);
-        await importFile(new File([data], src.name || 'Document.pdf', { type: 'application/pdf' }));
+        if (src.bytes.length > STORE.max) throw new RangeError(TOO_BIG_SAVE);
+        await importFile(new File([src.bytes], src.name || 'Document.pdf', { type: 'application/pdf' }));
         say(t('Saved to Documents'));
       } catch (e) {
         const big = e instanceof RangeError && (e.message === TOO_BIG || e.message === TOO_BIG_SAVE);

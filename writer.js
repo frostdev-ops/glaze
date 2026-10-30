@@ -7,12 +7,12 @@
 //                 draft came back); and for the frame's later parts (handle): quote (writer-compose.js), ai and
 //                 attachments (writer-ai.js), focus-mode (writer-paper.js), import:file (writer-import.js), submit:*
 //                 (writer-submit.js); in view mode (a Blackboard preview, features/bbpreview.js) init { mode: 'view', kind,
-//                 view { url, expires, name, href }, look, locale } and view:url (writer-kinds.js);
+//                 view { bytes, name, href }, look, locale } (writer-kinds.js);
 //   frame → page: ready, height { px }, change { html, text, words, delta } (compose's; a paper's compact box sends its
 //                 own: writer-paper.js; delta: its Quill ops, what the page writes into Ultra's editor), send (Mod-Enter),
 //                 native (back to Blackboard's editor; with a reason, the box holds what Writer can't keep and nothing was
 //                 written); and the later parts' attachments, focus-mode, view { full, px, from, to }, room { on } and
-//                 submit:*; in view mode view:shown, view:failed, view:renew and view:esc.
+//                 submit:*; in view mode view:shown, view:failed and view:esc.
 // Besides that pass it asks the extension only for the student's Writer settings (lib/writer-settings.js); its later
 // parts keep the paper (lib/writer-papers.js) and ask for proofing and AI on their own channels.
 (() => {
@@ -151,7 +151,7 @@
     init: (m) => {
       if (ed || refused || root.dataset.mode === 'view') return;
       look(m.look);
-      // A file shown by its address (features/bbpreview.js: a Blackboard preview), no editor: its kind's viewer
+      // A file the page hands over (features/bbpreview.js: a Blackboard preview), no editor: its kind's viewer
       // (writer-kinds.js), once the page's words are in.
       if (m.mode === 'view') { root.dataset.mode = 'view'; root.dataset.kind = ''; lang(m.locale).then(() => emit('view', m)); return; }
       root.dataset.mode = m.mode === 'paper' ? 'paper' : 'compose';

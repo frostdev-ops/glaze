@@ -2,10 +2,12 @@
 // loaded on demand: content.js loads this once a preview's frame is on an Ultra page and hands it each pass. Ultra converts
 // every attachment to a PDF and shows it in its own viewer, a frame at the attachment's data-bbfile viewerUrl (live probe,
 // 2026-10-30; the shapes: scripts/ultra-mock.js PREVIEW). Expanded, or open already, the worker is asked for that PDF
-// (lib/bb-preview.js) while Blackboard's frame stays. Done: Glaze's viewer (writer.html in view mode, pdf-kind.js show)
-// loads out of sight beside it and takes its place once its first page is drawn, as tall as an assignment's paper.
-// Converting: asked again on Ultra's own cadence, for as long as Ultra waits. Anything else, or nothing in time, keeps
-// Blackboard's frame, and so does a viewer that fails later. Collapsing (Ultra removes its frame) or the switch off puts
+// (lib/bb-preview.js) while Blackboard's frame stays. Done: this page reads the converted PDF from its presigned S3 address
+// (the bucket lets the page's own origin read it, as the probe found; at most MAX, the worker asked again once if S3
+// refuses an address that ran out) while Glaze's viewer (writer.html in view mode, pdf-kind.js show) loads out of sight
+// beside Blackboard's frame; the bytes go to it over its port, and it takes Blackboard's place once its first page is
+// drawn, as tall as an assignment's paper. Converting: asked again on Ultra's own cadence, for as long as Ultra waits.
+// Anything else, or nothing in time, keeps Blackboard's frame, and so does a viewer that fails later. Collapsing (Ultra removes its frame) or the switch off puts
 // Blackboard's back. Esc in the viewer returns to the attachment's Preview button. Dark documents never inverts Glaze's
 // frame (.gz-pv: content.js PREVIEWS, extras.css). Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
@@ -15,6 +17,7 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
   const FRAMES = '#site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe:not(.gz-pv)';
   const HEIGHT = 'max(640px, calc(100vh - 120px))'; // an assignment's paper (features/writer.js PAPER_HEIGHT)
   const ASK = 20000, SHOW = 30000, EVERY = 15000, FOR = 5 * 60e3; // EVERY and FOR: lib/bb-preview.js, Ultra's own
+  const MAX = 50e6; // a converted PDF's bytes, at most
   const on = () => { const s = X.settings(); return X.on() && s.enabled !== false && s.enhance?.bbPreviews !== false && s.writer?.pdf !== false; };
   const views = new Map(); // Blackboard's frame → its view
   const answers = new Map(); // a frame's address → the worker's done answer, kept until two minutes before it ends
@@ -53,12 +56,42 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
   };
 
   const live = (v) => views.get(v.bf) === v && v.bf.isConnected && on();
+  // The converted PDF from its presigned address, as this page (no cookies), read to its end and stopped past MAX.
+  const bytesOf = async (url, signal) => {
+    const r = await fetch(url, { mode: 'cors', credentials: 'omit', cache: 'no-store', signal });
+    if (!r.ok || !r.body || +r.headers.get('content-length') > MAX) { r.body?.cancel().catch(() => {}); throw new Error(r.ok ? 'pdf:too-big' : `pdf:${r.status}`); }
+    const reader = r.body.getReader(), parts = [];
+    let size = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if ((size += value.byteLength) > MAX) throw new Error('pdf:too-big');
+        parts.push(value);
+      }
+    } finally { reader.cancel().catch(() => {}); }
+    const out = new Uint8Array(size);
+    let at = 0;
+    for (const p of parts) { out.set(p, at); at += p.byteLength; }
+    return out;
+  };
+  // Refused or unreachable: the worker asked again for a fresh address (the last ran out), and that one read, once.
+  const pdfOf = async (v, signal) => {
+    try { return await bytesOf(v.answer.pdf, signal); } catch (e) {
+      if (signal.aborted || e.message === 'pdf:too-big') throw e;
+      const r = await asked(v.file.viewer, true);
+      if (!(r?.ok && r.status === 'done') || signal.aborted) throw e;
+      v.answer = r;
+      return bytesOf(r.pdf, signal);
+    }
+  };
   // Where a preview is, on Blackboard's frame (for a look in the inspector, and the check): asking, converting, loading,
   // shown, or ended:<why> (Blackboard's frame for good).
   const mark = (v, state) => { if (state) v.bf.setAttribute('data-gz-pv', state); else v.bf.removeAttribute('data-gz-pv'); };
   // Back to Blackboard's frame for good (on this frame): Glaze's goes, and Blackboard's shows.
   const fail = (v, reason) => {
     clearTimeout(v.timer); clearTimeout(v.wait);
+    v.reading?.abort(); v.reading = null;
     v.unhello?.(); v.unhello = null;
     v.port?.close(); v.port = null;
     v.gz?.remove(); v.gz = null;
@@ -87,22 +120,26 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
     b?.focus();
   };
   const hear = (v, m) => {
-    if (m.type === 'ready') v.port.postMessage({ type: 'init', mode: 'view', kind: 'pdf', view: { url: v.answer.pdf, expires: v.answer.expires, name: v.file.name, href: v.file.href }, look: look(), locale: X.locale() });
-    else if (m.type === 'view:shown') swap(v);
+    if (m.type === 'ready') {
+      // The bytes, once read, handed over (transferred: this page keeps no copy).
+      const port = v.port;
+      v.bytes.then((b) => {
+        if (v.port !== port || !live(v)) return;
+        port.postMessage({ type: 'init', mode: 'view', kind: 'pdf', view: { bytes: b.buffer, name: v.file.name, href: v.file.href }, look: look(), locale: X.locale() }, [b.buffer]);
+      }, () => {});
+    } else if (m.type === 'view:shown') swap(v);
     else if (m.type === 'view:failed') fail(v, `viewer:${String(m.reason || '').slice(0, 20)}`);
     else if (m.type === 'view:esc') back(v);
-    else if (m.type === 'view:renew') {
-      const port = v.port;
-      asked(v.file.viewer, true).then((r) => {
-        if (v.port !== port) return;
-        port.postMessage(r?.ok && r.status === 'done' ? { type: 'view:url', url: r.pdf, expires: r.expires } : { type: 'view:url', error: r?.error || 'none' });
-      });
-    }
   };
-  // writer.html in view mode, out of sight beside Blackboard's frame, on the one-use pass Writer's frames use.
+  // The PDF read, and writer.html in view mode out of sight beside Blackboard's frame (on the one-use pass Writer's frames
+  // use), both at once; the read failing, or the two not done and drawn within SHOW, keeps Blackboard's frame.
   const load = (v) => {
     let src;
     try { src = chrome.runtime.getURL('writer.html'); } catch { return; }
+    const reading = new AbortController();
+    v.reading = reading;
+    v.bytes = pdfOf(v, reading.signal);
+    v.bytes.catch((e) => { if (v.reading === reading) fail(v, String(e?.message || 'pdf').startsWith('pdf:') ? e.message : 'pdf'); });
     const origin = src.slice(0, src.indexOf('/', src.indexOf('://') + 3)).toLowerCase(); // as features/writer.js
     const f = Object.assign(document.createElement('iframe'), { className: 'gz-pv', title: v.file.name || X.t('PDF') });
     f.setAttribute('data-gz-preview', '');

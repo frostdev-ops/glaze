@@ -179,10 +179,9 @@ test('Glaze\'s pages may compile WebAssembly for OCR; only the approved pages ar
   assert.match(fs.readFileSync(path.join(__dirname, '..', 'sharing/quick.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   const reader = fs.readFileSync(path.join(__dirname, '..', 'reader.html'), 'utf8');
   assert.match(reader, /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
-  // Glaze Writer's editor frame: Glaze's files only, and no network from the page itself but a Blackboard preview's PDF at
-  // its presigned S3 address (features/bbpreview.js). An assignment's PDF or deck shows there (writer-kinds.js): pdf.js's
-  // decoders may compile WebAssembly, and a deck's pictures are blob: URLs of its own parts.
-  assert.match(fs.readFileSync(path.join(__dirname, '..', 'writer.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https:\/\/\*\.amazonaws\.com; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
+  // Glaze Writer's editor frame: Glaze's files only, no network from the page itself. An assignment's PDF or deck shows there
+  // (writer-kinds.js): pdf.js's decoders may compile WebAssembly, and a deck's pictures are blob: URLs of its own parts.
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'writer.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   // Documents uses Settings' GZ_FONTS loader: selected Google Fonts and jsDelivr files, fetched without credentials. Its slides
   // draw their pictures from blob: URLs of the deck's own parts (slides-kind.js).
   const papers = fs.readFileSync(path.join(__dirname, '..', 'papers.html'), 'utf8');
