@@ -91,3 +91,10 @@ test('Backup export and import preserve every synced sidebar option through the 
   assert.deepEqual(r.sent[0].restore.settings.sidebar, sidebar);
   assert.deepEqual(r.s.sidebar, sidebar);
 });
+
+test('backup export reads this device\'s fresh mark for its initial navigation items', async () => {
+  for (const fresh of [false, true]) {
+    const r = await restore('', 'solid', {}, true, { freshDefaults: { fresh, pending: false } });
+    assert.deepEqual(r.sent[0].restore.settings.navbarItems, B.initial(undefined, undefined, fresh));
+  }
+});
