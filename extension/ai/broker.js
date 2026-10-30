@@ -494,7 +494,8 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
       let cfg = p.config({ ...raw, ...(!Object.hasOwn(raw, 'key') && same && before.cfg.key && { key: before.cfg.key }) });
       if (!cfg) return { ok: false, error: 'setup', note: 'Check the address, the model and the key.' };
       const { generation: __, ...settings } = cfg;
-      const generation = same && before.cfg.key === settings.key && before.generation ? before.generation : E().generation();
+      const sameLocal = provider !== 'local' || (before?.cfg.tier === settings.tier && before?.cfg.context === settings.context);
+      const generation = same && sameLocal && before.cfg.key === settings.key && before.generation ? before.generation : E().generation();
       const older = provider === 'openai' && typeof base[m.id]?.model === 'string' ? { model: base[m.id].model } : {};
       if (!await env.vault.set(CONNECTIONS, { ...base, [m.id]: { provider, ...(name !== undefined && { name: name.trim() }), ...settings, ...older, generation } })) return { ok: false, error: 'write' };
       if (before?.generation !== generation) revoke(m.id, env);

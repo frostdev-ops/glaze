@@ -205,6 +205,39 @@ test('a failed download keeps Download, with why: no space, or a lost connection
   }
 });
 
+test('Delete cancels a download before its first verified chunk exists', async () => {
+  const s = setup();
+  let cancel;
+  s.st.download = async (id, { onProgress }) => {
+    s.st.log.downloads.push(id); onProgress(0);
+    return new Promise((resolve, reject) => { cancel = () => reject(Object.assign(new Error('removed'), { reason: 'removed' })); });
+  };
+  const remove = s.st.remove;
+  s.st.remove = async (id) => { if (id === 'lfm3-q4') cancel?.(); await remove(id); };
+  const downloading = LOCAL.prepare(LOCAL.config({}));
+  try {
+    await settle();
+    assert.equal(typeof cancel, 'function');
+    assert.equal((await s.st.status('lfm3-q4')).state, 'missing', 'no chunk has reached the store');
+    await LOCAL.remove(LOCAL.config({}));
+    assert.ok(s.st.log.removed.includes('lfm3-q4'), 'Delete must reach the store even before it reports partial');
+    assert.deepEqual(await downloading, { state: 'download' });
+  } finally { cancel?.(); await downloading; }
+});
+
+test('Delete prevents a pending hardware choice from starting a new download', async () => {
+  let choose;
+  const s = setup({ ladder: { pick: () => new Promise((resolve) => { choose = resolve; }) } });
+  const downloading = LOCAL.prepare(LOCAL.config({}));
+  await settle();
+  assert.equal(typeof choose, 'function');
+  await LOCAL.remove(LOCAL.config({}));
+  choose({ id: 'lfm3-q4' });
+  await downloading;
+  assert.deepEqual(s.st.log.downloads, [], 'Delete retires the prepare request before it reaches the store');
+  assert.equal((await LOCAL.status(LOCAL.config({}))).state, 'download');
+});
+
 test('a run: the request as the fine-tune\'s parts, tokenized in the host, the answer streamed and finished at the end token', async () => {
   const s = setup({ here: { 'glaze-q4': 'ready' }, reply: 'Hello world.' });
   const deltas = [];
@@ -298,6 +331,60 @@ test('a warm-up loads the model and reads the system turn once; a run with the s
   assert.deepEqual([t.workers.length, t.st.log.downloads.length], [0, 0]);
 });
 
+test('different local models load in sequence without releasing an active model', async () => {
+  let resume;
+  const s = setup({ here: { 'glaze-q4': 'ready', 'lfm3-q8': 'ready' },
+    gate: (signal, n) => n === 1 ? new Promise((resolve) => { resume = resolve; }) : null });
+  const first = P.run('local', request(TEXT, { text: 'first' }), LOCAL.config({ tier: 3 }));
+  await settle();
+  const second = P.run('local', request(TEXT, { text: 'second' }), LOCAL.config({ tier: 2 }));
+  const results = Promise.allSettled([first, second]);
+  try {
+    await settle();
+    assert.equal(s.eng.log.released, 0, 'the first decode still owns its resources');
+    assert.equal(s.eng.log.loads, 1, 'the second model waits for the first sequence');
+  } finally { resume?.(); await results; }
+  assert.equal(s.eng.log.loads, 2);
+  assert.equal(s.eng.log.released, 1);
+});
+
+test('release cancels active work and waits for engine calls before freeing resources', async () => {
+  let resume;
+  const s = setup({ here: { 'glaze-q4': 'ready' },
+    gate: (signal, n) => n === 1 ? new Promise((resolve) => { resume = resolve; }) : null });
+  const run = P.run('local', request(TEXT, { text: 'first' }), LOCAL.config({}));
+  const ended = assert.rejects(run, (e) => e.category === 'cancelled');
+  await settle();
+  const releasing = s.link.call('release');
+  try {
+    await settle();
+    assert.equal(s.eng.log.released, 0, 'a pending engine call must settle before release');
+  } finally { resume?.(); await releasing; }
+  await ended;
+  assert.equal(s.eng.log.released, 1);
+  assert.ok(!s.posted.some((m) => m.type === 'delta'), 'no output from the retired run');
+});
+
+test('a replacement model waits for an aborted load to finish releasing its resources', async () => {
+  const s = setup({ here: { 'glaze-q4': 'ready', 'lfm3-q8': 'ready' } });
+  const load = s.eng.E.load;
+  let resume, attempts = 0;
+  s.eng.E.load = async (...args) => {
+    if (++attempts === 1) await new Promise((resolve) => { resume = resolve; });
+    return load(...args);
+  };
+  const cancel = new AbortController();
+  const first = P.run('local', request(TEXT, { text: 'first' }), LOCAL.config({ tier: 3 }), { signal: cancel.signal });
+  const ended = assert.rejects(first, (e) => e.category === 'cancelled');
+  await settle(); cancel.abort(); await ended;
+  const second = P.run('local', request(TEXT, { text: 'second' }), LOCAL.config({ tier: 2 }));
+  try {
+    await settle();
+    assert.equal(attempts, 1, 'the GPU must not allocate a second model while the retired load is pending');
+  } finally { resume?.(); await second; }
+  assert.equal(s.eng.log.released, 1);
+});
+
 test('release lets the host drop the model; it loads again at the next run; an idle host releases it and goes', async () => {
   const s = setup({ here: { 'glaze-q4': 'ready' } });
   await P.run('local', request(TEXT, { text: 'b' }), LOCAL.config({}));
@@ -388,6 +475,27 @@ const port = (e) => {
     say(m) { for (const f of on.message) f(m); }, close() { for (const f of on.disconnect) f(); } };
   B.connect(p, e); return p;
 };
+
+test('changing the local tier invalidates writing identity and cancels admitted work', async () => {
+  let finish;
+  setup({ here: { 'glaze-q4': 'ready', 'lfm3-q8': 'ready' }, reply: '{"text":"hi"}',
+    gate: (signal, n) => n === 1 ? new Promise((resolve) => { finish = resolve; signal.addEventListener('abort', resolve, { once: true }); }) : null });
+  const e = env({}, { local: { provider: 'local', tier: 3, generation: 'gen-1' } }), p = port(e);
+  try {
+    const before = await B.status({ feature: 'writing' }, e);
+    p.say({ id: 1, op: 'run', feature: 'writing', task: TASK.id, input: { text: 'hi' } });
+    await settle();
+    assert.equal(typeof finish, 'function');
+    assert.deepEqual(await B.config({ op: 'set', id: 'local', cfg: { provider: 'local', tier: 2 } }, e), { ok: true });
+    const after = await B.status({ feature: 'writing' }, e);
+    assert.notEqual(after.identity, before.identity, 'the new model must not reuse saved writing results');
+    await settle();
+    assert.ok(p.posted.some((m) => m.id === 1 && m.type === 'error' && m.error === 'changed'), JSON.stringify(p.posted));
+    assert.ok(!p.posted.some((m) => m.type === 'end'));
+    await B.config({ op: 'set', id: 'local', cfg: { provider: 'local', tier: 2 } }, e);
+    assert.equal((await B.status({ feature: 'writing' }, e)).identity, after.identity, 'saving the same tier is stable');
+  } finally { finish?.(); p.close(); }
+});
 
 test('Settings asks Glaze\'s model\'s state, size and tiers, downloads it from a click with progress, and deletes it', async () => {
   const s = setup();

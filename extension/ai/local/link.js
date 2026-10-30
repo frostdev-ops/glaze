@@ -12,13 +12,13 @@ var GZ_AI_LOCAL_LINK = globalThis.GZ_AI_LOCAL_LINK || (() => {
   const PAGE = 'ai/local/host.html', WORKER = 'ai/local/host.js', PORT = 'glaze:local';
   const fail = (reason) => Object.assign(new Error(`local host: ${reason}`), { category: 'provider-unavailable', reason });
 
-  // env: { runtime (chrome.runtime), offscreen? (chrome.offscreen), Worker?, keep?() (Firefox: any extension API call),
+  // env: { runtime (chrome.runtime), offscreen? (chrome.offscreen), clients? (ServiceWorker clients), Worker?, keep?() (Firefox: any extension API call),
   // setTimeout?, clearTimeout? }.
   const create = (env) => {
     const later = env.setTimeout || setTimeout, cancelTimer = env.clearTimeout || clearTimeout;
     const kind = typeof env.offscreen?.createDocument === 'function' ? 'offscreen' : typeof env.Worker === 'function' ? 'worker' : null;
     const calls = new Map(); // id → { resolve, reject, onEvent }
-    let port = null, opening = null, waiting = null, seq = 0, keepTimer = null;
+    let port = null, opening = null, closing = null, waiting = null, seq = 0, keepTimer = null;
 
     const drop = (p, reason = 'host') => {
       if (p && port !== p) return;
@@ -28,8 +28,13 @@ var GZ_AI_LOCAL_LINK = globalThis.GZ_AI_LOCAL_LINK || (() => {
     };
     const heard = (m) => {
       if (m?.type === 'idle') {
+        if (calls.size) return; // The host may have emitted idle before a new request reached it.
         if (kind === 'worker') { const p = port; drop(p, 'idle'); try { p?.disconnect(); } catch { /* gone */ } }
-        else Promise.resolve().then(() => env.offscreen.closeDocument?.()).catch(() => {});
+        else {
+          const p = port;
+          closing ||= Promise.resolve().then(() => env.offscreen.closeDocument?.()).then(() => drop(p, 'idle'), () => {})
+            .finally(() => { closing = null; });
+        }
         return;
       }
       const c = calls.get(m?.id);
@@ -46,7 +51,7 @@ var GZ_AI_LOCAL_LINK = globalThis.GZ_AI_LOCAL_LINK || (() => {
     };
     const use = (p) => {
       port = p;
-      p.onMessage.addListener(heard);
+      p.onMessage.addListener((m) => { if (port === p) heard(m); });
       p.onDisconnect.addListener(() => drop(p));
       p.postMessage({ op: 'config', idle: LIMIT.idle });
     };
@@ -60,9 +65,11 @@ var GZ_AI_LOCAL_LINK = globalThis.GZ_AI_LOCAL_LINK || (() => {
     const exists = async () => {
       const url = env.runtime.getURL(PAGE);
       if (typeof env.runtime.getContexts === 'function') return (await env.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] })).some((c) => String(c.documentUrl || '').split('?')[0] === url);
+      if (typeof env.clients?.matchAll === 'function') return (await env.clients.matchAll()).some((c) => String(c.url || '').split(/[?#]/)[0] === url);
       return typeof env.offscreen.hasDocument === 'function' ? !!await env.offscreen.hasDocument() : false;
     };
     const open = () => {
+      if (closing) return closing.then(open);
       if (port) return Promise.resolve(port);
       if (!kind) return Promise.reject(fail('browser'));
       return (opening ||= (async () => {
@@ -74,16 +81,20 @@ var GZ_AI_LOCAL_LINK = globalThis.GZ_AI_LOCAL_LINK || (() => {
           use({ postMessage: (m) => w.postMessage(m), onMessage: { addListener: (f) => on.push(f) }, onDisconnect: { addListener: (f) => gone.push(f) }, disconnect: () => w.terminate() });
           return port;
         }
+        let timer;
         const got = new Promise((resolve, reject) => {
-          const t = later(() => { waiting = null; reject(fail('host')); }, LIMIT.connect);
-          waiting = (p) => { cancelTimer(t); waiting = null; resolve(p); };
+          timer = later(() => { waiting = null; reject(fail('host')); }, LIMIT.connect);
+          waiting = (p) => { cancelTimer(timer); waiting = null; resolve(p); };
         });
-        if (await exists()) env.runtime.sendMessage({ type: 'glaze:local-host', op: 'connect' })?.catch?.(() => {});
-        else {
-          try { await env.offscreen.createDocument({ url: PAGE, reasons: ['WORKERS'], justification: 'Runs Glaze’s own AI model on this computer.' }); }
-          catch { if (await exists().catch(() => false)) env.runtime.sendMessage({ type: 'glaze:local-host', op: 'connect' })?.catch?.(() => {}); else { waiting = null; throw fail('host'); } }
-        }
-        return got;
+        const starting = (async () => {
+          if (await exists()) env.runtime.sendMessage({ type: 'glaze:local-host', op: 'connect' })?.catch?.(() => {});
+          else {
+            try { await env.offscreen.createDocument({ url: PAGE, reasons: ['WORKERS'], justification: 'Runs Glaze’s own AI model on this computer.' }); }
+            catch { if (await exists().catch(() => false)) env.runtime.sendMessage({ type: 'glaze:local-host', op: 'connect' })?.catch?.(() => {}); else throw fail('host'); }
+          }
+        })();
+        try { await Promise.race([starting, got]); return await got; }
+        finally { cancelTimer(timer); waiting = null; }
       })().finally(() => { opening = null; }));
     };
     const call = async (op, args = {}, { signal, onEvent } = {}) => {

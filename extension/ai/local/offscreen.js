@@ -4,15 +4,17 @@
 // ('glaze:local-host'). The host's idle word closes the document: the worker closes it, or it closes itself.
 (() => {
   const host = new Worker('host.js');
-  let port = null;
+  let port = null, idleTimer = null;
   const connect = () => {
-    port = chrome.runtime.connect({ name: 'glaze:local' });
-    port.onMessage.addListener((m) => host.postMessage(m));
-    port.onDisconnect.addListener(() => { port = null; host.postMessage({ op: 'detach' }); });
+    clearTimeout(idleTimer); idleTimer = null;
+    const p = chrome.runtime.connect({ name: 'glaze:local' });
+    port = p;
+    p.onMessage.addListener((m) => { if (port !== p) return; clearTimeout(idleTimer); idleTimer = null; host.postMessage(m); });
+    p.onDisconnect.addListener(() => { if (port !== p) return; port = null; host.postMessage({ op: 'detach' }); });
   };
   host.onmessage = ({ data }) => {
     try { port?.postMessage(data); } catch { port = null; }
-    if (data?.type === 'idle') setTimeout(() => close(), 2000);
+    if (data?.type === 'idle') { clearTimeout(idleTimer); idleTimer = setTimeout(() => close(), 2000); }
   };
   chrome.runtime.onMessage.addListener((m, sender) => {
     if (sender?.id === chrome.runtime.id && m?.type === 'glaze:local-host' && m.op === 'connect' && !port) connect();

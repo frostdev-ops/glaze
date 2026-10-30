@@ -24,7 +24,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   let env = null;
   const own = () => env || (env = {
     store: globalThis.GZ_AI_STORE,
-    link: globalThis.GZ_AI_LOCAL_LINK.create({ runtime: globalThis.chrome?.runtime, offscreen: globalThis.chrome?.offscreen, Worker: globalThis.Worker,
+    link: globalThis.GZ_AI_LOCAL_LINK.create({ runtime: globalThis.chrome?.runtime, offscreen: globalThis.chrome?.offscreen, clients: globalThis.clients, Worker: globalThis.Worker,
       keep: () => (globalThis.browser?.runtime || globalThis.chrome?.runtime).getPlatformInfo() }),
     gpu: () => globalThis.navigator?.gpu || null,
   });
@@ -136,7 +136,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     const l = own().link;
     try {
       if (l.up) await l.call('remove');
-      else for (const m of await models()) if (m.state !== 'missing') await own().store.remove(m.id);
+      else for (const m of await own().store.list()) await own().store.remove(m.id);
     } catch { return { state: 'unavailable', reason: 'failed' }; }
     return status(cfg);
   };

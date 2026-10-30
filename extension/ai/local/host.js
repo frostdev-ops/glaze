@@ -50,21 +50,23 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
     };
 
     // ---- the model ------------------------------------------------------------------------------------------------------
-    const release = () => {
+    const unload = () => {
       const was = loaded;
       loaded = null;
       if (!was) return;
       was.control.abort(new DOMException('Released', 'AbortError'));
-      was.ready.then((job) => { for (const w of job.warm) { try { w.snap.drop?.(); } catch { /* gone */ } } try { job.base?.drop?.(); } catch { /* gone */ } try { job.model.release(); } catch { /* gone */ } }, () => {});
+      return was.ready.then((job) => { for (const w of job.warm) { try { w.snap.drop?.(); } catch { /* gone */ } } try { job.base?.drop?.(); } catch { /* gone */ } try { job.model.release(); } catch { /* gone */ } }, () => {});
     };
     // The engine with model `id`, loaded once and shared by the calls that ask together; another model releases it first.
     const load = (id) => {
       if (loaded?.id === id) return loaded.ready;
-      release();
+      const retired = unload();
       const E = env.engine();
       if (!E) return Promise.reject(fail('provider-unavailable', 'engine'));
       const job = { id, control: new AbortController(), warm: [], schemas: new Map() };
       job.ready = (async () => {
+        await retired;
+        if (job.control.signal.aborted) throw aborted(job.control.signal);
         let file;
         try { file = await env.store.open(id); } catch { throw fail('provider-unavailable', 'assets'); }
         let g, tok;
@@ -90,6 +92,11 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       turn = run.catch(() => {});
       return run;
     };
+    const stopSequences = () => {
+      for (const o of ops.values()) if (o.kind === 'run' || o.kind === 'warm') o.control.abort(new DOMException('Released', 'AbortError'));
+    };
+    // Retire requests immediately, but let their pending engine calls settle before freeing GPU resources.
+    const release = () => { stopSequences(); return queued(unload); };
     // The model at the end of `head` (the system turn): a kept snapshot of it, else read from the start and kept.
     const prefix = async (job, head, signal) => {
       const at = job.warm.findIndex((w) => same(w.ids, head));
@@ -137,19 +144,20 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
     };
     const prepare = async (m, signal) => {
       const p = await pick(Number.isSafeInteger(m.tier) && m.tier > 0 ? m.tier : 0);
+      if (signal.aborted) return { state: 'download' };
       if (!p.id) return { state: 'unavailable', reason: p.reason };
       try {
         await env.store.download(p.id, { signal, onProgress: (loaded) => post({ id: m.id, type: 'progress', loaded }) });
         return { state: 'ready', model: p.id };
       } catch (e) {
-        if (signal.aborted) throw e;
+        if (signal.aborted) return { state: 'download' };
         if (e?.reason === 'removed' || e?.reason === 'aborted') return { state: 'download', model: p.id };
         return { state: 'download', model: p.id, reason: e?.reason === 'quota' ? 'quota' : 'network' };
       }
     };
     const run = async (m, signal) => {
-      const job = await wait(load(m.model), signal);
       return queued(async () => {
+        const job = await wait(load(m.model), signal);
         const { model, tok } = job;
         const head = encode(job, m.parts.slice(0, m.stable)), rest = encode(job, m.parts.slice(m.stable));
         const input = head.length + rest.length, room = Math.min(model.context || LIMIT.context, LIMIT.context);
@@ -164,6 +172,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
           if (signal.aborted) throw aborted(signal);
           const mask = grammar ? grammar.mask() : null;
           const id = await model.decode({ sampler, ...(mask && { mask }), signal });
+          if (signal.aborted) throw aborted(signal);
           n++;
           if (id === job.eos) { finish = 'stop'; break; }
           grammar?.advance(id);
@@ -176,17 +185,24 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       }, signal);
     };
     const warm = async (m, signal) => {
-      if ((await env.store.status(m.model)).state !== 'ready') return { ok: false };
-      const job = await wait(load(m.model), signal);
-      await queued(() => prefix(job, encode(job, m.parts), signal), signal);
-      return { ok: true };
+      return queued(async () => {
+        if ((await env.store.status(m.model)).state !== 'ready') return { ok: false };
+        const job = await wait(load(m.model), signal);
+        await prefix(job, encode(job, m.parts), signal);
+        return { ok: true };
+      }, signal);
     };
     const remove = async () => {
-      release();
-      for (const x of await env.store.list()) if (x.state !== 'missing') await env.store.remove(x.id);
-      return { state: 'download' };
+      for (const o of ops.values()) if (o.kind === 'prepare') o.control.abort(new DOMException('Removed', 'AbortError'));
+      stopSequences();
+      return queued(async () => {
+        await unload();
+        // A download before its first committed chunk still reports missing; remove must cancel it too.
+        for (const x of await env.store.list()) await env.store.remove(x.id);
+        return { state: 'download' };
+      });
     };
-    const OPS = { prepare, run, warm, remove, release: async () => { release(); return {}; } };
+    const OPS = { prepare, run, warm, remove, release: async () => { await release(); return {}; } };
 
     const handle = (m) => {
       if (!m || typeof m !== 'object') return;

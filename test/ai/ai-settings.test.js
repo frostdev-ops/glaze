@@ -923,6 +923,27 @@ test('Glaze\'s model\'s card: its state and size, Download from the click, its p
   assert.equal(p.note().textContent, 'Needs a download · 1.8 GB');
 });
 
+test('long local downloads leave Downloading after completion or failure without another progress event', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const terminal of ['ready', 'download']) {
+    let state = 'download', prepares = 0;
+    const local = async (m) => {
+      if (m.op === 'prepare') { prepares++; state = 'downloading'; }
+      return { ok: true, state, size: 1099627808 };
+    };
+    const p = await open({ ai: { on: true }, providers: ['local'], local, conns: { local: { provider: 'local' } } });
+    await p.click(p.card('Glaze on-device AI'));
+    await p.click(p.button('Download', p.$('ai-drawer')));
+    // The last byte event can precede verification and the host's terminal result.
+    if (terminal === 'ready') await p.progress({ provider: 'local', loaded: 1 });
+    state = terminal;
+    t.mock.timers.tick(5000); await settle();
+    assert.match(p.note().textContent, terminal === 'ready' ? /^Ready/ : /^Needs a download/);
+    assert.equal(prepares, 1, 'checking progress never starts another download');
+    assert.equal(!!p.button('Download', p.$('ai-drawer')), terminal === 'download');
+  }
+});
+
 test('Glaze\'s model in the picker needs no model id; a download that stopped says why and keeps Download; Activity names it', async () => {
   const local = async (m) => (m.op === 'set' ? { ok: true } : { ok: true, state: 'download', reason: 'quota', size: 1099627808, tiers: [{ tier: 1, size: 1099627808 }] });
   const p = await open({ ai: { on: true, model: { use: 'local', model: '' } }, providers: ['openai', 'device', 'local'], local,

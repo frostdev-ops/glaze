@@ -674,11 +674,14 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     };
     // Glaze's own model: its status (the connection kept first, as On this device's is), Download from the click, Delete,
     // and the tier Advanced sets (the connection's).
-    let fetching = false;
+    let fetching = false, localPoll = null;
     const localResult = (r) => {
       const keep = (st) => ({ ...st, ...(!st.tiers && ours?.tiers && { tiers: ours.tiers }), ...(!st.size && ours?.size && { size: ours.size }) });
       ours = r.ok ? keep({ state: r.state, ...['reason', 'size', 'tier', 'tiers', 'progress'].reduce((o, k) => (r[k] === undefined ? o : { ...o, [k]: r[k] }), {}) })
         : { state: 'unavailable', reason: r.error };
+      clearTimeout(localPoll);
+      localPoll = ours.state === 'downloading' && !fetching ? setTimeout(() => localStatus(), 5000) : null;
+      localPoll?.unref?.();
       render();
     };
     const localConn = async () => {
@@ -701,7 +704,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       render();
       send({ op: 'prepare', provider: OWN }).then(async (r) => {
         fetching = false;
-        if (r.ok && r.state !== 'downloading') localResult(r); else if (!r.ok) await localStatus();
+        if (r.ok) localResult(r); else await localStatus();
       }, () => { fetching = false; });
     };
     const deleteModel = (e) => {
