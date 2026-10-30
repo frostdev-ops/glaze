@@ -116,6 +116,8 @@ const holds = (bytes, value) => {
     await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'compact');
     await quiet(() => fr.evaluate(() => !!document.querySelector('.gk-choose')), 'Document/Spreadsheet offered without a spreadsheet kind');
     check(await fr.evaluate(() => !document.querySelector('.gk-choose') && ![...document.querySelectorAll('#menu [role="menuitem"]')].some((b) => /spreadsheet/i.test(b.textContent))), 'writer.sheets on, no spreadsheet kind here: no Document/Spreadsheet choice, no New spreadsheet');
+    await fr.locator('#gw .ProseMirror').fill('Text beside the PDF.');
+    await until(() => p.evaluate(() => __text().trim() === 'Text beside the PDF.'), 'compact text in Ultra');
 
     // ---- a PDF: Ultra's file area → the card → Open in Glaze → the viewer in the paper's place
     const h0 = await el.evaluate((f) => f.getBoundingClientRect().height);
@@ -140,11 +142,27 @@ const holds = (bytes, value) => {
     await until(async () => holds(Buffer.from((await record()).file, 'base64'), 'Rivera Field'), 'the filled PDF saved', 20000);
     rec = await record();
     check(rec.kind === 'pdf' && rec.file && holds(Buffer.from(rec.file, 'base64'), 'Rivera Field'), `a filled field is saved into the record's PDF (${rec.size} bytes)`);
+    // PDF → Word → Undo exercises the real importer, file-version restore and viewer disposal in the assignment frame.
+    const word = await fr.evaluate(async () => {
+      await GZ_WRITER_PAPER.need(['lib/writer-color.js', 'lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects-docx.js']);
+      const doc = GZ_WRITER_SCHEMA.paper.nodeFromJSON({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Replacement Word draft.' }] }] });
+      return Array.from((await GZ_WRITER_DOCX.exportDocx(doc, { format: GZ_WRITER_STYLES.get('plain') })).bytes);
+    });
+    await give(p, 'replacement.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', word);
+    await until(() => cardOf(fr), 'Word card over PDF');
+    await tap(fr, '.gi-default');
+    await until(async () => (await record())?.kind === 'paper' && await fr.evaluate(() => !document.documentElement.dataset.doc && GZ_WRITER_PAPER.current()?.editor?.text().includes('Replacement Word draft.')), 'Word replaces PDF');
+    check(!(await record()).file && await fr.evaluate(() => !!document.querySelector('.gp-toast-do')), 'Word import replaces the PDF only after parsing and offers Undo');
+    await tap(fr, '.gp-toast-do');
+    await until(() => fr.evaluate(() => document.documentElement.dataset.doc === 'pdf' && document.querySelector('.gk .annotationLayer input')?.value === 'Rivera Field'), 'Undo restores filled PDF', 40000);
+    check((await record()).kind === 'pdf' && holds(Buffer.from((await record()).file, 'base64'), 'Rivera Field'), 'Undo restores the PDF kind, its viewer and its filled bytes');
     // Submit…: the sheet with the PDF large, no paste switch; Submit attaches the saved PDF once and clicks Ultra's Submit once.
     await tap(fr, '.gk .gp-submit');
     await until(() => sheetOf(fr), 'the sheet');
     const sh = await sheetOf(fr);
     check(sh.name === 'Rivera_Essay2.pdf' && sh.big === 'PDF' && !sh.toggle, `the sheet names the PDF Lastname_Title.pdf, no paste switch (${JSON.stringify(sh)})`);
+    await until(() => fr.evaluate(() => document.querySelector('#gs-held')?.value === 'Text beside the PDF.'), 'held compact text shown');
+    check(await fr.evaluate(() => document.querySelector('#gs-keep').getAttribute('aria-checked') === 'false'), 'the old compact text is shown in the sheet with Keep off by default');
     await shot(p, 'kinds-pdf-sheet-1440.png');
     await tap(fr, '.gs-primary');
     await until(() => p.evaluate(() => __clicks.filter((c) => /footer\.submit/.test(c)).length === 1), 'Ultra\'s Submit clicked', 40000, () => p.evaluate(() => ({ uploads: __uploads.map((u) => u.name), clicks: __clicks, log: __log, err: null })));
@@ -154,6 +172,7 @@ const holds = (bytes, value) => {
     check(up.length === 1 && up[0].name === 'Rivera_Essay2.pdf' && up[0].type === 'application/pdf' && sha(up[0].bytes) === sha(Buffer.from(rec.file, 'base64')) && holds(up[0].bytes, 'Rivera Field'),
       `the saved PDF attached once: its name, application/pdf, the record's very bytes, the field filled (${up.map((u) => `${u.name} ${u.type} ${u.bytes.length}`).join('; ')})`);
     check(await until(async () => (await versions()).some((v) => v.reason === 'submit'), 'the Submitted version'), 'Ultra\'s Submit clicked once; the version is marked Submitted');
+    check(await p.evaluate(() => !__text().trim()), 'PDF submission with Keep off clears the old compact text from Ultra');
     await p.close();
 
     // ---- the attempt again: the PDF viewer at once, the field still filled
