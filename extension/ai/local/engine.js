@@ -12,10 +12,11 @@
 var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
   let reference = null;
   const REF = () => reference || (reference = typeof GZ_AI_REFERENCE !== 'undefined' ? GZ_AI_REFERENCE : require('./reference.js'));
-  const fail = (what) => { throw new Error(`engine: ${what}`); };
+  // reason (a load's failure): 'webgpu' (no adapter or device, or a kernel it refuses), 'memory', 'lost' (the device), 'model'.
+  const fail = (what, reason) => { throw Object.assign(new Error(`engine: ${what}`), reason ? { reason } : {}); };
   // Values and bytes per block of the types with kernels.
   const QUANT = { Q4_K: [256, 144], Q5_K: [256, 176], Q6_K: [256, 210], Q8_0: [32, 34] };
-  const KERNELS = ['quant', 'matvec', 'matmul', 'embed', 'norm', 'swiglu', 'shortconv', 'rope', 'attention', 'argmax', 'topk', 'probe'];
+  const KERNELS = ['quant', 'matvec', 'matmul', 'embed', 'norm', 'swiglu', 'shortconv', 'rope', 'attention', 'argmax', 'topk', 'penalty', 'probe'];
   const QUANTIZED = new Set(['matvec', 'matmul', 'embed']);
   const SLOT = 256; // bytes per op's uniforms (minUniformBufferOffsetAlignment)
   const CAP = 2 ** 30; // bytes per weight buffer
@@ -115,12 +116,16 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     attention: ({ T, pos, H, Hkv, window = 0, ring = 0, scale, splits = 1 }) => u32(T, pos, H, Hkv, window, ring, f32bits(scale), splits),
     argmax: ({ n, chunks }) => u32(n, chunks, 0, 0),
     topk: ({ n, k, chunks }) => u32(n, k, chunks, 0),
+    penalty: ({ count, r }) => u32(count, f32bits(r), 0, 0),
   };
 
   // ---- the engine --------------------------------------------------------------------------------------------------------
   const defaultSource = (base) => async (name) => {
+    // An extension page has chrome.runtime; the engine host's dedicated Worker has no chrome.* but the extension's origin.
     const url = base ? new URL(`${name}.wgsl`, base).href
-      : typeof chrome !== 'undefined' && chrome.runtime?.getURL ? chrome.runtime.getURL(`ai/local/kernels/${name}.wgsl`) : fail('no kernel source');
+      : typeof chrome !== 'undefined' && chrome.runtime?.getURL ? chrome.runtime.getURL(`ai/local/kernels/${name}.wgsl`)
+        : typeof location !== 'undefined' && /^(chrome|moz|safari-web)-extension:$/.test(new URL(location.origin).protocol) ? new URL(`/ai/local/kernels/${name}.wgsl`, location.origin).href
+          : fail('no kernel source');
     const r = await fetch(url);
     if (!r.ok) fail(`kernel ${name}: ${r.status}`);
     return r.text();
@@ -146,21 +151,41 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
   // 'f32' | 'f16', subgroups 'auto' | false, kernels (name → source, or a base URL; the package's by default), onProgress,
   // profile (timestamp-query, for forward's profile option) }.
   const create = async (gguf, opts = {}) => {
-    const c = REF().config(gguf);
-    if (typeof navigator === 'undefined' || !navigator.gpu) fail('no WebGPU');
-    const adapter = opts.adapter || await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
-    if (!adapter) fail('no WebGPU adapter');
+    const halt = () => { if (opts.signal?.aborted) throw opts.signal.reason ?? new DOMException('Aborted', 'AbortError'); };
+    halt();
+    let c;
+    try { c = REF().config(gguf); } catch (e) { fail(e.message, 'model'); }
+    if (typeof navigator === 'undefined' || !navigator.gpu) fail('no WebGPU', 'webgpu');
+    let adapter = opts.adapter;
+    // Chrome on Linux with NVIDIA's Vulkan driver answers null until its GPU process is up: a few more tries.
+    for (let i = 0; !adapter && i < 4; i++) {
+      if (i) { await new Promise((r) => setTimeout(r, 500 * i)); halt(); }
+      try { adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }); } catch { adapter = null; }
+    }
+    halt();
+    if (!adapter) fail('no WebGPU adapter', 'webgpu');
     const precision = opts.precision || 'auto';
     const f16 = precision === 'f16' || (precision === 'auto' && adapter.features.has('shader-f16'));
-    if (f16 && !adapter.features.has('shader-f16')) fail('this adapter has no shader-f16');
+    if (f16 && !adapter.features.has('shader-f16')) fail('this adapter has no shader-f16', 'webgpu');
     let sg = opts.subgroups !== false && adapter.features.has('subgroups');
-    const device = opts.device || await requestDevice(adapter, { f16, subgroups: sg, profile: opts.profile });
+    let device;
+    try { device = opts.device || await requestDevice(adapter, { f16, subgroups: sg, profile: opts.profile }); } catch (e) { halt(); fail(`no device: ${e.message}`, 'webgpu'); }
+    // A device the engine made is the engine's to destroy (all its memory with it).
+    const own = !opts.device;
+    const bail = (e) => { if (own) device.destroy?.(); throw e; };
     if (sg && !device.features.has('subgroups')) sg = false;
-    if (f16 && !device.features.has('shader-f16')) fail('the device has no shader-f16');
+    if (f16 && !device.features.has('shader-f16')) bail(Object.assign(new Error('engine: the device has no shader-f16'), { reason: 'webgpu' }));
     // The GEMM's tiles: 2 × 576 vec4 of H.
-    if (device.limits.maxComputeWorkgroupStorageSize < 2 * 576 * (f16 ? 8 : 16)) fail('the device allows too little workgroup storage');
+    if (device.limits.maxComputeWorkgroupStorageSize < 2 * 576 * (f16 ? 8 : 16)) bail(Object.assign(new Error('engine: the device allows too little workgroup storage'), { reason: 'webgpu' }));
+    // The big GEMM tile (2 × 1024 vec4 of H) where the device allows it: opts.gemm 'auto' (for matrices of 1024 rows or
+    // more), 'big' or 'small'.
+    // A prompt step of more than 64 tokens takes the big tiles (for matrices of 1024 rows or more under 'auto').
+    const bigTile = device.limits.maxComputeWorkgroupStorageSize >= 2 * 1024 * (f16 ? 8 : 16) && opts.gemm !== 'small';
+    const bigRows = opts.gemm === 'big' ? 1 : 1024;
     let lost = null;
     device.lost.then((info) => { lost = info; });
+    try {
+    halt();
 
     const src = typeof opts.kernels === 'function' ? opts.kernels : typeof opts.kernels === 'object' && opts.kernels ? (n) => opts.kernels[n] : defaultSource(opts.kernels);
     const sources = {};
@@ -191,7 +216,11 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
 
     // ---- buffers ----
     const S = GPUBufferUsage;
-    const buffer = (size, usage = S.STORAGE | S.COPY_SRC | S.COPY_DST) => device.createBuffer({ size: up(Math.max(size, 4), 4), usage });
+    const fits = (size, limit) => { if (!Number.isSafeInteger(size) || size < 0 || up(Math.max(size, 4), 4) > limit) fail(`buffer of ${size} bytes exceeds device limit ${limit}`, 'memory'); };
+    const buffer = (size, usage = S.STORAGE | S.COPY_SRC | S.COPY_DST) => {
+      fits(size, device.limits.maxBufferSize);
+      return device.createBuffer({ size: up(Math.max(size, 4), 4), usage });
+    };
     const upload = (data, usage) => {
       const b = buffer(data.byteLength, usage);
       device.queue.writeBuffer(b, 0, data.buffer, data.byteOffset, up(data.byteLength, 4) === data.byteLength ? data.byteLength : fail('upload: not whole words'));
@@ -199,13 +228,15 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     };
     const read = async (b, offset = 0, size = b.size - offset) => {
       const r = device.createBuffer({ size, usage: S.MAP_READ | S.COPY_DST });
-      const enc = device.createCommandEncoder();
-      enc.copyBufferToBuffer(b, offset, r, 0, size);
-      device.queue.submit([enc.finish()]);
-      await r.mapAsync(GPUMapMode.READ);
-      const out = r.getMappedRange().slice(0);
-      r.unmap(); r.destroy();
-      return out;
+      try {
+        const enc = device.createCommandEncoder();
+        enc.copyBufferToBuffer(b, offset, r, 0, size);
+        device.queue.submit([enc.finish()]);
+        await r.mapAsync(GPUMapMode.READ);
+        const out = r.getMappedRange().slice(0);
+        r.unmap();
+        return out;
+      } finally { r.destroy(); }
     };
     // Uniforms for one dispatch outside a session (the checks).
     const uniform = (words) => { const b = buffer(SLOT, S.UNIFORM | S.COPY_DST); device.queue.writeBuffer(b, 0, words); return b; };
@@ -225,7 +256,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       device.queue.submit([enc.finish()]);
       u.destroy();
     };
-    const paramBinding = { matvec: 3, matmul: 3, embed: 3, norm: 5, swiglu: 2, shortconv: 4, rope: 8, attention: 5, argmax: 3, topk: 3 };
+    const paramBinding = { matvec: 3, matmul: 3, embed: 3, norm: 5, swiglu: 2, shortconv: 4, rope: 8, attention: 5, argmax: 3, topk: 3, penalty: 2 };
 
     // Subgroups: the kernels assume invocation li is lane li mod size, and need TPR ≤ the size; else the plain path.
     let sgWhy = null;
@@ -291,15 +322,21 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     const wbufs = [];
     const total = infos.reduce((n, t) => n + t.bytes, 0);
     let done = 0;
+    const scope = () => device.pushErrorScope?.('out-of-memory');
+    const unscoped = async (what) => { const e = await device.popErrorScope?.(); if (e) fail(`out of memory for ${what}`, 'memory'); };
     try {
-      for (const size of layout.buffers) wbufs.push(buffer(size, S.STORAGE | S.COPY_DST));
+      scope();
+      try { for (const size of layout.buffers) wbufs.push(buffer(size, S.STORAGE | S.COPY_DST)); }
+      finally { await unscoped('the weights'); }
       for (const t of infos) {
+        halt();
         for (const run of layout.at[t.name]) {
           const from = run.row * t.rowBytes, bytes = run.rows * t.rowBytes;
           // Reads may end inside a quantized row; queue.writeBuffer offsets must stay word aligned.
           const step = 32 << 20;
           for (let o = 0; o < bytes; o += step) {
             let chunk = await gguf.read(t.info, from + o, Math.min(step, bytes - o));
+            halt();
             if (chunk.byteLength % 4) { const p = new Uint8Array(up(chunk.byteLength, 4)); p.set(chunk); chunk = p; }
             device.queue.writeBuffer(wbufs[run.buffer], run.offset + o, chunk.buffer, chunk.byteOffset, chunk.byteLength);
             done += Math.min(step, bytes - o);
@@ -308,6 +345,8 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         }
       }
       await device.queue.onSubmittedWorkDone();
+      halt();
+      if (lost) fail(`device lost: ${lost.message}`, 'lost');
     } catch (e) {
       for (const b of wbufs) b.destroy();
       throw e;
@@ -326,14 +365,24 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       if (destroyed) fail('engine destroyed');
       const owned = [];
       let closed = false;
-      const destroy = () => { closed = true; for (const b of owned) b.destroy(); owned.length = 0; sessions.delete(destroy); };
-      const own = (b) => { if (closed) { b.destroy(); fail('session destroyed'); } owned.push(b); return b; };
-      sessions.add(destroy);
+      // destroy may be widened by the session (its snapshots); the engine calls whatever it is at the time.
+      const life = {
+        own: (b) => { if (closed) { b.destroy(); fail('session destroyed'); } owned.push(b); return b; },
+        closed: () => closed,
+        destroy: () => { closed = true; for (const b of owned) b.destroy(); owned.length = 0; sessions.delete(close); },
+      };
+      const close = () => life.destroy();
+      sessions.add(close);
       try {
-        const s = await createSession(opts, { own, destroy, closed: () => closed });
+        device.pushErrorScope?.('out-of-memory');
+        let s, oom;
+        try { s = await createSession(opts, life); }
+        finally { oom = await device.popErrorScope?.(); }
+        if (oom) fail('out of memory for the session', 'memory');
         if (closed) fail('session destroyed');
+        if (lost) fail(`device lost: ${lost.message}`, 'lost');
         return s;
-      } catch (e) { destroy(); throw e; }
+      } catch (e) { life.destroy(); throw e; }
     };
     // ctx: positions it can hold; chunk: tokens per forward step (a longer feed goes in chunks).
     const createSession = async ({ ctx = 4096, chunk = 128 } = {}, life) => {
@@ -343,25 +392,30 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       }
       const H = c.nHead, V = c.vocab, K = c.lCache - 1, hidden = Math.max(3 * E, F), kvHeads = Math.max(...c.nHeadKv);
       const kvb = f16 ? 2 : 4;
-      const mk = (n) => life.own(buffer(n * 4));
+      // Session storage is bound whole. Reject limits before WebGPU can return a validation-only invalid buffer,
+      // and before allocating the host-side RoPE tables for an impossible context.
+      const storage = (bytes) => { fits(bytes, device.limits.maxStorageBufferBindingSize); return life.own(buffer(bytes)); };
+      const mk = (n) => storage(n * 4);
+      fits(ctx * c.nRot * 4, device.limits.maxStorageBufferBindingSize);
+      fits(ctx * c.nRotSwa * 4, device.limits.maxStorageBufferBindingSize);
       const B = {
         ids: mk(chunk), x: mk(chunk * E), n: mk(chunk * E), a: mk(chunk * E), y: mk(chunk * E),
         big: mk(chunk * hidden), up: mk(chunk * F), q: mk(chunk * H * hd), k: mk(chunk * kvHeads * hd), v: mk(chunk * kvHeads * hd), g: mk(chunk * H),
-        last: mk(V), lastIds: mk(1), apart: mk(H * Math.ceil(ctx / 128) * (hd + 2)), part: mk(Math.ceil(V / 4096) * 2 * chunk), cand: mk(Math.ceil(V / 2048) * 64 * 2), top: mk(64 * 2),
+        last: mk(V), raw: mk(V), lastIds: mk(1), mask: mk(Math.ceil(V / 32)), pen: mk(64), apart: mk(H * Math.ceil(ctx / 128) * (hd + 2)), part: mk(Math.ceil(V / 4096) * 2 * chunk), cand: mk(Math.ceil(V / 2048) * 64 * 2), top: mk(64 * 2),
       };
       let all = null; // chunk × V logits, made on first use
       const state = c.layers.map((kind, i) => {
         if (kind === 'conv') return { conv: mk(K * E) };
         const width = c.nHeadKv[i] * hd, ring = kind === 'swa' && c.window + chunk < ctx ? c.window + chunk : 0;
         const slots = ring || ctx;
-        return { ring, K: life.own(buffer(slots * width * kvb)), V: life.own(buffer(slots * width * kvb)) };
+        return { ring, K: storage(slots * width * kvb), V: storage(slots * width * kvb) };
       });
       const ropeFull = life.own(upload(ropeTable(0, ctx, c.nRot, c.ropeBase, ropeFreqs), S.STORAGE | S.COPY_DST));
       const ropeSwa = life.own(upload(ropeTable(0, ctx, c.nRotSwa, c.ropeBaseSwa, null), S.STORAGE | S.COPY_DST));
 
       // Every dispatch of a forward step owns a uniform slot; a step rewrites them all, then runs its list.
       const slots = [];
-      const P = { one: [], many: [], lastOne: [], lastMany: [], allMany: [], argmax: [], topk: [] };
+      const P = { one: [], many: [], manyBig: [], lastOne: [], lastMany: [], allMany: [], argmax: [], topk: [] };
       let params = null;
       const op = async (list, kernel, defines, entries, words, dims) => {
         const p = await pipe(kernel, defines), slot = slots.length;
@@ -372,18 +426,21 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       const blk = (i, n) => `blk.${i}.${n}.weight`;
 
       // y = W · x for each run of W's rows. GEMV (one token) or GEMM (T tokens, T filled per step).
-      const mm = async (list, name, xOff, X, Y, yOff, { one, ldy }) => {
+      const mm = async (list, name, xOff, X, Y, yOff, { one, ldy, big: bigList = false }) => {
         const t = W(name);
         for (const r of t.runs) {
           if (one) await op(list, 'matvec', { [t.type]: true }, { 0: r.bind, 1: X, 2: Y }, () => PARAMS.matvec({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, xOff: xOff(), yOff: yOff + r.row }), () => grid(Math.ceil(r.rows / (256 / tpr))));
-          else await op(list, 'matmul', { [t.type]: true }, { 0: r.bind, 1: X, 2: Y }, (T) => PARAMS.matmul({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, T, xStride: t.cols, xOff: xOff(), ldy, yOff: yOff + r.row }), (T) => [Math.ceil(r.rows / 64), Math.ceil(T / 64)]);
+          else {
+            const big = bigList && bigTile && r.rows >= bigRows, tile = big ? 128 : 64;
+            await op(list, 'matmul', { [t.type]: true, BIG: big }, { 0: r.bind, 1: X, 2: Y }, (T) => PARAMS.matmul({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, T, xStride: t.cols, xOff: xOff(), ldy, yOff: yOff + r.row }), (T) => [Math.ceil(r.rows / tile), Math.ceil(T / tile)]);
+          }
         }
       };
       const vec = (name) => W(name).runs[0].bind;
 
-      const build = async (list, one) => {
+      const build = async (list, one, big = false) => {
         const zero = () => 0;
-        const at = (n) => ({ one, ldy: n });
+        const at = (n) => ({ one, ldy: n, big });
         const embd = W('token_embd.weight');
         for (const r of embd.runs) await op(list, 'embed', { [embd.type]: true }, { 0: r.bind, 1: B.ids, 2: B.x }, (T) => PARAMS.embed({ n: T, E, rowBytes: embd.rowBytes, row0: r.row, rows: r.rows }), (T) => grid(Math.ceil((T * E) / 32 / 64)));
         await op(list, 'norm', {}, { 1: B.x, 2: B.n, 3: vec(blk(0, 'attn_norm')) }, () => PARAMS.norm({ n: E, eps: c.eps }), (T) => [T]);
@@ -429,27 +486,35 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       const out = gguf.tensor('output.weight') ? 'output.weight' : 'token_embd.weight';
       await build(P.one, true);
       await build(P.many, false);
+      if (bigTile && chunk > 64) await build(P.manyBig, false, true);
       let lastT = 1;
       await mm(P.lastOne, out, () => 0, B.n, B.last, 0, { one: true });
       await mm(P.lastMany, out, () => (lastT - 1) * E, B.n, B.last, 0, { one: true });
-      const chunks = Math.ceil(V / 4096);
-      await op(P.argmax, 'argmax', { PART: true }, { 0: B.last, 1: B.part }, () => PARAMS.argmax({ n: V, chunks }), () => [chunks, 1]);
-      await op(P.argmax, 'argmax', {}, { 1: B.part, 2: B.lastIds }, () => PARAMS.argmax({ n: V, chunks }), () => [1]);
-      const tchunks = Math.ceil(V / 2048);
-      let topK = 1;
-      await op(P.topk, 'topk', { PART: true }, { 0: B.last, 1: B.cand }, () => PARAMS.topk({ n: V, k: topK, chunks: tchunks }), () => [tchunks]);
-      // A merge workgroup holds 256 × 16 candidates. Larger vocabularies need intermediate merges.
-      let candidates = B.cand, maxChunks = tchunks, chunkCount = () => tchunks, stage = 0;
-      for (;;) {
-        const inputCount = chunkCount, maxGroups = Math.ceil(maxChunks * 64 / 4096);
-        const groups = () => Math.ceil(inputCount() * topK / 4096);
-        const output = maxGroups === 1 ? B.top : (B[`topStage${stage++}`] = mk(maxGroups * 64 * 2));
-        await op(P.topk, 'topk', {}, { 1: candidates, 2: output }, () => PARAMS.topk({ n: V, k: topK, chunks: inputCount() }), () => [groups()]);
-        if (maxGroups === 1) break;
-        candidates = output; maxChunks = maxGroups; chunkCount = groups;
-      }
+      const chunks = Math.ceil(V / 4096), tchunks = Math.ceil(V / 2048);
+      let topK = 1, penCount = 0, penR = 1, stage = 0;
+      // The pick from B.last: argmax, or the top k; with the grammar's mask (B.mask) when masked.
+      const picks = async (argList, topList, masked) => {
+        const M = masked ? { MASK: true } : {}, Me = masked ? { 4: B.mask } : {};
+        await op(argList, 'argmax', { PART: true, ...M }, { 0: B.last, 1: B.part, ...Me }, () => PARAMS.argmax({ n: V, chunks }), () => [chunks, 1]);
+        await op(argList, 'argmax', {}, { 1: B.part, 2: B.lastIds }, () => PARAMS.argmax({ n: V, chunks }), () => [1]);
+        await op(topList, 'topk', { PART: true, ...M }, { 0: B.last, 1: B.cand, ...Me }, () => PARAMS.topk({ n: V, k: topK, chunks: tchunks }), () => [tchunks]);
+        // A merge workgroup holds 256 × 16 candidates. Larger vocabularies need intermediate merges.
+        let candidates = B.cand, maxChunks = tchunks, chunkCount = () => tchunks;
+        for (;;) {
+          const inputCount = chunkCount, maxGroups = Math.ceil(maxChunks * 64 / 4096);
+          const groups = () => Math.ceil(inputCount() * topK / 4096);
+          const output = maxGroups === 1 ? B.top : (B[`topStage${stage++}`] = mk(maxGroups * 64 * 2));
+          await op(topList, 'topk', {}, { 1: candidates, 2: output }, () => PARAMS.topk({ n: V, k: topK, chunks: inputCount() }), () => [groups()]);
+          if (maxGroups === 1) break;
+          candidates = output; maxChunks = maxGroups; chunkCount = groups;
+        }
+      };
+      Object.assign(P, { argmaxMask: [], topkMask: [], penalty: [] });
+      await picks(P.argmax, P.topk, false);
+      await picks(P.argmaxMask, P.topkMask, true);
+      await op(P.penalty, 'penalty', {}, { 0: B.last, 1: B.pen }, () => PARAMS.penalty({ count: penCount, r: penR }), () => [1]);
       // Every row's logits: its buffer (chunk × vocab) is made on first use.
-      await mm(P.allMany, out, () => 0, B.n, null, 0, { one: false, ldy: V });
+      await mm(P.allMany, out, () => 0, B.n, null, 0, { one: false, ldy: V, big: bigTile && chunk > 64 });
       params = life.own(buffer(slots.length * SLOT, S.UNIFORM | S.COPY_DST));
       const host = new Uint32Array((slots.length * SLOT) / 4);
       const bindAll = (list) => { for (const d of list) d.group = group(d.p, { ...d.entries, [paramBinding[d.kernel]]: { buffer: params, offset: d.slot * SLOT, size: 32 } }, d.kernel); };
@@ -483,7 +548,12 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       // Feeds tokens at the next positions. logits: 'none' | 'last' | 'all' (rows to onRows(first row, Float32Array,
       // count) a chunk at a time, or returned whole); argmax: the last row's id by the GPU; topK: k (≤ 64) best of the last
       // row, by the GPU. → { logits, id, top }.
-      const forward = async (tokens, { logits = 'last', argmax = false, topK: k = 0, onRows, profile = false } = {}) => {
+      // 'keep': the last row's logits stay on the GPU (B.last) for pick(). signal: checked before each chunk; an abort leaves
+      // the chunks already fed in the caches.
+      // embeds: [{ at, tokens, buffer }]: the rows at positions at .. at + tokens − 1 of this feed come from buffer (a
+      // GPUBuffer on this device with COPY_SRC, tokens × embedding_length f32, as a vision encoder writes them) instead of the
+      // token embedding: one ordinary position each, causal.
+      const forward = async (tokens, { logits = 'last', argmax = false, topK: k = 0, onRows, profile = false, signal, embeds = [] } = {}) => {
         if (life.closed()) fail('session destroyed');
         if (lost) fail(`device lost: ${lost.message}`);
         if (busy) fail('a forward step is running');
@@ -491,34 +561,54 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         if (pos + tokens.length > ctx) fail(`context of ${ctx} positions is full`);
         for (const id of tokens) if (!Number.isInteger(id) || id < 0 || id >= V) fail(`token ${id}`);
         if (!Number.isInteger(k) || k < 0 || k > 64) fail('topK: 0 or an integer from 1 to 64');
+        for (const e of embeds) {
+          if (!Number.isInteger(e?.at) || !Number.isInteger(e.tokens) || e.at < 0 || e.tokens < 1 || e.at + e.tokens > tokens.length) fail('embeds: at and tokens inside the feed');
+          if (!(e.buffer instanceof GPUBuffer) || e.buffer.size < e.tokens * E * 4 || !(e.buffer.usage & S.COPY_SRC)) fail(`embeds: a GPUBuffer with COPY_SRC of at least ${E * 4} bytes a token`);
+        }
         if (logits === 'all') allMany();
         busy = true;
         try {
           const rows = logits === 'all' && !onRows ? new Float32Array(tokens.length * V) : null;
           let res = { logits: null, id: null, top: null };
           for (let i = 0; i < tokens.length; i += chunk) {
+            if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+            if (lost) fail(`device lost: ${lost.message}`, 'lost');
             const part = tokens.slice(i, i + chunk), T = part.length, lastChunk = i + chunk >= tokens.length;
             device.queue.writeBuffer(B.ids, 0, Uint32Array.from(part));
             lastT = T; topK = k || 1;
-            const body = T === 1 ? P.one : P.many;
+            const body = T === 1 ? P.one : T > 64 && P.manyBig.length ? P.manyBig : P.many;
             const tail = [];
-            if (lastChunk && (logits === 'last' || argmax || k)) tail.push(T === 1 ? P.lastOne : P.lastMany);
+            if (lastChunk && (logits !== 'none' || argmax || k)) tail.push(T === 1 ? P.lastOne : P.lastMany);
             if (lastChunk && argmax) tail.push(P.argmax);
             if (lastChunk && k) tail.push(P.topk);
-            if (logits === 'all') tail.unshift(P.allMany);
+            if (logits === 'all') tail.push(P.allMany);
             fill([body, ...tail], T);
             const enc = device.createCommandEncoder();
             let times = null;
-            if (profile && device.features.has('timestamp-query')) times = await timed(enc, [body, ...tail], T);
+            // Rows from embeds overwrite the lookup's, between it and the first layer.
+            const copies = embeds.flatMap((e) => {
+              const lo = Math.max(e.at, i), hi = Math.min(e.at + e.tokens, i + T);
+              return lo < hi ? [{ buffer: e.buffer, from: (lo - e.at) * E * 4, to: (lo - i) * E * 4, size: (hi - lo) * E * 4 }] : [];
+            });
+            if (profile && device.features.has('timestamp-query') && !copies.length) times = await timed(enc, [body, ...tail], T);
             else {
-              const pass = enc.beginComputePass();
-              encode(pass, body, T);
+              const lookup = copies.length ? body.filter((d) => d.kernel === 'embed') : [];
+              let pass = enc.beginComputePass();
+              if (lookup.length) {
+                encode(pass, lookup, T);
+                pass.end();
+                for (const r of copies) enc.copyBufferToBuffer(r.buffer, r.from, B.x, r.to, r.size);
+                pass = enc.beginComputePass();
+              }
+              encode(pass, lookup.length ? body.filter((d) => d.kernel !== 'embed') : body, T);
               for (const l of tail) encode(pass, l, T);
               pass.end();
             }
             device.queue.submit([enc.finish()]);
-            if (times) (res.profile ||= []).push(...await times());
             pos += T;
+            if (times) (res.profile ||= []).push(...await times());
+            // With a signal, each chunk's work finishes before the next is checked: a cancel takes effect within a chunk.
+            if (signal && !lastChunk) await device.queue.onSubmittedWorkDone();
             if (logits === 'all') {
               const got = new Float32Array(await read(all, 0, T * V * 4));
               if (onRows) onRows(i, got, T); else rows.set(got, i * V);
@@ -532,27 +622,267 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
               }
             }
           }
+          if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
           if (rows) res.logits = rows;
           return res;
         } finally { busy = false; }
       };
+      // A token from the logits in B.last (a forward with logits 'keep' made them), on the GPU: penalty { ids, r } first
+      // (each id once, in place), then with mask (Uint32Array, ceil(vocab / 32) words; id i at bit i & 31 of word i >> 5)
+      // only allowed ids: k 1 → { id } (argmax), else → { top: [{ id, logit }] } (k ≤ 64, highest first).
+      const pick = async ({ k = 1, mask = null, penalty = null } = {}) => {
+        if (life.closed()) fail('session destroyed');
+        if (lost) fail(`device lost: ${lost.message}`, 'lost');
+        if (busy) fail('a forward step is running');
+        if (!Number.isInteger(k) || k < 1 || k > 64) fail('k: an integer from 1 to 64');
+        if (mask && !(mask instanceof Uint32Array && mask.length === Math.ceil(V / 32))) fail(`mask: a Uint32Array of ${Math.ceil(V / 32)} words`);
+        busy = true;
+        try {
+          const lists = [];
+          if (penalty?.ids?.length && penalty.r !== 1) {
+            const ids = [...new Set(penalty.ids)].filter((id) => Number.isInteger(id) && id >= 0 && id < V).slice(-64);
+            if (!(penalty.r > 0)) fail('repetition penalty: a positive number');
+            device.queue.writeBuffer(B.pen, 0, Uint32Array.from(ids));
+            penCount = ids.length; penR = penalty.r;
+            lists.push(P.penalty);
+          }
+          if (mask) device.queue.writeBuffer(B.mask, 0, mask);
+          topK = k;
+          lists.push(k === 1 ? (mask ? P.argmaxMask : P.argmax) : (mask ? P.topkMask : P.topk));
+          fill(lists, 1);
+          const enc = device.createCommandEncoder();
+          // Penalties are per draw. Preserve raw logits even if the mask is empty or readback/cancellation fails, so
+          // a retry or a snapshot does not apply the penalty a second time.
+          const penalized = lists.includes(P.penalty);
+          if (penalized) enc.copyBufferToBuffer(B.last, 0, B.raw, 0, V * 4);
+          const pass = enc.beginComputePass();
+          for (const l of lists) encode(pass, l, 1);
+          pass.end();
+          if (penalized) enc.copyBufferToBuffer(B.raw, 0, B.last, 0, V * 4);
+          device.queue.submit([enc.finish()]);
+          if (k === 1) {
+            const id = new Uint32Array(await read(B.lastIds, 0, 4))[0];
+            return { id: id === 0xffffffff ? null : id };
+          }
+          const t = new Uint32Array(await read(B.top, 0, k * 8)), f = new Float32Array(t.buffer);
+          return { top: Array.from({ length: k }, (_, j) => ({ id: t[2 * j + 1], logit: f[2 * j] })).filter((e) => e.id !== 0xffffffff && Number.isFinite(e.logit)) };
+        } finally { busy = false; }
+      };
+
+      // The sequence's state as GPU copies: the conv states, the sliding rings whole, the full layers' keys and values up
+      // to the position, and (logits) B.last. → { pos, logits, bufs, drop() }; restore(snap) puts it all back.
+      const snaps = new Set();
+      const snapshot = async ({ logits = false } = {}) => {
+        if (life.closed()) fail('session destroyed');
+        if (lost) fail(`device lost: ${lost.message}`, 'lost');
+        if (busy) fail('a forward step is running');
+        busy = true;
+        const bufs = [];
+        const copy = (src, size) => { const b = buffer(size); bufs.push([src, b, size]); return b; };
+        try {
+          device.pushErrorScope?.('out-of-memory');
+          let oom;
+          try {
+            state.forEach((st, i) => {
+              if (c.layers[i] === 'conv') return copy(st.conv, st.conv.size);
+              const rows = st.ring ? st.K.size : pos * c.nHeadKv[i] * hd * kvb;
+              if (rows) { copy(st.K, rows); copy(st.V, rows); }
+            });
+            if (logits) copy(B.last, V * 4);
+          } finally { oom = await device.popErrorScope?.(); }
+          if (life.closed()) fail('session destroyed');
+          if (lost) fail(`device lost: ${lost.message}`, 'lost');
+          if (oom) fail('out of memory for a snapshot', 'memory');
+          const enc = device.createCommandEncoder();
+          for (const [src, b, size] of bufs) enc.copyBufferToBuffer(src, 0, b, 0, size);
+          device.queue.submit([enc.finish()]);
+          const snap = {
+            pos, logits, bufs,
+            drop() { if (!snaps.delete(snap)) return; for (const [, b] of bufs) b.destroy(); },
+          };
+          snaps.add(snap);
+          return snap;
+        } catch (e) { for (const [, b] of bufs) b.destroy(); throw e; }
+        finally { busy = false; }
+      };
+      const restore = async (snap) => {
+        if (life.closed()) fail('session destroyed');
+        if (busy) fail('a forward step is running');
+        if (!snaps.has(snap)) fail('restore: not a live snapshot of this session');
+        const enc = device.createCommandEncoder();
+        for (const [dst, b, size] of snap.bufs) enc.copyBufferToBuffer(b, 0, dst, 0, size);
+        // The conv states at the start are zeros; a snapshot at 0 copied them, so every conv layer is restored.
+        device.queue.submit([enc.finish()]);
+        pos = snap.pos;
+      };
+      const close = life.destroy;
+      life.destroy = () => { for (const snap of [...snaps]) snap.drop(); close(); };
+
       return {
-        forward,
+        forward, pick, snapshot, restore,
         // The greedy next token after feeding tokens.
         greedy: async (tokens) => (await forward(tokens, { logits: 'none', argmax: true })).id,
         get pos() { return pos; },
-        ctx, chunk, destroy: life.destroy,
+        ctx, chunk, destroy: () => life.destroy(),
       };
     };
 
     return {
       config: c, device, adapter, f16, subgroups: sg, subgroupsOff: sgWhy, tpr, layout, session,
-      destroy: () => { destroyed = true; for (const close of sessions) close(); for (const b of wbufs) b.destroy(); },
+      get lost() { return lost; },
+      destroy: () => { destroyed = true; for (const close of sessions) close(); for (const b of wbufs) b.destroy(); if (own) device.destroy?.(); },
       // For the checks: the kernels one dispatch at a time, on the engine's own pipelines and weights.
       _k: { pipe, dispatch, upload, read, buffer, tensor, PARAMS, grid, get tpr() { return tpr; } },
     };
+    } catch (e) {
+      if (!e?.reason && !opts.signal?.aborted) e = Object.assign(e instanceof Error ? e : new Error(String(e)), { reason: lost ? 'lost' : /kernel /.test(e?.message) ? 'webgpu' : 'model' });
+      bail(e);
+    }
   };
 
-  return { create, plan, preprocess, grid, ropeTable, PARAMS, QUANT, KERNELS };
+
+  // ---- sampling (llama.cpp's order after the GPU's penalty and top-k: top-p at temperature 1, then temperature) -----------
+  // top: [{ id, logit }] highest first. → an id; random() in [0, 1).
+  const sample = (top, { temperature = 1, topP = 1 } = {}, random = Math.random) => {
+    if (!top.length) fail('no token is allowed');
+    let keep = top.length;
+    if (topP < 1) {
+      const m = top[0].logit, p = top.map((e) => Math.exp(e.logit - m)), z = p.reduce((a, b) => a + b, 0);
+      for (let i = 0, acc = 0; i < p.length; i++) { acc += p[i] / z; if (acc >= topP) { keep = i + 1; break; } }
+    }
+    const m = top[0].logit, w = top.slice(0, keep).map((e) => Math.exp((e.logit - m) / temperature));
+    let r = random() * w.reduce((a, b) => a + b, 0);
+    for (let i = 0; i < w.length; i++) { r -= w[i]; if (r < 0) return top[i].id; }
+    return top[keep - 1].id;
+  };
+  const checkSampler = ({ temperature = 1, topK = 0, topP = 1, repetitionPenalty = 1 } = {}) => {
+    if (!Number.isFinite(temperature) || temperature < 0) fail('sampler.temperature: a finite number ≥ 0');
+    if (!Number.isInteger(topK) || topK < 0) fail('sampler.topK: an integer ≥ 0');
+    if (!Number.isFinite(topP) || !(topP > 0 && topP <= 1)) fail('sampler.topP: a finite number in (0, 1]');
+    if (!Number.isFinite(repetitionPenalty) || repetitionPenalty <= 0) fail('sampler.repetitionPenalty: a finite number > 0');
+    return { temperature, topK, topP, repetitionPenalty };
+  };
+
+  // ---- the model a host drives (ai/local/host.js): one sequence on the GPU ------------------------------------------------
+  // load(gguf, { context, chunk, signal, onProgress, ...create's options }) → { context, prefill, decode, snapshot, restore,
+  // release }. Load errors carry .reason: 'webgpu', 'memory', 'lost' or 'model'; an abort rejects with the signal's reason.
+  //   prefill(ids, { snapshot, signal, embeds }): feeds ids (after the token decode last chose, which is part of the sequence);
+  //     embeds [{ at, tokens, buffer }]: ids[at .. at + tokens − 1] take their rows from buffer (on model.device, COPY_SRC,
+  //     tokens × embedding_length f32: a picture's embeddings) instead of the token embedding;
+  //     → a snapshot of the state after them when snapshot is set, else undefined. The signal is checked before each chunk.
+  //   decode({ sampler: { temperature, topK, topP, repetitionPenalty }, mask, signal, random }) → the next token's id,
+  //     from the last fed position's logits: penalty (the last 64 tokens), then mask (a Uint32Array of ceil(vocab / 32)
+  //     words, id i allowed when bit i & 31 of word i >> 5 is set), then temperature 0 or topK 1: the highest; else the
+  //     topK (at most 64; 0: 64) highest, top-p, temperature, a draw. The id is fed by the next decode or prefill.
+  //   snapshot() → snap (snap.drop() frees it); restore(snap): the sequence as it was. release(): all GPU memory goes.
+  const load = async (gguf, { context = 4096, chunk = 512, signal, onProgress, ...opts } = {}) => {
+    const engine = await create(gguf, { ...opts, onProgress, signal });
+    let s;
+    try {
+      s = await engine.session({ ctx: context, chunk });
+      if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+    } catch (e) {
+      engine.destroy();
+      if (!signal?.aborted && e && !e.reason) e.reason = engine.lost ? 'lost' : 'webgpu';
+      throw e;
+    }
+    let pending = null, ready = false, released = false, running = false, recent = [];
+    const snaps = new Map(); // model snap → { inner, pending, ready, recent }
+    const live = () => {
+      if (released) fail('the model was released');
+      if (engine.lost) fail(`device lost: ${engine.lost.message}`, 'lost');
+    };
+    const remember = (ids) => { recent = recent.concat(ids).slice(-64); };
+    const halt = (sig) => { if (sig?.aborted) throw sig.reason ?? new DOMException('Aborted', 'AbortError'); };
+    const feed = async (ids, opt) => {
+      const t = pending === null ? ids : [pending, ...ids];
+      if (!t.length) return;
+      const start = s.pos;
+      try { await s.forward(t, opt); }
+      finally {
+        // Validation can reject before any work, and cancellation can stop between chunks. Only submitted tokens
+        // became part of the caches; retain the pending token and old logits when nothing was consumed.
+        const consumed = s.pos - start;
+        if (consumed) {
+          pending = null; ready = consumed === t.length;
+          remember(t.slice(0, consumed));
+        }
+      }
+    };
+    const snapshot = async () => {
+      live();
+      const inner = await s.snapshot({ logits: ready });
+      if (released) { inner.drop(); live(); }
+      const snap = { drop() { const v = snaps.get(snap); if (!v) return; snaps.delete(snap); v.inner.drop(); } };
+      snaps.set(snap, { inner, pending, ready, recent });
+      return snap;
+    };
+    const model = {
+      context,
+      engine,
+      // The device embeds buffers must be made on.
+      get device() { return engine.device; },
+      async prefill(ids, { snapshot: snap = false, signal: sig, onRows, embeds } = {}) {
+        live(); halt(sig);
+        if (!Array.isArray(ids) && !ArrayBuffer.isView(ids)) fail('prefill: token ids');
+        // embeds index ids; the pending token, fed first, moves them one along.
+        const shifted = embeds?.length ? embeds.map((e) => ({ ...e, at: e.at + (pending === null ? 0 : 1) })) : undefined;
+        await feed(Array.from(ids), { ...(onRows ? { logits: 'all', onRows } : { logits: 'keep' }), signal: sig, embeds: shifted });
+        halt(sig);
+        if (!snap) return undefined;
+        try {
+          const result = await snapshot();
+          if (sig?.aborted) { result.drop(); halt(sig); }
+          return result;
+        } catch (e) { halt(sig); if (e?.reason === 'memory') return null; throw e; }
+      },
+      async decode({ sampler, mask = null, signal: sig, random = Math.random } = {}) {
+        live(); halt(sig);
+        const sp = checkSampler(sampler);
+        if (mask !== null && !(mask instanceof Uint32Array && mask.length === Math.ceil(engine.config.vocab / 32))) fail(`mask: a Uint32Array of ${Math.ceil(engine.config.vocab / 32)} words`);
+        if (model.pos >= context) fail(`context of ${context} positions is full`);
+        if (pending !== null) await feed([], { logits: 'keep', signal: sig });
+        if (!ready) fail('decode: nothing fed to decode from');
+        halt(sig);
+        const penalty = sp.repetitionPenalty !== 1 ? { ids: recent, r: sp.repetitionPenalty } : null;
+        const k = sp.temperature === 0 || sp.topK === 1 ? 1 : Math.min(sp.topK || 64, 64);
+        const r = await s.pick({ k, mask, penalty });
+        halt(sig);
+        const id = k === 1 ? r.id : sample(r.top, sp, random);
+        if (id === null) fail('decode: the mask allows no token');
+        pending = id; ready = false;
+        return id;
+      },
+      snapshot,
+      async restore(snap) {
+        live();
+        const v = snaps.get(snap);
+        if (!v) fail('restore: not a live snapshot of this model');
+        await s.restore(v.inner);
+        ({ pending, ready, recent } = v);
+      },
+      release() {
+        if (released) return;
+        released = true;
+        for (const snap of [...snaps.keys()]) snap.drop();
+        s.destroy(); engine.destroy();
+      },
+      get pos() { return s.pos + (pending === null ? 0 : 1); },
+    };
+    // A model operation spans several session calls and awaits. Lock the whole transaction, including its host state.
+    for (const name of ['prefill', 'decode', 'snapshot', 'restore']) {
+      const action = model[name];
+      model[name] = async (...args) => {
+        live();
+        if (running) fail('a model operation is running');
+        running = true;
+        try { const result = await action(...args); live(); return result; }
+        finally { running = false; }
+      };
+    }
+    return model;
+  };
+
+  return { create, load, sample, plan, preprocess, grid, ropeTable, PARAMS, QUANT, KERNELS };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_ENGINE; else GZ_AI_ENGINE;

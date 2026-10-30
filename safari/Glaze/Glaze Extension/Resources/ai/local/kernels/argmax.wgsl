@@ -1,10 +1,14 @@
 // The highest logit's id per row of L (rows of n), the lowest id on a tie; NaN never wins. Two passes: PART reduces
 // chunks of 4096 of each row to (value, id) pairs in B; the final pass reduces a row's pairs to its id in I.
+// MASK (with PART): only ids whose bit i & 31 of word i >> 5 of M is set take part (the grammar's mask); none: no id.
 struct P { n: u32, chunks: u32, p0: u32, p1: u32 }
 @group(0) @binding(0) var<storage, read> L: array<f32>;
 @group(0) @binding(1) var<storage, read_write> B: array<vec2<u32>>;
 @group(0) @binding(2) var<storage, read_write> I: array<u32>;
 @group(0) @binding(3) var<uniform> p: P;
+//#if MASK
+@group(0) @binding(4) var<storage, read> M: array<u32>;
+//#endif
 
 var<workgroup> rv: array<f32, 256>;
 var<workgroup> ri: array<u32, 256>;
@@ -20,7 +24,11 @@ fn main(@builtin(local_invocation_index) li: u32, @builtin(workgroup_id) wg: vec
   let base = wg.x * 4096u;
   for (var k = li; k < 4096u; k += 256u) {
     let i = base + k;
+//#if MASK
+    if (i < p.n && ((M[i >> 5u] >> (i & 31u)) & 1u) == 1u) { let v = L[row * p.n + i]; if (better(v, i, bv, bi)) { bv = v; bi = i; } }
+//#else
     if (i < p.n) { let v = L[row * p.n + i]; if (better(v, i, bv, bi)) { bv = v; bi = i; } }
+//#endif
   }
 //#else
   let row = wg.x;
