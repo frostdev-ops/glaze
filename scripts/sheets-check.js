@@ -427,6 +427,15 @@ const seeded = (key, wb = M.workbook()) => {
     const arec = await until(() => local(`writerPaper:${again}`), 'its record');
     check(arec.kind === 'sheet' && arec.cells === count(original) + 1, `the export imports again with every cell (${arec.cells})`);
 
+    // A script can finish loading without publishing its codec. Opening must show the read error and a usable home.
+    const failed = await context.newPage();
+    try {
+      await failed.addInitScript(() => Object.defineProperty(globalThis, 'GZ_SHEET_XLSX', { configurable: true, get: () => null, set() {} }));
+      await failed.goto(`${HOME}?sheet=${encodeURIComponent(gold)}`);
+      await until(() => failed.evaluate(() => document.querySelector('#gd-said')?.textContent === 'That file could not be read.'), 'the codec failure shown');
+      check(await failed.evaluate(() => !document.querySelector('#gx-grid') && document.querySelector('#gd-docs') && !document.querySelector('#list').hidden), 'a missing codec shows the read error on Documents, without a blank or untracked grid');
+    } finally { await failed.close(); }
+
     const intervals = await page.evaluate(() => globalThis.gzIntervals || []);
     check(intervals.every((ms) => ms >= 60000), `no interval under a minute (${JSON.stringify(intervals)})`);
     check(!errors.some((e) => /sender/.test(e)), 'no worker sender refusals');
