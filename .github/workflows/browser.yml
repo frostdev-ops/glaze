@@ -33,7 +33,7 @@ jobs:
           PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1 "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" install --with-deps --no-shell chromium
           node scripts/ci-chromium.js
 
-      - name: Settings, popup, sites and pointer checks
+      - name: Settings, popup, sites, pointer and agent link checks
         run: nice -n 10 node scripts/ci-browser-checks.js "$RUNNER_TEMP/browser-evidence"
 
       - name: Keep the logs and screenshots

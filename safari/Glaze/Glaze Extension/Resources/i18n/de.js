@@ -3750,5 +3750,17 @@
   "as the app reports itself": "nach Angaben der App",
   "Don't allow": "Nicht erlauben",
   "Unnamed app": "Unbenannte App",
-  "Glaze restarted before you answered.": "Glaze wurde neu gestartet, bevor du geantwortet hast."
+  "Glaze restarted before you answered.": "Glaze wurde neu gestartet, bevor du geantwortet hast.",
+  "Export .xlsm": ".xlsm exportieren",
+  "Attach from Documents": "Aus Dokumenten anhängen",
+  "{name} could not be made.": "{name} konnte nicht erstellt werden.",
+  "{name} is larger than 50 MB.": "{name} ist größer als 50 MB.",
+  "Attach up to {n} documents.": "Hänge bis zu {n} Dokumente an.",
+  "Attached: {names}": "Angehängt: {names}",
+  "A file is larger than 50 MB. Nothing was submitted.": "Eine Datei ist größer als 50 MB. Es wurde nichts abgegeben.",
+  "A file could not be read. Nothing was submitted.": "Eine Datei konnte nicht gelesen werden. Es wurde nichts abgegeben.",
+  "The document changed or was deleted. Remove it and pick it again. Nothing was submitted.": "Das Dokument wurde geändert oder gelöscht. Entferne es und wähle es erneut aus. Es wurde nichts abgegeben.",
+  "File: {name}.": "Datei: {name}.",
+  "Use Blackboard editor to review or remove these uploads: {names}.": "Prüfe oder entferne diese Uploads im Blackboard-Editor: {names}.",
+  "Not attached": "Nicht angehängt"
 };

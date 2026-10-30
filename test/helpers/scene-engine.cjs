@@ -8,7 +8,7 @@ const vm = require('node:vm');
 
 const file = process.env.GZ_LIFECYCLE_REPO ? path.join(process.env.GZ_LIFECYCLE_REPO, 'lib/scene.js') : path.join(__dirname, '../../lib/scene.js');
 const source = fs.readFileSync(file, 'utf8').replace(/^import \{[\s\S]*?\} from '\.\/three\.min\.js';\n/m, '')
-  .replace(/^const \{[\s\S]*?\} = await import\([^\n]+\);\n/m, '').replace(/^export const /gm, 'const ');
+  .replace(/^const \{[\s\S]*?\} = await [^\n]*\bimport\([^\n]+\);\n/m, '').replace(/^export const /gm, 'const ');
 
 // latency: how long the fake GPU takes to finish a frame, in the fake clock's milliseconds (a number, or a function of the
 // draw count and the drawing buffer's [width, height], so a test can make cost follow the pixels). Nothing in the VM moves

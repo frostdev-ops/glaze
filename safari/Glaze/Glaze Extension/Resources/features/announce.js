@@ -33,6 +33,7 @@ var GZ_ANNOUNCE = globalThis.GZ_ANNOUNCE || (() => {
   const prefs = () => ctx.settings().announce || {};
   const libs = ctx.need('lib/popup.js', () => globalThis.GZ_POPUP_LIB).then(() => ctx.need('lib/announce.js', () => globalThis.GZ_ANNOUNCE_LIB))
     .then(() => { A = globalThis.GZ_ANNOUNCE_LIB; });
+  libs.catch(() => {});
   // The pop-up's own files, asked for when first wanted (GZ_ANNOUNCE.ready, or a hover, focus or click on a site's list).
   let all = null, loaded = false;
   const load = () => (all ||= Promise.all([libs, ctx.need('features/popup.js', () => globalThis.GZ_POPUP).then(() => GZ_POPUP.ready), ctx.need('lib/lmsq.js', () => globalThis.GZ_LMSQ)])

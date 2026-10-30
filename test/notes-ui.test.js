@@ -570,6 +570,25 @@ test('uploads: a file over the limit is refused before it is read, and nothing i
   assert.ok(!P.ops().includes('file'));
 });
 
+test('a note whose paragraph holds 70,000 line breaks opens whole, its children added in bounded batches', async () => {
+  // Chromium overflows its stack on a spread of tens of thousands of arguments (Codex B6 review).
+  const P = page();
+  await P.seed([{ id: id(1), title: 'Long', course: '7', html: `<p>${'<br>'.repeat(70000)}</p>` }]);
+  await P.openView();
+  let most = 0;
+  const { append, replaceChildren } = El.prototype;
+  El.prototype.append = function (...k) { most = Math.max(most, k.length); return append.apply(this, k); };
+  El.prototype.replaceChildren = function (...k) { most = Math.max(most, k.length); return replaceChildren.apply(this, k); };
+  try {
+    P.fire(P.items()[0], 'click');
+    await settle(40);
+  } finally { Object.assign(El.prototype, { append, replaceChildren }); }
+  const body = P.box().querySelector('.gz-nt-body');
+  assert.equal(body.children.length, 1);
+  assert.equal(body.children[0].children.filter((c) => c.tagName?.toLowerCase() === 'br').length, 70000);
+  assert.ok(most <= 1024, `at most 1024 children per call (${most})`);
+});
+
 test('Duplicate makes "<title> (copy)" and opens it', async () => {
   const P = page();
   await P.seed([{ id: id(1), title: 'Week 3', course: '7', html: '<p>cells</p>' }]);

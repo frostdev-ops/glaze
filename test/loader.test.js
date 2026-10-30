@@ -106,6 +106,8 @@ test('without a document id, a frame that now holds another document gets nothin
 test('success means the file ran to its end: an injection that fails, throws or stops short is reported', async () => {
   const send = (execute, protocol) => worker(execute, protocol).send({ type: 'glaze:load', files: ['lib/drafts.js'] }, { ...tab(), documentId: 'A' });
   assert.deepEqual(await send(() => Promise.reject(new Error('Frame with ID 3 was removed.'))), { ok: false, error: 'Frame with ID 3 was removed.' });
+  // Firefox, the site's grant taken back: a refusal content.js doesn't ask again.
+  assert.deepEqual(await send(() => Promise.reject(new Error('Missing host permission for the tab or frames'))), { ok: false, error: 'sender' });
   // Chrome: a file that throws leaves no last value. Firefox reports the error.
   assert.deepEqual(await send(() => Promise.resolve([{ frameId: 3, result: null }])), { ok: false, error: 'did not finish' });
   assert.deepEqual(await send(() => Promise.resolve([{ frameId: 3 }])), { ok: false, error: 'did not finish' });
@@ -113,6 +115,22 @@ test('success means the file ran to its end: an injection that fails, throws or 
   assert.deepEqual(await send(() => Promise.resolve([{ frameId: 3, result: { worth() {} } }])), { ok: true });
   // Safari: its results for files aren't relied on; content.js checks the module itself.
   assert.deepEqual(await send(() => Promise.resolve([{ frameId: 3 }]), 'safari-web-extension:'), { ok: true });
+});
+
+test('only the browser host-permission refusal is final, not a script exception or a similar message', async () => {
+  const missing = 'Missing host permission for the tab or frames';
+  const similar = 'Missing host permission data; try again';
+  const message = { type: 'glaze:load', files: ['lib/drafts.js'], doc: 'A' };
+  for (const sender of [tab(), { ...tab(), documentId: 'A' }]) {
+    const refused = worker(() => Promise.reject(new Error(missing)));
+    assert.deepEqual(await refused.send(message, sender), { ok: false, error: 'sender' }, 'the document probe or injection is refused');
+    const retryable = worker(() => Promise.reject(new Error(similar)));
+    assert.deepEqual(await retryable.send(message, sender), { ok: false, error: similar }, 'a shared prefix does not prove a revoked grant');
+  }
+  const script = worker(() => Promise.resolve([{ frameId: 3, error: new Error(missing) }]));
+  assert.deepEqual(await script.send(message, { ...tab(), documentId: 'A' }), { ok: false, error: missing }, 'a script exception is still retryable');
+  const afterProbe = worker((o) => o.func ? Promise.resolve([{ result: true }]) : Promise.reject(new Error(missing)));
+  assert.deepEqual(await afterProbe.send(message, tab()), { ok: false, error: 'sender' }, 'a successful probe does not hide an injection refusal');
 });
 
 // What a feature file reads from content.js when it loads (features/*.js).

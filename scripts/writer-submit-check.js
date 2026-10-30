@@ -972,6 +972,169 @@ const HARNESS = require('./ultra-attempt-harness.js');
     await p.close();
     await setFull(true);
 
+    // ---- Attach from Documents: a paper (.docx), a spreadsheet (.xlsx) and a PDF imported on Documents (papers.html, its
+    // own chooser), attached on the sheet beside the attempt's own file (the full writer) and alone (the compact box), one
+    // added twice and removed, one over 50 MB refused; Ultra's upload sees each with its name, type and size, the note
+    // names them, and the submitted version keeps them.
+    {
+      const L = require('../lib/writer-submit.js'), XL = require('../lib/sheet-xlsx.js'), SM = require('../lib/sheet-model.js');
+      const setKinds = () => worker.evaluate(async () => { const w = (await chrome.storage.sync.get('writer')).writer || {}; await chrome.storage.sync.set({ writer: { ...w, sheets: true, pdf: true } }); });
+      await setKinds();
+      const book = SM.workbook();
+      book.sheets[0].rows.set(0, new Map([[0, { t: 's', v: 'Trial' }], [1, { t: 's', v: 'Distance' }]]));
+      book.sheets[0].rows.set(1, new Map([[0, { t: 'n', v: 1 }], [1, { t: 'n', v: 4.25 }]]));
+      const xlsx = Buffer.from(await XL.write(book)), syllabus = fs.readFileSync(path.join(root, 'test/fixtures/import/syllabus.pdf'));
+      const docs = path.join(out, 'documents');
+      fs.mkdirSync(docs, { recursive: true });
+      fs.writeFileSync(path.join(docs, 'Lab notes.docx'), essay); fs.writeFileSync(path.join(docs, 'Trial data.xlsx'), xlsx); fs.writeFileSync(path.join(docs, 'Field trip.pdf'), syllabus);
+      const home = await context.newPage();
+      watch(home, 'documents');
+      await home.goto(`chrome-extension://${id}/papers.html`);
+      await until(() => home.evaluate(() => !document.getElementById('list').hidden && /\.pdf/.test(document.querySelector('#gd-file')?.accept || '') && /\.xlsx/.test(document.querySelector('#gd-file').accept)), 'Documents takes the three kinds');
+      await home.setInputFiles('#gd-file', ['Lab notes.docx', 'Trial data.xlsx', 'Field trip.pdf'].map((f) => path.join(docs, f)));
+      const rowsOf = () => worker.evaluate(async () => ((await chrome.storage.local.get('writerPapers')).writerPapers || []).filter((r) => r.key.startsWith('doc:') && !r.trashed));
+      const kinds = await until(async () => { const r = await rowsOf(); const by = Object.fromEntries(['paper', 'sheet', 'pdf'].map((k) => [k, r.find((x) => (x.kind || 'paper') === k)])); return Object.values(by).every(Boolean) && by; }, 'the three documents on Documents', 60000, rowsOf);
+      await home.close();
+      const uploads = (p) => p.evaluate(() => __uploads.map(({ name, type, size, bytes }) => ({ name, type, size, bytes })));
+      const rows = (fr) => fr.evaluate(() => [...document.querySelectorAll('.gs-att')].map((r) => ({ name: r.querySelector('.gs-name').textContent, size: r.querySelector('small').textContent, tag: r.querySelector('.gs-doc').textContent })));
+      const ready = (fr, n, label) => until(async () => { const r = await rows(fr); return r.length === n && r.every((x) => / KB$/.test(x.size)) && await fr.evaluate(() => !document.querySelector('.gs-primary').disabled) && r; }, label, 60000, () => rows(fr));
+      const picker = (fr) => until(() => fr.evaluate(() => !!document.querySelector('.gp-fromdocs-layer[data-open]')), 'the Documents picker');
+      const pick = async (fr, key) => {
+        await picker(fr);
+        await tap(fr, `.gp-fromdocs-row[data-key="${key}"]`); await until(() => fr.evaluate(() => !document.querySelector('.gp-fromdocs-layer')), 'the picker closed and gone'); };
+      const attachOne = async (fr, key, n) => { await tap(fr, '.gs-attach'); await pick(fr, key); return ready(fr, n, `${n} attached`); };
+      const expect = (surname, taken, list) => { const names = []; for (const [row, ext] of list) names.push(L.attachName({ surname, title: row.title, fallback: 'Document', name: `x${ext}`, taken: [...taken, ...names] })); return names; };
+      const sameFile = async (u, want) => {
+        if (want.ext === '.docx') { const z = DT.unzip(new Uint8Array(u.bytes)); return u.type === MIME && z.names.includes('word/document.xml'); }
+        if (want.ext === '.xlsx') return u.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' && (await XL.read(new Uint8Array(u.bytes))).sheets[0].rows.get(1).get(1).v === 4.25;
+        return u.type === 'application/pdf' && sha(u.bytes) === sha(syllabus);
+      };
+      const kb = (n) => `${new Intl.NumberFormat('en-US').format(L.kb(n))} KB`;
+      const submitted = (key) => worker.evaluate(async (k) => ((await chrome.storage.local.get(`writerVersions:${k}`))[`writerVersions:${k}`] || []).find((v) => v.reason === 'submit') || null, key);
+
+      // The full writer: the attempt's own .docx, then the three.
+      await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('writerSubmit:'))); });
+      ({ p, el, fr } = await openAttempt());
+      await tap(fr, '.gp-submit');
+      await sheetOpen(fr);
+      const main = await fr.evaluate(() => document.querySelector('.gs-file .gs-name').textContent), surname = main.split('_')[0];
+      await tap(fr, '.gs-attach');
+      await picker(fr);
+      const listed = await until(() => fr.evaluate((keys) => { const rs = keys.map((k) => document.querySelector(`.gp-fromdocs-row[data-key="${k}"]`)); return rs.every((r) => r?.querySelector('.gp-fromdocs-pic > *')) && rs.map((r) => r.querySelector('small').textContent.split(' · ')[0]); }, [kinds.paper.key, kinds.sheet.key, kinds.pdf.key]), 'each kind with its thumbnail', 30000);
+      check(listed.join('|') === 'Document|Spreadsheet|PDF' && await fr.evaluate(() => document.querySelector('#gp-fromdocs-h').textContent === 'Attach from Documents' && document.querySelector('.gs-layer').inert), `Attach from Documents lists every kind with its thumbnail over the inert sheet (${listed.join(', ')})`);
+      fs.writeFileSync(path.join(out, 'attach-picker.png'), await p.screenshot());
+      await pick(fr, kinds.paper.key);
+      await ready(fr, 1, 'the paper attached');
+      await attachOne(fr, kinds.sheet.key, 2);
+      await attachOne(fr, kinds.pdf.key, 3);
+      const twice = await attachOne(fr, kinds.sheet.key, 4);
+      const names = expect(surname, [main], [[kinds.paper, '.docx'], [kinds.sheet, '.xlsx'], [kinds.pdf, '.pdf']]);
+      const again = expect(surname, [main, ...names], [[kinds.sheet, '.xlsx']])[0];
+      check(twice.map((r) => r.name).join('|') === [...names, again].join('|') && twice.map((r) => r.tag).join('|') === 'DOCX|XLSX|PDF|XLSX' && again.endsWith('_2.xlsx'), `each listed as Lastname_Title with its size, the same one twice de-duplicated (${twice.map((r) => `${r.name} ${r.size}`).join('; ')})`);
+      fs.writeFileSync(path.join(out, 'attach-sheet.png'), await p.screenshot());
+      // Ten rows must leave both actions visible without scrolling the page to find them.
+      for (let n = 5; n <= 10; n++) await attachOne(fr, kinds.sheet.key, n);
+      for (const width of [1280, 640]) {
+        await p.setViewportSize({ width, height: 720 });
+        await stillAll(p);
+        const geometry = await fr.evaluate(() => {
+          const rect = (s) => { const r = document.querySelector(s).getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }; };
+          return { title: rect('#gs-title'), submit: rect('.gs-primary'), cancel: rect('.gs-foot .gs-btn'), height: innerHeight };
+        });
+        const frameBox = await el.boundingBox();
+        check([geometry.title, geometry.submit, geometry.cancel].every((r) => r.top >= 0 && r.bottom <= geometry.height && frameBox.y + r.top >= 0 && frameBox.y + r.bottom <= 720), `ten attachments: title, Submit and Cancel inside the viewport at ${width}x720 (${JSON.stringify(geometry)})`);
+        // A real trusted click, intercepted in the frame before the submission handler.
+        await fr.evaluate(() => { globalThis.__submitHit = false; document.querySelector('.gs-primary').addEventListener('click', (e) => { e.stopImmediatePropagation(); globalThis.__submitHit = e.isTrusted; }, { capture: true, once: true }); });
+        await tap(fr, '.gs-primary');
+        check(await fr.evaluate(() => globalThis.__submitHit), `ten attachments: Submit clickable at ${width}x720`);
+        fs.writeFileSync(path.join(out, `attach-sheet-10-${width}.png`), await p.screenshot());
+      }
+      await p.setViewportSize({ width: 1280, height: 900 });
+      for (let n = 10; n > 4; n--) await tap(fr, '.gs-att:last-child .gs-att-x');
+
+      await tap(fr, '.gs-att:last-child .gs-att-x');
+      const left = await ready(fr, 3, 'one removed');
+      check(left.map((r) => r.name).join('|') === names.join('|') && await fr.evaluate(() => document.activeElement?.matches('.gs-att:last-child .gs-att-x')), 'Remove takes it off the list, focus to the row before');
+      const before = (await uploads(p)).length;
+      await fr.fill('#gs-note', 'Here is my lab.');
+      await tap(fr, '.gs-primary');
+      await until(() => p.evaluate(() => !!document.getElementById('ultra-confirm')), 'submitted with attachments', 60000 * 4);
+      const up = (await uploads(p)).slice(before);
+      const wants = [{ name: main, ext: '.docx' }, ...names.map((n, i) => ({ name: n, ext: ['.docx', '.xlsx', '.pdf'][i] }))];
+      const fits = await Promise.all(up.map((u, i) => wants[i] && u.name === wants[i].name && u.size === u.bytes.length && sameFile(u, wants[i])));
+      check(up.length === 4 && fits.every(Boolean) && up.slice(1).every((u, i) => kb(u.size) === left[i].size) && await p.evaluate(() => __clicks.length === 1), `Ultra's upload sees the attempt's .docx, then each attached file with its name, type and listed size, Submit once (${up.map((u) => `${u.name} ${u.type} ${u.size}`).join('; ')})`);
+      const text = await p.evaluate(() => __text());
+      check(text.includes('Here is my lab.') && text.includes(`Attached: ${names.join(', ')}`), `the note names the attachments (${JSON.stringify(text.slice(0, 200))})`);
+      const attemptKey = await fr.evaluate(() => GZ_WRITER_PAPER.current().key());
+      const v = await until(() => submitted(attemptKey), 'the submitted version');
+      check(JSON.stringify((v.attached || []).map((a) => [a.name, a.size, a.mime])) === JSON.stringify(up.slice(1).map((u) => [u.name, u.size, u.type])), `the submitted version keeps what was attached (${JSON.stringify(v.attached)})`);
+      await p.close();
+
+      // The compact box (Full writer off, the default): ⋯ → Attach from Documents, the files alone; one over 50 MB refused.
+      await setFull(false);
+      await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('writerSubmit:') || k.startsWith('writerVersions:bb.'))); });
+      ({ p, el, fr } = await openCompact());
+      await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'compact');
+      await tap(fr, '#gw .ProseMirror'); await boxFocused(fr); await p.keyboard.press('End'); await p.keyboard.type(' Compact attach text.');
+      await inUltra(p, fr, (x) => x.includes('Compact attach text.'), 'compact text in Ultra');
+      const ultraBefore = await p.evaluate(() => __text());
+      await tap(fr, '#more');
+      await tap(fr, '#menu [role="menuitem"]:text-is("Attach from Documents")');
+      await pick(fr, kinds.paper.key);
+      await sheetOpen(fr);
+      const one = await ready(fr, 1, 'compact: the paper attached');
+      const shape = await fr.evaluate(() => ({ only: !!document.querySelector('.gs-sheet.gs-only'), prev: !!document.querySelector('.gs-prev'), keep: !!document.querySelector('#gs-keep')?.isConnected, paste: !!document.querySelector('.gs-toggle') }));
+      check(shape.only && !shape.prev && !shape.keep && !shape.paste, `compact: the sheet holds the files alone, no pages, Keep or paste switch (${JSON.stringify(shape)})`);
+      fs.writeFileSync(path.join(out, 'attach-compact.png'), await p.screenshot());
+      // Over Blackboard's 50 MB: the PDF kind's export made larger in this frame.
+      await fr.evaluate(() => { const k = GZ_DOC_KINDS.get('pdf'); globalThis.__pdfFile = k.file; GZ_DOC_KINDS.register('pdf', { ...k, file: async () => ({ name: 'Big.pdf', mime: 'application/pdf', bytes: new Uint8Array(50e6 + 1) }) }); });
+      await tap(fr, '.gs-attach'); await pick(fr, kinds.pdf.key);
+      const refused = await until(() => fr.evaluate(() => document.querySelector('.gs-err').textContent), 'the refusal');
+      check(refused === `${kinds.pdf.title} is larger than 50 MB.` && (await rows(fr)).length === 1, `over 50 MB is refused with a plain reason ("${refused}")`);
+      await fr.evaluate(() => { const k = GZ_DOC_KINDS.get('pdf'); GZ_DOC_KINDS.register('pdf', { ...k, file: globalThis.__pdfFile }); });
+      await attachOne(fr, kinds.sheet.key, 2);
+      const three = await attachOne(fr, kinds.pdf.key, 3);
+      const cnames = expect(surname, [], [[kinds.paper, '.docx'], [kinds.sheet, '.xlsx'], [kinds.pdf, '.pdf']]);
+      check(one[0].name === cnames[0] && three.map((r) => r.name).join('|') === cnames.join('|'), `compact: Lastname_Title, nothing taken by an own file (${cnames.join(', ')})`);
+      for (let n = 4; n <= 10; n++) await attachOne(fr, kinds.sheet.key, n);
+      await p.setViewportSize({ width: 640, height: 720 }); await stillAll(p);
+      const compactFoot = await fr.evaluate(() => { const r = document.querySelector('.gs-primary').getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; });
+      const compactFrame = await el.boundingBox();
+      check(compactFoot.top >= 0 && compactFrame.y + compactFoot.bottom <= 720, 'compact: ten attachments keep Submit inside the visible window at 640x720');
+      await fr.evaluate(() => { globalThis.__submitHit = false; document.querySelector('.gs-primary').addEventListener('click', (e) => { e.stopImmediatePropagation(); globalThis.__submitHit = e.isTrusted; }, { capture: true, once: true }); });
+      await tap(fr, '.gs-primary');
+      check(await fr.evaluate(() => globalThis.__submitHit), 'compact: Submit with ten attachments is clickable');
+      fs.writeFileSync(path.join(out, 'attach-compact-10-640.png'), await p.screenshot());
+      for (let n = 10; n > 3; n--) await tap(fr, '.gs-att:last-child .gs-att-x');
+      await p.setViewportSize({ width: 1280, height: 900 });
+      const cbefore = (await uploads(p)).length;
+      await tap(fr, '.gs-primary');
+      await until(() => p.evaluate(() => !!document.getElementById('ultra-confirm')), 'compact: submitted with attachments', 60000 * 4);
+      const cup = (await uploads(p)).slice(cbefore);
+      const cfits = await Promise.all(cup.map((u, i) => u.name === cnames[i] && sameFile(u, { ext: ['.docx', '.xlsx', '.pdf'][i] })));
+      const ctext = await p.evaluate(() => __text());
+      check(cup.length === 3 && cfits.every(Boolean) && await p.evaluate(() => __clicks.length === 1), `compact: Ultra's upload sees the three files, Submit once (${cup.map((u) => `${u.name} ${u.type} ${u.size}`).join('; ')})`);
+      check(ctext.startsWith(ultraBefore.replace(/\n+$/, '')) && ctext.trim().endsWith(`Attached: ${cnames.join(', ')}`), `compact: Ultra's text box keeps the paper, the note naming the files after it (${JSON.stringify(ctext.slice(-160))})`);
+      const ckey = await fr.evaluate(() => GZ_WRITER_PAPER.current().key());
+      const cv = await until(() => submitted(ckey), 'the compact submitted version');
+      check((cv.attached || []).map((a) => a.name).join('|') === cnames.join('|'), 'compact: the submitted version keeps what was attached');
+      await p.close();
+      // The external-file API can supply an arbitrary filename; the note remains plain text in real Quill.
+      await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('writerSubmit:'))); });
+      ({ p, el, fr } = await openCompact());
+      await fr.evaluate(() => GZ_WRITER_SUBMIT_SHEET.open(GZ_WRITER_PAPER.current(), null, { attach: { key: 'missing', kind: 'pdf', title: 'missing' } }));
+      await sheetOpen(fr);
+      await until(() => fr.evaluate(() => !!document.querySelector('.gs-err').textContent), 'missing document refused');
+      const inertName = '<img src=x onerror=globalThis.__filenameInjected=1>**[notes]**$&{names}.bin';
+      check(await fr.evaluate((name) => GZ_WRITER_SUBMIT_SHEET.add({ name, mime: 'application/octet-stream', bytes: new Uint8Array([1, 2, 3]) }), inertName), 'external file accepted by the sheet');
+      await ready(fr, 1, 'external file staged');
+      await tap(fr, '.gs-primary');
+      await until(() => p.evaluate(() => !!document.getElementById('ultra-confirm')), 'external file submitted');
+      check(await p.evaluate((name) => __text().includes(`Attached: ${name}`) && !document.querySelector('.ql-editor img') && !globalThis.__filenameInjected, inertName), 'HTML and Markdown in filenames remain inert text in Blackboard');
+      await p.close();
+      await setFull(true);
+    }
+
     // ---- a test: no sheet, nothing caught
     p = await context.newPage();
     watch(p, 'test');
