@@ -106,6 +106,8 @@ test('without a document id, a frame that now holds another document gets nothin
 test('success means the file ran to its end: an injection that fails, throws or stops short is reported', async () => {
   const send = (execute, protocol) => worker(execute, protocol).send({ type: 'glaze:load', files: ['lib/drafts.js'] }, { ...tab(), documentId: 'A' });
   assert.deepEqual(await send(() => Promise.reject(new Error('Frame with ID 3 was removed.'))), { ok: false, error: 'Frame with ID 3 was removed.' });
+  // Firefox, the site's grant taken back: a refusal content.js doesn't ask again.
+  assert.deepEqual(await send(() => Promise.reject(new Error('Missing host permission for the tab or frames'))), { ok: false, error: 'sender' });
   // Chrome: a file that throws leaves no last value. Firefox reports the error.
   assert.deepEqual(await send(() => Promise.resolve([{ frameId: 3, result: null }])), { ok: false, error: 'did not finish' });
   assert.deepEqual(await send(() => Promise.resolve([{ frameId: 3 }])), { ok: false, error: 'did not finish' });

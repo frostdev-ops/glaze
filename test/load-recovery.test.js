@@ -108,6 +108,21 @@ test('a retry gives up after a few minutes, and refusals and a removed extension
   assert.equal(r.asks.length, 1, 'the extension gone: not asked again');
 });
 
+test("the pop-up's own loads, refused with nobody waiting yet, leave no unhandled rejection", async () => {
+  const stray = [];
+  const seen = (e) => stray.push(e);
+  process.on('unhandledRejection', seen);
+  try {
+    const c = vm.createContext({ console, document: { documentElement: new El('html') } });
+    c.globalThis = c;
+    c.GZ_CTX = { t: (k) => k, need: () => Promise.reject(new Error('Missing host permission for the tab or frames')) };
+    vm.runInContext(read('features/popup.js'), c, { filename: 'features/popup.js' });
+    await new Promise((r) => setTimeout(r, 10));
+    await assert.rejects(c.GZ_POPUP.ready, /Missing host permission/, 'its waiters still see the failed load');
+  } finally { process.off('unhandledRejection', seen); }
+  assert.deepEqual(stray.map((e) => e?.message), []);
+});
+
 test('a retry in flight is the one a sync gets: no file is loaded twice', async () => {
   let release;
   const p = await boot((n) => (n === 1 ? undefined : new Promise((res) => { release = () => res({ ok: true }); })));
