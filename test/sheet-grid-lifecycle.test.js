@@ -9,7 +9,7 @@ const source = fs.readFileSync(require.resolve('../sheet-grid.js'), 'utf8');
 const KEY = 'doc:00000000-0000-4000-8000-000000000001';
 const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(setImmediate); };
 const frame = (options = {}) => {
-  const doc = { activeElement: null, hidden: false, listeners: [] }, life = {}, timers = new Map(), data = {};
+  const doc = { activeElement: null, hidden: false, listeners: [] }, life = {}, lives = [], changes = new Set(), timers = new Map(), data = {};
   let tick = 0;
   const store = { get: async (keys) => Object.fromEntries([].concat(keys).filter((k) => data[k] !== undefined).map((k) => [k, structuredClone(data[k])])),
     set: async (values) => Object.assign(data, structuredClone(values)), remove: async (keys) => { for (const k of [].concat(keys)) delete data[k]; } };
@@ -31,7 +31,7 @@ const frame = (options = {}) => {
   doc.createElement = element; doc.createElementNS = (_, tag) => element(tag);
   doc.querySelector = (s) => doc.root.querySelector(s); doc.querySelectorAll = (s) => doc.root.querySelectorAll(s);
   doc.getElementById = (id) => doc.querySelector(`#${id}`);
-  doc.addEventListener = (type, f) => doc.listeners.push({ type, f });
+  doc.addEventListener = (type, f, opts) => doc.listeners.push({ type, f, opts });
   const fire = (target, type, more = {}) => {
     const e = { target, type, key: '', preventDefault() { this.defaultPrevented = true; }, stopPropagation() { this.stopped = true; }, ...more };
     for (let el = target; el && !e.stopped; el = el.parentNode) el.dispatchEvent?.(e);
@@ -40,13 +40,13 @@ const frame = (options = {}) => {
   };
   doc.fire = fire;
   const ctx = vm.createContext({ ...(options.ctx || {}), console: { error() {} }, document: doc, Map, Set, Uint8Array, structuredClone, performance, Intl,
-    innerWidth: 640, innerHeight: 900, GZ_SHEET_MODEL: M, GZ_SHEET_FORMULA: require('../lib/sheet-formula.js'),
+    AbortController, innerWidth: 640, innerHeight: 900, GZ_SHEET_MODEL: M, GZ_SHEET_FORMULA: require('../lib/sheet-formula.js'),
     GZ_SHEET_CALC: CALC, GZ_SHEET_NUMFMT: NF, GZ_SHEET_DATA: options.SD || SD,
-    chrome: { storage: { local: store, onChanged: { addListener() {} } } },
+    chrome: { storage: { local: store, onChanged: { addListener: (f) => changes.add(f), removeListener: (f) => changes.delete(f) } } },
     getComputedStyle: () => ({ fontSize: '13px', fontFamily: 'Arial' }),
-    ResizeObserver: class { observe() {} }, requestAnimationFrame: () => 1,
+    ResizeObserver: class { observe() {} disconnect() {} }, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
     setTimeout: (fn, ms) => { timers.set(++tick, { fn, ms }); return tick; }, clearTimeout: (id) => timers.delete(id),
-    addEventListener: (name, fn) => { life[name] = fn; } });
+    addEventListener: (name, fn, opts) => { life[name] = fn; lives.push({ name, fn, opts }); } });
   vm.runInContext(source, ctx);
   const wb = options.wb || M.workbook();
   const view = ctx.GZ_SHEET_GRID.mount({ key: KEY, wb, fresh: true, papers: P, sigs: new Map(), t: (k) => k,
@@ -55,7 +55,7 @@ const frame = (options = {}) => {
   const el = (id) => doc.getElementById(id), key = (name, more = {}) => fire(doc.activeElement, 'keydown', { key: name, ...more });
   const type = (text) => { key(text[0]); const editor = el('gx-edit'); editor.value = text; fire(editor, 'input'); };
   const unload = () => { const e = { prevented: false, returnValue: undefined, preventDefault() { this.prevented = true; } }; life.beforeunload(e); return e; };
-  return { doc, view, wb, data, timers, fire, el, key, type, unload };
+  return { doc, view, wb, data, timers, fire, el, key, type, unload, life, lives, changes, store };
 };
 
 test('beforeunload protects uncommitted cell text with the browser prompt and saves it; clean views do not prompt', async () => {
@@ -177,4 +177,19 @@ test('the grid tracks each applied operation with the codec and refuses a struct
   f.key('+', { ctrlKey: true });
   assert.equal(calls.length, before, 'a locked insert is not applied or tracked');
   await settle();
+});
+
+test('dispose ends every listener outside the grid, so an unmounted grid neither reads storage nor redraws again', async () => {
+  const f = frame();
+  assert.equal(typeof f.view.dispose, 'function', 'writer-kinds.js unmount calls it');
+  assert.equal(f.changes.size, 1, 'the storage listener');
+  const outside = [...f.doc.listeners, ...f.lives];
+  assert.ok(outside.length >= 7 && outside.every((l) => l.opts?.signal), `every page listener ends with the grid (${outside.filter((l) => !l.opts?.signal).map((l) => l.type || l.name)})`);
+  f.type('kept'); f.key('Enter');
+  assert.equal(await f.view.save(), true);
+  await f.view.dispose();
+  assert.equal(f.changes.size, 0, 'storage changes no longer reach it');
+  assert.ok(outside.every((l) => l.opts.signal.aborted));
+  assert.equal(f.doc.getElementById('gx-grid'), null, 'its view is gone');
+  assert.equal(f.timers.size, 0, 'no timer left');
 });

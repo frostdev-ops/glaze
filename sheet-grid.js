@@ -291,6 +291,9 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     const shown0 = () => o.show(wb);
     const root = document.documentElement;
     const isField = (el) => !!el?.closest?.('input, textarea, select');
+    // Everything the grid listens to outside itself ends with dispose (writer-kinds.js unmount).
+    const life = new AbortController(), { signal } = life;
+    let gone = false;
 
     // ---- the chrome: Documents and the title; the toolbar; the formula bar; the grid; the sheet tabs; the status bar
     const state = h('span', { class: 'gp-state' });
@@ -548,7 +551,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       if (scroller.scrollLeft + scroller.clientWidth > space.offsetWidth - 300 && ext.cols < MAX_VIEW_COLS) reach(0, ext.cols + 10 - MORE_COLS);
       draw();
     }, { passive: true });
-    new ResizeObserver(() => { layout(); draw(true); }).observe(gridEl);
+    const sizing = new ResizeObserver(() => { layout(); draw(true); });
+    sizing.observe(gridEl);
 
     // Scrolls the cell into view, past the frozen panes.
     const reveal = (r, c) => {
@@ -727,6 +731,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       if (rev == null || rev <= (rec?.revision || 0)) return;
       if (busy() || editing) { foreign = true; return; }
       const got = await SD.read((ks) => chrome.storage.local.get(ks), key).catch(() => null);
+      if (gone) return;
       if (!got || busy() || editing) { foreign = !!got; return; }
       wb = got.wb; rec = got.rec; sigs = got.sigs; lastVersion = rec.lastVersion || lastVersion;
       begin(); undos.length = 0; redos.length = 0; undoBytes = 0;
@@ -742,10 +747,10 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       if (saving) saving.then(() => theirs(rev)); else theirs(rev);
     };
     chrome.storage.onChanged.addListener(onStore);
-    addEventListener('pagehide', () => { if (busy()) flush(); });
+    addEventListener('pagehide', () => { if (busy()) flush(); }, { signal });
     // A tab closed while a save waits: the browser asks first, as for a PDF's unsaved form.
-    addEventListener('beforeunload', (e) => { if (busy()) { commit(); flush(); e.preventDefault(); e.returnValue = ''; } });
-    document.addEventListener('visibilitychange', () => { if (document.hidden && busy()) flush(); });
+    addEventListener('beforeunload', (e) => { if (busy()) { commit(); flush(); e.preventDefault(); e.returnValue = ''; } }, { signal });
+    document.addEventListener('visibilitychange', () => { if (document.hidden && busy()) flush(); }, { signal });
     // Documents: what is unsaved goes first (a frame of a school's page replaces itself, as papers.js's links do).
     back?.addEventListener('click', (e) => {
       if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -1162,7 +1167,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       el.querySelector('[role^="menuitem"]:not([disabled])')?.focus();
     };
     const below = (b) => { const r = b.getBoundingClientRect(); return { x: r.left, y: r.bottom + 4, h: r.height + 8 }; };
-    document.addEventListener('pointerdown', (e) => { if (menu && !menu.el.contains(e.target) && !menu.opener?.contains(e.target)) closeMenu(); }, true);
+    document.addEventListener('pointerdown', (e) => { if (menu && !menu.el.contains(e.target) && !menu.opener?.contains(e.target)) closeMenu(); }, { capture: true, signal });
     const toggle = (b, items, label) => b.addEventListener('click', () => { if (menu?.opener === b) { closeMenu(true); return; } commit(); openMenu(typeof items === 'function' ? items() : items, below(b), { opener: b, label }); });
     toggle(fmtB, () => {
       const now = NF.code(fmtOf(cellAt(...sel.active)));
@@ -1355,8 +1360,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       marquee = { sheet: S().id, g: range(g.r0, g.c0, r1, c1) };
       overlay();
     };
-    document.addEventListener('copy', (e) => copyOut(e, false));
-    document.addEventListener('cut', (e) => copyOut(e, true));
+    document.addEventListener('copy', (e) => copyOut(e, false), { signal });
+    document.addEventListener('cut', (e) => copyOut(e, true), { signal });
     const cellOf = (x, r, c) => {
       const formatted = (cell) => { if (x.fmt && cell.t === 'n') cell.s = M.internStyle(wb, { fmt: x.fmt }); return cell; };
       if (x.formula) return formatted({ t: 'n', v: 0, f: F.normalize(fromR1C1(x.formula, r, c)) });
@@ -1398,7 +1403,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       const op = ops.length > 1 ? { op: 'batch', ops } : ops[0];
       apply(op, { big: cells.length >= BIG, after: () => setSel({ active: [r0, c0], anchor: [r0, c0], ranges: [range(r0, c0, r0 + rows - 1, c0 + cols - 1)] }, { scroll: false }) });
       if (clip?.cut) { clip = null; marquee = null; overlay(); }
-    });
+    }, { signal });
 
     // ---- the keyboard on the grid
     const pageRows = () => Math.max(1, Math.floor((vh - HH - FH) / 20) - 1), pageCols = () => Math.max(1, Math.floor((vw - HW - FW) / 64) - 1);
@@ -1462,7 +1467,19 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     sizes(); layout(); tabsDraw(); told(); circular(); drawNow(true);
     gridEl.focus({ preventScroll: true });
     const save = async () => { if (!commit()) return false; await flush(); return !busy(); };
-    return { pages: () => wb.sheets.length, say, ready: () => true, save,
+    // The host saved first (writer-kinds.js): a write still in flight lands, then nothing of this grid listens or runs.
+    const dispose = async () => {
+      if (gone) return;
+      gone = true;
+      await saving?.catch(() => {});
+      life.abort(); chrome.storage.onChanged.removeListener(onStore); sizing.disconnect();
+      clearTimeout(timer); timer = 0; clearTimeout(sayTimer); clearTimeout(liveTimer);
+      if (frame) cancelAnimationFrame(frame);
+      frame = 0;
+      closeMenu();
+      view.remove();
+    };
+    return { pages: () => wb.sheets.length, say, ready: () => true, save, dispose,
       file: async () => { if (!await save()) throw new Error('not saved'); const f = await fileNow(); return { bytes: f.bytes, mime: f.mime, ext: f.name.slice(f.name.lastIndexOf('.')), name: f.name }; } };
   };
 
