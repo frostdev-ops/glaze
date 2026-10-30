@@ -71,7 +71,7 @@ test('stored PDFs are bounded before decoding, including dishonest size fields',
   const S = ctx.GZ_PDF_KIND.STORE;
   let decoded = 0;
   ctx.atob = () => { decoded++; return ''; };
-  assert.equal(S.get({ file: 'A'.repeat(4 * Math.ceil(S.max / 3) + 4), size: 1 }), null);
+  assert.ok(S.get({ file: 'A'.repeat(4 * Math.ceil(S.max / 3) + 4), size: 1 }) === null, 'oversized encoded bytes are refused');
   assert.equal(decoded, 0, 'reject the encoded allocation before decoding');
   assert.equal(S.get({ file: 'AAAA', size: S.max + 1 }), null);
   assert.equal(decoded, 0, 'reject an oversized declared file before decoding');
