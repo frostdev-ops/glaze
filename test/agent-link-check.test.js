@@ -7,7 +7,7 @@ const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '../scripts/agent-link-check.js'), 'utf8');
 
 test('T9 does not force the optional-grant worker to restart', () => {
-  assert.doesNotMatch(source, /ServiceWorker\.stop|runtime\.reload\(/, 'a forced restart cannot prove the idle restart decision');
+  assert.ok(!/ServiceWorker\.stop|runtime\.reload\(/.test(source), 'a forced restart cannot prove the idle restart decision');
 });
 
 test('T9 waits for SIGKILL to finish before releasing an owned process', async () => {
@@ -33,7 +33,21 @@ test('T9 retains a context when closing it fails so final cleanup can retry', as
   assert.equal(owned.contexts.has(context), true);
 });
 
+test('T9 stops a surviving browser helper after its parent has exited', async () => {
+  const child = { pid: 42, live: true }, signals = [];
+  const proc = { exitCode: 0, signalCode: null, kill: () => assert.fail('parent has exited') };
+  const owned = { procs: new Set([proc]) };
+  const context = { owned, processGroup: () => [child], sameProcess: (p) => p.live, sleep: async () => {},
+    process: { kill: (pid, sig) => { signals.push([pid, sig]); if (sig === 'SIGKILL') child.live = false; } },
+  };
+  vm.runInNewContext(source.slice(source.indexOf('async function stop(proc)'), source.indexOf('// ---- agents')), context);
+  await context.stop(proc);
+  assert.deepEqual(signals, [[42, 'SIGTERM'], [42, 'SIGKILL']]);
+  assert.equal(child.live, false);
+  assert.equal(owned.procs.has(proc), false);
+});
+
 test('T9 cleans up on SIGINT and SIGTERM as well as exceptions', () => {
-  for (const signal of ['SIGINT', 'SIGTERM']) assert.match(source, new RegExp(`['"]${signal}['"]`));
+  for (const signal of ['SIGINT', 'SIGTERM']) assert.ok(new RegExp(`['"]${signal}['"]`).test(source), signal);
   assert.match(source, /process\.once\(signal,/, 'route interruption through the same cleanup as a failed phase');
 });
