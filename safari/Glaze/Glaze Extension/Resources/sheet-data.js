@@ -3,7 +3,7 @@
 // one per sheet per 1,000-row band (writerSheet:<key>:<sheet id>:<band>), each stamped with the record revision that wrote it
 // (the record's parts: name → revision), so a read that meets a part of another write knows it is torn. A save writes only
 // the parts whose content changed and the book only when it changed (plan: a 32-bit hash per part, kept from the last
-// save), in the worker's one set() with the record and the index. Versions are the whole workbook packed as gzip and
+// save, with an exact per-part comparison when hashes match), in the worker's one set() with the record and the index. Versions are the whole workbook packed as gzip and
 // base64, up to 16 MB of them per spreadsheet. The card shows the active sheet's A1:F4 as text (glance), kept in the
 // record and its index row; search reads the cells' text (text). Kept package parts (bytes) travel tagged in the book, the
 // seam where the worker's blob store will take them by reference.
@@ -80,11 +80,18 @@ var GZ_SHEET_DATA = globalThis.GZ_SHEET_DATA || (() => {
   // `${id}:*` for all of its bands), or null for every one. → { book?, parts: { name: { rows } }, drop, sigs, changed }.
   const plan = (wb, sigs = new Map(), dirty = null) => {
     const next = new Map(), parts = {};
-    const take = (name, rows) => { if (!rows.length) return; const s = sig(JSON.stringify(rows)); next.set(name, s); if (sigs.get(name) !== s) parts[name] = { rows }; };
+    // Hashes reject changed parts quickly, but a matching 32-bit digest alone cannot prove a part is unchanged.
+    next.content = new Map();
+    const take = (name, rows) => {
+      if (!rows.length) return;
+      const json = JSON.stringify(rows), s = sig(json);
+      next.set(name, s); next.content.set(name, json);
+      if (sigs.get(name) !== s || sigs.content?.get(name) !== json) parts[name] = { rows };
+    };
     for (const sh of wb.sheets) {
       const id = String(sh.id);
       if (!dirty || dirty.has(`${id}:*`)) { for (const band of bandsOf(sh)) take(`${id}:${band}`, bandRows(sh, band)); continue; }
-      for (const [name, s] of sigs) if (name && name.split(':')[0] === id) next.set(name, s);
+      for (const [name, s] of sigs) if (name && name.split(':')[0] === id) { next.set(name, s); if (sigs.content?.has(name)) next.content.set(name, sigs.content.get(name)); }
       for (const name of dirty) {
         const [sid, band] = name.split(':');
         if (sid !== id || band === '*') continue;
@@ -93,9 +100,10 @@ var GZ_SHEET_DATA = globalThis.GZ_SHEET_DATA || (() => {
       }
     }
     const drop = [...sigs.keys()].filter((n) => n && !next.has(n));
-    const book = bookOf(wb), bsig = sig(JSON.stringify(book));
-    const bookChanged = sigs.get('') !== bsig;
+    const book = bookOf(wb), json = JSON.stringify(book), bsig = sig(json);
+    const bookChanged = sigs.get('') !== bsig || sigs.content?.get('') !== json;
     next.set('', bsig);
+    next.content.set('', json);
     return { book: bookChanged ? book : undefined, parts, drop, sigs: next, changed: bookChanged || Object.keys(parts).length > 0 || drop.length > 0 };
   };
 
@@ -138,8 +146,11 @@ var GZ_SHEET_DATA = globalThis.GZ_SHEET_DATA || (() => {
       const parts = new Map();
       if (!names.every((n) => { const p = got[keyOf(key, n)]; if (!p || p.rev !== rec.parts[n] || !Array.isArray(p.rows)) return false; parts.set(n, p.rows); return true; })) continue;
       const wb = join(rec.book || bookOf(GZ_SHEET_MODEL_OR().workbook()), parts);
-      const sigs = new Map([...parts].map(([n, rows]) => [n, sig(JSON.stringify(rows))]));
-      sigs.set('', sig(JSON.stringify(rec.book || null)));
+      const content = new Map([...parts].map(([n, rows]) => [n, JSON.stringify(rows)]));
+      content.set('', JSON.stringify(rec.book || null));
+      const sigs = new Map([...content].map(([n, json]) => [n, sig(json)]));
+      sigs.content = content;
+      sigs.revision = rec.revision || 0;
       return { rec, wb, sigs };
     }
     throw new Error('torn read of a spreadsheet');
@@ -148,12 +159,13 @@ var GZ_SHEET_DATA = globalThis.GZ_SHEET_DATA || (() => {
   // book when it changed, with the card's text, the search text and the counts; a packed version ({ reason, gz, cells })
   // when one is asked for. Nothing is sent when nothing changed and nothing else is asked. show: a cell's shown text.
   // → { sigs (for the next write; the old ones if the write fails, as it throws), saved (the worker's answer, or null) }.
-  const write = async (papers, key, wb, sigs, { patch = {}, dirty = null, version = null, show = plain, reason } = {}) => {
+  const write = async (papers, key, wb, sigs, { patch = {}, dirty = null, version = null, show = plain, reason, base = sigs?.revision ?? 0 } = {}) => {
     const p = plan(wb, sigs, dirty);
     if (!p.changed && !version && !Object.keys(patch).length) return { sigs, saved: null };
     const m = measure(wb);
     const saved = await papers.save(key, { kind: 'sheet', ...(p.book && { book: p.book }), grid: glance(wb, show), text: text(wb, show), cells: m.cells, sheets: m.sheets, ...patch },
-      { parts: p.parts, drop: p.drop, changed: p.changed, ...(version && { version }), ...(reason && { reason }) });
+      { base, parts: p.parts, drop: p.drop, changed: p.changed, ...(version && { version }), ...(reason && { reason }) });
+    p.sigs.revision = saved.paper.revision;
     return { sigs: p.sigs, saved };
   };
   const GZ_SHEET_MODEL_OR = () => (typeof GZ_SHEET_MODEL !== 'undefined' ? GZ_SHEET_MODEL : require('./lib/sheet-model.js'));

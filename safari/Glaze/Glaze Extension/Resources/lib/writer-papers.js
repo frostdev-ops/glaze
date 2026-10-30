@@ -14,7 +14,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
   const CAP = { versions: 40, bytes: 4e6, packed: 16e6, every: 10 * 60e3, words: 100, share: 0.15, presets: 20, trash: 30 * 864e5 };
   // A part's name: a sheet's id and a band of its rows; a part's key is under its record's.
   const PART_NAME = /^\d{1,9}:\d{1,5}$/;
-  const partsOf = (k, paper) => Object.keys(paper?.parts && typeof paper.parts === 'object' ? paper.parts : {}).filter((n) => PART_NAME.test(n)).map((n) => `${PART}${k}:${n}`);
+  const partsOf = (k, paper) => [...new Set([...Object.keys(paper?.parts || {}), ...(paper?.partDrops || [])])].filter((n) => PART_NAME.test(n)).map((n) => `${PART}${k}:${n}`);
   // The card's text a spreadsheet's index row carries (sheet-data.js glance): 4 rows of 6 short strings.
   const glance = (g) => Array.isArray(g) && g.length === 4 && g.every((row) => Array.isArray(row) && row.length === 6 && row.every((x) => typeof x === 'string' && x.length <= 40));
   const ID = /^_\d+_\d+$/, HOST = /^[a-z0-9.-]{1,253}(:\d{1,5})?$/i;
@@ -157,18 +157,29 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       // edited: the revision that last changed the document, its format or import choice. A save typed on an older
       // revision is a conflict only when one of those changed since: a rename (the Documents home's) in between is none.
       const changed = typeof own === 'boolean' ? own : JSON.stringify(paper.doc) !== JSON.stringify(prev?.doc) || JSON.stringify(paper.format) !== JSON.stringify(prev?.format) || (paper.keep === true) !== (prev?.keep === true);
+      // A parts plan belongs to the revision its editor read. Merging it into another editor's book would silently
+      // mix their bands; refuse before publishing anything, leaving the unsaved workbook in its editor.
+      if (paper.kind === 'sheet' && changed && base != null && (base < (prev?.edited ?? prev?.revision ?? 0) || (!prev && base > 0))) throw new Error('spreadsheet changed in another tab');
       if (written.length || dropped.length) {
         paper.parts = { ...(prev?.parts || {}) };
         for (const n of dropped) delete paper.parts[n];
         for (const n of written) paper.parts[n] = paper.revision;
       }
-      const limit = paper.parts ? CAP.packed : CAP.bytes;
+      // Publish cleanup names with the new parts map. A worker stopped after set() can retry them on its next save or
+      // remove them with the record. Revived bands are excluded before either the publication or the cleanup.
+      if (paper.parts) paper.partDrops = [...new Set([...(prev?.partDrops || []), ...dropped])].filter((n) => paper.parts[n] === undefined);
+      const limit = paper.kind === 'sheet' ? CAP.packed : CAP.bytes;
       paper.edited = changed ? paper.revision : prev?.edited ?? prev?.revision ?? 0;
       // Typing in a document in Trash (an editor still open on it, an assignment's Writer), or submitting it, takes it out:
       // what is written is never purged with it. A record that says it is in Trash (a backup's) says so itself.
       if ((changed || reason === 'sending' || reason === 'submit') && !('trashed' in patch)) delete paper.trashed;
       let version = null, history = null;
-      const retain = async (v) => { history = await cap([v, ...(history || await versionsOf(k))], limit); return v; };
+      const retain = async (v) => {
+        if (paper.kind === 'sheet' && v.bytes > limit) throw new RangeError('spreadsheet version size limit');
+        history = await cap([v, ...(history || await versionsOf(k))], limit);
+        if (paper.kind === 'sheet' && history.reduce((n, x) => n + x.bytes, 0) > limit) throw new RangeError('spreadsheet version size limit');
+        return v;
+      };
       const last = paper.lastVersion || 0, whole = reason === 'submit' || reason === 'sending';
       const conflict = prev?.doc && changed && base != null && base < (prev.edited ?? (prev.revision || 0));
       if (whole && conflict) await retain(snapshot(prev, 'conflict', t));
@@ -189,8 +200,10 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       // a submitted version or expose a half-saved paper. The worker serializes this read/compute/write.
       await store.set({ [PAPER + k]: paper, [INDEX]: await index(paper), ...(history ? { [VERSIONS + k]: history } : {}),
         ...Object.fromEntries(written.map((n) => [`${PART}${k}:${n}`, { ...parts[n], rev: paper.revision }])) });
-      const stale = dropped.filter((n) => !written.includes(n) && prev?.parts?.[n] !== undefined).map((n) => `${PART}${k}:${n}`);
-      if (stale.length) await store.remove(stale);
+      const stale = (paper.partDrops || []).map((n) => `${PART}${k}:${n}`);
+      // The document is already safely published. A cleanup refusal must not turn that successful save into a retry
+      // against an old revision; the persisted cleanup names keep deletion recoverable.
+      if (stale.length) { try { await store.remove(stale); } catch { /* retry on the next save or deletion */ } }
       seen.set(k, paper.revision);
       return { paper, version };
     });

@@ -63,7 +63,7 @@
     const got = rec?.key ? await GZ_SHEET_DATA.read(get, rec.key) : null;
     if (!got) return {};
     const { book, parts } = GZ_SHEET_DATA.split(got.wb);
-    return { book, grid: rec.grid, text: rec.text, cells: rec.cells, sheets: rec.sheets, parts: Object.fromEntries([...parts].map(([n, rows]) => [n, { rows }])) };
+    return { book, grid: got.rec.grid, text: got.rec.text, cells: got.rec.cells, sheets: got.rec.sheets, parts: Object.fromEntries([...parts].map(([n, rows]) => [n, { rows }])) };
   };
 
   // ---- files: .xlsx through GZ_SHEET_XLSX, .csv by the grid's reader
@@ -133,10 +133,12 @@
   // held kept as a version first (the 'import' save), every part it had before dropped. → the record.
   const into = async (key, f) => {
     const wb = await workbookOf(f), SD = GZ_SHEET_DATA;
-    const had = (await get([`writerPaper:${key}`]))[`writerPaper:${key}`];
+    let had = (await get([`writerPaper:${key}`]))[`writerPaper:${key}`];
+    const prior = had?.kind === 'sheet' ? await SD.read(get, key) : null;
+    if (prior) had = prior.rec;
     const sigs = new Map(Object.keys(had?.parts || {}).map((n) => [n, 'stale']));
-    const gz = await SD.pack(wb);
-    return (await SD.write(papers(), key, wb, sigs, { patch: { doc: null, words: 0 }, reason: 'import', show: shower(wb), version: { reason: 'start', gz, cells: SD.measure(wb).cells } })).saved.paper;
+    const checkpoint = prior?.wb || wb, gz = await SD.pack(checkpoint);
+    return (await SD.write(papers(), key, wb, sigs, { base: had?.revision || 0, patch: { doc: null, words: 0 }, reason: 'import', show: shower(wb), version: { reason: prior ? 'import' : 'start', gz, cells: SD.measure(checkpoint).cells } })).saved.paper;
   };
   // An empty attempt started as a spreadsheet (writer-kinds.js): what its record takes; the grid opens a blank workbook.
   const empty = () => ({ grid: Array.from({ length: 4 }, () => Array(6).fill('')), text: '', cells: 0, sheets: 1 });
@@ -145,7 +147,7 @@
   const edit = async (key, { fresh = false, host = null } = {}) => {
     if (!host) document.documentElement.dataset.mode = 'sheet';
     await need([...ENGINE, 'sheet-grid.js']);
-    const got = fresh ? null : await GZ_SHEET_DATA.read(get, key).catch((e) => { console.warn(e); return null; });
+    const got = fresh ? null : await GZ_SHEET_DATA.read(get, key);
     const wb = got?.wb || GZ_SHEET_MODEL.workbook();
     const v = GZ_SHEET_GRID.mount({ key, wb, rec: got?.rec || null, sigs: got?.sigs || new Map(), fresh: !got, t: host?.t || t, locale, papers: papers(), show: shower,
       local: GZ_WRITER_PAPERS.local(key), fileOf, download, exportLabel: () => (xlsx() ? 'Export .xlsx' : 'Export .csv'), host });

@@ -39,6 +39,9 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     // The index whose span holds pixel px (the last of a run of hidden ones before it never is).
     at(px) {
       if (px <= 0) return this.firstShown(0);
+      const total = this.total();
+      // Keep the binary search inside the last positive span, even if the end of the axis is hidden.
+      px = Math.min(px, total - Number.EPSILON * Math.max(1, total));
       let pos = 0, left = px;
       for (let step = 1 << Math.floor(Math.log2(this.n || 1)); step; step >>= 1) {
         const next = pos + step;
@@ -92,7 +95,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
   const LISTS = [...DAYS, ...MONTHS];
   const caseOf = (s) => (s === s.toUpperCase() ? 'up' : s === s.toLowerCase() ? 'low' : 'cap');
   const inCase = (s, k) => (k === 'up' ? s.toUpperCase() : k === 'low' ? s : s[0].toUpperCase() + s.slice(1));
-  const TAIL = /^(.*?)(\d+)(\D*)$/;
+  const TAIL = /^(.*?)(-?\d+)(\D*)$/;
   const steady = (xs) => xs.every((x, i) => i === 0 || Math.abs(x - xs[i - 1] - (xs[1] - xs[0])) < 1e-12);
   // A source column or row (cells or null) and how many cells come after it. o: back (up or left: the series runs the other
   // way, the nearest cell first), dr and dc (one step of the fill's way, for moving formulas), isDate(cell). → [{ cell, from }]
@@ -120,8 +123,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
         const ok = L === 1 || at.every((x, i) => i === 0 || (x - at[i - 1] + list.length) % list.length === step);
         if (ok) { const k = caseOf(src[0].v); value = (p) => inCase(list[(((at[0] + step * p) % list.length) + list.length) % list.length], k); }
       } else if (m && m.every((x) => x && x[1] === m[0][1] && x[3] === m[0][3])) {
-        const nums = m.map((x) => Number(x[2])), width = m[0][2].length, step = L === 1 ? 1 : nums[1] - nums[0];
-        if (L === 1 || steady(nums)) value = (p) => `${m[0][1]}${String(Math.abs(nums[0] + step * p)).padStart(width, '0')}${m[0][3]}`;
+        const nums = m.map((x) => Number(x[2])), width = m[0][2].replace(/^-/, '').length, step = L === 1 ? 1 : nums[1] - nums[0];
+        if (L === 1 || steady(nums)) value = (p) => { const n = nums[0] + step * p; return `${m[0][1]}${n < 0 ? '-' : ''}${String(Math.abs(n)).padStart(width, '0')}${m[0][3]}`; };
       }
     }
     const out = [];
@@ -157,8 +160,21 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     return rows;
   };
   const writeDelimited = (rows, delimiter) => rows.map((row) => row.map((v) => (/["\r\n]/.test(v) || v.includes(delimiter) ? `"${v.replace(/"/g, '""')}"` : v)).join(delimiter)).join('\r\n');
-  // A CSV's delimiter: the one of , ; and tab its first line has most of.
-  const sniff = (text) => { const line = String(text).replace(/^﻿/, '').split(/\r?\n/, 1)[0]; return [',', ';', '\t'].map((d) => [d, line.split(d).length]).sort((a, b) => b[1] - a[1])[0][0]; };
+  // A CSV's delimiter: count separators in the first record, outside quoted fields (which may span lines).
+  const sniff = (text) => {
+    const counts = new Map([[',', 0], [';', 0], ['\t', 0]]);
+    text = String(text).replace(/^﻿/, '');
+    let quoted = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '"') { if (quoted && text[i + 1] === '"') i++; else quoted = !quoted; }
+      else if (!quoted) {
+        if (ch === '\r' || ch === '\n') break;
+        if (counts.has(ch)) counts.set(ch, counts.get(ch) + 1);
+      }
+    }
+    return [...counts].sort((a, b) => b[1] - a[1])[0][0];
+  };
   const sig = (s) => { s = String(s).replace(/\r\n?/g, '\n').replace(/\n$/, ''); let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(16).padStart(8, '0'); };
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   // What a copy puts on the clipboard: the shown text as TSV (a field quoted only for a tab, a line break or a leading quote,
@@ -574,11 +590,20 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       drawNow(false);
     };
     // Moves the active cell (extend: the selection's far corner instead).
-    const move = (dr, dc, extend = false) => {
-      if (extend) { const [er, ec] = end(sel), [r, c] = clampRC(er + dr, ec + dc); setSel(select(sel, r, c, { extend: true })); }
-      else { const [r, c] = clampRC(sel.active[0] + dr, sel.active[1] + dc); setSel(select(null, r, c)); }
+    const shownIndex = (Z, i, by) => {
+      const start = i, step = by < 0 ? -1 : 1;
+      while (i >= 0 && i < Z.n && !Z.size(i)) i += step;
+      if (i >= 0 && i < Z.n) return i;
+      i = start;
+      while (i >= 0 && i < Z.n && !Z.size(i)) i -= step;
+      return Math.max(0, Math.min(i, Z.n - 1));
     };
-    const moveTo = (r, c, extend = false) => { [r, c] = clampRC(r, c); setSel(extend ? select(sel, r, c, { extend: true }) : select(null, r, c)); };
+    const shownRC = (r, c, dr, dc) => [shownIndex(R, r, dr), shownIndex(C, c, dc)];
+    const move = (dr, dc, extend = false) => {
+      if (extend) { const [er, ec] = end(sel), [r, c] = shownRC(...clampRC(er + dr, ec + dc), dr, dc); setSel(select(sel, r, c, { extend: true })); }
+      else { const [r, c] = shownRC(...clampRC(sel.active[0] + dr, sel.active[1] + dc), dr, dc); setSel(select(null, r, c)); }
+    };
+    const moveTo = (r, c, extend = false) => { [r, c] = shownRC(...clampRC(r, c), r - sel.active[0], c - sel.active[1]); setSel(extend ? select(sel, r, c, { extend: true }) : select(null, r, c)); };
 
     // ---- operations: every change goes through the engine; its inverse is the undo step; the cells it changed mark the
     // parts the next save writes
@@ -591,6 +616,10 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       if (v instanceof Map || v instanceof Set) { let n = 16; for (const x of v.values()) n += weigh(x, depth + 1); return n; }
       if (Array.isArray(v)) { let n = 16; for (const x of v) n += weigh(x, depth + 1); return n; }
       let n = 16; for (const k in v) n += k.length * 2 + weigh(v[k], depth + 1); return n;
+    };
+    const pushUndo = (entry) => {
+      undos.push(entry); undoBytes += entry.bytes;
+      while (undos.length > UNDO.steps || (undoBytes > UNDO.bytes && undos.length > 1)) undoBytes -= undos.shift().bytes;
     };
     const dirty = new Set();
     let dirtyAll = false, nextVersion = null, nextPatch = {};
@@ -618,9 +647,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       const before = { sheet: S().id, sel };
       let res;
       try { res = run(op); } catch (e) { refused(e); return null; }
-      undos.push({ op: res.inverse, ...before, bytes: weigh(res.inverse) });
-      undoBytes += undos[undos.length - 1].bytes;
-      while (undos.length > UNDO.steps || (undoBytes > UNDO.bytes && undos.length > 1)) undoBytes -= undos.shift().bytes;
+      pushUndo({ op: res.inverse, ...before, bytes: weigh(res.inverse) });
       redos.length = 0;
       mark(res, op);
       changed(res, op);
@@ -642,8 +669,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       let res;
       try { res = run(x.op); } catch (e) { refused(e); return; }
       const back = { op: res.inverse, sheet: x.sheet, sel, bytes: weigh(res.inverse) };
-      to.push(back);
-      if (redo) undoBytes += back.bytes;
+      if (redo) pushUndo(back); else to.push(back);
       mark(res, x.op);
       sel = x.sel;
       changed(res, x.op);
@@ -655,7 +681,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     // ---- saving: the parts the changes marked, the book and the card's text, a while after the last change; a version
     // every 10 minutes of editing, before a big change, a restore or on the first save. Leaving saves at once.
     let timer = 0, saving = null, again = false, lastVersion = rec?.lastVersion || 0, foreign = false;
-    const busy = () => !!(timer || saving || dirty.size || dirtyAll);
+    const busy = () => !!(timer || saving || dirty.size || dirtyAll || Object.keys(nextPatch).length || nextVersion || (editing && editing.surface.value !== editing.orig));
     const pill = () => { state.textContent = busy() ? t('Saving…') : ''; };
     const schedule = () => { clearTimeout(timer); timer = setTimeout(() => { timer = 0; flush(); }, 700); pill(); };
     const flush = () => {
@@ -667,10 +693,11 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
           const d = dirtyAll || foreign ? null : new Set(dirty), patch = nextPatch, pend = nextVersion;
           dirty.clear(); dirtyAll = false; nextPatch = {}; nextVersion = null;
           if (foreign) sigs = new Map([...sigs.keys()].map((n) => [n, 'stale']));
-          let version = pend ? await pend : null;
-          if (!version && (fresh || Date.now() - lastVersion >= EVERY)) version = { reason: fresh ? 'start' : 'auto', gz: await SD.pack(wb), cells: SD.measure(wb).cells };
+          let version = null;
           try {
-            const out = await SD.write(papers, key, wb, sigs, { dirty: d, version, patch: { ...(fresh && !patch.title && { title: '', named: false }), ...patch }, show: shown0() });
+            version = pend ? await pend : null;
+            if (!version && (fresh || Date.now() - lastVersion >= EVERY)) version = { reason: fresh ? 'start' : 'auto', gz: await SD.pack(wb), cells: SD.measure(wb).cells };
+            const out = await SD.write(papers, key, wb, sigs, { base: rec?.revision || 0, dirty: d, version, patch: { ...(fresh && !patch.title && { title: '', named: false }), ...patch }, show: shown0() });
             sigs = out.sigs;
             if (out.saved) { rec = out.saved.paper; lastVersion = rec.lastVersion || lastVersion; }
             fresh = false; foreign = false;
@@ -710,7 +737,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     chrome.storage.onChanged.addListener(onStore);
     addEventListener('pagehide', () => { if (busy()) flush(); });
     // A tab closed while a save waits: the browser asks first, as for a PDF's unsaved form.
-    addEventListener('beforeunload', (e) => { if (busy()) { flush(); e.preventDefault(); e.returnValue = ''; } });
+    addEventListener('beforeunload', (e) => { if (busy()) { commit(); flush(); e.preventDefault(); e.returnValue = ''; } });
     document.addEventListener('visibilitychange', () => { if (document.hidden && busy()) flush(); });
     // Documents: what is unsaved goes first (a frame of a school's page replaces itself, as papers.js's links do).
     back?.addEventListener('click', (e) => {
@@ -762,9 +789,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       let res;
       try { res = eng.edit(x.sheet, x.r, x.c, text); } catch (e) { refused(e); return false; }
       if (res.error) { say(t('There’s a problem with this formula.')); x.surface.focus(); return false; }
-      undos.push({ op: res.inverse, sheet: x.sheet, sel, bytes: weigh(res.inverse) });
-      undoBytes += undos[undos.length - 1].bytes;
-      while (undos.length > UNDO.steps) undoBytes -= undos.shift().bytes;
+      pushUndo({ op: res.inverse, sheet: x.sheet, sel, bytes: weigh(res.inverse) });
       redos.length = 0;
       reach(x.r, x.c);
       marquee = null;
@@ -1118,7 +1143,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       el.style.top = `${Math.max(4, at.y + hh > innerHeight - 4 ? at.y - hh - (at.h || 0) : at.y)}px`;
       el.addEventListener('keydown', (e) => {
         const all = [...el.querySelectorAll('[role^="menuitem"]:not([disabled])')], i = all.indexOf(document.activeElement);
-        if (e.key === 'Escape' || (e.key === 'Tab' && !e.target.matches('input'))) { e.preventDefault(); e.stopPropagation(); closeMenu(true); }
+        if (e.key === 'Tab' && !e.shiftKey && e.target.hasAttribute('role') && el.querySelector('input')) { e.preventDefault(); e.stopPropagation(); el.querySelector('input').focus(); }
+        else if (e.key === 'Escape' || (e.key === 'Tab' && !e.target.closest('.gx-fmt-row'))) { e.preventDefault(); e.stopPropagation(); closeMenu(true); }
         else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key) && !e.target.matches('input')) { e.preventDefault(); all[e.key === 'Home' ? 0 : e.key === 'End' ? all.length - 1 : (i + (e.key === 'ArrowUp' ? all.length - 1 : 1)) % all.length]?.focus(); }
       });
       el.getBoundingClientRect();
@@ -1244,7 +1270,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       openMenu([
         { act: 'rename', label: t('Rename'), run: () => renameTab(i) },
         { act: 'duplicate', label: t('Duplicate'), run: () => duplicate(i) },
-        { act: 'delete', label: t('Delete'), disabled: wb.sheets.length < 2, run: () => apply({ op: 'removeSheet', sheet: s.id }, { big: true }) },
+        { act: 'delete', label: t('Delete'), disabled: shown.length < 2, run: () => apply({ op: 'removeSheet', sheet: s.id }, { big: true }) },
         { act: 'hide', label: t('Hide'), disabled: shown.length < 2, run: () => apply({ op: 'gx-hide', sheet: s.id, hidden: true }) },
         ...hidden.map((x) => ({ act: 'unhide', label: t('Unhide {name}', { name: x.name }), run: () => apply({ op: 'gx-hide', sheet: x.id, hidden: false }) })), '-',
         { act: 'move-left', label: t('Move left'), disabled: i === 0, run: () => apply({ op: 'moveSheet', sheet: s.id, to: i - 1 }) },
@@ -1281,7 +1307,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       const [r, c] = hits[hitAt], next = swap(editText(r, c));
       const res = eng.edit(S().id, r, c, next);
       if (res.error) { say(t('There’s a problem with this formula.')); return; }
-      undos.push({ op: res.inverse, sheet: S().id, sel, bytes: weigh(res.inverse) }); redos.length = 0;
+      pushUndo({ op: res.inverse, sheet: S().id, sel, bytes: weigh(res.inverse) }); redos.length = 0;
       mark(res, { op: 'set' }); changed(res, { op: 'set' });
       search();
     };
@@ -1324,8 +1350,9 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     document.addEventListener('copy', (e) => copyOut(e, false));
     document.addEventListener('cut', (e) => copyOut(e, true));
     const cellOf = (x, r, c) => {
-      if (x.formula) return { t: 'n', v: 0, f: F.normalize(fromR1C1(x.formula, r, c)) };
-      if (x.value !== undefined) return typeof x.value === 'number' ? { t: 'n', v: x.value } : typeof x.value === 'boolean' ? { t: 'b', v: x.value } : { t: 's', v: x.value };
+      const formatted = (cell) => { if (x.fmt && cell.t === 'n') cell.s = M.internStyle(wb, { fmt: x.fmt }); return cell; };
+      if (x.formula) return formatted({ t: 'n', v: 0, f: F.normalize(fromR1C1(x.formula, r, c)) });
+      if (x.value !== undefined) return formatted(typeof x.value === 'number' ? { t: 'n', v: x.value } : typeof x.value === 'boolean' ? { t: 'b', v: x.value } : { t: 's', v: x.value });
       if (x.fmt === '@') return x.text ? { t: 's', v: x.text, s: M.internStyle(wb, { fmt: '@' }) } : null;
       const p = M.parseInput(x.text, { date1904: wb.date1904 });
       if (!p) return null;
@@ -1368,8 +1395,12 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     // ---- the keyboard on the grid
     const pageRows = () => Math.max(1, Math.floor((vh - HH - FH) / 20) - 1), pageCols = () => Math.max(1, Math.floor((vw - HW - FW) / 64) - 1);
     const filled = (r, c) => !!cellAt(r, c) && cellAt(r, c).t !== 'z';
+    let tabOut = false;
     gridEl.addEventListener('keydown', (e) => {
       if (e.target !== gridEl || editing) return;
+      if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return;
+      if (e.key === 'Tab' && tabOut) { tabOut = false; return; }
+      tabOut = e.key === 'Escape';
       const mod = e.ctrlKey || e.metaKey, k = e.key;
       const lim = { rows: ext.rows, cols: ext.cols };
       const arrow = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[k];
