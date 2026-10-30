@@ -332,11 +332,30 @@ const scan = () => {
     // A scan's card shows its page sharp: drawn at the card's size on a 2× screen, not a postage stamp scaled up.
     await worker.evaluate(async (s) => { await chrome.storage.sync.set(s); }, settings(true));
     await openHome();
+    await page.evaluate(() => {
+      const use = GZ_PDF_DOC.use, pages = new Map();
+      globalThis.pdfCheckDraws = [];
+      GZ_PDF_DOC.use = (...args) => {
+        const lib = use(...args), thumbnail = lib.thumbnail;
+        lib.thumbnail = (page, ...args) => {
+          if (!pages.has(page)) {
+            const render = page.render;
+            pages.set(page, render);
+            page.render = function (o) { globalThis.pdfCheckDraws.push([o.viewport.width, o.viewport.height]); return render.call(this, o); };
+          }
+          return thumbnail(page, ...args);
+        };
+        return lib;
+      };
+      globalThis.pdfCheckStopDraws = () => { GZ_PDF_DOC.use = use; for (const [page, render] of pages) page.render = render; };
+    });
     const scanned = path.join(tmp, 'Scanned worksheet.pdf');
     fs.writeFileSync(scanned, scan());
     await page.setInputFiles('#gd-file', scanned);
     const scanCard = await until(() => page.evaluate(() => { const c = [...document.querySelectorAll('.gd-card')].find((x) => x.querySelector('.gd-title')?.textContent === 'Scanned worksheet'), img = c?.querySelector('.gd-pic img'); return img?.complete && img.naturalWidth > 0 ? { w: img.naturalWidth, h: img.naturalHeight, src: img.src.length } : null; }), 'the scan\'s card');
     check(scanCard.w >= 300 && scanCard.src < 96e3, `a scanned page's card picture keeps its detail (${JSON.stringify(scanCard)})`);
+    const draws = await page.evaluate(() => { globalThis.pdfCheckStopDraws(); return globalThis.pdfCheckDraws; });
+    check(draws.length <= 2 && scanCard.w === 408 && scanCard.h === 528 && scanCard.src <= 64e3, `a scanned card takes at most two draws at full size (${JSON.stringify({ draws, card: scanCard })})`);
     // A PDF whose first page can't be read (its page tree points at nothing) is refused at import; one already kept says
     // so in the viewer instead of an empty viewer waiting for pages that never come.
     const broken = Buffer.from(fixture().toString('latin1').replace(/\/Kids \[(\d+) 0 R/, '/Kids [99 0 R'), 'latin1');
