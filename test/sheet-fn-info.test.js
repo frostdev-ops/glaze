@@ -208,3 +208,8 @@ test('CELL format recognizes Excel families rather than every date token', () =>
   const e = book(cells, { styles: formats.map(([fmt]) => ({ fmt })) });
   formats.forEach(([fmt, expected], i) => assert.equal(calc(e, `CELL("format",F${i + 1})`), expected, fmt));
 });
+
+test('native Excel confirms logical parity rejection and numeric sheet-name conversion', () => {
+  cases(book(), [['ISEVEN(TRUE)', '#VALUE!'], ['ISODD(TRUE)', '#VALUE!'], ['SHEET(1)', '#N/A']]);
+  cases(book({}, { sheets: ['1'] }), [['SHEET(1)', 1], ['SHEET("1")', 1]]);
+});

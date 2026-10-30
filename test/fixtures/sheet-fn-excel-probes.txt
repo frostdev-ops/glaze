@@ -1,0 +1,369 @@
+Excel 16.114.1 statistical/information review probes, 2026-10-30
+
+Native AppleScript automation under:
+nice -n 10 lockf -k /private/tmp/claude-501/glaze-heavy.lock osascript <probe>
+Excel was hidden. Each batch created and closed its own unsaved workbook. Excel
+was not running initially; each batch quit only the instance it launched.
+No owner workbook was read or changed.
+
+Common data (all other cells blank):
+A1=1, A2==NA(), A3=3; B1:B3=4,5,6; C1:C3=1,2,3;
+E1=="text", E2=="". Follow-up: D1:D3="x",TRUE,4.
+Names batch: sheet named "1", C1:C3=2,2,3.
+IFS batch: B4=1. Format batches: F1 onward contain 1, assigned the
+format in each line. Outputs used column Z, width 80.
+
+The initial/follow-up batches used a different Z row for each formula, so legacy
+TYPE(range) depended on that row. The precise, edge, blank and names batches
+reused Z2 and explicitly calculated it. Their numeric number format was
+0.000000000000000E+00. The validated batch used formula2 (modern array semantics);
+all other ordinary formulas used the legacy formula property. Explicit array TYPE
+used formula array at Y2. General string values show fewer significant digits.
+
+IMPORTANT: Excel's formula setter silently rejected some inputs, leaving a prior
+cached result. Those lines are raw automation observations, NOT Excel results for
+the requested expression. Rejected inputs: RANK.AVG with array literals (all such
+lines); _xlfn.RANK.AVG with array literals; COMBIN(1e308,1); expressions containing
+1e308 literals; MAXIFS(-C1:C4,...); MINIFS/MAXIFS/AVERAGEIFS with array literals.
+The validated batch records [stored: ] for rejected formulas. The blank and names
+batches verify RANK.AVG with real references. No finding relies on a rejected input.
+
+CELL(contents,blank) displays 0 but remains blank inside predicates. The edge and
+blank batches demonstrate why treating that display value as a number is wrong.
+TRIMMEAN's initial symmetric input did not distinguish cutoffs; the asymmetric
+edge/blank batches do. Decimal literals are shown as Excel stored them.
+
+Documentation read before probes:
+https://support.microsoft.com/en-us/excel/functions/stdev-s-function
+https://support.microsoft.com/en-us/excel/functions/var-s-function
+https://support.microsoft.com/en-us/excel/functions/pearson-function
+https://support.microsoft.com/en-us/excel/functions/forecast-and-forecast-linear-functions
+https://support.microsoft.com/en-us/excel/functions/averagea-function
+https://support.microsoft.com/en-us/excel/functions/stdeva-function
+https://support.microsoft.com/en-us/excel/functions/mina-function
+https://support.microsoft.com/en-us/excel/functions/mode-sngl-function
+https://support.microsoft.com/en-us/excel/functions/large-function
+https://support.microsoft.com/en-us/excel/functions/small-function
+https://support.microsoft.com/en-us/excel/functions/quartile-inc-function
+https://support.microsoft.com/en-us/excel/functions/trimmean-function
+https://support.microsoft.com/en-us/excel/functions/frequency-function
+https://support.microsoft.com/en-us/excel/functions/median-function
+https://support.microsoft.com/en-us/excel/functions/geomean-function
+https://support.microsoft.com/en-us/excel/functions/harmean-function
+https://support.microsoft.com/en-us/excel/functions/avedev-function
+https://support.microsoft.com/en-us/excel/functions/devsq-function
+https://support.microsoft.com/en-us/excel/functions/iseven-function
+https://support.microsoft.com/en-us/excel/functions/type-function
+https://support.microsoft.com/en-us/excel/functions/cell-function
+https://support.microsoft.com/en-us/excel/functions/sheet-function
+https://support.microsoft.com/en-us/excel/functions/sheets-function
+https://support.microsoft.com/en-us/excel/functions/combin-function
+https://support.microsoft.com/en-us/excel/functions/permut-function
+https://support.microsoft.com/en-us/excel/functions/norm-dist-function
+https://support.microsoft.com/en-us/excel/functions/rank-avg-function
+https://support.microsoft.com/en-us/excel/functions/percentile-exc-function
+
+Raw transcripts follow verbatim (including rejected setter observations).
+
+--- excel ---
+Excel version = 16.114.1
+AVERAGE(1,,3) = 1.333333333
+MEDIAN(1,,3) = 1
+STDEV(1,,3) = 1.527525232
+STDEV.P(1,,3) = 1.247219129
+MIN(1,,3) = 0
+AVERAGEA(4,) = 2
+STDEV(A1:A3) = #N/A
+STDEV.S(A1:A3) = #N/A
+STDEV.P(A1:A3) = #N/A
+VAR(A1:A3) = #N/A
+VAR.S(A1:A3) = #N/A
+VAR.P(A1:A3) = #N/A
+CORREL(A1:A3,B1:B3) = #N/A
+CORREL({1,"x",3},{4,#N/A,6}) = #N/A
+CORREL(G1:G3,H1:H3) = #DIV/0!
+PEARSON(G1:G3,H1:H3) = #DIV/0!
+SLOPE(G1:G3,H1:H3) = #DIV/0!
+INTERCEPT(G1:G3,H1:H3) = #DIV/0!
+RSQ(G1:G3,H1:H3) = #DIV/0!
+COVARIANCE.P(G1:G3,H1:H3) = #DIV/0!
+COVARIANCE.S(G1:G3,H1:H3) = #DIV/0!
+FORECAST(2,G1:G3,H1:H3) = #DIV/0!
+FORECAST.LINEAR(2,G1:G3,H1:H3) = #DIV/0!
+PEARSON({"x",2},{1,"y"}) = #DIV/0!
+SLOPE({"x",2},{1,"y"}) = #DIV/0!
+AVERAGEA({1,"2",TRUE,4}) = 1.666666667
+MAXA({1,"2",TRUE,4}) = 4
+MINA({1,"2",TRUE,4}) = 1
+STDEVA({1,"2",TRUE,4}) = 2.121320344
+STDEVPA({1,"2",TRUE,4}) = 1.5
+VARA({1,"2",TRUE,4}) = 4.5
+VARPA({1,"2",TRUE,4}) = 2.25
+MODE({2,1,1,2}) = 2
+MODE.SNGL({3,2,2,3}) = 3
+LARGE({1,2,3},1.5) = 2
+SMALL({1,2,3},1.5) = 1
+LARGE({1,2,3},0.5) = #NUM!
+QUARTILE({1,2,3,4},4.7) = 4
+QUARTILE.INC({1,2,3,4},-0.5) = #NUM!
+QUARTILE.EXC({1,2,3,4},3.7) = 3.75
+TRIMMEAN({1,2,9},1) = #NUM!
+TRIMMEAN({1,2,3,9},1) = #NUM!
+TRIMMEAN({1,2,3,4,5,6,7,8,9,100},0.5999999999999999) = 5.5
+INDEX(FREQUENCY({1,2,3,4,5},{4,2,4}),1) = 2
+INDEX(FREQUENCY({1,2,3,4,5},{4,2,4}),2) = 2
+INDEX(FREQUENCY({1,2,3,4,5},{4,2,4}),3) = 0
+INDEX(FREQUENCY({1,2,3,4,5},{4,2,4}),4) = 1
+MEDIAN(G1:G3) = #NUM!
+GEOMEAN(G1:G3) = #NUM!
+HARMEAN(G1:G3) = #N/A
+AVEDEV(G1:G3) = #NUM!
+DEVSQ(G1:G3) = #NUM!
+ISEVEN(TRUE) = #VALUE!
+ISODD(TRUE) = #VALUE!
+ISEVEN("2") = TRUE
+TYPE((A1,B1)) = 16
+TYPE(A1:A3) = 16
+CELL("type",E1) = l
+CELL("type",E2) = l
+CELL("contents",G1) = 0
+SHEET(1) = #N/A
+SHEETS(1) = #N/A
+FORECAST(2,{0,0},{1,1}) = #DIV/0!
+FORECAST.LINEAR(2,{0,0},{1,1}) = #DIV/0!
+PERMUT(0,0) = 1
+PERMUT(0.9,0) = 1
+COMBIN(-0.5,0) = #NUM!
+PERMUT(3,-0.5) = #NUM!
+COMBIN(3,-0.5) = #NUM!
+COMBIN(1029,514) = 1.4298E+308
+COMBIN(1030,515) = #NUM!
+COMBIN(1e308,1) = 
+PERMUT(171,171) = #NUM!
+NORM.S.INV(1e-300) = -37.0470963
+NORM.S.INV(0.999999999999999) = 7.941444487
+NORM.DIST(0,0,1e-300,FALSE) = 3.9894E+299
+NORM.DIST(1,0,1e-300,FALSE) = #NUM!
+STDEV.S({1000000000001,1000000000002,1000000000003}) = 1
+CORREL({1e150,2e150,3e150},{1e150,2e150,3e150}) = 1
+AVERAGEIFS(C1:C3,C1:C3,">0") = 2
+MAXIFS(C1:C3,C1:C3,">0") = 3
+CELL(format; @) = G
+CELL(format; 0.000) = F3
+CELL(format; 0.###) = F3
+CELL(format; yyyy) = G
+CELL(format; mmm) = G
+CELL(format; [h]:mm) = G
+CELL(format; 0.0E+00) = S1
+CELL(format; 0.00;[Blue]-0.00) = F2-
+CELL(format; 0.00;[Red]-0.00) = F2-
+CELL(format; "USD "0.00) = F2
+CELL(format; 0.00" days") = F2
+
+--- followup ---
+Excel version = 16.114.1
+TYPE(C1:C3) = 1
+TYPE({1,#N/A,3}) = 64
+TYPE(A1:A3) = 1
+TYPE({1,2}) = 64
+TYPE(E1:E2) = 16
+TYPE((C1,C2)) = 16
+TYPE(C1:C1) = 1
+TYPE((C1,C1)) = 16
+CELL("type",A2) = v
+CELL("type",C1) = v
+SHEETS("Sheet1") = #N/A
+SHEETS(TRUE) = #N/A
+SHEETS({1,2}) = #N/A
+SHEETS(1/0) = #DIV/0!
+AVERAGEA({1,"x",TRUE,4}) = 1.666666667
+AVERAGEA({TRUE,FALSE}) = #DIV/0!
+AVERAGEA({"x","y"}) = 0
+AVERAGEA(D1:D3) = 1.666666667
+MINA(D1:D3) = 0
+VARA(D1:D3) = 4.333333333
+VARA({1,"x",TRUE,4}) = 4.5
+MAXA({-1,"x",TRUE,-4}) = -1
+MAXA({TRUE}) = 0
+MINA({"x"}) = 0
+STDEVA({TRUE,FALSE}) = #DIV/0!
+AVERAGEA("x") = #VALUE!
+VARA("x") = #VALUE!
+SMALL({10,20,30,40},1.1) = 10
+SMALL({10,20,30,40},2.9) = 20
+SMALL({10,20,30,40},0.9) = #NUM!
+LARGE({10,20,30,40},1.1) = 30
+LARGE({10,20,30,40},2.9) = 20
+LARGE({10,20,30,40},4.1) = #NUM!
+QUARTILE.INC({1,2,3,4},4.7) = 4
+QUARTILE.EXC({1,2,3,4},0.9) = #NUM!
+QUARTILE.EXC({1,2,3,4},3.9) = 3.75
+PERMUT(-0.5,0) = #NUM!
+COMBIN(0.5,0.9) = 1
+PERMUT(0.5,0.9) = 1
+COMBIN(1e308,1) = 
+NORM.DIST(1,0,1e-200,FALSE) = #NUM!
+NORM.DIST(1,0,1e-150,FALSE) = 0
+NORM.DIST(1,0,1e-100,FALSE) = 0
+NORM.DIST(1,0,1e-300,TRUE) = 1
+NORM.DIST(1e308,-1e308,1,FALSE) = 
+NORM.DIST(1e308,-1e308,1,TRUE) = 
+CORREL({1e150,2e150,3e150},{1e150,2e150,3e150}) = 1
+PERCENTILE.EXC({1,2,3,4},0.1) = #NUM!
+PERCENTILE.INC({1,2,3,4},0.3) = 1.9
+RANK.AVG(2,{3,2,2,1}) = 
+
+--- precise ---
+Excel version = 16.114.1
+TYPE(C1:C3) = 1.000000000000000E+00
+TYPE(A1:A3) = 1.600000000000000E+01
+TYPE(E1:E2) = 2.000000000000000E+00
+TYPE((C1,C2)) = 1.600000000000000E+01
+TYPE({1,2}) = 6.400000000000000E+01
+RANK.AVG(2,{3,2,2,1}) = 6.400000000000000E+01
+SMALL({1,2,3},1.5) = 1.000000000000000E+00
+PERMUT(0,0) = 1.000000000000000E+00
+COMBIN(1029,514) = 1.429820686498900E+308
+NORM.S.DIST(1e200,FALSE) = #NUM!
+NORM.DIST(1,0,1e-200,FALSE) = #NUM!
+NORM.DIST(1,0,1e-150,FALSE) = 0.000000000000000E+00
+NORM.DIST(0,0,1e-300,FALSE) = 3.989422804014330E+299
+NORM.S.INV(1e-300) = -3.704709629936120E+01
+NORM.S.INV(0.999999999999999) = 7.941444487415980E+00
+STDEV.S({1000000000001,1000000000002,1000000000003}) = 1.000000000000000E+00
+CORREL({1e150,2e150,3e150},{1e150,2e150,3e150}) = 1.000000000000000E+00
+TRIMMEAN({1,2,3,4,5,6,7,8,9,100},0.5999999999999999) = 5.500000000000000E+00
+
+--- validated ---
+Excel version = 16.114.1
+RANK.AVG(2,{3,2,2,1}) =  [stored: ]
+_xlfn.RANK.AVG(2,{3,2,2,1}) =  [stored: ]
+TYPE(C1:C3) = 6.400000000000000E+01 [stored: =TYPE(C1:C3)]
+TYPE(E1:E2) = 6.400000000000000E+01 [stored: =TYPE(E1:E2)]
+TYPE({1,#N/A,3}) = 6.400000000000000E+01 [stored: =TYPE({1,#N/A,3})]
+PERMUT(3.1,3.9) = 6.000000000000000E+00 [stored: =PERMUT(3.1,3.9)]
+COMBIN(3.1,3.9) = 1.000000000000000E+00 [stored: =COMBIN(3.1,3.9)]
+AVERAGEA({1,"x",TRUE,4}) = 1.666666666666670E+00 [stored: =AVERAGEA({1,"x",TRUE,4})]
+FREQUENCY({1,2,3,4,5},{4,2,4}) = 2.000000000000000E+00 [stored: =FREQUENCY({1,2,3,4,5},{4,2,4})]
+
+--- formats ---
+Excel version = 16.114.1
+CELL(format; @) = G
+CELL(format; yyyy) = G
+CELL(format; mmm) = G
+CELL(format; [h]:mm) = G
+CELL(format; dd) = G
+CELL(format; mm) = G
+CELL(format; h) = G
+CELL(format; ss) = G
+CELL(format; h AM/PM) = G
+CELL(format; ss.00) = G
+CELL(format; yyyy-mm-dd) = G
+CELL(format; mmmm d, yyyy) = D4
+CELL(format; dddd, mmmm dd, yyyy) = D2
+CELL(format; mmm-yy) = D3
+CELL(format; mmm yyyy) = D3
+CELL(format; mm:ss) = G
+CELL(format; mm:ss.0) = G
+CELL(format; h:mm:ss.00) = D8
+CELL(format; [mm]:ss) = G
+CELL(format; [ss]) = G
+CELL(format; 0.00;[Red]-0.00) = F2-
+CELL(format; 0.00;[<=0]-0.00) = F2
+CELL(format; [$-409]m/d/yy) = D2
+CELL(format; 0.00;[Color10]-0.00) = F2-
+CELL(format; General;[Red]-General) = G-
+CELL(format; @;[Red]@) = G
+
+--- stored-formats ---
+Excel version = 16.114.1
+CELL(format; @) = G [stored: @]
+CELL(format; yyyy) = G [stored: yyyy]
+CELL(format; mmm) = G [stored: mmm]
+CELL(format; [h]:mm) = G [stored: [h]:mm]
+CELL(format; dd) = G [stored: dd]
+CELL(format; mm) = G [stored: mm]
+CELL(format; h) = G [stored: h]
+CELL(format; ss) = G [stored: ss]
+CELL(format; h AM/PM) = G [stored: h AM/PM]
+CELL(format; ss.00) = G [stored: ss.00]
+CELL(format; yyyy-mm-dd) = G [stored: yyyy-mm-dd]
+CELL(format; mmmm d, yyyy) = D4 [stored: mmmm d, yyyy]
+CELL(format; dddd, mmmm dd, yyyy) = D2 [stored: dddd, mmmm dd, yyyy]
+CELL(format; mmm-yy) = D3 [stored: mmm-yy]
+CELL(format; mmm yyyy) = D3 [stored: mmm yyyy]
+CELL(format; mm:ss) = G [stored: mm:ss]
+CELL(format; mm:ss.0) = G [stored: mm:ss.0]
+CELL(format; h:mm:ss.00) = D8 [stored: h:mm:ss.00]
+CELL(format; [mm]:ss) = G [stored: [mm]:ss]
+CELL(format; [ss]) = G [stored: [ss]]
+CELL(format; 0.00;[Red]-0.00) = F2- [stored: 0.00;[Red]-0.00]
+CELL(format; 0.00;[<=0]-0.00) = F2 [stored: 0.00;[<=0]-0.00]
+CELL(format; [$-409]m/d/yy) = D2 [stored: [$-409]m/d/yy]
+CELL(format; 0.00;[Color10]-0.00) = F2- [stored: 0.00;[Color10]-0.00]
+CELL(format; General;[Red]-General) = G- [stored: General;[Red]-General]
+CELL(format; @;[Red]@) = G [stored: General]
+
+--- ifs ---
+Excel version = 16.114.1
+MINIFS(C1:C4,B1:B4,">0") = 1.000000000000000E+00
+MAXIFS(-C1:C4,B1:B4,">0") = 1.000000000000000E+00
+MINIFS({5,6},{1,1},1) = 1.000000000000000E+00
+MAXIFS({5,6},{1,1},1) = 1.000000000000000E+00
+AVERAGEIFS({5,6},{1,1},1) = 1.000000000000000E+00
+CORREL({1,2;3,4},{1;2;3;4}) = 1.000000000000000E+00
+PEARSON({1,2;3,4},{1;2;3;4}) = 1.000000000000000E+00
+MINIFS(G1:G3,H1:H3,0) = 0.000000000000000E+00
+MAXIFS(G1:G3,H1:H3,0) = 0.000000000000000E+00
+TRIMMEAN({1,2,3,4,5,6,7,8,9,100},0.3999999999999999) = 5.500000000000000E+00
+
+--- edge ---
+Excel version = 16.114.1
+TRIMMEAN({1,2,4,8,16,32,64,128,256,1000},0.5999999999999999) = 4.200000000000000E+01 [stored: =TRIMMEAN({1,2,4,8,16,32,64,128,256,1000},0.599999999999999)]
+TRIMMEAN({1,2,4,8,16,32,64,128,256,1000},0.3999999999999999) = 6.375000000000000E+01 [stored: =TRIMMEAN({1,2,4,8,16,32,64,128,256,1000},0.399999999999999)]
+TRIMMEAN({1,2,4,8,16,32,64,128,256,1000},0.59999999999999) = 4.200000000000000E+01 [stored: =TRIMMEAN({1,2,4,8,16,32,64,128,256,1000},0.59999999999999)]
+CORREL({1,2;3,4},{1;2;3;4}) = 1.000000000000000E+00 [stored: =CORREL({1,2;3,4},{1;2;3;4})]
+LARGE({1,2,3},3.1) = #NUM! [stored: =LARGE({1,2,3},3.1)]
+TYPE(C1:C3) = 1.000000000000000E+00 [stored: =TYPE(C1:C3)]
+ISEVEN(TRUE) = #VALUE! [stored: =ISEVEN(TRUE)]
+CELL("type",E1) = l [stored: =CELL("type",E1)]
+ISNUMBER(CELL("contents",G1)) = FALSE [stored: =ISNUMBER(CELL("contents",G1))]
+SHEETS(5) = #N/A [stored: =SHEETS(5)]
+array TYPE(C1:C3) = 64
+
+--- blank ---
+Excel version = 16.114.1
+ISBLANK(CELL("contents",G1)) = TRUE [stored: =ISBLANK(CELL("contents",G1))]
+ISNUMBER(CELL("contents",G1)) = FALSE [stored: =ISNUMBER(CELL("contents",G1))]
+ISTEXT(CELL("contents",G1)) = FALSE [stored: =ISTEXT(CELL("contents",G1))]
+TYPE(CELL("contents",G1)) = 1.000000000000000E+00 [stored: =TYPE(CELL("contents",G1))]
+RANK.AVG(2,C1:C3) = 2.000000000000000E+00 [stored: =RANK.AVG(2,C1:C3)]
+RANK.EQ(2,C1:C3) = 2.000000000000000E+00 [stored: =RANK.EQ(2,C1:C3)]
+RANK(2,C1:C3) = 2.000000000000000E+00 [stored: =RANK(2,C1:C3)]
+TRIMMEAN({1,2,4,8,16,32,64,128,256,1000},0.599999999999999) = 4.200000000000000E+01 [stored: =TRIMMEAN({1,2,4,8,16,32,64,128,256,1000},0.599999999999999)]
+array TYPE(C1:C3) = 64
+
+--- names ---
+Excel version = 16.114.1
+SHEET(1) = 1.000000000000000E+00 [stored: =SHEET(1)]
+SHEET("1") = 1.000000000000000E+00 [stored: =SHEET("1")]
+SHEET(TRUE) = #N/A [stored: =SHEET(TRUE)]
+SHEET("TRUE") = #N/A [stored: =SHEET("TRUE")]
+SHEETS((C1,C2)) = 1.000000000000000E+00 [stored: =SHEETS((C1,C2))]
+RANK.AVG(2,C1:C3) = 2.500000000000000E+00 [stored: =RANK.AVG(2,C1:C3)]
+RANK.AVG(2,C1:C3,1) = 1.500000000000000E+00 [stored: =RANK.AVG(2,C1:C3,1)]
+PERCENTILE.INC(C1:C3,0.3) = 2.000000000000000E+00 [stored: =PERCENTILE.INC(C1:C3,0.3)]
+PERCENTILE.EXC(C1:C3,0.3) = 2.000000000000000E+00 [stored: =PERCENTILE.EXC(C1:C3,0.3)]
+array TYPE(C1:C3) = 64
+
+--- Other-lane local observations ---
+AVERAGE(1,,3) = 2
+MIN(1,,3) = 1
+Native Excel observations are in the first transcript above.
+
+--- Baseline measurement ---
+250000 numeric values; MAXA and MINA each threw:
+RangeError: Maximum call stack size exceeded
+LARGE and SMALL sorted their full numeric input (source inspection).
+1000 array-member ISFORMULA lookups in a 10000-cell array: 104.36579100000002 ms
+The deterministic lookup regression observed 1999800 member visits for 200 lookups.

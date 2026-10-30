@@ -381,3 +381,17 @@ test('TRIMMEAN floors exclusion counts without a 15-digit rounding snap', () => 
     ['TRIMMEAN({1,2,4,8,16,32,64,128,256,1000},0.3999999999999999)', 63.75],
   ]);
 });
+
+test('native Excel confirms omissions, empty pairs, modal ties and unsorted frequency bins', () => {
+  const e = book([[1, 4], ['#N/A', 5], [3, 6]], { D1: { f: 'FREQUENCY({1,2,3,4,5},{4,2,4})', a: 'D1:D4' } });
+  cases(e, [
+    ['MEDIAN(1,,3)', 1], ['MODE({2,1,1,2})', 2], ['TRIMMEAN({1,2,9},1)', '#NUM!'],
+    ['STDEV.S(A1:A3)', '#N/A'], ['VAR.S(A1:A3)', '#N/A'], ['CORREL(A1:A3,B1:B3)', '#N/A'],
+  ]);
+  close(e, [['STDEV(1,,3)', Math.sqrt(7 / 3)]]);
+  for (const name of ['CORREL', 'PEARSON', 'SLOPE', 'INTERCEPT', 'RSQ', 'COVARIANCE.P', 'COVARIANCE.S']) {
+    assert.equal(calc(e, `${name}(G1:G3,H1:H3)`), '#DIV/0!', name);
+  }
+  cases(e, [['FORECAST(2,G1:G3,H1:H3)', '#DIV/0!'], ['FORECAST.LINEAR(2,G1:G3,H1:H3)', '#DIV/0!']]);
+  assert.deepEqual(['D1', 'D2', 'D3', 'D4'].map((ref) => val(e, ref)), [2, 2, 0, 1]);
+});
