@@ -286,3 +286,13 @@ test('golden cases', () => {
     ['SUM(CHOOSECOLS(Data!K2:M6,3))', 410], ['INDEX(VSTACK({1,2},{3,4}),2,1)', 3],
   ]);
 });
+
+// Full-column results beyond CAP.cells fail explicitly; small slices use the complete reference extent.
+test('TAKE and DROP preserve reference extents and lift count arrays', () => {
+  const e = book({ A1: 9, A2: 8, A5001: 7 });
+  cases(e, [
+    ['INDEX(TAKE(A:A,-2),1)', 0], ['INDEX(TAKE(A:A,-2),2)', 0], ['ROWS(DROP(A:A,2))', '#NUM!'],
+    ['ROWS(DROP(A:A,1048574))', 2], ['ROWS(TAKE(A1:A5002,6000))', 5002],
+    ['INDEX(TAKE(A:A,{1,-1}),1,2)', 0], ['INDEX(DROP({1;2;3},{1,-1}),1,2)', 1],
+  ]);
+});
