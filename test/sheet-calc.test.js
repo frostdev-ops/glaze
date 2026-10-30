@@ -646,3 +646,15 @@ test('LET locals hide workbook names in the dependency graph', () => {
   assert.equal(val(e, 'B1'), 6);
   assert.equal(val(e, 'B2'), 9);
 });
+
+// Excel refuses these formula strings rather than evaluating a duplicate binding or a dotted local name.
+test('editing refuses duplicate and dotted LET locals without changing the cell', () => {
+  const e = book({ A1: 42 });
+  for (const f of ['=LET(x,1,x,2,x)', '=LET(foo.bar,2,foo.bar)']) {
+    const result = e.edit(1, 0, 0, f);
+    assert.ok(result.error, f);
+    assert.equal(val(e, 'A1'), 42);
+  }
+  assert.equal(e.edit(1, 0, 0, '=LET(x,1,LET(x,2,x)+x)').error, undefined);
+  assert.equal(val(e, 'A1'), 3, 'a nested LET can shadow its outer local');
+});
