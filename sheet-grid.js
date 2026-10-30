@@ -1384,8 +1384,11 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     // ---- the keyboard on the grid
     const pageRows = () => Math.max(1, Math.floor((vh - HH - FH) / 20) - 1), pageCols = () => Math.max(1, Math.floor((vw - HW - FW) / 64) - 1);
     const filled = (r, c) => !!cellAt(r, c) && cellAt(r, c).t !== 'z';
+    let tabOut = false;
     gridEl.addEventListener('keydown', (e) => {
       if (e.target !== gridEl || editing) return;
+      if (e.key === 'Tab' && tabOut) { tabOut = false; return; }
+      tabOut = e.key === 'Escape';
       const mod = e.ctrlKey || e.metaKey, k = e.key;
       const lim = { rows: ext.rows, cols: ext.cols };
       const arrow = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[k];
