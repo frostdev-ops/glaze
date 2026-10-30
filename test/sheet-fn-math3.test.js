@@ -11,6 +11,7 @@ const path = require('node:path');
 const M = require('../lib/sheet-model.js');
 const C = require('../lib/sheet-calc.js');
 require('../lib/sheet-fn-math.js');
+require('../lib/sheet-fn-math2.js');
 require('../lib/sheet-fn-logical.js');
 require('../lib/sheet-fn-lookup.js');
 require('../lib/sheet-fn-math3.js');
@@ -104,10 +105,10 @@ test('COTH CSCH SECH ACOT: the pages\' examples; Excel applies no 2^27 limit to 
   const e = book();
   shown(e, [['COTH(2)', '1.037'], ['CSCH(1.5)', '0.4696'], ['SECH(45)', '5.73E-20'], ['SECH(30)', '1.87E-13'], ['ACOT(2)', '0.4636']]);
   cases(e, [['COTH(0)', '#DIV/0!'], ['CSCH(0)', '#DIV/0!'], ['COTH(2^27)', 1], ['COTH(-2^27)', -1], ['COTH(1E+300)', 1], ['CSCH(2^27)', 0], ['CSCH(-800)', 0],
-    ['SECH(2^27)', 0], ['SECH(-1000)', 0], ['COTH(-1E-300)', -1e300], ['COTH("x")', '#VALUE!'], ['ACOT("x")', '#VALUE!'],
+    ['SECH(2^27)', 0], ['SECH(-1000)', 0], ['COTH("x")', '#VALUE!'], ['ACOT("x")', '#VALUE!'],
     // ACOT runs from 0 to pi: a negative number's angle is past pi/2.
     ['ACOT(0)', Math.PI / 2], ['ACOT(1E+300)', 1e-300], ['ACOT(-1E+300)', Math.PI], ['ACOT(-1E-300)', Math.PI / 2]]);
-  near(e, [['ACOT(-1)', 2.35619449019234], ['ACOT(-2)', 2.67794504458899], ['SECH(45)', 5.72503716109879e-20], ['COTH(2)', 1.03731472072755], ['CSCH(1.5)', 0.469642440595225]]);
+  near(e, [['COTH(-1E-300)', -1e300], ['ACOT(-1)', 2.35619449019234], ['ACOT(-2)', 2.67794504458899], ['SECH(45)', 5.72503716109879e-20], ['COTH(2)', 1.03731472072755], ['CSCH(1.5)', 0.469642440595225]]);
 });
 
 test('CEILING.PRECISE FLOOR.PRECISE ISO.CEILING: the pages\' examples; significance\'s sign ignored, 0 gives 0', () => {
@@ -140,24 +141,28 @@ test('COMBINA and PERMUTATIONA: the pages\' examples; arguments truncated; Excel
     ['COMBINA("x",1)', '#VALUE!'],
     // The page says no objects is #NUM!; Excel counts the one empty arrangement, and none of length 1.
     ['PERMUTATIONA(0,0)', 1], ['PERMUTATIONA(0,1)', 0], ['PERMUTATIONA(2,0)', 1], ['PERMUTATIONA(3.9,2.9)', 9], ['PERMUTATIONA(-1,2)', '#NUM!'], ['PERMUTATIONA(2,-1)', '#NUM!'],
+    // Excel refuses a number or count of 2^31-1 or more (1E+9 still passes).
+    ['PERMUTATIONA(1,1E+9)', 1], ['PERMUTATIONA(1,2^31-1)', '#NUM!'], ['PERMUTATIONA(1,2^40)', '#NUM!'], ['PERMUTATIONA(2^40,1)', '#NUM!'], ['PERMUTATIONA(0,2^40)', '#NUM!'],
     ['PERMUTATIONA(10,400)', '#NUM!'], ['PERMUTATIONA(2,1024)', '#NUM!'], ['PERMUTATIONA(2,"x")', '#VALUE!']]);
   near(e, [['PERMUTATIONA(2,1000)', 1.07150860718627e301]]);
 });
 
 test('MULTINOMIAL: the page\'s example; numbers truncated; text or TRUE in a range is #VALUE!; a sum past 170 overflows', () => {
-  const e = book({ J1: 2, J2: 3, J3: 4, A1: 1, C1: 1, C2: 'x', E1: 1, E2: true, G1: 1, G2: '=NA()' });
+  const e = book({ J1: 2, J2: 3, J3: 4, A1: 1, C1: 1, C2: 'x', E1: 1, E2: true, G1: 1, G2: '#N/A' });
   cases(e, [['MULTINOMIAL(2, 3, 4)', 1260], ['MULTINOMIAL(J1:J3)', 1260], ['MULTINOMIAL({2,3,4})', 1260], ['MULTINOMIAL(2.5,3)', 10], ['MULTINOMIAL(2.9,3.9)', 10],
     ['MULTINOMIAL(-1,2)', '#NUM!'], ['MULTINOMIAL(-0.5,2)', '#NUM!'], ['MULTINOMIAL(0)', 1], ['MULTINOMIAL("2",3)', 10], ['MULTINOMIAL(1,TRUE)', '#VALUE!'],
     ['MULTINOMIAL("x")', '#VALUE!'], ['MULTINOMIAL(C1:C2)', '#VALUE!'], ['MULTINOMIAL(E1:E2)', '#VALUE!'], ['MULTINOMIAL(A1:A2)', 1], ['MULTINOMIAL(G1:G2)', '#N/A'],
     ['MULTINOMIAL(170,1)', '#NUM!'], ['MULTINOMIAL(171)', '#NUM!'], ['MULTINOMIAL(100,100)', '#NUM!'], ['MULTINOMIAL(1000,1)', '#NUM!']]);
-  near(e, [['MULTINOMIAL(85,85)', 9.14484184513371e49]]);
+  // 170!/(85!·85!) exactly; Excel shows 9.14484184513371E+49 here and 1.0000000000002 for MULTINOMIAL(170), off in
+  // the 12th digit.
+  near(e, [['MULTINOMIAL(85,85)', 9.1448418451315549893681152591738975450186892788720e49], ['MULTINOMIAL(170)', 1], ['MULTINOMIAL(169,1)', 170]]);
 });
 
 test('SUMX2MY2 SUMX2PY2 SUMXMY2: the pages\' examples; pairs with a non-number skipped; sizes must match', () => {
   const e = book({
     A2: 2, B2: 6, A3: 3, B3: 5, A4: 9, B4: 11, A5: 1, B5: 7, A6: 8, B6: 5, A7: 7, B7: 4, A8: 5, B8: 4,
     D3: 2, E3: 6, D4: 3, E4: 5, D5: 9, E5: 11, D6: 1, E6: 7, D7: 8, E7: 5, D8: 7, E8: 4, D9: 5, E9: 4,
-    G1: 1, G2: '=NA()', H1: 2, H2: 3, J1: 1, K1: 2, K2: 3,
+    G1: 1, G2: '#N/A', H1: 2, H2: 3, J1: 1, K1: 2, K2: 3, P1: 'x',
     'Data!A1': 3, 'Data!A2': 1, 'Data!A3': 4, 'Data!A4': 1, 'Data!A5': 5, 'Data!B1': 2, 'Data!B2': 7, 'Data!B3': 1, 'Data!B4': 8, 'Data!B5': 2,
   }, { sheets: ['Sheet1', 'Data'] });
   cases(e, [
@@ -170,6 +175,9 @@ test('SUMX2MY2 SUMX2PY2 SUMXMY2: the pages\' examples; pairs with a non-number s
     ['SUMX2MY2(G1:G2,H1:H2)', '#N/A'],
     // No pair of numbers at all divides by zero, as in Excel.
     ['SUMX2MY2("3",2)', '#DIV/0!'], ['SUMX2PY2(TRUE,1)', '#DIV/0!'], ['SUMX2MY2({"a","b"},{1,2})', '#DIV/0!'], ['SUMXMY2(M1:M2,N1:N2)', '#DIV/0!'],
+    ['SUMX2MY2(P1,H1)', '#DIV/0!'],
+    // Except that a one-cell reference to a blank is #VALUE!, either side.
+    ['SUMX2MY2(M1,H1)', '#VALUE!'], ['SUMX2MY2(H1,M1)', '#VALUE!'], ['SUMX2PY2(M1,M2)', '#VALUE!'], ['SUMX2MY2(M1,"a")', '#VALUE!'],
   ]);
 });
 
@@ -179,7 +187,7 @@ test('MMULT: the pages\' examples; only numbers; array1\'s columns must be array
     // MMULT's second example: quantities of corks, bottles and barrels; each one's price and weight.
     'Sheet2!B3': 14, 'Sheet2!C3': 9, 'Sheet2!D3': 3, 'Sheet2!B4': 2, 'Sheet2!C4': 11, 'Sheet2!D4': 15,
     'Sheet2!A6': 200, 'Sheet2!B6': 4, 'Sheet2!A7': 250, 'Sheet2!B7': 42, 'Sheet2!A8': 425, 'Sheet2!B8': 115,
-    G1: 1, G2: '=NA()', H1: 2, H2: 3, J1: 1, K1: 2, K2: 3, L1: 1, L2: true, M1: 2, M2: 3,
+    G1: 1, G2: '#N/A', H1: 2, H2: 3, J1: 1, K1: 2, K2: 3, L1: 1, L2: true, M1: 2, M2: 3,
   }, { sheets: ['Sheet1', 'Sheet2'] });
   assert.deepEqual(spill(e, 'MMULT(A2:B3,A5:B6)'), [[2, 6], [14, 4]]);
   assert.deepEqual(spill(e, 'MMULT(Sheet2!B3:D4,Sheet2!A6:B8)'), [[6325, 779], [9525, 2195]]);
@@ -193,7 +201,7 @@ test('MMULT: the pages\' examples; only numbers; array1\'s columns must be array
 
 test('MDETERM: the page\'s examples; square and all numbers, else #VALUE!; a singular matrix\'s exact 0 kept', () => {
   const e = book({ A2: 1, B2: 3, C2: 8, D2: 5, A3: 1, B3: 3, C3: 6, D3: 1, A4: 1, B4: 1, C4: 1, D4: 0, A5: 7, B5: 3, C5: 10, D5: 2,
-    G1: 1, G2: '=NA()', H1: 2, H2: 3, J1: 1, K1: 2, K2: 3, L1: 1, L2: true, M1: 2, M2: 3, N1: 1, N2: 'x', O1: 2, O2: 3 });
+    G1: 1, G2: '#N/A', H1: 2, H2: 3, J1: 1, K1: 2, K2: 3, L1: 1, L2: true, M1: 2, M2: 3, N1: 1, N2: 'x', O1: 2, O2: 3 });
   near(e, [['MDETERM(A2:D5)', 88], ['MDETERM({3,6,1;1,1,0;3,10,2})', 1], ['MDETERM({3,6;1,1})', -3], ['MDETERM({4,7;2,6})', 10], ['MDETERM({1.1,2.2;3.3,4.4})', -2.42],
     ['MDETERM({2,1,1;4,-6,0;-2,7,2})', -16], ['MDETERM({1,2,3;4,5,6;7,8,9})', 6.66133814775094e-16]]);
   cases(e, [['MDETERM({1,3,8,5;1,3,6,1})', '#VALUE!'], ['MDETERM({1,2;3,4})', -2], ['MDETERM({1,2;2,4})', 0], ['MDETERM({1,2,1;2,4,2;1,0,1})', 0], ['MDETERM({0,0;0,0})', 0],
