@@ -338,12 +338,19 @@ const uninstall = async (o = {}) => {
   const all = B.table(ctx.platform, ctx.env);
   destinations(ctx, all);
   const removed = [], kept = [];
+  const owned = (f) => !MODES || fs.lstatSync(f).uid === process.getuid();
+  const ownedTree = (f) => owned(f) && (!fs.lstatSync(f).isDirectory() || fs.readdirSync(f).every((n) => ownedTree(path.join(f, n))));
+  const remove = (f, recursive = false) => {
+    if (!(recursive ? ownedTree(f) : owned(f))) { kept.push(f); return; }
+    fs.rmSync(f, { recursive, force: true });
+    removed.push(f);
+  };
   if (ctx.platform === 'win32') {
     for (const k of [...new Set(all.flatMap((b) => b.keys))]) {
       const { value: v, alone } = await exportKey(ctx, k);
       if (v === null) continue;
       const b = all.find((b) => b.keys.includes(k) && equalPath(ctx, manifestPath(ctx, b), v) && ours(ctx, b, v, readJson(v)));
-      if (!b) { kept.push(k); continue; }
+      if (!b || !owned(v)) { kept.push(k); continue; }
       // Deleting only the default value leaves an empty key, so a key holding nothing else goes whole.
       await ctx.run(regExe(ctx), alone ? ['delete', k, '/f'] : ['delete', k, '/ve', '/f']);
       removed.push(k);
@@ -352,22 +359,23 @@ const uninstall = async (o = {}) => {
   for (const b of all) {
     const f = manifestPath(ctx, b);
     const m = readJson(f);
-    if (ours(ctx, b, f, m)) { fs.rmSync(f, { force: true }); removed.push(f); } else if (m && m.name === B.HOST) kept.push(f);
+    if (ours(ctx, b, f, m)) remove(f); else if (m && m.name === B.HOST) kept.push(f);
   }
-  for (const { f } of launchers(ctx)) { fs.rmSync(f, { force: true }); removed.push(f); }
-  for (const v of copies(ctx)) { fs.rmSync(path.join(ctx.root, v), { recursive: true, force: true }); removed.push(path.join(ctx.root, v)); }
+  for (const { f } of launchers(ctx)) remove(f);
+  for (const v of copies(ctx)) remove(path.join(ctx.root, v), true);
   const g = path.join(ctx.root, GRANTS), saved = readJson(g);
-  if (saved && saved.name === B.HOST && Array.isArray(saved.ids) && saved.ids.every(IDS.valid)) { fs.rmSync(g); removed.push(g); }
+  if (saved && saved.name === B.HOST && Array.isArray(saved.ids) && saved.ids.every(IDS.valid)) remove(g);
   // The run folder (rendezvous.js), if it is private to this user: the files of hosts that have ended, then the folder
   // once empty. A host still running keeps its own until the browser ends it.
   const run = R.dir({ platform: ctx.platform, env: ctx.env });
   try {
+    safePath(run);
     if (R.check(run)) {
-      removed.push(...R.sweep(run));
+      removed.push(...R.sweep(run, { ownedOnly: true, platform: ctx.platform }));
       try { fs.rmdirSync(run); removed.push(run); } catch { /* a host still runs */ }
     }
   } catch { kept.push(run); }
-  for (const d of new Set([ctx.hosts, ctx.root, path.dirname(run)])) try { fs.rmdirSync(d); } catch { /* not empty, or gone */ }
+  for (const d of new Set([ctx.hosts, ctx.root, path.dirname(run)])) try { safePath(d); if (owned(d)) fs.rmdirSync(d); } catch { /* not empty, or gone */ }
   return { removed, kept };
 };
 
