@@ -153,7 +153,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       const record = { ...strip(j.record), kind: j.kind };
       const replacement = FILES.includes(j.kind) ? await bring(record.file, j.file, sum, j.fileRev, h) : null;
       if (replacement) Object.assign(record, { file: replacement.ref, size: replacement.ref.size });
-      return { key: j.key, kind: j.kind, record, parts: j.kind === 'sheet' ? j.parts : null, file: typeof j.file === 'string' ? j.file : null,
+      return { key: j.key, kind: j.kind, record, parts: j.kind === 'sheet' ? j.parts : null, file: typeof j.file === 'string' ? j.file : null, updated: Number.isFinite(j.updated) ? j.updated : 0,
         fileRev: replacement?.rev || (typeof j.fileRev === 'string' ? j.fileRev : null), external: !!replacement,
         sum: replacement ? await env.hash(canon(body(j.key, record, null))) : sum };
     };
@@ -189,6 +189,12 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       else await env.papers.keep(key, got.record);
     };
 
+    // This device's side kept as a version before Drive's is taken (a first meeting where Drive's was edited later).
+    const keepMine = async (key, l) => {
+      if (kindOf(l.rec) === 'sheet') await env.papers.keep(key, { kind: 'sheet', gz: await env.pack(l.rec, l.parts), cells: l.rec.cells });
+      else await env.papers.keep(key, l.rec);
+    };
+
     // This device's document up: its kind's file (a new one when it has none, or the one it had is gone), then its copy.
     const push = async (key, h, l, d, folder) => {
       const kind = kindOf(l.rec), b = body(key, l.rec, l.parts), sum = await env.hash(canon(b));
@@ -203,7 +209,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         const r = await up(file, { name: ex.name, appProperties: { glaze: 'file', key: h, sum } }, ex.mime, ex.bytes);
         file = r.id; fh = r.headRevisionId || null;
       }
-      const json = new TextEncoder().encode(JSON.stringify({ glaze: 'document', v: 1, ...b, file, fileRev: fh }));
+      // updated: Last edited where it was pushed, for a first meeting's later-edited rule (not in the sum: no change by itself).
+      const json = new TextEncoder().encode(JSON.stringify({ glaze: 'document', v: 1, ...b, file, fileRev: fh, updated: Number.isFinite(l.rec.updated) ? l.rec.updated : 0 }));
       const r = await up(d?.json || null, { name: `${base}.glaze.json`, appProperties: { glaze: 'doc', key: h, sum, rev: String(l.rec.revision || 0) } }, JSON_TYPE, json);
       return putDoc(h, { key, h, kind, json: r.id, file, fh, fsum: sum, rsum: sum, lsum: sum, rev: l.rec.revision || 0, trashed: false }, d);
     };
@@ -214,12 +221,16 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // { removed }: deleted for good, or out of reach); E: its kind's file's, when a change named it.
     const sync = async (key, h, { R, E, folder }) => {
       if (!(await state()).on) throw new Fail('off');
-      const d = await docOf(h);
+      let d = await docOf(h);
       key ||= d?.key || null;
       if (key && !syncable(key)) return;
       let l = key ? await local(key) : null;
       const lt = !!l && P().trashed(l.rec);
-      if (d && R?.id && R.id !== d.json && !R.removed) R = undefined; // another device's copy of the same document: not this one's
+      // Another device's copy of the same document. One made while this device made its own (first syncs that overlapped):
+      // every device keeps the lowest id, met as a first meeting; any other is not this one's.
+      if (d && R?.id && R.id !== d.json && !R.removed) {
+        if (R.id < d.json && !R.trashed) { await dropDoc(h, d); d = null; } else R = undefined;
+      }
       if (d && E && E.id !== d.file) E = undefined;
       if (R === undefined) R = d?.json ? await meta(d.json) : d ? null : !lt && l ? await lookup(h, folder) : null;
 
@@ -228,7 +239,17 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         const got = await fetchCopy(R, h, key);
         const source = { json: R.id, file: got.file, fh: got.fileRev, fsum: got.sum };
         if (!l) { const now2 = await take(got.key, null, got); if (got.external) return push(got.key, h, now2, source, folder); await agreed(got.key, h, R, got, now2, null); return; }
-        if ((await sumOf(key, l)) !== got.sum) { await keepOther(key, l, got); return push(key, h, await local(key), source, folder); }
+        if ((await sumOf(key, l)) !== got.sum) {
+          // Both hold it, as with Restore: the later edited stays current, the other kept beside it (a PDF: both documents).
+          if (got.kind !== 'pdf' && got.kind === kindOf(l.rec) && got.updated > (l.rec.updated || 0)) {
+            await keepMine(key, l);
+            const now2 = await take(key, l, got);
+            if (got.external) return push(key, h, now2, source, folder);
+            await agreed(key, h, R, got, now2, null);
+            return;
+          }
+          await keepOther(key, l, got); return push(key, h, await local(key), source, folder);
+        }
         if (got.external) return push(key, h, l, source, folder);
         await agreed(key, h, R, got, l, null);
         return;
@@ -356,9 +377,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         seen.add(h);
         const d = await docOf(h);
         const R = remote.get(h) || null;
-        await one(row.key, h, { R: !d?.json ? R : R?.id === d.json ? R : undefined, folder });
+        await one(row.key, h, { R: !d?.json || (R && R.id <= d.json) ? R : undefined, folder });
       }
-      for (const [h, R] of remote) if (!seen.has(h)) { seen.add(h); const d = await docOf(h); await one(null, h, { R: d?.json && d.json !== R.id ? undefined : R, folder }); }
+      for (const [h, R] of remote) if (!seen.has(h)) { seen.add(h); const d = await docOf(h); await one(null, h, { R: d?.json && R.id > d.json ? undefined : R, folder }); }
       for (const k of (await S.keys()).filter((x) => x.startsWith(DOC))) if (!seen.has(k.slice(DOC.length))) await one(null, k.slice(DOC.length), { folder });
       for (const [k, n] of Object.entries(dirt)) await unmark(k, n);
       if (more) await more.full(hooks(folder));
@@ -383,7 +404,10 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
           }
           const h = f.appProperties?.key, role = f.appProperties?.glaze;
           if (!HASH.test(h || '') || !['doc', 'file'].includes(role)) continue;
-          if (role === 'doc' && (f.parents || []).includes(folder) && f.mimeType === JSON_TYPE) at(h).R = f;
+          if (role === 'doc' && (f.parents || []).includes(folder) && f.mimeType === JSON_TYPE) {
+            const x = at(h);
+            if (!x.R || x.R.id === f.id || (!f.trashed && !x.R.removed && f.id < x.R.id)) x.R = f; // two copies in one page: the lower id
+          }
           else if (role === 'file') at(h).E = f;
         }
         for (const [h, x] of docs) {
