@@ -270,3 +270,12 @@ test('the translated layout case lets its seed Look reach History before any pag
   assert.ok(filed > 0, 'it waits for the worker to file the seed Look');
   assert.ok(filed < body.indexOf("for (const lang of"), 'before the first language is measured');
 });
+
+test('installed accepts a finished empty profile without requiring a catalogue cache', async () => {
+  const { installed } = require('../scripts/check-env.js');
+  const vm = require('node:vm');
+  const local = { freshDefaults: { fresh: true, pending: false }, migrated: ['tabs-auto'], channelKeysMoved: true };
+  const page = { evaluate: (fn, keys) => vm.runInContext(`(${fn})(${JSON.stringify(keys)})`, vm.createContext({ chrome: { storage: { local: { get: async () => local } } } })) };
+  await installed(page, 0);
+  assert.equal('lookCatalog' in local, false, 'a read must not manufacture an empty cache');
+});
