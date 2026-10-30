@@ -6,6 +6,8 @@
 @media (max-width: 640px) { .gd-pic .gq-thumb { zoom: calc(.72 * var(--gd-thumb)); } }
 
 :root[data-mode="pdf"] body { padding: 0; overflow: hidden; background: transparent; }
+/* pdf_viewer.css sets :root's color-scheme to "light dark": the page's stays the Look's (writer.css). */
+:root[data-dark] { color-scheme: dark; }
 :root[data-mode="pdf"] .gp-page { overflow: hidden; }
 .gq .gp-tool .gp-box { gap: 6px; min-width: 112px; justify-content: space-between; }
 .gq-ib { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; color: var(--gz-ink); flex: none; }
