@@ -202,6 +202,25 @@ test('a 401 drops the token and asks once more with a fresh one', async () => {
   assert.equal(decode(h.log.fetch[1].init.body), decode(h.log.fetch[0].init.body));
 });
 
+test('a request stops if Drive was connected to another account, or disconnected, since it began', async () => {
+  const run = async (accounts) => {
+    const log = [];
+    let i = 0;
+    const drive = D.create({ fetch: async (url) => { log.push(url); return json(200, FILES.docx); }, token: async () => 'tok', account: async () => accounts[Math.min(i++, accounts.length - 1)] });
+    return { r: await drive.meta(FILES.docx.id).then(() => 'ok', (e) => e.why), log };
+  };
+  assert.deepEqual(await run(['a@school.edu', 'a@school.edu']), { r: 'ok', log: [`${API}/${FILES.docx.id}?fields=${META}&supportsAllDrives=true`] });
+  assert.deepEqual(await run(['a@school.edu', 'b@school.edu']), { r: 'connect', log: [] });
+  assert.deepEqual(await run(['a@school.edu', null]), { r: 'connect', log: [] });
+  assert.deepEqual(await run([null]), { r: 'connect', log: [] });
+  // Mid-upload: the save's update finds another account and sends nothing.
+  let who = 'a@school.edu';
+  const log = [];
+  const drive = D.create({ fetch: async (url, init) => { log.push(init.method || 'GET'); who = 'b@school.edu'; return json(200, FILES.docx); }, token: async () => 'tok', account: async () => who });
+  await fails(drive.save({ name: 'Essay.docx', mime: MIME.docx, bytes: new Uint8Array([1]), as: 'file', id: FILES.docx.id }), 'connect');
+  assert.deepEqual(log, ['GET']);
+});
+
 test('Drive\'s errors and the sign-in\'s become fixed reasons', async () => {
   for (const [res, why] of [[json(403, ERRORS.insufficientFilePermissions), 'denied'], [json(403, ERRORS.appNotAuthorizedToFile), 'denied'], [json(404, ERRORS[404]), 'missing'],
     [json(429, ERRORS[429]), 'busy'], [json(403, ERRORS.userRateLimitExceeded), 'busy'], [json(403, ERRORS.storageQuotaExceeded), 'quota'],
