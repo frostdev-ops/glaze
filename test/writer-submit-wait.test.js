@@ -313,3 +313,21 @@ test('compact: a disabled Ultra Submit pressed before readiness is held until th
   assert.equal(c.clicks.length, 1);
   assert.equal(c.clicks[0], b);
 });
+
+test('compact: a footer returning just after a flush times out can retry before the next poll', async () => {
+  const { c, press } = await attempt(false);
+  c.emit({ type: 'view', full: false });
+  const old = c.doc.querySelector(SUBMIT), parent = old.parentElement;
+  press(SUBMIT);
+  old.remove(); c.tick(100);
+  c.tick(60000);
+  const fresh = c.doc.createElement('button');
+  fresh.setAttribute('data-analytics-id', old.getAttribute('data-analytics-id')); parent.append(fresh);
+  assert.doesNotThrow(() => press(SUBMIT));
+  assert.equal(flushes(c.ports[0]).length, 2);
+  c.emit({ type: 'compact:flushed', request: flushes(c.ports[0])[1].request, ...ok });
+  c.tick(100);
+  assert.equal(c.clicks.length, 1);
+  assert.equal(c.clicks[0], fresh);
+  assert.equal(fresh.hasAttribute('aria-busy'), false);
+});
