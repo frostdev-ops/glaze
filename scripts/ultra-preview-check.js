@@ -41,8 +41,8 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     }
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-preview-'));
     fs.mkdirSync(out, { recursive: true });
-    // The slides' PDF: six pages of about 12 MB, so pdf.js asks by Range while the whole file streams, and too big for
-    // Documents (3 MB); the lab's: three small pages.
+    // The slides' PDF: six pages of about 12 MB, above the old inline-record cap but within the file store's 50 MB;
+    // the lab's: three small pages.
     const pdfs = { [SLIDES.hash]: PDF.large({ count: 6, size: 12e6 }), [LAB.hash]: PDF.FIXTURES.three() };
     const plan = {}; // a file's hash → its scenario (ultra-mock.js previews)
     const mock = P.previews({ site, pdf: (f) => f && pdfs[f.hash], scenario: (f) => plan[f?.hash] || {} });
@@ -157,11 +157,12 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     check(opened !== p && originals.includes(SLIDES.at), `Open original opens ${SLIDES.at} in a new tab`);
     await opened.close().catch(() => {});
 
-    // ---- Save to Documents past the kind's cap: refused, nothing kept
+    // ---- Save to Documents above the old 3 MB cap: the merged file store keeps it
     await fr.click('[data-act="save"]');
-    await until(() => fr.evaluate(() => document.querySelector('.gp-state')?.textContent === 'This PDF is too big to save.'), 'too big to save', 20000, () => fr.evaluate(() => document.querySelector('.gp-state')?.textContent));
-    const papers = () => worker.evaluate(async () => { const all = await chrome.storage.local.get(null); return Object.entries(all).filter(([k]) => k.startsWith('writerPaper:doc:')).map(([k, v]) => ({ k, kind: v.kind, title: v.title, size: v.size, pages: v.pages })); });
-    check((await papers()).length === 0 && !(await fr.isDisabled('[data-act="save"]')), `Save to Documents on a ${(pdfs[SLIDES.hash].length / 1e6).toFixed(1)} MB PDF: "This PDF is too big to save.", nothing kept`);
+    await until(() => fr.evaluate(() => document.querySelector('.gp-state')?.textContent === 'Saved to Documents'), 'large PDF saved', 20000, () => fr.evaluate(() => document.querySelector('.gp-state')?.textContent));
+    const papers = () => worker.evaluate(async () => { const all = await chrome.storage.local.get(null); return Object.entries(all).filter(([k]) => k.startsWith('writerPaper:doc:')).map(([k, v]) => ({ k, kind: v.kind, title: v.title, size: v.size, pages: v.pages, file: v.file })); });
+    const large = await papers();
+    check(large.length === 1 && large[0].size === pdfs[SLIDES.hash].length && large[0].file?.size === large[0].size && typeof large[0].file?.hash === 'string', `Save to Documents keeps a ${(pdfs[SLIDES.hash].length / 1e6).toFixed(1)} MB PDF in the file store`);
 
     // ---- collapse, then expand again
     await toggle(SLIDES);
@@ -189,10 +190,10 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     // ---- Save to Documents: a PDF record, titled by the file, in Documents' list
     await fr.click('[data-act="save"]');
     await until(() => fr.evaluate(() => document.querySelector('.gp-state')?.textContent === 'Saved to Documents'), 'Saved to Documents', 20000, () => fr.evaluate(() => document.querySelector('.gp-state')?.textContent));
-    const saved = await papers();
-    check(saved.length === 1 && saved[0].kind === 'pdf' && saved[0].title === 'Lab safety' && saved[0].size === pdfs[LAB.hash].length && saved[0].pages === 3, `Save to Documents makes one PDF record (${JSON.stringify(saved)})`);
+    const saved = await papers(), lab = saved.find((r) => r.title === 'Lab safety');
+    check(saved.length === 2 && lab?.kind === 'pdf' && lab.size === pdfs[LAB.hash].length && lab.pages === 3, `Save to Documents adds one PDF record (${JSON.stringify(saved)})`);
     const index = await worker.evaluate(async () => (await chrome.storage.local.get('writerPapers')).writerPapers);
-    check(JSON.stringify(index || {}).includes(saved[0].k.slice('writerPaper:'.length)), 'and it lists in Documents (the index row)');
+    check(JSON.stringify(index || {}).includes(lab.k.slice('writerPaper:'.length)), 'and it lists in Documents (the index row)');
     await set({ enhance: { docPages: 'plain' } });
 
     // ---- the switch off: Blackboard's frames back; on with a preview open: Glaze's at once
