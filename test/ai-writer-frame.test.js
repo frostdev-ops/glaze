@@ -22,7 +22,7 @@ function frame({ answer = () => ({ allowed: true, ready: true }), settings: star
   }
   const hooks = {}, sent = [], receives = [], pendingStatus = [], pendingRun = [], said = [], ports = [];
   let ctx = initialContext, settings = start || { on: true, use: 'main', features: { completion: true, writing: true } }, holdStatus = false;
-  const opened = [];
+  const opened = [], messages = [];
   const doc = { content: { size: 10 }, textBetween: () => 'draft words' };
   const interaction = { dispatch: 0, focus: 0 };
   const ed = { view: { state: { doc }, dispatch() { interaction.dispatch++; }, focus() { interaction.focus++; } } };
@@ -47,7 +47,8 @@ function frame({ answer = () => ({ allowed: true, ready: true }), settings: star
         if (m.op === 'warm') queueMicrotask(() => reply({ id: m.id, type: 'warmed', ok: true }));
       } };
       ports.push(p); return p;
-    }, getURL: (p) => `${safari ? 'safari-web-extension' : 'chrome-extension'}://x/${p}`, onMessage: { addListener: (f) => { hooks.runtime = f; } } },
+    }, getURL: (p) => `${safari ? 'safari-web-extension' : 'chrome-extension'}://x/${p}`, onMessage: { addListener: (f) => { hooks.runtime = f; } },
+    sendMessage: async (m) => { messages.push(m); return { ok: true }; } },
     tabs: { create: async (o) => { opened.push(o.url); } } } };
   if (clock) sandbox.Date = class extends Date { static now() { return clock.t; } };
   const reply = (m) => receives.forEach((f) => f(m));
@@ -55,7 +56,7 @@ function frame({ answer = () => ({ allowed: true, ready: true }), settings: star
   const ai = sandbox.GZ_WRITER_AI;
   const panel = (opts) => { const host = new Element(); return sandbox.GZ_WRITER_AI.feedbackView(host, opts); };
   const pane = (opts) => panel(opts).el;
-  return { ai, sent, said, pendingStatus, pendingRun, reply, hooks, opened, pane, panel, interaction, ports, proof: sandbox.GZ_WRITER_PROOF,
+  return { ai, sent, said, pendingStatus, pendingRun, reply, hooks, opened, messages, pane, panel, interaction, ports, proof: sandbox.GZ_WRITER_PROOF,
     start: async () => { hooks.ready(); await flush(); },
     off: () => { settings.on = false; hooks.storage({ ai: { newValue: structuredClone(settings) } }, 'local'); },
     context: (c) => { ctx = c; hooks.context(c); }, hold: () => { holdStatus = true; },
@@ -328,7 +329,11 @@ test('Feedback says why AI can\'t give it, with Settings → AI one click away w
     const pane = f.pane(), go = pane.children.find((c) => c.className === 'gz-fb-run' && c.textContent === 'Settings');
     assert.match(pane.textContent, text, JSON.stringify(st || settings));
     assert.equal(!!go, button, `a Settings button: ${text}`);
-    if (go) { go.listeners.click(); assert.deepEqual(f.opened, ['chrome-extension://x/options.html#ai/setup']); }
+    if (go) {
+      go.listeners.click();
+      assert.deepEqual(f.messages, [{ type: 'glaze:settings-at', hash: '#ai/setup' }], 'the worker opens Settings → AI');
+      assert.deepEqual(f.opened, [], 'never from the frame: Safari kills the page when it calls tabs');
+    }
   }
 });
 
