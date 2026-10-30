@@ -151,6 +151,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   // the assignment's title and the frame's tools (Submit…) before ⋯, no way back to Documents; → its surface.
   const edit = async (key, host = null) => {
     const root = document.documentElement;
+    const life = new AbortController(), signal = life.signal;
     if (host) words = host.t || null; else root.dataset.mode = 'pdf';
     await GZ_WRITER_PAPER.need(['lib/writer-papers.js', 'lib/pdf-l10n.js']);
     const sheet = (href) => new Promise((ok) => { document.head.append(h('link', { rel: 'stylesheet', href, onload: ok, onerror: ok })); });
@@ -233,7 +234,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       menu = { el, opener };
       el.querySelector('[role="menuitem"]')?.focus();
     };
-    document.addEventListener('pointerdown', (e) => { if (menu && !menu.el.contains(e.target) && !menu.opener.contains(e.target)) closeMenu(); }, true);
+    document.addEventListener('pointerdown', (e) => { if (menu && !menu.el.contains(e.target) && !menu.opener.contains(e.target)) closeMenu(); }, { capture: true, signal });
     zoomB.addEventListener('click', () => openMenu(zoomB, [...PRESETS.map(([v, label]) => [t(label), () => { viewer.currentScaleValue = v; }, { 'data-zoom': v }]),
       ...STEPS.map((n) => [`${n}%`, () => { viewer.currentScaleValue = String(n / 100); }, { 'data-zoom': String(n) }])]));
     // ⋯: Export .pdf (the pages panel's bake and the tools come in later steps).
@@ -267,7 +268,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       if (k === 'f' && doc) { e.preventDefault(); showFind(true); }
       else if ((k === '=' || k === '+') && doc) { e.preventDefault(); viewer.increaseScale(); }
       else if (k === '-' && doc) { e.preventDefault(); viewer.decreaseScale(); }
-    });
+    }, { signal });
 
     // ---- saving: a field filled (pdf.js's annotation storage) saves a second after the last change, and before the page
     // leaves for Documents; the bytes pdf.js writes (an incremental update) replace the record's, with page 1 drawn again.
@@ -280,7 +281,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       try {
         const lib2 = pdfdoc(), out = lib2 ? (await (await lib2).save(doc)).bytes : await doc.saveDocument();
         const thumbUrl = await picture(doc).catch(() => null);
-        ({ paper: rec } = await st.save(key, { ...STORE.put(out), pages: doc.numPages, ...(thumbUrl && { thumb: thumbUrl }) }));
+        ({ paper: rec } = await st.save(key, { ...STORE.put(out), pages: doc.numPages, ...(thumbUrl && { thumb: thumbUrl }) }, { expectedKind: 'pdf' }));
         say(dirty ? '' : t('Saved'));
         return true;
       } catch (e) { console.error(e); dirty = true; say(t(e instanceof RangeError ? TOO_BIG : 'Not saved. Try again in a moment.')); return false; }
@@ -307,15 +308,20 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       flush().then((ok) => { if (ok) location[window.top === window ? 'assign' : 'replace'](back.href); });
     });
     // The embedded frame's Close, Escape and history routes await the same storage acknowledgement as Documents.
-    addEventListener('glaze:papers:beforeleave', (e) => { if (dirty || saving) e.detail.wait(flush()); });
-    document.addEventListener('visibilitychange', () => { if (document.hidden && dirty) flush(); });
+    addEventListener('glaze:papers:beforeleave', (e) => { if (dirty || saving) e.detail.wait(flush()); }, { signal });
+    document.addEventListener('visibilitychange', () => { if (document.hidden && dirty) flush(); }, { signal });
     // Native tab navigation cannot await a promise. Protect unsaved work until the write acknowledges it.
-    addEventListener('beforeunload', (e) => { if (dirty || saving) { flush(); e.preventDefault(); e.returnValue = ''; } });
+    addEventListener('beforeunload', (e) => { if (dirty || saving) { flush(); e.preventDefault(); e.returnValue = ''; } }, { signal });
+    const dispose = async () => {
+      life.abort(); clearTimeout(timer); sizing.disconnect(); l10n.destroy(); closeMenu();
+      viewer.setDocument(null); links.setDocument(null); finder.setDocument(null);
+      if (doc) doc.annotationStorage.onSetModified = null;
+      await task?.destroy().catch(() => {});
+    };
     addEventListener('pagehide', () => {
-      clearTimeout(timer); sizing.disconnect(); l10n.destroy();
-      flush().finally(() => task?.destroy().catch(() => {}));
-    });
-    addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); });
+      flush().finally(dispose);
+    }, { signal });
+    addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); }, { signal });
 
     // ---- the title: a standalone document's to type, saved on Enter or leaving the field; Esc puts it back
     if (titleIn) {
@@ -329,7 +335,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     // papers-motion.js holds the page hidden until a document has drawn.
     globalThis.GZ_PAPERS_MOTION?.shown?.('paper');
     // What an assignment's submit sheet sends (writer-submit.js): the PDF as saved, its fields filled.
-    return { pages: () => doc?.numPages || 0, say, ready: () => !!doc, save: flush,
+    return { pages: () => doc?.numPages || 0, say, ready: () => !!doc, save: flush, dispose,
       file: async () => { if (!await flush()) throw new Error('not saved'); rec = await st.get(key); const bytes = STORE.get(rec); if (!bytes) throw new Error('no file'); return { bytes, mime: 'application/pdf', ext: '.pdf' }; } };
   };
   // A PDF brought to an assignment (Open in Glaze, writer-kinds.js): the attempt's record becomes it, the paper it held

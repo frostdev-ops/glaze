@@ -52,11 +52,17 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
     const submitB = document.createElement('button');
     submitB.type = 'button'; submitB.className = 'gp-submit'; submitB.textContent = t('Submit…');
     submitB.disabled = typeof P().submit !== 'function';
+    const owns = async () => GZ_DOC_KINDS.kindOf(await store().get(key)) === id;
     const surface = {
       kind: () => id, key: () => key, ext: () => ext, context: () => paper.context(), paper: () => paper.paper(), compact: () => false, blank: () => false, importing: () => busy,
       pages: () => v?.pages?.() || null, notify: (m) => v?.say?.(t(m)), focused: () => {}, resume: () => {}, look: () => null,
-      version: (reason = 'submit') => store().save(key, {}, { reason }).catch((e) => { console.error(e); return null; }),
-      save: () => (v ? v.save() : Promise.resolve(false)), file: () => v.file(), importFile: (f) => open(surface, f),
+      version: async (reason = 'submit') => {
+        if (!await surface.save()) return null;
+        return store().save(key, {}, { reason, expectedKind: id }).catch((e) => { console.error(e); return null; });
+      },
+      save: async () => !!v && await owns() && await v.save() && await owns(),
+      file: async () => { if (!await owns()) throw new Error('document kind changed'); const out = await v.file(); if (!await owns()) throw new Error('document kind changed'); return out; },
+      importFile: (f) => open(surface, f),
       // Ultra's buttons over a compact box never reach a viewer: the page treats it as the full view (view below).
       flush: (request) => frame.say({ type: 'compact:flushed', request, ok: false }),
     };
@@ -65,12 +71,13 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
       v = await k.view(key, { mount: el, t, title: () => paper.context()?.assignment?.title || '', tools: [submitB] });
     } catch (e) { console.error(e); el.remove(); delete root.dataset.doc; return null; }
     if (typeof P().submit === 'function') submitB.disabled = false;
-    shown = { id, key, el, surface, paper };
+    shown = { id, key, el, surface, paper, viewer: v };
     frame.say({ type: 'view', full: true });
     return surface;
   };
-  const unmount = () => {
+  const unmount = async () => {
     if (!shown) return;
+    await shown.viewer?.dispose?.();
     shown.el.remove();
     delete document.documentElement.dataset.doc;
     shown = null;
@@ -95,7 +102,7 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
       else if (!await paper.save()) throw new Error('paper could not be saved');
       paper.hold();
       const rec = await k.into(key, f);
-      if (shown) { unmount(); const s = await mount(id, key, paper); if (!s) throw new Error('no viewer'); paper.take(s); }
+      if (shown) { await unmount(); const s = await mount(id, key, paper); if (!s) throw new Error('no viewer'); paper.take(s); }
       else if (!await paper.hand(rec)) throw new Error('no viewer');
     } catch (e) {
       console.error(e);
@@ -105,15 +112,17 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
   };
   // A Word file over a viewer: the record a paper again (its kind's fields cleared), then the file opens as a paper does.
   const back = async (f) => {
-    const { paper, key, surface } = shown;
+    const { paper, surface, el } = shown;
     busy = true;
     try {
       if (!await surface.save()) throw new Error('not saved');
-      await store().save(key, { kind: 'paper', file: null, size: null, pages: null, thumb: null, ext: null, slides: null, text: null }, { reason: 'import' });
-    } catch (e) { console.error(e); surface.notify('Not saved. Try again in a moment.'); return; } finally { busy = false; }
-    unmount();
-    paper.unpark();
-    await paper.importFile(f, { full: true });
+      el.inert = true;
+      paper.unpark();
+      // The paper importer validates and writes the Word document in one import save. A refusal leaves this file intact.
+      if (!await paper.importFile(f, { full: true, fromKind: true })) { paper.take(surface); return; }
+      await unmount();
+    } catch (e) { console.error(e); paper.take(surface); surface.notify('Not saved. Try again in a moment.'); }
+    finally { el.inert = false; busy = false; }
   };
 
   // ---- an empty attempt: Document or Spreadsheet (offers above). Spreadsheet makes the record the sheet kind, empty.
