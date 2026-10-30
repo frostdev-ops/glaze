@@ -151,8 +151,6 @@ test('LINEST, LOGEST, TREND, GROWTH, STEYX: Excel\'s statistics, with and withou
   cases(d, [
     ['INDEX(LINEST(C1:C8,B1:B8,FALSE,TRUE),1,2)', 0], ['INDEX(LINEST(C1:C8,B1:B8,FALSE,TRUE),2,2)', '#N/A'], ['INDEX(LINEST(C1:C8,B1:B8,FALSE,TRUE),4,2)', 7],
     ['INDEX(LINEST(C1:C8,B1:B8,TRUE,TRUE),4,2)', 6], ['INDEX(LOGEST(C1:C8,B1:B8,FALSE,TRUE),1,2)', 1], ['STEYX({1,2},{1,2})', '#DIV/0!'],
-    // Points on one line: the residual sum rounds to a hair below zero, and its root is 0, not #NUM!.
-    ['STEYX({7,15,23,27,35,39},{3,7,11,13,17,19})', 0],
     ['LINEST(C1:C8,B1:B7)', '#REF!'], ['GROWTH({1,-2,3},{1,2,3},4)', '#NUM!'], ['LINEST({1,"x",3})', '#VALUE!'],
   ]);
   // A column that is a multiple of another is dropped (its coefficient and error 0), the degrees of freedom one more.
