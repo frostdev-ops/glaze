@@ -6,7 +6,7 @@
 // leaves launchers that run a newer copy alone (Claude Desktop's bundle after an npx setup). node: null writes
 // launchers that say there is no node (launcher.js). Uninstall removes only
 // manifests and keys with our host name whose path points into our folder (of a key that holds more, only our value),
-// our launchers and our copies.
+// our launchers and our copies, and empties the run folder of what hosts that ended left.
 'use strict';
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -17,6 +17,7 @@ const B = require('./browsers.js');
 const IDS = require('./ids.js');
 const L = require('./launcher.js');
 const N = require('./nodes.js');
+const R = require('./rendezvous.js');
 
 const PKG = path.join(__dirname, '..');
 const DESCRIPTION = 'Lets AI apps on this computer use Glaze.';
@@ -347,7 +348,16 @@ const uninstall = async (o = {}) => {
   for (const v of copies(ctx)) { fs.rmSync(path.join(ctx.root, v), { recursive: true, force: true }); removed.push(path.join(ctx.root, v)); }
   const g = path.join(ctx.root, GRANTS), saved = readJson(g);
   if (saved && saved.name === B.HOST && Array.isArray(saved.ids) && saved.ids.every(IDS.valid)) { fs.rmSync(g); removed.push(g); }
-  for (const d of [ctx.hosts, ctx.root]) try { fs.rmdirSync(d); } catch { /* not empty, or gone */ }
+  // The run folder (rendezvous.js), if it is private to this user: the files of hosts that have ended, then the folder once
+  // empty. A host still running keeps its own until the browser ends it.
+  const run = R.dir({ platform: ctx.platform, env: ctx.env });
+  try {
+    if (R.check(run)) {
+      removed.push(...R.sweep(run));
+      try { fs.rmdirSync(run); removed.push(run); } catch { /* a host still runs */ }
+    }
+  } catch { kept.push(run); }
+  for (const d of new Set([ctx.hosts, ctx.root, path.dirname(run)])) try { fs.rmdirSync(d); } catch { /* not empty, or gone */ }
   return { removed, kept };
 };
 

@@ -124,6 +124,7 @@ test('agent identity and helper uninstall claims do not promise verified identit
     assert.doesNotMatch(text, /only your user account can open/);
     assert.match(text, /modified copies/);
     assert.match(text, /run folder/);
+    assert.doesNotMatch(text, /leaves the run folder/, 'uninstall empties the run folder');
   }
 });
 

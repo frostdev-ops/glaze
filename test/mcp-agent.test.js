@@ -369,6 +369,33 @@ test('with no browser connected, doctor hints that a browser started with --user
   assert.ok(!live.some((r) => /--user-data-dir/.test(r.detail)), 'not once a browser connects');
 });
 
+test('uninstall removes the run folder, leaving a host that still runs its run file, and an unsafe folder alone', { skip: posixOnly('POSIX modes; the Windows run folder sits inside the helper folder') }, async (t) => {
+  const home = scratch(t), env = { HOME: home }, platform = process.platform;
+  fs.mkdirSync(B.table(platform, env).find((b) => b.id === 'chrome').data, { recursive: true });
+  const ctx = { platform, env, node: nodeAt(t), run: nodeVersion, src: PKG };
+  const d = R.dir({ platform, env });
+  const rec = (browser, instance, pid) => ({ v: 1, pid, path: R.socketPath(d, browser, instance), token: R.token(), browser, instance, at: 1 });
+  await I.setup(ctx);
+  R.ready(d);
+  R.write(d, rec('chrome', 'gone', deadPid()));
+  R.write(d, rec('edge', 'live', process.pid));
+  const first = await I.uninstall(ctx);
+  assert.ok(first.removed.includes(R.runFile(d, 'chrome', 'gone')), JSON.stringify(first));
+  assert.equal(fs.existsSync(R.runFile(d, 'chrome', 'gone')), false, "an ended host's run file goes");
+  assert.ok(fs.existsSync(R.runFile(d, 'edge', 'live')), 'a host that still runs keeps its run file');
+  fs.rmSync(R.runFile(d, 'edge', 'live'));
+  await I.uninstall(ctx);
+  assert.equal(fs.existsSync(d), false, 'the run folder goes once empty');
+  assert.equal(fs.existsSync(path.dirname(d)), false, 'and the folder that held it');
+  // Not private to this user: not ours to empty.
+  R.ready(d);
+  R.write(d, rec('chrome', 'old', deadPid()));
+  fs.chmodSync(d, 0o755);
+  const loose = await I.uninstall(ctx);
+  assert.ok(fs.existsSync(R.runFile(d, 'chrome', 'old')));
+  assert.ok(loose.kept.includes(d), JSON.stringify(loose));
+});
+
 test('glaze-mcp doctor adds the live rows after its own', { skip: posixOnly('setup writes macOS and Linux folders here; the Windows test goes through the registry') }, async (t) => {
   // Only HOME: setup must not follow an XDG_* folder out of the scratch one.
   const home = scratch(t), env = { HOME: home };

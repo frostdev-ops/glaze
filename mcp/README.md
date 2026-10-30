@@ -55,8 +55,8 @@ now. It exits 1 when something fails.
 npx glaze-mcp uninstall
 ```
 
-This removes the helper's manifests, launchers and unchanged versioned copies. It leaves the run folder and modified
-copies alone. On Windows it removes its registry default values or an otherwise empty host key, preserving unrelated
+This removes the helper's manifests, launchers, unchanged versioned copies and run folder, except a running helper's run
+file. It leaves modified copies alone. On Windows it removes its registry default values or an otherwise empty host key, preserving unrelated
 values and subkeys.
 Restart your browser to stop a helper that is still running.
 

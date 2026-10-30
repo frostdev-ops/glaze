@@ -95,8 +95,8 @@ a switch for each group. Each installed mod with tools is a group of its own.
 Turning the switch off ends every connection, cancels waiting requests, clears the kept assignment reads and gives back
 the optional browser permissions on Chrome, Edge and Firefox. The apps, groups, declines, activity and profile id stay.
 A change already started can finish. Removing a site clears its assignment reads; Reset everything clears them all while
-keeping agent access and grants. Neither uninstalls the helper. Helper uninstall leaves the run folder and modified
-copies alone.
+keeping agent access and grants. Neither uninstalls the helper. Helper uninstall empties the run folder, except a
+running helper's run file, and leaves modified copies alone.
 
 ## Activity
 
