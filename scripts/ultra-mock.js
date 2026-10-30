@@ -247,7 +247,7 @@ const c = document.createElement('div'); c.className = 'makeStylesfileViewerCont
 const viewerPage = (f) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Document Rendering</title></head><body style="margin:0;font:14px system-ui;background:#525659;color:#fff"><p data-bb-viewer="${f.hash}" style="padding:16px">Blackboard viewer: ${f.name}</p></body></html>`;
 // The viewer chain for a context.route, with what was asked counted. scenario(f) → { api: 'done' | 'converting' | 'fail',
 // until (converting before this time, done after), s3: 'fail' | 'fail-first' (S3's refusal of an address that ran out,
-// once), expires } per file; pdf(file): its converted.pdf's bytes.
+// once) | 'huge' (a converted.pdf past 50 MB), expires } per file; pdf(file): its converted.pdf's bytes.
 const previews = ({ site = SITE, pdf, scenario = () => ({}) } = {}) => {
   const seen = { viewer: 0, api: 0, s3: 0, ranges: 0, refused: 0, origins: new Set(), asks: new Map() };
   const refusedOnce = new Set();
@@ -286,7 +286,7 @@ const previews = ({ site = SITE, pdf, scenario = () => ({}) } = {}) => {
       const cors = { 'access-control-allow-origin': '*', 'access-control-expose-headers': 'Accept-Ranges, Content-Range, Content-Length, ETag', 'access-control-allow-headers': 'range', 'access-control-allow-methods': 'GET, HEAD' };
       if (method === 'OPTIONS') return ok(route.fulfill({ status: 200, headers: cors, body: '' }));
       seen.s3++;
-      const raw = pdf?.(byHash.get(file[1])), bytes = raw && Buffer.from(raw), s = scenario(byHash.get(file[1])) || {};
+      const s = scenario(byHash.get(file[1])) || {}, raw = s.s3 === 'huge' ? Buffer.alloc(50e6 + 4096) : pdf?.(byHash.get(file[1])), bytes = raw && Buffer.from(raw);
       const date = /^(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z$/.exec(u.searchParams.get('X-Amz-Date') || '');
       const end = date && Date.UTC(+date[1], +date[2] - 1, +date[3], +date[4], +date[5], +date[6]) + Number(u.searchParams.get('X-Amz-Expires')) * 1000;
       const first = s.s3 === 'fail-first' && !refusedOnce.has(file[1]);

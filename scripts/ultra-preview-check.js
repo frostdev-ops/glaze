@@ -1,15 +1,16 @@
 // Ultra's file previews in Glaze's PDF viewer (features/bbpreview.js, lib/bb-preview.js, pdf-kind.js show), in the real
 // unpacked extension on the synthetic Ultra Document page and viewer chain of scripts/ultra-mock.js PREVIEW (the live probe's
 // shapes: two data-bbfile attachments, viewerUrl → 302 → basic-doc-viewer's index.html → its documents API → a presigned S3
-// converted.pdf served with Range). An expanded preview: Blackboard's frame until Glaze's viewer has drawn page 1, then
-// Glaze's in its place, page 1's text in it, its bytes read from S3 by the frame itself (Range too); the page box jumps; collapse and
-// expand; one already open when the switch comes on; the switch off, and Settings → Writer → PDFs off: Blackboard's frame;
-// "converting": Blackboard's frame while it waits, then Glaze's; the documents API failing, or S3 refusing the frame:
-// Blackboard's frame; an address that ran out: asked again, then shown; Save to Documents: a PDF record in Documents; Open original: the file in a new
-// tab; dark documents inverts Blackboard's frame, never Glaze's; the keyboard reaches the frame and Esc returns to the
-// Preview button; at 640 px it fits. The browser's following of viewerUrl's 302 in the worker is stood in for (ultra-mock.js
-// WHERE: Playwright doesn't follow a routed redirect there); the real one is the owner's live check.
-// GETs only, synthetic. NODE_PATH=<playwright> node scripts/ultra-preview-check.js [dir]
+// converted.pdf, readable with CORS from other origins). An expanded preview: Blackboard's frame until Glaze's viewer has
+// drawn page 1, then Glaze's in its place with page 1's text, its bytes read from S3 by Glaze in the page (the page's
+// origin, never the frame's) and handed over; the page box jumps; collapse and expand; one already open when the switch
+// comes on; the switch off, and Settings → Writer → PDFs off: Blackboard's frame; "converting": Blackboard's frame while it
+// waits, then Glaze's; the documents API failing, S3 refusing every address, or a PDF past 50 MB: Blackboard's frame; an
+// address that ran out: asked again, then shown; Save to Documents: a PDF record in Documents, and past the kind's cap
+// refused; Open original: the file in a new tab; dark documents inverts Blackboard's frame, never Glaze's; the keyboard
+// reaches the frame and Esc returns to the Preview button; at 640 px it fits. The browser's following of viewerUrl's 302 in
+// the worker is stood in for (ultra-mock.js WHERE: Playwright doesn't follow a routed redirect there); the real one is the
+// owner's live check. GETs only, synthetic. NODE_PATH=<playwright> node scripts/ultra-preview-check.js [dir]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
@@ -120,12 +121,7 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     await until(async () => (await pageText(fr)).includes('Page 1 of 6'), "page 1's text in Glaze's viewer", 20000, () => pageText(fr));
     check(true, "Glaze's viewer takes Blackboard's frame's place and shows the PDF's first page text (\"Page 1 of 6\")");
     check(mock.seen.viewer >= 1 && mock.seen.api >= 1, `the worker followed viewerUrl (${mock.seen.viewer}) and asked the documents API (${mock.seen.api})`);
-    check([...mock.seen.origins].every((o) => o === `chrome-extension://${id}`) && mock.seen.origins.size === 1, `the frame read the PDF from S3 itself (Origin ${[...mock.seen.origins].join(', ')})`);
-    // pdf.js asks by Range only for what its first stream hasn't brought yet; here the whole file comes at once, so the
-    // frame's own Range read (its CSP and S3's CORS for a Range from the extension's origin) is asked for directly.
-    const ranges = mock.seen.ranges;
-    const ranged = await fr.evaluate(async (u) => { const r = await fetch(u, { headers: { range: 'bytes=0-1023' } }); return { status: r.status, range: r.headers.get('content-range'), n: (await r.arrayBuffer()).byteLength }; }, P.pdfOf(SLIDES, Date.now()));
-    check(ranged.status === 206 && ranged.n === 1024 && ranged.range === `bytes 0-1023/${pdfs[SLIDES.hash].length}`, `a Range read from the frame: 206, ${ranged.range} (pdf.js itself asked ${ranges} ranges)`);
+    check([...mock.seen.origins].every((o) => o === site) && mock.seen.origins.size === 1 && mock.seen.s3 >= 1, `Glaze in the page read the PDF from S3 (${mock.seen.s3} GET, Origin ${[...mock.seen.origins].join(', ')}); the frame read nothing`);
     const title = await fr.evaluate(() => document.querySelector('.gp-top h1')?.textContent);
     check(title === SLIDES.name, `its title is the attachment's name ("${title}")`);
     const v1 = await view(SLIDES);
@@ -226,15 +222,24 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     check((await view(LAB)).bbShown, "the documents API failing: Blackboard's frame stays, no Glaze frame");
     await toggle(LAB);
 
-    // ---- S3 refusing the frame every time (a run-out address, or no CORS for the extension's origin): asked again once,
-    // then Blackboard's frame
+    // ---- S3 refusing every address: the worker asked again once, then Blackboard's frame
     plan[LAB.hash] = { s3: 'fail' };
     const refusedBefore = mock.seen.viewer;
     await toggle(LAB);
-    await until(async () => /^ended:/.test((await view(LAB)).state), 'the viewer gives up', 40000, () => view(LAB));
+    await until(async () => /^ended:/.test((await view(LAB)).state), 'the read gives up', 40000, () => view(LAB));
     const gaveUp = await view(LAB);
-    check(gaveUp.bbShown && !gaveUp.gz && gaveUp.state === 'ended:viewer:read' && mock.seen.viewer >= refusedBefore + 2, `S3 refusing the frame: asked again once, then Blackboard's frame (${gaveUp.state})`);
+    check(gaveUp.bbShown && !gaveUp.gz && gaveUp.state === 'ended:pdf:403' && mock.seen.viewer >= refusedBefore + 2, `S3 refusing every address: asked again once, then Blackboard's frame (${gaveUp.state})`);
     await toggle(LAB);
+
+    // ---- a converted PDF past 50 MB: not read past its length, Blackboard's frame
+    await load();
+    plan[LAB.hash] = { s3: 'huge' };
+    await toggle(LAB);
+    await until(async () => /^ended:/.test((await view(LAB)).state), 'the read refuses', 40000, () => view(LAB));
+    const huge = await view(LAB);
+    check(huge.bbShown && !huge.gz && huge.state === 'ended:pdf:too-big', `a PDF past 50 MB: Blackboard's frame (${huge.state})`);
+    await toggle(LAB);
+    plan[LAB.hash] = {};
 
     // ---- converting: Blackboard's frame while Ultra's 15 s go by, then Glaze's (a fresh page: no done answer kept)
     await load();
