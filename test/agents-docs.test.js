@@ -49,6 +49,14 @@ test('the policy states what agent access sends, what waits for the student and 
   assert.match(plain(read('docs/privacy.md')), /\]\(\.\.\/PRIVACY\.md#agent-access\)/);
 });
 
+test("the activity list's outcomes in docs/agents.md are the ones Settings shows", () => {
+  const E = require('../lib/editor-agents.js'), I = require('../lib/i18n.js');
+  const list = agents().match(/how it ended \(([^)]*)\)/)?.[1] || '';
+  const said = list.split(/, | or /);
+  const labels = E.OUTCOMES.map((o) => E.outcome(o, (k, v) => I.t(k, v, 'en')));
+  assert.deepEqual([...said].sort(), [...labels].sort(), 'docs/agents.md, under Activity');
+});
+
 test('the permission list matches the manifest: nativeMessaging is optional outside Safari', () => {
   const m = JSON.parse(read('manifest.json'));
   assert.ok(m.optional_permissions.includes('nativeMessaging'));

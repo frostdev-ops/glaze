@@ -3193,6 +3193,7 @@
   "Failed": "Mislukt",
   "Declined": "Niet toegestaan",
   "Interrupted": "Onderbroken",
+  "Invalid request": "Ongeldig verzoek",
   "Busy": "Bezet",
   "Connected": "Verbonden",
   "Get a key": "Sleutel aanvragen",

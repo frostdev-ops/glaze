@@ -3193,6 +3193,7 @@
   "Failed": "Falhou",
   "Declined": "Não permitido",
   "Interrupted": "Interrompido",
+  "Invalid request": "Solicitação inválida",
   "Busy": "Ocupado",
   "Connected": "Conectado",
   "Get a key": "Obter uma chave",

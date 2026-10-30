@@ -139,10 +139,10 @@ test('the activity list keeps the last 200 rows, its seven keys only, each in it
   await G.record(local, { ...row, args: { course: 'Biology' }, result: 'Essay due Friday', error: 'Canvas said no', client: 'claude-ai' });
   assert.deepEqual(local.data.mcpCalls, [row]);
   for (const outcome of G.OUTCOMES) await G.record(local, { ...row, outcome });
-  assert.deepEqual(G.OUTCOMES, ['ok', 'error', 'declined', 'timeout', 'interrupted', 'refused', 'busy', 'cancelled']);
-  assert.equal(local.data.mcpCalls.length, 9);
+  assert.deepEqual(G.OUTCOMES, ['ok', 'error', 'declined', 'timeout', 'interrupted', 'refused', 'busy', 'cancelled', 'invalid']);
+  assert.equal(local.data.mcpCalls.length, 1 + G.OUTCOMES.length);
   for (const outcome of ['fine', 'Essay due Friday', undefined, null, 1]) await G.record(local, { ...row, outcome });
-  assert.equal(local.data.mcpCalls.length, 9, 'a row without a known outcome is not kept');
+  assert.equal(local.data.mcpCalls.length, 1 + G.OUTCOMES.length, 'a row without a known outcome is not kept');
   await G.record(local, { at: 'today', app: 'Claude Desktop', tool: 'Read my essay please', group: 'my essay', kind: 'run', outcome: 'error', ms: -1 });
   await G.record(local, { at: NaN, app: 'q2yhd4emtekyo2kcX', tool: 'x'.repeat(65), group: 'mod:abc', kind: { a: 1 }, outcome: 'error', ms: Infinity });
   assert.deepEqual(local.data.mcpCalls.slice(-2), [{ outcome: 'error' }, { outcome: 'error' }], 'a value outside its shape is dropped');

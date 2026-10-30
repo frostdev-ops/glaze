@@ -101,7 +101,8 @@ copies alone.
 ## Activity
 
 **Activity** lists the last 200 calls, newest first: the tool, the app, when, and how it ended (Done, Failed, Declined,
-Timed out, Interrupted, Refused, Busy or Cancelled), never what was asked or answered. **Forget all apps** clears this list.
+Timed out, Interrupted, Refused, Busy, Cancelled or Invalid request), never what was asked or answered. **Forget all
+apps** clears this list.
 
 ## Troubleshooting
 
