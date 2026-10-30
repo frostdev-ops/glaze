@@ -81,7 +81,7 @@ const fileOf = (key, role) => [...drive.files.values()].find((f) => f.meta.appPr
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
     const rules = [...HOSTS.map((h) => `MAP ${h} 127.0.0.1:${server.address().port}`), 'MAP * ~NOTFOUND'].join(', ');
     await require('../../tools/dev/wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...env.chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, locale: 'en-US', reducedMotion: 'reduce',
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, locale: 'en-US', reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, `--host-resolver-rules=${rules}`, '--ignore-certificate-errors', '--disable-background-networking', '--renderer-process-limit=1'] });
     env.noFirstRun(ctx);
     await ctx.route('**/*', async (route) => {
