@@ -34,9 +34,29 @@ test('fidelity refuses an empty PNG reference instead of passing zero slides', a
 });
 
 test('fidelity requires one unambiguous reference per slide, including hidden slides', async () => {
-  for (const names of [['Slide1.png', 'Slide3.png'], ['Slide1.png', 'Slide2.png', 'nested/Slide2.png']]) {
+  for (const names of [['Slide1.png', 'Slide2.png'], ['Slide1.png', 'Slide3.png'], ['Slide1.png', 'Slide2.png', 'nested/Slide2.png']]) {
     const r = await run(names);
     assert.equal(r.code, 1, r.logs);
     assert.match(r.errors, /slide|duplicate/i);
   }
+});
+
+
+test('fidelity accepts a complete numbered reference in a nested export folder', async () => {
+  const r = await run(['png/Slide1.png', 'png/Slide2.png', 'png/Slide3.png']);
+  assert.equal(r.code, 0, r.errors);
+  assert.match(r.logs, /3 of 3 slides within 2%/);
+  assert.equal(r.closed, true);
+});
+
+test('fidelity clearly refuses a busy PowerPoint without sending AppleScript', () => {
+  let appleEvents = 0;
+  const source = fs.readFileSync(script, 'utf8').split('(async () => {')[0];
+  assert.throws(() => vm.runInNewContext(source + "\nexportWithPowerPoint(Buffer.from('deck'));", {
+    __dirname: path.dirname(script), process: { argv: ['node', script, 'deck.pptx'] }, Buffer,
+    require: (name) => name === 'node:fs' ? { ...fs, existsSync: () => true }
+      : name === 'node:child_process' ? { execFileSync: (cmd) => { if (cmd === 'pgrep') return '123'; appleEvents++; throw Error('AppleScript must not run'); } }
+        : realRequire(name),
+  }), /PowerPoint is open: run this when PowerPoint is free/);
+  assert.equal(appleEvents, 0);
 });
