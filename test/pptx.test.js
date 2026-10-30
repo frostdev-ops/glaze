@@ -407,6 +407,21 @@ test('the presentation element cap drops trailing content while the deck still o
   assert.ok(d.cut.parts > 0, 'the truncated presentation is counted');
 });
 
+test('custom geometry bounds guide evaluations across distinct path sizes and across the deck', async () => {
+  const guides = '<a:gd name="g1" fmla="val 1"/><a:gd name="g2" fmla="val 2"/><a:gd name="g3" fmla="val 3"/>';
+  const paths = [10, 20, 10].map((w) => `<a:path w="${w}" h="10"><a:moveTo><a:pt x="g1" y="0"/></a:moveTo></a:path>`).join('');
+  const shape = (i) => `<p:sp><p:nvSpPr><p:cNvPr id="${990 + i}" name="Work${i}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:custGeom><a:gdLst>${guides}</a:gdLst><a:pathLst>${paths}</a:pathLst></a:custGeom></p:spPr></p:sp>`;
+  const slide = fixture('ppt/slides/slide3.xml').replace(/<p:spTree>[\s\S]*?<\/p:spTree>/, `<p:spTree>${shape(0)}${shape(1)}</p:spTree>`);
+  const d = await P.read(pack({ 'ppt/slides/slide3.xml': slide }), { limits: { guideWork: 7 } });
+  const geometry = ['Work0', 'Work1'].map((name) => named(d.slides[2], name).geometry);
+  // One shape scope and two distinct path scopes, even though three paths draw.
+  const evaluations = geometry.reduce((n, g) => n + 3 * (g.avLst.length + g.gdLst.length), 0);
+  assert.ok(evaluations <= 7, `${evaluations} guide evaluations exceed the deck budget of 7`);
+  assert.equal(geometry[0].gdLst.length, 2, 'retain the guides that fit');
+  assert.ok(d.cut.shapes > 0, 'guide work omitted from later shapes is counted');
+  assert.equal(d.slides[0].title, 'Cell Biology');
+});
+
 test('missing media parts become picture boxes and are not listed as drawable media', async () => {
   const bytes = pack({ 'ppt/media/image1.png': null, 'ppt/media/image3.svg': null });
   const d = await P.read(bytes);
