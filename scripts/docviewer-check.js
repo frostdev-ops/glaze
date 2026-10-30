@@ -24,6 +24,8 @@ const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest(
 const BLOB = encodeURIComponent(JSON.stringify({ user_id: 170000000000042, attachment_id: 21, type: 'canvadoc' }));
 const KEY = 'ink:https://school.instructure.com/170000000000042/21';
 const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) process.exitCode = 1; };
+// Polls state from Node until it holds or the time is up; the case after it says which.
+const until = async (holds, ms = 5000) => { for (const end = Date.now() + ms; !(await holds()) && Date.now() < end;) await new Promise((r) => setTimeout(r, 50)); };
 
 (async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'w9-'));
@@ -139,7 +141,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
     await page.mouse.down();
     for (let i = 1; i <= 20; i++) await page.mouse.move(box.x + 100 + i * 10, box.y + 100 + Math.sin(i / 3) * 20);
     await page.mouse.up();
-    await page.waitForTimeout(300);
+    await until(async () => (await local())[KEY]?.pages?.['1']?.length === 1);
     let L = await local();
     ok(L[KEY]?.pages?.['1']?.length === 1, `a stroke saved under ${KEY}`);
     const s = L[KEY]?.pages?.['1']?.[0];
@@ -148,19 +150,19 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
     // Highlighter and a second stroke, then undo/redo with the keyboard.
     await bar.locator('button[aria-label="Highlighter"]').click();
     await page.mouse.move(box.x + 100, box.y + 300); await page.mouse.down(); await page.mouse.move(box.x + 300, box.y + 300, { steps: 5 }); await page.mouse.up();
-    await page.waitForTimeout(200);
-    ok((await local())[KEY]?.pages['1'].length === 2, 'highlight saved');
+    await until(async () => (await local())[KEY]?.pages?.['1']?.length === 2);
+    ok((await local())[KEY]?.pages?.['1']?.length === 2, 'highlight saved');
     await page.keyboard.press('Control+z');
-    await page.waitForTimeout(200);
-    ok((await local())[KEY]?.pages['1'].length === 1, 'Ctrl+Z undoes');
+    await until(async () => (await local())[KEY]?.pages?.['1']?.length === 1);
+    ok((await local())[KEY]?.pages?.['1']?.length === 1, 'Ctrl+Z undoes');
     await page.keyboard.press('Control+Shift+z');
-    await page.waitForTimeout(200);
-    ok((await local())[KEY]?.pages['1'][1]?.t === 'hl', 'Ctrl+Shift+Z redoes');
+    await until(async () => (await local())[KEY]?.pages?.['1']?.[1]?.t === 'hl');
+    ok((await local())[KEY]?.pages?.['1']?.[1]?.t === 'hl', 'Ctrl+Shift+Z redoes');
     await page.screenshot({ path: path.join(out, 'ink.png') });
     // Eraser across the first stroke.
     await bar.locator('button[aria-label="Eraser"]').click();
     await page.mouse.move(box.x + 150, box.y + 60); await page.mouse.down(); await page.mouse.move(box.x + 150, box.y + 160, { steps: 8 }); await page.mouse.up();
-    await page.waitForTimeout(200);
+    await until(async () => (await local())[KEY]?.pages?.['1']?.length === 1);
     L = await local();
     ok(L[KEY]?.pages['1'].length === 1 && L[KEY].pages['1'][0].t === 'hl', 'eraser removed the pen stroke only');
     // Export, then clear page, then import it back.
@@ -169,16 +171,17 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
     await dl.saveAs(file);
     ok(JSON.parse(fs.readFileSync(file, 'utf8')).format === 'glaze-annotations', `export downloads ${dl.suggestedFilename()}`);
     await bar.locator('button[aria-label="Clear page"]').click();
-    await page.waitForTimeout(200);
+    await until(async () => !(KEY in await local()));
     ok(!(KEY in await local()), 'clear page empties the file: key removed');
     await page.keyboard.press('Escape');
-    await page.keyboard.press('Control+z'); // tool down: Ctrl+Z is the viewer's, nothing happens
-    await page.waitForTimeout(200);
-    ok(!(KEY in await local()), 'with no tool picked, Ctrl+Z is left to the viewer');
+    // Tool down: Ctrl+Z is the viewer's. Glaze's undo would run in the key's own handler, which has run when press()
+    // returns, and would light Redo at once; the clear's undo record is still there to take.
+    await page.keyboard.press('Control+z');
+    ok(await bar.locator('button[aria-label="Redo"]').isDisabled() && !(KEY in await local()), 'with no tool picked, Ctrl+Z is left to the viewer');
     const [chooser] = await Promise.all([page.waitForEvent('filechooser'), bar.locator('button[aria-label="Import annotations"]').click()]);
     await chooser.setFiles(file);
-    await page.waitForTimeout(400);
-    ok((await local())[KEY]?.pages['1'].length === 1, 'import brings the marks back');
+    await until(async () => (await local())[KEY]?.pages?.['1']?.length === 1);
+    ok((await local())[KEY]?.pages?.['1']?.length === 1, 'import brings the marks back');
     const [pic] = await Promise.all([page.waitForEvent('download'), bar.locator('button[aria-label="Save page as picture"]').click()]);
     ok(/^page-1-21\.png$/.test(pic.suggestedFilename()), `page picture ${pic.suggestedFilename()}`);
     // Re-render on scroll: the viewer replaces a page's contents; the layer comes back with the marks.
@@ -203,7 +206,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
     await f.evaluate(() => { const p = document.getElementById('page-1'); p.style.width = '1224px'; Object.assign(p.querySelector('canvas').style, { width: '1224px', height: '1584px' }); });
     const offBy = (a) => a && Math.max(Math.abs(a.x0 - before.x0) * a.w, Math.abs(a.x1 - before.x1) * a.w, Math.abs(a.y - before.y) * a.h);
     let zoomed;
-    for (const end = Date.now() + 5000; ; await new Promise((r) => setTimeout(r, 50))) { zoomed = await onPicture(); if (zoomed?.w === 1224 && offBy(zoomed) < 1 || Date.now() > end) break; }
+    await until(async () => { zoomed = await onPicture(); return zoomed?.w === 1224 && offBy(zoomed) < 1; });
     ok(zoomed?.w === 1224 && offBy(zoomed) < 1, `zoom: the stroke stays on its spot of the page (${offBy(zoomed)?.toFixed(1)} px off at ${zoomed?.w}x${zoomed?.h})`);
     // Rotation: a click on the rotate button turns the frame a quarter turn.
     await f.locator('button[aria-label="Rotate Page Clockwise By 90 Degrees"]').click();
@@ -214,7 +217,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
     // German.
     lang = 'de';
     f = await load();
-    await page.waitForTimeout(1500);
+    await until(async () => await f.locator('#gz-ink-bar button[aria-label="Anmerken"]').count() === 1, 10000);
     ok(await f.locator('#gz-ink-bar button[aria-label="Anmerken"]').count() === 1, 'German page: the toolbar speaks German');
     const hosts = [...new Set(external.map((u) => new URL(u).host))];
     ok(hosts.every((h) => /^((school|canvas)\.instructure\.com|localhost:3000)$/.test(h)), `only the fixtures' own assets were asked for (all aborted; DNS is mapped to nowhere): ${hosts.join(', ')}`);
