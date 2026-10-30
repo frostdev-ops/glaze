@@ -384,3 +384,12 @@ test('packed version limits include empty spreadsheets and refuse an oversized p
   assert.equal(JSON.stringify(s.data), before, 'neither the submitted checkpoint nor the workbook can be evicted by a refusal');
   assert.ok(first.saved);
 });
+
+test('opening a torn spreadsheet refuses the view instead of mounting a blank workbook over it', async () => {
+  let mounted = false;
+  const { DK } = load({ sheets: true }, { GZ_SHEET_DATA: { read: async () => { throw new Error('torn read of a spreadsheet'); } },
+    GZ_WRITER_PAPERS: { open: () => ({}), local: () => true }, GZ_SHEET_MODEL: M, GZ_SHEET_GRID: { mount: () => { mounted = true; } } });
+  await DK.settled();
+  await assert.rejects(DK.get('sheet').view(KEY, {}), /torn/);
+  assert.equal(mounted, false);
+});
