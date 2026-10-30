@@ -47,6 +47,22 @@ test('kept background backups and older-browser reset limits are disclosed', () 
   assert.match(read('docs/privacy.md'), /background file bytes/);
 });
 
+test('optional Google Drive is disclosed in both privacy texts, with its scope, picker hosts and Limited Use', () => {
+  for (const file of ['PRIVACY.md', 'docs/privacy.md']) {
+    const text = read(file);
+    const limited = text.split(/\n\n|\n(?=Google )/).find((part) => part.includes('Limited Use')) || '';
+    assert.match(text, /`(?:https:\/\/www\.googleapis\.com\/auth\/)?drive\.file`/, file);
+    assert.match(text, /frostdev\.io\/glaze\/drive-picker\//, file);
+    assert.match(text, /frostdev-ops\.github\.io\/glaze-drive-picker\//, file);
+    assert.match(text, /Google Drive[^.]*unavailable in (?:this|the current) build while Google verification is pending/, file);
+    assert.match(limited, /Drive/, file);
+    assert.match(limited, /\[Google API Services User Data Policy\]\(https:\/\/developers\.google\.com\/terms\/api-services-user-data-policy\), including\s+the Limited Use requirements/, file);
+  }
+  const google = policy.slice(policy.indexOf('## Google user data'), policy.indexOf('## Hosting'));
+  assert.match(google, /Google Calendar sync and Google Drive are unavailable/);
+  assert.match(google, /Google Drive access \(`drive\.file`/);
+});
+
 const languages = {
   '': /account identifiers/, de: /Kontokennungen/, es: /identificadores de escuela, curso y cuenta/,
   fr: /identifiants d’établissement, de cours et de compte/, nl: /account-ID/, 'pt-BR': /identificadores de escola, curso e conta/,
