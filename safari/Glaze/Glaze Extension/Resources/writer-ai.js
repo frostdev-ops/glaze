@@ -872,6 +872,13 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     finally { signal?.removeEventListener('abort', abort); }
   };
 
+  // Source identity can arrive after the box opens. Enriching it or re-sending the same context must not cancel a
+  // ruling. Keep complete assignment material here too: unread attachment identities are absent from the AI cleaner.
+  const contextState = () => {
+    const c = F.context();
+    return { data: JSON.stringify([GZ_AI_WRITER.clean(c), c?.assignment]), key: GZ_WRITER_SOURCES.keyOf(c) };
+  };
+  let lastContext = null;
   F.on('ready', () => {
     imagesDestroyed = false;
     if (F.kind() === 'test') return;
@@ -880,9 +887,15 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     moreItem = F.item(t('Check with AI'), review);
     moreItem.hidden = true;
     hook();
+    lastContext = contextState();
     refresh();
   });
-  F.on('context', refresh);
+  F.on('context', () => {
+    const next = contextState();
+    const changed = !lastContext || lastContext.data !== next.data || lastContext.key && lastContext.key !== next.key;
+    lastContext = next;
+    if (changed) refresh();
+  });
   // The page's word that the worker now knows this attempt's kind: a frame that asked before then asks again.
   F.handle?.('ai', refresh);
   // The model's download, as the worker tells Settings: its progress here too, and a new check once it's in.
