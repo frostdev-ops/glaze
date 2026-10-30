@@ -3529,7 +3529,7 @@ chrome.storage.onChanged.addListener((c, area) => {
   // is weighed by when it was made, not lost to an earlier one from another device.
   chrome.storage.local.get('driveSync').then(async ({ driveSync: st }) => {
     const on = st?.on === true;
-    if (!googleLib().ON || !(on || typeof st?.account === 'string')) return;
+    if (!(on || typeof st?.account === 'string') || !googleLib().ON) return; // nothing loads for someone never connected
     const sync = openDriveSync();
     if (on) for (const k of keys) await sync.touched(k.slice(12));
     // Everything else: each key's time of change, and a push once saving pauses.
