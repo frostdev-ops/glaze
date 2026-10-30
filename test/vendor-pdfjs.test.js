@@ -7,7 +7,8 @@ const path = require('node:path');
 
 const root = path.join(__dirname, '..');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const modules = fs.readdirSync(path.join(root, 'lib/pdfjs')).filter((f) => /\.m?js$/.test(f));
+// Firefox also ships pdf.js's own no-wasm decoder fallbacks (.js), which its fixed local imports name.
+const modules = fs.readdirSync(path.join(root, 'lib/pdfjs')).filter((f) => /\.mjs$/.test(f));
 // A call of the old global escape or unescape function; not a method (RegExp.escape), core-js's $escape, or its definition.
 const OLD_ESCAPE = /(?<![\w$.]|function )(?:un)?escape\s*\(/;
 

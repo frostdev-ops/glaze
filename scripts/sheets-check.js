@@ -478,6 +478,32 @@ const seeded = (key, wb = M.workbook()) => {
     const arec = await until(() => local(`writerPaper:${again}`), 'its record');
     check(arec.kind === 'sheet' && arec.cells === count(original) + 1, `the export imports again with every cell (${arec.cells})`);
 
+    // ---- an .xlsm (test/fixtures/sheet-xlsm.js): it imports, its card and grid say Export .xlsm, and the export is
+    // Budget.xlsm with its macro project byte for byte
+    const XM = require(path.join(root, 'test/fixtures/sheet-xlsm.js')), DTX = require('../lib/doctext.js');
+    const xlsmFile = path.join(tmp, 'Budget.xlsm');
+    fs.writeFileSync(xlsmFile, XM.xlsm());
+    await openHome();
+    check(await page.evaluate(() => /\.xlsm/.test(document.querySelector('#gd-file').accept)), 'the chooser takes .xlsm');
+    const cardsM = await page.evaluate(() => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key));
+    await page.setInputFiles('#gd-file', xlsmFile);
+    const mkey = await until(() => page.evaluate((was) => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key).find((k) => !was.includes(k)), cardsM), 'the .xlsm card');
+    const mrec = await until(() => local(`writerPaper:${mkey}`), 'the .xlsm record');
+    await page.click(`.gd-card[data-key="${mkey}"] .gd-more`);
+    const cardMenu = await until(() => page.evaluate(() => [...document.querySelectorAll('.gd-menu [role="menuitem"]')].map((b) => b.textContent)).then((x) => x.length && x), 'the card menu');
+    await page.keyboard.press('Escape');
+    check(mrec.kind === 'sheet' && mrec.ext === '.xlsm' && cardMenu.includes('Export .xlsm') && !cardMenu.includes('Export .xlsx'), `the .xlsm imports and its card says Export .xlsm (${cardMenu.join(', ')})`);
+    await page.click(`.gd-card[data-key="${mkey}"] .gd-title`);
+    await grid();
+    await page.click('#gx-more');
+    check(await page.evaluate(() => document.querySelector('.gx-menu [data-act="export"]')?.textContent) === 'Export .xlsm', 'the grid\'s menu says Export .xlsm');
+    const [mdl] = await Promise.all([page.waitForEvent('download'), page.click('.gx-menu [data-act="export"]')]);
+    const mout = path.join(tmp, `out-${mdl.suggestedFilename()}`);
+    await mdl.saveAs(mout);
+    const mz = DTX.unzip(new Uint8Array(fs.readFileSync(mout))), vba = await mz.bytes('xl/vbaProject.bin'), types = await mz.text('[Content_Types].xml');
+    check(mdl.suggestedFilename() === 'Budget.xlsm' && vba && Buffer.from(vba).equals(Buffer.from(XM.VBA)) && /macroEnabled\.main\+xml/.test(types),
+      `the .xlsm exports as ${mdl.suggestedFilename()}, its macro project verbatim and the macro-enabled workbook type`);
+
     // A script can finish loading without publishing its codec. Opening must show the read error and a usable home.
     const failed = await context.newPage();
     try {

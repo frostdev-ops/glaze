@@ -44,14 +44,14 @@
       }
     },
     // a record → its bytes, or null for none; a FileError when the store can't give them (missing, unavailable, cut).
-    get: async (rec) => {
+    get: async (rec, got = null) => {
       if (typeof rec?.file === 'string') {
         if (!rec.file.length || rec.file.length > 4 * Math.ceil(LEGACY / 3)) return null;
         try { const bytes = unb64(rec.file); return bytes.length <= LEGACY ? bytes : null; } catch { return null; }
       }
       const F = await files();
       if (!F.ref(rec?.file) || rec.file.size > STORE.max) return null;
-      try { return await F.client().get(rec.file); } catch (e) { throw new FileError(e.why); }
+      try { return await F.client().get(rec.file, got); } catch (e) { throw new FileError(e.why); }
     },
   };
   let store = null;
@@ -204,8 +204,9 @@
     return key;
   };
   // A deck as its file: the bytes imported, named by its title. → { name, mime, bytes } or null.
-  const file = async (key) => {
-    const rec = await papers().get(key), bytes = await STORE.get(rec);
+  // progress (lib/doc-kinds.js progress): the bytes as they come from the file store.
+  const file = async (key, { progress = null } = {}) => {
+    const rec = await papers().get(key), bytes = await STORE.get(rec, progress && ((done, total) => progress({ stage: 'copy', done, total })));
     if (!bytes) return null;
     const ext = rec.ext === '.ppsx' ? '.ppsx' : '.pptx', name = String(rec.title || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || t('Slides');
     return { name: `${name}${ext}`, mime: MIME[ext], bytes };

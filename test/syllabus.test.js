@@ -19,9 +19,11 @@ test('section-like digits and contents leaders stay bounded at the input limit',
   assert.equal(probe.status, 0, probe.stderr);
 });
 
-// Compare CPU costs on this machine: linear work doubles, quadratic quadruples. Use the cheaper of two half samples
-// so compilation in the first cannot hide quadratic growth. Each whole extraction has a 5 s CPU cap; the child has
-// a wall-clock watchdog too, because an assertion after a stuck synchronous extractor would never run.
+// Compare CPU costs on this machine: linear work doubles, quadratic quadruples. Each size is sampled twice, interleaved,
+// and its cheaper sample kept, so compilation in the first can't hide quadratic growth and one slow sample on a busy
+// machine can't fake it (a lone whole sample against the cheaper half failed 2 of 3 suite runs at 3.06x, 2026-10-30).
+// Each whole extraction has a 5 s CPU cap; the child has a wall-clock watchdog too, because an assertion after a stuck
+// synchronous extractor would never run.
 // make(k) builds the input at k of its full size; separate builders vary row count and line width.
 const onePass = (make, o, { fraction = 0.5, growth = 3 } = {}) => {
   const { spawnSync } = require('node:child_process');
@@ -31,8 +33,8 @@ const onePass = (make, o, { fraction = 0.5, growth = 3 } = {}) => {
     const cpu = () => { const { user, system } = process.cpuUsage(); return (user + system) / 1000; };
     const cost = (text) => { const t0 = cpu(); S.extract(text, o); return cpu() - t0; };
     cost(warm);
-    const first = cost(half), full = cost(whole), second = cost(half);
-    console.log(JSON.stringify({ half: Math.min(first, second), whole: full }));
+    const h1 = cost(half), w1 = cost(whole), h2 = cost(half), w2 = cost(whole);
+    console.log(JSON.stringify({ half: Math.min(h1, h2), whole: Math.min(w1, w2) }));
   `], { input: JSON.stringify({ warm: make(0.05), half: make(fraction), whole: make(1), o }), timeout: 20000, encoding: 'utf8' });
   assert.equal(probe.error, undefined, 'one-pass probe must finish within 20 s wall time');
   assert.equal(probe.status, 0, probe.stderr);

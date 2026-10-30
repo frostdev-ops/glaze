@@ -56,13 +56,13 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
     submitB.disabled = typeof P().submit !== 'function';
     const owns = async () => GZ_DOC_KINDS.kindOf(await store().get(key)) === id;
     const surface = {
-      // A spreadsheet's file always waits for the .xlsx writer (sheet-kind.js fileOf).
-      kind: () => id, key: () => key, ext: () => (id === 'sheet' ? '.xlsx' : ext), context: () => paper.context(), paper: () => paper.paper(), compact: () => false, blank: () => false, importing: () => busy,
+      // A spreadsheet's file always waits for the .xlsx writer (sheet-kind.js fileOf): .xlsm when its record says so.
+      kind: () => id, key: () => key, ext: () => (id === 'sheet' ? (ext === '.xlsm' ? '.xlsm' : '.xlsx') : ext), context: () => paper.context(), paper: () => paper.paper(), compact: () => false, blank: () => false, importing: () => busy,
       pages: () => v?.pages?.() || null, notify: (m) => v?.say?.(t(m)), focused: () => {}, resume: () => {}, look: () => null,
-      version: async (reason = 'submit') => {
+      version: async (reason = 'submit', { attached = null } = {}) => {
         if (!await surface.save()) return null;
-        if (typeof k.version === 'function') return k.version(key, reason).catch((e) => { console.error(e); return null; });
-        return store().save(key, {}, { reason, expectedKind: id }).catch((e) => { console.error(e); return null; });
+        if (typeof k.version === 'function') return k.version(key, reason, { attached }).catch((e) => { console.error(e); return null; });
+        return store().save(key, {}, { reason, expectedKind: id, ...(attached && { attached }) }).catch((e) => { console.error(e); return null; });
       },
       save: async () => !!v && await owns() && await v.save() && await owns(),
       file: async () => { if (!await owns()) throw new Error('document kind changed'); const out = await v.file(); if (!await owns()) throw new Error('document kind changed'); return out; },
@@ -225,5 +225,5 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
     } catch (e) { console.error(e); failed('error'); }
   });
 
-  return { FRAME, opens, offers, mount, open, start, shown: () => shown?.id || null };
+  return { FRAME, opens, offers, kind, mount, open, start, shown: () => shown?.id || null };
 })();

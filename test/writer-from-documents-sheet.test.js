@@ -28,7 +28,7 @@ const sheet = ({ list = async () => rows(), busy = false } = {}) => {
   const ctx = vm.createContext({ document: doc, root, versionsB, current: app, api: app, importing: false, compact: false, Intl,
     PA, ST, store: { list }, h, btn: (props, ...kids) => h('button', props, ...kids), icon: () => h('svg'), t: (k, v) => I.t(k, v, 'en'), nf: String,
     labelOf: () => 'Blank', fromDocs: (...args) => chosen.push(args), toast: (m) => notices.push(m), console: { error() {} },
-    GZ_WRITER_SUBMIT_SHEET: { busy: () => busy, opened: () => busy } });
+    GZ_WRITER_SUBMIT_SHEET: { busy: () => busy, opened: () => busy }, self: {} });
   vm.runInContext(`${block}\nglobalThis.testSheet = { open: fromDocsSheet, close: closeDocs };`, ctx);
   return { ...ctx.testSheet, doc, root, prior, versionsB, notices, chosen, ctx,
     layer: () => doc.body.querySelector('.gp-fromdocs-layer'), picks: () => doc.body.querySelectorAll('.gp-fromdocs-row'),

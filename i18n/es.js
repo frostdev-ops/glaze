@@ -3755,5 +3755,17 @@
   "Glaze restarted before you answered.": "Glaze se reinició antes de que respondieras.",
   "Print with notes…": "Imprimir con notas…",
   "This file isn't available to you right now.": "Este archivo no está disponible para ti en este momento.",
-  "Couldn't open this file in Glaze.": "No se pudo abrir este archivo en Glaze."
+  "Couldn't open this file in Glaze.": "No se pudo abrir este archivo en Glaze.",
+  "Export .xlsm": "Exportar .xlsm",
+  "Attach from Documents": "Adjuntar desde Documentos",
+  "{name} could not be made.": "No se pudo crear {name}.",
+  "{name} is larger than 50 MB.": "{name} supera los 50 MB.",
+  "Attach up to {n} documents.": "Adjunta hasta {n} documentos.",
+  "Attached: {names}": "Adjuntos: {names}",
+  "A file is larger than 50 MB. Nothing was submitted.": "Un archivo supera los 50 MB. No se entregó nada.",
+  "A file could not be read. Nothing was submitted.": "No se pudo leer un archivo. No se entregó nada.",
+  "The document changed or was deleted. Remove it and pick it again. Nothing was submitted.": "El documento cambió o se eliminó. Quítalo y vuelve a seleccionarlo. No se entregó nada.",
+  "File: {name}.": "Archivo: {name}.",
+  "Use Blackboard editor to review or remove these uploads: {names}.": "Usa el editor de Blackboard para revisar o quitar estos archivos subidos: {names}.",
+  "Not attached": "No adjuntado"
 };

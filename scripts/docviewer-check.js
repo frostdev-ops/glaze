@@ -24,6 +24,8 @@ const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest(
 const BLOB = encodeURIComponent(JSON.stringify({ user_id: 170000000000042, attachment_id: 21, type: 'canvadoc' }));
 const KEY = 'ink:https://school.instructure.com/170000000000042/21';
 const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) process.exitCode = 1; };
+// Polls state from Node until it holds or the time is up; the case after it says which.
+const until = async (holds, ms = 5000) => { for (const end = Date.now() + ms; !(await holds()) && Date.now() < end;) await new Promise((r) => setTimeout(r, 50)); };
 
 (async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'w9-'));
@@ -32,6 +34,9 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
     ...chromeLaunch, headless: true, viewport: { width: 1100, height: 900 }, reducedMotion: 'reduce', colorScheme: 'dark',
     args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'],
   });
+  // Glaze's first screen opens on install as the active tab; a page left behind it renders at 1 Hz, too slow for the
+  // layer the viewer puts back on the next frame.
+  const welcomed = require('./check-env.js').noFirstRun(ctx);
   try {
     let lang = 'en';
     const external = [];
@@ -55,6 +60,10 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
     const set = (s) => opts.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); }, s);
     const local = () => opts.evaluate(() => chrome.storage.local.get(null));
     const look = (name) => ({ ...G.GZ_DEFAULTS, colors: G.GZ_PRESETS.find(([n]) => n === name)[1], preset: name });
+    let welcomeTimer;
+    try {
+      await Promise.race([welcomed, new Promise((_, no) => { welcomeTimer = setTimeout(() => no(new Error('the install never closed its first screen')), 45000); })]);
+    } finally { clearTimeout(welcomeTimer); }
     const page = await ctx.newPage();
     const frame = async () => {
       await page.waitForSelector('#file-preview-iframe');
@@ -132,7 +141,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
     await page.mouse.down();
     for (let i = 1; i <= 20; i++) await page.mouse.move(box.x + 100 + i * 10, box.y + 100 + Math.sin(i / 3) * 20);
     await page.mouse.up();
-    await page.waitForTimeout(300);
+    await until(async () => (await local())[KEY]?.pages?.['1']?.length === 1);
     let L = await local();
     ok(L[KEY]?.pages?.['1']?.length === 1, `a stroke saved under ${KEY}`);
     const s = L[KEY]?.pages?.['1']?.[0];
@@ -141,58 +150,87 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
     // Highlighter and a second stroke, then undo/redo with the keyboard.
     await bar.locator('button[aria-label="Highlighter"]').click();
     await page.mouse.move(box.x + 100, box.y + 300); await page.mouse.down(); await page.mouse.move(box.x + 300, box.y + 300, { steps: 5 }); await page.mouse.up();
-    await page.waitForTimeout(200);
-    ok((await local())[KEY]?.pages['1'].length === 2, 'highlight saved');
+    await until(async () => (await local())[KEY]?.pages?.['1']?.length === 2);
+    ok((await local())[KEY]?.pages?.['1']?.length === 2, 'highlight saved');
     await page.keyboard.press('Control+z');
-    await page.waitForTimeout(200);
-    ok((await local())[KEY]?.pages['1'].length === 1, 'Ctrl+Z undoes');
+    await until(async () => (await local())[KEY]?.pages?.['1']?.length === 1);
+    ok((await local())[KEY]?.pages?.['1']?.length === 1, 'Ctrl+Z undoes');
     await page.keyboard.press('Control+Shift+z');
-    await page.waitForTimeout(200);
-    ok((await local())[KEY]?.pages['1'][1]?.t === 'hl', 'Ctrl+Shift+Z redoes');
+    await until(async () => (await local())[KEY]?.pages?.['1']?.[1]?.t === 'hl');
+    ok((await local())[KEY]?.pages?.['1']?.[1]?.t === 'hl', 'Ctrl+Shift+Z redoes');
     await page.screenshot({ path: path.join(out, 'ink.png') });
     // Eraser across the first stroke.
     await bar.locator('button[aria-label="Eraser"]').click();
     await page.mouse.move(box.x + 150, box.y + 60); await page.mouse.down(); await page.mouse.move(box.x + 150, box.y + 160, { steps: 8 }); await page.mouse.up();
-    await page.waitForTimeout(200);
+    await until(async () => (await local())[KEY]?.pages?.['1']?.length === 1);
     L = await local();
     ok(L[KEY]?.pages['1'].length === 1 && L[KEY].pages['1'][0].t === 'hl', 'eraser removed the pen stroke only');
+    // Tool down: Ctrl+Z is the viewer's. Glaze's undo would run in the key's own handler, which has run when press()
+    // returns, and would light Redo at once; the eraser's undo record is there to take.
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+z');
+    ok(await bar.locator('button[aria-label="Redo"]').isDisabled() && (await local())[KEY]?.pages?.['1']?.length === 1, 'with no tool picked, Ctrl+Z is left to the viewer');
     // Export, then clear page, then import it back.
     const [dl] = await Promise.all([page.waitForEvent('download'), bar.locator('button[aria-label="Export annotations"]').click()]);
     const file = path.join(out, 'export.json');
     await dl.saveAs(file);
     ok(JSON.parse(fs.readFileSync(file, 'utf8')).format === 'glaze-annotations', `export downloads ${dl.suggestedFilename()}`);
     await bar.locator('button[aria-label="Clear page"]').click();
-    await page.waitForTimeout(200);
+    await until(async () => !(KEY in await local()));
     ok(!(KEY in await local()), 'clear page empties the file: key removed');
-    await page.keyboard.press('Escape');
-    await page.keyboard.press('Control+z'); // tool down: Ctrl+Z is the viewer's, nothing happens
-    await page.waitForTimeout(200);
-    ok(!(KEY in await local()), 'with no tool picked, Ctrl+Z is left to the viewer');
+    // Undo takes the clear back, though the clear removed the file's key; Redo clears again.
+    await bar.locator('button[aria-label="Undo"]').click({ timeout: 3000 }).catch(() => {});
+    await until(async () => (await local())[KEY]?.pages?.['1']?.length === 1);
+    ok((await local())[KEY]?.pages?.['1']?.length === 1 && await f.locator('#page-1 > svg.gz-ink path').count() === 1, 'Undo brings a cleared page back, in storage and on the page');
+    await bar.locator('button[aria-label="Redo"]').click({ timeout: 3000 }).catch(() => {});
+    await until(async () => !(KEY in await local()));
+    ok(!(KEY in await local()) && await f.locator('#page-1 > svg.gz-ink path').count() === 0, 'Redo clears it again');
     const [chooser] = await Promise.all([page.waitForEvent('filechooser'), bar.locator('button[aria-label="Import annotations"]').click()]);
     await chooser.setFiles(file);
-    await page.waitForTimeout(400);
-    ok((await local())[KEY]?.pages['1'].length === 1, 'import brings the marks back');
+    await until(async () => (await local())[KEY]?.pages?.['1']?.length === 1);
+    ok((await local())[KEY]?.pages?.['1']?.length === 1, 'import brings the marks back');
     const [pic] = await Promise.all([page.waitForEvent('download'), bar.locator('button[aria-label="Save page as picture"]').click()]);
     ok(/^page-1-21\.png$/.test(pic.suggestedFilename()), `page picture ${pic.suggestedFilename()}`);
     // Re-render on scroll: the viewer replaces a page's contents; the layer comes back with the marks.
     await f.evaluate(() => { const p = document.getElementById('page-1'); p.replaceChildren(...[...p.children].filter((c) => !c.matches('.gz-ink')).map((c) => c.cloneNode(true))); });
-    await page.waitForTimeout(300);
+    await f.waitForFunction(() => document.querySelector('#page-1 > svg.gz-ink path'), null, { polling: 50, timeout: 5000 }).catch(() => {});
     ok(await f.locator('#page-1 > svg.gz-ink path').count() === 1, 'a page drawn again gets its layer and marks back');
-    // Zoom: the page doubles in width; the layer follows, the stroke keeps its place in page units.
-    await f.evaluate(() => { document.getElementById('page-1').style.width = '1224px'; });
-    await page.waitForTimeout(300);
-    const vb = await f.locator('#page-1 > svg.gz-ink').getAttribute('viewBox');
-    ok(/^0 0 1000 \d+$/.test(vb), `viewBox in page units at any zoom: ${vb}`);
+    // Zoom: the viewer scales the page and its picture together, here to twice the size with no redraw. A mark drawn at a
+    // known spot stays on the same spot of the page's picture.
+    await bar.locator('button[aria-label="Pen"]').click();
+    await f.locator('#page-1').evaluate((p) => p.scrollIntoView());
+    const cb = await f.locator('#page-1 canvas').boundingBox();
+    await page.mouse.move(cb.x + 150, cb.y + 120); await page.mouse.down(); await page.mouse.move(cb.x + 350, cb.y + 120, { steps: 8 }); await page.mouse.up();
+    await page.keyboard.press('Escape');
+    // The newest stroke's middle line, as fractions of the page's picture.
+    const onPicture = () => f.evaluate(() => {
+      const pg = document.getElementById('page-1'), c = pg.querySelector('canvas').getBoundingClientRect();
+      const s = [...pg.querySelectorAll(':scope > svg.gz-ink path')].pop()?.getBoundingClientRect();
+      return s && { x0: (s.left - c.left) / c.width, x1: (s.right - c.left) / c.width, y: (s.top + s.height / 2 - c.top) / c.height, w: c.width, h: c.height };
+    });
+    const before = await onPicture();
+    ok(before && Math.abs(before.x1 * before.w - 350) < 2 && Math.abs(before.y * before.h - 120) < 2, `a stroke ends where it was drawn: ${JSON.stringify(before)}`);
+    await f.evaluate(() => { const p = document.getElementById('page-1'); p.style.width = '1224px'; Object.assign(p.querySelector('canvas').style, { width: '1224px', height: '1584px' }); });
+    const offBy = (a) => a && Math.max(Math.abs(a.x0 - before.x0) * a.w, Math.abs(a.x1 - before.x1) * a.w, Math.abs(a.y - before.y) * a.h);
+    let zoomed;
+    await until(async () => { zoomed = await onPicture(); return zoomed?.w === 1224 && offBy(zoomed) < 1; });
+    ok(zoomed?.w === 1224 && offBy(zoomed) < 1, `zoom: the stroke stays on its spot of the page (${offBy(zoomed)?.toFixed(1)} px off at ${zoomed?.w}x${zoomed?.h})`);
     // Rotation: a click on the rotate button turns the frame a quarter turn.
     await f.locator('button[aria-label="Rotate Page Clockwise By 90 Degrees"]').click();
-    await page.waitForTimeout(300);
+    await f.waitForFunction(() => /^matrix\(0,1,-1,0,/.test(document.querySelector('#page-1 > svg.gz-ink g')?.getAttribute('transform')), null, { polling: 50, timeout: 5000 }).catch(() => {});
     ok(/^matrix\(0,1,-1,0,/.test(await f.locator('#page-1 > svg.gz-ink g').getAttribute('transform')), 'rotate: the layer turns a quarter');
     await page.screenshot({ path: path.join(out, 'ink-rotated.png') });
+    // Another tab clears the file: this one drops its marks, and its history with them.
+    const undoB = bar.locator('button[aria-label="Undo"]');
+    const hadUndo = await undoB.isEnabled();
+    await opts.evaluate((k) => chrome.storage.local.remove(k), KEY);
+    await until(async () => await f.locator('#page-1 > svg.gz-ink path').count() === 0 && await undoB.isDisabled());
+    ok(hadUndo && await f.locator('#page-1 > svg.gz-ink path').count() === 0 && await undoB.isDisabled() && !(KEY in await local()), "another tab's clear empties this one, history too");
 
     // German.
     lang = 'de';
     f = await load();
-    await page.waitForTimeout(1500);
+    await until(async () => await f.locator('#gz-ink-bar button[aria-label="Anmerken"]').count() === 1, 10000);
     ok(await f.locator('#gz-ink-bar button[aria-label="Anmerken"]').count() === 1, 'German page: the toolbar speaks German');
     const hosts = [...new Set(external.map((u) => new URL(u).host))];
     ok(hosts.every((h) => /^((school|canvas)\.instructure\.com|localhost:3000)$/.test(h)), `only the fixtures' own assets were asked for (all aborted; DNS is mapped to nowhere): ${hosts.join(', ')}`);
