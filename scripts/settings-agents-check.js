@@ -195,6 +195,7 @@ async function pass(scheme) {
       const before = (await log()).length;
       await page.locator('#agents-on').click();
       for (const end = Date.now() + 8000; (await link())?.state !== 'off';) { if (Date.now() > end) throw new Error(`link ${JSON.stringify(await link())}`); await pause(100); }
+      await page.waitForFunction((start) => globalThis.agentsLog.slice(start).some((x) => x.removed === 'nativeMessaging'), before);
       const got = (await log()).slice(before);
       assert.deepEqual(got.filter((x) => x.asked), [], 'turning off asks for nothing');
       const set = got.findIndex((x) => x.sent === 'set' && x.on === false), removed = got.findIndex((x) => x.removed === 'nativeMessaging');
