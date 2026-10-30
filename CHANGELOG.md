@@ -21,6 +21,7 @@ All notable changes to Glaze are documented here. The format follows
 - Motion starts at Expressive. Updating moves Subtle to Expressive once; Off stays Off.
 - Text pasted or imported from Word keeps a colour only where it reads on the page.
 - Settings → Writer: Clear all names and removes papers and documents, Trash too.
+- Gallery Looks you save or use now appear wherever a Look is picked.
 
 ### Fixed
 
