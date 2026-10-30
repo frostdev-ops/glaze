@@ -10,7 +10,7 @@ const P = require('./peer.js');
 
 const HOLD = 1024 * 1024, POLL = 250;
 const USAGE = 'Usage: glaze-mcp [agent] [--browser <id>] [--instance <id>]\n';
-const SETTINGS = 'In Glaze, turn on Settings → Agents; if it says the helper is missing, run: npx glaze-mcp setup';
+const SETTINGS = 'In Glaze, turn on Settings → AI → Agents; if it says the helper is missing, run: npx glaze-mcp setup';
 
 const usage = (message) => Object.assign(new Error(message), { code: 'USAGE' });
 const options = (args, env) => {

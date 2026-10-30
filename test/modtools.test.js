@@ -239,7 +239,7 @@ test('editor: the agents permission, one line per tool saying where its data com
   const view = { ...MANIFEST, permissions: P('agents', 'todo', 'courses', 'grades'), tools: [DUE, WEEK, COURSES, GRADES, ASK] };
   const ls = E.lines(view, t);
   assert.deepEqual(ls.map((l) => [l.id, l.text]), [
-    ['agents', 'Agent apps you connect in Settings → Agents can use this mod’s tools.'],
+    ['agents', 'Agent apps you connect in Settings → AI → Agents can use this mod’s tools.'],
     ['todo', 'To Do — reads your to-dos, due dates and schedule.'],
     ['courses', 'Courses — reads the names and details of your courses.'],
     ['grades', 'Grades — reads your grades and GPA in every course.'],
