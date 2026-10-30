@@ -480,3 +480,12 @@ test('shared master chart titles are parsed once per part', async () => {
     assert.equal(parsed, 1);
   } finally { D.tokens = original; }
 });
+
+test('non-placeholder text boxes use presentation defaults while tables keep the master other style', async () => {
+  const pres = fixture('ppt/presentation.xml').replace(/(<p:defaultTextStyle>[\s\S]*?sz=")1800/, (_, prefix) => `${prefix}2600`);
+  const master = fixture('ppt/slideMasters/slideMaster1.xml').replace(/(<p:otherStyle>[\s\S]*?sz=")1800/, (_, prefix) => `${prefix}1400`);
+  const slide = fixture('ppt/slides/slide3.xml').replace('<p:cNvSpPr/>', '<p:cNvSpPr txBox="1"/>');
+  const d = await P.read(pack({ 'ppt/presentation.xml': pres, 'ppt/slideMasters/slideMaster1.xml': master, 'ppt/slides/slide3.xml': slide }));
+  assert.equal(named(d.slides[2], 'Default').text.paragraphs[0].runs[0].size, 26);
+  assert.equal(named(d.slides[4], 'Table 3').rows[0].cells[0].text.paragraphs[0].runs[0].size, 14);
+});
