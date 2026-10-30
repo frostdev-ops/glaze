@@ -24,6 +24,7 @@ const frame = (options = {}) => {
     plugin: (p) => hooks.push(p), on: (k, f) => { events[k] = f; } };
   const makePort = () => { const p = { sent: [], postMessage(m) { this.sent.push(m); }, start() {}, close() { this.closed = true; }, terminate() { this.terminated = true; }, addEventListener() {} }; ports.push(p); return p; };
   const ctx = vm.createContext({ GZ_WRITER_FRAME: api, GZ_WRITER_SETTINGS: settings, GZ_WRITER_PROOF: proof, GZ_WRITER_ISSUES: issues, GZ_PM,
+    GZ_AI_WRITER: require('../lib/ai/tasks/writer-context.js'), structuredClone,
     document: doc, innerWidth: 800, innerHeight: 300, console,
     setTimeout: (fn, ms) => { timers.set(++tid, { fn, ms }); return tid; }, clearTimeout: (id) => timers.delete(id),
     addEventListener: (k, fn) => { life[k] = fn; },

@@ -202,13 +202,15 @@
       rule(i);
     }
   };
+  // The same bounded context the AI reads: source identity arriving is harmless; a changed prompt or thread isn't.
+  const rulingContext = (c) => JSON.stringify(GZ_AI_WRITER.clean(c));
   const rule = async (i) => {
-    const version = ver(), contextAtAsk = F.context();
+    const version = ver(), contextAtAsk = structuredClone(F.context()), contextKey = rulingContext(contextAtAsk);
     const $from = view.state.doc.resolve(i.from), start = $from.start();
     let said = null;
     try { said = await P.decide({ text: P.blockText($from.parent), from: i.from - start, to: i.to - start, suggestions: i.suggestions.slice(), context: contextAtAsk }); } catch (e) { console.error(e); }
     const v = P.verdict(said, i.suggestions.length), now = view && I.list().find((x) => x.id === i.id);
-    if (stopped || view.composing || ver() !== version || F.context() !== contextAtAsk || !v || !now || now.suggestions[v.choice] !== i.suggestions[v.choice]) return;
+    if (stopped || view.composing || ver() !== version || rulingContext(F.context()) !== contextKey || !v || !now || now.suggestions[v.choice] !== i.suggestions[v.choice]) return;
     if (v.verdict === 'apply' && allowRule(now.rule)) { const made = P.autofix(view, now, now.suggestions[v.choice]); if (made) showFix(made); return; }
     // 'suggest': the choice first on the card.
     const list = now.suggestions.slice(), [pick] = list.splice(v.choice, 1), bare = (x) => ({ ...x, id: x.id.replace(/^harper:/, '') });

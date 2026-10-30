@@ -113,3 +113,25 @@ test('a storage reload from an earlier paper never replaces the current sources'
   old.resolve([source('Updated')]); await flush();
   assert.equal(f.cite.sources()[0].title, 'Bravo');
 });
+
+test('changing students clears the old sources and ignores their late read and storage events', async () => {
+  const bus = shared(), pending = [], C = require('../lib/writer-context-discussion.js');
+  const contextFor = (id) => C.contextOf({ kind: 'reply', school: 'bb.school.test', course: { id: '_101_1' }, user: { id }, item: '_9_1' });
+  const old = contextFor('_42_1'), next = contextFor('_43_1'), oldKey = S.keyOf(old), nextKey = S.keyOf(next);
+  bus.data[oldKey] = { sources: [source('Private Alpha')], at: 1 };
+  const f = frame({ ...bus.io, load: (k) => new Promise((resolve) => pending.push({ k, resolve })) }, undefined, bus.storage);
+  const a = f.events.context(old), b = f.events.context(next);
+  assert.equal(pending[0].k, oldKey);
+  assert.equal(pending[1].k, nextKey);
+  pending[1].resolve([]); await b;
+  pending[0].resolve(bus.data[oldKey].sources); await a;
+  bus.publish(oldKey, bus.data[oldKey]); await flush();
+  assert.equal(f.cite.sources().length, 0, 'neither the old load nor its notifications disclose sources');
+  assert.equal(pending.length, 2, 'notifications for the other student trigger no read');
+  f.cite.setSources([source('Private Bravo')]); await flush();
+  assert.equal(bus.data[nextKey].sources[0].title, 'Private Bravo');
+  assert.equal(bus.data[oldKey].sources[0].title, 'Private Alpha');
+  await f.events.context({});
+  assert.equal(f.cite.sources().length, 0, 'losing the student also clears the sources');
+  f.life.pagehide();
+});
