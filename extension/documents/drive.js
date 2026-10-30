@@ -214,10 +214,8 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
           if (m.trashed !== true && m.capabilities?.canEdit !== false && m.mimeType === target) to = id;
         } catch (e) { if (e.why !== 'missing' && e.why !== 'denied') throw e; }
       }
-      const { type, body } = multipart(to ? {} : { name: as === 'doc' ? name.replace(/\.docx$/i, '') : name, mimeType: target }, mime, bytes);
-      const r = await call(to ? `${UPLOAD}/${to}?${q({ uploadType: 'multipart', fields: SAVED, supportsAllDrives: 'true' })}` : `${UPLOAD}?${q({ uploadType: 'multipart', fields: SAVED })}`,
-        { method: to ? 'PATCH' : 'POST', headers: { 'content-type': type }, body });
-      const j = await r.json().catch(() => null);
+      // Sync's upload (put): multipart up to SMALL, else resumable.
+      const j = await put({ id: to, meta: to ? {} : { name: as === 'doc' ? name.replace(/\.docx$/i, '') : name, mimeType: target }, mime, bytes, fields: SAVED, all: !!to });
       if (typeof j?.id !== 'string' || !ID.test(j.id) || (to && j.id !== to)) throw new Fail('bad');
       return { id: j.id, fresh: !!id && !to };
     };
@@ -271,15 +269,17 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
       return join(parts, n);
     };
     // A file's content and metadata: a new file (no id) or a new revision of id. Up to SMALL in one multipart request, else
-    // a resumable session (its address only ever Drive's own upload address) and one PUT of the bytes.
-    const put = async ({ id = null, meta = {}, mime, bytes, fields = SYNC }) => {
+    // a resumable session (its address only ever Drive's own upload address) and one PUT of the bytes. all: the file may be
+    // in a shared drive (Save to Drive's update of a file the student moved).
+    const put = async ({ id = null, meta = {}, mime, bytes, fields = SYNC, all = false }) => {
       if ((id !== null && (typeof id !== 'string' || !ID.test(id))) || typeof mime !== 'string' || !MIME.test(mime) || !(bytes instanceof Uint8Array) || bytes.length > kinds().FILE * 4) throw new Fail('bad');
+      const more = all ? { supportsAllDrives: 'true' } : {};
       if (bytes.length <= SMALL) {
         const { type, body } = multipart(meta, mime, bytes);
-        return json(await call(id ? `${UPLOAD}/${id}?${q({ uploadType: 'multipart', fields })}` : `${UPLOAD}?${q({ uploadType: 'multipart', fields })}`,
+        return json(await call(id ? `${UPLOAD}/${id}?${q({ uploadType: 'multipart', fields, ...more })}` : `${UPLOAD}?${q({ uploadType: 'multipart', fields, ...more })}`,
           { method: id ? 'PATCH' : 'POST', headers: { 'content-type': type }, body }));
       }
-      const r = await call(id ? `${UPLOAD}/${id}?${q({ uploadType: 'resumable', fields })}` : `${UPLOAD}?${q({ uploadType: 'resumable', fields })}`, {
+      const r = await call(id ? `${UPLOAD}/${id}?${q({ uploadType: 'resumable', fields, ...more })}` : `${UPLOAD}?${q({ uploadType: 'resumable', fields, ...more })}`, {
         method: id ? 'PATCH' : 'POST', headers: { 'content-type': JSON_TYPE, 'x-upload-content-type': mime, 'x-upload-content-length': String(bytes.length) }, body: JSON.stringify(meta),
       });
       r.body?.cancel().catch(() => {});
