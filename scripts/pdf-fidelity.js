@@ -2,9 +2,9 @@
 // file with lib/pdf-doc.js as the editor and the pages panel do, then reads every output in pdf.js, in Poppler (pdfinfo,
 // pdftotext, pdftoppm, pdfsig) and in PDFKit, Preview's engine (a small Swift program compiled in a temporary folder),
 // and compares page count, page order (each page's text), rotation and field values with what was asked. Prints a
-// table, writes fidelity.json and the outputs to the folder, exits 1 on any difference. macOS; heavy, so run it as
-//   nice -n 10 lockf -k /private/tmp/claude-501/glaze-heavy.lock node scripts/pdf-fidelity.js [folder] [--small]
-// (default folder: a new temporary one; --small leaves out the 300-page file).
+// table, writes fidelity.json and the outputs to the folder, exits 1 on any difference. macOS; a heavy job, so it runs
+// under the machine's heavy-job lock, niced.
+// node scripts/pdf-fidelity.js [folder] [--small]   (default folder: a new temporary one; --small: not the 300-page file)
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const { pathToFileURL } = require('node:url');
