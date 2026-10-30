@@ -139,16 +139,23 @@ test('a frame without Writer\'s host makes no kinds module', () => {
 const viewer = async (id = 'pdf') => {
   const P = PA.open(store(), () => Date.now());
   await P.save(KEY, { kind: id, doc: null, file: 'JVBERi0=', size: 5 });
-  const calls = { save: 0, dispose: 0, versions: [] }, paper = { key: () => KEY, context: () => ({}), paper: () => ({}),
+  const calls = { save: 0, dispose: 0, versions: [], said: [] }, paper = { key: () => KEY, context: () => ({}), paper: () => ({}),
     hold() {}, unpark() {}, take() {}, release() {}, notify() {}, importFile: async () => null };
   const el = () => ({ dataset: {}, append() {}, remove() {}, addEventListener() {} });
   const document = { documentElement: el(), body: el(), head: { append: (l) => queueMicrotask(() => l.onload()) }, createElement: el };
   const implementation = { ...(id === 'sheet' && { version: async (key, reason) => { calls.versions.push([key, reason]); return { version: { id: 'packed', gz: 'workbook' } }; } }),
-    view: async () => ({ save: async () => { calls.save++; return true; }, file: async () => ({ bytes: new Uint8Array([1]) }), dispose: () => { calls.dispose++; } }),
-    into: async () => (await P.save(KEY, { kind: 'pdf', file: 'TkVX', size: 3 }, { reason: 'import' })).paper };
+    view: async () => ({ say: (text) => calls.said.push(text), save: async () => { calls.save++; return true; }, file: async () => ({ bytes: new Uint8Array([1]) }), dispose: () => { calls.dispose++; } }),
+    into: async (key, f, { progress } = {}) => {
+      progress?.({ stage: 'read' });
+      progress?.({ stage: 'read', done: 2e6, total: 2e6 });
+      progress?.({ stage: 'prepare' });
+      for (const done of [0, 1e6, 2e6]) progress?.({ stage: 'copy', done, total: 2e6 });
+      progress?.({ stage: 'save' });
+      return (await P.save(KEY, { kind: 'pdf', file: 'TkVX', size: 3 }, { reason: 'import' })).paper;
+    } };
   const DK = require('../lib/doc-kinds.js');
   const ctx = vm.createContext({ console: { error() {} }, document, GZ_WRITER_PAPERS: { open: () => P },
-    GZ_DOC_KINDS: { KINDS: DK.KINDS, kindOf: DK.kindOf, settled: async () => {}, get: (id) => ({ ...DK.KINDS[id], ...implementation }) },
+    GZ_DOC_KINDS: { KINDS: DK.KINDS, kindOf: DK.kindOf, progress: DK.progress, said: DK.said, settled: async () => {}, get: (id) => ({ ...DK.KINDS[id], ...implementation }) },
     GZ_WRITER_FRAME: { t: (s) => s, say() {}, on() {} }, GZ_WRITER_SETTINGS: { now: () => ({ pdf: true }) },
     GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_PAPER: { need: async () => {}, submit() {} } });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'writer-kinds.js'), 'utf8'), ctx);
@@ -180,6 +187,12 @@ test('replacing a viewer disposes the previous viewer', async () => {
   const { surface, calls } = await viewer();
   await surface.importFile({ name: 'new.pdf' });
   assert.equal(calls.dispose, 1);
+});
+
+test('an import over a viewer announces each stage once without chunk counts', async () => {
+  const { surface, calls } = await viewer();
+  await surface.importFile({ name: 'new.pdf' });
+  assert.deepEqual(calls.said, ['Reading…', 'Preparing pages…', 'Copying…', 'Saving…']);
 });
 
 test('the grid uses its kind\'s packed version for submit and before a file replaces it', async () => {

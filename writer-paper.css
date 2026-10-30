@@ -191,6 +191,15 @@
 .gp-status { height: 34px; flex: none; display: flex; align-items: center; gap: 18px; padding: 0 16px; color: var(--gz-ink-muted); font-size: 12px; background: var(--panel); border-top: 1px solid var(--edge); white-space: nowrap; }
 .gp-status button { font-size: 12px; color: var(--gz-ink-muted); }
 .gp-status button:hover { color: var(--gz-ink); }
+/* A file arriving (Open in Glaze): its stage and a bar filling as it goes */
+.gp-arrive { display: inline-flex; align-items: center; gap: 8px; color: var(--gz-ink); }
+.gp-arrive[hidden] { display: none; }
+.gp-progress { width: 120px; height: 4px; border-radius: 999px; overflow: hidden; background: color-mix(in srgb, var(--gz-ink-muted) 24%, transparent); }
+.gp-fill { display: block; height: 100%; border-radius: inherit; background: var(--gz-accent); transform: scaleX(0); transform-origin: left; transition: transform var(--gz-t-move, .2s) ease-out; }
+:root[dir="rtl"] .gp-fill { transform-origin: right; }
+html[data-gz-motion="off"] .gp-fill, html[data-gz-no-trans] .gp-fill { transition: none; }
+@media (prefers-reduced-motion: reduce) { html:not([data-gz-motion]) .gp-fill { transition: none; } }
+.gp-sr { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* Side panel */
 .gp-side { background: var(--panel); border-left: 1px solid var(--edge); display: flex; flex-direction: column; min-height: 0; min-width: 0; }

@@ -124,18 +124,23 @@
   // A Word file as a new standalone document, as the editor's import reads one (writer-paper.js importFile): in the format
   // Settings → Writer starts papers in, its own formatting kept where the format would flag it, the save taking the
   // document's first version. Its title is the file's name. → its key.
-  const importFile = async (file) => {
+  const importFile = async (file, { progress = null } = {}) => {
     if (!Number.isSafeInteger(file?.size) || file.size <= 0 || file.size > GZ_DOC_KINDS.KINDS.paper.max) throw new RangeError('Choose a Word file smaller than 15 MB.');
+    const p = typeof progress === 'function' ? progress : () => {};
+    p({ stage: 'read', done: 0, total: file.size });
     await GZ_WRITER_PAPER.need(['lib/writer-styles.js', 'lib/writer-format.js', 'lib/doc-home.js', ...DOCX]);
     const ST = GZ_WRITER_STYLES, F = GZ_WRITER_FORMAT;
     const id = await chrome.storage.sync.get('writer').then((r) => r?.writer?.format, () => null);
     const format = ST.FORMATS[ST.IDS.includes(id) ? id : 'mla9'];
     const bytes = await file.arrayBuffer();
     if (!(bytes instanceof ArrayBuffer) || bytes.byteLength !== file.size) throw new Error('invalid file read');
+    p({ stage: 'read', done: bytes.byteLength, total: bytes.byteLength });
+    p({ stage: 'prepare' });
     const r = await GZ_WRITER_DOCX.importDocx(new Uint8Array(bytes), { format });
     const doc = GZ_WRITER_SCHEMA.paper.nodeFromJSON(r.doc);
     const keep = F.check(doc, format, {}, {}).issues.some((i) => F.KEPT.has(i.rule) && i.fix?.op !== 'format');
     const key = GZ_WRITER_PAPERS.newKey(), title = GZ_DOC_HOME.stem(file.name);
+    p({ stage: 'save' });
     await papers().save(key, { kind: 'paper', doc: doc.toJSON(), format: format.id, keep, named: !!title, title }, { reason: 'import' });
     return key;
   };
@@ -235,6 +240,8 @@
     let rows = [], view = 'grid', sortBy = 'updated', course = 'all', kind = '', words = [], shown = [], current = null, focusNext = null, seq = 0;
     try { if (localStorage.getItem(VIEW) === 'list') view = 'list'; } catch { /* storage can be unavailable */ }
     let active = true, life = 0, textSize = 0;
+    // incoming: the imports under way, newest first (bring, below).
+    const incoming = [];
     const gone = new Set(), texts = new Map(), derived = new Map(), thumbs = new Map(), near = new Set(), cards = new Map(), epochs = new Map(), hitsByKey = new Map();
     // bin: the Trash is the view. moving: key → into Trash (true) or out (false), as shown until storage says so.
     let bin = false;
@@ -319,7 +326,7 @@
     };
     const inCourse = (r) => DH.inCourse(r, course === 'all' ? '' : course === 'none' ? DH.NONE : course.slice(2));
     // The cards as the filters, search and order have them; the rest leave the page. One Tab stop: the current card's link.
-    let renaming = null, held = false;
+    let renaming = null, held = false, counted = '';
     const render = () => {
       if (!active) return;
       if (renaming) { held = true; return; }
@@ -331,18 +338,25 @@
       const titles = new Map();
       const hits = list.filter((r) => { const title = titleOf(r); titles.set(r.key, title); return (bin || (inCourse(r) && (!kind || DK.kindOf(r) === kind))) && matches(r, title) === true; });
       shown = DH.sort(hits, bin ? 'trashed' : sortBy, titles, locale);
-      const els = shown.map(cardFor);
+      const listed = new Set(rows.map((r) => r.key));
+      // An import's card gives way to the document's once it is listed (its focus with it).
+      for (let i = incoming.length; i--;) {
+        const j = incoming[i];
+        if (!j.key || !listed.has(j.key)) continue;
+        if (j.ui.el.contains(document.activeElement)) focusNext = j.key;
+        incoming.splice(i, 1);
+      }
+      const els = [...(bin ? [] : incoming.map((j) => j.ui.el)), ...shown.map(cardFor)];
       if (els.length !== docs.children.length || els.some((e, i) => docs.children[i] !== e)) {
         const had = docs.contains(document.activeElement) ? document.activeElement : null;
         motion().cards(() => docs.replaceChildren(...els));
         if (had?.isConnected) had.focus({ preventScroll: true });
       }
-      const listed = new Set(rows.map((r) => r.key));
       for (const [k, c] of cards) if (!listed.has(k)) { io.unobserve(c.pic); near.delete(k); cards.delete(k); thumbs.delete(k); forgetText(k); derived.delete(k); epochs.delete(k); }
       for (const k of epochs.keys()) if (!listed.has(k)) { epochs.delete(k); forgetText(k); derived.delete(k); }
       roving();
       const n = t('{n} documents', { n: shown.length });
-      if (count.textContent !== n) count.textContent = n;
+      if (counted !== n) { counted = n; count.textContent = n; }
       // A copy or an undone delete takes focus once it is listed; one the filters hide doesn't take it later.
       if (focusNext && listed.has(focusNext)) { const k = focusNext; focusNext = null; if (cards.get(k)?.el.isConnected) go(k); }
       later();
@@ -644,6 +658,83 @@
     const KIND_SAYS = { pdf: { size: DK.KINDS.pdf.big, read: 'That file could not be read.' } };
     const saysOf = (id) => (id && id !== 'paper' && (DK.get(id)?.says || KIND_SAYS[id])) || PAPER_SAYS;
     const unread = many ? 'That file could not be read.' : PAPER_SAYS.read;
+    // ---- imports under way: a card for each file from the moment it is taken, in the list's first place, its stage and
+    // bytes as the kind reports them (lib/doc-kinds.js progress) on a bar, its menu off, until the document it made is
+    // listed (render); one that failed says why on its card, with Retry and Remove. The stages are spoken in the count's
+    // live region, the failure in the status line too. A batch's files go one after another.
+    const STEPS = { pdf: ['read', 'prepare', 'copy', 'save'], slides: ['read', 'prepare', 'copy', 'save'] };
+    let jobs = 0;
+    const showJob = (j) => {
+      const { el, bar, fill, meta, acts } = j.ui, f = j.failed ? 0 : j.p?.fraction || 0, w = j.failed ? [j.failed] : DK.said(j.p, j.kind);
+      el.toggleAttribute('data-failed', !!j.failed);
+      meta.textContent = w ? t(...w) : '';
+      bar.hidden = !!j.failed; acts.hidden = !j.failed;
+      fill.style.transform = `scaleX(${f})`;
+      bar.setAttribute('aria-valuenow', String(Math.round(f * 100)));
+    };
+    const importJob = async (j) => {
+      if (j.running) return {};
+      j.running = true; j.failed = ''; j.p = null;
+      let stage = null;
+      const report = DK.progress((p) => {
+        j.p = p;
+        const w = !p.end && !p.failed && p.stage !== stage && DK.said(p, j.kind, { spoken: true });
+        if (w) { stage = p.stage; count.textContent = t(...w); }
+        showJob(j);
+      }, STEPS[j.kind] || ['read', 'prepare', 'save']);
+      report({ stage: 'read', total: j.file.size });
+      try {
+        // An import that kept the file with parts left out says so (sheet-kind.js: { key, notice }).
+        const got = await DK.get(j.kind).importFile(j.file, { progress: report });
+        report.end();
+        j.key = typeof got === 'string' ? got : got?.key || null;
+        return { notice: got?.notice || '' };
+      } catch (e) {
+        console.error(e);
+        const says = saysOf(j.kind);
+        j.failed = e instanceof RangeError && (REFUSALS.has(e.message) || Object.values(says).includes(e.message)) ? e.message : says.read;
+        report.fail(e);
+        return { failed: j.failed };
+      } finally {
+        j.running = false;
+        // The count's region says the count again once the stages are over.
+        counted = '';
+        if (j.key) await refresh(); else render();
+      }
+    };
+    const removeJob = (j) => {
+      const i = incoming.indexOf(j);
+      if (i < 0 || j.running) return;
+      const had = j.ui.el.contains(document.activeElement);
+      incoming.splice(i, 1);
+      say('');
+      render();
+      if (had) importB.focus();
+    };
+    // Retry keeps the focus with the import: on the document once it is listed, on Retry again if it fails again.
+    const retry = async (j) => {
+      say('');
+      const focused = j.ui.el.contains(document.activeElement), pending = importJob(j);
+      if (focused) j.ui.el.focus({ preventScroll: true });
+      const r = await pending;
+      if (r.failed && j.ui.el.contains(document.activeElement) && j.ui.el.isConnected) j.ui.again.focus();
+      if (r.failed || r.notice) say(t(r.failed || r.notice));
+    };
+    const job = (f, id) => {
+      const j = { id: ++jobs, file: f, kind: id, p: { stage: 'read', fraction: 0 }, failed: '', key: null, running: false };
+      const fill = h('span', { class: 'gd-fill' });
+      const bar = h('div', { class: 'gd-progress', role: 'progressbar', 'aria-label': f.name, 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0' }, fill);
+      const meta = h('p', { class: 'gd-meta' });
+      const again = btn({ class: 'gd-btn gd-quiet', 'data-act': 'retry', onclick: () => { retry(j).catch((e) => console.error(e)); } }, t('Retry'));
+      const acts = h('div', { class: 'gd-acts', hidden: true }, again, btn({ class: 'gd-btn gd-quiet', 'data-act': 'remove', onclick: () => removeJob(j) }, t('Remove')));
+      const more = btn({ class: 'gd-more', disabled: true, 'aria-label': t('More'), title: t('More'), tabindex: '-1' }, icon('dots'));
+      const el = h('li', { class: 'gd-pending', tabindex: '-1', 'data-kind': id, 'data-import': String(j.id) },
+        h('div', { class: 'gd-pic' }, h('div', { class: 'gd-blank' })),
+        h('div', { class: 'gd-info' }, icon(DK.KINDS[id]?.icon || 'paper', 'gd-kind'), h('div', { class: 'gd-text' }, h('span', { class: 'gd-title', text: f.name }), meta, bar, acts), more));
+      j.ui = { el, bar, fill, meta, acts, again };
+      showJob(j);
+      return j;
+    };
     const bring = async (list) => {
       dismiss();
       say('');
@@ -651,12 +742,9 @@
       const first = refused.find((x) => x.why !== 'count');
       const limitText = refused.some((x) => x.why === 'count') ? t('Choose up to 20 files at a time.') : '';
       let why = first ? (first.why === 'size' ? saysOf(DK.forFile(first.file?.name)).size : unread) : '';
-      for (const { file: f, kind: id } of take) {
-        const says = saysOf(id);
-        // An import that kept the file with parts left out says so (sheet-kind.js: { key, notice }).
-        try { const got = await DK.get(id).importFile(f); if (got?.notice) why ||= got.notice; }
-        catch (e) { console.error(e); why ||= e instanceof RangeError && (REFUSALS.has(e.message) || Object.values(says).includes(e.message)) ? e.message : says.read; }
-      }
+      const mine = take.map(({ file: f, kind: id }) => job(f, id));
+      if (mine.length) { incoming.unshift(...mine); render(); }
+      for (const j of mine) { const r = await importJob(j); why ||= r.failed || r.notice || ''; }
       say([why && t(why), limitText].filter(Boolean).join(' '));
     };
     importB.addEventListener('click', () => file.click());

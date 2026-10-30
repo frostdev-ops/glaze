@@ -35,11 +35,12 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   const LEGACY = 3e6;
   const STORE = {
     max: GZ_DOC_KINDS.KINDS.pdf.max,
-    // bytes → the record's fields for them, the bytes kept in the store; a RangeError says why not.
-    put: async (bytes) => {
+    // bytes → the record's fields for them, the bytes kept in the store (sent(done, total) as they go); a RangeError says
+    // why not.
+    put: async (bytes, sent = null) => {
       if (!(bytes?.length > 0) || bytes.length > STORE.max) throw new RangeError(TOO_BIG);
       const F = await files();
-      try { return { file: await F.client().put(bytes, 'application/pdf'), size: bytes.length }; } catch (e) {
+      try { return { file: await F.client().put(bytes, 'application/pdf', sent), size: bytes.length }; } catch (e) {
         if (e.why === 'unavailable' && bytes.length <= LEGACY) return { file: b64(bytes), size: bytes.length };
         throw new FileError(e.why);
       }
@@ -135,17 +136,30 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   const nameOf = (rec) => `${String(rec?.title || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Document'}.pdf`;
 
   // ---- the page code GZ_DOC_KINDS takes
-  // A PDF file as a new standalone document, its title the file's name, its first page drawn for the card. → its key.
-  const importFile = async (file) => {
-    if (!Number.isSafeInteger(file?.size) || file.size <= 0 || file.size > STORE.max) throw new RangeError(TOO_BIG);
-    await GZ_WRITER_PAPER.need(['lib/writer-papers.js', 'lib/doc-home.js']);
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    if (bytes.length !== file.size) throw new Error('invalid file read');
+  // A file's bytes and what pdf.js makes of them, each stage told to progress (lib/doc-kinds.js progress): reading, page 1
+  // read and drawn, the bytes copied into the store. → the record's fields for the file.
+  const bring = async (f, progress) => {
+    const p = typeof progress === 'function' ? progress : () => {};
+    p({ stage: 'read', done: 0, total: f.size });
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    if (bytes.length !== f.size) throw new Error('invalid file read');
+    p({ stage: 'read', done: bytes.length, total: bytes.length });
+    p({ stage: 'prepare' });
     const { task, doc } = await read(bytes);
     let thumb = null, pages = 0;
     try { pages = doc.numPages; thumb = await picture(doc).catch(() => null); } finally { await task.destroy().catch(() => {}); }
+    p({ stage: 'copy', done: 0, total: bytes.length });
+    const kept = await STORE.put(bytes, (done, total) => p({ stage: 'copy', done, total }));
+    p({ stage: 'save' });
+    return { ...kept, pages, ...(thumb && { thumb }) };
+  };
+  // A PDF file as a new standalone document, its title the file's name, its first page drawn for the card. → its key.
+  const importFile = async (file, { progress = null } = {}) => {
+    if (!Number.isSafeInteger(file?.size) || file.size <= 0 || file.size > STORE.max) throw new RangeError(TOO_BIG);
+    await GZ_WRITER_PAPER.need(['lib/writer-papers.js', 'lib/doc-home.js']);
+    const fields = await bring(file, progress);
     const key = GZ_WRITER_PAPERS.newKey(), title = GZ_DOC_HOME.stem(file.name);
-    await papers().save(key, { kind: 'pdf', ...await STORE.put(bytes), pages, ...(thumb && { thumb }), title, named: !!title }, { reason: 'import' });
+    await papers().save(key, { kind: 'pdf', ...fields, title, named: !!title }, { reason: 'import' });
     return key;
   };
   // The card's picture: the one the record keeps, else drawn once from its bytes here and kept for its revision.
@@ -333,13 +347,17 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       if (!doc || saveB.disabled) return;
       saveB.disabled = true;
       say(t('Saving…'));
+      // How far the whole import has gone, by tens (the line is a live region), then Saved.
+      const progress = GZ_DOC_KINDS.progress((p) => { if (!p.end && !p.failed) say(t('Saving… {n}%', { n: Math.floor(p.fraction * 10) * 10 })); });
       try {
         if (src.bytes.length > STORE.max) throw new RangeError(TOO_BIG_SAVE);
-        await importFile(new File([src.bytes], src.name || 'Document.pdf', { type: 'application/pdf' }));
+        await importFile(new File([src.bytes], src.name || 'Document.pdf', { type: 'application/pdf' }), { progress });
+        progress.end();
         say(t('Saved to Documents'));
       } catch (e) {
         const big = e instanceof RangeError && (e.message === TOO_BIG || e.message === TOO_BIG_SAVE);
         if (!big) console.error(e);
+        progress.fail(e);
         say(t(big ? TOO_BIG_SAVE : 'Not saved. Try again in a moment.'));
         saveB.disabled = false;
       }
@@ -383,7 +401,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
 
     // ---- saving: a field filled (pdf.js's annotation storage) saves a second after the last change, and before the page
     // leaves for Documents; the bytes pdf.js writes (an incremental update) replace the record's, with page 1 drawn again.
-    const say = (text) => { state.textContent = text; };
+    const say = (text) => { if (state.textContent !== text) state.textContent = text; };
     let dirty = false, saving = null, timer = 0;
     const save = async () => {
       if (!doc || !dirty) return true;
@@ -456,15 +474,11 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   };
   // A PDF brought to an assignment (Open in Glaze, writer-kinds.js): the attempt's record becomes it, the paper it held
   // kept as a version first (the 'import' save), its title the assignment's. → the record.
-  const into = async (key, f) => {
+  const into = async (key, f, { progress = null } = {}) => {
     if (!Number.isSafeInteger(f?.size) || f.size <= 0 || f.size > STORE.max) throw new RangeError(TOO_BIG);
     await GZ_WRITER_PAPER.need(['lib/writer-papers.js']);
-    const bytes = new Uint8Array(await f.arrayBuffer());
-    if (bytes.length !== f.size) throw new Error('invalid file read');
-    const { task, doc } = await read(bytes);
-    let thumbUrl = null, pages = 0;
-    try { pages = doc.numPages; thumbUrl = await picture(doc).catch(() => null); } finally { await task.destroy().catch(() => {}); }
-    return (await papers().save(key, { kind: 'pdf', doc: null, words: 0, ...await STORE.put(bytes), pages, ...(thumbUrl && { thumb: thumbUrl }) }, { reason: 'import' })).paper;
+    const fields = await bring(f, progress);
+    return (await papers().save(key, { kind: 'pdf', doc: null, words: 0, ...fields }, { reason: 'import' })).paper;
   };
 
   // ---- registration: a PDF already kept lists and opens either way; only Settings → Writer → PDFs on (writer.pdf) lets

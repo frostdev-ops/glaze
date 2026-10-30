@@ -175,10 +175,30 @@ const holds = (bytes, value) => {
     await until(() => cardOf(fr), 'the card');
     const card = await cardOf(fr);
     check(card.tiles.join('|') === 'Open in Glaze|Submit as is' && card.name === 'Field trip form.pdf' && await p.evaluate(() => __uploads.length === 0), `a .pdf on Ultra's file area asks Open in Glaze or Submit as is, Ultra hearing nothing (${JSON.stringify(card)})`);
+    // The file arriving, as the compact bar's line (or the paper's status bar) says it, each change kept.
+    await fr.evaluate(() => {
+      const R = globalThis.__arrive = [];
+      const spoken = globalThis.__importSpoken = [];
+      const look = () => {
+        const a = document.querySelector('.gp-arrive:not([hidden]) > span'), s = document.querySelector('.gp-said[data-kind="importing"]'), v = a?.textContent || s?.textContent || '';
+        if (v && R.at(-1) !== v) R.push(v);
+      };
+      new MutationObserver(look).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+      new MutationObserver((records) => {
+        for (const r of records) if (r.target.matches?.('.gp-said[data-kind="importing"], .gp-sr[role="status"]') && r.target.getAttribute('aria-live') !== 'off') {
+          for (const n of r.addedNodes) if (n.textContent) spoken.push(n.textContent);
+        }
+      }).observe(document.body, { subtree: true, childList: true });
+    });
     await tap(fr, '.gi-default');
     await until(() => fr.evaluate(() => document.documentElement.dataset.doc === 'pdf' && document.querySelectorAll('.gk .pdfViewer .page').length === 3 && !!document.querySelector('.gk .pdfViewer .page[data-page-number="1"] canvas')), 'the PDF viewer', 40000,
       () => fr.evaluate(() => ({ doc: document.documentElement.dataset.doc, pages: document.querySelectorAll('.pdfViewer .page').length, said: document.querySelector('.gq-said')?.textContent })));
     const h1 = await until(async () => { const h = await el.evaluate((f) => f.getBoundingClientRect().height); return h > 600 && h; }, 'a paper\'s height');
+    const arrived = await fr.evaluate(() => ({ said: globalThis.__arrive, left: !document.querySelector('.gp-said[data-kind="importing"]') && !document.querySelector('.gp-arrive:not([hidden])') }));
+    check(['Reading…', 'Preparing pages…', 'Copying…', 'Saving…'].every((w, i, all) => arrived.said.indexOf(w) >= 0 && (i === 0 || arrived.said.indexOf(w) > arrived.said.indexOf(all[i - 1]))) && arrived.left,
+      `Open in Glaze shows the file arriving, stage by stage, until the viewer does (${arrived.said.join(' | ')})`);
+    const spoken = await fr.evaluate(() => globalThis.__importSpoken);
+    check(JSON.stringify(spoken) === JSON.stringify(['Reading…', 'Preparing pages…', 'Copying…', 'Saving…']), `the compact import announces each stage once, without chunk counts (${spoken.join(' | ')})`);
     let rec = await record(), vs = await versions();
     check(rec.kind === 'pdf' && sha((await bytesOf(rec))) === sha(pdfBytes) && rec.pages === 3 && rec.doc == null, `the attempt's record is the PDF, its bytes as brought (${JSON.stringify({ kind: rec.kind, pages: rec.pages, size: rec.size })})`);
     check(vs.some((v) => v.reason === 'import' && (v.kind || 'paper') === 'paper'), `the paper kept as a version first (${vs.map((v) => `${v.reason}:${v.kind || 'paper'}`).join(', ')})`);
@@ -252,6 +272,23 @@ const holds = (bytes, value) => {
     check((await cardOf(fr)).tiles.join('|') === 'Open in Glaze|Submit as is', 'a .pptx asks Open in Glaze or Submit as is');
     await tap(fr, '.gi-default');
     await until(() => fr.evaluate(() => document.documentElement.dataset.doc === 'slides' && document.querySelectorAll('.gk .gs-rail-b').length === 10 && !!document.querySelector('.gk #gs-canvas [role="group"]')), 'the slides viewer', 40000);
+    // Replacing an already-open deck must show the arriving file's stage in that viewer too.
+    await fr.evaluate((bytes) => {
+      const k = GZ_DOC_KINDS.get('slides');
+      GZ_DOC_KINDS.register('slides', { ...k, into: async (key, f, opts) => {
+        GZ_DOC_KINDS.register('slides', k);
+        opts.progress({ stage: 'read' });
+        await new Promise((r) => { globalThis.__deckRead = r; });
+        return k.into(key, f, opts);
+      } });
+      globalThis.__deckReplaced = false;
+      GZ_WRITER_PAPER.current().importFile(new File([new Uint8Array(bytes)], 'Replacement.pptx', { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' })).then(() => { globalThis.__deckReplaced = true; });
+    }, Array.from(deckBytes));
+    await until(() => fr.evaluate(() => typeof __deckRead === 'function'), 'replacement deck reading');
+    const deckStage = await fr.evaluate(() => document.querySelector('.gk .gp-state')?.textContent);
+    check(deckStage === 'Reading…', `an import over a slide viewer shows its stage (${deckStage})`);
+    await fr.evaluate(() => __deckRead());
+    await until(() => fr.evaluate(() => __deckReplaced && document.querySelectorAll('.gk .gs-rail-b').length === 10), 'replacement deck shown');
     rec = await record(); vs = await versions();
     check(rec.kind === 'slides' && rec.slides === 10 && sha((await bytesOf(rec))) === sha(deckBytes) && vs.some((v) => v.reason === 'import'), `the record is the deck, its bytes as brought, the paper a version first (${JSON.stringify({ kind: rec.kind, slides: rec.slides })})`);
     // Ctrl+F (⌘F) over the viewer is the viewer's own find, never the hidden paper's (writer-find.js).
