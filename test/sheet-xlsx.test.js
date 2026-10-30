@@ -392,7 +392,7 @@ test('caps: 100 sheets and 250,000 cells; the rest are listed, not read', async 
   });
   const b = await X.read(big);
   assert.equal(M.cellCount(b), 250000);
-  assert.deepEqual(b.keep.problems.map((p) => p.code), ['cap-cells']);
+  assert.deepEqual(b.keep.problems.map((p) => p.code), ['content-types', 'cap-cells']);
 });
 
 // ── Writing ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -723,7 +723,7 @@ test('csv: an unclosed quote and the cell cap degrade, listed in the problems', 
   assert.deepEqual(wb.keep.problems.map((p) => p.code), ['quote']);
   const big = X.readDelimited(`${'1,'.repeat(999)}1\n`.repeat(251));
   assert.equal(M.cellCount(big), 250000);
-  assert.deepEqual(big.keep.problems.map((p) => p.code), ['content-types', 'cap-cells']);
+  assert.deepEqual(big.keep.problems.map((p) => p.code), ['cap-cells']);
 });
 
 test('csv: written as Excel saves CSV UTF-8: shown text, quotes where needed, CRLF, a BOM; TSV with tabs', async () => {
@@ -871,4 +871,41 @@ test('review dependencies: a failed early lookup can retry after the engine load
 test('review page: Documents defers spreadsheet and document file codecs', () => {
   const html = fs.readFileSync(path.join(__dirname, '../papers.html'), 'utf8');
   assert.doesNotMatch(html, /<script src="lib\/(?:sheet-xlsx|doctext|zip)\.js"/);
+});
+
+test('review charts: relationship lookup honours XML encoding and package case', async () => {
+  const rp = 'xl/drawings/_rels/drawing1.xml.rels', z = D.unzip(synthetic()), files = [];
+  for (const name of z.names) files.push({ name: name === rp ? rp.toUpperCase() : name, data: name === rp
+    ? Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(await z.text(name), 'utf16le')]) : await z.bytes(name) });
+  const wb = await X.read(Buffer.concat(Z.zip(files)));
+  assert.deepEqual(wb.sheets[0].keep.drawing.charts, ['xl/charts/chart1.xml']);
+});
+
+test('review track: undo of a delete-and-rename batch restores the original kept refs', async () => {
+  const wb = await X.read(synthetic()), e = C.engine(wb), id = wb.sheets[0].id;
+  const op = { op: 'batch', ops: [{ op: 'delete', sheet: id, axis: 'row', at: 1, n: 1 }, { op: 'rename', sheet: id, name: "O'Brien" }] };
+  const undo = e.apply(op).inverse;
+  X.track(wb, op);
+  const changed = await parts(await X.write(wb, { recalc: false }));
+  assert.match(changed['xl/worksheets/sheet1.xml'], /sqref="A2:A8 C2"/);
+  e.apply(undo); X.track(wb, undo);
+  assert.deepEqual(wb.keep.log, []);
+});
+
+test('review kept counts: deleting a nonempty validation updates its container count', async () => {
+  const sheet = `<worksheet ${NS}><sheetData/><dataValidations count='2'><dataValidation sqref='A2'><formula1>1</formula1></dataValidation><dataValidation sqref='B5'><formula1>2</formula1></dataValidation></dataValidations></worksheet>`;
+  const wb = await X.read(synthetic({ 'xl/worksheets/sheet1.xml': sheet }));
+  X.track(wb, { op: 'delete', sheet: wb.sheets[0].id, axis: 'row', at: 1, n: 1 });
+  const p = await parts(await X.write(wb, { recalc: false }));
+  assert.match(p['xl/worksheets/sheet1.xml'], /<dataValidations count=["']1["']>/);
+});
+
+test('review locked: named pivot sources and data tables refuse structural edits', async () => {
+  const wb = await X.read(synthetic({
+    'xl/workbook.xml': BOOK().replace('</definedNames>', '<definedName name="PivotSource">Two!$A$1:$B$5</definedName></definedNames>'),
+    'xl/_rels/workbook.xml.rels': rels([['rId1', 'worksheet', 'worksheets/sheet1.xml'], ['rId2', 'worksheet', 'worksheets/sheet2.xml'], ['p', 'pivotCacheDefinition', 'pivotCache/p.xml']]),
+    'xl/pivotCache/p.xml': `<pivotCacheDefinition ${NS}><cacheSource type="worksheet"><worksheetSource name="PivotSource"/></cacheSource></pivotCacheDefinition>`,
+    'xl/worksheets/sheet1.xml': `<worksheet ${NS}><sheetData><row r="1"><c r="A1"><f t="dataTable" ref="A1:B5" r1="C1"/><v>1</v></c></row></sheetData></worksheet>`,
+  }));
+  for (const sh of wb.sheets) assert.ok(X.locked(wb, { op: 'insert', sheet: sh.id, axis: 'row', at: 0, n: 1 }), sh.name);
 });
