@@ -118,7 +118,7 @@ test('CELL: address, col, row, contents, type and format; the rest and INFO are 
     // Built-in ids: "$" quoted, a four-digit year; parentheses around positives.
     [5, 'C0'], [8, 'C2-'], [14, 'D4'], [22, 'D4'], [10, 'P2'], ['(0.0);(0.0)', 'F1()'], ['0;[Red]-0', 'F0-'],
   ];
-  const cells = { B1: 'Data', B2: 75, B3: 'Hello world!', B4: 2, B5: '=""', B6: '="x"' };
+  const cells = { B1: 'Data', B2: 75, B3: 'Hello world!', B4: 2, B5: '=""', B6: '="x"', 'Sheet 2!B2': 'there' };
   formats.forEach((_, i) => { cells[`F${i + 1}`] = { v: 1, s: i + 1 }; });
   const e = book(cells, { sheets: ['Sheet1', 'Sheet 2'], styles: formats.map(([fmt]) => ({ fmt })) });
   cases(e, [
@@ -128,6 +128,7 @@ test('CELL: address, col, row, contents, type and format; the rest and INFO are 
     ['CELL("color",B2)', '#VALUE!'], ['CELL("filename",B2)', '#VALUE!'], ['CELL("width",B2)', '#VALUE!'], ['CELL("prefix",B2)', '#VALUE!'],
     ['CELL("protect",B2)', '#VALUE!'], ['CELL("parentheses",B2)', '#VALUE!'], ['CELL("nonsense",B2)', '#VALUE!'], ['CELL("row",5)', '#VALUE!'],
     ['CELL("row",1/0)', '#DIV/0!'], ['INFO("numfile")', '#VALUE!'], ['INFO("recalc")', '#VALUE!'], ['INFO("system")', '#VALUE!'],
+    ['CELL("address",\'Sheet 2\'!B2)', "'Sheet 2'!$B$2"], ['INDIRECT(CELL("address",\'Sheet 2\'!B2))', 'there'],
   ]);
   formats.forEach(([fmt, code], i) => assert.equal(calc(e, `CELL("format",F${i + 1})`), code, String(fmt)));
 });
