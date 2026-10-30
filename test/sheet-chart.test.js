@@ -92,6 +92,31 @@ test('resolve: references read live, the cache when they can\'t be, hidden rows 
   assert.equal(pie.data.title, 'Share');
 });
 
+test('lookup: whole columns and rows read their used cells live across sheets', async () => {
+  const { wb, e } = await open();
+  e.edit(wb.sheets[0].id, 1, 1, '80');
+  const other = M.sheet('Other data', 2);
+  other.rows.set(0, new Map([[0, { t: 'n', v: 7 }], [2, { t: 'n', v: 9 }]]));
+  wb.sheets.push(other);
+  const look = CX.lookup(wb);
+  assert.deepEqual(look('Data!$B:$B')?.map((x) => x.v), ['Sales', 80, 20, 30, 40]);
+  assert.deepEqual(look("'Other data'!$1:$1")?.map((x) => x.v), [7, undefined, 9]);
+});
+
+test('lookup: a wide explicit reference is complete', () => {
+  const wb = M.workbook(), sh = wb.sheets[0];
+  sh.rows.set(0, new Map([[1500, { t: 'n', v: 42 }]]));
+  assert.equal(CX.lookup(wb)('Sheet1!A1:XFD1')?.[1500]?.v, 42, 'no silent 1001-column truncation');
+});
+
+test('lookup: oversized rectangles are refused before reading cells', () => {
+  const wb = M.workbook(), sh = wb.sheets[0];
+  let reads = 0;
+  sh.rows.get = () => { reads++; throw new Error('oversized reference read a cell'); };
+  assert.equal(CX.lookup(wb)('Sheet1!A1:ALL100001'), null);
+  assert.equal(reads, 0, 'check the complete rectangle before allocating or visiting it');
+});
+
 test('moving: inserted rows move the anchors and references, a rename follows, undo takes it back', async () => {
   const { wb, e } = await open();
   const id = wb.sheets[0].id;
