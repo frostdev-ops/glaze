@@ -11,6 +11,9 @@ const F = require('../lib/doc-files.js');
 const PA = require('../lib/writer-papers.js');
 const D = require('../defaults.js');
 const { fakeIDB } = require('./helpers/fake-idb.cjs');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const { execFileSync } = require('node:child_process');
 globalThis.GZ_WRITER_STYLES = require('../lib/writer-styles.js');
 
 const NOW = Date.now() - 60000;
@@ -158,6 +161,20 @@ test('a reader from before the store sees only base64 records in papers, and no 
   }
   assert.ok(m.papers.some((r) => r.key === `writerPaper:${legacy}`));
   assert.ok(entries.filter((e) => e.name.endsWith('.bin')).every((e) => e.data.length <= 64 << 20), 'every file within what any reader takes per entry');
+});
+
+test('a reader from before the store refuses a backup whose documents it would silently omit', async () => {
+  const a = device();
+  await seeded(a);
+  // The immutable main revision merged into this lane: the 4.0.0 reader before the file store.
+  const oldSource = execFileSync('git', ['show', '8434813b:lib/backup.js'], { cwd: __dirname, encoding: 'utf8' });
+  const old = { exports: {} };
+  vm.runInNewContext(oldSource, { module: old, require: (p) => require(`../lib/${p}`), Blob, TextEncoder, TextDecoder, Uint8Array, DataView, URL });
+  const { file } = await backUp(a);
+  await assert.rejects(old.exports.read(file), (e) => e.why === 'newer');
+  assert.ok((await B.read(file)).cats.papers, 'the store-aware reader still takes every document');
+  const options = fs.readFileSync(require.resolve('../options.js'), 'utf8');
+  assert.match(options, /newer:.*Update Glaze to restore it\./, 'the old reader gives its existing update instruction');
 });
 
 test('files that cannot fit one backup are refused before any is read', async () => {
