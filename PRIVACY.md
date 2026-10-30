@@ -519,13 +519,18 @@ not those unknown legacy copies or unrelated stickers.
   same way: one store per assignment or journal, one shared by a discussion's post and replies, and one shared by each
   course's new messages. The documents you start or import on Writer's Documents page are kept
   the same way, each under a random key (`doc:<uuid>`) with its text, title, format and versions; Glaze keeps no copy on
-  a server. Delete there moves a paper or document to Trash, which keeps it and its versions on this device; 30 days later
+  a server. A spreadsheet keeps its cells beside its record (`writerSheet:<key>:<sheet>:<rows>`) and its versions
+  compressed (16 MB in all); a PDF or slide deck keeps the file itself in its record (3 MB at most; a PDF's with the form
+  values you fill), with its size, page or slide count and first page's picture. An assignment attempt you open as one
+  of these is kept the same way under the assignment's key. Glaze reads and draws these files on this device, from the
+  extension's own files, and sends them nowhere. Delete there moves a paper or document to Trash, which keeps it and its versions on this device; 30 days later
   it is deleted for good, with its versions and saved sources, the next time the browser starts or Documents opens, unless
   you restore it first; Delete forever and Settings' Clear delete them at once. A paper's edits
   not yet saved wait in the writer frame's own
   `sessionStorage` until they are. What you type in a discussion, reply, message or test box goes to Back up what you
   type (when it is on), as Blackboard's own editor's does; Writer keeps no copy of its own. **Back up…** includes papers,
-  documents (those in Trash too), versions, presets, the dictionary and saved sources; uninstalling removes them. The thread, prompt, rubric, attached files and names Writer reads
+  documents (those in Trash too; a spreadsheet with its cells, a PDF or deck with its file), versions, presets, the
+  dictionary and saved sources; uninstalling removes them. The thread, prompt, rubric, attached files and names Writer reads
   from Blackboard for a box are held in that page's memory only.
 - **Course tabs** (Canvas and Blackboard Ultra, on by default), in `chrome.storage.local`, on this device only, per site and
   signed-in account (`ctabs:<origin>:<uid>`): for each tab (40 at most) the course's id, name and code, whether it is
@@ -809,7 +814,9 @@ you import) are bundled. It makes requests in these cases:
   instructions and description attach (at most 6, 40 MB in all), read on this device as the syllabus import reads them. Proofing runs on this device (Harper, from the extension's own files)
   and sends nothing. It sends nothing to Blackboard itself: what you write reaches Blackboard only through Blackboard's
   own buttons, when you post, reply, send or submit (Ctrl/⌘+Enter presses Post, Reply or Send; the submit sheet's
-  Submit attaches the paper's .docx through Ultra's own upload, writes your note and clicks Ultra's Submit once).
+  Submit attaches the paper's .docx, or the PDF, deck or .xlsx open in its place, through Ultra's own upload, writes your
+  note and clicks Ultra's Submit once). **Open in Glaze** beside an attached PDF, deck or spreadsheet reads that file from your
+  Blackboard site when you click it (20 MB at most) and keeps it as the attempt's document.
   Writer's frame may not connect anywhere itself; two things leave the device, each only as described:
   - **Citation lookups**, only when you click Look up in Cite, made by Glaze's worker with no cookies, referrer or cache,
     one 10-second deadline, at most 2 MB read and https all the way: a DOI to `doi.org` (falling back to
