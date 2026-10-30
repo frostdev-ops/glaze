@@ -109,10 +109,13 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
       // The file arriving, stage by stage (lib/doc-kinds.js progress): in the paper's status bar, or the viewer's line,
       // until its viewer shows (finally, below).
       const steps = id === 'sheet' ? ['read', 'prepare', 'save'] : ['read', 'prepare', 'copy', 'save'];
+      let stage = null;
       const progress = GZ_DOC_KINDS.progress((p) => {
         const w = GZ_DOC_KINDS.said(p, id);
         if (!w || p.end || p.failed) return;
-        if (shown) shown.viewer?.say?.(t(...w));
+        if (shown) {
+          if (stage !== p.stage) { stage = p.stage; shown.viewer?.say?.(t(...GZ_DOC_KINDS.said(p, id, { spoken: true }))); }
+        }
         else paper.arriving?.({ name: f.name, text: t(...w), spoken: t(...GZ_DOC_KINDS.said(p, id, { spoken: true })), fraction: p.fraction });
       }, steps);
       arriving = paper;
