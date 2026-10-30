@@ -47,7 +47,7 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     const plan = {}; // a file's hash → its scenario (ultra-mock.js previews)
     const mock = P.previews({ site, pdf: (f) => f && pdfs[f.hash], scenario: (f) => plan[f?.hash] || {} });
     const originals = [];
-    const ext = env.staged(root, [`${site}/*`]);
+    const ext = require('./check-env.js').staged(root, [`${site}/*`]);
     await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(20000);
