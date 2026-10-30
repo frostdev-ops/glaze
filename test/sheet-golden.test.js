@@ -387,6 +387,12 @@ const run = async (family, list) => {
 // Excel caches an error named after Excel 2016 (#CALC!) as #VALUE! and shows its name, which is its answer.
 const excel = (g) => (g.t === 'e' && g.text !== g.v ? { t: 'e', v: g.text } : { t: g.t, v: g.v });
 
+test("only Excel's #CALC! storage alias uses display text as its error", () => {
+  assert.deepEqual(excel({ t: 'e', v: '#VALUE!', text: '#CALC!' }), { t: 'e', v: '#CALC!' });
+  assert.deepEqual(excel({ t: 'e', v: '#DIV/0!', text: '' }), { t: 'e', v: '#DIV/0!' });
+  assert.deepEqual(excel({ t: 'e', v: '#N/A', text: '#VALUE!' }), { t: 'e', v: '#N/A' });
+});
+
 // Cases the engine answers otherwise, and why. A function not built is a todo by itself.
 const TODO = {
   'financial.rate.2': 'the root is 0, where Excel stops at -1.96e-10 and the engine at 1.1e-12: no relative test holds',
