@@ -102,3 +102,36 @@ test('review: a failing document build leaves the sheet usable and sends nothing
   assert.equal(s.doc.querySelector('.gs-primary').disabled, false);
   assert.equal(s.ctx.GZ_WRITER_SUBMIT_SHEET.busy(), false);
 });
+
+test('Save and Close: editing during a slow save never acknowledges the newer unsaved document', async () => {
+  const s = sheet(), notices = [];
+  let finish;
+  s.api.save = () => new Promise((r) => { finish = r; });
+  s.api.notify = (m) => notices.push(m);
+  const saving = s.handles['submit:save']({ request: 'old-snapshot' });
+  s.edit(); finish(true); await saving;
+  assert.equal(s.messages.find((m) => m.type === 'submit:saved').ok, false);
+  assert.deepEqual(notices, ['Not saved. Try again in a moment.']);
+  s.api.save = async () => true;
+  await s.handles['submit:save']({ request: 'retry' });
+  assert.equal(s.messages.filter((m) => m.type === 'submit:saved').at(-1).ok, true);
+});
+
+test('Save and Close: the 30 second failure is said once and a late save cannot acknowledge again', async () => {
+  const s = sheet(), notices = [];
+  let finish;
+  s.api.save = () => new Promise((r) => { finish = r; });
+  s.api.notify = (m) => notices.push(m);
+  const saving = s.handles['submit:save']({ request: 'slow' });
+  // The handler's save timer, without waiting 30 seconds in a unit test.
+  for (const fn of s.timers.values()) fn();
+  await saving;
+  finish(true); await s.flush();
+  assert.equal(s.messages.filter((m) => m.type === 'submit:saved').length, 1);
+  assert.equal(s.messages.at(-1).ok, false);
+  assert.deepEqual(notices, ['Not saved. Try again in a moment.']);
+  s.api.save = async () => true;
+  await s.handles['submit:save']({ request: 'retry' });
+  assert.equal(s.messages.at(-1).ok, true);
+  assert.equal(notices.length, 1);
+});

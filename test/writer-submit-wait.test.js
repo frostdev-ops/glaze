@@ -162,16 +162,16 @@ test('compact: a frame that reopens while it saves is asked again; the old frame
   assert.equal(flushes(c.ports[1]).length, 1, 'and never asked twice');
 });
 
-test('full: a press before the submit step has the box goes to it once it does; one it never takes goes to Ultra', async () => {
+test('full: a press before the submit step has the box goes to it once armed, and never to Ultra without the paper', async () => {
   const { c, press } = await attempt(true);
   const button = c.doc.querySelector(SUBMIT);
   assert.equal(press(SUBMIT).held, true, 'Ultra doesn\'t hear it: its box doesn\'t hold the paper');
   c.tick(100);
   assert.equal(c.clicks.length, 0);
-  c.ctx.GZ_WRITER_SUBMIT = { armed: () => true, passing: () => false };
+  c.ctx.GZ_WRITER_SUBMIT = { armed: () => true, passing: () => false, press: (_box, b) => c.clicks.push(b) };
   c.tick(100);
   assert.deepEqual(c.clicks, [button], 'pressed again, for the submit step (its sheet)');
-  // A box the step never takes (its frame up for HOLD_ARM): Ultra's own button, as before Writer held it.
+  // A box the step never takes cannot submit Ultra's empty or stale text box.
   delete c.ctx.GZ_WRITER_SUBMIT;
   let now = 1e6;
   c.ctx.__now = () => now;
@@ -181,6 +181,207 @@ test('full: a press before the submit step has the box goes to it once it does; 
   now += 4000; c.tick(100);
   assert.equal(c.clicks.length, 1);
   now += 1500; c.tick(100);
-  assert.deepEqual(c.clicks, [button, button]);
+  assert.equal(c.clicks.length, 1, 'a missing submit step never passes the press to Ultra');
   assert.equal(button.hasAttribute('aria-busy'), false);
+});
+
+test('full: a lost Save and Close clears its poll and busy state before a retry, ignoring late success', async () => {
+  const p = page(), save = L.footer(p.box.editor).save;
+  p.fire(save, 'click');
+  const request = asks(p.sent)[0].request;
+  await p.tick(51000);
+  assert.equal(save.hasAttribute('aria-busy'), false, 'a quiet frame cannot leave the button busy forever');
+  assert.equal(p.timers.size, 0, 'no poll remains after the deadline');
+  p.hear({ type: 'submit:saved', request, ok: true });
+  assert.equal(p.clicks.length, 0, 'a success after the deadline presses nothing');
+  p.fire(save, 'click');
+  const retry = asks(p.sent)[1].request;
+  p.hear({ type: 'submit:saved', request: retry, ok: true });
+  await p.tick(100);
+  assert.deepEqual(p.clicks, [save]);
+  assert.equal(p.timers.size, 0);
+});
+
+test('full: a Submit held for readiness cannot race Save and Close, and conversely', async () => {
+  for (const first of ['submit', 'save']) {
+    const p = page(), footer = L.footer(p.box.editor);
+    p.box.ready = false;
+    p.fire(footer[first], 'click');
+    p.fire(footer[first === 'submit' ? 'save' : 'submit'], 'click');
+    p.box.ready = true;
+    await p.tick(100);
+    assert.equal(asks(p.sent).length, first === 'save' ? 1 : 0);
+    assert.equal(p.sent.filter((m) => m.type === 'submit:open').length, first === 'submit' ? 1 : 0, 'only the first action is dispatched');
+  }
+});
+
+test('full: redraw transfers busy feedback and disconnected buttons are cleared when ownership ends', async () => {
+  const p = page(), old = L.footer(p.box.editor).save;
+  p.fire(old, 'click');
+  const fresh = new El('button', p.doc);
+  fresh.setAttribute('type', 'button'); fresh.setAttribute('data-analytics-id', old.getAttribute('data-analytics-id'));
+  fresh.getClientRects = () => [{}];
+  old.replaceWith(fresh);
+  await p.tick(100);
+  assert.equal(old.hasAttribute('aria-busy'), false, 'detached footer released');
+  assert.equal(fresh.getAttribute('aria-busy'), 'true', 'the visible footer shows the outstanding save');
+  p.own(false);
+  await p.tick(100);
+  assert.equal(fresh.hasAttribute('aria-busy'), false);
+  assert.equal(p.timers.size, 0);
+  assert.equal(p.clicks.length, 0);
+});
+
+test('compact: a footer redrawn during a flush carries busy state until its single native press', async () => {
+  const { c, press } = await attempt(false);
+  c.emit({ type: 'view', full: false });
+  const old = c.doc.querySelector(SUBMIT), parent = old.parentElement;
+  press(SUBMIT);
+  const request = flushes(c.ports[0])[0].request;
+  const fresh = c.doc.createElement('button');
+  fresh.setAttribute('data-analytics-id', old.getAttribute('data-analytics-id'));
+  old.remove(); parent.append(fresh);
+  c.tick(100);
+  assert.equal(old.hasAttribute('aria-busy'), false);
+  assert.equal(fresh.getAttribute('aria-busy'), 'true');
+  c.emit({ type: 'compact:flushed', request, ...ok });
+  c.tick(100);
+  assert.equal(c.clicks.length, 1);
+  assert.equal(c.clicks[0], fresh);
+  assert.equal(fresh.hasAttribute('aria-busy'), false);
+  assert.equal(fresh.style.getPropertyValue('cursor'), '');
+});
+
+test('full: a save acknowledgement after the deadline cannot beat a throttled expiry poll', () => {
+  const p = page(), save = L.footer(p.box.editor).save;
+  p.fire(save, 'click');
+  const request = asks(p.sent)[0].request;
+  p.ctx.Date.now = () => p.now() + 51000;
+  p.hear({ type: 'submit:saved', request, ok: true });
+  assert.equal(p.clicks.length, 0);
+  assert.equal(save.hasAttribute('aria-busy'), false);
+});
+
+test('full: a held click handed off after Ultra disables Submit still opens the sheet once', async () => {
+  const { c, press } = await attempt(true);
+  let box;
+  c.ctx.GZ_WRITER_SUBMIT = { armed: (b) => { box = b; return false; } };
+  press(SUBMIT);
+  // Ultra disables its empty box's button before the submit module is armed. Native .click() now delivers no event.
+  const b = c.doc.querySelector(SUBMIT); b.disabled = true; b.click = () => {};
+  delete c.ctx.GZ_WRITER_SUBMIT;
+  c.ctx.GZ_WRITER_SUBMIT_LIB = L;
+  vm.runInContext(require('node:fs').readFileSync(require.resolve('../features/writer-submit.js'), 'utf8'), c.ctx);
+  c.ctx.GZ_WRITER_SUBMIT.hear(box, { type: 'submit:arm' }, c.ctx.GZ_CTX, () => true);
+  c.tick(100);
+  assert.equal(c.clicks.length, 0);
+  assert.equal(c.ports[0].sent.filter((m) => m.type === 'submit:open').length, 1);
+});
+
+test('compact: removal, navigation and a missing footer end their held poll without a native press', async () => {
+  for (const why of ['removed', 'navigated', 'footer gone']) {
+    const { c, press } = await attempt(false), button = c.doc.querySelector(SAVE);
+    // Delay readiness, so this tests the hold rather than the flush deadline.
+    press(SAVE);
+    if (why === 'removed') c.native().editor.remove();
+    if (why === 'navigated') c.location.pathname = '/ultra/courses/_101_1/outline';
+    if (why === 'footer gone') {
+      button.remove();
+      c.ctx.__now = () => 1e15;
+      vm.runInContext('Date.now = () => globalThis.__now()', c.ctx);
+    }
+    c.tick(100);
+    assert.equal(button.hasAttribute('aria-busy'), false, why);
+    assert.equal(c.clicks.length, 0, why);
+    assert.equal([...c.timers.values()].filter((t) => t.ms === 100).length, 0, why);
+  }
+});
+
+test('compact: a disabled Ultra Submit pressed before readiness is held until the paper enables it', async () => {
+  const { c } = await attempt(false), b = c.doc.querySelector(SUBMIT);
+  b.disabled = true; b.setAttribute('disabled', '');
+  b.getBoundingClientRect = () => ({ left: 10, right: 90, top: 20, bottom: 50 });
+  for (const type of ['pointerdown', 'pointerup']) c.doc.dispatchEvent({ type, target: b, button: 0, clientX: 40, clientY: 30, preventDefault() {}, stopImmediatePropagation() {} });
+  assert.equal(b.getAttribute('aria-busy'), 'true');
+  c.emit({ type: 'view', full: false });
+  c.tick(100);
+  const request = flushes(c.ports[0])[0]?.request;
+  assert.ok(request, 'a disabled button emits no click: the pointer press must still ask for the paper');
+  b.disabled = false; b.removeAttribute('disabled');
+  c.emit({ type: 'compact:flushed', request, ...ok });
+  c.tick(100);
+  assert.equal(c.clicks.length, 1);
+  assert.equal(c.clicks[0], b);
+});
+
+test('compact: a footer returning just after a flush times out can retry before the next poll', async () => {
+  const { c, press } = await attempt(false);
+  c.emit({ type: 'view', full: false });
+  const old = c.doc.querySelector(SUBMIT), parent = old.parentElement;
+  press(SUBMIT);
+  old.remove(); c.tick(100);
+  c.tick(60000);
+  const fresh = c.doc.createElement('button');
+  fresh.setAttribute('data-analytics-id', old.getAttribute('data-analytics-id')); parent.append(fresh);
+  assert.doesNotThrow(() => press(SUBMIT));
+  assert.equal(flushes(c.ports[0]).length, 2);
+  c.emit({ type: 'compact:flushed', request: flushes(c.ports[0])[1].request, ...ok });
+  c.tick(100);
+  assert.equal(c.clicks.length, 1);
+  assert.equal(c.clicks[0], fresh);
+  assert.equal(fresh.hasAttribute('aria-busy'), false);
+});
+
+for (const first of ['reply', 'retry']) test(`compact: an expired flush ${first} cannot beat its throttled deadline timer`, async () => {
+  const { c, press } = await attempt(false);
+  let now = 1e6; c.ctx.__now = () => now;
+  vm.runInContext('Date.now = () => globalThis.__now()', c.ctx);
+  c.emit({ type: 'view', full: false }); press(SUBMIT);
+  const request = flushes(c.ports[0])[0].request;
+  now += 61000; // neither the 60 s timer nor the 100 ms poll has run
+  if (first === 'reply') {
+    c.emit({ type: 'compact:flushed', request, ...ok });
+    assert.equal(c.clicks.length, 0, 'an expired save never presses Ultra');
+    assert.equal(c.ports[0].sent.at(-1).reason, 'save');
+  }
+  press(SUBMIT);
+  assert.equal(flushes(c.ports[0]).length, 2, 'the first explicit retry starts a new save');
+  const retry = flushes(c.ports[0])[1].request;
+  c.emit({ type: 'compact:flushed', request, ...ok });
+  assert.equal(c.clicks.length, 0);
+  c.emit({ type: 'compact:flushed', request: retry, ...ok });
+  c.tick(100);
+  assert.equal(c.clicks.length, 1);
+  assert.equal(c.doc.querySelector(SUBMIT).hasAttribute('aria-busy'), false);
+});
+
+test('full: the first explicit retry expires an old save even when its poll was throttled', () => {
+  const p = page(), save = L.footer(p.box.editor).save;
+  p.fire(save, 'click');
+  const request = asks(p.sent)[0].request;
+  p.ctx.Date.now = () => p.now() + 51000;
+  p.fire(save, 'click');
+  assert.equal(asks(p.sent).length, 2);
+  p.hear({ type: 'submit:saved', request, ok: true });
+  assert.equal(p.clicks.length, 0);
+  p.hear({ type: 'submit:saved', request: asks(p.sent)[1].request, ok: true });
+  assert.equal(p.clicks.length, 1);
+});
+
+test('full: the arm deadline belongs to the current port even if a reopen finishes between polls', async () => {
+  const { c, press } = await attempt(true);
+  let now = 1e6, box;
+  c.ctx.__now = () => now; vm.runInContext('Date.now = () => globalThis.__now()', c.ctx);
+  c.ctx.GZ_WRITER_SUBMIT = { armed: (b) => { box = b; return false; } };
+  press(SUBMIT);
+  now += 4900; c.tick(100);
+  const sent = []; box.port = { postMessage: (m) => sent.push(m) }; // already ready again at the next poll
+  c.tick(100);
+  now += 200; c.tick(100);
+  assert.equal(c.doc.querySelector(SUBMIT).getAttribute('aria-busy'), 'true', 'the new frame gets its own arm window');
+  assert.equal(sent.length, 0);
+  now += 5000; c.tick(100);
+  assert.equal(c.doc.querySelector(SUBMIT).hasAttribute('aria-busy'), false);
+  assert.equal(sent.filter((m) => m.type === 'submit:unavailable').length, 1);
+  assert.equal(c.clicks.length, 0);
 });
