@@ -332,7 +332,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     // itself and leaves the list.
     const SIGN_IN = ['off', 'connect', 'setup', 'account', 'auth', 'permission', 'scope', 'browser', 'unsupported', 'state'];
     const driveWhy = (why) => (why === 'cancel' ? '' : why === 'missing' || why === 'denied' ? t("Glaze can't reach this file in Google Drive.")
-      : why === 'busy' ? t('Google Drive is busy. Try again in a moment.') : why === 'type' || why === 'bad' ? t('That file could not be read.')
+      : why === 'busy' ? t('Google Drive is busy. Try again in a moment.') : why === 'export' ? t('That file is too large.') : why === 'type' || why === 'bad' ? t('That file could not be read.')
       : SIGN_IN.includes(why) ? t('Connect Google Drive again in Settings.') : t("Couldn't reach Google Drive. Try again in a moment."));
     const tell = (why) => { if (why) err.textContent = err.textContent ? `${err.textContent} ${why}` : why; };
     const fromDrive = (f) => {

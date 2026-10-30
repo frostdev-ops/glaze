@@ -35,8 +35,9 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
   const BUSY = new Set(['userRateLimitExceeded', 'rateLimitExceeded', 'dailyLimitExceeded', 'sharingRateLimitExceeded']);
   const FULL = new Set(['storageQuotaExceeded', 'activeItemCreationLimitExceeded']);
   // Every reason a request ends with: the sign-in's (background/google.js), the Picker's, Drive's, the port's.
+  // export: a Google file larger than Drive exports (its 10 MB).
   const WHY = ['off', 'connect', 'setup', 'account', 'auth', 'permission', 'cancel', 'scope', 'browser', 'unsupported', 'state', 'picker', 'offline',
-    'network', 'missing', 'denied', 'busy', 'quota', 'size', 'type', 'bad', 'sender'];
+    'network', 'missing', 'denied', 'busy', 'quota', 'size', 'export', 'type', 'bad', 'sender'];
   const ID = /^[\w-]{1,256}$/, MIME = /^[\w.+-]{1,127}\/[\w.+-]{1,127}$/;
   class Fail extends Error { constructor(why) { super(why); this.why = why; } }
   const kinds = () => globalThis.GZ_DOC_KINDS || require('./doc-kinds.js');
@@ -58,6 +59,16 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
     } catch { throw new Fail('bad'); }
   };
   const join = (parts, n) => { const out = new Uint8Array(n); let at = 0; for (const p of parts) { out.set(p, at); at += p.length; } return out; };
+  // A Drive name as one any file can have (writer/writer-submit.js asIsName, what Blackboard's upload takes): Drive's may hold
+  // a slash (a date in a title), a backslash or a control character, each made _ as a browser's download does, and run past
+  // 255 characters, cut before its extension.
+  const fileName = (name) => {
+    let n = String(name).replace(/[/\\\u0000-\u001f\u007f]/g, '_');
+    if (/^\.*$/.test(n.trim())) n = `_${n}`;
+    const all = [...n];
+    if (all.length > 255) { const ext = /\.[^.]{1,16}$/.exec(n)?.[0] || ''; n = all.slice(0, 255 - [...ext].length).join('') + ext; }
+    return n;
+  };
 
   // A files.get reply for id, as Glaze asked for it.
   const valid = (m, id) => !!m && typeof m === 'object' && m.id === id && typeof m.name === 'string' && m.name.length > 0 && m.name.length <= 1000
@@ -94,7 +105,9 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
     const send = (url, init) => env.fetch(url, { ...init, credentials: 'omit', redirect: 'error', cache: 'no-store' });
     const reason = async (r) => {
       const j = await r.json().catch(() => null);
-      const why = Array.isArray(j?.error?.errors) ? j.error.errors.map((e) => e?.reason) : [];
+      const errs = Array.isArray(j?.error?.errors) ? j.error.errors : [], why = errs.map((e) => e?.reason);
+      // An export past Drive's 10 MB: 400 badRequest at export.size now, 403 exportSizeLimitExceeded before (test/fixtures/drive/v3.js).
+      if ((r.status === 400 || r.status === 403) && errs.some((e) => e?.location === 'export.size' || e?.reason === 'exportSizeLimitExceeded')) return 'export';
       if (r.status === 401) return 'auth';
       if (r.status === 404) return 'missing';
       if (r.status === 429 || r.status >= 500) return 'busy';
@@ -176,7 +189,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
       if (m.capabilities?.canDownload === false) throw new Fail('denied');
       const as = kind ? kinds().KINDS[kind].mime : null, size = as || m.size === undefined ? null : Number(m.size);
       if (size !== null && size > max) throw new Fail('size');
-      await on.head?.({ name: kind ? m.name + EXT[kind] : m.name, mime: as || m.mimeType, size });
+      await on.head?.({ name: fileName(kind ? m.name + EXT[kind] : m.name), mime: as || m.mimeType, size });
       const r = await call(as ? `${API}/${id}/export?${q({ mimeType: as })}` : `${API}/${id}?${q({ alt: 'media', supportsAllDrives: 'true' })}`, { signal: on.signal });
       return pour(r, max, on, on.signal);
     };
@@ -464,7 +477,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
     // What a page says of a reason, in English (the caller translates); nothing for a Picker the student closed.
     const SIGN_IN = new Set(['off', 'connect', 'setup', 'account', 'auth', 'permission', 'scope', 'browser', 'unsupported', 'state']);
     const SAYS = { missing: "Glaze can't reach this file in Google Drive.", denied: "Glaze can't reach this file in Google Drive.", busy: 'Google Drive is busy. Try again in a moment.',
-      quota: 'Your Google Drive is full.', type: 'That file could not be read.', size: 'That file is too large.' };
+      quota: 'Your Google Drive is full.', type: 'That file could not be read.', size: 'That file is too large.', export: 'That file is too large.' };
     const says = (why) => (why === 'cancel' ? '' : SAYS[why] || (SIGN_IN.has(why) ? 'Connect Google Drive again in Settings.' : "Couldn't reach Google Drive. Try again in a moment."));
     const pick = async () => {
       const r = await chrome.runtime.sendMessage({ type: 'glaze:google', op: 'pick' }).catch(() => null);
@@ -539,12 +552,14 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
         if (!f) return;
         const takes = location.pathname.endsWith('/writer.html') ? ['paper', ...(globalThis.GZ_WRITER_KINDS?.opens?.() || [])] : ['paper'];
         api?.notify?.('Reading…');
-        bring(await client().open(f.id, takes));
+        // On an assignment it goes on to Blackboard's upload (writer-import.js), which takes only a name a file can have.
+        const got = await client().open(f.id, takes), name = fileName(got.name);
+        bring(name === got.name ? got : new File([got], name, { type: got.type }));
       } catch (e) { const w = says(fail(e)); if (w) api?.notify?.(w); }
     } }] : []);
     return { home, items, connected: () => connected };
   })();
 
-  return { API, UPLOAD, CHANGES, PORT, CHUNK, META, SYNC, SMALL, DOC, WHY, Fail, b64, unb64, plan, create, serve, client, page };
+  return { API, UPLOAD, CHANGES, PORT, CHUNK, META, SYNC, SMALL, DOC, WHY, Fail, b64, unb64, fileName, plan, create, serve, client, page };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_DRIVE;

@@ -283,7 +283,7 @@ test('a Drive title with a slash (a date) or a control character is attached, un
   assert.equal(r[1], 'Scan 10_30_.heic');
   s.click('.gs-primary'); await settle(s);
   const go = s.messages.find((m) => m.type === 'submit:go');
-  assert.deepEqual(go.files.map((f) => f.name), r);
+  assert.equal(JSON.stringify(go.files.map((f) => f.name)), JSON.stringify(r));
 });
 
 test('a Google file larger than Drive exports names itself as too large, not as unreadable', async () => {
