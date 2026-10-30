@@ -4,6 +4,21 @@
   "description": "Lets AI apps on this computer use Glaze in your browser.",
   "license": "MIT",
   "author": "FrostDev",
+  "homepage": "https://github.com/frostdev-ops/glaze/blob/main/docs/agents.md",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/frostdev-ops/glaze.git",
+    "directory": "mcp"
+  },
+  "bugs": "https://github.com/frostdev-ops/glaze/issues",
+  "keywords": [
+    "mcp",
+    "glaze",
+    "native-messaging",
+    "canvas",
+    "blackboard",
+    "moodle"
+  ],
   "bin": {
     "glaze-mcp": "bin/glaze-mcp.js"
   },
