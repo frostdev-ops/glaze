@@ -5,7 +5,7 @@ const path = require('node:path');
 
 // A sheet's rules as [selector, body], comments removed, @media and @supports blocks flattened, in file order.
 const cssRules = (file) => {
-  const css = fs.readFileSync(path.join(__dirname, '..', '..', file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = fs.readFileSync(path.join(__dirname, '../../extension', file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const out = [];
   const walk = (text) => {
     for (let i = 0; i < text.length;) {

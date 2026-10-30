@@ -3,8 +3,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const { El } = require('./stand-in-dom.js');
-const E = require('../lib/writer-editor.js'), P = require('../lib/writer-proof.js'), I = require('../lib/writer-issues.js');
+const { El } = require('../stand-in-dom.js');
+const E = require('../../extension/lib/writer-editor.js'), P = require('../../extension/lib/writer-proof.js'), I = require('../../extension/lib/writer-issues.js');
 const flush = async () => { for (let n = 0; n < 20; n++) await Promise.resolve(); };
 const frame = (options = {}) => {
   const events = {}, hooks = [], ports = [], timers = new Map(), life = {};
@@ -17,7 +17,7 @@ const frame = (options = {}) => {
     dispatch(tr) { const prev = this.state; this.state = this.state.apply(tr); for (const p of pluginViews) p?.update?.(this, prev); } };
   const issues = { ...I.bind(view), look: I.look };
   let context = options.context || {};
-  const defaults = require('../defaults.js').GZ_DEFAULTS.writer;
+  const defaults = require('../../extension/defaults.js').GZ_DEFAULTS.writer;
   let preferences = { ...defaults }, follow;
   const settings = { now: () => preferences, clean: () => defaults, follow: (fn) => { follow = fn; } };
   const configure = (patch) => { const was = preferences; preferences = { ...was, ...patch }; follow(preferences, was); };
@@ -25,7 +25,7 @@ const frame = (options = {}) => {
     plugin: (p) => hooks.push(p), on: (k, f) => { events[k] = f; } };
   const makePort = () => { const p = { sent: [], postMessage(m) { this.sent.push(m); }, start() {}, close() { this.closed = true; }, terminate() { this.terminated = true; }, addEventListener() {} }; ports.push(p); return p; };
   const ctx = vm.createContext({ GZ_WRITER_FRAME: api, GZ_WRITER_SETTINGS: settings, GZ_WRITER_PROOF: proof, GZ_WRITER_ISSUES: issues, GZ_PM,
-    GZ_AI_WRITER: require('../lib/ai/tasks/writer-context.js'), structuredClone,
+    GZ_AI_WRITER: require('../../extension/lib/ai/tasks/writer-context.js'), structuredClone,
     document: doc, innerWidth: 800, innerHeight: 300, console,
     setTimeout: (fn, ms) => { timers.set(++tid, { fn, ms }); return tid; }, clearTimeout: (id) => timers.delete(id),
     addEventListener: (k, fn) => { life[k] = fn; },
@@ -33,7 +33,7 @@ const frame = (options = {}) => {
     Worker: class { constructor() { return makePort(); } },
     navigator: { locks: options.locks },
     chrome: { storage: { local: options.store || { get: async () => ({}), set: async () => {} }, onChanged: { addListener() {} } } } });
-  vm.runInContext(fs.readFileSync(require.resolve('../writer-proof.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/writer-proof.js'), 'utf8'), ctx);
   view.state = E.state({ html: options.html || '<p>teh</p>', plugins: [I.plugin(), ...hooks] });
   const replace = (state) => { view.state = state; pluginViews = hooks.map((p) => p.spec.view?.(view)); };
   replace(view.state);
@@ -259,7 +259,7 @@ test('a document replaced whole (a fresh editor state, its versions from 0 again
   f.view.dispatch(f.view.state.tr.insertText('x', f.view.state.doc.content.size - 2)); await f.run(150);
   const asked = f.lint();
   assert.match(asked.key, /^b\d+$/, 'the last paragraph\'s own lint, asked at version 1');
-  const prev = f.view.state, PMS = globalThis.GZ_PM || require('../lib/pm.js');
+  const prev = f.view.state, PMS = globalThis.GZ_PM || require('../../extension/lib/pm.js');
   f.view.state = PMS.state.EditorState.create({ doc: E.state({ html: '<p>Short.</p>' }).doc, plugins: prev.plugins });
   // ProseMirror makes the plugin views again for a state with a new plugin list, so no update() hears the swap.
   f.view.dispatch(f.view.state.tr.insertText('y', 1)); // the fresh state at version 1 too

@@ -1,13 +1,13 @@
 // Declarative widgets on the page (features/modwidgets.js) in a VM with stand-ins: the tiles and rail widgets it hands the
 // boards, what it asks the worker for, buttons that go only to this site's own pages, and following the mods and their data.
-// content.js's loader for it is read from the source. The browser side is scripts/widgets-builder-check.js.
+// content.js's loader for it is read from the source. The browser side is checks/core/widgets-builder-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async (n = 8) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const plain = (x) => (x === undefined ? x : JSON.parse(JSON.stringify(x)));
 const eq = (a, b, ...m) => assert.deepStrictEqual(plain(a), plain(b), ...m);

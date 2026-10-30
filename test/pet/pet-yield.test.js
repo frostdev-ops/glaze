@@ -1,8 +1,8 @@
 // The wandering pet and its Return home pill step aside while the site has a panel or dialog open (features/petworld.js puts
 // data-gz-yield on <html>; apps.css hides them there, and while Glaze's Settings is over the page). In a browser:
-// scripts/ultra-panels-check.js.
+// checks/navigation/ultra-panels-check.js.
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const P = require('../lib/pet.js'), { El } = require('./stand-in-dom.js');
+const P = require('../../extension/lib/pet.js'), { El } = require('../stand-in-dom.js');
 
 test('out wandering, the pet yields to an open site panel within half a second, comes back after, and lets go when it stops', () => {
   const doc = { activeElement: null, hidden: false, visibilityState: 'visible', location: { pathname: '/ultra/stream' } }, timers = new Map();
@@ -15,7 +15,7 @@ test('out wandering, the pet yields to an open site panel within half a second, 
     elementsFromPoint: () => [], addEventListener() {}, removeEventListener() {} });
   const stage = make('div'); stage.box = { left: 20, top: 20, width: 300, height: 200 }; doc.body.append(stage);
   const c = { document: doc, console, Math, Date, Object, Array, Number, String, Map, Set, WeakMap, Promise, JSON, Error, RegExp, Infinity, NaN, isFinite, parseFloat,
-    GZ_PET: P, GZ_PET_BRAIN: require('../lib/petbrain.js'), GZ_PET_PHYSICS: require('../lib/petphysics.js'),
+    GZ_PET: P, GZ_PET_BRAIN: require('../../extension/lib/petbrain.js'), GZ_PET_PHYSICS: require('../../extension/lib/petphysics.js'),
     GZ_WIDGETS_UI: { avatar: () => ({ play() {}, sleep() {}, wake() {}, stop() {} }) },
     location: { pathname: '/ultra/stream' }, innerWidth: 1000, innerHeight: 700, scrollX: 0, scrollY: 0,
     matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }), MutationObserver: class { observe() {} disconnect() {} },
@@ -24,7 +24,7 @@ test('out wandering, the pet yields to an open site panel within half a second, 
     addEventListener() {}, removeEventListener() {},
     chrome: { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://x/${p}` }, storage: { local: { get: (k, cb) => cb({}) }, onChanged: { addListener() {}, removeListener() {} } } } };
   c.window = c; c.globalThis = c; vm.createContext(c);
-  const W = vm.runInContext(fs.readFileSync(path.join(__dirname, '../features/petworld.js'), 'utf8'), c);
+  const W = vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/features/petworld.js'), 'utf8'), c);
   const run = (ms) => { const end = clock + ms; while (timers.size) { const [id, t] = [...timers].sort((a, b) => a[1].at - b[1].at)[0]; if (t.at > end) break; timers.delete(id); clock = Math.max(clock, t.at); t.f(); } clock = Math.max(clock, end); };
   const yielded = () => doc.root.hasAttribute('data-gz-yield');
   // Out wandering, with reduced motion: the pet's own loop rests, the look for open panels doesn't.
@@ -56,6 +56,6 @@ test('out wandering, the pet yields to an open site panel within half a second, 
   assert.equal(yielded(), false, 'another pet, at home: nothing held');
   const before = asked.length; run(5000);
   assert.equal(asked.length, before, 'at home it does not look');
-  const css = fs.readFileSync(path.join(__dirname, '../features/apps.css'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../../extension/features/apps.css'), 'utf8');
   assert.match(css, /html:is\(\[data-gz-yield\],\[data-gz-settings\]\) :is\(\.gz-game-world,\.gz-game-home\)\{visibility:hidden!important\}/);
 });

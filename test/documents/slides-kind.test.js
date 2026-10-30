@@ -1,11 +1,11 @@
 // Slides on the Documents page (slides-kind.js, papers.html): loaded after papers.js and packaged, available for viewing with
 // Settings → Writer → Slides off; importing needs writer.slides on, its one storage seam (the deck's bytes in the worker's file store,
 // lib/doc-files.js, a record from before it holding them as base64), what it keeps for search and a copy, and the files it refuses. The
-// viewer itself is scripts/slides-check.js.
+// viewer itself is checks/documents/slides-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 
 test('papers.html loads the kind registry first and slides-kind.js after papers.js; both package lists ship it', () => {
   const html = read('papers.html');
@@ -14,7 +14,7 @@ test('papers.html loads the kind registry first and slides-kind.js after papers.
   assert.ok(at('slides-kind.js') > at('papers.js'), 'slides-kind.js after papers.js');
   assert.ok(html.includes('<link rel="stylesheet" href="slides-kind.css">'));
   assert.match(html, /img-src 'self' data: blob:;/, 'pictures from blob: URLs');
-  const pkg = read('package.sh').split('\n').filter((l) => / papers\.js /.test(l));
+  const pkg = read('../tools/build/package.sh').split('\n').filter((l) => / papers\.js /.test(l));
   assert.equal(pkg.length, 2, 'chmod and zip');
   for (const line of pkg) for (const f of ['slides-kind.js', 'slides-kind.css']) assert.ok(line.includes(` ${f} `), `${f} in: ${line.slice(0, 40)}…`);
 });
@@ -23,13 +23,13 @@ test('papers.html loads the kind registry first and slides-kind.js after papers.
 const sanitizer = (on) => {
   const src = read('defaults.js'), flipped = src.replace(/slides: \[(?:true|false), 'bool'\]/, `slides: [${on}, 'bool']`);
   assert.notEqual(flipped, on ? src.replace(/slides: \[true/, 'x') : src.replace(/slides: \[false/, 'x'), 'writer.slides in defaults.js');
-  const c = vm.createContext({ require: require('node:module').createRequire(path.join(__dirname, '..', 'defaults.js')), TextEncoder, Intl });
+  const c = vm.createContext({ require: require('node:module').createRequire(path.join(__dirname, '../../extension/defaults.js')), TextEncoder, Intl });
   vm.runInContext(`${flipped}\nthis.GZ_SANITIZE = GZ_SANITIZE;`, c);
   return c.GZ_SANITIZE;
 };
-const { GZ_SANITIZE, GZ_DEFAULTS } = require('../defaults.js');
-const F = require('../lib/doc-files.js');
-const { fakeIDB } = require('./helpers/fake-idb.cjs');
+const { GZ_SANITIZE, GZ_DEFAULTS } = require('../../extension/defaults.js');
+const F = require('../../extension/lib/doc-files.js');
+const { fakeIDB } = require('../helpers/fake-idb.cjs');
 // The worker's file store over a fake IndexedDB, reached through ports that carry JSON as Chrome's do.
 const worker = (idb) => {
   const { indexedDB, IDBKeyRange } = fakeIDB(), st = F.store(idb || F.idb(indexedDB, 'glaze-docs', IDBKeyRange));
@@ -48,9 +48,9 @@ const worker = (idb) => {
 // slides-kind.js in a context of its own: the registry, defaults.js's sanitizer, a storage.sync answering writer.slides, and
 // need() as a no-op.
 const load = (writer, overrides = {}) => {
-  delete require.cache[require.resolve('../lib/doc-kinds.js')];
+  delete require.cache[require.resolve('../../extension/lib/doc-kinds.js')];
   delete globalThis.GZ_DOC_KINDS;
-  const DK = require('../lib/doc-kinds.js');
+  const DK = require('../../extension/lib/doc-kinds.js');
   let ctx;
   const need = async (files) => { if (files.includes('lib/doc-files.js') && !ctx.GZ_DOC_FILES) vm.runInContext(read('lib/doc-files.js'), ctx); };
   ctx = vm.createContext({ GZ_DOC_KINDS: DK, GZ_SANITIZE, GZ_WRITER_PAPER: { need }, console, URL, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, DataView, RangeError, Error, Promise, Object, Array, String, Number, Math, JSON, Map, Set, btoa, atob, ...overrides,

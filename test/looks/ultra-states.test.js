@@ -7,7 +7,7 @@ const path = require('node:path');
 
 // A sheet's rules as [selector, body], comments removed, @media and @supports blocks flattened, in file order.
 const cssRules = (file) => {
-  const css = fs.readFileSync(path.join(__dirname, '..', file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = fs.readFileSync(path.join(__dirname, '../../extension', file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const out = [];
   const walk = (text) => {
     for (let i = 0; i < text.length;) {
@@ -105,7 +105,7 @@ test('a disabled button looks disabled, on the page and in dialogs: its colours 
   for (const j of [rule('.MuiButton-contained {', FILL), rule('#site-wrap a.button, #site-wrap button.button {', FILL),
     rule('#site-wrap :is(a, button).button:is(.button-attempt, .js-submit, [type="submit"]) {', FILL), rule('#site-wrap :is([class*="resultsButtonWrapper"]', FILL)]) assert.ok(beats(fill, j), `disabled fill beats ${theme[j][0].slice(0, 80)}`);
   // MUI's disabled colours, in the palette.
-  assert.match(fs.readFileSync(path.join(__dirname, '..', 'theme.css'), 'utf8'), /--palette-action-disabled: var\(--gz-ink-faint\) !important;\s*--palette-action-disabledBackground: var\(--gz-line\) !important;/);
+  assert.match(fs.readFileSync(path.join(__dirname, '../../extension/theme.css'), 'utf8'), /--palette-action-disabled: var\(--gz-ink-faint\) !important;\s*--palette-action-disabledBackground: var\(--gz-line\) !important;/);
 });
 
 test('a field that refused its input shows it: error edge, label and hint, hovered or focused, and a group keeps its asterisk', () => {

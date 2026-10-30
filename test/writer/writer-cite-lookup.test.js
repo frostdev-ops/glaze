@@ -5,13 +5,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const L = require('../lib/writer-lookup.js');
-const S = require('../lib/writer-sources.js');
-const C = require('../lib/writer-cite.js');
+const L = require('../../extension/lib/writer-lookup.js');
+const S = require('../../extension/lib/writer-sources.js');
+const C = require('../../extension/lib/writer-cite.js');
 
-const fixture = (f) => fs.readFileSync(path.join(__dirname, 'fixtures', f), 'utf8');
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../fixtures', f), 'utf8');
 // Node has no DOMParser: the pieces facts() reads from a parsed page, taken out of the fixture by pattern. The browser check
-// (scripts/writer-cite-check.js) runs facts() itself on these files through DOMParser and compares.
+// (checks/writer/writer-cite-check.js) runs facts() itself on these files through DOMParser and compares.
 const factsOf = (html) => {
   const attr = (tag, a) => (new RegExp(`\\s${a}="([^"]*)"`, 'i').exec(tag) || [])[1];
   const metas = [...html.matchAll(/<meta\s[^>]*>/gi)].map(([tag]) => [(attr(tag, 'name') || attr(tag, 'property') || '').toLowerCase(), attr(tag, 'content')]).filter(([k, v]) => k && v != null);

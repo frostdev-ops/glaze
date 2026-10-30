@@ -8,15 +8,15 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { EventEmitter } = require('node:events');
 
-const F = require('../mcp/lib/agent-frames.js');
-const N = require('../mcp/lib/native.js');
-const R = require('../mcp/lib/rendezvous.js');
-const L = require('../mcp/lib/lines.js');
-const H = require('../mcp/lib/host.js');
-const M = require('../mcp/lib/mux.js');
+const F = require('../../mcp/lib/agent-frames.js');
+const N = require('../../mcp/lib/native.js');
+const R = require('../../mcp/lib/rendezvous.js');
+const L = require('../../mcp/lib/lines.js');
+const H = require('../../mcp/lib/host.js');
+const M = require('../../mcp/lib/mux.js');
 
-const { PKG, ORIGIN, scratch, hmac, until, runDir, browser, agent, opened, lineFrom } = require('./helpers/mcp-pipe.cjs');
-const VERSION = require('../mcp/package.json').version;
+const { PKG, ORIGIN, scratch, hmac, until, runDir, browser, agent, opened, lineFrom } = require('../helpers/mcp-pipe.cjs');
+const VERSION = require('../../mcp/package.json').version;
 const POSIX = process.platform !== 'win32';
 const posixOnly = (why) => (POSIX ? false : why);
 const MiB = 1024 * 1024;
@@ -303,7 +303,7 @@ test('a bye in the same read as hello cleans up a socket whose listen is still s
 test('a replacement file at the bound socket path keeps its mode and is never published as a host', { skip: posixOnly('unix socket files') }, async (t) => {
   const home = scratch(t), preload = path.join(home, 'replace.cjs');
   fs.writeFileSync(preload, `
-    const fs = require('node:fs'), R = require(${JSON.stringify(require.resolve('../mcp/lib/rendezvous.js'))});
+    const fs = require('node:fs'), R = require(${JSON.stringify(require.resolve('../../mcp/lib/rendezvous.js'))});
     const listen = R.listen;
     R.listen = async (server, p) => {
       const own = await listen(server, p);

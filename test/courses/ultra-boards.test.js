@@ -10,12 +10,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../defaults.js');
-const W = require('../lib/widgets.js');
-const K = require('../lib/cards.js');
-const { El } = require('./stand-in-dom.js');
+const D = require('../../extension/defaults.js');
+const W = require('../../extension/lib/widgets.js');
+const K = require('../../extension/lib/cards.js');
+const { El } = require('../stand-in-dom.js');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
 // A layout saved since the Courses page's To Do became a tile (todo: true), so only these tiles are on.
 const ONLY = (ids) => ({ todo: true, tiles: W.TILES.map((id) => ({ id, on: ids.includes(id) })) });

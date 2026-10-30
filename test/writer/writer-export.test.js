@@ -2,9 +2,9 @@
 // fixtures.js) and on small documents for each block and mark.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../lib/writer-schema.js');
-const X = require('../lib/writer-export.js');
-const FX = require('./fixtures/writer-paper-fixtures.js');
+const S = require('../../extension/lib/writer-schema.js');
+const X = require('../../extension/lib/writer-export.js');
+const FX = require('../fixtures/writer-paper-fixtures.js');
 
 const BLOCK = { align: null, indent: 0, line: null, first: null };
 const node = (json) => S.paper.nodeFromJSON(json);

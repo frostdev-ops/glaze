@@ -4,7 +4,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const Q = require('../lib/ai/local/quant.js');
+const Q = require('../../extension/lib/ai/local/quant.js');
 
 const f = Math.fround;
 // binary16 bits of a few values the blocks use.

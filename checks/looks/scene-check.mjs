@@ -1,6 +1,6 @@
 // Headless checks for lib/scene.js and lib/glsl.js in a real browser: built-in scenes unchanged, the three example shaders,
 // a heavy shader stepping down, a refused shader never reaching GL, motion off, context loss, layers.
-//   nice -n 10 node scripts/scene-check.mjs [--out=dir] [--angle=metal|swiftshader|default] [--base=<git ref>] [--run=a,b,c] [--vp=WxH]
+//   nice -n 10 node checks/looks/scene-check.mjs [--out=dir] [--angle=metal|swiftshader|default] [--base=<git ref>] [--run=a,b,c] [--vp=WxH]
 // --base is the revision whose lib/scene.js and three.js build the built-in scenes are compared with (default: the
 // revision this branch was cut from, read as merge-base with `mods`). One headless browser at a time across agents: it waits
 // while another is running, and kills its own and deletes its profile whatever happens. Exit code 1 if any check fails.
@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, execSync, execFileSync } from 'node:child_process';
 
-const ROOT = path.resolve(new URL('..', import.meta.url).pathname);
+const ROOT = path.resolve(new URL('../../extension/', import.meta.url).pathname);
 const args = process.argv.slice(2);
 const opt = Object.fromEntries(args.filter((a) => a.startsWith('--')).map((a) => { const i = a.indexOf('='); return i < 0 ? [a.slice(2), true] : [a.slice(2, i), a.slice(i + 1)]; }));
 const vp = String(opt.vp || '1440x900');
@@ -36,14 +36,16 @@ const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-scene-base-'));
 fs.mkdirSync(path.join(baseDir, 'lib'));
 // three.js was lib/three.min.js before 3.4.6: take whichever the base has, under the name its scene.js imports.
 for (const f of ['scene.js', 'three.js', 'three.min.js']) {
-  let src; try { src = execFileSync('git', ['show', `${ref}:lib/${f}`], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 << 20, stdio: ['ignore', 'pipe', 'ignore'] }); } catch { continue; }
+  let src;
+  for (const dir of ['extension/lib', 'lib']) { try { src = execFileSync('git', ['show', `${ref}:${dir}/${f}`], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 << 20, stdio: ['ignore', 'pipe', 'ignore'] }); break; } catch {} }
+  if (src === undefined) continue;
   fs.writeFileSync(path.join(baseDir, 'lib', f), src);
 }
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.css': 'text/css', '.glsl': 'text/plain' };
 const server = http.createServer((req, res) => {
   const url = decodeURIComponent(req.url.split('?')[0]);
-  const root = url.startsWith('/base/') ? baseDir : ROOT;
+  const root = url.startsWith('/base/') ? baseDir : fs.existsSync(path.join(ROOT, url)) ? ROOT : path.dirname(ROOT);
   const p = path.join(root, url.startsWith('/base/') ? url.slice(5) : url);
   if (!p.startsWith(root) || !fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end('nf'); }
   res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream', 'cache-control': 'no-store' });
@@ -103,7 +105,7 @@ try {
   const [vw, vh] = vp.split('x').map(Number);
   await send('Emulation.setDeviceMetricsOverride', { width: vw, height: vh, deviceScaleFactor: 1, mobile: false });
   const q = new URLSearchParams({ base: '1', ...Object.fromEntries(['run', 'only', 'wait'].filter((k) => opt[k]).map((k) => [k, opt[k]])) });
-  await send('Page.navigate', { url: `${origin}/scripts/scene-check.html?${q}` });
+  await send('Page.navigate', { url: `${origin}/checks/looks/scene-check.html?${q}` });
   const t0 = Date.now();
   for (let stuck = 0; Date.now() - t0 < 300000;) {
     await sleep(500);

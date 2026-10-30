@@ -1,16 +1,16 @@
 // DrawingML shape geometry (lib/pptx-geom.js): the guide formula evaluator and its built-in guides, arcTo drawn as SVG
 // arcs, custom geometry (custGeom), and every preset against stored path snapshots.
 // The snapshots are test/fixtures/pptx-geom/<preset>.json. After a reviewed change to the geometry, rewrite them with
-//   GZ_GEOM_SNAPSHOTS=write node --test test/pptx-geom.test.js
+//   GZ_GEOM_SNAPSHOTS=write node --test test/documents/pptx-geom.test.js
 // and read the diff before committing it. Regeneration is refused when CI is set.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const G = require('../lib/pptx-geom.js');
+const G = require('../../extension/lib/pptx-geom.js');
 
-const SNAPSHOTS = path.join(__dirname, 'fixtures', 'pptx-geom');
+const SNAPSHOTS = path.join(__dirname, '../fixtures/pptx-geom');
 const WRITE = process.env.GZ_GEOM_SNAPSHOTS === 'write';
 
 const PRESETS = ['rect', 'roundRect', 'ellipse', 'triangle', 'rtTriangle', 'diamond', 'parallelogram', 'trapezoid', 'pentagon',
@@ -292,10 +292,10 @@ test('the preset transcription can be regenerated from DrawingML XML', () => {
     <a:rect l="l" t="t" r="r" b="b"/><a:pathLst><a:path extrusionOk="false"><a:moveTo><a:pt x="l" y="t"/></a:moveTo>
       <a:lnTo><a:pt x="r" y="t"/></a:lnTo><a:lnTo><a:pt x="r" y="b"/></a:lnTo><a:lnTo><a:pt x="l" y="b"/></a:lnTo>
       <a:close/></a:path></a:pathLst></rect></presetShapeDefinitons>`;
-  const child = spawnSync('python3', [path.join(__dirname, 'pptx-geom-presets.py'), '-', 'rect'], { input: xml, encoding: 'utf8' });
+  const child = spawnSync('python3', [path.join(__dirname, '../pptx-geom-presets.py'), '-', 'rect'], { input: xml, encoding: 'utf8' });
   assert.ifError(child.error);
   assert.equal(child.status, 0, child.stderr);
-  const source = fs.readFileSync(path.join(__dirname, '../lib/pptx-geom.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/lib/pptx-geom.js'), 'utf8');
   assert.equal(child.stdout.trimEnd(), `  const PRESETS = {\n${source.match(/^    rect: \{[\s\S]*?\n    \},/m)[0]}\n  };`);
 });
 

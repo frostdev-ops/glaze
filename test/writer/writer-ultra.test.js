@@ -4,11 +4,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { El } = require('./stand-in-dom.js');
-const { parse } = require('./fixture-dom.js');
-const U = require('../lib/writer-ultra.js');
+const { El } = require('../stand-in-dom.js');
+const { parse } = require('../fixture-dom.js');
+const U = require('../../extension/lib/writer-ultra.js');
 
-const raw = (f) => fs.readFileSync(path.join(__dirname, 'fixtures', f), 'utf8');
+const raw = (f) => fs.readFileSync(path.join(__dirname, '../fixtures', f), 'utf8');
 const page = (f) => { const doc = { activeElement: null }; doc.root = new El('html', doc); doc.body = parse(raw(f), doc); return doc.body; };
 const DISCUSSION = '/ultra/courses/_101_1/discussion/_9_1', MESSAGES = '/ultra/messages/create', ATTEMPT = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
 
@@ -208,7 +208,7 @@ test('native attachments and formatting outside the frame schema are never taken
 // passes the quick look, so a box Writer has synced is never taken back from it; the frame (lib/writer-schema.js loses)
 // has the last word on the rest.
 test('what compose writes into Ultra\'s editor passes the quick look', () => {
-  const S = require('../lib/writer-schema.js');
+  const S = require('../../extension/lib/writer-schema.js');
   const doc = S.parse(S.compose, '<h3>Title</h3><p class="ql-align-center">Centered <strong>bold</strong> <a href="https://x.test/a">link</a></p>'
     + '<ol><li>One</li><li class="ql-indent-1">One a</li></ol><ul><li class="ql-indent-2 ql-align-right">Bullet</li></ul><p class="ql-indent-3">Indented <em>it</em> <s>s</s> <u>u</u> x<sup>2</sup> H<sub>2</sub>O</p>'
     + '<pre class="ql-syntax" spellcheck="false">code\n</pre><h4 class="ql-align-justify">Small</h4><p><br></p>');

@@ -4,10 +4,10 @@
 // is there (an imported file's setup still asks); and the .docx made from it.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const ST = require('../lib/writer-styles.js');
-const F = require('../lib/writer-format.js');
-const S = require('../lib/writer-schema.js');
-const X = require('../lib/writer-docx.js');
+const ST = require('../../extension/lib/writer-styles.js');
+const F = require('../../extension/lib/writer-format.js');
+const S = require('../../extension/lib/writer-schema.js');
+const X = require('../../extension/lib/writer-docx.js');
 
 const mla = ST.FORMATS.mla9, chicago = ST.FORMATS.chicago17;
 

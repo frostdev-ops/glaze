@@ -2,10 +2,10 @@
 // distinct text; turns set on pages and inherited from page-tree nodes; AcroForm fields; a hybrid and a pure XFA form; a
 // signature dictionary; a password-locked file and an owner-restricted one (RC4, 128-bit); a scanned page; object and
 // cross-reference streams; a broken cross-reference table pdf.js has to rebuild; 300 pages of about 40 MB.
-// test/pdf-doc.test.js builds the small ones in memory. As a script it writes the corpus to a folder (default: a new
+// test/documents/pdf-doc.test.js builds the small ones in memory. As a script it writes the corpus to a folder (default: a new
 // temporary one), with a public-domain pure XFA form when --xfa-url and --xfa-sha256 name one, fetched into a folder of
 // its own and kept only if its SHA-256 matches; it is read, never run.
-// node scripts/pdf-fixtures.js [folder] [--xfa-url URL --xfa-sha256 HEX]
+// node tools/fidelity/pdf-fixtures.js [folder] [--xfa-url URL --xfa-sha256 HEX]
 const crypto = require('node:crypto');
 const zlib = require('node:zlib');
 

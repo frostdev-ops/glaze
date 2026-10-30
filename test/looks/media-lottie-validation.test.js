@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const M = require('../lib/media.js');
+const M = require('../../extension/lib/media.js');
 
 const gradient = (g, ty = 'gf') => ({ v: '5.13.0', fr: 30, ip: 0, op: 30, w: 100, h: 100,
   layers: [{ ty: 4, shapes: [{ ty, g }] }] });

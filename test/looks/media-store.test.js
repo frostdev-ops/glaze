@@ -7,13 +7,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const M = require('../lib/media.js');
-const X = require('../lib/lookparts.js');
-const S = require('../lib/share.js');
-const G = require('../defaults.js');
-const { fakeIDB } = require('./helpers/fake-idb.cjs');
+const M = require('../../extension/lib/media.js');
+const X = require('../../extension/lib/lookparts.js');
+const S = require('../../extension/lib/share.js');
+const G = require('../../extension/defaults.js');
+const { fakeIDB } = require('../helpers/fake-idb.cjs');
 
-const fx = (f) => new Uint8Array(fs.readFileSync(path.join(__dirname, 'fixtures/media', f)));
+const fx = (f) => new Uint8Array(fs.readFileSync(path.join(__dirname, '../fixtures/media', f)));
 const clone = (x) => (x === undefined ? x : structuredClone(x));
 // storage.local, refusing get(null): nothing about kept media may read all of it.
 const localArea = (data = {}) => ({
@@ -256,7 +256,7 @@ test('list marks the files a saved Look (history or a favorite) names', async ()
 });
 
 // ---- the worker -----------------------------------------------------------------------------------------------------------
-const manifest = require('../manifest.json');
+const manifest = require('../../extension/manifest.json');
 const worker = ({ fetch, local: seed = {}, sync: syncSeed = {}, keyListing = true, frames = {} } = {}) => {
   const on = { message: [], changed: [], startup: [], installed: [] };
   const local = { ...seed }, sync = { ...syncSeed }, opened = [];
@@ -275,7 +275,7 @@ const worker = ({ fetch, local: seed = {}, sync: syncSeed = {}, keyListing = tru
   const context = vm.createContext({
     URL, console, TextEncoder, TextDecoder, Blob, Response, CompressionStream, DecompressionStream, btoa, atob, structuredClone, Promise, Date, crypto, AbortSignal, fetch,
     indexedDB, IDBKeyRange, setTimeout: (f) => { timers.push(f); return timers.length; }, clearTimeout: () => {}, navigator: {},
-    importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(require.resolve(`../lib/${f}`), 'utf8'), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(require.resolve(`../../extension/lib/${f}`), 'utf8'), context); },
     chrome: {
       permissions: { contains: async () => true },
       runtime: {
@@ -296,7 +296,7 @@ const worker = ({ fetch, local: seed = {}, sync: syncSeed = {}, keyListing = tru
       tabs: { onRemoved: { addListener() {} }, create: () => {} },
     },
   });
-  vm.runInContext(fs.readFileSync(require.resolve('../lib/background.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/lib/background.js'), 'utf8'), context);
   const ask = (m, s) => new Promise((res) => { senders.set(s.tab?.id, { url: s.url }); for (const f of on.message) if (f(m, s, (r) => res(clone(r))) === true) return; res('ignored'); });
   const send = (m, s) => on.message.forEach((f) => f(m, s));
   const until = async (ok) => { for (let i = 0; i < 2000 && !ok(); i++) await new Promise((r) => setTimeout(r, 2)); assert.ok(ok(), 'waited too long'); };
@@ -378,7 +378,7 @@ test('worker: only the course wearing a video Look can read its file, including 
   const url = `${bb}/ultra/courses/_101_1/outline`;
   const w = worker({ frames: { 'course-doc': { url }, 9: { url: `${bb}/ultra/courses/_202_1/outline` } } });
   const put = await w.ask({ type: 'glaze:media', op: 'put', kind: 'video', b64: M.std(fx('clip.webm')) }, editor);
-  const code = await codeWith(put.h, 'video'), id = require('../lib/looks.js').idOf(code);
+  const code = await codeWith(put.h, 'video'), id = require('../../extension/lib/looks.js').idOf(code);
   w.local.lookFavorites = [{ code, name: 'Course video' }];
   w.sync.courses = { looks: { _101_1: id } };
   const course = { ...page, url, origin: bb, tab: { id: 2, url } };
@@ -402,7 +402,7 @@ test('worker: course video files work in Canvas and Moodle frames and survive a 
   const moodleUrl = `${moodle}/learn/mod/page/view.php?id=99`;
   const w = worker({ frames: { 'moodle-doc': { url: moodleUrl, body: 'course-42 pagelayout-incourse', styles: `${moodle}/learn/theme/styles.php/boost/1/all` } } });
   const put = await w.ask({ type: 'glaze:media', op: 'put', kind: 'video', b64: M.std(fx('clip.webm')) }, editor);
-  const code = await codeWith(put.h, 'video'), id = require('../lib/looks.js').idOf(code);
+  const code = await codeWith(put.h, 'video'), id = require('../../extension/lib/looks.js').idOf(code);
   w.local.lookFavorites = [{ code, name: 'Video' }];
   w.sync.courses = { looks: { [`canvas:${page.origin}/1`]: id, [`moodle:${moodle}/learn/42`]: id } };
   const request = { type: 'glaze:keptFile', h: put.h };
@@ -421,7 +421,7 @@ test('worker: a sender URL from before SPA navigation cannot grant the previous 
   const put = await w.ask({ type: 'glaze:media', op: 'put', kind: 'video', b64: M.std(fx('clip.webm')) }, editor);
   const code = await codeWith(put.h, 'video');
   w.local.lookFavorites = [{ code, name: 'Video' }];
-  w.sync.courses = { looks: { [`canvas:${page.origin}/1`]: require('../lib/looks.js').idOf(code) } };
+  w.sync.courses = { looks: { [`canvas:${page.origin}/1`]: require('../../extension/lib/looks.js').idOf(code) } };
   const request = { type: 'glaze:keptFile', h: put.h };
   assert.equal((await w.ask(request, page)).ok, false, 'current course 2 cannot borrow the initial course 1 URL');
   frames[0].url = page.url;
@@ -433,7 +433,7 @@ test('worker: a course Look authorizes its remote video and Lottie, with the sam
   let fetched = 0;
   const w = worker({ fetch: async () => { fetched++; return new Response(fx('clip.webm')); } });
   const code = await S.encode(G.GZ_SANITIZE({ bg: { kind: 'media' } }), {}, { x: { bg: { media: { type: 'video', src } } } });
-  const id = require('../lib/looks.js').idOf(code);
+  const id = require('../../extension/lib/looks.js').idOf(code);
   w.local.lookFavorites = [{ code, name: 'Remote course' }];
   w.sync.courses = { looks: { [`canvas:${page.origin}/1`]: id } };
   const request = { type: 'glaze:remoteMedia', src, kind: 'video' };
@@ -444,7 +444,7 @@ test('worker: a course Look authorizes its remote video and Lottie, with the sam
   const put = await w.ask({ type: 'glaze:media', op: 'put', kind: 'lottie', b64: M.std(fx('spin.json')) }, editor);
   const lottie = await codeWith(put.h, 'lottie');
   w.local.lookFavorites = [{ code: lottie, name: 'Course animation' }];
-  w.sync.courses.looks[`canvas:${page.origin}/1`] = require('../lib/looks.js').idOf(lottie);
+  w.sync.courses.looks[`canvas:${page.origin}/1`] = require('../../extension/lib/looks.js').idOf(lottie);
   assert.equal((await w.ask({ type: 'glaze:lottie', src: `file:${put.h}` }, page)).ok, true);
   assert.equal((await w.ask({ type: 'glaze:lottie', src: `file:${put.h}` }, { ...page, url: `${page.origin}/courses/2` })).ok, false);
 });
@@ -569,14 +569,14 @@ test('worker: an update moves files kept in storage.local to the files store, an
 });
 
 // ---- the editor -----------------------------------------------------------------------------------------------------------
-const options = fs.readFileSync(require.resolve('../options.js'), 'utf8');
+const options = fs.readFileSync(require.resolve('../../extension/options.js'), 'utf8');
 
 test('editor: an offer whose file had no room says so', async () => {
   const section = options.slice(options.indexOf('  const tryCode ='), options.indexOf("  $('#share-try').addEventListener"));
   const notes = [];
   const controls = { '#share-code': { value: await codeWith('A'.repeat(43), 'video') }, '#share-offer': {}, '#share-what': { replaceChildren() {}, append: (...xs) => notes.push(...xs.map((x) => x.textContent ?? x)) } };
   const context = vm.createContext({
-    GZ_SHARE: S, GZ_XPARTS: X, GZ_SANITIZE: G.GZ_SANITIZE, GZ_MATCH_PRESET: G.GZ_MATCH_PRESET, GZ_CARDS: require('../lib/cards.js'), GZ_FONTS: require('../lib/fonts.js'),
+    GZ_SHARE: S, GZ_XPARTS: X, GZ_SANITIZE: G.GZ_SANITIZE, GZ_MATCH_PRESET: G.GZ_MATCH_PRESET, GZ_CARDS: require('../../extension/lib/cards.js'), GZ_FONTS: require('../../extension/lib/fonts.js'),
     GZ_I18N: { ui: () => 'en', locale: () => 'en' }, s: G.GZ_SANITIZE(), offer: null, from: null, offerFile: '', offerGeneration: 0, letGo() {}, URL, Intl,
     $: (id) => controls[id], document: { createElement: () => ({}) }, fontName: (f) => f.name,
     t: (x, vars) => x.replace(/\{(\w+)(?:\|\w+)?\}/g, (_, k) => vars[k]), endOffer() {}, hint() {}, preview() {}, drawLooks() {}, GZ_UI: { paint() {} },
@@ -635,7 +635,7 @@ test('editor: a refused gallery code releases its pending file, and Cancel wins 
 
 // ---- a page ---------------------------------------------------------------------------------------------------------------
 test('page: a kept file is asked of the worker and played without hashing it on every page load', async () => {
-  const { env: pageEnv } = require('./helpers/media-env.cjs');
+  const { env: pageEnv } = require('../helpers/media-env.cjs');
   const bytes = Uint8Array.from({ length: 300 }, (_, i) => i & 255), h = 'H'.repeat(43);
   const e = pageEnv({ ask: async (m) => (m.type === 'glaze:keptFile' && m.h === h ? { ok: true, mime: 'video/webm', b64: Buffer.from(bytes).toString('base64') } : { ok: false }) });
   const host = e.document.createElement('div'), fails = [];

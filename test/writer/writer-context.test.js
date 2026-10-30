@@ -1,17 +1,17 @@
 // Glaze Writer's discussion context (lib/writer-context-discussion.js) over the probed API shapes
 // (test/fixtures/ultra-writer-thread*.json): the forum behind a route, the prompt, the thread within its budget, the post a
 // reply answers, and the reads through lib/ultra.js's reader. What the frame gets in a browser is
-// scripts/writer-compose-check.js.
+// checks/writer/writer-compose-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const C = require('../lib/writer-context-discussion.js');
-const T = require('../lib/writer-target.js');
-const { read } = require('../lib/ultra.js');
-const text = require('../lib/doctext.js').html;
+const C = require('../../extension/lib/writer-context-discussion.js');
+const T = require('../../extension/lib/writer-target.js');
+const { read } = require('../../extension/lib/ultra.js');
+const text = require('../../extension/lib/doctext.js').html;
 
-const load = (f) => JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', f), 'utf8'));
+const load = (f) => JSON.parse(fs.readFileSync(path.join(__dirname, '../fixtures', f), 'utf8'));
 const LIST = load('ultra-writer-thread-discussions.json'), PAGE1 = load('ultra-writer-thread.json'), PAGE2 = load('ultra-writer-thread-2.json'), REPLIES = load('ultra-writer-thread-replies.json');
 const ALL = [...PAGE1.results, ...PAGE2.results, ...REPLIES.results];
 const ME = '_42_1';
@@ -34,7 +34,7 @@ test('routes: a discussion\'s course and content ids, a journal\'s, a message co
 });
 
 test('compose routes agree with rubric discussion routes and never treat new-message as a content id', () => {
-  const R = require('../lib/rubric.js');
+  const R = require('../../extension/lib/rubric.js');
   const path = '/ultra/courses/_101_1/discussion/_9_1/';
   assert.equal(C.route(path).content, R.route('ultra', path).contentId);
   for (const kind of ['discussion', 'journal']) assert.equal(C.route(`/ultra/courses/_101_1/${kind}/new-message`), null);

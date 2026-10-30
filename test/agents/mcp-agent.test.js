@@ -8,15 +8,15 @@ const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
 const { PassThrough, Readable } = require('node:stream');
 
-const R = require('../mcp/lib/rendezvous.js');
-const F = require('../mcp/lib/agent-frames.js');
-const A = require('../mcp/lib/agent.js');
-const B = require('../mcp/lib/browsers.js');
-const I = require('../mcp/lib/install.js');
-const D = require('../mcp/lib/doctor.js');
-const CLI = require('../mcp/bin/glaze-mcp.js');
-const { PKG, BIN, FIREFOX, scratch, nodeAt, hmac, until, envFor, runDir, stop, browser, opened, lineFrom } = require('./helpers/mcp-pipe.cjs');
-const { runner } = require('./helpers/mcp-reg.cjs');
+const R = require('../../mcp/lib/rendezvous.js');
+const F = require('../../mcp/lib/agent-frames.js');
+const A = require('../../mcp/lib/agent.js');
+const B = require('../../mcp/lib/browsers.js');
+const I = require('../../mcp/lib/install.js');
+const D = require('../../mcp/lib/doctor.js');
+const CLI = require('../../mcp/bin/glaze-mcp.js');
+const { PKG, BIN, FIREFOX, scratch, nodeAt, hmac, until, envFor, runDir, stop, browser, opened, lineFrom } = require('../helpers/mcp-pipe.cjs');
+const { runner } = require('../helpers/mcp-reg.cjs');
 
 const POSIX = process.platform !== 'win32';
 const posixOnly = (why) => (POSIX ? false : why);

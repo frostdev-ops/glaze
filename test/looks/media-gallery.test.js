@@ -5,12 +5,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../lib/media.js');
-const X = require('../lib/lookparts.js');
-const B = require('../lib/modbroker.js');
-const BUNDLE = require('../lib/modbundle.js');
+const M = require('../../extension/lib/media.js');
+const X = require('../../extension/lib/lookparts.js');
+const B = require('../../extension/lib/modbroker.js');
+const BUNDLE = require('../../extension/lib/modbundle.js');
 
-const fx = (f) => new Uint8Array(fs.readFileSync(path.join(__dirname, 'fixtures/media', f)));
+const fx = (f) => new Uint8Array(fs.readFileSync(path.join(__dirname, '../fixtures/media', f)));
 const b64 = (bytes) => Buffer.from(bytes).toString('base64');
 const flush = () => new Promise(setImmediate);
 const ID = 'abcdefghijklmnop', OTHER = 'qrstuvwxyz234567', SITE = 'https://school.instructure.com';

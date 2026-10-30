@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const path = require('node:path');
-const read = (f) => fs.readFileSync(path.join(process.env.GZ_CTAB_REPO || path.join(__dirname, '..'), f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(process.env.GZ_CTAB_REPO || path.join(__dirname, '../../extension'), f), 'utf8');
 const rules = (f) => [...read(f).replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, sel, body]) => [sel.trim(), body]);
 const has = (f, sel, prop) => rules(f).some(([s, b]) => s.split(/,(?![^(]*\))/).some((x) => x.trim() === sel) && prop.test(b));
 

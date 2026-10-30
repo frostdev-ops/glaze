@@ -4,14 +4,14 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const G = require('../defaults.js');
-const C = require('../lib/looks.js');
+const G = require('../../extension/defaults.js');
+const C = require('../../extension/lib/looks.js');
 
 // Glaze 3.4.6's defaults.js as released (git show v3.4.6:defaults.js); its helpers are unchanged since.
 const old = (() => {
   const module = { exports: {} };
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'fixtures/defaults-3.4.6.js.txt'), 'utf8'), {
-    module, TextEncoder, console, GZ_COLOR: require('../lib/color.js'), GZ_SURFACES: require('../lib/surfaces.js'), GZ_FONTS: require('../lib/fonts.js') });
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../fixtures/defaults-3.4.6.js.txt'), 'utf8'), {
+    module, TextEncoder, console, GZ_COLOR: require('../../extension/lib/color.js'), GZ_SURFACES: require('../../extension/lib/surfaces.js'), GZ_FONTS: require('../../extension/lib/fonts.js') });
   return module.exports;
 })();
 // A 3.x course edit (its course menu, its Settings row, its worker's courseName): courses read, sanitized, edited, written back.
@@ -126,7 +126,7 @@ test('removing a kept Look takes it off every course, in both maps', () => {
 // The real 4.0 worker (lib/background.js) over `sync`: its writes of course Looks, and `arrive` for a change another device
 // synced (in storage and heard, not written here).
 const worker4 = (sync) => {
-  const env = require('./helpers/worker-env.cjs')({ store: { sync, local: { ultra: [] }, session: {} } });
+  const env = require('../helpers/worker-env.cjs')({ store: { sync, local: { ultra: [] }, session: {} } });
   const writes = [], set = env.context.chrome.storage.sync.set;
   env.context.chrome.storage.sync.set = (v) => { if ('courses' in v || 'courseLooks' in v) writes.push(structuredClone(v)); return set(v); };
   const arrive = (fn) => {

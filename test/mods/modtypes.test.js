@@ -7,9 +7,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-const dts = read('types/glaze.d.ts');
-const docs = read('docs/mods-api.md');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
+const dts = read('../types/glaze.d.ts');
+const docs = read('../docs/mods-api.md');
 const sorted = (set) => [...set].sort();
 
 // The `glaze` object as a mod gets it: the client mods/host.js sends as source, run here with a stand-in port.
@@ -57,7 +57,7 @@ test('the events: the type file, the docs and the code that sends them agree', (
 });
 
 test('the palette tokens, effect kinds and shapes are Glaze\'s own', () => {
-  const D = require('../defaults.js'), MX = require('../lib/motionx.js');
+  const D = require('../../extension/defaults.js'), MX = require('../../extension/lib/motionx.js');
   assert.deepEqual(sorted(literals('GlazeColor')), sorted(D.GZ_COLORS.map(([v]) => v.slice(5))));
   assert.deepEqual(sorted(literals('GlazeEffectKind')), sorted(MX.KINDS));
   assert.deepEqual(sorted(literals('GlazeShape')), sorted(MX.SHAPES));
@@ -75,7 +75,7 @@ test('the components: the type file, the docs and the drawing code have the same
 });
 
 test('every example is listed in the docs', () => {
-  for (const d of fs.readdirSync(path.join(__dirname, '..', 'examples', 'mods'), { withFileTypes: true }).filter((d) => d.isDirectory())) {
+  for (const d of fs.readdirSync(path.join(__dirname, '../../examples/mods'), { withFileTypes: true }).filter((d) => d.isDirectory())) {
     assert.ok(docs.includes(`examples/mods/${d.name}`), d.name);
   }
   assert.ok(docs.includes('examples/looks/shader-background'));
@@ -83,7 +83,7 @@ test('every example is listed in the docs', () => {
 
 
 test('Look overrides expose every supported background kind in the SDK', () => {
-  const XP = require('../lib/lookparts.js');
+  const XP = require('../../extension/lib/lookparts.js');
   assert.ok(XP.clean({ bg: { media: { type: 'video', src: 'https://media.example/loop.webm', fit: 'cover', dim: 40, loop: true } } }));
   const bg = body('GlazeLookParts');
   for (const key of ['shader', 'layers', 'media']) assert.match(bg, new RegExp(`\\b${key}\\?:`), key);
@@ -94,7 +94,7 @@ test('Look overrides expose every supported background kind in the SDK', () => {
 });
 
 test('mod.json tools: the type file has each source\'s fields and each kind of tool\'s keys, and the docs name them', () => {
-  const T = require('../lib/modtools.js');
+  const T = require('../../extension/lib/modtools.js');
   assert.deepEqual(sorted(literals('GlazeTodoField')), sorted(Object.keys(T.FIELDS.todo)));
   assert.deepEqual(Object.keys(T.FIELDS.schedule), Object.keys(T.FIELDS.todo));
   assert.deepEqual(sorted(literals('GlazeCourseField')), sorted(Object.keys(T.FIELDS.courses)));

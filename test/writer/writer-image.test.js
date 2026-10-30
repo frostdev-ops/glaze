@@ -1,12 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const I = require('../lib/ai/tasks/writer-image.js');
-const T = require('../lib/ai/task.js');
-const X = require('../lib/ai/text.js');
-const P = require('../lib/ai/providers.js');
-const V = require('../lib/ai/visual-cache.js');
+const I = require('../../extension/lib/ai/tasks/writer-image.js');
+const T = require('../../extension/lib/ai/task.js');
+const X = require('../../extension/lib/ai/text.js');
+const P = require('../../extension/lib/ai/providers.js');
+const V = require('../../extension/lib/ai/visual-cache.js');
 const { webcrypto } = require('node:crypto');
-require('../lib/ai/providers/mock.js');
+require('../../extension/lib/ai/providers/mock.js');
 const picture = () => ({ name: 'Task.png', mime: 'image/png', data: 'iVBORw0KGgo=' });
 const raw = () => ({ name: 'Task.png', image: { mime: 'image/png', data: 'iVBORw0KGgo=' }, context: { kind: 'assignment', assignment: { title: 'Plant observations', instructions: 'Explain plant growth.', rubric: { criteria: [{ label: 'Evidence' }] } } } });
 const reading = () => ({ description: 'A table has Evidence in the left column and 20 points in the right column. An arrow connects water to growth.', requirements: ['Explain plant growth.'], complete: true, reason: '', relevance: 'relevant' });

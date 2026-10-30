@@ -7,13 +7,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../lib/sheet-model.js');
-const C = require('../lib/sheet-calc.js');
-require('../lib/sheet-fn-math.js');
-require('../lib/sheet-fn-logical.js');
-require('../lib/sheet-fn-text.js');
-require('../lib/sheet-fn-info.js');
-require('../lib/sheet-fn-lookup.js');
+const M = require('../../extension/lib/sheet-model.js');
+const C = require('../../extension/lib/sheet-calc.js');
+require('../../extension/lib/sheet-fn-math.js');
+require('../../extension/lib/sheet-fn-logical.js');
+require('../../extension/lib/sheet-fn-text.js');
+require('../../extension/lib/sheet-fn-info.js');
+require('../../extension/lib/sheet-fn-lookup.js');
 
 // A calculated workbook from { 'A1': typed input, 'Sheet2!B1': ... }. An input { f, a } is an array formula over a; { v,
 // s } a number with style s. Names may be scoped to a sheet by its name.
@@ -50,7 +50,7 @@ test('the information functions are registered', () => {
   const names = 'ISBLANK ISERR ISERROR ISNA ISNUMBER ISTEXT ISNONTEXT ISLOGICAL ISREF ISEVEN ISODD ISFORMULA N T TYPE ERROR.TYPE NA CELL INFO SHEET SHEETS FORMULATEXT'.split(' ');
   for (const name of names) assert.ok(C.fn(name), name);
   assert.ok(C.fn('CELL').volatile && C.fn('INFO').volatile && !C.fn('SHEET').volatile, 'moving a sheet recalculates SHEET without volatility');
-  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '..', 'lib', 'sheet-fn-info.js'), 'utf8')), 'no timers');
+  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-fn-info.js'), 'utf8')), 'no timers');
 });
 
 test('the IS functions, with Microsoft\'s examples: values are not converted', () => {

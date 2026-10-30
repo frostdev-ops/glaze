@@ -1,18 +1,18 @@
 // Glaze Writer's citations in the real unpacked extension, on the synthetic Ultra discussion (test/fixtures/ultra-writer-*,
-// running the real Quill 1.3.7 as scripts/writer-check.js does): the toolbar's Cite, its popover, DOI, ISBN and page
+// running the real Quill 1.3.7 as checks/writer/writer-check.js does): the toolbar's Cite, its popover, DOI, ISBN and page
 // lookups answered from saved synthetic responses (test/fixtures/writer-cite-*), the citation at the caret and in Ultra's
 // Quill, ⋯ Add references, the cite issues, and the paper side panel's Sources view. No outside network from the browser:
 // every request is routed here, and anything unexpected is refused and fails the check.
-// NODE_PATH=<playwright> nice -n 10 node scripts/writer-cite-check.js (under the shared heavy-browser lock)
+// NODE_PATH=<playwright> nice -n 10 node checks/writer/writer-cite-check.js (under the shared heavy-browser lock)
 // WRITER_SHOTS names where the screenshots go (default /tmp/gz-writer-cite-shots).
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
+const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
 const site = 'https://bb.school.test';
 const QUILL = { url: 'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js', sha256: 'c675f57388d3598637c4e0f9fe154bd61dfb1c2086271f944a0bb2b9b059b074' };
-const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const shots = process.env.WRITER_SHOTS || '/tmp/gz-writer-cite-shots';
 const NEWS = 'https://news.example.com/2019/03/22/forgetting.html';
 const checks = [], requests = [], errors = [], failures = [];
@@ -28,7 +28,7 @@ const until = async (fn, label, ms = 10000) => {
 };
 const check = (v, label) => { assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
 
-// Real Quill on each writable box, with Ultra's enabled-state reproduced (scripts/writer-check.js's harness, cut down).
+// Real Quill on each writable box, with Ultra's enabled-state reproduced (checks/writer/writer-check.js's harness, cut down).
 const HARNESS = `(() => {
   for (const c of document.querySelectorAll('.ql-container:not(.is-read-only)')) {
     const old = c.querySelector('.ql-editor'), html = old.innerHTML, id = old.id, placeholder = old.getAttribute('data-placeholder');
@@ -42,7 +42,7 @@ const HARNESS = `(() => {
 
 (async () => {
   let context, tmp, ext, held = false;
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   try {
     for (let i = 0; ; i++) {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nwriter-cite-check\n`); break; }
@@ -51,9 +51,9 @@ const HARNESS = `(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-writer-cite-'));
     const quill = Buffer.from(await (await fetch(QUILL.url)).arrayBuffer());
     if (crypto.createHash('sha256').update(quill).digest('hex') !== QUILL.sha256) throw Error('Quill 1.3.7 hash mismatch');
-    ext = require('./check-env.js').staged(root, [`${site}/*`, `${new URL(NEWS).origin}/*`]);
-    await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    ext = require('../../tools/dev/check-env.js').staged(root, [`${site}/*`, `${new URL(NEWS).origin}/*`]);
+    await require('../../tools/dev/wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(10000);
     // The lookups' answers, as doi.org (after its redirect), Open Library and a news site give them.
     const ANSWERS = {

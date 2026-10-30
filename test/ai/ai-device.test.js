@@ -5,12 +5,12 @@
 // warm sessions prompted through clone().
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const P = require('../lib/ai/providers.js');
-const B = require('../lib/ai/broker.js');
-const T = require('../lib/ai/task.js');
-const S = require('../lib/ai/schema.js');
-const A = require('../lib/ai/settings.js');
-const D = require('../lib/ai/providers/device.js');
+const P = require('../../extension/lib/ai/providers.js');
+const B = require('../../extension/lib/ai/broker.js');
+const T = require('../../extension/lib/ai/task.js');
+const S = require('../../extension/lib/ai/schema.js');
+const A = require('../../extension/lib/ai/settings.js');
+const D = require('../../extension/lib/ai/providers/device.js');
 
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex').toString('base64');
 const SCHEMA = { type: 'object', properties: { text: { type: 'string' } }, required: ['text'], additionalProperties: false };
@@ -532,8 +532,8 @@ for (const outcome of ['completed', 'failed', 'cancelled', 'disconnected', 'time
 });
 
 test('in the real worker: Settings\' top frame asks for the device and starts its download; nothing else may', async () => {
-  const worker = require('./helpers/worker-env.cjs');
-  const { fakeIDB } = require('./helpers/fake-idb.cjs');
+  const worker = require('../helpers/worker-env.cjs');
+  const { fakeIDB } = require('../helpers/fake-idb.cjs');
   const s = stub({ avail: 'downloadable' });
   const w = worker({ globals: { ...fakeIDB(), LanguageModel: s.LM, EventTarget, Event } });
   const EXT = 'chrome-extension://x';
@@ -632,7 +632,7 @@ test('broker readiness accepts only a boolean image capability from provider sta
 });
 
 test('writing readiness exposes a stable identity for model, connection generation, tuning and effort without connection secrets', async () => {
-  require('../lib/ai/providers/openai.js');
+  require('../../extension/lib/ai/providers/openai.js');
   const settings = { on: true, mode: 'advanced', model: { use: 'alpha', model: 'model-a', effort: 'low' },
     tune: { writing: { temperature: 0.5, context: 8192 } }, features: { writing: true, completion: true } };
   const e = env({ settings: async () => structuredClone(settings), reach: async () => true });
@@ -802,8 +802,8 @@ test('responseConstraint never replaces validation of the returned JSON', async 
 });
 
 test('a restarted worker reads current download state and never replays a session', async () => {
-  const worker = require('./helpers/worker-env.cjs');
-  const { fakeIDB } = require('./helpers/fake-idb.cjs');
+  const worker = require('../helpers/worker-env.cjs');
+  const { fakeIDB } = require('../helpers/fake-idb.cjs');
   const s = stub({ avail: 'downloading' });
   const globals = { ...fakeIDB(), LanguageModel: s.LM, EventTarget, Event };
   const editor = { id: 'glaze', frameId: 0, url: 'chrome-extension://x/options.html', origin: 'chrome-extension://x' };

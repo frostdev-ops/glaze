@@ -1,7 +1,7 @@
 // Editor ownership and safe-reset regressions; real generated DOM ownership is also checked by the browser gate.
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
 const vm = require('node:vm');
-const root = path.resolve(__dirname, '..'), D = require(path.join(root, 'defaults.js'));
+const root = path.resolve(__dirname, '../../extension'), D = require(path.join(root, 'defaults.js'));
 for (const file of ['todo', 'widgets', 'remind', 'nav', 'coursetabs']) require(path.join(root, `lib/${file}.js`));
 const N = require(path.join(root, 'lib/nav-items.js')), E = require(path.join(root, 'lib/editor.js'));
 const cards = require(path.join(root, 'lib/cards.js'));
@@ -241,7 +241,7 @@ test('E1 Ultra preview carries the chosen course color and nickname without savi
     frame: { contentDocument: { querySelector: () => section }, contentWindow: { postMessage: (m) => messages.push(m) } },
     $: (selector) => ({ value: selector === '#preview-size' ? 'desktop' : 'current' }), location: { origin: 'chrome-extension://fixture' },
     previewSite: 'ultra', previewPage: 'outline', previewCourse: '', renderNav() {}, renderContrast() {}, sizePreview() {}, paintBackdrop() {}, previewItems: () => ({}),
-    GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_COURSE_COLORS: D.GZ_COURSE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_COURSE_LOOK_ID: D.GZ_COURSE_LOOK_ID, GZ_COURSE_TINTED: D.GZ_COURSE_TINTED, GZ_LOOK_PARTS: require('../lib/lookset.js'), catalog: require('../lib/looks.js').list(),
+    GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_COURSE_COLORS: D.GZ_COURSE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_COURSE_LOOK_ID: D.GZ_COURSE_LOOK_ID, GZ_COURSE_TINTED: D.GZ_COURSE_TINTED, GZ_LOOK_PARTS: require('../../extension/lib/lookset.js'), catalog: require('../../extension/lib/looks.js').list(),
   });
   vm.runInContext(`(${preview})()`, context);
   assert.equal(section.className, 'course course-color-2'); assert.equal(name.textContent, 'My course');

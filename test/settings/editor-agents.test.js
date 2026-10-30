@@ -6,10 +6,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const I = require('../lib/i18n.js');
-const L = require('../lib/agent-link.js');
+const I = require('../../extension/lib/i18n.js');
+const L = require('../../extension/lib/agent-link.js');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
 const settle = async () => { for (let i = 0; i < 40; i++) await new Promise(setImmediate); };
@@ -127,7 +127,7 @@ const page = ({ browser = 'chrome', os = 'mac', on = false, link, apps = [], mod
 };
 const text = (e) => (e && typeof e === 'object' ? `${e.textContent}${e.children.map(text).join('')}` : '');
 const open = async (opts) => { const p = page(opts); await settle(); return p; };
-const E = () => require('../lib/editor-agents.js');
+const E = () => require('../../extension/lib/editor-agents.js');
 
 test('off by default: the switch is off, no state shows, and the worker is asked once for its state and apps', async () => {
   const p = await open();
@@ -634,7 +634,7 @@ test('the activity list: time, app, tool and outcome, newest first, and nothing 
   assert.equal(p.rows()[0], 'schedule_list · Claude Code | @400 · Timed out', 'a new row shows as it is recorded');
   assert.ok(p.ops().filter((o) => o === 'apps').length >= 2, 'and the apps are read again, for their last use');
   const { outcome, OUTCOMES } = E();
-  assert.deepEqual(OUTCOMES, require('../lib/mcp/grants.js').OUTCOMES, 'every outcome lib/mcp/grants.js records');
+  assert.deepEqual(OUTCOMES, require('../../extension/lib/mcp/grants.js').OUTCOMES, 'every outcome lib/mcp/grants.js records');
   for (const o of OUTCOMES) assert.notEqual(outcome(o, tEn), o, o);
   assert.equal(outcome('invalid', tEn), 'Invalid request', "an app's malformed call is not the student's refusal");
   assert.notEqual(outcome('invalid', tEn), outcome('refused', tEn));

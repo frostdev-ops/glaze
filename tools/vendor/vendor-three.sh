@@ -6,9 +6,9 @@
 # checked against the SHA-512 integrity pinned below before esbuild runs, and the result against the SHA-256 of the
 # checked-in file. To upgrade, pick the new versions, copy their integrity from `npm view <package>@<version> dist.integrity`
 # (esbuild's binaries are its optional dependencies, one package per platform), run this once, and record the new file hash.
-# Usage: scripts/vendor-three.sh
+# Usage: tools/vendor/vendor-three.sh
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../../extension"
 
 three_version=0.186.1
 esbuild_version=0.28.2
@@ -32,7 +32,7 @@ echo "export {$names} from 'three';" > "$tmp/entry.js"
 npm install --prefix "$tmp" --silent --no-save --no-package-lock --ignore-scripts --no-audit --no-fund \
   --registry https://registry.npmjs.org/ "three@$three_version" "esbuild@$esbuild_version"
 # npm records what it installed, with the integrity of each tarball, in node_modules/.package-lock.json.
-printf '%s\n' "$integrity" | node scripts/npm-integrity.js "$tmp/node_modules/.package-lock.json" - three esbuild
+printf '%s\n' "$integrity" | node ../tools/vendor/npm-integrity.js "$tmp/node_modules/.package-lock.json" - three esbuild
 
 # From inside $tmp: the readable output names each source file by its path, which must not depend on where $tmp is.
 (cd "$tmp" && node_modules/.bin/esbuild entry.js --bundle --format=esm --legal-comments=eof \

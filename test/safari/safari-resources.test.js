@@ -1,20 +1,20 @@
 // Safari's app bundles only what its Xcode project lists for the two extension targets (Mac and iOS); the release
 // scripts put the Chrome package in the project's Resources folder and build the project as it is. So everything the
-// package ships, and everything the manifest, the loader and the pages name, must be listed there (scripts/safari-resources.js).
+// package ships, and everything the manifest, the loader and the pages name, must be listed there (tools/build/safari-resources.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const S = require('../scripts/safari-resources.js');
+const S = require('../../tools/build/safari-resources.js');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const m = require('../manifest.json');
-// The paths package.sh zips (as test/package.test.js reads them), and every file under them.
-const roots = read('package.sh').match(/^zip -q -r -X "\$OUT" ([\s\S]*?)-x /m)[1].replace(/\\\n/g, ' ').trim().split(/\s+/);
-// Code mods' sandbox files (mods/) are Chrome's alone: scripts/safari-manifest.sh drops them from the staged copy, as Safari
+const m = require('../../extension/manifest.json');
+// The paths package.sh zips (as test/release/package.test.js reads them), and every file under them.
+const roots = read('../tools/build/package.sh').match(/^zip -q -r -X "\$OUT" ([\s\S]*?)-x /m)[1].replace(/\\\n/g, ' ').trim().split(/\s+/);
+// Code mods' sandbox files (mods/) are Chrome's alone: tools/build/safari-manifest.sh drops them from the staged copy, as Safari
 // has no manifest sandbox.
 const shipped = roots.flatMap((r) => (fs.statSync(path.join(root, r)).isDirectory() ? S.walk(path.join(root, r), `${r}/`) : [r])).filter((f) => !f.startsWith('mods/') && f !== 'features/mods.js');
 
@@ -47,25 +47,25 @@ test('and everything the manifest, the loader, the stylesheets and the preview n
 });
 
 test('every Safari release script checks its staged resources against the project before it builds', () => {
-  for (const f of ['scripts/appstore-safari.sh', 'scripts/appstore-ios.sh', 'scripts/build-safari.sh']) {
+  for (const f of ['../tools/build/appstore-safari.sh', '../tools/build/appstore-ios.sh', '../tools/build/build-safari.sh']) {
     const src = read(f);
-    const check = src.search(/^node scripts\/safari-resources\.js "\$/m);
+    const check = src.search(/^node tools\/build\/safari-resources\.js "\$/m);
     assert.ok(check > 0, `${f} runs the check`);
     assert.ok(check < src.indexOf('xcodebuild'), `${f}: before xcodebuild`);
   }
 });
 
 // Safari has no manifest sandbox (MDN: not on macOS or iOS), so, as in the Firefox package, code mods' sandbox page, CSP,
-// bootstrap and their web-accessible entries go from every staged copy: each staging path runs scripts/safari-manifest.sh on
+// bootstrap and their web-accessible entries go from every staged copy: each staging path runs tools/build/safari-manifest.sh on
 // the unzipped Chrome package before the resource check and the build. The page side goes too.
 test('the Safari staging drops code mods\' sandbox and keeps everything else bundled', () => {
   const dist = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-safari-stage-'));
   try {
-    execFileSync('bash', ['package.sh'], { cwd: root, env: { ...process.env, DIST: dist }, stdio: 'pipe' });
+    execFileSync('bash', ['../tools/build/package.sh'], { cwd: root, env: { ...process.env, DIST: dist }, stdio: 'pipe' });
     const stage = path.join(dist, 'Resources');
     execFileSync('unzip', ['-q', path.join(dist, `glaze-v${m.version}.zip`), '-d', stage]);
     assert.ok(fs.existsSync(path.join(stage, 'mods/host.html')), 'the Chrome package has them');
-    execFileSync('sh', [path.join(root, 'scripts/safari-manifest.sh'), path.join(stage, 'manifest.json')]);
+    execFileSync('sh', [path.join(__dirname, '../../tools/build/safari-manifest.sh'), path.join(stage, 'manifest.json')]);
     const staged = S.walk(stage);
     const sm = JSON.parse(fs.readFileSync(path.join(stage, 'manifest.json'), 'utf8'));
     assert.ok(!staged.some((f) => f.startsWith('mods/') || f === 'features/mods.js'), 'no host, bootstrap or sandbox content runtime');
@@ -78,7 +78,7 @@ test('the Safari staging drops code mods\' sandbox and keeps everything else bun
   } finally {
     fs.rmSync(dist, { recursive: true, force: true });
   }
-  for (const f of ['scripts/package-safari.sh', 'scripts/appstore-safari.sh', 'scripts/appstore-ios.sh', 'scripts/stage-safari-dmg.py']) {
+  for (const f of ['../tools/build/package-safari.sh', '../tools/build/appstore-safari.sh', '../tools/build/appstore-ios.sh', '../tools/build/stage-safari-dmg.py']) {
     const src = read(f), unzip = src.indexOf('unzip'), rewrite = src.indexOf('safari-manifest.sh');
     assert.ok(unzip > 0 && rewrite > unzip, `${f} rewrites the staged manifest after unzipping`);
     const check = src.indexOf('safari-resources.js');

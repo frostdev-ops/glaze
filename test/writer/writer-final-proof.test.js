@@ -2,10 +2,10 @@
 // as typed; the doubled-word fix keeps names and real reduplications. Typing goes through the plugins' handleTextInput.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../lib/writer-schema.js');
-const E = require('../lib/writer-editor.js');
-const P = require('../lib/writer-proof.js');
-const I = require('../lib/writer-issues.js');
+const S = require('../../extension/lib/writer-schema.js');
+const E = require('../../extension/lib/writer-editor.js');
+const P = require('../../extension/lib/writer-proof.js');
+const I = require('../../extension/lib/writer-issues.js');
 
 const editor = () => {
   const view = { composing: false, state: null, dispatch(tr) { this.state = this.state.apply(tr); } };

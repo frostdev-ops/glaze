@@ -2,8 +2,8 @@
 // optional and checked; mod tools named mod_<id>_<local> in their own group, Glaze's never mod_; what aiTools sends unchanged.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const TL = require('../lib/ai/tools.js');
-const S = require('../lib/ai/schema.js');
+const TL = require('../../extension/lib/ai/tools.js');
+const S = require('../../extension/lib/ai/schema.js');
 
 const ID = 'abcdefghijklmnop', OTHER = 'zyxwvutsrqponm23';
 const base = { name: 'courses_list', kind: 'read', description: 'The student\'s courses.', parameters: S.obj({ term: S.str('Which term.') }), run: async () => [] };

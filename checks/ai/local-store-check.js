@@ -5,13 +5,13 @@
 // is read in slices (also from a dedicated Worker), and is removed. A redirect to another host is refused. A remove from a
 // second page ends the first page's download as removed. The shipped
 // models.json loads as the default catalog. Everything else the browser asks for is aborted.
-//   NODE_PATH=<playwright> node scripts/local-store-check.js [evidence folder]
+//   NODE_PATH=<playwright> node checks/ai/local-store-check.js [evidence folder]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const https = require('node:https');
 const { execFileSync } = require('node:child_process');
-const env = require('./check-env.js'), lock = require('./check-env.js').lockPath(), chromeLaunch = require('./check-env.js').chromeLaunch();
-const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
+const env = require('../../tools/dev/check-env.js'), lock = require('../../tools/dev/check-env.js').lockPath(), chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
+const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
 const out = path.resolve(process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-local-store-')));
 fs.mkdirSync(out, { recursive: true });
 
@@ -72,7 +72,7 @@ const ok = (value, label, detail) => { results.push({ label, pass: !!value, ...(
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
     const port = server.address().port;
     profile = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-local-store-profile-'));
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(profile, {
       ...chromeLaunch, headless: true,
       args: [`--disable-extensions-except=${root}`, `--load-extension=${root}`, '--disable-background-networking',

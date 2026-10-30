@@ -5,13 +5,13 @@
 # ASC_ISSUER_ID) Xcode may create missing certificates and profiles. Nothing is uploaded unless APPSTORE_UPLOAD=1.
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
 cd "$root"
 team=${SAFARI_TEAM_ID:-22AAZFMTV8}
-version=$(node -p 'require("./manifest.json").version')
+version=$(node -p 'require("./extension/manifest.json").version')
 # Every upload needs a new build number; the time keeps them increasing.
 build=${BUILD_NUMBER:-$(date -u +%Y%m%d%H%M)}
-./package.sh
+tools/build/package.sh
 
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
@@ -20,9 +20,9 @@ resources="$stage/Glaze/Glaze Extension/Resources"
 rm -rf "$resources"
 mkdir -p "$resources"
 unzip -q "dist/glaze-v$version.zip" -d "$resources"
-sh scripts/safari-manifest.sh "$resources/manifest.json"
+sh tools/build/safari-manifest.sh "$resources/manifest.json"
 # The app bundles only what the Xcode project lists: stop before building if the package has something it doesn't.
-node scripts/safari-resources.js "$resources"
+node tools/build/safari-resources.js "$resources"
 
 set --
 if [ -n "${ASC_KEY_PATH:-}" ]; then

@@ -3,14 +3,14 @@
 // https://bb.school.test (the student's grants), all on their LMS's list. With nothing changed, the worker's pass over the
 // registrations makes no call (Chrome's own answers, match patterns sorted, read as what Glaze asked for); with an older file list and older matches registered, it updates both in
 // place, never unregistering, and their pages get Glaze. (chrome.runtime.reload() leaves a --load-extension copy
-// unloaded headless, so the update itself is test/register-update.test.js's.)
-// NODE_PATH=<installed playwright> nice node scripts/register-update-check.js [evidence directory]
+// unloaded headless, so the update itself is test/platform/register-update.test.js's.)
+// NODE_PATH=<installed playwright> nice node checks/platform/register-update-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const C = 'https://canvas.school.test', A = 'https://another.school.test', B = 'https://bb.school.test';
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), [`${C}/*`, `${A}/*`, `${B}/*`]);
-const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), [`${C}/*`, `${A}/*`, `${B}/*`]);
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-register-update-'));
 const out = process.argv[2];
@@ -41,9 +41,9 @@ const worker = async (ctx) => until(async () => ctx.serviceWorkers().find((w) =>
 (async () => {
   let ctx;
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
-      ...require('./check-env.js').chromeLaunch(),
+      ...require('../../tools/dev/check-env.js').chromeLaunch(),
       headless: true, viewport: { width: 1280, height: 860 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
     });

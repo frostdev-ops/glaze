@@ -1,11 +1,11 @@
-// The whole of features/coursetabs.js in a vm over a stand-in Ultra course page (test/coursetabs-takeover.test.js,
-// test/coursetabs-repaint.test.js). Each glaze() is one copy of Glaze in its own world; copies share the page's document,
+// The whole of features/coursetabs.js in a vm over a stand-in Ultra course page (test/navigation/coursetabs-takeover.test.js,
+// test/navigation/coursetabs-repaint.test.js). Each glaze() is one copy of Glaze in its own world; copies share the page's document,
 // sessionStorage, window events and clock. Timers and animation frames run only when a test ticks or paints.
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const { GZ_SANITIZE } = require('../../defaults.js');
-const L = require('../../lib/coursetabs.js');
+const { GZ_SANITIZE } = require('../../extension/defaults.js');
+const L = require('../../extension/lib/coursetabs.js');
 const { El } = require('../stand-in-dom.js');
-const source = fs.readFileSync(path.join(__dirname, '../../features/coursetabs.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../../extension/features/coursetabs.js'), 'utf8');
 const origin = 'https://bb.school.test';
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
 

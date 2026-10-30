@@ -10,8 +10,8 @@ const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const G = require('../lib/sharing.js');
-const { relay, backup, LIMIT, RATE, sigv4, s3Store, diskStore } = require('../server/relay.js');
+const G = require('../../extension/lib/sharing.js');
+const { relay, backup, LIMIT, RATE, sigv4, s3Store, diskStore } = require('../../server/relay.js');
 
 const memory = () => { const m = new Map(); return { m, put: async (k, b) => { m.set(k, Buffer.from(b)); }, get: async (k) => m.get(k) || null, del: async (k) => { m.delete(k); } }; };
 const up = async (opts = {}, port = 0) => {
@@ -119,8 +119,8 @@ test('the relay keeps sessions across a restart', async (t) => {
   const db = path.join(tmp(t), 'share.db');
   let r = await up({ db });
   const a = make(r, 'look');
-  const { encode } = require('../lib/share.js');
-  const { GZ_SANITIZE } = require('../defaults.js');
+  const { encode } = require('../../extension/lib/share.js');
+  const { GZ_SANITIZE } = require('../../extension/defaults.js');
   a.local = { look: { name: 'Frost', code: await encode(GZ_SANITIZE({})) } };
   await a.pump();
   const port = r.port;
@@ -372,7 +372,7 @@ test('subscriptions leave nothing behind when a socket moves to other sessions a
 // A relay in its own process, so a crash shows as an exit code rather than taking the test runner down with it.
 const relayProcess = async (t) => {
   const dir = tmp(t);
-  const code = `const { relay, diskStore } = require(${JSON.stringify(path.join(__dirname, '..', 'server', 'relay.js'))});
+  const code = `const { relay, diskStore } = require(${JSON.stringify(path.join(__dirname, '../../server/relay.js'))});
     relay({ db: ${JSON.stringify(path.join(dir, 'share.db'))}, store: diskStore(${JSON.stringify(path.join(dir, 'blobs'))}) })
       .listen(0, '127.0.0.1').then((a) => console.log('PORT', a.port));`;
   const p = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', '-e', code], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -854,7 +854,7 @@ test('a failed upload, even one that landed before failing, is doomed: deleted, 
 
 // The relay's own command line, as the owner runs it beside a serving relay (a separate process).
 const cli = (args, env) => new Promise((resolve) => {
-  const p = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', path.join(__dirname, '..', 'server', 'relay.js'), ...args], { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const p = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', path.join(__dirname, '../../server/relay.js'), ...args], { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
   p.stdout.on('data', (d) => { out += d; });
   p.stderr.on('data', (d) => { out += d; });

@@ -1,11 +1,11 @@
 // Glaze Writer's objects (lib/writer-objects.js over lib/writer-schema.js): the paper's pictures, tables, links, rules and
 // lists keep their attributes through JSON and HTML, and the commands, keys and input rules that make them work on an
-// EditorState alone. The frame (writer-objects.js) is checked in headless Chromium by scripts/writer-objects-check.js.
+// EditorState alone. The frame (writer-objects.js) is checked in headless Chromium by checks/writer/writer-objects-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../lib/writer-schema.js');
-const E = require('../lib/writer-editor.js');
-const L = require('../lib/writer-objects.js');
+const S = require('../../extension/lib/writer-schema.js');
+const E = require('../../extension/lib/writer-editor.js');
+const L = require('../../extension/lib/writer-objects.js');
 const { TextSelection, NodeSelection } = GZ_PM.state;
 
 const P = S.paper, C = S.compose;

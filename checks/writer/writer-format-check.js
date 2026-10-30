@@ -1,4 +1,4 @@
-// Stream F in the real unpacked extension, on the synthetic assignment attempt (as scripts/writer-paper-check.js):
+// Stream F in the real unpacked extension, on the synthetic assignment attempt (as checks/writer/writer-paper-check.js):
 // the paper toolbar's font, size, colour, highlight and more-formatting controls; Word's and Docs' shortcuts (and ⌘⇧H
 // for Replace on a Mac, ⌘H left to the system); the Paragraph dialog; the ruler (markers, tab stops, its off switch
 // storage.sync writer.ruler); Page setup (A4 landscape, margins, the format's header kept, the margins check quiet, Reset
@@ -6,17 +6,17 @@
 // shapes with the Keep formatting / Match the paper toast (and its off switch writer.pasteAsk), plain paste; the page's
 // context menu; typing time with all of it on. Screenshots of each in FORMAT_SHOTS (default
 // ~/Projects/glaze-plans/writer/format/shots). GETs only, synthetic; no account or outside network from the browser.
-// NODE_PATH=<playwright> nice -n 10 lockf -k <heavy lock> node scripts/writer-format-check.js [evidence directory]
+// NODE_PATH=<playwright> nice -n 10 lockf -k <heavy lock> node checks/writer/writer-format-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
-const FX = require('../test/fixtures/writer-paper-fixtures.js');
+const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
+const FX = require('../../test/fixtures/writer-paper-fixtures.js');
 const site = 'https://bb.school.test';
-const PASTE = require('../test/fixtures/writer-paste-html.js');
+const PASTE = require('../../test/fixtures/writer-paste-html.js');
 const QUILL = { url: 'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js', sha256: 'c675f57388d3598637c4e0f9fe154bd61dfb1c2086271f944a0bb2b9b059b074' };
-const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const ATTEMPT = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
 const out = process.argv[2] || path.join(os.tmpdir(), 'gz-format-check');
 const shots = process.env.FORMAT_SHOTS || path.join(os.homedir(), 'Projects/glaze-plans/writer/format/shots');
@@ -31,7 +31,7 @@ const until = async (fn, label, ms = 15000) => {
 let seenErrors = 0;
 const check = (v, label) => { if (errors.length > seenErrors) { console.log(`errors +${errors.length - seenErrors} before: ${label}`); seenErrors = errors.length; } assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
 
-// The page's world: a real Quill on the writable box, Ultra's footer behaviour around it (as scripts/writer-check.js).
+// The page's world: a real Quill on the writable box, Ultra's footer behaviour around it (as checks/writer/writer-check.js).
 const HARNESS = `(() => {
   for (const c of document.querySelectorAll('.ql-container:not(.is-read-only)')) {
     const old = c.querySelector('.ql-editor'), html = old.innerHTML, id = old.id;
@@ -46,7 +46,7 @@ const HARNESS = `(() => {
 
 (async () => {
   let context, held = false, tmp, ext;
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   try {
     for (let i = 0; ; i++) {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nwriter-format-check\n`); break; }
@@ -57,9 +57,9 @@ const HARNESS = `(() => {
     const quill = Buffer.from(await (await fetch(QUILL.url)).arrayBuffer());
     if (crypto.createHash('sha256').update(quill).digest('hex') !== QUILL.sha256) throw Error('Quill 1.3.7 hash mismatch');
 
-    ext = require('./check-env.js').staged(root, [`${site}/*`]);
-    await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    ext = require('../../tools/dev/check-env.js').staged(root, [`${site}/*`]);
+    await require('../../tools/dev/wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(15000);
     const grades = JSON.parse(fixture('ultra-writer-gradebook.json'));
     const members = JSON.parse(fixture('ultra-memberships.json'));

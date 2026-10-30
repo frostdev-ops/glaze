@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(setImmediate); };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -22,7 +22,7 @@ const canvasPage = ({ search = '', stored = {} } = {}) => {
   };
   const context = vm.createContext({
     JSON, Math, Number, Date, Set, Map, Object, Array, String, URLSearchParams, console,
-    GZ_PAGE: require('../lib/page.js'),
+    GZ_PAGE: require('../../extension/lib/page.js'),
     GZ_CTX: {
       site: 'canvas', local: (fn) => fn(local), courseId: () => undefined, toggleOf: () => null, ROWS: '.row', placeAsked: () => 0,
       canvasCourseKey: () => 'canvas:https://school.instructure.com/25', settings: () => env.settings, solo: true, on: () => true,
@@ -104,7 +104,7 @@ test("the worker takes a page's place changes for its own site's courses only, a
     URL, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto, atob, btoa, navigator: {},
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
     chrome: {
-      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
+      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener() {} } },
     },

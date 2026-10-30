@@ -8,12 +8,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const R = require('../lib/mcp/modroute.js');
-const B = require('../lib/modbroker.js');
-const worker = require('./helpers/worker-env.cjs');
-const { fakeIDB } = require('./helpers/fake-idb.cjs');
+const R = require('../../extension/lib/mcp/modroute.js');
+const B = require('../../extension/lib/modbroker.js');
+const worker = require('../helpers/worker-env.cjs');
+const { fakeIDB } = require('../helpers/fake-idb.cjs');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 // Values from the VMs carry their own realm's prototypes: compared as data.
 const plain = (x) => (x === undefined ? x : JSON.parse(JSON.stringify(x)));

@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../lib/harper/shared.js'), 'utf8').replace(/^import .*;\n/gm, '');
+const source = fs.readFileSync(require.resolve('../../extension/lib/harper/shared.js'), 'utf8').replace(/^import .*;\n/gm, '');
 const flush = async () => { for (let n = 0; n < 20; n++) await Promise.resolve(); };
 const world = (options = {}) => {
   let closed = 0, disposed = 0, tick;

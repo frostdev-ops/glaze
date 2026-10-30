@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const B = require('../lib/blocklist.js');
+const B = require('../../extension/lib/blocklist.js');
 
 // TEST KEY ONLY. The same key, list and signature are in the server's tests (frostdev.io server/gallery.test.mjs): if
 // canon() or the signed text ever differ between the two, one side's tests fail.
@@ -398,7 +398,7 @@ test('a failed list write cannot leave partial blocks or unblocks behind', async
 // ---- the worker ---------------------------------------------------------------------------------------------------------
 // lib/background.js as the browser would run it: what wakes a check, and who may.
 const settle = () => new Promise((res) => setTimeout(res, 20));
-const worker = ({ local: seed = installed(mod(BAD)), sync: seedSync = {}, protocol = 'chrome-extension:', source = fs.readFileSync(require.resolve('../lib/background.js'), 'utf8') } = {}) => {
+const worker = ({ local: seed = installed(mod(BAD)), sync: seedSync = {}, protocol = 'chrome-extension:', source = fs.readFileSync(require.resolve('../../extension/lib/background.js'), 'utf8') } = {}) => {
   const listeners = [], local = structuredClone(seed), sync = structuredClone(seedSync), fetches = [];
   const store = (s) => ({
     get: async (k) => (k === null ? structuredClone(s) : Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, structuredClone(s[x])]))),
@@ -408,10 +408,10 @@ const worker = ({ local: seed = installed(mod(BAD)), sync: seedSync = {}, protoc
     URL, console, TextEncoder, TextDecoder, Blob, CompressionStream, DecompressionStream, btoa, atob, structuredClone, Promise, Date, crypto,
     setTimeout, clearTimeout,
     fetch: async (url, init) => { fetches.push({ url, init }); return new Response('{}', { status: 503 }); },
-    importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(require.resolve(`../lib/${f}`), 'utf8'), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(require.resolve(`../../extension/lib/${f}`), 'utf8'), context); },
     chrome: {
       runtime: {
-        id: 'ext', getURL: (p = '') => `${protocol}//x/${p}`, getManifest: () => require('../manifest.json'),
+        id: 'ext', getURL: (p = '') => `${protocol}//x/${p}`, getManifest: () => require('../../extension/manifest.json'),
         onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
       },
       scripting: { executeScript: async () => [{ result: 1 }] },
@@ -474,7 +474,7 @@ test('a failed check is not repeated by the next page within the hour, and a bad
 
 test('a page that loads the mods runtime wakes the check; other loads do not', async () => {
   // features/mods.js is the mods runtime's entry, in LOADABLE.
-  const source = fs.readFileSync(require.resolve('../lib/background.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../../extension/lib/background.js'), 'utf8');
   assert.match(source, /LOADABLE = new Set\(\[[^\]]*'features\/mods\.js'/);
   const w = worker({ source });
   const loaded = await w.send({ type: 'glaze:load', files: ['features/mods.js'], doc: 'd' }, { ...page, documentId: 'doc1' });
@@ -510,18 +510,18 @@ test('the worker lends the mods code blocked(record), which reads the last good 
 });
 
 test('the setting defaults on, is a boolean, and has one owning control', () => {
-  const D = require('../defaults.js');
+  const D = require('../../extension/defaults.js');
   assert.equal(D.GZ_DEFAULTS.mods.blocklist, true);
   assert.equal(D.GZ_SANITIZE({ mods: { blocklist: false } }).mods.blocklist, false);
   assert.equal(D.GZ_SANITIZE({ mods: { blocklist: 'no' } }).mods.blocklist, true);
   assert.equal(D.GZ_SANITIZE({}).mods.blocklist, true);
-  const html = fs.readFileSync(require.resolve('../options.html'), 'utf8');
+  const html = fs.readFileSync(require.resolve('../../extension/options.html'), 'utf8');
   assert.equal(html.match(/data-key="mods\.blocklist"/g).length, 1);
 });
 
 test('the manifest asks for no alarms and nothing new: the check rides on events that already happen', () => {
-  const m = require('../manifest.json');
+  const m = require('../../extension/manifest.json');
   assert.ok(!(m.permissions || []).includes('alarms'));
   assert.ok(m.host_permissions.includes('https://frostdev.io/*'), 'the blocklist\'s host is held from the start');
-  assert.ok(!/alarms|setInterval/.test(fs.readFileSync(require.resolve('../lib/blocklist.js'), 'utf8').replace(/\/\/.*$/gm, '')));
+  assert.ok(!/alarms|setInterval/.test(fs.readFileSync(require.resolve('../../extension/lib/blocklist.js'), 'utf8').replace(/\/\/.*$/gm, '')));
 });

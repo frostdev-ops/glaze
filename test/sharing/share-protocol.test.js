@@ -8,12 +8,12 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const G = require('../lib/sharing.js');
-const S = require('../lib/sessions.js');
-const N = require('../lib/notes.js');
-const T = require('../lib/todo.js');
-const K = require('../lib/cards.js');
-const { relay, LIMIT, fromEnv } = require('../server/relay.js');
+const G = require('../../extension/lib/sharing.js');
+const S = require('../../extension/lib/sessions.js');
+const N = require('../../extension/lib/notes.js');
+const T = require('../../extension/lib/todo.js');
+const K = require('../../extension/lib/cards.js');
+const { relay, LIMIT, fromEnv } = require('../../server/relay.js');
 
 const memory = () => { const m = new Map(); return { m, put: async (k, b) => { m.set(k, Buffer.from(b)); }, get: async (k) => m.get(k) || null, del: async (k) => { m.delete(k); } }; };
 const up = async (t, opts = {}) => {
@@ -49,9 +49,9 @@ const fileId = () => G.b64(crypto.getRandomValues(new Uint8Array(16)));
 // Actual pre-S2 source, frozen at f61431b, with its imports resolved as they were from lib/sharing.js.
 const oldClient = () => {
   const vm = require('node:vm'), { createRequire } = require('node:module');
-  const context = vm.createContext({ module: { exports: {} }, require: createRequire(path.join(__dirname, '../lib/sharing.js')),
+  const context = vm.createContext({ module: { exports: {} }, require: createRequire(path.join(__dirname, '../../extension/lib/sharing.js')),
     crypto: globalThis.crypto, fetch, TextEncoder, TextDecoder, URL, AbortController, Uint8Array, DataView, setTimeout, clearTimeout, atob, btoa });
-  vm.runInContext(fs.readFileSync(path.join(__dirname, 'fixtures/sharing-gzs1.txt'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../fixtures/sharing-gzs1.txt'), 'utf8'), context);
   return context.module.exports;
 };
 
@@ -483,7 +483,7 @@ test('the relay\'s database goes to version 2; its sessions take gzs1 until they
   assert.equal(r.db.prepare('SELECT gzs FROM sessions WHERE sid = ?').get(k.sid).gzs, 2);
 });
 
-// The worker's broker (lib/sessions.js) as test/sessions-sync.test.js runs it, without a surface open.
+// The worker's broker (lib/sessions.js) as test/sharing/sessions-sync.test.js runs it, without a surface open.
 const clone = (x) => (x === undefined ? x : structuredClone(x));
 const area = (data = {}) => ({ data, get: async (keys) => Object.fromEntries([].concat(keys ?? Object.keys(data)).filter((k) => k in data).map((k) => [k, clone(data[k])])),
   set: async (patch) => { Object.assign(data, clone(patch)); return true; }, remove: async () => true });

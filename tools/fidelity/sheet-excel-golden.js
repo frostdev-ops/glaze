@@ -5,14 +5,14 @@
 // harness's reader (test/helpers/xlsx-cache.cjs): golden.json takes each case's type and value from the saved file, and
 // only the shown text from Excel itself. A formula Excel refuses is listed with Excel's message, for cases.js to mark
 // unsupported; the run fails when Excel and cases.js disagree on that, or a saved formula differs from the one written.
-// Mac only, the one heavy job running: nice -n 10 node scripts/sheet-excel-golden.js [family …] (default: all)
-// node scripts/sheet-excel-golden.js --script <family> prints that family's AppleScript instead (osacompile checks it).
+// Mac only, the one heavy job running: nice -n 10 node tools/fidelity/sheet-excel-golden.js [family …] (default: all)
+// node tools/fidelity/sheet-excel-golden.js --script <family> prints that family's AppleScript instead (osacompile checks it).
 const fs = require('node:fs'), path = require('node:path');
 const { str, num, osa, start, quit, box } = require('./sheet-excel.js');
-const { read, parseRange, colName } = require('../test/helpers/xlsx-cache.cjs');
-const { cases, families } = require('../test/fixtures/sheets/cases.js');
+const { read, parseRange, colName } = require('../../test/helpers/xlsx-cache.cjs');
+const { cases, families } = require('../../test/fixtures/sheets/cases.js');
 
-const OUT = path.join(__dirname, '../test/fixtures/sheets');
+const OUT = path.join(__dirname, '../../test/fixtures/sheets');
 const RS = '(character id 30)', US = '(character id 31)';
 const bare = (f) => f.replace(/_xl(fn|ws|pm|udf)\./g, '');
 

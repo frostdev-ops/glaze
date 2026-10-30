@@ -1,4 +1,4 @@
-# HF transformers' logits for scripts/local-reference-check.js compare: LiquidAI/LFM3-1.7B at ac2586a3 (bf16 weights) on
+# HF transformers' logits for checks/ai/local-reference-check.js compare: LiquidAI/LFM3-1.7B at ac2586a3 (bf16 weights) on
 # the GPU, fed the token ids of a llama.cpp run, written in the same layout (<id>.json, .prefill.f32, .decode.f32).
 # Not part of the suite. In the glaze-train image on the Linux runner:
 #   docker run --rm --gpus all -v ~/glaze-train/hf:/hf -e HF_HOME=/hf -e HF_HUB_OFFLINE=1 -v <dir>:/work glaze-train:1 \

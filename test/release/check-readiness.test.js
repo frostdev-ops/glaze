@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const read = (name) => fs.readFileSync(path.join(__dirname, '../scripts', name), 'utf8');
+const read = (name) => fs.readFileSync(path.join(__dirname, '../../checks/settings', name), 'utf8');
 
 const removeSites = async ({ delayCanvas = false, missingBB = false } = {}) => {
   const source = read('sites-check.js');

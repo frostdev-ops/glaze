@@ -1,16 +1,16 @@
 // Native discussion participant cards mount through Ultra's explicit-root IntersectionObserver.
-// NODE_PATH=<installed playwright> nice -n 15 node scripts/sidebar-participants-check.js [screenshots]
+// NODE_PATH=<installed playwright> nice -n 15 node checks/navigation/sidebar-participants-check.js [screenshots]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const root = process.env.EXT || path.join(__dirname, '..');
+const root = process.env.EXT || path.join(__dirname, '../../extension');
 const out = process.argv[2];
 let checks = 0, fails = 0;
 const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' : 'FAIL'} ${text}`); };
 (async () => {
   let browser;
   try {
-    await require('./wait-for-browser.js')();
-    browser = await chromium.launch({ headless: true, ...require('./check-env.js').chromeLaunch(), args: ['--host-resolver-rules=MAP * ~NOTFOUND'], chromiumSandbox: false });
+    await require('../../tools/dev/wait-for-browser.js')();
+    browser = await chromium.launch({ headless: true, ...require('../../tools/dev/check-env.js').chromeLaunch(), args: ['--host-resolver-rules=MAP * ~NOTFOUND'], chromiumSandbox: false });
     const page = await browser.newPage({ viewport: { width: 1800, height: 900 } });
     await page.route('**/*', (r) => r.request().url().startsWith('https://bb.school.test/ultra/') ? r.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' }) : r.abort());
     const shot = async (name) => { if (out) { fs.mkdirSync(out, { recursive: true }); await page.screenshot({ path: path.join(out, `${name}.png`) }); } };

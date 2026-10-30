@@ -5,7 +5,7 @@
 // (clicking a teacher's quiz Preview button makes Canvas save a preview attempt, not the student's).
 // Animations hold still (reduced motion). Per page it prints the path, title, whether Glaze's stylesheets
 // are linked, how many data-gz-* attributes <html> has, and any page or console errors ("ext" = from Glaze).
-//   NODE_PATH=/path/to/node_modules node scripts/canvas-shots.js [options] [path ...]   (needs playwright)
+//   NODE_PATH=/path/to/node_modules node tools/dev/canvas-shots.js [options] [path ...]   (needs playwright)
 //
 //   --look <name>      a preset or look from defaults.js (Frost, Paper, Aurora Night ...); repeat for several.
 //                      Default: Frost (dark) and Paper (light).
@@ -43,22 +43,22 @@
 //                      out (the login page) without ending the session.
 //   CHROME=/path/to/chrome runs that browser instead of Chrome for Testing.
 //
-//   node scripts/canvas-shots.js
-//   node scripts/canvas-shots.js --look Paper --look Midnight /courses/{bio}/modules /grades
-//   node scripts/canvas-shots.js --settings '{enabled:false}' --full /courses/{eng}
-//   node scripts/canvas-shots.js --settings '{enabled:false}' --html test/fixtures planner=/?glaze_view=planner
-//   node scripts/canvas-shots.js --lms moodle --audit --full
+//   node tools/dev/canvas-shots.js
+//   node tools/dev/canvas-shots.js --look Paper --look Midnight /courses/{bio}/modules /grades
+//   node tools/dev/canvas-shots.js --settings '{enabled:false}' --full /courses/{eng}
+//   node tools/dev/canvas-shots.js --settings '{enabled:false}' --html test/fixtures planner=/?glaze_view=planner
+//   node tools/dev/canvas-shots.js --lms moodle --audit --full
 const { chromium } = require('playwright');
 const { parseArgs } = require('util');
 const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const G = require('../defaults.js');
+const G = require('../../extension/defaults.js');
 const { redact, fixture } = require('./redact.js');
 const { auditFrame } = require('./audit.js');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 let BASE = 'http://localhost:3000';
 let CREDS = path.join(os.homedir(), 'Projects/canvas-lms/glaze/credentials.env');
 let LMS = 'canvas';
@@ -390,7 +390,7 @@ const lightShare = async (page, jpegs) => page.evaluate(async (list) => {
 const english = (url, words) => {
   const lang = new URL(url, BASE).searchParams.get('glaze_lang');
   if (!lang) return null;
-  const I = require('../lib/i18n.js');
+  const I = require('../../extension/lib/i18n.js');
   const cat = globalThis.GZ_LANGS[I.CODES.find((c) => c === lang || c.split('-')[0] === lang.split('-')[0])] || {};
   const bits = [];
   for (const [k, v] of Object.entries(cat)) {

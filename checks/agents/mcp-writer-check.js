@@ -7,10 +7,10 @@
 // editor, and asks for a fix and a citation: each waits in the approval window, worded by Glaze; Don't allow changes
 // nothing, Allow changes the editor and the saved paper. Every request outside the extension is aborted.
 // Shots: list-pair.png, fix-action.png, fixed.png.
-//   NODE_PATH=<playwright> nice -n 10 node scripts/mcp-writer-check.js [shots folder]   (EXT selects the checkout)
+//   NODE_PATH=<playwright> nice -n 10 node checks/agents/mcp-writer-check.js [shots folder]   (EXT selects the checkout)
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
-const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
+const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
 const PA = require(path.join(root, 'lib/writer-papers.js'));
 const SRC = require(path.join(root, 'lib/writer-sources.js'));
 const SCHEMA = require(path.join(root, 'lib/writer-schema.js'));
@@ -53,7 +53,7 @@ const records = async () => {
 };
 
 (async () => {
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-mcp-writer-'));
   const shots = path.resolve(process.argv[2] || path.join(scratch, 'shots'));
   fs.mkdirSync(shots, { recursive: true });
@@ -63,17 +63,17 @@ const records = async () => {
       try { fs.mkdirSync(lock); held = true; } catch (e) { if (e.code !== 'EEXIST') throw e; await pause(1000); }
     }
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nmcp-writer-check\n`);
-    const ext = require('./check-env.js').staged(root, [], scratch);
+    const ext = require('../../tools/dev/check-env.js').staged(root, [], scratch);
     // The staged files are hard links to the checkout: replace the worker's, never write through it.
     const worker0 = fs.readFileSync(path.join(ext, 'lib/background.js'), 'utf8');
     fs.rmSync(path.join(ext, 'lib/background.js'));
     fs.writeFileSync(path.join(ext, 'lib/background.js'), worker0 + SHIM);
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', locale: 'en-US',
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', locale: 'en-US',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking', '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-quic'],
     });
-    require('./check-env.js').noFirstRun(context);
+    require('../../tools/dev/check-env.js').noFirstRun(context);
     context.setDefaultTimeout(20000);
     const unexpected = [];
     await context.route('**/*', (r) => { const u = new URL(r.request().url()); if (u.protocol === 'chrome-extension:') return r.continue(); unexpected.push(u.href); return r.abort(); });

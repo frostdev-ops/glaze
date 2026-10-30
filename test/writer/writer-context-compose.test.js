@@ -1,12 +1,12 @@
 // Glaze Writer's compose bar (writer-compose.js) and Quote pop (features/writer-quote.js), their pure parts: the ring, its
 // tooltip, the citation count that stands in for the cite stream's, the quote blocks the editor draws, and where the pop
-// goes. What they do in a browser, with the page's context and a real Quill, is scripts/writer-compose-check.js.
+// goes. What they do in a browser, with the page's context and a real Quill, is checks/writer/writer-compose-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../lib/writer-schema.js');
-const E = require('../lib/writer-editor.js');
-const C = require('../writer-compose.js');
-const Q = require('../features/writer-quote.js');
+const S = require('../../extension/lib/writer-schema.js');
+const E = require('../../extension/lib/writer-editor.js');
+const C = require('../../extension/writer-compose.js');
+const Q = require('../../extension/features/writer-quote.js');
 
 test('the ring counts toward the minimum, then the maximum; full and green at the minimum, amber past the maximum', () => {
   const at = (n, req) => { const r = C.ring(n, req); return [r.target, r.state, Math.round(r.offset * 100) / 100]; };

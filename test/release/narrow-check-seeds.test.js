@@ -7,7 +7,8 @@ const vm = require('node:vm');
 // Run the real options-page seed callback without starting a browser. These fixtures need the student's approval as well
 // as a staged host grant; resetting local storage must not silently remove that approval before the next navigation.
 const seed = (name, chrome) => {
-  const source = fs.readFileSync(path.join(__dirname, `../scripts/${name}-check.js`), 'utf8');
+  const checks = path.join(__dirname, '../../checks');
+  const source = fs.readFileSync(fs.readdirSync(checks).map((a) => path.join(checks, a, `${name}-check.js`)).find((f) => fs.existsSync(f)), 'utf8');
   const call = name === 'share' ? 'settings.evaluate(' : 'opts.evaluate(';
   const start = source.indexOf(call) + call.length;
   const context = vm.createContext({ chrome, origin: 'https://ultra.fixture.test', O: 'https://bb.school.test' });

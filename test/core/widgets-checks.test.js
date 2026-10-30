@@ -2,7 +2,7 @@ const test = require('node:test'), assert = require('node:assert/strict'), fs = 
 
 for (const script of ['widgets-sizes-check.js', 'ultra-boards-check.js']) {
   test(`${script}: resetting fixtures keeps the approved school registered for the next navigation`, async () => {
-    const source = fs.readFileSync(require.resolve(`../scripts/${script}`), 'utf8');
+    const source = fs.readFileSync(require('node:path').join(__dirname, '../../checks', script === 'widgets-sizes-check.js' ? 'core' : 'courses', script), 'utf8');
     const body = source.slice(source.indexOf('    const store =')).match(/opts\.evaluate\(async \(\[s, local\]\) => \{([\s\S]*?)\}, \[s, local\]\)/)?.[1];
     assert.ok(body, 'exercise the actual browser storage setup');
     let data = { ultra: ['https://bb.school.test'], canvas: ['https://school.instructure.com/*'], obsolete: true }, lost = false;
@@ -24,7 +24,7 @@ for (const script of ['widgets-sizes-check.js', 'ultra-boards-check.js']) {
 
 for (const script of ['widgets-sizes-check.js', 'ultra-boards-check.js']) {
   test(`${script}: navigation waits for the worker’s queued installation and registration`, async () => {
-    const source = fs.readFileSync(require.resolve(`../scripts/${script}`), 'utf8');
+    const source = fs.readFileSync(require('node:path').join(__dirname, '../../checks', script === 'widgets-sizes-check.js' ? 'core' : 'courses', script), 'utf8');
     const start = source.indexOf('    const store =');
     const end = source.indexOf(script === 'widgets-sizes-check.js' ? '\n    const page =' : '\n    const layout =', start);
     const calls = []; let release, releaseWrites;

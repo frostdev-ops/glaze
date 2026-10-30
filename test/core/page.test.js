@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const P = require('../lib/page.js');
-const I = require('../lib/i18n.js');
+const P = require('../../extension/lib/page.js');
+const I = require('../../extension/lib/i18n.js');
 
 const now = new Date(2026, 9, 11, 15, 0); // Sun 11 Oct 2026, 3 PM
 

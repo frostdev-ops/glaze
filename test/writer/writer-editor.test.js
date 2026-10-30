@@ -4,8 +4,8 @@
 // own handleTextInput with a stand-in view, and keys through the bindings in the order the plugins run them.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../lib/writer-schema.js');
-const E = require('../lib/writer-editor.js');
+const S = require('../../extension/lib/writer-schema.js');
+const E = require('../../extension/lib/writer-editor.js');
 const { TextSelection, AllSelection, Plugin } = GZ_PM.state;
 const { baseKeymap } = GZ_PM.commands;
 
@@ -284,7 +284,7 @@ test('a tab survives the round trips: Quill\'s HTML, its delta, and the paper\'s
   const st = press(caret(make('<p>ab</p>'), 'a'), 'Tab').st;
   assert.equal(S.serialize(st.schema, S.parse(st.schema, html(st))), '<p>a\tb</p>', 'parsed back from the HTML Quill keeps');
   assert.deepEqual(S.delta(st.doc).map((o) => o.insert).join(''), 'a\tb\n', 'the delta written into Ultra\'s Quill');
-  const X = require('../lib/writer-docx.js');
+  const X = require('../../extension/lib/writer-docx.js');
   const paper = press(caret(make('<p>ab</p>', 'paper'), 'a'), 'Tab').st;
   assert.match(X.exportDocx(paper.doc, { format: 'mla9', date: new Date(2026, 9, 27) }).parts['word/document.xml'], /<w:t xml:space="preserve">a<\/w:t><w:tab\/><w:t xml:space="preserve">b<\/w:t>/, 'a tab is a Word tab');
 });

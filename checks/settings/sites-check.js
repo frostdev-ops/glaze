@@ -6,13 +6,13 @@
 // is handed back. The schools stand in the staged copy's host_permissions (the student's grant) so the worker's own check
 // reaches them; the page still sees the product's required hosts. canvas.school.edu answers as Canvas, bb.school.edu as
 // Blackboard, www.school.edu is a school's main website linking to it, and bb.nowhere.edu doesn't exist.
-// NODE_PATH=<installed playwright> nice node scripts/sites-check.js [evidence directory]
+// NODE_PATH=<installed playwright> nice node checks/settings/sites-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const BB = 'https://bb.school.edu', CANVAS = 'https://canvas.school.edu', WWW = 'https://www.school.edu';
-const env = require('./check-env.js');
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), [`${BB}/*`, `${CANVAS}/*`, `${WWW}/*`]);
+const env = require('../../tools/dev/check-env.js');
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), [`${BB}/*`, `${CANVAS}/*`, `${WWW}/*`]);
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-sites-'));
 const out = process.argv[2] || path.join(tmp, 'shots');
@@ -48,13 +48,13 @@ const stub = (required) => {
 (async () => {
   let ctx;
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
-      ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 },
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
     });
     const welcomed = env.noFirstRun(ctx);
-    await ctx.addInitScript(stub, require('../manifest.json').host_permissions);
+    await ctx.addInitScript(stub, require('../../extension/manifest.json').host_permissions);
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:') return route.continue();

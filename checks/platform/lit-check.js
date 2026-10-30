@@ -4,16 +4,16 @@
 // (RequestContentScript: Playwright's Chromium has it, stable Chrome doesn't; the twins exist only here). Synthetic pages
 // (test/fixtures; the Ultra page wears the off-canvas wrap real Ultra has), no outside network. Also: the attention icon
 // drawn at 16 and 32 (saved enlarged, and its dot's pixels read), and the per-tab normal icon's path loads.
-// NODE_PATH=<installed playwright> nice node scripts/lit-check.js [evidence directory]
+// NODE_PATH=<installed playwright> nice node checks/platform/lit-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const HOSTS = { canvas: 'https://canvas.school.test', moodle: 'https://moodle.school.test', ultra: 'https://bb.school.test', plain: 'https://www.school.test' };
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), Object.values(HOSTS).map((h) => `${h}/*`));
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), Object.values(HOSTS).map((h) => `${h}/*`));
 // The twins' marks: new files in the staged copy (its own files are links to the checkout's and are never written).
 for (const name of ['canvas', 'moodle', 'ultra']) fs.writeFileSync(path.join(ext, `twin-${name}.js`), `document.documentElement.setAttribute('data-twin-${name}', '');\n`);
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
-const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-lit-'));
 const out = process.argv[2] || path.join(tmp, 'shots');
 fs.mkdirSync(out, { recursive: true });
@@ -24,12 +24,12 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
 (async () => {
   let ctx;
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
-      ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 860 },
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 860 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
     });
-    require('./check-env.js').noFirstRun(ctx);
+    require('../../tools/dev/check-env.js').noFirstRun(ctx);
     const pages = {
       [`${HOSTS.canvas}/courses/25`]: fixture('canvas-course-home.html'),
       [`${HOSTS.moodle}/my/`]: fixture('moodle-dashboard.html'),

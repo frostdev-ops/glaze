@@ -7,7 +7,7 @@ const vm = require('node:vm');
 const { pathToFileURL } = require('node:url');
 const { EventEmitter } = require('node:events');
 
-const file = path.join(process.env.EXT || path.join(__dirname, '..'), 'scripts/agent-link-firefox-check.mjs');
+const file = path.join(process.env.EXT || path.join(__dirname, '../../extension'), '../checks/firefox/agent-link-firefox-check.mjs');
 const source = fs.readFileSync(file, 'utf8');
 const section = (from, to) => {
   const start = source.indexOf(from), end = source.indexOf(to, start);

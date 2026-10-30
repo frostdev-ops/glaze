@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-const source = () => process.env.GZ_B7C_REVIEW_BASE ? require('node:child_process').execFileSync('git', ['show', `${process.env.GZ_B7C_REVIEW_BASE}:features/nav.js`], { cwd: path.join(__dirname, '..'), encoding: 'utf8' }) : fs.readFileSync(require.resolve('../features/nav.js'), 'utf8');
+const source = () => process.env.GZ_B7C_REVIEW_BASE ? require('node:child_process').execFileSync('git', ['show', `${process.env.GZ_B7C_REVIEW_BASE}:features/nav.js`], { cwd: path.join(__dirname, '../../extension'), encoding: 'utf8' }) : fs.readFileSync(require.resolve('../../extension/features/nav.js'), 'utf8');
 const fixture = () => {
   const src = source(), a = src.indexOf('function GZ_ULTRA_OVERLAY('), b = src.indexOf('// The modern drawer', a);
   assert.ok(a > 0 && b > a, 'overlay behavior stays in the lazy module');

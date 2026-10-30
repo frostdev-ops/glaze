@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const worker = require('./helpers/worker-env.cjs');
+const worker = require('../helpers/worker-env.cjs');
 const writer = { id: 'glaze', url: 'chrome-extension://x/writer.html#pass', origin: 'chrome-extension://x', frameId: 3, tab: { id: 7, url: 'https://school.blackboard.com/ultra/courses/1' } };
 
 test('citation worker: the shipped listener serves only Writer\'s pages and checks page grants', async () => {

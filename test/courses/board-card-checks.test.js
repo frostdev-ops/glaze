@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const { createRequire } = require('node:module');
 
 test('Ultra native card check enables its school and keeps the native page visible', async () => {
-  const script = path.join(__dirname, '../scripts/ultra-cards-check.js'), req = createRequire(script);
+  const script = path.join(__dirname, '../../checks/courses/ultra-cards-check.js'), req = createRequire(script);
   const stop = new Error('fixture ready'), local = {}, sync = {};
   const page = { goto: async () => {}, setViewportSize: async () => {}, evaluate: (fn, arg) => fn(arg),
     waitForFunction: async () => {
@@ -27,7 +27,7 @@ test('Ultra native card check enables its school and keeps the native page visib
 });
 
 test('Moodle title restoration ignores a resweep of unrelated course menu buttons', async () => {
-  const source = fs.readFileSync(path.join(__dirname, '../scripts/rules-check.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../checks/looks/rules-check.js'), 'utf8');
   const line = source.split('\n').find((l) => l.includes('const moodleCards ='));
   let late = false;
   const title = '<a class="coursename"><span class="multiline">Biology</span><span>Course is starred</span></a>';
@@ -38,8 +38,8 @@ test('Moodle title restoration ignores a resweep of unrelated course menu button
 });
 
 test('the widget fixture keeps its floating mod through worker layout normalization', () => {
-  const W = require('../lib/widgets.js');
-  const source = fs.readFileSync(path.join(__dirname, '../scripts/widgets-builder-check.js'), 'utf8');
+  const W = require('../../extension/lib/widgets.js');
+  const source = fs.readFileSync(path.join(__dirname, '../../checks/core/widgets-builder-check.js'), 'utf8');
   const code = source.slice(source.indexOf('    const layout ='), source.indexOf('    await sw.evaluate((l)'));
   const mid = 'abcdefghijklmnop';
   const layout = vm.runInNewContext(`${code}; layout`, { mid, W });

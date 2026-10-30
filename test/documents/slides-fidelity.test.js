@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), vm = require('node:vm');
 const { createRequire } = require('node:module');
-const script = path.resolve(__dirname, '../scripts/slides-fidelity.js'), realRequire = createRequire(script);
+const script = path.resolve(__dirname, '../../tools/fidelity/slides-fidelity.js'), realRequire = createRequire(script);
 const run = async (names, n = 3) => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-fidelity-test-')), errors = [], logs = [];
   const input = path.join(tmp, 'deck.pptx'), reference = path.join(tmp, 'reference'), out = path.join(tmp, 'out');

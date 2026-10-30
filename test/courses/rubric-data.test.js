@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-const lib = () => require('../lib/rubric.js');
+const lib = () => require('../../extension/lib/rubric.js');
 const copy = (x) => structuredClone(x);
 const cc = { courseId: '101', assignmentId: '7', userId: '21' };
 const uc = { courseId: '_101_1', contentId: '_7_1', columnId: '_8_1', columnBound: true, userId: '_21_1', attemptId: '_22_1', state: 'graded', pointsPossible: 20 };
@@ -254,7 +254,7 @@ test('Ultra evaluation requires the current association, attempt and user, and i
   for (const mutate of [(e) => { e.published = false; }, (e) => { delete e.published; }, (e) => { e.userId = null; }, (e) => { delete e.userId; }]) {
     const e = evaluation(); mutate(e); assert.ok(lib().parse.ultra(ultra(), association(), e, uc).result, 'the graded state, not the flag, gates selections');
   }
-  const real = require('./fixtures/ultra-rubric-graded.json'), a = real.column.rubricAssociations[0];
+  const real = require('../fixtures/ultra-rubric-graded.json'), a = real.column.rubricAssociations[0];
   const m = lib().parse.ultra(a.rubricDefinition, a, real.attempt.rubricEvaluation, { ...uc, columnId: '_300_1', contentId: '_8120_1', userId: '_42_1', attemptId: '_400_1', pointsPossible: 100 });
   assert.deepEqual(Object.values(m.result.criteria).map((c) => [c.cell, c.score]), [['_630_1', 100], ['_634_1', 70]]);
   for (const mutate of [
@@ -331,7 +331,7 @@ test('Hostile strings stay untrusted data; parser never creates a DOM', () => {
   a.rubric[0].long_description = hostile; s.rubric_assessment.crit1.comments = hostile;
   const m = lib().parse.canvas(a, s, cc);
   assert.equal(m.criteria[0].detail, hostile); assert.equal(m.result.criteria.crit1.comment, hostile);
-  assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '../lib/rubric.js'), 'utf8'), /\b(document|DOMParser|innerHTML|fetch)\b/);
+  assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '../../extension/lib/rubric.js'), 'utf8'), /\b(document|DOMParser|innerHTML|fetch)\b/);
 });
 
 test('Oversized labels, instructions and visible feedback fall back without truncation', () => {
@@ -397,7 +397,7 @@ test('Routes accept only complete assignment and Ultra overview, attempt or disc
 });
 
 test('Classic-script reinjection keeps the original library without browser dependencies', () => {
-  const source = fs.readFileSync(path.join(__dirname, '../lib/rubric.js'), 'utf8'), context = vm.createContext({});
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/lib/rubric.js'), 'utf8'), context = vm.createContext({});
   vm.runInContext(source, context); const first = context.GZ_RUBRIC_LIB;
   assert.equal(typeof first.parse.canvas, 'function'); vm.runInContext(source, context); assert.equal(context.GZ_RUBRIC_LIB, first);
 });

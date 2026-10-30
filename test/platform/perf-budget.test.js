@@ -7,9 +7,9 @@ const fs = require('node:fs');
 const os = require('node:os');
 const { execFileSync } = require('node:child_process');
 const path = require('node:path');
-const m = require('../manifest.json');
+const m = require('../../extension/manifest.json');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const size = (f) => fs.statSync(path.join(root, f)).size;
 
@@ -295,7 +295,7 @@ test('the detector that Safari runs on every other https page stays under 2 KB',
   const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'glaze-perf-safari-'));
   try {
     fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(m));
-    require('node:child_process').execFileSync('sh', [path.join(root, 'scripts/safari-manifest.sh'), path.join(dir, 'manifest.json')]);
+    require('node:child_process').execFileSync('sh', [path.join(__dirname, '../../tools/build/safari-manifest.sh'), path.join(dir, 'manifest.json')]);
     const safari = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
     assert.ok(safari.content_scripts.some((c) => c.js.length === 1 && c.js[0] === 'lib/detect.js'));
   } finally {
@@ -316,7 +316,7 @@ const shipped = (top) => execFileSync('git', ['ls-files', '-z', '--', '*.js'], {
   return f && !parts.some((p) => p.startsWith('.')) && !(parts.length > 1 && NOT_SHIPPED.has(parts[0])) && !VENDORED.has(f)
     && fs.existsSync(path.join(top, f));
 });
-const CODE = shipped(root);
+const CODE = [...shipped(root), ...shipped(path.join(root, '..')).filter((f) => f.startsWith('examples/')).map((f) => `../${f}`)];
 
 // Source without its comments: /* … */ blocks, and // to the end of a line where // starts a comment (not https://).
 const executable = (src) => src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[\s;{}()])\/\/[^\n]*/gm, '$1');

@@ -4,7 +4,7 @@
 // localhost grant alike. Without <all_urls> a fetch to a host Glaze lacks fails on CORS; here it is never made.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const worker = require('./helpers/worker-env.cjs');
+const worker = require('../helpers/worker-env.cjs');
 
 const CANVAS = 'https://school.instructure.com';
 const CDN = 'inst-fs-iad.example-cdn.net';

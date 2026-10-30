@@ -8,9 +8,9 @@
 # checked against the SHA-512 integrity pinned below before esbuild runs, and the result against the SHA-256 of the
 # checked-in files. To upgrade, pick the new versions, copy their integrity from `npm view <package>@<version> dist.integrity`
 # (and their dependencies', which npm prints in node_modules/.package-lock.json), run this once, and record the new hashes.
-# Usage: scripts/vendor-prosemirror.sh
+# Usage: tools/vendor/vendor-prosemirror.sh
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../../extension"
 
 esbuild_version=0.28.2
 file_sha256=5132e25333a4ad3b68fcd366d10cad9d0c762d50437ac95feedb684687cd8ae4
@@ -51,7 +51,7 @@ npm install --prefix "$tmp" --silent --no-save --no-package-lock --ignore-script
 # npm records what it installed, with the integrity of each tarball, in node_modules/.package-lock.json.
 names="$(for p in $packages; do echo "${p%@*}"; done)"
 # shellcheck disable=SC2086
-printf '%s\n' "$integrity" | node scripts/npm-integrity.js "$tmp/node_modules/.package-lock.json" - $names esbuild
+printf '%s\n' "$integrity" | node ../tools/vendor/npm-integrity.js "$tmp/node_modules/.package-lock.json" - $names esbuild
 
 # One namespace per package, by the name GZ_PM gives it.
 for p in $names; do

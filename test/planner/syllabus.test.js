@@ -3,13 +3,13 @@
 // field is checked exactly; a field the heuristics can't read must come back empty, never wrong.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../lib/syllabus.js');
-const D = require('../lib/doctext.js');
+const S = require('../../extension/lib/syllabus.js');
+const D = require('../../extension/lib/doctext.js');
 
 test('section-like digits and contents leaders stay bounded at the input limit', () => {
   const { spawnSync } = require('node:child_process');
   const probe = spawnSync(process.execPath, ['-e', `
-    const S = require(${JSON.stringify(require.resolve('../lib/syllabus.js'))});
+    const S = require(${JSON.stringify(require.resolve('../../extension/lib/syllabus.js'))});
     for (const text of [
       ('1.' + '1'.repeat(1990) + '!\\n').repeat(101),
       ('Quiz ' + '. '.repeat(990) + '!\\n').repeat(101),
@@ -113,7 +113,7 @@ test('week arithmetic stays in UTC across both daylight saving changes', () => {
   const { spawnSync } = require('node:child_process');
   for (const TZ of ['UTC', 'America/New_York', 'Europe/Berlin', 'Pacific/Auckland']) {
     const r = spawnSync(process.execPath, ['-e', `
-      const S = require(${JSON.stringify(require.resolve('../lib/syllabus.js'))});
+      const S = require(${JSON.stringify(require.resolve('../../extension/lib/syllabus.js'))});
       console.log(JSON.stringify([
         S.weekDay('2027-03-08', 2, 6), S.weekDay('2026-10-26', 2, 6),
         S.extract('Quiz due Monday of week 2', {week1: Date.UTC(2027, 2, 10)}).dates[0].day,
@@ -399,7 +399,7 @@ test('dates fall in the course\'s term: the year after for a term that crosses N
   assert.deepEqual(days('Midterms: Oct 12 and Nov 16', FALL), ['2026-10-12', '2026-11-16']);
 });
 
-// Day and time reading itself is W14's (lib/classes.js meetings, tested in test/classes.test.js); these check how the
+// Day and time reading itself is W14's (lib/classes.js meetings, tested in test/planner/classes.test.js); these check how the
 // syllabus uses it: labels, places, office hours apart, dated sessions left out, the text's language, guesses marked.
 test('class times come from lib/classes.js, with the line\'s label and place', () => {
   const r = S.extract('Lecture: MWF 9:00-9:50 AM, Room 101\nOffice hours: Mon 2-3pm\nMidterm review: Monday, October 5, 6-8pm\nDiscussion: TR 2pm');
@@ -485,7 +485,7 @@ test('ids: a row keeps a good id, is told apart from its twin, matches the same 
 });
 
 test('syllabus task ids for the longest accepted Ultra course still fit the To Do contract', () => {
-  const T = require('../lib/todo.js');
+  const T = require('../../extension/lib/todo.js');
   const cid = '_12345678901234567890_12345678901234567890';
   const row = { id: 'abcdefghij', title: 'Exam', day: '2026-11-20' };
   const id = S.taskId(cid, row), data = T.clean({});
@@ -547,7 +547,7 @@ test('a record from before ids: its dates have the ids their tasks were made wit
 
 // The audit's scenario (r9), through the caller's path: the professor moves the midterm, the student edits it and saves again.
 test('moving a saved date and saving again leaves one task, not two (ACA-3)', async () => {
-  const T = require('../lib/todo.js');
+  const T = require('../../extension/lib/todo.js');
   const store = {};
   const area = { local: { get: async (ks) => Object.fromEntries(ks.map((k) => [k, store[k]])), set: async (o) => { Object.assign(store, o); return true; } } };
   const key = 'todo:https://x.instructure.com/7';
@@ -683,7 +683,7 @@ test('a damaged stored date is dropped, not thrown on', () => {
 // ACA-3: this used to send importTask a second time with the same id and a new day and title, which the caller could never
 // do (its ids were made from the day and title). A saved row keeps its id now, so the edits come from the caller's own path.
 test('a date edited and saved again to Better To Do keeps whether it was done, and its steps', () => {
-  const T = require('../lib/todo.js');
+  const T = require('../../extension/lib/todo.js');
   const [r] = S.ids([{ title: 'Midterm exam', day: '2026-11-04', kind: 'exam' }]);
   const id = S.taskId('25', r);
   const send = (d, o) => { for (const e of S.taskEdits({ cid: '25', note: 'From your syllabus', at: 1, picked: new Set(), ...o })) T.edit(d, e); };

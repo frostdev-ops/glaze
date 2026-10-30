@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
-const worker = require('./helpers/worker-env.cjs');
+const worker = require('../helpers/worker-env.cjs');
 
 const ORIGIN = 'https://school.blackboard.com';
 const ATTEMPT = `${ORIGIN}/ultra/courses/_1_1/assessment/_2_1/attempt/create`;

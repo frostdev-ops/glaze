@@ -2,13 +2,13 @@
 // of "Glaze", its one word, the popup still inside Chrome's 600px, gone with Writer off, kept with the theme off, a real
 // click only; tabs.create stubbed, then real), Settings → Writer → Papers' link, Settings → Navigation's opt-in item,
 // Glaze's bar with it on (Settings' preview: a tab through the worker; a Canvas page: Documents beside the bar, as Settings
-// opens, scripts/documents-page-check.js) and Canvas's command palette (the same). Shots: the popup at its natural size and
+// opens, checks/documents/documents-page-check.js) and Canvas's command palette (the same). Shots: the popup at its natural size and
 // the papers heading, each in a dark and a light Look, and the Glaze items.
-// NODE_PATH=<playwright> nice -n 10 node scripts/documents-entry-check.js [shots folder] (default: a temporary folder).
+// NODE_PATH=<playwright> nice -n 10 node checks/documents/documents-entry-check.js [shots folder] (default: a temporary folder).
 // EXT selects the checkout.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
-const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
+const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
 const D = require(path.join(root, 'defaults.js'));
 const CANVAS = 'https://canvas.school.test';
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -17,7 +17,7 @@ const until = async (fn, label, ms = 10000) => {
   while (Date.now() - start < ms) { try { const v = await fn(); if (v) return v; } catch (e) { last = e; } await pause(80); }
   throw Error(`${label} timed out${last ? `: ${last.message}` : ''}`);
 };
-const fixture = (f) => fs.readFileSync(path.join(root, 'test/fixtures', f), 'utf8');
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 let total = 0, failed = 0;
 const check = async (name, test) => {
   total++;
@@ -25,7 +25,7 @@ const check = async (name, test) => {
 };
 
 (async () => {
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-documents-entry-'));
   const shots = path.resolve(process.argv[2] || path.join(scratch, 'shots'));
   fs.mkdirSync(shots, { recursive: true });
@@ -35,13 +35,13 @@ const check = async (name, test) => {
       try { fs.mkdirSync(lock); held = true; } catch (e) { if (e.code !== 'EEXIST') throw e; await pause(1000); }
     }
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\ndocuments-entry-check\n`);
-    const ext = require('./check-env.js').staged(root, [`${CANVAS}/*`], scratch);
-    await require('./wait-for-browser.js')();
+    const ext = require('../../tools/dev/check-env.js').staged(root, [`${CANVAS}/*`], scratch);
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2, reducedMotion: 'reduce',
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2, reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking', '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-quic'],
     });
-    require('./check-env.js').noFirstRun(context);
+    require('../../tools/dev/check-env.js').noFirstRun(context);
     context.setDefaultTimeout(10000);
     await context.route('**/*', (r) => {
       const u = new URL(r.request().url());
@@ -221,7 +221,7 @@ const check = async (name, test) => {
             const svg = item.locator('svg');
             const b = await svg.boundingBox();
             assert.ok(b?.width > 0 && b?.height > 0, `${L.name} ${mode}: icon has room`);
-            assert.equal(await svg.locator('path').getAttribute('d'), require('../lib/navbar.js').ICONS.documents, `${L.name} ${mode}: Documents drawing`);
+            assert.equal(await svg.locator('path').getAttribute('d'), require('../../extension/lib/navbar.js').ICONS.documents, `${L.name} ${mode}: Documents drawing`);
             assert.equal(await svg.evaluate((e) => getComputedStyle(e).stroke), await item.evaluate((e) => getComputedStyle(e).color), `${L.name} ${mode}: inherits the item's ink`);
           }
         }

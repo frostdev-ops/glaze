@@ -2,11 +2,11 @@
 // cleaner, the editor's words and the bar's model. The page side (features/mods.js) is in mods-runtime.test.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const M = require('../lib/modbundle.js');
-const B = require('../lib/modbroker.js');
-const A = require('../lib/modapi.js');
-const E = require('../lib/editor-mods.js');
-const NB = require('../lib/navbar.js');
+const M = require('../../extension/lib/modbundle.js');
+const B = require('../../extension/lib/modbroker.js');
+const A = require('../../extension/lib/modapi.js');
+const E = require('../../extension/lib/editor-mods.js');
+const NB = require('../../extension/lib/navbar.js');
 
 const u8 = (s) => new TextEncoder().encode(s);
 const BASE = { glaze: 1, name: 'Tiny', version: '1.0.0', author: { name: 'Kai', key: '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo' } };
@@ -109,7 +109,7 @@ test('reserved names reject Latin-looking Cyrillic and Greek letters through the
   }
   assert.equal((await call(e, 'nav.add', [{ id: 'study', label: 'Моя учёба', action: true }])).ok, true, 'other-script names remain usable');
 });
-const translations = () => RESERVED.flatMap((k) => ['de', 'es', 'fr', 'nl', 'pt-BR'].map((lang) => { require(`../i18n/${lang}.js`); return globalThis.GZ_LANGS[lang][k]; }));
+const translations = () => RESERVED.flatMap((k) => ['de', 'es', 'fr', 'nl', 'pt-BR'].map((lang) => { require(`../../extension/i18n/${lang}.js`); return globalThis.GZ_LANGS[lang][k]; }));
 test('a mod\'s item can\'t pass for Glaze\'s own: not their icons, nor the names of Glaze settings or Sign out in any of Glaze\'s languages', async () => {
   const e = env({ permissions: perms('nav.items') }, { 'nav.items': true });
   for (const label of [...RESERVED, ...translations(), ' glaze   SETTINGS ', 'Sign-Out', 'signout', 'Log out', 'Logout', 'Glaze​settings', 'ＧＬＡＺＥ settings']) {
@@ -156,7 +156,7 @@ test('Use my own also removes manifest navigation parts, leaving other parts int
 });
 
 test('the page refreshes installed parts when a navigation layout opt-out changes', () => {
-  const fs = require('node:fs'), vm = require('node:vm'), source = fs.readFileSync(require.resolve('../content.js'), 'utf8');
+  const fs = require('node:fs'), vm = require('node:vm'), source = fs.readFileSync(require.resolve('../../extension/content.js'), 'utf8');
   const from = source.indexOf('    if (changes.lookX && area'), to = source.indexOf('    if (isPreview ||', from);
   let reads = 0;
   const changed = vm.runInNewContext(`(changes, area) => { ${source.slice(from, to)} }`, { modsIn: () => reads++, partsIn() {} });

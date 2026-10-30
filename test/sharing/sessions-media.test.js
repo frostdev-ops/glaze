@@ -6,15 +6,15 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const S = require('../lib/sessions.js');
-const N = require('../lib/notes.js');
-const T = require('../lib/todo.js');
-const X = require('../lib/lookparts.js');
-const M = require('../lib/media.js');
-const L = require('../lib/share.js');
-const { relay, diskStore } = require('../server/relay.js');
+const S = require('../../extension/lib/sessions.js');
+const N = require('../../extension/lib/notes.js');
+const T = require('../../extension/lib/todo.js');
+const X = require('../../extension/lib/lookparts.js');
+const M = require('../../extension/lib/media.js');
+const L = require('../../extension/lib/share.js');
+const { relay, diskStore } = require('../../server/relay.js');
 
-const fx = (f) => new Uint8Array(fs.readFileSync(path.join(__dirname, 'fixtures/media', f)));
+const fx = (f) => new Uint8Array(fs.readFileSync(path.join(__dirname, '../fixtures/media', f)));
 const clone = (x) => (x === undefined ? x : structuredClone(x));
 const localArea = (data = {}) => ({ data, get: async (keys) => Object.fromEntries([].concat(keys ?? Object.keys(data)).filter((k) => k in data).map((k) => [k, clone(data[k])])),
   set: async (patch) => { Object.assign(data, clone(patch)); return true; }, remove: async (keys) => { for (const k of [].concat(keys)) delete data[k]; return true; } });
@@ -197,7 +197,7 @@ test('a Look share offered when there is no room for its file says so', async (t
 });
 
 test('a stray old-style kept file is still taken by the sticker reset\'s rule', () => {
-  const L2 = require('../lib/lookx.js');
+  const L2 = require('../../extension/lib/lookx.js');
   assert.equal(L2.RESET('lookMedia:abc'), true);
   assert.equal(L2.RESET('lookMedia'), false);
   assert.equal(L2.RESET('stkImg:abc'), true);

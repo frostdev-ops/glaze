@@ -6,16 +6,16 @@
 // worker refuses every writer task on a test attempt (lib/background.js aiFiles, the attempt-route rule).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const T = require('../lib/ai/task.js');
-const S = require('../lib/ai/schema.js');
-require('../lib/ai/providers/mock.js');
-const W = require('../lib/ai/tasks/writer-context.js');
-const C = require('../lib/ai/tasks/writer-complete.js');
-const RV = require('../lib/ai/tasks/writer-review.js');
-const FB = require('../lib/ai/tasks/writer-feedback.js');
-const RQ = require('../lib/ai/tasks/writer-requirements.js');
-const CT = require('../lib/ai/tasks/writer-cite.js');
-const D = require('../lib/ai/tasks/writer-decide.js');
+const T = require('../../extension/lib/ai/task.js');
+const S = require('../../extension/lib/ai/schema.js');
+require('../../extension/lib/ai/providers/mock.js');
+const W = require('../../extension/lib/ai/tasks/writer-context.js');
+const C = require('../../extension/lib/ai/tasks/writer-complete.js');
+const RV = require('../../extension/lib/ai/tasks/writer-review.js');
+const FB = require('../../extension/lib/ai/tasks/writer-feedback.js');
+const RQ = require('../../extension/lib/ai/tasks/writer-requirements.js');
+const CT = require('../../extension/lib/ai/tasks/writer-cite.js');
+const D = require('../../extension/lib/ai/tasks/writer-decide.js');
 
 const BEFORE = 'I agree that the river works as a kind of archive.\n\nWhen Sethe returns to the clearing, the memory is not something she owns; it';
 const CONTEXT = {
@@ -175,7 +175,7 @@ test('writer.complete requires a typed word boundary for an unanchored lower-cas
 });
 
 test('writer.complete keeps open straight single quotes in the caret paragraph closed to completion', () => {
-  const AI = require('../writer-ai.js');
+  const AI = require('../../extension/writer-ai.js');
   for (const fits of [C.fits, AI.fits]) {
     assert.equal(fits("Baldwin calls it 'the price of the"), false);
     assert.equal(fits("He said 'hello.\n\nThree things I learned are how to"), true);
@@ -431,7 +431,7 @@ test('writer.feedback: a comment says what the draft does, specifically; one off
   const { output } = await go(FB.task, { text: draft, context: ASSIGN }, { json: { criteria: comments.map(([comment], i) => ({ criterion: i % 2 ? '_11_1' : '_10_1', status: 'partly', comment, quotes: [], level: null })) } });
   assert.equal(output.criteria.length, 2);
   assert.equal(output.criteria[0].comment, comments[0][0], 'a specific comment survives');
-  for (const [c, ok] of comments) assert.equal(FB.assesses(c, [draft, ASSIGN.assignment.instructions, '[_10_1] Thesis: A clear, arguable thesis.'].map((x) => require('../lib/ai/text.js').source(x))) === c.trim(), ok, c);
+  for (const [c, ok] of comments) assert.equal(FB.assesses(c, [draft, ASSIGN.assignment.instructions, '[_10_1] Thesis: A clear, arguable thesis.'].map((x) => require('../../extension/lib/ai/text.js').source(x))) === c.trim(), ok, c);
 });
 
 // ---- writer.requirements ------------------------------------------------------------------------------------------
@@ -488,8 +488,8 @@ test('the page\'s context is bounded, its rich text made plain, and a test refus
 
 // ---- the harness around them ------------------------------------------------------------------------------------
 test('a new completion supersedes the one in flight: the old ends cancelled, the new one\'s text comes back checked', async () => {
-  const B = require('../lib/ai/broker.js');
-  require('../lib/ai/providers/openai.js');
+  const B = require('../../extension/lib/ai/broker.js');
+  require('../../extension/lib/ai/providers/openai.js');
   B._reset();
   const waiting = [];
   const json = (body) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
@@ -518,8 +518,8 @@ test('a new completion supersedes the one in flight: the old ends cancelled, the
 
 test('the real worker refuses every writer task on a test attempt, and runs them on an assignment', async () => {
   const vm = require('node:vm');
-  const worker = require('./helpers/worker-env.cjs');
-  const { fakeIDB } = require('./helpers/fake-idb.cjs');
+  const worker = require('../helpers/worker-env.cjs');
+  const { fakeIDB } = require('../helpers/fake-idb.cjs');
   const ULTRA = 'https://school.blackboard.com', ATTEMPT = `${ULTRA}/ultra/courses/_101_1/assessment/_7_1/attempt/create?courseId=_101_1`;
   const w = worker({ globals: fakeIDB(), fetch: async (url) => new Response(JSON.stringify(url.endsWith('/models') ? { data: [{ id: 'gpt-x' }] } : { choices: [{ message: { content: '{"minWords":250,"maxWords":null,"sources":null,"replies":null}' }, finish_reason: 'stop' }] }), { headers: { 'content-type': 'application/json' } }),
     store: { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [], ai: { on: true, model: { use: 'main', model: 'gpt-x' }, features: { completion: true, writing: true } } }, session: {} } });

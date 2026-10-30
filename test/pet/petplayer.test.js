@@ -1,5 +1,5 @@
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm');
-const S = require('../lib/petsprites.js');
+const S = require('../../extension/lib/petsprites.js');
 const page = () => {
   const timers = new Map(), docEvents = new Map(), winEvents = new Map(), motionEvents = new Map(); let n = 0, observer, motionObserver, image, draws = 0, revoked = 0, now = 0, lastFrame = [], motionLevel = 'subtle';
   const canvas = { isConnected: true, getContext: () => ({ clearRect() {}, drawImage(...args) { draws++; lastFrame = args.slice(1, 3); } }) };
@@ -15,7 +15,7 @@ const page = () => {
     URL: { createObjectURL: () => 'blob:own', revokeObjectURL: () => revoked++ }, Blob, Uint8Array,
   };
   const motion = { matches: false, addEventListener: (k, f) => motionEvents.set(k, f), removeEventListener: (k) => motionEvents.delete(k) };
-  vm.createContext(context); const player = vm.runInContext(fs.readFileSync(require.resolve('../lib/petplayer.js'), 'utf8'), context);
+  vm.createContext(context); const player = vm.runInContext(fs.readFileSync(require.resolve('../../extension/lib/petplayer.js'), 'utf8'), context);
   return { context, timers, docEvents, winEvents, motionEvents, motion, canvas, setMotion: (value) => { motionLevel = value; motionObserver(); }, player, load: () => image.onload(), observer: (v) => observer([{ isIntersecting: v }]), draws: () => draws, revoked: () => revoked, frame: () => lastFrame, tick: (ms) => { now = ms; [...timers.values()][0](); } };
 };
 test('pet clock pauses offscreen/hidden/reduced-motion and cleans all listeners on removal', () => {

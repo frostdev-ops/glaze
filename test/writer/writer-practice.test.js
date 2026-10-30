@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const Module = require('node:module');
-const { options, browserArgs, observe, main } = require('../scripts/writer-practice.js');
+const { options, browserArgs, observe, main } = require('../../tools/dev/writer-practice.js');
 
 test('practice validates --ext and flags before opening a browser or resetting a profile', () => {
   assert.deepEqual(options(['--ext', '.', '--fresh', '--smoke']), { root: path.resolve('.'), fresh: true, smoke: true, help: false, ai: '' });
@@ -35,7 +35,7 @@ test('console observation includes resource errors and errors from every page an
 test('an interrupted browser wait exits without waiting for an unrelated browser', async () => {
   const controller = new AbortController();
   controller.abort(Error('synthetic interrupt'));
-  await assert.rejects(require('../scripts/wait-for-browser.js')(controller.signal), /synthetic interrupt/);
+  await assert.rejects(require('../../tools/dev/wait-for-browser.js')(controller.signal), /synthetic interrupt/);
 });
 
 test('smoke output can stay in a hidden checkout folder, and a launch failure cleans its profile and lock', async (t) => {
@@ -52,8 +52,8 @@ test('smoke output can stay in a hidden checkout folder, and a launch failure cl
     if (id === './wait-for-browser.js') return async () => {};
     return load.call(this, id, ...args);
   });
-  t.mock.method(require('../scripts/check-env.js'), 'lockPath', () => path.join(tmp, 'heavy.lock'));
-  t.mock.method(require('../scripts/ultra-mock.js'), 'quill', async () => Buffer.alloc(0));
+  t.mock.method(require('../../tools/dev/check-env.js'), 'lockPath', () => path.join(tmp, 'heavy.lock'));
+  t.mock.method(require('../../checks/mocks/ultra-mock.js'), 'quill', async () => Buffer.alloc(0));
   try {
     const ext = path.join(tmp, 'source');
     fs.mkdirSync(ext);
@@ -71,7 +71,7 @@ test('smoke output can stay in a hidden checkout folder, and a launch failure cl
 
 // Exercise the private allow-list without opening a browser. Only sanitized worker results cross this boundary.
 const proxyPolicy = () => {
-  const file = require.resolve('../scripts/writer-practice.js');
+  const file = require.resolve('../../tools/dev/writer-practice.js');
   const logs = [];
   const helpers = require('node:vm').runInNewContext(`${fs.readFileSync(file, 'utf8')}\n;({ connections, reachable });`, {
     require: Module.createRequire(file), module: { exports: {} }, __dirname: path.dirname(file), process, URL,
@@ -116,8 +116,8 @@ test('the practice route blocks page traffic even to an AI host and continues on
     if (name === './wait-for-browser.js') return async () => {};
     return load.call(this, name, ...args);
   });
-  t.mock.method(require('../scripts/check-env.js'), 'lockPath', () => path.join(tmp, 'heavy.lock'));
-  t.mock.method(require('../scripts/ultra-mock.js'), 'quill', async () => Buffer.alloc(0));
+  t.mock.method(require('../../tools/dev/check-env.js'), 'lockPath', () => path.join(tmp, 'heavy.lock'));
+  t.mock.method(require('../../checks/mocks/ultra-mock.js'), 'quill', async () => Buffer.alloc(0));
   try {
     const ext = path.join(tmp, 'source'); fs.mkdirSync(ext);
     fs.writeFileSync(path.join(ext, 'manifest.json'), '{"manifest_version":3,"name":"Synthetic practice","version":"0.0.0"}');

@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const D = require('../defaults.js');
+const D = require('../../extension/defaults.js');
 
 const at = (s) => new Date(s); // local time, no zone in the string
 const iso = (d) => d && `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${d.toTimeString().slice(0, 5)}`;
@@ -63,7 +63,7 @@ test('the palette painted follows the schedule, and the device only in device mo
 });
 
 // ---- content.js: the pre-paint path ---------------------------------------------------------------------------
-const source = fs.readFileSync(require.resolve('../content.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../extension/content.js'), 'utf8');
 
 test('pre-paint: the first enable waits on the quiz gate, and the first paint reads the schedule now', () => {
   // The kept settings are read, the gate defined, then the first enable; nothing caches the time in between.
@@ -136,7 +136,7 @@ test('the clock (features/schedule.js): one timeout to the next flip, re-armed, 
     setTimeout: (f, ms) => { pending.set(++id, [f, ms]); return id; }, clearTimeout: (i) => pending.delete(i),
     document: { hidden: false, addEventListener: (n, f) => { visible = f; } },
   });
-  const S = vm.runInContext(fs.readFileSync(require.resolve('../features/schedule.js'), 'utf8'), ctx);
+  const S = vm.runInContext(fs.readFileSync(require.resolve('../../extension/features/schedule.js'), 'utf8'), ctx);
   let worn = { on: true, mode: 'schedule', from: '20:00', to: '08:00' };
   const hook = { auto: () => worn, reapply: () => { painted++; S.arm(hook); } };
   for (let i = 0; i < 5; i++) S.arm(hook);
@@ -158,7 +158,7 @@ test('the clock (features/schedule.js): one timeout to the next flip, re-armed, 
 
 // The sweep's instructor-colour check, run on stand-in elements (no browser cascade claimed).
 const sweepWith = (palette) => {
-  const C = require('../lib/color.js');
+  const C = require('../../extension/lib/color.js');
   const ctx = vm.createContext({
     C, ultra: false, darkTheme: true, palette, accentInk: C.parse(palette['--gz-accent-ink']), innerHeight: 900,
     SKIP: /^(img|video|canvas|svg|iframe|picture|source|path|use|script|style|link|meta)$/i, FIELD: /^(input|textarea|select)$/i,
@@ -241,7 +241,7 @@ test('instructor text: mid-dark colours lifted under 4.5:1; translucent, gradien
 });
 
 test('editor: clearing a time keeps the last valid one and saves nothing', () => {
-  const opts = fs.readFileSync(require.resolve('../options.js'), 'utf8');
+  const opts = fs.readFileSync(require.resolve('../../extension/options.js'), 'utf8');
   const s = D.GZ_SANITIZE({ auto: { on: true, mode: 'schedule', from: '21:00', to: '07:00' } });
   let changed, saves = 0;
   const control = { type: 'time', value: '', dataset: { key: 'auto.from' }, addEventListener: (n, f) => { changed = f; } };

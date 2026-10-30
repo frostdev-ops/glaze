@@ -3,7 +3,7 @@
 // Moodle pages (test/fixtures) under invented school origins, each with a strict and a permissive page Content-Security-Policy.
 // A minimal served Ultra page under the strict one adds the parts that don't need Ultra's markup. Every other request is aborted
 // and DNS resolves nowhere; no LMS or account is needed.
-//   NODE_PATH=/path/to/node_modules nice node scripts/mods-combined-check.js [screenshots directory] [--only=<scenario id>]
+//   NODE_PATH=/path/to/node_modules nice node checks/mods/mods-combined-check.js [screenshots directory] [--only=<scenario id>]
 //   scenario ids: ultra-preview canvas-strict canvas-open moodle-strict moodle-open ultra-served
 // It checks, for each page: everything applies (the shader's canvas, the animations, an effect and the pointer's, the nav
 // layout, the rules of that LMS); that motion off stops all motion (no animation frame asked for, no canvas, no keyframes) and
@@ -17,8 +17,8 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 
-// A copy holding the schools' hosts, as the student's grant does (scripts/check-env.js staged).
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://ultra.school.test/*', 'https://strict.moodle.test/*', 'https://open.moodle.test/*']); // the id is made from the real path
+// A copy holding the schools' hosts, as the student's grant does (tools/dev/check-env.js staged).
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://ultra.school.test/*', 'https://strict.moodle.test/*', 'https://open.moodle.test/*']); // the id is made from the real path
 const out = process.argv.slice(2).find((a) => !a.startsWith('--'));
 const only = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7);
 const G = require(path.join(ext, 'defaults.js'));
@@ -29,7 +29,7 @@ globalThis.GZ_GLSL = GLSL;
 globalThis.GZ_PARTS = PARTS;
 const S = require(path.join(ext, 'lib/share.js'));
 const X = require(path.join(ext, 'lib/lookparts.js'));
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -82,7 +82,7 @@ const LOOK = G.GZ_SANITIZE({ colors: { ...G.GZ_PRESET('Paper'), '--gz-accent': '
 
 // ---- the pages -----------------------------------------------------------------------------------------------------------
 const STRICT = "default-src 'self'; style-src 'self'; script-src 'self'; img-src * data: blob:; font-src * data:; connect-src 'self'; object-src 'none'; base-uri 'self'";
-const fixture = (name) => fs.readFileSync(path.join(ext, 'test/fixtures', name), 'utf8');
+const fixture = (name) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', name), 'utf8');
 const strip = (html, css) => html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '').replace('</head>', `<style>${css}</style></head>`);
 // Stand-ins for each LMS's own frame CSS (not fetched): Canvas's fixed rail beside #wrapper, Moodle's fixed navbar.
 const CANVAS_CSS = `body { margin: 0; font: 14px/1.4 system-ui, sans-serif; }
@@ -132,7 +132,7 @@ const until = async (fn, ms = 10000, step = 80) => { const end = Date.now() + ms
   const errors = [], external = [];
   let ctx;
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), {
       ...chromeLaunch, headless: true, viewport: { width: 1280, height: 860 }, locale: 'en-US', timezoneId: 'America/New_York',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'],

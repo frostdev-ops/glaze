@@ -6,8 +6,8 @@ const vm = require('node:vm');
 // Moodle's front page is `/`, like Canvas's Dashboard: Canvas-only hooks keyed on that path must stay off there, or they
 // load Canvas code and (cardsHere) stop the page-start due fetch Moodle's own due list relies on. They are Canvas's part
 // (content-canvas.js), which a Moodle page doesn't load: content.js's own stand-ins (X) do nothing in their place.
-const source = fs.readFileSync(require.resolve('../content.js'), 'utf8');
-const canvas = fs.readFileSync(require.resolve('../content-canvas.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../extension/content.js'), 'utf8');
+const canvas = fs.readFileSync(require.resolve('../../extension/content-canvas.js'), 'utf8');
 const hook = (name) => canvas.match(new RegExp(`^  const ${name} = \\(\\) => [^\\n]*;$`, 'm'))[0];
 
 test('Canvas-only hooks on `/` stay off on a Moodle site', () => {
@@ -21,7 +21,7 @@ test('Canvas-only hooks on `/` stay off on a Moodle site', () => {
     assert.ok(!source.includes(`const ${name} =`), `${name} isn't in the script Moodle runs`);
   }
   // Moodle's first script, as lib/background.js registers it: Canvas's without the Canvas part.
-  const m = require('../manifest.json');
+  const m = require('../../extension/manifest.json');
   const moodleScript = m.content_scripts.find((c) => c.matches.includes('https://*.moodlecloud.com/*')).js;
   assert.ok(!moodleScript.includes('content-canvas.js') && moodleScript.at(-1) === 'content.js');
   // What stands in for Canvas's hooks on Moodle: nothing runs, and the planner check says no, so the page start asks for
@@ -36,7 +36,7 @@ test('Canvas-only hooks on `/` stay off on a Moodle site', () => {
 // what they key on is Canvas's own markup. Moodle's real pages (test/fixtures, Moodle 5.3) hold none of it, so leaving
 // Canvas's part off Moodle changes nothing there.
 test('what Canvas\'s part keys on is nowhere on Moodle\'s pages', () => {
-  const dir = require('node:path').join(__dirname, 'fixtures');
+  const dir = require('node:path').join(__dirname, '../fixtures');
   const pages = fs.readdirSync(dir).filter((f) => /^moodle-.*\.html$/.test(f));
   assert.ok(pages.length >= 8);
   const MARKUP = ['ic-DashboardCard', 'planner-grouping', 'student_grades', 'grades_summary', 'ig-row', 'context_module', 'ToDoSidebarItem',
@@ -51,7 +51,7 @@ test('what Canvas\'s part keys on is nowhere on Moodle\'s pages', () => {
 
 // The shared palette has Canvas and Ultra adapters; Moodle content search stays off.
 test('search in your courses is Canvas and Ultra only', () => {
-  const palette = fs.readFileSync(require.resolve('../features/palette.js'), 'utf8');
+  const palette = fs.readFileSync(require.resolve('../../extension/features/palette.js'), 'utf8');
   const line = palette.match(/^ {2}const searchHere = \(\) => [^\n]*;$/m)?.[0];
   assert.ok(line, 'features/palette.js has searchHere');
   assert.match(palette, /^ {4}if \(searchHere\(\)\) need\('features\/search\.js'/m, 'and the search loads only through it');

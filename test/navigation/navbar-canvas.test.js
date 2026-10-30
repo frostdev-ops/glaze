@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const L = require('../lib/navlayout.js'), M = require('../lib/navbar.js'), G = require('../defaults.js');
-const read = (f) => fs.readFileSync(require.resolve(`../${f}`), 'utf8');
+const L = require('../../extension/lib/navlayout.js'), M = require('../../extension/lib/navbar.js'), G = require('../../extension/defaults.js');
+const read = (f) => fs.readFileSync(require.resolve(`../../extension/${f}`), 'utf8');
 const plain = (v) => JSON.parse(JSON.stringify(v));
 const origin = 'https://school.instructure.com';
 const anchor = (key, href, label, badge = '', active = false) => ({

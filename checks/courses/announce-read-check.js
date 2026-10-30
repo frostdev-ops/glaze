@@ -1,11 +1,11 @@
 // Regression checks against synthetic Ultra markup/pagination. No school requests, server or persistent profile.
-// NODE_PATH=/path/to/node_modules node scripts/announce-read-check.js [evidence directory]
+// NODE_PATH=/path/to/node_modules node checks/courses/announce-read-check.js [evidence directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), assert = require('node:assert/strict');
-const root = path.resolve(__dirname, '..'), O = 'https://bb.school.test';
+const root = path.resolve(__dirname, '../../extension'), O = 'https://bb.school.test';
 const out = path.resolve(process.argv[2] || '/tmp/glaze-announce-read-check');
-const env = require('./check-env.js');
-const lock = require('./check-env.js').lockPath();
+const env = require('../../tools/dev/check-env.js');
+const lock = require('../../tools/dev/check-env.js').lockPath();
 const results = [];
 let server, browser, held = false;
 const check = (value, label) => { assert.ok(value, label); results.push(label); console.log(`ok ${label}`); };
@@ -14,7 +14,7 @@ const check = (value, label) => { assert.ok(value, label); results.push(label); 
   try {
     fs.mkdirSync(lock); held = true;
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nannounce-read-check\n`);
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     server = await chromium.launchServer({ ...env.chromeLaunch(), headless: true, args: ['--host-resolver-rules=MAP * ~NOTFOUND'] });
     console.log(`Owned Chromium PID ${server.process().pid}`);
     browser = await chromium.connect(server.wsEndpoint());
@@ -26,7 +26,7 @@ const check = (value, label) => { assert.ok(value, label); results.push(label); 
       const u = new URL(r.request().url());
       requests.push(`${r.request().method()} ${u.pathname}`);
       if (u.origin !== O) return r.abort();
-      if (u.pathname.startsWith('/ultra/')) return r.fulfill({ contentType: 'text/html', body: fs.readFileSync(path.join(root, 'test/fixtures/announce-read-ultra.html'), 'utf8') });
+      if (u.pathname.startsWith('/ultra/')) return r.fulfill({ contentType: 'text/html', body: fs.readFileSync(path.join(__dirname, '../../test/fixtures/announce-read-ultra.html'), 'utf8') });
       if (u.pathname === '/learn/api/v1/courses/_101_1/announcements') {
         const records = await page.evaluate(() => records), offset = +(u.searchParams.get('offset') || 0);
         reads.push(offset);

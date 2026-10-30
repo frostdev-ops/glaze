@@ -2,10 +2,10 @@
 // { text, ids, plain } made with HF tokenizers must give exactly `ids` with added tokens parsed (specials: true), and
 // exactly `plain` (HF with its added tokens taken out) the default way, and decode back to the text. Then encode speed.
 // Not in the suite: it needs the model's tokenizer.json and the references, which stay out of the repo.
-//   node scripts/local-tokenizer-check.js <tokenizer.json> <refs.jsonl> [--config tokenizer_config.json]
+//   node checks/ai/local-tokenizer-check.js <tokenizer.json> <refs.jsonl> [--config tokenizer_config.json]
 //     [--gguf kv.json (the GGUF's tokenizer.* keys as JSON: checked the same way)] [--out results.json]
 const fs = require('node:fs');
-const K = require('../lib/ai/local/tokenizer.js');
+const K = require('../../extension/lib/ai/local/tokenizer.js');
 
 const args = process.argv.slice(2);
 const flag = (name) => { const i = args.indexOf(name); return i < 0 ? null : args.splice(i, 2)[1]; };
@@ -13,7 +13,7 @@ const config = flag('--config');
 const gguf = flag('--gguf');
 const out = flag('--out');
 const [tokPath, refPath] = args;
-if (!tokPath || !refPath) { console.error('usage: node scripts/local-tokenizer-check.js <tokenizer.json> <refs.jsonl> [--config f] [--gguf f] [--out f]'); process.exit(2); }
+if (!tokPath || !refPath) { console.error('usage: node checks/ai/local-tokenizer-check.js <tokenizer.json> <refs.jsonl> [--config f] [--gguf f] [--out f]'); process.exit(2); }
 
 const cfg = config ? JSON.parse(fs.readFileSync(config, 'utf8')) : {};
 const name = (t) => (t && typeof t === 'object' ? t.content : t);

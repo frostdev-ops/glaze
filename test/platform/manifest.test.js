@@ -4,26 +4,26 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { execFileSync } = require('node:child_process');
-const m = require('../manifest.json');
+const m = require('../../extension/manifest.json');
 
 // Glaze's first content script, one entry per LMS's own hosts: Ultra's and Canvas's, each with its own part, and MoodleCloud's.
 const glaze = m.content_scripts.filter((c) => c.js.at(-1) === 'content.js');
 const ultra = glaze.find((c) => c.js.includes('content-ultra.js'));
 const canvas = glaze.find((c) => c.js.includes('content-canvas.js'));
 const moodle = glaze.find((c) => c.matches.includes('https://*.moodlecloud.com/*'));
-const D = require('../defaults.js');
-// The Safari manifest scripts/safari-manifest.sh makes from `input`.
+const D = require('../../extension/defaults.js');
+// The Safari manifest tools/build/safari-manifest.sh makes from `input`.
 const safari = (input) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-safari-manifest-'));
   try {
     fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(input));
-    execFileSync('sh', [path.join(__dirname, '../scripts/safari-manifest.sh'), path.join(dir, 'manifest.json')]);
+    execFileSync('sh', [path.join(__dirname, '../../tools/build/safari-manifest.sh'), path.join(dir, 'manifest.json')]);
     return JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 };
-const V338 = require('./fixtures/manifest-v3.3.8.json');
+const V338 = require('../fixtures/manifest-v3.3.8.json');
 
 test('Ultra matches its bare entry and descendants on Blackboard\'s hosts, without matching lookalike paths', () => {
   assert.deepEqual(ultra.matches, ['https://*.blackboard.com/ultra', 'https://*.blackboard.com/ultra/*']);
@@ -77,7 +77,7 @@ test('the built-in hosts are the manifest\'s, in one place', () => {
     for (const other of ['canvas', 'moodle', 'ultra'].filter((k) => k !== kind)) assert.equal(D.GZ_BUILT_IN(other, new URL(`https://school.${h}/`)), false, `${other} on ${h}`);
   }
   assert.equal(D.GZ_BUILT_IN(null, new URL('https://school.instructure.com/')), false, 'no LMS found');
-  const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
   for (const f of ['content.js', 'content-ultra.js', 'options.js', 'lib/background.js']) {
     assert.match(read(f), /GZ_BUILT_IN\(/, f);
     assert.doesNotMatch(read(f), /instructure\\\.com\$|blackboard\\\.com\$|endsWith\('\.(instructure|blackboard)\.com'\)/, `${f} keeps no host list of its own`);
@@ -97,8 +97,8 @@ test('Safari keeps 3.3.8\'s access: every host, Ultra on /ultra anywhere and the
 
 test('the 3.3.8 manifest fixture is the tagged release\'s', (t) => {
   let tagged;
-  try { tagged = execFileSync('git', ['show', 'v3.3.8:manifest.json'], { cwd: path.join(__dirname, '..'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return t.skip('no v3.3.8 tag in this clone'); }
-  assert.equal(fs.readFileSync(path.join(__dirname, 'fixtures/manifest-v3.3.8.json'), 'utf8'), tagged);
+  try { tagged = execFileSync('git', ['show', 'v3.3.8:manifest.json'], { cwd: path.join(__dirname, '../../extension'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return t.skip('no v3.3.8 tag in this clone'); }
+  assert.equal(fs.readFileSync(path.join(__dirname, '../fixtures/manifest-v3.3.8.json'), 'utf8'), tagged);
 });
 
 test('Safari runs exactly one first bundle on MoodleCloud, including Ultra paths', () => {
@@ -140,7 +140,7 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
   delete expected.optional_host_permissions;
   expected.content_scripts = safari(m).content_scripts;
   try {
-    const rewrite = () => execFileSync('sh', [path.join(__dirname, '../scripts/safari-manifest.sh'), file]);
+    const rewrite = () => execFileSync('sh', [path.join(__dirname, '../../tools/build/safari-manifest.sh'), file]);
     rewrite();
     const once = fs.readFileSync(file, 'utf8');
     assert.deepEqual(JSON.parse(once), expected);
@@ -172,19 +172,19 @@ test('Glaze\'s pages may compile WebAssembly for OCR; only the approved pages ar
   // Documents is exposed as Settings is (including dynamic URLs if that group uses them). Its Look's fonts use only the
   // catalogued font endpoints; scripts and styles remain local, with no broader network or form authority.
   assert.deepEqual(m.web_accessible_resources.find((w) => w.resources.includes('papers.html')), m.web_accessible_resources.find((w) => w.resources.includes('options.html')));
-  assert.match(fs.readFileSync(path.join(__dirname, '..', 'papers.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; font-src 'self' https:\/\/fonts\.gstatic\.com https:\/\/cdn\.jsdelivr\.net; connect-src 'self' https:\/\/fonts\.googleapis\.com https:\/\/fonts\.gstatic\.com https:\/\/cdn\.jsdelivr\.net; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
+  assert.match(fs.readFileSync(path.join(__dirname, '../../extension/papers.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; font-src 'self' https:\/\/fonts\.gstatic\.com https:\/\/cdn\.jsdelivr\.net; connect-src 'self' https:\/\/fonts\.googleapis\.com https:\/\/fonts\.gstatic\.com https:\/\/cdn\.jsdelivr\.net; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   // Download all's Allow frame: one button, Glaze's files only, no network from the page itself.
-  assert.match(fs.readFileSync(path.join(__dirname, '..', 'features/allow.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'none'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
+  assert.match(fs.readFileSync(path.join(__dirname, '../../extension/features/allow.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'none'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   // The Notes share panel: Glaze's files only, no network from the page itself (the worker talks to the relay).
-  assert.match(fs.readFileSync(path.join(__dirname, '..', 'sharing/quick.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
-  const reader = fs.readFileSync(path.join(__dirname, '..', 'reader.html'), 'utf8');
+  assert.match(fs.readFileSync(path.join(__dirname, '../../extension/sharing/quick.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
+  const reader = fs.readFileSync(path.join(__dirname, '../../extension/reader.html'), 'utf8');
   assert.match(reader, /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   // Glaze Writer's editor frame: Glaze's files only, no network from the page itself. An assignment's PDF or deck shows there
   // (writer-kinds.js): pdf.js's decoders may compile WebAssembly, and a deck's pictures are blob: URLs of its own parts.
-  assert.match(fs.readFileSync(path.join(__dirname, '..', 'writer.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
+  assert.match(fs.readFileSync(path.join(__dirname, '../../extension/writer.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   // Documents uses Settings' GZ_FONTS loader: selected Google Fonts and jsDelivr files, fetched without credentials. Its slides
   // draw their pictures from blob: URLs of the deck's own parts (slides-kind.js).
-  const papers = fs.readFileSync(path.join(__dirname, '..', 'papers.html'), 'utf8');
+  const papers = fs.readFileSync(path.join(__dirname, '../../extension/papers.html'), 'utf8');
   assert.match(papers, /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; font-src 'self' https:\/\/fonts.gstatic.com https:\/\/cdn.jsdelivr.net; connect-src 'self' https:\/\/fonts.googleapis.com https:\/\/fonts.gstatic.com https:\/\/cdn.jsdelivr.net; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   assert.doesNotMatch(papers, /<style\b|<script(?![^>]*\bsrc=)/);
 });
@@ -197,9 +197,9 @@ test('the mods host is the one sandbox page: no same-origin, no inline script, n
   for (const d of ['default-src', 'frame-src', 'connect-src']) assert.deepEqual(csp[d], ["'none'"], d);
   const war = m.web_accessible_resources.filter((w) => w.resources.some((r) => r.startsWith('mods/')));
   assert.deepEqual(war, [{ resources: ['mods/host.html', 'mods/boot.js'], matches: ['https://*/*'], use_dynamic_url: true }]);
-  for (const f of ['mods/host.html', 'mods/host.js', 'mods/boot.js']) assert.ok(fs.existsSync(path.join(__dirname, '..', f)), f);
+  for (const f of ['mods/host.html', 'mods/host.js', 'mods/boot.js']) assert.ok(fs.existsSync(path.join(__dirname, '../../extension', f)), f);
 });
 
 test('every content script file exists', () => {
-  for (const f of m.content_scripts.flatMap((c) => c.js)) assert.ok(fs.existsSync(path.join(__dirname, '..', f)), f);
+  for (const f of m.content_scripts.flatMap((c) => c.js)) assert.ok(fs.existsSync(path.join(__dirname, '../../extension', f)), f);
 });

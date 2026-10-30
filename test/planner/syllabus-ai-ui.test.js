@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const settle = async (n = 12) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const ORIGIN = 'https://school.instructure.com';
@@ -67,7 +67,7 @@ const page = ({ ai, broker = () => {}, file = { name: 'syllabus.pdf' }, syllabus
     document: { body, activeElement: null, createElement: (t) => new El(t), getElementById: (id) => (id === 'course_syllabus' && syl) || null, querySelector: () => null },
     location: { origin: ORIGIN, pathname: '/courses/25/modules' },
     chrome,
-    GZ_I18N: require('../lib/i18n.js'),
+    GZ_I18N: require('../../extension/lib/i18n.js'),
     GZ_IMPORT: { read: async () => ({ text: TEXT, ocr: null }), note: () => '', doubt: () => false },
     GZ_CTX: {
       t: (k, v) => (v ? k.replace(/\{(\w+)\}/g, (_, n) => v[n]) : k), locale: () => 'en', settings: () => ({ enabled: true, enhance: { syllabus: true } }), on: () => true, canvasCourseId: () => '25',

@@ -3,19 +3,19 @@
 # extension" client, S3 §1) is tied to the Chrome Web Store item's ID, and Chrome gives an unpacked copy that ID only when
 # its manifest carries the store's public key ("key"). So: the store package (package.sh), unzipped into a folder, with
 # Google sync's build-time switch turned on (lib/gcal.js ON, with the manifest's oauth2 client and optional identity
-# permission back) and the key added, in that copy only. Never in manifest.json or the package (test/gcal.test.js checks).
+# permission back) and the key added, in that copy only. Never in manifest.json or the package (test/planner/gcal.test.js checks).
 #
-#   scripts/dev-gcal.sh <file holding the store's public key, one base64 line> [folder, default dist/glaze-dev-gcal]
+#   tools/dev/dev-gcal.sh <file holding the store's public key, one base64 line> [folder, default dist/glaze-dev-gcal]
 #
 # Then chrome://extensions → Developer mode → Load unpacked → that folder. Remove the store's Glaze from that Chrome
 # profile first: two copies can't share one ID.
 set -euo pipefail
-cd "$(dirname "$0")/.."
-key_file="${1:?usage: scripts/dev-gcal.sh <public-key file> [folder]}"
+cd "$(dirname "$0")/../.."
+key_file="${1:?usage: tools/dev/dev-gcal.sh <public-key file> [folder]}"
 out="${2:-dist/glaze-dev-gcal}"
 
-./package.sh >/dev/null
-version="$(node -p 'require("./manifest.json").version')"
+tools/build/package.sh >/dev/null
+version="$(node -p 'require("./extension/manifest.json").version')"
 rm -rf "$out"
 mkdir -p "$out"
 unzip -q "${DIST:-dist}/glaze-v$version.zip" -d "$out"
@@ -28,7 +28,7 @@ gcal = f'{out}/lib/gcal.js'
 src = open(gcal).read()
 assert '  const ON = false;\n' in src or '  const ON = true;\n' in src, 'lib/gcal.js: no ON switch'
 open(gcal, 'w').write(src.replace('  const ON = false;\n', '  const ON = true;\n', 1))
-repo = json.load(open('manifest.json'))
+repo = json.load(open('extension/manifest.json'))
 path = f'{out}/manifest.json'
 manifest = json.load(open(path))
 manifest['oauth2'] = repo['oauth2']

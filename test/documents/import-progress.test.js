@@ -2,7 +2,7 @@
 // importing card, the frame's status bar and Save to Documents show it.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const DK = require('../lib/doc-kinds.js');
+const DK = require('../../extension/lib/doc-kinds.js');
 
 const heard = (stages) => { const got = []; const report = DK.progress((p) => got.push(p), stages); return { got, report }; };
 
@@ -95,7 +95,7 @@ test('said: one status word a stage, the bytes while copying, none of them spoke
 });
 
 test('every word said is in every catalogue', () => {
-  const I = require('../lib/i18n.js');
+  const I = require('../../extension/lib/i18n.js');
   const words = ['Reading…', 'Preparing pages…', 'Preparing slides…', 'Preparing sheets…', 'Copying…', 'Copying… {done} / {total} MB', 'Saving…', 'Saving… {n}%', 'Retry', 'Remove'];
   for (const code of I.CODES) for (const w of words) assert.ok(typeof globalThis.GZ_LANGS[code][w] === 'string', `${code}: ${w}`);
   assert.equal(I.t('Copying… {done} / {total} MB', { done: 12.3, total: 49.5 }, 'de'), 'Wird kopiert… 12,3 / 49,5 MB');

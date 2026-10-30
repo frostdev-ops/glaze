@@ -1,5 +1,5 @@
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm');
-const P = require('../lib/pet.js'), T = require('../lib/todo.js'), { El } = require('./stand-in-dom.js');
+const P = require('../../extension/lib/pet.js'), T = require('../../extension/lib/todo.js'), { El } = require('../stand-in-dom.js');
 const settle = async () => { for (let i = 0; i < 12; i++) await new Promise(setImmediate); };
 const page = ({ delayed = false, record = { earned: { 'work:assignment:1': 20 } }, world = false } = {}) => {
   const doc = { activeElement: null }, storage = [], events = [], timers = new Map(), win = [], mounts = [], sizes = [], settings = { enabled: true, enhance: { pet: true } }; let next = 0, release;
@@ -9,7 +9,7 @@ const page = ({ delayed = false, record = { earned: { 'work:assignment:1': 20 } 
     addEventListener: (type, f) => events.push({ type, f }), removeEventListener: (type, f) => { const i = events.findIndex((x) => x.type === type && x.f === f); if (i >= 0) events.splice(i, 1); } });
   const profile = delayed ? new Promise((res) => { release = res; }) : Promise.resolve({ uid: '3', tz: 'UTC' });
   const c = { document: doc, console, URL, Date, Intl, Map, Set, Object, Number, Math, Array, String, Promise,
-    GZ_PET: P, GZ_PET_BRAIN: require('../lib/petbrain.js'), GZ_TODO: T, GZ_CTX: { site: 'canvas', t: (k, v) => k.replace(/\{(\w+)\}/g, (m, n) => v && n in v ? v[n] : m), settings: () => settings, need: async () => {} },
+    GZ_PET: P, GZ_PET_BRAIN: require('../../extension/lib/petbrain.js'), GZ_TODO: T, GZ_CTX: { site: 'canvas', t: (k, v) => k.replace(/\{(\w+)\}/g, (m, n) => v && n in v ? v[n] : m), settings: () => settings, need: async () => {} },
     addEventListener: (type, f, opts) => win.push({ type, f, opts }), removeEventListener: (type, f) => { const i = win.findIndex((x) => x.type === type && x.f === f); if (i >= 0) win.splice(i, 1); },
     ...(world && { GZ_WIDGETS_UI: { who: async () => ({ uid: '3', tz: 'UTC' }), register() {} }, GZ_PET_WORLD: { mount: (stage, o) => { mounts.push({ stage, o }); return { stop() {}, play() {} }; }, refresh() {}, stop() {} } }),
     ResizeObserver: class { constructor(f) { this.f = f; sizes.push(this); } observe(el) { this.el = el; } disconnect() { this.el = null; } },
@@ -17,7 +17,7 @@ const page = ({ delayed = false, record = { earned: { 'work:assignment:1': 20 } 
     chrome: { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://x/${p}`, sendMessage: (m, cb) => cb({ ok: true, data: P.view(record) }) },
       storage: { onChanged: { addListener: (f) => storage.push(f), removeListener: (f) => { const i = storage.indexOf(f); if (i >= 0) storage.splice(i, 1); } } } } };
   c.globalThis = c; vm.createContext(c);
-  const ui = vm.runInContext(fs.readFileSync(require.resolve('../features/pet.js'), 'utf8'), c);
+  const ui = vm.runInContext(fs.readFileSync(require.resolve('../../extension/features/pet.js'), 'utf8'), c);
   const body = make('div'); doc.body.append(body);
   c.window = c;
   return { ui, body, doc, storage, events, timers, win, mounts, settings, fire: (type, e = {}) => { for (const l of win.filter((x) => x.type === type)) { if (l.opts?.once) win.splice(win.indexOf(l), 1); l.f({ type, ...e }); } },
@@ -78,7 +78,7 @@ test('animated characters hide Classic outfits without changing the saved outfit
 });
 
 // WID-4: the habitat's record is rewritten by the pet's own decisions; a write must not rebuild controls the student is using.
-const B = require('../lib/petbrain.js');
+const B = require('../../extension/lib/petbrain.js');
 const learned = (n) => B.learn(B.clean(), 'walk', B.vector({}), 1 + n * 0);
 const level = { earned: Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`work:assignment:${i}`, 20])) };
 test('WID-4: a write that changes nothing shown keeps the same controls, open panel and focus', async () => {

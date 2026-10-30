@@ -2,15 +2,15 @@
 // picker and the effort a model takes, a feature's own model, Advanced's endpoint and tuning, AI off, and search; each
 // state shot in light and dark, each scheme in a browser of its own since Settings paints its Look when it loads. The providers' servers are stand-ins (no network; OpenRouter's list is its own, as kept in
 // test/fixtures), and the copy's manifest holds their hosts, which a headless browser couldn't grant.
-// NODE_PATH=<playwright> nice -n 10 node scripts/settings-ai-check.js [shots folder]
+// NODE_PATH=<playwright> nice -n 10 node checks/settings/settings-ai-check.js [shots folder]
 // AI_CASE selects one check, AI_SCHEME one scheme ('light' or 'dark'); EXT selects the checkout under test.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
-const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
-const env = require('./check-env.js');
-const lock = require('./check-env.js').lockPath();
+const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
+const env = require('../../tools/dev/check-env.js');
+const lock = require('../../tools/dev/check-env.js').lockPath();
 const shots = process.argv[2] ? path.resolve(process.argv[2]) : '';
-const routed = fs.readFileSync(path.join(root, 'test/fixtures/openrouter-models.json'), 'utf8');
+const routed = fs.readFileSync(path.join(__dirname, '../../test/fixtures/openrouter-models.json'), 'utf8');
 const KEY = 'sk-or-v1-0000synthetic0000000000000000000000000000000000000000000000';
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 // The stand-in servers: OpenRouter's key record and list, OpenAI's and Groq's ids, Anthropic refusing the key, Ollama's ids.
@@ -53,9 +53,9 @@ async function pass(scheme) {
   try {
     scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-settings-ai-check-'));
     const ext = env.staged(root, HOSTS, scratch);
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 3000 }, deviceScaleFactor: 2, reducedMotion: 'reduce', colorScheme: scheme,
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 3000 }, deviceScaleFactor: 2, reducedMotion: 'reduce', colorScheme: scheme,
       // Routing supplies every response; a missed route (including a worker's) cannot reach a real provider.
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking',
         '--proxy-server=http://127.0.0.1:0', '--proxy-bypass-list=<-loopback>', '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-quic'],

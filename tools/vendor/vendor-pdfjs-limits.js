@@ -2,7 +2,7 @@
 // Existing callers omit it. Every replacement must match the pinned build exactly, or the rebuild stops.
 const fs = require('node:fs');
 const path = require('node:path');
-const dir = process.argv[2] || path.join(__dirname, '../lib/pdfjs');
+const dir = process.argv[2] || path.join(__dirname, '../../extension/lib/pdfjs');
 const patchFile = (name, edits) => {
   const file = path.join(dir, name);
   let text = fs.readFileSync(file, 'utf8');

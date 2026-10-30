@@ -6,13 +6,13 @@
 //   - A plain glaze1 code clears them again; a built-in Look from the popup puts its own in their place.
 //   - Parts too big for a sync item live in local storage with a hash in sync, and the page reads them there.
 //   - A quiz page gets none.
-// EXT=/path/to/checkout NODE_PATH=/path/to/playwright/node_modules nice node scripts/lookparts-check.js
+// EXT=/path/to/checkout/extension NODE_PATH=/path/to/playwright/node_modules nice node checks/looks/lookparts-check.js
 // One browser at a time (wait while another agent's run is up); it deletes its own profile when it is done.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
-const ext = require('./check-env.js').staged(process.env.EXT || path.resolve(__dirname, '..'), ['https://school.example.test/*']);
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.resolve(__dirname, '../../extension'), ['https://school.example.test/*']);
 const G = require(path.join(ext, 'defaults.js')), S = require(path.join(ext, 'lib/share.js')), X = require(path.join(ext, 'lib/lookparts.js'));
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const LMS = 'https://school.example.test';
 const PAGE = `${LMS}/ultra/courses/_1_1/outline`, QUIZ = `${LMS}/ultra/courses/_1_1/assessment/_9_1`;
 const html = '<!doctype html><html><head><base href="https://school.example.test/ultra/"><title>Course</title></head><body><div id="site-wrap"><nav id="base_tools"><a href="/ultra/institution-page">Institution Page</a><a href="/ultra/course">Courses</a></nav><main id="app"><h1>A course</h1></main></div></body></html>';
@@ -26,7 +26,7 @@ const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() +
   const check = (name, pass, detail = '') => { results.push({ name, pass, detail }); console.log(`${pass ? 'ok  ' : 'FAIL'} ${name}${pass ? '' : ` ${detail}`}`); };
   let context;
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(scratch, { ...chromeLaunch, headless: true, viewport: { width: 1280, height: 850 }, locale: 'en-US',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-webgl', '--host-resolver-rules=MAP * ~NOTFOUND'] });
     await context.route('**/*', (route) => {
@@ -41,7 +41,7 @@ const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() +
     const seed = await context.newPage();
     await seed.goto(`chrome-extension://${id}/popup.html`);
     await sw.evaluate(() => queue);
-    await require('./check-env.js').ultraReady(seed);
+    await require('../../tools/dev/check-env.js').ultraReady(seed);
     await seed.close();
     const state = (url = PAGE) => sw.evaluate(async (u) => {
       const [tab] = await chrome.tabs.query({ url: u });

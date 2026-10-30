@@ -1,16 +1,16 @@
 // lib/harper/shared.js with the real Harper (lib/harper, the slim wasm), run here as the SharedWorker it is: two frames'
 // ports, the fixture texts' issues, each frame's words and ignores, the shared dictionary, a newer lint replacing a queued
 // one, frames served in turn, one Harper for both, and the worker closing when idle. In the browser:
-// scripts/writer-proof-check.js.
+// checks/writer/writer-proof-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const P = require('../lib/writer-proof.js');
+const P = require('../../extension/lib/writer-proof.js');
 
-const root = path.join(__dirname, '..');
-const fixtures = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/writer-proof-texts.json'), 'utf8')).texts;
+const root = path.join(__dirname, '../../extension');
+const fixtures = JSON.parse(fs.readFileSync(path.join(__dirname, '../fixtures/writer-proof-texts.json'), 'utf8')).texts;
 
 // The worker's world: a SharedWorkerGlobalScope's onconnect and close, and fetch reading the binary from disk.
 let closed = 0;

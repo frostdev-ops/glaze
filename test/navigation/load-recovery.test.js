@@ -5,7 +5,7 @@
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async (n = 10) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 class El {
   constructor(tag = 'div') { this.tagName = tag.toUpperCase(); this.attrs = new Map(); this.kids = []; this.dataset = {}; this.childNodes = []; this.children = []; this.nodeType = 1;

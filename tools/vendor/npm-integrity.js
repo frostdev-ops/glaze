@@ -1,5 +1,5 @@
 // Checks what `npm install --ignore-scripts` put in a node_modules against pinned integrity values, before any of it runs.
-//   node scripts/npm-integrity.js <node_modules/.package-lock.json> <pins file, or - for stdin> [required package name...]
+//   node tools/vendor/npm-integrity.js <node_modules/.package-lock.json> <pins file, or - for stdin> [required package name...]
 // A pin is one line, "name@version sha512-<base64>", as `npm view <name>@<version> dist.integrity` prints it. npm
 // checks each tarball against the integrity its registry metadata gives; this checks that metadata against ours. Every
 // installed package must be pinned (so a new dependency, or another version, fails), must have come from the npm registry,

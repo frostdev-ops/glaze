@@ -2,10 +2,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
-const P = require('../lib/page.js'), G = require('../lib/grades.js');
-const source = fs.readFileSync(require.resolve('../content-ultra.js'), 'utf8');
+const P = require('../../extension/lib/page.js'), G = require('../../extension/lib/grades.js');
+const source = fs.readFileSync(require.resolve('../../extension/content-ultra.js'), 'utf8');
 const settle = () => new Promise(setImmediate);
-const { El } = require('./stand-in-dom.js');
+const { El } = require('../stand-in-dom.js');
 const row = (columnId, patch = {}) => ({
   columnId, status: 'NEEDS_GRADING', lastAttemptId: `_8${columnId.slice(1)}`,
   column: { calculationType: 'NON_CALCULATED', dueDate: '2026-10-20T12:00:00Z', contentId: '_703_1' },

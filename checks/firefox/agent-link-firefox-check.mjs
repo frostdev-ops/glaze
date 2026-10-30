@@ -11,25 +11,25 @@
 // Isolation: the staged package's host name is io.frostdev.glaze_mcp_check_<pid> (patched once), the only file written
 // outside temp folders is that manifest in ~/Library/Application Support/Mozilla/NativeMessagingHosts (removed at the end,
 // with any folder the check made for it), and the helper and agents run with a temp HOME, so the run folder is the check's.
-// This file names connectNative only in comments: test/agent-link.test.js lets lib/agent-link.js alone call it, so the
+// This file names connectNative only in comments: test/agents/agent-link.test.js lets lib/agent-link.js alone call it, so the
 // link's own state is the evidence (restart when it is missing).
-//   FIREFOX=<Firefox.app> nice -n 10 lockf -k <heavy lock> node scripts/agent-link-firefox-check.mjs [<evidence folder>]
+//   FIREFOX=<Firefox.app> nice -n 10 lockf -k <heavy lock> node checks/firefox/agent-link-firefox-check.mjs [<evidence folder>]
 // The evidence folder gets results.json, check.log and firefox.log (the helper's stderr included).
 import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'; import net from 'node:net';
 import { spawn, execFileSync } from 'node:child_process'; import { createRequire } from 'node:module'; import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../extension');
 if (process.platform !== 'darwin') { console.error('agent-link-firefox-check runs on the Mac only'); process.exit(2); }
 const app = process.env.FIREFOX || '/Applications/Firefox.app';
 const bin = app.endsWith('.app') ? path.join(app, 'Contents/MacOS/firefox') : app;
-if (!fs.existsSync(bin)) { console.error('usage: FIREFOX=<Firefox.app> node scripts/agent-link-firefox-check.mjs [<evidence folder>]'); process.exit(2); }
+if (!fs.existsSync(bin)) { console.error('usage: FIREFOX=<Firefox.app> node checks/firefox/agent-link-firefox-check.mjs [<evidence folder>]'); process.exit(2); }
 const ID = 'glaze@frostdev.io', UUID = '2b7c4e1a-9d3f-4a6b-8c5e-0f1a2b3c4d5e', EXT = `moz-extension://${UUID}/`;
 const REAL = 'io.frostdev.glaze_mcp', NAME = `${REAL}_check_${process.pid}`;
 if (!/^io\.frostdev\.glaze_mcp_check_\d+$/.test(NAME)) throw new Error(`not a check host name: ${NAME}`);
 const HOSTS = path.join(os.homedir(), 'Library/Application Support/Mozilla/NativeMessagingHosts');
 const MANIFEST = path.join(HOSTS, `${NAME}.json`);
-const HELPER = path.join(root, 'mcp/bin/glaze-mcp.js');
+const HELPER = path.join(root, '../mcp/bin/glaze-mcp.js');
 const IDLE = 60e3, TIMEOUT = 3000;
 const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'glaze-agent-firefox-'));
 const OUT = path.resolve(process.argv[2] || `${tmp}-out`);
@@ -50,7 +50,7 @@ const stage = () => {
   running();
   const dist = fs.mkdtempSync(path.join(tmp, 'dist-'));
   const { ZIP, ZIPOPT, ...env } = process.env; // zip reads both as its own options
-  execFileSync('sh', ['scripts/package-firefox.sh', '--development'], { cwd: root, env: { ...env, DIST: dist }, stdio: 'pipe' });
+  execFileSync('sh', ['../tools/build/package-firefox.sh', '--development'], { cwd: root, env: { ...env, DIST: dist }, stdio: 'pipe' });
   const dir = path.join(tmp, 'glaze');
   fs.mkdirSync(dir);
   execFileSync('unzip', ['-q', path.join(dist, fs.readdirSync(dist).find((f) => f.endsWith('-firefox.zip'))), '-d', dir]);
@@ -267,7 +267,7 @@ const checkRun = async () => {
   R.firefox = execFileSync(bin, ['--version'], { encoding: 'utf8' }).trim();
   const pkg = stage();
   writeLauncher();
-  await require('./wait-for-browser.js')();
+  await require('../../tools/dev/wait-for-browser.js')();
   const b = await firefox();
   const dir = await b.inChrome(`Services.dirsvc.get('XREUserNativeManifests', Ci.nsIFile).path`);
   if (path.join(dir, 'NativeMessagingHosts') !== HOSTS) throw new Error(`Firefox reads host manifests from ${dir}/NativeMessagingHosts, not ${HOSTS}`);
@@ -305,7 +305,7 @@ const checkRun = async () => {
     page: { before: { ...page0, log: undefined }, after: { ...page1, log: undefined }, between: tally(between), restarts: restarts(between) },
     background: { api: bg0.api, page: bg0.page, same: bg1.same, native: { before: bg0.native, after: bg1.native }, runtime: bg0.runtime, link: bg0.link }, launches: started(),
     chrome: 'Chromium (spike Q2): after the grant the running worker still lacks the native connect call, so the link shows restart until the worker restarts' };
-  ok(after.state === 'connected' && after.host === require('../mcp/package.json').version && after.browser === 'firefox',
+  ok(after.state === 'connected' && after.host === require('../../mcp/package.json').version && after.browser === 'firefox',
     `after the grant the link connected, with the helper's hello (${after.state}, host ${after.host}, ${after.error || 'no error'})`);
   ok(!R.grant.states.includes('restart'), `never restart, as Chrome's running worker would be (${R.grant.states.join(' → ')})`);
   ok(page0.child !== null && page1.child === page0.child && R.grant.page.restarts.length === 0,

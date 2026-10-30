@@ -5,16 +5,16 @@
 // so the numbers are an upper bound for a machine with a GPU; the point is the ratios: motion off and a hidden tab must cost what a plain
 // background costs, and playing must be something a page can carry. Needs ffmpeg and img2webp for the realistic files; without them the
 // Lottie rows still run.
-//   nice -n 10 NODE_PATH=/path/to/node_modules node scripts/media-cost-check.js
+//   nice -n 10 NODE_PATH=/path/to/node_modules node checks/looks/media-cost-check.js
 // One headless browser at a time across agents: it waits while another runs. The profile and the files are temporary.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 const { execFileSync, spawnSync } = require('node:child_process');
 
 const origin = 'https://ultra.fixture.test';
-// A staged copy holding the fixture's host, as a student's grant for their school's Ultra would (scripts/check-env.js staged).
-const ext = require('./check-env.js').staged(path.join(__dirname, '..'), [`${origin}/*`]);
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+// A staged copy holding the fixture's host, as a student's grant for their school's Ultra would (tools/dev/check-env.js staged).
+const ext = require('../../tools/dev/check-env.js').staged(path.join(__dirname, '../../extension'), [`${origin}/*`]);
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const D = require(path.join(ext, 'defaults.js'));
 const P = require(path.join(ext, 'lib/lookparts.js'));
@@ -54,7 +54,7 @@ const lottie = (n) => ({ v: '5.7.0', fr: 30, ip: 0, op: 90, w: 1280, h: 720, nm:
   let context;
   try {
     const profile = path.join(scratch, 'profile');
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(profile, {
       ...chromeLaunch, headless: true, viewport: { width: 1280, height: 800 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'],
@@ -105,7 +105,7 @@ const lottie = (n) => ({ v: '5.7.0', fr: 30, ip: 0, op: 90, w: 1280, h: 720, nm:
       ['Lottie, 300 layers (the limit is 500), playing', { type: 'lottie', src: `${origin}/media/heavy.json`, fit: 'cover' }, 'subtle'], ['Lottie, 300 layers, motion off', { type: 'lottie', src: `${origin}/media/heavy.json` }, 'off']);
     // Keeping options.html open would animate its preview too and charge that work to the hidden LMS tab. Glaze's first screen,
     // which opens on install, goes too.
-    require('./check-env.js').noFirstRun(context);
+    require('../../tools/dev/check-env.js').noFirstRun(context);
     for (let i = 0; context.pages().some((p) => p.url().startsWith('chrome-extension:')) && i < 100; i++) await sleep(100);
     if (context.pages().some((p) => p.url().startsWith('chrome-extension:'))) throw new Error('an extension preview would contaminate the CPU sample');
     const WINDOW = 6000;

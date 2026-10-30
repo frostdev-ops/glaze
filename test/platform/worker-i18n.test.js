@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const worker = () => {
   const loaded = [], install = [];
   let lang = 'de-DE', fail = '';
@@ -13,7 +13,7 @@ const worker = () => {
     addEventListener: (name, f) => { if (name === 'install') install.push(f); },
     crypto: globalThis.crypto, atob, btoa, navigator: {},
     importScripts: (...files) => { for (const f of files) { loaded.push(f); if (f === fail) throw new Error('fixture import failure'); vm.runInContext(fs.readFileSync(path.join(root, 'lib', f), 'utf8'), context, { filename: f }); } },
-    chrome: { i18n: { getUILanguage: () => lang }, runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'), onMessage: none, onInstalled: none, onStartup: none, onConnect: none },
+    chrome: { i18n: { getUILanguage: () => lang }, runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: none, onInstalled: none, onStartup: none, onConnect: none },
       storage: { local: area, sync: area, onChanged: none } } });
   vm.runInContext(fs.readFileSync(path.join(root, 'lib/background.js'), 'utf8'), context);
   vm.runInContext('sessions()', context);

@@ -3,11 +3,11 @@
 // lib/modbroker.js gives a mod on that account's page, and no account ever sees another's.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const ST = require('../lib/mcp/tools-study.js');
-const B = require('../lib/modbroker.js');
-const AT = require('../lib/ai/tools.js');
-const S = require('../lib/ai/schema.js');
-const C = require('./helpers/mcp-caches.cjs');
+const ST = require('../../extension/lib/mcp/tools-study.js');
+const B = require('../../extension/lib/modbroker.js');
+const AT = require('../../extension/lib/ai/tools.js');
+const S = require('../../extension/lib/ai/schema.js');
+const C = require('../helpers/mcp-caches.cjs');
 
 const { CANVAS, ULTRA, NOW } = C;
 const A = `${CANVAS}/5`, BEE = `${CANVAS}/6`, UL = `${ULTRA}/${C.ULTRA_UID}`;

@@ -1,11 +1,11 @@
 // The mounted grid's saving and keyboard lifecycle, with real workbook/storage code and a small DOM.
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
-const { El } = require('./stand-in-dom.js');
-const M = require('../lib/sheet-model.js'), SD = require('../sheet-data.js'), PA = require('../lib/writer-papers.js');
-const CALC = require('../lib/sheet-calc.js'), NF = require('../lib/sheet-numfmt.js');
-require('../lib/sheet-fn-math.js');
-const source = fs.readFileSync(require.resolve('../sheet-grid.js'), 'utf8');
+const { El } = require('../stand-in-dom.js');
+const M = require('../../extension/lib/sheet-model.js'), SD = require('../../extension/sheet-data.js'), PA = require('../../extension/lib/writer-papers.js');
+const CALC = require('../../extension/lib/sheet-calc.js'), NF = require('../../extension/lib/sheet-numfmt.js');
+require('../../extension/lib/sheet-fn-math.js');
+const source = fs.readFileSync(require.resolve('../../extension/sheet-grid.js'), 'utf8');
 const KEY = 'doc:00000000-0000-4000-8000-000000000001';
 const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(setImmediate); };
 // A save in flight (a version packed through CompressionStream first) lands when it lands: wait for what it stores.
@@ -22,7 +22,7 @@ const frame = (options = {}) => {
     el.insertBefore = (child, at) => { if (at) at.before(child); else el.append(child); };
     el.setSelectionRange = (start, end) => { el.selectionStart = start; el.selectionEnd = end; };
     el.select = () => el.setSelectionRange(0, el.value.length);
-    el.matches = (selector) => require('./stand-in-dom.js').matches(el, selector);
+    el.matches = (selector) => require('../stand-in-dom.js').matches(el, selector);
     el.classList = { toggle() {} };
     el.scrollLeft = el.scrollTop = 0;
     el.box = { left: 0, top: 0, width: 640, height: 400 };
@@ -42,7 +42,7 @@ const frame = (options = {}) => {
   };
   doc.fire = fire;
   const ctx = vm.createContext({ ...(options.ctx || {}), console: { error() {} }, document: doc, Map, Set, Uint8Array, structuredClone, performance, Intl,
-    AbortController, innerWidth: 640, innerHeight: 900, GZ_SHEET_MODEL: M, GZ_SHEET_FORMULA: require('../lib/sheet-formula.js'),
+    AbortController, innerWidth: 640, innerHeight: 900, GZ_SHEET_MODEL: M, GZ_SHEET_FORMULA: require('../../extension/lib/sheet-formula.js'),
     GZ_SHEET_CALC: CALC, GZ_SHEET_NUMFMT: NF, GZ_SHEET_DATA: options.SD || SD,
     chrome: { storage: { local: store, onChanged: { addListener: (f) => changes.add(f), removeListener: (f) => changes.delete(f) } } },
     getComputedStyle: () => ({ fontSize: '13px', fontFamily: 'Arial' }),

@@ -3,7 +3,7 @@
 // pages state (rounding to 15 significant digits first, the minus sign at the front, one section for every sign).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const F = require('../lib/sheet-numfmt.js');
+const F = require('../../extension/lib/sheet-numfmt.js');
 
 const table = (rows) => { for (const [fmt, v, want, opts] of rows) assert.equal(F.format(v, fmt, opts), want, `${JSON.stringify(fmt)} ${v}`); };
 

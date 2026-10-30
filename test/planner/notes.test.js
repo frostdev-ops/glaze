@@ -2,9 +2,9 @@
 // as the worker applies them (two tabs, the trash, files), and the export zip's round trip.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const N = require('../lib/notes.js');
-const Z = require('../lib/zip.js');
-const D = require('../lib/doctext.js');
+const N = require('../../extension/lib/notes.js');
+const Z = require('../../extension/lib/zip.js');
+const D = require('../../extension/lib/doctext.js');
 
 const S = (html, opts) => N.sanitize(html, opts);
 const BASE = 'https://school.instructure.com/courses/7/pages/week-1';
@@ -820,7 +820,7 @@ test('folder times in a backup keep only numeric known fields, and a future one 
 });
 
 test('the backup worker retains field times and counts metadata imports across batches', async () => {
-  const S = require('../lib/sessions.js'), src = world(), dst = world(), t = src.now;
+  const S = require('../../extension/lib/sessions.js'), src = world(), dst = world(), t = src.now;
   let turns = 0;
   const worker = (w) => S.make({ local: w.local, sync: w.local, notes: w.idb, db: { all: async () => [] }, enqueue: async (f) => { turns++; return f(); } });
   const source = worker(src), target = worker(dst);

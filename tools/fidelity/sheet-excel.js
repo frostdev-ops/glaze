@@ -1,5 +1,5 @@
-// Microsoft Excel on this Mac through AppleScript, for the Sheets harness (scripts/sheet-excel-golden.js,
-// scripts/sheet-excel-fidelity.js), as scripts/writer-word-fidelity.js drives Word. Excel runs hidden and without alerts;
+// Microsoft Excel on this Mac through AppleScript, for the Sheets harness (tools/fidelity/sheet-excel-golden.js,
+// tools/fidelity/sheet-excel-fidelity.js), as tools/fidelity/writer-word-fidelity.js drives Word. Excel runs hidden and without alerts;
 // files go through a folder inside Excel's own container, which the sandboxed app reads and writes without asking; Excel
 // quits only if the script started it. Scripts are plain ASCII: other characters are spelled as (character id N).
 const { execFileSync } = require('node:child_process');

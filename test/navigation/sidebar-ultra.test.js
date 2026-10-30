@@ -10,10 +10,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../defaults.js');
-const W = require('../lib/widgets.js');
-const S = require('../lib/sidebar.js');
-const { page, record, natives, unmoved, settle, read, KEY, O, CARD } = require('./sidebar-ultra-page.js');
+const D = require('../../extension/defaults.js');
+const W = require('../../extension/lib/widgets.js');
+const S = require('../../extension/lib/sidebar.js');
+const { page, record, natives, unmoved, settle, read, KEY, O, CARD } = require('../sidebar-ultra-page.js');
 
 test('two sidebar toggles before a snapshot callback compute their states in update order', async () => {
   const p = page({ at: 'outline' });
@@ -757,8 +757,8 @@ test('Ultra page switches restore the legacy To Do hook when that page kind is d
 });
 
 test('Ultra off matches the frozen pre-sidebar Courses board DOM and html attributes', async () => {
-  const baseline = require('./fixtures/sidebar-legacy.json').ultra;
-  const snapshot = require('./sidebar-snapshot.js');
+  const baseline = require('../fixtures/sidebar-legacy.json').ultra;
+  const snapshot = require('../sidebar-snapshot.js');
   for (const kindOff of [false, true]) {
     const sw = { sidebar: false, widgets: false, notes: false, pet: false, todo: true };
     const p = page({ at: 'courses', widgets: true, todo: true, enhance: sw,

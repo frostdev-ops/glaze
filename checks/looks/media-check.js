@@ -6,7 +6,7 @@
 // what a person would see. Then the editor: the builder's controls write the part, a file is kept and listed and removed, and
 // the preview frame draws it and tells its parent. Then a mod's own background file (an animated WebP and a Lottie file in its
 // bundle, `mod:<id>/<path>` on the page), and a gallery Look's file fetched from the gallery's media address (routed here).
-//   nice -n 10 NODE_PATH=/path/to/node_modules node scripts/media-check.js [out-dir]
+//   nice -n 10 NODE_PATH=/path/to/node_modules node checks/looks/media-check.js [out-dir]
 // One headless browser at a time across agents: wait while another is running. Every profile is temporary, and no request
 // leaves the fixture (a host-resolver rule maps every name to nothing, and the page's own routes answer).
 const { chromium } = require('playwright');
@@ -14,16 +14,16 @@ const fs = require('node:fs'), path = require('node:path'), os = require('node:o
 const assert = require('node:assert/strict');
 
 const origin = 'https://ultra.fixture.test';
-// A staged copy holding the fixture's host, as a student's grant for their school's Ultra would (scripts/check-env.js staged).
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), [`${origin}/*`]);
+// A staged copy holding the fixture's host, as a student's grant for their school's Ultra would (tools/dev/check-env.js staged).
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), [`${origin}/*`]);
 const out = process.argv[2] && path.resolve(process.argv[2]);
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 // Another host, which the staged copy doesn't hold: a Look's address there is refused before any request.
 const ELSEWHERE = 'https://media.elsewhere.test';
 const D = require(path.join(ext, 'defaults.js'));
 const P = require(path.join(ext, 'lib/lookparts.js'));
-const fixtures = path.join(ext, 'test/fixtures/media');
+const fixtures = path.join(__dirname, '../../test/fixtures/media');
 const TYPES = { '.webm': 'video/webm', '.webp': 'image/webp', '.json': 'application/json', '.mp4': 'video/mp4' };
 const fixture = '<!doctype html><html lang="en"><head><base href="//ultra-cdn.invalid/ultra/uiv4001.0.0-rel/"><meta charset="utf-8"><title>Ultra fixture</title></head><body><div id="site-wrap"><nav id="base_tools"><a href="/ultra/institution-page"><span>Institution Page</span></a><a href="/ultra/course">Courses</a></nav><main id="main-content"><div id="main-content-inner"><h1>Stream</h1></div></main></div></body></html>';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -42,7 +42,7 @@ const near = (a, b, tol = 24) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
   const check = (name, ok, detail) => { results.push({ name, ok: !!ok, detail: ok ? undefined : detail }); };
   let context, failure;
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
       ...chromeLaunch, headless: true, viewport: { width: 1280, height: 800 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'],
@@ -89,7 +89,7 @@ const near = (a, b, tol = 24) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
     // The fixture's site approved (storage.local ultra) and its Ultra script registered before each page.
     const approve = async () => {
       await opts.evaluate((o) => chrome.storage.local.get('ultra').then((r) => (r.ultra || []).includes(o) || chrome.storage.local.set({ ultra: [...(r.ultra || []), o] })), origin);
-      await require('./check-env.js').ultraReady(opts);
+      await require('../../tools/dev/check-env.js').ultraReady(opts);
     };
     const open = async () => { await approve(); const page = await context.newPage(); page.on('pageerror', (e) => errors.push(e.message)); await page.goto(`${origin}/ultra/stream`); await page.waitForFunction(() => document.documentElement.hasAttribute('data-gz-font')); return page; };
     const shot = async (page, name) => { if (out) { fs.mkdirSync(out, { recursive: true }); await page.screenshot({ path: path.join(out, `${name}.png`) }); } };

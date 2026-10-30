@@ -1,5 +1,5 @@
 // Glaze Writer with a very large paper, in the real unpacked extension on the synthetic assignment attempt (as
-// scripts/writer-paper-check.js): 2,600 paragraphs of 20 runs, every other one bold (past compose's input limit; 371 MLA
+// checks/writer/writer-paper-check.js): 2,600 paragraphs of 20 runs, every other one bold (past compose's input limit; 371 MLA
 // pages), opened in the compact box and switched to Full writer. Checked: compose's projection of it stays fast; the first
 // pages are drawn within a second of the switch; a key typed every 200 ms while the pages are laid out lands (in the
 // document and drawn) within 300 ms of its press, or of the end of the switch's own task for a key pressed during it (the
@@ -13,16 +13,16 @@
 // Chromium's renderer accessibility is off (HUGE_AX=1 leaves it on): with an assistive or automation app running, as on
 // the owner's Mac, it follows each layout of a paper this size for about half a second and slows Playwright's own key
 // presses to one a second, too few to type through the layout; the runner has none. GETs only, synthetic.
-// NODE_PATH=<playwright> nice -n 10 node scripts/writer-huge-check.js [evidence directory]
+// NODE_PATH=<playwright> nice -n 10 node checks/writer/writer-huge-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
-const FX = require('../test/fixtures/writer-paper-fixtures.js');
+const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
+const FX = require('../../test/fixtures/writer-paper-fixtures.js');
 const site = 'https://bb.school.test';
 const QUILL = { url: 'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js', sha256: 'c675f57388d3598637c4e0f9fe154bd61dfb1c2086271f944a0bb2b9b059b074' };
-const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const ATTEMPT = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
 const out = process.argv[2] || path.join(os.tmpdir(), 'gz-huge-check');
 const PARAGRAPHS = 2600, FIRST_MS = 1000, KEY_MS = 300, KEY_EVERY = 200, PROJECT_MS = 1000;
@@ -101,7 +101,7 @@ const top = (profile, n = 25) => {
 
 (async () => {
   let context, held = false, tmp, ext;
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   try {
     for (let i = 0; ; i++) {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nwriter-huge-check\n`); break; }
@@ -111,9 +111,9 @@ const top = (profile, n = 25) => {
     fs.mkdirSync(out, { recursive: true });
     const quill = Buffer.from(await (await fetch(QUILL.url)).arrayBuffer());
     if (crypto.createHash('sha256').update(quill).digest('hex') !== QUILL.sha256) throw Error('Quill 1.3.7 hash mismatch');
-    ext = require('./check-env.js').staged(root, [`${site}/*`]);
-    await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', ...(process.env.HUGE_AX ? [] : ['--disable-renderer-accessibility'])] });
+    ext = require('../../tools/dev/check-env.js').staged(root, [`${site}/*`]);
+    await require('../../tools/dev/wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', ...(process.env.HUGE_AX ? [] : ['--disable-renderer-accessibility'])] });
     env.noFirstRun(context); context.setDefaultTimeout(15000);
     const grades = JSON.parse(fixture('ultra-writer-gradebook.json'));
     const members = JSON.parse(fixture('ultra-memberships.json'));

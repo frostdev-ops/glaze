@@ -10,16 +10,16 @@ const path = require('node:path');
 const { builtinModules } = require('node:module');
 const { spawnSync } = require('node:child_process');
 
-const PKG = path.join(__dirname, '..', 'mcp');
-const B = require('../mcp/lib/browsers.js');
-const IDS = require('../mcp/lib/ids.js');
-const L = require('../mcp/lib/launcher.js');
-const I = require('../mcp/lib/install.js');
-const D = require('../mcp/lib/doctor.js');
-const CLI = require('../mcp/bin/glaze-mcp.js');
-const { nodeAt } = require('./helpers/mcp-pipe.cjs');
-const { K, REG, runner } = require('./helpers/mcp-reg.cjs');
-const VERSION = require('../mcp/package.json').version;
+const PKG = path.join(__dirname, '../../mcp');
+const B = require('../../mcp/lib/browsers.js');
+const IDS = require('../../mcp/lib/ids.js');
+const L = require('../../mcp/lib/launcher.js');
+const I = require('../../mcp/lib/install.js');
+const D = require('../../mcp/lib/doctor.js');
+const CLI = require('../../mcp/bin/glaze-mcp.js');
+const { nodeAt } = require('../helpers/mcp-pipe.cjs');
+const { K, REG, runner } = require('../helpers/mcp-reg.cjs');
+const VERSION = require('../../mcp/package.json').version;
 const HOST = 'io.frostdev.glaze_mcp';
 const STORE = 'jmmaeoajomodnbnlmdikjooalmcilooh';
 const ORIGIN = `chrome-extension://${STORE}/`;
@@ -66,8 +66,8 @@ test('the package is glaze-mcp: one bin, Node 18 and later, MIT license included
   assert.deepEqual(pkg.engines, { node: '>=18' });
   assert.deepEqual(pkg.files, ['bin', 'lib', 'LICENSE']);
   assert.equal(pkg.license, 'MIT');
-  assert.match(fs.readFileSync(path.join(__dirname, '..', 'LICENSE'), 'utf8'), /^MIT License/);
-  assert.equal(fs.readFileSync(path.join(PKG, 'LICENSE'), 'utf8'), fs.readFileSync(path.join(__dirname, '..', 'LICENSE'), 'utf8'));
+  assert.match(fs.readFileSync(path.join(__dirname, '../../LICENSE'), 'utf8'), /^MIT License/);
+  assert.equal(fs.readFileSync(path.join(PKG, 'LICENSE'), 'utf8'), fs.readFileSync(path.join(__dirname, '../../LICENSE'), 'utf8'));
   assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
   for (const k of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies', 'bundleDependencies']) assert.equal(k in pkg, false, k);
   const bin = fs.readFileSync(path.join(PKG, 'bin', 'glaze-mcp.js'), 'utf8');
@@ -174,7 +174,7 @@ test('a browser counts as present when its data folder exists (a file there does
 test('ids: the store id, an unpacked folder\'s id as Chrome derives it, validation and the --extension-id/--dev flags', (t) => {
   assert.equal(IDS.STORE, STORE);
   assert.equal(IDS.FIREFOX, 'glaze@frostdev.io');
-  // scripts/blocklist-check.js's derivation, and a fixed vector of it.
+  // checks/mods/blocklist-check.js's derivation, and a fixed vector of it.
   const derive = (p) => [...crypto.createHash('sha256').update(p).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
   for (const p of ['/Users/s/Projects/glaze', '/home/s/glaze ext/é']) assert.equal(IDS.devId(p), derive(p));
   assert.equal(IDS.devId('/Users/s/Projects/glaze'), derive('/Users/s/Projects/glaze'));
@@ -1070,7 +1070,7 @@ test('the command: setup, doctor and uninstall through the same context, and the
 // Real files and symlink traversal, with stat identities injected so admin/root/foreign owners need no chown privileges.
 test('doctor accepts Homebrew admin and own-group folders and refuses unsafe owners, modes and symlink targets', { skip: posixOnly('POSIX owners, groups and symlinks') }, async (t) => {
   const vm = require('node:vm'), { createRequire } = require('node:module');
-  const doctorFile = require.resolve('../mcp/lib/doctor.js'), req = createRequire(doctorFile);
+  const doctorFile = require.resolve('../../mcp/lib/doctor.js'), req = createRequire(doctorFile);
   const cases = [
     ['Apple Silicon Homebrew', 'opt/homebrew', 'darwin', 501, 80, 0o775, true],
     ['Intel Homebrew', 'usr/local', 'darwin', 501, 80, 0o775, true],

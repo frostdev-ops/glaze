@@ -1,12 +1,12 @@
-// The browser gate's helpers: scripts/ci-chromium.js (the installed Chromium against ci/chromium.pins) and
-// scripts/ci-browser-checks.js (each check under a time limit that also stops what it started).
+// The browser gate's helpers: tools/dev/ci-chromium.js (the installed Chromium against .github/pins/chromium.pins) and
+// tools/dev/ci-browser-checks.js (each check under a time limit that also stops what it started).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const C = require('../scripts/ci-chromium.js');
-const { run } = require('../scripts/ci-browser-checks.js');
+const C = require('../../tools/dev/ci-chromium.js');
+const { run } = require('../../tools/dev/ci-browser-checks.js');
 const { spawn, spawnSync } = require('node:child_process');
 const { once } = require('node:events');
 
@@ -46,7 +46,7 @@ test('a pin must match the installed build, version, platform and hash', () => {
 });
 
 test('ci/chromium.pins pins the gate\'s Linux runner', () => {
-  const pins = C.parsePins(fs.readFileSync(path.join(__dirname, '../ci/chromium.pins'), 'utf8'));
+  const pins = C.parsePins(fs.readFileSync(path.join(__dirname, '../../.github/pins/chromium.pins'), 'utf8'));
   assert.ok([...pins.keys()].some((k) => k.endsWith(' linux-x64')));
   assert.equal(new Set([...pins.keys()].map((k) => k.split(' ')[0])).size, 1, 'one Chromium build, the pinned playwright-core\'s');
 });
@@ -105,18 +105,18 @@ const gate = (t, { corrupt = '', env = {} } = {}) => {
     'browsers/ffmpeg-1011/ffmpeg': 'ffmpeg', 'browsers/ffmpeg-1011/INSTALLATION_COMPLETE': '',
   });
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  fs.mkdirSync(path.join(dir, 'scripts'));
-  fs.mkdirSync(path.join(dir, 'ci'));
-  for (const name of ['ci-browser-checks.js', 'ci-chromium.js', 'check-env.js']) fs.copyFileSync(path.join(__dirname, '../scripts', name), path.join(dir, 'scripts', name));
+  fs.mkdirSync(path.join(dir, 'tools/dev'), { recursive: true });
+  fs.mkdirSync(path.join(dir, '.github/pins'), { recursive: true });
+  for (const name of ['ci-browser-checks.js', 'ci-chromium.js', 'check-env.js']) fs.copyFileSync(path.join(__dirname, '../../tools/dev', name), path.join(dir, 'tools/dev', name));
   for (const [name, rev, version] of [['chromium', '1243', '153.0.8010.12'], ['ffmpeg', '1011', '-']]) {
     const build = `${name}-${rev}`, hash = C.treeHash(path.join(dir, 'browsers', build));
-    fs.writeFileSync(path.join(dir, 'ci', `${name}.pins`), `${build} ${version} ${process.platform}-${process.arch} ${hash}\n`);
+    fs.writeFileSync(path.join(dir, '.github/pins', `${name}.pins`), `${build} ${version} ${process.platform}-${process.arch} ${hash}\n`);
     if (corrupt === name) fs.appendFileSync(path.join(dir, 'browsers', build, name === 'chromium' ? 'chrome' : name), '!');
   }
-  for (const { script } of require('../scripts/ci-browser-checks.js').CHECKS) fs.writeFileSync(path.join(dir, 'scripts', script), "console.log('CHECK STARTED');");
+  for (const { script } of require('../../tools/dev/ci-browser-checks.js').CHECKS) { fs.mkdirSync(path.dirname(path.join(dir, script)), { recursive: true }); fs.writeFileSync(path.join(dir, script), "console.log('CHECK STARTED');"); }
   const childEnv = { ...process.env, NODE_PATH: path.join(dir, 'node_modules'), PLAYWRIGHT_BROWSERS_PATH: path.join(dir, 'browsers'), GLAZE_LOCK: path.join(dir, 'shared.lock') };
   for (const key of ['CHROME', 'IA_CASE', 'EXT']) delete childEnv[key];
-  return { dir, args: [path.join(dir, 'scripts/ci-browser-checks.js'), path.join(dir, 'out')], env: { ...childEnv, ...env } };
+  return { dir, args: [path.join(dir, 'tools/dev/ci-browser-checks.js'), path.join(dir, 'out')], env: { ...childEnv, ...env } };
 };
 
 for (const corrupt of ['chromium', 'ffmpeg']) test(`the gate refuses a changed ${corrupt} before starting any check`, (t) => {
@@ -156,7 +156,7 @@ setInterval(() => {}, 1000);`);
 
 test('cancellation waits for detached children before releasing the shared lock', { skip: process.platform === 'win32' }, async (t) => {
   const f = gate(t), pidFile = path.join(f.dir, 'browser');
-  fs.writeFileSync(path.join(f.dir, 'scripts/settings-ia-check.js'), `const c = require('node:child_process').spawn(process.execPath, ['-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"], { detached: true, stdio: 'ignore' });
+  fs.writeFileSync(path.join(f.dir, 'checks/settings/settings-ia-check.js'), `const c = require('node:child_process').spawn(process.execPath, ['-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"], { detached: true, stdio: 'ignore' });
 setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(pidFile)}, String(c.pid)), 200); setInterval(() => {}, 1000);`);
   const child = spawn(process.execPath, f.args, { env: f.env, stdio: 'ignore' });
   let pid;
@@ -173,14 +173,14 @@ setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(pidFile)}, St
 });
 
 test('settings has room for the narrow route sweep while the gate leaves time for setup and artifacts', () => {
-  const { CHECKS, BUDGET } = require('../scripts/ci-browser-checks.js');
+  const { CHECKS, BUDGET } = require('../../tools/dev/ci-browser-checks.js');
   const settings = CHECKS.find((c) => c.name === 'settings');
   assert.ok(settings.limit > 4 * 60 * 1000 && settings.limit <= 6 * 60 * 1000, 'settings needs more than the old four-minute allowance');
   assert.ok(BUDGET >= settings.limit && BUDGET <= 11 * 60 * 1000, 'the runner must finish before the fifteen-minute job limit');
 });
 
 test('the browser gate includes a portable backup within its existing total budget', () => {
-  const { CHECKS, BUDGET } = require('../scripts/ci-browser-checks.js');
-  assert.ok(CHECKS.some((c) => c.script === 'backup-check.js'));
+  const { CHECKS, BUDGET } = require('../../tools/dev/ci-browser-checks.js');
+  assert.ok(CHECKS.some((c) => c.script === 'checks/settings/backup-check.js'));
   assert.equal(BUDGET, 11 * 60 * 1000);
 });

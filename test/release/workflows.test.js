@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const dir = path.join(__dirname, '../.github/workflows');
+const dir = path.join(__dirname, '../../.github/workflows');
 const files = fs.readdirSync(dir).filter((f) => /\.ya?ml$/.test(f));
 const read = (f) => fs.readFileSync(path.join(dir, f), 'utf8');
 
@@ -146,14 +146,14 @@ test('the gate installs the pinned Playwright, checks it and its Chromium, and o
   const [job] = browser(), runs = runsOf(job);
   const version = job.lines.join('\n').match(/^      PLAYWRIGHT:\s*(\d+\.\d+\.\d+)\s*$/m)?.[1];
   assert.ok(version, 'PLAYWRIGHT names an exact version');
-  const pins = require('../scripts/npm-integrity.js').parsePins(fs.readFileSync(path.join(__dirname, '../ci/playwright.pins'), 'utf8'));
+  const pins = require('../../tools/vendor/npm-integrity.js').parsePins(fs.readFileSync(path.join(__dirname, '../../.github/pins/playwright.pins'), 'utf8'));
   assert.ok(pins.has(`playwright@${version}`) && pins.has(`playwright-core@${version}`), 'ci/playwright.pins pins this version');
   const install = runs.match(/npm install[^\n]*/)?.[0] ?? '';
   for (const flag of ['--ignore-scripts', '--no-package-lock', '--registry https://registry.npmjs.org/', '"playwright@$PLAYWRIGHT"']) assert.ok(install.includes(flag), flag);
   assert.doesNotMatch(runs, /\bnpx\b|@latest/);
   const at = (s) => { const i = runs.indexOf(s); assert.ok(i >= 0, s); return i; };
-  const order = [at('npm install'), at('scripts/npm-integrity.js "$RUNNER_TEMP/playwright/node_modules/.package-lock.json" ci/playwright.pins playwright playwright-core'),
-    at('.bin/playwright" install --with-deps --no-shell chromium'), at('node scripts/ci-chromium.js'), at('node scripts/ci-browser-checks.js')];
+  const order = [at('npm install'), at('tools/vendor/npm-integrity.js "$RUNNER_TEMP/playwright/node_modules/.package-lock.json" .github/pins/playwright.pins playwright playwright-core'),
+    at('.bin/playwright" install --with-deps --no-shell chromium'), at('node tools/dev/ci-chromium.js'), at('node tools/dev/ci-browser-checks.js')];
   assert.deepEqual(order, [...order].sort((a, b) => a - b), 'install, verify, install Chromium, verify, run');
 });
 
@@ -168,10 +168,10 @@ test('the gate keeps its logs and screenshots when it fails', () => {
 });
 
 test('the gate runs only checks that need no school, local LMS or network', () => {
-  const { CHECKS } = require('../scripts/ci-browser-checks.js');
-  assert.deepEqual(CHECKS.map((c) => c.script), ['settings-ia-check.js', 'backup-check.js', 'popup-check.js', 'sites-check.js', 'pointer-check.js', 'register-update-check.js']);
+  const { CHECKS } = require('../../tools/dev/ci-browser-checks.js');
+  assert.deepEqual(CHECKS.map((c) => c.script), ['checks/settings/settings-ia-check.js', 'checks/settings/backup-check.js', 'checks/settings/popup-check.js', 'checks/settings/sites-check.js', 'checks/looks/pointer-check.js', 'checks/platform/register-update-check.js']);
   for (const { script } of CHECKS) {
-    const code = fs.readFileSync(path.join(__dirname, '../scripts', script), 'utf8');
+    const code = fs.readFileSync(path.join(__dirname, '../..', script), 'utf8');
     assert.doesNotMatch(code, /localhost:(8081|3000)|127\.0\.0\.1:(8081|3000)/, `${script} reaches a local LMS`);
     assert.match(code, /route\(/, `${script} answers or blocks the page's requests itself`);
   }

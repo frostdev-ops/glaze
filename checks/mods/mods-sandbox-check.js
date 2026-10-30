@@ -6,10 +6,10 @@ const https = require('node:https'), http = require('node:http'), dgram = requir
 const { execFileSync } = require('node:child_process');
 const { createHash, X509Certificate } = require('node:crypto');
 const assert = require('node:assert/strict');
-const env = require('./check-env.js');
+const env = require('../../tools/dev/check-env.js');
 const HOSTS = ['https://127.0.0.1/*', 'https://trusted.test/*', 'https://rebind.test/*'];
-const ext = env.staged(path.resolve(process.env.EXT || path.join(__dirname, '..')), HOSTS);
-const chrome = require('./check-env.js').chromePath() || chromium.executablePath();
+const ext = env.staged(path.resolve(process.env.EXT || path.join(__dirname, '../../extension')), HOSTS);
+const chrome = require('../../tools/dev/check-env.js').chromePath() || chromium.executablePath();
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 15000) => {
   const end = Date.now() + ms;
@@ -71,8 +71,8 @@ async function battery(secret, mode, sink, plain, stun) {
 }
 
 (async () => {
-  fs.mkdirSync(path.join(ext, '.sandbox-check'), { recursive: true });
-  const tmp = fs.mkdtempSync(path.join(ext, '.sandbox-check', 'run-'));
+  fs.mkdirSync(path.join(__dirname, '../../.sandbox-check'), { recursive: true });
+  const tmp = fs.mkdtempSync(path.join(__dirname, '../../.sandbox-check/run-'));
   let context, lms, sink, rebind, plain, udp, quic, controlQuic, deadline, interrupted = false, diagnostics = async () => ({});
   const interrupt = () => { interrupted = true; context?.close().catch(() => {}); };
   process.once('SIGINT', interrupt); process.once('SIGTERM', interrupt);
@@ -125,7 +125,7 @@ async function battery(secret, mode, sink, plain, stun) {
     fs.writeFileSync(path.join(tmp, 'network.sb'), '(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip "localhost:*"))');
     const quote = (v) => `'${v.replaceAll("'", "'\\''")}'`;
     fs.writeFileSync(wrapper, `#!/bin/sh\nexec /usr/bin/sandbox-exec -f ${quote(path.join(tmp, 'network.sb'))} ${quote(chrome)} "$@"\n`, { mode: 0o700 });
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(profile, { executablePath: wrapper, headless: true, viewport: { width: 1000, height: 700 }, args: [
       `--disable-extensions-except=${ext}`, `--load-extension=${ext}`, `--ignore-certificate-errors-spki-list=${spki}`, '--disable-background-networking', '--disable-component-update', '--no-proxy-server',
       `--host-resolver-rules=MAP *.leak.test 127.0.0.1, MAP trusted.test 127.0.0.1:${sinkPort}, MAP rebind.test 127.0.0.1:${rebindPort}, MAP * ~NOTFOUND, EXCLUDE 127.0.0.1`,

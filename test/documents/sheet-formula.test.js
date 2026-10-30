@@ -4,8 +4,8 @@
 // _xlfn. prefixes off and on.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const F = require('../lib/sheet-formula.js');
-const M = require('../lib/sheet-model.js');
+const F = require('../../extension/lib/sheet-formula.js');
+const M = require('../../extension/lib/sheet-model.js');
 
 // The AST as an S-expression, references resolved at (r, c) to A1 text.
 const ref = (n, r, c) => {

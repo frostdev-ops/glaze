@@ -1,4 +1,4 @@
-// scripts/store-api.mjs: request building, error handling, tokens and the submit/resume logic of the three stores.
+// tools/release/store-api.mjs: request building, error handling, tokens and the submit/resume logic of the three stores.
 // Every call goes to a stub that replaces fetch (and, for Chrome's token, a stub gcloud that is the only program on PATH),
 // so nothing here can reach a store.
 const test = require('node:test');
@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const load = () => import('../scripts/store-api.mjs');
+const load = () => import('../../tools/release/store-api.mjs');
 const scratch = () => fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-store-api-'));
 const reply = (body, status = 200) => new Response(typeof body === 'string' ? body : JSON.stringify(body), { status });
 
@@ -49,11 +49,11 @@ const withGcloud = async (fn, { token = 'cws-token', fail = false } = {}) => {
 };
 
 // The listings in the repository, for the manifest's version, are the text every store test sends.
-const repo = path.join(__dirname, '..');
+const repo = path.join(__dirname, '../..');
 let listings;
 test.before(async () => {
-  const { readListings } = await import('../scripts/store-listings.mjs');
-  listings = readListings((file) => fs.readFileSync(path.join(repo, file), 'utf8'), JSON.parse(fs.readFileSync(path.join(repo, 'manifest.json'), 'utf8')).version);
+  const { readListings } = await import('../../tools/release/store-listings.mjs');
+  listings = readListings((file) => fs.readFileSync(path.join(repo, file), 'utf8'), JSON.parse(fs.readFileSync(path.join(repo, 'extension/manifest.json'), 'utf8')).version);
   appleManifest.listings = listings;
 });
 const LANGS = ['en', 'de', 'es', 'fr', 'nl', 'pt-BR'];

@@ -1,25 +1,25 @@
 // Real unpacked extension and renderer on routed Ultra page fixtures; no account or external network.
-// NODE_PATH=<playwright> nice -n 15 node scripts/background-pages-check.js [evidence directory]
+// NODE_PATH=<playwright> nice -n 15 node checks/platform/background-pages-check.js [evidence directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto'), assert = require('node:assert/strict');
-// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
-const root = require('./check-env.js').staged(process.env.EXT || path.resolve(__dirname, '..'), ['https://bb.school.test/*']);
+// A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
+const root = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.resolve(__dirname, '../../extension'), ['https://bb.school.test/*']);
 const G = require(path.join(root, 'defaults.js'));
 const id = [...crypto.createHash('sha256').update(root).digest('hex').slice(0,32)].map(c=>String.fromCharCode(97+parseInt(c,16))).join('');
 const origin = 'https://bb.school.test', uid = '_42_1', out = process.argv[2];
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(),'glaze-background-pages-'));
-const fixture = fs.readFileSync(path.join(root,'test/fixtures/ultra-course.html'),'utf8').replace('</style>', `
+const fixture = fs.readFileSync(path.join(__dirname,'../../test/fixtures/ultra-course.html'),'utf8').replace('</style>', `
   .course-content-container > .panel-wrap { top:var(--gz-navbar-top,0px); left:var(--gz-navbar-left,0px); }
   </style>`);
-const lock = require('./check-env.js').lockPath();
+const lock = require('../../tools/dev/check-env.js').lockPath();
 let ctx, held=false; const results=[], errors=[];
 const until = async fn => { const end=Date.now()+15000; while(Date.now()<end) { const v=await fn(); if(v)return v; await new Promise(r=>setTimeout(r,100)); } throw Error('background did not settle'); };
 const check = (value,label) => { assert.ok(value,label); results.push(label); };
 (async()=>{
   try {
     fs.mkdirSync(lock); held=true; fs.writeFileSync(path.join(lock,'owner'),`${process.pid}\nbackground-pages-check\n`);
-    await require('./wait-for-browser.js')();
-    ctx=await chromium.launchPersistentContext(path.join(tmp,'profile'),{headless:true,...require('./check-env.js').chromeLaunch(),viewport:{width:1800,height:1000},reducedMotion:'reduce',args:[`--disable-extensions-except=${root}`,`--load-extension=${root}`,'--disable-background-networking','--host-resolver-rules=MAP * ~NOTFOUND']});
+    await require('../../tools/dev/wait-for-browser.js')();
+    ctx=await chromium.launchPersistentContext(path.join(tmp,'profile'),{headless:true,...require('../../tools/dev/check-env.js').chromeLaunch(),viewport:{width:1800,height:1000},reducedMotion:'reduce',args:[`--disable-extensions-except=${root}`,`--load-extension=${root}`,'--disable-background-networking','--host-resolver-rules=MAP * ~NOTFOUND']});
     await ctx.route('**/*',r=>{
       const u=new URL(r.request().url());
       if(u.protocol==='chrome-extension:')return r.continue();
@@ -35,7 +35,7 @@ const check = (value,label) => { assert.ok(value,label); results.push(label); };
       await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings);
       await chrome.storage.local.set({ultra:[origin],[`sidebar:ultra:${origin}/${uid}`]:{v:1,rev:1,mig:1,dock:[{id:'notes'}],dest:{notes:'dock'}},[`ctabs:${origin}:${uid}`]:{tabs:[101,102].map((n,i)=>({cid:`_${n}_1`,name:`Course ${n}`,path:`/ultra/courses/_${n}_1/outline`,top:0,at:i,pin:true}))}});
     },{settings,origin,uid});
-    await require('./check-env.js').ultraReady(opts);
+    await require('../../tools/dev/check-env.js').ultraReady(opts);
     const page=await ctx.newPage();page.on('pageerror',e=>errors.push(e.message));
     page.on('console',m=>{if(m.text().startsWith('[Glaze] Background'))console.error(m.text());});
     const paths=['institution-page','course','stream','calendar','grades','messages',...['outline','calendar','announcements','engagement','grades','messages','groups/enrollments','achievements','document/_8110_1?view=content&state=view','assessment/_8120_1/overview','assessment/_8121_1/overview','outline/edit/document/_9001_1','outline/assessment/_9002_1/overview','outline/discussion/_9003_1'].map(p=>`courses/_101_1/${p}`)];

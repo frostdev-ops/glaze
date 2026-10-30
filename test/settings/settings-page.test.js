@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 
 const worker = () => {
   const listeners = [];
@@ -12,7 +12,7 @@ const worker = () => {
   const ctx = vm.createContext({ URL, TextEncoder, TextDecoder, structuredClone, console, crypto, atob, btoa, setTimeout, clearTimeout, Date, navigator: {},
     GZ_SESSIONS: { make: () => ({ handle: async () => ({ ok: true }), connect: () => () => {}, stop() {}, changed() {} }) },
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
-    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: { addListener: (f) => listeners.push(f) }, onConnect: { addListener() {} }, onInstalled: { addListener() {} }, onStartup: { addListener() {} } },
       tabs: { onRemoved: { addListener() {} } }, storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
   vm.runInContext(read('lib/background.js'), ctx);
@@ -48,7 +48,7 @@ test('the page opens Settings with its ticket in a closed shadow root, and Setti
 });
 
 test("Settings over the page leaves only it and Glaze's bar in reach, and gives focus back to what opened it", async () => {
-  const { El } = require('./stand-in-dom.js');
+  const { El } = require('../stand-in-dom.js');
   const doc = { activeElement: null };
   const html = new El('html', doc), body = new El('body', doc);
   doc.root = html; html.append(body);
@@ -98,7 +98,7 @@ const tabHistory = (on) => {
 const tick = () => new Promise((r) => setTimeout(r, 5));
 
 test("Documents opens beside the bar as Settings does: a pass for each document over a channel the page can't hear, its documents in the tab's history, and Back, Forward, Close, Escape and Settings", async () => {
-  const { El } = require('./stand-in-dom.js');
+  const { El } = require('../stand-in-dom.js');
   const doc = { activeElement: null };
   const html = new El('html', doc), body = new El('body', doc);
   doc.root = html; html.append(body);
@@ -268,7 +268,7 @@ test("Documents opens beside the bar as Settings does: a pass for each document 
 });
 
 test("a pass the worker refuses opens nothing in the page, so the bar and Ctrl+K open Documents' own tab", async () => {
-  const { El } = require('./stand-in-dom.js');
+  const { El } = require('../stand-in-dom.js');
   const doc = { activeElement: null };
   const html = new El('html', doc), body = new El('body', doc);
   doc.root = html; html.append(body);
@@ -282,7 +282,7 @@ test("a pass the worker refuses opens nothing in the page, so the bar and Ctrl+K
 });
 
 test('Documents closes each retired private channel and ignores its late messages', async () => {
-  const { El } = require('./stand-in-dom.js');
+  const { El } = require('../stand-in-dom.js');
   const doc = { activeElement: null }, html = new El('html', doc), body = new El('body', doc);
   doc.root = html; html.append(body);
   Object.assign(doc, { documentElement: html, body, createElement: (tag) => new El(tag, doc), getElementById: () => null });
@@ -309,7 +309,7 @@ test('Documents closes each retired private channel and ignores its late message
 });
 
 test('the page host follows the measured phone bar and disconnects every layout observer on leave', async () => {
-  const { El } = require('./stand-in-dom.js');
+  const { El } = require('../stand-in-dom.js');
   const doc = { activeElement: null }, html = new El('html', doc), body = new El('body', doc);
   doc.root = html; html.append(body); html.setAttribute('data-gz-navbar', 'rail');
   const bar = new El('div', doc); bar.id = 'gz-navbar'; bar.attachShadow({ mode: 'open' }); body.append(bar);

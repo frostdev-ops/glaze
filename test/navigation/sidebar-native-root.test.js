@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { page, record, natives, unmoved } = require('./sidebar-ultra-page.js');
+const { page, record, natives, unmoved } = require('../sidebar-ultra-page.js');
 
 test('native discussion scrolling is observed only while that document owns the sidebar', async () => {
   const p = page({ at: 'discussion', stored: record() });

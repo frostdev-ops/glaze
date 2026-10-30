@@ -11,14 +11,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../lib/sheet-model.js');
-const C = require('../lib/sheet-calc.js');
-require('../lib/sheet-fn-math.js');
-require('../lib/sheet-fn-text.js');
-require('../lib/sheet-fn-info.js');
-require('../lib/sheet-fn-date.js');
-require('../lib/sheet-fn-lookup.js');
-require('../lib/sheet-fn-database.js');
+const M = require('../../extension/lib/sheet-model.js');
+const C = require('../../extension/lib/sheet-calc.js');
+require('../../extension/lib/sheet-fn-math.js');
+require('../../extension/lib/sheet-fn-text.js');
+require('../../extension/lib/sheet-fn-info.js');
+require('../../extension/lib/sheet-fn-date.js');
+require('../../extension/lib/sheet-fn-lookup.js');
+require('../../extension/lib/sheet-fn-database.js');
 
 // cells: typed input (a string, as a person types it), a number, a boolean, or { s } for text as it is.
 const book = (cells = {}, { sheets = ['Sheet1'] } = {}) => {
@@ -59,7 +59,7 @@ const NAMES = 'DSUM DCOUNT DCOUNTA DAVERAGE DGET DMAX DMIN DPRODUCT DSTDEV DSTDE
 test('the database functions are registered', () => {
   for (const name of NAMES) assert.ok(C.fn(name), name);
   for (const name of NAMES) assert.equal(C.fn(name).min, 3, `${name} takes three arguments`);
-  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '..', 'lib', 'sheet-fn-database.js'), 'utf8')), 'no timers');
+  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-fn-database.js'), 'utf8')), 'no timers');
 });
 
 // The pages' orchard: criteria A1:F3 over the table, its labels in row `top`.

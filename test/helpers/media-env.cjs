@@ -1,13 +1,13 @@
 // lib/scene-media.js without a browser: the module itself, run as a script in a VM with stand-ins for the page's elements, its
 // storage and the worker. Its export is made a plain const and its one dynamic import (Lottie's player) is the stand-in
-// `lottie`. Used by test/scene-media.test.js. Nothing in the VM moves on its own: the test fires the events (loadeddata,
+// `lottie`. Used by test/looks/scene-media.test.js. Nothing in the VM moves on its own: the test fires the events (loadeddata,
 // visibilitychange, resize) and runs the timers it asks for.
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
 
-const source = fs.readFileSync(path.join(__dirname, '../../lib/scene-media.js'), 'utf8')
+const source = fs.readFileSync(path.join(__dirname, '../../extension/lib/scene-media.js'), 'utf8')
   .replace(/^export const /gm, 'const ')
   .replace(/import\(chrome\.runtime\.getURL\((['`])lib\/lottie\/lottie_light_canvas\.js/, "importLottie(chrome.runtime.getURL($1lib/lottie/lottie_light_canvas.js");
 if (!source.includes('importLottie(')) throw new Error('scene-media.js no longer imports Lottie the way this stand-in expects');

@@ -8,14 +8,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../lib/sheet-model.js');
-const C = require('../lib/sheet-calc.js');
-require('../lib/sheet-fn-math.js');
-require('../lib/sheet-fn-logical.js');
-require('../lib/sheet-fn-info.js');
-require('../lib/sheet-fn-lookup.js');
-require('../lib/sheet-fn-stats.js');
-require('../lib/sheet-fn-stats2.js');
+const M = require('../../extension/lib/sheet-model.js');
+const C = require('../../extension/lib/sheet-calc.js');
+require('../../extension/lib/sheet-fn-math.js');
+require('../../extension/lib/sheet-fn-logical.js');
+require('../../extension/lib/sheet-fn-info.js');
+require('../../extension/lib/sheet-fn-lookup.js');
+require('../../extension/lib/sheet-fn-stats.js');
+require('../../extension/lib/sheet-fn-stats2.js');
 
 const book = (cells = {}) => {
   const wb = M.workbook();
@@ -75,7 +75,7 @@ test('the functions are registered, legacy names share their new functions, and 
     BINOMDIST: 'BINOM.DIST', LOGINV: 'LOGNORM.INV', CHIDIST: 'CHISQ.DIST.RT', CHIINV: 'CHISQ.INV.RT', FDIST: 'F.DIST.RT', FINV: 'F.INV.RT',
     TINV: 'T.INV.2T', BETAINV: 'BETA.INV', ZTEST: 'Z.TEST', TTEST: 'T.TEST', 'CONFIDENCE': 'CONFIDENCE.NORM', NEGBINOMDIST: null, HYPGEOMDIST: null };
   for (const [old, name] of Object.entries(legacy)) if (name) assert.equal(C.fn(old).fn, C.fn(name).fn, old);
-  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '..', 'lib', 'sheet-fn-stats2.js'), 'utf8')));
+  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-fn-stats2.js'), 'utf8')));
 });
 
 test('KURT, SKEW, SKEW.P: Microsoft\'s examples and the fewest points each takes', () => {
@@ -280,7 +280,7 @@ test('incomplete distributions converge before returning and preserve small tail
   const e = book();
   close(e, [['GAMMA.DIST(1E10,1E10,1,TRUE)', 0.5000013298076014], ['CHISQ.DIST(1E10,1E10,TRUE)', 0.5000018806319452],
     ['POISSON.DIST(10000000000,10000000000,TRUE)', 0.5000026596152026], ['BETA.DIST(0.5,1E10,1E10,TRUE)', 0.5]]);
-  const S = require('../lib/sheet-fn-stats2.js');
+  const S = require('../../extension/lib/sheet-fn-stats2.js');
   for (const [a, x, q] of [[1e-10, 1, 2.1938393441796778e-11], [1e-8, 0.5, 5.597735977099587e-9]]) {
     const got = S.incgamma(a, x)[1];
     assert.ok(Math.abs(got - q) <= Math.abs(q) * 1e-12, `${a}, ${x}: Q=${got}; 60-digit reference ${q}`);
@@ -319,7 +319,7 @@ test('discrete distributions reject negative counts before truncation', () => {
 });
 
 test('incomplete beta preserves the small tail with a tiny shape', () => {
-  const S = require('../lib/sheet-fn-stats2.js');
+  const S = require('../../extension/lib/sheet-fn-stats2.js');
   // mpmath at 60 digits, using the exact doubles supplied below.
   for (const [a, b, x, index, want] of [[1e-10, 0.1, 0.1, 1, 1.20545519894815e-9], [1e-10, 1000, 0.0001, 1, 1.8233312140731544e-10],
     [100, 1e-10, 0.999, 0, 1.827003617274029e-10], [0.001, 3, 0.1, 1, 0.0009975335256324026]]) {
@@ -333,6 +333,6 @@ test('discrete count functions terminate beyond integer precision', () => {
   const source = `const C = require('./lib/sheet-calc.js'); require('./lib/sheet-fn-stats2.js');
     const cases = [['BINOM.INV',[1e100,0.5,0.5]], ['BINOM.DIST.RANGE',[1e100,0.5,5e99]], ['HYPGEOM.DIST',[2.5e99,5e99,5e99,1e100,true]]];
     console.log(JSON.stringify(cases.map(([name,args]) => { try { return C.fn(name).fn(args, {}); } catch (e) { return e.code; } })));`;
-  const got = execFileSync(process.execPath, [...process.execArgv, '-e', source], { cwd: path.join(__dirname, '..'), encoding: 'utf8', timeout: 3000 });
+  const got = execFileSync(process.execPath, [...process.execArgv, '-e', source], { cwd: path.join(__dirname, '../../extension'), encoding: 'utf8', timeout: 3000 });
   assert.deepEqual(JSON.parse(got), ['#NUM!', '#NUM!', '#NUM!']);
 });

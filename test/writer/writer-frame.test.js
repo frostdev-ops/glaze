@@ -1,16 +1,16 @@
 // Glaze Writer's frame protocol: the worker's one-use pass and the page-world helper it puts in (lib/background.js
 // 'glaze:writer'), lib/writer-main.js's events, and writer.js's side of the channel, with a stand-in editor. What the frame
-// does in a browser, against the real Quill, is scripts/writer-check.js.
+// does in a browser, against the real Quill, is checks/writer/writer-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const worker = require('./helpers/worker-env.cjs');
-const { El } = require('./stand-in-dom.js');
-const { parse } = require('./fixture-dom.js');
+const worker = require('../helpers/worker-env.cjs');
+const { El } = require('../stand-in-dom.js');
+const { parse } = require('../fixture-dom.js');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 
 // ---- the worker -----------------------------------------------------------------------------------------------------
@@ -69,7 +69,7 @@ test('both frames load on demand: lib/writer-ultra.js and features/writer.js are
   const list = JSON.parse(read('lib/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"'));
   assert.ok(list.includes('lib/writer-ultra.js') && list.includes('features/writer.js'));
   assert.ok(!list.includes('lib/writer-main.js'), 'the page-world helper goes in only with a pass');
-  const m = require('../manifest.json');
+  const m = require('../../extension/manifest.json');
   assert.ok(m.web_accessible_resources.some((w) => w.resources.includes('writer.html') && !w.use_dynamic_url));
   assert.ok(!m.content_scripts.some((c) => c.world === 'MAIN'), 'no manifest MAIN-world entry (Safari 18 only)');
 });
@@ -124,7 +124,7 @@ test('page world: ops outside what compose writes are refused before Quill sees 
 });
 
 test('page world: telephone links accepted by compose sync to native Quill', () => {
-  const S = require('../lib/writer-schema.js');
+  const S = require('../../extension/lib/writer-schema.js');
   const p = pageWorld(); p.run();
   const doc = S.parse(S.compose, '<p>Call <a href="tel:+15551234567">the office</a>.</p>');
   const delta = S.delta(doc);

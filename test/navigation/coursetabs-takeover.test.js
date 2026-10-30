@@ -3,7 +3,7 @@
 // page: the fresh copy takes the page over, as after a reload, and the old one lets go.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { page, glaze, settle, origin, L } = require('./helpers/coursetabs-page.cjs');
+const { page, glaze, settle, origin, L } = require('../helpers/coursetabs-page.cjs');
 
 const course = '_53708_1';
 const frames = (p) => p.doc.querySelectorAll('iframe').filter((e) => e.name === `gz-ctab:${course}`);

@@ -1,10 +1,10 @@
 // Glaze's first screen (features/welcome.js): what a student types becomes the one site Glaze asks for.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const W = require('../features/welcome.js');
+const W = require('../../extension/features/welcome.js');
 
 test('the button says what it will do', () => {
-  const s = require('../lib/site.js').address('bb.school.edu');
+  const s = require('../../extension/lib/site.js').address('bb.school.edu');
   assert.equal(W.act(null, false), 'none');
   assert.equal(W.act(null, true), 'none');
   assert.equal(W.act(s, false), 'allow');
@@ -13,7 +13,7 @@ test('the button says what it will do', () => {
 
 test('the page wears the Frostdev Look from its definition, and asks only from a click', () => {
   const fs = require('node:fs'), path = require('node:path');
-  const js = fs.readFileSync(path.join(__dirname, '../features/welcome.js'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../../extension/features/welcome.js'), 'utf8');
   assert.match(js, /GZ_LOOKS\.find\(\(l\) => l\.name === 'Frostdev'\)/);
   assert.match(js, /GZ_LOOK_PARTS\(\{ name: 'Frostdev' \}\)/);
   // Every request sits in a click or submit handler, before any await: All sites here, a school through lib/site.js allow
@@ -65,7 +65,7 @@ const screen = ({ granted = true, found = { kind: 'ultra', url: 'https://bb.scho
       },
     },
   });
-  const read = (f) => require('node:fs').readFileSync(require('node:path').join(__dirname, '..', f), 'utf8');
+  const read = (f) => require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension', f), 'utf8');
   // As welcome.html loads it, with the school's answers the test's.
   vm.runInContext(read('lib/site.js'), context);
   Object.assign(context.GZ_SITE, { probe: async () => found, nearby: async () => [] });

@@ -1,13 +1,13 @@
 // Glaze's widgets in its own navigation: which ones show (lib/navbar.js) and the widgets themselves
-// (features/navbar-widgets.js); the bar's placing them is checked in a browser by scripts/navbar-check.js.
+// (features/navbar-widgets.js); the bar's placing them is checked in a browser by checks/navigation/navbar-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const M = require('../lib/navbar.js');
-const { El } = require('./stand-in-dom.js');
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const M = require('../../extension/lib/navbar.js');
+const { El } = require('../stand-in-dom.js');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const plain = (v) => JSON.parse(JSON.stringify(v));
 
 test("the student's widgets are cleaned like the rest of navbarItems, and left out until they choose", () => {
@@ -169,7 +169,7 @@ test('widget settings show and preserve the worn Look before the first personal 
   for (const id of ['nbar-items', 'nbar-glaze', 'nbar-widgets', 'nbar-links', 'nbar-status', 'nbar-link-form', 'nbar-reset']) elements[id] = Object.assign(new El('div', doc), { id });
   doc.querySelector = (s) => elements[s.slice(1)]; doc.createElement = (s) => new El(s, doc); doc.createElementNS = (_, s) => new El(s, doc);
   let written;
-  const ctx = vm.createContext({ document: doc, TextEncoder, URL, GZ_NAVBAR: M, GZ_NAV_ITEMS: require('../lib/nav-items.js'),
+  const ctx = vm.createContext({ document: doc, TextEncoder, URL, GZ_NAVBAR: M, GZ_NAV_ITEMS: require('../../extension/lib/nav-items.js'),
     chrome: { storage: { sync: { get: async () => ({ navItems: { widgets: [{ id: 'timer', on: true }] } }), set: async (v) => { written = v; } }, onChanged: { addListener() {} } } } });
   vm.runInContext(read('lib/editor-navbar.js'), ctx);
   ctx.GZ_NAVBAREDIT.mount({ t: (s) => s, settings: () => ({ enhance: {}, parts: { x: { nav: { groups: [{ items: ['w:clock', 'w:next'] }] } } } }) });
@@ -183,7 +183,7 @@ test('widget settings show and preserve the worn Look before the first personal 
 
 
 test('timer advance uses the shared model and emits done once for an observed deadline', async () => {
-  const W = require('../lib/widgets.js');
+  const W = require('../../extension/lib/widgets.js');
   let now = Date.now();
   const local = { widgetTimer: { phase: 'work', end: now + 1000, left: 0 } };
   const { w, sent, moments } = harness({ timer: W, local, now: () => now, send: (_, cb) => cb({ ok: true, timer: W.advance(local.widgetTimer, now, { work: 25, rest: 5 }), advanced: local.widgetTimer.end }) });
@@ -196,7 +196,7 @@ test('timer advance uses the shared model and emits done once for an observed de
 });
 
 test('the nav timer waits for the shared deadline claim before announcing completion', async () => {
-  const W = require('../lib/widgets.js'); let now = Date.now(), reply;
+  const W = require('../../extension/lib/widgets.js'); let now = Date.now(), reply;
   const local = { widgetTimer: { phase: 'work', end: now + 1000, left: 0 } };
   const { w, moments } = harness({ timer: W, local, now: () => now, send: (_, cb) => { reply = cb; } });
   w.set(['timer']); await settle(); now += 1005; w.draw();
@@ -206,7 +206,7 @@ test('the nav timer waits for the shared deadline claim before announcing comple
 });
 
 test('preview timer actions stay local and next due never requests site data', async () => {
-  const { w, sent, X } = harness({ preview: true, timer: require('../lib/widgets.js'), dueWeek: () => { throw Error('preview must not fetch'); } });
+  const { w, sent, X } = harness({ preview: true, timer: require('../../extension/lib/widgets.js'), dueWeek: () => { throw Error('preview must not fetch'); } });
   let requested = 0; X.dueWeek = () => { requested++; return Promise.resolve([]); };
   w.set(['timer', 'next']); await settle();
   w.nodes.get('timer').go.dispatchEvent({ type: 'click' }); await settle();
@@ -285,7 +285,7 @@ test('the phone sheet wraps Tab past an anchor without a destination', () => {
 
 test('a timer options read cannot overwrite a setting changed while it loads', async () => {
   let reply;
-  const { w, ctx, changes } = harness({ timer: require('../lib/widgets.js') });
+  const { w, ctx, changes } = harness({ timer: require('../../extension/lib/widgets.js') });
   ctx.chrome.storage.sync.get = (_, cb) => { reply = cb; };
   const node = w.set(['timer']).get('timer'); await settle();
   changes[0]({ widgets: { newValue: { work: 60 } } }, 'sync');

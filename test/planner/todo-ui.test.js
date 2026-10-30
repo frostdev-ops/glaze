@@ -6,10 +6,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../defaults.js');
-const T = require('../lib/todo.js');
+const D = require('../../extension/defaults.js');
+const T = require('../../extension/lib/todo.js');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const settle = () => new Promise(setImmediate);
 const O = D.GZ_SANITIZE({}).todo;
@@ -367,7 +367,7 @@ test('a task past the limit is not shown as added: the list says it was not save
 });
 
 test("the worker takes To Do writes from a Canvas page for its own site's accounts, and backups from the editor only, one at a time", async () => {
-  const m = require('../manifest.json');
+  const m = require('../../extension/manifest.json');
   const store = { sync: { version: 2 }, local: { [KEY(3)]: { tasks: [{ id: 'old', title: 'Before' }], items: {} } } };
   const later = (fn) => new Promise((res) => setTimeout(() => res(fn())));
   // Settings with colors 'refuse' don't take, after a pause long enough for a later import to overtake them.

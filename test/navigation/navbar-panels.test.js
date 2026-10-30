@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const { El } = require('./stand-in-dom.js');
+const { El } = require('../stand-in-dom.js');
 
 // Exercise the renderer's real asynchronous panel lifecycle with a deferred site response.
 const panelHarness = () => {
@@ -19,7 +19,7 @@ const panelHarness = () => {
     byId: () => ({ label: 'Messages' }), make, put: (e, ...kids) => { e.append(...kids); return e; }, part: (e) => e, icon: () => new El('svg', doc), t: (s) => s, emit() {},
     menuTo() {}, sheetTo() {}, placePanel() {}, getComputedStyle: () => ({ visibility: 'visible' }), URL, location: { href: 'https://school.test/', origin: 'https://school.test', protocol: 'https:', host: 'school.test' }, isPreview: false,
     M: { PICKS: ['bell'] }, site: { panel: () => new Promise((r) => { resolve = r; }) } });
-  const src = fs.readFileSync(require.resolve('../features/navbar.js'), 'utf8');
+  const src = fs.readFileSync(require.resolve('../../extension/features/navbar.js'), 'utf8');
   vm.runInContext(src.slice(src.indexOf('  const safeHref ='), src.indexOf('  // The open course')) + src.slice(src.indexOf('  const panelAnchor ='), src.indexOf('  const placePanel =')) + src.slice(src.indexOf('  const panelRow ='), src.indexOf('  // ---- acting')) + '\nglobalThis.open = panelTo; globalThis.left = leftPanel;', context);
   return { doc, box, from, open: context.open, left: context.left, resolve: (v) => resolve(v) };
 };
@@ -77,7 +77,7 @@ test('panel response labels and descriptions remain literal text', async () => {
 });
 
 test('turning the bar off restores tabindex added by Skip to content', () => {
-  const src = fs.readFileSync(require.resolve('../features/navbar.js'), 'utf8');
+  const src = fs.readFileSync(require.resolve('../../extension/features/navbar.js'), 'utf8');
   for (const tabindex of [null, '2']) {
     const doc = { activeElement: null }, main = new El('main', doc), skip = new El('a', doc), html = new El('html', doc);
     if (tabindex !== null) main.setAttribute('tabindex', tabindex);
@@ -96,8 +96,8 @@ test('turning the bar off restores tabindex added by Skip to content', () => {
   }
 });
 
-const M = require('../lib/navbar.js');
-const source = fs.readFileSync(require.resolve('../features/navbar.js'), 'utf8');
+const M = require('../../extension/lib/navbar.js');
+const source = fs.readFileSync(require.resolve('../../extension/features/navbar.js'), 'utf8');
 const between = (start, end) => source.slice(source.indexOf(start), source.indexOf(end));
 const location = { href: 'https://school.test/courses/12', origin: 'https://school.test' };
 const urls = () => between(source.includes('  const safeHref =') ? '  const safeHref =' : '  const sameSite =', '  // The open course');
@@ -132,7 +132,7 @@ test('panel and course links navigate when the course-tab controller declines th
 });
 
 test('inactive course tabs explicitly decline navigation', () => {
-  const src = fs.readFileSync(require.resolve('../features/coursetabs.js'), 'utf8');
+  const src = fs.readFileSync(require.resolve('../../extension/features/coursetabs.js'), 'utf8');
   const open = vm.runInNewContext('({' + src.slice(src.lastIndexOf('    open: (href, options) => {'), src.indexOf('\n  };', src.lastIndexOf('    open: (href, options) => {'))) + '\n}).open;', { PAGE: 'page', requestAnimationFrame() {}, nudge() {}, keepPage() {}, spare: new Map(), next: new Map(), popping: false,
     URL, location, on: false, framed: false,
   });
@@ -159,7 +159,7 @@ test('a delayed panel response preserves focus after the user tabs into page con
 });
 
 test('a settled Canvas frame refreshes the shared course menu after navigation', () => {
-  const src = fs.readFileSync(require.resolve('../features/coursetabs.js'), 'utf8');
+  const src = fs.readFileSync(require.resolve('../../extension/features/coursetabs.js'), 'utf8');
   let now = 0, next, synced = 0;
   const doc = { body: {}, location: { origin: location.origin, pathname: '/courses/12/modules' }, querySelector: () => ({ childElementCount: 1 }), documentElement: { matches: () => false }, addEventListener() {}, removeEventListener() {} };
   const f = { el: { contentDocument: doc, style: {} } };

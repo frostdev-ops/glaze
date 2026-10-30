@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const fs = require('node:fs');
-const source = fs.readFileSync(require.resolve('../writer-ai.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../extension/writer-ai.js'), 'utf8');
 const flush = async () => { for (let i = 0; i < 8; i++) await new Promise(setImmediate); };
 const until = async (f, ms = 2000) => { const t = Date.now(); while (!f() && Date.now() - t < ms) await new Promise((r) => setTimeout(r, 5)); return f(); };
 const plain = (v) => JSON.parse(JSON.stringify(v));
@@ -26,11 +26,11 @@ function frame({ answer = () => ({ allowed: true, ready: true }), settings: star
   const doc = { content: { size: 10 }, textBetween: () => 'draft words' };
   const interaction = { dispatch: 0, focus: 0 };
   const ed = { view: { state: { doc }, dispatch() { interaction.dispatch++; }, focus() { interaction.focus++; } } };
-  const sandbox = { GZ_AI_FAILURE: require('../lib/ai/failure.js'), navigator: { platform: 'MacIntel' }, document: { hidden, createElement: () => new Element(), body: new Element(), addEventListener(type, f) { hooks[`document:${type}`] = f; } },
+  const sandbox = { GZ_AI_FAILURE: require('../../extension/lib/ai/failure.js'), navigator: { platform: 'MacIntel' }, document: { hidden, createElement: () => new Element(), body: new Element(), addEventListener(type, f) { hooks[`document:${type}`] = f; } },
     addEventListener(type, f) { hooks[`window:${type}`] = f; }, requestAnimationFrame: (f) => f(), setTimeout: (f, ms, ...a) => setTimeout(f, ms / pace, ...a).unref(), clearTimeout, setInterval, clearInterval,
     GZ_PM: { state: { Plugin: class { constructor(spec) { this.spec = spec; } }, PluginKey: class { getState() { return null; } } }, view: {}, transform: { Mapping: class { appendMapping() {} map(v) { return v; } } } },
     GZ_WRITER_SCHEMA: { text: () => ({ text: 'draft words', posAt: (v) => v }) }, GZ_WRITER_PROOF: {},
-    GZ_AI_WRITER: require('../lib/ai/tasks/writer-context.js'), GZ_WRITER_SOURCES: require('../lib/writer-sources.js'),
+    GZ_AI_WRITER: require('../../extension/lib/ai/tasks/writer-context.js'), GZ_WRITER_SOURCES: require('../../extension/lib/writer-sources.js'),
     GZ_WRITER_PAPER: format ? { current: () => ({ format: () => format, ...(look && { look }) }) } : undefined,
     GZ_WRITER_FRAME: { t: (s, v) => s.replace(/\{(\w+)\}/g, (m, k) => (v && k in v ? v[k] : m)), kind: () => 'reply', context: () => ctx, editor: () => ed, mode: () => mode,
       on: (ev, f) => { hooks[ev] = f; }, handle: (type, f) => { hooks[`page:${type}`] = f; }, say: (m) => said.push(m), plugin(p) { hooks.plugin = p.spec; }, slot: () => new Element(), item: () => new Element() },
@@ -225,7 +225,7 @@ test('Feedback shows safe measured token counts and planning counts with their d
     const job = f.ai.feedback(); await flush();
     f.reply({ id: f.pendingRun.at(-1).id, type: 'error', error: 'size', ...detail }); await job;
     assert.ok(f.pane().textContent.includes(detail.tokens ? `(${detail.tokens}/${detail.context} tokens)` : '(65/64)'));
-    assert.ok(f.pane().textContent.includes(require('../lib/ai/failure.js').explain(detail)));
+    assert.ok(f.pane().textContent.includes(require('../../extension/lib/ai/failure.js').explain(detail)));
   }
 });
 
@@ -380,7 +380,7 @@ test('Feedback as the mockup draws it: a head row with the run button in every s
 });
 
 test('a paper\'s Feedback run carries the paper\'s layout, which the .docx has; compose sends none', async () => {
-  const ST = require('../lib/writer-styles.js');
+  const ST = require('../../extension/lib/writer-styles.js');
   const f = frame({ mode: 'paper', format: ST.get('mla9') }); await f.start();
   f.context({ kind: 'assignment', assignment: { description: 'Three things you learned.' } }); await flush();
   f.ai.feedback(); await flush();
@@ -418,7 +418,7 @@ const cancelFeedback = (f) => {
 };
 
 test('a ready assignment quietly prepares image bytes before Feedback and reuses the preparation without editor interaction', async () => {
-  const format = require('../lib/writer-styles.js').get('mla9');
+  const format = require('../../extension/lib/writer-styles.js').get('mla9');
   const f = frame({ mode: 'paper', format, answer: vision, pace: 100 }); await f.start();
   const context = imageContext();
   context.assignment.files.push({ id: 'attachment-2', name: 'Rubric.jpg', image: true });
@@ -747,7 +747,7 @@ test('Feedback uses actual imported page setup and marks a layout-only change st
 });
 
 test('Feedback availability copy is translated in all five catalogues', () => {
-  const I = require('../lib/i18n.js');
+  const I = require('../../extension/lib/i18n.js');
   const keys = ['Checking whether AI can run here…', 'AI is off. Turn it on in Settings → AI.',
     'Feedback is off. Turn it on in Settings → AI.', 'No AI model is chosen. Choose one in Settings → AI.',
     'Glaze needs permission to reach {host}. Allow it in Settings → AI.', 'The on-device model isn’t downloaded. Download it in Settings → AI.',
@@ -755,7 +755,7 @@ test('Feedback availability copy is translated in all five catalogues', () => {
     'Glaze couldn’t confirm this page may use AI. Reload the page to try again.',
     'AI is only available on confirmed assignments, never on tests.', 'AI isn’t available right now.', 'Settings'];
   for (const locale of ['de', 'es', 'fr', 'nl', 'pt-BR']) {
-    require(`../i18n/${locale}.js`);
+    require(`../../extension/i18n/${locale}.js`);
     const catalogue = globalThis.GZ_LANGS[locale];
     for (const key of keys) {
       assert.equal(typeof catalogue[key], 'string', `${locale}: ${key}`);
@@ -773,7 +773,7 @@ test('the frame asks the worker whatever model Settings names, an older store\'s
 });
 
 test('the gray text waits Advanced\'s pause when the student set one, else its own', () => {
-  const W = require('../writer-ai.js');
+  const W = require('../../extension/writer-ai.js');
   assert.equal(W.wait({ mode: 'advanced', tune: { completion: { pause: 350 } } }, 0.5), 350);
   assert.equal(W.wait({ mode: 'simple', tune: { completion: { pause: 350 } } }, 0.5), W.pause(0.5));
   assert.equal(W.wait({ mode: 'advanced', tune: { completion: { pause: 99999 } } }, 0.5), W.pause(0.5), 'only within lib/ai/settings.js TUNE');

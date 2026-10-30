@@ -1,11 +1,11 @@
 // A local stand-in for the parts of Google's Calendar API and token revocation that Glaze uses (lib/gcal.js), for the
-// node tests (test/gcal.test.js) and headless runs of the extension. It listens on 127.0.0.1 only and reaches nothing.
+// node tests (test/planner/gcal.test.js) and headless runs of the extension. It listens on 127.0.0.1 only and reaches nothing.
 // Modeled on Google's documented behavior: client-chosen event ids (base32hex, 5–1024 characters, 409 when taken, even by
 // a deleted event), etags, syncToken listing that includes deletions (410 once a token has expired), 404 for an unknown
 // calendar, 403 for one the app didn't make (the calendar.app.created scope), and the revoke endpoint. Not shipped.
 //
-//   const mock = await require('./scripts/gcal-mock.js').start();   // { api, revoke, port, ... }; mock.stop() when done
-//   node scripts/gcal-mock.js [port]                                  // runs until stopped; prints its addresses
+//   const mock = await require('./checks/mocks/gcal-mock.js').start();   // { api, revoke, port, ... }; mock.stop() when done
+//   node checks/mocks/gcal-mock.js [port]                                  // runs until stopped; prints its addresses
 //
 // mock.tokens: access tokens it accepts ('tok-1' to start); mock.fail(n, status, { headers, reason }): the next n
 // requests answer that; mock.edit(cal, id, patch) and mock.del(cal, id): what the student does in Google Calendar;

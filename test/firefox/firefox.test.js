@@ -10,8 +10,8 @@ test('package-firefox.sh builds a Firefox manifest whose background scripts all 
   const dist = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-firefox-'));
   try {
     // Exercise package format from any source checkout; the separate release-readiness tests enforce provenance.
-    execFileSync('sh', ['scripts/package-firefox.sh', '--development'], { cwd: path.join(__dirname, '..'), env: { ...process.env, DIST: dist }, stdio: 'pipe' });
-    const version = require('../manifest.json').version;
+    execFileSync('sh', ['../tools/build/package-firefox.sh', '--development'], { cwd: path.join(__dirname, '../../extension'), env: { ...process.env, DIST: dist }, stdio: 'pipe' });
+    const version = require('../../extension/manifest.json').version;
     const zip = path.join(dist, `glaze-v${version}-firefox.zip`);
     const files = new Set(execFileSync('unzip', ['-Z1', zip], { encoding: 'utf8' }).split('\n'));
     const m = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json'], { encoding: 'utf8' }));
@@ -31,7 +31,7 @@ test('package-firefox.sh builds a Firefox manifest whose background scripts all 
     assert.ok(m.web_accessible_resources.every((e) => !('use_dynamic_url' in e)));
     // Code mods need Chrome: no sandbox page, CSP or files, so content.js never starts them.
     assert.equal(m.sandbox, undefined);
-    assert.deepEqual(m.content_security_policy, { extension_pages: require('../manifest.json').content_security_policy.extension_pages });
+    assert.deepEqual(m.content_security_policy, { extension_pages: require('../../extension/manifest.json').content_security_policy.extension_pages });
     assert.ok(m.web_accessible_resources.every((e) => e.resources.length && e.resources.every((r) => !r.startsWith('mods/'))));
     assert.ok(![...files].some((f) => f.startsWith('mods/') || f === 'features/mods.js'), 'no mods host, bootstrap or sandbox page side');
     assert.ok(files.has('lib/modbroker.js') && m.background.scripts.includes('lib/modbroker.js'), 'the worker imports the broker, so it ships');
@@ -58,8 +58,8 @@ test('package-firefox.sh builds a Firefox manifest whose background scripts all 
 test('package-firefox.sh: no declarativeContent or addHostAccessRequest, the button on the toolbar, the hosts as Chrome asks', () => {
   const dist = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-firefox-'));
   try {
-    execFileSync('sh', ['scripts/package-firefox.sh', '--development'], { cwd: path.join(__dirname, '..'), env: { ...process.env, DIST: dist }, stdio: 'pipe' });
-    const chrome = require('../manifest.json');
+    execFileSync('sh', ['../tools/build/package-firefox.sh', '--development'], { cwd: path.join(__dirname, '../../extension'), env: { ...process.env, DIST: dist }, stdio: 'pipe' });
+    const chrome = require('../../extension/manifest.json');
     const zip = path.join(dist, `glaze-v${chrome.version}-firefox.zip`);
     const m = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json'], { encoding: 'utf8' }));
     assert.deepEqual(m.permissions, chrome.permissions.filter((p) => p !== 'declarativeContent'));

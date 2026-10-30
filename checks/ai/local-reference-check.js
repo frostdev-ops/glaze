@@ -1,16 +1,16 @@
 // The local engine's reference forward pass (lib/ai/local/reference.js) against llama.cpp on the same GGUF, and any
 // two runs against each other (HF transformers too). Not in the suite: it needs the model and hours of CPU.
-// A run is a folder of dumps, one per prompt of scripts/local-reference-prompts.json: <id>.json { prompt (token ids),
+// A run is a folder of dumps, one per prompt of checks/ai/local-reference-prompts.json: <id>.json { prompt (token ids),
 // gen (greedy: gen[0] from the prompt, gen[s + 1] from decode step s), vocab } and <id>.prefill.f32 / <id>.decode.f32,
 // rows of vocab float32 logits: prefill row i predicts token i + 1, decode row s follows feeding gen[s].
-//   node scripts/local-reference-check.js tsv <prompts.tsv>          the prompts for scripts/local-reference-logits.cpp
+//   node checks/ai/local-reference-check.js tsv <prompts.tsv>          the prompts for checks/ai/local-reference-logits.cpp
 //   llama-logits <model.gguf> - <prompts.tsv> <llama dir> 64 <threads>     (llama.cpp's run; see that file)
-//   node scripts/local-reference-check.js reference <model.gguf> <llama dir> <our dir> [--jobs 4] [--steps 64] [--only a,b]
+//   node checks/ai/local-reference-check.js reference <model.gguf> <llama dir> <our dir> [--jobs 4] [--steps 64] [--only a,b]
 //     our run, from llama.cpp's token ids, each prompt fed in chunks of 128 (the KV cache and conv state carry them)
-//   node scripts/local-reference-check.js compare <dir a> <dir b> [--out results.json] [--strict]
+//   node checks/ai/local-reference-check.js compare <dir a> <dir b> [--out results.json] [--strict]
 //     per prompt: top-1 agreement at every prompt position, greedy tokens, max |Δlogit| (prefill, and decode while
 //     the two greedy runs agree). --strict: exit 1 unless every top-1 and every greedy token agrees.
-// HF transformers writes the same layout with scripts/local-reference-hf.py.
+// HF transformers writes the same layout with checks/ai/local-reference-hf.py.
 const fs = require('node:fs');
 const path = require('node:path');
 const { fork } = require('node:child_process');
@@ -53,8 +53,8 @@ if (mode === 'tsv') {
 } else if (mode === 'worker') {
   // One child: loads the model once and runs the prompts the parent sends.
   const [model, llamaDir, outDir, steps, chunk] = args;
-  const G = require('../lib/ai/local/gguf.js');
-  const R = require('../lib/ai/local/reference.js');
+  const G = require('../../extension/lib/ai/local/gguf.js');
+  const R = require('../../extension/lib/ai/local/reference.js');
   (async () => {
     const t0 = performance.now();
     const m = await R.load(await G.open(fileSource(model)));
@@ -166,6 +166,6 @@ if (mode === 'tsv') {
   if (out) fs.writeFileSync(out, JSON.stringify(results, null, 1));
   if (strict && !(allTop1 && allGen)) process.exitCode = 1;
 } else {
-  console.error('usage: node scripts/local-reference-check.js tsv | reference | compare (see the top of this file)');
+  console.error('usage: node checks/ai/local-reference-check.js tsv | reference | compare (see the top of this file)');
   process.exit(2);
 }

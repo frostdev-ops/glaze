@@ -1,9 +1,9 @@
 // Insights (lib/insights.js): a term in numbers from the student's own Canvas data, as table tests.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const I = require('../lib/insights.js');
-const T = require('../lib/todo.js');
-const live = require('./fixtures/canvas-grades.json');
+const I = require('../../extension/lib/insights.js');
+const T = require('../../extension/lib/todo.js');
+const live = require('../fixtures/canvas-grades.json');
 
 const TZ = 'America/New_York';
 const at = (s) => Date.parse(s);
@@ -135,7 +135,7 @@ test("with grading periods, the trend's last point is the current period's score
   const info = { weighted: false, periods, weightedPeriods: false };
   const tr = I.trend(groups, info, TZ, 2);
   assert.deepEqual(tr, [[at('2026-09-10T20:00:00Z'), 100, '1'], [at('2026-10-05T20:00:00Z'), 50, '2']]);
-  const C = require('../lib/gradecalc.js');
+  const C = require('../../extension/lib/gradecalc.js');
   assert.equal(tr.at(-1)[1], C.round2(C.calc(C.fromApi(groups, info), {}, { period: '2' }).current), "W2's engine for that period");
   // Without a current period (between periods, or none), the course as Canvas totals it.
   assert.deepEqual(I.trend(groups, info, TZ, null).map((p) => p[1]), [100, 75]);

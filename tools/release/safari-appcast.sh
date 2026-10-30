@@ -2,7 +2,7 @@
 # Release operator only: validates an already notarized DMG, signs its enclosure with
 # Sparkle's Keychain EdDSA key, and writes a local appcast. Does not upload or publish.
 set -eu
-root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
 python3 - "$root" "$@" <<'PY'
 import base64
 from datetime import datetime, timezone
@@ -17,9 +17,9 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 if len(sys.argv) != 4:
-    sys.exit('usage: sh scripts/safari-appcast.sh <notarized-dmg> <Sparkle-bin-directory>')
+    sys.exit('usage: sh tools/release/safari-appcast.sh <notarized-dmg> <Sparkle-bin-directory>')
 root, dmg, tools = map(lambda p: Path(p).resolve(), sys.argv[1:])
-version = json.loads((root / 'manifest.json').read_text())['version']
+version = json.loads((root / 'extension/manifest.json').read_text())['version']
 if dmg.name != f'glaze-{version}-safari-macos.dmg' or not dmg.is_file():
     sys.exit('safari-appcast: expected existing notarized glaze-<manifest-version>-safari-macos.dmg')
 for tool in ('generate_keys', 'sign_update'):

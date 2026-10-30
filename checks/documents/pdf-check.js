@@ -5,11 +5,11 @@
 // runs its own worker (never the fake one in the page), the page stays white under a dark Look while its chrome wears it,
 // and nothing errors, in the page or at the worker's sender check. Screenshots at 1280 and 640 px. A synthetic PDF only;
 // the browser reaches no network.
-// NODE_PATH=<playwright> nice -n 10 node scripts/pdf-check.js [evidence directory]
+// NODE_PATH=<playwright> nice -n 10 node checks/documents/pdf-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
+const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
 const out = process.argv[2] || path.join(os.tmpdir(), 'gz-pdf-check');
 const checks = [], errors = [], requests = [], workers = [], shots = [], logs = [];
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -48,7 +48,7 @@ const fixture = () => {
 // A scanned worksheet: one Letter page that is a 150 dpi grey picture with the paper's grain and lines of dark words, which
 // a PNG of the page cannot keep small.
 const scan = () => {
-  const F = require('./pdf-fixtures.js'), zlib = require('node:zlib');
+  const F = require('../../tools/fidelity/pdf-fixtures.js'), zlib = require('node:zlib');
   const w = 1275, h = 1650, px = Buffer.alloc(w * h);
   let seed = 7;
   const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
@@ -65,7 +65,7 @@ const scan = () => {
 };
 // A noisy colour photo needs more JPEG compression than a worksheet, even at the same card dimensions.
 const photo = () => {
-  const F = require('./pdf-fixtures.js'), zlib = require('node:zlib'), w = 408, h = 528, px = Buffer.alloc(w * h * 3);
+  const F = require('../../tools/fidelity/pdf-fixtures.js'), zlib = require('node:zlib'), w = 408, h = 528, px = Buffer.alloc(w * h * 3);
   let seed = 17;
   for (let i = 0; i < px.length; i++) { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; px[i] = seed & 255; }
   const { objects, refs, add } = F.pagesOf([{ size: [612, 792], content: 'q 612 0 0 792 0 0 cm /Im1 Do Q', resources: ' /XObject << /Im1 %IMG% >>' }]);
@@ -76,7 +76,7 @@ const photo = () => {
 
 (async () => {
   let context, held = false, tmp, passed = false, page = null;
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   try {
     for (let i = 0; ; i++) {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\npdf-check\n`); break; }
@@ -87,8 +87,8 @@ const photo = () => {
     const file = path.join(tmp, 'Field trip form.pdf');
     fs.writeFileSync(file, fixture());
     const ext = env.staged(root, []);
-    await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1, locale: 'en-US',
+    await require('../../tools/dev/wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1, locale: 'en-US',
       reducedMotion: 'reduce', acceptDownloads: true, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(15000);
     await context.route('**/*', (r) => { const u = new URL(r.request().url()); if (u.protocol === 'chrome-extension:') return r.continue(); requests.push(u.href); return r.abort(); });
@@ -423,7 +423,7 @@ const photo = () => {
     // ---- past the old 3 MB: a 12 MB PDF kept in the worker's file store (lib/doc-files.js), its record pointing at it; it
     // opens, fills, saves and exports.
     const sha = (b) => require('node:crypto').createHash('sha256').update(b).digest('hex');
-    const bigPdf = require('./pdf-fixtures.js').large({ count: 30, size: 12e6, form: true }), bigPath = path.join(tmp, 'Course reader.pdf');
+    const bigPdf = require('../../tools/fidelity/pdf-fixtures.js').large({ count: 30, size: 12e6, form: true }), bigPath = path.join(tmp, 'Course reader.pdf');
     fs.writeFileSync(bigPath, bigPdf);
     await openHome();
     await page.evaluate(() => { document.getElementById('gd-said').textContent = ''; });
@@ -496,7 +496,7 @@ const photo = () => {
 
     // Page-view dimensions already include /Rotate. Whole page must fit both the height-limited and width-limited room.
     await openHome();
-    const F = require('./pdf-fixtures.js'), rotatedFile = path.join(tmp, 'Rotated page.pdf');
+    const F = require('../../tools/fidelity/pdf-fixtures.js'), rotatedFile = path.join(tmp, 'Rotated page.pdf');
     fs.writeFileSync(rotatedFile, F.write(F.pagesOf([{ size: [612, 792], rotate: 90, label: 'Rotated page' }]).objects));
     await page.setInputFiles('#gd-file', rotatedFile);
     const rotatedCard = page.locator('.gd-card').filter({ has: page.locator('.gd-title', { hasText: 'Rotated page' }) });

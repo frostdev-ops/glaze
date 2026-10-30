@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 
 // Everything a release Mac could plausibly carry that a package must not see, including names no denylist knew about.
 const SECRETS = {
@@ -18,7 +18,7 @@ const SECRETS = {
 };
 
 test('a third-party step gets an allowlisted environment and a temporary HOME', async () => {
-  const { isolatedEnv } = await import('../scripts/public-release.mjs');
+  const { isolatedEnv } = await import('../../tools/release/public-release.mjs');
   const env = isolatedEnv({
     PATH: '/usr/bin:/bin', LANG: 'en_US.UTF-8', TZ: 'UTC', TMPDIR: '/var/tmp/x', HTTPS_PROXY: 'http://proxy.example:8080',
     HOME: '/Users/me', ...SECRETS,
@@ -34,7 +34,7 @@ test('a third-party step gets an allowlisted environment and a temporary HOME', 
 });
 
 test('the temporary HOME exists for the step, lives in the OS temp directory, and is removed afterwards', async () => {
-  const { withIsolatedEnv } = await import('../scripts/public-release.mjs');
+  const { withIsolatedEnv } = await import('../../tools/release/public-release.mjs');
   let seen;
   const result = await withIsolatedEnv({ PATH: '/usr/bin', HOME: os.homedir(), GH_TOKEN: 'gh' }, async (env) => {
     seen = env.HOME;
@@ -51,16 +51,16 @@ test('the temporary HOME exists for the step, lives in the OS temp directory, an
 });
 
 test('the Firefox lint runs a pinned web-ext', async () => {
-  const { WEB_EXT } = await import('../scripts/store-release.mjs');
+  const { WEB_EXT } = await import('../../tools/release/store-release.mjs');
   assert.match(WEB_EXT, /^web-ext@\d+\.\d+\.\d+$/, 'an exact version, never a range or a tag');
-  const source = read('scripts/store-release.mjs');
+  const source = read('../tools/release/store-release.mjs');
   assert.match(source, /'npx', \['--yes', WEB_EXT, 'lint'/);
   assert.equal(source.match(/web-ext@/g).length, 1, 'the version lives in one constant');
 });
 
 test('every npm, npx and website step gets the isolated environment', () => {
   let steps = 0;
-  for (const f of ['scripts/store-release.mjs', 'scripts/public-release.mjs']) {
+  for (const f of ['../tools/release/store-release.mjs', '../tools/release/public-release.mjs']) {
     for (const [call] of read(f).matchAll(/[^\n]*\brun\('(?:npm|npx)'[^\n]*|[^\n]*\brun\('node', \[[^\n]*, site, [^\n]*/g)) {
       steps++;
       assert.match(call, /, (?:bare|isolated),/, `${f}: ${call.trim().slice(0, 100)}`);
@@ -71,5 +71,5 @@ test('every npm, npx and website step gets the isolated environment', () => {
 });
 
 test('the old denylist is gone', () => {
-  for (const f of ['scripts/store-release.mjs', 'scripts/public-release.mjs']) assert.doesNotMatch(read(f), /withoutStoreKeys|STORE_KEYS/, f);
+  for (const f of ['../tools/release/store-release.mjs', '../tools/release/public-release.mjs']) assert.doesNotMatch(read(f), /withoutStoreKeys|STORE_KEYS/, f);
 });

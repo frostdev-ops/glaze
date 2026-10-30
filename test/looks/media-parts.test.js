@@ -3,9 +3,9 @@
 // type or fit that is not one of the few, numbers out of range, keys nobody defined.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const X = require('../lib/lookparts.js');
-const S = require('../lib/share.js');
-const G = require('../defaults.js');
+const X = require('../../extension/lib/lookparts.js');
+const S = require('../../extension/lib/share.js');
+const G = require('../../extension/defaults.js');
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const HASH = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ'; // 43 characters of base64url
@@ -150,7 +150,7 @@ test('describe says what a media Look plays, and where it loads from', () => {
   assert.deepEqual(d({ type: 'video', src: 'https://cdn.example.com/a.webm' }), [{ why: 'Plays a video behind your pages, loaded from {host}.', vars: { host: 'cdn.example.com' } }]);
   assert.deepEqual(d({ type: 'image', src: 'https://a.example.org/x.webp' }), [{ why: 'Plays an animated picture behind your pages, loaded from {host}.', vars: { host: 'a.example.org' } }]);
   assert.deepEqual(d({ type: 'lottie', src: 'https://xn--bcher-kva.example/a.json' }), [{ why: 'Plays an animation behind your pages, loaded from {host}.', vars: { host: 'xn--bcher-kva.example' } }]);
-  // A `file:` is a name: a pasted code brings no file, so the line does not say one came with it (test/look-media-share.test.js).
+  // A `file:` is a name: a pasted code brings no file, so the line does not say one came with it (test/looks/look-media-share.test.js).
   assert.deepEqual(d({ type: 'video', src: `file:${HASH}` }), [{ why: 'Plays a video behind your pages from a file it names. If that file isn’t on this computer, the gradient shows instead.', vars: undefined }]);
   assert.equal(X.KIND_WORD.media, 'a video or animation background');
   assert.deepEqual(X.describe({ x: { cursor: { kind: 'glow' } } }).map((n) => n.why), ['Adds a cursor effect.']);

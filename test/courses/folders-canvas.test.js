@@ -1,6 +1,6 @@
 // Hidden modules on Canvas: the folders feature on a synthetic Modules page, its keys and its hook. Inert DOM, no network.
 const test = require('node:test'), assert = require('node:assert/strict'), vm = require('node:vm'), fs = require('node:fs');
-const F = require('../lib/folders.js');
+const F = require('../../extension/lib/folders.js');
 const ROW = '.context_module[data-module-id]';
 class E {
   constructor(tag = 'div') { this.tagName = tag; this.children = []; this.dataset = {}; this.attrs = {}; this.listeners = {}; this._text = ''; this.className = ''; }
@@ -61,7 +61,7 @@ const fixture = () => {
   const ctx = { site: 'canvas', on: () => on, settings: () => ({ enhance: { hideFolders: true } }), courseId: () => undefined, toggleOf: () => null,
     canvasCourseId: () => location.pathname.match(/^\/courses\/(\d+)/)?.[1], t: (k, args) => k.replace(/\{(\w+)\}/g, (_, p) => args[p]) };
   const c = vm.createContext({ document, location, chrome, GZ_CTX: ctx, GZ_FOLDERS: F, MutationObserver: class { observe() {} disconnect() {} }, requestAnimationFrame() {}, setTimeout: () => 0, clearTimeout() {} });
-  vm.runInContext(fs.readFileSync(require.resolve('../features/folders.js'), 'utf8'), c);
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/features/folders.js'), 'utf8'), c);
   const click = async (el) => { el.listeners.click({ isTrusted: true, detail: 1, preventDefault() {}, stopPropagation() {} }); await settle(); };
   return { ui: c.GZ_FOLDER_UI, a, b, blank, list, document, store, sent, click, location, setOn: (v) => { on = v; } };
 };
@@ -117,10 +117,10 @@ test('Canvas module keys: plain ids, any Canvas origin including a local http on
 });
 
 test('Canvas loads hidden modules on demand where a course lists its modules, as who is signed in', () => {
-  const part = fs.readFileSync(require.resolve('../content-canvas.js'), 'utf8');
+  const part = fs.readFileSync(require.resolve('../../extension/content-canvas.js'), 'utf8');
   assert.match(part, /I\.settings\.enhance\.hideFolders && document\.getElementById\('context_modules'\)/);
   assert.match(part, /need\('lib\/folders\.js'[^\n]*need\('features\/folders\.js'[^\n]*GZ_FOLDER_UI\.sync\(true, me\(\)\)/);
-  const worker = fs.readFileSync(require.resolve('../lib/background.js'), 'utf8');
+  const worker = fs.readFileSync(require.resolve('../../extension/lib/background.js'), 'utf8');
   assert.match(worker, /m\.key\.startsWith\(`hiddenFolders:\$\{await fromUltra\(s\)\}\/_`\)/, 'an Ultra page writes only Ultra keys');
   assert.match(worker, /m\.key\.startsWith\(`hiddenFolders:\$\{await fromCanvas\(s\)\}\/`\) && \/\\\/\\d\+\\\/\\d\+\$\/\.test\(m\.key\)/, 'a Canvas page only its own site\'s module keys');
 });
@@ -128,7 +128,7 @@ test('Canvas loads hidden modules on demand where a course lists its modules, as
 test('the Canvas stop hook restores hidden modules even when the native page makes no further mutations', async () => {
   const e = fixture(); e.ui.sync(true, Promise.resolve('42')); await settle();
   await e.click(eye(e.a));
-  const part = fs.readFileSync(require.resolve('../content-canvas.js'), 'utf8');
+  const part = fs.readFileSync(require.resolve('../../extension/content-canvas.js'), 'utf8');
   const start = part.indexOf('stop: () => '), end = part.indexOf(', planner:', start);
   const stop = vm.runInNewContext(`(${part.slice(start + 6, end)})`, { GZ_FOLDER_UI: e.ui });
   e.setOn(false); stop();
@@ -144,12 +144,12 @@ test('the folders worker isolates Canvas and Ultra origins, including same-origi
     set: async (v) => { Object.assign(s, structuredClone(v)); }, remove: async () => {},
   });
   const c = vm.createContext({ URL, TextEncoder, structuredClone, console, setTimeout, clearTimeout, crypto,
-    importScripts: (...files) => files.forEach(f => vm.runInContext(fs.readFileSync(require.resolve(`../lib/${f}`), 'utf8'), c)),
-    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
+    importScripts: (...files) => files.forEach(f => vm.runInContext(fs.readFileSync(require.resolve(`../../extension/lib/${f}`), 'utf8'), c)),
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: { addListener: (f) => listeners.push(f) }, onConnect: { addListener() {} }, onInstalled: { addListener() {} }, onStartup: { addListener() {} } },
       tabs: { onRemoved: { addListener() {} } }, storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener() {} } } },
   });
-  vm.runInContext(fs.readFileSync(require.resolve('../lib/background.js'), 'utf8'), c);
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/lib/background.js'), 'utf8'), c);
   const send = (m, s) => new Promise(resolve => { for (const f of listeners) if (f(m, s, r => resolve(structuredClone(r))) === true) return; resolve(null); });
   const canvas = { id: 'glaze', tab: { id: 9, url: 'https://school.instructure.com/courses/31/modules' }, frameId: 0, url: 'https://school.instructure.com/courses/31/modules' };
   const ultra = { ...canvas, url: 'https://bb.example.edu/ultra/courses/_8_1/outline', tab: { id: 10, url: 'https://bb.example.edu/ultra/courses/_8_1/outline' } };

@@ -1,23 +1,23 @@
 // Glaze Writer's editing tools in the real unpacked extension (writer-find.js, writer-counts.js, writer-print.js), on the
 // synthetic assignment attempt (paper mode, the 6-page fixtures of test/fixtures/writer-paper-fixtures.js) and the
-// synthetic discussion (compose mode), with real Quill 1.3.7 in the page as scripts/writer-paper-check.js runs it: Find and
+// synthetic discussion (compose mode), with real Quill 1.3.7 in the page as checks/writer/writer-paper-check.js runs it: Find and
 // Replace (count, stepping, Escape, match case, whole word, across pages, in notes, Replace and Replace all as one undo
 // each, the live region), the printed paper (Playwright's PDF of the frame's own print copy: page count and each page's
-// first line against the editor's, as scripts/writer-word-fidelity.js compares Word's), ⌘P, the .txt and .md exports, the
+// first line against the editor's, as tools/fidelity/writer-word-fidelity.js compares Word's), ⌘P, the .txt and .md exports, the
 // word count popover, and typing latency on a 6-page paper with the find bar closed and open. Screenshots go in
 // ~/Projects/glaze-plans/writer/mockups/build-edit (EDIT_SHOTS). GETs only, synthetic; no account or outside network
 // from the browser.
-// NODE_PATH=<playwright> nice -n 10 node scripts/writer-edit-check.js [evidence directory], under the heavy-check lock (CLAUDE.md)
+// NODE_PATH=<playwright> nice -n 10 node checks/writer/writer-edit-check.js [evidence directory], under the heavy-check lock (CLAUDE.md)
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
-const FX = require('../test/fixtures/writer-paper-fixtures.js');
+const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
+const FX = require('../../test/fixtures/writer-paper-fixtures.js');
 const site = 'https://bb.school.test';
 const QUILL = { url: 'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js', sha256: 'c675f57388d3598637c4e0f9fe154bd61dfb1c2086271f944a0bb2b9b059b074' };
-const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const ATTEMPT = '/ultra/courses/_101_1/assessment/_7_1/attempt/create', DISCUSSION = '/ultra/courses/_101_1/discussion/_9_1';
 const out = process.argv[2] || path.join(os.tmpdir(), 'gz-edit-check');
 const shots = process.env.EDIT_SHOTS || path.join(os.homedir(), 'Projects/glaze-plans/writer/mockups/build-edit');
@@ -47,7 +47,7 @@ const head = (s) => words(s).split(' ').slice(0, 6).join(' ');
 
 (async () => {
   let context, held = false, tmp, ext;
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   try {
     for (let i = 0; ; i++) {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nwriter-edit-check\n`); break; }
@@ -58,9 +58,9 @@ const head = (s) => words(s).split(' ').slice(0, 6).join(' ');
     fs.mkdirSync(shots, { recursive: true });
     const quill = Buffer.from(await (await fetch(QUILL.url)).arrayBuffer());
     if (crypto.createHash('sha256').update(quill).digest('hex') !== QUILL.sha256) throw Error('Quill 1.3.7 hash mismatch');
-    ext = require('./check-env.js').staged(root, [`${site}/*`]);
-    await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, acceptDownloads: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    ext = require('../../tools/dev/check-env.js').staged(root, [`${site}/*`]);
+    await require('../../tools/dev/wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, acceptDownloads: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(15000);
     const grades = JSON.parse(fixture('ultra-writer-gradebook.json')), members = JSON.parse(fixture('ultra-memberships.json'));
     members.results = members.results.map((m) => (m.courseId === '_101_1' ? { ...m, course: { ...m.course, name: FX.context.course, displayName: FX.context.course } } : m));

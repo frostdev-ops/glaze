@@ -1,4 +1,4 @@
-// The browser's side of a glaze-mcp host, for test/mcp-host.test.js and test/mcp-agent.test.js: a real host process
+// The browser's side of a glaze-mcp host, for test/agents/mcp-host.test.js and test/agents/mcp-agent.test.js: a real host process
 // started with process.execPath, spoken to over the native codec, and agents written from the handshake's format alone.
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');

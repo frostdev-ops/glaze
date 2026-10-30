@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # Package the extension for the Chrome Web Store upload (and the Safari builds, which start from it).
-# DIST: the folder the zip goes in (default dist).
+# DIST: the folder the zip goes in (default dist); a relative DIST is from the repo root, where dist/ is.
 set -euo pipefail
-cd "$(dirname "$0")"
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "$root/extension"
 
 version="$(node -p 'require("./manifest.json").version')"
 dist="${DIST:-dist}"
+case "$dist" in /*) ;; *) dist="$root/$dist" ;; esac
 OUT="$dist/glaze-v$version.zip"
+shown="${DIST:-dist}/glaze-v$version.zip"
 
 mkdir -p "$dist"
 rm -f "$OUT"
@@ -34,4 +37,4 @@ if [ "$(node -p 'require("./lib/gcal.js").ON')" != true ]; then
   (cd "$stage" && zip -q -X "$zip_abs" manifest.json)
 fi
 
-echo "packaged Glaze v$version -> $OUT ($(du -h "$OUT" | cut -f1))"
+echo "packaged Glaze v$version -> $shown ($(du -h "$OUT" | cut -f1))"

@@ -4,7 +4,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const S = require('../lib/ai/local/store.js');
+const S = require('../../extension/lib/ai/local/store.js');
 
 const CHUNK = 1024;
 const SIZE = CHUNK * 4 + 300; // five chunks, the last one short
@@ -369,7 +369,7 @@ test('a CDN reply that is not the asked range is refused', async () => {
 });
 
 test('the shipped manifest is well formed and pinned', () => {
-  const M = require('../lib/ai/local/models.json');
+  const M = require('../../extension/lib/ai/local/models.json');
   assert.ok(Array.isArray(M.models) && M.models.length >= 1);
   for (const m of M.models) {
     assert.match(m.commit, /^[0-9a-f]{40}$/);

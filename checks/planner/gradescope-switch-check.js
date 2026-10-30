@@ -4,11 +4,11 @@
 // then yes), and when it says yes the check stands in for the grant in the worker (contains, getAll and remove for that one
 // host, as the browser would answer). Refused: the switch stays off and nothing registers. Allowed: on, and Gradescope's
 // script registers. Off: unregistered, and the grant handed back.
-//   NODE_PATH=<installed playwright> nice node scripts/gradescope-switch-check.js [screenshots directory]
+//   NODE_PATH=<installed playwright> nice node checks/planner/gradescope-switch-check.js [screenshots directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-const env = require('./check-env.js');
-const ext = env.staged(process.env.EXT || path.join(__dirname, '..'), []);
+const env = require('../../tools/dev/check-env.js');
+const ext = env.staged(process.env.EXT || path.join(__dirname, '../../extension'), []);
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const GS = 'https://www.gradescope.com/*';
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-gradescope-'));
@@ -23,8 +23,8 @@ const until = async (fn, label, ms = 10000) => { const end = Date.now() + ms; fo
   let ctx;
   const errors = [], probed = [];
   try {
-    await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, locale: 'en-US', reducedMotion: 'reduce',
+    await require('../../tools/dev/wait-for-browser.js')();
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, locale: 'en-US', reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'] });
     env.noFirstRun(ctx);
     await ctx.route('**/*', (route) => {

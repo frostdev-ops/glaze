@@ -5,8 +5,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { createRequire } = require('node:module');
-const W = require('../lib/widgets.js');
-const file = (name) => path.join(__dirname, '..', 'scripts', `${name}-boards-check.js`);
+const W = require('../../extension/lib/widgets.js');
+const file = (name) => path.join(__dirname, '../../checks/courses', `${name}-boards-check.js`);
 const canvas = fs.readFileSync(file('canvas'), 'utf8');
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 
@@ -38,7 +38,7 @@ test('Ultra check removes its temporary profile even when Chrome cannot launch',
   const result = vm.runInNewContext(fs.readFileSync(script, 'utf8'), {
     __dirname: path.dirname(script), console: { log() {} },
     process: { env: {}, argv: ['node', script, '/tmp/board-check-output'] },
-    require: (id) => id === './wait-for-browser.js' ? async () => { waited = true; }
+    require: (id) => id === '../../tools/dev/wait-for-browser.js' ? async () => { waited = true; }
       : id === 'playwright' ? { chromium: { launchPersistentContext: async () => { assert.equal(waited, true); throw blocked; } } }
       : id === 'fs' ? { ...fs, mkdirSync() {}, mkdtempSync: () => '/tmp/board-check-profile', rmSync: (p) => removed.push(p) } : req(id),
   });

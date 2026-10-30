@@ -1,9 +1,9 @@
 // Current Ultra assessment columns, using structures observed on the overview and attempt/create pages.
 // No account or external network. Editor text and all action handlers are local stubs.
-// Hold $GLAZE_LOCK (default glaze-heavy.lock in the OS temp directory); NODE_PATH=<playwright> nice -n 15 node scripts/sidebar-assessment-check.js [screenshots]
+// Hold $GLAZE_LOCK (default glaze-heavy.lock in the OS temp directory); NODE_PATH=<playwright> nice -n 15 node checks/navigation/sidebar-assessment-check.js [screenshots]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const root = path.resolve(process.env.EXT || path.join(__dirname, '..')), out = process.argv[2];
+const root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension')), out = process.argv[2];
 let checks = 0, fails = 0;
 const check = (v, label) => { checks++; fails += !v; console.log(`${v ? 'ok' : 'FAIL'} ${label}`); };
 const overview = (toc, description = true, submitted = false, details = true) => `<section class="assessment-overview-modern-panel routed-page route-view-container bb-offcanvas-container"><content-page-header>Course / Assessment</content-page-header><learning-module-panel-view class="routed-page-body"><div class="table-of-contents-${toc}"><div class="panel-content-body"><div class="root-learning-module-panel"><div id="learningModulePanelContainerId" class="content-item-container"><h1>A fictional assignment</h1><div class="content-item-container-children"><content-body><div class="base-body"><div class="content-root"><div class="standard-content-body"><div class="assessment-overview-grid">
@@ -21,8 +21,8 @@ const attempt = `<section class="routed-page route-view-container bb-offcanvas-c
 (async () => {
   let browser;
   try {
-    await require('./wait-for-browser.js')();
-    browser = await chromium.launch({ headless: true, ...require('./check-env.js').chromeLaunch(), args: ['--host-resolver-rules=MAP * ~NOTFOUND'], chromiumSandbox: false });
+    await require('../../tools/dev/wait-for-browser.js')();
+    browser = await chromium.launch({ headless: true, ...require('../../tools/dev/check-env.js').chromeLaunch(), args: ['--host-resolver-rules=MAP * ~NOTFOUND'], chromiumSandbox: false });
     const page = await browser.newPage({ viewport: { width: 1800, height: 900 } });
     const errors = []; page.on('pageerror', (e) => errors.push(String(e)));
     await page.route('**/*', (r) => r.request().url().startsWith('https://bb.school.test/ultra/') ? r.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' }) : r.abort());

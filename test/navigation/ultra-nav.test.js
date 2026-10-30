@@ -1,10 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const G = require('../defaults.js');
-const N = require('../lib/nav-items.js');
-const K = require('../lib/cards.js');
-const Store = require('../lib/nav-store.js');
+const G = require('../../extension/defaults.js');
+const N = require('../../extension/lib/nav-items.js');
+const K = require('../../extension/lib/cards.js');
+const Store = require('../../extension/lib/nav-store.js');
 
 const memory = (start = {}, fail = false) => {
   const values = structuredClone(start);
@@ -53,7 +53,7 @@ test('custom logos share image caps and keep the previous image when sync fails'
 });
 
 test('first paint covers MUI and legacy nav, owns the logo image without replacing its link', () => {
-  const css = fs.readFileSync(require.resolve('../theme.css'), 'utf8');
+  const css = fs.readFileSync(require.resolve('../../extension/theme.css'), 'utf8');
   assert.match(css, /makeStylesnavigation/); assert.match(css, /nav#base_tools/);
   // The Glaze logos are inlined: a page can't load them by the extension's fixed address (use_dynamic_url), and a
   // file it could load would tell a site Glaze is installed.
@@ -61,7 +61,7 @@ test('first paint covers MUI and legacy nav, owns the logo image without replaci
   assert.ok(logos.length >= 3, 'the logo, its dark version and the mark are inlined');
   assert.doesNotMatch(css, /url\("(?:assets|icons)\/[^"]+\.svg"\)/, 'no logo by the extension address');
   assert.match(css, /data-gz-nav-brand/);
-  const manifest = require('../manifest.json');
+  const manifest = require('../../extension/manifest.json');
   const ultra = manifest.content_scripts.find((c) => c.js.includes('content-ultra.js')).js;
   const canvas = manifest.content_scripts.find((c) => c.js.includes('content-canvas.js')).js;
   assert.ok(ultra.includes('lib/nav.js')); assert.ok(!canvas.includes('lib/nav.js'));
@@ -87,18 +87,18 @@ test('logo cleanup failure leaves the committed logo and reports an orphan for t
 });
 
 test('Look codes exclude Ultra personal navigation fields while backups explicitly include the capped items', async () => {
-  const S = require('../lib/share.js');
+  const S = require('../../extension/lib/share.js');
   const settings = G.GZ_SANITIZE({ nav: { k: 'solid', c: '#112233', brand: 'custom', li: 'aaaaaaaaaaaa', width: 300 } });
   const shared = await S.decode(await S.encode(settings));
   assert.ok(!('brand' in shared.nav)); assert.ok(!('li' in shared.nav)); assert.ok(!('width' in shared.nav));
-  const src = fs.readFileSync(require.resolve('../options.js'), 'utf8');
+  const src = fs.readFileSync(require.resolve('../../extension/options.js'), 'utf8');
   assert.match(src, /navItems: N.clean\(r\?\.navItems\)/);
   assert.match(src, /next.nav.li = ''/);
 });
 
 test('worker timer/nav message allow rules reject unknown actions, untrusted senders and image uploads from Canvas', async () => {
   const vm = require('node:vm');
-  const source = fs.readFileSync(require.resolve('../lib/background.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../../extension/lib/background.js'), 'utf8');
   let enabled = true;
   // ultraPage: the top frame, or a course tab's frame on the same Ultra site as its tab (lib/background.js).
   const ctx = vm.createContext({ fromEditor: (s) => s.editor === true, fromCanvas: async (s) => s.canvas === true, fromUltra: async (s) => s.ultra === true, ultraPage: (s) => s.frameId === 0 || s.sameSite === true, chrome: { storage: { sync: { get: async () => ({ enabled }) } } } });
@@ -128,9 +128,9 @@ test('presets and precise Ultra sizes stay separate from Canvas preferences', ()
 test('the Ultra first-paint helper is idempotent and native MUI colors stay scoped to the rail', () => {
   const vm = require('node:vm');
   const ctx = vm.createContext({ GZ_SPEC: { nav: {} }, GZ_DEFAULTS: { nav: {} } });
-  const source = fs.readFileSync(require.resolve('../lib/nav.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../../extension/lib/nav.js'), 'utf8');
   const first = vm.runInContext(source, ctx); assert.equal(vm.runInContext(source, ctx), first);
-  const css = fs.readFileSync(require.resolve('../theme.css'), 'utf8');
+  const css = fs.readFileSync(require.resolve('../../extension/theme.css'), 'utf8');
   assert.match(css, /nav\[class\*="makeStylesnavigation-"\] a\.MuiListItemButton-root \{ color: var\(--gz-ink-muted\) !important/);
   assert.match(css, /gz-nav-pet-level \{ display: inline/);
 });
@@ -147,11 +147,11 @@ test('the wrong-LMS-host fallback injects the nav schema before Ultra once with 
   const vm = require('node:vm');
   const listeners = [], scripts = [], none = { addListener() {} };
   const ctx = vm.createContext({ URL, console, setTimeout, clearTimeout, TextEncoder, TextDecoder, structuredClone, crypto: globalThis.crypto,
-    importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(require.resolve(`../lib/${f}`), 'utf8'), ctx); },
-    chrome: { runtime: { id: 'glaze', getURL: (p = '') => `chrome-extension://glaze/${p}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: none, onStartup: none, onConnect: none },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(require.resolve(`../../extension/lib/${f}`), 'utf8'), ctx); },
+    chrome: { runtime: { id: 'glaze', getURL: (p = '') => `chrome-extension://glaze/${p}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: none, onStartup: none, onConnect: none },
       storage: { local: { get: async () => ({ canvas: ['https://canvas.school.edu/*'] }) }, sync: { get: async () => ({}) }, onChanged: none },
       scripting: { executeScript: async (v) => { scripts.push(v); return [{ result: {} }]; } } } });
-  vm.runInContext(fs.readFileSync(require.resolve('../lib/background.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/lib/background.js'), 'utf8'), ctx);
   // A page of a school's own Canvas the student approved, which now serves Ultra (its list lacks Ultra's part).
   const page = { id: 'glaze', tab: { id: 8 }, frameId: 0, documentId: 'doc-1', url: 'https://canvas.school.edu/ultra/course' };
   const request = (files, sender = page) => new Promise((r) => { for (const f of listeners) f({ type: 'glaze:load', files }, sender, r); });
@@ -167,7 +167,7 @@ test('the wrong-LMS-host fallback injects the nav schema before Ultra once with 
 });
 
 test('static preview arrival starts nav despite an earlier cached rejected injection', async () => {
-  const vm = require('node:vm'), source = fs.readFileSync(require.resolve('../content-ultra.js'), 'utf8');
+  const vm = require('node:vm'), source = fs.readFileSync(require.resolve('../../extension/content-ultra.js'), 'utf8');
   const a = source.indexOf('  const syncNav = () =>'), b = source.indexOf('\n  chrome.storage.onChanged', a);
   let starts = 0, asks = 0;
   const failed = Promise.reject(new Error('not in the preview')); failed.catch(() => {});
@@ -179,7 +179,7 @@ test('static preview arrival starts nav despite an earlier cached rejected injec
 });
 
 test('the nav logo goes home in this tab: the Dashboard when it is on, else Courses', () => {
-  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'content-ultra.js'), 'utf8');
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/content-ultra.js'), 'utf8');
   const block = src.slice(src.indexOf("  // The nav's logo goes home"), src.indexOf('  let navRead = false'));
   const run = (dashboard, ev = {}, found = true) => {
     let handler; const clicked = [], assigned = [];
@@ -202,10 +202,10 @@ test('the nav logo goes home in this tab: the Dashboard when it is on, else Cour
 });
 
 test('Glaze settings: last in the nav, a copy of its last item, hidden and moved like Ultra\'s own; gone when Glaze is off', () => {
-  const N = require('../lib/nav.js');
+  const N = require('../../extension/lib/nav.js');
   assert.equal(N.native('#glaze'), 'glaze');
   assert.equal(N.NATIVE.at(-1), 'glaze', 'last by default');
-  const src = fs.readFileSync(require('node:path').join(__dirname, '..', 'content-ultra.js'), 'utf8');
+  const src = fs.readFileSync(require('node:path').join(__dirname, '../../extension/content-ultra.js'), 'utf8');
   const block = src.slice(src.indexOf("  // Glaze settings, last in Ultra's nav"), src.indexOf('  const queueNav = '));
   // A small DOM: a nav with two items in li, the last Ultra's Sign out (#).
   const mk = (tag) => { const e = { tagName: tag.toUpperCase(), children: [], attrs: {}, classList: null, parentElement: null, listeners: {} };
@@ -251,8 +251,8 @@ test("Ultra's own navigation is named by its class, never a document's Contents 
   // [class*="makeStylesnavigation"] matched it as Ultra's navigation, and the rules folding that away under Glaze's bar hid
   // the drawer: 0px wide, its links hidden (the owner, 2026-10-27). Ultra's navigation is makeStylesnavigation-<n>.
   const { execFileSync } = require('node:child_process');
-  const files = execFileSync('git', ['ls-files', '*.css', '*.js', '*.html'], { cwd: require('node:path').join(__dirname, '..'), encoding: 'utf8' })
+  const files = execFileSync('git', ['ls-files', '*.css', '*.js', '*.html'], { cwd: require('node:path').join(__dirname, '../..'), encoding: 'utf8' })
     .split('\n').filter((f) => f && !/^(safari|reports|prototypes|test)\//.test(f));
-  const loose = files.flatMap((f) => (fs.readFileSync(require.resolve(`../${f}`), 'utf8').match(/\[class\*=\\?["']makeStylesnavigation\\?["']\]/g) || []).map(() => f));
+  const loose = files.flatMap((f) => (fs.readFileSync(require.resolve(`../../${f}`), 'utf8').match(/\[class\*=\\?["']makeStylesnavigation\\?["']\]/g) || []).map(() => f));
   assert.deepEqual([...new Set(loose)], []);
 });

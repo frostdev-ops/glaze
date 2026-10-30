@@ -1,6 +1,6 @@
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
 const { El } = require('../stand-in-dom.js');
-const I = require('../../lib/i18n.js'), L = require('../../lib/writer-submit.js');
+const I = require('../../extension/lib/i18n.js'), L = require('../../extension/lib/writer-submit.js');
 module.exports = () => {
   const doc = { activeElement: null }, messages = [], handles = {}, hooks = {}, timers = new Map();
   doc.root = new El('html', doc); doc.documentElement = doc.root;
@@ -21,7 +21,7 @@ module.exports = () => {
     GZ_WRITER_FRAME: frame, GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_PAPER: { current: () => current, need: async () => {} },
     setTimeout: (f) => { timers.set(++seq, f); return seq; }, clearTimeout: (n) => timers.delete(n),
   });
-  vm.runInContext(fs.readFileSync(process.env.WRITER_SUBMIT_SHEET_SOURCE || path.join(__dirname, '../../writer-submit.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(process.env.WRITER_SUBMIT_SHEET_SOURCE || path.join(__dirname, '../../extension/writer-submit.js'), 'utf8'), ctx);
   const flush = async () => { for (let i = 0; i < 10; i++) await new Promise(setImmediate); };
   return { doc, ctx, api, messages, handles, hooks, builds, saved, timers, flush,
     open: () => ctx.GZ_WRITER_SUBMIT_SHEET.open(),

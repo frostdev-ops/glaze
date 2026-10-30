@@ -3,7 +3,7 @@
 // (read in small chunks, and never past the header until a tensor is asked for), and what ggml refuses.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../lib/ai/local/gguf.js');
+const G = require('../../extension/lib/ai/local/gguf.js');
 
 // ---- a GGUF writer, independent of the reader ------------------------------------------------------------------------
 const T = { u8: 0, i8: 1, u16: 2, i16: 3, u32: 4, i32: 5, f32: 6, bool: 7, str: 8, arr: 9, u64: 10, i64: 11, f64: 12 };

@@ -4,11 +4,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const U = require('../lib/ultra.js');
-const Z = require('../lib/zip.js');
+const U = require('../../extension/lib/ultra.js');
+const Z = require('../../extension/lib/zip.js');
 
-const load = (n) => JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', `ultra-${n}.json`), 'utf8'));
-const src = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const load = (n) => JSON.parse(fs.readFileSync(path.join(__dirname, '../fixtures', `ultra-${n}.json`), 'utf8'));
+const src = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const o = 'https://lms.example.edu';
 // Ultra applies a `fields` list to each item's top-level keys.
 const project = (items, fields) => items.map((i) => Object.fromEntries(fields.split(',').filter((k) => k in i).map((k) => [k, i[k]])));
@@ -100,10 +100,10 @@ test('a File item whose attachments cannot be read counts as failed; attachment 
 });
 
 // ---- the data layer -----------------------------------------------------------------------------------------------
-const T = require('../lib/todo.js');
-const R = require('../lib/remind.js');
-const I = require('../lib/insights.js');
-const C = require('../lib/calexport.js');
+const T = require('../../extension/lib/todo.js');
+const R = require('../../extension/lib/remind.js');
+const I = require('../../extension/lib/insights.js');
+const C = require('../../extension/lib/calexport.js');
 const NOW = Date.parse('2026-10-15T12:00:00Z');
 const LATER = Date.parse('2026-10-24T12:00:00Z');
 const clone = (v) => JSON.parse(JSON.stringify(v));
@@ -179,7 +179,7 @@ test('where work stands: a table of measured and synthetic rows ([I] rules, unkn
 });
 
 test('saved drafts stay open in Better To Do despite attempt dates or multiple attempt ids', () => {
-  const T = require('../lib/todo.js');
+  const T = require('../../extension/lib/todo.js');
   const column = { dueDate: '2026-10-20T12:00:00Z', contentId: '_703_1' };
   const base = { columnId: '_603_1', column, firstAttemptId: '_810_1', lastAttemptId: '_813_1', lastAttempt: { status: 'IN_PROGRESS', attemptDate: '2026-10-21T12:00:00Z' } };
   const cases = [
@@ -266,7 +266,7 @@ test("grades: B0's calibration (weighted categories, discrepancy 0), and the est
   assert.deepEqual([g.kind, g.estimate, g.overall], ['weighted', false, 88]);
   assert.equal(g.percent() - g.overall, 0);
   // The what-if reads the same course through the calculator Canvas uses: still no discrepancy.
-  assert.equal(require('../lib/gradecalc.js').calc(g.course, {}).current - g.overall, 0);
+  assert.equal(require('../../extension/lib/gradecalc.js').calc(g.course, {}).current - g.overall, 0);
   assert.deepEqual(g.course.groups.map((x) => [x.id, x.name, x.weight]), [['_201_1', 'Assignment', 40], ['_202_1', 'Test', 40], ['_203_1', 'Discussion', 20]]);
   assert.equal(g.scale, null); // the overall column's schema is a percent scale
   // A letter scale as a student gets it (B4, measured): letters and the value an entered letter stands for, no bounds.
@@ -325,7 +325,7 @@ test('the overall column\'s text is the course letter only for a letter scale or
   assert.equal(U.grade(withText('B', '_403_1'), schemas).letter, 'B');
   assert.equal(U.grade(withText('', '_403_1'), schemas).letter, null);
   // The GPA row then computes its letter from the score on a common scale, instead of "88.00%" with no points.
-  const C = require('../lib/gradecalc.js');
+  const C = require('../../extension/lib/gradecalc.js');
   const g = U.grade(withText('88.00%'), schemas);
   const e = { computed_current_score: g.overall, computed_current_grade: g.letter || (g.overall != null && g.scale ? C.letter(g.overall, g.scale) : null) };
   const row = C.gpaRow(e, {}, null, { plus: true });
@@ -499,7 +499,7 @@ test('the due-date chips\' late check takes an exception for its own column only
 });
 
 test("PRIVACY doesn't promise folder previews leave memory after a minute: the minute is only when they're asked again", () => {
-  const para = src('PRIVACY.md').match(/- \*\*Folder previews\*\*[\s\S]*?(?=\n- \*\*)/)[0];
+  const para = src('../PRIVACY.md').match(/- \*\*Folder previews\*\*[\s\S]*?(?=\n- \*\*)/)[0];
   assert.doesNotMatch(para, /kept in memory for a minute/);
   assert.match(para, /until you leave or reload the page/);
 });
@@ -531,7 +531,7 @@ test("a course's content for links: the public API through the reader, kept to i
 // Codex B5 fix verification #7: the picker shows what search may show, by one rule: released now, known availability,
 // and every ancestor too.
 test("a course's content for links: only what is released now, with known availability, under released folders", async () => {
-  const shapes = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'ultra-search.json'), 'utf8')).contents
+  const shapes = JSON.parse(fs.readFileSync(path.join(__dirname, '../fixtures/ultra-search.json'), 'utf8')).contents
     .map((x) => ({ ...x, links: [{ rel: 'alternate', href: `/ultra/redirect?redirectType=nautilus&courseId=_101_1&contentId=${x.id}` }] }));
   const f = async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ results: shapes }) });
   const { items } = await U.read({ origin: o, f }).contents('_101_1');

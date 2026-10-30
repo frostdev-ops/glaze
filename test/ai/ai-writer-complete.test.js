@@ -5,11 +5,11 @@
 // already suggested. Through the harness with the mock provider.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const T = require('../lib/ai/task.js');
-const R = require('../lib/ai/request.js');
-const X = require('../lib/ai/text.js');
-require('../lib/ai/providers/mock.js');
-const C = require('../lib/ai/tasks/writer-complete.js');
+const T = require('../../extension/lib/ai/task.js');
+const R = require('../../extension/lib/ai/request.js');
+const X = require('../../extension/lib/ai/text.js');
+require('../../extension/lib/ai/providers/mock.js');
+const C = require('../../extension/lib/ai/tasks/writer-complete.js');
 
 const ASSIGN = { kind: 'assignment', course: { id: '_1_1', name: 'ENGL 2110' }, style: 'mla9',
   assignment: { title: 'Essay 2', instructions: 'Write about memory in Beloved.', rubric: 'Thesis: 10 points' } };
@@ -241,7 +241,7 @@ test('a stable block ends at the document; suggestions and the caret never carry
 
 
 test('completion privacy disclosure names the full document, per-pause transmission and transient suggestions', () => {
-  const policy = require('node:fs').readFileSync(require('node:path').join(__dirname, '../PRIVACY.md'), 'utf8');
+  const policy = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../PRIVACY.md'), 'utf8');
   const completion = policy.split('**Tab completion**')[1].split('**Feedback**')[0];
   assert.match(completion, /whole document before the caret/);
   assert.match(completion, /each pause/);
@@ -252,7 +252,7 @@ test('completion privacy disclosure names the full document, per-pause transmiss
 
 
 test('frame caps on document text and remembered suggestions never start with half a surrogate pair', () => {
-  const AI = require('../writer-ai.js');
+  const AI = require('../../extension/writer-ai.js');
   for (const cap of [600, 1000000]) {
     const text = 'prefix 😀' + 'a'.repeat(cap - 1);
     const cut = AI.tailText(text, cap);

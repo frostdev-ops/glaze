@@ -5,10 +5,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
-const worker = require('./helpers/worker-env.cjs');
-const { fakeIDB } = require('./helpers/fake-idb.cjs');
-const C = require('./helpers/mcp-caches.cjs');
-const G = require('../lib/mcp/grants.js');
+const worker = require('../helpers/worker-env.cjs');
+const { fakeIDB } = require('../helpers/fake-idb.cjs');
+const C = require('../helpers/mcp-caches.cjs');
+const G = require('../../extension/lib/mcp/grants.js');
 
 const META = { 'io.modelcontextprotocol/protocolVersion': '2026-07-28', 'io.modelcontextprotocol/clientCapabilities': {} };
 const SUB = 'io.modelcontextprotocol/subscriptionId';

@@ -1,14 +1,14 @@
 // Computed glass styles against Ultra's captured header structure, including its hashed class.
-// NODE_PATH=<playwright> nice node scripts/ctab-strip-glass-check.js [evidence directory]
+// NODE_PATH=<playwright> nice node checks/navigation/ctab-strip-glass-check.js [evidence directory]
 // EXT selects the source checkout; hold the shared browser lock while running.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
+// A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
 const G = require(path.join(ext, 'defaults.js')); require(path.join(ext, 'lib/coursetabs.js'));
 const site = 'https://bb.school.test', key = `ctabs:${site}:_42_1`;
 const out = process.argv[2];
-let html = fs.readFileSync(path.join(__dirname, '../test/fixtures/ultra-course.html'), 'utf8')
+let html = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-course.html'), 'utf8')
   .replace('.bb-course-navigation { position: sticky; top: 0; z-index: 10; background: Canvas; }', '.bb-course-navigation { position: sticky; top: 0; z-index: 10; }')
   .replace('.panel-wrap { position: absolute; top: 0; right: 0; bottom: 0; left: 220px;', '.panel-wrap { position: absolute; top: 0; right: 0; bottom: 0; left: 0;')
   .replace('#main-content { height: 100%; margin-left: 220px;', '#main-content { height: 100%; margin-left: 0;')
@@ -35,8 +35,8 @@ const measure = (p) => p.evaluate(() => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-strip-glass-'));
   try {
     if (out) fs.mkdirSync(out, { recursive: true });
-    await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true,
+    await require('../../tools/dev/wait-for-browser.js')();
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true,
       viewport: { width: 1280, height: 800 }, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'] });
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());

@@ -5,14 +5,14 @@
 // pages lay out the same in every scheme, that print's copy stays white with the source colours, that the palette follows
 // the system live and the ⋯ menu's Light page saves, and that a light page in a dark Look draws the sheet pixel for pixel
 // as BASE (default c8e99a04, from git archive) did. Local extension pages only; no network.
-// NODE_PATH=<playwright> nice -n 10 node scripts/writer-dark-check.js [screenshot directory]
+// NODE_PATH=<playwright> nice -n 10 node checks/writer/writer-dark-check.js [screenshot directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
-const S = require('../lib/writer-schema.js');
-const G = require('../defaults.js');
+const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
+const S = require('../../extension/lib/writer-schema.js');
+const G = require('../../extension/defaults.js');
 const out = path.resolve(process.argv[2] || path.join(os.tmpdir(), 'gz-writer-dark-check'));
 const BASE = process.env.BASE || 'c8e99a04';
 const KEY = 'bb.school.test|_900_1|_101_1|_7_1';
@@ -69,7 +69,7 @@ const READ = () => {
 
 (async () => {
   let context, held = false, tmp, base;
-  const lock = require('./check-env.js').lockPath(), ext = [];
+  const lock = require('../../tools/dev/check-env.js').lockPath(), ext = [];
   try {
     for (let i = 0; ; i++) {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nwriter-dark-check\n`); break; }
@@ -83,8 +83,8 @@ const READ = () => {
     const launch = async (src, tag) => {
       const dir = env.staged(src, []);
       ext.push(dir);
-      await require('./wait-for-browser.js')();
-      context = await chromium.launchPersistentContext(path.join(tmp, `profile-${tag}`), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 1800 }, deviceScaleFactor: 1,
+      await require('../../tools/dev/wait-for-browser.js')();
+      context = await chromium.launchPersistentContext(path.join(tmp, `profile-${tag}`), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 1800 }, deviceScaleFactor: 1,
         args: [`--disable-extensions-except=${dir}`, `--load-extension=${dir}`, '--disable-background-networking', '--host-resolver-rules=MAP * ~NOTFOUND'] });
       env.noFirstRun(context); context.setDefaultTimeout(15000);
       await context.route('**/*', (r) => (new URL(r.request().url()).protocol === 'chrome-extension:' ? r.continue() : r.abort()));

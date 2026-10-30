@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const content = require('./helpers/writer-content.cjs');
+const content = require('../helpers/writer-content.cjs');
 
 test('Writer ignores inherited blank loads and grants a pass only after its own frame boots', async () => {
   const c = content(); c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
@@ -294,7 +294,7 @@ test('an assignment panel retained while navigating to another assessment cannot
   assert.equal(c.messages.filter((m) => m.type === 'glaze:attempt-kind').at(-1).kind, 'unknown');
   assert.equal(c.doc.querySelectorAll('iframe.gz-writer').length, 0, 'the stale submission editor stays native');
   c.doc.querySelector('bb-assignment-attempt-authoring-panel').remove();
-  require('./fixture-dom.js').parse(require('node:fs').readFileSync(require.resolve('./fixtures/ultra-writer-attempt.html'), 'utf8'), c.doc);
+  require('../fixture-dom.js').parse(require('node:fs').readFileSync(require.resolve('../fixtures/ultra-writer-attempt.html'), 'utf8'), c.doc);
   c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
   assert.equal(c.messages.filter((m) => m.type === 'glaze:attempt-kind').at(-1).kind, 'assignment', 'a freshly rendered assignment remains eligible');
 });

@@ -6,10 +6,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const M = require('../lib/modbundle.js');
-const B = require('../lib/modbroker.js');
+const M = require('../../extension/lib/modbundle.js');
+const B = require('../../extension/lib/modbroker.js');
 
-const root = path.join(__dirname, '..', 'examples', 'mods');
+const root = path.join(__dirname, '../../examples/mods');
 const enc = new TextEncoder();
 const folders = fs.readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
 // A folder as dev mode reads it: every file by its path, as bytes.
@@ -29,9 +29,9 @@ test('the mod examples are all here', () => {
 });
 
 test('shader-background is a Look-parts example that round-trips as a wearable theme code', async () => {
-  const X = require('../lib/lookparts.js'), S = require('../lib/share.js'), G = require('../defaults.js');
-  const src = fs.readFileSync(path.join(__dirname, '../examples/looks/shader-background/shader.glsl'), 'utf8');
-  assert.equal(require('../lib/glsl.js').check(src).ok, true);
+  const X = require('../../extension/lib/lookparts.js'), S = require('../../extension/lib/share.js'), G = require('../../extension/defaults.js');
+  const src = fs.readFileSync(path.join(__dirname, '../../examples/looks/shader-background/shader.glsl'), 'utf8');
+  assert.equal(require('../../extension/lib/glsl.js').check(src).ok, true);
   const parts = { bg: { shader: { src } } };
   assert.deepEqual(X.clean(parts), parts);
   const code = await S.encode(G.GZ_SANITIZE({ bg: { kind: 'shader' } }), {}, { x: parts });
@@ -152,7 +152,7 @@ const run = async (name, { local = {}, grants = {}, events = [] } = {}) => {
   };
   const send = (data) => { for (const f of listeners) f({ data }); };
   const ctx = vm.createContext({ setTimeout, performance, console });
-  const source = fs.readFileSync(path.join(__dirname, '..', 'mods', 'host.js'), 'utf8').match(/function glazeClient\(port\) \{[\s\S]*?\n    return glaze;\n  \}/)[0];
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/mods/host.js'), 'utf8').match(/function glazeClient\(port\) \{[\s\S]*?\n    return glaze;\n  \}/)[0];
   vm.runInContext(`(${source})`, ctx)(port);
   // As the host starts a Worker: its code, and the code tools mod.json declares for it to handle.
   const tools = (manifest.tools || []).filter((t) => t.code === true).map((t) => t.name);

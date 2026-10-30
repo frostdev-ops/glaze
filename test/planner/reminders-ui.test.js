@@ -7,12 +7,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../defaults.js');
-const T = require('../lib/todo.js');
-const R = require('../lib/remind.js');
-const C = require('../lib/classes.js');
+const D = require('../../extension/defaults.js');
+const T = require('../../extension/lib/todo.js');
+const R = require('../../extension/lib/remind.js');
+const C = require('../../extension/lib/classes.js');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
 const NOW = Date.now();
 const ORIGIN = 'https://canvas.test';
@@ -255,7 +255,7 @@ test('no planner request where To Do or the card tasks will make it, drawn yet o
 // (syncCardTasks: cardsHere and a .ic-DashboardCard on the page) starts the card tasks there, and they ask the planner.
 // So reminders leave it to them, and the planner is asked once, not twice.
 test("the Dashboard's planner view: card tasks run and ask, reminders don't: one planner request", async () => {
-  const html = read('test/fixtures/canvas-dashboard-planner.html');
+  const html = read('../test/fixtures/canvas-dashboard-planner.html');
   assert.match(html, /id="DashboardCard_Container" style="display: none;?"/, 'the fixture is the planner view');
   const has = (sel) => (sel === '.ic-DashboardCard' && /class="ic-DashboardCard"/.test(html) ? {} : null);
   // Canvas's part's own gate (content-canvas.js), run over that page.
