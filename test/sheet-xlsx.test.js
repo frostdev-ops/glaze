@@ -192,9 +192,9 @@ test('synthetic: theme colours (lt1/dk1 swapped, tints), indexed colours, the cu
   assert.deepEqual(s[0], {}, 'the default style is the empty difference');
   // theme="4" is accent1 4472C4, darkened 25%; theme="1" is dk1 (111111), theme="0" lt1 (FEFEFE).
   assert.equal(s[1].color, X.tinted('#4472C4', -0.249977111117893));
-  assert.equal(s[1].color, '#2F5597', "Excel's darker 25% of accent 1");
+  assert.equal(s[1].color, '#2F5597');
   assert.equal(X.tinted('#FEFEFE', 0.39997558519241921), '#FEFEFE');
-  assert.equal(X.tinted('#4472C4', 0.39997558519241921), '#8FAADC', "Excel's lighter 40% of accent 1");
+  assert.equal(X.tinted('#4472C4', 0.39997558519241921), '#8FAADC');
   assert.equal(s[2].color, '#FF0000');
   assert.equal(s[3].color, '#123456', 'indexed 10 from the workbook palette');
   assert.equal(s[2].border.bottom.color, '#ABCDEF', 'indexed 12 from the workbook palette');
@@ -209,6 +209,17 @@ test('synthetic: theme colours (lt1/dk1 swapped, tints), indexed colours, the cu
   assert.deepEqual(colors['#2F5597'], { theme: '4', tint: '-0.249977111117893' });
   assert.deepEqual(colors['#123456'], { indexed: '10' });
   assert.deepEqual(wb.keep.theme.slice(0, 4), ['#FEFEFE', '#111111', '#E7E6E6', '#44546A']);
+});
+
+// What Excel 16.114.1 on the Mac drew for the 2023 Office theme's accent 1 (#156082) at five tints, read from its fonts
+// (2026-10-30). Glaze's HLS tint lands within 2 of each channel; the file keeps the theme and tint themselves.
+test('tints within 2 of each channel Excel draws', () => {
+  const drawn = { 0.39997558519241921: '#44B3E1', '-0.249977111117893': '#104861', 0.59999389629810485: '#83CCEB', '-0.499984740745262': '#0B3040', 0.79998168889431442: '#C0E6F5' };
+  const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  for (const [tint, want] of Object.entries(drawn)) {
+    const got = X.tinted('#156082', Number(tint));
+    assert.ok(rgb(got).every((v, i) => Math.abs(v - rgb(want)[i]) <= 2), `${tint}: ${got}, Excel ${want}`);
+  }
 });
 
 test('synthetic: fonts, fills, borders, alignment, protection and number formats as style fields', async () => {
