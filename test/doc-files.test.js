@@ -203,6 +203,32 @@ test('quota exceeded: the put says quota, and leaves no upload or chunk behind',
   assert.deepEqual([...data().keys()], []);
 });
 
+test('quota exceeded when publishing the file releases its uploaded chunks', async () => {
+  const { st, data } = make({ wrap: (db) => ({ ...db, write: async (puts, dels) => {
+    if (puts.some(([k]) => k.startsWith('f:'))) throw Object.assign(new Error('full'), { name: 'QuotaExceededError' });
+    return db.write(puts, dels);
+  } }) });
+  await assert.rejects(wire(st).client.put(bytes(F.CHUNK + 10, 61), 'application/pdf'), (e) => e.why === 'quota');
+  assert.deepEqual([...data().keys()], [], 'a refused file cannot keep consuming the remaining room');
+});
+
+test('a page disconnecting while its upload starts releases the late upload', async () => {
+  let release, started;
+  const beginning = new Promise((r) => { started = r; });
+  const gate = new Promise((r) => { release = r; });
+  const { st, data } = make({ wrap: (db) => ({ ...db, write: async (puts, dels) => {
+    if (puts.some(([k]) => k.startsWith('u:'))) { started(); await gate; }
+    return db.write(puts, dels);
+  } }) });
+  const { client, log } = wire(st), uploading = client.put(bytes(100, 62), 'application/pdf');
+  await beginning;
+  log[0].page.disconnect();
+  await assert.rejects(uploading, (e) => e.why === 'interrupted');
+  release();
+  for (let i = 0; i < 20; i++) await new Promise(setImmediate);
+  assert.deepEqual([...data().keys()], []);
+});
+
 test('IndexedDB unavailable: the put says unavailable', async () => {
   const st = F.store(F.idb({ open: () => { throw Object.assign(new Error('no'), { name: 'InvalidStateError' }); } }, 'glaze-docs', fakeIDB().IDBKeyRange));
   const { client } = wire(st);
