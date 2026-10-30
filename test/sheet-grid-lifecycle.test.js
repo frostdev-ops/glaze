@@ -231,6 +231,15 @@ test('the grid tracks each applied operation with the codec and refuses a struct
   await settle();
 });
 
+// node:assert prints a failed value at depth 1000: an element that reaches the document from every node prints the page
+// again at each one, and one failed assert.equal(menu, null) took the runner past 6 GB.
+test('a failed assertion on a grid element prints that element alone', () => {
+  const f = frame(), button = f.el('gx-versions');
+  const printed = (depth) => require('node:util').inspect(button, { compact: false, customInspect: false, depth, maxArrayLength: Infinity, sorted: true, getters: true }).length;
+  assert.ok(printed(10) < 20000, `${printed(10)} characters at depth 10`);
+  assert.equal(printed(1000), printed(10), 'the print ends with the element\'s own children');
+});
+
 test('dispose ends every listener outside the grid, so an unmounted grid neither reads storage nor redraws again', async () => {
   const f = frame();
   assert.equal(typeof f.view.dispose, 'function', 'writer-kinds.js unmount calls it');
