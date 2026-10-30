@@ -6,9 +6,13 @@
 // Refusals are Errors named Pdf…Error. Every limit can be lowered per call with { limits }.
 // Classic script; module.exports for node.
 var GZ_PDF_DOC = globalThis.GZ_PDF_DOC || (() => {
-  // bytes: a file opened, saved or merged in; merged: a baked file; text: characters of a page's text; thumbnail: PNG bytes.
+  // bytes: a file opened, saved or merged in; merged: aggregate input and baked bytes; text: page text; thumbnail: PNG bytes.
   const LIMITS = Object.freeze({ bytes: 50e6, pages: 500, merged: 50e6, text: 20000, thumbnail: 24 << 10 });
-  const limitsOf = (given) => Object.fromEntries(Object.entries(LIMITS).map(([k, v]) => [k, Math.min(v, given?.[k] ?? v)]));
+  const limitsOf = (given) => Object.fromEntries(Object.entries(LIMITS).map(([k, v]) => {
+    const n = given?.[k] ?? v;
+    if (!Number.isSafeInteger(n) || n < 0) throw new RangeError(`${k}: a limit is a nonnegative integer`);
+    return [k, Math.min(v, n)];
+  }));
   const fail = (name, message, extra) => Object.assign(new Error(message), { name }, extra);
   const mb = (n) => `${Math.round(n / 1e6)} MB`;
   const asBytes = (data) => {
@@ -25,7 +29,11 @@ var GZ_PDF_DOC = globalThis.GZ_PDF_DOC || (() => {
   //   { op: 'duplicate', pages }  each copy right after its page          { op: 'rotate', pages, by }  by: ±90, 180, …
   //   { op: 'blank', at, size }  at: 0 to the page count (default: the end)  { op: 'merge', bytes, at }
   // mergedCounts[k] is the page count of the k-th merge's file.
-  const layout = (count, ops, mergedCounts = []) => {
+  const layout = (count, ops, mergedCounts = [], limits) => {
+    const L = limitsOf(limits);
+    const bound = (n) => { if (n > L.pages) throw fail('PdfTooManyPagesError', `A PDF can have at most ${L.pages} pages, including between operations.`); };
+    if (!Number.isSafeInteger(count) || count < 1) throw new RangeError('a PDF keeps at least one page');
+    bound(count);
     let pages = Array.from({ length: count }, (_, page) => ({ source: 0, page, turn: 0 }));
     let merges = 0;
     const which = (list, op) => {
@@ -46,7 +54,12 @@ var GZ_PDF_DOC = globalThis.GZ_PDF_DOC || (() => {
           break;
         }
         case 'delete': { const gone = which(o.pages, 'delete'); pages = pages.filter((_, i) => !gone.has(i)); break; }
-        case 'duplicate': { const twice = which(o.pages, 'duplicate'); pages = pages.flatMap((p, i) => (twice.has(i) ? [p, { ...p }] : [p])); break; }
+        case 'duplicate': {
+          const twice = which(o.pages, 'duplicate');
+          bound(pages.length + twice.size);
+          pages = pages.flatMap((p, i) => (twice.has(i) ? [p, { ...p }] : [p]));
+          break;
+        }
         case 'rotate': {
           if (!Number.isInteger(o.by) || o.by % 90) throw new RangeError('rotate: by a multiple of 90');
           const turned = which(o.pages, 'rotate');
@@ -56,12 +69,14 @@ var GZ_PDF_DOC = globalThis.GZ_PDF_DOC || (() => {
         case 'blank': {
           const ok = o.size === undefined || (Array.isArray(o.size) && o.size.length === 2 && o.size.every((n) => Number.isFinite(n) && n >= 3 && n <= 14400));
           if (!ok) throw new RangeError('blank: size is [width, height] in points');
+          bound(pages.length + 1);
           pages.splice(place(o.at, 'blank'), 0, { source: 'blank', page: 0, turn: 0, ...(o.size && { size: o.size }) });
           break;
         }
         case 'merge': {
           const n = mergedCounts[merges++];
           if (!Number.isInteger(n) || n < 1) throw new RangeError('merge: the file has no pages');
+          bound(pages.length + n);
           pages.splice(place(o.at, 'merge'), 0, ...Array.from({ length: n }, (_, page) => ({ source: merges, page, turn: 0 })));
           break;
         }
@@ -87,14 +102,16 @@ var GZ_PDF_DOC = globalThis.GZ_PDF_DOC || (() => {
   const use = (pdfjs, options = {}) => {
     const { PermissionFlag: P, PasswordResponses, AnnotationMode } = pdfjs;
     const bases = new WeakMap(); // an open document → the SHA-256 of the bytes it was opened from or last saved as
+    const saving = new WeakMap();
 
     // pdf.js hands what it is given to its worker; it gets a copy, so the caller's bytes stay usable.
     const load = async (bytes, password) => {
-      const task = pdfjs.getDocument({ verbosity: 0, ...options, data: bytes.slice(), password, enableXfa: false });
+      let task;
       try {
+        task = pdfjs.getDocument({ verbosity: 0, ...options, data: new Uint8Array(bytes), password, enableXfa: false });
         return await task.promise;
       } catch (e) {
-        await task.destroy();
+        await task?.destroy();
         if (e?.name !== 'PasswordException') throw fail('PdfInvalidError', 'This file is not a PDF Glaze can read.', { cause: e });
         const wrong = e.code === PasswordResponses.INCORRECT_PASSWORD;
         throw fail('PdfPasswordError', wrong ? 'That password does not open this PDF.' : 'This PDF needs its password.', { reason: wrong ? 'incorrect' : 'needed' });
@@ -103,11 +120,15 @@ var GZ_PDF_DOC = globalThis.GZ_PDF_DOC || (() => {
 
     const inspect = async (doc, L) => {
       if (doc.numPages > L.pages) throw fail('PdfTooManyPagesError', `Choose a PDF with at most ${L.pages} pages.`);
-      const [{ info }, permissions, signatures] = await Promise.all([doc.getMetadata(), doc.getPermissions(), doc.getSignatures()]);
+      const [{ info }, permissions, signatures, fields] = await Promise.all([doc.getMetadata(), doc.getPermissions(), doc.getSignatures(), doc.getFieldObjects()]);
       // Pure XFA: the form lives only in its XFA packets (no AcroForm fields), and the pages hold a placeholder.
       if (info.IsXFAPresent && !info.IsAcroFormPresent) throw fail('PdfXfaError', 'This PDF is an XFA form, which only Adobe Acrobat opens.');
       const list = permissions ? [...permissions].sort((a, b) => a - b) : null;
-      const signed = !!signatures?.length, encrypted = !!info.EncryptFilterName;
+      // getSignatures() trusts SigFlags. Field objects still expose signature widgets without that flag, but hide their
+      // value, so conservatively protect even an unfilled signature field rather than risk breaking a signed original.
+      const signatureField = fields && [...fields.values()].some((list) => list.some((f) => f.type === 'signature'));
+      const signed = !!info.IsSignaturesPresent || !!signatures?.length || !!signatureField;
+      const encrypted = !!info.EncryptFilterName;
       // Pages change when the owner allows assembling or changing the document (ISO 32000-1, table 22) and no signature
       // would break. pdf.js writes pages from more than one file unencrypted, so an encrypted file takes in no others.
       const pages = !signed && (!list || list.includes(P.ASSEMBLE) || list.includes(P.MODIFY_CONTENTS));
@@ -117,8 +138,9 @@ var GZ_PDF_DOC = globalThis.GZ_PDF_DOC || (() => {
     // → { doc, pages, permissions (pdf.js's PermissionFlag values, or null when unrestricted), hasForms, signed, encrypted,
     // allows: { pages, add }, hash }. The caller destroys doc (doc.loadingTask.destroy()).
     const open = async (data, { password, limits } = {}) => {
-      const bytes = asBytes(data), L = limitsOf(limits);
-      if (bytes.length > L.bytes) throw fail('PdfTooLargeError', `Choose a PDF smaller than ${mb(L.bytes)}.`);
+      const input = asBytes(data), L = limitsOf(limits);
+      if (input.length > L.bytes) throw fail('PdfTooLargeError', `Choose a PDF smaller than ${mb(L.bytes)}.`);
+      const bytes = new Uint8Array(input);
       const doc = await load(bytes, password);
       try {
         const facts = await inspect(doc, L);
@@ -133,21 +155,51 @@ var GZ_PDF_DOC = globalThis.GZ_PDF_DOC || (() => {
 
     // → { bytes, hash, base, changed }: the file with the editor's changes appended. Refused past the size limit, so a
     // saved file always opens again.
-    const save = async (doc, { limits } = {}) => {
+    const write = async (doc, { limits } = {}) => {
       const L = limitsOf(limits);
-      const bytes = doc.annotationStorage.size ? await doc.saveDocument() : await doc.getData();
+      const closed = () => fail('PdfClosedError', 'This PDF has been closed. Open it again before saving.');
+      if (doc?.loadingTask?.destroyed) throw closed();
+      if (!bases.has(doc)) throw fail('PdfInvalidError', 'Open this PDF with Glaze before saving it.');
+      let bytes;
+      try { bytes = doc.annotationStorage.size ? await doc.saveDocument(null, L.bytes) : await doc.getData(); }
+      catch (e) {
+        if (e.message === 'PDF output exceeds byte limit') throw fail('PdfTooLargeError', `Saved, this PDF would be larger than ${mb(L.bytes)}.`);
+        throw doc.loadingTask.destroyed ? closed() : fail('PdfWriteError', 'Glaze could not save this PDF.', { cause: e });
+      }
+      if (doc.loadingTask.destroyed) throw closed();
       if (bytes.length > L.bytes) throw fail('PdfTooLargeError', `Saved, this PDF would be larger than ${mb(L.bytes)}.`);
-      const base = bases.get(doc) ?? null, digest = await hash(bytes);
+      const base = bases.get(doc), digest = await hash(bytes);
       bases.set(doc, digest);
       return { bytes, hash: digest, base, changed: digest !== base };
+    };
+    // pdf.js's writer and the base hash advance together, even when two callers save at once.
+    const save = (doc, options) => {
+      if (!doc || typeof doc !== 'object') return Promise.reject(fail('PdfInvalidError', 'Open this PDF with Glaze before saving it.'));
+      const next = (saving.get(doc) || Promise.resolve()).catch(() => {}).then(() => write(doc, options));
+      saving.set(doc, next);
+      const clear = () => { if (saving.get(doc) === next) saving.delete(doc); };
+      next.then(clear, clear);
+      return next;
     };
 
     // → { bytes, hash, base, pages }: the file with ops applied, read back to check every page is there, turned as asked.
     // Form values come from the bytes: save edits first.
     const bake = async (data, ops, { password, limits } = {}) => {
-      const bytes = asBytes(data), L = limitsOf(limits);
+      const input = asBytes(data), L = limitsOf(limits);
       if (!Array.isArray(ops)) throw new TypeError('ops is a list');
-      if (bytes.length > L.bytes) throw fail('PdfTooLargeError', `Choose a PDF smaller than ${mb(L.bytes)}.`);
+      if (input.length > L.bytes) throw fail('PdfTooLargeError', `Choose a PDF smaller than ${mb(L.bytes)}.`);
+      ops = ops.map((o) => ({ ...o, ...(Array.isArray(o?.pages) && { pages: [...o.pages] }), ...(Array.isArray(o?.order) && { order: [...o.order] }),
+        ...(Array.isArray(o?.size) && { size: [...o.size] }) }));
+      const merging = ops.filter((o) => o?.op === 'merge');
+      const total = merging.reduce((n, o) => {
+        const size = asBytes(o.bytes).length;
+        if (size > L.bytes) throw fail('PdfTooLargeError', `Choose a PDF smaller than ${mb(L.bytes)}.`);
+        return n + size;
+      }, input.length);
+      if (total > L.merged) throw fail('PdfTooLargeError', `The PDF inputs exceed ${mb(L.merged)}.`);
+      // Validate and extract the same bytes, even if the caller changes its buffers while pdf.js is working.
+      for (const o of merging) o.bytes = new Uint8Array(asBytes(o.bytes));
+      const bytes = new Uint8Array(input);
       const base = await hash(bytes);
       const docs = [];
       try {
@@ -157,7 +209,6 @@ var GZ_PDF_DOC = globalThis.GZ_PDF_DOC || (() => {
         if (!ops.length) return { bytes, hash: base, base, pages: facts.pages };
         if (facts.signed) throw fail('PdfSignedError', 'This PDF is digitally signed: changing its pages would break the signature.');
         if (!facts.allows.pages) throw fail('PdfLockedError', 'The owner of this PDF does not allow changing its pages.');
-        const merging = ops.filter((o) => o?.op === 'merge');
         const protectedPdf = () => fail('PdfProtectedError', 'Pages cannot be added to a password-protected PDF, or taken from one.');
         if (facts.encrypted && (merging.length || ops.some((o) => o?.op === 'blank'))) throw protectedPdf();
         const others = [];
@@ -171,7 +222,7 @@ var GZ_PDF_DOC = globalThis.GZ_PDF_DOC || (() => {
           if (f.signed) throw fail('PdfSignedError', 'Pages of a digitally signed PDF would carry a broken signature.');
           others.push({ bytes: other, doc: otherDoc });
         }
-        const pages = layout(doc.numPages, ops, others.map((o) => o.doc.numPages));
+        const pages = layout(doc.numPages, ops, others.map((o) => o.doc.numPages), L);
         if (pages.length > L.pages) throw fail('PdfTooManyPagesError', `A PDF can have at most ${L.pages} pages.`);
 
         const known = new Map();
@@ -208,11 +259,14 @@ var GZ_PDF_DOC = globalThis.GZ_PDF_DOC || (() => {
             document: source === 0 ? null : (source === 'blank' ? blank : others[source - 1].bytes).slice(),
             includePages: list, pageIndices: list.map((n) => kept.get(n).slot), rotations: Object.fromEntries(list.map((n) => [n, kept.get(n).turn])),
           };
-        }));
+        }), null, Math.min(L.bytes, L.merged)).catch((e) => {
+          if (e.message === 'PDF output exceeds byte limit') throw fail('PdfTooLargeError', `The PDF would be larger than ${mb(Math.min(L.bytes, L.merged))}.`);
+          throw fail('PdfWriteError', 'Glaze could not write these pages.', { cause: e });
+        });
         const unwritten = () => fail('PdfWriteError', 'Glaze could not write these pages.');
         if (!out) throw unwritten();
-        if (out.length > L.merged) throw fail('PdfTooLargeError', `The PDF would be larger than ${mb(L.merged)}.`);
-        const back = await load(out, password);
+        if (out.length > Math.min(L.bytes, L.merged)) throw fail('PdfTooLargeError', `The PDF would be larger than ${mb(Math.min(L.bytes, L.merged))}.`);
+        const back = await load(out, password).catch(() => { throw unwritten(); });
         docs.push(back);
         if (back.numPages !== pages.length) throw unwritten();
         for (const [i, p] of pages.entries()) {
@@ -230,31 +284,41 @@ var GZ_PDF_DOC = globalThis.GZ_PDF_DOC || (() => {
     };
 
     // → { png, width, height }: the page drawn with its form values and annotations, its longer side maxPx at most,
-    // drawn smaller until the PNG fits LIMITS.thumbnail (or 16 px is reached). { png: null, reason } where there is no canvas.
-    const thumbnail = async (page, maxPx = 200) => {
+    // drawn smaller until the PNG fits the byte limit. { png: null, reason } if there is no canvas or it cannot fit.
+    const thumbnail = async (page, maxPx = 200, { limits } = {}) => {
+      const L = limitsOf(limits);
+      if (!Number.isFinite(maxPx) || maxPx < 1) throw new RangeError('thumbnail: maxPx is at least one pixel');
       const make = typeof OffscreenCanvas === 'function' ? (w, h) => new OffscreenCanvas(w, h)
         : typeof document !== 'undefined' ? (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) : null;
       if (!make) return { png: null, reason: 'no canvas to draw on' };
       const one = page.getViewport({ scale: 1 });
-      let side = Math.max(16, Math.min(Math.floor(maxPx), 2048));
+      let side = Math.min(Math.floor(maxPx), 2048);
+      const smallest = Math.min(side, 16);
       for (;;) {
         const viewport = page.getViewport({ scale: side / Math.max(one.width, one.height) });
         const [width, height] = [Math.max(1, Math.round(viewport.width)), Math.max(1, Math.round(viewport.height))];
         const canvas = make(width, height);
-        const context = canvas.getContext('2d');
-        context.fillStyle = '#fff';
-        context.fillRect(0, 0, width, height);
-        await page.render({ canvas, canvasContext: context, viewport, annotationMode: AnnotationMode.ENABLE_STORAGE }).promise;
-        const blob = canvas.convertToBlob ? await canvas.convertToBlob({ type: 'image/png' }) : await new Promise((done) => canvas.toBlob(done, 'image/png'));
-        canvas.width = canvas.height = 0;
-        if (blob.size <= LIMITS.thumbnail || side <= 16) return { png: new Uint8Array(await blob.arrayBuffer()), width, height };
-        side = Math.max(16, Math.floor(side * 0.75));
+        let blob;
+        try {
+          const context = canvas.getContext('2d');
+          if (!context) return { png: null, reason: 'no canvas context to draw on' };
+          context.fillStyle = '#fff';
+          context.fillRect(0, 0, width, height);
+          await page.render({ canvas, canvasContext: context, viewport, annotationMode: AnnotationMode.ENABLE_STORAGE }).promise;
+          blob = canvas.convertToBlob ? await canvas.convertToBlob({ type: 'image/png' }) : await new Promise((done) => canvas.toBlob(done, 'image/png'));
+        } finally { canvas.width = canvas.height = 0; }
+        if (!blob) return { png: null, reason: 'no PNG encoder' };
+        if (blob.size <= L.thumbnail) return { png: new Uint8Array(await blob.arrayBuffer()), width, height };
+        if (side <= smallest) return { png: null, reason: 'thumbnail exceeds size limit' };
+        side = Math.max(smallest, Math.floor(side * 0.75));
       }
     };
 
     // A page's text in the order pdf.js finds it, runs of spaces as one, at most max characters (LIMITS.text).
-    const text = async (page, { max } = {}) => {
-      const limit = Math.min(LIMITS.text, max ?? LIMITS.text);
+    const text = async (page, { max, limits } = {}) => {
+      const L = limitsOf(limits);
+      if (max !== undefined && (!Number.isSafeInteger(max) || max < 0)) throw new RangeError('text: max is a nonnegative integer');
+      const limit = Math.min(L.text, max ?? L.text);
       const { items } = await page.getTextContent();
       let out = '';
       for (const item of items) {
