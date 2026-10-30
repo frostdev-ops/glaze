@@ -35,16 +35,21 @@ const oldSh = (o) => makeSh(o);
 const sh = (o) => makeSh(o, true);
 // cmd expands % even inside quotes, so it is doubled. cmd reads a .bat a line at a time from where it left off, so the
 // command ends the file's reading itself (`& exit /b`): a launcher rewritten while its host runs is never read further.
+// `call exit /b %%errorlevel%%` reads Node's status once Node has ended; plain `exit /b` returns 0 under cmd /c. A folder
+// is told by what is inside it ("X\*"): cmd says "X\" exists for some plain files (nvm-windows' node.exe in %LOCALAPPDATA%).
 // PowerShell writes the no-node bytes: cmd has no way to write a NUL. %SystemRoot% is the browser's own.
 const PS = '"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -NonInteractive -Command';
 const PS_WRITE = () => `"$o=[Console]::OpenStandardOutput();$b=[byte[]](${[...wire()].join(',')});$o.Write($b,0,$b.Length);$o.Flush()"`;
-const makeBat = ({ node, also = [], script, browser }, regular = true) => {
+// form: 'now' as setup writes it; 'rc' and 'plain' as glaze-mcp 4.0.0's prereleases did, which still count as ours.
+const makeBat = ({ node, also = [], script, browser }, form = 'now') => {
   const w = (p) => {
     if (/["\x00-\x1f]/.test(abs(p))) throw new Error(`invalid character in launcher path: ${p}`);
     return `"${p.replace(/%/g, '%%')}"`;
   };
   if (node === null) return `@echo off\r\n@setlocal DisableDelayedExpansion\r\nrem no node for ${w(script)} host --browser=${id(browser)}\r\n${PS} ${PS_WRITE()} & exit /b 1\r\n`;
-  const run = (n) => `if exist ${w(n)} ${regular ? `if not exist ${w(`${n}\\`)} ` : ''}(${w(n)} ${w(script)} host --browser=${id(browser)} %* & exit /b)\r\n`;
+  const guard = (n) => (form === 'now' ? `if not exist ${w(`${n}\\*`)} ` : form === 'rc' ? `if not exist ${w(`${n}\\`)} ` : '');
+  const end = form === 'now' ? 'call exit /b %%errorlevel%%' : 'exit /b';
+  const run = (n) => `if exist ${w(n)} ${guard(n)}(${w(n)} ${w(script)} host --browser=${id(browser)} %* & ${end})\r\n`;
   return `@echo off\r\n@setlocal DisableDelayedExpansion\r\n${[node, ...also].map(run).join('')}${PS} ${PS_WRITE()} & exit /b 1\r\n`;
 };
 const bat = (o) => makeBat(o);
@@ -80,12 +85,12 @@ const parse = (t) => {
   }
   f = typeof t === 'string' && BAT_IF.exec(t);
   if (f) {
-    const line = new RegExp(`if exist ${W} (?:if not exist ${W} )?\\(${W} ${W} host --browser=([a-z][a-z-]*) %\\* & exit /b\\)\r\n`, 'g');
+    const line = new RegExp(`if exist ${W} (?:if not exist ${W} )?\\(${W} ${W} host --browser=([a-z][a-z-]*) %\\* & (?:call exit /b %%errorlevel%%|exit /b)\\)\r\n`, 'g');
     const lines = [...f[1].matchAll(line)];
     if (!lines.length) return null;
     const [node, ...also] = lines.map((m) => unBat(m[1]));
     const o = { node, also, script: unBat(lines[0][4]), browser: lines[0][5] };
-    return back(o, bat) || back(o, (o) => makeBat(o, false));
+    return back(o, bat) || back(o, (o) => makeBat(o, 'rc')) || back(o, (o) => makeBat(o, 'plain'));
   }
   let m = typeof t === 'string' && SH.exec(t);
   if (m) return { node: unSh(m[1]), also: [], script: unSh(m[2]), browser: m[3] };
