@@ -41,13 +41,20 @@ const start = async (o = {}) => {
   try {
     const run = o.run || I.runFile;
     node = await N.choose({ platform, env, run, execPath: o.execPath, versions: o.versions, list: o.list });
-    if (!node) log(N.MISSING);
     const present = B.present(table).map((b) => b.id);
     const browsers = [...new Set([...present, ...(table.some((b) => b.id === id) ? [id] : [])])];
-    if (!browsers.length) { log('no supported browser found to set up'); return { env, node, setup: null }; }
+    if (!browsers.length) {
+      if (!node) log(N.MISSING);
+      log('no supported browser found to set up');
+      return { env, node, setup: null };
+    }
     const setup = await I.ensure({ platform, env, run, node, browsers, ifNeeded: true, keepNewer: true });
+    if (setup.node !== undefined) node = setup.node;
     if (setup.newer) log(`leaving glaze-mcp ${setup.newer}, set up already, in place`);
-    else if (setup.changed) log(`set up ${list(setup.names)}`);
+    else {
+      if (!node) log(N.MISSING);
+      if (setup.changed) log(`set up ${list(setup.names)}`);
+    }
     return { env, node, setup };
   } catch (e) {
     log(`couldn't set up browsers: ${e.message}`);

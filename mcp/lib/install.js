@@ -195,11 +195,24 @@ const launchers = (ctx) => {
   });
 };
 const triple = (v) => v.split(/[.-]/).slice(0, 3).map(Number);
-const newer = (a, b) => { const x = triple(a), y = triple(b); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2]; };
-const newest = (a, b) => {
+const newer = (a, b) => {
   const x = triple(a), y = triple(b);
-  return y[0] - x[0] || y[1] - x[1] || y[2] - x[2] || (a < b ? 1 : -1);
+  const core = x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+  if (core) return core;
+  const pre = (v) => (v.includes('-') ? v.slice(v.indexOf('-') + 1).split('.') : []);
+  const p = pre(a), q = pre(b);
+  if (!p.length || !q.length) return +!p.length - +!q.length;
+  for (let i = 0; i < Math.max(p.length, q.length); i++) {
+    if (p[i] === undefined || q[i] === undefined) return p.length - q.length;
+    if (p[i] === q[i]) continue;
+    const pn = /^\d+$/.test(p[i]), qn = /^\d+$/.test(q[i]);
+    if (pn && qn) return BigInt(p[i]) > BigInt(q[i]) ? 1 : -1;
+    if (pn !== qn) return pn ? -1 : 1;
+    return p[i] > q[i] ? 1 : -1;
+  }
+  return 0;
 };
+const newest = (a, b) => newer(b, a);
 // Keeps this version and the one the launchers ran before (else the newest other one).
 const prune = (ctx, version, before) => {
   const others = copies(ctx).filter((v) => v !== version).sort(newest);
@@ -279,7 +292,11 @@ const ensure = async (o = {}) => {
   if (o.keepNewer) {
     const ahead = [...before].filter((v) => newer(v, version) > 0).sort(newest)[0];
     if (ahead) return { ...out, newer: ahead };
+    // The bundle's PATH can omit the node an earlier setup found. Recheck it before replacing a working launcher.
+    if (ctx.node === null) ctx.node = await N.find({ platform: ctx.platform, env: ctx.env, run: ctx.run,
+      list: [...new Set(priorLaunchers.map(({ l }) => l.node).filter((n) => n !== null))] });
   }
+  out.node = ctx.node;
   privateDir(ctx.root);
   privateDir(ctx.hosts);
   out.copied = copy(ctx, version, !force);
