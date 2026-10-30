@@ -158,3 +158,24 @@ test('handIn accepts byte views and returns codes for unreadable or failed dispa
   assert.equal(await q.ctx.GZ_WRITER_SUBMIT.handIn(q.box, file), 'review');
   assert.equal(q.clicks.length, 0);
 });
+
+test('a partial attachment failure names the failed file and every possible retained upload', async () => {
+  const p = page({ listed: false });
+  p.input.addEventListener('change', () => { if (p.uploads.length === 1) p.addRow(p.uploads[0].name); });
+  await p.go({ files: [{ name: 'Notes.pdf', mime: 'application/pdf', bytes: new Uint8Array([4]).buffer }] });
+  await p.tick(31000);
+  assert.equal(p.clicks.length, 0);
+  const failure = p.sent.filter((m) => m.type === 'submit:done').at(-1);
+  assert.equal(failure.error, 'attach');
+  assert.equal(failure.file, 'Notes.pdf');
+  assert.deepEqual([...failure.retained], ['Rivera_Essay2.docx', 'Notes.pdf']);
+});
+
+test('replacing an earlier attachment while the last file uploads never proves the original bytes', async () => {
+  const p = page({ listed: false });
+  p.input.addEventListener('change', () => { if (p.uploads.length === 1) p.addRow(p.uploads[0].name); });
+  await p.go({ files: [{ name: 'Notes.pdf', mime: 'application/pdf', bytes: new Uint8Array([4]).buffer }] });
+  require('../lib/writer-submit.js').listings(require('../lib/writer-submit.js').areaOf(p.box.editor), 'Rivera_Essay2.docx')[0].remove();
+  p.addRow('Rivera_Essay2.docx'); p.addRow('Notes.pdf'); await p.tick();
+  assert.equal(p.clicks.length, 0);
+});

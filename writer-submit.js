@@ -356,7 +356,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
           if (mine.cancelled || sheet !== mine || P()?.current() !== api || api.key() !== snapshot.key || !L().fileBytes(file, bytes)) throw 'page';
           const r = await send(run, { key: snapshot.key, name, bytes, note: x.note, text: null, ...ultra, asis: true, mime: file.type || '', files: x.files });
           if (mine.cancelled || sheet !== mine) return;
-          if (!r.ok) throw r.error || 'page';
+          if (!r.ok) throw r;
           mine.back = null;
           lock(false);
           close();
@@ -372,7 +372,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
           s = L().advance(s, { step: 'build' });
           const r = await send(run, { key: snapshot.key, note: x.note, text: null, ...ultra, keep: false, append: true, files: x.files, kind: 'paper', version: sending.version?.id ?? null });
           if (mine.cancelled || sheet !== mine) return;
-          if (!r.ok) throw r.error || 'page';
+          if (!r.ok) throw r;
           mine.back = null; lock(false); close();
           return;
         }
@@ -384,17 +384,19 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
         const ext = /(\.[^./\\]+)$/.exec(String(out.name || ''))?.[1].toLowerCase(), sent = other && ext && L().kindOf(`x${ext}`) === kindId && L().kindOf(name) === kindId ? name.replace(/\.[^.]+$/, ext) : name;
         const r = await send(run, { key: snapshot.key, name: sent, bytes: out.bytes.slice().buffer, note: x.note, text, files: x.files, ...ultra, kind: kindId, mime: out.mime || L().mimeOf(name), version: sending.version?.id ?? null });
         if (mine.cancelled || sheet !== mine) return;
-        if (!r.ok) throw r.error || 'page';
+        if (!r.ok) throw r;
         mine.back = null;
         lock(false);
         close();
       } catch (code) {
         if (waiting?.run === run) waiting = null;
-        if (typeof code !== 'string') console.error(code);
+        const detail = code && typeof code === 'object' ? code : null;
+        if (detail && !detail.error) console.error(code);
         if (mine.cancelled || sheet !== mine) return;
         lock(false);
         native.hidden = false;
-        err.textContent = t(SAYS[code] || SAYS.page);
+        err.textContent = [detail?.file ? t('File: {name}.', { name: detail.file }) : '', t(SAYS[detail?.error || code] || SAYS.page), detail?.retained?.length ? t('Use Blackboard editor to review or remove these uploads: {names}.', { names: detail.retained.join(', ') }) : ''].filter(Boolean).join(' ');
+        for (const a of list) if (a.name === detail?.file) { a.ui.el.setAttribute('data-error', ''); a.ui.sizeEl.textContent = t('Not attached'); }
         ask();
       }
     });
@@ -406,7 +408,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
   frame.handle('submit:step', (m) => { if (waiting && m.run === waiting.run) waiting.step(m.step); });
   frame.handle('submit:held', (m) => { sheet?.held?.(m.text); });
   frame.handle('submit:unavailable', (m) => P()?.current()?.notify?.(m.action === 'save' ? 'Not saved. Try again in a moment.' : 'Nothing was submitted. Try again in a moment.'));
-  frame.handle('submit:done', (m) => { if (waiting && m.run === waiting.run) waiting.done({ ok: m.ok === true, error: typeof m.error === 'string' ? m.error : 'page' }); });
+  frame.handle('submit:done', (m) => { if (waiting && m.run === waiting.run) waiting.done({ ok: m.ok === true, error: typeof m.error === 'string' ? m.error : 'page', file: m.file, retained: m.retained }); });
   // Ultra's Save and Close: the paper saved first (it attaches nothing), then the page lets Ultra's own go on. A press
   // made as the frame opened waits for the paper; a save the worker hasn't answered in SAVE_WAIT says so, and Ultra's
   // button stays (the save may still land; it sends nothing then).

@@ -228,7 +228,8 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     return said.some((r) => r?.ok) && sameText(box, d) ? null : 'text';
   };
   const go = async (box, m, ok) => {
-    const fail = (error) => { say(box, { type: 'submit:done', run: m.run, ok: false, error }); return false; };
+    let file = null;
+    const fail = (error) => { say(box, { type: 'submit:done', run: m.run, ok: false, error, file, retained: [...(attached.get(box)?.keys() || [])] }); return false; };
     if (running || box.saved || submitted.has(box) || !Number.isSafeInteger(m.run) || m.run <= Math.max(runs.get(box) || 0, cancelled.get(box) || 0)) return fail('busy');
     runs.set(box, m.run);
     // kind: what the frame built (a paper's .docx, a PDF as saved, a deck as brought: writer-kinds.js), named for it.
@@ -268,9 +269,11 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       if ([...(attached.get(box)?.keys() || [])].some((n) => !names.includes(n.toLowerCase()))) return fail('review');
       say(box, { type: 'submit:step', run: m.run, step: 'attach' });
       for (const f of [...(alone ? [] : [{ name, mime: asis ? m.mime : L().mimeOf(name), bytes }]), ...files]) {
+        file = f.name;
         const a = await handIn(box, f, here);
         if (a) return fail(a);
       }
+      file = null;
       s = L().advance(s, { step: 'attach' });
       if (!here()) return fail('page');
       if (d || note) {
@@ -284,7 +287,9 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       const b = await until(() => { const x = L().footer(box.editor).submit; return x && L().enabled(x) && x; }, 15000, 100, here);
       if (!b) return fail('submit');
       const area = L().areaOf(box.editor);
-      if (!here() || !L().may(s, 'submit') || !L().enabled(b) || b !== L().footer(box.editor).submit || !b.isConnected || [...(alone ? [] : [name]), ...files.map((f) => f.name)].some((n) => L().listed(area, n, visible) !== 1)) return fail('page');
+      file = [...(alone ? [] : [name]), ...files.map((f) => f.name)].find((n) => { const rows = L().listings(area, n, visible); return rows.length !== 1 || rows[0] !== attached.get(box)?.get(n)?.row; }) || null;
+      if (file) return fail('review');
+      if (!here() || !L().may(s, 'submit') || !L().enabled(b) || b !== L().footer(box.editor).submit || !b.isConnected) return fail('page');
       if (note ? !tail(box, note) : d ? !sameText(box, d) : flat(heldOf(box)) !== flat(held)) return fail('text');
       // The worker records the dispatch in the click's own turn: nothing can fail between them, and a page Ultra's
       // navigation tears down after the click has already sent it.
