@@ -22,7 +22,8 @@ const area = (name, heard) => {
   const api = {
     m,
     get: async (k) => { const ks = k == null ? [...m.keys()] : Array.isArray(k) ? k : [k]; return Object.fromEntries(ks.filter((x) => m.has(x)).map((x) => [x, structuredClone(m.get(x))])); },
-    set: async (o) => { const c = {}; for (const [k, v] of Object.entries(o)) { c[k] = { oldValue: m.get(k), newValue: structuredClone(v) }; m.set(k, structuredClone(v)); } await tell(c); },
+    // As Chrome's storage: a key written with the value it already holds is no change, and nothing hears of it.
+    set: async (o) => { const c = {}; for (const [k, v] of Object.entries(o)) { if (!m.has(k) || ST.canon(m.get(k)) !== ST.canon(v)) c[k] = { oldValue: m.get(k), newValue: structuredClone(v) }; m.set(k, structuredClone(v)); } await tell(c); },
     remove: async (k) => { const c = {}; for (const x of [].concat(k)) if (m.has(x)) { c[x] = { oldValue: m.get(x) }; m.delete(x); } await tell(c); },
     keys: async () => [...m.keys()],
   };
@@ -643,4 +644,21 @@ test('a push after one note\'s edit reads that note, not every note ever synced'
   assert.ok((await a.run({ push: true })).ok);
   assert.ok(reads <= 3, `${reads} note bodies read`);
   assert.equal(body(recFile(drive, 'notes', `${ACCT}|${nid(7)}`)).value.html, '<p>Note 7, again</p>');
+});
+
+test('a change back to a value Drive sent unchanged still syncs', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  await a.local.set({ writerWords: ['One'] });
+  await a.on(); await b.on();
+  // Both make the same change, B first: B takes A's later one, the very value B holds.
+  clock.t += 1000; await b.local.set({ writerWords: ['Two'] });
+  clock.t += 1000; await a.local.set({ writerWords: ['Two'] });
+  assert.ok((await a.run({ push: true })).ok); assert.ok((await b.run()).ok); assert.ok((await b.run({ push: true })).ok);
+  clock.t += 1000; await b.local.set({ writerWords: ['Three'] });
+  assert.ok((await b.run({ push: true })).ok); assert.ok((await b.run({ push: true })).ok);
+  clock.t += 1000; await b.local.set({ writerWords: ['Two'] });
+  assert.ok((await b.run({ push: true })).ok);
+  assert.deepEqual(body(recFile(drive, 'local', 'writerWords')).value, ['Two'], 'B\'s change back reaches Drive');
+  assert.ok((await a.run()).ok);
+  assert.deepEqual((await a.local.get('writerWords')).writerWords, ['Two']);
 });
