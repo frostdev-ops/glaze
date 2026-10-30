@@ -112,9 +112,12 @@ const fixture = () => {
     // pdf.js's words come from Glaze's catalogue (lib/pdf-l10n.js), set as its elements are added.
     const landmark = await until(() => page.evaluate(() => document.querySelector('.pdfViewer .page[data-page-number="2"]')?.getAttribute('aria-label')), 'page landmarks');
     check(landmark === 'Page 2', `each page is a landmark named in Glaze's words (${landmark})`);
-    check(workers.some((u) => u.endsWith('/lib/pdfjs/pdf.worker.mjs')), `pdf.js runs in its module worker (${workers.join(', ')})`);
+    const moduleWorker = page.workers().find((w) => w.url().endsWith('/lib/pdfjs/pdf.worker.mjs'));
+    const moduleType = moduleWorker && await moduleWorker.evaluate(() => { try { importScripts(); return false; } catch (e) { return /module/i.test(e.message); } });
+    check(moduleType, `pdf.js runs in its module worker (${workers.join(', ')})`);
     const chrome1 = await page.evaluate(() => ({ title: document.querySelector('.gp-top h1 input')?.value ?? document.querySelector('.gp-top h1')?.textContent, back: document.querySelector('.gp-top a')?.getAttribute('href'), mode: document.documentElement.dataset.mode }));
     check(chrome1.title === 'Field trip form' && chrome1.back === 'papers.html' && chrome1.mode === 'pdf', `the top bar: Documents, the title (${JSON.stringify(chrome1)})`);
+    check(await page.getByRole('region', { name: 'Field trip form', exact: true }).count() === 1, 'the scrollable PDF has a named region');
     // The page is paper under a dark Look; the bar around it is the Look's.
     const lum = (c) => { const m = c.match(/[\d.]+/g).map(Number); return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
     const colours = await page.evaluate(() => ({ dark: document.documentElement.hasAttribute('data-dark'), page: getComputedStyle(document.querySelector('.pdfViewer .page')).backgroundColor, bar: getComputedStyle(document.querySelector('.gp-top')).backgroundColor, ground: getComputedStyle(document.querySelector('.gq-scroll')).backgroundColor }));
