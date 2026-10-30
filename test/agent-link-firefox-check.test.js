@@ -36,7 +36,7 @@ const harness = (t, overrides = {}) => {
   };
   const execFileSync = (_, args) => {
     if (args.includes('-p')) return table.get(Number(args[args.indexOf('-p') + 1]))?.command || '';
-    return [...table].map(([pid, p]) => `${pid} ${p.ppid} ${p.command}`).join('\n');
+    return [...table].map(([pid, p]) => `${pid} ${p.ppid} Wed Oct 29 22:48:00 2026 ${p.command}`).join('\n');
   };
   const context = vm.createContext({
     fs, os: { homedir: () => home, tmpdir: () => scratch }, path, net: {},
@@ -121,6 +121,20 @@ test('T10 SIGTERM saves evidence and exits only after asynchronous cleanup', asy
   release();
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(events, ['cleanup', 'save', 'exit 143']);
+});
+
+test('T10 still owns a child that execs after Firefox exits', async (t) => {
+  const h = harness(t), ff = new EventEmitter();
+  ff.pid = 41; ff.exitCode = null; ff.signalCode = null;
+  ff.kill = () => {
+    h.table.delete(41); ff.signalCode = 'SIGTERM';
+    h.table.set(42, { ppid: 1, command: 'Firefox child after exec' });
+  };
+  h.table.set(41, { ppid: 123456, command: `firefox --profile ${h.tmp}/profile` });
+  h.table.set(42, { ppid: 41, command: 'Firefox child before exec' });
+  h.setFirefox(ff);
+  await h.cleanup();
+  assert.equal(h.table.has(42), false, 'exec changes the command, not ownership of the process');
 });
 
 const claims = async (code, values) => {
