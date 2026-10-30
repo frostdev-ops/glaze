@@ -319,12 +319,13 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     else if (box.text) box.retry = setTimeout(() => { box.retry = null; if (boxes.get(box.editor) === box) send(box, until); }, 60);
   };
   // A compact native action must read the frame's current document, not merely its last delivered change. The frame
-  // saves and holds editing until the native click is dispatched, however long the save takes (its bar says Saving…);
-  // a failed one never clicks Ultra, and the bar says why (reason: text, submit or page; the frame's own it says itself).
+  // saves and holds editing until the native click is dispatched (its bar says Saving…). A lost save gives editing back
+  // after a minute with a visible failure; its late acknowledgement can never dispatch Ultra's button.
   let passing = null;
   const endFlush = (box, reason = null) => {
     const f = box.flushing;
     if (!f) return;
+    clearTimeout(f.timer);
     box.flushing = null;
     box.port?.postMessage({ type: 'compact:resume', request: f.request, ...(reason && { reason }) });
   };
@@ -349,7 +350,9 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       e.preventDefault(); e.stopImmediatePropagation();
       if (!box.ready || !box.port || box.flushing) return;
       const request = crypto.randomUUID(), id = b.getAttribute('data-analytics-id'), action = /submit$/.test(id) ? 'submit' : 'save';
-      box.flushing = { request, button: b, id, action };
+      box.flushing = { request, button: b, id, action, timer: setTimeout(() => {
+        if (box.flushing?.request === request) endFlush(box, 'save');
+      }, 60000) };
       box.port.postMessage({ type: 'compact:flush', request, action });
     }
   }, true);
