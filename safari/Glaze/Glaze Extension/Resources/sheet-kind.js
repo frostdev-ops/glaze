@@ -1,5 +1,5 @@
 // Spreadsheets on the Documents page (papers.html): the sheet kind's page code (lib/doc-kinds.js). Settings → Writer →
-// Spreadsheets (writer.sheets, off by default) adds the New band's Spreadsheet tile (create) and takes .xlsx, .csv and .tsv files
+// Spreadsheets (writer.sheets, defaults.js) adds the New band's Spreadsheet tile (create) and takes .xlsx, .csv and .tsv files
 // (importFile); existing spreadsheets always open, copy and export. A card shows the record's 6×4 text (sheet-data.js
 // glance). Opening one mounts the grid (sheet-grid.js) on the calc engine (lib/sheet-*.js). .xlsx files are read and written
 // by GZ_SHEET_XLSX (lib/sheet-xlsx.js), loaded on demand before a file or the grid opens. Storage is sheet-data.js's alone.
@@ -162,9 +162,12 @@
   };
   const view = (key, host) => edit(key, { host });
 
-  // Opening, copying and exporting stay registered; creating and importing follow the switch. The page waits before it
-  // routes or draws.
-  const on = Promise.resolve().then(() => chrome.storage.sync.get('writer')).then((r) => r?.writer?.sheets === true, () => false);
+  // Opening, copying and exporting stay registered; creating and importing follow the switch, read as Settings shows it
+  // (defaults.js: its default where none is stored). papers.html loads defaults.js on demand; writer.html has it already,
+  // and a second load would redeclare its consts. The page waits before it routes or draws.
+  const DEFAULTS = ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js'];
+  const on = Promise.resolve().then(() => (typeof GZ_SANITIZE === 'undefined' ? need(DEFAULTS) : null)).then(() => chrome.storage.sync.get('writer'))
+    .then((r) => GZ_SANITIZE({ writer: r?.writer }).writer.sheets === true, () => false);
   DK.wait(on.then((yes) => DK.register('sheet', { edit, view, into, empty, thumb, file, exportFile, version, text, measure, copy, says: SAYS, exportLabel: 'Export .xlsx',
     ...(yes && { importFile, create }) })));
   globalThis.GZ_SHEET_KIND = Object.freeze({ shower, fileOf });

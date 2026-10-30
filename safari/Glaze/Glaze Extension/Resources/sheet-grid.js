@@ -291,6 +291,9 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     const shown0 = () => o.show(wb);
     const root = document.documentElement;
     const isField = (el) => !!el?.closest?.('input, textarea, select');
+    // Everything the grid listens to outside itself ends with dispose (writer-kinds.js unmount).
+    const life = new AbortController(), { signal } = life;
+    let gone = false;
 
     // ---- the chrome: Documents and the title; the toolbar; the formula bar; the grid; the sheet tabs; the status bar
     const state = h('span', { class: 'gp-state' });
@@ -548,7 +551,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       if (scroller.scrollLeft + scroller.clientWidth > space.offsetWidth - 300 && ext.cols < MAX_VIEW_COLS) reach(0, ext.cols + 10 - MORE_COLS);
       draw();
     }, { passive: true });
-    new ResizeObserver(() => { layout(); draw(true); }).observe(gridEl);
+    const sizing = new ResizeObserver(() => { layout(); draw(true); });
+    sizing.observe(gridEl);
 
     // Scrolls the cell into view, past the frozen panes.
     const reveal = (r, c) => {
@@ -697,14 +701,24 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       saving = (async () => {
         do {
           again = false;
-          const d = dirtyAll || foreign ? null : new Set(dirty), patch = nextPatch, pend = nextVersion;
+          const d = dirtyAll || foreign ? null : new Set(dirty), patch = nextPatch;
+          let pend = nextVersion, version = null, base = rec?.revision || 0;
           dirty.clear(); dirtyAll = false; nextPatch = {}; nextVersion = null;
-          if (foreign) sigs = new Map([...sigs.keys()].map((n) => [n, 'stale']));
-          let version = null;
           try {
-            version = pend ? await pend : null;
+            // Another tab wrote while this one had unsaved work, and the worker refuses parts planned on an older revision:
+            // this workbook goes over the stored one whole (its parts this one lacks dropped), the stored one kept as a version.
+            if (foreign) {
+              const cur = await SD.read((ks) => chrome.storage.local.get(ks), key);
+              sigs = new Map([...(cur ? cur.sigs : sigs).keys()].filter(Boolean).map((n) => [n, 'stale']));
+              if (cur) base = cur.rec.revision || 0;
+              if (cur?.rec.kind === 'sheet') {
+                version = { reason: 'conflict', gz: await SD.pack(cur.wb), cells: SD.measure(cur.wb).cells };
+                if (pend) { nextVersion = pend; pend = null; again = true; }
+              }
+            }
+            version ||= pend ? await pend : null;
             if (!version && (fresh || Date.now() - lastVersion >= EVERY)) version = { reason: fresh ? 'start' : 'auto', gz: await SD.pack(wb), cells: SD.measure(wb).cells };
-            const out = await SD.write(papers, key, wb, sigs, { base: rec?.revision || 0, dirty: d, version, patch: { ...(fresh && !patch.title && { title: '', named: false }), ...patch }, show: shown0() });
+            const out = await SD.write(papers, key, wb, sigs, { base, dirty: d, version, patch: { ...(fresh && !patch.title && { title: '', named: false }), ...patch }, show: shown0() });
             sigs = out.sigs;
             if (out.saved) { rec = out.saved.paper; lastVersion = rec.lastVersion || lastVersion; }
             fresh = false; foreign = false;
@@ -712,7 +726,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
             console.error(e);
             if (d) for (const n of d) dirty.add(n); else dirtyAll = true;
             nextPatch = { ...patch, ...nextPatch };
-            if (version && version.reason !== 'auto') nextVersion ||= Promise.resolve(version);
+            if (version && version.reason !== 'auto' && version.reason !== 'conflict') nextVersion ||= Promise.resolve(version);
             say(t('Not saved. Try again in a moment.'));
             timer = setTimeout(() => { timer = 0; flush(); }, 5000);
             break;
@@ -722,11 +736,19 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       pill();
       return saving;
     };
-    // Another tab's write: with nothing unsaved here, its workbook is shown; else the next save writes every part.
-    const theirs = async (rev) => {
+    // Another tab's write: with nothing unsaved here, its workbook is shown; else the next save writes every part. A write
+    // that left the cells as they were (the frame's submit checkpoint, a rename) brings only its record, and undo stays.
+    const theirs = async (next) => {
+      const rev = next?.revision;
       if (rev == null || rev <= (rec?.revision || 0)) return;
+      if (next.kind === 'sheet' && next.edited != null && rec?.edited != null && next.edited <= rec.edited) {
+        rec = next; lastVersion = rec.lastVersion || lastVersion;
+        if (titleIn && document.activeElement !== titleIn && rec.title) titleIn.value = rec.title;
+        return;
+      }
       if (busy() || editing) { foreign = true; return; }
       const got = await SD.read((ks) => chrome.storage.local.get(ks), key).catch(() => null);
+      if (gone) return;
       if (!got || busy() || editing) { foreign = !!got; return; }
       wb = got.wb; rec = got.rec; sigs = got.sigs; lastVersion = rec.lastVersion || lastVersion;
       begin(); undos.length = 0; redos.length = 0; undoBytes = 0;
@@ -738,14 +760,14 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     const PAPER = `writerPaper:${key}`;
     const onStore = (ch, area) => {
       if (area !== 'local' || !(PAPER in ch)) return;
-      const rev = ch[PAPER].newValue?.revision;
-      if (saving) saving.then(() => theirs(rev)); else theirs(rev);
+      const next = ch[PAPER].newValue;
+      if (saving) saving.then(() => theirs(next)); else theirs(next);
     };
     chrome.storage.onChanged.addListener(onStore);
-    addEventListener('pagehide', () => { if (busy()) flush(); });
+    addEventListener('pagehide', () => { if (busy()) { commit(); flush(); } }, { signal });
     // A tab closed while a save waits: the browser asks first, as for a PDF's unsaved form.
-    addEventListener('beforeunload', (e) => { if (busy()) { commit(); flush(); e.preventDefault(); e.returnValue = ''; } });
-    document.addEventListener('visibilitychange', () => { if (document.hidden && busy()) flush(); });
+    addEventListener('beforeunload', (e) => { if (busy()) { commit(); flush(); e.preventDefault(); e.returnValue = ''; } }, { signal });
+    document.addEventListener('visibilitychange', () => { if (document.hidden && busy()) flush(); }, { signal });
     // Documents: what is unsaved goes first (a frame of a school's page replaces itself, as papers.js's links do).
     back?.addEventListener('click', (e) => {
       if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -806,7 +828,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       changed(res, { op: 'set' });
       return true;
     };
-    const cancel = () => { if (!editing) return; stopEdit(); gridEl.focus({ preventScroll: true }); };
+    // Back to the cell's own sheet if a reference was being looked for on another.
+    const cancel = () => { if (!editing) return; const home = editing.sheet; stopEdit(); if (home !== S().id) show(wb.sheets.findIndex((x) => x.id === home)); gridEl.focus({ preventScroll: true }); };
     // Where a reference can go: the formula's text before the caret ends in an operator, a parenthesis, a comma or the =.
     const pointable = () => {
       if (!editing) return false;
@@ -871,6 +894,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     };
     const editKeys = (e) => {
       if (!editing) return;
+      // An input method's keys (Enter takes a candidate, Escape drops one) are its own while it composes.
+      if (e.isComposing || e.keyCode === 229) { e.stopPropagation(); return; }
       const s = editing.surface;
       if (!complete.hidden && ['ArrowDown', 'ArrowUp', 'Tab'].includes(e.key) && !e.altKey) {
         const items = [...complete.children];
@@ -904,8 +929,9 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       s.addEventListener('click', () => { if (editing) { editing.point = null; typed(); } });
     }
     fx.addEventListener('focus', () => { if (!editing) startEdit(editText(...sel.active), 'edit', fx); else if (editing.surface === editor) { editing.surface = fx; editor.hidden = true; } });
-    editor.addEventListener('blur', () => { setTimeout(() => { if (editing?.surface === editor && document.activeElement !== editor && document.activeElement !== fx && !document.activeElement?.closest?.('.gx-menu')) commit(); }, 0); });
-    fx.addEventListener('blur', () => { setTimeout(() => { if (editing?.surface === fx && document.activeElement !== fx && document.activeElement !== gridEl) commit(); }, 0); });
+    // A sheet's tab pressed: show() decides.
+    editor.addEventListener('blur', () => { setTimeout(() => { if (editing?.surface === editor && document.activeElement !== editor && document.activeElement !== fx && !document.activeElement?.closest?.('.gx-menu, .gx-tabs')) commit(); }, 0); });
+    fx.addEventListener('blur', () => { setTimeout(() => { if (editing?.surface === fx && document.activeElement !== fx && document.activeElement !== gridEl && !document.activeElement?.closest?.('.gx-tabs')) commit(); }, 0); });
 
     // ---- the name box: a cell, a range, a sheet's or a name's; Enter goes there
     const goTo = (text) => {
@@ -1066,8 +1092,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     };
     const collator = new Intl.Collator(o.locale || undefined, { sensitivity: 'base', numeric: true });
     const rank = (x) => (!x || x.t === 'z' ? 9 : x.t === 'n' ? 0 : x.t === 's' ? 1 : x.t === 'b' ? 2 : 3);
-    // The rows of the selection (or, from one cell, the block of data around it, its first row kept when it reads as a
-    // header), in order by the active cell's column; their formulas move with them.
+    // The rows of the selection (or, from one cell or whole columns, the block of data around them, its first row kept when
+    // it reads as a header), in order by the active cell's column; their formulas move with them.
     const region = (r, c) => {
       const sh = S(), has = (a, b) => a >= 0 && b >= 0 && !!sh.rows.get(a)?.get(b);
       let g = range(r, c), grew = true;
@@ -1084,12 +1110,23 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     const sort = (desc) => {
       commit();
       const last = sel.ranges[sel.ranges.length - 1], [, col] = sel.active;
-      let g = last.r0 === last.r1 && last.c0 === last.c1 ? region(last.r0, last.c0) : { ...last };
+      const one = last.r0 === last.r1 && last.c0 === last.c1, columns = last.r0 === 0 && last.r1 >= ext.rows - 1;
+      let g = one ? region(last.r0, last.c0) : { ...last };
+      // Whole columns sort the block of data they are in, its rows kept whole, as from one of its cells.
+      if (columns) {
+        let top = null;
+        for (const [r, row] of S().rows) for (const c of row.keys()) if (c >= last.c0 && c <= last.c1 && (!top || r < top[0])) top = [r, c];
+        if (!top) return;
+        const b = region(top[0], top[1]);
+        g = range(b.r0, Math.min(b.c0, last.c0), b.r1, Math.max(b.c1, last.c1));
+      }
       const u = used(S());
       g = range(g.r0, g.c0, Math.min(g.r1, u.r - 1), Math.min(g.c1, u.c - 1));
-      if (last.r0 === last.r1 && g.r1 > g.r0) {
-        const a = cellAt(g.r0, col), b = cellAt(g.r0 + 1, col);
-        if (a?.t === 's' && b && b.t !== 's') g.r0++;
+      // A header: a first row of text over, in some column, a value of another kind.
+      if ((one || columns) && g.r1 > g.r0) {
+        const cs = []; for (let c = g.c0; c <= g.c1; c++) cs.push(c);
+        const text = cs.every((c) => { const a = cellAt(g.r0, c); return !a || a.t === 's'; });
+        if (text && cs.some((c) => { const a = cellAt(g.r0, c), b = cellAt(g.r0 + 1, c); return a?.t === 's' && b && b.t !== 's' && b.t !== 'z'; })) g.r0++;
       }
       if (g.r1 <= g.r0) return;
       const rows = []; for (let r = g.r0; r <= g.r1; r++) rows.push(r);
@@ -1162,7 +1199,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       el.querySelector('[role^="menuitem"]:not([disabled])')?.focus();
     };
     const below = (b) => { const r = b.getBoundingClientRect(); return { x: r.left, y: r.bottom + 4, h: r.height + 8 }; };
-    document.addEventListener('pointerdown', (e) => { if (menu && !menu.el.contains(e.target) && !menu.opener?.contains(e.target)) closeMenu(); }, true);
+    document.addEventListener('pointerdown', (e) => { if (menu && !menu.el.contains(e.target) && !menu.opener?.contains(e.target)) closeMenu(); }, { capture: true, signal });
     const toggle = (b, items, label) => b.addEventListener('click', () => { if (menu?.opener === b) { closeMenu(true); return; } commit(); openMenu(typeof items === 'function' ? items() : items, below(b), { opener: b, label }); });
     toggle(fmtB, () => {
       const now = NF.code(fmtOf(cellAt(...sel.active)));
@@ -1233,7 +1270,10 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     // menu key: rename, duplicate, delete, hide and unhide, move
     const show = (i) => {
       if (i < 0 || i >= wb.sheets.length || i === wb.active) return;
-      commit();
+      // A formula waiting for a reference stays open while another sheet shows, in the formula bar (its cell isn't
+      // there): a cell clicked goes in with its sheet's name.
+      if (!(editing && pointable())) commit();
+      if (editing?.surface === editor) { const at = editor.selectionStart; editing.surface = fx; editor.hidden = true; fx.setSelectionRange(at, at); }
       sels.set(S().id, { sel, sL: scroller.scrollLeft, sT: scroller.scrollTop });
       wb.active = i;
       const was = sels.get(S().id);
@@ -1247,7 +1287,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       gridEl.setAttribute('aria-label', S().name);
     };
     const tabOf = (el) => { const id = Number(el?.closest?.('.gx-tab')?.dataset.sheet); return Number.isInteger(id) ? wb.sheets.findIndex((s) => s.id === id) : -1; };
-    tabs.addEventListener('click', (e) => { const i = tabOf(e.target); if (i >= 0) { show(i); gridEl.focus({ preventScroll: true }); } });
+    tabs.addEventListener('click', (e) => { const i = tabOf(e.target); if (i >= 0) { show(i); (editing ? editing.surface : gridEl).focus({ preventScroll: true }); } });
     const renameTab = (i) => {
       const sh = wb.sheets[i], el = tabs.querySelector(`[data-sheet="${sh.id}"]`);
       if (!el) return;
@@ -1312,8 +1352,11 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     const swap = (text) => { const q = findQ.value; return q ? text.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), () => repQ.value) : text; };
     const replaceOne = () => {
       if (hitAt < 0) return;
-      const [r, c] = hits[hitAt], next = swap(editText(r, c));
-      const res = eng.edit(S().id, r, c, next);
+      const [r, c] = hits[hitAt], was = editText(r, c), next = swap(was);
+      // A match in the shown text alone (a format's $ or %) has nothing to replace: the next match is the one.
+      if (next === was) { step(1); return; }
+      let res;
+      try { res = eng.edit(S().id, r, c, next); } catch (e) { refused(e); return; }
       if (res.error) { say(t('There’s a problem with this formula.')); return; }
       pushUndo({ op: res.inverse, sheet: S().id, sel, bytes: weigh(res.inverse) }); redos.length = 0;
       mark(res, { op: 'set' }); changed(res, { op: 'set' });
@@ -1355,8 +1398,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       marquee = { sheet: S().id, g: range(g.r0, g.c0, r1, c1) };
       overlay();
     };
-    document.addEventListener('copy', (e) => copyOut(e, false));
-    document.addEventListener('cut', (e) => copyOut(e, true));
+    document.addEventListener('copy', (e) => copyOut(e, false), { signal });
+    document.addEventListener('cut', (e) => copyOut(e, true), { signal });
     const cellOf = (x, r, c) => {
       const formatted = (cell) => { if (x.fmt && cell.t === 'n') cell.s = M.internStyle(wb, { fmt: x.fmt }); return cell; };
       if (x.formula) return formatted({ t: 'n', v: 0, f: F.normalize(fromR1C1(x.formula, r, c)) });
@@ -1382,6 +1425,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       } else {
         let table = null;
         try { table = html ? parseHTML(html) : null; } catch { table = null; }
+        // A picture or a file alone brings no cells.
+        if (!table && !text) return;
         if (!table) { try { table = parseDelimited(text.replace(/\r?\n$/, ''), '\t').map((row) => row.map((v) => ({ text: v }))); } catch { table = [[{ text }]]; } }
         table.forEach((row, i) => row.forEach((x, j) => { cells.push([r0 + i, c0 + j, cellOf(x, r0 + i, c0 + j)]); cols = Math.max(cols, j + 1); }));
         rows = table.length;
@@ -1398,18 +1443,21 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       const op = ops.length > 1 ? { op: 'batch', ops } : ops[0];
       apply(op, { big: cells.length >= BIG, after: () => setSel({ active: [r0, c0], anchor: [r0, c0], ranges: [range(r0, c0, r0 + rows - 1, c0 + cols - 1)] }, { scroll: false }) });
       if (clip?.cut) { clip = null; marquee = null; overlay(); }
-    });
+    }, { signal });
 
     // ---- the keyboard on the grid
     const pageRows = () => Math.max(1, Math.floor((vh - HH - FH) / 20) - 1), pageCols = () => Math.max(1, Math.floor((vw - HW - FW) / 64) - 1);
     const filled = (r, c) => !!cellAt(r, c) && cellAt(r, c).t !== 'z';
+    const MAC = /^mac/i.test(globalThis.navigator?.userAgentData?.platform || globalThis.navigator?.platform || '');
     let tabOut = false;
     gridEl.addEventListener('keydown', (e) => {
       if (e.target !== gridEl || editing) return;
       if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return;
       if (e.key === 'Tab' && tabOut) { tabOut = false; return; }
       tabOut = e.key === 'Escape';
-      const mod = e.ctrlKey || e.metaKey, k = e.key;
+      // A character typed with AltGr (Ctrl+Alt to the page) or the Mac's Option is a character, not a shortcut.
+      const altGr = e.getModifierState?.('AltGraph') === true, option = MAC && e.altKey && !e.ctrlKey && !e.metaKey;
+      const mod = (e.ctrlKey || e.metaKey) && !altGr, k = e.key;
       const lim = { rows: ext.rows, cols: ext.cols };
       const arrow = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[k];
       if (arrow && !e.altKey) {
@@ -1444,11 +1492,12 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
         case mod && (k === 'r' || k === 'R'): e.preventDefault(); copyAlong('col'); return;
         case mod && k === ' ': e.preventDefault(); setSel({ active: sel.active, anchor: [0, g.c0], ranges: [range(0, g.c0, ext.rows - 1, g.c1)] }, { scroll: false }); return;
         case e.shiftKey && !mod && k === ' ': e.preventDefault(); setSel({ active: sel.active, anchor: [g.r0, 0], ranges: [range(g.r0, 0, g.r1, ext.cols - 1)] }, { scroll: false }); return;
-        case mod && (k === '+' || (k === '=' && e.shiftKey)): e.preventDefault(); shape('insert', whole('col') ? 'col' : 'row', 'before'); return;
-        case mod && k === '-': e.preventDefault(); shape('delete', whole('col') ? 'col' : 'row'); return;
+        // On whole rows or columns; over cells these are the browser's zoom.
+        case mod && (k === '+' || (k === '=' && e.shiftKey)) && (whole('row') || whole('col')): e.preventDefault(); shape('insert', whole('col') ? 'col' : 'row', 'before'); return;
+        case mod && k === '-' && (whole('row') || whole('col')): e.preventDefault(); shape('delete', whole('col') ? 'col' : 'row'); return;
         default:
       }
-      if (k.length === 1 && !mod && !e.altKey) { e.preventDefault(); startEdit(k, 'enter'); return; }
+      if (k.length === 1 && !mod && (!e.altKey || altGr || option)) { e.preventDefault(); startEdit(k, 'enter'); return; }
       if (k === 'Process' || k === 'Dead') startEdit('', 'enter');
     });
     gridEl.addEventListener('focus', () => draw());
@@ -1462,7 +1511,21 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     sizes(); layout(); tabsDraw(); told(); circular(); drawNow(true);
     gridEl.focus({ preventScroll: true });
     const save = async () => { if (!commit()) return false; await flush(); return !busy(); };
-    return { pages: () => wb.sheets.length, say, ready: () => true, save,
+    // Embedded Documents' Close and history routes (papers.js beforeLeave) wait for the cell being written and the save.
+    addEventListener('glaze:papers:beforeleave', (e) => { if (busy()) e.detail.wait(save()); }, { signal });
+    // The host saved first (writer-kinds.js): a write still in flight lands, then nothing of this grid listens or runs.
+    const dispose = async () => {
+      if (gone) return;
+      gone = true;
+      await saving?.catch(() => {});
+      life.abort(); chrome.storage.onChanged.removeListener(onStore); sizing.disconnect();
+      clearTimeout(timer); timer = 0; clearTimeout(sayTimer); clearTimeout(liveTimer);
+      if (frame) cancelAnimationFrame(frame);
+      frame = 0;
+      closeMenu();
+      view.remove();
+    };
+    return { pages: () => wb.sheets.length, say, ready: () => true, save, dispose,
       file: async () => { if (!await save()) throw new Error('not saved'); const f = await fileNow(); return { bytes: f.bytes, mime: f.mime, ext: f.name.slice(f.name.lastIndexOf('.')), name: f.name }; } };
   };
 
