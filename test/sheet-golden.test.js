@@ -398,14 +398,28 @@ test('every todo names a case', () => {
   assert.deepEqual(Object.keys(TODO).filter((id) => !golden[id]), []);
 });
 
+const todoFor = (c, ok, got) => {
+  const missing = [...new Set(F.tokenize(c.formula).filter((k) => k.k === 'fn' && !C.fn(k.name)).map((k) => k.name))];
+  return ok ? undefined : TODO[c.id] ?? (missing.length ? `not built: ${missing.join(', ')}` : undefined);
+};
+
+test('automatic todos cannot cover a built function result or a colliding name', () => {
+  const c = { id: 'review.sum.1', formula: '=IF(TRUE,SUM(1,2),NOSUCHFN(0))' };
+  assert.equal(todoFor(c, false, { t: 'n', v: 4 }), undefined, 'an unused unknown call cannot excuse a wrong number');
+  assert.equal(todoFor({ ...c, formula: '=SUM(1,2)' }, false, { t: 'e', v: '#NAME?' }), undefined);
+  assert.equal(todoFor({ ...c, formula: '=SUMIFS(A1,A1,1)' }, false, { t: 'n', v: 9 }), undefined);
+  assert.equal(todoFor({ ...c, formula: '=SUMIFSX(A1,A1,1)' }, false, { t: 'e', v: '#NAME?' }), 'not built: SUMIFSX');
+  assert.equal(todoFor({ ...c, formula: '=CONCAT("NOSUCHFN(",1)' }, false, { t: 's', v: 'wrong' }), undefined);
+  assert.equal(todoFor(c, true, { t: 'n', v: 3 }), undefined);
+});
+
 for (const [family, list] of byFamily) {
   test(`engine against Excel: ${family}`, async (t) => {
     const got = await run(family, list);
     for (const c of list) {
       if (c.unsupported != null) continue;
       const want = excel(golden[c.id]), ok = same(want, got.get(c.id));
-      const missing = [...new Set(F.tokenize(c.formula).filter((k) => k.k === 'fn' && !C.fn(k.name)).map((k) => k.name))];
-      const todo = ok ? undefined : TODO[c.id] ?? (missing.length ? `not built: ${missing.join(', ')}` : undefined);
+      const todo = todoFor(c, ok, got.get(c.id));
       await t.test(c.id, { todo }, () => {
         assert.ok(!(ok && TODO[c.id]), `${c.id} agrees with Excel now: drop its todo`);
         assert.ok(ok, `${c.formula}: Excel ${JSON.stringify(want)}, engine ${JSON.stringify(got.get(c.id))}`);
