@@ -682,7 +682,7 @@
         if (w) { stage = p.stage; count.textContent = t(...w); }
         showJob(j);
       }, STEPS[j.kind] || ['read', 'prepare', 'save']);
-      showJob(j);
+      report({ stage: 'read', total: j.file.size });
       try {
         // An import that kept the file with parts left out says so (sheet-kind.js: { key, notice }).
         const got = await DK.get(j.kind).importFile(j.file, { progress: report });
@@ -721,7 +721,7 @@
       if (r.failed || r.notice) say(t(r.failed || r.notice));
     };
     const job = (f, id) => {
-      const j = { id: ++jobs, file: f, kind: id, p: null, failed: '', key: null, running: false };
+      const j = { id: ++jobs, file: f, kind: id, p: { stage: 'read', fraction: 0 }, failed: '', key: null, running: false };
       const fill = h('span', { class: 'gd-fill' });
       const bar = h('div', { class: 'gd-progress', role: 'progressbar', 'aria-label': f.name, 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0' }, fill);
       const meta = h('p', { class: 'gd-meta' });
