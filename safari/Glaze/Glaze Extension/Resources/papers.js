@@ -1,6 +1,7 @@
 // Glaze Writer's Documents home (papers.html): every document on this device as a grid of first-page thumbnails or a
-// list, with a New band (Blank and the three formats), search, a course filter, sort, rename, copy, export, delete to
-// Trash with Undo (the Trash its own view: Restore, Delete forever), and .docx files dropped or imported as new documents.
+// list, with a New band (Blank and the three formats, and a kind's own tile: sheet-kind.js's Spreadsheet), search, a course
+// filter, sort, rename, copy, export, delete to Trash with Undo (the Trash its own view: Restore, Delete forever), and files
+// dropped or imported as new documents (.docx, and what a switched-on kind takes).
 // ?paper=<key> opens one in the same paper chrome an assignment's frame has (writer-paper.js). Each kind of document
 // (lib/doc-kinds.js) brings its own page code; this file registers the paper's. Reads Writer's storage directly and writes
 // through the worker (lib/writer-papers.js).
@@ -14,7 +15,7 @@
   // parts as options.js feeds #backdrop; there only while Glaze is on and the Look has one). Follows storage live. The home
   // is an address with no document's key (a kind's param, lib/doc-kinds.js), so its first paint is already the whole Look; a
   // stale link that falls back home paints again (home below). The Look's surfaces (features/surfaces.css) are the home's.
-  const look = { whole: !/[?&](?:paper|pdf|slides)=/.test(location.search), paint: () => {}, surfaces: null,
+  const look = { whole: !/[?&](?:paper|sheet|pdf|slides)=/.test(location.search), paint: () => {}, surfaces: null,
     sheet: () => { look.surfaces ||= new Promise((ok) => { const l = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: 'features/surfaces.css', onload: ok, onerror: ok }); document.head.append(l); }); } };
   const theme = async () => {
     const root = document.documentElement, scheme = matchMedia('(prefers-color-scheme: dark)'), calm = matchMedia('(prefers-reduced-motion: reduce)');
@@ -80,7 +81,7 @@
   };
   const btn = (props, ...kids) => h('button', { type: 'button', ...props }, ...kids);
   const SVG = 'http://www.w3.org/2000/svg';
-  const PATHS = { paper: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6', search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4', grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', list: 'M4 6h16M4 12h16M4 18h16', dots: 'M5 12h.01M12 12h.01M19 12h.01', trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6', slides: 'M3 4h18v12H3zM12 16v4M8 20h8' };
+  const PATHS = { paper: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6', search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4', grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', list: 'M4 6h16M4 12h16M4 18h16', dots: 'M5 12h.01M12 12h.01M19 12h.01', trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6', slides: 'M3 4h18v12H3zM12 16v4M8 20h8', sheet: 'M4 4h16v16H4zM4 9h16M4 14h16M9 4v16M14 4v16' };
   const icon = (name, cls = 'ico') => { const s = document.createElementNS(SVG, 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', cls); s.setAttribute('aria-hidden', 'true'); const p = document.createElementNS(SVG, 'path'); p.setAttribute('d', PATHS[name] || PATHS.paper); s.append(p); return s; };
   const catalogue = () => new Promise((ok) => {
     const file = GZ_I18N.file(locale);
@@ -198,6 +199,14 @@
       return a;
     });
     const band = h('section', { class: 'gd-new', 'aria-labelledby': 'gd-new-h' }, h('h2', { id: 'gd-new-h', text: t('New') }), h('div', { class: 'gd-tiles' }, tiles));
+    // A kind that starts documents of its own (create → its new address) adds its tile, drawn by its own thumbnail.
+    for (const id of Object.keys(DK.KINDS).filter((k) => k !== 'paper' && typeof DK.get(k)?.create === 'function')) {
+      const k = DK.get(id), a = h('a', { class: 'gd-tile', 'data-kind': id, href: k.create() }, h('span', { class: 'gd-tile-pic' }, k.thumb(null)), h('span', { class: 'gd-tile-name', text: t(k.label) }));
+      const mint = () => a.setAttribute('href', k.create());
+      a.addEventListener('click', mint);
+      a.addEventListener('auxclick', mint);
+      band.lastChild.append(a);
+    }
 
     // ---- the toolbar: search, course, kind (once there are two), sort, grid or list, Trash (while it holds anything), import
     const q = h('input', { id: 'gd-q', type: 'search', 'aria-label': t('Search'), placeholder: t('Search'), autocomplete: 'off', spellcheck: 'false', enterkeyhint: 'search' });
@@ -249,8 +258,8 @@
     // What the lists, search, the course choices and mods see: no document in Trash. inView: the view's (the Trash's).
     const live = () => DH.view(known(), false, moving), inView = () => DH.view(known(), bin, moving);
     // What a record says beyond the index: its text for search, and its first line where the index has no title.
-    // A record holds its document (doc, a paper's) or its file (another kind's: file).
-    const holds = (rec) => !!(rec?.doc || rec?.file);
+    // A record holds its document (doc, a paper's), its file (a PDF's or deck's: file) or a spreadsheet's book.
+    const holds = (rec) => !!(rec?.doc || rec?.file || rec?.book);
     const learn = (k, rec) => {
       if (!holds(rec)) return;
       const text = rec.doc ? DH.flat(rec.doc) : String(DK.get(DK.kindOf(rec))?.text?.(rec) ?? '');
@@ -501,7 +510,7 @@
       if (act === 'rename') rename(k);
       else if (act === 'copy') copy(k).catch((e) => { console.error(e); say(t('Not saved. Try again in a moment.')); });
       // A paper Word can't take (a picture kept in a form Word has no place for) is said on the page, not logged.
-      else if (act === 'export') { const id = DK.kindOf(cards.get(k)?.row); DK.get(id).exportFile(k).catch(() => say(t(id === 'paper' ? 'The .docx could not be made.' : 'That file could not be read.'))); }
+      else if (act === 'export') { const id = DK.kindOf(cards.get(k)?.row); DK.get(id).exportFile(k).catch((e) => { console.error(e); say(t(id === 'paper' ? 'The .docx could not be made.' : id === 'sheet' ? 'Not saved. Try again in a moment.' : 'That file could not be read.')); }); }
       else if (act === 'delete') del(k);
       else if (act === 'restore') out(k);
       else if (act === 'forever') forever(k);
@@ -552,13 +561,15 @@
       const rec = await st.get(k);
       return st.save(k, { title: rec?.doc ? F.name(rec.doc, ST.get(rec.format)) : '', named: false });
     };
-    // A copy as a standalone document (lib/writer-papers.js copyOf: the text and its look, never the assignment).
+    // A copy as a standalone document (lib/writer-papers.js copyOf: the text and its look, never the assignment), with what
+    // its kind keeps of its own (copy: a spreadsheet's book, and its parts written with it).
     const copy = async (k) => {
       const rec = await st.get(k);
       if (!rec) return;
-      const c = { ...PA.copyOf(rec, t('Copy of {title}', { title: titleOf(cards.get(k)?.row || rec) })), ...DK.get(DK.kindOf(rec))?.copy?.(rec) };
+      const { parts, ...own } = (await DK.get(DK.kindOf(rec))?.copy?.(rec)) || {};
+      const c = { ...PA.copyOf(rec, t('Copy of {title}', { title: titleOf(cards.get(k)?.row || rec) })), ...own };
       focusNext = c.key;
-      await st.save(c.key, c);
+      await st.save(c.key, c, parts ? { parts, changed: true } : undefined);
     };
 
     // ---- delete: the card goes to Trash at once; the toast's Undo (or Ctrl+Z while it shows) takes it out again through the
@@ -787,8 +798,8 @@
     document.title = t('Documents');
     await GZ_WRITER_PAPER.need(['lib/writer-papers.js']);
     GZ_DOC_KINDS.register('paper', { edit, thumb, file, exportFile, text, importFile, measure: GZ_WRITER_PAPERS.measure });
-    // The other kinds' scripts (pdf-kind.js, slides-kind.js, after this one in papers.html) have run once the document is
-    // parsed; each may still be reading its switch.
+    // The other kinds' scripts (sheet-kind.js, pdf-kind.js, slides-kind.js, after this one in papers.html) have run once the
+    // document is parsed; each may still be reading its switch.
     if (document.readyState === 'loading') await new Promise((ok) => document.addEventListener('DOMContentLoaded', ok, { once: true }));
     await GZ_DOC_KINDS.settled();
     // ?<a kind's param>=<key> opens that document; else the home.
@@ -796,10 +807,11 @@
     if (id) {
       const key = params.get(GZ_DOC_KINDS.KINDS[id].param), k = GZ_DOC_KINDS.get(id);
       const rec = GZ_WRITER_PAPERS.valid(key) ? await papers().get(key) : null;
-      // Only a New tile can open a missing key. A stale link, malformed key or a kind this build cannot edit returns home
-      // without mounting an empty editor over an existing document of another kind.
-      const fresh = !rec && GZ_WRITER_PAPERS.local(key) && ['plain', 'mla9', 'apa7', 'chicago17'].includes(params.get('format'));
-      if (typeof k.edit === 'function' && ((rec && GZ_DOC_KINDS.kindOf(rec) === id) || fresh)) { await k.edit(key); return; }
+      // Only a New tile can open a missing key: a paper's with its format, another kind's (&new) while that kind creates. A
+      // stale link, malformed key or a kind this build cannot edit returns home without mounting an empty editor over an
+      // existing document of another kind.
+      const fresh = !rec && GZ_WRITER_PAPERS.local(key) && (id === 'paper' ? ['plain', 'mla9', 'apa7', 'chicago17'].includes(params.get('format')) : params.has('new') && typeof k.create === 'function');
+      if (typeof k.edit === 'function' && ((rec && GZ_DOC_KINDS.kindOf(rec) === id) || fresh)) { await k.edit(key, { fresh: !rec }); return; }
       history.replaceState(null, '', 'papers.html');
     }
     await home();
@@ -843,7 +855,7 @@ if (window.top !== window) (() => {
   };
   const place = () => {
     if (close.isConnected) return true;
-    // A document of any kind (data-mode: 'paper', 'pdf', 'slides') has the paper chrome's top bar.
+    // A document of any kind (data-mode: 'paper', 'sheet', 'pdf', 'slides') has the paper chrome's top bar.
     const paper = !!root.dataset.mode, at = paper ? document.querySelector('.gp-top') : $('list');
     if (!at || at.hidden) return false;
     close.textContent = GZ_I18N.t('Close', {}, locale);

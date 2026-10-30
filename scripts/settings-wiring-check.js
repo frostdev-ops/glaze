@@ -72,7 +72,7 @@ const check = async (name, run) => {
       });
       assert.ok(cases.length > 200, 'the full editor loaded');
       // Writer's off switches for page behaviour, each a control of its own.
-      for (const key of ['writer.full', 'writer.pdf', 'writer.slides']) assert.ok(cases.some((c) => c.key === key), `${key} has a control`);
+      for (const key of ['writer.full', 'writer.sheets', 'writer.pdf', 'writer.slides']) assert.ok(cases.some((c) => c.key === key), `${key} has a control`);
       for (const item of cases) {
         const started = Date.now();
         await check(item.key, async () => {

@@ -1,10 +1,11 @@
 // The kinds of document the Documents home (papers.html) holds: each kind's fixed facts here, its page code (edit, thumb,
-// file → { name, mime, bytes }, exportFile, text, importFile, measure, and copy → the fields of its own a copy keeps)
-// attached by the page script that draws it (papers.js the paper's, pdf-kind.js the PDF's, slides-kind.js the slides'; each
-// one's importFile only while its Settings → Writer switch is on). Only a kind registered with importFile takes files; a
-// script that decides late what it registers says so with wait(), and the page routes once settled(). A stored record or
-// index row without a kind was written before kinds and is a paper (lib/writer-papers.js). Later kinds join KINDS; a build
-// that lacks one leaves its rows alone rather than guessing at them.
+// file → { name, mime, bytes }, exportFile, text, importFile, measure, copy → the fields of its own a copy keeps, create → a
+// new one from the New band) attached by the page script that draws it (papers.js the paper's, sheet-kind.js the
+// spreadsheet's, pdf-kind.js the PDF's, slides-kind.js the slides'; each one's importFile and create only while its
+// Settings → Writer switch is on). Only a kind registered with importFile takes files; a script that decides late what it
+// registers says so with wait(), and the page routes once settled(). A stored record or index row without a kind was
+// written before kinds and is a paper (lib/writer-papers.js). Later kinds join KINDS; a build that lacks one leaves its
+// rows alone rather than guessing at them.
 // Classic script; module.exports for node.
 var GZ_DOC_KINDS = globalThis.GZ_DOC_KINDS || (() => {
   const freeze = (o) => { for (const v of Object.values(o)) if (v && typeof v === 'object') freeze(v); return Object.freeze(o); };
@@ -12,6 +13,7 @@ var GZ_DOC_KINDS = globalThis.GZ_DOC_KINDS || (() => {
   // max: the largest file it opens, in bytes; param: its name in a page's address.
   const KINDS = freeze({
     paper: { label: 'Document', icon: 'paper', accept: ['.docx'], mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', max: 15e6, param: 'paper' },
+    sheet: { label: 'Spreadsheet', icon: 'sheet', accept: ['.xlsx', '.csv'], mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', max: 15e6, param: 'sheet' },
     pdf: { label: 'PDF', icon: 'pdf', accept: ['.pdf'], mime: 'application/pdf', max: 50e6, param: 'pdf' },
     slides: { label: 'Slides', icon: 'slides', accept: ['.pptx', '.ppsx'], mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', max: 50e6, param: 'slides' },
   });
