@@ -84,7 +84,7 @@ async function pass(scheme) {
 
     await check(`${scheme}-switches`, async () => {
       const keys = await page.$$eval('#panel-writer input[type="checkbox"][data-key]', (els) => els.map((e) => e.dataset.key));
-      assert.deepEqual(keys, ['enhance.writer', 'enhance.writerUploads', 'writer.ruler', 'writer.lightPage', 'writer.full', 'writer.autocorrect.typos', 'writer.autocorrect.capitalI', 'writer.autocorrect.doubles', 'writer.autocorrect.smart',
+      assert.deepEqual(keys, ['enhance.writer', 'enhance.writerUploads', 'writer.ruler', 'writer.lightPage', 'writer.full', 'writer.pdf', 'writer.autocorrect.typos', 'writer.autocorrect.capitalI', 'writer.autocorrect.doubles', 'writer.autocorrect.smart',
         'writer.pasteAsk', 'writer.proofing', 'writer.compose.markdown', 'writer.compose.target', 'writer.compose.quote', 'writer.submit.rememberText']);
       for (const k of keys) {
         const box = page.locator(`#panel-writer [data-key="${k}"]`);
