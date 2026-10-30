@@ -466,3 +466,17 @@ test('a slide masterClrMapping bypasses the layout colour-map override', async (
   assert.deepEqual(d.slides[0].background, { type: 'solid', color: '#ffffff' });
   assert.equal(named(d.slides[0], 'Title 1').text.paragraphs[0].runs[0].color, '#000000');
 });
+
+test('shared master chart titles are parsed once per part', async () => {
+  const D = require('../lib/doctext.js'), original = D.tokens;
+  let parsed = 0;
+  D.tokens = function* (src, ...args) {
+    if (src.includes('shared-chart-probe')) parsed++;
+    yield* original(src, ...args);
+  };
+  try {
+    const rels = fixture('ppt/slideMasters/_rels/slideMaster1.xml.rels').replace('</Relationships>', '<Relationship Id="chart" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/></Relationships>');
+    await P.read(pack({ 'ppt/slideMasters/_rels/slideMaster1.xml.rels': rels, 'ppt/charts/chart1.xml': fixture('ppt/charts/chart1.xml').replace('?>', '?><!-- shared-chart-probe -->') }));
+    assert.equal(parsed, 1);
+  } finally { D.tokens = original; }
+});
