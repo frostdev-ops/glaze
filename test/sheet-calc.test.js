@@ -532,3 +532,15 @@ test('moving a sheet changes which sheets a 3-D reference spans', () => {
   e.edit(third, 0, 0, '300');
   assert.equal(val(e, 'B1'), 11);
 });
+
+test('formulaAt: a formula\'s cell, or the head of the array formula covering it', () => {
+  const e = book({ A1: '=1+1', B1: 5 });
+  const sh = e.wb.sheets[0];
+  e.apply({ op: 'set', sheet: sh.id, r: 2, c: 0, cell: { t: 'n', v: 0, f: '{1;2}*3', a: 'A3:A4' } });
+  assert.equal(e.formulaAt(sh, 0, 0).f, '1+1');
+  assert.equal(e.formulaAt(sh.id, 0, 0).f, '1+1', 'by sheet id too');
+  assert.equal(e.formulaAt(sh, 3, 0), M.cell(sh, 2, 0), 'a member gives its head');
+  assert.equal(e.formulaAt(sh, 0, 1), null);
+  assert.equal(e.formulaAt(sh, 9, 9), null);
+  assert.equal(e.formulaAt(999, 0, 0), null);
+});
