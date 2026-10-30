@@ -173,6 +173,9 @@ test('copyOf drops the assignment fields', async () => {
   copy.doc.content[0].content[0].text = 'Changed.';
   assert.equal(paper.doc.content[0].content[0].text, 'Original.', 'the copy is its own document');
   assert.deepEqual(Object.keys(PA.copyOf({ kind: 'sheet', title: 'x' }, 'Copy of x', 1)).sort(), ['created', 'keep', 'key', 'kind', 'named', 'revision', 'title', 'updated']);
+  // A PDF (pdf-kind.js) is its file: the copy keeps the bytes, their size and page count, and the first page's picture.
+  const pdf = PA.copyOf({ kind: 'pdf', title: 'Form', file: 'JVBERi0xLjQK', size: 9, pages: 3, thumb: 'data:image/png;base64,AA==', school: 'bb.school.test' }, 'Copy of Form', 2);
+  assert.deepEqual(pdf, { key: pdf.key, kind: 'pdf', file: 'JVBERi0xLjQK', size: 9, pages: 3, thumb: 'data:image/png;base64,AA==', keep: false, title: 'Copy of Form', named: true, created: 2, updated: 2, revision: 0 });
 });
 
 test('fromDocument: a standalone document\'s text, format and import choice for an assignment\'s paper, never its name', async () => {
