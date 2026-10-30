@@ -312,6 +312,40 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
       check(true, 'a reused Blackboard iframe never keeps the previous file visible');
     }
 
+    // Hold one page-origin S3 read while another attachment opens, then collapse and reopen it.
+    if (!reviewCase || reviewCase === 'lifecycle') {
+      let release, started = false;
+      const gate = new Promise((r) => { release = r; }), pattern = '**/converted.pdf*';
+      const slow = async (route) => {
+        if (route.request().url().includes(SLIDES.hash)) { started = true; await gate; }
+        await route.fallback();
+      };
+      await context.route(pattern, slow);
+      try {
+        await load(); await toggle(SLIDES);
+        await until(() => started, 'slides read started');
+        await toggle(LAB); await glazeIn(LAB, 'second attachment while the first reads');
+        check((await view(SLIDES)).bbShown && !(await view(SLIDES)).gzShown, 'two expanded attachments keep independent reads and swaps');
+        await toggle(SLIDES);
+        await until(async () => { const v = await view(SLIDES); return !v.bb && !v.gz; }, 'collapse during read');
+        release(); await context.unroute(pattern, slow);
+        await toggle(SLIDES); await glazeIn(SLIDES, 'reopened after an aborted read');
+        check((await view(LAB)).gzShown, 'collapse during fetch and a late result leave the other attachment and the reopened preview intact');
+      } finally { release(); await context.unroute(pattern, slow); }
+
+      started = false;
+      const next = new Promise((r) => { release = r; });
+      const navigating = async (route) => { started = true; await next; await route.fallback(); };
+      await context.route(pattern, navigating);
+      try {
+        await load(); await toggle(LAB);
+        await until(() => started, 'read before navigation');
+        await p.goto('about:blank'); release(); await context.unroute(pattern, navigating);
+        await load(); await toggle(LAB); await glazeIn(LAB, 'new page after navigation during fetch');
+        check(await p.locator('iframe.gz-pv').count() === 1, "navigation during fetch leaves only the new page's preview");
+      } finally { release(); await context.unroute(pattern, navigating); }
+    }
+
     // pdf.js dispatches pagerendered with error even when the draw failed (pdf_viewer.mjs dispatchPageRendered).
     if (!reviewCase || reviewCase === 'draw') {
       await p.addInitScript(() => {
