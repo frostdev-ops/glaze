@@ -303,3 +303,30 @@ test('every binding stays within the device\'s limit: the FFN in chunks when its
   assert.equal(h2.live().length, weights);
   e2.release();
 });
+
+test('precision auto is f32 even where shader-f16 exists; f16 only when asked', async () => {
+  const h = host({ features: ['shader-f16'] });
+  const a = await h.load(projector());
+  assert.equal(a.f16, false);
+  a.release();
+  const b = await h.load(projector(), { precision: 'f16' });
+  assert.equal(b.f16, true);
+  b.release();
+  // an encoder that makes its own device asks for shader-f16 only for f16
+  const asked = [];
+  const h2 = host({ features: ['shader-f16'] });
+  const requestDevice = h2.adapter.requestDevice;
+  h2.adapter.requestDevice = async (d) => { asked.push(d.requiredFeatures); return requestDevice(d); };
+  const kernels = (n) => fs.readFileSync(path.join(__dirname, `../../extension/ai/local/kernels/vision-${n}.wgsl`), 'utf8');
+  (await h2.V.load(projector(), { kernels })).release();
+  (await h2.V.load(projector(), { kernels, precision: 'f16' })).release();
+  assert.deepEqual(asked.map((f) => [...f]), [[], ['shader-f16']]);
+});
+
+test('the result buffer can be copied from, as the engine\'s prefill embeds need', async () => {
+  const h = host(), enc = await h.load(), r = await enc.encode(picture(64, 64));
+  const U = h.context.GPUBufferUsage;
+  assert.ok(r.buffer.usage & U.COPY_SRC);
+  assert.ok(r.buffer.usage & U.STORAGE);
+  r.drop(); enc.release();
+});

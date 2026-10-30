@@ -7,6 +7,11 @@
 //                                           the reference's embeddings (<ref dir>/<id>.embd.f32): max |Δ| ≤ 1e-3 on f32
 //                                           (reported on f16); --out gets the GPU's <id>.embd.f32 for `lm`
 //   speed <mmproj.gguf> [--size 1024x1024]  encode time of a picture (after a warm-up, median of 3) and the CPU's share
+//   prefill <model.gguf> <mmproj.gguf> <images> <ref dir>
+//                                           end to end on the GPU: the VL model's text half in the engine
+//                                           (GZ_AI_ENGINE.load), the pictures encoded on its device and fed as prefill
+//                                           embeds; top-1 at every text position against <ref dir>/<id>.prefill.f32
+//                                           (vision-reference.js and the reference text model): all must agree
 //   lm <model.gguf> <gpu dir> <ref dir>     (Node only, an hour of CPU) the GPU's embeddings through the reference text
 //                                           model in place of the reference's own: top-1 at every text position of the
 //                                           prompt against <ref dir>/<id>.prefill.f32 (local-vision-check.js's dumps)
@@ -189,7 +194,7 @@ function pageLib() {
   };
   const describe = (a) => ({ vendor: a.info.vendor, architecture: a.info.architecture, description: a.info.description, isFallbackAdapter: a.info.isFallbackAdapter, features: [...a.features].sort(), limits: Object.fromEntries(['maxBufferSize', 'maxStorageBufferBindingSize', 'maxComputeWorkgroupStorageSize'].map((k) => [k, a.limits[k]])) });
   const loadEncoder = async (g, o) => {
-    const a = await adapter(), L = a.limits, f16 = o.precision !== 'f32' && a.features.has('shader-f16');
+    const a = await adapter(), L = a.limits, f16 = o.precision === 'f16' && a.features.has('shader-f16');
     const device = await a.requestDevice({ requiredFeatures: f16 ? ['shader-f16'] : [], requiredLimits: { maxBufferSize: L.maxBufferSize, maxStorageBufferBindingSize: L.maxStorageBufferBindingSize, maxComputeWorkgroupStorageSize: L.maxComputeWorkgroupStorageSize } });
     const errors = [];
     device.onuncapturederror = (e) => errors.push(e.error.message);
@@ -426,20 +431,77 @@ function pageLib() {
     return { adapter: ad, f16: enc.f16, size: [w, h], resized: [size.width, size.height], tokens: size.tokens, runs, ms, cpuMs, errors, pass: !errors.length };
   };
 
-  window.CK = { small, model: modelMode, speed };
+  // ---- prefill: the engine's text model fed the encoder's embeddings, end to end on the GPU ----
+  const prefill = async (o) => {
+    const a = await adapter(), kernels = new URL('/ai/local/kernels/', location.href).href;
+    const t0 = performance.now();
+    const model = await GZ_AI_ENGINE.load(await open('model'), { adapter: a, context: 4096, chunk: 512, kernels });
+    const enc = await V.load(await open('mmproj'), { device: model.device, precision: o.precision, kernels });
+    const errors = [];
+    model.device.addEventListener?.('uncapturederror', (e) => errors.push(e.error.message));
+    const E = model.engine.config.nEmbd, Vc = model.engine.config.vocab;
+    log(`engine: ${a.info.vendor} ${a.info.architecture}, ${model.engine.f16 ? 'f16' : 'f32'}, subgroups ${model.engine.subgroups ? 'on' : 'off'}; encoder ${enc.f16 ? 'f16' : 'f32'}; loaded in ${Math.round(performance.now() - t0)} ms`);
+    if (enc.config.outEmbd !== E) throw new Error(`the projector writes ${enc.config.outEmbd} wide, the text model is ${E}`);
+    const start = await model.snapshot(), rows = [];
+    for (const { id, w, h } of o.pictures) {
+      const want = JSON.parse(new TextDecoder().decode(await bytes(`ref/${id}.json`)));
+      const ref = new Float32Array((await bytes(`ref/${id}.prefill.f32`)).buffer);
+      const ids = [], text = [], embeds = [], p0 = performance.now();
+      for (const ch of want.chunks) {
+        if (ch.text) { for (const t of ch.text) { text.push(ids.length); ids.push(t); } continue; }
+        const r = await enc.encode({ width: w, height: h, data: await bytes(`img/${id}`) });
+        if (r.tokens !== ch.image) throw new Error(`${id}: ${r.tokens} picture tokens, the reference has ${ch.image}`);
+        embeds.push({ at: ids.length, tokens: r.tokens, buffer: r.buffer, drop: r.drop });
+        for (let i = 0; i < r.tokens; i++) ids.push(0);
+      }
+      const isText = new Set(text), got = [];
+      let n = 0, same = 0, dmax = 0;
+      const misses = [];
+      await model.prefill(ids, {
+        embeds: embeds.map(({ at, tokens, buffer }) => ({ at, tokens, buffer })),
+        onRows: (first, block, count) => {
+          for (let r = 0; r < count; r++) {
+            if (!isText.has(first + r)) continue;
+            const x = block.subarray(r * Vc, (r + 1) * Vc), y = ref.subarray(n * Vc, (n + 1) * Vc);
+            let ta = 0, tb = 0;
+            for (let k = 0; k < Vc; k++) { if (x[k] > x[ta]) ta = k; if (y[k] > y[tb]) tb = k; dmax = Math.max(dmax, Math.abs(x[k] - y[k])); }
+            if (ta === tb) same++; else misses.push({ pos: n, gpu: ta, ref: tb, gap: y[tb] - y[ta] });
+            got.push(ta); n++;
+          }
+        },
+      });
+      const ms = performance.now() - p0;
+      for (const e of embeds) e.drop();
+      await model.restore(start);
+      const row = { id, positions: n, of: text.length, same, prefillMaxAbs: dmax, misses, imageTokens: embeds.reduce((k, e) => k + e.tokens, 0), prompt: ids.length, ms, pass: n === text.length && same === n };
+      rows.push(row);
+      log(`${row.pass ? 'ok  ' : 'FAIL'} ${id}: ${row.imageTokens} picture tokens in a prompt of ${row.prompt}, top-1 ${same}/${n} text positions, max |Δlogit| ${dmax.toExponential(3)} (encode + prefill ${Math.round(ms)} ms)${misses.length ? ` misses ${JSON.stringify(misses)}` : ''}`);
+    }
+    start.drop(); enc.release(); model.release();
+    const same = rows.reduce((k, r) => k + r.same, 0), total = rows.reduce((k, r) => k + r.of, 0);
+    log(`all: top-1 ${same}/${total}`);
+    if (errors.length) log(`FAIL WebGPU errors: ${errors.slice(0, 5).join(' | ')}`);
+    return { rows, same, total, errors, pass: rows.every((r) => r.pass) && !errors.length };
+  };
+
+  window.CK = { small, model: modelMode, speed, prefill };
 }
 
 // ---- Node: serve, launch, run ---------------------------------------------------------------------------------------------
-if (require.main === module && ['small', 'model', 'speed'].includes(mode)) (async () => {
+if (require.main === module && ['small', 'model', 'speed', 'prefill'].includes(mode)) (async () => {
   const { serve } = require('./local-engine-check.js');
   const files = {};
   const o = { precision: opt.precision };
   if (mode === 'small') files.tiny = tinyProjector();
-  else {
+  else if (mode === 'prefill') {
+    files.model = path.resolve(args.shift() || '');
+    if (!fs.existsSync(files.model)) throw new Error('no text model');
+    files.mmproj = path.resolve(args[0] || '');
+  } else {
     files.mmproj = path.resolve(args[0] || '');
     if (!fs.existsSync(files.mmproj)) throw new Error(`no projector ${args[0]}`);
   }
-  if (mode === 'model') {
+  if (mode === 'model' || mode === 'prefill') {
     const [, images, ref] = args;
     files.ref = path.resolve(ref);
     o.tol = EMBD_TOL; o.keep = !!opt.out;
@@ -495,7 +557,7 @@ if (require.main === module && ['small', 'model', 'speed'].includes(mode)) (asyn
   process.exitCode = pass ? 0 : 1;
 })().catch((e) => { console.error(e); process.exitCode = 1; });
 else if (require.main === module && !['lm', 'lm-worker'].includes(mode)) {
-  console.error('usage: node checks/ai/local-vision-gpu-check.js small | model <mmproj> <images> <ref dir> | speed <mmproj> | lm <model> <gpu dir> <ref dir>  (see the top of this file)');
+  console.error('usage: node checks/ai/local-vision-gpu-check.js small | model <mmproj> <images> <ref dir> | speed <mmproj> | prefill <model> <mmproj> <images> <ref dir> | lm <model> <gpu dir> <ref dir>  (see the top of this file)');
   process.exit(2);
 }
 
