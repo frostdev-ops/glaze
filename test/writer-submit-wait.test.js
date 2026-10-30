@@ -314,6 +314,38 @@ test('compact: a disabled Ultra Submit pressed before readiness is held until th
   assert.equal(c.clicks[0], b);
 });
 
+// Ultra turns its Submit on once React has drawn the text written into its box, not as the write returns: the held press
+// waits for that, within a bound, and says why when it never comes.
+test('compact: a held Submit that Ultra turns on just after the text lands goes once; one that never does says why', async () => {
+  for (const turnsOn of [true, false]) {
+    const { c } = await attempt(false), b = c.doc.querySelector(SUBMIT);
+    b.disabled = true; b.setAttribute('disabled', '');
+    b.getBoundingClientRect = () => ({ left: 10, right: 90, top: 20, bottom: 50 });
+    for (const type of ['pointerdown', 'pointerup']) c.doc.dispatchEvent({ type, target: b, button: 0, clientX: 40, clientY: 30, preventDefault() {}, stopImmediatePropagation() {} });
+    c.emit({ type: 'view', full: false });
+    c.tick(100);
+    const request = flushes(c.ports[0])[0]?.request;
+    assert.ok(request);
+    if (turnsOn) c.doc.addEventListener('gz-writer:set', () => queueMicrotask(() => { b.disabled = false; b.removeAttribute('disabled'); }));
+    c.emit({ type: 'compact:flushed', request, ...ok });
+    await new Promise(setImmediate);
+    assert.equal(c.ports[0].sent.some((m) => m.type === 'compact:resume'), false, 'still saving while Ultra turns its Submit on');
+    assert.equal(b.getAttribute('aria-busy'), 'true');
+    if (!turnsOn) {
+      const t0 = Date.now();
+      c.ctx.__now = () => t0 + 15001;
+      vm.runInContext('Date.now = () => globalThis.__now()', c.ctx);
+    }
+    c.tick(100);
+    c.tick(100);
+    const resume = c.ports[0].sent.filter((m) => m.type === 'compact:resume');
+    assert.equal(c.clicks.length, turnsOn ? 1 : 0);
+    assert.equal(resume.length, 1);
+    assert.equal(resume[0].reason, turnsOn ? undefined : 'submit');
+    assert.equal(b.hasAttribute('aria-busy'), false);
+  }
+});
+
 test('compact: a footer returning just after a flush times out can retry before the next poll', async () => {
   const { c, press } = await attempt(false);
   c.emit({ type: 'view', full: false });
