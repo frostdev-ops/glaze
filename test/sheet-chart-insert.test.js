@@ -254,3 +254,22 @@ test('chart room: imported anchors and an inserted chart extend beyond the initi
   assert.deepEqual(L.list()[0].box, { x: 27 * 64, y: 0, w: 480, h: 288 });
   L.dispose();
 });
+
+test('delete: a chart part shared by another relationship survives, including undo', async () => {
+  const wb = await X.read(FX.workbook({ kinds: ['column', 'line'], over: {
+    'xl/drawings/_rels/drawing1.xml.rels': FX.rels([['rId1', 'chart', '../charts/chart1.xml'], ['rId2', 'chart', '../charts/chart1.xml']]),
+  } }));
+  const L = mount(wb);
+  L.draw();
+  const back = L.apply(L.remove(L.list()[0].id));
+  L.draw();
+  assert.equal(L.list().length, 1);
+  assert.equal(L.list()[0].title, 'Sales by month');
+  assert.equal(L.list()[0].marks.bars.length, 8);
+  const exported = await X.read(await X.write(wb, { date: DATE }));
+  assert.equal(CX.charts(exported, exported.sheets[0])[0].chart.kind, 'plot');
+  L.apply(back);
+  L.draw();
+  assert.deepEqual(L.list().map((c) => c.title), ['Sales by month', 'Sales by month']);
+  L.dispose();
+});
