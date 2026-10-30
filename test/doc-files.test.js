@@ -277,6 +277,69 @@ test('a put keeps up to WINDOW chunks on their way, the bytes kept in order', as
   assert.equal(sha(await client.get(file)), sha(b));
 });
 
+test('a put refuses chunk acknowledgements delivered out of order', async () => {
+  const { st, data } = make();
+  const { client } = wire(st, { tap: (p) => {
+    const post = p.postMessage;
+    let first = null, n = 0;
+    p.postMessage = (m) => {
+      if (m.ack && ++n === 1) { first = m; return; }
+      post(m);
+      if (m.ack && n === 2) post(first);
+    };
+    return p;
+  } });
+  await assert.rejects(client.put(bytes(F.CHUNK * 8, 14), 'application/pdf'), (e) => e.why === 'unavailable');
+  for (let i = 0; i < 50 && [...data().keys()].length; i++) await new Promise(setImmediate);
+  assert.deepEqual([...data().keys()], [], 'no upload, chunk or published file left');
+});
+
+test('a put refuses a gap in chunk acknowledgements before the port disconnects', async () => {
+  const { st, data } = make();
+  const { client } = wire(st, { tap: (p) => {
+    const post = p.postMessage;
+    let n = 0;
+    p.postMessage = (m) => {
+      if (m.ack && ++n === 1) return;
+      post(m);
+      // End the faulty fake's port so a client that misses the gap cannot hang the test.
+      if (m.ack && n === 4) setImmediate(() => p.disconnect());
+    };
+    return p;
+  } });
+  await assert.rejects(client.put(bytes(F.CHUNK * 4, 15), 'application/pdf'), (e) => e.why === 'unavailable');
+  for (let i = 0; i < 50 && [...data().keys()].length; i++) await new Promise(setImmediate);
+  assert.deepEqual([...data().keys()], [], 'no upload or chunk left');
+});
+
+test('a full window waits for the first write and a page disconnect releases it', async () => {
+  let release, entered;
+  const writing = new Promise((r) => { entered = r; });
+  const gate = new Promise((r) => { release = r; });
+  const { st, db, data } = make({ wrap: (db) => ({ ...db, write: async (puts, dels) => {
+    if (puts.some(([k]) => k.startsWith('c:'))) { entered(); await gate; }
+    return db.write(puts, dels);
+  } }) });
+  const p = ports();
+  F.serve(p.worker, st);
+  const ready = new Promise((r) => p.page.onMessage.addListener((m) => { if (m.ready) r(); }));
+  p.page.postMessage({ op: 'put', size: F.CHUNK * 8, type: 'application/pdf' });
+  await ready;
+  for (let i = 0; i < 4; i++) p.page.postMessage({ op: 'chunk', data: F.b64(bytes(F.CHUNK, 16 + i)) });
+  try {
+    await writing;
+    await new Promise(setImmediate);
+    assert.equal(p.sent.filter(({ from, m }) => from === 'worker' && m.ack).length, 0);
+  } finally { p.page.disconnect(); release(); }
+  for (let i = 0; i < 50 && [...data().keys()].length; i++) await new Promise(setImmediate);
+  assert.deepEqual([...data().keys()], [], 'the pending write and queued chunks cannot outlive the upload');
+  // A new worker over the same database starts the retry on its own port, never resumes the old window.
+  const restarted = wire(F.store(db)), b = bytes(F.CHUNK * 4 + 1, 17);
+  const file = await restarted.client.put(b, 'application/pdf');
+  assert.equal(file.hash, sha(b));
+  assert.equal(sha(await restarted.client.get(file)), file.hash);
+});
+
 test('a refusal while chunks are on their way is the one said', async () => {
   const { st } = make();
   const chunk = st.chunk;
