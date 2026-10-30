@@ -175,6 +175,11 @@ test('DOLLAR, FIXED, NUMBERVALUE with Microsoft\'s data', () => {
   ]);
 });
 
+test('a range past the engine\'s cell cap is #NUM!', () => {
+  const e = book({ A1: 'a', Z10000: 'b' });
+  cases(e, [['ARRAYTOTEXT(A1:Z10000)', '#NUM!'], ['TEXTJOIN(",",TRUE,A1:Z10000)', '#NUM!'], ['TEXTJOIN(A1:Z10000,TRUE,"x","y")', '#NUM!']]);
+});
+
 test('VALUETOTEXT and ARRAYTOTEXT with Microsoft\'s data', () => {
   const e = book({ A2: true, A3: 1234.01234, A4: 'Hello', A5: '#VALUE!', A6: 'Seattle', A7: 1234, B2: '#VALUE!', B3: 'Seattle', B4: "'1,123", C1: 'say "hi"' });
   const rows = [['A2', 'TRUE', 'TRUE'], ['A3', '1234.01234', '1234.01234'], ['A4', 'Hello', '"Hello"'], ['A5', '#VALUE!', '#VALUE!'], ['A6', 'Seattle', '"Seattle"'], ['A7', '1234', '1234']];

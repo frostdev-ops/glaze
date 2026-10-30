@@ -173,6 +173,11 @@ test('XNPV and XIRR with Microsoft\'s data; dates truncated, out of order, misma
   ]);
 });
 
+test('a range past the engine\'s cell cap is #NUM!', () => {
+  const e = book({ A1: -1, Z10000: 1 });
+  cases(e, [['XNPV(0.1,A1:Z10000,A1:Z10000)', '#NUM!'], ['XIRR(A1:Z10000,A1:Z10000)', '#NUM!']]);
+});
+
 test('SLN, SYD, DB, DDB with Microsoft\'s data', () => {
   examples(book({ A2: '$30,000', A3: '$7,500', A4: 10 }), [['SLN(A2, A3, A4)', '$2,250', 2250]]);
   const s = book({ A2: '$ 30,000.00', A3: '$ 7,500.00', A4: 10 });

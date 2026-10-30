@@ -84,6 +84,11 @@ test('SUMPRODUCT with the page\'s four tables; non-numbers are 0; sizes must mat
   assert.equal(calc(e, 'SUMPRODUCT(F2:F5,G2:G5)'), calc(e, 'F2*G2+F3*G3+F4*G4+F5*G5'));
 });
 
+test('a range past the engine\'s cell cap is #NUM!', () => {
+  const e = book({ A1: 1, Z10000: 1 });
+  cases(e, [['SUMPRODUCT(A1:Z10000)', '#NUM!'], ['SERIESSUM(1,1,1,A1:Z10000)', '#NUM!'], ['AGGREGATE(14,6,A1:Z10000+0,1)', '#NUM!']]);
+});
+
 test('SUMSQ, PRODUCT, QUOTIENT', () => {
   const e = book({ A2: 5, A3: 15, A4: 30, B1: 3, B2: 'x', B3: true, B4: 4 });
   cases(e, [
