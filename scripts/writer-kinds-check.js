@@ -6,8 +6,10 @@
 // the paper's place, as tall as a paper; a field filled is saved; Submit… sends the saved PDF (its bytes, application/pdf,
 // Lastname_Title.pdf) through Ultra's upload once and clicks Ultra's Submit once; a reload opens the viewer again, the field
 // still filled. The same for a .pptx: the deck in the slides viewer, and Submit sends the very bytes brought. With
-// no spreadsheet kind in this build, neither Document/Spreadsheet nor New spreadsheet is offered, even if the gate is
-// asked with a future spreadsheet preference (today's settings sanitizer does not retain writer.sheets).
+// Spreadsheets off nothing offers a spreadsheet; on, an empty attempt offers Document or Spreadsheet (and ⋯ New
+// spreadsheet): Spreadsheet keeps the paper as a version and shows the grid, values typed are saved, and Submit sends the
+// sheet's file once (.xlsx where lib/sheet-xlsx.js is in the build, else .csv); a .csv on Ultra's file area opens in the
+// grid by Open in Glaze.
 // An attached PDF (the assignment's content item, test/fixtures/ultra-writer-attach-content.json, with a PDF entry in its
 // .docx entry's shape; on the page a link to the file in the instructions, a stand-in: how Ultra draws an attachment on
 // the attempt page wasn't probed) gets Open in Glaze beside its link, PDFs on, and that alone: the file comes by the page's
@@ -131,11 +133,11 @@ const holds = (bytes, value) => {
     const pdfBytes = PDF.acroform(), deckBytes = deck();
     attachment.bytes = pdfBytes;
 
-    // ---- no spreadsheet kind in this build: no choice offered, including with the future preference passed to the gate
+    // ---- Spreadsheets off: no choice offered
     let { p, el, fr } = await open();
     await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'compact');
-    await quiet(() => fr.evaluate(() => !!document.querySelector('.gk-choose')), 'Document/Spreadsheet offered without a spreadsheet kind');
-    check(await fr.evaluate(() => GZ_WRITER_KINDS.offers({ sheets: true }).length === 0 && !document.querySelector('.gk-choose') && ![...document.querySelectorAll('#menu [role="menuitem"]')].some((b) => /spreadsheet/i.test(b.textContent))), 'no spreadsheet kind here: even with sheets on the gate offers nothing; no Document/Spreadsheet choice or New spreadsheet');
+    await quiet(() => fr.evaluate(() => !!document.querySelector('.gk-choose')), 'Document/Spreadsheet offered with Spreadsheets off', 2000);
+    check(await fr.evaluate(() => GZ_WRITER_KINDS.offers().length === 0 && !document.querySelector('.gk-choose') && ![...document.querySelectorAll('#menu [role="menuitem"]')].some((b) => /spreadsheet/i.test(b.textContent))), 'Spreadsheets off: no Document/Spreadsheet choice, no New spreadsheet');
     await fr.locator('#gw .ProseMirror').fill('Text beside the PDF.');
     await until(() => p.evaluate(() => __text().trim() === 'Text beside the PDF.'), 'compact text in Ultra');
 
@@ -221,6 +223,54 @@ const holds = (bytes, value) => {
     await quiet(() => p.evaluate(() => __uploads.length > 1), 'a second upload');
     const dup = await p.evaluate(() => __uploads.map((u) => ({ name: u.name, type: u.type, bytes: u.bytes })));
     check(dup.length === 1 && dup[0].name === 'Rivera_Essay2.pptx' && dup[0].type === PPTX && sha(dup[0].bytes) === sha(deckBytes), `the deck attached once, byte for byte, as a presentation (${dup.map((u) => `${u.name} ${u.type}`).join('; ')})`);
+    await p.close();
+
+    // ---- a spreadsheet: Spreadsheets on, an empty attempt offers Document or Spreadsheet; Spreadsheet shows the grid
+    await reset({ sheets: true });
+    ({ p, el, fr } = await open());
+    await until(() => fr.evaluate(() => [...document.querySelectorAll('.gk-choose .gk-pick')].map((b) => b.textContent).join('|') === 'Document|Spreadsheet'), 'the choice', 30000);
+    check(await fr.evaluate(() => [...document.querySelectorAll('#menu [role="menuitem"]')].some((b) => b.textContent === 'New spreadsheet')), 'Spreadsheets on: an empty attempt offers Document or Spreadsheet, and ⋯ has New spreadsheet');
+    await tap(fr, '.gk-pick[data-kind="sheet"]');
+    const A1 = '.gk #gx-grid .gx-c[data-r="0"][data-c="0"]';
+    await until(() => fr.evaluate((a1) => document.documentElement.dataset.doc === 'sheet' && !!document.querySelector(a1), A1), 'the grid', 40000,
+      () => fr.evaluate(() => ({ doc: document.documentElement.dataset.doc, said: [...document.querySelectorAll('[role="status"], [role="alert"]')].map((x) => x.textContent).filter(Boolean).join(' | ') })));
+    rec = await record(); vs = await versions();
+    check(rec.kind === 'sheet' && rec.doc == null && vs.some((v) => v.reason === 'import' && (v.kind || 'paper') === 'paper') && (await el.evaluate((f) => f.getBoundingClientRect().height)) > 600,
+      `Spreadsheet: the record a spreadsheet, the paper a version first, the grid as tall as a paper (${vs.map((v) => `${v.reason}:${v.kind || 'paper'}`).join(', ')})`);
+    // To A1 by the name box, as sheets-check.js goes to a cell: the grid's cells sit under its scroll layer.
+    await tap(fr, '.gk #gx-name');
+    await fr.fill('.gk #gx-name', 'A1');
+    await p.keyboard.press('Enter');
+    await until(() => fr.evaluate(() => document.querySelector('.gk #gx-name')?.value === 'A1' && document.activeElement?.id === 'gx-grid'), 'A1 active in the grid');
+    for (const v of ['Trial', '42', '58']) { await p.keyboard.type(v); await p.keyboard.press('Enter'); }
+    const cellOf = (r, c) => fr.evaluate(([r, c]) => document.querySelector(`.gk #gx-grid .gx-c[data-r="${r}"][data-c="${c}"]`)?.textContent ?? null, [r, c]);
+    await until(async () => (await cellOf(2, 0)) === '58', 'the values in the grid');
+    await until(async () => /58/.test((await record())?.text || ''), 'the values saved', 20000, async () => ({ text: (await record())?.text, state: await fr.evaluate(() => document.querySelector('.gk .gp-state')?.textContent) }));
+    check([await cellOf(0, 0), await cellOf(1, 0), await cellOf(2, 0)].join() === 'Trial,42,58', 'values typed into the grid are saved');
+    await shot(p, 'kinds-sheet-1440.png');
+    const sx = await fr.evaluate(() => (globalThis.GZ_SHEET_XLSX ? '.xlsx' : '.csv'));
+    await tap(fr, '.gk .gp-submit');
+    await until(() => sheetOf(fr), 'the spreadsheet\'s sheet');
+    check((await sheetOf(fr)).name === `Rivera_Essay2${sx}`, `the sheet names the spreadsheet Lastname_Title${sx} (${(await sheetOf(fr)).name})`);
+    await tap(fr, '.gs-primary');
+    await until(() => p.evaluate(() => __clicks.filter((c) => /footer\.submit/.test(c)).length === 1), 'Ultra\'s Submit clicked for the spreadsheet', 40000);
+    await quiet(() => p.evaluate(() => __uploads.length > 1), 'a second upload');
+    const sup = await p.evaluate(() => __uploads.map((u) => ({ name: u.name, type: u.type, bytes: u.bytes })));
+    const body = Buffer.from(sup[0]?.bytes || []);
+    check(sup.length === 1 && sup[0].name === `Rivera_Essay2${sx}` && sup[0].type === (sx === '.csv' ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') && (sx !== '.csv' || /Trial[\s\S]*42[\s\S]*58/.test(body.toString('utf8'))),
+      `the spreadsheet's file attached once, Ultra's Submit once (${sup.map((u) => `${u.name} ${u.type} ${u.bytes.length}`).join('; ')})`);
+    await p.close();
+
+    // ---- a .csv on Ultra's file area: Open in Glaze → the grid with its values
+    await reset({ sheets: true });
+    ({ p, el, fr } = await open());
+    await give(p, 'Lab data.csv', 'text/csv', Buffer.from('Time,Temp\n1,20.5\n2,21\n'));
+    await until(() => cardOf(fr), 'the .csv card');
+    check((await cardOf(fr)).tiles.join('|') === 'Open in Glaze|Submit as is' && await p.evaluate(() => __uploads.length === 0), 'a .csv asks Open in Glaze or Submit as is, Ultra hearing nothing');
+    await tap(fr, '.gi-default');
+    await until(async () => (await cellOf(1, 1)) === '20.5', 'the .csv in the grid', 40000);
+    rec = await record();
+    check(rec.kind === 'sheet' && [await cellOf(0, 0), await cellOf(0, 1), await cellOf(2, 1)].join() === 'Time,Temp,21', 'Open in Glaze puts the .csv in the grid, the record a spreadsheet');
     await p.close();
 
     // ---- an attached PDF: Open in Glaze beside its link, straight to the viewer

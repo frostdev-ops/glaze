@@ -111,16 +111,18 @@ test('a brought file opens as its kind only while that kind is switched on and h
   assert.deepEqual([...kinds({}).opens()], [], 'off: nothing but Word files');
   assert.deepEqual([...kinds({ pdf: true }).opens()], ['pdf']);
   assert.deepEqual([...kinds({ pdf: true, slides: true }).opens()], ['pdf', 'slides']);
-  assert.deepEqual([...kinds({ pdf: true, slides: true, sheets: true }).opens()], ['pdf', 'slides'], 'writer.sheets on, but no grid in the frame yet');
-  assert.deepEqual(Object.keys(kinds().FRAME), ['pdf', 'slides']);
+  assert.deepEqual([...kinds({ pdf: true, slides: true, sheets: true }).opens()], ['pdf', 'slides', 'sheet'], 'the grid is in the frame');
+  assert.deepEqual([...kinds({ sheets: true }).opens()], ['sheet']);
+  assert.deepEqual(Object.keys(kinds().FRAME), ['pdf', 'slides', 'sheet']);
+  assert.deepEqual([...kinds().FRAME.sheet.scripts], ['lib/doc-kinds.js', 'sheet-kind.js']);
   assert.ok(Object.isFrozen(kinds().FRAME));
-  const K = kinds();
-  assert.deepEqual([...K.opens({ sheets: true }, { ...K.FRAME, sheet: {} })], ['sheet'], 'the grid once it is here');
+  const K = kinds(), { sheet: _, ...noGrid } = K.FRAME;
+  assert.deepEqual([...K.opens({ sheets: true }, noGrid)], [], 'a build without the grid offers no spreadsheet');
 });
 
 test('Document or Spreadsheet: offered only with the spreadsheet kind here and writer.sheets on', () => {
-  const K = kinds(), grid = { ...K.FRAME, sheet: {} }, KINDS = { paper: {}, pdf: {}, slides: {}, sheet: {} };
-  assert.deepEqual([...K.offers({ sheets: true }, K.FRAME, { paper: {}, pdf: {}, slides: {} })], [], 'this build: no spreadsheet kind');
+  const K = kinds(), grid = K.FRAME, KINDS = { paper: {}, pdf: {}, slides: {}, sheet: {} }, { sheet: _, ...noGrid } = K.FRAME;
+  assert.deepEqual([...K.offers({ sheets: true }, noGrid, KINDS)], [], 'a build without the grid in the frame');
   assert.deepEqual([...K.offers({ sheets: true }, grid, { paper: {}, pdf: {}, slides: {} })], [], 'a grid but no kind in the registry');
   assert.deepEqual([...K.offers({ sheets: false }, grid, KINDS)], [], 'writer.sheets off');
   assert.deepEqual([...K.offers({}, grid, KINDS)], []);
