@@ -49,13 +49,15 @@ const deck = () => {
     .flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name), `${base}${e.name}/`) : [[`${base}${e.name}`, fs.readFileSync(path.join(d, e.name))]]));
   return Buffer.concat(Z.zip(walk(dir).sort(([a], [b]) => (a < b ? -1 : 1)).map(([name, data]) => ({ name, data: new Uint8Array(data), date: new Date(2026, 9, 29, 12) }))));
 };
-// The course's files: 21 a PDF, 22 a deck, 23 a PDF the server refuses, 24 locked, 25 a Word file (no kind of Glaze's here).
+// The course's files: 21 a PDF, 22 a deck, 23 a PDF the server refuses, 24 locked, 25 a Word file (no kind of Glaze's here),
+// 26 a CSV.
 const FILES = {
   21: { name: 'Syllabus.pdf', body: pdf(), type: 'application/pdf' },
   22: { name: 'Week 3.pptx', body: deck(), type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
   23: { name: 'Broken.pdf', body: null, type: 'application/pdf' },
   24: { name: 'Answers.pdf', body: pdf(), type: 'application/pdf', locked: true },
   25: { name: 'Notes.docx', body: Buffer.from('docx'), type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+  26: { name: 'Grades.csv', body: Buffer.from('Name,Score\nAda,91\nGrace,88\n'), type: 'text/csv' },
 };
 const api = (u) => {
   const f = /^\/api\/v1\/files\/(\d+)(\/public_url)?$/.exec(u.pathname), x = f && FILES[f[1]];
@@ -75,7 +77,7 @@ const FILES_PREVIEW = (id) => strip(fixture('canvas-file-preview.html')).replace
 const MODULES = (() => {
   const page = strip(fixture('canvas-modules.html'));
   const row = /<li id="context_module_item_272"[\s\S]*?<\/li>\s*(?=<li id="context_module_item_273")/.exec(page)[0];
-  const rows = ['22', '21', '23', '24', '25'].map((id, i) => row.replaceAll('context_module_item_272', `context_module_item_${80 + i}`).replaceAll('Attachment_21', `Attachment_${id}`).replaceAll('Syllabus.pdf', FILES[id].name)
+  const rows = ['22', '21', '23', '24', '25', '26'].map((id, i) => row.replaceAll('context_module_item_272', `context_module_item_${80 + i}`).replaceAll('Attachment_21', `Attachment_${id}`).replaceAll('Syllabus.pdf', FILES[id].name)
     .replaceAll('/modules/items/272', `/modules/items/${80 + i}`).replaceAll('module-item-272', `module-item-${80 + i}`)).join('\n');
   return page.replace(row, rows);
 })();
@@ -92,7 +94,7 @@ const WIKI = strip(fixture('canvas-wiki-page.html')).replace(/(<div class="show-
     }
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-canvas-suite-'));
     fs.mkdirSync(out, { recursive: true });
-    check(/show-content/.test(WIKI) && WIKI.includes('instructure_file_link') && (MODULES.match(/class="context_module_item [^"]*attachment/g) || []).length >= 5 && FILE_PAGE(21).includes('canvas-own'), 'the saved pages carry the preview, the five File rows and the file link');
+    check(/show-content/.test(WIKI) && WIKI.includes('instructure_file_link') && (MODULES.match(/class="context_module_item [^"]*attachment/g) || []).length >= 6 && FILE_PAGE(21).includes('canvas-own'), 'the saved pages carry the preview, the five File rows and the file link');
     const ext = env.staged(root, [`https://${HOST}/*`]);
     const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
     await require('./wait-for-browser.js')();
@@ -171,9 +173,9 @@ const WIKI = strip(fixture('canvas-wiki-page.html')).replace(/(<div class="show-
     // ---- Modules: the deck's row opens the slides viewer below it; the PDF row has its own button, the Word row none
     await page.goto(`${O}/courses/25/modules`);
     const rowB = (n) => `#context_module_item_${n} .gz-co`;
-    await until(() => page.evaluate(() => document.querySelectorAll('.gz-co').length === 4), async () => `buttons by the four rows Glaze opens (${await page.evaluate(() => document.querySelectorAll('.gz-co').length)})`);
-    const rows = await page.evaluate(() => [80, 81, 82, 83, 84].map((n) => document.querySelector(`#context_module_item_${n} .gz-co`)?.textContent || ''));
-    check(JSON.stringify(rows) === JSON.stringify(['Open in Glaze', 'Open in Glaze', 'Open in Glaze', 'Open in Glaze', '']), `Open in Glaze by the .pptx and .pdf rows, none by the .docx (${JSON.stringify(rows)})`);
+    await until(() => page.evaluate(() => document.querySelectorAll('.gz-co').length === 5), async () => `buttons by the five rows Glaze opens (${await page.evaluate(() => document.querySelectorAll('.gz-co').length)})`);
+    const rows = await page.evaluate(() => [80, 81, 82, 83, 84, 85].map((n) => document.querySelector(`#context_module_item_${n} .gz-co`)?.textContent || ''));
+    check(JSON.stringify(rows) === JSON.stringify(['Open in Glaze', 'Open in Glaze', 'Open in Glaze', 'Open in Glaze', '', 'Open in Glaze']), `Open in Glaze by the .pptx, .pdf and .csv rows, none by the .docx (${JSON.stringify(rows)})`);
     await page.click(rowB(80));
     await until(async () => (await gz())?.shown, 'the slides viewer below the deck\'s row');
     fr = await until(() => frameOf(), 'the slides viewer\'s document');
@@ -195,6 +197,30 @@ const WIKI = strip(fixture('canvas-wiki-page.html')).replace(/(<div class="show-
     await page.click(rowB(80));
     await until(() => page.evaluate(() => !document.querySelector('iframe.gz-co-frame')), 'the button again closes the viewer');
     check(await page.getAttribute(rowB(80), 'aria-expanded') === 'false', 'the row\'s button again closes Glaze\'s viewer');
+    // The CSV: the grid from memory, an edit kept nowhere, Save to Documents a spreadsheet.
+    const papersNow = () => sw.evaluate(async () => Object.entries(await chrome.storage.local.get(null)).filter(([k]) => k.startsWith('writerPaper:')).map(([, v]) => ({ kind: v.kind || 'paper', title: v.title })));
+    const had = (await papersNow()).length;
+    await page.click(rowB(85));
+    await until(async () => (await gz())?.shown, 'the grid below the CSV\'s row');
+    fr = await until(() => frameOf(), 'the grid\'s document');
+    const cell = (r, c) => fr.evaluate(([r, c]) => document.querySelector(`#gx-grid .gx-c[data-r="${r}"][data-c="${c}"]`)?.textContent ?? null, [r, c]);
+    await until(async () => (await cell(1, 0)) === 'Ada', 'Ada in A2');
+    const sheet = await fr.evaluate(() => ({ doc: document.documentElement.dataset.doc, title: document.querySelector('.gp-top h1')?.textContent, versions: !!document.getElementById('gx-versions'), acts: [...document.querySelectorAll('.gx-tool [data-act]')].map((b) => b.dataset.act).join() }));
+    check(sheet.doc === 'sheet' && sheet.title === 'Grades.csv' && !sheet.versions && sheet.acts === 'original,save' && await cell(2, 1) === '88', `the CSV opens in Glaze's grid from memory, no Versions, Open original and Save to Documents (${JSON.stringify(sheet)})`);
+    await fr.fill('#gx-name', 'B2');
+    await fr.press('#gx-name', 'Enter');
+    await until(() => fr.evaluate(() => document.activeElement?.id === 'gx-grid'), 'B2 chosen in the Name box');
+    await page.keyboard.type('95');
+    await page.keyboard.press('Enter');
+    await until(async () => (await cell(1, 1)) === '95', 'the edit on the screen');
+    const afterEdit = await fr.evaluate(() => document.querySelector('.gp-top .gp-state')?.textContent || '');
+    check(afterEdit === '' && (await papersNow()).length === had, `an edit shows and is kept nowhere, nor said to be saving (state "${afterEdit}")`);
+    await fr.click('[data-act="save"]');
+    await until(() => fr.evaluate(() => document.querySelector('.gx-said')?.textContent === 'Saved to Documents'), async () => `the CSV saved to Documents (says "${await fr.evaluate(() => document.querySelector('.gx-said')?.textContent)}"; errors ${JSON.stringify(errors)})`);
+    const sheets = (await papersNow()).filter((p) => p.kind === 'sheet');
+    check(sheets.length === 1 && sheets[0].title === 'Grades', `Save to Documents keeps the CSV as a spreadsheet (${JSON.stringify(sheets)})`);
+    await page.click(rowB(85));
+    await until(() => page.evaluate(() => !document.querySelector('iframe.gz-co-frame')), 'the grid closed');
     // A locked file: said on the button, nothing opened.
     await page.click(rowB(83));
     const locked = await until(() => page.evaluate(() => { const b = document.querySelector('#context_module_item_83 .gz-co'); return /^failed:/.test(b.dataset.gzCo || '') && { text: b.textContent, frames: document.querySelectorAll('iframe.gz-co-frame').length }; }), 'the locked file\'s answer');
@@ -210,11 +236,11 @@ const WIKI = strip(fixture('canvas-wiki-page.html')).replace(/(<div class="show-
     check(await until(() => fr.evaluate(() => document.getElementById('gs-at')?.textContent === '1 / 10')) && await page.evaluate(() => document.querySelector('#content .show-content p .gz-co') && document.querySelector('#content .show-content p').nextElementSibling?.classList.contains('gz-co-frame')),
       'a page\'s file link opens the deck below its paragraph');
 
-    // ---- Settings → Writer → Slides off: no button by the deck; the PDF keeps its own
-    await set({ writer: { slides: false } });
+    // ---- Settings → Writer → Slides and Spreadsheets off: no button by the deck or the CSV; the PDF keeps its own
+    await set({ writer: { slides: false, sheets: false } });
     await page.goto(`${O}/courses/25/modules`);
     await until(() => page.locator(rowB(81)).count(), 'the PDF row\'s button with Slides off');
-    check(await page.locator(rowB(80)).count() === 0, 'Slides off: no Open in Glaze by the deck');
+    check(await page.locator(rowB(80)).count() === 0 && await page.locator(rowB(85)).count() === 0, 'Slides and Spreadsheets off: no Open in Glaze by the deck or the CSV');
     // ---- Previews in Glaze off: none at all (Download all's buttons show the page's pass ran)
     await set({ enhance: { bbPreviews: false, download: true } });
     await page.goto(`${O}/courses/25/modules`);

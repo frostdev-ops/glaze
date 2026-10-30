@@ -1,6 +1,6 @@
 // Canvas's files in Glaze's viewers (enhance.bbPreviews, Settings → Documents → Previews in Glaze; each kind only while its
-// Settings → Writer switch is on: writer.pdf, writer.slides), loaded on demand: features/docs.js loads this on a Canvas page
-// with a file preview or a file link and hands it each pass. A .pdf, .pptx or .ppsx file's preview (the file page's
+// Settings → Writer switch is on: writer.pdf, writer.slides, writer.sheets), loaded on demand: features/docs.js loads this on a
+// Canvas page with a file preview or a file link and hands it each pass. A .pdf, .pptx, .ppsx, .xlsx or .csv file's preview (the file page's
 // #doc_preview, Files' preview at ?preview=) gets Open in Glaze among the document buttons; a link to one (a module's File
 // row, a file link in a page) gets it beside the link. Only the click reads the file: Canvas's API names it and signs its
 // address, and the worker's byte port reads it (features/download.js canvasFile, Download all's path; a file server Glaze
@@ -17,8 +17,10 @@ var GZ_CANVAS_OPEN = globalThis.GZ_CANVAS_OPEN || (() => {
   const SHOW = 30000; // the viewer drawn within this, or Canvas's preview stays
   // The kinds a file opens as, by extension, with the Writer switch each needs and the largest file each reads
   // (lib/doc-kinds.js KINDS max).
-  const KINDS = { pdf: { kind: 'pdf', on: 'pdf', max: 50e6 }, pptx: { kind: 'slides', on: 'slides', max: 50e6 }, ppsx: { kind: 'slides', on: 'slides', max: 50e6 } };
-  const MIMES = { 'application/pdf': 'pdf', 'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx', 'application/vnd.openxmlformats-officedocument.presentationml.slideshow': 'ppsx' };
+  const KINDS = { pdf: { kind: 'pdf', on: 'pdf', max: 50e6 }, pptx: { kind: 'slides', on: 'slides', max: 50e6 }, ppsx: { kind: 'slides', on: 'slides', max: 50e6 },
+    xlsx: { kind: 'sheet', on: 'sheets', max: 15e6 }, csv: { kind: 'sheet', on: 'sheets', max: 15e6 } };
+  const MIMES = { 'application/pdf': 'pdf', 'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx', 'application/vnd.openxmlformats-officedocument.presentationml.slideshow': 'ppsx',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx', 'text/csv': 'csv' };
   const typeOf = (name, mime = '') => KINDS[/\.([a-z0-9]{1,5})\s*$/i.exec(String(name || ''))?.[1].toLowerCase()] || KINDS[MIMES[mime]] || null;
   const on = (k) => { const s = X.settings(); return X.on() && s.enabled !== false && s.enhance?.bbPreviews !== false && (!k || s.writer?.[k.on] === true); };
   const fileId = (v) => (/^\d{1,20}$/.test(String(v ?? '')) ? String(v) : '');
@@ -91,7 +93,7 @@ var GZ_CANVAS_OPEN = globalThis.GZ_CANVAS_OPEN || (() => {
     if (v.round) { if (v.button.title !== text) v.button.title = text; }
     else if (v.button.textContent !== text) v.button.textContent = text;
   };
-  const SAID = { locked: "This file isn't available to you right now.", big: v => (v.type.kind === 'pdf' ? 'Choose a PDF smaller than 50 MB.' : 'Choose a PowerPoint file smaller than 50 MB.') };
+  const SAID = { locked: "This file isn't available to you right now.", big: (v) => ({ pdf: 'Choose a PDF smaller than 50 MB.', slides: 'Choose a PowerPoint file smaller than 50 MB.', sheet: 'Choose a spreadsheet smaller than 15 MB.' })[v.type.kind] };
   const views = new Map(); // key → the view
 
   // ---- one file's view: the bytes on the click, Glaze's frame beside Canvas's preview or below the link

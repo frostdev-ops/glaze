@@ -278,7 +278,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
   // o: { key, wb, rec, sigs, fresh, t, locale, papers, show (wb → a cell's shown text), local, fileOf (wb, title → { name,
   // mime, bytes }), download (that file), exportLabel, host }. host: an assignment's frame (writer-kinds.js view): { mount,
   // title, tools }, the grid in mount under the assignment's title with the frame's tools (Submit…) before ⋯, no way back to
-  // Documents. → { pages, say, ready, save (→ whether all is saved), file (→ { bytes, mime, ext, name }) }.
+  // Documents. memory: a workbook from elsewhere (sheet-kind.js show), edited here and never written: no saves, no versions,
+  // no other tab's writes. → { pages, say, ready, save (→ whether all is saved), file (→ { bytes, mime, ext, name }) }.
   const mount = (o) => {
     const { key, t, papers } = o;
     const NF = GZ_SHEET_NUMFMT, CALC = GZ_SHEET_CALC, SD = GZ_SHEET_DATA, F = FX();
@@ -310,7 +311,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     const freezeB = btn({ id: 'gx-freeze', class: 'gp-tbtn', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: t('Freeze') }, icon('freeze'), h('span', { class: 'gx-lbl', text: t('Freeze') }), icon('caret'));
     const findB = tb('gx-find-b', t('Find'), 'find', { 'aria-pressed': 'false' });
     const chartB = globalThis.GZ_SHEET_CHART ? btn({ id: 'gx-chart', class: 'gp-tbtn', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: t('Chart') }, icon('chart'), h('span', { class: 'gx-lbl', text: t('Chart') }), icon('caret')) : null;
-    const versB = btn({ id: 'gx-versions', class: 'gp-tbtn', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: t('Versions') }, icon('clock'), h('span', { class: 'gx-lbl', text: t('Versions') }));
+    const versB = o.memory ? null : btn({ id: 'gx-versions', class: 'gp-tbtn', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: t('Versions') }, icon('clock'), h('span', { class: 'gx-lbl', text: t('Versions') }));
     const moreB = tb('gx-more', t('More'), 'dots', { 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
     const sep = () => h('span', { class: 'gp-sepv' });
     const tool = h('div', { class: 'gp-tool gx-tool', role: 'toolbar', 'aria-label': t('Spreadsheet') }, undoB, redoB, sep(), fmtB, sep(), azB, zaB, freezeB, chartB, sep(), findB, h('span', { class: 'grow' }), versB, ...(host?.tools || []), moreB);
@@ -705,9 +706,10 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     let timer = 0, saving = null, again = false, lastVersion = rec?.lastVersion || 0, foreign = false;
     const busy = () => !!(timer || saving || dirty.size || dirtyAll || Object.keys(nextPatch).length || nextVersion || (editing && editing.surface.value !== editing.orig));
     const pill = () => { state.textContent = busy() ? t('Saving…') : ''; };
-    const schedule = () => { clearTimeout(timer); timer = setTimeout(() => { timer = 0; flush(); }, 700); pill(); };
+    const schedule = () => { if (o.memory) { flush(); return; } clearTimeout(timer); timer = setTimeout(() => { timer = 0; flush(); }, 700); pill(); };
     const flush = () => {
       clearTimeout(timer); timer = 0;
+      if (o.memory) { dirty.clear(); dirtyAll = false; nextPatch = {}; nextVersion = null; pill(); return Promise.resolve(); }
       if (saving) { again = true; return saving; }
       saving = (async () => {
         do {
@@ -774,10 +776,10 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       const next = ch[PAPER].newValue;
       if (saving) saving.then(() => theirs(next)); else theirs(next);
     };
-    chrome.storage.onChanged.addListener(onStore);
-    addEventListener('pagehide', () => { if (busy()) { commit(); flush(); } }, { signal });
+    if (!o.memory) chrome.storage.onChanged.addListener(onStore);
+    if (!o.memory) addEventListener('pagehide', () => { if (busy()) { commit(); flush(); } }, { signal });
     // A tab closed while a save waits: the browser asks first, as for a PDF's unsaved form.
-    addEventListener('beforeunload', (e) => { if (busy()) { commit(); flush(); e.preventDefault(); e.returnValue = ''; } }, { signal });
+    if (!o.memory) addEventListener('beforeunload', (e) => { if (busy()) { commit(); flush(); e.preventDefault(); e.returnValue = ''; } }, { signal });
     document.addEventListener('visibilitychange', () => { if (document.hidden && busy()) flush(); }, { signal });
     // Documents: what is unsaved goes first (a frame of a school's page replaces itself, as papers.js's links do).
     back?.addEventListener('click', (e) => {
@@ -1260,7 +1262,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     const fileNow = async () => o.fileOf(wb, rec?.title || host?.title?.() || '');
     toggle(moreB, () => [{ act: 'export', label: t(o.exportLabel()), run: () => { flush(); fileNow().then(o.download, (e) => { console.error(e); say(t('Not saved. Try again in a moment.')); }); } }], t('More'));
     const when = new Intl.DateTimeFormat(o.locale || undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-    versB.addEventListener('click', async () => {
+    versB?.addEventListener('click', async () => {
       if (menu?.opener === versB) { closeMenu(true); return; }
       commit();
       const list = (await papers.versions(key).catch(() => [])).filter((v) => (v.kind || 'paper') === 'sheet');

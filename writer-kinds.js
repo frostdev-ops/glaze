@@ -202,11 +202,11 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
 
   // ---- a file shown from elsewhere (writer.js view mode; features/bbpreview.js: Blackboard's preview of an attachment,
   // converted to a PDF, which the page read; features/canvasopen.js: a Canvas file the page read on a click): init { kind:
-  // 'pdf' or 'slides', view: { bytes (an ArrayBuffer, transferred), name, href } } → the kind's show, nothing kept unless the
+  // 'pdf', 'slides' or 'sheet', view: { bytes (an ArrayBuffer, transferred), name, href } } → the kind's show, nothing kept unless the
   // student saves it to Documents. The page hears view:shown once page 1 is
   // drawn, view:failed (with a reason) for anything else, so it keeps Blackboard's frame, and view:esc for an Esc the
   // viewer didn't take.
-  const SHOWN = ['pdf', 'slides'];
+  const SHOWN = ['pdf', 'slides', 'sheet'];
   frame.on('view', async (m) => {
     const v = m.view, failed = (reason) => frame.say({ type: 'view:failed', reason: String(reason || 'error') });
     const bytes = v?.bytes instanceof ArrayBuffer && v.bytes.byteLength ? new Uint8Array(v.bytes) : null;
