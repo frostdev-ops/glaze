@@ -242,6 +242,9 @@ async function pass(scheme) {
         await page.setViewportSize(was);
         await pause(200);
       };
+      await open();
+      await page.evaluate(async () => { const { ai } = await chrome.storage.local.get('ai'); await chrome.storage.local.set({ ai: { ...ai, on: true } }); });
+      await open();
       await card.click();
       await note.filter({ hasText: /^Needs a download · 1\.1 GB$/ }).waitFor();
       assert.ok(await page.getByRole('button', { name: 'Download', exact: true }).isVisible());
