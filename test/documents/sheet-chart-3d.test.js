@@ -196,7 +196,7 @@ test('3-D pie: rotations are reduced to one turn before geometry work', () => {
   // This finite XML number makes turn++ stop advancing in the old rim loop.
   const run = require('node:child_process').spawnSync(process.execPath, ['-e', `
     const CX = require('./documents/sheets/sheet-chart-xml.js'), CH = require('./documents/sheets/sheet-chart.js');
-    const FX = require('./test/fixtures/sheets/charts.js');
+    const FX = require('../test/fixtures/sheets/charts.js');
     const xml = FX.CHARTS.pie3d.replace('<c:rotY val="0"/>', '<c:rotY val="1.3282328232823282e+22"/>');
     console.log(JSON.stringify(CH.scene(CX.resolve(CX.chart(xml), () => null), 480, 300).marks));
   `], { cwd: require('node:path').join(__dirname, '../../extension'), timeout: 2000, encoding: 'utf8' });
