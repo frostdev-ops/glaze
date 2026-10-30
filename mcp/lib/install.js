@@ -296,8 +296,12 @@ const ensure = async (o = {}) => {
     const ahead = [...before].filter((v) => newer(v, version) > 0).sort(newest)[0];
     if (ahead) return { ...out, newer: ahead };
     // The bundle's PATH can omit the node an earlier setup found. Recheck it before replacing a working launcher.
-    if (ctx.node === null) ctx.node = await N.find({ platform: ctx.platform, env: ctx.env, run: ctx.run,
-      list: [...new Set(priorLaunchers.flatMap(({ l }) => [l.node, ...(l.also || [])]).filter((n) => n !== null))] });
+    if (ctx.node === null) {
+      const list = [...new Set(priorLaunchers.flatMap(({ l }) => [l.node, ...(l.also || [])]).filter((n) => n !== null))];
+      const search = { platform: ctx.platform, env: ctx.env, run: ctx.run, list };
+      ctx.node = await N.find(search);
+      ctx.also = ctx.node === null ? [] : await N.all({ ...search, skip: [ctx.node] });
+    }
   }
   if (ctx.node === null) ctx.also = [];
   else if (ctx.also === undefined) ctx.also = await N.all({ platform: ctx.platform, env: ctx.env, run: ctx.run, skip: [ctx.node] });
