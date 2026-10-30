@@ -383,7 +383,7 @@ test('caps: 100 sheets and 250,000 cells; the rest are listed, not read', async 
   });
   const wb = await X.read(book);
   assert.equal(wb.sheets.length, 100);
-  assert.deepEqual(wb.keep.problems.map((p) => p.code), ['cap-sheets', 'cap-sheets']);
+  assert.deepEqual(wb.keep.problems.map((p) => p.code), ['content-types', 'cap-sheets', 'cap-sheets']);
   const row = '<c><v>1</v></c>'.repeat(1000);
   const big = pack({
     'xl/workbook.xml': `<workbook ${NS}><sheets><sheet name="Big" sheetId="1" r:id="rId1"/></sheets></workbook>`,
@@ -865,5 +865,10 @@ test('review dependencies: a failed early lookup can retry after the engine load
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../lib/sheet-xlsx.js'), 'utf8'), ctx);
   assert.throws(() => ctx.module.exports.tinted('#000000', 0), /late dependency/);
   Object.assign(ctx, { GZ_SHEET_FORMULA: require('../lib/sheet-formula.js'), GZ_SHEET_NUMFMT: require('../lib/sheet-numfmt.js'), GZ_DOCTEXT: D });
-  assert.equal(ctx.module.exports.tinted('#000000', 0), '#000000');
+  assert.equal(M.cell(ctx.module.exports.readDelimited('1').sheets[0], 0, 0)?.v, 1);
+});
+
+test('review page: Documents defers spreadsheet and document file codecs', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../papers.html'), 'utf8');
+  assert.doesNotMatch(html, /<script src="lib\/(?:sheet-xlsx|doctext|zip)\.js"/);
 });
