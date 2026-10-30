@@ -57,6 +57,7 @@ test('the permission list matches the manifest: nativeMessaging is optional outs
   assert.doesNotMatch(line, /Safari only/);
   assert.match(line, /Chrome, Edge and Firefox, optional/);
   assert.match(line, /Settings → AI → Agents/);
+  assert.match(line, /on-device AI/, 'Safari also routes AI native messages to the containing app');
 });
 
 test('docs/agents.md names the approval window\'s groups and buttons as Glaze shows them', () => {
