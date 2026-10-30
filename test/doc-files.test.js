@@ -184,6 +184,15 @@ test('a file the store no longer has is missing, to get and to read', async () =
   await assert.rejects(client.get({ ...x, hash: 'b'.repeat(64) }), (e) => e.why === 'missing');
 });
 
+test('a stored chunk changed without changing its length is refused on read', async () => {
+  const { st, data } = make(), { client } = wire(st);
+  const file = await client.put(bytes(F.CHUNK + 10, 51), 'application/pdf');
+  const key = [...data().keys()].find((k) => k.startsWith('c:'));
+  data().get(key)[10] ^= 1;
+  await assert.rejects(client.get(file), (e) => e.why === 'missing');
+  await assert.rejects(st.read(file.hash, () => {}), (e) => e.why === 'missing');
+});
+
 test('quota exceeded: the put says quota, and leaves no upload or chunk behind', async () => {
   let full = false;
   const { st, data } = make({ wrap: (db) => ({ ...db, write: async (puts, dels) => { if (full && puts.some(([k]) => k.startsWith('c:'))) throw Object.assign(new Error('full'), { name: 'QuotaExceededError' }); return db.write(puts, dels); } }) });
