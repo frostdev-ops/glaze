@@ -208,8 +208,12 @@ test('shell-like path text stays literal when generating and parsing a guarded l
 test('batch candidate guards exclude directories without expanding the selected exit code early', () => {
   const o = { node: 'C:\\Jo 100% !x! & (home)\\node.exe', also: ['C:\\other ^ bin\\node.exe'], script: "C:\\Jo's 100% !x! & (home)\\glaze.js", browser: 'chrome' };
   const text = L.bat(o);
-  assert.match(text, /if not exist "C:\\Jo 100%% !x! & \(home\)\\node.exe\\"/);
-  assert.doesNotMatch(text, /%errorlevel%|!errorlevel!/i);
+  // A folder is a name with something inside it: cmd says "X\\" exists for some plain files (nvm-windows' node.exe under
+  // %LOCALAPPDATA%, live on Windows 11, 2026-10-30), so the pinned Node was skipped.
+  assert.match(text, /if not exist "C:\\Jo 100%% !x! & \(home\)\\node.exe\\\*"/);
+  // Node's own status: `& exit /b` alone returns 0 under cmd /c; only the deferred errorlevel, read after Node ends, keeps it.
+  assert.equal(text.match(/& call exit \/b %%errorlevel%%\)\r\n/g)?.length, 2);
+  assert.doesNotMatch(text.replace(/call exit \/b %%errorlevel%%/g, ''), /errorlevel/i);
   assert.deepEqual(L.parse(text), o);
   const bytes = text.match(/\[byte\[\]\]\(([\d,]+)\)/)[1].split(',').map(Number);
   assert.deepEqual(Buffer.from(bytes), FRAME);

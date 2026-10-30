@@ -214,8 +214,8 @@ test('launchers: each node they name tried in turn, by absolute, quoted paths, t
   // must leave nothing after the command for it to read.
   const none = L.bat({ node: null, script: 'C:\\Users\\100%\\glaze-mcp\\0.1.0\\bin\\glaze-mcp.js', browser: 'edge' }).split('\r\n')[3];
   assert.equal(bat, '@echo off\r\n@setlocal DisableDelayedExpansion\r\n'
-    + 'if exist "C:\\Program Files\\nodejs\\node.exe" if not exist "C:\\Program Files\\nodejs\\node.exe\\" ("C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\100%%\\glaze-mcp\\0.1.0\\bin\\glaze-mcp.js" host --browser=edge %* & exit /b)\r\n'
-    + 'if exist "C:\\nvm4w\\node.exe" if not exist "C:\\nvm4w\\node.exe\\" ("C:\\nvm4w\\node.exe" "C:\\Users\\100%%\\glaze-mcp\\0.1.0\\bin\\glaze-mcp.js" host --browser=edge %* & exit /b)\r\n'
+    + 'if exist "C:\\Program Files\\nodejs\\node.exe" if not exist "C:\\Program Files\\nodejs\\node.exe\\*" ("C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\100%%\\glaze-mcp\\0.1.0\\bin\\glaze-mcp.js" host --browser=edge %* & call exit /b %%errorlevel%%)\r\n'
+    + 'if exist "C:\\nvm4w\\node.exe" if not exist "C:\\nvm4w\\node.exe\\*" ("C:\\nvm4w\\node.exe" "C:\\Users\\100%%\\glaze-mcp\\0.1.0\\bin\\glaze-mcp.js" host --browser=edge %* & call exit /b %%errorlevel%%)\r\n'
     + `${none}\r\n`);
   assert.match(none, /& exit \/b 1$/);
   assert.equal(/[^\r]\n/.test(bat), false, 'every line ends in CRLF');
@@ -419,7 +419,7 @@ test('setup on Windows: manifests and .bat launchers in LOCALAPPDATA, one reg.ex
     assert.equal(m.path, path.join(hosts, `${b}.bat`));
     assert.deepEqual(b === 'firefox' ? m.allowed_extensions : m.allowed_origins, b === 'firefox' ? ['glaze@frostdev.io'] : [ORIGIN]);
     assert.equal(fs.readFileSync(m.path, 'utf8'), L.bat({ node: 'C:\\Program Files\\nodejs\\node.exe', script, browser: b }));
-    assert.match(fs.readFileSync(m.path, 'utf8'), /\r\nif exist "C:\\Program Files\\nodejs\\node\.exe" if not exist "C:\\Program Files\\nodejs\\node\.exe\\" \("C:\\Program Files\\nodejs\\node\.exe" "[^"]+" host --browser=[a-z-]+ %\* & exit \/b\)\r\n/);
+    assert.match(fs.readFileSync(m.path, 'utf8'), /\r\nif exist "C:\\Program Files\\nodejs\\node\.exe" if not exist "C:\\Program Files\\nodejs\\node\.exe\\\*" \("C:\\Program Files\\nodejs\\node\.exe" "[^"]+" host --browser=[a-z-]+ %\* & call exit \/b %%errorlevel%%\)\r\n/);
   }
   assert.equal(fs.existsSync(path.join(hosts, 'vivaldi.json')), false);
   assert.equal(fs.existsSync(path.join(hosts, 'vivaldi.bat')), false);
@@ -930,7 +930,7 @@ test('batch launchers reject quote and line injection, preserve carets and perce
   assert.match(text, /setlocal DisableDelayedExpansion/i);
   assert.match(text, /"C:\\a \^ b\\node.exe"/);
   assert.match(text, /100%% !name!/);
-  assert.ok(text.includes('%* & exit /b)\r\n'));
+  assert.ok(text.includes('%* & call exit /b %%errorlevel%%)\r\n'));
   assert.deepEqual(L.parse(text), o);
 });
 
