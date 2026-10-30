@@ -295,6 +295,30 @@ test('disconnect revokes the grant, clears the cached tokens, gives identity bac
   }
 });
 
+test('drop(token): a token Google answered 401 to is forgotten, and the next token() is a fresh one, silently', async () => {
+  const w = harness({ flow: 'web' });
+  await w.g.connect();
+  assert.equal(await w.g.token(), 'web-tok-1');
+  await w.g.drop('someone-else');
+  assert.equal(await w.g.token(), 'web-tok-1', 'another token: the held one stays');
+  await w.g.drop('web-tok-1');
+  const checks = w.log.fetch.filter((f) => f.url === G.USERINFO).length;
+  assert.equal(await w.g.token(), 'web-tok-2', 'web: not the dead token again');
+  assert.equal(w.log.launch.at(-1).interactive, false, 'renewed silently');
+  assert.equal(w.log.fetch.filter((f) => f.url === G.USERINFO).length, checks + 1, 'and the new one is checked for the account');
+
+  const c = harness();
+  await c.g.connect();
+  const t = await c.g.token();
+  await c.g.drop(t);
+  assert.deepEqual(c.log.removed, [t], 'Chrome forgets it from its cache');
+  const checks2 = c.log.fetch.filter((f) => f.url === G.USERINFO).length;
+  assert.notEqual(await c.g.token(), t);
+  assert.equal(c.log.fetch.filter((f) => f.url === G.USERINFO).length, checks2 + 1);
+  assert.equal(c.log.auth.at(-1).interactive, false);
+  await harness().g.drop('x'); // not connected: nothing to do, and no throw
+});
+
 test('a token for another Google account than the one connected is refused, dropped, never used or revoked', async () => {
   for (const flow of ['chrome', 'web']) {
     const h = harness({ flow });
