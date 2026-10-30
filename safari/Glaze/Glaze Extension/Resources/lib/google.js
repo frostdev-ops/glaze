@@ -1,7 +1,10 @@
 // Google sign-in for Drive, in the worker only (lib/background.js 'glaze:google'), optional: nothing runs until the student
 // presses Connect in Settings → Writer → Papers, whose click asks the browser for the identity permission first. Scopes:
 // drive.file, openid and email (lib/google-config.js). The access token never leaves the worker and is never stored:
-// Chrome's own cache (getAuthToken) or this worker's memory (launchWebAuthFlow). storage.local google holds { email, flow, at }.
+// Chrome's own cache (getAuthToken) or this worker's memory (launchWebAuthFlow). storage.local google holds { email, sub, flow,
+// at }: the account connected, by its email and Google's id for it (userinfo sub). A token is used only once its userinfo
+// names that same account: if the browser's account changes (Chrome's default one, Google's session), Drive refuses
+// (why: 'account') until the student connects again, and never revokes the other account's grant.
 // Flows (flowOf):
 //   chrome  Google Chrome and Chromium: getAuthToken with the browser's Google account and the "Chrome extension" client
 //           (the packaged manifest's oauth2).
@@ -81,12 +84,13 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
     const now = env.now || Date.now;
     const id = () => env.identity();
     let held = null; // the web flow's { token, exp }: this worker's memory only
+    const checked = new Set(); // tokens whose userinfo named the connected account, this worker's memory only
     let queue = Promise.resolve();
     const turn = (f) => { const p = queue.then(f); queue = p.catch(() => {}); return p; };
     const send = (url, init = {}) => env.fetch(url, { ...init, credentials: 'omit', redirect: 'error', cache: 'no-store' });
     const saved = async () => {
       const g = (await env.storage.get('google')).google;
-      return typeof g?.email === 'string' && Object.hasOwn(NEEDS, g.flow) ? g : null;
+      return typeof g?.email === 'string' && typeof g.sub === 'string' && g.sub && Object.hasOwn(NEEDS, g.flow) ? g : null;
     };
     // Chrome signs in with its own client only when the manifest holds it; a copy with another (a dev build) uses the web flow.
     const usable = (flow) => ready(c(), flow) && (flow !== 'chrome' || env.manifest()?.oauth2?.client_id === c().chrome);
@@ -158,8 +162,18 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       const r = await send(USERINFO, { headers: { authorization: `Bearer ${token}` } }).catch(() => null);
       if (r?.status === 401) { await drop(flow, token); throw new Fail('auth'); }
       const j = r?.ok ? await r.json().catch(() => null) : null;
-      if (typeof j?.email !== 'string' || !/^[^@\s]+@[^@\s]+$/.test(j.email) || j.email.length > 320) throw new Fail('network');
-      return j.email;
+      if (typeof j?.email !== 'string' || !/^[^@\s]+@[^@\s]+$/.test(j.email) || j.email.length > 320 || typeof j.sub !== 'string' || !/^[\w-]{1,255}$/.test(j.sub)) throw new Fail('network');
+      return { email: j.email, sub: j.sub };
+    };
+    // g's token, once Google says it is g's account's. Another account's is forgotten (Chrome's cache, this worker's
+    // memory) and refused: 'account'.
+    const ours = async (g, interactive) => {
+      const t = await tokenFor(g.flow, interactive, g.email);
+      if (checked.has(t)) return t;
+      if ((await who(g.flow, t)).sub !== g.sub) { await drop(g.flow, t); throw new Fail('account'); }
+      if (checked.size > 50) checked.clear();
+      checked.add(t);
+      return t;
     };
 
     // → { ok: true, flow, email (null until connected) } or { ok: false, why: 'setup' (placeholders) | 'browser' (Safari, for now) }
@@ -183,8 +197,9 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       }
       if (flow === 'web') token = await webToken(true, '');
       try {
-        const email = await who(flow, token);
-        await env.storage.set({ google: { email, flow, at: now() } });
+        const { email, sub } = await who(flow, token);
+        await env.storage.set({ google: { email, sub, flow, at: now() } });
+        checked.add(token);
         return { ok: true, email };
       } catch (e) { held = null; throw e; }
     }));
@@ -194,13 +209,14 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       const g = await saved();
       if (!g) throw new Fail('connect');
       if (!usable(g.flow)) throw new Fail('setup');
-      return tokenFor(g.flow, interactive, g.email);
+      return ours(g, interactive);
     };
     const account = async () => (await saved())?.email || null;
     // The grant revoked (with a token from the cache or a silent renewal, never a prompt), the browser's cached tokens and
     // the identity permission dropped, the account forgotten. While Calendar sync holds the grant too (keep), revoking would
     // end its access as well (a revocation covers every scope the project was granted): only Drive's own state goes.
-    // → { ok, revoked: whether Google confirmed, had: a token to revoke }
+    // → { ok, revoked: whether Google confirmed, had: a connection, so Google may still hold its grant unless revoked (no
+    // token for its account: signed out of Google, offline, or the browser's account changed) }
     const disconnect = () => turn(async () => {
       const g = await saved();
       if (await Promise.resolve().then(() => env.keep?.()).catch(() => true)) {
@@ -208,17 +224,18 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
         await env.storage.remove('google');
         return { ok: true, revoked: false, had: false };
       }
-      const t = g && usable(g.flow) ? await tokenFor(g.flow, false, g.email).catch(() => null) : null;
+      const t = g && usable(g.flow) ? await ours(g, false).catch(() => null) : null;
       const r = t && await send(REVOKE, {
         method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ token: t }).toString(),
       }).catch(() => null);
       held = null;
+      checked.clear();
       const i = id();
       if (t && g.flow === 'chrome') await Promise.resolve().then(() => i?.removeCachedAuthToken({ token: t })).catch(() => {});
       if (g?.flow === 'chrome') await Promise.resolve().then(() => i?.clearAllCachedAuthTokens()).catch(() => {});
       await Promise.resolve().then(() => env.permissions.remove({ permissions: ['identity'] })).catch(() => {});
       await env.storage.remove('google');
-      return { ok: true, revoked: !!r?.ok, had: !!t };
+      return { ok: true, revoked: !!r?.ok, had: !!g };
     });
     // The first picker page that answers, else null: frostdev.io's, then its GitHub Pages copy (which answers every origin).
     const reach = async () => {

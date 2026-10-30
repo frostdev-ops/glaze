@@ -1098,8 +1098,9 @@ GZ_UI.load().then((s) => {
     const gcalSignIn = async () => {
       try {
         if (!await chrome.permissions.request({ permissions: ['identity'] })) return t("Glaze can't connect without Chrome's sign-in permission.");
-        const r = await chrome.identity.getAuthToken({ interactive: true });
-        const scope = chrome.runtime.getManifest().oauth2.scopes[0];
+        // Calendar's scope alone: the client is shared with Google Drive, whose scopes the manifest may list too.
+        const r = await chrome.identity.getAuthToken({ interactive: true, scopes: [GZ_GCAL.SCOPE] });
+        const scope = GZ_GCAL.SCOPE;
         if (Array.isArray(r?.grantedScopes) && !r.grantedScopes.includes(scope)) {
           // Chrome would hand the same token back: forgotten, so the next Connect asks Google again.
           await chrome.identity.removeCachedAuthToken({ token: r.token }).catch(() => {});
