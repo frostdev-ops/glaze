@@ -97,6 +97,13 @@ for (const file of process.argv.slice(2)) {
     cut(/^        part = unescape\(part\);\n/gm, `        part = part${percent};\n`);
   }
   if (file.endsWith('/pdf_viewer.mjs')) {
+    // Firefox Add-ons flags Fluent's innerHTML sink even though its overlay sanitizes the result. Parse in an inert
+    // document instead, with an explicit body to retain leading whitespace and head-like elements, then keep the same
+    // template fragment and Fluent allowlists.
+    cut(/^      templateElement\.innerHTML = value;\n/gm,
+      '      // scripts/vendor-pdfjs.sh: parse Fluent overlays without an HTML assignment sink.\n' +
+      '      const translated = new DOMParser().parseFromString("<body>" + value, "text/html");\n' +
+      '      templateElement.content.append(...translated.body.childNodes);\n');
     // A destination written into a link's #hash, and read back out of the address.
     cut(/^        return this\.getAnchorUrl\("#" \+ escape\(dest\)\);\n/gm, `        return this.getAnchorUrl("#" + dest${escaped});\n`);
     cut(/^        return this\.getAnchorUrl\("#" \+ escape\(str\)\);\n/gm, `        return this.getAnchorUrl("#" + str${escaped});\n`);
