@@ -1,6 +1,6 @@
 // Glaze's own tokenizer for local models (lib/ai/local/tokenizer.js), on a hand-made byte-level BPE vocabulary: merges
 // in rank order, bytes with no merge as their own tokens, added tokens only when asked for, page text never producing a
-// control token, prompts from text and named specials, Glaze's own specials after the vocabulary, a streaming decoder that
+// control token, prompts from text and named specials, Glaze's own specials in the model's reserved rows, a streaming decoder that
 // never splits a character, and decode(encode(x)) === x. scripts/local-tokenizer-check.js holds it to LFM3's real one.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -113,29 +113,69 @@ test('encodeWith builds a prompt from text and named specials; text parts stay t
   assert.throws(() => tk.encodeWith([{ text: 'a', special: '<|im_end|>' }]), /part/);
 });
 
-test('Glaze specials go after the vocabulary, once, and are never text', () => {
-  const tk = K.load(neutral({ added: ADDED }));
-  const n = tk.size;
+test('Glaze specials take the model\'s reserved rows, once, and are never text', () => {
+  const v = neutral({ added: ADDED });
+  const n = v.tokens.length;
+  const rows = n + K.GLAZE_TOKENS.length + 2;
+  const tk = K.load({ ...v, rows });
+  assert.equal(tk.size, rows, 'the model\'s rows');
+  const task = tk.add('<|gz_task:syllabus.read|>');
   const ctx = tk.add('<|gz_ctx|>');
-  assert.equal(ctx, n);
+  assert.equal(ctx, n, 'its place in the table, whatever order they are added in');
+  assert.equal(task, n + K.GLAZE_TOKENS.indexOf('<|gz_task:syllabus.read|>'));
   assert.equal(tk.add('<|gz_ctx|>'), ctx, 'the same name keeps its id');
-  const task = tk.add('<|gz_task:syllabus|>');
-  assert.equal(task, n + 1);
-  assert.equal(tk.size, n + 2);
-  assert.throws(() => tk.add('gz_ctx'), /name/);
+  assert.equal(tk.size, rows, 'never grows');
+  assert.throws(() => tk.add('<|gz_task:syllabus|>'), /name/, 'not in the table');
   assert.throws(() => tk.add('<|im_start|>'), /name/, 'not a model token');
-  const ids = tk.encodeWith([{ special: '<|gz_ctx|>' }, { text: 'hello' }, { special: '<|gz_task:syllabus|>' }]);
+  const ids = tk.encodeWith([{ special: '<|gz_ctx|>' }, { text: 'hello' }, { special: '<|gz_task:syllabus.read|>' }]);
   assert.deepEqual([...ids], [ctx, ...tk.encode('hello'), task]);
   assert.ok(![...tk.encode('<|gz_ctx|>', { specials: true })].includes(ctx), 'text never spells a Glaze special');
   assert.equal(tk.decode(ids), 'hello');
-  assert.equal(tk.decode(ids, { specials: true }), '<|gz_ctx|>hello<|gz_task:syllabus|>');
+  assert.equal(tk.decode(ids, { specials: true }), '<|gz_ctx|>hello<|gz_task:syllabus.read|>');
+  assert.equal(tk.decode([n + 1, n + 2], { specials: true }), '', 'a reserved row nothing has taken is no text');
   const bytes = tk.byteStrings();
   assert.equal(bytes.length, tk.size);
   assert.equal(bytes[ctx], null);
+  assert.equal(bytes[n + 1], null);
   assert.equal(bytes[tk.id('<|im_start|>')], null);
   assert.equal(bytes[tk.id('<think>')], null);
   assert.deepEqual([...bytes[0x41]], [0x41]);
   assert.deepEqual([...bytes[id(tk, ' world')]], [...Buffer.from(' world')]);
+  assert.throws(() => tk.decode([tk.size]), /id/);
+});
+
+test('the Glaze table: fixed order, and the same ids from a GGUF\'s [PAD] rows and after a tokenizer.json\'s last token', () => {
+  assert.deepEqual(K.GLAZE_TOKENS.slice(0, 4), ['<|gz_ctx|>', '<|/gz_ctx|>', '<|gz_data|>', '<|/gz_data|>']);
+  assert.deepEqual(K.GLAZE_TOKENS.slice(4), ['writer.complete', 'writer.review', 'writer.feedback', 'writer.outline', 'writer.requirements', 'writer.cite', 'writer.sources', 'writer.decide', 'writer.image', 'syllabus.read'].map((t) => `<|gz_task:${t}|>`));
+  assert.ok(Object.isFrozen(K.GLAZE_TOKENS));
+  const v = neutral({ added: ADDED });
+  const n = v.tokens.length, rows = n + 20;
+  // LFM3's layout: tokenizer.json ends at its last added token; the GGUF lists the rest of the rows as [PADi], unused.
+  const hf = {
+    model: { type: 'BPE', vocab: Object.fromEntries(v.tokens.map((t, i) => [t, i]).filter(([, i]) => v.types[i] === 1)), merges: [...MERGES, ['l', 'd']], ignore_merges: true, byte_fallback: false },
+    normalizer: null, pre_tokenizer: LFM_PRE, decoder: { type: 'ByteLevel' },
+    added_tokens: v.tokens.map((content, i) => ({ id: i, content, special: v.types[i] === 3 })).filter((t) => v.types[t.id] !== 1),
+  };
+  const pads = Array.from({ length: rows - n }, (_, i) => `[PAD${n + i}]`);
+  const gguf = { 'tokenizer.ggml.model': 'gpt2', 'tokenizer.ggml.pre': 'lfm2', 'tokenizer.ggml.tokens': [...v.tokens, ...pads], 'tokenizer.ggml.token_type': [...v.types, ...pads.map(() => 5)], 'tokenizer.ggml.merges': v.merges };
+  const a = K.fromHF(hf, { rows }), b = K.fromGGUF(gguf);
+  assert.equal(a.size, rows);
+  assert.equal(b.size, rows);
+  const order = [...K.GLAZE_TOKENS].reverse();
+  const ia = order.map((t) => a.add(t)), ib = order.map((t) => b.add(t));
+  assert.deepEqual(ia, ib);
+  assert.deepEqual(K.GLAZE_TOKENS.map((t) => a.id(t)), K.GLAZE_TOKENS.map((_, i) => n + i), 'from the first free row, in table order');
+  for (const tk of [a, b]) {
+    assert.equal(tk.decode([a.id('<|gz_data|>')]), '');
+    assert.equal(tk.decode([a.id('<|gz_data|>')], { specials: true }), '<|gz_data|>');
+    assert.equal(tk.byteStrings()[a.id('<|gz_data|>')], null);
+  }
+  // Fewer reserved rows than the table: the rest are refused, and nothing grows past the model.
+  const few = K.load({ ...v, rows: n + 3 });
+  assert.equal(few.add('<|gz_data|>'), n + 2);
+  assert.throws(() => few.add('<|/gz_data|>'), /reserved/);
+  assert.equal(few.size, n + 3);
+  assert.throws(() => K.fromHF(hf).add('<|gz_ctx|>'), /reserved/, 'a tokenizer.json alone says nothing of the model\'s rows');
 });
 
 test('decode skips control tokens unless asked and keeps user-defined ones, as HF does', () => {
