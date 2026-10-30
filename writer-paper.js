@@ -313,7 +313,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         },
       },
     });
-    ed.addPlugins([PG.styler(look), PG.plugin({ format: look, notes: noteHeights, gap: GAP, onLayout: (l) => { layout = l; draw(); laidOut(); }, paused: () => compact }), watch, fallback]);
+    ed.addPlugins([PG.styler(look), PG.plugin({ format: look, notes: noteHeights, gap: GAP, onLayout: (l) => { layout = l; draw(); if (!l.partial) laidOut(); }, paused: () => compact }), watch, fallback]);
 
     // ---- pages
     const surname = () => F.surname(view.state.doc, format);
@@ -364,6 +364,10 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       zoomEl.style.width = `${geo.width}px`;
       zoomEl.style.height = `${n * stride - GAP}px`;
       zoomEl.style.transform = `scale(${scale})`;
+      // A layout still under way (lib/writer-paginate.js partial): its settled pages, the text after them clipped at the
+      // last one's foot until its pages are laid out.
+      flow.style.height = layout.partial ? `${(n - 1) * stride + geo.body}px` : '';
+      flow.style.overflow = layout.partial ? 'clip' : '';
       size.style.width = `${geo.width * scale}px`;
       size.style.height = `${(n * stride - GAP) * scale}px`;
       sizeTop = size.offsetTop;
@@ -1815,7 +1819,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
           const now = caretY(), r = canvas.getBoundingClientRect();
           if (now != null && y != null) canvas.scrollTop += now - Math.min(Math.max(y, r.top + 48), r.bottom - 96);
         };
-        const mark = () => { laid = true; drawn.splice(drawn.indexOf(mark), 1); };
+        const mark = () => { if (layout?.partial) return; laid = true; drawn.splice(drawn.indexOf(mark), 1); };
         drawn.push(mark, back);
         addEventListener('resize', back);
         PG.relayout(view);

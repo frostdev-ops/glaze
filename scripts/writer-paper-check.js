@@ -207,6 +207,15 @@ const HARNESS = `(() => {
     for (const fid of ['mla9', 'apa7', 'chicago17']) {
       await load(fr, FX.papers[fid](), fid);
       pages[fid] = await pagesOf(fr);
+      // Each line's start as the pages read it from the DOM is where ProseMirror's posAtCoords puts it (notes, tabs and
+      // headings included), and a layout from scratch has the drawn one's breaks.
+      const starts = await fr.evaluate(() => {
+        const v = GZ_WRITER_PAPER.current().editor.view, P = GZ_WRITER_PAGINATE, one = P.whole(v), old = P.whole(v, { legacy: true });
+        const at = (l) => l.blocks.map((b) => (b.lines || []).map((x) => x.at).join(','));
+        const sig = (breaks) => breaks.map((b) => `${b.b}:${b.l}:${Math.round(b.gap * 100)}`).join('|');
+        return { lines: one.blocks.reduce((n, b) => n + (b.lines?.length || 0), 0), differ: at(one).findIndex((x, i) => x !== at(old)[i]), same: sig(one.breaks) === sig(GZ_WRITER_PAPER.current().layout().breaks) };
+      });
+      check(starts.differ === -1 && starts.same, `${fid}: its ${starts.lines} lines start where ProseMirror's posAtCoords puts them, and laid out again from scratch it breaks as drawn${starts.differ === -1 ? '' : ` (block ${starts.differ} differs)`}`);
       const api = await fr.evaluate(async () => { const o = await GZ_WRITER_PAPER.current().docx(); return Array.from(o.bytes); });
       fs.writeFileSync(path.join(out, `paper-${fid}.docx`), Buffer.from(api));
       if (process.env.PAPER_PROBE && fid === 'apa7') console.log('PROBE', JSON.stringify(await fr.evaluate(() => {
