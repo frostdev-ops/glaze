@@ -3319,7 +3319,7 @@ chrome.runtime.onConnect.addListener((p) => {
   D.serve(p, {
     allowed: async () => googleLib().ON && await drivePage(s),
     drive: D.create({ fetch: (u, init) => fetch(u, init), token: (o) => openGoogle().token(o), account: () => openGoogle().account(),
-      drop: (token) => chrome.identity?.removeCachedAuthToken?.({ token }) }),
+      drop: (token) => openGoogle().drop(token) }),
     record: {
       get: async (k) => {
         if (!P().valid(k)) return null;
@@ -3328,7 +3328,7 @@ chrome.runtime.onConnect.addListener((p) => {
       },
       set: (k, drive) => (brokerTurn ||= GZ_CARDS.queue())(async () => {
         if (!(await chrome.storage.local.get(P().KEYS.PAPER + k))[P().KEYS.PAPER + k]) return false;
-        await openPapers().save(k, { drive }, { changed: false });
+        await openPapers().save(k, { drive }, { changed: false, touch: false });
         return true;
       }),
     },
