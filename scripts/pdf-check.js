@@ -97,6 +97,14 @@ const scan = () => {
     const shot = async (name) => { await pause(250); const f = path.join(out, name); await page.screenshot({ path: f }); shots.push(f); };
     const openHome = async () => { await page.goto(HOME); await until(() => page.evaluate(() => !document.getElementById('list').hidden), 'home'); };
 
+    // ---- no stored switch (a new install, an update): Documents reads it as Settings shows it, defaults.js's default, the
+    // page loading defaults.js after the scripts it reads.
+    await worker.evaluate(async (s) => { await chrome.storage.sync.set({ ...s, writer: { ...s.writer } }); await chrome.storage.sync.set({ writer: Object.fromEntries(Object.entries(s.writer).filter(([k]) => k !== 'pdf')) }); }, settings(false));
+    await openHome();
+    const unset = await page.evaluate(() => ({ accept: document.getElementById('gd-file').accept, defaults: typeof GZ_DEFAULTS === 'object' }));
+    check(unset.defaults && /pdf/.test(unset.accept) === G.GZ_DEFAULTS.writer.pdf, `no stored PDFs switch: Documents follows the default, ${G.GZ_DEFAULTS.writer.pdf ? 'on' : 'off'} (${JSON.stringify(unset)})`);
+    await worker.evaluate(async (s) => { await chrome.storage.sync.set(s); }, settings(false));
+
     // ---- off: Documents is as it was
     await openHome();
     const off = await page.evaluate(() => ({ accept: document.getElementById('gd-file').accept, label: document.getElementById('gd-import').textContent }));

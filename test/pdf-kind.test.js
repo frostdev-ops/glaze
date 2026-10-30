@@ -27,7 +27,13 @@ const load = (writer, { defaults = true } = {}) => {
   const needed = [];
   const ctx = vm.createContext({ GZ_DOC_KINDS: DK, console, URL, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, RangeError, Error, Promise, Object, Array, String, Number, Math, JSON, Map, Set, btoa, atob,
     chrome: { storage: { sync: { get: async () => (writer === undefined ? {} : { writer }) } }, runtime: { getURL: (f) => `chrome-extension://x/${f}` } } });
-  ctx.GZ_WRITER_PAPER = { need: async (files) => { needed.push(...files); if (files.includes('defaults.js')) ctx.GZ_SANITIZE = G.GZ_SANITIZE; } };
+  // need() runs each file in turn, as the page does; defaults.js reads GZ_COLOR, GZ_SURFACES and GZ_FONTS as it loads.
+  const ran = new Set();
+  ctx.GZ_WRITER_PAPER = { need: async (files) => { for (const f of files) {
+    needed.push(f);
+    if (f === 'defaults.js') { assert.ok(['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js'].every((x) => ran.has(x)), `defaults.js after what it reads (${needed})`); ctx.GZ_SANITIZE = G.GZ_SANITIZE; }
+    ran.add(f);
+  } } };
   if (!defaults) ctx.GZ_SANITIZE = G.GZ_SANITIZE;
   ctx.globalThis = ctx;
   vm.runInContext(read('pdf-kind.js'), ctx);
@@ -50,8 +56,9 @@ test('off, Documents imports Word files only, and a PDF it already keeps still o
 
 test('the switch reads as Settings shows it: no stored key, or a bad value, is the default', async () => {
   for (const writer of [undefined, { pdf: 'yes' }, { full: true }]) assert.equal((await imports(writer)).yes, G.GZ_DEFAULTS.writer.pdf, JSON.stringify(writer));
-  // papers.html loads defaults.js for it; writer.html already has it, and a second copy would redeclare its constants.
-  assert.deepEqual((await imports(undefined)).needed, ['defaults.js']);
+  // papers.html loads defaults.js for it, after the scripts defaults.js reads; writer.html already has it, and a second
+  // copy would redeclare its constants.
+  assert.deepEqual((await imports(undefined)).needed, ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js']);
   assert.deepEqual((await imports(undefined, { defaults: false })).needed, []);
   assert.equal((await imports({ pdf: true }, { defaults: false })).yes, true);
 });
