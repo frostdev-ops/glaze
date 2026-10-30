@@ -33,7 +33,7 @@ const look = (name) => G.GZ_LOOKS.find((L) => L.name === name);
 // Glaze 3.4.6's defaults.js as released (git show v3.4.6:defaults.js), for its sanitize of the courses it writes back.
 const old = (() => {
   const module = { exports: {} };
-  require('node:vm').runInNewContext(fs.readFileSync(path.join(root, 'test/fixtures/defaults-3.4.6.js'), 'utf8'), {
+  require('node:vm').runInNewContext(fs.readFileSync(path.join(root, 'test/fixtures/defaults-3.4.6.js.txt'), 'utf8'), {
     module, TextEncoder, console, GZ_COLOR: require('../lib/color.js'), GZ_SURFACES: require('../lib/surfaces.js'), GZ_FONTS: require('../lib/fonts.js') });
   return module.exports;
 })();

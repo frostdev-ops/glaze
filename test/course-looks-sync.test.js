@@ -10,7 +10,7 @@ const C = require('../lib/looks.js');
 // Glaze 3.4.6's defaults.js as released (git show v3.4.6:defaults.js); its helpers are unchanged since.
 const old = (() => {
   const module = { exports: {} };
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'fixtures/defaults-3.4.6.js'), 'utf8'), {
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'fixtures/defaults-3.4.6.js.txt'), 'utf8'), {
     module, TextEncoder, console, GZ_COLOR: require('../lib/color.js'), GZ_SURFACES: require('../lib/surfaces.js'), GZ_FONTS: require('../lib/fonts.js') });
   return module.exports;
 })();
