@@ -138,7 +138,11 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const toolGrow = h('span', { class: 'grow' });
     // The status bar's word count opens the counts (writer-counts.js, where loaded).
     wordsL.addEventListener('click', () => globalThis.GZ_WRITER_COUNTS?.open(wordsL));
-    const status = h('div', { class: 'gp-status' }, pageL, wordsL, h('span', { class: 'grow' }), fontL, versionsB);
+    // A file arriving (Open in Glaze, writer-kinds.js): its stage and bytes, a bar filling as it goes, the stage spoken.
+    const arriveText = h('span', { 'aria-hidden': 'true' }), arriveSay = h('span', { class: 'gp-sr', role: 'status' }), arriveFill = h('span', { class: 'gp-fill' });
+    const arriveBar = h('span', { class: 'gp-progress', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0' }, arriveFill);
+    const arrive = h('span', { class: 'gp-arrive', hidden: true }, arriveText, arriveBar, arriveSay);
+    const status = h('div', { class: 'gp-status' }, pageL, wordsL, arrive, h('span', { class: 'grow' }), fontL, versionsB);
     const tabs = {}, panes = {}, badges = {};
     for (const [id, label] of [['checks', 'Checks'], ['sources', 'Sources'], ['feedback', 'Feedback'], ['outline', 'Document outline']]) {
       badges[id] = h('span', { class: 'gp-badge' });
@@ -1725,6 +1729,18 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       // over the viewer).
       hold: () => { if (!parked) { parked = { holding: true }; clearTimeout(saveTimer); } }, release: () => { if (parked?.holding) parked = null; },
       hand: (rec) => hand(rec, true), take: (surface) => { parked = surface; current = surface; }, unpark: () => { parked = null; current = api; },
+      // arriving(p): the file's stage while it arrives ({ name, text, spoken, fraction }), null once it has or hasn't. In
+      // the compact box, the bar's line says it.
+      arriving: (p) => {
+        if (compact && said) { if (p) tell('importing', p.text); else if (saying === 'importing') tell(''); return; }
+        arrive.hidden = !p;
+        if (!p) { arriveSay.textContent = ''; return; }
+        arriveText.textContent = p.text;
+        if (arriveSay.textContent !== p.spoken) arriveSay.textContent = p.spoken;
+        arriveBar.setAttribute('aria-label', p.name || '');
+        arriveBar.setAttribute('aria-valuenow', String(Math.round(p.fraction * 100)));
+        arriveFill.style.transform = `scaleX(${p.fraction})`;
+      },
       // Nothing written past the format's opening yet (an import then needs no word about the paper it replaces).
       blank: () => { const text = view.state.doc.textContent.trim(); return !text || text === S.paper.nodeFromJSON(F.template(format, values())).textContent.trim(); },
       // The page ended Focus (a click on its dim).

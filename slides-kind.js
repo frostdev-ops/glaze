@@ -34,10 +34,11 @@
   const LEGACY = 3e6; // base64 of 3 MB is the record's 4 MB
   const STORE = {
     max: GZ_DOC_KINDS.KINDS.slides.max,
-    put: async (bytes, ext) => {
+    // sent(done, total) as the bytes reach the store.
+    put: async (bytes, ext, sent = null) => {
       if (!(bytes?.length <= STORE.max)) throw new RangeError(SAYS.size);
       const x = String(ext || '').toLowerCase() === '.ppsx' ? '.ppsx' : '.pptx', F = await files();
-      try { return { file: await F.client().put(bytes, MIME[x]), size: bytes.length, ext: x }; } catch (e) {
+      try { return { file: await F.client().put(bytes, MIME[x], sent), size: bytes.length, ext: x }; } catch (e) {
         if (e.why === 'unavailable' && bytes.length <= LEGACY) return { file: b64(bytes), size: bytes.length, ext: x };
         throw new FileError(e.why);
       }
@@ -174,19 +175,31 @@
 
   // ---- import and export
   const stem = (name) => (globalThis.GZ_DOC_HOME ? GZ_DOC_HOME.stem(name) : String(name || '').replace(/\.[^./\\]+$/, '').trim().slice(0, 120));
-  // A deck as a new standalone document, titled by its file's name. → its key.
-  const importFile = async (file) => {
-    if (!Number.isSafeInteger(file?.size) || file.size <= 0 || file.size > STORE.max) throw new RangeError(SAYS.size);
-    await need(LIBS);
-    const raw = await file.arrayBuffer();
-    if (!(raw instanceof ArrayBuffer) || raw.byteLength !== file.size) throw new Error('invalid file read');
+  // A deck file's bytes, read, its first slide drawn and its words taken, then copied into the store, each stage told to
+  // progress (lib/doc-kinds.js progress). → the record's fields for it.
+  const bring = async (f, progress) => {
+    const p = typeof progress === 'function' ? progress : () => {};
+    p({ stage: 'read', done: 0, total: f.size });
+    const raw = await f.arrayBuffer();
+    if (!(raw instanceof ArrayBuffer) || raw.byteLength !== f.size) throw new Error('invalid file read');
     const bytes = new Uint8Array(raw);
+    p({ stage: 'read', done: bytes.length, total: bytes.length });
+    p({ stage: 'prepare' });
     const deck = await GZ_PPTX.read(bytes).catch(() => null);
     if (!deck?.slides.length) throw new RangeError(SAYS.read);
-    const thumbUrl = await picture(deck, bytes).catch(() => null), words = textOf(deck), title = stem(file.name);
+    const thumbUrl = await picture(deck, bytes).catch(() => null), words = textOf(deck);
+    p({ stage: 'copy', done: 0, total: bytes.length });
+    const kept = await STORE.put(bytes, /\.ppsx$/i.test(f.name) ? '.ppsx' : '.pptx', (done, total) => p({ stage: 'copy', done, total }));
+    p({ stage: 'save' });
+    return { ...kept, slides: deck.slides.length, text: words, words: measure({ text: words }).words, ...(thumbUrl && { thumb: thumbUrl }) };
+  };
+  // A deck as a new standalone document, titled by its file's name. → its key.
+  const importFile = async (file, { progress = null } = {}) => {
+    if (!Number.isSafeInteger(file?.size) || file.size <= 0 || file.size > STORE.max) throw new RangeError(SAYS.size);
+    await need(LIBS);
+    const fields = await bring(file, progress), title = stem(file.name);
     const key = GZ_WRITER_PAPERS.newKey();
-    await papers().save(key, { kind: 'slides', ...await STORE.put(bytes, /\.ppsx$/i.test(file.name) ? '.ppsx' : '.pptx'), slides: deck.slides.length, text: words,
-      words: measure({ text: words }).words, ...(thumbUrl && { thumb: thumbUrl }), named: !!title, title }, { reason: 'import' });
+    await papers().save(key, { kind: 'slides', ...fields, named: !!title, title }, { reason: 'import' });
     return key;
   };
   // A deck as its file: the bytes imported, named by its title. → { name, mime, bytes } or null.
@@ -541,17 +554,11 @@
   };
   // A deck brought to an assignment (Open in Glaze, writer-kinds.js): the attempt's record becomes it, the paper it held
   // kept as a version first (the 'import' save), its title the assignment's. → the record.
-  const into = async (key, f) => {
+  const into = async (key, f, { progress = null } = {}) => {
     if (!Number.isSafeInteger(f?.size) || f.size <= 0 || f.size > STORE.max) throw new RangeError(SAYS.size);
     await need(LIBS);
-    const raw = await f.arrayBuffer();
-    if (!(raw instanceof ArrayBuffer) || raw.byteLength !== f.size) throw new Error('invalid file read');
-    const bytes = new Uint8Array(raw);
-    const deck = await GZ_PPTX.read(bytes).catch(() => null);
-    if (!deck?.slides.length) throw new RangeError(SAYS.read);
-    const thumbUrl = await picture(deck, bytes).catch(() => null), words2 = textOf(deck);
-    return (await papers().save(key, { kind: 'slides', doc: null, ...await STORE.put(bytes, /\.ppsx$/i.test(f.name) ? '.ppsx' : '.pptx'), slides: deck.slides.length, text: words2,
-      words: measure({ text: words2 }).words, ...(thumbUrl && { thumb: thumbUrl }) }, { reason: 'import' })).paper;
+    const fields = await bring(f, progress);
+    return (await papers().save(key, { kind: 'slides', doc: null, ...fields }, { reason: 'import' })).paper;
   };
 
   // Viewing stays registered; only import follows the switch, read through defaults.js as every Writer setting is (a device
