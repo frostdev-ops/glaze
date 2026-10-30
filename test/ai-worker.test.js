@@ -155,7 +155,9 @@ test('Firefox\'s event page loads every file of the harness the worker would imp
   // scripts/package-firefox.sh: the files named in the worker's importScripts calls, as it reads them.
   const bg = fs.readFileSync(path.join(__dirname, '..', 'lib/background.js'), 'utf8');
   const named = new Set([...bg.matchAll(/importScripts\(([^)]*)\)/g)].flatMap(([, a]) => [...a.matchAll(/'([^']+)'/g)].map(([, f]) => `lib/${f}`)));
-  const shipped = fs.readdirSync(path.join(__dirname, '..', 'lib/ai'), { recursive: true }).filter((f) => f.endsWith('.js') && f !== 'providers/mock.js').map((f) => `lib/ai/${f}`);
+  // The local engine's files before its provider step names them (4.0.1): the worker doesn't load them yet.
+  const unwired = ['local/store.js'];
+  const shipped = fs.readdirSync(path.join(__dirname, '..', 'lib/ai'), { recursive: true }).filter((f) => f.endsWith('.js') && f !== 'providers/mock.js' && !unwired.includes(f)).map((f) => `lib/ai/${f}`);
   assert.ok(shipped.length >= 14);
   for (const f of shipped) assert.ok(named.has(f), `${f} is named in an importScripts call`);
   assert.ok(!named.has('lib/ai/providers/mock.js'), 'the mock is for tests and the eval');
