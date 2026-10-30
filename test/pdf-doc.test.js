@@ -321,6 +321,24 @@ test('page and byte limits bound intermediate work and reject invalid overrides'
   await assert.rejects(pdf.bake(three, [{ op: 'duplicate', pages: [0] }], { limits: { bytes: three.length } }), refused('PdfTooLargeError'));
 });
 
+test('bake snapshots merge inputs and operations, and names unreadable output as a write failure', async () => {
+  const pdf = await api(), other = F.FIXTURES.three();
+  const ops = [{ op: 'merge', bytes: other }, { op: 'rotate', pages: [0], by: 90 }];
+  const pending = pdf.bake(F.FIXTURES.three(), ops);
+  other.fill(0);
+  ops[1].by = 180;
+  ops[1].pages[0] = 1;
+  const baked = await pending;
+  assert.deepEqual((await read(baked.bytes)).pages, ['Alpha page one 90', ...THREE.slice(1), ...THREE]);
+  const pdfjs = await load();
+  const badWriter = D.use({ ...pdfjs, getDocument(options) {
+    const task = pdfjs.getDocument(options);
+    task.promise.then((doc) => { doc.extractPages = async () => new Uint8Array([0]); }, () => {});
+    return task;
+  } });
+  await assert.rejects(badWriter.bake(F.FIXTURES.three(), [{ op: 'rotate', pages: [0], by: 90 }]), refused('PdfWriteError'));
+});
+
 test('pdf.js refuses an inflated save before allocating the output buffer', async () => {
   const fs = require('node:fs'), vm = require('node:vm');
   const worker = fs.readFileSync(path.join(root, 'lib/pdfjs/pdf.worker.mjs'), 'utf8');
