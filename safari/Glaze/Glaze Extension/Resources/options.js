@@ -1617,9 +1617,14 @@ GZ_UI.load().then((s) => {
     }
   });
   // The defaults this device started with: a fresh install has Notes and the pet habitat on (GZ_SANITIZE's fresh), so a
-  // reset gives those back rather than turning them off.
-  let freshHere = false;
-  chrome.storage.local.get('freshDefaults', (r) => { freshHere = r?.freshDefaults?.fresh === true; showResets(); });
+  // reset gives those back rather than turning them off. Settings can open before the install marks the device, and a
+  // restore unmarks it: each change counts, and a read answered after one is older than it.
+  let freshHere = false, freshKnown = false;
+  chrome.storage.local.get('freshDefaults', (r) => { if (!freshKnown) { freshHere = r?.freshDefaults?.fresh === true; showResets(); } });
+  chrome.storage.onChanged.addListener((c, area) => {
+    if (area !== 'local' || !c.freshDefaults) return;
+    freshKnown = true; freshHere = c.freshDefaults.newValue?.fresh === true; showResets();
+  });
   const defaultsHere = () => ({ ...GZ_SANITIZE(undefined, freshHere), card: GZ_CARDS.settings() });
   // Two clicks, so a stray one can't wipe everything. Custom presets survive.
   let armed = 0;
@@ -1791,6 +1796,9 @@ GZ_UI.load().then((s) => {
   GZ_WRITEREDIT.mount({ t, hint, elsewhere: ownTabAt });
   GZ_AIEDIT.mount({ t, when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium', timeStyle: 'short' }).format(at),
     pct: (x) => GZ_I18N.pct(Math.round(x * 100), GZ_I18N.ui()) });
+  // Agents (lib/editor-agents.js): agent access, the helper's link, the paired apps and their groups, and the activity list.
+  GZ_AGENTSEDIT.mount({ t, hint, when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium', timeStyle: 'short' }).format(at),
+    day: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium' }).format(at) });
   followSection(editor.route(), editor.part());
 
   // Opening the editor wakes the mod blocklist check, which asks only if one is due (lib/blocklist.js).

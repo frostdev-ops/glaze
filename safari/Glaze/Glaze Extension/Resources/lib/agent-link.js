@@ -8,7 +8,7 @@
 //   attach({ open(c, peer), line(c, text), close(c, why), state(status) }). send(c, text) and close(c, why) → whether it went;
 //   the link closes a connection itself as 'gone' (the helper left), 'stopped' or 'too-long' (a line over 64 MiB).
 //   ensure() brings the link to what storage.local mcp says (as lib/mcp/grants.js reads it) and runs on every trigger:
-//   worker start, onStartup, onInstalled, an mcp change either way, permissions.onAdded, the options page's poll.
+//   worker start, onStartup, onInstalled, an mcp change either way, permissions.onAdded.
 //   stop() says bye and disconnects the port itself, as permissions.remove leaves an open port open.
 //
 // status() → { state, at, host?, browser?, error? }, mirrored to storage.session mcpLink so the options page can read it

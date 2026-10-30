@@ -288,13 +288,15 @@ const checkRun = async () => {
     e.style.cssText = 'position:fixed;top:8px;left:8px;width:160px;height:48px;z-index:2147483647';
     window.__grant = null;
     e.addEventListener('click', () => {
-      const asked = chrome.permissions.request({ permissions: ['nativeMessaging'] });
+      const asked = chrome.permissions.request({ permissions: ['nativeMessaging'], data_collection: ['websiteContent'] }); // as Settings asks
       window.__grant = asked.then((granted) => chrome.runtime.sendMessage({ type: 'glaze:mcp-config', op: 'set', on: true }).then((set) => ({ granted, set })), (e) => ({ error: String(e) }));
     });
     document.body.append(e); return true; })()`, c);
   await b.click(c, '#gz-check-grant');
   const grant = await until(() => b.value('window.__grant', c), 'the grant');
   if (!ok(grant.granted === true, `Firefox granted nativeMessaging from the click, with no prompt (${JSON.stringify(grant)})`)) throw new Error('no grant');
+  const consent = await b.value(`chrome.permissions.getAll().then((p) => p.data_collection || null)`, c);
+  ok(Array.isArray(consent) && consent.includes('websiteContent'), `the same click granted the website-content consent (${JSON.stringify(consent)})`);
   const after = await settled(b, c, 'the link after the grant', ['off', 'needs-permission'], 30000);
   const bg1 = await b.value(BG(false), c), page1 = await b.inChrome(PAGE);
   const seen = await links(b, c);
