@@ -229,3 +229,15 @@ test('cancellation bounds a stalled tab lookup', async () => {
   const result = await Promise.race([t.run(A, 'todo', {}, { signal: ac.signal }).then(() => 'returned', () => 'cancelled'), H.pause(100).then(() => 'hung')]);
   assert.equal(result, 'cancelled');
 });
+
+test('turning Insights off during a refresh leaves its kept record unchanged', async () => {
+  const store = {}, old = Date.now() - 864e5;
+  await C.keepInsights(store, C.CANVAS, '5', C.canvasGrades().slice(0, 1).map((x) => C.canvasCourse(x, old)), old);
+  let tab;
+  tab = canvasTab({ id: 1, store, settings: { enhance: { insights: true } }, courses: insightsCourses(), routes: {
+    ...gradeRoutes(), '/api/v1/courses/25/assignment_groups': () => { tab.context.GZ_CTX.settings().enhance.insights = false; return C.canvasGrades()[0].groups; },
+  } });
+  const before = structuredClone(store);
+  assert.deepEqual(await make([tab]).t.refresh(A, 'grades'), { ok: false, source: 'tab' });
+  assert.deepEqual(store, before);
+});
