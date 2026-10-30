@@ -115,6 +115,7 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
     if (!vals.some(Array.isArray)) return f(...vals);
     let rows = 1, cols = 1;
     for (const v of vals) { const [r, c] = dims(v); rows = Math.max(rows, r); cols = Math.max(cols, c); }
+    if (rows * cols > CAP.cells) return ERR.NUM;
     const out = new Array(rows);
     for (let i = 0; i < rows; i++) { out[i] = new Array(cols); for (let j = 0; j < cols; j++) out[i][j] = f(...vals.map((v) => at(v, i, j))); }
     return out;
@@ -149,6 +150,7 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
   const toArray = (ref, ctx) => {
     let { r1, c1 } = ref;
     if (ref.r1 - ref.r0 >= 4096 || ref.c1 - ref.c0 >= 4096) { const [mr, mc] = ctx.eng.extent(ref.sheet); r1 = Math.max(ref.r0, Math.min(r1, mr)); c1 = Math.max(ref.c0, Math.min(c1, mc)); }
+    if ((r1 - ref.r0 + 1) * (c1 - ref.c0 + 1) > CAP.cells) return ERR.NUM;
     const out = [];
     for (let r = ref.r0; r <= r1; r++) { const row = new Array(c1 - ref.c0 + 1); for (let c = ref.c0; c <= c1; c++) row[c - ref.c0] = ctx.read(ref.sheet, r, c); out.push(row); }
     return out;
@@ -262,7 +264,13 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
   };
   // KB 78113: when a formula's last operation adds or subtracts and the result is within a rounding error of zero,
   // Excel shows 0.
-  const snap = (r, a, b) => (r !== 0 && Math.abs(r) < Math.max(Math.abs(a), Math.abs(b)) * 1e-15 ? 0 : r);
+  const snap = (r, a, b) => {
+    const magnitude = Math.max(Math.abs(a), Math.abs(b));
+    let e = Math.floor(Math.log2(magnitude));
+    if (2 ** e > magnitude) e--;
+    // The binary boundary is verified in Excel; KB 78113 describes the optimization without specifying its threshold.
+    return r !== 0 && Math.abs(r) < 2 ** (e - 49) ? 0 : r;
+  };
   const OPS = {
     '+': numeric((a, b) => a + b), '-': numeric((a, b) => a - b), '*': numeric((a, b) => a * b),
     '/': numeric((a, b) => (b === 0 ? ERR.DIV0 : a / b)), '^': numeric(power),
@@ -312,7 +320,7 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
           const test1 = COMPARE[n.op];
           return map([a, b], (x, y) => (isErr(x) ? x : isErr(y) ? y : test1(compare(x, y))));
         }
-        const op = (top && OPS.top[n.op]) || OPS[n.op];
+        const op = (top && !n.grouped && OPS.top[n.op]) || OPS[n.op];
         return map([a, b], (x, y) => op(x, y, ctx));
       }
       default: return ERR.VALUE;
@@ -361,6 +369,25 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
 
   // ── The graph ───────────────────────────────────────────────────────────────────────────────────────────────────────
   const WIDE = 64;
+  // Canonical binary-tree segments let a point query visit at most one path, rather than every range in a column.
+  const segments = (first, last, base) => {
+    const out = [];
+    for (let a = first + base, b = last + base; a <= b; a = Math.floor(a / 2), b = Math.floor(b / 2)) {
+      if (a % 2) out.push(a++);
+      if (!(b % 2)) out.push(b--);
+    }
+    return out;
+  };
+  const path = function* (point, base) { for (let k = point + base; k; k = Math.floor(k / 2)) yield k; };
+  const addEntry = (map, segment, k) => {
+    let entries = map.get(segment);
+    if (!entries) map.set(segment, (entries = new Set()));
+    entries.add(k);
+  };
+  const removeEntry = (map, segment, k) => {
+    const entries = map.get(segment);
+    if (entries) { entries.delete(k); if (!entries.size) map.delete(segment); }
+  };
   const key = (id, r, c) => (id * MAX_ROWS + r) * MAX_COLS + c;
   const analyses = new WeakMap();
   const analyze = (ast) => {
@@ -409,7 +436,28 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
       return e;
     }
 
+    checkArrays() {
+      let count = M.cellCount(this.wb);
+      const holes = new Map();
+      for (const sheet of this.wb.sheets) for (const [r, row] of sheet.rows) for (const [c, cell] of row) {
+        if (cell.f === undefined || cell.a === undefined) continue;
+        const span = M.rangePosition(cell.a);
+        if (!span || span.r0 !== r || span.c0 !== c) continue;
+        const area = (span.r1 - r + 1) * (span.c1 - c + 1);
+        if (area > CAP.cells) throw Object.assign(new Error('array exceeds cell cap'), { code: 'cap-cells' });
+        for (let i = r; i <= span.r1; i++) for (let j = c; j <= span.c1; j++) {
+          const k = key(sheet.id, i, j);
+          if (!M.cell(sheet, i, j) && !holes.has(k)) {
+            if (++count > CAP.cells) throw Object.assign(new Error('array exceeds cell cap'), { code: 'cap-cells' });
+            holes.set(k, [sheet.id, i, j, null]);
+          }
+        }
+      }
+      return [...holes.values()];
+    }
+
     build() {
+      this.checkArrays();
       this.nodes.clear(); this.index.clear(); this.volatile.clear(); this.members.clear(); this.dirty.clear(); this.circular.clear();
       this.byName = new Map(this.wb.sheets.map((s) => [s.name.toLowerCase(), s]));
       this.byId = new Map(this.wb.sheets.map((s) => [s.id, s]));
@@ -441,26 +489,43 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
       let si = this.index.get(id);
       if (!si) this.index.set(id, (si = { cols: new Map(), wide: new Map() }));
       node.entries.push([id, r0, c0, r1, c1]);
-      if (c1 - c0 >= WIDE) { const list = si.wide.get(node.key); if (list) list.push([r0, c0, r1, c1]); else si.wide.set(node.key, [[r0, c0, r1, c1]]); return; }
+      if (c1 - c0 >= WIDE) {
+        for (const rs of segments(r0, r1, MAX_ROWS)) {
+          let cols = si.wide.get(rs);
+          if (!cols) si.wide.set(rs, (cols = new Map()));
+          for (const cs of segments(c0, c1, MAX_COLS)) addEntry(cols, cs, node.key);
+        }
+        return;
+      }
       for (let c = c0; c <= c1; c++) {
         let col = si.cols.get(c);
         if (!col) si.cols.set(c, (col = { cells: new Map(), ranges: new Map() }));
         if (r0 === r1) { let s = col.cells.get(r0); if (!s) col.cells.set(r0, (s = new Set())); s.add(node.key); }
-        else { const list = col.ranges.get(node.key); if (list) list.push([r0, r1]); else col.ranges.set(node.key, [[r0, r1]]); }
+        else for (const rs of segments(r0, r1, MAX_ROWS)) addEntry(col.ranges, rs, node.key);
       }
     }
     unregister(node) {
       for (const [id, r0, c0, r1, c1] of node.entries) {
         const si = this.index.get(id);
         if (!si) continue;
-        if (c1 - c0 >= WIDE) { si.wide.delete(node.key); continue; }
+        if (c1 - c0 >= WIDE) {
+          for (const rs of segments(r0, r1, MAX_ROWS)) {
+            const cols = si.wide.get(rs);
+            if (!cols) continue;
+            for (const cs of segments(c0, c1, MAX_COLS)) removeEntry(cols, cs, node.key);
+            if (!cols.size) si.wide.delete(rs);
+          }
+          continue;
+        }
         for (let c = c0; c <= c1; c++) {
           const col = si.cols.get(c);
           if (!col) continue;
           if (r0 === r1) { const s = col.cells.get(r0); if (s) { s.delete(node.key); if (!s.size) col.cells.delete(r0); } }
-          else col.ranges.delete(node.key);
+          else for (const rs of segments(r0, r1, MAX_ROWS)) removeEntry(col.ranges, rs, node.key);
+          if (!col.cells.size && !col.ranges.size) si.cols.delete(c);
         }
       }
+      for (const [id, si] of this.index) if (!si.cols.size && !si.wide.size) this.index.delete(id);
       node.entries = [];
     }
     dependents(id, r, c, visit) {
@@ -470,9 +535,13 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
       if (col) {
         const s = col.cells.get(r);
         if (s) for (const k of s) visit(k);
-        for (const [k, spans] of col.ranges) for (const [a, b] of spans) if (r >= a && r <= b) { visit(k); break; }
+        for (const rs of path(r, MAX_ROWS)) { const entries = col.ranges.get(rs); if (entries) for (const k of entries) visit(k); }
       }
-      for (const [k, boxes] of si.wide) for (const [r0, c0, r1, c1] of boxes) if (r >= r0 && r <= r1 && c >= c0 && c <= c1) { visit(k); break; }
+      for (const rs of path(r, MAX_ROWS)) {
+        const cols = si.wide.get(rs);
+        if (!cols) continue;
+        for (const cs of path(c, MAX_COLS)) { const entries = cols.get(cs); if (entries) for (const k of entries) visit(k); }
+      }
     }
 
     // The cells a formula reads, through its names too, as index entries.
@@ -656,6 +725,16 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
 
     // Excel refuses a change to part of an array formula's range.
     guard(op) {
+      // Like restore, this inverse carries a complete saved array, including generated result cells.
+      if (op.arrayUndo === true) return;
+      const check = (r, c, cell) => {
+        const span = cell?.f !== undefined && cell.a !== undefined ? M.rangePosition(cell.a) : null;
+        if (span && span.r0 === r && span.c0 === c && (span.r1 - r + 1) * (span.c1 - c + 1) > CAP.cells) {
+          throw Object.assign(new Error('array exceeds cell cap'), { code: 'cap-cells' });
+        }
+      };
+      if (op.op === 'set') check(op.r, op.c, op.cell);
+      if (op.op === 'cells') for (const [r, c, cell] of op.cells) check(r, c, cell);
       if (op.op === 'batch') { for (const x of op.ops) this.guard(x); return; }
       if (!this.members.size || !['set', 'cells', 'clear'].includes(op.op)) return;
       const sheet = this.byId.get(op.sheet);
@@ -677,6 +756,13 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
     apply(op) {
       this.guard(op);
       const res = M.apply(this.wb, op, F.hooks);
+      const arraysChanged = res.rebuild || res.touched.some(([id, r, c]) => M.cell(this.byId.get(id), r, c)?.a !== undefined);
+      if (arraysChanged) {
+        let holes;
+        try { holes = this.checkArrays(); }
+        catch (error) { M.apply(this.wb, res.inverse, F.hooks); throw error; }
+        if (holes.length) res.inverse = { op: 'batch', arrayUndo: true, ops: [{ op: 'restore', cells: holes }, res.inverse] };
+      }
       for (const [id, r, c] of res.touched) this.changed.set(key(id, r, c), [id, r, c]);
       if (res.rebuild) {
         this.build();
