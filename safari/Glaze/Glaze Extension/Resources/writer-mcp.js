@@ -56,7 +56,7 @@
     insert: ({ sourceId, page, inText }) => {
       const c = citation(sourceId, page);
       if (!c) return fail(NO_SOURCE);
-      if (typeof inText === 'string' && c.text !== inText) return fail(CHANGED);
+      if (typeof inText !== 'string' || c.text !== inText) return fail(CHANGED);
       if (!view().editable) return fail("The document can't be changed right now.");
       insert(c);
       return { value: { ok: true } };
@@ -64,7 +64,7 @@
     fix: ({ issueId, suggestion, text }) => {
       const I = globalThis.GZ_WRITER_ISSUES, i = I?.list().find((x) => x.id === issueId);
       if (!i || !i.suggestions.includes(suggestion)) return fail("Not one of that issue's suggestions.");
-      if (typeof text === 'string' && i.text !== text) return fail(CHANGED);
+      if (typeof text !== 'string' || i.text !== text) return fail(CHANGED);
       if (!view().editable) return fail("The document can't be changed right now.");
       return I.apply(i, i.suggestions.indexOf(suggestion)) ? { value: { ok: true } } : fail(CHANGED);
     },

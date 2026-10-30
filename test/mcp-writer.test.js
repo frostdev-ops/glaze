@@ -384,11 +384,11 @@ test('the hub asks the page holding the paper, the focused one first, and the pa
   assert.equal((await h.hub.call(ESSAY, 'issues', {})).length, 1, 'the other page');
   a.page.mounted = false;
   assert.equal(await h.hub.call(ESSAY, 'issues', {}), null);
-  // Admission is asked again for each op: a page no longer allowed goes.
+  // Admission is asked again even for discovery: every page no longer allowed goes.
   a.page.mounted = true;
   h.allow.ok = false;
   assert.equal(await h.hub.call(ESSAY, 'issues', {}), null);
-  await until(() => h.hub.size() === 2, 'the refused page dropped');
+  await until(() => h.hub.size() === 0, 'the refused pages dropped');
 });
 
 test('fix applies one of the issue\'s own suggestions as its card does, and only to the words the student saw', async () => {
