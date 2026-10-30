@@ -18,8 +18,7 @@ const opaqueHex = (value) => { const c = C.parse(value); return c?.a === 1 ? C.h
 
 const ext = path.join(__dirname, '..');
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-docviewer-'));
-const env = require('./check-env.js');
-const chromeLaunch = env.chromeLaunch();
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const fx = (f) => fs.readFileSync(path.join(ext, 'test/fixtures', f), 'utf8');
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const BLOB = encodeURIComponent(JSON.stringify({ user_id: 170000000000042, attachment_id: 21, type: 'canvadoc' }));
@@ -35,7 +34,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
   });
   // Glaze's first screen opens on install as the active tab; a page left behind it renders at 1 Hz, too slow for the
   // layer the viewer puts back on the next frame.
-  const welcomed = env.noFirstRun(ctx);
+  const welcomed = require('./check-env.js').noFirstRun(ctx);
   try {
     let lang = 'en';
     const external = [];
