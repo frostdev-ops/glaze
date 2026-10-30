@@ -85,6 +85,16 @@ test('a legacy file version without its payload cannot replace the current recor
   assert.deepEqual((await P.get(KEY)).doc, doc('Keep this draft.'));
 });
 
+test('a late paper autosave cannot replace a file-kind record', async () => {
+  const s = store(), P = PA.open(s, () => 1000), late = PA.open(s, () => 2000);
+  await P.save(KEY, { kind: 'paper', doc: doc('Draft.') });
+  const old = await late.get(KEY);
+  await P.save(KEY, { kind: 'pdf', doc: null, file: 'JVBERi0=', size: 5 }, { reason: 'import' });
+  await assert.rejects(late.save(KEY, { kind: 'paper', doc: doc('Late key.') }, { base: old.revision }), /kind/);
+  assert.equal((await P.get(KEY)).kind, 'pdf');
+  assert.equal((await P.get(KEY)).file, 'JVBERi0=');
+});
+
 // writer-kinds.js in a frame of its own: the frame, the settings and the submit library it reads.
 const kinds = (w = {}) => {
   const ctx = vm.createContext({ console, setTimeout, clearTimeout, document: { querySelector: () => null, getElementById: () => null },

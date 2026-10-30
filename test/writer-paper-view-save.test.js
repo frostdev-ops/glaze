@@ -35,6 +35,31 @@ const flushCtx = ({ save, project }) => {
 };
 const PROJECTED = { html: '<p>Last edit.</p>', text: 'Last edit.', delta: [{ insert: 'Last edit.\n' }] };
 
+test('a kind handoff stops a queued compact projection and a pending flush', async () => {
+  const a = flushCtx({ save: async () => ({}), project: () => PROJECTED });
+  a.ctx.soon();
+  a.ctx.parked = { holding: true };
+  await new Promise(setImmediate);
+  assert.equal(a.messages.length, 0, 'a queued microtask cannot project the outgoing paper');
+  let done;
+  const b = flushCtx({ save: () => new Promise((r) => { done = r; }), project: () => PROJECTED });
+  const pending = b.ctx.begin('late', 'submit');
+  b.ctx.parked = { holding: true };
+  done({}); await pending;
+  assert.ok(!b.messages.some((m) => m.ok === true), 'a flush cannot submit the outgoing paper after a handoff');
+});
+
+test('restoring a file version mounts its viewer before touching the paper document', async () => {
+  let mounted = false;
+  const begin = source.indexOf('    const restore = async (id) => {'), end = source.indexOf('    const open2 = ', begin);
+  const ctx = vm.createContext({ save: async () => true, key: 'paper', store: { restore: async () => ({ paper: { kind: 'pdf', doc: null } }) },
+    paper: null, keep: false, outlineSaved: null, hand: async (p) => { mounted = p.kind === 'pdf'; return mounted; },
+    setFormat: async () => {}, ST: { get: () => ({}) }, setDoc: () => assert.fail('file version parsed as paper'), toast() {}, t: (s) => s });
+  vm.runInContext(source.slice(begin, end) + '\nglobalThis.restoreVersion = restore;', ctx);
+  await ctx.restoreVersion('pdf');
+  assert.equal(mounted, true);
+});
+
 test('compact flush: the save first, however long; the box held and the bar saying Saving… until the page answers', async () => {
   for (const early of [false, true]) {
     let release;
