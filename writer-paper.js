@@ -1872,7 +1872,9 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
   if (frame) {
     const listeners = [];
     frame.on('context', (c) => { for (const fn of listeners) fn(c); });
-    frame.handle('compact:flush', (m) => current ? current.flush(m.request, m.action === 'save' ? 'save' : 'submit') : frame.say({ type: 'compact:flushed', request: m.request, ok: false }));
+    // Ultra's button pressed as the frame opened (features/writer.js holds it until the frame is up): the paper first.
+    const mounted = async () => { for (let i = 0; i < 150 && !current; i++) await new Promise((r) => setTimeout(r, 100)); return current; };
+    frame.handle('compact:flush', async (m) => { const api = current || await mounted(); return api ? api.flush(m.request, m.action === 'save' ? 'save' : 'submit') : frame.say({ type: 'compact:flushed', request: m.request, ok: false }); });
     frame.handle('compact:resume', (m) => current?.resume(m.request, typeof m.reason === 'string' ? m.reason : null));
     frame.handle('focus-mode', (m) => current?.focused(m.on === true));
     frame.on('ready', (editor) => {

@@ -119,6 +119,7 @@ test('compact: a sheet over the box takes the paper\'s height while it is open',
 test('compact: Submit and Save and Close wait for a fresh, saved frame snapshot, however slow, and say why one didn\'t go', async () => {
   for (const action of ['submit', 'save']) {
     const { c, box } = await paper(false);
+    c.emit({ type: 'view', full: false }); // the frame's own, once its editor is up
     const button = c.doc.querySelector(`[data-analytics-id="assignment.attempt.authoring.footer.${action === 'save' ? 'saveAndClose' : action}"]`) || c.doc.querySelector('[data-analytics-id="course.content.assessment.footer.buttons.saveAndClose"]');
     assert.ok(button, action);
     const click = () => { const e = { type: 'click', target: button, preventDefault() { this.held = true; }, stopImmediatePropagation() {} }; c.doc.dispatchEvent(e); return e; };
