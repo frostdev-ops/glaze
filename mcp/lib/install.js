@@ -2,11 +2,11 @@
 // <data>/<version>, keeping the version it replaces, and writes one launcher and one host manifest per browser that is
 // present. On Windows the manifests sit beside the launchers and a key under HKCU points at each; keys go through
 // run('…\System32\reg.exe', argv), never a shell. ensure({ ifNeeded: true }) is the same code, writing only what
-// differs: a moved node or a new version rewrites the launchers, and nothing else is touched; with keepNewer it also
-// leaves launchers that run a newer copy alone (Claude Desktop's bundle after an npx setup). node: null writes
-// launchers that say there is no node (launcher.js). Uninstall removes only
+// differs: a moved node, other nodes to fall back on or a new version rewrites the launchers, and nothing else is
+// touched; with keepNewer it also leaves launchers that run a newer copy alone (Claude Desktop's bundle after an npx
+// setup). node: null writes launchers that say there is no node (launcher.js). Uninstall removes only
 // manifests and keys with our host name whose path points into our folder (of a key that holds more, only our value),
-// our launchers and our copies.
+// our launchers and our copies, and empties the run folder of what hosts that ended left.
 'use strict';
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -17,6 +17,7 @@ const B = require('./browsers.js');
 const IDS = require('./ids.js');
 const L = require('./launcher.js');
 const N = require('./nodes.js');
+const R = require('./rendezvous.js');
 
 const PKG = path.join(__dirname, '..');
 const DESCRIPTION = 'Lets AI apps on this computer use Glaze.';
@@ -36,9 +37,11 @@ const usage = (message) => Object.assign(new Error(message), { code: 'USAGE' });
 const context = (o = {}) => {
   const platform = o.platform || process.platform;
   const env = o.env || { ...process.env, HOME: process.env.HOME || os.homedir() };
-  // By default this node, unless it is Claude's own runtime, which a browser can't start (nodes.js).
+  // By default this node, unless it is Claude's own runtime, which a browser can't start (nodes.js). also: the nodes a
+  // launcher tries after it; by default, when node is too, the others nodes.js finds (ensure looks).
   const node = o.node !== undefined ? o.node : N.claude() ? null : stableNode(process.execPath, platform, env);
-  return { platform, env, node, src: o.src || PKG, run: o.run || runFile, tmp: o.tmp || os.tmpdir(), ...B.folder(platform, env) };
+  const also = Array.isArray(o.also) ? o.also : o.node !== undefined || node === null ? [] : undefined;
+  return { platform, env, node, also, src: o.src || PKG, run: o.run || runFile, tmp: o.tmp || os.tmpdir(), ...B.folder(platform, env) };
 };
 const stableNode = N.stable;
 
@@ -280,7 +283,7 @@ const ensure = async (o = {}) => {
     const launcher = L.file(ctx.platform, ctx.hosts, b.id), mf = manifestPath(ctx, b);
     if (fs.existsSync(launcher) && !priorLaunchers.some(({ f }) => equalPath(ctx, f, launcher))) throw new Error(`refusing unrelated launcher: ${launcher}`);
     if (fs.existsSync(mf) && !ours(ctx, b, mf, readJson(mf))) throw new Error(`refusing unrelated manifest: ${mf}`);
-    L.text(ctx.platform, { node: ctx.node, script: path.join(ctx.root, version, SCRIPT), browser: b.id });
+    L.text(ctx.platform, { node: ctx.node, also: ctx.also || [], script: path.join(ctx.root, version, SCRIPT), browser: b.id });
   }
   const priorKeys = new Map();
   for (const [k, b] of owner) {
@@ -293,10 +296,18 @@ const ensure = async (o = {}) => {
     const ahead = [...before].filter((v) => newer(v, version) > 0).sort(newest)[0];
     if (ahead) return { ...out, newer: ahead };
     // The bundle's PATH can omit the node an earlier setup found. Recheck it before replacing a working launcher.
-    if (ctx.node === null) ctx.node = await N.find({ platform: ctx.platform, env: ctx.env, run: ctx.run,
-      list: [...new Set(priorLaunchers.map(({ l }) => l.node).filter((n) => n !== null))] });
+    if (ctx.node === null) {
+      const list = [...new Set(priorLaunchers.flatMap(({ l }) => [l.node, ...(l.also || [])]).filter((n) => n !== null))];
+      const search = { platform: ctx.platform, env: ctx.env, run: ctx.run, list };
+      ctx.node = await N.find(search);
+      ctx.also = ctx.node === null ? [] : await N.all({ ...search, skip: [ctx.node] });
+    }
   }
+  if (ctx.node === null) ctx.also = [];
+  else if (ctx.also === undefined) ctx.also = await N.all({ platform: ctx.platform, env: ctx.env, run: ctx.run, skip: [ctx.node] });
+  else ctx.also = ctx.also.filter((n) => n !== ctx.node);
   out.node = ctx.node;
+  out.also = ctx.also;
   privateDir(ctx.root);
   privateDir(ctx.hosts);
   out.copied = copy(ctx, version, !force);
@@ -306,7 +317,7 @@ const ensure = async (o = {}) => {
     const keys = ctx.platform === 'win32' ? b.keys.filter((k) => owner.get(k) === b) : [];
     if (ctx.platform === 'win32' && !keys.length) continue;
     const launcher = L.file(ctx.platform, ctx.hosts, b.id);
-    if (put(launcher, L.text(ctx.platform, { node: ctx.node, script, browser: b.id }), ctx.platform === 'win32' ? 0 : 0o755, force)) out.wrote.push(launcher);
+    if (put(launcher, L.text(ctx.platform, { node: ctx.node, also: ctx.also, script, browser: b.id }), ctx.platform === 'win32' ? 0 : 0o755, force)) out.wrote.push(launcher);
     const mf = manifestPath(ctx, b);
     fs.mkdirSync(path.dirname(mf), { recursive: true });
     if (put(mf, `${JSON.stringify(manifest(b, launcher, out.ids), null, 2)}\n`, 0, force)) out.wrote.push(mf);
@@ -327,12 +338,19 @@ const uninstall = async (o = {}) => {
   const all = B.table(ctx.platform, ctx.env);
   destinations(ctx, all);
   const removed = [], kept = [];
+  const owned = (f) => !MODES || fs.lstatSync(f).uid === process.getuid();
+  const ownedTree = (f) => owned(f) && (!fs.lstatSync(f).isDirectory() || fs.readdirSync(f).every((n) => ownedTree(path.join(f, n))));
+  const remove = (f, recursive = false) => {
+    if (!(recursive ? ownedTree(f) : owned(f))) { kept.push(f); return; }
+    fs.rmSync(f, { recursive, force: true });
+    removed.push(f);
+  };
   if (ctx.platform === 'win32') {
     for (const k of [...new Set(all.flatMap((b) => b.keys))]) {
       const { value: v, alone } = await exportKey(ctx, k);
       if (v === null) continue;
       const b = all.find((b) => b.keys.includes(k) && equalPath(ctx, manifestPath(ctx, b), v) && ours(ctx, b, v, readJson(v)));
-      if (!b) { kept.push(k); continue; }
+      if (!b || !owned(v)) { kept.push(k); continue; }
       // Deleting only the default value leaves an empty key, so a key holding nothing else goes whole.
       await ctx.run(regExe(ctx), alone ? ['delete', k, '/f'] : ['delete', k, '/ve', '/f']);
       removed.push(k);
@@ -341,13 +359,23 @@ const uninstall = async (o = {}) => {
   for (const b of all) {
     const f = manifestPath(ctx, b);
     const m = readJson(f);
-    if (ours(ctx, b, f, m)) { fs.rmSync(f, { force: true }); removed.push(f); } else if (m && m.name === B.HOST) kept.push(f);
+    if (ours(ctx, b, f, m)) remove(f); else if (m && m.name === B.HOST) kept.push(f);
   }
-  for (const { f } of launchers(ctx)) { fs.rmSync(f, { force: true }); removed.push(f); }
-  for (const v of copies(ctx)) { fs.rmSync(path.join(ctx.root, v), { recursive: true, force: true }); removed.push(path.join(ctx.root, v)); }
+  for (const { f } of launchers(ctx)) remove(f);
+  for (const v of copies(ctx)) remove(path.join(ctx.root, v), true);
   const g = path.join(ctx.root, GRANTS), saved = readJson(g);
-  if (saved && saved.name === B.HOST && Array.isArray(saved.ids) && saved.ids.every(IDS.valid)) { fs.rmSync(g); removed.push(g); }
-  for (const d of [ctx.hosts, ctx.root]) try { fs.rmdirSync(d); } catch { /* not empty, or gone */ }
+  if (saved && saved.name === B.HOST && Array.isArray(saved.ids) && saved.ids.every(IDS.valid)) remove(g);
+  // The run folder (rendezvous.js), if it is private to this user: the files of hosts that have ended, then the folder
+  // once empty. A host still running keeps its own until the browser ends it.
+  const run = R.dir({ platform: ctx.platform, env: ctx.env });
+  try {
+    safePath(run);
+    if (R.check(run)) {
+      removed.push(...R.sweep(run, { ownedOnly: true, platform: ctx.platform }));
+      try { fs.rmdirSync(run); removed.push(run); } catch { /* a host still runs */ }
+    }
+  } catch { kept.push(run); }
+  for (const d of new Set([ctx.hosts, ctx.root, path.dirname(run)])) try { safePath(d); if (owned(d)) fs.rmdirSync(d); } catch { /* not empty, or gone */ }
   return { removed, kept };
 };
 

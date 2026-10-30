@@ -333,7 +333,7 @@ test('Windows: the agent won\'t use a run folder that is a junction', async (t) 
 test('doctor\'s live check: a probe each live host answers without the worker hearing of it; stale and silent ones said', async (t) => {
   const home = scratch(t), ctx = { platform: process.platform, env: envFor(home) };
   const none = await A.doctor(ctx);
-  assert.deepEqual(none.map((r) => r.level), ['warn']);
+  assert.deepEqual(none.map((r) => r.level), process.platform === 'win32' ? ['warn'] : ['warn', 'info']);
   assert.match(none[0].detail, /Settings → AI → Agents/);
   assert.equal(fs.existsSync(runDir(home)), false, 'the check makes nothing');
   const b = browser(t, home);
@@ -351,6 +351,49 @@ test('doctor\'s live check: a probe each live host answers without the worker he
   await new Promise((r) => setTimeout(r, 100));
   assert.deepEqual(b.left((f) => f.t === 'open' || f.t === 'close'), [], 'a probe never reaches the worker');
   assert.ok(fs.existsSync(R.runFile(d, 'edge', 'gone')), 'the check removes nothing');
+});
+
+test('with no browser connected, doctor hints that a browser started with --user-data-dir reads its own folder', async (t) => {
+  const home = scratch(t);
+  for (const platform of ['linux', 'darwin']) {
+    const rows = await A.doctor({ platform, env: { HOME: home, XDG_RUNTIME_DIR: home } });
+    const hint = rows.find((r) => r.level === 'info');
+    assert.ok(hint, `${platform}: ${JSON.stringify(rows)}`);
+    assert.match(hint.detail, /--user-data-dir/);
+    assert.match(hint.detail, /<that folder>\/NativeMessagingHosts/);
+    assert.ok(!hint.detail.includes(home), 'no guessed path');
+  }
+  const b = browser(t, home);
+  await b.start();
+  const live = await A.doctor({ platform: process.platform, env: envFor(home) });
+  assert.ok(!live.some((r) => /--user-data-dir/.test(r.detail)), 'not once a browser connects');
+});
+
+test('uninstall removes the run folder, leaving a host that still runs its run file, and an unsafe folder alone', { skip: posixOnly('POSIX modes; the Windows run folder sits inside the helper folder') }, async (t) => {
+  const home = scratch(t), env = { HOME: home }, platform = process.platform;
+  fs.mkdirSync(B.table(platform, env).find((b) => b.id === 'chrome').data, { recursive: true });
+  const ctx = { platform, env, node: nodeAt(t), run: nodeVersion, src: PKG };
+  const d = R.dir({ platform, env });
+  const rec = (browser, instance, pid) => ({ v: 1, pid, path: R.socketPath(d, browser, instance), token: R.token(), browser, instance, at: 1 });
+  await I.setup(ctx);
+  R.ready(d);
+  R.write(d, rec('chrome', 'gone', deadPid()));
+  R.write(d, rec('edge', 'live', process.pid));
+  const first = await I.uninstall(ctx);
+  assert.ok(first.removed.includes(R.runFile(d, 'chrome', 'gone')), JSON.stringify(first));
+  assert.equal(fs.existsSync(R.runFile(d, 'chrome', 'gone')), false, "an ended host's run file goes");
+  assert.ok(fs.existsSync(R.runFile(d, 'edge', 'live')), 'a host that still runs keeps its run file');
+  fs.rmSync(R.runFile(d, 'edge', 'live'));
+  await I.uninstall(ctx);
+  assert.equal(fs.existsSync(d), false, 'the run folder goes once empty');
+  assert.equal(fs.existsSync(path.dirname(d)), false, 'and the folder that held it');
+  // Not private to this user: not ours to empty.
+  R.ready(d);
+  R.write(d, rec('chrome', 'old', deadPid()));
+  fs.chmodSync(d, 0o755);
+  const loose = await I.uninstall(ctx);
+  assert.ok(fs.existsSync(R.runFile(d, 'chrome', 'old')));
+  assert.ok(loose.kept.includes(d), JSON.stringify(loose));
 });
 
 test('glaze-mcp doctor adds the live rows after its own', { skip: posixOnly('setup writes macOS and Linux folders here; the Windows test goes through the registry') }, async (t) => {

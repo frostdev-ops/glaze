@@ -1,8 +1,8 @@
-// doctor: reads what setup wrote and says what is wrong with it. It checks our folders (owner and modes), each present
-// browser's manifest (or, on Windows, the key that points at it), the extension ids it lets in, its launcher, the node
-// that launcher names and that node's version, and which copy it runs. It reads files, runs `node --version` and
-// `reg export`, and sends nothing anywhere. `live` is where the host and agent steps add a live handshake: an async
-// function returning more rows.
+// doctor: reads what setup wrote and says what is wrong with it. It checks our folders (owner and modes), the manifest of
+// each browser set up (or, on Windows, the key that points at it), the extension ids it lets in, its launcher, the node
+// that launcher names and that node's version, and which copy it runs. Other browsers found are listed, not judged. It
+// reads files, runs `node --version` and `reg export`, and sends nothing anywhere. `live` is where the host and agent
+// steps add a live handshake: an async function returning more rows.
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
@@ -14,6 +14,7 @@ const N = require('./nodes.js');
 
 const MIN_NODE = 18;
 const FIX = 'Run: npx glaze-mcp setup';
+const AGAIN = 'Run setup again: npx glaze-mcp setup';
 const LABEL = { ok: 'ok', warn: 'warn', fail: 'FAIL', info: '--' };
 
 const run = async (o = {}) => {
@@ -46,8 +47,9 @@ const run = async (o = {}) => {
   const keys = new Map();
   const key = (k) => { if (!keys.has(k)) keys.set(k, I.readKey(ctx, k)); return keys.get(k); };
 
-  // What is wrong with one browser's manifest, launcher and node, or [] when nothing is.
-  const check = async (b, file) => {
+  // What is wrong with one browser's manifest, launcher and node, or [] when nothing is; warns gets what only needs a
+  // rerun.
+  const check = async (b, file, warns = []) => {
     try { I.safePath(file); } catch (e) { return [e.message]; }
     const fBad = trustedPath(file);
     if (fBad) return [fBad];
@@ -91,42 +93,63 @@ const run = async (o = {}) => {
     if (modes && !(lst.mode & 0o100)) out.push(`${launcher} is not executable. ${FIX}`);
     // Written by Claude Desktop's bundle when it found no Node.js; it reopens with one, or setup runs with this one.
     if (l.node === null) return [...out, `${N.MISSING}, then reopen Claude or run: npx glaze-mcp setup`];
-    const nodeBad = trustedPath(l.node);
+    // The launcher runs the first of its nodes that is an executable file (launcher.js).
+    const gone = (n) => {
+      let st;
+      try { st = fs.statSync(n); } catch { return `node at ${n} is gone`; }
+      if (!st.isFile()) return `${n} is not a regular file`;
+      try { if (modes) fs.accessSync(n, fs.constants.X_OK); } catch { return `${n} is not executable`; }
+      return trustedPath(n) || '';
+    };
+    const why = gone(l.node), node = why ? l.also.find((n) => !gone(n)) : l.node;
+    if (!node) return [...out, `${why}. ${AGAIN}`];
+    if (why) warns.push(`${why}; its launcher runs ${node} instead. ${AGAIN}`);
+    const nodeBad = trustedPath(node);
     if (nodeBad) return [...out, nodeBad];
-    let nst;
-    try { nst = fs.statSync(l.node); } catch { return [...out, `node at ${l.node} is gone. ${FIX}`]; }
-    if (!nst.isFile()) out.push(`${l.node} is not a regular file`);
-    if (modes && !(nst.mode & 0o111)) out.push(`${l.node} is not executable`);
     if (out.length) return out;
-    const v = await nodeVersion(l.node);
+    const v = await nodeVersion(node);
     const major = /^v(\d+)\./.exec(v || '');
-    if (!major) out.push(`${l.node} didn't say its version`);
-    else if (+major[1] < MIN_NODE) out.push(`${l.node} is Node ${v}; glaze-mcp needs ${MIN_NODE} or later. Run setup with a newer Node`);
+    if (!major) out.push(`${node} didn't say its version`);
+    else if (+major[1] < MIN_NODE) out.push(`${node} is Node ${v}; glaze-mcp needs ${MIN_NODE} or later. ${AGAIN} with a newer Node`);
     if (!fs.existsSync(l.script)) out.push(`${l.script} is missing. ${FIX}`);
     return out;
   };
 
-  const present = B.present(B.table(ctx.platform, ctx.env));
-  if (!present.length) add('warn', 'Browsers', 'No supported browser found');
-  for (const b of present) {
+  // Judged: each browser setup wrote for (its launcher), or with our manifest (on Windows, its key). The others found
+  // here are only listed: setup may have been asked for some browsers only.
+  const all = B.table(ctx.platform, ctx.env), here = B.present(all);
+  const exists = (f) => { try { fs.lstatSync(f); return true; } catch { return false; } };
+  const others = [];
+  let judged = 0;
+  for (const b of all) {
+    const set = exists(L.file(ctx.platform, ctx.hosts, b.id));
     let file = I.manifestPath(ctx, b), via = '';
     if (ctx.platform === 'win32') {
+      if (!here.includes(b) && !set) continue;
       // The key the browser reads first.
       const v = await key(b.keys[0]);
+      if (!v && !set) { others.push(b); continue; }
+      judged++;
       if (!v) { add('fail', b.name, `${b.keys[0]} is missing. ${FIX}`); continue; }
       file = v;
       via = `${b.keys[0]} → `;
+    } else {
+      if (!exists(file) && !set) { if (here.includes(b)) others.push(b); continue; }
+      judged++;
     }
-    const problems = await check(b, file);
+    const warns = [], problems = await check(b, file, warns);
     if (problems.length) { for (const p of problems) add('fail', b.name, p); continue; }
     const m = JSON.parse(fs.readFileSync(file, 'utf8'));
     const l = L.parse(fs.readFileSync(path.resolve(path.dirname(file), m.path), 'utf8'));
     const extra = IDS.fromManifest(m).filter((id) => id !== IDS.STORE);
     add('ok', b.name, `${via}${file}${extra.length ? `; also lets in ${extra.join(', ')}` : ''}`);
+    for (const w of warns) add('warn', b.name, w);
     const copyVersion = I.versionOf(path.dirname(path.dirname(l.script)));
     if (copyVersion !== version) add('warn', b.name, `runs glaze-mcp ${copyVersion}; this is ${version}. To switch: npx glaze-mcp@${version} setup`);
   }
 
+  if (!judged) add('fail', 'Browsers', here.length ? `glaze-mcp is set up for no browser. ${FIX}` : `No supported browser found. ${FIX} --browser <id>`);
+  if (others.length) add('info', 'Not set up', `${others.map((b) => `${b.name} (${b.id})`).join(', ')}. To add one: npx glaze-mcp setup --browser <id>`);
   for (const [node, v] of nodes) add('info', 'Node', `${node} (${(await v) || 'no version'})`);
   if (typeof o.live === 'function') {
     try { for (const r of (await o.live(ctx)) || []) rows.push(r); } catch (e) { add('fail', 'Live check', e.message); }

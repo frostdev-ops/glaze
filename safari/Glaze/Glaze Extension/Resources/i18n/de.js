@@ -3197,6 +3197,7 @@
   "Failed": "Fehlgeschlagen",
   "Declined": "Nicht erlaubt",
   "Interrupted": "Unterbrochen",
+  "Invalid request": "Ungültige Anfrage",
   "Busy": "Beschäftigt",
   "Connected": "Verbunden",
   "Get a key": "Schlüssel holen",

@@ -49,6 +49,14 @@ test('the policy states what agent access sends, what waits for the student and 
   assert.match(plain(read('docs/privacy.md')), /\]\(\.\.\/PRIVACY\.md#agent-access\)/);
 });
 
+test("the activity list's outcomes in docs/agents.md are the ones Settings shows", () => {
+  const E = require('../lib/editor-agents.js'), I = require('../lib/i18n.js');
+  const list = agents().match(/how it ended \(([^)]*)\)/)?.[1] || '';
+  const said = list.split(/, | or /);
+  const labels = E.OUTCOMES.map((o) => E.outcome(o, (k, v) => I.t(k, v, 'en')));
+  assert.deepEqual([...said].sort(), [...labels].sort(), 'docs/agents.md, under Activity');
+});
+
 test('the permission list matches the manifest: nativeMessaging is optional outside Safari', () => {
   const m = JSON.parse(read('manifest.json'));
   assert.ok(m.optional_permissions.includes('nativeMessaging'));
@@ -120,6 +128,7 @@ test('agent identity and helper uninstall claims do not promise verified identit
     assert.doesNotMatch(text, /only your user account can open/);
     assert.match(text, /modified copies/);
     assert.match(text, /run folder/);
+    assert.doesNotMatch(text, /leaves the run folder/, 'uninstall empties the run folder');
   }
 });
 
@@ -141,6 +150,11 @@ test('features lists Agents and the AI harness describes the active Writer bridg
 
 test('helper uninstall documents removal of otherwise empty Windows host keys', () => {
   assert.match(plain(read('mcp/README.md')), /otherwise empty host key/);
+});
+
+test("helper uninstall says a helper already running stops only when the browser restarts", () => {
+  const section = plain(read('mcp/README.md').split('\n## Uninstall\n')[1]?.split('\n## ')[0] || '');
+  assert.match(section, /Restart your browser to stop a helper that is still running/);
 });
 
 

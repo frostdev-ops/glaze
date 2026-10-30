@@ -636,6 +636,8 @@ test('the activity list: time, app, tool and outcome, newest first, and nothing 
   const { outcome, OUTCOMES } = E();
   assert.deepEqual(OUTCOMES, require('../lib/mcp/grants.js').OUTCOMES, 'every outcome lib/mcp/grants.js records');
   for (const o of OUTCOMES) assert.notEqual(outcome(o, tEn), o, o);
+  assert.equal(outcome('invalid', tEn), 'Invalid request', "an app's malformed call is not the student's refusal");
+  assert.notEqual(outcome('invalid', tEn), outcome('refused', tEn));
 });
 
 test('hidden on iOS and Android, where no helper can run; the worker is asked nothing there', async () => {

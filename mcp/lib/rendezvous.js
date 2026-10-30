@@ -195,20 +195,29 @@ const list = (d, { platform = process.platform } = {}) => within(d, () => fs.rea
   return { file, rec, alive: !!rec && alive(rec.pid) };
 }).filter((e) => e.rec).sort((a, b) => b.rec.at - a.rec.at), []);
 const rm = (f, out, d) => { try { fs.unlinkSync(f); out.push(path.join(d, f)); } catch { /* already gone */ } };
-const sweep = (d) => within(d, () => locked(() => {
+const sweep = (d, { ownedOnly = false, platform = process.platform } = {}) => within(d, () => locked(() => {
   const out = [];
   for (const n of fs.readdirSync('.')) {
     const t = TMP.exec(n);
-    if (t) { if (!alive(+t[1])) rm(n, out, d); continue; }
+    if (t) {
+      const r = ownedOnly ? json(n, false) : null;
+      const valid = !ownedOnly || r && r.pid === +t[1] && record(path.join(d, n.slice(0, n.indexOf('.json.') + 5)), r, platform);
+      if (valid && !alive(+t[1])) rm(n, out, d);
+      continue;
+    }
     const m = RUN.exec(n);
     if (!m) continue;
     const r = json(n, false);
+    if (ownedOnly && !record(path.join(d, n), r, platform)) continue;
     if (r && Number.isSafeInteger(r.pid) && r.pid > 0 && alive(r.pid)) continue;
     rm(n, out, d);
     // Only a valid, dead host's record authorizes deleting its socket, under the same mutation lock.
-    if (!record(path.join(d, n), r)) continue;
+    if (!record(path.join(d, n), r, platform)) continue;
     const sock = `${m[1]}.${m[2]}.sock`;
-    try { if (fs.lstatSync(sock).isSocket()) rm(sock, out, d); } catch { /* none */ }
+    try {
+      const st = fs.lstatSync(sock);
+      if (st.isSocket() && (!ownedOnly || !MODES || st.uid === process.getuid())) rm(sock, out, d);
+    } catch { /* none */ }
   }
   return out;
 }), []);
