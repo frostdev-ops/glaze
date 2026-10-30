@@ -160,6 +160,7 @@ test('Numbers helper: refused events after launch clean up the owned process', (
   const killed = [];
   let opened = false;
   const context = { __dirname: path.join(root, 'scripts'), module: { exports: {} }, process: { platform: 'darwin', kill: (...args) => killed.push(args) }, require: (id) => {
+    if (id === './sheet-fidelity-books.js') return require('../scripts/sheet-fidelity-books.js');
     if (id === 'node:fs') return { existsSync: () => true };
     if (id === 'node:child_process') return { execFileSync: (cmd) => {
       if (cmd === 'open') { opened = true; return ''; }

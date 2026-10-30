@@ -723,7 +723,7 @@ test('csv: an unclosed quote and the cell cap degrade, listed in the problems', 
   assert.deepEqual(wb.keep.problems.map((p) => p.code), ['quote']);
   const big = X.readDelimited(`${'1,'.repeat(999)}1\n`.repeat(251));
   assert.equal(M.cellCount(big), 250000);
-  assert.deepEqual(big.keep.problems.map((p) => p.code), ['cap-cells']);
+  assert.deepEqual(big.keep.problems.map((p) => p.code), ['content-types', 'cap-cells']);
 });
 
 test('csv: written as Excel saves CSV UTF-8: shown text, quotes where needed, CRLF, a BOM; TSV with tabs', async () => {
