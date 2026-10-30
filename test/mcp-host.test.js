@@ -244,7 +244,7 @@ test('closing: the worker\'s close ends one client; a client\'s close reaches th
 });
 
 for (const [how, end] of [['the worker\'s bye', (b) => b.send({ t: 'bye' })], ['stdin closing', (b) => b.p.stdin.end()]]) {
-  test(`${how} closes every client, removes the socket and run file, and exits 0 within 1 s`, async (t) => {
+  test(`${how} closes every client, removes the socket and run file, and exits 0 within 3 s`, async (t) => {
     const home = scratch(t);
     const b = browser(t, home);
     const { rec, file } = await b.start();
@@ -255,7 +255,8 @@ for (const [how, end] of [['the worker\'s bye', (b) => b.send({ t: 'bye' })], ['
     end(b);
     const { code, at: done } = await b.exited;
     assert.equal(code, 0, b.err());
-    assert.ok(done - at < 1000, `exited after ${done - at} ms`);
+    // The bound catches a hang, not speed: a full runner (six suites at once) took 1247 ms to see an immediate exit.
+    assert.ok(done - at < 3000, `exited after ${done - at} ms`);
     await until('the clients see it', () => one.ended && two.ended, 2000);
     assert.equal(fs.existsSync(file), false);
     if (POSIX) assert.equal(fs.existsSync(rec.path), false);
@@ -274,7 +275,7 @@ test('a bye in the same read as hello cleans up a socket whose listen is still s
   ]));
   const { code, at: done } = await b.exited;
   assert.equal(code, 0, b.err());
-  assert.ok(done - at < 1000, `exited after ${done - at} ms`);
+  assert.ok(done - at < 3000, `exited after ${done - at} ms`);
   assert.deepEqual(fs.readdirSync(runDir(home)), [], 'no socket or run file left behind');
 });
 
