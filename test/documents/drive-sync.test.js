@@ -741,3 +741,26 @@ test('two devices whose first syncs overlap on one document keep one copy and se
   assert.equal(textOf((await a.papers.get(key)).doc), 'B, later', 'and B\'s reaches A');
   noDeletes(drive);
 });
+
+test('a conflict on a paper too big for a version keeps Drive\'s side as a document of its own', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  const a = device(drive, { clock }), b = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-0000000000bb', big = (who) => doc(`${who} ${'x'.repeat(4.2e6)}`);
+  await a.papers.save(key, { doc: doc('Small start'), title: 'Photo essay', named: true });
+  await a.sync.set(true); await b.sync.set(true);
+  clock.t += 60e3;
+  await a.papers.save(key, { doc: big('A') });
+  await a.sync.touched(key); await a.fire();
+  await b.papers.save(key, { doc: big('B') });
+  await b.sync.touched(key);
+  assert.ok((await b.sync.run()).ok);
+  assert.ok(textOf((await b.papers.get(key)).doc).startsWith('B '), 'B\'s stays current on B');
+  const copy = (await b.papers.list()).find((r) => r.title === 'Photo essay (Drive copy)');
+  assert.ok(copy, 'Drive\'s side kept, as a document of its own');
+  assert.ok(textOf((await b.papers.get(copy.key)).doc).startsWith('A '));
+  assert.ok(textOf(sidecarJson(drive, key).record.doc).startsWith('B '), 'and Drive moves on to B\'s');
+  assert.ok((await a.sync.run()).ok);
+  assert.ok(textOf((await a.papers.get(key)).doc).startsWith('B '));
+  assert.ok((await a.papers.list()).some((r) => r.title === 'Photo essay (Drive copy)'), 'the copy reaches A too');
+  noDeletes(drive);
+});
