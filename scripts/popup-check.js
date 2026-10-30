@@ -91,7 +91,7 @@ const stub = (notHeld) => {
     await env.installed(sw);
     let welcomeTimer;
     try {
-      await Promise.race([welcomed, new Promise((_, no) => { welcomeTimer = setTimeout(() => no(new Error('the install never closed its first screen')), 45000).unref(); })]);
+      await Promise.race([welcomed, new Promise((_, no) => { welcomeTimer = setTimeout(() => no(new Error('the install never closed its first screen')), 45000); })]);
     } finally { clearTimeout(welcomeTimer); }
     const sheets = (p) => p.evaluate(() => [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.href).filter((h) => h.startsWith('chrome-extension://')).map((h) => new URL(h).pathname.slice(1)));
 

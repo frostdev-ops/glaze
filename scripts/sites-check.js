@@ -71,7 +71,7 @@ const stub = (required) => {
     await env.installed(sw);
     let welcomeTimer;
     try {
-      await Promise.race([welcomed, new Promise((_, no) => { welcomeTimer = setTimeout(() => no(new Error('the install never closed its first screen')), 45000).unref(); })]);
+      await Promise.race([welcomed, new Promise((_, no) => { welcomeTimer = setTimeout(() => no(new Error('the install never closed its first screen')), 45000); })]);
     } finally { clearTimeout(welcomeTimer); }
 
     const page = await ctx.newPage();
