@@ -9,7 +9,7 @@ const B = require('../lib/navbar.js');
 const BK = require('../lib/backup.js');
 
 const source = fs.readFileSync(require.resolve('../options.js'), 'utf8');
-const backup = source.slice(source.indexOf('  // ---- backup ----'), source.indexOf('  // Two clicks, so a stray'));
+const backup = source.slice(source.indexOf('  // ---- backup ----'), source.indexOf('  // The defaults this device started with'));
 // kept: the files this computer keeps for backgrounds, as the worker lists them (lib/media.js).
 const restore = async (src, kind = 'media', extra = {}, roundTrip = false, stored = {}, kept = []) => {
   let raw = { ...structuredClone(G.GZ_DEFAULTS), bg: { ...G.GZ_DEFAULTS.bg, kind }, parts: { x: { bg: { media: { type: 'video', src } }, cursor: { kind: 'glow' } } }, ...extra };
