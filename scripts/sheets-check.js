@@ -508,6 +508,17 @@ const seeded = (key, wb = M.workbook()) => {
     await page.keyboard.press('Control+z');
     const unmoved = await until(async () => { const l = await chartsNow(); return l.length === 5 && l.every((c) => c.y === drawn.find((d) => d.id === c.id).y) ? l : null; }, 'the charts back');
     check(unmoved.length === 5, 'undoing the insert brings the charts back');
+    // Frozen panes: with the top row frozen, the charts scroll under it with their cells.
+    await page.click('#gx-freeze');
+    await page.click('.gx-menu [data-act="freeze-row"]');
+    await page.evaluate(() => { document.querySelector('#gx-grid .gx-scroll').scrollTop = 100; });
+    const frozen = await until(async () => { const l = await chartsNow(); const c = l.find((x) => x.title === 'Sales by month'); return c && c.y === byTitle['Sales by month'].y - 100 ? l : null; }, 'charts scrolled under the frozen row');
+    const panes = await page.evaluate(() => ({ top: document.querySelectorAll('#gx-grid .gx-tl .gx-chart, #gx-grid .gx-tr .gx-chart').length, rest: document.querySelectorAll('#gx-grid .gx-br .gx-chart').length }));
+    check(panes.top === 0 && panes.rest === 5 && frozen.every((c) => c.y === drawn.find((d) => d.id === c.id).y - 100), `frozen top row: the charts scroll with their cells, below it (${JSON.stringify(panes)})`);
+    await page.evaluate(() => { document.querySelector('#gx-grid .gx-scroll').scrollTop = 0; });
+    await page.click('#gx-freeze');
+    await page.click('.gx-menu [data-act="unfreeze"]');
+    await until(async () => { const l = await chartsNow(); return l.length === 5 && l.every((c) => c.y === drawn.find((d) => d.id === c.id).y) ? l : null; }, 'unfrozen');
     // The dark Look: the chart's words read on its ground.
     const lumOf = (rgb) => { const [r, g, b] = rgb.match(/[\d.]+/g).slice(0, 3).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
     const ink = await page.evaluate(() => { const el = document.querySelector('#gx-grid .gx-chart .gc-title'), bg = document.querySelector('#gx-grid .gx-chart .gc-bg'), tick = document.querySelector('#gx-grid .gx-chart .gc-tick'); return { dark: document.documentElement.hasAttribute('data-dark'), title: getComputedStyle(el).fill, tick: getComputedStyle(tick).fill, ground: getComputedStyle(bg).fill }; });
