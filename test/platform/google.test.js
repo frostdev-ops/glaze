@@ -503,6 +503,39 @@ test('Disconnect after a worker restart, when silent renewal fails, says Google 
   assert.deepEqual(await harness().g.disconnect(), { ok: true, revoked: false, had: false });
 });
 
+test('the web flow without the identity permission (taken back in the browser\'s add-on settings) asks for it, never a TypeError', async () => {
+  for (const firefox of [false, true]) {
+    const h = harness({ flow: 'web', firefox, granted: false });
+    h.local.google = { email: 'student@school.edu', sub: '1', flow: 'web', at: 1 };
+    await assert.rejects(h.g.token(), (e) => e.why === 'permission', 'a sync run');
+    await assert.rejects(h.g.token({ interactive: true }), (e) => e.why === 'permission', 'a Drive action');
+    assert.deepEqual(await h.g.pick(), { ok: false, why: 'permission' });
+    assert.deepEqual(h.log.launch, []);
+  }
+});
+
+test('offline: a sign-in the browser couldn\'t reach Google for says network, not that Drive needs connecting again', async () => {
+  // The worker's navigator.onLine: false only when the browser knows it is offline.
+  const offline = async (f) => {
+    const nav = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    Object.defineProperty(globalThis, 'navigator', { value: { onLine: false }, configurable: true, writable: true });
+    try { await f(); } finally { if (nav) Object.defineProperty(globalThis, 'navigator', nav); else delete globalThis.navigator; }
+  };
+  const w = harness({ flow: 'web' });
+  await w.g.connect();
+  w.tick(3600 * 1000);
+  w.identity.launchWebAuthFlow = async () => { throw new Error('Authorization page could not be loaded.'); };
+  await offline(() => assert.rejects(w.g.token(), (e) => e.why === 'network', 'web: the silent renewal'));
+  await assert.rejects(w.g.token(), (e) => e.why === 'auth', 'online: Google wants a sign-in (signed out, for one)');
+  const c = harness();
+  await c.g.connect();
+  c.identity.fail = 'OAuth2 request failed: Connection failed (-106).';
+  await offline(() => assert.rejects(c.g.token(), (e) => e.why === 'network', 'chrome: getAuthToken'));
+  await assert.rejects(c.g.token(), (e) => e.why === 'auth');
+  noToken(w);
+  noToken(c);
+});
+
 test('the picker\'s answer: our state, files with an id, a name and a type, or a cancel', () => {
   const s = 'S'.repeat(43);
   const file = { id: '1AbC_d-EfGh', name: 'Notes.pdf', mimeType: 'application/pdf' };
