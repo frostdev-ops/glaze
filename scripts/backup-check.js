@@ -11,7 +11,7 @@ const shots = process.argv[2];
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 let scratch, held = false, open = null;
 
-// A profile's Settings on Backup and reset.
+// A new profile, installed, on Settings' Backup and reset.
 const launch = async (dir) => {
   await require('./wait-for-browser.js')();
   const context = await chromium.launchPersistentContext(dir, {
@@ -26,6 +26,7 @@ const launch = async (dir) => {
   page.setDefaultTimeout(10000);
   await page.goto(`chrome-extension://${new URL(worker.url()).host}/options.html#backup/privacy`);
   await page.waitForFunction(() => document.querySelector('#looks button'));
+  await env.installed(page);
   return { context, page };
 };
 

@@ -64,6 +64,20 @@ const ultraReady = async (page, timeout = 10000) => {
   }
 };
 
+// A new profile's install (lib/background.js onInstalled) writes storage.local after Glaze's pages can load, so a check that
+// seeds or compares storage first waits for each install task's last write: the starter widgets (freshDefaults settles
+// with widgetLayout and starterTouched), the tabs-auto migration and the channel-key move. Polled from Node, as ultraReady.
+const installDone = async () => {
+  const l = await chrome.storage.local.get(['freshDefaults', 'migrated', 'channelKeysMoved']);
+  return l.freshDefaults?.pending === false && Array.isArray(l.migrated) && l.migrated.includes('tabs-auto') && l.channelKeysMoved === true;
+};
+const installed = async (page, timeout = 10000) => {
+  for (const end = Date.now() + timeout; ; await new Promise((r) => setTimeout(r, 50))) {
+    if (await page.evaluate(installDone)) return;
+    if (Date.now() > end) throw new Error('installed: the new profile\'s install never finished writing storage.local');
+  }
+};
+
 // Glaze opens its first screen (features/welcome.html) in a tab of its own when it is installed on Chrome. A check that
 // counts on its own tabs alone closes it, now or when it opens.
 const noFirstRun = (ctx) => {
@@ -73,4 +87,4 @@ const noFirstRun = (ctx) => {
   ctx.on('page', watch);
 };
 
-module.exports = { lockPath, chromePath, chromeLaunch, staged, ultraReady, noFirstRun };
+module.exports = { lockPath, chromePath, chromeLaunch, staged, ultraReady, installed, noFirstRun };
