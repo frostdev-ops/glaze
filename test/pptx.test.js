@@ -380,6 +380,23 @@ test('paragraphs, runs and each part\'s elements are bounded: kilobytes of defla
   assert.ok(used.user + used.system < 2e6, `${used.user + used.system} microseconds of CPU`);
 });
 
+test('table cells, guides and path commands are bounded across the deck, not only per table or shape', async () => {
+  const row = `<a:tr h="1">${'<a:tc/>'.repeat(10)}</a:tr>`, tbl = `<a:tbl><a:tblGrid/>${row.repeat(10)}</a:tbl>`;
+  const frame = (i) => `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${900 + i}" name="T${i}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="0" y="0"/><a:ext cx="100" cy="100"/></p:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">${tbl}</a:graphicData></a:graphic></p:graphicFrame>`;
+  const tables = await P.read(pack({ 'ppt/slides/slide3.xml': fixture('ppt/slides/slide3.xml').replace('</p:spTree>', `${[0, 1, 2, 3, 4].map(frame).join('')}</p:spTree>`) }), { limits: { allCells: 250 } });
+  assert.deepEqual(['T0', 'T1', 'T2', 'T3', 'T4'].map((n) => named(tables.slides[2], n).type), ['table', 'table', 'box', 'box', 'box']);
+  const geom = '<a:custGeom><a:gdLst><a:gd name="g1" fmla="val 1"/><a:gd name="g2" fmla="val 2"/><a:gd name="g3" fmla="val 3"/></a:gdLst><a:pathLst><a:path w="10" h="10"><a:moveTo><a:pt x="0" y="0"/></a:moveTo>'
+    + `${'<a:lnTo><a:pt x="1" y="1"/></a:lnTo>'.repeat(9)}</a:path></a:pathLst></a:custGeom>`;
+  const sp = (i) => `<p:sp><p:nvSpPr><p:cNvPr id="${950 + i}" name="C${i}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>${geom}</p:spPr></p:sp>`;
+  const shapes = await P.read(pack({ 'ppt/slides/slide3.xml': fixture('ppt/slides/slide3.xml').replace('</p:spTree>', `${[0, 1, 2].map(sp).join('')}</p:spTree>`) }), { limits: { commands: 25, guides: 7 } });
+  const custom = shapes.slides.flatMap(all).map((x) => x.geometry).filter((x) => x?.pathLst);
+  assert.equal(custom.reduce((n, x) => n + x.pathLst.reduce((m, p) => m + p.cmds.length, 0), 0), 25);
+  assert.equal(custom.reduce((n, x) => n + x.avLst.length + x.gdLst.length, 0), 7);
+  const g = ['C0', 'C1', 'C2'].map((n) => named(shapes.slides[2], n).geometry);
+  assert.ok(g[2].pathLst[0].cmds.length < 10 && g[2].gdLst.length < 3, 'the last shape keeps what fit');
+  assert.ok(shapes.cut.shapes > 0);
+});
+
 test('missing media parts become picture boxes and are not listed as drawable media', async () => {
   const bytes = pack({ 'ppt/media/image1.png': null, 'ppt/media/image3.svg': null });
   const d = await P.read(bytes);
