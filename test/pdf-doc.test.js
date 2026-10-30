@@ -90,6 +90,33 @@ test('the large fixture: pages of noise that does not compress, about the size a
 });
 
 // ---- lib/pdf-doc.js ----------------------------------------------------------------------------------------------------
+test('fixture downloads are bounded and leave no download directory on failure', async (t) => {
+  const fs = require('node:fs'), os = require('node:os');
+  const { spawnSync } = require('node:child_process');
+  for (const mode of ['http', 'network', 'oversize', 'chunked', 'stream', 'mismatch', 'ok']) await t.test(mode, () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gz-fixture-download-test-'));
+    try {
+      const preload = path.join(tmp, 'fetch.cjs'), dir = path.join(tmp, 'corpus');
+      fs.writeFileSync(preload, `global.fetch = async () => {
+        if (${JSON.stringify(mode)} === 'network') throw Error('network failed');
+        if (${JSON.stringify(mode)} === 'http') return new Response('', { status: 503 });
+        if (${JSON.stringify(mode)} === 'oversize') return new Response('pinned PDF bytes', { headers: { 'content-length': '50000001' } });
+        if (${JSON.stringify(mode)} === 'chunked') return new Response(new ReadableStream({ start(c) { c.enqueue(new Uint8Array(25000000)); c.enqueue(new Uint8Array(25000001)); c.close(); } }));
+        if (${JSON.stringify(mode)} === 'stream') return new Response(new ReadableStream({ start(c) { c.error(Error('stream failed')); } }));
+        return new Response('pinned PDF bytes');
+      };`);
+      const expected = crypto.createHash('sha256').update(mode === 'mismatch' ? 'different' : 'pinned PDF bytes').digest('hex');
+      const r = spawnSync(process.execPath, ['--require', preload, path.join(root, 'scripts/pdf-fixtures.js'), dir,
+        '--xfa-url', 'https://fixtures.invalid/form.pdf', '--xfa-sha256', expected], { env: { ...process.env, TMPDIR: tmp }, encoding: 'utf8', timeout: 60000 });
+      assert.equal(r.status, mode === 'ok' ? 0 : 1, r.stderr);
+      if (['oversize', 'chunked'].includes(mode)) assert.match(r.stderr, /50 MB/, 'refuse before buffering the whole download');
+      assert.deepEqual(fs.readdirSync(tmp).filter((n) => n.startsWith('gz-pdf-download-')), [], 'download scratch always removed');
+      assert.equal(fs.existsSync(path.join(dir, 'publicXfa.pdf')), mode === 'ok', 'only the bounded, verified bytes are published');
+      if (mode === 'ok') assert.equal(fs.readFileSync(path.join(dir, 'publicXfa.pdf'), 'utf8'), 'pinned PDF bytes');
+    } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  });
+});
+
 const D = require('../lib/pdf-doc.js');
 const api = async () => D.use(await load());
 const sha = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
