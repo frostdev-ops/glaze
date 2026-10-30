@@ -129,7 +129,27 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       if (!await notes.replace(key, here, next)) throw new Fail('stale');
       return;
     }
-    if (cat === 'noteFiles' || cat === 'gradescope') return;
+    if (cat === 'noteFiles') return;
+    // Looks history: each Look either side wore, once, at the later time it was worn, newest first.
+    if (key === 'lookHistory') {
+      const H = L.history(), here = H.entries((await local.get(key))[key]), by = new Map();
+      for (const e of [...here, ...H.entries(value)]) {
+        const id = JSON.stringify(H.theme(e.theme)), at = Number.isFinite(e.at) ? e.at : 0, had = by.get(id);
+        if (!had) by.set(id, { ...e, at }); else if (at > had.at) had.at = at;
+      }
+      const next = [...by.values()].sort((a, b) => b.at - a.at).slice(0, H.MAX);
+      if (canon(next) !== canon(here)) await local.set({ [key]: next });
+      return;
+    }
+    // Gradescope: every placing and answer either side has (this device's where both), for the one account; read rows stay
+    // only for a course still placed where they were read.
+    if (cat === 'gradescope') {
+      const G = L.gradescope(), raw = (await local.get(key))[key], here = G.clean(raw), same = !!here.acct && here.acct.id === value.acct?.id;
+      const view = { acct: here.acct || value.acct, map: same ? { ...value.map, ...here.map } : here.acct ? here.map : value.map, hide: here.hide || value.hide, bind: { ...value.bind, ...here.bind } };
+      const next = G.clean(defOf('local', key).merge(raw, view));
+      if (canon(next) !== canon(here)) await local.set({ [key]: next });
+      return;
+    }
     // A Better To Do list on both: every task either side has (this device's where both do), never one side's list whole.
     if (cat === 'tasks' && key.startsWith('todo:')) {
       const T = L.todo(), here = T.clean((await local.get(key))[key]), ids = new Set(here.tasks.map((t) => t.id));
