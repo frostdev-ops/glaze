@@ -194,6 +194,17 @@ test('an opening state reply cannot undo a completed click', async () => {
   assert.equal(p.line(), 'Starting…');
 });
 
+test('cancelling permission keeps a pending opening consent read valid', async () => {
+  const gate = deferred();
+  const p = page({ on: true, grant: false, reply: async (m, r) => { if (m.op === 'state') await gate.promise; return r; } });
+  await settle();
+  await p.toggle('agents-on');
+  gate.resolve();
+  await settle();
+  assert.equal(p.$('agents-on').checked, p.worker.on);
+  assert.deepEqual(p.ops().filter((op) => op === 'set'), [], 'permission was cancelled');
+});
+
 test('opening storage snapshots cannot replace newer link and activity events', async () => {
   const gate = deferred();
   const p = page({ on: true, link: { state: 'restart', at: 1 }, calls: [], readStorage: async (area, keys, r) => { await gate.promise; return r; } });
