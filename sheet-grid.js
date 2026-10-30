@@ -1258,7 +1258,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     };
     if (chartB) toggle(chartB, () => KINDS.map(([kind, label]) => ({ act: `chart-${kind}`, label: t(label), run: () => insertChart(kind) })), t('Chart'));
     const fileNow = async () => o.fileOf(wb, rec?.title || host?.title?.() || '');
-    toggle(moreB, () => [{ act: 'export', label: t(o.exportLabel()), run: () => { flush(); fileNow().then(o.download, (e) => { console.error(e); say(t('Not saved. Try again in a moment.')); }); } }], t('More'));
+    toggle(moreB, () => [{ act: 'export', label: t(o.exportLabel(wb)), run: () => { flush(); fileNow().then(o.download, (e) => { console.error(e); say(t('Not saved. Try again in a moment.')); }); } }], t('More'));
     const when = new Intl.DateTimeFormat(o.locale || undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
     versB.addEventListener('click', async () => {
       if (menu?.opener === versB) { closeMenu(true); return; }

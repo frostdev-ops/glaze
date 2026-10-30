@@ -29,6 +29,16 @@ test('the file is Lastname_Title.docx, the title before its subtitle, letters an
   assert.equal(S.kb(20), 1);
 });
 
+test('a workbook kept with its macros goes as .xlsm, Excel\'s macro-enabled type; every other one as .xlsx', () => {
+  assert.equal(S.fileName({ surname: 'Rivera', title: 'Budget', ext: '.xlsm' }), 'Rivera_Budget.xlsm');
+  assert.equal(S.fileName({ surname: 'Rivera', title: 'Budget', ext: '.xlsx' }), 'Rivera_Budget.xlsx');
+  assert.equal(S.mimeOf('Rivera_Budget.xlsm'), 'application/vnd.ms-excel.sheet.macroEnabled.12');
+  assert.equal(S.mimeOf('Rivera_Budget.xlsx'), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  assert.equal(S.kindOf('Budget.XLSM'), 'sheet');
+  assert.ok(S.safeName('Rivera_Budget.xlsm', 'sheet'));
+  assert.equal(S.route('Budget.xlsm', { kinds: ['sheet'] }), 'choose', 'brought to an assignment, it opens in Glaze or submits as is');
+});
+
 test('the probed attempt: the file area\'s own input, the drop zone, and the footer\'s Submit and Save and Close', () => {
   const body = page(), ed = editorOf(body), area = S.areaOf(ed);
   assert.match(area.className, /makeStylessubmission-/);

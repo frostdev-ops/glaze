@@ -254,7 +254,9 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
         try { out = !other && built && built.doc === snapshot.doc && built.format === snapshot.format && built.key === snapshot.key ? built.out : await build(); } catch (e) { console.error(e); throw other ? 'made' : 'build'; }
         s = L().advance(s, { step: 'build' });
         if (mine.cancelled || !same() || !L().may(s, 'attach') || sheet !== mine) throw 'page';
-        const r = await send(run, { key: snapshot.key, name, bytes: out.bytes.slice().buffer, note: note.value, text, ...ultra, kind: kindId, mime: out.mime || L().mimeOf(name), version: sending.version?.id ?? null });
+        // A kind's file names its own extension (a spreadsheet with macros: .xlsm): the one sent says it too.
+        const ext = /(\.[^./\\]+)$/.exec(String(out.name || ''))?.[1].toLowerCase(), sent = other && ext && L().kindOf(`x${ext}`) === kindId && L().kindOf(name) === kindId ? name.replace(/\.[^.]+$/, ext) : name;
+        const r = await send(run, { key: snapshot.key, name: sent, bytes: out.bytes.slice().buffer, note: note.value, text, ...ultra, kind: kindId, mime: out.mime || L().mimeOf(name), version: sending.version?.id ?? null });
         if (mine.cancelled || sheet !== mine) return;
         if (!r.ok) throw r.error || 'page';
         mine.back = null;

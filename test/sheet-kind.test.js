@@ -582,6 +582,50 @@ test('the codecs load on demand: an .xlsx read into the record, the file written
   assert.ok(PA.local(key.key));
 });
 
+// A workbook brought as .xlsm keeps its macros (lib/sheet-xlsx.js) and goes out as .xlsm with Excel's macro-enabled type,
+// on Documents and in an assignment's frame, its record and index row saying so for the card's Export label.
+test('an imported .xlsm round-trips as .xlsm: its name, type, macro project and Export label', async () => {
+  const X = require('../lib/sheet-xlsx.js'), XM = require('./fixtures/sheet-xlsm.js'), Z = require('../lib/doctext.js');
+  const s = store(), P = PA.open(s, () => 1000, { versions: async () => 40 }), K = 'bb.school.test|_900_1|_101_1|_7_1';
+  await P.save(K, { kind: 'paper', doc: { type: 'doc', content: [] }, title: 'Lab 3' });
+  const G = require('../sheet-grid.js');
+  for (const f of ['date', 'math', 'info']) require(`../lib/sheet-fn-${f}.js`);
+  const ctx0 = { local: s, GZ_WRITER_PAPERS: { ...PA, open: () => P }, GZ_SHEET_MODEL: M, GZ_SHEET_DATA: SD, GZ_SHEET_GRID: G, GZ_SHEET_CALC: require('../lib/sheet-calc.js'),
+    GZ_SHEET_NUMFMT: require('../lib/sheet-numfmt.js'), CompressionStream, DecompressionStream, Response, Blob };
+  const { DK, ctx } = load({ sheets: true }, ctx0);
+  ctx.GZ_WRITER_PAPER = { need: async (files) => { if (files.includes('lib/sheet-xlsx.js')) ctx.GZ_SHEET_XLSX = X; } };
+  await DK.settled();
+  const k = DK.get('sheet'), bytes = XM.xlsm();
+  assert.equal(DK.opens('Budget.xlsm'), 'sheet', 'Documents takes an .xlsm');
+  const file = (name, b) => ({ name, size: b.length, arrayBuffer: async () => b.buffer.slice(b.byteOffset, b.byteOffset + b.length) });
+  const vba = async (out) => { const z = Z.unzip(out.bytes); return z.names.includes('xl/vbaProject.bin') && Buffer.from(await z.bytes('xl/vbaProject.bin')).equals(Buffer.from(XM.VBA)); };
+  const key = await k.importFile(file('Budget.xlsm', bytes));
+  const rec = await P.get(key), row = (await P.list()).find((r) => r.key === key);
+  assert.equal(rec.ext, '.xlsm');
+  assert.equal(row.ext, '.xlsm', 'the index row says it for the card');
+  assert.equal(k.exportLabelOf(row), 'Export .xlsm');
+  const out = await k.file(key);
+  assert.equal(out.name, 'Budget.xlsm');
+  assert.equal(out.mime, XM.MIME);
+  assert.ok(await vba(out), 'the macro project goes out verbatim');
+  assert.equal((await X.read(out.bytes)).sheets[0].rows.get(0).get(1).v, 42);
+  // In an assignment's frame: the attempt's record becomes the workbook, written as .xlsm too.
+  const into = await k.into(K, file('Budget.xlsm', bytes));
+  assert.equal(into.ext, '.xlsm');
+  const there = await k.file(K);
+  assert.ok(there.name.endsWith('.xlsm') && there.mime === XM.MIME && await vba(there));
+  // Everything else stays .xlsx.
+  const src = M.workbook();
+  put(src.sheets[0], 0, 0, { t: 's', v: 'Plain' });
+  const plain = await k.importFile(file('Plain.xlsx', await X.write(src)));
+  const prow = (await P.list()).find((r) => r.key === plain);
+  assert.equal(prow.ext, undefined);
+  assert.equal(k.exportLabelOf(prow), 'Export .xlsx');
+  assert.deepEqual([(await k.file(plain)).name, (await k.file(plain)).mime], ['Plain.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
+  assert.equal((await k.into(K, file('Plain.xlsx', await X.write(src)))).ext, null, 'a workbook without macros brought over one is .xlsx again');
+  assert.equal(k.exportLabel, 'Export .xlsx');
+});
+
 test('a cell\'s dynamic-array and data-table fields (cm, vm, dt) survive a save', () => {
   const wb = M.workbook();
   put(wb.sheets[0], 0, 0, { t: 'n', v: 1, f: 'SEQUENCE(3)', cm: 1 });
