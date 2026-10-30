@@ -74,3 +74,18 @@ test('translated layout still catches removed, hidden or clipped replacement con
     assert.match(p.measure().off.join('; '), why);
   }
 });
+
+test('first-screen guards report a missing screen even when the browser leaves no live handles', () => {
+  const { spawnSync } = require('node:child_process');
+  for (const name of ['popup-check.js', 'sites-check.js']) {
+    const source = read(name);
+    const start = source.indexOf('    let welcomeTimer;');
+    const guard = source.slice(start, source.indexOf('\n    } finally { clearTimeout(welcomeTimer); }', start) + '\n    } finally { clearTimeout(welcomeTimer); }'.length);
+    const child = `const timer = globalThis.setTimeout; const setTimeout = (fn) => timer(fn, 5);
+      const welcomed = new Promise(() => {});
+      (async () => { ${guard} })().catch((e) => { console.error(e.message); process.exitCode = 1; });`;
+    const result = spawnSync(process.execPath, ['-e', child], { encoding: 'utf8', timeout: 5000 });
+    assert.equal(result.status, 1, `${name}: a pending first-screen wait cannot exit successfully`);
+    assert.match(result.stderr, /the install never closed its first screen/);
+  }
+});
