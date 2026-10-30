@@ -241,6 +241,24 @@ test('a typed formula that reads a range where one value belongs is evaluated wh
   assert.deepEqual([val(e, 'C8'), at('C8').a], [20, 'C8'], 'a name for a range is a range');
 });
 
+test('legacy formula editing makes scalar references explicit without recalculating aggregate ranges', () => {
+  const e = book({ B1: 3, B5: 7 }), sh = e.wb.sheets[0];
+  require('../lib/sheet-fn-lookup.js');
+  require('../lib/sheet-fn-math2.js');
+  for (const [f, want] of [
+    ['B:B*2', '@B:B*2'], ['SUM(B:B)', 'SUM(B:B)'], ['SUM(B:B*2)', 'SUM(@B:B*2)'],
+    ['ABS(B:B)', 'ABS(@B:B)'], ['@B:B*2', '@B:B*2'], ['(B:B)*2', '@(B:B)*2'],
+    ['IF(FALSE,B:B,2)', '@IF(FALSE,B:B,2)'], ['IF(FALSE,B:B*2,2)', 'IF(FALSE,@B:B*2,2)'],
+    ['SUMPRODUCT(B:B*2)', 'SUMPRODUCT(B:B*2)'],
+    ['INDEX(B:B,0)*2', '@INDEX(B:B,0)*2'], ['{1;2}', '@{1;2}'],
+  ]) {
+    assert.equal(e.legacy(f, sh, 4, 0), want, f);
+    const before = e.evaluate(f, sh.id, 4, 0);
+    e.edit(sh.id, 4, 0, `=${want}`);
+    assert.deepEqual(e.value(sh.id, 4, 0), before, f);
+  }
+});
+
 test('a dynamic array\'s formula is edited at its first cell, as Excel 365 allows; a legacy array\'s is refused', () => {
   const wb = M.workbook();
   const sh = wb.sheets[0];

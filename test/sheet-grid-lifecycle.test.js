@@ -140,6 +140,23 @@ test('plain text and HTML formula paste use dynamic evaluation and keep dependen
   }
 });
 
+test('editing a legacy range formula shows explicit intersection and preserves its row unless @ is removed', () => {
+  const wb = M.workbook(), sh = wb.sheets[0];
+  sh.rows.set(0, new Map([[1, { t: 'n', v: 3 }]]));
+  sh.rows.set(4, new Map([[0, { t: 'n', v: 0, f: 'B:B*2' }], [1, { t: 'n', v: 7 }]]));
+  const f = frame({ wb });
+  for (let i = 0; i < 4; i++) f.key('ArrowDown');
+  assert.equal(sh.rows.get(4).get(0).v, 14);
+  assert.equal(f.el('gx-formula').value, '=@B:B*2');
+  f.key('F2'); assert.equal(f.el('gx-edit').value, '=@B:B*2'); f.key('Enter');
+  assert.equal(sh.rows.get(4).get(0).v, 14);
+  assert.equal(sh.rows.get(4).get(0).a, undefined);
+  f.key('ArrowUp'); f.type('=B:B*2'); f.key('Enter');
+  assert.equal(sh.rows.get(4).get(0).v, 6, 'removing @ opts into dynamic evaluation');
+  assert.equal(sh.rows.get(4).get(0).a, 'A5');
+  f.key('z', { ctrlKey: true }); assert.equal(sh.rows.get(4).get(0).v, 14);
+});
+
 test('the last shown sheet cannot be deleted while every other sheet is hidden', () => {
   const wb = M.workbook(), hidden = M.sheet('Hidden', 2); hidden.keep.hidden = true; wb.sheets.push(hidden);
   const f = frame({ wb }), tab = f.el('gx-tab-1');

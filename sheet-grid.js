@@ -415,7 +415,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     const editText = (r, c) => {
       const x = cellAt(r, c);
       if (!x) return '';
-      if (x.f !== undefined) return `=${x.f}`;
+      if (x.f !== undefined) return `=${x.a === undefined ? eng.legacy(x.f, S(), r, c) : x.f}`;
       if (x.t === 'b') return x.v ? 'TRUE' : 'FALSE';
       if (x.t === 'e') return String(x.v);
       if (x.t === 'n') {
