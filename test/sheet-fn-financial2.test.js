@@ -100,3 +100,7 @@ test('DOLLARDE and DOLLARFR: Microsoft\'s examples and Remarks', () => {
     ['DOLLARDE(1.1,3)', 1.3333333333333337], ['DOLLARFR(-1.125,16)', -1.02], ['DOLLARFR(1.3,3)', 1.0900000000000001], ['DOLLARFR(1.5,10)', 1.5],
   ]);
 });
+
+test('DOLLARDE and DOLLARFR reject negative fractions before truncation', () => {
+  cases(book(), [['DOLLARDE(1.02,-0.5)', '#NUM!'], ['DOLLARFR(1.125,-0.5)', '#NUM!']]);
+});
