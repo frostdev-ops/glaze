@@ -76,11 +76,16 @@ const create = ({ send, pending = () => 0, queue = L.QUEUE, line = L.LINE }) => 
     held = false;
     for (const k of conns.values()) k.socket.resume();
   };
-  // The worker is gone: every socket closes, and nothing more is sent.
+  // The worker is gone: nothing more is read, and each socket closes once what the worker wrote last (a subscription's end
+  // and its notifications/cancelled, at agent access off) has gone. → when every socket has flushed or closed.
   const end = () => {
     const all = [...conns.values()];
     conns.clear();
-    for (const k of all) k.socket.destroy();
+    return Promise.all(all.map(({ socket }) => new Promise((resolve) => {
+      socket.once('close', resolve);
+      socket.resume();
+      socket.end(resolve);
+    })));
   };
 
   return { open, frame, release, end, size: () => conns.size };

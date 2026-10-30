@@ -1,7 +1,8 @@
 // glaze-mcp host: what the browser starts over native messaging (native.js), one per Glaze worker with agent access on.
 // It says hello first, and once the worker answers with its instance it opens the socket and run file (rendezvous.js)
 // and lets in each agent that proves the token (handshake.js) as a numbered connection (mux.js). The worker's bye, or
-// stdin ending, closes everything, removes the socket and run file, and exits within a second.
+// stdin ending, closes everything once the worker's last lines have gone, removes the socket and run file, and exits
+// within a second.
 //
 // The server is never closed: libuv unlinks the name it bound on close, which may by then be a newer host's socket for
 // the same browser and instance (or, bound by a relative name, a file in another folder). Exiting leaves it to us.
@@ -42,7 +43,7 @@ const main = async ({ args = [], browser = null, caller = null, io = {} } = {}) 
   const quit = (code) => {
     if (done) return;
     done = true;
-    mux.end();
+    const flushed = mux.end();
     let gone = false;
     const go = () => {
       if (gone) return;
@@ -50,10 +51,10 @@ const main = async ({ args = [], browser = null, caller = null, io = {} } = {}) 
       if (own) R.remove(own.dir, own);
       exit(code);
     };
-    const finish = () => {
+    const finish = () => flushed.then(() => {
       if (!stdout.writableLength) return go();
       stdout.once('drain', go);
-    };
+    });
     setTimeout(go, 500).unref();
     // listen binds before its promise settles. Let start record the inode before exiting on a pipelined bye/EOF.
     if (starting) starting.then(finish, finish); else finish();
