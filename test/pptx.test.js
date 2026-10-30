@@ -393,3 +393,16 @@ test('the part byte limit also bounds relationship XML and multibyte slide XML',
   const multi = await P.read(pack({ 'ppt/slides/slide1.xml': slide }), { limits: { part } });
   assert.equal(multi.slides[0].broken, true);
 });
+
+test('hostile numeric geometry and nested group scales keep model numbers finite and bounded', async () => {
+  const group = fixture('ppt/slides/slide6.xml').replace('chExt cx="2000000" cy="1000000"', 'chExt cx="1e-320" cy="1"');
+  const geom = fixture('ppt/slides/slide3.xml').replace('val 25000', `val ${'9'.repeat(400)}`);
+  const d = await P.read(pack({ 'ppt/slides/slide6.xml': group, 'ppt/slides/slide3.xml': geom }));
+  for (const s of d.slides.flatMap(all)) {
+    for (const v of Object.values(s.bounds)) assert.ok(Number.isFinite(v) && Math.abs(v) <= 1e9, `${s.name}: ${v}`);
+    if (s.geometry?.avLst && !Array.isArray(s.geometry.avLst)) {
+      for (const v of Object.values(s.geometry.avLst)) assert.ok(Number.isFinite(v));
+    }
+  }
+  assert.deepEqual(JSON.parse(JSON.stringify(d)), d);
+});
