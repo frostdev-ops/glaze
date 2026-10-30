@@ -296,3 +296,14 @@ test('TAKE and DROP preserve reference extents and lift count arrays', () => {
     ['INDEX(TAKE(A:A,{1,-1}),1,2)', 0], ['INDEX(DROP({1;2;3},{1,-1}),1,2)', 1],
   ]);
 });
+
+test('TAKE and DROP with count arrays read only their selected first cells', () => {
+  const ref = new C.lib.Ref({}, 0, 0, 999, 0), counts = Array.from({ length: 1000 }, () => [999]);
+  for (const name of ['TAKE', 'DROP']) {
+    let reads = 0;
+    const ctx = { value: (v) => v, read: (_, r) => { reads++; return r; } };
+    const result = C.fn(name).fn([ref, counts], ctx);
+    assert.ok(result.every(([v]) => v === (name === 'TAKE' ? 0 : 999)));
+    assert.equal(reads, 1000, `${name} must not materialize one whole range for each count`);
+  }
+});
