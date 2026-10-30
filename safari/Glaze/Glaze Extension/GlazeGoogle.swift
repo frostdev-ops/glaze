@@ -159,12 +159,17 @@ nonisolated enum GlazeGoogle {
     /// The extension's side: sign-ins started and finished, tokens minted, the grant revoked.
     actor Engine {
         struct Pending: Codable { let state: String, verifier: String, at: Double }
-        struct Saved: Codable { let refresh: String, sub: String, email: String }
+        struct Saved: Codable, Equatable { let refresh: String, sub: String, email: String }
 
         private let vault: Vault, slot: Slot?, transport: Transport, now: @Sendable () -> Date
         private var held: [String: (token: String, expires: Date, sub: String)] = [:]
-        /// Bumped by connect and disconnect: an answer that arrives after either, across an await, is dropped.
+        /// Bumped by Connect, Disconnect and committing a grant: older answers across an await are dropped.
         private var generation: [String: Int] = [:]
+        /// Only an explicit Disconnect may revoke a late exchange. Google's revocation also invalidates newer grants
+        /// for the same account/client, so a superseding Connect must only discard the old answer.
+        private var disconnected: Set<String> = []
+        private var revoking = 0
+        private var revocationWaiters: [CheckedContinuation<Void, Never>] = []
         private func bump(_ profile: String) { generation[profile, default: 0] += 1 }
 
         init(vault: Vault, slot: Slot?, transport: Transport, now: @escaping @Sendable () -> Date = { Date() }) {
@@ -180,11 +185,19 @@ nonisolated enum GlazeGoogle {
             return ["ok": true, "email": s?.email ?? NSNull(), "sub": s?.sub ?? NSNull()]
         }
 
-        func connect(profile: String, hint: String?) throws -> SignIn {
+        func connect(profile: String, hint: String?) async throws -> SignIn {
             guard let slot else { throw Fail.setup }
             if let hint, !validEmail(hint) { throw Fail.request }
             guard let state = random(), let verifier = random() else { throw Fail.setup }
             bump(profile)
+            disconnected.remove(profile)
+            let started = generation[profile, default: 0]
+            // A revoke already sent to Google cannot be canceled. Do not start another authorization until it ends.
+            // This is global: Google's revocation is account/client-wide, across Safari profiles too.
+            while revoking > 0 {
+                await withCheckedContinuation { revocationWaiters.append($0) }
+                guard generation[profile, default: 0] == started else { throw Fail.signin }
+            }
             if let old = load(Pending.self, "pending." + profile) { slot.remove(old.state) }
             slot.sweep(olderThan: now().addingTimeInterval(-pendingFor))
             guard store(Pending(state: state, verifier: verifier, at: now().timeIntervalSince1970), "pending." + profile) else { throw Fail.setup }
@@ -214,12 +227,14 @@ nonisolated enum GlazeGoogle {
                                                            "grant_type": "authorization_code", "redirect_uri": redirect])
             let g: Grant
             do { g = try grant(status: status, body: body, now: now()) } catch Fail.revoked { throw Fail.auth } // a spent code
-            guard generation[profile, default: 0] == started else { // disconnected or restarted meanwhile: this grant goes too
-                if let r = g.refresh { _ = try? await post(revokeURL, ["token": r]) }
+            guard generation[profile, default: 0] == started else {
+                if disconnected.contains(profile), let r = g.refresh { _ = await revoke(r) }
                 throw Fail.signin
             }
             guard let refresh = g.refresh, let account = g.account else { throw Fail.auth }
             guard store(Saved(refresh: refresh, sub: account.sub, email: account.email), "refresh." + profile) else { throw Fail.setup }
+            // A refresh can start after Connect but before this exchange finishes. It belongs to the previous grant.
+            bump(profile)
             held[profile] = (g.access, g.expires, account.sub)
             return account
         }
@@ -231,7 +246,8 @@ nonisolated enum GlazeGoogle {
             held[profile] = nil
             let started = generation[profile, default: 0]
             let (status, body) = try await post(tokenURL, ["client_id": client, "grant_type": "refresh_token", "refresh_token": s.refresh])
-            guard generation[profile, default: 0] == started else { throw Fail.signin } // disconnected meanwhile
+            guard generation[profile, default: 0] == started,
+                  load(Saved.self, "refresh." + profile) == s else { throw Fail.signin }
             let g: Grant
             do { g = try grant(status: status, body: body, now: now()) } catch Fail.revoked { vault.remove("refresh." + profile); throw Fail.revoked }
             catch Fail.scope { vault.remove("refresh." + profile); throw Fail.revoked } // Drive's access was taken back
@@ -243,14 +259,28 @@ nonisolated enum GlazeGoogle {
 
         func disconnect(profile: String) async -> (revoked: Bool, had: Bool) {
             bump(profile)
+            disconnected.insert(profile)
             let s = load(Saved.self, "refresh." + profile)
             if let p = load(Pending.self, "pending." + profile) { slot?.remove(p.state) }
             vault.remove("refresh." + profile)
             vault.remove("pending." + profile)
             held[profile] = nil
             guard let s else { return (false, false) }
-            let r = try? await post(revokeURL, ["token": s.refresh])
-            return (r?.0 == 200, true)
+            return (await revoke(s.refresh), true)
+        }
+
+        private func revoke(_ refresh: String) async -> Bool {
+            revoking += 1
+            defer {
+                revoking -= 1
+                if revoking == 0 {
+                    let waiters = revocationWaiters
+                    revocationWaiters.removeAll()
+                    for waiter in waiters { waiter.resume() }
+                }
+            }
+            let r = try? await post(revokeURL, ["token": refresh])
+            return r?.0 == 200
         }
 
         private func post(_ url: URL, _ form: [String: String]) async throws -> (Int, Data) {
@@ -350,15 +380,21 @@ nonisolated enum GlazeGoogle {
     }
 
     /// Google's endpoints only: a form POST, no cookies, no cache, no redirects followed.
-    final class HTTP: NSObject, Transport, URLSessionTaskDelegate, @unchecked Sendable {
-        private lazy var session: URLSession = {
+    final class HTTP: Transport {
+        private let session: URLSession
+        init() {
             let c = URLSessionConfiguration.ephemeral
             c.httpCookieStorage = nil
             c.urlCache = nil
             c.requestCachePolicy = .reloadIgnoringLocalCacheData
             c.timeoutIntervalForRequest = 15
-            return URLSession(configuration: c, delegate: self, delegateQueue: nil)
-        }()
+            session = URLSession(configuration: c, delegate: Redirects(), delegateQueue: nil)
+        }
+        /// Kept separate so the session does not retain its transport and construction needs no mutable/lazy property.
+        private final class Redirects: NSObject, URLSessionTaskDelegate, Sendable {
+            func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                            newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) { completionHandler(nil) }
+        }
         func post(_ url: URL, form: [String: String]) async throws -> (Int, Data) {
             var r = URLRequest(url: url)
             r.httpMethod = "POST"
@@ -367,8 +403,6 @@ nonisolated enum GlazeGoogle {
             let (data, response) = try await session.data(for: r)
             return ((response as? HTTPURLResponse)?.statusCode ?? 0, data)
         }
-        func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                        newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) { completionHandler(nil) }
     }
 
     /// application/x-www-form-urlencoded, keys sorted.

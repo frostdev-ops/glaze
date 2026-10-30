@@ -20,33 +20,45 @@ import UIKit
 final class GlazeGoogleSignIn: NSObject, ASWebAuthenticationPresentationContextProviding {
     static let shared = GlazeGoogleSignIn()
     private var session: ASWebAuthenticationSession?
-    private var state: String?
+    private struct Active {
+        let id: UUID, state: String, slot: GlazeGoogle.GroupSlot
+        let done: @MainActor () -> Void
+    }
+    private var active: Active?
 
     /// Whether url is the sign-in URL's scheme. done runs once this sign-in ends (at once if none started).
     @discardableResult
     func open(_ url: URL, done: @escaping @MainActor () -> Void = {}) -> Bool {
         guard url.scheme?.lowercased() == GlazeGoogle.appScheme else { return false }
         guard let s = GlazeGoogle.signIn(from: url), let slot = GlazeGoogle.GroupSlot.shared() else { done(); return true }
-        if let old = state { session?.cancel(); answer(slot, old, ["error": "cancel"]) }
+        if let old = active { complete(old.id, ["error": "cancel"], cancel: true) }
+        let id = UUID()
         let session = ASWebAuthenticationSession(url: GlazeGoogle.authURL(s), callbackURLScheme: GlazeGoogle.callbackScheme) { [weak self] url, error in
             Task { @MainActor in
                 let canceled = (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin
-                self?.answer(slot, s.state, url.map { ["url": $0.absoluteString] } ?? ["error": canceled ? "cancel" : "auth"])
-                if self?.state == s.state { self?.session = nil; self?.state = nil }
-                done()
+                self?.complete(id, url.map { ["url": $0.absoluteString] } ?? ["error": canceled ? "cancel" : "auth"])
             }
         }
         session.presentationContextProvider = self
         session.prefersEphemeralWebBrowserSession = false
         self.session = session
-        state = s.state
+        active = Active(id: id, state: s.state, slot: slot, done: done)
         if !session.start() {
-            answer(slot, s.state, ["error": "auth"])
-            self.session = nil
-            state = nil
-            done()
+            complete(id, ["error": "auth"])
         }
         return true
+    }
+
+    /// Programmatic cancel need not call AuthenticationServices' completion. Retire ownership before cancel/done so
+    /// delayed callbacks cannot answer twice, overwrite a newer reply, or decrement the DMG app's sign-in count twice.
+    private func complete(_ id: UUID, _ reply: [String: String], cancel: Bool = false) {
+        guard let old = active, old.id == id else { return }
+        let session = self.session
+        active = nil
+        self.session = nil
+        answer(old.slot, old.state, reply)
+        if cancel { session?.cancel() }
+        old.done()
     }
 
     private func answer(_ slot: GlazeGoogle.GroupSlot, _ state: String, _ reply: [String: String]) {
