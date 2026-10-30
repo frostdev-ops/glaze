@@ -192,3 +192,19 @@ test('formula inspection work does not scan all array members per cell', () => {
   }
   assert.ok(visited <= 10000, `${visited} array-member visits for 200 lookups`);
 });
+
+// Native Excel 16.114.1: a date token alone is not one of CELL's date/time format families.
+test('CELL format recognizes Excel families rather than every date token', () => {
+  const formats = [
+    ['@', 'G'], ['yyyy', 'G'], ['mmm', 'G'], ['dd', 'G'], ['mm', 'G'], ['h', 'G'], ['ss', 'G'],
+    ['h AM/PM', 'G'], ['ss.00', 'G'], ['yyyy-mm-dd', 'G'], ['[h]:mm', 'G'], ['[mm]:ss', 'G'], ['[ss]', 'G'],
+    ['mmmm d, yyyy', 'D4'], ['dddd, mmmm dd, yyyy', 'D2'], ['mmm yyyy', 'D3'],
+    ['mm:ss', 'G'], ['mm:ss.0', 'G'], ['h:mm:ss.00', 'D8'], ['[$-409]m/d/yy', 'D2'],
+    ['0.000', 'F3'], ['0.###', 'F3'], ['0.0E+00', 'S1'], ['0.00;[Blue]-0.00', 'F2-'],
+    ['0.00;[<=0]-0.00', 'F2'], ['0.00;[Color10]-0.00', 'F2-'], ['General;[Red]-General', 'G-'],
+    ['"USD "0.00', 'F2'], ['0.00" days"', 'F2'],
+  ];
+  const cells = Object.fromEntries(formats.map((_, i) => [`F${i + 1}`, { v: 1, s: i + 1 }]));
+  const e = book(cells, { styles: formats.map(([fmt]) => ({ fmt })) });
+  formats.forEach(([fmt, expected], i) => assert.equal(calc(e, `CELL("format",F${i + 1})`), expected, fmt));
+});
