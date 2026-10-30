@@ -10,10 +10,10 @@ const frame = (extra = {}, html = '<p>Body</p>', storage) => {
   const events = {}, writes = [], nodes = [], life = {};
   const element = () => { const n = { append() {}, setAttribute(k) { if (k === 'hidden') this.hidden = true; }, addEventListener() {}, removeAttribute() {} }; nodes.push(n); return n; };
   const view = { state: PM.state.EditorState.create({ doc: W.parse(W.compose, html) }), dispatch(tr) { this.state = this.state.apply(tr); } };
-  const scope = vm.createContext({ console, setTimeout: () => 0, clearTimeout() {}, ResizeObserver: class { observe() {} }, addEventListener: (name, fn) => { life[name] = fn; }, chrome: { storage }, document: { createElement: element, body: element(), getElementById: () => null, addEventListener() {} },
+  const scope = vm.createContext({ console, setTimeout: () => 0, clearTimeout() {}, ResizeObserver: class { observe() {} }, addEventListener: (name, fn) => { const before = life[name]; life[name] = (event) => { before?.(event); fn(event); }; }, chrome: { storage }, document: { createElement: element, body: element(), getElementById: () => null, addEventListener() {} },
     GZ_PM: PM, GZ_WRITER_CITE: { ...C }, GZ_WRITER_LOOKUP: {}, GZ_WRITER_SOURCES: { ...S, save: async (key, list) => { writes.push([key, list]); }, ...extra },
     GZ_WRITER_FRAME: { on: (name, fn) => { events[name] = fn; }, slot: () => null, editor: () => ({ view }), mode: () => 'compose', t: (s) => s } });
-  vm.runInContext(fs.readFileSync(require.resolve('../writer-cite.js'), 'utf8'), scope);
+  vm.runInContext(fs.readFileSync(process.env.WRITER_CITE_SOURCE || require.resolve('../writer-cite.js'), 'utf8'), scope);
   return { cite: scope.GZ_WRITER_CITE, events, writes, view, nodes, life };
 };
 
