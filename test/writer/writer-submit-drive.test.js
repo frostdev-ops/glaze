@@ -26,7 +26,7 @@ const pair = () => {
 };
 
 // Drive as the stand-in holds it: id → { meta, bytes, hold (a promise the second piece waits on), stall (no piece after the
-// first, ever) }. asked: each request, `${id} meta|media|export <type>`; ended: each body cancelled before its end.
+// first, ever), refuse (Drive's error body for its bytes) }. asked: each request, `${id} meta|media|export <type>`; ended: each body cancelled before its end.
 const standIn = () => {
   const files = new Map(), asked = [], ended = [];
   const fetch = async (url) => {
@@ -35,6 +35,7 @@ const standIn = () => {
     asked.push(`${id} ${what}`);
     if (!f) return new Response(JSON.stringify(ERRORS[404]), { status: 404 });
     if (what === 'meta') return Response.json({ trashed: false, capabilities: { canEdit: true, canDownload: true }, ...f.meta });
+    if (f.refuse) return Response.json(f.refuse, { status: f.refuse.error.code });
     let at = 0;
     const body = new ReadableStream({
       async pull(c) {
@@ -266,4 +267,32 @@ test('a closed Picker says nothing and a sign-in to redo says so, without a requ
   await setupFail.open(); setupFail.builds[0].resolve(); await setupFail.flush();
   setupFail.click('.gs-drive'); await settle(setupFail);
   assert.equal(err(setupFail), 'Connect Google Drive again in Settings.'); assert.deepEqual(setupFail.d.asked, []);
+});
+
+test('a Drive title with a slash (a date) or a control character is attached, under a name a file can have', async () => {
+  const doc = file('1Slash', 'Lab report 10/30', MIME.gdoc), heic = file('1Heic', 'Scan 10/30\u0007.heic', 'image/heic', 900);
+  const s = setup({ picked: [doc, heic] });
+  s.d.files.set(doc.id, { meta: doc, bytes: bytes(1000, 1) });
+  s.d.files.set(heic.id, { meta: heic, bytes: bytes(900, 2) });
+  await s.open(); s.builds[0].resolve(); await s.flush();
+  s.click('.gs-drive'); await settle(s, 30);
+  assert.equal(err(s), '', 'neither is refused as unreadable');
+  const r = rows(s).map((x) => x.name);
+  assert.equal(r.length, 2);
+  assert.match(r[0], /LabReport1030\.docx$/);
+  assert.equal(r[1], 'Scan 10_30_.heic');
+  s.click('.gs-primary'); await settle(s);
+  const go = s.messages.find((m) => m.type === 'submit:go');
+  assert.deepEqual(go.files.map((f) => f.name), r);
+});
+
+test('a Google file larger than Drive exports names itself as too large, not as unreadable', async () => {
+  const big = file('1BigDoc', 'Lab notes', MIME.gdoc), s = setup({ picked: [big] });
+  s.d.files.set(big.id, { meta: big, bytes: bytes(10), refuse: ERRORS.exportSize });
+  await s.open(); s.builds[0].resolve(); await s.flush();
+  s.click('.gs-drive'); await settle(s, 20);
+  assert.deepEqual(s.d.asked, [`1BigDoc meta`, `1BigDoc export ${MIME.docx}`]);
+  assert.equal(rows(s).length, 0);
+  assert.equal(err(s), 'Lab notes: That file is too large.');
+  assert.equal(submitOff(s), false);
 });

@@ -239,6 +239,19 @@ test('Drive\'s errors and the sign-in\'s become fixed reasons', async () => {
   assert.equal(D.WHY.includes('network') && D.WHY.includes('size'), true);
 });
 
+test('a Google file larger than Drive exports says so, as Drive answers it now (400) and did (403), not "try again"', async () => {
+  for (const [code, body] of [[400, ERRORS.exportSize], [403, ERRORS.exportSizeLimitExceeded]]) {
+    const h = harness([json(200, FILES.doc), json(code, body)]);
+    await fails(h.drive.open(FILES.doc.id, ALL), 'export');
+    assert.match(h.log.fetch[1].url, /\/export\?/, `${code}: the export itself refused`);
+    const r = harness([json(200, FILES.sheet), json(code, body)]);
+    await fails(r.drive.raw(FILES.sheet.id), 'export');
+  }
+  assert.ok(D.WHY.includes('export'), 'the port carries it');
+  await fails(harness([json(400, ERRORS.exportSize)]).drive.meta(FILES.docx.id), 'export');
+  await fails(harness([json(400, {})]).drive.meta(FILES.docx.id), 'bad');
+});
+
 // A runtime port pair, as chrome.runtime.connect gives each side: messages cloned and delivered later, in order.
 const ports = () => {
   const side = () => ({ msg: [], gone: [], peer: null, closed: false,
@@ -463,4 +476,39 @@ test('Disconnect stops a download even inside a large network chunk', async () =
     if (done) who = null;
   }), 'connect');
   assert.equal(received, D.CHUNK, 'only the chunk acknowledged before Disconnect was delivered');
+});
+
+// The pages' part (page), run as a page runs it: drive.js in a realm with a document, the runtime's messages and ports.
+const pageOf = ({ files, drive, path = '/writer.html' }) => {
+  const vm = require('node:vm'), fs = require('node:fs');
+  const notes = [];
+  const ctx = vm.createContext({
+    console, setTimeout, clearTimeout, setInterval, clearInterval, URLSearchParams, TextEncoder, File, atob, btoa, crypto, document: {}, location: { pathname: path },
+    GZ_I18N: { t: (k) => k },
+    chrome: {
+      runtime: {
+        sendMessage: async (m) => (m.type === 'glaze:drive' ? { ok: true, connected: true } : { ok: true, files }),
+        connect: () => { const [page, worker] = ports(); D.serve(worker, { drive, allowed: async () => true }); return page; },
+      },
+      storage: { onChanged: { addListener() {} } }, i18n: { getUILanguage: () => 'en' },
+    },
+  });
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/documents/drive.js'), 'utf8'), ctx);
+  return { page: ctx.GZ_DRIVE.page, api: { notify: (m) => notes.push(m) }, notes };
+};
+
+test('the paper\'s From Google Drive brings a file under a name a file can have, which Writer\'s import takes', async () => {
+  const L = require('../../extension/writer/writer-submit.js');
+  const meta = { ...FILES.doc, name: 'Lab report 10/30' };
+  const h = harness([json(200, meta), stream(2048).res]);
+  const p = pageOf({ files: [{ id: meta.id, name: meta.name, mimeType: meta.mimeType }], drive: h.drive });
+  for (let i = 0; i < 10 && !p.page.connected(); i++) await new Promise((r) => setImmediate(r));
+  let brought = null;
+  const [item] = p.page.items(p.api, (f) => { brought = f; });
+  assert.equal(item.label, 'From Google Drive');
+  await item.run();
+  assert.ok(brought, JSON.stringify(p.notes));
+  assert.equal(brought.name, 'Lab report 10_30.docx');
+  assert.equal(brought.size, 2048);
+  assert.equal(L.fileError(brought), null, 'on an assignment, writer-import.js takes it rather than saying it could not be read');
 });

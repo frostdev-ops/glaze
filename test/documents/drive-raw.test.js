@@ -112,3 +112,31 @@ test('the port: a page gets a raw file whole; its cancel aborts the worker\'s fe
   assert.equal(s.seen.cancelled, true, 'the worker\'s body cancelled when the page let go');
   assert.ok(log[1].init.signal.aborted, 'and its fetch\'s signal aborted');
 });
+
+// Drive lets a name hold what a file's can't: a slash ("Lab 10/30", a date in a title), a control character, a thousand
+// characters. Submit from Drive hands the file to Blackboard's upload, which takes only names a file can have
+// (writer/writer-submit.js asIsName): such a file was refused as "That file could not be read.".
+test('raw: a Drive name a file can\'t have comes as one it can, its extension kept', async () => {
+  const L = require('../../extension/writer/writer-submit.js');
+  const long = `${'Ünïcode '.repeat(40)}notes.pdf`;
+  for (const [meta, name] of [
+    [{ ...FILES.doc, name: 'Lab report 10/30' }, 'Lab report 10_30.docx'],
+    [{ ...PNG, name: 'Scan 10\\30\u0007\n.png' }, 'Scan 10_30__.png'],
+    [{ ...PNG, name: '...' }, '_...'],
+    [{ ...PNG, name: long, mimeType: MIME.pdf }, null],
+    [PNG, 'Lab photo.png'],
+  ]) {
+    const heads = [];
+    await drive([json(200, meta), bytes(10)]).raw(meta.id, { head: (h) => heads.push(h) });
+    const got = heads[0].name;
+    assert.ok(L.asIsName(got), `${JSON.stringify(meta.name)} → ${JSON.stringify(got)} is a name a file can have`);
+    if (name) assert.equal(got, name);
+    else { assert.equal([...got].length, 255); assert.ok(got.endsWith(' notes.pdf') || got.endsWith('.pdf')); assert.ok(got.startsWith('Ünïcode Ünïcode')); }
+  }
+  // Over the port, the File the page gets carries it.
+  const [page, worker] = ports();
+  D.serve(worker, { drive: drive([json(200, { ...FILES.doc, name: 'Lab report 10/30' }), bytes(10)]), allowed: async () => true });
+  const f = await D.client(() => page).raw(FILES.doc.id);
+  assert.equal(f.name, 'Lab report 10_30.docx');
+  assert.equal(L.fileError(f), null, 'Writer\'s import takes it');
+});
