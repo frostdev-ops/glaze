@@ -3754,5 +3754,6 @@
   "Google Drive": "Google Drive",
   "Glaze needs the browser's sign-in permission to connect.": "Glaze heeft de aanmeldtoestemming van de browser nodig om te verbinden.",
   "Connect again and allow Google Drive access.": "Verbind opnieuw en sta toegang tot Google Drive toe.",
-  "Google Drive didn't connect. Try again in a moment.": "Google Drive kon niet verbinden. Probeer het zo opnieuw."
+  "Google Drive didn't connect. Try again in a moment.": "Google Drive kon niet verbinden. Probeer het zo opnieuw.",
+  "Couldn't disconnect. Try again in a moment.": "Kon niet loskoppelen. Probeer het zo opnieuw."
 };
