@@ -287,3 +287,21 @@ test('every slide of the fixture draws, through DOM calls alone', async () => {
   for (const sink of ['innerHTML', 'outerHTML', 'insertAdjacentHTML', 'document.write', 'createContextualFragment', 'DOMParser']) assert.ok(!src.includes(sink), sink);
   assert.ok(!/setAttribute\(\s*['"]style['"]/.test(src), 'styles through the CSSOM, never a style attribute (papers.html allows no inline style)');
 });
+
+
+test('find spans adjacent formatted runs as one hit and excludes merged table continuations', async () => {
+  const d = await deck(), s = structuredClone(d.slides[1]);
+  s.shapes = [s.shapes.find((s) => s.text?.paragraphs.some((p) => p.runs.some((r) => r.text === 'Passive transport')))];
+  const p = s.shapes[0].text.paragraphs.find((p) => p.runs.some((r) => r.text === 'Passive transport'));
+  const r = p.runs[0];
+  p.runs = [{ ...r, text: 'Passive trans' }, { ...r, text: 'port', bold: true }];
+  const el = R.slide(s, d, { document: doc, find: 'Passive transport' });
+  const marks = all(el).filter(tag('mark'));
+  assert.equal(R.count(R.text(s), 'Passive transport'), 1);
+  assert.equal(marks.map((m) => m.textContent).join(''), 'Passive transport');
+  assert.deepEqual(marks.map((m) => m.getAttribute('data-gs-hit')), ['0', '0'], 'two styled fragments of one find hit');
+  const table = structuredClone(d.slides[4]);
+  const merged = table.shapes.find((s) => s.type === 'table').rows.flatMap((r) => r.cells).find((c) => c.merged);
+  merged.text.paragraphs[0].runs = [{ ...r, text: 'invisible continuation' }];
+  assert.equal(R.count(R.text(table), 'invisible continuation'), 0, 'a cell the renderer skips is not a find hit');
+});
