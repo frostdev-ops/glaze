@@ -221,6 +221,7 @@ test('a 4.0 pick of a kept Look landing before the worker gets to a 3.x pick for
     await w.settle();
     w.arrive((x) => { x[second] = structuredClone(mine[second]); });
     await w.settle();
+    assert.deepEqual(w.writes, [], `${first} first: no write`);
     assert.deepEqual(sync.courseLooks, { _2_1: K1 }, `${first} first`);
     assert.equal(wears(sync, '_2_1'), K1, `${first} first: the 4.0 pick`);
   }
