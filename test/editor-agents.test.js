@@ -305,25 +305,20 @@ test('Starting… on Chrome is bounded: after the wait the page asks the worker 
   assert.deepEqual(p.ops().slice(before), ['state'], 'one ask');
   assert.equal(p.line(), 'In Claude Desktop, add the Glaze extension. For other apps, run npx glaze-mcp setup');
   assert.deepEqual(p.waits(), [], 'and no poll after it');
-  assert.equal(p.$('agents-restart').hidden, true);
 });
 
-test('a worker still without connectNative after the wait: the line offers Glaze\'s restart, only in its click', async () => {
+test('a worker still without connectNative after the wait: the line says to restart the browser, and Glaze reloads nothing', async () => {
   const p = await open({ on: true, link: { state: 'restart', at: 1 } });
   await p.elapse();
-  assert.equal(p.line(), 'Restart Glaze to start the helper');
+  assert.equal(p.line(), 'Restart your browser to start the helper');
   assert.equal(p.$('agents-state').dataset.tone, 'bad');
-  assert.equal(p.$('agents-restart').hidden, false);
   assert.equal(p.$('agents-copy').hidden, true);
   assert.equal(p.$('agents-allow').hidden, true);
-  assert.deepEqual(p.reloads, [], 'never without the student\'s click');
+  assert.deepEqual(p.reloads, [], 'Glaze never reloads itself: open documents and Writer saves stay as they are');
   assert.deepEqual(p.waits(), [], 'asked once');
-  await p.click('agents-restart');
-  assert.deepEqual(p.reloads, [{ gesture: true }]);
-  // Whatever the worker writes next replaces the offer.
+  // Whatever the worker writes next replaces it.
   await p.linked('connected');
   assert.equal(p.line(), 'Ready');
-  assert.equal(p.$('agents-restart').hidden, true);
 });
 
 test('the wait belongs to Starting…: a newer state, a newer write than the ask, or off ends it', async () => {
@@ -381,7 +376,6 @@ test('a recheck from an earlier Starting… episode cannot offer Restart in a fr
   gate.resolve();
   await asking;
   assert.equal(p.line(), 'Starting…', 'the old answer cannot consume the new episode\'s wait');
-  assert.equal(p.$('agents-restart').hidden, true);
   assert.deepEqual(p.waits(), [E().WAIT]);
 });
 
@@ -420,13 +414,12 @@ test('Firefox and Safari keep their lines: no wait, no ask, no restart', async (
   }
 });
 
-test('Restart only acts on Chrome while its restart offer still applies', async () => {
+test('Settings has no control that reloads Glaze, on any browser', async () => {
+  assert.ok(!/id="agents-restart"/.test(read('options.html')));
   for (const browser of ['chrome', 'firefox', 'safari']) {
     const p = await open({ browser, on: true, link: { state: 'restart', at: 1 } });
     await p.elapse();
-    if (browser === 'chrome') await p.linked('connected');
-    await p.click('agents-restart');
-    assert.deepEqual(p.reloads, [], `${browser}: no reload through a hidden or stale Restart control`);
+    assert.deepEqual(p.reloads, [], browser);
   }
 });
 
@@ -469,7 +462,6 @@ test('every state lib/agent-link.js reports has its line, with the command to ru
     assert.equal(p.line(), words, state);
     assert.equal(p.$('agents-copy').hidden, !['forbidden', 'exited', 'old-helper'].includes(state), `${state}: Copy`);
     assert.equal(p.$('agents-allow').hidden, state !== 'needs-permission', `${state}: Allow`);
-    assert.equal(p.$('agents-restart').hidden, true, `${state}: Restart only after the wait`);
     assert.equal(p.$('agents-state').dataset.tone, state === 'connected' ? 'ok' : ['restart', 'connecting'].includes(state) ? 'wait' : 'bad', `${state}: tone`);
   }
   await p.linked('forbidden');
