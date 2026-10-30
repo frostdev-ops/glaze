@@ -3750,5 +3750,10 @@
   "as the app reports itself": "según la propia app",
   "Don't allow": "No permitir",
   "Unnamed app": "App sin nombre",
-  "Glaze restarted before you answered.": "Glaze se reinició antes de que respondieras."
+  "Glaze restarted before you answered.": "Glaze se reinició antes de que respondieras.",
+  "Google Drive": "Google Drive",
+  "Glaze needs the browser's sign-in permission to connect.": "Glaze necesita el permiso de inicio de sesión del navegador para conectarse.",
+  "Connect again and allow Google Drive access.": "Vuelve a conectar y permite el acceso a Google Drive.",
+  "Google Drive didn't connect. Try again in a moment.": "Google Drive no se conectó. Inténtalo de nuevo en un momento.",
+  "Couldn't disconnect. Try again in a moment.": "No se pudo desconectar. Inténtalo de nuevo en un momento."
 };

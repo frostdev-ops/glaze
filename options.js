@@ -1098,8 +1098,9 @@ GZ_UI.load().then((s) => {
     const gcalSignIn = async () => {
       try {
         if (!await chrome.permissions.request({ permissions: ['identity'] })) return t("Glaze can't connect without Chrome's sign-in permission.");
-        const r = await chrome.identity.getAuthToken({ interactive: true });
-        const scope = chrome.runtime.getManifest().oauth2.scopes[0];
+        // Calendar's scope alone: the client is shared with Google Drive, whose scopes the manifest may list too.
+        const r = await chrome.identity.getAuthToken({ interactive: true, scopes: [GZ_GCAL.SCOPE] });
+        const scope = GZ_GCAL.SCOPE;
         if (Array.isArray(r?.grantedScopes) && !r.grantedScopes.includes(scope)) {
           // Chrome would hand the same token back: forgotten, so the next Connect asks Google again.
           await chrome.identity.removeCachedAuthToken({ token: r.token }).catch(() => {});
@@ -1148,13 +1149,61 @@ GZ_UI.load().then((s) => {
       if ($('#gcal-bye').returnValue !== 'ok') return $('#gcal-disconnect').focus();
       const r = await gcalOp({ op: 'disconnect', drop: $('#gcal-drop').checked });
       if (!r.ok) return hint(t("Couldn't delete the Glaze calendar, so nothing changed. Try again, or disconnect without deleting it."), true);
-      // Nothing stays behind: the permission goes too, until the next Connect asks again.
-      await chrome.permissions.remove({ permissions: ['identity'] }).catch(() => {});
+      // The worker released identity in its grant queue unless Drive still holds it.
       gcalRender(null);
       $('#gcal-connect').focus();
       hint(r.had && !r.revoked ? t("Disconnected on this device. Google didn't confirm it removed Glaze's access: you can remove it at myaccount.google.com/connections.") : t('Disconnected.'), r.had && !r.revoked);
     });
     chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.gcal) gcalRender(changes.gcal.newValue); });
+  }
+
+  // ---- Google Drive (lib/google.js, through the worker: 'glaze:google'): Connect, the account, Disconnect ----
+  // Hidden until Google's clients are set up for this browser (the worker says why: 'setup' or 'browser').
+  {
+    const gdOp = (op) => new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:google', op }, (r) => res(chrome.runtime.lastError ? { ok: false, why: 'network' } : r || { ok: false })));
+    let gdFlow = '';
+    const gdRender = (s) => {
+      gdFlow = s?.flow || '';
+      $('#gdrive').hidden = !s?.ok;
+      $('#gdrive-who').textContent = s?.email || '';
+      $('#gdrive-connect').hidden = !!s?.email;
+      $('#gdrive-disconnect').hidden = !s?.email;
+    };
+    const gdLoad = () => gdOp('status').then(gdRender);
+    gdLoad();
+    let gdBusy = false;
+    // Inside the student's click: the browser's identity permission first (optional; nothing is asked before this), then
+    // Google's own screen, from the worker. Safari signs in through the Glaze app and has no identity permission: Connect
+    // answers 'pending' until the app is done (each answer waits a while), and Settings asks again.
+    $('#gdrive-connect').addEventListener('click', async (e) => {
+      if (!e.isTrusted || gdBusy) return;
+      const native = gdFlow === 'native';
+      // Settings framed in a school's page may have no permissions API (Firefox): its own tab asks, at this section.
+      if (!native && typeof chrome.permissions?.request !== 'function') return GZ_SITE.elsewhere ? GZ_SITE.elsewhere(e.currentTarget) : hint(t("Glaze needs the browser's sign-in permission to connect."), true);
+      gdBusy = true;
+      try {
+        if (!native) {
+          const asked = chrome.permissions.request({ permissions: ['identity'] });
+          if (!await Promise.resolve(asked).catch(() => false)) return hint(t("Glaze needs the browser's sign-in permission to connect."), true);
+        }
+        let r = await gdOp('connect');
+        for (let n = 0; native && r.why === 'pending' && n < 40; n++) r = await gdOp('connect');
+        if (r.ok) { await gdLoad(); $('#gdrive-disconnect').focus(); return hint(t('Connected.')); }
+        hint(r.why === 'scope' ? t('Connect again and allow Google Drive access.') : r.why === 'cancel' ? '' : t("Google Drive didn't connect. Try again in a moment."), r.why !== 'cancel');
+      } finally { gdBusy = false; }
+    });
+    $('#gdrive-disconnect').addEventListener('click', async (e) => {
+      if (!e.isTrusted || gdBusy) return;
+      gdBusy = true;
+      try {
+        const r = await gdOp('disconnect');
+        if (!r.ok) return hint(t("Couldn't disconnect. Try again in a moment."), true);
+        await gdLoad();
+        $('#gdrive-connect').focus();
+        hint(r.had && !r.revoked ? t("Disconnected on this device. Google didn't confirm it removed Glaze's access: you can remove it at myaccount.google.com/connections.") : t('Disconnected.'), !!r.had && !r.revoked);
+      } finally { gdBusy = false; }
+    });
+    chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.google) gdLoad(); });
   }
 
   // Another surface changed something: read after our queued saves, and never apply a read older than an edit.

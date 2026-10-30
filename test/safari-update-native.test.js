@@ -54,6 +54,12 @@ test('DMG staging is repeatable and isolates Sparkle from the checked-in Mac/iOS
     const scheme = /static let start = "([a-z.-]+):\/\/start"/.exec(fs.readFileSync(path.join(root, 'safari/Glaze/Glaze Extension/GlazeAgentBridge.swift'), 'utf8'))[1];
     assert.equal(scheme, 'io.frostdev.glaze-agent');
     assert.deepEqual(info.CFBundleURLTypes[1], { CFBundleURLName: scheme, CFBundleURLSchemes: [scheme] });
+    // Google Drive's sign-in: the extension's handler opens the app at <appScheme>://signin (GlazeGoogle.swift), and the
+    // staged Info.plist, whose URL types the script replaces, keeps the scheme the app's own Info.plist declares.
+    const google = /static let appScheme = "([a-z.-]+)"/.exec(fs.readFileSync(path.join(root, 'safari/Glaze/Glaze Extension/GlazeGoogle.swift'), 'utf8'))[1];
+    assert.equal(google, 'io.frostdev.glaze-google');
+    assert.deepEqual(info.CFBundleURLTypes[2], { CFBundleURLName: google, CFBundleURLSchemes: [google] });
+    assert.equal(info.CFBundleURLTypes.length, 3);
     const GROUPS = 'com.apple.security.application-groups';
     const appEntitlements = plist(path.join(staged, 'Glaze/Release.entitlements')), extensionEntitlements = plist(path.join(staged, 'Glaze Extension/Release.entitlements'));
     assert.deepEqual([appEntitlements[GROUPS], appEntitlements['com.apple.security.app-sandbox']], [['22AAZFMTV8.io.frostdev.Glaze'], undefined]);

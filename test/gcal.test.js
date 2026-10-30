@@ -263,7 +263,7 @@ const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 // on: the build-time switch (lib/gcal.js ON) turned on in the worker's copy, as scripts/dev-gcal.sh does.
 const switched = (src, on) => (on ? src.replace('  const ON = false;\n', '  const ON = true;\n') : src);
 // failSet(patch): a storage write that fails, as a full disk or a quota does. identity.hold: what getAuthToken waits on.
-const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet = () => false } = {}) => {
+const worker = (mock, { on = true, drive = false, local = {}, sync = { enabled: true }, failSet = () => false } = {}) => {
   const store = { local, sync };
   // As chrome.storage: a read is served when it's asked (hooks.read runs after that, while the answer is on its way, as a
   // change landing then would), and every change is heard through onChanged.
@@ -288,8 +288,9 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
   const identity = {
     cleared: 0, removed: [],
     asked: 0, hold: null,
-    getAuthToken: async ({ interactive }) => {
+    getAuthToken: async ({ interactive, scopes }) => {
       assert.equal(interactive, false, 'the worker never prompts');
+      assert.deepEqual(scopes && [...scopes], [G.SCOPE], 'Calendar asks for its own scope only, never the manifest\'s list (Drive\'s are there too)'); // the worker's array is of the vm's realm
       identity.asked++;
       await identity.hold;
       return { token: 'tok-1', grantedScopes: [G.SCOPE] };
@@ -297,6 +298,7 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
     removeCachedAuthToken: async ({ token }) => { identity.removed.push(token); },
     clearAllCachedAuthTokens: async () => { identity.cleared++; },
   };
+  const permissions = { contains: async () => true, remove: async () => true };
   const context = vm.createContext({
     URL, URLSearchParams, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, AbortController, crypto: globalThis.crypto, atob, btoa, navigator: {},
     setTimeout: (f, ms) => setTimeout(f, Math.min(ms, 1)), clearTimeout,
@@ -305,13 +307,13 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
       assert.ok(url.startsWith(`${G.API}/`) || url === G.REVOKE, `only Google's two addresses: ${url}`);
       return fetch(url.replace(G.API, mock.api).replace(G.REVOKE, mock.revoke), init);
     },
-    importScripts: (...files) => { for (const f of files) vm.runInContext(switched(read(`lib/${f}`), on && f === 'gcal.js'), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(switched(read(`lib/${f}`), (on && f === 'gcal.js') || (drive && f === 'google.js')), context); },
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         onInstalled: { addListener: (f) => (listeners.installed ||= []).push(f) }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area('local', store.local), sync: area('sync', store.sync), onChanged: { addListener: (f) => heard.push(f) } },
       identity,
-      permissions: { contains: async () => true }, // the student granted every host (Chrome)
+      permissions, // the student granted every host (Chrome)
       tabs: { query: async () => [] },
       scripting: {
         getRegisteredContentScripts: async () => registered,
@@ -324,7 +326,7 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
   const send = (m, sender) => new Promise((res) => { for (const f of listeners) f(structuredClone(m), sender, (r) => res(structuredClone(r))); });
   // change(): a change made elsewhere (the popup, the editor), heard as Chrome tells it.
   const change = (name, patch) => { const c = Object.fromEntries(Object.keys(patch).map((k) => [k, { oldValue: store[name][k], newValue: patch[k] }])); Object.assign(store[name], patch); fire(name, c); };
-  return { store, identity, asked, send, hooks, change, registered: () => registered, install: () => { for (const f of listeners.installed) f(); } };
+  return { store, identity, permissions, asked, send, hooks, change, registered: () => registered, install: () => { for (const f of listeners.installed) f(); } };
 };
 // What the page sends with its batch (lib/calexport.js consent), worked out from the worker's storage as it is now.
 const D = require('../defaults.js');
@@ -397,6 +399,73 @@ withMock('worker: disconnect deletes the calendar when asked, revokes the grant,
   assert.equal(mock.calendars.size, 1, 'kept, as chosen');
 });
 
+withMock('worker: Calendar\'s disconnect while Drive still holds the shared grant drops only Calendar\'s state: no revoke, Chrome\'s cache and identity stay', async (mock) => {
+  const w = worker(mock);
+  await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
+  const cal = w.store.local.gcal.cal;
+  w.store.local.google = { email: 'student@school.edu', flow: 'chrome', at: NOW }; // Drive connected (lib/google.js)
+  assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'disconnect', drop: true }, EDITOR), { ok: true, revoked: false, had: false, shared: true });
+  assert.ok(!mock.calendars.has(cal), 'the calendar still goes, as chosen');
+  assert.deepEqual([mock.revoked, w.identity.cleared, w.identity.removed], [[], 0, []]);
+  assert.ok(!('gcal' in w.store.local) && !('gcalSync' in w.store.local));
+  assert.deepEqual(w.store.local.google, { email: 'student@school.edu', flow: 'chrome', at: NOW }, 'Drive\'s record stays');
+});
+
+withMock('worker: Calendar\'s and Drive\'s Disconnects at once, in either order: one of them is the last and cleans up, never both "shared"', async (mock) => {
+  for (const first of ['gcal', 'google']) {
+    const w = worker(mock, { drive: true });
+    mock.tokens.add('tok-1');
+    await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
+    w.store.local.google = { email: 'student@school.edu', sub: '1', flow: 'web', at: NOW }; // Drive connected too
+    const cal = () => w.send({ type: 'glaze:gcal', op: 'disconnect' }, EDITOR), drive = () => w.send({ type: 'glaze:google', op: 'disconnect' }, EDITOR);
+    const [c, d] = first === 'gcal' ? await Promise.all([cal(), drive()]) : (([x, y]) => [y, x])(await Promise.all([drive(), cal()]));
+    assert.ok(c.ok && d.ok, JSON.stringify([c, d]));
+    assert.ok(!(c.shared === true && d.had === false), `${first} first: one of them cleans up (${JSON.stringify([c, d])})`);
+    assert.ok(!('gcal' in w.store.local) && !('google' in w.store.local));
+  }
+});
+
+test('Calendar releases identity before replying so Settings cannot remove a later Drive connection permission', async () => {
+  const w = worker({ api: G.API, revoke: G.REVOKE }, { local: { gcal: { gen: 'g', cal: 'calendar', last: {} } } });
+  w.identity.getAuthToken = async () => { throw new Error('signed out'); };
+  let permissionHeld = true, close, removed = 0;
+  w.permissions.remove = async () => { removed++; permissionHeld = false; return true; };
+  const nodes = {
+    '#gcal-bye': { returnValue: 'ok', addEventListener: (_, f) => { close = f; } },
+    '#gcal-drop': { checked: false }, '#gcal-connect': { focus() {} },
+  };
+  const source = read('options.js');
+  const start = source.indexOf("$('#gcal-bye').addEventListener('close'");
+  const end = source.indexOf('chrome.storage.onChanged.addListener', start);
+  vm.runInNewContext(source.slice(start, end), {
+    $: (s) => nodes[s], chrome: { permissions: w.permissions }, t: (s) => s, hint() {}, gcalRender() {},
+    gcalOp: async (m) => {
+      const result = await w.send({ type: 'glaze:gcal', ...m }, EDITOR);
+      // A queued Drive Connect completes before the reply reaches Settings.
+      permissionHeld = true;
+      w.store.local.google = { email: 'student@school.edu', sub: '1', flow: 'chrome', at: NOW };
+      return result;
+    },
+  });
+  await close();
+  assert.equal(removed, 1, 'the worker releases the old permission');
+  assert.equal(permissionHeld, true, 'the old Calendar reply must not remove Drive\'s new permission');
+});
+
+test('Settings\' Calendar sign-in asks Chrome for Calendar\'s scope only', () => {
+  const src = read('options.js');
+  const sign = src.slice(src.indexOf('const gcalSignIn = async () => {'), src.indexOf('// Only a person\'s click or key, while the page has their activation'));
+  assert.match(sign, /chrome\.identity\.getAuthToken\(\{ interactive: true, scopes: \[GZ_GCAL\.SCOPE\] \}\)/);
+  assert.match(sign, /const scope = GZ_GCAL\.SCOPE;/);
+  assert.doesNotMatch(sign, /getManifest\(\)\.oauth2/);
+});
+
+test('Settings leaves Calendar identity cleanup to the worker grant queue', () => {
+  const src = read('options.js');
+  const bye = src.slice(src.indexOf("$('#gcal-bye').addEventListener('close'"), src.indexOf("chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.gcal)"));
+  assert.doesNotMatch(bye, /permissions\.remove/);
+});
+
 // ---- the build-time switch (lib/gcal.js ON): off in the repo and the store package until Google verifies the app ----
 test('switch off (the repo as it is): no settings section, no sync, no page script, even with a connection left from a dev build', async () => {
   assert.equal(G.ON, false, 'lib/gcal.js ON stays false until Google verifies the app');
@@ -437,8 +506,11 @@ test('the store package leaves Google sync out while the switch is off; scripts/
     const repo = require('../manifest.json');
     const zip = path.join(dir, 'dist', `glaze-v${repo.version}.zip`);
     const packed = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json']));
-    const { oauth2, optional_permissions: optional, ...rest } = repo, store = optional.filter((p) => p !== 'identity');
-    assert.deepEqual(packed, store.length ? { ...rest, optional_permissions: store } : rest, 'the store manifest: the same, without oauth2 and the optional identity permission');
+    const { oauth2 } = repo;
+    // Calendar's scope stays out while its switch is off; what Drive needs (scripts/oauth-manifest.js) goes in.
+    const { oauth2: _o, optional_permissions: optional, ...rest } = repo, store = optional.filter((p) => p !== 'identity');
+    assert.deepEqual(packed, store.length ? { ...rest, optional_permissions: store } : rest, 'the store manifest: the same, without oauth2 and identity while Calendar and Drive are both switched off');
+    assert.ok(!(packed.oauth2?.scopes || []).includes(G.SCOPE), 'no Calendar scope while the switch is off');
     assert.match(execFileSync('unzip', ['-p', zip, 'lib/gcal.js']).toString(), /\n {2}const ON = false;\n/);
     const dev = JSON.parse(fs.readFileSync(path.join(dir, 'dev/manifest.json')));
     assert.deepEqual([dev.oauth2, dev.optional_permissions, dev.key], [oauth2, repo.optional_permissions, fs.readFileSync(keyFile, 'utf8')]);

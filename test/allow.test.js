@@ -291,7 +291,10 @@ test('taken back: a site\'s registration goes while its host isn\'t held, its ap
   // Firefox lets a student take back a built-in host too: Glaze stops asking its pages' frames for nothing, and removes nothing.
   await w.revoke('https://*.instructure.com/*');
   assert.deepEqual(w.removedGrants, []);
-  assert.doesNotMatch(read('lib/background.js'), /permissions\.remove\(/, 'the worker never hands a grant back');
+  // Sites' grants: the worker never hands one back. Its one removal is Google's identity API permission, released when
+  // Calendar's Disconnect is the last holder of their shared grant (inside the grant queue, so a later Connect keeps it).
+  const removals = [...read('lib/background.js').matchAll(/permissions\.remove\(([^)]*)\)/g)].map((m) => m[1].replace(/\s+/g, ' ').trim());
+  assert.deepEqual(removals, ["{ permissions: ['identity'] }"], 'the worker never hands a site\'s grant back');
 });
 
 test('a listed site registers only while its host is held (every grant is checked, the built-in ones too); Safari\'s <all_urls> holds them all', async () => {

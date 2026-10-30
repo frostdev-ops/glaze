@@ -1,6 +1,6 @@
 # Privacy summary
 
-_Last updated: 2026-10-29_
+_Last updated: 2026-10-30_
 
 A plain-language summary. The full policy is [PRIVACY.md](../PRIVACY.md).
 
@@ -22,7 +22,9 @@ Backups (**Back up…**, and older settings files and notes ZIPs) include share 
 [Glaze Writer](../PRIVACY.md#what-glaze-stores) (Blackboard Ultra) keeps your papers and the documents on its Documents
 page, their versions and your format presets, your personal dictionary and the sources you save in `chrome.storage.local`
 on this device, with no server; **Back up…** includes them. Documents' Trash keeps a deleted paper or document for 30
-days, then deletes it. The Documents page loads a web font your Look uses from Google Fonts or jsDelivr, as Settings does. Discussion,
+days, then deletes it. Google Drive is unavailable in this build while Google verification is pending; in a future
+build that enables it, a document goes to your own Drive only when you connect Drive and choose Save to Drive or Sync
+Documents. The Documents page loads a web font your Look uses from Google Fonts or jsDelivr, as Settings does. Discussion,
 message and test boxes keep their drafts through Back up what you type when it is on, as Blackboard's own editor does. Spelling and
 grammar are checked on your device. Writer reads the prompt, thread and rubric from your own Blackboard site, read-only,
 and sends nothing to Blackboard itself: your words reach it only when you press Blackboard's own Post, Reply, Send or
@@ -91,6 +93,7 @@ the Looks gallery is a website you visit yourself; Glaze asks it only for the on
 Better To Do's own tasks and plans stay on your device too, with a two-minute copy of your Canvas planner items or Blackboard due items.
 A calendar file you export (.ics) is made on your device and saved by your browser; it holds your course and assignment names, and Glaze keeps no copy.
 Google Calendar sync is unavailable in this build while Google verification is pending. In a future build that enables it, optional sync would send the same events to the Glaze calendar in your Google account and read changes there, directly between your browser and Google (`www.googleapis.com`, and `oauth2.googleapis.com` to revoke access on Disconnect); Chrome would keep the sign-in. Calendar file export remains available without connecting Google.
+Google Drive is unavailable in this build while Google verification is pending. In a future build that enables it, Connect in Settings asks Google for `drive.file`, `openid` and `email`: Glaze can reach only the Drive files it creates or the ones you pick, and the email shows which account is connected. Open from Drive, Save to Drive, Sync Documents (off by default; a Glaze folder in your Drive) and Submit from Drive go directly between your browser and Google (`accounts.google.com`, `openidconnect.googleapis.com`, `www.googleapis.com`, and `oauth2.googleapis.com` to revoke access on Disconnect). To pick a file, Glaze opens a static page, `https://frostdev.io/glaze/drive-picker/` or its copy `https://frostdev-ops.github.io/glaze-drive-picker/`, that loads Google's Picker; the token reaches it in the address's fragment, which browsers don't send to servers, so those hosts see only an ordinary page request. Glaze stores the connected account's email, sign-in flow and time, never the token, and nothing goes to Frostdev. Glaze's use of Google data adheres to the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements.
 Dashboard notes, the widgets' layout, the timer and the music link you type stay on your device. So do the notes app's notes, folders, pictures and attachments, in Glaze's own storage (not the school page's); its Canvas link picker reads your own Canvas site, and only a link and title are kept. A music widget contacts its
 player (Spotify, YouTube through youtube-nocookie.com, Apple Music) only after you press Load player.
 

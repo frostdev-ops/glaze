@@ -19,6 +19,12 @@
 		3B8EDA8D307C30D500B0DD77 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8EDA8C307C30D500B0DD77 /* SafariWebExtensionHandler.swift */; };
 		3B8EDF02307C30D500B0DD77 /* GlazeAI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8EDF01307C30D500B0DD77 /* GlazeAI.swift */; };
 		3B8EDF03307C30D500B0DD77 /* GlazeAI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8EDF01307C30D500B0DD77 /* GlazeAI.swift */; };
+		E1A0000000000000000000B1 /* GlazeGoogle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A0000000000000000000A1 /* GlazeGoogle.swift */; };
+		E1A0000000000000000000B2 /* GlazeGoogle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A0000000000000000000A1 /* GlazeGoogle.swift */; };
+		E1A0000000000000000000B3 /* GlazeGoogle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A0000000000000000000A1 /* GlazeGoogle.swift */; };
+		E1A0000000000000000000B4 /* GlazeGoogle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A0000000000000000000A1 /* GlazeGoogle.swift */; };
+		E1A0000000000000000000B5 /* GlazeGoogleSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A0000000000000000000A2 /* GlazeGoogleSignIn.swift */; };
+		E1A0000000000000000000B6 /* GlazeGoogleSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A0000000000000000000A2 /* GlazeGoogleSignIn.swift */; };
 		3B8EDAA9307C30D500B0DD77 /* preview.html in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA99307C30D500B0DD77 /* preview.html */; };
 		3B8EDAAA307C30D500B0DD77 /* ui.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9A307C30D500B0DD77 /* ui.js */; };
 		3B8EDAAB307C30D500B0DD77 /* theme.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9B307C30D500B0DD77 /* theme.css */; };
@@ -216,6 +222,8 @@
 		3B8EDA87307C30D500B0DD77 /* Glaze Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Glaze Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B8EDA8C307C30D500B0DD77 /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
 		3B8EDF01307C30D500B0DD77 /* GlazeAI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlazeAI.swift; sourceTree = "<group>"; };
+		E1A0000000000000000000A1 /* GlazeGoogle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlazeGoogle.swift; sourceTree = "<group>"; };
+		E1A0000000000000000000A2 /* GlazeGoogleSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlazeGoogleSignIn.swift; sourceTree = "<group>"; };
 		3B8EDA8E307C30D500B0DD77 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		3B8EDA99307C30D500B0DD77 /* preview.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = preview.html; path = Resources/preview.html; sourceTree = "<group>"; };
 		3B8EDA9A307C30D500B0DD77 /* ui.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = ui.js; path = Resources/ui.js; sourceTree = "<group>"; };
@@ -342,6 +350,7 @@
 			children = (
 				3B8EDA6F307C30D300B0DD77 /* AppDelegate.swift */,
 				3B8EDA7B307C30D300B0DD77 /* ViewController.swift */,
+				E1A0000000000000000000A2 /* GlazeGoogleSignIn.swift */,
 				3B8EDA7D307C30D300B0DD77 /* Main.storyboard */,
 				3B8EDA80307C30D500B0DD77 /* Assets.xcassets */,
 				3B8EDA82307C30D500B0DD77 /* Info.plist */,
@@ -367,6 +376,7 @@
 				3B8EDA98307C30D500B0DD77 /* Resources */,
 				3B8EDA8C307C30D500B0DD77 /* SafariWebExtensionHandler.swift */,
 				3B8EDF01307C30D500B0DD77 /* GlazeAI.swift */,
+				E1A0000000000000000000A1 /* GlazeGoogle.swift */,
 				3B8EDA8E307C30D500B0DD77 /* Info.plist */,
 			);
 			path = "Glaze Extension";
@@ -787,6 +797,8 @@
 			files = (
 				3B8EDA7C307C30D300B0DD77 /* ViewController.swift in Sources */,
 				3B8EDA70307C30D300B0DD77 /* AppDelegate.swift in Sources */,
+				E1A0000000000000000000B3 /* GlazeGoogle.swift in Sources */,
+				E1A0000000000000000000B5 /* GlazeGoogleSignIn.swift in Sources */,
 			);
 		};
 		3B8EDA83307C30D500B0DD77 /* Sources */ = {
@@ -794,12 +806,15 @@
 			files = (
 				3B8EDA8D307C30D500B0DD77 /* SafariWebExtensionHandler.swift in Sources */,
 				3B8EDF02307C30D500B0DD77 /* GlazeAI.swift in Sources */,
+				E1A0000000000000000000B1 /* GlazeGoogle.swift in Sources */,
 			);
 		};
 		3B8EDC0B307C30D500B0DD77 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
 				3B8EDC1A307C30D500B0DD77 /* GlazeApp.swift in Sources */,
+				E1A0000000000000000000B4 /* GlazeGoogle.swift in Sources */,
+				E1A0000000000000000000B6 /* GlazeGoogleSignIn.swift in Sources */,
 			);
 		};
 		3B8EDC0F307C30D500B0DD77 /* Sources */ = {
@@ -807,6 +822,7 @@
 			files = (
 				3B8EDC22307C30D500B0DD77 /* SafariWebExtensionHandler.swift in Sources */,
 				3B8EDF03307C30D500B0DD77 /* GlazeAI.swift in Sources */,
+				E1A0000000000000000000B2 /* GlazeGoogle.swift in Sources */,
 			);
 		};
 /* End PBXSourcesBuildPhase section */
@@ -1119,6 +1135,7 @@
 		3B8EDC15307C30D500B0DD77 /* Debug configuration for PBXNativeTarget "Glaze iOS" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Glaze iOS/Glaze iOS.entitlements";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 4.0.0;
@@ -1153,6 +1170,7 @@
 		3B8EDC16307C30D500B0DD77 /* Release configuration for PBXNativeTarget "Glaze iOS" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Glaze iOS/Glaze iOS.entitlements";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 4.0.0;
@@ -1187,6 +1205,7 @@
 		3B8EDC18307C30D500B0DD77 /* Debug configuration for PBXNativeTarget "Glaze iOS Extension" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Glaze iOS/Glaze iOS Extension.entitlements";
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 4.0.0;
@@ -1218,6 +1237,7 @@
 		3B8EDC19307C30D500B0DD77 /* Release configuration for PBXNativeTarget "Glaze iOS Extension" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Glaze iOS/Glaze iOS Extension.entitlements";
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 4.0.0;

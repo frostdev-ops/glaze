@@ -3122,9 +3122,10 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 const gcalEnv = {
   fetch: (url, init) => fetch(url, init),
   sleep: (ms) => new Promise((res) => setTimeout(res, ms)),
-  // Chrome's cached token, never a prompt (the editor's click asks); none without the calendar scope.
+  // Chrome's cached token, never a prompt (the editor's click asks); none without the calendar scope. Calendar's scope
+  // alone: the client is shared with Google Drive, whose scopes the manifest may list too.
   token: async () => {
-    const r = await chrome.identity.getAuthToken({ interactive: false });
+    const r = await chrome.identity.getAuthToken({ interactive: false, scopes: [GZ_GCAL.SCOPE] });
     if (Array.isArray(r?.grantedScopes) && !r.grantedScopes.includes(GZ_GCAL.SCOPE)) throw new GZ_GCAL.Fail('auth');
     return typeof r === 'string' ? r : r?.token;
   },
@@ -3141,6 +3142,10 @@ chrome.storage.onChanged.addListener((c, area) => {
   if (GCAL_WATCH[area]?.some((k) => k in c)) for (const run of gcalRuns) run.heard = true;
 });
 const gcalTurn = (f) => { const p = gcalQueue.then(f); gcalQueue = p.catch(() => {}); return p; };
+// Calendar and Drive share one Google grant (one client): their Connects and Disconnects take turns here, so each Disconnect
+// sees whether the other still holds the grant, and the last one revokes it and gives identity back.
+let grantQueue = Promise.resolve();
+const grantTurn = (f) => { const p = grantQueue.then(f); grantQueue = p.catch(() => {}); return p; };
 const gcalState = async () => (await chrome.storage.local.get('gcal')).gcal;
 const gcalOps = {
   connect: async (m) => {
@@ -3157,13 +3162,22 @@ const gcalOps = {
     return { ok: !!g?.cal };
   },
   // drop: also delete the Glaze calendar; if that fails, nothing changes. Then the grant is revoked, Chrome forgets its
-  // tokens and Glaze its state. → revoked: whether Google confirmed (false with no token to revoke: had).
+  // tokens and Glaze its state. → revoked: whether Google confirmed (false with no token to revoke: had). While Google Drive
+  // is connected (lib/google.js) it holds the same grant, and a revocation would end its access too: only Calendar's state
+  // goes, and shared tells Settings to keep the identity permission.
   disconnect: async (m) => {
     const g = await gcalState();
     if (m.drop === true && g?.cal) await GZ_GCAL.remove(gcalEnv, g.cal);
+    if (typeof (await chrome.storage.local.get('google')).google?.email === 'string') {
+      await chrome.storage.local.remove(['gcal', 'gcalSync']);
+      serial(ensure);
+      return { ok: true, revoked: false, had: false, shared: true };
+    }
     const token = await gcalEnv.token().catch(() => null);
     const revoked = !!token && await GZ_GCAL.revoke(gcalEnv, token);
     await Promise.resolve().then(() => chrome.identity.clearAllCachedAuthTokens()).catch(() => {});
+    // Release inside grantTurn, before another Connect can acquire identity. A delayed Settings reply owns no grant.
+    await Promise.resolve().then(() => chrome.permissions.remove({ permissions: ['identity'] })).catch(() => {});
     await chrome.storage.local.remove(['gcal', 'gcalSync']);
     serial(ensure);
     return { ok: true, revoked, had: !!token };
@@ -3245,8 +3259,41 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
         || typeof m.consent !== 'string' || m.consent.length > 4000 || typeof m.whole !== 'boolean') return { ok: false, error: 'sender' };
     } else if (!fromEditor(s)) return { ok: false, error: 'sender' };
     else if (m.op === 'disconnect') { gcalEpoch++; gcalStop?.abort(); }
-    return gcalTurn(() => gcalOps[m.op](m, epoch));
+    return m.op === 'connect' || m.op === 'disconnect' ? grantTurn(() => gcalTurn(() => gcalOps[m.op](m, epoch))) : gcalTurn(() => gcalOps[m.op](m, epoch));
   })().then(reply, (e) => reply({ ok: false, error: e?.code || 'network' }));
+  return true;
+});
+
+// Google sign-in for Drive (lib/google.js): Settings' Connect, its account and Disconnect, and the Picker for Glaze's own
+// pages. Loaded the first time one asks; nothing runs for someone who never connects. The token stays here.
+globalThis.addEventListener?.('install', () => importScripts('oauth.js', 'google-config.js', 'google.js'));
+let google = null;
+const googleLib = () => { if (!globalThis.GZ_GOOGLE) importScripts('oauth.js', 'google-config.js', 'google.js'); return GZ_GOOGLE; };
+const openGoogle = () => {
+  if (!google) {
+    googleLib();
+    const protocol = new URL(chrome.runtime.getURL('')).protocol;
+    google = GZ_GOOGLE.create({
+      config: GZ_GOOGLE_CONFIG, flow: GZ_GOOGLE.flowOf({ protocol, brands: navigator.userAgentData?.brands }), firefox: protocol === 'moz-extension:',
+      identity: () => chrome.identity, permissions: chrome.permissions, manifest: () => chrome.runtime.getManifest(), storage: chrome.storage.local,
+      fetch: (u, init) => fetch(u, init),
+      native: (message) => chrome.runtime.sendNativeMessage(GZ_GOOGLE.APP, message),
+      // iOS: the sign-in tab the student taps (the worker opens it, never a framed page).
+      open: (url) => chrome.tabs.create({ url }),
+      // Calendar sync signs in with the same permission and Chrome's same cache: while it's connected, Disconnect leaves both.
+      keep: async () => GZ_GCAL.ON && !!(await chrome.storage.local.get('gcal')).gcal?.cal,
+    });
+  }
+  return google;
+};
+const googlePage = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && ['options.html', 'papers.html', 'writer.html'].some((p) => s.url.split(/[?#]/)[0] === chrome.runtime.getURL(p));
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:google' || !['status', 'connect', 'disconnect', 'pick'].includes(m.op)) return;
+  if (!(m.op === 'pick' ? googlePage(s) : fromEditor(s))) { reply({ ok: false, why: 'sender' }); return; }
+  googleLib();
+  if (!GZ_GOOGLE.ON) { reply({ ok: false, why: 'off' }); return; } // the build-time switch (lib/google.js)
+  const run = () => openGoogle()[m.op]();
+  Promise.resolve().then(() => (m.op === 'connect' || m.op === 'disconnect' ? grantTurn(run) : run())).then(reply, () => reply({ ok: false, why: 'network' }));
   return true;
 });
 
