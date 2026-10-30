@@ -260,8 +260,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-// on: the build-time switch (lib/gcal.js ON) turned on in the worker's copy, as scripts/dev-gcal.sh does.
-const switched = (src, on) => (on ? src.replace('  const ON = false;\n', '  const ON = true;\n') : src);
+// on: the build-time switch (lib/gcal.js ON) as the worker's copy has it; off is a build that leaves Google sync out.
+const SWITCH = /\n {2}const ON = (?:true|false);\n/;
+const switched = (src, on) => { assert.match(src, SWITCH); return src.replace(SWITCH, `\n  const ON = ${on};\n`); };
 // failSet(patch): a storage write that fails, as a full disk or a quota does. identity.hold: what getAuthToken waits on.
 const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet = () => false } = {}) => {
   const store = { local, sync };
@@ -305,7 +306,7 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
       assert.ok(url.startsWith(`${G.API}/`) || url === G.REVOKE, `only Google's two addresses: ${url}`);
       return fetch(url.replace(G.API, mock.api).replace(G.REVOKE, mock.revoke), init);
     },
-    importScripts: (...files) => { for (const f of files) vm.runInContext(switched(read(`lib/${f}`), on && f === 'gcal.js'), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(f === 'gcal.js' ? switched(read(`lib/${f}`), on) : read(`lib/${f}`), context); },
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         onInstalled: { addListener: (f) => (listeners.installed ||= []).push(f) }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
@@ -397,9 +398,9 @@ withMock('worker: disconnect deletes the calendar when asked, revokes the grant,
   assert.equal(mock.calendars.size, 1, 'kept, as chosen');
 });
 
-// ---- the build-time switch (lib/gcal.js ON): off in the repo and the store package until Google verifies the app ----
-test('switch off (the repo as it is): no settings section, no sync, no page script, even with a connection left from a dev build', async () => {
-  assert.equal(G.ON, false, 'lib/gcal.js ON stays false until Google verifies the app');
+// ---- the build-time switch (lib/gcal.js ON): on in the repo and the Chrome package since 4.0.1 ----
+test('switch off (a build that leaves it out): no settings section, no sync, no page script, even with a connection left', async () => {
+  assert.equal(G.ON, true, 'lib/gcal.js ON is on since 4.0.1');
   // The section is hidden in the page itself, and only the switch shows it; the editor loads the switch.
   assert.match(read('options.html'), /<div class="group" id="gcal" hidden>/);
   assert.match(read('options.html'), /<script src="lib\/gcal\.js"><\/script>[\s\S]*<script src="options\.js"><\/script>/);
@@ -425,7 +426,7 @@ test('switch off (the repo as it is): no settings section, no sync, no page scri
   } finally { await mock.stop(); }
 });
 
-test('the store package leaves Google sync out while the switch is off; scripts/dev-gcal.sh turns it on in its copy only', () => {
+test('the Chrome package carries Google sync; scripts/dev-gcal.sh adds only the store\'s key, in its copy', () => {
   const { execFileSync } = require('node:child_process');
   const os = require('node:os');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-gcal-pkg-'));
@@ -437,13 +438,13 @@ test('the store package leaves Google sync out while the switch is off; scripts/
     const repo = require('../manifest.json');
     const zip = path.join(dir, 'dist', `glaze-v${repo.version}.zip`);
     const packed = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json']));
-    const { oauth2, optional_permissions: optional, ...rest } = repo, store = optional.filter((p) => p !== 'identity');
-    assert.deepEqual(packed, store.length ? { ...rest, optional_permissions: store } : rest, 'the store manifest: the same, without oauth2 and the optional identity permission');
-    assert.match(execFileSync('unzip', ['-p', zip, 'lib/gcal.js']).toString(), /\n {2}const ON = false;\n/);
+    assert.deepEqual(packed, repo, 'the store manifest is the repo\'s, oauth2 client and optional identity permission included');
+    assert.ok(packed.oauth2.scopes.length === 1 && packed.oauth2.scopes[0] === G.SCOPE && packed.optional_permissions.includes('identity'));
+    assert.ok(!('key' in packed), 'the store adds its own key');
+    assert.match(execFileSync('unzip', ['-p', zip, 'lib/gcal.js']).toString(), /\n {2}const ON = true;\n/);
     const dev = JSON.parse(fs.readFileSync(path.join(dir, 'dev/manifest.json')));
-    assert.deepEqual([dev.oauth2, dev.optional_permissions, dev.key], [oauth2, repo.optional_permissions, fs.readFileSync(keyFile, 'utf8')]);
-    assert.match(fs.readFileSync(path.join(dir, 'dev/lib/gcal.js'), 'utf8'), /\n {2}const ON = true;\n/);
-    assert.equal(G.ON, false, "the repo's switch is untouched");
+    assert.deepEqual(dev, { ...repo, key: fs.readFileSync(keyFile, 'utf8') }, 'the dev copy: the store manifest and the key');
+    assert.equal(fs.readFileSync(path.join(dir, 'dev/lib/gcal.js'), 'utf8'), read('lib/gcal.js'));
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
