@@ -277,7 +277,7 @@ test('thumbnail honours lowered byte limits, caps every result and releases canv
   page.render = () => ({ promise: Promise.reject(Error('render failed')) });
   await assert.rejects(drawn.thumbnail(page), /render failed/);
   assert.equal(canvases.at(-1).width, 0, 'release on render failure');
-  await assert.rejects(drawn.thumbnail(page, NaN), RangeError);
+  await assert.rejects(drawn.thumbnail(page, NaN), { name: 'RangeError' });
   assert.equal(await pdf.text({ getTextContent: async () => ({ items: [{ str: 'hello' }] }) }, { limits: { text: 3 } }), 'hel');
 });
 
