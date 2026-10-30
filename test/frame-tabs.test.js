@@ -20,7 +20,9 @@ const tags = (page) => [...read(page).matchAll(/<script\b[^>]*\bsrc\s*=\s*["']([
 // or 'media.js' from the root or its folder.
 const named = (file, src) => [...src.matchAll(/['"`]([\w./-]+\.m?js)(?:[?#][^'"`]*)?['"`]/g)]
   .flatMap((m) => (/^\.\.?\//.test(m[1]) ? [] : [m[1]]).concat(from(path.posix.dirname(file), m[1]))).filter(exists);
-const REACH = /\b(?:chrome|browser)\s*(?:\?\.|\.)\s*(tabs|windows)\b|\b(?:chrome|browser)\s*(?:\?\.)?\s*\[\s*['"`](tabs|windows)['"`]\s*\]/g;
+// Between tokens: spaces, line breaks and comments.
+const _ = String.raw`(?:\s|/\*[\s\S]*?\*/|//[^\n]*\n)*`;
+const REACH = new RegExp(String.raw`\b(?:chrome|browser)${_}(?:\?\.|\.)${_}(tabs|windows)\b|\b(?:chrome|browser)${_}(?:\?\.)?${_}\[${_}['"\`](tabs|windows)['"\`]${_}\]`, 'g');
 
 const reached = (page) => {
   const seen = new Set(), found = [];
@@ -52,7 +54,8 @@ test('no page a site can frame reaches tabs or windows itself', () => {
 
 test('the scan sees each way of writing the call, and each way of naming a script', () => {
   for (const code of ['chrome.tabs.create({})', 'chrome?.tabs.create({})', 'chrome.tabs?.create', 'browser.windows.getAll()', "chrome['tabs'].query({})",
-    'chrome\n  .tabs\n  .create({})', 'const marker = "//"; chrome.tabs.create({});', '`${x}` /* */ chrome.tabs.create({})']) {
+    'chrome\n  .tabs\n  .create({})', 'const marker = "//"; chrome.tabs.create({});', '`${x}` /* */ chrome.tabs.create({})',
+    'chrome/* comment */.tabs.create({});', "chrome['tabs' /* comment */].create({});", 'chrome // c\n  .tabs.create({})']) {
     assert.equal([...code.matchAll(REACH)].length, 1, code);
   }
   assert.deepEqual(named('lib/writer-papers.js', "['./writer-docx.js?v=1', 'lib/pdfjs/pdf.mjs#x', 'nowhere.js']"), ['lib/writer-docx.js', 'lib/pdfjs/pdf.mjs']);
