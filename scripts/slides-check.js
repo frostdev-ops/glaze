@@ -123,6 +123,18 @@ const fixture = () => {
     check(top.title === 'Cell Biology week 3' && top.back === 'papers.html' && top.mode === 'slides' && top.state === '10 slides', `the top bar: Documents, the title, the count (${JSON.stringify(top)})`);
     const rail = await until(() => page.evaluate(() => { const b = [...document.querySelectorAll('#gs-rail [data-slide]')]; return b.slice(0, 3).every((x) => x.querySelector('.gs-slide')) ? b.map((x) => [x.getAttribute('aria-label'), x.hasAttribute('data-hidden')]) : null; }), 'rail thumbnails');
     check(rail[0][0] === 'Slide 1' && rail[6][0] === 'Slide 7 (Hidden)' && rail[6][1] && !rail[5][1], `the rail names each slide, the hidden one marked (${JSON.stringify(rail.slice(5, 8))})`);
+    const railA11y = await page.evaluate(() => ({
+      role: document.querySelector('#gs-rail [role="tablist"]')?.getAttribute('aria-orientation'),
+      tabs: document.querySelectorAll('#gs-rail [role="tab"]').length,
+      stops: [...document.querySelectorAll('#gs-rail button')].filter((b) => b.tabIndex === 0).map((b) => b.dataset.slide),
+      label: document.getElementById('gs-canvas').getAttribute('aria-labelledby'),
+    }));
+    check(railA11y.role === 'vertical' && railA11y.tabs === 10 && railA11y.stops.join() === '0' && railA11y.label === 'gs-tab-0', `rail is a labelled tablist with one tab stop (${JSON.stringify(railA11y)})`);
+    await page.focus('#gs-rail [data-slide="0"]');
+    await page.keyboard.press('ArrowDown');
+    check(await page.evaluate(() => document.activeElement.id === 'gs-tab-1' && document.activeElement.getAttribute('aria-selected') === 'true'), 'rail arrows move focus with the selected slide');
+    await page.keyboard.press('Home');
+    await page.focus('#gs-canvas');
     // The slide is as authored under a dark Look; the bar around it is the Look's.
     const lum = (c) => { const m = c.match(/[\d.]+/g).map(Number); return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
     const colours = await page.evaluate(() => ({ dark: document.documentElement.hasAttribute('data-dark'), slide: document.querySelector('#gs-canvas .gs-slide').style.backgroundColor, bar: getComputedStyle(document.querySelector('.gp-top')).backgroundColor, ground: getComputedStyle(document.getElementById('gs-canvas')).backgroundColor }));
