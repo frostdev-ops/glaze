@@ -514,3 +514,23 @@ test('Enter and Tab after a cross-sheet reference move from the formula cell, re
     await f.view.dispose();
   }
 });
+
+test('pointing at the same cross-sheet reference still returns to the formula cell without adding undo', async () => {
+  for (const [key, want] of [['Enter', 'D6'], ['Tab', 'E5'], ['save', 'D5']]) {
+    const wb = M.workbook(); wb.sheets.push(M.sheet('Sheet2', 2)); wb.active = 1;
+    wb.sheets[1].rows.set(4, new Map([[3, { t: 'n', v: 0, f: 'Sheet1!A1' }]]));
+    const f = frame({ wb });
+    f.el('gx-name').value = 'D5'; f.fire(f.el('gx-name'), 'keydown', { key: 'Enter' });
+    f.type('='); f.el('gx-edit').setSelectionRange(1, 1);
+    f.fire(f.el('gx-tab-1'), 'click');
+    f.fire(f.doc.querySelector('.gx-scroll'), 'pointerdown', { button: 0, clientX: 60, clientY: 35, pointerId: 1 });
+    f.fire(f.doc.querySelector('.gx-scroll'), 'pointerup', { pointerId: 1 });
+    assert.equal(f.el('gx-formula').value, '=Sheet1!A1');
+    if (key === 'save') assert.equal(await f.view.save(), true); else f.key(key);
+    assert.equal(f.el('gx-tab-2').getAttribute('aria-selected'), 'true', 'an unchanged formula also returns home');
+    assert.equal(f.el('gx-name').value, want);
+    assert.equal(f.el('gx-undo').disabled, true, 'no undo entry when the formula did not change');
+    assert.equal(await f.view.save(), true);
+    await f.view.dispose();
+  }
+});
