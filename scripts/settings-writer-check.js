@@ -171,17 +171,22 @@ async function pass(scheme) {
       assert.deepEqual(errors, []);
     });
 
-    // A paper whose key never came (writer-paper.js keeps it under a stand-in) is the student's too: Clear all takes it.
+    // A paper whose key never came (writer-paper.js keeps it under a stand-in) is the student's too, and a document in
+    // Trash: Clear all takes both, and its question counts the one in Trash the list leaves out.
     await check(`${scheme}-clear-all`, async () => {
       await page.evaluate(async () => {
-        const k = 'recovery:0b6f6a2e-3c1d-4f6a-9d1e-2a7c5b9e8f10', { writerPapers: rows } = await chrome.storage.local.get('writerPapers');
-        await chrome.storage.local.set({ [`writerPaper:${k}`]: { key: k, doc: { type: 'doc', content: [{ type: 'paragraph' }] }, updated: 1 }, writerPapers: [{ key: k, title: '', course: '', url: '', words: 0, format: 'mla9', updated: 1, submitted: null }, ...rows] });
+        const k = 'recovery:0b6f6a2e-3c1d-4f6a-9d1e-2a7c5b9e8f10', bin = 'doc:5d2c7e1a-8b4f-4c3d-9e6a-1f0b2c3d4e5f', trashed = Date.now();
+        const doc = { type: 'doc', content: [{ type: 'paragraph' }] }, { writerPapers: rows } = await chrome.storage.local.get('writerPapers');
+        await chrome.storage.local.set({ [`writerPaper:${k}`]: { key: k, doc, updated: 1 }, [`writerPaper:${bin}`]: { key: bin, kind: 'paper', doc, updated: 1, trashed }, [`writerVersions:${bin}`]: [],
+          writerPapers: [{ key: k, title: '', course: '', url: '', words: 0, format: 'mla9', updated: 1, submitted: null }, { key: bin, kind: 'paper', title: 'Binned', updated: 1, trashed }, ...rows] });
       });
       await open();
       await until(async () => /^5\b/.test(await page.locator('#writer-papers-count').textContent()), 'every paper counted');
+      assert.equal(await page.locator('#writer-clear-all').textContent(), 'Clear all papers and documents');
       await page.locator('#writer-clear-all').click();
       await page.locator('#writer-clear').waitFor({ state: 'visible' });
-      assert.equal(await page.locator('#writer-clear-title').textContent(), 'Clear all papers?');
+      assert.equal(await page.locator('#writer-clear-title').textContent(), 'Clear all papers and documents?');
+      assert.match(await page.locator('#writer-clear-note').textContent(), /^6 papers and documents\. /, 'Trash counted');
       await page.locator('#writer-clear-ok').click();
       await until(async () => !Object.keys(await page.evaluate(() => chrome.storage.local.get(null))).some((k) => /^writer(Paper|Versions):/.test(k)), 'every paper and its versions gone');
       assert.deepEqual((await page.evaluate(() => chrome.storage.local.get('writerPapers'))).writerPapers, []);
