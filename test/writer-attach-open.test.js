@@ -57,9 +57,13 @@ test('open refuses what isn\'t the box\'s or is switched off, and says when the 
   assert.equal(await C.open(p.X, { ...p.box, kind: 'test' }, 'attachment-1', L), false, 'a test is never read');
   assert.equal(await C.open(p.X, p.box, 'attachment-1', L), false, 'a 404');
   assert.deepEqual(p.port.sent.map(({ m }) => m.type), ['import:failed']);
-  const big = page({ [FILES[1].url]: new Uint8Array(8) }, { max: C.ATTACH.file + 1 });
+  const big = page({ [FILES[1].url]: new Uint8Array(8) }, { max: L.MAX_FILE + 1 });
   assert.equal(await C.open(big.X, big.box, 'attachment-2', L), false, 'past the bound by its length');
-  assert.deepEqual(big.port.sent.map(({ m }) => [m.type, m.name]), [['import:failed', 'Week 3.pptx']]);
+  assert.deepEqual(big.port.sent.map(({ m }) => [m.type, m.name, m.why]), [['import:failed', 'Week 3.pptx', 'size']], 'said: too large');
+  // Up to what the submit sheet sends (50 MB), past the 20 MB Feedback reads.
+  const fits = page({ [FILES[1].url]: new Uint8Array(8) }, { max: 30e6 });
+  assert.equal(await C.open(fits.X, fits.box, 'attachment-2', L), true, 'a 30 MB deck opens');
+  assert.equal(L.MAX_FILE, require('../lib/doc-kinds.js').FILE);
 });
 
 test('a slideshow attachment reaches the opener through the real attachment-link parser', () => {

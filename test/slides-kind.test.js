@@ -1,6 +1,6 @@
 // Slides on the Documents page (slides-kind.js, papers.html): loaded after papers.js and packaged, available for viewing with
-// Settings → Writer → Slides off; importing needs writer.slides on, its one storage seam (the deck's bytes as a base64 `file` field in the paper
-// record until the worker's blob store takes them), what it keeps for search and a copy, and the files it refuses. The
+// Settings → Writer → Slides off; importing needs writer.slides on, its one storage seam (the deck's bytes in the worker's file store,
+// lib/doc-files.js, a record from before it holding them as base64), what it keeps for search and a copy, and the files it refuses. The
 // viewer itself is scripts/slides-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -28,14 +28,33 @@ const sanitizer = (on) => {
   return c.GZ_SANITIZE;
 };
 const { GZ_SANITIZE, GZ_DEFAULTS } = require('../defaults.js');
+const F = require('../lib/doc-files.js');
+const { fakeIDB } = require('./helpers/fake-idb.cjs');
+// The worker's file store over a fake IndexedDB, reached through ports that carry JSON as Chrome's do.
+const worker = (idb) => {
+  const { indexedDB, IDBKeyRange } = fakeIDB(), st = F.store(idb || F.idb(indexedDB, 'glaze-docs', IDBKeyRange));
+  return () => {
+    const end = () => ({ on: [], off: [], dead: false, onMessage: {}, onDisconnect: {} });
+    const a = end(), b = end();
+    for (const [x, y] of [[a, b], [b, a]]) {
+      x.onMessage.addListener = (f) => x.on.push(f); x.onDisconnect.addListener = (f) => x.off.push(f);
+      x.postMessage = (m) => { const j = JSON.stringify(m); setImmediate(() => { if (!y.dead) for (const f of y.on) f(JSON.parse(j)); }); };
+      x.disconnect = () => { x.dead = true; setImmediate(() => { if (!y.dead) { y.dead = true; for (const f of y.off) f(); } }); };
+    }
+    F.serve(b, st);
+    return a;
+  };
+};
 // slides-kind.js in a context of its own: the registry, defaults.js's sanitizer, a storage.sync answering writer.slides, and
 // need() as a no-op.
 const load = (writer, overrides = {}) => {
   delete require.cache[require.resolve('../lib/doc-kinds.js')];
   delete globalThis.GZ_DOC_KINDS;
   const DK = require('../lib/doc-kinds.js');
-  const ctx = vm.createContext({ GZ_DOC_KINDS: DK, GZ_SANITIZE, GZ_WRITER_PAPER: { need: async () => {} }, console, URL, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, RangeError, Error, Promise, Object, Array, String, Number, Math, JSON, Map, Set, btoa, atob, ...overrides,
-    chrome: { storage: { sync: { get: async () => (writer === undefined ? {} : { writer }) } }, runtime: { getURL: (f) => `chrome-extension://x/${f}` } } });
+  let ctx;
+  const need = async (files) => { if (files.includes('lib/doc-files.js') && !ctx.GZ_DOC_FILES) vm.runInContext(read('lib/doc-files.js'), ctx); };
+  ctx = vm.createContext({ GZ_DOC_KINDS: DK, GZ_SANITIZE, GZ_WRITER_PAPER: { need }, console, URL, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, DataView, RangeError, Error, Promise, Object, Array, String, Number, Math, JSON, Map, Set, btoa, atob, ...overrides,
+    chrome: { storage: { sync: { get: async () => (writer === undefined ? {} : { writer }) } }, runtime: { getURL: (f) => `chrome-extension://x/${f}`, connect: overrides.connect || worker() } } });
   ctx.globalThis = ctx;
   if (ctx.GZ_SANITIZE === undefined) delete ctx.GZ_SANITIZE;
   vm.runInContext(read('slides-kind.js'), ctx);
@@ -89,24 +108,34 @@ test('on, the slides kind registers its page code', async () => {
   assert.equal(k.exportLabel, 'Export .pptx');
 });
 
-test('the storage seam: bytes in, the same bytes out, nothing past the record cap', async () => {
+test('the storage seam: bytes in, kept in the worker\'s store, the same bytes out, up to the kind\'s 50 MB', async () => {
   const { ctx } = load({ slides: true });
   const S = ctx.GZ_SLIDES_KIND.STORE;
-  const bytes = new Uint8Array(70000).map((_, i) => (i * 7919) % 256);
-  const fields = S.put(bytes, '.ppsx');
+  const bytes = new Uint8Array(4e6).map((_, i) => (i * 7919) % 256);
+  const fields = await S.put(bytes, '.ppsx');
   assert.deepEqual(Object.keys(fields).sort(), ['ext', 'file', 'size']);
-  assert.equal(typeof fields.file, 'string');
+  assert.ok(F.ref(fields.file));
+  assert.equal(fields.file.type, F.TYPES['.ppsx']);
   assert.equal(fields.size, bytes.length);
   assert.equal(fields.ext, '.ppsx');
-  assert.equal(S.put(bytes, '.PPTX').ext, '.pptx');
-  assert.equal(S.put(bytes, '.exe').ext, '.pptx', 'only the two extensions');
-  assert.deepEqual([...S.get(fields)], [...bytes]);
-  assert.ok(fields.file.length <= 4e6);
-  // The paper record's 4 MB: base64 of at most 3 MB of deck (the blob store lifts this to the kind's 50 MB).
-  assert.equal(S.max, 3e6);
-  assert.throws(() => S.put(new Uint8Array(S.max + 1), '.pptx'), RangeError);
-  assert.equal(S.get({}), null, 'a record without a file');
-  assert.equal(S.get({ file: 42 }), null);
+  assert.equal((await S.put(bytes, '.PPTX')).ext, '.pptx');
+  assert.equal((await S.put(bytes, '.exe')).ext, '.pptx', 'only the two extensions');
+  assert.deepEqual(Buffer.from(await S.get(fields)), Buffer.from(bytes));
+  assert.equal(S.max, 50e6);
+  await assert.rejects(S.put(new Uint8Array(S.max + 1), '.pptx'), RangeError);
+  assert.equal(await S.get({}), null, 'a record without a file');
+  assert.equal(await S.get({ file: 42 }), null);
+  // A deck from before the store reads as before; one the store lost says so.
+  assert.deepEqual([...await S.get({ file: 'UEsDBA==' })], [80, 75, 3, 4]);
+  await assert.rejects(S.get({ file: { hash: 'a'.repeat(64), size: 9, type: F.TYPES['.pptx'] } }), (e) => e.why === 'missing' && e.message === 'This file is missing.');
+});
+
+test('the store unavailable: a deck up to 3 MB is kept in its record as before; a larger one says why', async () => {
+  const { ctx } = load({ slides: true }, { connect: worker(F.idb({ open: () => { throw new Error('private window'); } }, 'glaze-docs', fakeIDB().IDBKeyRange)) });
+  const S = ctx.GZ_SLIDES_KIND.STORE;
+  const fields = await S.put(new Uint8Array(1000).fill(3), '.pptx');
+  assert.equal(typeof fields.file, 'string');
+  await assert.rejects(S.put(new Uint8Array(3e6 + 1), '.pptx'), (e) => e.why === 'unavailable' && e.message === "This browser can't keep files larger than 3 MB right now.");
 });
 
 test('a copy keeps the deck, its count, its search text and its picture; the text is what search and measure read', async () => {
@@ -125,19 +154,19 @@ test('files over the record cap are refused in the student\'s words before anyth
   const { DK } = load({ slides: true });
   await DK.settled();
   const k = DK.get('slides');
-  const big = { name: 'Huge.pptx', size: 3e6 + 1, arrayBuffer: () => { throw new Error('read'); } };
+  const big = { name: 'Huge.pptx', size: 50e6 + 1, arrayBuffer: () => { throw new Error('read'); } };
   await assert.rejects(k.importFile(big), (e) => e instanceof RangeError && e.message === k.says.size);
-  assert.deepEqual({ ...k.says }, { size: 'Choose a PowerPoint file smaller than 3 MB.', read: 'That file could not be read as a PowerPoint presentation.' });
+  assert.deepEqual({ ...k.says }, { size: 'Choose a PowerPoint file smaller than 50 MB.', read: 'That file could not be read as a PowerPoint presentation.', ...DK.SAYS });
 });
 
 
-test('stored decks are bounded before base64 decoding', () => {
+test('stored decks are bounded before base64 decoding', async () => {
   let decoded = 0;
   const { ctx } = load({ slides: true }, { atob: (s) => { decoded++; return atob(s); } });
   const S = ctx.GZ_SLIDES_KIND.STORE;
-  assert.ok(S.get({ file: 'A'.repeat(4e6 + 4), size: 3e6 + 3 }) === null, 'oversized stored deck is refused');
+  assert.ok(await S.get({ file: 'A'.repeat(4e6 + 4), size: 3e6 + 3 }) === null, 'oversized stored deck is refused');
   assert.equal(decoded, 0, 'oversized stored input never reaches atob');
-  assert.equal(S.get({ file: '' }), null);
+  assert.equal(await S.get({ file: '' }), null);
 });
 
 

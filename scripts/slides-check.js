@@ -21,13 +21,13 @@ const until = async (fn, label, ms = 15000) => {
 };
 const check = (v, label) => { assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
 
-// The fixture deck as its package: every part under test/fixtures/pptx/deck, stored.
-const fixture = () => {
+// The fixture deck as its package: every part under test/fixtures/pptx/deck, stored, and any extra parts.
+const fixture = (extra = []) => {
   const dir = path.join(root, 'test/fixtures/pptx/deck');
   const walk = (d, base = '') => fs.readdirSync(d, { withFileTypes: true }).filter((e) => e.name !== '.DS_Store')
     .flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name), `${base}${e.name}/`) : [[`${base}${e.name}`, fs.readFileSync(path.join(d, e.name))]]));
   const files = walk(dir).sort(([a], [b]) => (a < b ? -1 : 1)).map(([name, data]) => ({ name, data: new Uint8Array(name === 'ppt/slides/slide2.xml' ? Buffer.from(data.toString().replace('Passive transport</a:t></a:r>', 'Passive trans</a:t></a:r><a:r><a:rPr b="1"/><a:t>port</a:t></a:r>')) : data), date: new Date(2026, 9, 29, 12) }));
-  return Buffer.concat(Z.zip(files));
+  return Buffer.concat(Z.zip([...files, ...extra]));
 };
 
 (async () => {
@@ -67,6 +67,8 @@ const fixture = () => {
     await first.catch(() => {});
     await worker.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(s); }, settings(false));
     const local = (k) => worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k] ?? null, k);
+    // A record's file bytes: from the worker's file store (lib/doc-files.js), or a record's base64 from before it.
+    const bytesOf = async (rec) => Buffer.from(await worker.evaluate(async (f) => { if (typeof f === 'string') return f; let s = ''; await openDocFiles().read(f.hash, (c) => { s += GZ_DOC_FILES.b64(c); }); return s; }, rec.file), 'base64');
     const shot = async (name) => { await pause(250); const f = path.join(out, name); await page.screenshot({ path: f }); shots.push(f); };
     const openHome = async () => { await page.goto(HOME); await until(() => page.evaluate(() => !document.getElementById('list').hidden), 'home'); };
     const said = () => page.evaluate(() => document.getElementById('gd-said').textContent);
@@ -92,7 +94,7 @@ const fixture = () => {
     await page.setInputFiles('#gd-file', file);
     const key = await until(() => page.evaluate(() => document.querySelector('.gd-card')?.dataset.key), 'the deck card');
     const rec = await until(() => local(`writerPaper:${key}`), 'the record');
-    check(rec.kind === 'slides' && rec.title === 'Cell Biology week 3' && rec.slides === 10 && rec.ext === '.pptx' && rec.size === deckBytes.length && Buffer.from(rec.file, 'base64').equals(deckBytes),
+    check(rec.kind === 'slides' && rec.title === 'Cell Biology week 3' && rec.slides === 10 && rec.ext === '.pptx' && rec.size === deckBytes.length && (await bytesOf(rec)).equals(deckBytes),
       `the record: kind slides, its title, 10 slides, the bytes as given (${JSON.stringify({ kind: rec.kind, title: rec.title, slides: rec.slides, size: rec.size, ext: rec.ext })})`);
     check(/Membrane transport/.test(rec.text) && /Start with the quiz/.test(rec.text), 'the record keeps the slides\' and notes\' text for search');
     check(/^data:image\/jpeg;base64,/.test(rec.thumb || '') && rec.thumb.length < 96e3, `the record keeps slide 1 as a picture (${(rec.thumb || '').length} chars)`);
@@ -328,6 +330,24 @@ const fixture = () => {
     await page.click(`.gd-card[data-key="${key}"] .gd-title`);
     await until(() => page.locator('#gs-canvas .gs-slide').count(), 'off: existing deck opens');
     check((await at()).n === '1 / 10', 'off: existing slides still open for viewing');
+
+    // ---- past the old 3 MB: an ~8 MB deck (the same slides with 8 MB of media beside them) is kept in the worker's file
+    // store (lib/doc-files.js), its record pointing at it, and opens.
+    const sha = (b) => require('node:crypto').createHash('sha256').update(b).digest('hex');
+    const bigDeck = fixture([{ name: 'ppt/media/media9.bin', data: new Uint8Array(require('node:crypto').randomBytes(7.9e6)), date: new Date(2026, 9, 29, 12) }]), bigPath = path.join(tmp, 'Lecture 4 recording.pptx');
+    fs.writeFileSync(bigPath, bigDeck);
+    await worker.evaluate(async (s) => { await chrome.storage.sync.set(s); }, settings(true));
+    await openHome();
+    await page.setInputFiles('#gd-file', bigPath);
+    const bigKey = await until(() => page.evaluate(() => [...document.querySelectorAll('.gd-card')].find((c) => c.querySelector('.gd-title')?.textContent === 'Lecture 4 recording')?.dataset.key
+      || (document.getElementById('gd-said')?.textContent && `said: ${document.getElementById('gd-said').textContent}`)), 'the 8 MB deck\'s card', 60000);
+    check(!bigKey.startsWith('said:'), `a ${(bigDeck.length / 1e6).toFixed(1)} MB deck imports (${bigKey})`);
+    const bigRec = await local(`writerPaper:${bigKey}`);
+    check(/^[0-9a-f]{64}$/.test(bigRec?.file?.hash || '') && bigRec.size === bigDeck.length && sha(await bytesOf(bigRec)) === sha(bigDeck) && bigRec.slides === 10 && JSON.stringify(bigRec).length < 200e3,
+      `its record points at the file in the store, the bytes as imported (${bigRec?.size} bytes, record ${JSON.stringify(bigRec).length} chars)`);
+    await page.goto(`${HOME}?slides=${encodeURIComponent(bigKey)}`);
+    await until(() => page.evaluate(() => document.querySelectorAll('#gs-rail [data-slide]').length === 10 && !!document.querySelector('#gs-canvas .gs-slide')), 'the 8 MB deck in the viewer', 60000);
+    check((await at()).n === '1 / 10', 'the 8 MB deck opens in the viewer');
 
     check(!errors.some((e) => /sender/.test(e)), 'no worker sender refusals');
     check(errors.length === 0, `no page errors (${errors.join('; ')})`);

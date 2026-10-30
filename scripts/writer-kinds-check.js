@@ -113,6 +113,8 @@ const holds = (bytes, value) => {
     await reset({ pdf: true, slides: true });
     const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/popup.html`); await env.ultraReady(opts); await opts.close();
     const local = () => worker.evaluate(async () => chrome.storage.local.get(null));
+    // A record's file bytes: from the worker's file store (lib/doc-files.js), or a record's base64 from before it.
+    const bytesOf = async (rec) => Buffer.from(await worker.evaluate(async (f) => { if (typeof f === 'string') return f; let s = ''; await openDocFiles().read(f.hash, (c) => { s += GZ_DOC_FILES.b64(c); }); return s; }, rec.file), 'base64');
     const record = async () => { const all = await local(), k = Object.keys(all).find((x) => x.startsWith('writerPaper:')); return k ? all[k] : null; };
     const versions = async () => { const all = await local(), k = Object.keys(all).find((x) => x.startsWith('writerVersions:')); return all[k] || []; };
     const open = async () => {
@@ -156,7 +158,7 @@ const holds = (bytes, value) => {
       () => fr.evaluate(() => ({ doc: document.documentElement.dataset.doc, pages: document.querySelectorAll('.pdfViewer .page').length, said: document.querySelector('.gq-said')?.textContent })));
     const h1 = await until(async () => { const h = await el.evaluate((f) => f.getBoundingClientRect().height); return h > 600 && h; }, 'a paper\'s height');
     let rec = await record(), vs = await versions();
-    check(rec.kind === 'pdf' && sha(Buffer.from(rec.file, 'base64')) === sha(pdfBytes) && rec.pages === 3 && rec.doc == null, `the attempt's record is the PDF, its bytes as brought (${JSON.stringify({ kind: rec.kind, pages: rec.pages, size: rec.size })})`);
+    check(rec.kind === 'pdf' && sha((await bytesOf(rec))) === sha(pdfBytes) && rec.pages === 3 && rec.doc == null, `the attempt's record is the PDF, its bytes as brought (${JSON.stringify({ kind: rec.kind, pages: rec.pages, size: rec.size })})`);
     check(vs.some((v) => v.reason === 'import' && (v.kind || 'paper') === 'paper'), `the paper kept as a version first (${vs.map((v) => `${v.reason}:${v.kind || 'paper'}`).join(', ')})`);
     check(await fr.evaluate(() => { const shown = (x) => !!x && x.getClientRects().length > 0; return !shown(document.querySelector('#gw')) && !shown(document.querySelector('.gp:not(.gp-standalone)')) && shown(document.querySelector('.gk .gp-submit')) && !document.querySelector('.gk .gp-top a[href]'); }),
       `the viewer in the paper's place, its own Submit…, no way to Documents (frame ${h0}px → ${h1}px)`);
@@ -165,9 +167,9 @@ const holds = (bytes, value) => {
     const input = fr.locator('.gk .page[data-page-number="1"] .annotationLayer input').first();
     await input.fill('Rivera Field');
     await input.press('Tab');
-    await until(async () => holds(Buffer.from((await record()).file, 'base64'), 'Rivera Field'), 'the filled PDF saved', 20000);
+    await until(async () => holds((await bytesOf((await record()))), 'Rivera Field'), 'the filled PDF saved', 20000);
     rec = await record();
-    check(rec.kind === 'pdf' && rec.file && holds(Buffer.from(rec.file, 'base64'), 'Rivera Field'), `a filled field is saved into the record's PDF (${rec.size} bytes)`);
+    check(rec.kind === 'pdf' && rec.file && holds((await bytesOf(rec)), 'Rivera Field'), `a filled field is saved into the record's PDF (${rec.size} bytes)`);
     // PDF → Word → Undo exercises the real importer, file-version restore and viewer disposal in the assignment frame.
     const word = await fr.evaluate(async () => {
       await GZ_WRITER_PAPER.need(['lib/writer-color.js', 'lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects-docx.js']);
@@ -181,7 +183,7 @@ const holds = (bytes, value) => {
     check(!(await record()).file && await fr.evaluate(() => !!document.querySelector('.gp-toast-do')), 'Word import replaces the PDF only after parsing and offers Undo');
     await tap(fr, '.gp-toast-do');
     await until(() => fr.evaluate(() => document.documentElement.dataset.doc === 'pdf' && document.querySelector('.gk .annotationLayer input')?.value === 'Rivera Field'), 'Undo restores filled PDF', 40000);
-    check((await record()).kind === 'pdf' && holds(Buffer.from((await record()).file, 'base64'), 'Rivera Field'), 'Undo restores the PDF kind, its viewer and its filled bytes');
+    check((await record()).kind === 'pdf' && holds((await bytesOf((await record()))), 'Rivera Field'), 'Undo restores the PDF kind, its viewer and its filled bytes');
     // Submit…: the sheet with the PDF large, no paste switch; Submit attaches the saved PDF once and clicks Ultra's Submit once.
     await tap(fr, '.gk .gp-submit');
     await until(() => sheetOf(fr), 'the sheet');
@@ -195,7 +197,7 @@ const holds = (bytes, value) => {
     await quiet(() => p.evaluate(() => __clicks.filter((c) => /footer\.submit/.test(c)).length > 1 || __uploads.length > 1), 'a second upload or Submit');
     const up = await p.evaluate(() => __uploads.map((u) => ({ name: u.name, type: u.type, bytes: u.bytes })));
     rec = await record(); vs = await versions();
-    check(up.length === 1 && up[0].name === 'Rivera_Essay2.pdf' && up[0].type === 'application/pdf' && sha(up[0].bytes) === sha(Buffer.from(rec.file, 'base64')) && holds(up[0].bytes, 'Rivera Field'),
+    check(up.length === 1 && up[0].name === 'Rivera_Essay2.pdf' && up[0].type === 'application/pdf' && sha(up[0].bytes) === sha((await bytesOf(rec))) && holds(up[0].bytes, 'Rivera Field'),
       `the saved PDF attached once: its name, application/pdf, the record's very bytes, the field filled (${up.map((u) => `${u.name} ${u.type} ${u.bytes.length}`).join('; ')})`);
     check(await until(async () => (await versions()).some((v) => v.reason === 'submit'), 'the Submitted version'), 'Ultra\'s Submit clicked once; the version is marked Submitted');
     check(await p.evaluate(() => !__text().trim()), 'PDF submission with Keep off clears the old compact text from Ultra');
@@ -217,7 +219,7 @@ const holds = (bytes, value) => {
     await tap(fr, '.gi-default');
     await until(() => fr.evaluate(() => document.documentElement.dataset.doc === 'slides' && document.querySelectorAll('.gk .gs-rail-b').length === 10 && !!document.querySelector('.gk #gs-canvas [role="group"]')), 'the slides viewer', 40000);
     rec = await record(); vs = await versions();
-    check(rec.kind === 'slides' && rec.slides === 10 && sha(Buffer.from(rec.file, 'base64')) === sha(deckBytes) && vs.some((v) => v.reason === 'import'), `the record is the deck, its bytes as brought, the paper a version first (${JSON.stringify({ kind: rec.kind, slides: rec.slides })})`);
+    check(rec.kind === 'slides' && rec.slides === 10 && sha((await bytesOf(rec))) === sha(deckBytes) && vs.some((v) => v.reason === 'import'), `the record is the deck, its bytes as brought, the paper a version first (${JSON.stringify({ kind: rec.kind, slides: rec.slides })})`);
     // Ctrl+F (⌘F) over the viewer is the viewer's own find, never the hidden paper's (writer-find.js).
     await fr.evaluate(() => document.querySelector('.gk .gs-rail-b')?.focus());
     await p.keyboard.press('ControlOrMeta+f');
@@ -350,7 +352,7 @@ const holds = (bytes, value) => {
     await until(() => fr.evaluate(() => document.documentElement.dataset.doc === 'pdf' && document.querySelectorAll('.gk .pdfViewer .page').length === 3), 'the attachment in the PDF viewer', 40000,
       async () => ({ gets: attachment.gets - gets, ...await fr.evaluate(() => ({ doc: document.documentElement.dataset.doc, card: !!document.querySelector('.gi-layer'), current: GZ_WRITER_PAPER.current()?.kind?.(), said: [...document.querySelectorAll('[role="status"], [role="alert"]')].map((x) => x.textContent).filter(Boolean).join(' | ') })) }));
     rec = await record(); vs = await versions();
-    check(attachment.gets === gets + 1 && rec.kind === 'pdf' && sha(Buffer.from(rec.file, 'base64')) === sha(pdfBytes) && vs.some((v) => v.reason === 'import' && (v.kind || 'paper') === 'paper') && await fr.evaluate(() => !document.querySelector('.gi-layer')) && await p.evaluate(() => __uploads.length === 0),
+    check(attachment.gets === gets + 1 && rec.kind === 'pdf' && sha((await bytesOf(rec))) === sha(pdfBytes) && vs.some((v) => v.reason === 'import' && (v.kind || 'paper') === 'paper') && await fr.evaluate(() => !document.querySelector('.gi-layer')) && await p.evaluate(() => __uploads.length === 0),
       `the attachment fetched once, opened with no card: the record its PDF, the paper a version first, nothing uploaded (${vs.map((v) => `${v.reason}:${v.kind || 'paper'}`).join(', ')})`);
     await shot(p, 'kinds-attachment-1440.png');
     await p.close();

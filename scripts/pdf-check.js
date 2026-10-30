@@ -99,6 +99,8 @@ const photo = () => {
     await worker.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(s); }, settings(false));
     const HOME = `chrome-extension://${id}/papers.html`;
     const local = (k) => worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k] ?? null, k);
+    // A record's file bytes: from the worker's file store (lib/doc-files.js), or a record's base64 from before it.
+    const bytesOf = async (rec) => Buffer.from(await worker.evaluate(async (f) => { if (typeof f === 'string') return f; let s = ''; await openDocFiles().read(f.hash, (c) => { s += GZ_DOC_FILES.b64(c); }); return s; }, rec.file), 'base64');
     page = await context.newPage();
     page.on('pageerror', (e) => errors.push(`page: ${e.message}`));
     page.on('console', (m) => { const x = m.text(); logs.push(`${m.type()}: ${x}`); if (m.type() === 'error' && !/Failed to load resource|pdf-check quota refusal/.test(x)) errors.push(`console: ${x}`); if (/fake worker/i.test(x)) errors.push(`fake worker: ${x}`); });
@@ -132,7 +134,7 @@ const photo = () => {
     await page.setInputFiles('#gd-file', file);
     const key = await until(() => page.evaluate(() => document.querySelector('.gd-card')?.dataset.key), 'the PDF card');
     const rec = await local(`writerPaper:${key}`);
-    check(rec?.kind === 'pdf' && rec.title === 'Field trip form' && rec.pages === 3 && Buffer.from(rec.file, 'base64').subarray(0, 5).toString() === '%PDF-', `the record: kind pdf, its title, 3 pages, the bytes (${JSON.stringify({ kind: rec?.kind, title: rec?.title, pages: rec?.pages, size: rec?.size })})`);
+    check(rec?.kind === 'pdf' && rec.title === 'Field trip form' && rec.pages === 3 && (await bytesOf(rec)).subarray(0, 5).toString() === '%PDF-', `the record: kind pdf, its title, 3 pages, the bytes (${JSON.stringify({ kind: rec?.kind, title: rec?.title, pages: rec?.pages, size: rec?.size })})`);
     check(/^data:image\/(png|jpeg);base64,/.test(rec.thumb || '') && rec.thumb.length < 64e3, `the record keeps its first page as a picture (${(rec.thumb || '').length} chars)`);
     const cardInfo = await until(() => page.evaluate((k) => { const c = document.querySelector(`.gd-card[data-key="${k}"]`), img = c?.querySelector('.gd-pic img'); return img?.complete && img.naturalWidth > 0 ? { w: img.naturalWidth, meta: c.querySelector('.gd-meta').textContent, title: c.querySelector('.gd-title').textContent, href: c.querySelector('.gd-title').getAttribute('href') } : null; }, key), 'the card thumbnail');
     check(cardInfo.title === 'Field trip form' && /^PDF/.test(cardInfo.meta) && cardInfo.href === `papers.html?pdf=${encodeURIComponent(key)}`, `the card: title, PDF meta, link (${JSON.stringify(cardInfo)})`);
@@ -216,7 +218,7 @@ const photo = () => {
     check(await input.evaluate((el) => document.activeElement === el), 'the form autosaves without leaving its field');
     await input.press('Tab');
     const saved = await local(`writerPaper:${key}`);
-    check(saved.revision > rec.revision && Buffer.from(saved.file, 'base64').length > Buffer.from(rec.file, 'base64').length, `the filled file is saved (${rec.size} → ${saved.size} bytes)`);
+    check(saved.revision > rec.revision && (await bytesOf(saved)).length > (await bytesOf(rec)).length, `the filled file is saved (${rec.size} → ${saved.size} bytes)`);
     // Saving (and drawing page 1 again for the card) leaves the page on screen as it was: drawn, the field filled.
     const drawnPage = () => page.evaluate(() => { const p = document.querySelector('.pdfViewer .page[data-page-number="1"]'), c = p?.querySelector('canvas'); return !!c && c.width > 0 && getComputedStyle(c).display !== 'none' && p.querySelector('.annotationLayer input')?.value === 'Ada Lovelace' && !!p.querySelector('.textLayer span'); });
     check(await until(drawnPage, 'page 1 drawn after saving', 5000), 'page 1 stays drawn with its field after saving');
@@ -290,7 +292,7 @@ const photo = () => {
       await page.click('.gp-top a[href="papers.html"]');
       await until(() => page.evaluate(() => !location.search || document.querySelector('.gp-state')?.textContent === 'Not saved. Try again in a moment.'), 'quota refusal or navigation');
       check(page.url().includes('?pdf=') && await page.evaluate(() => document.querySelector('.annotationLayer input')?.value === 'Grace Hopper'), 'quota refusal keeps the unsaved form open');
-      check((await local(`writerPaper:${key}`)).file === good.file, 'quota refusal keeps the last good bytes');
+      check(JSON.stringify((await local(`writerPaper:${key}`)).file) === JSON.stringify(good.file), 'quota refusal keeps the last good bytes');
     } finally {
       await worker.evaluate(() => { chrome.storage.local.set = globalThis.pdfCheckSet; delete globalThis.pdfCheckSet; });
     }
@@ -384,6 +386,61 @@ const photo = () => {
     await page.setInputFiles('#gd-file', photographed);
     const photoCard = await until(() => page.evaluate(() => { const c = [...document.querySelectorAll('.gd-card')].find((x) => x.querySelector('.gd-title')?.textContent === 'Colour photo'), img = c?.querySelector('.gd-pic img'); return img?.complete && img.naturalWidth > 0 ? { w: img.naturalWidth, h: img.naturalHeight, src: img.src.length, jpeg: img.src.startsWith('data:image/jpeg;') } : null; }), 'the photo\'s card');
     check(photoCard.jpeg && photoCard.w === 408 && photoCard.h === 528 && photoCard.src <= 64e3, `a colour photo's full-size JPEG stays within 64 KB (${JSON.stringify(photoCard)})`);
+    // ---- past the old 3 MB: a 12 MB PDF kept in the worker's file store (lib/doc-files.js), its record pointing at it; it
+    // opens, fills, saves and exports.
+    const sha = (b) => require('node:crypto').createHash('sha256').update(b).digest('hex');
+    const bigPdf = require('./pdf-fixtures.js').large({ count: 30, size: 12e6, form: true }), bigPath = path.join(tmp, 'Course reader.pdf');
+    fs.writeFileSync(bigPath, bigPdf);
+    await openHome();
+    await page.evaluate(() => { document.getElementById('gd-said').textContent = ''; });
+    await page.setInputFiles('#gd-file', bigPath);
+    const bigKey = await until(() => page.evaluate(() => [...document.querySelectorAll('.gd-card')].find((c) => c.querySelector('.gd-title')?.textContent === 'Course reader')?.dataset.key
+      || (document.getElementById('gd-said').textContent && `said: ${document.getElementById('gd-said').textContent}`)), 'the 12 MB PDF\'s card', 60000);
+    check(!bigKey.startsWith('said:'), `a ${(bigPdf.length / 1e6).toFixed(1)} MB PDF imports (${bigKey})`);
+    const bigRec = await local(`writerPaper:${bigKey}`);
+    check(/^[0-9a-f]{64}$/.test(bigRec?.file?.hash || '') && bigRec.size === bigPdf.length && sha(await bytesOf(bigRec)) === sha(bigPdf) && JSON.stringify(bigRec).length < 100e3,
+      `its record points at the file in the store, the bytes as imported (${bigRec?.size} bytes, record ${JSON.stringify(bigRec).length} chars)`);
+    await page.goto(`${HOME}?pdf=${encodeURIComponent(bigKey)}`);
+    const bigInput = page.locator('.page[data-page-number="1"] .annotationLayer input').first();
+    await bigInput.waitFor({ timeout: 60000 });
+    await bigInput.fill('Katherine Johnson');
+    // Leaving the field saves too (its change): wait for that save, so the bytes read are the last ones.
+    await bigInput.press('Tab');
+    await until(() => page.evaluate(() => document.querySelector('.gp-top .gp-state')?.textContent === 'Saved'), 'the 12 MB PDF saved after filling', 60000);
+    const bigSaved = await local(`writerPaper:${bigKey}`), bigBytes = await bytesOf(bigSaved), latin = bigBytes.toString('latin1');
+    const filledIn = latin.includes('(Katherine Johnson)') || latin.toLowerCase().includes(Buffer.from('\ufeffKatherine Johnson', 'utf16le').swap16().toString('hex'));
+    check(bigSaved.file.hash !== bigRec.file.hash && bigSaved.size === bigBytes.length && bigBytes.length > bigPdf.length && filledIn, `the filled 12 MB PDF is saved into the store (${bigRec.size} → ${bigSaved.size} bytes)`);
+    await page.click('.gq-more');
+    await until(() => page.evaluate(() => !!document.querySelector('.gq-menu [data-act="export"]')), 'the 12 MB PDF\'s ⋯ menu');
+    const bigDownload = page.waitForEvent('download', { timeout: 60000 });
+    await page.click('.gq-menu [data-act="export"]');
+    const bigD = await bigDownload, bigOut = path.join(tmp, 'big-export.pdf');
+    await bigD.saveAs(bigOut);
+    const exported = fs.readFileSync(bigOut);
+    const afterExport = await local(`writerPaper:${bigKey}`);
+    check(bigD.suggestedFilename() === 'Course reader.pdf' && sha(exported) === sha(bigBytes) && afterExport.file.hash === bigSaved.file.hash,
+      `Export .pdf downloads the filled 12 MB file as saved (${exported.length} bytes; saved ${bigSaved.size})`);
+
+    // ---- a record from before the store (its bytes base64 in the record) opens, moves into the store as it does, and
+    // opens from the store after a reload, the same document.
+    const legacyPdf = fixture();
+    const oldKey = await worker.evaluate(async (b64) => {
+      const k = `doc:${crypto.randomUUID()}`, t = Date.now(), list = (await chrome.storage.local.get('writerPapers')).writerPapers || [];
+      await chrome.storage.local.set({ [`writerPaper:${k}`]: { key: k, kind: 'pdf', doc: null, file: b64, size: atob(b64).length, pages: 3, title: 'Old form', named: true, created: t, updated: t, revision: 1 },
+        writerPapers: [{ key: k, kind: 'pdf', named: true, title: 'Old form', updated: t }, ...list] });
+      return k;
+    }, legacyPdf.toString('base64'));
+    const oldShown = (label) => until(() => page.evaluate(() => !!document.querySelector('.pdfViewer .page[data-page-number="1"] .annotationLayer input') && document.querySelector('.gq-said')?.hidden !== false), label, 30000);
+    await page.goto(`${HOME}?pdf=${encodeURIComponent(oldKey)}`);
+    await oldShown('the record from before the store drawn');
+    const moved = await until(async () => { const r = await local(`writerPaper:${oldKey}`); return r?.file && typeof r.file === 'object' ? r : null; }, 'the old record moved into the store', 30000);
+    check(sha(await bytesOf(moved)) === sha(legacyPdf) && moved.size === legacyPdf.length && moved.revision === 1 && moved.title === 'Old form',
+      `a record from before the store opens and moves into it, its revision and title as they were (${JSON.stringify({ revision: moved.revision, size: moved.size })})`);
+    await page.reload();
+    await oldShown('the moved record drawn after a reload');
+    check(true, 'after a reload the moved record opens from the store');
+    await openHome();
+
     // A PDF whose first page can't be read (its page tree points at nothing) is refused at import; one already kept says
     // so in the viewer instead of an empty viewer waiting for pages that never come.
     const broken = Buffer.from(fixture().toString('latin1').replace(/\/Kids \[(\d+) 0 R/, '/Kids [99 0 R'), 'latin1');
@@ -406,6 +463,7 @@ const photo = () => {
     // nothing else may error.
     const theirs = errors.splice(erred).filter((e) => !/^page: FormatError$|^console: RangeError: That file could not be read\./.test(e));
     errors.push(...theirs);
+
     check(!errors.some((e) => /sender/.test(e)), 'no worker sender refusals');
     check(!errors.some((e) => /fake worker/i.test(e)), 'pdf.js never fell back to a fake worker');
     check(errors.length === 0, `no page errors (${errors.join('; ')})`);
@@ -420,7 +478,7 @@ const photo = () => {
         const P = await import(chrome.runtime.getURL('lib/pdfjs/pdf.mjs'));
         P.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdfjs/pdf.worker.mjs');
         const rec = (await chrome.storage.local.get(`writerPaper:${key}`))[`writerPaper:${key}`];
-        const data = Uint8Array.from(atob(rec.file), (c) => c.charCodeAt(0));
+        const data = typeof rec.file === 'string' ? Uint8Array.from(atob(rec.file), (c) => c.charCodeAt(0)) : await GZ_WRITER_PAPER.need(['lib/doc-files.js']).then(() => GZ_DOC_FILES.client().get(rec.file));
         const task = P.getDocument({ data, isEvalSupported: false, verbosity: 0 });
         try {
           const doc = await task.promise;

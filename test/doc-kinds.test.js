@@ -8,8 +8,8 @@ test('paper, sheet, pdf and slides are the kinds, frozen', () => {
   assert.deepEqual(Object.keys(DK.KINDS), ['paper', 'sheet', 'pdf', 'slides']);
   assert.deepEqual(DK.KINDS.paper, { label: 'Document', icon: 'paper', accept: ['.docx'], mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', max: 15e6, param: 'paper' });
   assert.deepEqual(DK.KINDS.sheet, { label: 'Spreadsheet', icon: 'sheet', accept: ['.xlsx', '.csv', '.tsv'], mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', max: 15e6, param: 'sheet' });
-  assert.deepEqual(DK.KINDS.pdf, { label: 'PDF', icon: 'pdf', accept: ['.pdf'], mime: 'application/pdf', max: 3e6, param: 'pdf' });
-  assert.deepEqual(DK.KINDS.slides, { label: 'Slides', icon: 'slides', accept: ['.pptx', '.ppsx'], mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', max: 3e6, param: 'slides' });
+  assert.deepEqual(DK.KINDS.pdf, { label: 'PDF', icon: 'pdf', accept: ['.pdf'], mime: 'application/pdf', max: 50e6, big: 'Choose a PDF smaller than 50 MB.', param: 'pdf' });
+  assert.deepEqual(DK.KINDS.slides, { label: 'Slides', icon: 'slides', accept: ['.pptx', '.ppsx'], mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', max: 50e6, big: 'Choose a PowerPoint file smaller than 50 MB.', param: 'slides' });
   for (const k of Object.values(DK.KINDS)) assert.ok(Object.isFrozen(k) && Object.isFrozen(k.accept));
   assert.ok(Object.isFrozen(DK.KINDS));
   assert.throws(() => { 'use strict'; DK.KINDS.paper.max = 1; });
@@ -149,8 +149,9 @@ test('settled waits for the sheet kind\'s late registration', async () => {
 test('a PDF and a deck open up to what their record holds (pdf-kind.js, slides-kind.js STORE.max)', () => {
   const fs = require('node:fs'), path = require('node:path');
   for (const [id, f] of [['pdf', 'pdf-kind.js'], ['slides', 'slides-kind.js']]) {
-    const m = /const STORE = \{\s*max: ([\de.]+)/.exec(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'));
+    const m = /const STORE = \{\s*max: ([^,]+),/.exec(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'));
     assert.ok(m, `${f} STORE.max`);
-    assert.equal(DK.KINDS[id].max, Number(m[1]), f);
+    assert.equal(m[1].trim(), `GZ_DOC_KINDS.KINDS.${id}.max`, `${f} reads the kind's own number`);
+    assert.equal(DK.KINDS[id].max, DK.FILE, f);
   }
 });
