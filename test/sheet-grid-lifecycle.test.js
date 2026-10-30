@@ -319,3 +319,22 @@ test('Replace says why a cell in an array stays, and passes over a match in the 
   assert.equal(sh.rows.get(0).get(1).v, 5);
   assert.equal(f.el('gx-undo').disabled, true, 'no undo step for a replace that changed nothing');
 });
+
+test('sorting from a cell or a whole column keeps rows whole and the header row a numeric column shows', () => {
+  const rows = [['Name', 'Score'], ['Zoe', 90], ['Adam', 70], ['Mia', 80]];
+  const names = (wb) => [0, 1, 2, 3].map((r) => `${wb.sheets[0].rows.get(r).get(0).v}${r ? wb.sheets[0].rows.get(r).get(1).v : ''}`).join();
+  for (const [from, desc, want] of [['A1', false, 'Name,Adam70,Mia80,Zoe90'], ['B3', true, 'Name,Zoe90,Mia80,Adam70'], ['A:A', false, 'Name,Adam70,Mia80,Zoe90']]) {
+    const wb = M.workbook();
+    rows.forEach((row, r) => wb.sheets[0].rows.set(r, new Map(row.map((v, c) => [c, typeof v === 'number' ? { t: 'n', v } : { t: 's', v }]))));
+    const f = frame({ wb });
+    if (from === 'A:A') f.key(' ', { ctrlKey: true }); else { f.el('gx-name').value = from; f.fire(f.el('gx-name'), 'keydown', { key: 'Enter' }); }
+    f.fire(f.el(desc ? 'gx-sort-za' : 'gx-sort-az'), 'click');
+    assert.equal(names(f.wb), want, `from ${from}`);
+  }
+  // No header to keep: every row of text.
+  const wb = M.workbook();
+  ['Cy', 'Ab', 'Bo'].forEach((v, r) => wb.sheets[0].rows.set(r, new Map([[0, { t: 's', v }]])));
+  const f = frame({ wb });
+  f.fire(f.el('gx-sort-az'), 'click');
+  assert.equal([0, 1, 2].map((r) => f.wb.sheets[0].rows.get(r).get(0).v).join(), 'Ab,Bo,Cy');
+});

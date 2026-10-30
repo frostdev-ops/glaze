@@ -1090,8 +1090,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     };
     const collator = new Intl.Collator(o.locale || undefined, { sensitivity: 'base', numeric: true });
     const rank = (x) => (!x || x.t === 'z' ? 9 : x.t === 'n' ? 0 : x.t === 's' ? 1 : x.t === 'b' ? 2 : 3);
-    // The rows of the selection (or, from one cell, the block of data around it, its first row kept when it reads as a
-    // header), in order by the active cell's column; their formulas move with them.
+    // The rows of the selection (or, from one cell or whole columns, the block of data around them, its first row kept when
+    // it reads as a header), in order by the active cell's column; their formulas move with them.
     const region = (r, c) => {
       const sh = S(), has = (a, b) => a >= 0 && b >= 0 && !!sh.rows.get(a)?.get(b);
       let g = range(r, c), grew = true;
@@ -1108,12 +1108,23 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     const sort = (desc) => {
       commit();
       const last = sel.ranges[sel.ranges.length - 1], [, col] = sel.active;
-      let g = last.r0 === last.r1 && last.c0 === last.c1 ? region(last.r0, last.c0) : { ...last };
+      const one = last.r0 === last.r1 && last.c0 === last.c1, columns = last.r0 === 0 && last.r1 >= ext.rows - 1;
+      let g = one ? region(last.r0, last.c0) : { ...last };
+      // Whole columns sort the block of data they are in, its rows kept whole, as from one of its cells.
+      if (columns) {
+        let top = null;
+        for (const [r, row] of S().rows) for (const c of row.keys()) if (c >= last.c0 && c <= last.c1 && (!top || r < top[0])) top = [r, c];
+        if (!top) return;
+        const b = region(top[0], top[1]);
+        g = range(b.r0, Math.min(b.c0, last.c0), b.r1, Math.max(b.c1, last.c1));
+      }
       const u = used(S());
       g = range(g.r0, g.c0, Math.min(g.r1, u.r - 1), Math.min(g.c1, u.c - 1));
-      if (last.r0 === last.r1 && g.r1 > g.r0) {
-        const a = cellAt(g.r0, col), b = cellAt(g.r0 + 1, col);
-        if (a?.t === 's' && b && b.t !== 's') g.r0++;
+      // A header: a first row of text over, in some column, a value of another kind.
+      if ((one || columns) && g.r1 > g.r0) {
+        const cs = []; for (let c = g.c0; c <= g.c1; c++) cs.push(c);
+        const text = cs.every((c) => { const a = cellAt(g.r0, c); return !a || a.t === 's'; });
+        if (text && cs.some((c) => { const a = cellAt(g.r0, c), b = cellAt(g.r0 + 1, c); return a?.t === 's' && b && b.t !== 's' && b.t !== 'z'; })) g.r0++;
       }
       if (g.r1 <= g.r0) return;
       const rows = []; for (let r = g.r0; r <= g.r1; r++) rows.push(r);
