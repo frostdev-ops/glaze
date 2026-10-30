@@ -378,9 +378,15 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       const progress = GZ_DOC_KINDS.progress((p) => { if (!p.end && !p.failed) say(t('Saving… {n}%', { n: Math.floor(p.fraction * 10) * 10 })); });
       try {
         if (src.bytes.length > STORE.max) throw new RangeError(TOO_BIG_SAVE);
-        await importFile(new File([src.bytes], src.name || 'Document.pdf', { type: 'application/pdf' }), { progress });
+        const key = await importFile(new File([src.bytes], src.name || 'Document.pdf', { type: 'application/pdf' }), { progress });
         progress.end();
         say(t('Saved to Documents'));
+        // The saved copy is the one to mark up: Save becomes its link, as a spreadsheet preview's does (sheet-kind.js).
+        if (typeof key === 'string' && key) {
+          const openA = h('a', { class: 'gp-submit', 'data-act': 'open', href: `papers.html?${GZ_DOC_KINDS.KINDS.pdf.param}=${encodeURIComponent(key)}`, target: '_blank', rel: 'noopener', text: t('Open in Documents') });
+          saveB.replaceWith(openA);
+          openA.focus();
+        }
       } catch (e) {
         const big = e instanceof RangeError && (e.message === TOO_BIG || e.message === TOO_BIG_SAVE);
         if (!big) console.error(e);

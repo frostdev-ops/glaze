@@ -612,9 +612,15 @@
         // Only while Settings → Writer → Slides takes files, as Documents' own import.
         if (typeof DK.get('slides')?.importFile !== 'function') throw new Error('off');
         const ext = /\.ppsx$/i.test(src.name || '') ? '.ppsx' : '.pptx', name = /\.pp[ts]x$/i.test(src.name || '') ? src.name : `${src.name || t('Slides')}${ext}`;
-        await importFile(new File([src.bytes], name, { type: MIME[ext] }), { progress });
+        const key = await importFile(new File([src.bytes], name, { type: MIME[ext] }), { progress });
         progress.end();
         say(t('Saved to Documents'));
+        // Save becomes the saved copy's link, as a spreadsheet preview's does (sheet-kind.js).
+        if (typeof key === 'string' && key) {
+          const openA = h('a', { class: 'gp-submit', 'data-act': 'open', href: `papers.html?${DK.KINDS.slides.param}=${encodeURIComponent(key)}`, target: '_blank', rel: 'noopener', text: t('Open in Documents') });
+          saveB.replaceWith(openA);
+          openA.focus();
+        }
       } catch (e) {
         const big = e instanceof RangeError && e.message === SAYS.size;
         if (!big) console.error(e);

@@ -197,7 +197,11 @@ const WIKI = strip(fixture('canvas-wiki-page.html')).replace(/(<div class="show-
     await fr.click('[data-act="save"]');
     await until(() => fr.evaluate(() => document.querySelector('.gp-top .gp-state')?.textContent === 'Saved to Documents'), async () => `Saved to Documents (says "${await fr.evaluate(() => document.querySelector('.gp-top .gp-state')?.textContent)}"; errors ${JSON.stringify(errors)})`);
     const kept = await sw.evaluate(async () => { const all = await chrome.storage.local.get(null); return Object.entries(all).filter(([k, v]) => k.startsWith('writerPaper:') && v?.kind === 'slides').map(([, v]) => ({ title: v.title, slides: v.slides })); });
+    const keptKey = await sw.evaluate(async () => Object.entries(await chrome.storage.local.get(null)).find(([k, v]) => k.startsWith('writerPaper:') && v?.kind === 'slides')?.[0].slice('writerPaper:'.length));
     check(kept.length === 1 && kept[0].title === 'Week 3' && kept[0].slides === 10, `Save to Documents keeps the deck (${JSON.stringify(kept)})`);
+    const openDeck = await fr.evaluate(() => { const a = document.querySelector('[data-act="open"]'); return a && { tag: a.tagName, text: a.textContent, href: a.getAttribute('href'), save: !!document.querySelector('[data-act="save"]') }; });
+    check(openDeck?.tag === 'A' && openDeck.text === 'Open in Documents' && openDeck.href === `papers.html?slides=${encodeURIComponent(keptKey)}` && !openDeck.save,
+      `Save to Documents becomes Open in Documents, the saved deck's link (${JSON.stringify(openDeck)})`);
     await page.click(rowB(80));
     await until(() => page.evaluate(() => !document.querySelector('iframe.gz-co-frame')), 'the button again closes the viewer');
     check(await page.getAttribute(rowB(80), 'aria-expanded') === 'false', 'the row\'s button again closes Glaze\'s viewer');
