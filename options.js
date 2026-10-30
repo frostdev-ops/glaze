@@ -1547,6 +1547,10 @@ GZ_UI.load().then((s) => {
     return r;
   };
   let backupBusy = false;
+  // Spreadsheets, PDFs and slide decks (lib/backup.js pack leaves them out): said under Back up… while this device keeps any.
+  const kindsNote = (rows) => { $('#backup-kinds-note').hidden = !(Array.isArray(rows) && rows.some((r) => typeof r?.kind === 'string' && r.kind !== 'paper')); };
+  chrome.storage.local.get('writerPapers').then((r) => kindsNote(r.writerPapers), () => {});
+  chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.writerPapers) kindsNote(changes.writerPapers.newValue); });
   $('#export').addEventListener('click', async (e) => {
     if (!e.isTrusted || !(navigator.userActivation?.isActive ?? true) || backupBusy) return;
     backupBusy = true;

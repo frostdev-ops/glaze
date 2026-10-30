@@ -3089,6 +3089,7 @@
   "Only this key can update your mods; keep a backup of it.": "Solo esta clave puede actualizar tus mods; guarda una copia de seguridad de ella.",
   "Locks the backup file, and is needed to restore it.": "Bloquea el archivo de copia de seguridad y se necesita para restaurarlo.",
   "Includes all share keys and creator delete tokens: anyone with this backup can open, change or delete those sessions.": "Incluye todas las claves para compartir y los tokens de eliminación del creador: cualquiera que tenga esta copia de seguridad puede abrir, cambiar o eliminar esas sesiones.",
+  "Backups leave out spreadsheets, PDFs and slides; export them from Documents.": "Las copias no incluyen hojas de cálculo, PDF ni diapositivas; expórtalos desde Documentos.",
   "Reset keeps your presets, pictures, notes, tasks, bookmarks and share keys.": "Restablecer conserva tus predefinidas, imágenes, notas, tareas, marcadores y claves para compartir.",
   "On Chrome, with code mods installed, Glaze asks frostdev.io once a day for a signed list of mods to stop. Nothing about you is sent.": "En Chrome, con mods de código instalados, Glaze pide a frostdev.io una vez al día una lista firmada de mods que detener. No se envía nada sobre ti.",
   "Removing a site forgets what Glaze read there; your notes and tasks stay.": "Quitar un sitio olvida lo que Glaze leyó allí; tus notas y tareas se quedan.",
