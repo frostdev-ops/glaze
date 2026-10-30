@@ -230,9 +230,16 @@ test('the @ operator is _xlfn.SINGLE() in a file, as Excel writes it', () => {
     ['-@Rate^2', '-_xlfn.SINGLE(Rate)^2'], ['@@A1:A2', '_xlfn.SINGLE(_xlfn.SINGLE(A1:A2))'], ['@{1,2}', '_xlfn.SINGLE({1,2})'], ['Table1[@Col1]*2', 'Table1[@Col1]*2'],
     ['@XLOOKUP(1,A:A,B:B)', '_xlfn.SINGLE(_xlfn.XLOOKUP(1,A:A,B:B))'],
   ]) assert.equal(F.toFile(glaze), file, glaze);
-  assert.equal(F.fromFile('_xlfn.SINGLE(B1:B5)+1'), '@(B1:B5)+1');
-  assert.equal(F.toFile(F.fromFile('_xlfn.SINGLE(B1:B5)+1')), '_xlfn.SINGLE(B1:B5)+1');
-  assert.deepEqual(F.parse(F.fromFile('_xlfn.SINGLE(B1:B5)')), F.parse('@(B1:B5)'));
+  // Read back as Excel shows it: @ and its operand, in parentheses only when @ wouldn't bind all of it.
+  for (const [file, glaze] of [
+    ['_xlfn.SINGLE(B1:B5)+1', '@B1:B5+1'], ['_xlfn.SINGLE(_xlfn.XLOOKUP(1,A:A,B:B))*2', '@XLOOKUP(1,A:A,B:B)*2'], ['_xlfn.SINGLE(A1%)', '@(A1%)'],
+    ['_xlfn.SINGLE(A1+1)', '@(A1+1)'], ['SUM(_xlfn.SINGLE(A1:INDEX(A:A,3)),2)', 'SUM(@A1:INDEX(A:A,3),2)'], ['_xlfn.SINGLE(_xlfn.SINGLE(A1:A2))', '@@A1:A2'],
+    ['_xlfn.SINGLE()', '@()'],
+  ]) {
+    assert.equal(F.fromFile(file), glaze, file);
+    if (file !== '_xlfn.SINGLE()') assert.equal(F.toFile(F.fromFile(file)), file, `${file} round trip`);
+  }
+  assert.deepEqual(F.parse(F.fromFile('_xlfn.SINGLE(B1:B5)')), F.parse('@B1:B5'));
 });
 
 test('the model\'s shift and rename hooks are these', () => {
