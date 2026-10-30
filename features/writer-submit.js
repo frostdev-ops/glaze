@@ -30,7 +30,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const armed = new Map(); // box → whether it's still features/writer.js's
   const submitted = new WeakSet();
   const runs = new WeakMap(), cancelled = new WeakMap(), tokens = new WeakMap();
-  const attached = new WeakMap(); // box → each file's name → its exact bytes and the row its upload produced
+  const attached = new WeakMap(); // box → each file's name → its byte digest and the row its upload produced
   const written = new WeakSet(); // boxes a run has written into
   const imports = new WeakMap();
   let passing = null, running = false, active = null, down = null, giving = false, X = null;
@@ -163,9 +163,13 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const attach = async (box, file, bytes, here) => {
     const area = L().areaOf(box.editor), panel = L().panelOf(box.editor);
     if (!area || !panel) return 'page';
-    const old = attached.get(box)?.get(file.name), data = new Uint8Array(bytes);
+    if (!here()) return 'page';
+    const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', data))].map((n) => n.toString(16).padStart(2, '0')).join('');
+    if (!here()) return 'page';
+    const old = attached.get(box)?.get(file.name);
     if (old) {
-      if (old.name !== file.name || old.bytes.length !== data.length || !old.bytes.every((b, i) => b === data[i])) return 'review';
+      if (old.name !== file.name || old.size !== data.byteLength || old.hash !== hash || old.mime !== file.type) return 'review';
       // Reuse only the same bytes and the very row the completed upload produced.
       const rows = L().listings(area, file.name, visible);
       return rows.length === 1 && rows[0] === old.row ? null : 'review';
@@ -177,10 +181,12 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     if (!input && !zone) return 'upload';
     const before = new Set(L().listings(area, file.name, visible));
     if (!attached.has(box)) attached.set(box, new Map());
-    const entry = { name: file.name, bytes: data.slice(), before };
+    const entry = { name: file.name, size: data.byteLength, mime: file.type, hash, before };
     attached.get(box).set(file.name, entry); // before dispatch: an exception can still leave an upload running
-    if (input) { if (!give(input, file)) return 'review'; }
-    else drop(zone, file);
+    try {
+      if (input) { if (!give(input, file)) return 'review'; }
+      else drop(zone, file);
+    } catch { return 'review'; }
     const shown = await until(() => {
       // The probed dialog belongs to the editor's own upload, not this React area. Never save an unrelated modal.
       if (document.querySelector('[role="dialog"][aria-labelledby="file-properties-dialog-title"]')) return 'dialog';
@@ -190,15 +196,18 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     if (shown === 'listed') entry.row = L().listings(area, file.name, visible)[0];
     return !here() ? 'page' : shown === 'listed' ? null : shown === 'dialog' ? 'review' : 'attach';
   };
-  // The hand-in: one file from any source, { name, mime, bytes } (bytes an ArrayBuffer: a document's export, the attempt's
-  // own file, a Drive file), attached through Ultra's upload and waited on until Ultra lists it, while here() holds.
-  // → null, or why not ('large' over Blackboard's 50 MB, 'file' unreadable, else attach's).
-  const handIn = async (box, { name, mime, bytes } = {}, here = () => true) => {
-    const why = L().handInError({ name, mime, bytes });
-    if (why) return why;
-    const buffer = bytes instanceof ArrayBuffer ? bytes : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-    const file = new File([buffer], name, { type: mime, lastModified: Date.now() });
-    return attach(box, file, buffer, here);
+  // One file from any source; byte views use only their byteOffset/byteLength. Never reject the promise for bad input.
+  // → null, large, file, page (here revoked), upload, attach, or review (an upload may already be in Ultra).
+  const handIn = async (box, f, here = () => true) => {
+    let data, file;
+    try {
+      const why = L().handInError(f);
+      if (why) return why;
+      if (typeof here !== 'function' || !here()) return 'page';
+      data = f.bytes instanceof ArrayBuffer ? new Uint8Array(f.bytes) : new Uint8Array(f.bytes.buffer, f.bytes.byteOffset, f.bytes.byteLength);
+      file = new File([data], f.name, { type: f.mime, lastModified: Date.now() });
+    } catch { return 'file'; }
+    try { return await attach(box, file, data, here); } catch { return 'page'; }
   };
   const sameText = (box, d) => {
     const want = d.map((o) => o.insert).join('').split('\n').slice(0, -1).map(squash).join('\n');

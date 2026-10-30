@@ -139,3 +139,22 @@ test('review: a cancellation arriving before a delayed go still revokes that run
   assert.equal(p.uploads.length, 0);
   assert.equal(p.clicks.length, 0);
 });
+
+test('handIn honours here even when an identical file was already listed', async () => {
+  const p = page(), file = { name: 'one.pdf', mime: 'application/pdf', bytes: new Uint8Array([1, 2, 3]) };
+  assert.equal(await p.ctx.GZ_WRITER_SUBMIT.handIn(p.box, file), null);
+  assert.equal(await p.ctx.GZ_WRITER_SUBMIT.handIn(p.box, file, () => false), 'page');
+  assert.equal(p.uploads.length, 1);
+});
+
+test('handIn accepts byte views and returns codes for unreadable or failed dispatches', async () => {
+  const p = page(), file = { name: 'one.pdf', mime: 'application/pdf', bytes: new Uint16Array(new Uint8Array([8, 9, 10, 11, 12, 13]).buffer, 2, 2) };
+  assert.equal(await p.ctx.GZ_WRITER_SUBMIT.handIn(p.box, file), null);
+  assert.deepEqual([...new Uint8Array(await p.uploads[0].arrayBuffer())], [10, 11, 12, 13]);
+  assert.equal(await p.ctx.GZ_WRITER_SUBMIT.handIn(p.box, null), 'file');
+  const bytes = new ArrayBuffer(3); structuredClone(bytes, { transfer: [bytes] });
+  assert.equal(await p.ctx.GZ_WRITER_SUBMIT.handIn(p.box, { ...file, bytes }), 'file');
+  const q = page(); q.input.dispatchEvent = () => { throw new Error('input gone'); };
+  assert.equal(await q.ctx.GZ_WRITER_SUBMIT.handIn(q.box, file), 'review');
+  assert.equal(q.clicks.length, 0);
+});
