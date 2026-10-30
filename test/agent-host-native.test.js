@@ -453,3 +453,33 @@ test('a prepared update waits for a long call and its split reply, then quits th
     fs.rmSync(temp, { recursive: true, force: true });
   }
 });
+
+test('replayed hellos cannot reset a live session, replace its nonce or resurrect a session after bye', { skip: !S.supported }, async () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-agent-replay-'));
+  const group = path.join(temp, 'group');
+  fs.mkdirSync(group, { mode: 0o700 });
+  const file = path.join(temp, 'Replay.swift');
+  fs.writeFileSync(file, fs.readFileSync(bridgeFile, 'utf8') + fs.readFileSync(hostFile, 'utf8') + HARNESS);
+  const swift = S.run(file, [path.join(temp, 'run'), group, '60', String(LINE), String(QUEUE)], { flags: ['-D', 'GLAZE_DMG', '-default-isolation', 'MainActor'] });
+  const send = async (b) => {
+    swift.send({ cmd: 'batch', id: 1, batch: b });
+    for (;;) { const m = await swift.next(); if (m.ev === 'reply') return m.reply; }
+  };
+  const replay = { ok: false, error: 'a replayed hello' };
+  try {
+    assert.equal((await swift.next()).started, true);
+    assert.deepEqual(await send(B(1, 1, [HELLO])), { ok: true });
+    assert.deepEqual(await send(B(1, 1, [HELLO])), replay, 'a duplicate hello cannot reset seq');
+    assert.deepEqual(await send(B(1, 2, [])), { ok: true });
+    assert.deepEqual(await send(B(2, 1, [HELLO])), { ok: true });
+    assert.deepEqual(await send(B(1, 1, [HELLO])), replay, 'a retired hello cannot take over a new session');
+    assert.deepEqual(await send(B(2, 2, [])), { ok: true }, 'the current nonce and seq still work');
+    assert.deepEqual(await send(B(2, 3, [{ t: 'bye' }])), { ok: true });
+    assert.deepEqual(await send(B(2, 1, [HELLO])), replay, 'bye cannot erase the replay guard');
+    assert.deepEqual(await send(B(3, 1, [HELLO])), { ok: true }, 'a fresh worker can reconnect');
+  } finally {
+    swift.send({ cmd: 'stop' });
+    await swift.done;
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
+});
