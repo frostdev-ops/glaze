@@ -6,7 +6,9 @@
 // {t:'error',why:'no-node'}, which the worker shows as no-node (lib/agent-link.js), and exits 1. It still names the script
 // it would run, so setup, uninstall and doctor know it as theirs.
 'use strict';
+const fs = require('node:fs');
 const path = require('node:path');
+const SH_SAFE = fs.readFileSync(path.join(__dirname, 'launcher-trust.sh'), 'utf8');
 
 const abs = (p) => {
   if (typeof p !== 'string' || !(path.posix.isAbsolute(p) || path.win32.isAbsolute(p))) throw new Error(`launcher paths must be absolute: ${p}`);
@@ -26,23 +28,26 @@ const wire = () => {
 };
 const octal = (buf) => [...buf].map((b) => (b >= 0x20 && b < 0x7f && b !== 0x25 && b !== 0x5c && b !== 0x27 ? String.fromCharCode(b) : `\\${b.toString(8).padStart(3, '0')}`)).join('');
 
-const sh = ({ node, also = [], script, browser }) => (node === null
+const oldSh = ({ node, also = [], script, browser }) => (node === null
   ? `#!/bin/sh\n: no node for ${q(abs(script))} host --browser=${id(browser)}\nprintf '${octal(wire())}'\nexit 1\n`
   : `#!/bin/sh\nfor n in ${[node, ...also].map((n) => q(abs(n))).join(' ')}; do\n  [ -f "$n" ] && [ -x "$n" ] && exec "$n" ${q(abs(script))} host --browser=${id(browser)} "$@"\ndone\nprintf '${octal(wire())}'\nexit 1\n`);
+const sh = (o) => o.node === null ? oldSh(o) : oldSh(o).replace('#!/bin/sh\n', SH_SAFE)
+  .replace('&& exec "$n"', '&& safe_path "$n" 2>/dev/null && exec "$n"');
 // cmd expands % even inside quotes, so it is doubled. cmd reads a .bat a line at a time from where it left off, so the
 // command ends the file's reading itself (`& exit /b`): a launcher rewritten while its host runs is never read further.
 // PowerShell writes the no-node bytes: cmd has no way to write a NUL. %SystemRoot% is the browser's own.
 const PS = '"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -NonInteractive -Command';
 const PS_WRITE = () => `"$o=[Console]::OpenStandardOutput();$b=[byte[]](${[...wire()].join(',')});$o.Write($b,0,$b.Length);$o.Flush()"`;
-const bat = ({ node, also = [], script, browser }) => {
+const makeBat = ({ node, also = [], script, browser }, regular = true) => {
   const w = (p) => {
     if (/["\x00-\x1f]/.test(abs(p))) throw new Error(`invalid character in launcher path: ${p}`);
     return `"${p.replace(/%/g, '%%')}"`;
   };
   if (node === null) return `@echo off\r\n@setlocal DisableDelayedExpansion\r\nrem no node for ${w(script)} host --browser=${id(browser)}\r\n${PS} ${PS_WRITE()} & exit /b 1\r\n`;
-  const run = (n) => `if exist ${w(n)} (${w(n)} ${w(script)} host --browser=${id(browser)} %* & exit /b)\r\n`;
+  const run = (n) => `if exist ${w(n)} ${regular ? `if not exist ${w(`${n}\\`)} ` : ''}(${w(n)} ${w(script)} host --browser=${id(browser)} %* & exit /b)\r\n`;
   return `@echo off\r\n@setlocal DisableDelayedExpansion\r\n${[node, ...also].map(run).join('')}${PS} ${PS_WRITE()} & exit /b 1\r\n`;
 };
+const bat = (o) => makeBat(o);
 const text = (platform, o) => (platform === 'win32' ? bat(o) : sh(o));
 const file = (platform, hosts, browser) => path.join(hosts, platform === 'win32' ? `${id(browser)}.bat` : id(browser));
 
@@ -53,7 +58,7 @@ const BAT = /^@echo off\r\n(?:@setlocal DisableDelayedExpansion\r\n)?"([^"\x00-\
 // A launcher with nodes is ours only as text() writes it.
 const Q = String.raw`'((?:[^']|'\\'')*)'`, W = '"([^"\x00-\x1f]*)"';
 const SH_FOR = new RegExp(`^#!/bin/sh\nfor n in ((?:${Q} ?)+); do\n  \\[ -f "\\$n" \\] && \\[ -x "\\$n" \\] && exec "\\$n" ${Q} host --browser=([a-z][a-z-]*) "\\$@"\n`);
-const BAT_IF = new RegExp(`^@echo off\r\n@setlocal DisableDelayedExpansion\r\n((?:if exist ${W} \\(${W} ${W} host --browser=([a-z][a-z-]*) %\\* & exit /b\\)\r\n)+)`);
+const BAT_IF = /^@echo off\r\n@setlocal DisableDelayedExpansion\r\n((?:if exist [^\r\n]+\r\n)+)/;
 const nodesOf = (list, re, un) => [...list.matchAll(re)].map((m) => un(m[1]));
 // A launcher with no node is ours only as text() writes it.
 const NONE = /^(?:#!\/bin\/sh\n: no node for '((?:[^']|'\\'')*)' host --browser=([a-z][a-z-]*)\n|@echo off\r\n@setlocal DisableDelayedExpansion\r\nrem no node for "([^"\x00-\x1f]*)" host --browser=([a-z][a-z-]*)\r\n)/;
@@ -66,17 +71,21 @@ const parse = (t) => {
   }
   const unSh = (s) => s.replace(/'\\''/g, "'"), unBat = (s) => s.replace(/%%/g, '%');
   const back = (o, make) => { try { return make(o) === t ? o : null; } catch { return null; } };
-  let f = typeof t === 'string' && SH_FOR.exec(t);
+  const guarded = typeof t === 'string' && t.startsWith(SH_SAFE);
+  const plain = guarded ? t.replace(SH_SAFE, '#!/bin/sh\n').replace('&& safe_path "$n" 2>/dev/null && exec "$n"', '&& exec "$n"') : t;
+  let f = typeof plain === 'string' && SH_FOR.exec(plain);
   if (f) {
     const [node, ...also] = nodesOf(f[1], new RegExp(Q, 'g'), unSh);
-    return back({ node, also, script: unSh(f[f.length - 2]), browser: f[f.length - 1] }, sh);
+    return back({ node, also, script: unSh(f[f.length - 2]), browser: f[f.length - 1] }, guarded ? sh : oldSh);
   }
   f = typeof t === 'string' && BAT_IF.exec(t);
   if (f) {
-    const line = new RegExp(`if exist ${W} \\(${W} ${W} host --browser=([a-z][a-z-]*) %\\* & exit /b\\)\r\n`, 'g');
+    const line = new RegExp(`if exist ${W} (?:if not exist ${W} )?\\(${W} ${W} host --browser=([a-z][a-z-]*) %\\* & exit /b\\)\r\n`, 'g');
     const lines = [...f[1].matchAll(line)];
+    if (!lines.length) return null;
     const [node, ...also] = lines.map((m) => unBat(m[1]));
-    return back({ node, also, script: unBat(lines[0][3]), browser: lines[0][4] }, bat);
+    const o = { node, also, script: unBat(lines[0][4]), browser: lines[0][5] };
+    return back(o, bat) || back(o, (o) => makeBat(o, false));
   }
   let m = typeof t === 'string' && SH.exec(t);
   if (m) return { node: unSh(m[1]), also: [], script: unSh(m[2]), browser: m[3] };

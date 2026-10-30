@@ -117,7 +117,7 @@ test('the manifest is MCPB 0.3: a node server run as glaze-mcp --from=mcpb, the 
 test('the staged tree is the npm package under server/, with the manifest and icon beside it; its entry point runs', (t) => {
   const dir = path.join(scratch(t), 'stage');
   const got = P().stage(dir);
-  const lib = fs.readdirSync(path.join(PKG, 'lib')).filter((f) => f.endsWith('.js')).map((f) => path.join('server', 'lib', f));
+  const lib = fs.readdirSync(path.join(PKG, 'lib')).filter((f) => /\.(js|sh)$/.test(f)).map((f) => path.join('server', 'lib', f));
   const want = ['manifest.json', 'icon.png', path.join('server', 'package.json'), path.join('server', 'LICENSE'), path.join('server', 'bin', 'glaze-mcp.js'), ...lib].sort();
   assert.deepEqual(files(dir), want);
   assert.deepEqual([...got].sort(), want);

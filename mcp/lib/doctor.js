@@ -98,7 +98,8 @@ const run = async (o = {}) => {
       let st;
       try { st = fs.statSync(n); } catch { return `node at ${n} is gone`; }
       if (!st.isFile()) return `${n} is not a regular file`;
-      return modes && !(st.mode & 0o111) ? `${n} is not executable` : '';
+      try { if (modes) fs.accessSync(n, fs.constants.X_OK); } catch { return `${n} is not executable`; }
+      return trustedPath(n) || '';
     };
     const why = gone(l.node), node = why ? l.also.find((n) => !gone(n)) : l.node;
     if (!node) return [...out, `${why}. ${AGAIN}`];

@@ -207,15 +207,15 @@ test('ids: the store id, an unpacked folder\'s id as Chrome derives it, validati
 // ---- launchers --------------------------------------------------------------------------------------------------------
 test('launchers: each node they name tried in turn, by absolute, quoted paths, then the no-node message; a .bat with CRLF, %* and its % doubled', () => {
   const sh = L.sh({ node: "/opt/o'k/node", also: ['/usr/local/bin/node'], script: '/a b/glaze-mcp.js', browser: 'brave' });
-  assert.equal(sh, `#!/bin/sh\nfor n in '/opt/o'\\''k/node' '/usr/local/bin/node'; do\n  [ -f "$n" ] && [ -x "$n" ] && exec "$n" '/a b/glaze-mcp.js' host --browser=brave "$@"\ndone\n`
-    + L.sh({ node: null, script: '/a b/glaze-mcp.js', browser: 'brave' }).split('\n').slice(2).join('\n'));
+  assert.ok(sh.endsWith(`for n in '/opt/o'\\''k/node' '/usr/local/bin/node'; do\n  [ -f "$n" ] && [ -x "$n" ] && safe_path "$n" 2>/dev/null && exec "$n" '/a b/glaze-mcp.js' host --browser=brave "$@"\ndone\n`
+    + L.sh({ node: null, script: '/a b/glaze-mcp.js', browser: 'brave' }).split('\n').slice(2).join('\n')));
   const bat = L.bat({ node: 'C:\\Program Files\\nodejs\\node.exe', also: ['C:\\nvm4w\\node.exe'], script: 'C:\\Users\\100%\\glaze-mcp\\0.1.0\\bin\\glaze-mcp.js', browser: 'edge' });
   // `& exit /b` on the same line: cmd reads a .bat line by line from where it left off, so a rewrite while a host runs
   // must leave nothing after the command for it to read.
   const none = L.bat({ node: null, script: 'C:\\Users\\100%\\glaze-mcp\\0.1.0\\bin\\glaze-mcp.js', browser: 'edge' }).split('\r\n')[3];
   assert.equal(bat, '@echo off\r\n@setlocal DisableDelayedExpansion\r\n'
-    + 'if exist "C:\\Program Files\\nodejs\\node.exe" ("C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\100%%\\glaze-mcp\\0.1.0\\bin\\glaze-mcp.js" host --browser=edge %* & exit /b)\r\n'
-    + 'if exist "C:\\nvm4w\\node.exe" ("C:\\nvm4w\\node.exe" "C:\\Users\\100%%\\glaze-mcp\\0.1.0\\bin\\glaze-mcp.js" host --browser=edge %* & exit /b)\r\n'
+    + 'if exist "C:\\Program Files\\nodejs\\node.exe" if not exist "C:\\Program Files\\nodejs\\node.exe\\" ("C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\100%%\\glaze-mcp\\0.1.0\\bin\\glaze-mcp.js" host --browser=edge %* & exit /b)\r\n'
+    + 'if exist "C:\\nvm4w\\node.exe" if not exist "C:\\nvm4w\\node.exe\\" ("C:\\nvm4w\\node.exe" "C:\\Users\\100%%\\glaze-mcp\\0.1.0\\bin\\glaze-mcp.js" host --browser=edge %* & exit /b)\r\n'
     + `${none}\r\n`);
   assert.match(none, /& exit \/b 1$/);
   assert.equal(/[^\r]\n/.test(bat), false, 'every line ends in CRLF');
@@ -419,7 +419,7 @@ test('setup on Windows: manifests and .bat launchers in LOCALAPPDATA, one reg.ex
     assert.equal(m.path, path.join(hosts, `${b}.bat`));
     assert.deepEqual(b === 'firefox' ? m.allowed_extensions : m.allowed_origins, b === 'firefox' ? ['glaze@frostdev.io'] : [ORIGIN]);
     assert.equal(fs.readFileSync(m.path, 'utf8'), L.bat({ node: 'C:\\Program Files\\nodejs\\node.exe', script, browser: b }));
-    assert.match(fs.readFileSync(m.path, 'utf8'), /\r\nif exist "C:\\Program Files\\nodejs\\node\.exe" \("C:\\Program Files\\nodejs\\node\.exe" "[^"]+" host --browser=[a-z-]+ %\* & exit \/b\)\r\n/);
+    assert.match(fs.readFileSync(m.path, 'utf8'), /\r\nif exist "C:\\Program Files\\nodejs\\node\.exe" if not exist "C:\\Program Files\\nodejs\\node\.exe\\" \("C:\\Program Files\\nodejs\\node\.exe" "[^"]+" host --browser=[a-z-]+ %\* & exit \/b\)\r\n/);
   }
   assert.equal(fs.existsSync(path.join(hosts, 'vivaldi.json')), false);
   assert.equal(fs.existsSync(path.join(hosts, 'vivaldi.bat')), false);
