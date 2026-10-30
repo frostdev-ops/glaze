@@ -3348,6 +3348,7 @@
   "Check with AI": "Vérifier avec l’IA",
   "Checking…": "Vérification…",
   "Source removed": "Source supprimée",
+  "Sources could not be saved.": "Les sources n’ont pas pu être enregistrées.",
   "Use a DOI, ISBN or web address.": "Utilisez un DOI, un ISBN ou une adresse web.",
   "Looking up…": "Recherche…",
   "This page redirects. Use its final address or add it manually.": "Cette page redirige. Utilisez son adresse finale ou ajoutez-la à la main.",

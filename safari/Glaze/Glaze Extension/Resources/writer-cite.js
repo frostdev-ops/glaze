@@ -6,7 +6,8 @@
 //   open({ anchor, prefill, form }) · add(prefill) · sourcesView(container) → { refresh, destroy } · count(doc?, sources?, style?)
 //   sources() · setSources(list) · use(style) · style() · on(fn) (sources or style changed) · references()
 // A lookup asks the browser for a page's host from the click itself (GZ_SITE.reach's way), then the worker fetches
-// ('glaze:writer-lookup', lib/writer-lookup.js); what comes back is parsed here as untrusted text.
+// ('glaze:writer-lookup', lib/writer-lookup.js); what comes back is parsed here as untrusted text. Open writers reload
+// sources on storage changes. Simultaneous saves across tabs still use the last write; storage.local has no transaction.
 (() => {
   const F = globalThis.GZ_WRITER_FRAME, C = globalThis.GZ_WRITER_CITE, S = globalThis.GZ_WRITER_SOURCES, LK = globalThis.GZ_WRITER_LOOKUP;
   if (!F || !C || !S || !LK) return;
@@ -62,11 +63,41 @@
     undoTimer = setTimeout(clearUndo, 8000);
   };
 
+  const saveNotice = el('div', { class: 'gzc-undo', role: 'status', hidden: true, text: t('Sources could not be saved.') });
+  document.body.append(saveNotice);
+
   // ---- the style and the sources --------------------------------------------------------------------------------------
   const use = (s) => { const v = STYLE[String(s || '').toLowerCase()]; if (v && v !== style) { style = v; changed(); } return style; };
+  const stateOf = (loaded) => Array.isArray(loaded) ? { sources: loaded, removed: [] } : loaded;
+  const accept = (stored) => {
+    if (JSON.stringify(sources) === JSON.stringify(stored.sources) && JSON.stringify([...removedBibliography]) === JSON.stringify(stored.removed)) return;
+    sources = stored.sources;
+    removedBibliography.clear();
+    for (const id of stored.removed) removedBibliography.add(id);
+    changed();
+  };
+  const reload = async (load) => {
+    const read = ++load.read;
+    const stored = stateOf(await S.load(load.key, undefined, { state: true }));
+    if (loading !== load || load.read !== read || load.writes || load.failed || !watching) return;
+    accept(stored);
+  };
   const persist = () => {
     if (loading?.pending) { loading.edits = sources.slice(); return Promise.resolve(true); }
-    return key ? S.save(key, sources, undefined, { removed: [...removedBibliography] }) : Promise.resolve(true);
+    if (!key) return Promise.resolve(true);
+    const load = loading, list = sources.slice(), removed = [...removedBibliography];
+    load.writes++;
+    load.read++; // a read begun before this edit cannot replace it
+    load.saves = (load.saves || Promise.resolve()).then(() => S.save(load.key, list, undefined, { removed })).catch(() => false).then((ok) => {
+      load.writes--;
+      if (loading === load && !load.writes) {
+        load.failed = ok === false;
+        saveNotice.hidden = !load.failed;
+        if (load.refresh && ok !== false) { load.refresh = false; reload(load); }
+      }
+      return ok;
+    });
+    return load.saves;
   };
   const setSources = (list) => {
     const next = S.dedupe(list), ids = new Set(next.map((s) => s.id));
@@ -79,23 +110,40 @@
     if (k === key) return;
     clearUndo();
     key = k;
+    saveNotice.hidden = true;
     seenBibliography.clear();
     removedBibliography.clear(); bibliographyLinks.clear();
     sources = [];
     referenceBlock = null;
-    const load = loading = { key: k, pending: !!k, edits: null };
+    const load = loading = { key: k, pending: !!k, edits: null, writes: 0, read: 0, refresh: false };
     changed();
     if (!k) return;
-    const loaded = await S.load(k, undefined, { state: true }), storedState = Array.isArray(loaded) ? { sources: loaded, removed: [] } : loaded, stored = storedState.sources;
+    let storedState;
+    do { load.refresh = false; storedState = stateOf(await S.load(k, undefined, { state: true })); } while (loading === load && load.refresh);
+    const stored = storedState.sources;
     load.pending = false;
     const merged = load.edits ? S.dedupe([...load.edits, ...stored]) : stored;
     if (loading !== load) return;
     for (const id of storedState.removed) removedBibliography.add(id);
-    if (load.edits) S.save(k, merged, undefined, { removed: [...removedBibliography] });
     sources = merged;
+    if (load.edits) persist();
     changed();
     importBibliography();
   };
+  const storageChanges = globalThis.chrome?.storage?.onChanged;
+  let watching = true;
+  const storageChanged = (changes, area) => {
+    if (area !== 'local' || !key || !Object.hasOwn(changes, key)) return;
+    if (loading.pending || loading.writes || loading.failed) loading.refresh = true;
+    else reload(loading);
+  };
+  storageChanges?.addListener(storageChanged);
+  addEventListener('pagehide', () => { watching = false; storageChanges?.removeListener(storageChanged); });
+  addEventListener('pageshow', (event) => {
+    if (!event.persisted) return;
+    watching = true; storageChanges?.addListener(storageChanged);
+    if (key) storageChanged({ [key]: {} }, 'local');
+  });
   F.on('ready', (_, init) => loadFor(init?.context || F.context()).then(() => importBibliography()));
   F.on('context', (c) => { if (pop.hidden === false) close(); saved = null; return loadFor(c); });
 

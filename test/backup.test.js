@@ -736,3 +736,18 @@ for (const [name, extra] of [['Look parts', { parts: { x: { invalid: true } } }]
     assert.equal(await reasonOf(B.read(file)), 'bad');
   });
 }
+
+
+test('Back up carries assignment source host keys, ports and local document keys', async () => {
+  const paper = { school: 'bb.school.test:8443', user: '_900_1', course: '_101_1', content: '_7_1' };
+  const keys = [SR.keyOf({ paper }), SR.keyOf({ paper: { ...paper, school: 'bb.school.test' } }),
+    SR.key({ school: 'local', user: 'local', course: 'papers', item: `doc:${id(1)}` }), SOURCES];
+  const local = Object.fromEntries(keys.map((k, n) => [k, { sources: [source(`Source ${n}`, `source-${n}`)], at: NOW }]));
+  const a = device(local), b = device();
+  try {
+    const { plan, out } = await restore(b, await backUp(a), ['sources']);
+    assert.deepEqual(Object.keys(plan.cats.sources).sort(), keys.sort());
+    assert.deepEqual(out.failed, []);
+    for (const k of keys) assert.deepEqual(b.store[k], local[k]);
+  } finally { a.stop(); b.stop(); }
+});
