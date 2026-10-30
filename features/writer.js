@@ -246,7 +246,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       const f = box.flushing;
       if (!f || m.request !== f.request) return;
       // Saved: Ultra's own button goes on with the text (Ultra may have drawn its footer again meanwhile), or the compact
-      // bar says why not. A paper too long for Ultra's box: the frame has said so and offers Full writer, focused.
+      // bar says why not. A paper too long for Ultra's box: the frame has said so and focused Full writer itself (focusing
+      // the frame from here would put its focus back on its body).
       let why = null;
       try {
         if (m.ok === true) {
@@ -255,7 +256,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
           else if (typeof m.html !== 'string' || !Array.isArray(m.delta) || !sync(box, m.html, m.delta)) why = 'text';
           else if (!U().enabled(b)) why = f.action === 'submit' ? 'submit' : 'page';
           else { passing = b; try { b.click(); } finally { passing = null; } }
-        } else if (m.reason === 'long') box.frame?.focus?.({ preventScroll: true });
+        }
       } finally { endFlush(box, why); }
     }
     else if (m.type === 'view' || m.type === 'room') { if (box.mode === 'paper') view(box, m); }

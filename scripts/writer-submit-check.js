@@ -891,7 +891,7 @@ const HARNESS = `(() => {
     await p.click(SUBMIT);
     await until(() => fr.evaluate(() => document.hasFocus() && !!document.activeElement?.matches('.gw-bar .gp-full')), 'Full writer focused');
     await quiet(() => p.evaluate(() => __clicks.length > 0), 'Ultra\'s Submit sent a partial text');
-    check((await bar(fr)).text === 'Too long for Ultra’s text box. Use Full writer.' && await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.editable) && (await p.evaluate(() => __text())) === 'Short start.\n', 'Ultra\'s Submit on it sends nothing, the bar still says why, Full writer has the focus, the box is the student\'s again');
+    check((await bar(fr)).text === 'Too long for Ultra’s text box. Use Full writer.' && await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.editable && document.hasFocus() && !!document.activeElement?.matches('.gw-bar .gp-full')) && (await p.evaluate(() => __text())) === 'Short start.\n', 'Ultra\'s Submit on it sends nothing, the bar still says why, Full writer keeps the focus, the box is the student\'s again');
     await p.keyboard.press('Space');
     await until(async () => (await fullSet()) === true && await fr.evaluate(() => document.documentElement.dataset.view === 'full' && document.querySelectorAll('.gp-sheet').length > 1), 'Full writer from the switch', 60000);
     check(true, 'Space on it turns Full writer on (writer.full saved): the paper in its pages, for a .docx');

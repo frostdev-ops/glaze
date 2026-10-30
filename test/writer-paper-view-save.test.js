@@ -24,7 +24,7 @@ test('full → compact refuses to project when the paper or its view version can
 // The compact bar's line and the hold, as writer-paper.js has them (from the line's element to setView), over stand-ins.
 const flushCtx = ({ save, project }) => {
   const messages = [], doc = {}, view = { props: { editable: () => true }, state: { doc }, setProps(o) { Object.assign(this.props, o); } };
-  const el = (cls = '') => ({ inert: false, textContent: '', title: '', dataset: {}, children: [], classList: { contains: (c) => cls.split(' ').includes(c) }, toggleAttribute(n, on) { this[n] = on; }, focus() { this.focused = true; }, getClientRects: () => [1] });
+  const el = (cls = '') => ({ inert: false, textContent: '', title: '', dataset: {}, children: [], classList: { contains: (c) => cls.split(' ').includes(c) }, toggleAttribute(n, on) { this[n] = on; }, focus() { this.focused = (this.focused || 0) + 1; }, getClientRects: () => [1] });
   const bar = el('gw-bar'), body = el(), full = el('gp-full');
   const ctx = vm.createContext({ view, compact: true, loaded: true, holding: false, switching: null, flushing: null, projecting: false,
     root: { inert: false }, boxEl: { children: [body, bar] }, host: { say: (m) => messages.push(m) }, save, project, setView() {}, queueMicrotask,
@@ -76,7 +76,7 @@ test('compact flush: why Ultra\'s button didn\'t go stays in the bar — not sav
   assert.deepEqual({ ...long.messages[0] }, { type: 'compact:flushed', request: 'c', ok: false, reason: 'long' });
   assert.equal(long.line.textContent, 'Too long for Ultra’s text box. Use Full writer.');
   assert.equal(long.full['data-offer'], true);
-  assert.equal(long.full.focused, true);
+  assert.equal(long.full.focused, 1);
   const page = flushCtx({ save: async () => ({}), project: () => PROJECTED });
   await page.ctx.begin('d', 'submit');
   page.ctx.end('d', 'text');
