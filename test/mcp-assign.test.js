@@ -260,4 +260,6 @@ test('rubric numbers come back as the site means them, not with float noise (liv
       cells: [{ level: 'a', detail: '', value: 0.1 + 0.2 }] }] } });
   assert.equal(r.points, 5);
   assert.deepEqual([r.rubric.criteria[0].points, r.rubric.criteria[0].weight, r.rubric.criteria[0].cells[0].value], [0.7, 14, 0.3]);
+  // Only the float noise goes: a value the site really has, like 20.2 / 20.1, keeps its digits for the app to round as Glaze does.
+  assert.equal(require('../lib/mcp/tools-assign.js').clean({ rubric: { criteria: [{ points: 20.2 / 20.1 }] } }).rubric.criteria[0].points, 1.00497512438);
 });
