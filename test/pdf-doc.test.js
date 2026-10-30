@@ -276,6 +276,38 @@ test('signature fields protect pages even when SigFlags is missing or a signatur
   }
 });
 
+test('page and byte limits bound intermediate work and reject invalid overrides', async () => {
+  const pdf = await api(), three = F.FIXTURES.three();
+  for (const limits of [{ bytes: NaN }, { pages: NaN }, { merged: -1 }]) await assert.rejects(pdf.open(three, { limits }), RangeError);
+  assert.throws(() => D.layout(1, Array.from({ length: 10 }, () => ({ op: 'duplicate', pages: [0] })), [], { pages: 5 }), refused('PdfTooManyPagesError'));
+  assert.throws(() => D.layout(500, [{ op: 'merge' }], [500]), refused('PdfTooManyPagesError'));
+  // Refuse accumulated merge bytes before even opening the first PDF.
+  await assert.rejects(pdf.bake(new Uint8Array(600), [{ op: 'merge', bytes: new Uint8Array(600) }], { limits: { merged: 1000 } }), refused('PdfTooLargeError'));
+  await assert.rejects(pdf.bake(three, [], { limits: { merged: 1000 } }), refused('PdfTooLargeError'));
+  await assert.rejects(pdf.bake(three, [{ op: 'duplicate', pages: [0] }], { limits: { bytes: three.length } }), refused('PdfTooLargeError'));
+});
+
+test('pdf.js refuses an inflated save before allocating the output buffer', async () => {
+  const fs = require('node:fs'), vm = require('node:vm');
+  const worker = fs.readFileSync(path.join(root, 'lib/pdfjs/pdf.worker.mjs'), 'utf8');
+  const writer = worker.slice(worker.indexOf('async function incrementalUpdate('), worker.indexOf('\n;// ./src/core/editor/pdf_editor.js'));
+  const allocations = [];
+  const write = vm.runInNewContext(`(${writer})`, {
+    Math, Uint8Array: class { constructor(length) { allocations.push(length); throw Error('oversize allocation attempted'); } },
+    updateAcroform: async () => {}, getTrailerDict: () => ({}), writeChanges: async () => [{ data: 'x'.repeat(2e6) }], getXRefTable: async () => {},
+  });
+  await assert.rejects(write({ originalData: { length: 49e6, at: () => 10 }, maxBytes: 50e6 }), /PDF output exceeds byte limit/);
+  assert.deepEqual(allocations, [], '49 MB + 2 MB is refused before Uint8Array allocation');
+  const pdfjs = await load(), pdf = await api(), { doc } = await pdf.open(F.FIXTURES.three());
+  try {
+    doc.annotationStorage.setValue('pdfjs_internal_editor_0', { annotationType: pdfjs.AnnotationEditorType.FREETEXT, color: [0, 0, 0], fontSize: 10,
+      value: 'x'.repeat(2000), pageIndex: 0, rect: [20, 20, 120, 40], rotation: 0, structTreeParentId: null, id: null });
+    await assert.rejects(doc.saveDocument(null, 2000), /PDF output exceeds byte limit/);
+    await assert.rejects(pdf.save(doc, { limits: { bytes: 2000 } }), refused('PdfTooLargeError'));
+    await assert.rejects(doc.extractPages([{ document: null }], null, 1000), /PDF output exceeds byte limit/);
+  } finally { await doc.loadingTask.destroy(); }
+});
+
 test('layout applies page operations in order, each counting the pages as the ones before left them', () => {
   const at = (pages) => pages.map((p) => (p.source === 'blank' ? `blank${p.size ? p.size.join('x') : ''}` : `${p.source}:${p.page}`) + (p.turn ? `@${p.turn}` : ''));
   assert.deepEqual(at(D.layout(3, [])), ['0:0', '0:1', '0:2']);
