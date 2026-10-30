@@ -407,7 +407,11 @@ async function onAndAgents() {
   ph.host = { rec: host && { ...host.rec, token: '…' }, argv, run: runFolder(P1.home) };
   ok('2', 'the link is connected to the helper setup installed, which Chromium started', up?.host === VERSION && up.browser === 'chromium' && hosts(P1.home).length === 1
     && !!argv && same(argv.slice(1), [L.parse(R.phases.setup.launcher)?.script, 'host', '--browser=chromium', IDS.origin(E1.id)]), { up, ...ph.host });
-  const instance = ph.instance = (await opt.evaluate(() => chrome.storage.local.get('mcpInstance'))).mcpInstance;
+  const instance = ph.instance = await opt.evaluate(() => new Promise((resolve, reject) => {
+    const r = indexedDB.open('glaze-mcp-settings', 1);
+    r.onerror = () => reject(r.error);
+    r.onsuccess = () => { const g = r.result.transaction('settings').objectStore('settings').get('mcpInstance'); g.onsuccess = () => { r.result.close(); resolve(g.result); }; g.onerror = () => reject(g.error); };
+  }));
   ok('2', 'the run file is named for the worker\'s instance', host?.rec.instance === instance && runFolder(P1.home)?.join() === `chromium.${instance}.json,chromium.${instance}.sock`, { instance, run: runFolder(P1.home) });
 
   const doctor = (() => { try { return execFileSync(process.execPath, [BIN, 'doctor'], { env: envFor(P1.home), encoding: 'utf8' }); } catch (e) { return `${e.stdout}${e.stderr}`; } })();

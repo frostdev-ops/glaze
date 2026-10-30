@@ -7,6 +7,8 @@
 //   (local, session), browser ('chrome' | 'firefox' | 'safari'); timers, now() and random(n) default to the real ones.
 //   attach({ open(c, peer), line(c, text), close(c, why), state(status) }). send(c, text) and close(c, why) → whether it went;
 //   the link closes a connection itself as 'gone' (the helper left), 'stopped' or 'too-long' (a line over 64 MiB).
+//   storage.local here is the worker's: lib/background.js answers mcp and mcpInstance from its own IndexedDB, never from
+//   chrome.storage.local, which content scripts can write.
 //   ensure() brings the link to what storage.local mcp says (as lib/mcp/grants.js reads it) and runs on every trigger:
 //   worker start, onStartup, onInstalled, an mcp change either way, permissions.onAdded.
 //   stop() says bye, and disconnects the port itself unless the helper ends it within a second, as permissions.remove leaves
@@ -330,7 +332,7 @@ var GZ_AGENT_LINK = globalThis.GZ_AGENT_LINK || (() => {
     return { attach, send, close, ensure, stop, status };
   };
 
-  return { HOST, SAFARI, KEY, INSTANCE, STATES, make };
+  return { HOST, SAFARI, KEY, INSTANCE, SETTING, ID, STATES, make };
 })();
 GZ_AGENT_LINK;
 if (typeof module !== 'undefined') module.exports = GZ_AGENT_LINK;

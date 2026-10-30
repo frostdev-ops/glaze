@@ -10,7 +10,8 @@
 //   { signal, tool }) → { ok, source: 'tab' } | null (null: no tab to read), local, keys (a tool's ctx: storage.local and
 //   its keys), now, record(row) (GZ_MCP_GRANTS.record's), turn(f) (the broker's serializer), timers? ({ setTimeout,
 //   clearTimeout }) }) → { call } for lib/mcp/wire.js create.
-// A view: { app: { name (as the app reports itself), exe }, tool: { name, title }, group, summary? (an action's: the tool's
+// A view: { app: { name (as the app reports itself), exe }, tool: { name, title }, group, mod? (a mod tool's: its mod's name
+// in the state the call was listed from), summary? (an action's: the tool's
 // summarize, from Glaze's own data, never the model's words) }. progress may be given (message) or (n, total, message).
 // The answer: structuredContent { note, account, source: 'tab' | 'cache', at, ageSeconds, ...the rest of the tool's }, and
 // the same JSON in content[0].text; past LIMIT.text characters both hold the harness's omission receipt (lib/ai/loop.js
@@ -176,10 +177,11 @@ var GZ_MCP_CALLS = globalThis.GZ_MCP_CALLS || (() => {
     };
 
     // Steps 3 to 10. → [outcome (null: none logged), the call's answer].
-    const serve = async (t, stamp, id, c, signal, tell) => {
+    const serve = async (t, stamp, id, c, signal, tell, s0) => {
       if (signal.aborted) return answer('cancelled');
       const app = { name: cut(str(c.client?.name) || str(c.peer?.name), G().LIMIT.name), exe: str(c.peer?.exe) || null };
-      const view = { app, tool: { name: t.name, title: t.title || t.name }, group: t.group };
+      const mod = isMod(t) ? str((Array.isArray(s0?.mods) ? s0.mods : []).find((r) => `mod:${r?.id}` === t.owner)?.manifest?.name) : '';
+      const view = { app, tool: { name: t.name, title: t.title || t.name }, group: t.group, ...(mod && { mod }) };
       // Paired, and the group granted: asked once, a decline remembered.
       let rec = await grants.get(id);
       if (!rec) {
@@ -270,7 +272,7 @@ var GZ_MCP_CALLS = globalThis.GZ_MCP_CALLS || (() => {
       let n = 0;
       const tell = (message) => { if (typeof c.progress === 'function') c.progress(++n, undefined, typeof message === 'string' ? message : undefined); };
       let outcome, result;
-      try { [outcome, result] = await serve(t, stamp, id, c, signal, tell); } catch { [outcome, result] = signal.aborted ? answer('cancelled') : ['error', fail("Glaze couldn't run this tool.")]; }
+      try { [outcome, result] = await serve(t, stamp, id, c, signal, tell, s0); } catch { [outcome, result] = signal.aborted ? answer('cancelled') : ['error', fail("Glaze couldn't run this tool.")]; }
       if (outcome) {
         try { Promise.resolve(d.record({ at: start, app: id, tool: t.name, group: t.group, kind: t.kind, outcome, ms: Math.max(0, now() - start) })).catch(() => {}); } catch { /* The log never fails a call. */ }
       }

@@ -189,7 +189,7 @@ test('frames in give replies out: initialize, ping and an unknown method, each o
   const env = boot();
   const host = nodeHost(env.w);
   await connected(env);
-  assert.deepEqual(host.ports[0].sent[0], { t: 'hello', v: 1, glaze: env.w.manifest.version, instance: env.store.local.mcpInstance });
+  assert.deepEqual(host.ports[0].sent[0], { t: 'hello', v: 1, glaze: env.w.manifest.version, instance: kept(env.idb) });
   const a = agent(host.link(), 1), b = agent(host.link(), 2);
   const init = await a.ask(INIT(0));
   assert.equal(init.result.protocolVersion, '2025-11-25');
@@ -541,4 +541,72 @@ test('an unused Safari snapshot cannot survive off and give a new connection the
   const a = agent({ say: app.say, sent: () => app.frames }, 7);
   assert.equal((await a.ask({ jsonrpc: '2.0', id: 4, method: 'tools/list' })).error?.code, -32602, 'new connections must establish their own identity');
   await config(env, { op: 'set', on: false }, { ...EDITOR, url: base + 'options.html', origin: base.slice(0, -1) });
+});
+
+// Content scripts run on school pages and can write storage.local, so nothing there may pick the instance the helper names
+// its run file for, or the mod name the approval window shows.
+const PLANTED = 'f'.repeat(20), LEGACY = '0123456789abcdef0123';
+const kept = (idb) => idb.dbs.get('glaze-mcp-settings')?.get('settings')?.get('mcpInstance');
+const hello = (host) => host.ports.at(-1).sent.find((f) => f.t === 'hello')?.instance;
+
+test("the worker's instance is its own: a content script's storage.local write changes it in neither this worker nor the next", async () => {
+  const store = store0(), idb = fakeIDB().indexedDB;
+  const first = boot({ store, idb }), h1 = nodeHost(first.w);
+  await connected(first);
+  const mine = hello(h1);
+  assert.match(mine, /^[0-9a-f]{20}$/);
+  assert.equal(kept(idb), mine, "kept in the worker's database");
+  assert.equal(store.local.mcpInstance, undefined, 'never in storage.local');
+  await first.w.context.chrome.storage.local.set({ mcpInstance: PLANTED });
+  await config(first, { op: 'set', on: false });
+  await config(first, { op: 'set', on: true });
+  await connected(first);
+  assert.equal(hello(h1), mine, 'a reconnect in the same worker');
+  delete store.session.mcpLink;
+  const second = boot({ store, idb }), h2 = nodeHost(second.w);
+  await connected(second);
+  assert.equal(hello(h2), mine, 'the next worker');
+  await config(second, { op: 'set', on: false });
+});
+
+test("a 4.0.0 profile's instance moves once into the worker's database while an app is paired, and is made afresh otherwise", async () => {
+  const idb = fakeIDB().indexedDB;
+  idb.dbs.set(G.DB, new Map([[G.STORE, new Map([[MOD, { id: MOD, name: 'Claude', exe: '', verified: false, at: 1, used: 1, grants: {}, declined: {} }]])]]));
+  const store = store0({ local: { mcpInstance: LEGACY } });
+  const env = boot({ store, idb }), host = nodeHost(env.w);
+  await connected(env);
+  assert.equal(hello(host), LEGACY);
+  assert.equal(kept(idb), LEGACY);
+  assert.equal(store.local.mcpInstance, undefined, 'moved, not copied');
+  store.local.mcpInstance = PLANTED;
+  delete store.session.mcpLink;
+  const next = boot({ store, idb }), h2 = nodeHost(next.w);
+  await connected(next);
+  assert.equal(hello(h2), LEGACY, 'moved once: a later write is not taken');
+  await config(next, { op: 'set', on: false });
+
+  // No app ever used this profile's instance: one a page may have written is not taken.
+  const fresh = boot({ store: store0({ local: { mcpInstance: PLANTED } }) }), h3 = nodeHost(fresh.w);
+  await connected(fresh);
+  assert.match(hello(h3), /^[0-9a-f]{20}$/);
+  assert.notEqual(hello(h3), PLANTED);
+  assert.equal(fresh.store.local.mcpInstance, undefined);
+  await config(fresh, { op: 'set', on: false });
+});
+
+test("a mod group's ask carries the name from the worker's checked record, which a later storage.local write cannot change", async () => {
+  const env = boot({ store: store0({ local: await school({ mods: [MOD], [`mod:${MOD}`]: modRec(true) }) }) });
+  const host = nodeHost(env.w);
+  await connected(env);
+  const a = agent(host.link(), 1);
+  await a.ask(INIT(0));
+  a.send(INITIALIZED);
+  a.send(CALL(1, `mod_${MOD}_titles`));
+  const rec = await waiting(env, 'pair');
+  assert.equal(rec.group, `mod:${MOD}`);
+  assert.equal(rec.mod, 'Due titles');
+  await env.w.context.chrome.storage.local.set({ [`mod:${MOD}`]: { manifest: { name: 'Planted' } } });
+  await pause(50);
+  assert.equal(env.store.session[`mcpAsk:${rec.id}`].mod, 'Due titles');
+  await config(env, { op: 'set', on: false });
 });
