@@ -157,6 +157,19 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
     document.getElementById('gw')?.prepend(row);
     return row;
   };
+  let readyPaper = null, newSheet = null;
+  const refreshChoices = () => {
+    if (!readyPaper) return;
+    const paper = P()?.current();
+    if (paper?.kind?.() !== 'paper' || offers().length < 2) {
+      document.querySelector('.gk-choose')?.remove();
+      newSheet?.remove(); newSheet = null;
+      return;
+    }
+    newSheet ||= frame.item(t('New spreadsheet'), () => start(paper, 'sheet', { any: true }));
+    choice(paper);
+  };
+  globalThis.GZ_WRITER_SETTINGS?.follow?.(refreshChoices);
   frame.on('ready', () => {
     if (frame.mode() !== 'paper' || frame.kind() !== 'assignment') return;
     // ⋯ → New spreadsheet, and the choice, once the paper has loaded and only where both are offered.
@@ -164,10 +177,8 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
       for (let i = 0; i < 150 && !P()?.current(); i++) await new Promise((r) => setTimeout(r, 100));
       // The registry says whether this build has the spreadsheet kind (offers).
       if (Object.hasOwn(FRAME, 'sheet')) await P().need(['lib/doc-kinds.js']);
-      const paper = P()?.current();
-      if (!paper || paper.kind?.() !== 'paper' || offers().length < 2) return;
-      frame.item(t('New spreadsheet'), () => start(paper, 'sheet', { any: true }));
-      choice(paper);
+      readyPaper = P()?.current();
+      refreshChoices();
     })().catch((e) => console.error(e));
   });
 
