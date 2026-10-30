@@ -90,13 +90,48 @@
     return [svgEl('path', { d: 'M3 15h18M6 15v-5M11 15V3M16 15V8', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6 })];
   };
   const svgOf = (kind, colours) => { const g = svgEl('svg', { viewBox: '0 0 24 16', preserveAspectRatio: 'xMidYMid meet' }); g.append(...glyph(kind, colours)); return g; };
-  // A record without the summary: its active sheet's drawing, its chart frames counted from the kept XML (no parse).
+  // Legacy records: scan only the active sheet's owned drawing, with chart children
+  // of the first graphic frame in each anchor, just as the chart reader does (Choice/Fallback is one object).
+  const countXml = (xml) => {
+    const stack = [];
+    let anchor = null, n = 0;
+    const local = (name) => name.slice(name.lastIndexOf(':') + 1);
+    const leave = (name) => {
+      const i = stack.lastIndexOf(name);
+      if (i < 0) return;
+      stack.length = i;
+      if (anchor && stack.length < anchor.depth) anchor = null;
+      if (anchor?.frame && stack.length < anchor.frame) anchor.frame = 0;
+      if (anchor?.data && stack.length < anchor.data) anchor.data = 0;
+    };
+    // Quoted attributes may contain >; comments and CDATA never contribute tags. No DOM or chart models per card.
+    for (const m of xml.matchAll(/<(?:!--[\s\S]*?--|!\[CDATA\[[\s\S]*?\]\]|[!?][^>]*|\/?[\w:.-]+(?:[^"'<>]|"[^"]*"|'[^']*')*)>/g)) {
+      const tag = /^<(\/?)([\w:.-]+)/.exec(m[0]);
+      if (!tag) continue;
+      const [, close, name] = tag, k = local(name);
+      if (close) { leave(name); continue; }
+      if (stack.length === 1 && local(stack[0]) === 'wsDr' && /^(twoCellAnchor|oneCellAnchor|absoluteAnchor)$/.test(k)) anchor = { depth: stack.length + 1, frame: 0, data: 0, frameSeen: false, dataSeen: false, found: false };
+      if (anchor) {
+        if (k === 'graphicFrame' && !anchor.frameSeen) { anchor.frame = stack.length + 1; anchor.frameSeen = true; }
+        else if (k === 'graphicData' && anchor.frame && !anchor.dataSeen) { anchor.data = stack.length + 1; anchor.dataSeen = true; }
+        else if (k === 'chart' && anchor.data && stack.length === anchor.data && !anchor.found) { anchor.found = true; n++; }
+      }
+      stack.push(name);
+      if (/\/\s*>$/.test(m[0])) leave(name);
+    }
+    return n;
+  };
   const counted = (book) => {
     const sh = book?.sheets?.[book.active] || book?.sheets?.[0], path = sh?.keep?.drawing?.path, parts = book?.keep?.parts;
-    const part = path && parts && (parts[path] ?? parts[Object.keys(parts).find((k) => k.toLowerCase() === String(path).toLowerCase())]);
-    let xml = part?.data;
-    if (xml && typeof xml === 'object' && typeof xml.$b64 === 'string') { try { xml = atob(xml.$b64); } catch { xml = ''; } }
-    return typeof xml === 'string' ? (xml.match(/<(?:\w+:)?graphicData\b[^>]*uri="[^"]*chart[^"]*"/g) || []).length : 0;
+    if (!path || !parts) return 0;
+    const owners = book.sheets.filter((s) => s.keep?.drawing?.path === path);
+    if ((owners.find((s) => s.keep.sourceId === s.id) || owners[0]) !== sh) return 0;
+    const part = parts[path] ?? parts[Object.keys(parts).find((k) => k.toLowerCase() === String(path).toLowerCase())];
+    if (!part || typeof part !== 'object') return 0;
+    const data = part.data?.$b64 ?? part.data;
+    let xml = data;
+    if (typeof part.data?.$b64 === 'string') { try { xml = atob(data); } catch { xml = ''; } }
+    return typeof xml === 'string' ? countXml(xml) : 0;
   };
   const chartsOn = (box, rec) => {
     const list = Array.isArray(rec?.charts) ? rec.charts.filter((x) => x && Array.isArray(x.anchor) && x.anchor.length === 4 && x.anchor.every(Number.isSafeInteger)) : null;
