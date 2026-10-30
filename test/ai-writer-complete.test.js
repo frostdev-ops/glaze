@@ -236,3 +236,14 @@ test('a stable block ends at the document; suggestions and the caret never carry
   assert.match(b[1].text, /suggestions already shown/);
   assert.match(b[1].text, /the sentence the student is typing/);
 });
+
+
+test('completion privacy disclosure names the full document, per-pause transmission and transient suggestions', () => {
+  const policy = require('node:fs').readFileSync(require('node:path').join(__dirname, '../PRIVACY.md'), 'utf8');
+  const completion = policy.split('**Tab completion**')[1].split('**Feedback**')[0];
+  assert.match(completion, /whole document before the caret/);
+  assert.match(completion, /each pause/);
+  assert.match(completion, /4,000/);
+  assert.match(completion, /40/);
+  assert.match(completion, /memory only/);
+});
