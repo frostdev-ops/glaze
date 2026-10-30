@@ -3448,6 +3448,7 @@
   "Light page": "Page claire",
   "Full writer": "Writer complet",
   "PDFs": "PDF",
+  "Page {page}": "Page {page}",
   "Too long for Ultra’s text box. Use Full writer.": "Trop long pour la zone de texte d’Ultra. Utilisez Writer complet.",
   "The ruler above the page, showing the paragraph’s indents and tab stops, which you can drag. Off, the page starts right under the toolbar.": "La règle au-dessus de la page, avec les retraits et tabulations du paragraphe, que vous pouvez faire glisser. Désactivée, la page commence juste sous la barre d’outils.",
   "Versions kept": "Versions conservées",
