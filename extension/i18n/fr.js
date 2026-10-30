@@ -3750,5 +3750,15 @@
   "as the app reports itself": "selon l’app elle-même",
   "Don't allow": "Ne pas autoriser",
   "Unnamed app": "App sans nom",
-  "Glaze restarted before you answered.": "Glaze a redémarré avant votre réponse."
+  "Glaze restarted before you answered.": "Glaze a redémarré avant votre réponse.",
+  "Glaze on-device AI": "IA locale de Glaze",
+  "Model size": "Taille du modèle",
+  "Auto": "Automatique",
+  "{n} GB": "{n} Go",
+  "This browser has no WebGPU, which Glaze’s on-device model needs.": "Ce navigateur n’a pas WebGPU, dont l’IA locale de Glaze a besoin.",
+  "This computer’s graphics can’t run Glaze’s on-device model.": "La carte graphique de cet ordinateur ne peut pas exécuter l’IA locale de Glaze.",
+  "Glaze’s on-device model could not start.": "L’IA locale de Glaze n’a pas pu démarrer.",
+  "Glaze’s on-device model stopped. Try again.": "L’IA locale de Glaze s’est arrêtée. Réessayez.",
+  "There isn’t enough free space for the model.": "Il n’y a pas assez d’espace libre pour le modèle.",
+  "The download lost its connection. Try again.": "Le téléchargement a perdu la connexion. Réessayez."
 };

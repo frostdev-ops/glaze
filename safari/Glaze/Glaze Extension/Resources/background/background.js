@@ -2336,7 +2336,7 @@ const loadInto = (m, sender, files, reply) => {
 // tab's own Glaze has said the attempt is an assignment (aiWriter). The connections live in the worker's own store; only
 // Settings' top frame reads and writes them ('glaze:ai-config'), and never sees a key it kept. Every file by name, in the one call: Firefox's package loads what the
 // worker's importScripts calls name (scripts/package-firefox.sh). A task (ai/tasks/<id>.js) goes in this list too.
-const aiFiles = () => importScripts('../writer/writer-sources.js', '../writer/writer-cite.js', '../ai/schema.js', '../ai/request.js', '../ai/stream.js', '../ai/failure.js', '../ai/endpoint.js', '../ai/text.js', '../ai/visual-cache.js', '../ai/models.js', '../ai/providers.js', '../ai/providers/openai.js', '../ai/providers/device.js', '../ai/providers/apple.js', '../ai/tools.js', '../ai/loop.js', '../ai/task.js', '../ai/tasks/syllabus-read.js', '../ai/tasks/writer-context.js', '../ai/tasks/writer-complete.js', '../ai/tasks/writer-review.js', '../ai/tasks/writer-image.js', '../ai/tasks/writer-feedback.js', '../ai/tasks/writer-outline.js', '../ai/tasks/writer-requirements.js', '../ai/tasks/writer-cite.js', '../ai/tasks/writer-decide.js', '../ai/settings.js', '../ai/broker.js');
+const aiFiles = () => importScripts('../writer/writer-sources.js', '../writer/writer-cite.js', '../ai/schema.js', '../ai/request.js', '../ai/stream.js', '../ai/failure.js', '../ai/endpoint.js', '../ai/text.js', '../ai/visual-cache.js', '../ai/models.js', '../ai/providers.js', '../ai/providers/openai.js', '../ai/providers/device.js', '../ai/providers/apple.js', '../ai/local/store.js', '../ai/local/format.js', '../ai/local/link.js', '../ai/providers/local.js', '../ai/tools.js', '../ai/loop.js', '../ai/task.js', '../ai/tasks/syllabus-read.js', '../ai/tasks/writer-context.js', '../ai/tasks/writer-complete.js', '../ai/tasks/writer-review.js', '../ai/tasks/writer-image.js', '../ai/tasks/writer-feedback.js', '../ai/tasks/writer-outline.js', '../ai/tasks/writer-requirements.js', '../ai/tasks/writer-cite.js', '../ai/tasks/writer-decide.js', '../ai/settings.js', '../ai/broker.js');
 globalThis.addEventListener?.('install', aiFiles);
 const ai = () => { if (typeof GZ_AI_BROKER === 'undefined') aiFiles(); return GZ_AI_BROKER; };
 let aiVault = null, aiLocal = null, aiRevision = 0;
@@ -2551,6 +2551,14 @@ const aiVisualScope = async (s) => {
     || await aiAttempt(s.tab.id, host.documentId, page.href) !== 'assignment') return null;
   return { school: page.school, account: page.account, assignment: page.assignment };
 };
+// Glaze's own model's engine host (ai/local/link.js): Chrome's offscreen document of this extension, ai/local/host.html,
+// and nothing else.
+chrome.runtime.onConnect.addListener((p) => {
+  if (p.name !== 'glaze:local') return;
+  const s = p.sender || {}, page = chrome.runtime.getURL('ai/local/host.html');
+  if (s.id !== chrome.runtime.id || s.tab || typeof s.url !== 'string' || s.url.split(/[?#]/)[0] !== page) { try { p.disconnect(); } catch { /* gone */ } return; }
+  ai(); GZ_AI_LOCAL.accept(p);
+});
 chrome.runtime.onConnect.addListener((p) => {
   if (p.name !== 'glaze:ai') return;
   ai().connect(p, { ...aiEnv(), who: String(p.sender?.tab?.id ?? 'none'), allowed: (what) => aiSender(p.sender || {}, what), visualScope: () => aiVisualScope(p.sender || {}) });

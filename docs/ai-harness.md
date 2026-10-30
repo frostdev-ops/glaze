@@ -16,6 +16,8 @@ until the student has turned AI on, chosen a model for that feature and allowed 
 | `ai/providers.js` | The provider registry and `run`, the one way to call a model. |
 | `ai/providers/openai.js` | Any Chat Completions server. A request's `effort` goes as OpenRouter's `reasoning.effort` there and as `reasoning_effort` elsewhere; a model that refuses it gets the next level up (none, minimal, low), then none at all, remembered an hour for that model. `mock.js` is for tests and evals only; the worker never loads it. |
 | `ai/providers/device.js` | Chrome's Prompt API (Chrome 138+), in the worker itself. Chrome chooses its built-in model; Glaze retains `gemini-nano` as its compatibility id. Unavailable elsewhere. |
+| `ai/providers/local.js` | Glaze's own model on this computer (LFM3, Glaze's WebGPU engine), Chrome and Firefox; unavailable in Safari. Below. |
+| `ai/local/` | Its formatter (`format.js`), the link to its engine host (`link.js`), the host (`host.js`, `host.html`, `offscreen.js`), the store, GGUF reader, tokenizer, engine, grammar and ladder. |
 | `ai/providers/apple.js` | Safari only: Apple's Foundation Models on this device, through the extension's native handler, `GlazeAI.swift`. One reply per request; no tools, no streaming. |
 | `ai/tools.js` | Tool definitions, `aiTools` (adds the required `reason`), `invokeReadTool`. |
 | `ai/loop.js` | The agent loop: rounds, batch triage, approvals, receipts, repair. |
@@ -37,7 +39,7 @@ The [Chrome 156 flag](https://chromium.googlesource.com/chromium/src/+/156.0.807
 
 storage.local `ai` (`ai/settings.js`) is `{ on, outline, sources, mode, model, models, tune, features }`. `model` is the overall model,
 `{ use, model, effort? }`: `use` a connection's id (a provider's: `openai`, `anthropic`, `gemini`, `openrouter`, `xai`,
-`mistral`, `groq`, `deepseek`; `device`, the model on this device; or `custom-1` and on, an endpoint the student added),
+`mistral`, `groq`, `deepseek`; `device`, the model on this device; `local`, Glaze's own model; or `custom-1` and on, an endpoint the student added),
 `model` its id at that provider (`''` on this device), `effort` the student's. `models` holds a feature's own model in that
 shape. A feature runs on its own model, else the overall one (`resolve`); with neither, or a connection with no model id,
 none is chosen (`chosen`), its status says `why: 'setup'` and Writer says "No AI model is chosen". `mode` is `simple` or
@@ -276,7 +278,7 @@ For a connection that goes over the network it reports `to`, the host the text g
 | Device status / download | 20 s / 4 minutes per shared attempt |
 | Answers | 10 MB across the entire response, including SSE; 64 KB of an error body is read |
 
-While an admitted Chrome device run is active, the broker sends `{ id, type: 'keepalive' }` on its existing port every
+While an admitted run on a model that downloads to this computer (a provider with `prepare`: `device`, `local`) is active, the broker sends `{ id, type: 'keepalive' }` on its existing port every
 20 seconds. Chrome's [worker lifecycle](https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle)
 allows a silent asynchronous operation to stop after 30 seconds; keeping a port open alone does not reset that timer.
 The pulse covers session setup, token measurement and non-streaming inference, including the quiet gaps within staged
@@ -371,3 +373,79 @@ Native Apple requests use the reported context size and preflight complete text 
 macOS 27.0.1, Apple's token counter throws for image attachments even when inference can read them. Image requests count
 their text separately and reserve an estimated 1,024 tokens per image; this estimate is not an exact measured image count.
 If the system refuses token counting, the request retains its output ceiling and the model's own context-size check.
+
+## Glaze's own model
+
+`ai/providers/local.js` (`local`, Settings' **Glaze on-device AI**) runs LiquidAI's LFM3 from `ai/local/models.json` on
+Glaze's WebGPU engine. caps: `{ text, json, stream, local: true, tools: false, images: false, context: 16000 }` (every tier
+reads 16k for now), so `writer.complete`'s brief path and Feedback's local orchestration apply. Settings, `ai/settings.js`
+`HERE` and `writer-ai.js` treat `device`, `apple` and `local` alike as models on this computer: no model id, no key.
+
+Where it runs: Chrome, an offscreen document (`ai/local/host.html`, reason WORKERS, the `offscreen` permission) whose
+`offscreen.js` runs `ai/local/host.js` in a dedicated Worker and connects a port `glaze:local` to the worker
+(`background/background.js` takes it only from that page of this extension, with no tab); Firefox, `host.js` in a Worker of
+the background event page, and while anything is in flight the page calls `runtime.getPlatformInfo()` every 20 s; Safari,
+nowhere: status `unavailable`, reason `browser`, and Settings lists no card (Apple Intelligence stays). The host keeps the
+weights loaded between requests and, after five minutes with nothing in flight, releases them and says `idle`: Chrome's
+document is closed, Firefox's Worker ended. A port that goes ends its calls as `provider-unavailable`, reason `host`; nothing
+is replayed. The host page's CSP: `default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src
+'self' https://huggingface.co https://*.huggingface.co https://*.hf.co`; the Worker itself runs under the manifest's
+`extension_pages` policy, which leaves `connect-src` open, and `ai/local/store.js` refuses any host but Hugging Face's.
+
+`status` is the worker's and starts nothing: the browser, `navigator.gpu`, a reason a run met (`engine`, `webgpu`,
+`hardware`, until a connection changes), then the store: `ready` when the model it runs is downloaded, else `download`,
+`downloading` while its prepare runs. The model: the tier Settings' Advanced keeps on the `local` connection (`{ provider:
+'local', tier }`), else the one downloaded (ready, then partial), else at Download the ladder's pick. Settings' ops:
+`test { provider: 'local' }` → `{ ok, state, reason?, size, tier, tiers: [{ tier, size }], progress? }`; `prepare` from the
+Download click (progress events as the device's; it answers `downloading` after four minutes while the download goes on in
+the host); `delete { provider: 'local' }` removes every downloaded model and ends a download. A failed download answers
+`download` with reason `quota` or `network`, so Download stays.
+
+A run: `ai/local/format.js` writes the request as `[{ special } | { text }]` parts, which the host tokenizes with
+`encodeWith` (page text never makes a control token). `ai/task.js` puts `task: { id, version }` on every request and
+`ai/text.js` `fenced: { context, data }`; `ai/request.js` keeps both, no provider sends them, and `estimateTokens` leaves them
+out. Dialects: `glaze` (the fine-tune: `<|startoftext|><|im_start|>system\n<|gz_task:ID|>{system}\n\n{TRUST}[\n\n{schema in
+words}]<|im_end|>\n<|im_start|>user\n<|gz_ctx|>label\ntext<|/gz_ctx|>\n…<|gz_data|>label\ntext<|/gz_data|><|im_end|>\n<|im_start|>
+assistant\n`, no `<think>`), and `chatml` for a `stock: true` model, whose weights never learnt Glaze's tokens (the harness's
+messages as written, the schema in words, `<think></think>` after the assistant header). The draft it follows is
+`glaze-plans/lfm-tune/train/format.js`; FORMAT.md is still to come (a TODO in `format.js`). The system turn is the prefix kept
+warm: up to three per loaded model, as snapshots. Sampling: the request's temperature, else LFM3's GGUF defaults
+(temperature 0.1, top-k 50); output up to the request's `maxTokens` (1,024 by default) and refused before reading when the
+prompt and output exceed the window (`request-rejected`, `context`).
+
+### The engine, grammar and ladder the host uses
+
+`ai/local/engine.js` (`GZ_AI_ENGINE`), loaded in the host's Worker after `quant.js` and `reference.js`:
+
+```js
+GZ_AI_ENGINE.load(gguf, { context, signal, onProgress? }) → Promise<model>
+  // gguf: GZ_AI_GGUF.open(store.open(id)); context: positions a sequence may hold (16000)
+model.context                                   // the positions it holds
+model.prefill(ids, { snapshot?, signal }) → Promise<snap | undefined>
+  // ids: Uint32Array fed at the next positions; afterwards the model holds the logits for the next one.
+  // snapshot: true → resolves to a snapshot of the state after them.
+model.decode({ sampler: { temperature, topK, topP?, repetitionPenalty? }, mask?, signal }) → Promise<id>
+  // samples one id from the held logits (temperature 0: greedy), with mask: a Uint32Array, token i allowed when bit
+  // i & 31 of word i >> 5 is set, never written; then feeds that id (the engine may defer it to its next call).
+model.snapshot() → Promise<snap>;  model.restore(snap) → Promise<void>  // positions after snap.pos are dropped
+snap: { pos, drop() }                           // drop frees what it holds; the host drops each one it lets go
+model.release()                                 // frees every GPU resource; the model is not used again
+// load rejects with signal.reason on abort, else an Error whose reason is 'webgpu' | 'memory' | 'lost' | 'model'
+// (the provider says webgpu | hardware | engine | assets).
+```
+
+`ai/local/grammar.js` (`GZ_AI_GRAMMAR`): per model `vocab(tokenizer.byteStrings(), { eos: [id] })`, per schema
+`compile(schema, vocab)` (a refusal: the schema in words only), per run `matcher()` with `mask()`, `advance(id)`, `complete`,
+`done`; the mask allows the end token only once the JSON is whole, so a run stops at the end token. `ai/local/ladder.js`
+(`GZ_AI_LADDER`): `pick({ adapter, models }) → { id } | { reason }`, `adapter` the Worker's `requestAdapter()` (null without
+one), `models` the store's list. Each is optional in the host until it ships: no engine is `unavailable`, reason `engine`; no
+grammar, words only; no ladder, the smallest stock model where there is an adapter.
+
+The host's messages (`host.js` header): `prepare { tier? }`, `run { model, parts, stable, schema?, sampler, maxTokens }`,
+`warm { model, parts }`, `remove`, `release`, `cancel`; it answers `progress`, `delta`, `done` or `error`, `tick` every 20 s
+while anything is in flight, and `idle`.
+
+What needs a real GPU or browser: the engine's numbers and speed, the ladder's tiers, Firefox's event page staying while its
+Worker works (measured nowhere yet), and Chrome closing an idle offscreen document. `checks/ai/local-provider-check.js`
+covers the rest in Chromium with a stub engine.
+

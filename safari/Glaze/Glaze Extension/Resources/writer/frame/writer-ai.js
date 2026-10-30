@@ -51,7 +51,9 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   // The pause Advanced's tuning set for the gray text (Settings → AI, ai/settings.js TUNE), else the adaptive one.
   const wait = (s, score) => { const p = s?.mode === 'advanced' ? s.tune?.completion?.pause : undefined; return Number.isSafeInteger(p) && p >= 100 && p <= 2000 ? p : pause(score); };
   // The connection's name on the chip.
-  const providerName = (st, t) => (st?.provider === 'device' ? t('Chrome on-device AI') : st?.provider === 'apple' ? t('Apple Intelligence') : st?.to || t('Endpoint'));
+  const providerName = (st, t) => (st?.provider === 'device' ? t('Chrome on-device AI') : st?.provider === 'apple' ? t('Apple Intelligence') : st?.provider === 'local' ? t('Glaze on-device AI') : st?.to || t('Endpoint'));
+  // The models on this computer (ai/settings.js HERE): no model id, and a status that can change without the student.
+  const HERE = ['device', 'apple', 'local'];
   const api = { fits, sentence, tailText, nextWord, consume, pause, wait, learn, providerName };
   const D = typeof GZ_AI_FAILURE !== 'undefined' ? GZ_AI_FAILURE : typeof require === 'function' ? require('../../ai/failure.js') : null;
   const reasonText = (e) => D?.explain(e) || '';
@@ -133,7 +135,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     if (!st) return 'unverified';
     if (!st.allowed) return st.why === 'attempt' ? (Date.now() - attemptSince < 10000 ? 'checking' : 'attempt') : st.why ? 'unavailable' : 'off';
     if (st.why === 'unavailable' && st.provider === 'apple' && st.reason === 'off') return 'apple-off';
-    if (st.why === 'unavailable' && ['device', 'apple'].includes(st.provider)) return 'device';
+    if (st.why === 'unavailable' && HERE.includes(st.provider)) return 'device';
     return ['setup', 'permission', 'download', 'downloading'].includes(st.why) ? st.why : 'unavailable';
   };
   const invalidate = () => {
@@ -156,7 +158,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   // the gray text stayed off while Feedback, asked a moment later, ran (Safari, 2026-10-27).
   const ASK = { status: 30000 }, AGAIN = [500, 1000, 2000, 4000, 8000];
   const settled = (st) => st?.type === 'status' && !(st.allowed === false && st.why === 'attempt')
-    && !(['device', 'apple'].includes(st.provider) && !st.ready && ['unavailable', 'downloading'].includes(st.why));
+    && !(HERE.includes(st.provider) && !st.ready && ['unavailable', 'downloading'].includes(st.why));
   const again = (f, gen, n = 0) => setTimeout(async () => {
     if (gen !== generation || quiet()) return;
     const st = await ask({ op: 'status', feature: f }, ASK.status);
@@ -183,7 +185,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     // Outline and Sources have their own consent. Resolve their safe cache identity without enabling Feedback's
     // status or any other writing task when its feature switch is off.
     const selection = s?.models?.writing?.use ? s.models.writing : s?.model;
-    const configured = !!selection?.use && (!!selection.model || ['device', 'apple'].includes(selection.use)) || !!s?.use;
+    const configured = !!selection?.use && (!!selection.model || HERE.includes(selection.use)) || !!s?.use;
     const independent = s?.on === true && configured && (s.outline !== false ? 'writer.outline' : s.sources !== false ? 'writer.sources' : '');
     if (!want('writing') && independent) {
       const st = await ask({ op: 'status', feature: 'writing', task: independent }, ASK.status);
@@ -204,7 +206,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     scheduleImagePrefetch();
   };
   try { chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.ai) refresh(); }); } catch { /* no storage */ }
-  const recover = () => { if (!checking && !quiet() && Date.now() - checked > 5000 && ['device', 'apple'].includes(status.writing?.provider) && !status.writing.ready) refresh(); };
+  const recover = () => { if (!checking && !quiet() && Date.now() - checked > 5000 && HERE.includes(status.writing?.provider) && !status.writing.ready) refresh(); };
   addEventListener('focus', recover);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { stopImagePrefetch(); if (fb.state === 'running') stopFeedback(); }
@@ -816,7 +818,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const cite = ({ text, url } = {}) => ask1('writer.cite', { text, ...(url && { url }) });
   const outlineInfo = () => {
     const sel = said?.models?.writing?.use ? said.models.writing : said?.model;
-    const configured = !!sel?.use && (!!sel.model || ['device', 'apple'].includes(sel.use)) || !!said?.use;
+    const configured = !!sel?.use && (!!sel.model || HERE.includes(sel.use)) || !!said?.use;
     const available = !quiet() && !checking && said?.on === true && configured;
     // The worker supplies only stable, safe model/config fields. Page generations still cancel current work, while
     // this identity lets saved section labels survive a reload and invalidates them when the connection changes.
