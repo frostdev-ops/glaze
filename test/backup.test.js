@@ -798,3 +798,22 @@ test('backup export omits file kinds and their versions until the blob store own
   assert.deepEqual(manifest.papers.map((r) => r.key), [`writerPaper:${paper}`]);
   assert.equal(entries.filter((e) => e.name.startsWith('papers/')).length, 1);
 });
+
+test('a restored paper backs up without file-kind versions and still restores', async () => {
+  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js');
+  const key = PA.newKey(), a = device(), b = device();
+  try {
+    let clock = NOW;
+    const P = PA.open(a.local, () => ++clock), doc = SC.parse(SC.paper, '<p>Recovered draft</p>').toJSON();
+    await P.save(key, { doc });
+    const imported = await P.save(key, { kind: 'pdf', doc: null, file: 'JVBERi0=', size: 5 }, { reason: 'import' });
+    await P.restore(key, imported.version.id);
+    const result = await restore(b, await backUp(a), ['papers']);
+    assert.deepEqual(result.out.failed, []);
+    const Q = PA.open(b.local);
+    assert.deepEqual((await Q.get(key)).doc, doc);
+    assert.ok((await Q.versions(key)).every((v) => !v.kind || v.kind === 'paper'));
+    const entries = B.pack({ settings: SETTINGS, tasks: {}, local: a.store });
+    for (const e of entries.filter((e) => e.name.startsWith('papers/'))) assert.ok(!new TextDecoder().decode(e.data).includes('JVBERi0='), 'file bytes stay out of the backup');
+  } finally { a.stop(); b.stop(); }
+});
