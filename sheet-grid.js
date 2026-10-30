@@ -707,6 +707,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     };
     chrome.storage.onChanged.addListener(onStore);
     addEventListener('pagehide', () => { if (busy()) flush(); });
+    // A tab closed while a save waits: the browser asks first, as for a PDF's unsaved form.
+    addEventListener('beforeunload', (e) => { if (busy()) { flush(); e.preventDefault(); e.returnValue = ''; } });
     document.addEventListener('visibilitychange', () => { if (document.hidden && busy()) flush(); });
     // Documents: what is unsaved goes first (a frame of a school's page replaces itself, as papers.js's links do).
     back?.addEventListener('click', (e) => {
@@ -763,6 +765,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       while (undos.length > UNDO.steps) undoBytes -= undos.shift().bytes;
       redos.length = 0;
       reach(x.r, x.c);
+      marquee = null;
       stopEdit();
       mark(res, { op: 'set' });
       changed(res, { op: 'set' });
