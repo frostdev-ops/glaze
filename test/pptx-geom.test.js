@@ -2,7 +2,7 @@
 // arcs, custom geometry (custGeom), and every preset against stored path snapshots.
 // The snapshots are test/fixtures/pptx-geom/<preset>.json. After a reviewed change to the geometry, rewrite them with
 //   GZ_GEOM_SNAPSHOTS=write node --test test/pptx-geom.test.js
-// and read the diff before committing it.
+// and read the diff before committing it. Regeneration is refused when CI is set.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -355,7 +355,7 @@ test('CI refuses snapshot regeneration before writing any fixture', () => {
   const child = spawnSync(process.execPath, ['--test-name-pattern', '^every preset matches its snapshot', '-e', `
     require('node:fs').writeFileSync = () => { throw Error('snapshot write attempted'); };
     require(${JSON.stringify(__filename)});
-  `], { env: { ...process.env, CI: 'true', GZ_GEOM_SNAPSHOTS: 'write' }, encoding: 'utf8' });
+  `], { env: { ...process.env, NODE_TEST_CONTEXT: undefined, CI: 'true', GZ_GEOM_SNAPSHOTS: 'write' }, encoding: 'utf8' });
   assert.ifError(child.error);
   const output = child.stdout + child.stderr;
   assert.notEqual(child.status, 0, output);
@@ -369,6 +369,7 @@ const casesFor = (prst) => [
 ];
 
 test('every preset matches its snapshot at two sizes and with its adjusts changed', () => {
+  assert.ok(!(WRITE && process.env.CI), 'Snapshot regeneration is disabled in CI');
   if (WRITE) fs.mkdirSync(SNAPSHOTS, { recursive: true });
   for (const prst of PRESETS) {
     const file = path.join(SNAPSHOTS, `${prst}.json`);
