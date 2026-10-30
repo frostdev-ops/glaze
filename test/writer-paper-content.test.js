@@ -116,31 +116,48 @@ test('compact: a sheet over the box takes the paper\'s height while it is open',
   assert.equal(height(frame), '300px');
 });
 
-test('compact: Submit and Save and Close wait for a fresh, saved frame snapshot and reject late replies', async () => {
+test('compact: Submit and Save and Close wait for a fresh, saved frame snapshot, however slow, and say why one didn\'t go', async () => {
   for (const action of ['submit', 'save']) {
     const { c, box } = await paper(false);
     const button = c.doc.querySelector(`[data-analytics-id="assignment.attempt.authoring.footer.${action === 'save' ? 'saveAndClose' : action}"]`) || c.doc.querySelector('[data-analytics-id="course.content.assessment.footer.buttons.saveAndClose"]');
     assert.ok(button, action);
     const click = () => { const e = { type: 'click', target: button, preventDefault() { this.held = true; }, stopImmediatePropagation() {} }; c.doc.dispatchEvent(e); return e; };
+    const flushes = () => c.ports[0].sent.filter((m) => m.type === 'compact:flush').length;
     c.emit({ type: 'change', html: '<p>Earlier.</p>', text: 'Earlier.', delta: ops('Earlier.') });
     assert.equal(click().held, true, 'native action waits even when the previous projection synced');
     const request = c.ports[0].sent.at(-1).request;
     assert.equal(c.ports[0].sent.at(-1).type, 'compact:flush');
+    assert.equal(c.ports[0].sent.at(-1).action, action, 'the frame is told which of Ultra\'s buttons waits');
     c.emit({ type: 'compact:flushed', request: 'stale', ok: true, html: '<p>Wrong.</p>', text: 'Wrong.', delta: ops('Wrong.') });
     assert.equal(c.clicks.length, 0);
     c.emit({ type: 'compact:flushed', request, ok: true, html: '<p>Last keystroke.</p>', text: 'Last keystroke.', delta: ops('Last keystroke.') });
     assert.equal(box.editor.innerHTML, '<p>Last keystroke.</p>');
     assert.deepEqual(c.clicks, [button]);
-    assert.equal(c.ports[0].sent.at(-1).type, 'compact:resume');
+    assert.deepEqual({ ...c.ports[0].sent.at(-1) }, { type: 'compact:resume', request });
     click();
     const failed = c.ports[0].sent.at(-1).request;
     c.helper('fail');
     c.emit({ type: 'compact:flushed', request: failed, ok: true, html: '<p>Unsynced.</p>', text: 'Unsynced.', delta: ops('Unsynced.') });
     assert.equal(c.clicks.length, 1, 'failed native sync never clicks');
-    click(); c.tick(4000);
-    const timedOut = c.ports[0].sent.at(-1).request;
-    c.emit({ type: 'compact:flushed', request: timedOut, ok: true, html: '<p>Late.</p>', text: 'Late.', delta: ops('Late.') });
-    assert.equal(c.clicks.length, 1, 'a timed-out flush cannot submit later');
+    assert.deepEqual({ ...c.ports[0].sent.at(-1) }, { type: 'compact:resume', request: failed, reason: 'text' }, 'and the frame is told why');
+    c.helper('ok');
+    // A slow save: Ultra's button stays held past what was once a 4 s bound, a second press waits on the same save, and the
+    // reply, whenever it comes, sends Ultra's button once.
+    click();
+    const slow = c.ports[0].sent.at(-1).request, asked = flushes();
+    for (const ms of [4000, 15000]) c.tick(ms);
+    assert.equal(click().held, true);
+    assert.equal(flushes(), asked, 'no second save is asked for while one runs');
+    assert.equal(c.clicks.length, 1);
+    c.emit({ type: 'compact:flushed', request: slow, ok: true, html: '<p>After a slow save.</p>', text: 'After a slow save.', delta: ops('After a slow save.') });
+    assert.equal(box.editor.innerHTML, '<p>After a slow save.</p>');
+    assert.deepEqual(c.clicks, [button, button], 'the slow save still sends Ultra\'s button, once');
+    // The frame's own refusal (too long for Ultra's box, or not saved): nothing clicked, the frame says it in its bar.
+    click();
+    const long = c.ports[0].sent.at(-1).request;
+    c.emit({ type: 'compact:flushed', request: long, ok: false, reason: 'long' });
+    assert.equal(c.clicks.length, 2);
+    assert.deepEqual({ ...c.ports[0].sent.at(-1) }, { type: 'compact:resume', request: long });
   }
 });
 

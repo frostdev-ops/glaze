@@ -200,3 +200,27 @@ test('Alt+Enter reaches the visible autocorrect Undo with the keyboard', async (
   await f.run(4000);
   assert.ok(!pop.hidden);
 });
+
+test('while Harper proofs, the browser\'s own spellcheck is off on the editor; proofing off gives it back', () => {
+  const f = frame();
+  const spell = () => Object.assign({}, ...f.view.state.plugins.map((p) => (typeof p.props.attributes === 'function' ? p.props.attributes(f.view.state) : p.props.attributes) || {})).spellcheck;
+  assert.equal(spell(), 'false');
+  f.configure({ proofing: false });
+  assert.equal(spell(), undefined);
+  f.configure({ proofing: true });
+  assert.equal(spell(), 'false');
+});
+
+test('a document replaced whole (a fresh editor state, its versions from 0 again) drops the lints asked of the one before', async () => {
+  const f = frame({ html: `<p>${'A long paragraph of text. '.repeat(20)}</p><p>${'More of it here. '.repeat(20)}</p><p>teh end</p>` }); await flush();
+  f.reply(f.ports[0], { op: 'lint', id: f.lint().id, lints: [] });
+  f.view.dispatch(f.view.state.tr.insertText('x', f.view.state.doc.content.size - 2)); await f.run(150);
+  const asked = f.lint();
+  assert.match(asked.key, /^b\d+$/, 'the last paragraph\'s own lint, asked at version 1');
+  const prev = f.view.state, PMS = globalThis.GZ_PM || require('../lib/pm.js');
+  f.view.state = PMS.state.EditorState.create({ doc: E.state({ html: '<p>Short.</p>' }).doc, plugins: prev.plugins });
+  // ProseMirror makes the plugin views again for a state with a new plugin list, so no update() hears the swap.
+  f.view.dispatch(f.view.state.tr.insertText('y', 1)); // the fresh state at version 1 too
+  assert.doesNotThrow(() => f.reply(f.ports[0], { op: 'lint', id: asked.id, lints: [{ start: 0, end: 3, kind: 'Spelling', problem: 'teh', suggestions: [{ k: 0, t: 'the' }] }] }));
+  assert.equal(f.issues.list().length, 0);
+});
