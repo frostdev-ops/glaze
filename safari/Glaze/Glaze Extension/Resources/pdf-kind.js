@@ -196,6 +196,8 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     bus.on('scalechanging', ({ scale, presetValue }) => { const p = PRESETS.find(([v]) => v === presetValue); zoomLabel.textContent = p ? t(p[1]) : `${Math.round(scale * 100)}%`; });
     zoomIn.addEventListener('click', () => viewer.increaseScale());
     zoomOut.addEventListener('click', () => viewer.decreaseScale());
+    // A fit follows the room it fits (the window, the find bar), as pdf.js's own app re-applies it.
+    new ResizeObserver(() => { const v = viewer.currentScaleValue; if (doc && PRESETS.some(([p]) => p === v)) viewer.currentScaleValue = v; }).observe(scroll);
 
     // ---- menus (the paper's .pop .gp-menu): arrows move, Esc and Tab close, focus back on the opener
     let menu = null;

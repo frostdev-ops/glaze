@@ -165,6 +165,9 @@ const fixture = () => {
     check(await until(onScreen, 'page 1 on screen', 5000), `page 1's words are on screen (after Tab: ${JSON.stringify(where)})`);
     await shot('viewer-1280.png');
     await page.setViewportSize({ width: 640, height: 900 });
+    // Page width follows the window.
+    const refit = await until(() => page.evaluate(() => { const p = document.querySelector('.pdfViewer .page[data-page-number="1"]').getBoundingClientRect(), s = document.querySelector('.gq-scroll').getBoundingClientRect(); return p.width <= s.width && p.width > s.width * 0.85 ? { p: p.width, s: s.width } : null; }), 'page width at 640', 5000);
+    check(refit, `page width refits at 640 (${JSON.stringify(refit)})`);
     await until(drawnPage, 'page 1 drawn at 640', 5000);
     await shot('viewer-640.png');
     await page.setViewportSize({ width: 1280, height: 900 });
