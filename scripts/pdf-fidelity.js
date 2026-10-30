@@ -59,7 +59,17 @@ const table = (rows) => {
   return [`| ${head.join(' | ')} |`, `|${head.map(() => '---').join('|')}|`, ...rows.map((r) => `| ${head.map((k) => cell(r[k])).join(' | ')} |`)].join('\n');
 };
 
-module.exports = { parseInfo, splitPages, expectedOf, compare, table };
+const notesOf = (want, got) => {
+  const notes = [];
+  if (want.encrypted !== undefined && got.encrypted !== want.encrypted) notes.push(`encrypted ${got.encrypted}, not ${want.encrypted}`);
+  if (want.printing === false && got.printing !== false) notes.push('printing allowed again');
+  if (want.notes !== undefined && got.notes !== undefined && got.notes !== want.notes) notes.push(`${got.notes} FreeText, not ${want.notes}`);
+  if (want.signatures !== undefined && got.signatures !== undefined && got.signatures !== want.signatures) notes.push(`${got.signatures} signatures, not ${want.signatures}`);
+  if (got.drawn === false) notes.push('pdftoppm failed');
+  return notes;
+};
+
+module.exports = { parseInfo, splitPages, expectedOf, compare, table, notesOf };
 
 // ---- the readers -----------------------------------------------------------------------------------------------------
 const PDFKIT = `import Foundation
@@ -111,7 +121,9 @@ const readers = async (tmp) => {
   } finally { [console.log, console.warn] = [log, warn]; }
   const swift = path.join(tmp, 'pdfkit-read.swift'), binary = path.join(tmp, 'pdfkit-read');
   fs.writeFileSync(swift, PDFKIT);
-  const built = run('xcrun', ['swiftc', '-O', '-o', binary, swift]);
+  const cache = path.join(tmp, 'module-cache');
+  const built = run('xcrun', ['swiftc', '-module-cache-path', cache, '-O', '-o', binary, swift],
+    { env: { ...process.env, CLANG_MODULE_CACHE_PATH: cache, SWIFT_MODULE_CACHE_PATH: cache } });
   if (built.status !== 0) throw new Error(`swiftc: ${built.stderr}`);
 
   const pdfjsRead = async (file, password) => {
@@ -219,11 +231,7 @@ const main = async () => {
         const inherited = got.error && baseline.get(`${label}:${reader}`) === got.error;
         if (inherited) notes.push('as the source');
         if (!got.error) {
-          if (want.encrypted !== undefined && got.encrypted !== want.encrypted) notes.push(`encrypted ${got.encrypted}, not ${want.encrypted}`);
-          if (want.printing === false && got.printing !== false) notes.push('printing allowed again');
-          if (want.notes && got.notes !== undefined && got.notes !== want.notes) notes.push(`${got.notes} FreeText, not ${want.notes}`);
-          if (want.signatures && got.signatures !== undefined && got.signatures !== want.signatures) notes.push(`${got.signatures} signatures, not ${want.signatures}`);
-          if (got.drawn === false) notes.push('pdftoppm failed');
+          notes.push(...notesOf(want, got));
           if (got.complaints?.length) notes.push(got.complaints.slice(0, 2).map((c) => c.slice(0, 70)).join('; '));
         }
         if (extra.note) notes.push(extra.note);
@@ -244,8 +252,13 @@ const main = async () => {
       // A refusal at open is the case's result; the readers still say what they show of the source.
       let opened;
       try { opened = await pdf.open(source, { password: c.password }); } catch (e) {
+        if (e.name !== c.refuse) differs = true;
         await check(label, 'source', source, { pages: facts.pages, fields: null }, c.password, { note: `open refused: ${e.name}`, allowed: e.name === c.refuse });
         continue;
+      }
+      if (c.refuse === 'PdfXfaError') {
+        differs = true;
+        rows.push({ file: label, output: 'source', reader: 'lib/pdf-doc.js', pages: `opened, expected ${c.refuse}` });
       }
       let base = source, baseFacts = facts;
       try {
@@ -273,6 +286,10 @@ const main = async () => {
         continue;
       }
       const took = Date.now() - started;
+      if (c.refuse) {
+        differs = true;
+        rows.push({ file: label, output: 'baked', reader: 'lib/pdf-doc.js', pages: `wrote, expected ${c.refuse}` });
+      }
       const sources = [baseFacts, ...await Promise.all(merged.map((b, i) => factsOf(`${label}-merge${i}`, b)))];
       const slots = D.layout(baseFacts.pages.length, ops, merged.map((_, i) => sources[i + 1].pages.length));
       const want = { pages: expectedOf(sources, slots), fields: baseFacts.fields, encrypted: baseFacts.encrypted, printing: baseFacts.printing, notes: baseFacts.notes };
