@@ -475,6 +475,141 @@ const photo = () => {
     check(true, 'after a reload the moved record opens from the store');
     await openHome();
 
+    // ---- the tools (lib/pdf-tools.js): Pen, Highlight, Text, Image and the four shapes on a fresh copy of the form, each
+    // drawn as a student does, autosaved, still there after a reload, and exported as the PDF's own annotations.
+    const marked = path.join(tmp, 'Marked up.pdf');
+    fs.writeFileSync(marked, fixture());
+    await openHome();
+    await page.setInputFiles('#gd-file', marked);
+    const tKey = await until(() => page.evaluate(() => [...document.querySelectorAll('.gd-card')].find((c) => c.querySelector('.gd-title')?.textContent === 'Marked up')?.dataset.key), 'the Marked up card');
+    await page.goto(`${HOME}?pdf=${encodeURIComponent(tKey)}`);
+    await until(() => page.evaluate(() => !!document.querySelector('.pdfViewer .page[data-page-number="1"] canvas') && document.querySelector('[data-tool="pen"]')?.disabled === false), 'the tools on');
+    const group = await page.evaluate(() => ({ tools: [...document.querySelectorAll('.gq-tools [data-tool]')].map((b) => b.dataset.tool), label: document.querySelector('.gq-tools').getAttribute('aria-label'),
+      undo: document.querySelector('.gq-tools [data-act="undo"]').disabled, redo: document.querySelector('.gq-tools [data-act="redo"]').disabled, inBar: !!document.querySelector('.gp-tool .gq-tools'), pdfjsBar: !!document.querySelector('#toolbarContainer, #editorModeButtons') }));
+    check(['highlight', 'pen', 'text', 'image', 'shape'].every((x) => group.tools.includes(x)) && group.inBar && !group.pdfjsBar && group.undo && group.redo, `the tools are a group in Glaze's toolbar, Undo and Redo off until there is something (${JSON.stringify(group)})`);
+    const count = (sel) => page.evaluate((s) => document.querySelectorAll(`.page[data-page-number="1"] .annotationEditorLayer ${s}`).length, sel);
+    const stateNow = () => page.evaluate(() => document.querySelector('.gp-top .gp-state')?.textContent);
+    const fileHash = async () => (await local(`writerPaper:${tKey}`)).file.hash;
+    const autosaved = async (prev, label) => until(async () => { const h = await fileHash(); return (await stateNow()) === 'Saved' && h !== prev ? h : null; }, label);
+    const pageBox = () => page.evaluate(() => document.querySelector('.pdfViewer .page[data-page-number="1"]').getBoundingClientRect().toJSON());
+    await page.evaluate(() => document.querySelector('.gq-scroll').scrollTo(0, 0));
+    let b = await pageBox(), h0 = await fileHash();
+    const drag = async ([x0, y0], [x1, y1]) => { await page.mouse.move(b.x + x0, b.y + y0); await page.mouse.down(); for (let i = 1; i <= 8; i++) await page.mouse.move(b.x + x0 + ((x1 - x0) * i) / 8, b.y + y0 + ((y1 - y0) * i) / 8); await page.mouse.up(); };
+    // Pen, red and 4 thick.
+    await page.click('[data-tool="pen"]');
+    await page.click('[data-act="color"]'); await page.click('.gq-menu [data-color="#d93025"]');
+    await page.click('[data-act="size"]'); await page.click('.gq-menu [data-size="4"]');
+    const penShown = await page.evaluate(() => ({ pressed: document.querySelector('[data-tool="pen"]').getAttribute('aria-pressed'), size: document.querySelector('[data-act="size"]').textContent }));
+    await drag([120, 260], [300, 300]);
+    await until(async () => (await count('.inkEditor')) === 1, 'the pen stroke');
+    const h1 = await autosaved(h0, 'the pen stroke saved');
+    check(penShown.pressed === 'true' && penShown.size === '4' && !await page.evaluate(() => document.querySelector('[data-act="undo"]').disabled), `Pen: a stroke on page 1, autosaved (${JSON.stringify(penShown)})`);
+    // Highlight: the words of page 1, selected with the pointer.
+    await page.click('[data-tool="highlight"]');
+    const words = await page.evaluate(() => [...document.querySelectorAll('.page[data-page-number="1"] .textLayer span')].find((s) => /page 1/.test(s.textContent))?.getBoundingClientRect().toJSON());
+    await page.mouse.move(words.x + 2, words.y + words.height / 2); await page.mouse.down();
+    for (let i = 1; i <= 6; i++) await page.mouse.move(words.x + 2 + ((words.width - 4) * i) / 6, words.y + words.height / 2);
+    await page.mouse.up();
+    await until(async () => (await count('.highlightEditor')) === 1, 'the highlight');
+    const h2 = await autosaved(h1, 'the highlight saved');
+    check(true, 'Highlight: the selected words are highlighted, autosaved');
+    // Text: a note typed where the page is clicked; choosing Text again puts the tool down and keeps it.
+    await page.click('[data-tool="text"]');
+    await page.mouse.click(b.x + 120, b.y + 380);
+    await until(() => page.evaluate(() => document.activeElement?.closest?.('.freeTextEditor')), 'the text box');
+    await page.keyboard.type('Glaze note');
+    await page.click('[data-tool="text"]');
+    await until(() => page.evaluate(() => [...document.querySelectorAll('.page[data-page-number="1"] .freeTextEditor')].some((e) => /Glaze note/.test(e.textContent))), 'the note kept');
+    const h3 = await autosaved(h2, 'the note saved');
+    check(await page.evaluate(() => document.querySelector('[data-tool="text"]').getAttribute('aria-pressed')) === 'false', 'Text: a typed note on the page, autosaved; choosing Text again puts it down');
+    // Image: pdf.js's own file chooser, the picture in the middle of the page.
+    const png = path.join(tmp, 'stamp.png');
+    // A 48 px blue square with a white cross, as a PNG.
+    const chunk = (type, data) => { const z = require('node:zlib'), b = Buffer.alloc(4); b.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type), data]), c = Buffer.alloc(4); c.writeUInt32BE(z.crc32(td) >>> 0); return Buffer.concat([b, td, c]); };
+    const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(48, 0); ihdr.writeUInt32BE(48, 4); ihdr.set([8, 2, 0, 0, 0], 8);
+    const rows = Buffer.concat(Array.from({ length: 48 }, (_, y) => Buffer.concat([Buffer.from([0]), ...Array.from({ length: 48 }, (_, x) => Buffer.from(Math.abs(x - y) < 3 || Math.abs(x + y - 47) < 3 ? [255, 255, 255] : [26, 86, 219]))])));
+    fs.writeFileSync(png, Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), chunk('IHDR', ihdr), chunk('IDAT', require('node:zlib').deflateSync(rows)), chunk('IEND', Buffer.alloc(0))]));
+    const chooser = page.waitForEvent('filechooser');
+    await page.click('[data-tool="image"]');
+    await (await chooser).setFiles(png);
+    await until(async () => (await count('.stampEditor')) === 1 && page.evaluate(() => !!document.querySelector('.stampEditor canvas')), 'the picture');
+    const h4 = await autosaved(h3, 'the picture saved');
+    check(true, 'Image: a picture from a file on the page, autosaved');
+    // Shapes: a rectangle and an ellipse dragged out, a line chosen with the keyboard (in the middle, selected), an arrow dragged.
+    await page.keyboard.press('Escape');
+    const shapeTo = async (kind) => { await page.click('[data-tool="shape"]'); await page.click(`.gq-menu [data-shape="${kind}"]`); };
+    await shapeTo('rect'); await drag([100, 450], [260, 540]);
+    await until(async () => (await count('.inkEditor')) === 2, 'the rectangle');
+    await shapeTo('ellipse'); await drag([300, 450], [460, 540]);
+    await until(async () => (await count('.inkEditor')) === 3, 'the ellipse');
+    await page.locator('[data-tool="shape"]').focus();
+    await page.keyboard.press('Enter');
+    await until(() => page.evaluate(() => document.activeElement?.closest?.('.gq-menu')), 'the shapes menu by keyboard');
+    for (let i = 0; i < 6 && !(await page.evaluate(() => document.activeElement?.dataset.shape === 'line')); i++) await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await until(async () => (await count('.inkEditor')) === 4, 'the line by keyboard');
+    const lineSel = await page.evaluate(() => !!document.querySelector('.page[data-page-number="1"] .inkEditor.selectedEditor'));
+    await shapeTo('arrow'); await drag([120, 600], [320, 640]);
+    await until(async () => (await count('.inkEditor')) === 5, 'the arrow');
+    const h5 = await autosaved(h4, 'the shapes saved');
+    check(lineSel, 'Shapes: a rectangle, an ellipse and an arrow dragged out, a line put in by keyboard and selected, autosaved');
+    // pdf.js's own bar on a selected mark (its colour and Delete): its buttons keep their size under the page's text scale.
+    const glyph = await page.evaluate(() => { const d = document.querySelector('.selectedEditor .editToolbar .deleteButton'), c = getComputedStyle(d); return { font: parseFloat(c.fontSize), line: c.lineHeight, h: d.getBoundingClientRect().height }; });
+    check(glyph.font <= 16 && glyph.h <= 40, `pdf.js's bar on a selected mark keeps its buttons small (${JSON.stringify(glyph)})`);
+    await shot('tools-1280.png');
+    await page.setViewportSize({ width: 640, height: 900 });
+    await shot('tools-640.png');
+    await page.setViewportSize({ width: 1280, height: 900 });
+    // Undo takes the arrow back; Redo puts it again.
+    await page.click('[data-act="undo"]');
+    await until(async () => (await count('.inkEditor:not(.hidden)')) === 4, 'undo');
+    const redoOn = await page.evaluate(() => !document.querySelector('[data-act="redo"]').disabled);
+    await page.click('[data-act="redo"]');
+    await until(async () => (await count('.inkEditor')) === 5, 'redo');
+    check(redoOn, 'Undo takes the last shape back and Redo puts it again (pdf.js\'s own undo)');
+    await until(async () => (await stateNow()) === 'Saved' && !await page.evaluate(() => document.querySelector('.gp-state').textContent === ''), 'saved after redo');
+    await page.keyboard.press('Escape');
+    // A reload: the PDF's own annotations, drawn by pdf.js's annotation layer.
+    await page.reload();
+    const kinds = await until(() => page.evaluate(() => {
+      const l = document.querySelector('.page[data-page-number="1"] .annotationLayer');
+      const n = (c) => l?.querySelectorAll(`.${c}`).length || 0;
+      const k = { ink: n('inkAnnotation'), highlight: n('highlightAnnotation'), text: n('freeTextAnnotation'), stamp: n('stampAnnotation') };
+      return k.ink === 5 && k.highlight === 1 && k.text === 1 && k.stamp === 1 ? k : null;
+    }), 'the annotations after a reload');
+    check(!!kinds, `after a reload every mark is still on page 1 (${JSON.stringify(kinds)})`);
+    // Editable again: Pen's mode makes pdf.js's ink annotations editors.
+    await until(() => page.evaluate(() => document.querySelector('[data-tool="pen"]')?.disabled === false), 'the tools on after a reload');
+    await page.click('[data-tool="pen"]');
+    await until(async () => (await count('.inkEditor')) === 5, 'the kept ink as editors');
+    await page.click('[data-tool="pen"]');
+    check(true, 'after a reload the kept ink is editable again');
+    // Export: the file as saved, its marks the PDF's own annotations (not drawn into the page), the pen's red kept.
+    const tDown = page.waitForEvent('download');
+    await page.click('.gq-more');
+    await page.click('.gq-menu [data-act="export"]');
+    const tFile = path.join(out, 'annotated.pdf');
+    await (await tDown).saveAs(tFile);
+    const tBytes = fs.readFileSync(tFile), tText = tBytes.toString('latin1');
+    const subtypes = Object.fromEntries(['Ink', 'Highlight', 'FreeText', 'Stamp'].map((s) => [s, (tText.match(new RegExp(`/Subtype\\s*/${s}\\b`, 'g')) || []).length]));
+    check(sha(tBytes) === (await local(`writerPaper:${tKey}`)).file.hash && subtypes.Ink === 5 && subtypes.Highlight === 1 && subtypes.FreeText === 1 && subtypes.Stamp === 1 && /\/C\s*\[\s*0\.85\d*\s+0\.18\d*\s+0\.14\d*\s*\]/.test(tText),
+      `Export .pdf: the saved file, its marks as editable annotations (${JSON.stringify(subtypes)}, ${tBytes.length} bytes)`);
+
+    // ---- a file whose owner forbids adding to it: the tools are there, disabled, and say why.
+    const noMarks = path.join(tmp, 'No marks.pdf'), FX = require('./pdf-fixtures.js');
+    fs.writeFileSync(noMarks, FX.write(FX.pagesOf(FX.LABELS.map((label) => ({ label }))).objects, { id: 'no-marks', encrypt: { owner: FX.PASSWORDS.owner, permissions: (0xfffffffc & ~0x20 & ~0x08) | 0 } }));
+    await openHome();
+    await page.setInputFiles('#gd-file', noMarks);
+    const nKey = await until(() => page.evaluate(() => [...document.querySelectorAll('.gd-card')].find((c) => c.querySelector('.gd-title')?.textContent === 'No marks')?.dataset.key), 'the No marks card');
+    await page.goto(`${HOME}?pdf=${encodeURIComponent(nKey)}`);
+    const refused = await until(() => page.evaluate(() => {
+      const g = document.querySelector('.gq-tools');
+      return g && 'off' in g.dataset ? { all: [...g.querySelectorAll('[data-tool]')].every((x) => x.disabled), why: g.title, each: g.querySelector('[data-tool="pen"]').title } : null;
+    }), 'the tools refused');
+    check(refused.all && refused.why === "The owner of this PDF doesn't allow adding to it." && refused.each === refused.why, `a file that forbids adding annotations shows the tools disabled, with the reason (${JSON.stringify(refused)})`);
+    await openHome();
+
+
     // A PDF whose first page can't be read (its page tree points at nothing) is refused at import; one already kept says
     // so in the viewer instead of an empty viewer waiting for pages that never come.
     const broken = Buffer.from(fixture().toString('latin1').replace(/\/Kids \[(\d+) 0 R/, '/Kids [99 0 R'), 'latin1');

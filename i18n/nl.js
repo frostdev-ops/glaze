@@ -3750,5 +3750,10 @@
   "as the app reports itself": "zoals de app zichzelf noemt",
   "Don't allow": "Niet toestaan",
   "Unnamed app": "Naamloze app",
-  "Glaze restarted before you answered.": "Glaze is opnieuw gestart voordat je antwoordde."
+  "Glaze restarted before you answered.": "Glaze is opnieuw gestart voordat je antwoordde.",
+  "Signature": "Handtekening",
+  "Rectangle": "Rechthoek",
+  "Ellipse": "Ellips",
+  "Arrow": "Pijl",
+  "The owner of this PDF doesn't allow adding to it.": "De eigenaar van deze pdf staat geen toevoegingen toe."
 };

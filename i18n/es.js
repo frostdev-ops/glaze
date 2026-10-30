@@ -3750,5 +3750,10 @@
   "as the app reports itself": "según la propia app",
   "Don't allow": "No permitir",
   "Unnamed app": "App sin nombre",
-  "Glaze restarted before you answered.": "Glaze se reinició antes de que respondieras."
+  "Glaze restarted before you answered.": "Glaze se reinició antes de que respondieras.",
+  "Signature": "Firma",
+  "Rectangle": "Rectángulo",
+  "Ellipse": "Elipse",
+  "Arrow": "Flecha",
+  "The owner of this PDF doesn't allow adding to it.": "El propietario de este PDF no permite añadirle nada."
 };

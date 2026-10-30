@@ -44,3 +44,19 @@
   .gq .gp-tool .gp-sepv, #gq-zoom-out, #gq-zoom-in { display: none; }
   .gq .gp-tool .gp-box { min-width: 0; }
 }
+/* The tools (lib/pdf-tools.js): a group in the toolbar, the chosen one pressed; colour and size for the chosen tool. */
+.gq-tools { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.gq-tools[hidden] { display: none; }
+.gq-ib[aria-pressed="true"] { background: color-mix(in srgb, var(--gz-accent) 22%, transparent); color: var(--gz-ink); }
+.gq-ib:disabled, .gq-tools .gp-box:disabled { opacity: .45; cursor: default; }
+.gq-ib:disabled:hover { background: none; }
+.gq-tools [hidden] { display: none; }
+.gq-swatch { display: inline-block; width: 16px; height: 16px; border-radius: 50%; box-shadow: 0 0 0 1px var(--gz-line-strong); flex: none; }
+.gq .gp-tool .gq-sizeb { min-width: 0; gap: 4px; padding: 5px 8px; font-variant-numeric: tabular-nums; }
+.gq-menu-sw { display: inline-flex; align-items: center; gap: 8px; }
+.gq-menu [aria-checked="true"] { font-weight: 700; }
+/* A shape as it is dragged out, before pdf.js takes it as ink. */
+.gq-shape-draft { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 30; overflow: visible; }
+/* pdf.js's bar on a selected mark (Delete, its colour): Glaze's buttons inherit their font (writer.css), and the mark's
+   layer carries the page's text scale, so its buttons take back a control's own size. */
+.gq-scroll .annotationEditorLayer .editToolbar button { font: 13px/1 system-ui, sans-serif; }

@@ -3,7 +3,8 @@
 // card, exports as itself, and opens in pdf.js's own viewer (lib/pdfjs: pdf.mjs and pdf_viewer.mjs, imported only when a
 // PDF is first read; pdf.js parses in its module worker, pdf.worker.mjs): the visible pages drawn, zoom, the text layer and
 // pdf.js's find, AcroForm fields filled and kept (saved by lib/pdf-doc.js, or as pdf.js writes them where that isn't
-// loaded), the file's permissions honoured, and a form only XFA can show refused. The page itself stays white, a
+// loaded), marks added with the tools (lib/pdf-tools.js: highlights, ink, notes, pictures, shapes) and kept as the
+// PDF's own annotations, the file's permissions honoured, and a form only XFA can show refused. The page itself stays white, a
 // print document; its chrome is the paper's (writer-paper.css: the top bar, the toolbar, ⋯) in the student's Look.
 // Off, Documents takes Word files only, as before, and a PDF already kept still lists, opens and fills. pdf.js's words are
 // Glaze's (lib/pdf-l10n.js).
@@ -195,7 +196,8 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const root = document.documentElement;
     const life = new AbortController(), signal = life.signal;
     if (host) words = host.t || null; else root.dataset.mode = 'pdf';
-    await GZ_WRITER_PAPER.need(['lib/writer-papers.js', 'lib/pdf-l10n.js']);
+    // A kept PDF's tools (lib/pdf-tools.js) come with its viewer; a preview has none.
+    await GZ_WRITER_PAPER.need(['lib/writer-papers.js', 'lib/pdf-l10n.js', ...(src ? [] : ['lib/pdf-tools.js'])]);
     const sheet = (href) => new Promise((ok) => { document.head.append(h('link', { rel: 'stylesheet', href, onload: ok, onerror: ok })); });
     const st = papers(), PA = GZ_WRITER_PAPERS;
     let rec = src ? null : await st.get(key);
@@ -231,16 +233,23 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     if (titleIn) titleIn.value = rec?.title || '';
 
     // pdf.js's viewer over the pages: only those in view drawn, forms as fields, links in a new tab, the file's own
-    // permissions (copying, filling) honoured. Its editors stay off until the tools step turns them on.
+    // permissions (copying, filling, adding) honoured.
     const bus = new V.EventBus(), links = new V.PDFLinkService({ eventBus: bus, externalLinkTarget: V.LinkTarget.BLANK, externalLinkRel: 'noopener noreferrer nofollow' });
     const finder = new V.PDFFindController({ eventBus: bus, linkService: links });
     const l10n = GZ_PDF_L10N.make({ t, lang: locale() });
+    // A kept PDF's editor (its tools, lib/pdf-tools.js) waits at NONE until a tool is chosen; a preview has none.
     const viewer = new V.PDFViewer({ container: scroll, viewer: pagesEl, eventBus: bus, linkService: links, findController: finder, l10n, annotationMode: src ? P.AnnotationMode.ENABLE : P.AnnotationMode.ENABLE_FORMS,
-      annotationEditorMode: P.AnnotationEditorType.DISABLE, enablePermissions: true, imageResourcesPath: url('lib/pdfjs/images/'), removePageBorders: false });
+      annotationEditorMode: src ? P.AnnotationEditorType.DISABLE : P.AnnotationEditorType.NONE, annotationEditorHighlightColors: src ? null : GZ_PDF_TOOLS.HIGHLIGHTS,
+      enablePermissions: true, imageResourcesPath: url('lib/pdfjs/images/'), removePageBorders: false });
     links.setViewer(viewer);
+    // Every change the tools make saves as a filled field does (modified, below).
+    let modified = () => {};
+    const tools = src ? null : GZ_PDF_TOOLS.mount({ P, viewer, bus, t, h, btn, openMenu: (...a) => openMenu(...a), modified: () => modified(), scroll, signatures: null, say: (x) => say(x) });
+    if (tools) findB.after(h('span', { class: 'gp-sepv' }), tools.el);
     l10n.translate(scroll);
     const refuse = (e) => {
       said.textContent = t(e instanceof FileError ? e.message : UNREAD); said.hidden = false; for (const b of [zoomOut, zoomB, zoomIn, findB, pageIn, saveB]) if (b) b.disabled = true;
+      if (tools) tools.el.hidden = true;
       // A file the store no longer has: Delete (to Trash, as Documents' own) or Import… it again, where this is a document of its own.
       if (e?.why === 'missing' && own) said.append(' ', btn({ class: 'gp-box', 'data-act': 'delete', onclick: () => { st.trash(key).then(() => location[window.top === window ? 'assign' : 'replace']('papers.html'), () => say(t('Not saved. Try again in a moment.'))); } }, t('Delete')),
         ' ', btn({ class: 'gp-box', 'data-act': 'reimport', onclick: () => { pick.click(); } }, t('Import…')));
@@ -265,7 +274,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       else if (e.pageNumber === 1 && !e.cssTransform && !e.isDetailView) ok(true);
     }, { signal }));
     if (doc) {
-      bus.on('pagesinit', () => { viewer.currentScaleValue = 'page-width'; });
+      bus.on('pagesinit', () => { viewer.currentScaleValue = 'page-width'; tools?.decide(doc); });
       viewer.setDocument(doc);
       links.setDocument(doc, null);
     }
@@ -320,13 +329,13 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const openMenu = (opener, items) => {
       if (menu?.opener === opener) { closeMenu(true); return; }
       closeMenu();
-      const el = h('div', { class: 'pop gp-menu gq-menu', role: 'menu' }, items.map(([label, run, props = {}]) => btn({ role: 'menuitem', tabindex: '-1', ...props, onclick: () => { closeMenu(true); run(); } }, label)));
+      const el = h('div', { class: 'pop gp-menu gq-menu', role: 'menu' }, items.map(([label, run, props = {}]) => btn({ role: 'menuitem', tabindex: '-1', ...props, onclick: (e) => { closeMenu(true); run(e); } }, label)));
       document.body.append(el);
       const r = opener.getBoundingClientRect(), w = el.offsetWidth;
       el.style.left = `${Math.max(4, Math.min(r.left, innerWidth - w - 4))}px`;
       el.style.top = `${r.bottom + 6}px`;
       el.addEventListener('keydown', (e) => {
-        const all = [...el.querySelectorAll('[role="menuitem"]')], i = all.indexOf(document.activeElement);
+        const all = [...el.querySelectorAll('[role^="menuitem"]:not([disabled])')], i = all.indexOf(document.activeElement);
         if (e.key === 'Escape' || e.key === 'Tab') { e.preventDefault(); closeMenu(true); }
         else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) { e.preventDefault(); all[e.key === 'Home' ? 0 : e.key === 'End' ? all.length - 1 : (i + (e.key === 'ArrowUp' ? all.length - 1 : 1)) % all.length].focus(); }
       });
@@ -334,7 +343,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       el.setAttribute('data-open', '');
       opener.setAttribute('aria-expanded', 'true');
       menu = { el, opener };
-      el.querySelector('[role="menuitem"]')?.focus();
+      el.querySelector('[role^="menuitem"]:not([disabled])')?.focus();
     };
     document.addEventListener('pointerdown', (e) => { if (menu && !menu.el.contains(e.target) && !menu.opener.contains(e.target)) closeMenu(); }, { capture: true, signal });
     zoomB.addEventListener('click', () => openMenu(zoomB, [...PRESETS.map(([v, label]) => [t(label), () => { zoomTo(v); }, { 'data-zoom': v }]),
@@ -404,6 +413,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const say = (text) => { if (state.textContent !== text) state.textContent = text; };
     let dirty = false, saving = null, timer = 0;
     const save = async () => {
+      tools?.commit();
       if (!doc || !dirty) return true;
       dirty = false; clearTimeout(timer);
       say(t('Saving…'));
@@ -424,7 +434,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       return saving;
     };
     if (doc && !src) {
-      const modified = () => { dirty = true; say(''); clearTimeout(timer); timer = setTimeout(flush, 1000); };
+      modified = () => { dirty = true; say(''); clearTimeout(timer); timer = setTimeout(flush, 1000); };
       doc.annotationStorage.onSetModified = modified;
       // pdf.js only calls onSetModified once until its current save finishes. Track each input as well, so a field
       // changed during that save cannot be mistaken for the value its worker already captured.
@@ -432,17 +442,18 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       ui.addEventListener('change', (e) => { if (e.target.closest?.('.annotationLayer')) { modified(); flush(); } }, { signal });
     }
     back?.addEventListener('click', (e) => {
+      tools?.commit(true);
       if (!dirty && !saving) return;
       e.preventDefault();
       flush().then((ok) => { if (ok) location[window.top === window ? 'assign' : 'replace'](back.href); });
     });
     // The embedded frame's Close, Escape and history routes await the same storage acknowledgement as Documents.
-    addEventListener('glaze:papers:beforeleave', (e) => { if (dirty || saving) e.detail.wait(flush()); }, { signal });
-    document.addEventListener('visibilitychange', () => { if (document.hidden && dirty) flush(); }, { signal });
+    addEventListener('glaze:papers:beforeleave', (e) => { tools?.commit(true); if (dirty || saving) e.detail.wait(flush()); }, { signal });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) tools?.commit(true); if (document.hidden && dirty) flush(); }, { signal });
     // Native tab navigation cannot await a promise. Protect unsaved work until the write acknowledges it.
-    addEventListener('beforeunload', (e) => { if (dirty || saving) { flush(); e.preventDefault(); e.returnValue = ''; } }, { signal });
+    addEventListener('beforeunload', (e) => { tools?.commit(true); if (dirty || saving) { flush(); e.preventDefault(); e.returnValue = ''; } }, { signal });
     const dispose = async () => {
-      life.abort(); clearTimeout(timer); clearTimeout(drawTimer); sizing.disconnect(); l10n.destroy(); closeMenu();
+      life.abort(); clearTimeout(timer); clearTimeout(drawTimer); sizing.disconnect(); l10n.destroy(); closeMenu(); tools?.dispose();
       viewer.setDocument(null); links.setDocument(null); finder.setDocument(null);
       if (doc) doc.annotationStorage.onSetModified = null;
       await task?.destroy().catch(() => {});
