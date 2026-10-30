@@ -61,6 +61,8 @@ const find = (el, fn) => all(el).find(fn);
 const cls = (name) => (e) => e.className.split(/\s+/).includes(name);
 const tag = (name) => (e) => e.localName === name;
 const named = (root, name) => find(root, (e) => e.getAttribute('data-name') === name);
+// The paths a shape draws: its SVG's own, not those inside its defs (markers, clip paths).
+const drawn = (box) => find(box, tag('svg')).children.find(tag('path'));
 const MEDIA = new Map([['ppt/media/image1.png', 'blob:test/png'], ['ppt/media/image3.svg', 'blob:test/svg']]);
 const LABELS = { chart: 'Chart', smartart: 'Diagram', ole: 'Object', picture: 'Picture', media: 'Video', table: 'Table', broken: '', other: '' };
 const draw = async (n, o = {}) => { const d = await deck(); return R.slide(d.slides[n], d, { document: doc, media: MEDIA, labels: LABELS, ...o }); };
@@ -161,7 +163,7 @@ test('geometry: presets and custom paths, gradients, dashes, caps and arrowheads
   const el = await draw(2);
   const rounded = named(el, 'Rounded');
   assert.match(rounded.style.getPropertyValue('transform'), /rotate\(90deg\)/);
-  const rp = find(rounded, tag('path'));
+  const rp = drawn(rounded);
   assert.match(rp.getAttribute('d'), /A /, 'roundRect has arcs');
   assert.equal(rp.getAttribute('stroke'), '#ff0000');
   assert.equal(rp.getAttribute('stroke-width'), '28575');
@@ -169,7 +171,7 @@ test('geometry: presets and custom paths, gradients, dashes, caps and arrowheads
   assert.equal(rp.getAttribute('stroke-dasharray'), '114300 85725'); // dash: 4 and 3 line widths
   const arrow = named(el, 'Arrow');
   assert.match(arrow.style.getPropertyValue('transform'), /scale\(1, -1\)/);
-  const ap = find(arrow, tag('path'));
+  const ap = drawn(arrow);
   assert.equal(ap.getAttribute('fill'), 'none');
   const markers = all(arrow).filter(tag('marker'));
   assert.equal(markers.length, 2);
@@ -184,11 +186,11 @@ test('geometry: presets and custom paths, gradients, dashes, caps and arrowheads
   assert.ok(grad, 'a linear gradient');
   assert.deepEqual(grad.children.filter(tag('stop')).map((s) => [s.getAttribute('offset'), s.getAttribute('stop-color')]), [['0', '#cfd5ea'], ['1', '#2f528f']]);
   assert.deepEqual(['x1', 'y1', 'x2', 'y2'].map((k) => grad.getAttribute(k)), ['0.5', '0', '0.5', '1']); // 90°: top to bottom
-  const tp = find(tri, tag('path'));
+  const tp = drawn(tri);
   assert.equal(tp.getAttribute('fill'), `url(#${grad.getAttribute('id')})`);
   assert.equal(tp.getAttribute('d'), 'M 914400 0 L 1828800 1828800 L 0 1828800 Z'); // its 100 × 100 path space stretched
   // Effects and 3-D are dropped: the shadowed ellipse is its plain fill.
-  assert.equal(find(named(el, 'Shadowed'), tag('path')).getAttribute('fill'), '#70ad47');
+  assert.equal(drawn(named(el, 'Shadowed')).getAttribute('fill'), '#70ad47');
 });
 
 test('pictures: a blob: URL from the media map, cropped, clipped to their geometry, with alt text; undrawable ones are titled frames', async () => {
@@ -255,7 +257,7 @@ test('groups nest: each box at its place in its group, the group turned and flip
   assert.equal(c.parentNode, inner);
   assert.deepEqual(['left', 'top'].map((k) => px(c.style.getPropertyValue(k))), [1000000, 500000].map((v) => Math.round(v / 9525 * 100) / 100));
   assert.match(c.style.getPropertyValue('transform'), /rotate\(45deg\)/);
-  assert.equal(find(a, tag('path')).getAttribute('fill'), '#ffc000'); // the group's fill
+  assert.equal(drawn(a).getAttribute('fill'), '#ffc000'); // the group's fill
 });
 
 test('find marks each match in the slide\'s text; text() is what find searches; hidden slides are left out of visible()', async () => {
