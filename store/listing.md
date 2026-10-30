@@ -42,7 +42,7 @@ GLAZE WRITER AND DOCUMENTS
 • AI is optional and off until you set it up in Settings › AI. Tab completion only finishes the current sentence, and Feedback assesses your paper against the rubric and instructions. Glaze never drafts. Tests get proofing only.
 • Documents keeps every paper, spreadsheet, PDF and PowerPoint deck in one place, from Glaze's toolbar icon, Ctrl+K or Glaze navigation. Start a Blank, MLA, APA or Chicago paper, create a spreadsheet or import a file; deleted files wait 30 days in Trash.
 • Spreadsheets have more than 380 Excel functions, show a workbook's own charts on the grid and chart a selection; they import .xlsx, .csv and .tsv files and export .xlsx that Excel opens without repair. PDFs open with zoom, find, fillable forms you can save, and export; decks open with a slide rail, zoom, find, speaker notes and Present. PDFs and decks up to 50 MB stay in this browser.
-• In an assignment, an empty attempt offers Document or Spreadsheet. Uploaded PDFs, decks and spreadsheets open in their viewers for submission; spreadsheets submit as .xlsx. Blackboard's file previews open in Glaze's own PDF viewer, with find, zoom and a page box. Switches for Spreadsheets, PDFs and Slides are in Settings › Writer › Papers; saved files still open.
+• In an assignment, an empty attempt offers Document or Spreadsheet. Uploaded PDFs, decks and spreadsheets open in their viewers for submission; spreadsheets submit as .xlsx. Blackboard Ultra's file previews open in Glaze's own PDF viewer, with find, zoom and a page-number field. Switches for Spreadsheets, PDFs and Slides are in Settings › Writer › Papers; saved files still open.
 • Documents wears your Look, and Writer's pages follow a dark Look; Light page keeps them white.
 
 AGENTS
