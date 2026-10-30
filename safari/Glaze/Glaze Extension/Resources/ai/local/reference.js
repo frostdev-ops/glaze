@@ -230,7 +230,7 @@ var GZ_AI_REFERENCE = globalThis.GZ_AI_REFERENCE || (() => {
     };
 
     // Feeds tokens at the next positions. → their logits: all rows (T × vocab) or only the last (vocab).
-    const forward = (tokens, { logits = 'last' } = {}) => {
+    const forward = (tokens, opts) => {
       const T = tokens.length;
       if (!T) fail('no tokens');
       const x = new Float32Array(T * E), er = new Float32Array(E);
@@ -239,6 +239,16 @@ var GZ_AI_REFERENCE = globalThis.GZ_AI_REFERENCE || (() => {
         if (!Number.isInteger(id) || id < 0 || id >= c.vocab) fail(`token ${id}`);
         x.set(row(w.embd, id, er), t * E);
       }
+      return run(x, T, opts);
+    };
+    // Feeds T input embeddings (T × embedding_length, e.g. an image's from ai/local/vision-reference.js) in place of
+    // token rows, at the next positions. → logits as forward.
+    const forwardEmbeddings = (embeddings, opts) => {
+      const T = embeddings.length / E;
+      if (!T || !Number.isInteger(T)) fail(`${embeddings.length} values are not whole rows of ${E}`);
+      return run(Float32Array.from(embeddings), T, opts);
+    };
+    const run = (x, T, { logits = 'last' } = {}) => {
       for (let li = 0; li < c.nLayer; li++) {
         const L = w.layers[li], s = state[li];
         const n = rmsnorm(x, T, E, L.attnNorm, c.eps);
@@ -258,7 +268,7 @@ var GZ_AI_REFERENCE = globalThis.GZ_AI_REFERENCE || (() => {
       return matmul(w.output, h, rows);
     };
 
-    return { forward, get pos() { return pos; }, state };
+    return { forward, forwardEmbeddings, get pos() { return pos; }, state };
   };
 
   // ---- sampling --------------------------------------------------------------------------------------------------------
