@@ -323,7 +323,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     // What goes with the run: the files, the note naming them, and what the version keeps.
     const extras = () => {
       const ok = list.filter((a) => a.ref), names = ok.map((a) => a.name);
-      return { files: ok.map((a) => ({ name: a.name, mime: a.mime, size: a.size })), note: L().noteWith(note.value, names, t('Attached: {names}', { names: names.join(', ') })),
+      return { files: ok.map((a) => ({ name: a.name, mime: a.mime, size: a.size })), note: L().noteWith(note.value, names, t('Attached: {names}', { names: '{names}' })),
         attached: ok.map((a) => ({ name: a.name, size: a.size, mime: a.mime })) };
     };
     ready();

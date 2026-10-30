@@ -201,3 +201,8 @@ test('an explicit extension disambiguates listings with the same workbook stem',
   assert.equal(S.listed(area, 'Budget.xlsm'), 0);
   assert.equal(S.listed(area, 'Budget.xlsx'), 1);
 });
+
+test('attachment notes keep template and replacement characters in filenames literally', () => {
+  const names = ['$&.bin', '{names}.bin', "quote$`$'.bin"];
+  assert.equal(S.noteWith('Hi', names), `Hi\n\nAttached: ${names.join(', ')}`);
+});
