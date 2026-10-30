@@ -11,6 +11,7 @@ const path = require('node:path');
 const M = require('../lib/sheet-model.js');
 const C = require('../lib/sheet-calc.js');
 require('../lib/sheet-fn-math.js');
+require('../lib/sheet-fn-info.js');
 require('../lib/sheet-fn-financial2.js');
 
 const book = (rows = []) => {
