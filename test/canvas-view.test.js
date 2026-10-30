@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const worker = require('./helpers/worker-env.cjs');
+const vm = require('node:vm');
 
 const CANVAS = 'https://school.instructure.com', EXT = 'chrome-extension://x';
 const page = (patch = {}) => ({ id: 'glaze', frameId: 0, url: `${CANVAS}/courses/25/pages/week-3`, origin: CANVAS,
@@ -36,8 +37,8 @@ test('Canvas viewer passes require a course file page or link page in its own ta
 });
 
 test('Canvas passes are one-use, tab-bound and claim no AI host or MAIN-world script', async () => {
-  const hosts = [], scripts = [];
-  const w = worker({ store: store(), globals: { aiFrameHost: async (s, from) => { if (from) hosts.push(from); } } });
+  const scripts = [];
+  const w = worker({ store: store() });
   w.context.chrome.scripting.executeScript = async (s) => { scripts.push(s); return []; };
   const frame = (tab = 7) => ({ id: 'glaze', frameId: 4, documentId: 'viewer', url: `${EXT}/writer.html`, origin: EXT, tab: { id: tab, url: page().url } });
   const claim = (pass, sender = frame()) => w.send({ type: 'glaze:writer', op: 'claim', pass }, sender);
@@ -47,6 +48,7 @@ test('Canvas passes are one-use, tab-bound and claim no AI host or MAIN-world sc
   assert.deepEqual(await claim(pass), { ok: false });
   assert.deepEqual(await ask(w, page(), 'slides', other), { ok: true });
   assert.deepEqual(await claim(other, frame(8)), { ok: false });
-  assert.deepEqual(hosts, []);
+  assert.equal(vm.runInContext('aiHosts.size', w.context), 0);
+  assert.deepEqual(w.store.session.aiHosts || {}, {});
   assert.deepEqual(scripts, []);
 });

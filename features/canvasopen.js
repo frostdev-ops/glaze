@@ -149,7 +149,7 @@ var GZ_CANVAS_OPEN = globalThis.GZ_CANVAS_OPEN || (() => {
       if (v.gz !== f || offered || e.source !== f.contentWindow || e.origin !== origin || e.data?.type !== 'glaze:writer:hello') return;
       offered = true;
       const pass = crypto.randomUUID();
-      const ok = await Promise.resolve().then(() => chrome.runtime.sendMessage({ type: 'glaze:canvas-view', pass })).then((r) => r?.ok === true, () => false);
+      const ok = await Promise.resolve().then(() => chrome.runtime.sendMessage({ type: 'glaze:canvas-view', pass, kind: v.type.kind })).then((r) => r?.ok === true, () => false);
       if (v.gz !== f) return;
       if (!ok || !f.isConnected) { close(v, 'pass'); return; }
       try { f.contentWindow.postMessage({ type: 'glaze:writer', pass }, origin, [ch.port2]); transferred = true; } catch { close(v, 'pass'); }
