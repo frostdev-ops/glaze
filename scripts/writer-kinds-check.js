@@ -127,6 +127,12 @@ const holds = (bytes, value) => {
       const t0 = Date.now();
       await p.goto(`${site}${ATTEMPT}?mode=empty`);
       const tGoto = Date.now() - t0;
+      // Glaze's content scripts on the page first (Glaze's own globals in its isolated world): a page they never reached
+      // fails here, by name, rather than as a Writer frame that never came.
+      await until(() => worker.evaluate(async (u) => {
+        const tabs = await chrome.tabs.query({ url: `${u}/*` }), on = async (t) => (await chrome.scripting.executeScript({ target: { tabId: t.id, frameIds: [0] }, func: () => Object.keys(globalThis).some((k) => k.startsWith('GZ_')) }))[0]?.result === true;
+        return tabs.length > 0 && (await Promise.all(tabs.map(on))).every(Boolean);
+      }, site), `open ${n}: Glaze's content scripts on the page`, 10000);
       let sawFrame = false;
       // Read only page state at the deadline. Recovery removes the frame and Writer markers, leaving Ultra's editor visible.
       const state = async () => {
