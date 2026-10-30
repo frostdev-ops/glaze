@@ -103,3 +103,20 @@ test('stored decks are bounded before base64 decoding', () => {
   assert.equal(decoded, 0, 'oversized stored input never reaches atob');
   assert.equal(S.get({ file: '' }), null);
 });
+
+
+test('export blob URLs are revoked when the page closes', async () => {
+  const listeners = new Map(), revoked = [];
+  const { DK } = load({ slides: true }, {
+    addEventListener: (name, cb) => listeners.set(name, cb), Blob,
+    URL: { createObjectURL: () => 'blob:export', revokeObjectURL: (url) => revoked.push(url) },
+    GZ_WRITER_PAPERS: { open: () => ({ get: async () => ({ file: 'UEsDBA==', title: 'Deck' }) }) },
+    document: { createElement: () => ({ click() {}, remove() {} }), body: { append() {} } },
+  });
+  await DK.settled();
+  await DK.get('slides').exportFile('doc:test');
+  listeners.get('pagehide')({ persisted: true });
+  assert.deepEqual(revoked, [], 'back-forward cached documents retain their URLs');
+  listeners.get('pagehide')({ persisted: false });
+  assert.deepEqual(revoked, ['blob:export']);
+});
