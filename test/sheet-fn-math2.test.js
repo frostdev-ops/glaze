@@ -257,3 +257,20 @@ test('AGGREGATE returns each requested rank in an array formula', () => {
   e.recalc();
   assert.deepEqual(['D1','E1','F1','G1'].map((r) => val(e, r)), [4,3,2,1]);
 });
+
+test('hiding rows or changing the filter recalculates SUBTOTAL and AGGREGATE, and what reads them', () => {
+  const e = book({ A1: 1, A2: 10, A3: 100, B1: '=SUBTOTAL(109,A1:A3)', B2: '=AGGREGATE(9,5,A1:A3)', B3: '=B1*2', B4: '=SUBTOTAL(9,A1:A3)', 'Sheet2!A1': '=SUBTOTAL(109,Sheet1!A1:A3)' },
+    { sheets: ['Sheet1', 'Sheet2'] });
+  const sh = e.wb.sheets[0], other = e.wb.sheets[1].id;
+  const read = () => [val(e, 'B1'), val(e, 'B2'), val(e, 'B3'), val(e, 'B4'), out(e.value(other, 0, 0))];
+  assert.deepEqual(read(), [111, 111, 222, 111, 111]);
+  const hide = e.apply({ op: 'hide', sheet: sh.id, axis: 'row', i: 1, hidden: true });
+  assert.deepEqual(read(), [101, 101, 202, 111, 101], 'row 2 hidden by hand');
+  const filter = e.apply({ op: 'prop', sheet: sh.id, key: 'filter', value: { r0: 0, c0: 0, r1: 2, c1: 0 } });
+  assert.deepEqual(read(), [101, 101, 202, 101, 101], 'row 2 now filtered out, which SUBTOTAL(9) skips too');
+  e.apply(filter.inverse);
+  e.apply(hide.inverse);
+  assert.deepEqual(read(), [111, 111, 222, 111, 111]);
+  e.apply({ op: 'batch', ops: [{ op: 'hide', sheet: sh.id, axis: 'row', i: 0, hidden: true }, { op: 'hide', sheet: sh.id, axis: 'row', i: 2, hidden: true }] });
+  assert.deepEqual(read(), [10, 10, 20, 111, 10]);
+});
