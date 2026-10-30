@@ -1,8 +1,9 @@
 // Glaze Sheets' further text functions: TEXTBEFORE TEXTAFTER TEXTSPLIT TEXTJOIN SUBSTITUTE REPLACE REPT FIND FINDB
 // SEARCH SEARCHB EXACT PROPER CLEAN CHAR CODE UNICHAR UNICODE DOLLAR FIXED NUMBERVALUE VALUETOTEXT ARRAYTOTEXT,
 // registered with the calc engine (sheet-calc.js define). Text past 32,767 characters is #VALUE!. FINDB and SEARCHB
-// count as FIND and SEARCH do, as Excel does outside a double-byte language. CHAR and CODE use Windows' ANSI code page
-// (1252); a character outside it has CODE 63, "?".
+// use UTF-16 positions in the fixed SBCS locale; FIND, SEARCH and REPLACE use compatibility-version-2 code points.
+// CHAR and CODE deliberately use Windows-1252 on every host for portable workbooks; outside it CODE is 63, "?".
+// DBCS byte positions require workbook locale metadata from the model.
 // Classic script; module.exports for node.
 var GZ_SHEET_FN_TEXT2 = globalThis.GZ_SHEET_FN_TEXT2 || (() => {
   const C = typeof GZ_SHEET_CALC !== 'undefined' ? GZ_SHEET_CALC : require('./sheet-calc.js');
@@ -27,15 +28,13 @@ var GZ_SHEET_FN_TEXT2 = globalThis.GZ_SHEET_FN_TEXT2 || (() => {
   const texts = (a, ctx) => values(a, ctx).map((v) => { if (isErr(v)) throw v; return text(v); });
 
   // Where any of the delimiters occurs, left to right without overlap ([start, end]); of two at one place, the longer.
+  const escape = (s) => s.replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&');
   const occurrences = (s, delims, insensitive) => {
-    const hay = insensitive ? s.toLowerCase() : s, ds = delims.filter(Boolean).map((d) => (insensitive ? d.toLowerCase() : d));
-    const out = [];
-    for (let i = 0; i < hay.length;) {
-      let len = 0;
-      for (const d of ds) if (d.length > len && hay.startsWith(d, i)) len = d.length;
-      if (len) { out.push([i, i + len]); i += len; } else i++;
-    }
-    return out;
+    const ds = [...new Set(delims.filter(Boolean))].sort((a, b) => b.length - a.length);
+    if (!ds.length) return [];
+    // Match the original string, so case folds such as İ never shift the returned offsets.
+    const re = new RegExp(ds.map(escape).join('|'), insensitive ? 'gi' : 'g');
+    return [...s.matchAll(re)].map((m) => [m.index, m.index + m[0].length]);
   };
   const split = (s, delims, insensitive, dropEmpty) => {
     const parts = [];
@@ -50,8 +49,9 @@ var GZ_SHEET_FN_TEXT2 = globalThis.GZ_SHEET_FN_TEXT2 || (() => {
   const around = (after) => ({ p: ['v', 'r', 'v', 'v', 'v', 'v'], min: 2, max: 6, fn: ([t, delimiter, instance, mode, end, missing], ctx) => {
     const s = text(t), delims = texts(delimiter, ctx);
     const n = given(instance) ? whole(instance, ctx) : 1, insensitive = flag(mode, ctx) === 1, toEnd = flag(end, ctx) === 1;
-    if (s === '') return '';
-    if (n === 0 || Math.abs(n) > s.length) throw ERR.VALUE;
+    if (n === 0) throw ERR.VALUE;
+    if (s === '') { if (delims.includes('')) return ''; throw ERR.VALUE; }
+    if (Math.abs(n) > s.length) throw ERR.VALUE;
     if (delims.includes('')) return (n > 0) === after ? s : '';
     const occ = occurrences(s, delims, insensitive), k = Math.abs(n);
     if (k <= occ.length) { const [a, b] = occ[n > 0 ? k - 1 : occ.length - k]; return after ? s.slice(b) : s.slice(0, a); }
@@ -60,26 +60,46 @@ var GZ_SHEET_FN_TEXT2 = globalThis.GZ_SHEET_FN_TEXT2 || (() => {
     throw ERR.NA;
   } });
 
-  // A pattern of SEARCH's wildcards: ? any character, * any run, ~ before either (or ~) the character itself.
-  const pattern = (find) => {
-    let re = '';
+  // Match the fixed pieces between SEARCH's stars from left to right. Keeping stars out of the regular
+  // expressions avoids exponential backtracking on patterns such as *a*a*a*b in a long run of a's.
+  const searchAt = (find, s, unicode) => {
+    const pieces = [''];
+    let leadingStar = false;
     for (let i = 0; i < find.length; i++) {
       const ch = find[i];
-      if (ch === '~' && '*?~'.includes(find[i + 1] ?? '')) re += `\\${find[++i]}`;
-      else if (ch === '*') re += '[\\s\\S]*';
-      else if (ch === '?') re += '[\\s\\S]';
-      else re += ch.replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&');
+      if (ch === '~' && i + 1 === find.length) break; // Excel ignores a trailing escape.
+      if (ch === '~') pieces[pieces.length - 1] += escape(find[++i]);
+      else if (ch === '*') { if (i === 0) leadingStar = true; pieces.push(''); }
+      else pieces[pieces.length - 1] += ch === '?' ? '[\\s\\S]' : escape(ch);
     }
-    return new RegExp(re, 'i');
+    let at = 0, first = null;
+    for (const piece of pieces) {
+      if (!piece) continue;
+      const rest = s.slice(at), re = new RegExp(piece, 'gi');
+      let m = re.exec(rest);
+      // Excel's ? consumes one UTF-16 unit, but SEARCH cannot begin inside a surrogate pair.
+      while (m && first === null && !leadingStar && unicode && m.index > 0
+        && /[\udc00-\udfff]/.test(rest[m.index]) && /[\ud800-\udbff]/.test(rest[m.index - 1])) {
+        re.lastIndex = m.index + 1;
+        m = re.exec(rest);
+      }
+      if (!m) return -1;
+      if (first === null) first = at + m.index;
+      at += m.index + m[0].length;
+    }
+    return leadingStar ? 0 : first ?? 0;
   };
   // FIND and SEARCH: the 1-based place of find_text in within_text from start_num, which must lie inside it.
-  const locate = (wild) => ({ p: ['v', 'v', 'v'], min: 2, max: 3, fn: ([find, within, start], ctx) => {
+  const locate = (wild, bytes = false) => ({ p: ['v', 'v', 'v'], min: 2, max: 3, fn: ([find, within, start], ctx) => {
     const f = text(find), w = text(within), from = given(start) ? whole(start, ctx) : 1;
-    if (from < 1 || from > w.length) throw ERR.VALUE;
+    const chars = bytes ? w.split('') : [...w], length = chars.length;
+    if (from < 1 || from > length + (!wild && f === '' ? 1 : 0)) throw ERR.VALUE;
     if (f === '') return from;
-    const at = wild ? (() => { const m = pattern(f).exec(w.slice(from - 1)); return m ? m.index + from - 1 : -1; })() : w.indexOf(f, from - 1);
+    const offset = chars.slice(0, from - 1).join('').length;
+    const found = wild ? searchAt(f, w.slice(offset), !bytes) : w.indexOf(f, offset);
+    const at = wild && found >= 0 ? found + offset : found;
     if (at < 0) throw ERR.VALUE;
-    return at + 1;
+    return (bytes ? at : [...w.slice(0, at)].length) + 1;
   } });
 
   // Windows-1252's 128-159 (the five it leaves undefined map to the same code points, as Windows does).
@@ -111,9 +131,10 @@ var GZ_SHEET_FN_TEXT2 = globalThis.GZ_SHEET_FN_TEXT2 || (() => {
       const one = (v) => {
         if (isErr(v)) return v;
         const s = text(v);
+        if (s === '') return ERR.VALUE;
         const lines = rows.length ? split(s, rows, insensitive, dropEmpty) : [s];
         const out = lines.map((line) => (cols.length ? split(line, cols, insensitive, dropEmpty) : [line])).filter((r) => r.length);
-        if (!out.length) return ERR.VALUE;
+        if (!out.length) return C.err('#CALC!');
         const width = Math.max(...out.map((r) => r.length));
         return out.map((r) => (r.length < width ? r.concat(Array(width - r.length).fill(fill)) : r));
       };
@@ -146,7 +167,8 @@ var GZ_SHEET_FN_TEXT2 = globalThis.GZ_SHEET_FN_TEXT2 || (() => {
     REPLACE: { p: ['v', 'v', 'v', 'v'], min: 4, max: 4, fn: ([t, start, count, rep], ctx) => {
       const s = text(t), at = whole(start, ctx), n = whole(count, ctx), r = text(rep);
       if (at < 1 || n < 0) throw ERR.VALUE;
-      return capped(s.slice(0, at - 1) + r + s.slice(at - 1 + n));
+      const chars = [...s];
+      return capped(chars.slice(0, at - 1).join('') + r + chars.slice(at - 1 + n).join(''));
     } },
     REPT: { p: ['v', 'v'], min: 2, max: 2, fn: ([t, times], ctx) => {
       const s = text(t), n = whole(times, ctx);
@@ -154,9 +176,9 @@ var GZ_SHEET_FN_TEXT2 = globalThis.GZ_SHEET_FN_TEXT2 || (() => {
       return s.repeat(n);
     } },
     FIND: locate(false),
-    FINDB: locate(false),
+    FINDB: locate(false, true),
     SEARCH: locate(true),
-    SEARCHB: locate(true),
+    SEARCHB: locate(true, true),
     EXACT: { p: ['v', 'v'], min: 2, max: 2, fn: ([a, b]) => text(a) === text(b) },
     // Each letter after a non-letter upper case, every other letter lower.
     PROPER: { p: ['v'], min: 1, max: 1, fn: ([t]) => {
@@ -164,7 +186,7 @@ var GZ_SHEET_FN_TEXT2 = globalThis.GZ_SHEET_FN_TEXT2 || (() => {
       for (const ch of text(t)) { const letter = /\p{L}/u.test(ch); s += letter ? (prev ? ch.toLowerCase() : ch.toUpperCase()) : ch; prev = letter; }
       return capped(s);
     } },
-    // ASCII's control characters 0-31 only, as Excel's CLEAN.
+    // Use CLEAN's documented portable ASCII 0-31 set. Mac Excel additionally strips U+0080-U+009F.
     CLEAN: { p: ['v'], min: 1, max: 1, fn: ([t]) => text(t).replace(/[\x00-\x1f]/g, '') },
     CHAR: { p: ['v'], min: 1, max: 1, fn: ([x], ctx) => {
       const n = whole(x, ctx);
@@ -193,7 +215,8 @@ var GZ_SHEET_FN_TEXT2 = globalThis.GZ_SHEET_FN_TEXT2 || (() => {
     // Excel's $#,##0.00_);($#,##0.00), to the decimals asked for.
     DOLLAR: { p: ['v', 'v'], min: 1, max: 2, fn: ([x, d], ctx) => {
       const places = decimals(d, ctx, 2), code = `"$"${digitsCode(true, places)}`;
-      return NF.format(round(num(x, ctx), places), `${code};(${code})`);
+      const value = num(x, ctx), result = NF.format(Math.abs(round(value, places)), code);
+      return value < 0 ? `(${result})` : result;
     } },
     FIXED: { p: ['v', 'v', 'v'], min: 1, max: 3, fn: ([x, d, noCommas], ctx) => {
       const places = decimals(d, ctx, 2);
@@ -212,8 +235,8 @@ var GZ_SHEET_FN_TEXT2 = globalThis.GZ_SHEET_FN_TEXT2 || (() => {
       const plain = (point >= 0 ? s.slice(0, point).split(group).join('') + '.' + s.slice(point + 1) : s.split(group).join(''));
       if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(plain)) throw ERR.VALUE;
       const n = Number(plain) / 100 ** pct;
-      if (!Number.isFinite(n)) throw ERR.NUM;
-      return n;
+      if (!Number.isFinite(n) || Math.abs(n) > 9.99999999999999e307) throw ERR.VALUE;
+      return Math.abs(n) < 2.2250738585072014e-308 ? 0 : n;
     } },
     VALUETOTEXT: { p: ['v', 'v'], min: 1, max: 2, errors: true, fn: ([v, format], ctx) => {
       if (isErr(format)) return format;
