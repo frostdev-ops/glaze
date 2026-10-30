@@ -214,3 +214,18 @@ test('Canvas pagination keeps partial coverage and cannot switch API resources',
     assert.ok(!tab.page.asked.some((x) => x.url.includes('/users/6')));
   }
 });
+
+test('find rechecks the probed route', async () => {
+  const tab = canvasTab({ id: 1 });
+  tab.context.location.href = `${C.CANVAS}/courses/25/quizzes/3`;
+  tab.context.location.pathname = '/courses/25/quizzes/3';
+  assert.equal(await make([tab]).t.find(A), null);
+});
+
+test('cancellation bounds a stalled tab lookup', async () => {
+  const t = TABS.create({ tabs: { query: () => new Promise(() => {}) }, scripting: { executeScript() {} }, quiet: H.quiet, limit: { read: 30 } });
+  const ac = new AbortController();
+  setTimeout(() => ac.abort(), 10);
+  const result = await Promise.race([t.run(A, 'todo', {}, { signal: ac.signal }).then(() => 'returned', () => 'cancelled'), H.pause(100).then(() => 'hung')]);
+  assert.equal(result, 'cancelled');
+});
