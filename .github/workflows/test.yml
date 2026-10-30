@@ -22,6 +22,64 @@ jobs:
           # Node 22's deflate-raw stream accepts trailing junk; 26 follows the browser contract.
           node-version: 26
       - run: node --test
+  # The agent helper (mcp/) and the worker's side of it on Windows: named pipes, the registry, .bat launchers, then a real
+  # native-messaging host in Chromium. The helper supports Node 18 and later.
+  mcp-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 26]
+    defaults:
+      run:
+        shell: bash
+    env:
+      PLAYWRIGHT: 1.63.0
+      # Playwright's host check would run winldd's PrintDeps.exe, which no pin covers.
+      PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS: 1
+    steps:
+      # The files as the npm package ships them: Windows git would otherwise check them out with CRLF.
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+
+      # The worker's code takes crypto from the browser, and Node 18 has no global one: the flag gives the test files one.
+      # The helper processes they start run without it.
+      - name: MCP and agent tests
+        run: node ${{ matrix.node == 18 && '--experimental-global-webcrypto' || '' }} --test test/mcp-*.test.js test/agent-*.test.js
+
+      # As browser.yml installs it: scripts off, every package and both builds checked against their pins before any of
+      # it runs. No --with-deps: on Windows it only adds a media pack.
+      - name: Install the pinned Playwright
+        if: matrix.node == 26
+        run: |
+          echo "NODE_PATH=$RUNNER_TEMP/playwright/node_modules" >> "$GITHUB_ENV"
+          echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/ms-playwright" >> "$GITHUB_ENV"
+          npm install --prefix "$RUNNER_TEMP/playwright" --no-save --no-package-lock --ignore-scripts --no-audit --no-fund --registry https://registry.npmjs.org/ "playwright@$PLAYWRIGHT"
+          node scripts/npm-integrity.js "$RUNNER_TEMP/playwright/node_modules/.package-lock.json" ci/playwright.pins playwright playwright-core
+      - name: Install its Chromium
+        if: matrix.node == 26
+        run: |
+          node "$RUNNER_TEMP/playwright/node_modules/playwright/cli.js" install --no-shell chromium
+          node scripts/ci-chromium.js
+      - name: A real native-messaging host in Chromium
+        if: matrix.node == 26
+        run: node scripts/mcp-windows-check.js "$RUNNER_TEMP/mcp-windows-evidence"
+      - name: Keep the check's evidence
+        if: failure() && matrix.node == 26
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mcp-windows-evidence
+          path: ${{ runner.temp }}/mcp-windows-evidence
+          if-no-files-found: ignore
+          retention-days: 14
   browser:
     permissions:
       contents: read

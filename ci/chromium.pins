@@ -2,3 +2,4 @@
 # matches Google's Chrome for Testing zip of that version, unpacked.
 chromium-1243 153.0.8010.12 linux-x64 de81033ef46a2ebc03cd1865fccace6f7955ba3b8b45adb4e485ecf51ebdceac
 chromium-1243 153.0.8010.12 darwin-arm64 37eeed7899f5e4b2524e05af529c8ca9ca4dce83ffee579b85b92ec04dc797a4
+chromium-1243 153.0.8010.12 win32-x64 bdb90fb4515be221f8b2b9abe8fb3f9f8cd3af6fd06873872e4ccc921ddc28db

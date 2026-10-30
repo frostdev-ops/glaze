@@ -18,15 +18,18 @@ const I = require('../mcp/lib/install.js');
 const D = require('../mcp/lib/doctor.js');
 const CLI = require('../mcp/bin/glaze-mcp.js');
 const { nodeAt } = require('./helpers/mcp-pipe.cjs');
+const { K, REG, runner } = require('./helpers/mcp-reg.cjs');
 const VERSION = require('../mcp/package.json').version;
 const HOST = 'io.frostdev.glaze_mcp';
 const STORE = 'jmmaeoajomodnbnlmdikjooalmcilooh';
 const ORIGIN = `chrome-extension://${STORE}/`;
 const DESCRIPTION = 'Lets AI apps on this computer use Glaze.';
 const A = 'abcdefghijklmnopabcdefghijklmnop', Z = 'ponmlkjihgfedcbaponmlkjihgfedcba';
-// Modes and sh launchers need a POSIX file system; on Windows (the CI job) those checks are skipped.
+// Modes, symlinks and sh launchers need a POSIX system; on Windows (the CI job) those tests are skipped, saying why, and
+// the Windows tests below run instead: .bat launchers through cmd, junctions, and the registry through `runner`.
 const POSIX = process.platform !== 'win32';
-const K = (p) => `HKCU\\Software\\${p}\\NativeMessagingHosts\\${HOST}`;
+const posixOnly = (why) => (POSIX ? false : why);
+const windowsOnly = (why) => (POSIX ? why : false);
 
 const scratch = (t) => {
   const d = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-mcp-install-')));
@@ -41,37 +44,12 @@ const files = (dir, rel = '') => fs.readdirSync(path.join(dir, rel), { withFileT
 const tree = (dir) => Object.fromEntries(files(dir).map((f) => [f, [fs.readFileSync(path.join(dir, f), 'base64'), fs.statSync(path.join(dir, f)).mode]]));
 const mode = (f) => fs.statSync(f).mode & 0o777;
 
-// A registry kept in a Map, driven through the same reg.exe argv the real one gets, and `node --version` answered.
-const runner = ({ nodeVersion = 'v22.11.0' } = {}) => {
-  const keys = new Map(), calls = [];
-  const missing = () => Object.assign(new Error('ERROR: The system was unable to find the specified registry key or value.'), { code: 1 });
-  const run = async (file, args) => {
-    calls.push([file, args]);
-    if (/reg\.exe$/i.test(file)) {
-      const [op, key] = args;
-      if (op === 'add') { keys.set(key, args[args.indexOf('/d') + 1]); return { stdout: 'The operation completed successfully.\r\n', stderr: '' }; }
-      if (op === 'delete') { if (!keys.delete(key)) throw missing(); return { stdout: 'The operation completed successfully.\r\n', stderr: '' }; }
-      if (op === 'export') {
-        if (!keys.has(key)) throw missing();
-        const v = keys.get(key).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-        const text = `Windows Registry Editor Version 5.00\r\n\r\n[${key.replace(/^HKCU/, 'HKEY_CURRENT_USER')}]\r\n@="${v}"\r\n\r\n`;
-        fs.writeFileSync(args[2], Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, 'utf16le')]));
-        return { stdout: 'The operation completed successfully.\r\n', stderr: '' };
-      }
-    }
-    if (args[0] === '--version') return { stdout: `${nodeVersion}\n`, stderr: '' };
-    throw new Error(`unexpected run: ${file} ${args.join(' ')}`);
-  };
-  return { keys, calls, run, ops: (op) => calls.filter(([, a]) => a[0] === op).map(([, a]) => a) };
-};
-
 const mac = (home, over = {}) => ({ platform: 'darwin', env: { HOME: home }, node: '/opt/node/bin/node', src: PKG, run: runner().run, ...over });
 const AS = (home) => path.join(home, 'Library', 'Application Support');
 const win = (base, reg, over = {}) => ({
   platform: 'win32', env: { LOCALAPPDATA: path.join(base, 'Local'), APPDATA: path.join(base, 'Roaming'), SystemRoot: 'C:\\Windows' },
   node: 'C:\\Program Files\\nodejs\\node.exe', src: PKG, run: reg.run, ...over,
 });
-const REG = 'C:\\Windows\\System32\\reg.exe';
 // A copy of the package that says it is another version.
 const pkgAt = (t, version) => {
   const d = scratch(t);
@@ -101,6 +79,12 @@ test('the package is glaze-mcp: one bin, Node 18 and later, MIT license included
       assert.ok(name.startsWith('.') || name.startsWith('node:') || builtinModules.includes(name), `${f} requires ${name}`);
     }
   }
+});
+
+test('the package\'s files end their lines in LF, as npm ships them, on a Windows checkout too', () => {
+  // A CR in the bin's first line breaks `#!/usr/bin/env node` on macOS and Linux. Windows git turns LF into CRLF unless
+  // core.autocrlf is false, which the CI job sets before its checkout.
+  for (const f of files(PKG)) assert.equal(fs.readFileSync(path.join(PKG, f)).includes(13), false, `${f} has a CR; check out with core.autocrlf false`);
 });
 
 // ---- where each browser looks -----------------------------------------------------------------------------------------
@@ -241,7 +225,7 @@ test('launchers: sh with absolute, quoted paths and exec; a .bat with CRLF, %* a
   assert.throws(() => L.sh({ node: 'node', script: '/s', browser: 'b' }), /absolute/);
 });
 
-test('the sh launcher setup writes runs node on the copied script with host --browser and the browser\'s arguments', { skip: !POSIX }, async (t) => {
+test('the sh launcher setup writes runs node on the copied script with host --browser and the browser\'s arguments', { skip: posixOnly('sh launchers run on POSIX; the .bat test runs them on Windows') }, async (t) => {
   const home = path.join(scratch(t), "Jo's home");
   mk(AS(home), 'Google', 'Chrome');
   // A stand-in for node that prints what it was given.
@@ -254,7 +238,7 @@ test('the sh launcher setup writes runs node on the copied script with host --br
   assert.deepEqual(out.stdout.split('\n'), [path.join(AS(home), 'glaze-mcp', VERSION, 'bin', 'glaze-mcp.js'), 'host', '--browser=chrome', ORIGIN, '']);
 });
 
-test('launchers name node by the PATH entry that leads to it, so a Homebrew upgrade doesn\'t break them', { skip: !POSIX }, (t) => {
+test('launchers name node by the PATH entry that leads to it, so a Homebrew upgrade doesn\'t break them', { skip: posixOnly('POSIX symlinks; the junction test covers Windows') }, (t) => {
   const d = scratch(t);
   // A "Cellar" node, the stable link to it, and another node earlier in PATH that is a different file.
   const cellar = path.join(mk(d, 'Cellar', 'node', '26.0.0', 'bin'), 'node');
@@ -270,6 +254,34 @@ test('launchers name node by the PATH entry that leads to it, so a Homebrew upgr
   fs.symlinkSync(process.execPath, path.join(mk(d, 'link'), 'node'));
   assert.equal(I.context({ platform: 'darwin', env: { HOME: d, PATH: path.join(d, 'link') } }).node, path.join(d, 'link', 'node'));
   assert.equal(I.context({ platform: 'darwin', env: { HOME: d, PATH: path.join(d, 'link') }, node: '/given/node' }).node, '/given/node');
+});
+
+test('the .bat launcher setup writes runs node on the copied script through cmd, as Chromium starts it', { skip: windowsOnly('cmd.exe is Windows only; the sh launcher test covers POSIX') }, async (t) => {
+  // %, ! and parentheses, which cmd would expand or split on outside quotes, and an apostrophe.
+  const base = path.join(scratch(t), "Jo's (100%) !x!");
+  mk(base, 'Local', 'Google', 'Chrome', 'User Data');
+  // A package whose bin prints what node was given.
+  const src = pkgAt(t, VERSION);
+  fs.writeFileSync(path.join(src, 'bin', 'glaze-mcp.js'), 'process.stdout.write(JSON.stringify(process.argv.slice(1)));\n');
+  await I.setup(win(base, runner(), { node: process.execPath, src }));
+  const hosts = path.join(base, 'Local', 'glaze-mcp', 'hosts'), launcher = path.join(hosts, 'chrome.bat');
+  // Chromium's own command line for a host that isn't an .exe, from the launcher's folder.
+  const out = spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', `""${launcher}" ${ORIGIN} --parent-window=0"`], { cwd: hosts, encoding: 'utf8', windowsVerbatimArguments: true });
+  assert.equal(out.status, 0, out.stderr);
+  assert.deepEqual(JSON.parse(out.stdout), [path.join(base, 'Local', 'glaze-mcp', VERSION, 'bin', 'glaze-mcp.js'), 'host', '--browser=chrome', ORIGIN, '--parent-window=0']);
+});
+
+test('Windows: launchers name node by the PATH entry that leads to it, so an nvm-windows switch doesn\'t break them', (t) => {
+  const d = scratch(t);
+  const used = path.join(mk(d, 'nvm', 'v26.0.0'), 'node.exe'), other = path.join(mk(d, 'other'), 'node.exe');
+  fs.writeFileSync(used, '');
+  fs.writeFileSync(other, '');
+  // nvm-windows' NVM_SYMLINK: a junction to the version in use, and what PATH names. Off Windows the type is ignored.
+  fs.symlinkSync(path.dirname(used), path.join(d, 'nodejs'), 'junction');
+  const Path = ['relative', path.join(d, 'missing'), path.join(d, 'other'), path.join(d, 'nodejs')].join(';');
+  assert.equal(I.stableNode(used, 'win32', { Path }), path.join(d, 'nodejs', 'node.exe'));
+  assert.equal(I.stableNode(used, 'win32', { PATH: path.join(d, 'other') }), used);
+  assert.equal(I.stableNode(used, 'win32', {}), used);
 });
 
 // ---- setup ------------------------------------------------------------------------------------------------------------
@@ -500,10 +512,26 @@ test('uninstall on Windows deletes only keys that point into our folder, and our
   const hosts = path.join(base, 'Local', 'glaze-mcp', 'hosts');
   fs.writeFileSync(path.join(hosts, 'other.json'), JSON.stringify({ name: 'com.other.host', path: path.join(hosts, 'chrome.bat') }));
   const r = await I.uninstall(ctx);
-  assert.deepEqual(reg.ops('delete'), [['delete', K('Google\\Chrome'), '/ve', '/f'], ['delete', K('Mozilla'), '/ve', '/f']]);
+  assert.deepEqual(reg.ops('delete'), [['delete', K('Google\\Chrome'), '/f'], ['delete', K('Mozilla'), '/f']]);
   assert.deepEqual([...reg.keys], [[K('Chromium'), 'C:\\dev\\glaze\\host.json']]);
   assert.ok(r.kept.includes(K('Chromium')));
   assert.deepEqual(fs.readdirSync(hosts), ['other.json']);
+});
+
+test('uninstall on Windows deletes our key when our value is all it holds, else only that value', async (t) => {
+  const base = scratch(t), reg = runner(), ctx = win(base, reg);
+  for (const d of [['Google', 'Chrome'], ['Microsoft', 'Edge'], ['Chromium']]) mk(base, 'Local', ...d, 'User Data');
+  await I.setup(ctx);
+  // reg.exe leaves a key behind when only its default value is deleted, so a key holding nothing else goes whole.
+  reg.named.set(K('Microsoft\\Edge'), { note: 'theirs' });
+  reg.keys.set(`${K('Chromium')}\\child`, 'theirs too');
+  await I.uninstall(ctx);
+  assert.deepEqual(reg.ops('delete'), [['delete', K('Google\\Chrome'), '/f'], ['delete', K('Chromium'), '/ve', '/f'], ['delete', K('Microsoft\\Edge'), '/ve', '/f']]);
+  assert.equal(reg.keys.has(K('Google\\Chrome')), false, 'no empty key left');
+  assert.deepEqual(reg.named.get(K('Microsoft\\Edge')), { note: 'theirs' });
+  assert.equal(reg.keys.get(`${K('Chromium')}\\child`), 'theirs too');
+  for (const k of [K('Google\\Chrome'), K('Chromium'), K('Microsoft\\Edge')]) assert.equal(await I.readKey(ctx, k), null, k);
+  assert.deepEqual((await I.uninstall(ctx)).removed, []);
 });
 
 // ---- doctor -----------------------------------------------------------------------------------------------------------
@@ -593,7 +621,7 @@ const io = (over = {}) => {
   return { stdin: { isTTY: false }, stdout: { write: (s) => out.push(s) }, stderr: { write: (s) => err.push(s) }, out: () => out.join(''), err: () => err.join(''), ...over };
 };
 
-test('setup and uninstall refuse symlinks in installation destinations without changing their targets', { skip: !POSIX }, async (t) => {
+test('setup and uninstall refuse symlinks in installation destinations without changing their targets', { skip: posixOnly('POSIX symlinks; the junction test covers Windows') }, async (t) => {
   for (const rel of ['', 'hosts', VERSION, path.join(VERSION, 'bin')]) {
     await t.test(rel || 'root', async (t) => {
       const home = scratch(t), outside = scratch(t), ctx = mac(home);
@@ -613,7 +641,28 @@ test('setup and uninstall refuse symlinks in installation destinations without c
   }
 });
 
-test('browser manifest directories and files cannot redirect setup or uninstall through a symlink', { skip: !POSIX }, async (t) => {
+test('Windows: setup and uninstall refuse a junction in their folders without changing its target or the registry', async (t) => {
+  for (const rel of ['', 'hosts', VERSION]) {
+    await t.test(rel || 'root', async (t) => {
+      const base = scratch(t), outside = scratch(t), reg = runner(), ctx = win(base, reg);
+      mk(base, 'Local', 'Google', 'Chrome', 'User Data');
+      const root = path.join(base, 'Local', 'glaze-mcp');
+      const link = rel ? path.join(root, rel) : root;
+      mk(path.dirname(link));
+      fs.writeFileSync(path.join(outside, 'keep'), 'unrelated');
+      // Node reads a junction as a symlink. Off Windows the type is ignored and this is a symlink.
+      fs.symlinkSync(outside, link, 'junction');
+      const before = tree(outside);
+      await assert.rejects(I.setup(ctx), /symlink|symbolic/i);
+      await assert.rejects(I.uninstall(ctx), /symlink|symbolic/i);
+      assert.deepEqual(tree(outside), before);
+      assert.deepEqual(reg.ops('add'), []);
+      assert.ok(fs.lstatSync(link).isSymbolicLink());
+    });
+  }
+});
+
+test('browser manifest directories and files cannot redirect setup or uninstall through a symlink', { skip: posixOnly('browser manifest folders are macOS and Linux only; Windows uses the registry') }, async (t) => {
   for (const leaf of [false, true]) await t.test(String(leaf), async (t) => {
     const home = scratch(t), outside = scratch(t), ctx = mac(home);
     const dir = mk(AS(home), 'Google', 'Chrome', 'NativeMessagingHosts');
@@ -657,7 +706,7 @@ test('an atomic-write collision never removes the preexisting temporary file', a
   assert.equal(fs.readFileSync(tmp, 'utf8'), 'unrelated');
 });
 
-test('uninstall independently refuses a redirected hosts directory and preserves its contents', { skip: !POSIX }, async (t) => {
+test('uninstall independently refuses a redirected hosts directory and preserves its contents', { skip: posixOnly('POSIX symlinks; the junction test covers Windows') }, async (t) => {
   const home = scratch(t), outside = scratch(t), ctx = mac(home);
   mk(AS(home), 'Google', 'Chrome');
   await I.setup(ctx);
@@ -689,7 +738,7 @@ test('uninstall leaves script-shaped foreign files, version-shaped foreign packa
   assert.equal(fs.readFileSync(note, 'utf8'), 'mine too');
 });
 
-test('Windows setup preserves foreign registrations; uninstall requires its exact owned manifest and deletes only the default value', async (t) => {
+test('Windows setup preserves foreign registrations; uninstall requires its exact owned manifest', async (t) => {
   const base = scratch(t), reg = runner(), ctx = win(base, reg);
   mk(base, 'Local', 'Google', 'Chrome', 'User Data');
   reg.keys.set(K('Google\\Chrome'), 'C:\\dev\\manual.json');
@@ -703,7 +752,7 @@ test('Windows setup preserves foreign registrations; uninstall requires its exac
   reg.keys.set(K('Chromium'), foreign);
   await I.uninstall(ctx);
   assert.equal(reg.keys.get(K('Chromium')), foreign);
-  assert.deepEqual(reg.ops('delete'), [['delete', K('Google\\Chrome'), '/ve', '/f']]);
+  assert.deepEqual(reg.ops('delete'), [['delete', K('Google\\Chrome'), '/f']]);
   assert.equal(json(foreign).name, 'another.host');
 });
 
@@ -766,7 +815,7 @@ test('batch launchers reject quote and line injection, preserve carets and perce
   assert.deepEqual(L.parse(text), o);
 });
 
-test('doctor rejects unsafe folders before running a node path and rejects extra Firefox ids', { skip: !POSIX }, async (t) => {
+test('doctor rejects unsafe folders before running a node path and rejects extra Firefox ids', { skip: posixOnly('POSIX file modes') }, async (t) => {
   const home = scratch(t), calls = [], ctx = mac(home, { node: process.execPath, run: async (...args) => { calls.push(args); return { stdout: 'v18.20.8' }; } });
   mk(AS(home), 'Firefox');
   await I.setup(ctx);
@@ -780,7 +829,7 @@ test('doctor rejects unsafe folders before running a node path and rejects extra
   assert.equal((await D.run(ctx)).ok, false);
 });
 
-test('doctor never executes a node from an unsafe file or any unsafe path ancestor', { skip: !POSIX }, async (t) => {
+test('doctor never executes a node from an unsafe file or any unsafe path ancestor', { skip: posixOnly('POSIX file modes') }, async (t) => {
   for (const which of ['node', 'parent', 'ancestor', 'link parent', 'link target', 'installation ancestor', 'script parent', 'manifest parent']) {
     await t.test(which, async (t) => {
       const home = scratch(t), programs = scratch(t), calls = [];
@@ -808,7 +857,7 @@ test('doctor never executes a node from an unsafe file or any unsafe path ancest
   }
 });
 
-test('doctor accepts a node symlink whose path and target are safe', { skip: !POSIX }, async (t) => {
+test('doctor accepts a node symlink whose path and target are safe', { skip: posixOnly('POSIX symlinks and file modes') }, async (t) => {
   const home = scratch(t), bin = mk(scratch(t), 'bin'), node = path.join(bin, 'node'), link = path.join(bin, 'stable');
   fs.writeFileSync(node, '#!/bin/sh\necho v26.0.0\n', { mode: 0o755 });
   fs.symlinkSync('node', link);
@@ -820,7 +869,7 @@ test('doctor accepts a node symlink whose path and target are safe', { skip: !PO
   assert.deepEqual(fake.calls, [[link, ['--version']]]);
 });
 
-test('doctor refuses a real executable in a world-writable ancestor without running it', { skip: !POSIX }, async (t) => {
+test('doctor refuses a real executable in a world-writable ancestor without running it', { skip: posixOnly('POSIX file modes') }, async (t) => {
   const home = scratch(t), programs = scratch(t), bin = mk(programs, 'bin'), node = path.join(bin, 'node');
   const marker = path.join(programs, 'executed');
   fs.writeFileSync(node, `#!/bin/sh\necho ran > '${marker}'\necho v26.0.0\n`, { mode: 0o755 });
@@ -893,4 +942,54 @@ test('the command: setup, doctor and uninstall through the same context, and the
   assert.equal(fs.existsSync(path.join(AS(home), 'Google', 'Chrome', 'NativeMessagingHosts', `${HOST}.json`)), false);
   const after = io(ctx);
   assert.equal(await CLI.main(['doctor'], after), 1);
+});
+
+// Real files and symlink traversal, with stat identities injected so admin/root/foreign owners need no chown privileges.
+test('doctor accepts Homebrew admin and own-group folders and refuses unsafe owners, modes and symlink targets', { skip: posixOnly('POSIX owners, groups and symlinks') }, async (t) => {
+  const vm = require('node:vm'), { createRequire } = require('node:module');
+  const doctorFile = require.resolve('../mcp/lib/doctor.js'), req = createRequire(doctorFile);
+  const cases = [
+    ['Apple Silicon Homebrew', 'opt/homebrew', 'darwin', 501, 80, 0o775, true],
+    ['Intel Homebrew', 'usr/local', 'darwin', 501, 80, 0o775, true],
+    ['root admin folder', 'usr/local', 'darwin', 0, 80, 0o775, true],
+    ['own group', 'usr/local', 'linux', 501, 20, 0o775, true],
+    ['root own group', 'usr/local', 'linux', 0, 20, 0o775, true],
+    ['unrelated group', 'opt/homebrew', 'darwin', 501, 81, 0o775, false],
+    ['admin gid on Linux', 'usr/local', 'linux', 501, 80, 0o775, false],
+    ['world writable', 'opt/homebrew', 'darwin', 501, 80, 0o777, false],
+    ['foreign owner', 'opt/homebrew', 'darwin', 502, 80, 0o755, false],
+    ['foreign admin owner', 'usr/local', 'darwin', 502, 80, 0o775, false],
+    ['unsafe link parent', 'opt/homebrew', 'darwin', 501, 81, 0o775, false],
+    ['unsafe link target', 'usr/local', 'darwin', 501, 81, 0o775, false],
+    ['group writable executable', 'opt/homebrew', 'darwin', 501, 80, 0o775, false],
+  ];
+  for (const [label, prefix, platform, uid, gid, mode, ok] of cases) await t.test(label, async (t) => {
+    const home = scratch(t), brew = mk(home, ...prefix.split('/'));
+    const bin = mk(brew, 'bin'), cellar = mk(brew, 'Cellar'), target = mk(cellar, 'node', '26.0.0', 'bin');
+    const exe = path.join(target, 'node'), link = path.join(bin, 'node');
+    fs.writeFileSync(exe, '#!/bin/sh\necho v26.0.0\n', { mode: 0o755 });
+    fs.symlinkSync('../Cellar/node/26.0.0/bin/node', link);
+    for (const dir of [brew, bin, cellar]) fs.chmodSync(dir, 0o775);
+    const calls = [], ctx = mac(home, { platform, node: link, run: async (...a) => { calls.push(a); return { stdout: 'v26.0.0' }; } });
+    mk(B.table(platform, ctx.env).find((b) => b.id === 'chrome').data);
+    await I.setup(ctx);
+    const identities = new Map([brew, bin, cellar].map((f) => [f, { uid: 501, gid: 80, mode: 0o775 }]));
+    for (const f of [brew, bin, cellar]) identities.set(f, { uid, gid, mode });
+    if (label === 'unsafe link parent' || label === 'unsafe link target' || label === 'group writable executable') {
+      for (const f of [brew, bin, cellar]) identities.set(f, { uid: 501, gid: 80, mode: 0o775 });
+      identities.set(label === 'unsafe link parent' ? bin : label === 'unsafe link target' ? cellar : exe, { uid, gid, mode });
+    }
+    const stat = (fn, f) => {
+      const st = fs[fn](f), id = identities.get(f);
+      return Object.assign(Object.create(st), { uid: st.uid === 0 ? 0 : 501, ...id, mode: id ? (st.mode & ~0o777) | id.mode : st.mode });
+    };
+    const module = { exports: {} };
+    vm.runInNewContext(fs.readFileSync(doctorFile, 'utf8'), {
+      module, process: { platform: 'darwin', version: process.version, getuid: () => 501, getgid: () => 20 },
+      require: (name) => name === 'node:fs' ? { ...fs, lstatSync: (f) => stat('lstatSync', f), statSync: (f) => stat('statSync', f) } : req(name),
+    });
+    const report = await module.exports.run({ ...ctx, platform });
+    assert.equal(report.ok, ok, D.text(report));
+    assert.deepEqual(calls.map(([f, a]) => [f, Array.from(a)]), ok ? [[link, ['--version']]] : [], D.text(report));
+  });
 });

@@ -16,8 +16,11 @@ const I = require('../mcp/lib/install.js');
 const D = require('../mcp/lib/doctor.js');
 const CLI = require('../mcp/bin/glaze-mcp.js');
 const { PKG, BIN, FIREFOX, scratch, nodeAt, hmac, until, envFor, runDir, stop, browser, opened, lineFrom } = require('./helpers/mcp-pipe.cjs');
+const { runner } = require('./helpers/mcp-reg.cjs');
 
 const POSIX = process.platform !== 'win32';
+const posixOnly = (why) => (POSIX ? false : why);
+const windowsOnly = (why) => (POSIX ? why : false);
 const MiB = 1024 * 1024;
 const nodeVersion = async () => ({ stdout: 'v22.11.0\n', stderr: '' });
 const deadPid = () => spawnSync(process.execPath, ['-e', '0']).pid;
@@ -223,7 +226,7 @@ test('the agent takes the newest host unless told which, and names the others', 
   assert.deepEqual(opens(), []);
 });
 
-test('a stale socket with a live recorded pid keeps waiting until a host replaces it', { skip: !POSIX }, async (t) => {
+test('a stale socket with a live recorded pid keeps waiting until a host replaces it', { skip: posixOnly('a stale unix socket file; the test after it covers a pipe no one listens on') }, async (t) => {
   const home = scratch(t), dir = R.ready(runDir(home));
   const sock = R.socketPath(dir, 'chrome', 'inst1');
   // Exiting without server.close leaves a socket inode, with no listener.
@@ -234,6 +237,23 @@ test('a stale socket with a live recorded pid keeps waiting until a host replace
   const a = app(t, home);
   a.write('{"id":"held"}\n');
   await until('waiting after a refused socket connect', () => /waiting/i.test(a.err()));
+  assert.equal(a.p.exitCode, null);
+  assert.equal(a.out().length, 0);
+  const b = browser(t, home);
+  await b.start();
+  await opened(b);
+  assert.equal(await lineFrom(b, 1), '{"id":"held"}');
+  a.end();
+  assert.equal((await a.exited).code, 0);
+});
+
+test('a recorded live host with nothing listening keeps the agent waiting until a host replaces it', async (t) => {
+  const home = scratch(t), dir = R.ready(runDir(home));
+  // A pipe no one listens on (off Windows, a socket path with nothing there), under a pid that runs.
+  R.write(dir, { v: 1, pid: process.pid, path: R.socketPath(dir, 'chrome', 'inst1'), token: R.token(), browser: 'chrome', instance: 'inst1', at: Date.now() });
+  const a = app(t, home);
+  a.write('{"id":"held"}\n');
+  await until('waiting after a failed connect', () => /waiting/i.test(a.err()));
   assert.equal(a.p.exitCode, null);
   assert.equal(a.out().length, 0);
   const b = browser(t, home);
@@ -289,13 +309,24 @@ test('the agent refuses options it doesn\'t know and ids that aren\'t ids', asyn
   assert.equal(fs.existsSync(runDir(home)), false);
 });
 
-test('the agent won\'t trust a run folder others can open', { skip: !POSIX }, async (t) => {
+test('the agent won\'t trust a run folder others can open', { skip: posixOnly('POSIX file modes; the junction test covers Windows') }, async (t) => {
   const home = scratch(t);
   fs.mkdirSync(runDir(home), { recursive: true });
   fs.chmodSync(runDir(home), 0o755);
   const a = app(t, home);
   assert.equal((await a.exited).code, 1);
   assert.match(a.err(), /755/);
+});
+
+test('Windows: the agent won\'t use a run folder that is a junction', async (t) => {
+  const home = scratch(t), outside = scratch(t);
+  fs.mkdirSync(path.dirname(runDir(home)), { recursive: true });
+  // Node reads a junction as a symlink. Off Windows the type is ignored and this is a symlink.
+  fs.symlinkSync(outside, runDir(home), 'junction');
+  const a = app(t, home);
+  assert.equal((await a.exited).code, 1);
+  assert.match(a.err(), /symlink/);
+  assert.deepEqual(fs.readdirSync(outside), []);
 });
 
 // ---- doctor -----------------------------------------------------------------------------------------------------------
@@ -322,7 +353,7 @@ test('doctor\'s live check: a probe each live host answers without the worker he
   assert.ok(fs.existsSync(R.runFile(d, 'edge', 'gone')), 'the check removes nothing');
 });
 
-test('glaze-mcp doctor adds the live rows after its own', { skip: !POSIX }, async (t) => {
+test('glaze-mcp doctor adds the live rows after its own', { skip: posixOnly('setup writes macOS and Linux folders here; the Windows test goes through the registry') }, async (t) => {
   // Only HOME: setup must not follow an XDG_* folder out of the scratch one.
   const home = scratch(t), env = { HOME: home };
   fs.mkdirSync(B.table(process.platform, env).find((b) => b.id === 'chrome').data, { recursive: true });
@@ -333,6 +364,21 @@ test('glaze-mcp doctor adds the live rows after its own', { skip: !POSIX }, asyn
   const out = [];
   const code = await CLI.main(['doctor'], { ...ctx, stdout: { write: (s) => out.push(s) }, stderr: { write: (s) => out.push(s) } });
   assert.equal(code, 0, out.join(''));
+  assert.match(out.join(''), /^ok {3}Live chrome \(inst1\): /m);
+});
+
+test('glaze-mcp doctor on Windows follows the key setup wrote, then adds the live rows', { skip: windowsOnly('the run folder and pipes here are Windows ones; the test above covers macOS and Linux') }, async (t) => {
+  const home = scratch(t), reg = runner();
+  const env = { LOCALAPPDATA: home, APPDATA: path.join(home, 'Roaming'), SystemRoot: process.env.SystemRoot || 'C:\\Windows' };
+  fs.mkdirSync(B.table('win32', env).find((b) => b.id === 'chrome').data, { recursive: true });
+  const ctx = { platform: 'win32', env, node: process.execPath, run: reg.run, src: PKG };
+  await I.setup(ctx);
+  const b = browser(t, home);
+  await b.start();
+  const out = [];
+  const code = await CLI.main(['doctor'], { ...ctx, stdout: { write: (s) => out.push(s) }, stderr: { write: (s) => out.push(s) } });
+  assert.equal(code, 0, out.join(''));
+  assert.match(out.join(''), /^ok {3}Google Chrome: HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\io\.frostdev\.glaze_mcp → /m);
   assert.match(out.join(''), /^ok {3}Live chrome \(inst1\): /m);
 });
 

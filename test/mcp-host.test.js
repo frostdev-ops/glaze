@@ -18,6 +18,7 @@ const M = require('../mcp/lib/mux.js');
 const { PKG, ORIGIN, scratch, hmac, until, runDir, browser, agent, opened, lineFrom } = require('./helpers/mcp-pipe.cjs');
 const VERSION = require('../mcp/package.json').version;
 const POSIX = process.platform !== 'win32';
+const posixOnly = (why) => (POSIX ? false : why);
 const MiB = 1024 * 1024;
 const mode = (f) => fs.statSync(f).mode & 0o777;
 
@@ -277,7 +278,7 @@ test('a bye in the same read as hello cleans up a socket whose listen is still s
   assert.deepEqual(fs.readdirSync(runDir(home)), [], 'no socket or run file left behind');
 });
 
-test('a replacement file at the bound socket path keeps its mode and is never published as a host', { skip: !POSIX }, async (t) => {
+test('a replacement file at the bound socket path keeps its mode and is never published as a host', { skip: posixOnly('unix socket files') }, async (t) => {
   const home = scratch(t), preload = path.join(home, 'replace.cjs');
   fs.writeFileSync(preload, `
     const fs = require('node:fs'), R = require(${JSON.stringify(require.resolve('../mcp/lib/rendezvous.js'))});
@@ -348,7 +349,7 @@ test('a host for the same browser and instance takes over; the old one leaves it
   c.s.destroy();
 });
 
-test('a run folder that isn\'t safe: the worker gets an error and the host exits 1', { skip: !POSIX }, async (t) => {
+test('a run folder that isn\'t safe: the worker gets an error and the host exits 1', { skip: posixOnly('POSIX file modes; the junction test covers Windows') }, async (t) => {
   const home = scratch(t);
   fs.mkdirSync(runDir(home), { recursive: true, mode: 0o755 });
   fs.chmodSync(runDir(home), 0o755);
@@ -360,6 +361,21 @@ test('a run folder that isn\'t safe: the worker gets an error and the host exits
   assert.match(e.why, /mode 755/);
   assert.equal((await b.exited).code, 1);
   assert.deepEqual(fs.readdirSync(runDir(home)), []);
+});
+
+test('Windows: a run folder that is a junction: the worker gets an error and the host exits 1, writing nothing through it', async (t) => {
+  const home = scratch(t), outside = scratch(t);
+  fs.mkdirSync(path.dirname(runDir(home)), { recursive: true });
+  // Node reads a junction as a symlink. Off Windows the type is ignored and this is a symlink.
+  fs.symlinkSync(outside, runDir(home), 'junction');
+  const b = browser(t, home);
+  await b.take('hello', (f) => f.t === 'hello');
+  b.send({ t: 'hello', v: 1, glaze: '4.0.0', instance: 'inst1' });
+  const e = await b.take('error', (f) => f.t === 'error');
+  assert.ok(F.valid.toWorker(e));
+  assert.match(e.why, /symlink/);
+  assert.equal((await b.exited).code, 1);
+  assert.deepEqual(fs.readdirSync(outside), []);
 });
 
 test('a worker hello the host can\'t take is an error; frames that aren\'t the worker\'s are ignored', async (t) => {
