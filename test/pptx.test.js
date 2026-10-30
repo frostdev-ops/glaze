@@ -428,7 +428,7 @@ test('long malformed attribute names do not cause quadratic attribute scans', as
 
 test('paragraph default run properties apply below explicit run and end-paragraph properties', async () => {
   const p = '<a:p><a:pPr><a:defRPr sz="3600" b="1"><a:solidFill><a:srgbClr val="123456"/></a:solidFill></a:defRPr></a:pPr><a:r><a:t>Inherited</a:t></a:r><a:r><a:rPr sz="2000" b="0"/><a:t>Own</a:t></a:r><a:endParaRPr sz="1400"/></a:p>';
-  const slide = fixture('ppt/slides/slide3.xml').replace('<a:p><a:r><a:rPr lang="en-US"/><a:t>Default</a:t></a:r></a:p>', p);
+  const slide = fixture('ppt/slides/slide3.xml').replace(/<a:p>[\s\S]*?<\/a:p>/, p);
   assert.ok(slide.includes('Inherited'));
   const d = await P.read(pack({ 'ppt/slides/slide3.xml': slide }));
   const para = named(d.slides[2], 'Default').text.paragraphs[0];
