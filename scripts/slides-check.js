@@ -1,5 +1,5 @@
 // Slide decks on the Documents page (papers.html, slides-kind.js) in the real unpacked extension: with Settings → Writer →
-// Slides set off (writer.slides: false) a .pptx is refused as before; on, the fixture deck (test/fixtures/pptx/deck, zipped
+// Slides set off (writer.slides: false; it defaults on) a .pptx is refused as before; on, the fixture deck (test/fixtures/pptx/deck, zipped
 // with lib/zip.js) imports as a card showing slide 1, opens in the viewer (the rail, slide 1, arrows and Page keys, zoom,
 // find in the slides' text, the notes), presents in a dialog whose keys are Rimeward's and which skips the hidden slide,
 // exports the bytes it was given, and Esc and Back behave as a paper's. The chrome wears a dark Look while the slide stays
@@ -51,7 +51,7 @@ const fixture = () => {
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
     const G = require(path.join(root, 'defaults.js'));
     // Frost: a dark Look, so the chrome is dark while the slide keeps its own white.
-    const settings = (slides) => G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true }, writer: { ...G.GZ_DEFAULTS.writer, slides } });
+    const settings = (slides) => G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true }, writer: { ...G.GZ_DEFAULTS.writer, sheets: false, pdf: false, slides } });
     const HOME = `chrome-extension://${id}/papers.html`;
     const page = await context.newPage();
     await page.addInitScript(() => {
