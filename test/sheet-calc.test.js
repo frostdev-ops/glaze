@@ -166,7 +166,7 @@ test('operators: arithmetic, the seven errors, Excel\'s comparison order, blank 
     ['TRUE+TRUE', 2], ['-2^2', 4], ['2^3^2', 64], ['2^-1', 0.5], ['50%', 0.5], ['A1%*100', 3], ['10^309', '#NUM!'], ['(-8)^(1/3)', '#NUM!'],
     ['"a"="A"', true], ['1<"a"', true], ['"z"<TRUE', true], ['FALSE<TRUE', true], ['"abc"<"abd"', true], ['"B">"a"', true], ['2>"1"', false],
     ['Z1=0', true], ['Z1=""', true], ['Z1=FALSE', true], ['Z1+1', 1], ['"x"&Z1', 'x'], ['Z1', 0], ['-Z1', 0], ['+B1', 'abc'],
-    ['0.1+0.2=0.3', true], ['(0.5-0.4-0.1)', 0], ['0.5-0.4-0.1', 0],
+    ['0.1+0.2=0.3', true], ['(0.5-0.4-0.1)', 0.5 - 0.4 - 0.1], ['0.5-0.4-0.1', 0],
   ]);
   assert.equal(calc(e, '1*(0.5-0.4-0.1)'), 0.5 - 0.4 - 0.1, 'KB 78113: only a final + or - rounds to 0');
   const errs = new Set(['#NULL!', '#DIV/0!', '#VALUE!', '#REF!', '#NAME?', '#NUM!', '#N/A']);
@@ -475,4 +475,15 @@ test('applying an oversized array fails atomically before materializing its cell
   delete sh.rows.set;
   assert.equal(sh.rows.set, original);
   assert.deepEqual(e.wb, before);
+});
+
+// KB 78113 documents cancellation near zero; the exact boundaries and parentheses are verified in Excel 16.114.1.
+test('final subtraction cancellation follows binary magnitude and excludes a parenthesized result', () => {
+  const e = book();
+  cases(e, [
+    ['1-(1-15*2^-53)', 0], ['1-(1-16*2^-53)', 16 * 2 ** -53],
+    ['0.75-(0.75-7*2^-53)', 0], ['0.75-(0.75-8*2^-53)', 8 * 2 ** -53],
+    ['(1.333+1.225-1.333-1.225)', 1.333 + 1.225 - 1.333 - 1.225],
+    ['1.333+1.225-1.333-1.225', 0],
+  ]);
 });
