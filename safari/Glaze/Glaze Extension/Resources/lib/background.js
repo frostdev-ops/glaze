@@ -1965,7 +1965,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
       const env = { site: preview ? 'editor' : await fromDocuments(s) ? 'documents' : await fromLms(s, m.type === 'glaze:modpage' && m.op === 'parts'), signal: control?.signal, local, sync: brokerArea('sync'), fetch: (u, i) => fetch(u, control ? { ...i, signal: control.signal } : i), reach: reachable, queue: (f) => (brokerTurn ||= GZ_CARDS.queue())(f),
         keys: async () => (chrome.storage.local.getKeys ? chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null))),
         account: () => (who ||= env.site && !preview && env.site !== 'documents' ? modAccount(s, env.site, m.doc) : Promise.resolve(null)),
-        record: (id) => modRead(`mod:${id}`), blocklist: () => modRead('modsBlocklist') };
+        record: (id) => modRead(`mod:${id}`), blocklist: () => modRead('modsBlocklist'), tool: (call, out, uid) => !!mcpRoute && mcpRoute.settle(s, m.mod, call, out, uid) };
       return await (m.type === 'glaze:mod' ? GZ_MODBROKER.handle(m, env) : GZ_MODBROKER.page(m, env));
     } finally {
       clearTimeout(timer);
@@ -2364,7 +2364,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 const MCP_BROWSER = SAFARI ? 'safari' : new URL(chrome.runtime.getURL('')).protocol === 'moz-extension:' ? 'firefox' : 'chrome';
 const agentFiles = () => importScripts('agent-frames.js', 'agent-link.js');
 const grantFiles = () => importScripts('ai/request.js', 'ai/schema.js', 'ai/tools.js', 'mcp/grants.js');
-const mcpFiles = () => importScripts('ai/request.js', 'ai/schema.js', 'ai/tools.js', 'ai/failure.js', 'ai/loop.js', 'modapi.js', 'modwidget.js', 'modbroker.js', 'modtools.js', 'mcp/grants.js', 'mcp/registry.js', 'mcp/tools-study.js', 'mcp/tools-grades.js', 'doc-home.js', 'writer-sources.js', 'writer-tools.js', 'mcp/writer.js', 'mcp/wire.js', 'mcp/approve.js', 'mcp/calls.js');
+const mcpFiles = () => importScripts('ai/request.js', 'ai/schema.js', 'ai/tools.js', 'ai/failure.js', 'ai/loop.js', 'modapi.js', 'modwidget.js', 'modbroker.js', 'modtools.js', 'mcp/grants.js', 'mcp/registry.js', 'mcp/tools-study.js', 'mcp/tools-grades.js', 'doc-home.js', 'writer-sources.js', 'writer-tools.js', 'mcp/writer.js', 'mcp/wire.js', 'mcp/approve.js', 'mcp/calls.js', 'mcp/modroute.js');
 globalThis.addEventListener?.('install', () => { agentFiles(); mcpFiles(); });
 // The local setting is a UI mirror, writable by content scripts. Only an options message may persist consent in this
 // extension-origin database. A forged local on cannot reconnect a previously paired app after the owner switched off.
@@ -2403,7 +2403,8 @@ chrome.runtime.onConnect.addListener((p) => {
   if (p.name === 'glaze:mcp-writer') mcpWriterPages().connect(p, async () => await mcpOn() && await glazeOn() && await aiSender(p.sender || {}, { op: 'run', feature: 'writing' }) === true);
 });
 // C14: a mod's code tool (the registry state's code), answered by its Worker through an open LMS tab.
-const mcpCode = async (mod, name, args, ctx) => ({ ok: false, error: "This mod's agent tools are not available yet." });
+let mcpRoute = null;
+const mcpCode = (mod, name, args, ctx) => (mcpRoute ||= GZ_MCP_MODROUTE.create({ tabs: chrome.tabs, browser: MCP_BROWSER, quiet: modQuiet })).code(mod, name, args, ctx);
 
 const mcpKeys = async () => (chrome.storage.local.getKeys ? chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null)));
 const mcpCtx = (account) => ({ account, local: chrome.storage.local, keys: mcpKeys, now: Date.now });
