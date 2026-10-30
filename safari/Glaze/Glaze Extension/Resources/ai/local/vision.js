@@ -4,7 +4,8 @@
 // prefill between <|vision_start|> and <|vision_end|>. checks/ai/local-vision-gpu-check.js holds it to the reference.
 // Preprocessing (the bicubic resize and normalization) runs on the CPU as the reference's own code, so it matches bit
 // for bit. Weights: each F16 (or F32) matrix and F32 vector in a buffer of its own, matrices read two values a word in
-// the GEMM. Paths: f16 (`shader-f16`): the GEMM's and attention's workgroup tiles in f16, sums in f32; f32 otherwise.
+// the GEMM. Paths: f32 by default; f16 when asked (precision 'f16', on a device with `shader-f16`): the GEMM's and
+// attention's workgroup tiles in f16, sums in f32, about 8 % faster on Apple's GPU and up to 4e-3 off the reference.
 // No subgroups. Every binding stays within the device's maxStorageBufferBindingSize: the FFN runs in chunks of tokens
 // when its tokens × feed_forward_length buffers would pass it.
 // Classic script; node exports.
@@ -71,7 +72,7 @@ var GZ_AI_VISION = globalThis.GZ_AI_VISION || (() => {
   const aborted = (signal) => signal.reason ?? new DOMException('Aborted', 'AbortError');
 
   // gguf: the projector's open GGUF (ai/local/gguf.js). opts: { device (the text engine's; else one from adapter or
-  // navigator.gpu, the encoder's own), adapter, signal, precision 'auto' | 'f32' | 'f16', kernels (name → source, or a
+  // navigator.gpu, the encoder's own), adapter, signal, precision 'auto' (f32) | 'f32' | 'f16', kernels (name → source, or a
   // base URL; the package's by default) }.
   const load = async (gguf, opts = {}) => {
     const signal = opts.signal;
@@ -90,14 +91,13 @@ var GZ_AI_VISION = globalThis.GZ_AI_VISION || (() => {
         try { adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }); } catch { adapter = null; }
       }
       if (!adapter) fail('no WebGPU adapter', 'webgpu');
-      const L = adapter.limits, half = opts.precision !== 'f32' && adapter.features.has('shader-f16');
+      const L = adapter.limits, half = opts.precision === 'f16' && adapter.features.has('shader-f16');
       try {
         device = await adapter.requestDevice({ requiredFeatures: half ? ['shader-f16'] : [], requiredLimits: { maxBufferSize: L.maxBufferSize, maxStorageBufferBindingSize: L.maxStorageBufferBindingSize } });
       } catch (e) { fail(`no device: ${e.message}`, 'webgpu'); }
       own = true;
     }
-    const precision = opts.precision || 'auto';
-    const f16 = precision === 'f16' || (precision === 'auto' && device.features.has('shader-f16'));
+    const f16 = opts.precision === 'f16';
     const owned = new Set();
     const free = () => { for (const b of owned) b.destroy(); owned.clear(); if (own) device.destroy?.(); };
     let lost = null;
