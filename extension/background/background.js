@@ -3525,12 +3525,15 @@ chrome.storage.onChanged.addListener((c, area) => {
   const keys = area === 'local' ? Object.keys(c).filter((k) => k.startsWith('writerPaper:')) : [];
   const other = Object.keys(c).some((k) => !k.startsWith('writerPaper:') && !k.startsWith('writerSheet:') && !k.startsWith('writerVersions:') && !k.startsWith('driveSync'));
   if (!keys.length && !other) return;
-  driveSyncOn().then(async (on) => {
-    if (!on) return;
+  // Off but still bound to its account, each record's time of change is kept too: turned on again, a change made meanwhile
+  // is weighed by when it was made, not lost to an earlier one from another device.
+  chrome.storage.local.get('driveSync').then(async ({ driveSync: st }) => {
+    const on = st?.on === true;
+    if (!googleLib().ON || !(on || typeof st?.account === 'string')) return;
     const sync = openDriveSync();
-    for (const k of keys) await sync.touched(k.slice(12));
+    if (on) for (const k of keys) await sync.touched(k.slice(12));
     // Everything else: each key's time of change, and a push once saving pauses.
-    if (other && Object.keys(c).some((k) => driveStore.watches(area, k))) { await driveStore.stamp(c, area); await sync.nudge(); }
+    if (other && Object.keys(c).some((k) => driveStore.watches(area, k))) { await driveStore.stamp(c, area); if (on) await sync.nudge(); }
   }).catch((e) => console.warn('Sync to Google Drive:', e));
 });
 // Connecting Drive turns Sync on, unless the student turned it off: it makes the Glaze folder and fills it, or restores
