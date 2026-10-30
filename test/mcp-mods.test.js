@@ -448,7 +448,24 @@ const wiredWorker = async () => {
     const go = () => t.run(${JSON.stringify(args)}, { account: ${JSON.stringify(ACCOUNT)} });
     return ${turn ? '(brokerTurn ||= GZ_CARDS.queue())(go)' : 'go()'};
   })()`);
-  return { w, s, sent, run, inWorker, store };
+  const call = (name, args, approve = async () => 'yes') => {
+    w.context.reviewApprove = approve;
+    return inWorker(`(async () => {
+      if (typeof GZ_MCP_CALLS === 'undefined') mcpFiles();
+      const rec = { grants: { ['mod:' + ${JSON.stringify(MOD)}]: true, courses: true } };
+      globalThis.reviewAccess = rec;
+      globalThis.reviewAsks = [];
+      const calls = GZ_MCP_CALLS.create({ registry: GZ_MCP_REGISTRY, state: mcpRead,
+        grants: { get: async () => rec, pair() {}, grant() {}, decline() {}, touch() {} },
+        settings: async () => ({ on: true }), enabled: glazeOn, accounts: async () => [{ account: ${JSON.stringify(ACCOUNT)} }],
+        approve: { ask: async (kind, view) => { reviewAsks.push(kind); return reviewApprove(kind, view); } },
+        refresh: async () => null, local: chrome.storage.local, keys: mcpKeys, now: Date.now, record() {},
+        turn: (f) => (brokerTurn ||= GZ_CARDS.queue())(async () => { globalThis.reviewInTurn = true; try { return await f(); } finally { reviewInTurn = false; } }),
+      });
+      return calls.call({ peer: { exe: '/tool-test', verified: true }, client: { name: 'tool-test' }, name: ${JSON.stringify(name)}, args: ${JSON.stringify(args)} });
+    })()`);
+  };
+  return { w, s, sent, run, call, inWorker, store };
 };
 
 test('the real worker, wired: the registry\'s code tool runs in the school\'s tab, and its answer comes back through the worker\'s own route for mods\' calls', async () => {
@@ -471,10 +488,29 @@ test('the real worker, wired: with the school\'s tab closed, the app is told to 
   assert.deepEqual(plain(await run(`mod_${MOD}_echo`, { text: 'hi' })), fail(TEXT.open));
 });
 
-test('a code tool whose handler writes the mod\'s storage answers when it runs as a change, in the broker\'s turn', {
-  todo: 'lib/mcp/calls.js runs a confirm tool inside brokerTurn, where the handler\'s glaze.storage.set waits until the call times out',
-}, async () => {
-  const { run, inWorker } = await wiredWorker();
+test('an approved code tool can write its storage through the broker without holding its turn', async () => {
+  const { call, inWorker, store } = await wiredWorker();
   inWorker("if (typeof GZ_MCP_MODROUTE === 'undefined') mcpFiles(); GZ_MCP_MODROUTE.LIMIT.timeout = 500;");
-  assert.deepEqual(plain(await run(`mod_${MOD}_keep`, { text: 'x' }, { turn: true })), { kept: 'x' });
+  const result = plain(await call(`mod_${MOD}_keep`, { text: 'x' }));
+  assert.equal(result.isError, undefined, JSON.stringify(result));
+  assert.equal(result.structuredContent.kept, 'x');
+  assert.equal(store.local[`modData:${MOD}`].kept, 'x');
+  assert.deepEqual(plain(inWorker('reviewAsks')), ['action']);
+});
+
+test('code tools still recheck access and their revision after approval, and first-party tab changes keep the turn', async () => {
+  for (const change of ['grant', 'mod', 'off']) {
+    const c = await wiredWorker();
+    const result = plain(await c.call(`mod_${MOD}_echo`, { text: 'x' }, async () => {
+      if (change === 'grant') c.inWorker(`reviewAccess.grants['mod:${MOD}'] = false`);
+      if (change === 'mod') await c.w.context.chrome.storage.local.set({ [`mod:${MOD}`]: modRec({ hash: 'changed' }) });
+      if (change === 'off') await c.w.context.chrome.storage.sync.set({ enabled: false });
+      return 'yes';
+    }));
+    assert.ok(result.isError || result.rpcError, change);
+    assert.deepEqual(c.sent, [], `${change}: nothing reached a tab`);
+  }
+  const c = await wiredWorker();
+  c.inWorker(`mcpFiles(); GZ_AI_TOOLS.add({ name: 'review_change', kind: 'confirm', group: 'courses', needs: 'tab', description: 'Change.', parameters: { type: 'object' }, summarize: () => 'Change.', run: async () => ({ held: globalThis.reviewInTurn === true }) });`);
+  assert.equal((await c.call('review_change', {})).structuredContent.held, true);
 });
