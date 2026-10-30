@@ -512,3 +512,44 @@ test('the paper\'s From Google Drive brings a file under a name a file can have,
   assert.equal(brought.size, 2048);
   assert.equal(L.fileError(brought), null, 'on an assignment, writer-import.js takes it rather than saying it could not be read');
 });
+
+// Save to Drive above Drive's multipart size (SMALL, 5 MB) goes resumable through Sync's own path (put): a session, its
+// address only ever Drive's upload address, then one PUT of the bytes; at or below, one multipart request. Against the
+// stand-in Drive that keeps state (test/helpers/drive-standin.cjs).
+test('save: a 6 MB PDF goes resumable, through the same Location check Sync\'s uploads have; 5 MB stays multipart', async () => {
+  const { standin } = require('../helpers/drive-standin.cjs');
+  const sd = standin(), elsewhere = [];
+  let move = false;
+  const fetch = async (url, init) => {
+    if (!url.startsWith('https://www.googleapis.com/')) { elsewhere.push(url); throw new TypeError('Failed to fetch'); }
+    const r = await sd.fetch(url, init);
+    if (!move || !r.headers.get('location')) return r;
+    return new Response(null, { status: 200, headers: { location: r.headers.get('location').replace('https://www.googleapis.com/', 'https://uploads.example/') } });
+  };
+  const drive = D.create({ fetch, token: async () => 'tok-1', boundary: () => 'B0und4ry' });
+  const asked = () => sd.log.map((x) => [x.method, x.path, x.query.uploadType, x.query.supportsAllDrives && 'all'].filter(Boolean).join(' '));
+  const pdf = new Uint8Array(6e6).fill(5);
+
+  const made = await drive.save({ name: 'Reading.pdf', mime: MIME.pdf, bytes: pdf });
+  assert.deepEqual(asked(), ['POST /upload/drive/v3/files resumable', 'PUT /upload/drive/v3/files resumable'], 'a session, then its bytes; no multipart');
+  assert.equal(made.fresh, false);
+  const f = sd.files.get(made.id);
+  assert.equal(f.bytes.length, 6e6); assert.equal(f.meta.name, 'Reading.pdf'); assert.equal(f.meta.mimeType, MIME.pdf);
+  assert.equal(sd.log[0].type, 'application/json; charset=UTF-8');
+
+  sd.log.length = 0;
+  const again = await drive.save({ name: 'Reading.pdf', mime: MIME.pdf, bytes: pdf, id: made.id });
+  assert.deepEqual(again, { id: made.id, fresh: false }, 'the same file updated');
+  assert.deepEqual(asked(), [`GET /drive/v3/files/${made.id} all`, `PATCH /upload/drive/v3/files/${made.id} resumable all`, `PUT /upload/drive/v3/files/${made.id} resumable`], 'the session\'s own address takes the bytes');
+  assert.equal(sd.files.get(made.id).meta.version, '2', 'one new revision');
+
+  sd.log.length = 0;
+  await drive.save({ name: 'Small.pdf', mime: MIME.pdf, bytes: new Uint8Array(D.SMALL).fill(1) });
+  assert.deepEqual(asked(), ['POST /upload/drive/v3/files multipart'], 'at 5 MB, one multipart request');
+
+  // A session whose address isn't Drive's upload address: refused, the bytes and the token go nowhere else.
+  sd.log.length = 0; move = true;
+  await fails(drive.save({ name: 'Reading.pdf', mime: MIME.pdf, bytes: pdf }), 'bad');
+  assert.deepEqual(asked(), ['POST /upload/drive/v3/files resumable']);
+  assert.deepEqual(elsewhere, []);
+});
