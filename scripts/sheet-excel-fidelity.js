@@ -9,6 +9,8 @@ const fs = require('node:fs'), path = require('node:path');
 const { jxa: run, start, quit, box } = require('./sheet-excel.js');
 const { books, expect, agree, stored } = require('./sheet-fidelity-books.js');
 const M = require('../lib/sheet-model.js');
+const { cases } = require('../test/fixtures/sheets/cases.js');
+const ENGINE_TODO = new Set(['financial.rate.2', 'financial.xirr.1', 'financial.xirr.2']);
 
 // The JXA that opens one file and reports what Excel shows, as JSON. ask: per sheet, the cells whose shown text (errors)
 // and number format are wanted, the merges and hidden columns to look at. Each cell Glaze holds is read by itself: JXA
@@ -22,7 +24,9 @@ app.displayAlerts = false;
 let wb = null, step = 'open';
 try {
   app.open(Path(${JSON.stringify(file)}));
-  wb = app.activeWorkbook;
+  const opened = app.activeWorkbook;
+  if (opened.fullName() !== ${JSON.stringify(file)}) throw new Error('Excel did not open the probe workbook');
+  wb = opened;
   const out = { name: wb.name(), caption: app.activeWindow.caption(), date1904: wb.date1904(), active: wb.activeSheet.name(), sheets: [], visible: wb.worksheets.visible() };
   const ask = ${JSON.stringify(ask)};
   const names = wb.worksheets.name();
@@ -101,7 +105,10 @@ const compare = (model, got) => {
       if (wantF === undefined && typeof f === 'string' && f.startsWith('=')) problems.push(`${where}: formula ${f} where Glaze has a value`);
       const shown = Object.hasOwn(s.text, at) ? s.text[at] : null;
       const off = x.f !== undefined ? engine : problems;
-      if (x.t === 'e') { if (shown !== x.v && stored(shown) !== x.v) off.push(`${where} ${x.f ?? ''}: ${JSON.stringify(shown ?? v)}, not ${x.v}`); }
+      if (x.t === 'e') {
+        if (typeof shown !== 'string') problems.push(`${where}: error text was not read`);
+        else if (shown !== x.v && stored(shown) !== x.v) off.push(`${where} ${x.f ?? ''}: ${JSON.stringify(shown)}, not ${x.v}`);
+      }
       else if (shown !== null && /^#[A-Z/0!?]+[!?A]?$/.test(shown) && x.t !== 's') off.push(`${where} ${x.f ?? ''}: ${shown}, not ${JSON.stringify(x.v)}`);
       else if (x.t === 'n' && !agree('n', x.v, v)) off.push(`${where} ${x.f ?? ''}: ${JSON.stringify(v)}, not ${x.v}`);
       else if (x.t === 's' && v !== x.v) off.push(`${where} ${x.f ?? ''}: ${JSON.stringify(v)}, not ${JSON.stringify(x.v)}`);
@@ -161,6 +168,8 @@ const main = async () => {
       }
       const repaired = /repaired/i.test(got.name) || /repaired/i.test(got.caption);
       const res = compare(b.model, got);
+      const allowed = cases.filter((c) => ENGINE_TODO.has(c.id) && `${c.family}.xlsx` === b.name).map((c) => `${c.sheet}!${c.cell} `);
+      for (const p of res.engine) if (!allowed.some((prefix) => p.startsWith(prefix))) res.problems.push(`unexpected engine difference: ${p}`);
       rows.push({ name: b.name, repaired: repaired ? `REPAIRED ("${got.name}", "${got.caption}")` : 'no', ...res });
     }
   } finally {

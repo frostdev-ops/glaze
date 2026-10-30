@@ -16,8 +16,11 @@ const start = () => {
   if (process.platform !== 'darwin' || !fs.existsSync(NUMBERS)) throw Error('Numbers is not installed on this Mac');
   const before = pid();
   if (!before) execFileSync('open', ['-g', '-j', '-a', NUMBERS]);
-  jxa("Application('Numbers').name()", 120000);
-  return { started: !before, pid: before || pid() };
+  const self = { started: !before, pid: before || pid() };
+  try { jxa("Application('Numbers').name()", 120000); }
+  catch (err) { self.pid ||= pid(); quit(self); throw err; }
+  self.pid ||= pid();
+  return self;
 };
 const quit = ({ started, pid: was }) => {
   if (!started) return;
@@ -83,9 +86,10 @@ const main = async () => {
   const keepDir = k >= 0 ? path.resolve(args.splice(k, 2)[1]) : null;
   const list = await books(args.map((f) => path.resolve(f)));
   const numbers = start();
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-numbers-'));
+  let tmp;
   const rows = [];
   try {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-numbers-'));
     for (const b of list) {
       const file = path.join(tmp, b.name);
       fs.writeFileSync(file, b.bytes);
@@ -96,7 +100,7 @@ const main = async () => {
       rows.push({ name: b.name, opened: 'yes', ...compare(b.model, got) });
     }
   } finally {
-    try { quit(numbers); } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+    try { quit(numbers); } finally { if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); }
   }
   console.log('| workbook | opened | values compared | file differences | formulas Numbers answers otherwise |');
   console.log('|---|---|---|---|---|');

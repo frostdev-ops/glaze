@@ -1,7 +1,7 @@
 // The workbooks the fidelity scripts (scripts/sheet-excel-fidelity.js, scripts/sheet-numbers-fidelity.js) open in another
 // app: the 13 golden workbooks read and written again by lib/sheet-xlsx.js, a workbook built in Glaze from scratch, and
-// files given on the command line (written by Glaze elsewhere). Each comes back with the model it holds (read back from
-// the written bytes), which is what the other app must show.
+// files given on the command line (written by Glaze elsewhere). The source model after recalc is the expectation;
+// reading the exported bytes back to make the expectation would hide anything the writer lost.
 const fs = require('node:fs'), path = require('node:path');
 const LIB = path.join(__dirname, '../lib');
 const M = require('../lib/sheet-model.js');
@@ -13,7 +13,7 @@ const GOLDEN = path.join(__dirname, '../test/fixtures/sheets');
 
 // A workbook as a student might make one in Glaze: typed values of every kind, formulas across sheets, styles, a merge,
 // frozen panes, a filter, widths, a hidden column, a rich text cell and a defined name.
-const built = async () => {
+const built = async (withModel = false) => {
   const wb = M.workbook();
   const e = C.engine(wb);
   const id = wb.sheets[0].id;
@@ -52,7 +52,8 @@ const built = async () => {
   e.apply({ op: 'hide', sheet: id, axis: 'col', i: 7, hidden: true });
   e.apply({ op: 'name', name: 'Total', ref: 'Sheet1!$D$5' });
   e.recalc();
-  return X.write(wb, { engine: e });
+  const bytes = await X.write(wb, { engine: e });
+  return withModel ? { bytes, model: wb } : bytes;
 };
 
 // → [{ name, bytes, model }]
@@ -63,11 +64,11 @@ const books = async (files = []) => {
     return out;
   }
   for (const f of fs.readdirSync(GOLDEN).filter((n) => n.endsWith('.xlsx')).sort()) {
-    const bytes = await X.write(await X.read(fs.readFileSync(path.join(GOLDEN, f))));
-    out.push({ name: f, bytes, model: await X.read(bytes) });
+    const model = await X.read(fs.readFileSync(path.join(GOLDEN, f)));
+    const bytes = await X.write(model);
+    out.push({ name: f, bytes, model });
   }
-  const bytes = await built();
-  out.push({ name: 'built-in-glaze.xlsx', bytes, model: await X.read(bytes) });
+  out.push({ name: 'built-in-glaze.xlsx', ...await built(true) });
   return out;
 };
 
