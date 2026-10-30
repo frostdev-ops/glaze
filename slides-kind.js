@@ -460,11 +460,11 @@
     };
     presentB.addEventListener('click', present);
 
-    // ---- ⋯: Export .pptx
+    // ---- ⋯: export in the deck's own format
     const closeMenu = (back) => { if (!menu) return; menu.remove(); menu = null; moreB.setAttribute('aria-expanded', 'false'); if (back) moreB.focus(); };
     const openMenu = () => {
       menu = h('div', { class: 'pop gp-menu gs-menu', role: 'menu', 'aria-label': t('More') },
-        btn({ role: 'menuitem', tabindex: '-1', 'data-act': 'export', disabled: !bytes, onclick: () => { closeMenu(true); exportFile(key).catch((e) => console.warn(e)); } }, t('Export .pptx')));
+        btn({ role: 'menuitem', tabindex: '-1', 'data-act': 'export', disabled: !bytes, onclick: () => { closeMenu(true); exportFile(key).catch((e) => console.warn(e)); } }, t('Export .pptx').replace('.pptx', rec?.ext === '.ppsx' ? '.ppsx' : '.pptx')));
       document.body.append(menu);
       const r = moreB.getBoundingClientRect();
       menu.style.setProperty('left', `${Math.max(4, Math.min(r.right - menu.offsetWidth, innerWidth - menu.offsetWidth - 4))}px`);
