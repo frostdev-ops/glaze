@@ -264,7 +264,9 @@ test('golden: every case is in its workbook as written, with the value Excel cac
 // ---- the engine -----------------------------------------------------------------------------------------------------
 // Two results are the same when their types are and, for numbers, they agree to 1e-12 of the larger magnitude
 // (so Excel's exact zero needs an exact zero).
-const same = (want, got) => !!got && want.t === got.t && (want.t === 'n' ? Math.abs(want.v - got.v) <= 1e-12 * Math.max(Math.abs(want.v), Math.abs(got.v)) : want.v === got.v);
+const same = (want, got) => !!want && !!got && want.t === got.t && (want.t === 'n'
+  ? Number.isFinite(want.v) && Number.isFinite(got.v) && Math.abs(want.v - got.v) <= 1e-12 * Math.max(Math.abs(want.v), Math.abs(got.v))
+  : want.v === got.v);
 
 test('engine comparison: 1e-12 relative, types strict', () => {
   assert.ok(same({ t: 'n', v: 0.1 + 0.2 }, { t: 'n', v: 0.3 }));
