@@ -28,11 +28,11 @@ All notable changes to Glaze are documented here. The format follows
 
 - Blackboard: the rubric shows on a saved draft's attempt page, and going back to an assignment left with its rubric open shows the assignment. Blackboard's side panels open over Glaze's column.
 - Blackboard: **soon** and **today** chips are right across a clock change; impossible gradebook dates are no longer read as due dates.
-- Blackboard: Content leaves folder expansion and scrolling to Blackboard; search follows Blackboard's own links; turning Remember your place off cancels a pending restore.
+- Blackboard: Content leaves folders and scrolling to Blackboard; search follows its links; Remember your place off cancels a pending restore.
 - The sidebar covers its card beside a scrollbar, and the rubric opening lines up in right-to-left layouts.
 - Writer: a visible caret on a dark page, no doubled spelling marks in Chrome, and the status bar names the page on screen.
 - Settings → Writer: Versions kept saves 50 and 100; Saved papers wraps at narrow widths.
-- Your buddy's page no longer throws errors when Glaze updates while it is open.
+- Your buddy's page no longer errors when Glaze updates while it's open.
 
 ## [3.4.6] — 2026-10-26
 
