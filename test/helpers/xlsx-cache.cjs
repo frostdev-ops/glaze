@@ -1,11 +1,11 @@
 // The values Excel cached in an .xlsx, read back as Excel saved them: each sheet's cells with their type, cached value
 // and formula text, shared and array formulas resolved to every cell they cover. The golden harness's own reader
-// (tools/fidelity/sheet-excel-golden.js, test/documents/sheet-golden.test.js); lib/sheet-xlsx.js is the product's. Runs on
-// lib/doctext.js's unzip and tokenizer and is bounded the same way: archive limits come from unzip, and sheets, cells,
+// (tools/fidelity/sheet-excel-golden.js, test/documents/sheet-golden.test.js); documents/sheets/sheet-xlsx.js is the product's. Runs on
+// core/doctext.js's unzip and tokenizer and is bounded the same way: archive limits come from unzip, and sheets, cells,
 // shared strings and formula length are capped here. Every limit can be lowered per call with { limits }.
 // → { date1904, sheets: [{ name, cells: Map 'A1' → { t: 'n'|'s'|'b'|'e', v, f?, kind?, ref?, cm? } }] }
 // f is the formula without its '='; kind is 'shared' or 'array' when the file wrote it so, with ref the range it covers.
-const { unzip, tokens, decode } = require('../../extension/lib/doctext.js');
+const { unzip, tokens, decode } = require('../../extension/core/doctext.js');
 
 const LIMITS = { sheets: 100, cells: 250000, strings: 250000, formula: 8192 };
 const MAX_ROW = 1048576, MAX_COL = 16384;

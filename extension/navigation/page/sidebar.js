@@ -1,11 +1,11 @@
 // The sidebar (enhance.sidebar): the page's own sidebar content (This page), then the widgets the student docks under it
 // (My widgets), in one column at the window's right edge, loaded on demand. The site's part calls sync(on) from its passes
-// (content-canvas.js, content-ultra.js syncSidebar), in the top frame; features/widgets.js draws the docked widgets into host().widgets,
-// with the same tiles as its boards and floats. The state is lib/sidebar.js: one record per account on this device,
+// (content-canvas.js, content-ultra.js syncSidebar), in the top frame; core/page/widgets.js draws the docked widgets into host().widgets,
+// with the same tiles as its boards and floats. The state is navigation/sidebar.js: one record per account on this device,
 // changed field by field through the worker ('glaze:sidebar').
 // The page's own column stays where and as the LMS made it: nothing of it is moved, cloned or rebuilt. Glaze adds its
 // header before the column's first child and its widgets after the last, and lays the column out with attributes and
-// CSS variables only (features/sidebar.css); a page without a column gets Glaze's own (#gz-sidebar), beside its content.
+// CSS variables only (navigation/page/sidebar.css); a page without a column gets Glaze's own (#gz-sidebar), beside its content.
 // Wide enough, the column keeps its room beside the content (expanded, or collapsed to its header); narrower, it is a
 // drawer behind a button. A page with nothing for it keeps no room, only a button at the edge to add widgets.
 // Each LMS is an adapter (ADAPTERS): Canvas and Blackboard Ultra. Nothing here asks the LMS for anything but who is signed in.
@@ -91,7 +91,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     // existing dock opens as a drawer (overlay). An assignment's overview or attempt keeps its details in its own page
     // (they scroll with it): Glaze's own column shows them in This page (panels(), projected in place, never moved).
     // Elsewhere, Glaze's own column, fixed at the window's edge (own) with the page's content kept clear of it
-    // (features/sidebar.css).
+    // (navigation/page/sidebar.css).
     ultra: {
       family() {
         const p = location.pathname;
@@ -160,7 +160,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const A = ADAPTERS[LMS] || ADAPTERS.canvas;
   // The sidebar settings (defaults.js sidebar), one for every account: title ('' is "Sidebar"); style float (the default,
   // as the navigation's default) | embed, or auto as Glaze's navigation's; open auto (the account's expanded or collapsed), expanded or collapsed at the start of
-  // each page, or drawer always; width until the account drags one (lib/sidebar.js shown); order This page or My widgets
+  // each page, or drawer always; width until the account drags one (navigation/sidebar.js shown); order This page or My widgets
   // first; page This page shown, folded at first or hidden; heading and jump the header's name and Jump to widgets;
   // surface glass (blur px, opacity %), solid or clear; radius and density, auto for the Look's; min and grades the room
   // the content keeps, else a drawer; canvas and ultra per site (the site's part); off the kinds of page
@@ -171,9 +171,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const offOn = (fam) => (cfg().off || []).includes(KIND[fam] || 'other');
   const enabled = () => ctx.settings().enhance.sidebar !== false && cfg()[LMS] !== false && !offOn(A.family());
   const name = () => cfg().title || t('Sidebar');
-  // Native To Do lists Better To Do can take the place of (features/apps.css hides them while data-gz-sidebar-todo is set).
+  // Native To Do lists Better To Do can take the place of (core/page/apps.css hides them while data-gz-sidebar-todo is set).
   const NATIVE_TODO = '.Sidebar__TodoListContainer, .todo-list-header, ul.to-do-list, bb-todo';
-  // In a course tab's frame (features/coursetabs.js), the sidebar is the frame's while the frame is on screen, and the
+  // In a course tab's frame (navigation/page/coursetabs.js), the sidebar is the frame's while the frame is on screen, and the
   // page around it hides its own. Only the document on screen draws, watches or changes anything: a covered or hidden one
   // keeps its record up to date and waits (asleep), and its changes go through the page around it (GZ_CTABS.sidebar).
   const framed = !!ctx.tabFrame && globalThis.top !== globalThis.window;
@@ -182,7 +182,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const DOC = Math.random().toString(36).slice(2, 10);
 
   // ---- state --------------------------------------------------------------------------------------------------------
-  let S = null; // lib/sidebar.js
+  let S = null; // navigation/sidebar.js
   let on = false, starting = null, failed = false, active = false;
   let key = '', rec = null, flying = 0, reads = 0, lost = false, epoch = 0;
   let family = '', course = '', gen = 0, route = '', seenRoute = '', nativeView = null;
@@ -192,7 +192,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   let dock = null, dockBtn = null, list = null, note = null, addBtn = null, adding = null, live = null, edge = null, launch = null;
   let mode = 'none', drawer = false, forced = false, opener = null, inerted = [], dragW = 0, modalAway = false;
   let modalObserver = null, backdrop = null, widthCancel = null, lifted = null;
-  let drawnCount = null; // the widgets features/widgets.js drew into the dock (null: not said yet)
+  let drawnCount = null; // the widgets core/page/widgets.js drew into the dock (null: not said yet)
   let mo = null, frame = 0, noteTimer = 0, retryTimer = 0, passFrame = 0, offer = null, asleep = false;
   let topRO = null, topHeaders = [];
   let peekMO = null, peekFrame = 0;
@@ -256,9 +256,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const account = async () => String((await ctx.account()) ?? '');
   const start = async () => {
     const g = epoch;
-    await ctx.need('lib/widgets.js', () => globalThis.GZ_WIDGETS);
+    await ctx.need('core/widgets.js', () => globalThis.GZ_WIDGETS);
     if (g !== epoch) return false;
-    await ctx.need('lib/sidebar.js', () => globalThis.GZ_SIDEBAR);
+    await ctx.need('navigation/sidebar.js', () => globalThis.GZ_SIDEBAR);
     if (g !== epoch) return false;
     S = globalThis.GZ_SIDEBAR;
     const k = S.key(LMS, location.origin, await account());
@@ -267,7 +267,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     const r = await get(k);
     if (g !== epoch) return false;
     let next = S.clean(r[k]);
-    // The one-time move into the dock is written first, and only then shown (lib/sidebar.js migrate).
+    // The one-time move into the dock is written first, and only then shown (navigation/sidebar.js migrate).
     if (!next.mig) { const a = await post(k, [{ op: 'migrate' }]); if (a?.ok && a.rec) next = S.clean(a.rec); }
     if (g !== epoch) return false;
     if (key !== k) gen++;
@@ -316,7 +316,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       if (mode === 'drawer') closeDrawer();
       else {
         // Set to start each page expanded or collapsed (sidebar.open), the choice holds on this page only. The page,
-        // reflowed round the new width, crossfades in (lib/motion.js swap) rather than jumping.
+        // reflowed round the new width, crossfades in (core/motion.js swap) rather than jumping.
         const change = () => {
           const v = !isOpen();
           if (['expanded', 'collapsed'].includes(cfg().open)) { openHere = v; layout(); } else op([{ op: 'open', v }]);
@@ -352,7 +352,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     addBtn.setAttribute('aria-expanded', 'false');
     adding = make('div', { className: 'gz-sb-adding', id: 'gz-sb-adding', hidden: true });
     addBtn.setAttribute('aria-controls', 'gz-sb-adding');
-    // Ultra's boards disagreed about To Do (lib/sidebar.js migrate): offered here, never forced, until docked or dismissed.
+    // Ultra's boards disagreed about To Do (navigation/sidebar.js migrate): offered here, never forced, until docked or dismissed.
     offer = make('div', { className: 'gz-sb-offer', hidden: true },
       make('p', { className: 'gz-sb-faint', textContent: t('To Do is on one of your Blackboard boards but not the other. Keep it in the sidebar instead?') }),
       button(t('Move To Do to sidebar'), () => { op([{ op: 'dock', id: 'todo', at: 0 }]); say(t('{name} is in the sidebar.', { name: t('To Do') })); dockBtn.focus(); }, { className: 'gz-sb-btn gz-sb-small' }),
@@ -808,7 +808,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     nativeScroller?.addEventListener('scroll', queueLayout, { passive: true });
   };
   const roomFor = () => Math.min(S.MAX_WIDTH, innerWidth - A.left() - inset() - safeEnd - S.GAP - minMain());
-  // How the sidebar looks (the settings): on <html>, for features/sidebar.css.
+  // How the sidebar looks (the settings): on <html>, for navigation/page/sidebar.css.
   const dress = () => {
     const c = cfg(), h = html();
     setAttr(h, 'data-gz-sb-style', styleOf());
@@ -1010,7 +1010,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     topHeaders = next;
     for (const e of next) topRO.observe(e);
   };
-  // The document on screen changed (features/coursetabs.js): asleep, the drawer and menu close and nothing is watched;
+  // The document on screen changed (navigation/page/coursetabs.js): asleep, the drawer and menu close and nothing is watched;
   // awake again, the column is looked at as on a pass.
   const cover = () => {
     const now = covered();
@@ -1150,7 +1150,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
 
   // ---- menus --------------------------------------------------------------------------------------------------------
-  // A small menu under its button (this one's customizations; a widget's destinations, from features/widgets.js): arrow
+  // A small menu under its button (this one's customizations; a widget's destinations, from core/page/widgets.js): arrow
   // keys move in it, Escape or Tab closes it and gives the focus back. items: [{ label, run }].
   let menuEl = null, menuBtn = null;
   const closeMenu = (back = false) => {
@@ -1191,7 +1191,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
 
   // ---- Add widgets --------------------------------------------------------------------------------------------------
-  // Every widget that can dock here (features/widgets.js catalog), where it is now, and a button to bring it into the
+  // Every widget that can dock here (core/page/widgets.js catalog), where it is now, and a button to bring it into the
   // dock: a widget elsewhere moves, it isn't copied.
   const WHERE = { dock: 'In the sidebar', board: 'On the Dashboard', float: 'Floating', off: 'Not shown' };
   let addSig = '';
@@ -1221,7 +1221,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
 
   // ---- starting and stopping ----------------------------------------------------------------------------------------
-  // Everything Glaze added taken away, and the column back as the LMS had it. features/widgets.js hears first, so it
+  // Everything Glaze added taken away, and the column back as the LMS had it. core/page/widgets.js hears first, so it
   // takes its docked tiles away itself.
   const teardown = () => {
     epoch++;
@@ -1285,7 +1285,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     });
   };
 
-  // What features/widgets.js and other files use: host() the column's parts while it is here; context() the page it is
+  // What core/page/widgets.js and other files use: host() the column's parts while it is here; context() the page it is
   // for (gen moves on with the page, the account or the document); on('change' | 'mode' | 'context', fn) → stop; drawn(n)
   // how many widgets it drew into the dock; asleep() while another document has the sidebar; cover() said by course tabs
   // when the document on screen changes.
@@ -1295,7 +1295,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (drawnCount !== n) { drawnCount = n; layout(); }
     if (!asleep && adding && !adding.hidden) openAdd(true, false);
   };
-  // To Do's scope here: the account's choice, else the settings' (lib/sidebar.js shown).
+  // To Do's scope here: the account's choice, else the settings' (navigation/sidebar.js shown).
   const scope = () => (rec && S ? S.shown(rec, cfg()).todoScope : 'follow');
   return { enabled, scope, sync, ready, cover, asleep: () => asleep, active: () => active, failed: () => failed, rec: () => rec, op, host: hostOf, context, on: on_, say, status, drawn, menu, add: () => { if (mode === 'none' || (mode === 'drawer' && !drawer)) { forced = mode === 'none'; openDrawer(document.activeElement); } openAdd(true); } };
 })();

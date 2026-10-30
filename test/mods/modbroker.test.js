@@ -1,11 +1,11 @@
-// Code mods' permission broker (lib/modbroker.js): every call checked in one place, with stand-in storage and fetch, and the
-// worker's sender check (lib/background.js fromLms) on the real helpers it builds on.
+// Code mods' permission broker (mods/modbroker.js): every call checked in one place, with stand-in storage and fetch, and the
+// worker's sender check (background/background.js fromLms) on the real helpers it builds on.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const B = require('../../extension/lib/modbroker.js');
+const B = require('../../extension/mods/modbroker.js');
 
 const SITE = 'https://school.instructure.com';
 const ID = 'abcdefghijklmnop', OTHER = 'qrstuvwxyz234567';
@@ -32,7 +32,7 @@ const env = ({ site = SITE, record = rec(), local = {}, sync = {}, list = null, 
     queue: (f) => (turn = turn.then(f, f)),
     keys: async () => Object.keys(l.data),
     record: async (id) => (await l.get(`mod:${id}`))[`mod:${id}`],
-    blocklist: async () => list, account: async () => '5', // the account signed in on the page (lib/background.js modAccount)
+    blocklist: async () => list, account: async () => '5', // the account signed in on the page (background/background.js modAccount)
   };
 };
 const call = (e, callName, args = [], extra = {}) => B.handle({ mod: ID, call: callName, args, via: 'worker', ...extra }, e);
@@ -58,7 +58,7 @@ test('dev mode suspends unsigned mods without changing their saved on/off state'
 });
 
 test('the worker cached record preserves the unsigned flag for the broker', async () => {
-  const source = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
   const code = source.slice(source.indexOf('const modKept ='), source.indexOf('chrome.runtime.onMessage.addListener', source.indexOf('const modKept =')));
   const data = { [`mod:${ID}`]: rec({ dev: true }) };
   const ctx = vm.createContext({ GZ_MODBROKER: B, Map, chrome: { storage: { local: area(data), onChanged: { addListener() {} } } } });
@@ -69,7 +69,7 @@ test('the worker cached record preserves the unsigned flag for the broker', asyn
 });
 
 test('the worker cached record preserves the fixed media source for checked overrides', async () => {
-  const source = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
   const code = source.slice(source.indexOf('const modKept ='), source.indexOf('chrome.runtime.onMessage.addListener', source.indexOf('const modKept =')));
   const parts = { bg: { media: { type: 'image', src: 'https://media.example/background.webp' } } };
   const data = { [`mod:${ID}`]: rec({ manifest: { permissions: [], parts }, grants: {} }) };
@@ -340,17 +340,17 @@ test('whether the sandbox runs here is kept for the editor, written only when it
   assert.deepEqual(await B.page({ op: 'runtime', ok: true }, { ...e, site: null }), { ok: false, error: 'sender' });
 });
 
-// ---- the worker's sender check (lib/background.js) -------------------------------------------------------------------------
+// ---- the worker's sender check (background/background.js) -------------------------------------------------------------------------
 test('only Glaze\'s content script in the top frame of an LMS page it runs on, with Glaze on, off quiz and tool pages', async () => {
-  const src = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
-  const helpers = src.slice(src.indexOf('const fromEditor ='), src.indexOf('// Gradescope (lib/gradescope.js)'));
+  const src = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
+  const helpers = src.slice(src.indexOf('const fromEditor ='), src.indexOf('// Gradescope (planner/gradescope.js)'));
   const mine = src.slice(src.indexOf('const modQuiet ='), src.indexOf('const modKept ='));
   const store = { local: { canvas: ['https://canvas.school.edu/*'], moodle: ['https://moodle.school.edu/*'], ultra: ['https://bb.school.edu'] }, sync: { enabled: true } };
   const chrome = {
     runtime: { id: 'glaze', getURL: (p = '') => `chrome-extension://glaze/${p}`, getManifest: () => ({ host_permissions: ['<all_urls>'] }) },
     storage: Object.fromEntries(['local', 'sync'].map((a) => [a, { get: async (k) => Object.fromEntries([].concat(k).filter((x) => x in store[a]).map((x) => [x, store[a][x]])) }])),
   };
-  const ctx = vm.createContext({ chrome, URL, GZ_LX: require('../../extension/lib/lookx.js'), GZ_BUILT_IN: require('../../extension/defaults.js').GZ_BUILT_IN, GZ_LOCAL_DEV: require('../../extension/defaults.js').GZ_LOCAL_DEV, Promise });
+  const ctx = vm.createContext({ chrome, URL, GZ_LX: require('../../extension/looks/lookx.js'), GZ_BUILT_IN: require('../../extension/content/defaults.js').GZ_BUILT_IN, GZ_LOCAL_DEV: require('../../extension/content/defaults.js').GZ_LOCAL_DEV, Promise });
   vm.runInContext(`${helpers}\n${mine}\nthis.fromLms = fromLms;`, ctx);
   const s = (url, over = {}) => ({ id: 'glaze', url, frameId: 0, tab: { id: 1, url }, ...over });
   const yes = { 'https://x.instructure.com/courses/1': 'https://x.instructure.com', 'https://canvas.school.edu/': 'https://canvas.school.edu', 'https://moodle.school.edu/my/': 'https://moodle.school.edu', 'https://bb.school.edu/ultra/course': 'https://bb.school.edu' };
@@ -379,7 +379,7 @@ test('only Glaze\'s content script in the top frame of an LMS page it runs on, w
 
 
 test('the broker reads and invalidates the blocklist package storage shape', async () => {
-  const source = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
   const cache = source.slice(source.indexOf('const modKept ='), source.indexOf('chrome.runtime.onMessage.addListener', source.indexOf('const modKept =')));
   let changed;
   const data = { modsBlocklist: { list: { mods: [ID] }, sig: 'checked', seq: 1 } };
@@ -432,7 +432,7 @@ test('code media overrides reuse only the manifest source and type, including lo
 
 
 for (const revoke of [{ [`mod:${ID}`]: { newValue: { enabled: false } } }, { modDev: { newValue: false } }]) test(`revocation ${Object.keys(revoke)[0]} aborts an in-flight broker fetch, including its response body`, async () => {
-  const source = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
   const code = source.slice(source.indexOf('const modKept ='), source.indexOf('// Code on demand', source.indexOf('const modKept =')));
   const e = env();
   let message, signal, finish;
@@ -466,7 +466,7 @@ test('revocation during a data read or queued write releases neither data nor a 
 
 
 test('a storage read crossed by revocation retries instead of returning a stale grant', async () => {
-  const source = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
   const code = source.slice(source.indexOf('const modKept ='), source.indexOf('chrome.runtime.onMessage.addListener', source.indexOf('const modKept =')));
   let changed, release, first = true;
   const data = { [`mod:${ID}`]: rec() };
@@ -483,7 +483,7 @@ test('a storage read crossed by revocation retries instead of returning a stale 
 });
 
 test('the worker cancels an in-flight declarative widget read on revocation', async () => {
-  const source = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
   const code = source.slice(source.indexOf('const modKept ='), source.indexOf('// Code on demand', source.indexOf('const modKept =')));
   const e = env();
   let message, signal, finish;
@@ -531,7 +531,7 @@ test('the page is told every on mod\'s Look parts, cleaned, in order, code or no
   assert.deepEqual(await B.page({ op: 'parts' }, env({ local: { mods: 'x' } })), { ok: true, parts: [] });
 });
 
-// ---- code tools for agent apps (lib/mcp/modroute.js) ----------------------------------------------------------------------
+// ---- code tools for agent apps (agents/modroute.js) ----------------------------------------------------------------------
 const agents = (over = {}) => rec({ manifest: { ...rec().manifest, permissions: [...rec().manifest.permissions, { id: 'agents', why: 'w' }] }, grants: { ...rec().grants, agents: true }, ...over });
 
 test('tools.result hands the tab account read by the worker to the pending call check and observes revocation while reading it', async () => {

@@ -1,14 +1,14 @@
-// The editor's widget builder (lib/editor-widget.js): the form's blocks as the cleaner takes them, the manifest it makes (asking
+// The editor's widget builder (settings/editor-widget.js): the form's blocks as the cleaner takes them, the manifest it makes (asking
 // for exactly the permissions its blocks use, with reasons), versions that go up, and the prompt's words for a widget with no
-// code (lib/editor-mods.js). The page itself, with real clicks, is checks/core/widgets-builder-check.js.
+// code (settings/editor-mods.js). The page itself, with real clicks, is checks/core/widgets-builder-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const WE = require('../../extension/lib/editor-widget.js');
-const E = require('../../extension/lib/editor-mods.js');
-const W = require('../../extension/lib/modwidget.js');
-const M = require('../../extension/lib/modbundle.js');
+const WE = require('../../extension/settings/editor-widget.js');
+const E = require('../../extension/settings/editor-mods.js');
+const W = require('../../extension/mods/modwidget.js');
+const M = require('../../extension/mods/modbundle.js');
 
 const t = (k, vars = {}) => k.replace(/\{(\w+)\}/g, (s, n) => (n in vars ? String(vars[n]) : s));
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
@@ -111,22 +111,22 @@ test('the Mods tab says a widget with no code stays on this device, and offers i
   assert.equal(E.sourceText('builder', t), 'Made in the widget builder');
   assert.equal(E.sourceText('somewhere', t), '');
   // The builder is on the card for a plain widget the student made, and the editor passes the callback in.
-  assert.match(read('lib/editor-mods.js'), /mine && a\.canEdit\?\.\(rec\.manifest\) && a\.edit \?/);
-  assert.match(read('options.js'), /edit: widgets\.edit/);
+  assert.match(read('settings/editor-mods.js'), /mine && a\.canEdit\?\.\(rec\.manifest\) && a\.edit \?/);
+  assert.match(read('settings/options.js'), /edit: widgets\.edit/);
 });
 
 test('every id the builder looks up is on the page, once, and its scripts load before it', () => {
-  const html = read('options.html'), js = read('lib/editor-widget.js');
+  const html = read('options.html'), js = read('settings/editor-widget.js');
   const used = new Set([...js.matchAll(/\$\('([\w-]+)'\)/g)].map((m) => m[1]).filter((id) => !id.includes('${')));
   assert.ok(used.size > 15);
   for (const id of used) assert.equal(html.split(`id="${id}"`).length - 1, 1, id);
-  const order = ['lib/modbundle.js', 'lib/modapi.js', 'lib/gradecalc.js', 'lib/modwidget.js', 'lib/modbroker.js', 'features/modui.js', 'lib/editor-mods.js', 'lib/editor-widget.js', 'options.js'].map((f) => html.indexOf(`<script src="${f}"></script>`));
+  const order = ['mods/modbundle.js', 'mods/modapi.js', 'planner/gradecalc.js', 'mods/modwidget.js', 'mods/modbroker.js', 'mods/page/modui.js', 'settings/editor-mods.js', 'settings/editor-widget.js', 'settings/options.js'].map((f) => html.indexOf(`<script src="${f}"></script>`));
   assert.ok(order.every((i) => i > 0) && order.every((i, k) => !k || i > order[k - 1]), String(order));
   assert.ok(html.includes('<a href="#mods/widget" data-editor-alias>Widget builder</a>') && html.includes('data-editor-section="mods/widget"'));
 });
 
 test('the builder writes only text: no markup reaches the page from a name, a reason or a block', () => {
-  const src = read('lib/editor-widget.js').replace(/\/\/.*$/gm, '');
+  const src = read('settings/editor-widget.js').replace(/\/\/.*$/gm, '');
   for (const word of ['innerHTML', 'outerHTML', 'insertAdjacentHTML', 'document.write', 'eval(', 'Function(']) assert.ok(!src.includes(word), word);
 });
 
@@ -145,8 +145,8 @@ test('only manifests the builder can round-trip without losing slots or features
     (x) => x.settings = [],
     (x) => x.replaces = [],
   ]) { const x = copy(); change(x); assert.equal(WE.editable(x), false); }
-  assert.match(read('lib/editor-mods.js'), /mine && a\.canEdit\?\.\(rec\.manifest\)/);
-  assert.match(read('options.js'), /canEdit: widgets\.canEdit/);
+  assert.match(read('settings/editor-mods.js'), /mine && a\.canEdit\?\.\(rec\.manifest\)/);
+  assert.match(read('settings/options.js'), /canEdit: widgets\.canEdit/);
 });
 
 test('decorative images retain an explicit empty alternative text', () => {
@@ -157,7 +157,7 @@ test('decorative images retain an explicit empty alternative text', () => {
 
 test('replacing or removing an image keeps files still used by another block', async () => {
   const vm = require('node:vm');
-  const source = read('lib/editor-widget.js');
+  const source = read('settings/editor-widget.js');
   const controls = source.slice(source.indexOf('    const control ='), source.indexOf('    const list ='));
   const drawing = source.slice(source.indexOf('    let invalid ='), source.indexOf('    // ---- what it needs'));
   for (const replace of [false, true]) {
@@ -183,7 +183,7 @@ test('replacing or removing an image keeps files still used by another block', a
 });
 
 test('the image picker rejects unreadable or oversized images before replacing the current file', async () => {
-  const vm = require('node:vm'), source = read('lib/editor-widget.js');
+  const vm = require('node:vm'), source = read('settings/editor-widget.js');
   const controls = source.slice(source.indexOf('    const control ='), source.indexOf('    const list ='));
   for (const size of [null, { w: 4097, h: 1 }, { w: 1, h: 4097 }]) {
     const b = { type: 'image', src: 'img/old.png', alt: 'Old' }, pictures = { 'img/old.png': new Uint8Array([1]) }, said = [];
@@ -204,7 +204,7 @@ test('the image picker rejects unreadable or oversized images before replacing t
 
 
 test('saving a widget never changes a new draft opened while signing', async () => {
-  const vm = require('node:vm'), source = read('lib/editor-widget.js');
+  const vm = require('node:vm'), source = read('settings/editor-widget.js');
   const code = source.slice(source.indexOf('    const save = async '), source.indexOf("    $('wb-save')"));
   const initial = state(), current = state({ name: 'New draft', version: '1.0.0' });
   let release;
@@ -228,7 +228,7 @@ test('saving a widget never changes a new draft opened while signing', async () 
 
 
 test('an older picture read cannot replace a newer choice or repopulate another draft', async () => {
-  const vm = require('node:vm'), source = read('lib/editor-widget.js');
+  const vm = require('node:vm'), source = read('settings/editor-widget.js');
   const controls = source.slice(source.indexOf('    const control ='), source.indexOf('    const list ='));
   for (const nextDraft of [false, true]) {
     const b = { type: 'image', src: 'img/old.png', alt: '' }, pictures = { 'img/old.png': new Uint8Array([1]) };

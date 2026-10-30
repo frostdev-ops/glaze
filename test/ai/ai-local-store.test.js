@@ -1,10 +1,10 @@
-// lib/ai/local/store.js: the local model's weights in OPFS, downloaded on the student's click with Range resume and a
+// ai/local/store.js: the local model's weights in OPFS, downloaded on the student's click with Range resume and a
 // SHA-256 check per chunk. A fake OPFS (handles, swap-file writables, quota) and a fake fetch that answers as Hugging Face
 // does: huggingface.co's resolve URL redirects to its CDN, which serves 206 Range responses.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const S = require('../../extension/lib/ai/local/store.js');
+const S = require('../../extension/ai/local/store.js');
 
 const CHUNK = 1024;
 const SIZE = CHUNK * 4 + 300; // five chunks, the last one short
@@ -369,7 +369,7 @@ test('a CDN reply that is not the asked range is refused', async () => {
 });
 
 test('the shipped manifest is well formed and pinned', () => {
-  const M = require('../../extension/lib/ai/local/models.json');
+  const M = require('../../extension/ai/local/models.json');
   assert.ok(Array.isArray(M.models) && M.models.length >= 1);
   for (const m of M.models) {
     assert.match(m.commit, /^[0-9a-f]{40}$/);

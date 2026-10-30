@@ -1,4 +1,4 @@
-// Canvas-only helpers for content.js, loaded before it on Canvas hosts (lib/background.js) or on demand.
+// Canvas-only helpers for content.js, loaded before it on Canvas hosts (background/background.js) or on demand.
 // Receives the core's live state (I); reinjection keeps the first copy and returns it.
 var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   const { C, html, isPreview, need, t, locale, capi, canvasCourseKey, canvasCourseId, celebrate, markDue, drawProgress, cardBadge, KIND, cardsInView, inView, tagExtras, setVar, setAttr } = I;
@@ -80,31 +80,31 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   });
 
   // ---- code on demand ------------------------------------------------------------------------------
-  // The sidebar (features/sidebar.js): the page's column, with Better To Do and the docked widgets in it, on the page or in
+  // The sidebar (navigation/page/sidebar.js): the page's column, with Better To Do and the docked widgets in it, on the page or in
   // a course tab's frame (only the one on screen works it). Better To Do takes the site's sidebar itself only without it
   // (or while it can't start).
   const sidebarHere = () => I.links.length && I.settings.enhance.sidebar && I.settings.sidebar?.canvas !== false && (window.top === window || !!I.tabFrame) && !/^\/log(in|out)\b/.test(location.pathname);
   const sidebarOn = () => sidebarHere() && (globalThis.GZ_SIDEBAR_UI?.enabled?.() ?? !I.settings.sidebar?.off?.length);
-  const syncSidebar = () => (sidebarHere() ? need('features/sidebar.js', () => globalThis.GZ_SIDEBAR_UI).then(() => GZ_SIDEBAR_UI.sync(sidebarHere()), () => {}) : globalThis.GZ_SIDEBAR_UI?.sync(false));
+  const syncSidebar = () => (sidebarHere() ? need('navigation/page/sidebar.js', () => globalThis.GZ_SIDEBAR_UI).then(() => GZ_SIDEBAR_UI.sync(sidebarHere()), () => {}) : globalThis.GZ_SIDEBAR_UI?.sync(false));
   const todoHere = () => I.links.length && I.settings.enhance.todo && /^\/(courses\/\d+\/?)?$/.test(location.pathname);
   const todoSide = () => todoHere() && !(sidebarOn() && !globalThis.GZ_SIDEBAR_UI?.failed());
-  const syncTodo = () => (todoSide() ? need('features/todo.js', () => globalThis.GZ_TODO_UI).then(() => GZ_TODO_UI.sync(todoSide()), () => {}) : globalThis.GZ_TODO_UI?.sync(false));
+  const syncTodo = () => (todoSide() ? need('planner/page/todo.js', () => globalThis.GZ_TODO_UI).then(() => GZ_TODO_UI.sync(todoSide()), () => {}) : globalThis.GZ_TODO_UI?.sync(false));
   const cardsHere = () => I.links.length && I.settings.enhance.cardTasks && location.pathname === '/';
-  const syncCardTasks = () => (cardsHere() && document.querySelector('.ic-DashboardCard') ? need('features/cardtasks.js', () => globalThis.GZ_CARD_TASKS).then(() => GZ_CARD_TASKS.sync(cardsHere()), () => {}) : globalThis.GZ_CARD_TASKS?.sync(false));
+  const syncCardTasks = () => (cardsHere() && document.querySelector('.ic-DashboardCard') ? need('courses/page/cardtasks.js', () => globalThis.GZ_CARD_TASKS).then(() => GZ_CARD_TASKS.sync(cardsHere()), () => {}) : globalThis.GZ_CARD_TASKS?.sync(false));
   const widgetsHere = () => { const e = I.settings.enhance; return I.links.length && (window.top === window || I.tabFrame === 'page' || (!!I.tabFrame && sidebarOn())) && (e.widgets || e.notes || e.pet || (e.todo && (location.pathname === '/' || sidebarOn()))); };
-  const syncWidgets = () => (syncSidebar(), widgetsHere() ? need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => {}) : globalThis.GZ_WIDGETS_UI?.sync(false));
+  const syncWidgets = () => (syncSidebar(), widgetsHere() ? need('core/page/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => {}) : globalThis.GZ_WIDGETS_UI?.sync(false));
   const remindHere = () => I.links.length && window.top === window && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => I.settings.enhance[k]);
-  const syncRemind = () => (remindHere() ? need('features/reminders.js', () => globalThis.GZ_REMIND_UI).then(() => GZ_REMIND_UI.sync(remindHere()), () => {}) : globalThis.GZ_REMIND_UI?.sync(false));
+  const syncRemind = () => (remindHere() ? need('planner/page/reminders.js', () => globalThis.GZ_REMIND_UI).then(() => GZ_REMIND_UI.sync(remindHere()), () => {}) : globalThis.GZ_REMIND_UI?.sync(false));
   const sylHere = () => I.links.length && window.top === window && I.settings.enhance.syllabus && /^\/courses\/\d+(\/assignments\/syllabus)?\/?$/.test(location.pathname);
-  const syncSyl = () => (sylHere() ? need('features/syllabus.js', () => globalThis.GZ_SYL_UI).then(() => GZ_SYL_UI.sync(sylHere()), () => {}) : globalThis.GZ_SYL_UI?.sync(false));
-  const syncInsights = () => (globalThis.GZ_INSIGHTS_UI || (I.links.length && I.settings.enhance.insights && location.pathname === '/')) && need('features/insights.js', () => globalThis.GZ_INSIGHTS_UI).then(() => GZ_INSIGHTS_UI.sync(), () => {});
+  const syncSyl = () => (sylHere() ? need('planner/page/syllabus.js', () => globalThis.GZ_SYL_UI).then(() => GZ_SYL_UI.sync(sylHere()), () => {}) : globalThis.GZ_SYL_UI?.sync(false));
+  const syncInsights = () => (globalThis.GZ_INSIGHTS_UI || (I.links.length && I.settings.enhance.insights && location.pathname === '/')) && need('planner/page/insights.js', () => globalThis.GZ_INSIGHTS_UI).then(() => GZ_INSIGHTS_UI.sync(), () => {});
   const canvasGrades = () => {
     const e = I.settings.enhance;
     if (I.observer && (globalThis.GZ_GRADES_UI || (e.calc && /^\/courses\/\d+\/grades\/?$/.test(location.pathname)) || (e.gpa && location.pathname === '/'))) {
-      need('features/grades.js', () => globalThis.GZ_GRADES_UI).then(() => GZ_GRADES_UI.render(), () => {});
+      need('planner/page/grades.js', () => globalThis.GZ_GRADES_UI).then(() => GZ_GRADES_UI.render(), () => {});
     }
   };
-  addEventListener('message', (e) => { if (e.data?.gz === 'docs?' && /^https:\/\/canvadocs(-[\w-]+)?\.instructure\.com$/.test(e.origin)) need('features/docs.js', () => globalThis.GZ_DOCS).then(() => GZ_DOCS.ask(e), () => {}); });
+  addEventListener('message', (e) => { if (e.data?.gz === 'docs?' && /^https:\/\/canvadocs(-[\w-]+)?\.instructure\.com$/.test(e.origin)) need('courses/page/docs.js', () => globalThis.GZ_DOCS).then(() => GZ_DOCS.ask(e), () => {}); });
 
   // ---- grades on course cards (Extras) ---------------------------------------------------------
   addEventListener('click', (e) => {
@@ -227,7 +227,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   };
 
   // ---- folder previews (Extras) ----------------------------------------------------------------
-  // What a module or folder holds, for features/previews.js and features/download.js.
+  // What a module or folder holds, for courses/page/previews.js and courses/page/download.js.
   const peeks = new Map();
   // Canvas paginates these lists; cache whole answers, shared by previews and module downloads.
   const canvasPeekList = (path) => canvasAll(`${path}${path.includes('?') ? '&' : '?'}per_page=100`);
@@ -263,11 +263,11 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
     }
     return c.p;
   };
-  // Hidden modules (features/folders.js), where a course lists its modules; who you are keys what you hid.
+  // Hidden modules (courses/page/folders.js), where a course lists its modules; who you are keys what you hid.
   let meP = null;
   const me = () => (meP ||= profile().then((p) => String(p.id), (e) => { meP = null; throw e; }));
   const syncFolders = () => (I.links.length && I.settings.enhance.hideFolders && document.getElementById('context_modules')
-    ? need('lib/folders.js', () => globalThis.GZ_FOLDERS).then(() => need('features/folders.js', () => globalThis.GZ_FOLDER_UI)).then(() => GZ_FOLDER_UI.sync(true, me()), () => {})
+    ? need('courses/folders.js', () => globalThis.GZ_FOLDERS).then(() => need('courses/page/folders.js', () => globalThis.GZ_FOLDER_UI)).then(() => GZ_FOLDER_UI.sync(true, me()), () => {})
     : globalThis.GZ_FOLDER_UI?.sync(false));
   let reqs = null; // { cid, load, progress: { done, total } | null }, tied to the shared Modules cache
   const canvasProgress = () => {
@@ -442,7 +442,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
     }
   };
 
-  // ---- the global navigation (features/navbar.js) --------------------------------------------------
+  // ---- the global navigation (navigation/page/navbar.js) --------------------------------------------------
   const paintNav = (n, picture) => {
     if (window.top !== window) { setAttr('data-gz-navbar-frame', I.tabFrame && I.settings.navbar.on && (I.settings.navbar.course === 'hide' ? 'none' : I.settings.navbar.cmenu !== false ? 'menu' : '')); return; }
     // Reserve the bar's room before its lazy renderer arrives, using GZ_NAVBAR.layout's words.
@@ -456,7 +456,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
     setAttr('data-gz-nav', n.k !== 'default' && (n.k === 'image' && !src ? 'solid' : n.k));
     for (const [k, v] of [['ink', n.ink], ['c', n.c], ['d', n.d], ['a', `${n.a}deg`], ['o', n.o / 100], ['img', src ? `url("${src}")` : 'none']]) setVar(`--gz-nav-${k}`, v);
   };
-  // Course tabs (features/coursetabs.js, on demand): the strip's place and size as this browser tab last had them, else
+  // Course tabs (navigation/page/coursetabs.js, on demand): the strip's place and size as this browser tab last had them, else
   // the defaults, as data-gz-ctabs from the first paint: canvas.css holds that room, so the row doesn't move when it comes.
   const paintTabs = () => {
     let at = null;
@@ -466,9 +466,9 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   };
   const syncNav = () => {
     if (window.top !== window || /^\/(?:login|logout)(?:\/|$)/.test(location.pathname)) return;
-    if (globalThis.GZ_NAVBAR_UI || (I.links.length && I.settings.navbar?.on)) need('features/navbar-canvas.js', () => globalThis.GZ_NAVBAR_CANVAS).then(() => need('features/navbar.js', () => globalThis.GZ_NAVBAR_UI)).then(() => GZ_NAVBAR_UI.sync(), () => setAttr('data-gz-navbar', false));
-    // Under Glaze navigation features/nav.js stays off; a loaded one is still told.
-    if (!I.settings.navbar?.on && (I.worn.nav.i || I.worn.nav.collapsed || I.worn.nav.labels === 'icons' || (I.links.length && globalThis.GZ_CTX?.parts()?.nav))) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
+    if (globalThis.GZ_NAVBAR_UI || (I.links.length && I.settings.navbar?.on)) need('navigation/page/navbar-canvas.js', () => globalThis.GZ_NAVBAR_CANVAS).then(() => need('navigation/page/navbar.js', () => globalThis.GZ_NAVBAR_UI)).then(() => GZ_NAVBAR_UI.sync(), () => setAttr('data-gz-navbar', false));
+    // Under Glaze navigation navigation/page/nav.js stays off; a loaded one is still told.
+    if (!I.settings.navbar?.on && (I.worn.nav.i || I.worn.nav.collapsed || I.worn.nav.labels === 'icons' || (I.links.length && globalThis.GZ_CTX?.parts()?.nav))) need('navigation/page/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
     else globalThis.GZ_NAV_UI?.sync();
   };
 
@@ -478,7 +478,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
     syncTodo, syncCardTasks, syncWidgets, syncRemind, syncSyl,
     syncInsights: () => {
       syncInsights();
-      if (I.solo && (I.settings.enhance.tabs || globalThis.GZ_CTABS)) need('features/coursetabs.js', () => globalThis.GZ_CTABS).then(() => GZ_CTABS.sync(!!I.links.length && I.settings.enhance.tabs), () => {});
+      if (I.solo && (I.settings.enhance.tabs || globalThis.GZ_CTABS)) need('navigation/page/coursetabs.js', () => globalThis.GZ_CTABS).then(() => GZ_CTABS.sync(!!I.links.length && I.settings.enhance.tabs), () => {});
     },
     ctx: { canvasCourses, profile, canvasPeek, moduleItems },
   };

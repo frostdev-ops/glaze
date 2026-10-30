@@ -7,7 +7,7 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
 // A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
 const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
 const site = 'https://bb.school.test', key = `ctabs:${site}:_42_1`;
-const G = require(path.join(ext, 'defaults.js'));
+const G = require(path.join(ext, 'content/defaults.js'));
 const html = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-course.html'), 'utf8');
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-panel-close-'));

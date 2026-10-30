@@ -2,7 +2,7 @@
 # A dev copy of the extension for trying Google Calendar sync with the real OAuth client. That client (a "Chrome
 # extension" client, S3 §1) is tied to the Chrome Web Store item's ID, and Chrome gives an unpacked copy that ID only when
 # its manifest carries the store's public key ("key"). So: the store package (package.sh), unzipped into a folder, with
-# Google sync's build-time switch turned on (lib/gcal.js ON, with the manifest's oauth2 client and optional identity
+# Google sync's build-time switch turned on (planner/gcal.js ON, with the manifest's oauth2 client and optional identity
 # permission back) and the key added, in that copy only. Never in manifest.json or the package (test/planner/gcal.test.js checks).
 #
 #   tools/dev/dev-gcal.sh <file holding the store's public key, one base64 line> [folder, default dist/glaze-dev-gcal]
@@ -24,9 +24,9 @@ import base64, hashlib, json, sys
 out, key_file = sys.argv[1], sys.argv[2]
 key = open(key_file).read().strip()
 der = base64.b64decode(key, validate=True)  # a public key in base64, nothing else
-gcal = f'{out}/lib/gcal.js'
+gcal = f'{out}/planner/gcal.js'
 src = open(gcal).read()
-assert '  const ON = false;\n' in src or '  const ON = true;\n' in src, 'lib/gcal.js: no ON switch'
+assert '  const ON = false;\n' in src or '  const ON = true;\n' in src, 'planner/gcal.js: no ON switch'
 open(gcal, 'w').write(src.replace('  const ON = false;\n', '  const ON = true;\n', 1))
 repo = json.load(open('extension/manifest.json'))
 path = f'{out}/manifest.json'

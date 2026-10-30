@@ -1,6 +1,6 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
-const source = fs.readFileSync(process.env.WRITER_PAPER_SOURCE || require.resolve('../../extension/writer-paper.js'), 'utf8');
+const source = fs.readFileSync(process.env.WRITER_PAPER_SOURCE || require.resolve('../../extension/writer/frame/writer-paper.js'), 'utf8');
 const start = source.indexOf('    const setView = async '), end = source.indexOf('    // Settings → Writer → Full writer changed', start);
 const code = source.slice(start, end);
 

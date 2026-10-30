@@ -1,15 +1,15 @@
-// writer.complete reads the whole document (lib/ai/tasks/writer-complete.js): the document so far as a rolling window the
+// writer.complete reads the whole document (ai/tasks/writer-complete.js): the document so far as a rolling window the
 // model's input window holds (the earliest paragraphs left out first), in a prompt whose start stays the same while the
 // student types (the page's context, then the document so far; the sentence at the caret last), the suggestions already
 // shown as a rolling list, and a check that refuses a finish repeating a sentence the document has or the gray text
 // already suggested. Through the harness with the mock provider.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const T = require('../../extension/lib/ai/task.js');
-const R = require('../../extension/lib/ai/request.js');
-const X = require('../../extension/lib/ai/text.js');
-require('../../extension/lib/ai/providers/mock.js');
-const C = require('../../extension/lib/ai/tasks/writer-complete.js');
+const T = require('../../extension/ai/task.js');
+const R = require('../../extension/ai/request.js');
+const X = require('../../extension/ai/text.js');
+require('../../extension/ai/providers/mock.js');
+const C = require('../../extension/ai/tasks/writer-complete.js');
 
 const ASSIGN = { kind: 'assignment', course: { id: '_1_1', name: 'ENGL 2110' }, style: 'mla9',
   assignment: { title: 'Essay 2', instructions: 'Write about memory in Beloved.', rubric: 'Thesis: 10 points' } };
@@ -101,7 +101,7 @@ test('the window math: known, unknown, large, brief, and the request\'s own size
     assert.ok(X.estimateTokens(small.req) < 1600, `${JSON.stringify(caps)}: ${X.estimateTokens(small.req)} tokens`);
   }
 
-  // A window bigger than a run may read (lib/ai/loop.js refuses a request over the task's limits.tokens): the run's bound.
+  // A window bigger than a run may read (ai/loop.js refuses a request over the task's limits.tokens): the run's bound.
   assert.equal(C.task.limits.tokens, C.READ.tokens);
   assert.ok(C.READ.tokens * C.READ.room * C.READ.bytes < R.LIMIT.text, 'and so under the request\'s own text limit');
   const huge = doc(1000, 1000).slice(-(C.LIMIT.raw - CARET.length - 1)).replace(/^[^\n]*\n/, '');
@@ -252,7 +252,7 @@ test('completion privacy disclosure names the full document, per-pause transmiss
 
 
 test('frame caps on document text and remembered suggestions never start with half a surrogate pair', () => {
-  const AI = require('../../extension/writer-ai.js');
+  const AI = require('../../extension/writer/frame/writer-ai.js');
   for (const cap of [600, 1000000]) {
     const text = 'prefix 😀' + 'a'.repeat(cap - 1);
     const cut = AI.tailText(text, cap);

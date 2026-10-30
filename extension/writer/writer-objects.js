@@ -4,7 +4,7 @@
 // changed with their text), the horizontal line (--- on an empty line), special characters, and list styles (each
 // level's numbering or bullet, restart and continue). Commands work on an EditorState alone (node tests); the frame
 // (writer-objects.js) draws the UI over them. Paper schema except links, which compose has too.
-// Classic script after lib/pm.js, lib/writer-schema.js and lib/writer-editor.js; module.exports for node.
+// Classic script after vendor/pm.js, writer/writer-schema.js and writer/writer-editor.js; module.exports for node.
 var GZ_WRITER_OBJECTS_LIB = globalThis.GZ_WRITER_OBJECTS_LIB || (() => {
   const S = typeof GZ_WRITER_SCHEMA !== 'undefined' ? GZ_WRITER_SCHEMA : require('./writer-schema.js');
   const { TextSelection, NodeSelection, Plugin } = GZ_PM.state;

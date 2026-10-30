@@ -1,4 +1,4 @@
-// Glaze Writer opening Word files as Word lays them out (lib/writer-docx.js importDocx): properties resolved from the
+// Glaze Writer opening Word files as Word lays them out (writer/writer-docx.js importDocx): properties resolved from the
 // document's defaults through its paragraph and character styles to direct formatting; paragraph spacing, line rules,
 // contextual spacing, indents, tab stops, keep options and widow control; the page's size, margins, header and footer with
 // their fields; the base font through the theme; run formatting; and the .docx Writer exports for an imported paper
@@ -6,11 +6,11 @@
 // layout of them is tools/fidelity/writer-import-fidelity.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../../extension/lib/writer-schema.js');
-const X = require('../../extension/lib/writer-docx.js');
-const ST = require('../../extension/lib/writer-styles.js');
-const P = require('../../extension/lib/writer-paginate.js');
-const F = require('../../extension/lib/writer-format.js');
+const S = require('../../extension/writer/writer-schema.js');
+const X = require('../../extension/writer/writer-docx.js');
+const ST = require('../../extension/writer/writer-styles.js');
+const P = require('../../extension/writer/writer-paginate.js');
+const F = require('../../extension/writer/writer-format.js');
 const FX = require('../fixtures/writer-docx-import.js');
 
 const open = async (id, format = 'mla9') => {
@@ -123,7 +123,7 @@ test('A4, margins, header and footer distances, a different first page, PAGE and
 
 test('a minimal file with no defaults is Word\'s bare default: Times New Roman 10, single-spaced, nothing after', async () => {
   const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
-  const Z = require('../../extension/lib/zip.js');
+  const Z = require('../../extension/core/zip.js');
   const files = [['_rels/.rels', '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'],
     ['word/document.xml', `<w:document ${W}><w:body><w:p><w:r><w:t>one</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`]];
   const bytes = Buffer.concat(Z.zip(files.map(([name, t]) => ({ name, data: new TextEncoder().encode(t), date: new Date('2026-10-27T12:00:00Z') }))).map((c) => Buffer.from(c)));
@@ -255,11 +255,11 @@ test('a Word 365 paper from today\'s Normal.dotm: 1.16 lines and 8 pt after kept
   for (const n of tops.filter((x) => x.type.name === 'paragraph').slice(1)) assert.deepEqual(pick(n, 'line', 'after', 'first'), { line: 1.16, after: 8, first: 0 });
 });
 
-// lib/writer-color.js on import: a run's colour stays where the paper shows it (on its highlight, else the white page, at
+// writer/writer-color.js on import: a run's colour stays where the paper shows it (on its highlight, else the white page, at
 // 2:1); Word's theme text and page colours and Automatic are the paper's ink.
 test('legibility: white on a shaded paragraph or cell, theme text and Automatic import as the paper\'s ink; accents stay', async () => {
   const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
-  const Z = require('../../extension/lib/zip.js');
+  const Z = require('../../extension/core/zip.js');
   const run = (rpr, t) => `<w:r><w:rPr>${rpr}</w:rPr><w:t xml:space="preserve">${t}</w:t></w:r>`;
   const body = `<w:p><w:pPr><w:shd w:val="clear" w:color="auto" w:fill="1F1F1F"/></w:pPr>${run('<w:color w:val="FFFFFF"/>', 'shaded white')}${run('<w:color w:val="C00000"/>', ' dark red')}</w:p>`
     + `<w:p>${run('<w:color w:val="262626" w:themeColor="text1"/>', 'theme text')}${run('<w:color w:val="1F1F1F" w:themeColor="background1"/>', ' theme page')}${run('<w:color w:val="4472C4" w:themeColor="accent1"/>', ' accent words')}${run('<w:color w:val="auto"/>', ' auto words')}${run('<w:color w:val="404040" w:themeColor="text1" w:themeTint="BF"/>', ' tinted text')}</w:p>`

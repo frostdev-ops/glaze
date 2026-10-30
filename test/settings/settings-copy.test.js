@@ -23,7 +23,7 @@ test('the master switch has a visible label', () => {
 });
 
 test('no taglines or site lines on the settings page', () => {
-  for (const f of ['options.html', 'options.js', 'lib/editor-xparts.js']) {
+  for (const f of ['options.html', 'settings/options.js', 'settings/editor-xparts.js']) {
     assert.doesNotMatch(read(f), /section-note|site-scope/, f);
   }
 });
@@ -56,12 +56,12 @@ test('a "?" opens a trimmed description', () => {
 });
 
 // Where each works, from the code: content.js loads the site parts (content-canvas.js, content-ultra.js; Moodle has none of
-// their X.* hooks), moodle.css styles Moodle, features/moodle.js and features/navbar-moodle.js serve it.
+// their X.* hooks), moodle.css styles Moodle, courses/page/moodle.js and navigation/page/navbar-moodle.js serve it.
 const SHORT = { Canvas: 'Canvas', 'Blackboard Ultra': 'Blackboard', Moodle: 'Moodle' };
 const ALL = ['Canvas', 'Blackboard Ultra', 'Moodle'];
 const LMS_SECTIONS = {
   'look/palette': ALL, 'look/type': ALL, 'look/surfaces': ALL, 'look/background': ALL, 'look/motion': ALL, 'look/pointer': ALL,
-  // Rotation runs in the worker; stickers through the command palette, which loads features/lookx.js on Moodle too.
+  // Rotation runs in the worker; stickers through the command palette, which loads looks/page/lookx.js on Moodle too.
   'look/extras': ALL, 'look/nav-layout': ALL, 'look/rules': ALL,
   'navigation/bar': ALL, 'navigation/items': ALL,
   // No course tabs or sidebar on Moodle: content.js's Moodle sheets hold neither.
@@ -83,13 +83,13 @@ const SETTING_BADGES = {
   'navbar.cmenu': 'Canvas · Moodle', // GZ_NAVBAR_ULTRA has no course menu
   'navbar.tabs': 'Canvas · Blackboard',
   'sidebar.absorb': 'Blackboard',
-  'card.create': 'Canvas', // features/cards.js: if (!ultra)
+  'card.create': 'Canvas', // courses/page/cards.js: if (!ultra)
   'todo.teacher': 'Canvas', 'todo.progress': 'Canvas', 'todo.sync': 'Canvas', // Ultra never loads grading; ticks stay local there
-  'enhance.overall': 'Canvas · Blackboard · Moodle', // features/moodle.js, moodle.css
+  'enhance.overall': 'Canvas · Blackboard · Moodle', // courses/page/moodle.js, moodle.css
   'enhance.docTheme': 'Canvas', 'enhance.docInk': 'Canvas', 'enhance.quizLight': 'Canvas',
   'declutter.faculty': 'Blackboard',
   footer: 'Canvas · Blackboard · Moodle', // content.js syncFooter, moodle.css #gz-footer
-  'enhance.search': 'Canvas · Blackboard', // features/palette.js: !moodle
+  'enhance.search': 'Canvas · Blackboard', // navigation/page/palette.js: !moodle
 };
 const badge = (sites) => sites.map((s) => SHORT[s]).join(' · ');
 
@@ -123,15 +123,15 @@ test('site badges: only where something does not work on all three sites, and tr
   for (const k of kinds) assert.ok(['Canvas', 'Blackboard', 'Moodle', 'Canvas · Blackboard', 'Canvas · Moodle', 'Canvas · Blackboard · Moodle'].includes(k), k);
 });
 
-test('course tabs offer every place lib/coursetabs.js knows, Automatic first', () => {
-  require('../../extension/defaults.js');
-  const CT = require('../../extension/lib/coursetabs.js');
+test('course tabs offer every place navigation/coursetabs.js knows, Automatic first', () => {
+  require('../../extension/content/defaults.js');
+  const CT = require('../../extension/navigation/coursetabs.js');
   const values = [...main.matchAll(/<input type="radio" name="tabs\.at" value="([^"]+)">([^<]+)<\/label>/g)];
   assert.deepEqual(values.map((m) => m[1]).sort(), [...CT.SPEC.at[1]].sort());
   assert.deepEqual([values[0][1], values[0][2]], ['auto', 'Automatic']);
   assert.equal(CT.SPEC.at[0], 'auto', 'the default is the one listed first');
   // The note about Only in the navigation shows only for it.
-  assert.match(read('options.js'), /\$\('#tabs \[data-tabs-nav-note\]'\)\.hidden = s\.tabs\.at !== 'nav' \|\| \(s\.navbar\.on && s\.navbar\.tabs\);/);
+  assert.match(read('settings/options.js'), /\$\('#tabs \[data-tabs-nav-note\]'\)\.hidden = s\.tabs\.at !== 'nav' \|\| \(s\.navbar\.on && s\.navbar\.tabs\);/);
 });
 
 test('labels say what the code does', () => {
@@ -147,9 +147,9 @@ test('labels say what the code does', () => {
   assert.match(text, /Highlight urgent work in To Do/);
   assert.match(main.slice(main.indexOf('data-key="declutter.banner"'), main.indexOf('</label>', main.indexOf('data-key="declutter.banner"'))), /Canvas: the pictures on Dashboard cards/);
   assert.doesNotMatch(main.slice(main.indexOf('<div class="nav-own"'), main.indexOf('<div class="stack" data-show="logo">')), />[^<]*Sidebar[^<]*</, 'the site navigation is not the sidebar');
-  assert.doesNotMatch(read('options.js'), /sidebar contrast|Sidebar contrast/);
+  assert.doesNotMatch(read('settings/options.js'), /sidebar contrast|Sidebar contrast/);
   assert.equal((main.match(/>Better To Do</g) || []).length, 1, 'one Better To Do');
-  assert.doesNotMatch(read('lib/editor-xparts.js'), /Blackboard › Blackboard navigation/);
+  assert.doesNotMatch(read('settings/editor-xparts.js'), /Blackboard › Blackboard navigation/);
   const preview = html.slice(html.indexOf('<aside class="preview"'), html.indexOf('</aside>', html.indexOf('<aside class="preview"')));
   assert.doesNotMatch(preview, /Sidebar colors|Synthetic local pages|CSS px/);
 });

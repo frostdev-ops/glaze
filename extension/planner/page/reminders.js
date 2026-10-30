@@ -1,14 +1,14 @@
 // Reminders and streak (W11), on Canvas and Blackboard Ultra: the student's own opt-in, every part off by default
 // (enhance.remind, remindExam, remindPlan, remindClass, streak). The site's part loads this (need) in the top frame of its
-// pages only while one of them is on, and calls sync(on) from content.js's passes; the logic is lib/remind.js. Nothing
+// pages only while one of them is on, and calls sync(on) from content.js's passes; the logic is planner/remind.js. Nothing
 // leaves the page: no notifications permission, no badge, no sound. A reminder is a toast in the page's corner (one at a
 // time, never taking focus, shown only in the tab being looked at, never on a quiz or test being taken or a tool's page)
 // and a hub from the To Do header and the command palette. One setTimeout to the next reminder, set again when the page is
 // shown or focused, and at most ten minutes long (a timer stalls while the computer sleeps): never a poll.
 // It reads the shared planner answer (storage.local todoCache) and asks the site itself (Canvas's planner; Ultra's To
-// Do, calendar and gradebooks, lib/ultra.js page.due) only when that is missing or ten minutes old and neither the To Do
+// Do, calendar and gradebooks, courses/ultra.js page.due) only when that is missing or ten minutes old and neither the To Do
 // list nor the card tasks are on the page to ask. What's seen, snoozed, muted and the streak are kept on this device
-// (storage.local remind:<site>/<user>) through the worker's queue (lib/background.js 'glaze:remind'), apart from the
+// (storage.local remind:<site>/<user>) through the worker's queue (background/background.js 'glaze:remind'), apart from the
 // site's own read state, which nothing here touches.
 // Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
@@ -29,15 +29,15 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   let busy = false, wait = 0; // a claim in flight; no new one before wait (the worker didn't answer)
   let unacked = null; // { ids, lease }: a toast drawn whose acknowledgement the worker hasn't kept yet
   const drawn = new Set(); // every reminder this page has drawn, for the page's life
-  const tab = crypto.randomUUID(); // this page, to the worker's leases (lib/remind.js claim and confirm)
+  const tab = crypto.randomUUID(); // this page, to the worker's leases (planner/remind.js claim and confirm)
   let live = null, hub = null, opener = null, run = null; // run: the streak as reckoned last
-  let gs = null; // Gradescope's items for this site (lib/todo.js gradescope)
+  let gs = null; // Gradescope's items for this site (planner/todo.js gradescope)
   const sources = new Map(); // reminders other packages add (class start W14, study W18): name -> () => events
-  // Class start (enhance.remindClass): the class schedule kept on this device (lib/classes.js, storage.local classes:<site>/<user>).
+  // Class start (enhance.remindClass): the class schedule kept on this device (planner/classes.js, storage.local classes:<site>/<user>).
   let classes = null, ckey = '';
   sources.set('class', () => {
     if (!en().remindClass || !classes) return [];
-    if (!globalThis.GZ_CLASSES) { ctx.need('lib/classes.js', () => globalThis.GZ_CLASSES).then(() => { if (on) arm(); }, () => {}); return []; }
+    if (!globalThis.GZ_CLASSES) { ctx.need('planner/classes.js', () => globalThis.GZ_CLASSES).then(() => { if (on) arm(); }, () => {}); return []; }
     return GZ_CLASSES.events(classes, { now: Date.now(), tz: who.tz, lead: +o.cls });
   });
 
@@ -63,7 +63,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     return s;
   };
 
-  // ---- Canvas's planner, as the list asks for it (features/todo.js and cardtasks.js), kept in the list's shape ----
+  // ---- Canvas's planner, as the list asks for it (planner/page/todo.js and cardtasks.js), kept in the list's shape ----
   const pages = async (path) => {
     const out = [];
     let url = location.origin + path;
@@ -82,7 +82,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     const { start, end } = T.fetchRange(todoO, now, who.tz);
     let c, due;
     if (ultra) {
-      await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA);
+      await ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA);
       if (!on) throw new Error('off'); // turned off while it loaded: nothing is read
       const u = await GZ_ULTRA.page.due(Date.parse(start), Date.parse(end));
       c = { key: todoKey, at: now, start, end, teach: todoO.teacher, progress: todoO.progress, items: u.items, complete: u.complete, grading: [], sums: {} };
@@ -115,7 +115,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   };
 
   // ---- what's due when ----------------------------------------------------------------------------------------
-  // The list over the next eight days and the past month, as Better To Do counts it (lib/todo.js build).
+  // The list over the next eight days and the past month, as Better To Do counts it (planner/todo.js build).
   const reckon = (now) => {
     gs ||= T.gradescope(() => { if (on) arm(); });
     // Ultra has no planner to tick in: its ticks are this device's, as Better To Do's there.
@@ -234,11 +234,11 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   const hide = () => {
     const had = live?.contains(document.activeElement);
     if (had) document.querySelector('#gz-todo .gz-rm-bell, #gz-todo .gz-rm-streak')?.focus({ preventScroll: true });
-    // The toast sinks back as it fades (lib/motion.js), after the focus has left it: a going toast can't hold it.
+    // The toast sinks back as it fades (core/motion.js), after the focus has left it: a going toast can't hold it.
     if (live && globalThis.GZ_MOTION) for (const e of [...live.children]) GZ_MOTION.exit(e, { to: { translate: '0 8px' } });
     else live?.replaceChildren();
   };
-  // A class about to start, with the notes app on: its course's notes, a new note ready (features/notes.js).
+  // A class about to start, with the notes app on: its course's notes, a new note ready (planner/page/notes.js).
   const notesFor = (e) => (e.cat === 'class' && en().notes && e.url?.match(/^\/courses\/(\d+)$/)?.[1]) || '';
   const toast = (e, more) => {
     const now = Date.now();
@@ -258,7 +258,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     const id = ev.target.closest('[data-id]')?.dataset.id;
     if (act === 'hide') hide();
     else if (act === 'hub') { hide(); openHub(); }
-    else if (act === 'notes' && human(ev)) { const course = ev.target.closest('[data-course]')?.dataset.course; hide(); ctx.need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open({ course, create: true, event: ev }), () => {}); }
+    else if (act === 'notes' && human(ev)) { const course = ev.target.closest('[data-course]')?.dataset.course; hide(); ctx.need('planner/page/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open({ course, create: true, event: ev }), () => {}); }
     else if (act === 'snooze' && id && human(ev)) {
       hide();
       send({ op: 'snooze', id, until: Date.now() + H }).then((r) => {
@@ -313,7 +313,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     const titles = new Map([...b.groups.flatMap(([, l]) => l), ...b.done, ...b.graded].map((r) => [r.key, r.title]));
     const was = hub.contains(document.activeElement) ? document.activeElement.dataset.focus : null;
     const parts = [make('div', { className: 'gz-rm-top' }, make('h2', { id: 'gz-rm-title', textContent: t('Reminders') }), button('×', 'close', t('Close'))),
-      gs?.question(who.uid, t, 'gz-rm-gs')]; // Gradescope's one-time question (lib/todo.js gradescope), when there is one
+      gs?.question(who.uid, t, 'gz-rm-gs')]; // Gradescope's one-time question (planner/todo.js gradescope), when there is one
     if (en().streak && run) {
       const month = T.dayKey(T.dayOf(now, who.tz)).slice(0, 7);
       const n = R.left(st, month);
@@ -394,7 +394,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     if (!el) return;
     if (e.type === 'click' && el.dataset.act === 'close') return hub.close();
     if (e.type === 'click' && el.dataset.act === 'options') { try { Promise.resolve(chrome.runtime.sendMessage('options')).catch(() => {}); } catch { /* reloaded */ } return; }
-    if (e.type === 'click' && el.dataset.act === 'classes') { hub.close(); ctx.need('features/classes.js', () => globalThis.GZ_CLASSES_UI).then(() => GZ_CLASSES_UI.open()).catch(() => {}); return; }
+    if (e.type === 'click' && el.dataset.act === 'classes') { hub.close(); ctx.need('planner/page/classes.js', () => globalThis.GZ_CLASSES_UI).then(() => GZ_CLASSES_UI.open()).catch(() => {}); return; }
     if (!human(e)) { if (e.type === 'change') drawHub(); return; }
     const done = (r) => { if (r?.data) st = R.clean(r.data); arm(); };
     if (e.type === 'click' && el.dataset.act === 'mute') send({ op: 'mute', item: el.dataset.item }).then(done);
@@ -422,8 +422,8 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   };
   const onShow = () => { if (on && st && document.visibilityState === 'visible') { refresh(); arm(); } };
   const start = async () => {
-    await ctx.need('lib/todo.js', () => globalThis.GZ_TODO);
-    await ctx.need('lib/remind.js', () => globalThis.GZ_REMIND);
+    await ctx.need('planner/todo.js', () => globalThis.GZ_TODO);
+    await ctx.need('planner/remind.js', () => globalThis.GZ_REMIND);
     T = globalThis.GZ_TODO;
     R = globalThis.GZ_REMIND;
     const [p, list] = await Promise.all([ctx.profile(), ctx.canvasCourses(), readPrefs()]);
@@ -468,10 +468,10 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
 
   return {
     sync,
-    // The To Do list's header draws this (features/todo.js).
+    // The To Do list's header draws this (planner/page/todo.js).
     head: () => (on && st ? [headEl] : []),
     cmds: () => (on && st ? [{ label: t('Reminders'), hint: 'Glaze', group: 'Glaze', run: openHub }] : []),
-    // Later packages' reminders: fn returns events in lib/remind.js events()'s extra shape.
+    // Later packages' reminders: fn returns events in planner/remind.js events()'s extra shape.
     source: (name, fn) => { sources.set(name, fn); if (on && st) arm(); },
   };
 })();

@@ -1,5 +1,5 @@
 // The local model's weights in OPFS (navigator.storage.getDirectory()), for Glaze's own engine. A model comes from
-// lib/ai/local/models.json (scripts/model-manifest.js writes it): a Hugging Face file pinned to a commit, its size and the
+// ai/local/models.json (scripts/model-manifest.js writes it): a Hugging Face file pinned to a commit, its size and the
 // SHA-256 of each 64 MB chunk. download() fetches it by Range from huggingface.co's resolve URL, which redirects to HF's
 // CDN, on the student's click only. Each chunk is checked before the next starts and kept as its own file, so a
 // cancelled or killed download resumes from its verified chunks (a writable commits on close; rewriting one 1 GB file in
@@ -88,7 +88,7 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
     let catalog = null;
     const load = () => (catalog ||= (async () => {
       let list = typeof models === 'function' ? await models() : models;
-      if (!list) list = await (await globalThis.fetch(new URL('/lib/ai/local/models.json', globalThis.location.origin).href)).json();
+      if (!list) list = await (await globalThis.fetch(new URL('/ai/local/models.json', globalThis.location.origin).href)).json();
       if (list && !Array.isArray(list)) list = list.models;
       const map = new Map();
       for (const m of list || []) if (valid(m) && !map.has(m.id)) map.set(m.id, Object.freeze({ ...m, sha256: Object.freeze([...m.sha256]) }));

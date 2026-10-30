@@ -25,7 +25,7 @@ const rules = (file) => {
   walk(css);
   return out;
 };
-const THEME = rules('theme.css');
+const THEME = rules('content/theme.css');
 const LABEL = '.assessment-overview-grid > .overview-section > h2.section-label';
 const RESULTS_LABEL = '.assessment-overview-grid > .assessment-results-section > .assessment-results-header > h2.section-label';
 const RESULTS_WELL = '.assessment-results-section > .section-content';

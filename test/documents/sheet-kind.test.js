@@ -1,13 +1,13 @@
 // Spreadsheets on the Documents page: the storage layout (sheet-data.js: a book in the record, a part per sheet per 1,000-row
 // band, the change test, measure, search text, the 6×4 card text, packed versions), the worker's write path for parts
-// (lib/writer-papers.js), and sheet-kind.js's registration behind Settings → Writer → Spreadsheets (writer.sheets). The grid
+// (writer/writer-papers.js), and sheet-kind.js's registration behind Settings → Writer → Spreadsheets (writer.sheets). The grid
 // itself is checks/documents/sheets-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const M = require('../../extension/lib/sheet-model.js');
-const SD = require('../../extension/sheet-data.js');
-const PA = require('../../extension/lib/writer-papers.js');
+const M = require('../../extension/documents/sheets/sheet-model.js');
+const SD = require('../../extension/documents/sheets/sheet-data.js');
+const PA = require('../../extension/writer/writer-papers.js');
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 
 const put = (sh, r, c, cell) => { if (!sh.rows.has(r)) sh.rows.set(r, new Map()); sh.rows.get(r).set(c, cell); };
@@ -265,27 +265,27 @@ test('a sheet\'s versions are its packed copies, kept to 16 MB, the newest alway
 
 // sheet-kind.js in a context of its own: the registry, a storage.sync answering writer.sheets, defaults.js's sanitizer (as
 // writer.html has it), need() a no-op that keeps what it was asked for.
-const DEFAULTS = require('../../extension/defaults.js');
+const DEFAULTS = require('../../extension/content/defaults.js');
 const load = (writer, overrides = {}) => {
-  delete require.cache[require.resolve('../../extension/lib/doc-kinds.js')];
+  delete require.cache[require.resolve('../../extension/documents/doc-kinds.js')];
   delete globalThis.GZ_DOC_KINDS;
-  const DK = require('../../extension/lib/doc-kinds.js'), needed = [];
+  const DK = require('../../extension/documents/doc-kinds.js'), needed = [];
   const ctx = vm.createContext({ GZ_DOC_KINDS: DK, GZ_WRITER_PAPER: { need: async (files) => { needed.push(...files); } }, GZ_SANITIZE: DEFAULTS.GZ_SANITIZE, console, URL, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, RangeError, Error, Promise, Object, Array, String, Number, Math, JSON, Map, Set, btoa, atob, ...overrides,
     chrome: { storage: { sync: { get: async () => (writer === undefined ? {} : { writer }) }, local: overrides.local || { get: async () => ({}) } }, runtime: { getURL: (f) => `chrome-extension://x/${f}` } } });
   ctx.globalThis = ctx;
-  vm.runInContext(read('sheet-kind.js'), ctx);
+  vm.runInContext(read('documents/sheets/sheet-kind.js'), ctx);
   return { DK, ctx, needed };
 };
 
 test('papers.html loads sheet-kind.js after papers.js with its stylesheet; both package lists ship the sheet files', () => {
   const html = read('papers.html');
   const at = (src) => html.indexOf(`<script src="${src}"></script>`);
-  assert.ok(at('lib/doc-kinds.js') > 0 && at('lib/doc-kinds.js') < at('papers.js'), 'the registry before papers.js');
-  assert.ok(at('sheet-kind.js') > at('papers.js'), 'sheet-kind.js after papers.js');
-  assert.ok(html.includes('<link rel="stylesheet" href="sheet.css">'));
-  const pkg = read('../tools/build/package.sh').split('\n').filter((l) => / papers\.js /.test(l));
+  assert.ok(at('documents/doc-kinds.js') > 0 && at('documents/doc-kinds.js') < at('documents/papers.js'), 'the registry before papers.js');
+  assert.ok(at('documents/sheets/sheet-kind.js') > at('documents/papers.js'), 'sheet-kind.js after papers.js');
+  assert.ok(html.includes('<link rel="stylesheet" href="documents/sheets/sheet.css">'));
+  const pkg = read('../tools/build/package.sh').split('\n').filter((l) => / documents /.test(l));
   assert.equal(pkg.length, 2, 'chmod and zip');
-  for (const line of pkg) for (const f of ['sheet-kind.js', 'sheet-grid.js', 'sheet-data.js', 'sheet.css']) assert.ok(line.includes(` ${f} `), `${f} in: ${line.slice(0, 40)}…`);
+  for (const line of pkg) for (const f of ['documents/sheets/sheet-kind.js', 'documents/sheets/sheet-grid.js', 'documents/sheets/sheet-data.js', 'documents/sheets/sheet.css']) assert.ok(line.includes(` ${f.split('/')[0]} `), `${f} in: ${line.slice(0, 40)}…`);
 });
 
 test('off: spreadsheets still open, copy and export; Documents neither creates nor imports them', async () => {
@@ -316,7 +316,7 @@ test('with no switch stored (a fresh install, an update from 3.x) or an invalid 
 test('defaults.js loads, after what it stands on, only where the page has not loaded it already', async () => {
   const where = load(undefined, { GZ_SANITIZE: undefined });
   await where.DK.settled().catch(() => {});
-  assert.deepEqual(where.needed, ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js'], 'papers.html: on demand');
+  assert.deepEqual(where.needed, ['core/color.js', 'looks/surfaces.js', 'looks/fonts.js', 'content/defaults.js'], 'papers.html: on demand');
   const frame = load(undefined);
   await frame.DK.settled();
   assert.deepEqual(frame.needed, [], 'writer.html: already there, never twice');
@@ -348,7 +348,7 @@ test('the card is the record\'s 6×4 text; its text and measure come from the re
 });
 
 test('the card\'s columns take the active sheet\'s widths, in the grid\'s pixels, as shares of the card', async () => {
-  const { El } = require('../stand-in-dom.js'), { px } = require('../../extension/sheet-grid.js');
+  const { El } = require('../stand-in-dom.js'), { px } = require('../../extension/documents/sheets/sheet-grid.js');
   const doc = { createElement: (tag) => new El(tag, doc) };
   const { DK } = load({ sheets: true }, { document: doc });
   await DK.settled();
@@ -387,10 +387,10 @@ test('card width shares stay finite for oversized widths and keep empty or inval
 test('the assignment frame\'s hooks: view, into over a paper, empty', async () => {
   const s = store(), P = PA.open(s, () => 1000, { versions: async () => 40 }), K = 'bb.school.test|_900_1|_101_1|_7_1';
   await P.save(K, { kind: 'paper', doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'my draft' }] }] }, title: 'Lab 3' });
-  const G = require('../../extension/sheet-grid.js');
-  for (const f of ['date', 'math', 'info']) require(`../../extension/lib/sheet-fn-${f}.js`);
-  const { DK } = load({ sheets: true }, { local: s, GZ_WRITER_PAPERS: { ...PA, open: () => P }, GZ_SHEET_MODEL: M, GZ_SHEET_DATA: SD, GZ_SHEET_GRID: G, GZ_SHEET_XLSX: require('../../extension/lib/sheet-xlsx.js'), GZ_SHEET_CALC: require('../../extension/lib/sheet-calc.js'),
-    GZ_SHEET_NUMFMT: require('../../extension/lib/sheet-numfmt.js'), CompressionStream, DecompressionStream, Response, Blob });
+  const G = require('../../extension/documents/sheets/sheet-grid.js');
+  for (const f of ['date', 'math', 'info']) require(`../../extension/documents/sheets/sheet-fn-${f}.js`);
+  const { DK } = load({ sheets: true }, { local: s, GZ_WRITER_PAPERS: { ...PA, open: () => P }, GZ_SHEET_MODEL: M, GZ_SHEET_DATA: SD, GZ_SHEET_GRID: G, GZ_SHEET_XLSX: require('../../extension/documents/sheets/sheet-xlsx.js'), GZ_SHEET_CALC: require('../../extension/documents/sheets/sheet-calc.js'),
+    GZ_SHEET_NUMFMT: require('../../extension/documents/sheets/sheet-numfmt.js'), CompressionStream, DecompressionStream, Response, Blob });
   await DK.settled();
   const k = DK.get('sheet');
   assert.equal(typeof k.view, 'function');
@@ -506,7 +506,7 @@ test('import into an existing spreadsheet keeps the workbook it replaces as an i
   const s = store(), P = PA.open(s, () => 1000), wb = book();
   await SD.write(P, KEY, wb, new Map());
   const { DK } = load({ sheets: true }, { local: s, GZ_WRITER_PAPERS: { ...PA, open: () => P }, GZ_SHEET_MODEL: M, GZ_SHEET_DATA: SD,
-    GZ_SHEET_GRID: require('../../extension/sheet-grid.js'), GZ_SHEET_XLSX: require('../../extension/lib/sheet-xlsx.js'), GZ_SHEET_CALC: require('../../extension/lib/sheet-calc.js'), GZ_SHEET_NUMFMT: require('../../extension/lib/sheet-numfmt.js') });
+    GZ_SHEET_GRID: require('../../extension/documents/sheets/sheet-grid.js'), GZ_SHEET_XLSX: require('../../extension/documents/sheets/sheet-xlsx.js'), GZ_SHEET_CALC: require('../../extension/documents/sheets/sheet-calc.js'), GZ_SHEET_NUMFMT: require('../../extension/documents/sheets/sheet-numfmt.js') });
   await DK.settled();
   const bytes = new TextEncoder().encode('replacement\n');
   await DK.get('sheet').into(KEY, { name: 'new.csv', size: bytes.length, arrayBuffer: async () => bytes.buffer });
@@ -539,28 +539,28 @@ test('equal band hashes never discard different cell text', async () => {
   same((await SD.read((ks) => s.get(ks), KEY)).wb, wb);
 });
 
-// The .xlsx codecs (lib/sheet-xlsx.js, lib/zip.js, lib/doctext.js) load on demand: asked for before a file is read or
+// The .xlsx codecs (documents/sheets/sheet-xlsx.js, core/zip.js, core/doctext.js) load on demand: asked for before a file is read or
 // written, never with the page. A workbook whose parts couldn't all be read is kept, said once (an existing line).
 test('the codecs load on demand: an .xlsx read into the record, the file written as .xlsx, a left-out part said', async () => {
-  const X = require('../../extension/lib/sheet-xlsx.js');
+  const X = require('../../extension/documents/sheets/sheet-xlsx.js');
   const src = M.workbook();
   put(src.sheets[0], 0, 0, { t: 's', v: 'Name' }); put(src.sheets[0], 0, 1, { t: 'n', v: 91 });
   const bytes = await X.write(src);
   const s = store(), P = PA.open(s, () => 1000, { versions: async () => 40 }), K = 'bb.school.test|_900_1|_101_1|_7_1';
   await P.save(K, { kind: 'paper', doc: { type: 'doc', content: [] }, title: 'Lab 3' });
   const asked = [];
-  const G = require('../../extension/sheet-grid.js');
-  for (const f of ['date', 'math', 'info']) require(`../../extension/lib/sheet-fn-${f}.js`);
-  const ctx0 = { local: s, GZ_WRITER_PAPERS: { ...PA, open: () => P }, GZ_SHEET_MODEL: M, GZ_SHEET_DATA: SD, GZ_SHEET_GRID: G, GZ_SHEET_CALC: require('../../extension/lib/sheet-calc.js'),
-    GZ_SHEET_NUMFMT: require('../../extension/lib/sheet-numfmt.js'), CompressionStream, DecompressionStream, Response, Blob };
+  const G = require('../../extension/documents/sheets/sheet-grid.js');
+  for (const f of ['date', 'math', 'info']) require(`../../extension/documents/sheets/sheet-fn-${f}.js`);
+  const ctx0 = { local: s, GZ_WRITER_PAPERS: { ...PA, open: () => P }, GZ_SHEET_MODEL: M, GZ_SHEET_DATA: SD, GZ_SHEET_GRID: G, GZ_SHEET_CALC: require('../../extension/documents/sheets/sheet-calc.js'),
+    GZ_SHEET_NUMFMT: require('../../extension/documents/sheets/sheet-numfmt.js'), CompressionStream, DecompressionStream, Response, Blob };
   const { DK, ctx } = load({ sheets: true }, ctx0);
-  ctx.GZ_WRITER_PAPER = { need: async (files) => { asked.push(...files); if (files.includes('lib/sheet-xlsx.js')) ctx.GZ_SHEET_XLSX = X; } };
+  ctx.GZ_WRITER_PAPER = { need: async (files) => { asked.push(...files); if (files.includes('documents/sheets/sheet-xlsx.js')) ctx.GZ_SHEET_XLSX = X; } };
   await DK.settled();
   const k = DK.get('sheet');
-  assert.ok(!asked.includes('lib/sheet-xlsx.js'), 'nothing loaded with the page');
+  assert.ok(!asked.includes('documents/sheets/sheet-xlsx.js'), 'nothing loaded with the page');
   const file = (name, b) => ({ name, size: b.length, arrayBuffer: async () => b.buffer.slice(b.byteOffset, b.byteOffset + b.length) });
   const rec = await k.into(K, file('grades.xlsx', bytes));
-  for (const f of ['lib/doctext.js', 'lib/zip.js', 'lib/sheet-xlsx.js']) assert.ok(asked.includes(f), `${f} asked for before the read`);
+  for (const f of ['core/doctext.js', 'core/zip.js', 'documents/sheets/sheet-xlsx.js']) assert.ok(asked.includes(f), `${f} asked for before the read`);
   assert.equal(rec.kind, 'sheet');
   const got = await SD.read((ks) => s.get(ks), K);
   assert.deepEqual([got.wb.sheets[0].rows.get(0).get(0).v, got.wb.sheets[0].rows.get(0).get(1).v], ['Name', 91]);
@@ -596,13 +596,13 @@ test('a cell\'s dynamic-array and data-table fields (cm, vm, dt) survive a save'
 });
 
 test('concurrent import and submit wait for one codec load, preserving the XLSX name and MIME', async () => {
-  const X = require('../../extension/lib/sheet-xlsx.js'), s = store(), P = PA.open(s);
+  const X = require('../../extension/documents/sheets/sheet-xlsx.js'), s = store(), P = PA.open(s);
   let release, loads = 0, writes = 0;
   const gate = new Promise((ok) => { release = ok; });
   const { DK, ctx } = load({ sheets: true }, { local: s, GZ_WRITER_PAPERS: { ...PA, open: () => P },
-    GZ_SHEET_MODEL: M, GZ_SHEET_DATA: SD, GZ_SHEET_CALC: require('../../extension/lib/sheet-calc.js'),
-    GZ_SHEET_NUMFMT: require('../../extension/lib/sheet-numfmt.js'), CompressionStream, DecompressionStream, Response, Blob,
-    GZ_WRITER_PAPER: { need: async (files) => { if (files.includes('lib/sheet-xlsx.js')) { loads++; await gate; } } } });
+    GZ_SHEET_MODEL: M, GZ_SHEET_DATA: SD, GZ_SHEET_CALC: require('../../extension/documents/sheets/sheet-calc.js'),
+    GZ_SHEET_NUMFMT: require('../../extension/documents/sheets/sheet-numfmt.js'), CompressionStream, DecompressionStream, Response, Blob,
+    GZ_WRITER_PAPER: { need: async (files) => { if (files.includes('documents/sheets/sheet-xlsx.js')) { loads++; await gate; } } } });
   await DK.settled();
   const bytes = await X.write(M.workbook());
   const incoming = DK.get('sheet').into(KEY, { name: 'book.xlsx', size: bytes.length, arrayBuffer: async () => bytes.slice().buffer });
@@ -625,8 +625,8 @@ test('concurrent import and submit wait for one codec load, preserving the XLSX 
 test('failed or missing codecs reject file creation with a named error and can be retried', async () => {
   for (const missing of [false, true]) {
     let loads = 0;
-    const { DK, ctx } = load({ sheets: true }, { GZ_SHEET_NUMFMT: require('../../extension/lib/sheet-numfmt.js'), GZ_SHEET_GRID: require('../../extension/sheet-grid.js'),
-      console: { error() {} }, GZ_WRITER_PAPER: { need: async () => { loads++; if (!missing) throw new Error('lib/zip.js did not load'); } } });
+    const { DK, ctx } = load({ sheets: true }, { GZ_SHEET_NUMFMT: require('../../extension/documents/sheets/sheet-numfmt.js'), GZ_SHEET_GRID: require('../../extension/documents/sheets/sheet-grid.js'),
+      console: { error() {} }, GZ_WRITER_PAPER: { need: async () => { loads++; if (!missing) throw new Error('core/zip.js did not load'); } } });
     await DK.settled();
     await assert.rejects(ctx.GZ_SHEET_KIND.fileOf(M.workbook(), 'Lab'), (e) => e.code === 'codecs' && /load/i.test(e.message));
     assert.equal(loads, 1);
@@ -644,7 +644,7 @@ test('a kept workbook never mounts without the codec that tracks its edits', asy
     GZ_SHEET_DATA: { read: async () => ({ wb, sigs: new Map() }) },
     GZ_SHEET_GRID: { mount: () => { mounted = true; } },
     GZ_WRITER_PAPERS: { open: () => ({}), local: () => true },
-    GZ_WRITER_PAPER: { need: async (files) => { if (files.includes('lib/sheet-xlsx.js')) throw new Error('lib/zip.js did not load'); } } });
+    GZ_WRITER_PAPER: { need: async (files) => { if (files.includes('documents/sheets/sheet-xlsx.js')) throw new Error('core/zip.js did not load'); } } });
   await DK.settled();
   await assert.rejects(DK.get('sheet').view(KEY, {}), (e) => e.code === 'codecs');
   assert.equal(mounted, false);
@@ -665,15 +665,15 @@ test('the New spreadsheet tile leaves codecs unloaded until an actual workbook i
 });
 
 test('CSV and TSV imports use the codec byte reader and replace the prior tracking log', async () => {
-  const X = require('../../extension/lib/sheet-xlsx.js'), s = store(), P = PA.open(s), old = book();
+  const X = require('../../extension/documents/sheets/sheet-xlsx.js'), s = store(), P = PA.open(s), old = book();
   old.keep.log = [{ op: 'shift', sheet: 1, name: 'Sheet1', axis: 'row', at: 0, n: 1 }];
   await SD.write(P, KEY, old, new Map());
   const reads = [];
   const { DK, ctx } = load({ sheets: true }, { local: s, GZ_WRITER_PAPERS: { ...PA, open: () => P },
-    GZ_SHEET_MODEL: M, GZ_SHEET_DATA: SD, GZ_SHEET_GRID: require('../../extension/sheet-grid.js'),
-    GZ_SHEET_CALC: require('../../extension/lib/sheet-calc.js'), GZ_SHEET_NUMFMT: require('../../extension/lib/sheet-numfmt.js'),
+    GZ_SHEET_MODEL: M, GZ_SHEET_DATA: SD, GZ_SHEET_GRID: require('../../extension/documents/sheets/sheet-grid.js'),
+    GZ_SHEET_CALC: require('../../extension/documents/sheets/sheet-calc.js'), GZ_SHEET_NUMFMT: require('../../extension/documents/sheets/sheet-numfmt.js'),
     CompressionStream, DecompressionStream, Response, Blob });
-  ctx.GZ_WRITER_PAPER = { need: async (files) => { if (files.includes('lib/sheet-xlsx.js')) ctx.GZ_SHEET_XLSX = {
+  ctx.GZ_WRITER_PAPER = { need: async (files) => { if (files.includes('documents/sheets/sheet-xlsx.js')) ctx.GZ_SHEET_XLSX = {
     ...X, readDelimited: (bytes, opts) => { reads.push(opts.name); return X.readDelimited(bytes, opts); }
   }; } };
   await DK.settled();

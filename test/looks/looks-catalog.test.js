@@ -1,12 +1,12 @@
-// The Looks catalogue (lib/looks.js): built-in, saved and gallery Looks as one list with ids, and every reference to a Look by
+// The Looks catalogue (looks/looks.js): built-in, saved and gallery Looks as one list with ids, and every reference to a Look by
 // id (courses.looks, Look rotation), with old built-in names still read.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../../extension/defaults.js');
-const C = require('../../extension/lib/looks.js');
-const S = require('../../extension/lib/share.js');
-const LX = require('../../extension/lib/lookx.js');
-const H = require('../../extension/lib/history.js');
+const G = require('../../extension/content/defaults.js');
+const C = require('../../extension/looks/looks.js');
+const S = require('../../extension/sharing/share.js');
+const LX = require('../../extension/looks/lookx.js');
+const H = require('../../extension/looks/history.js');
 
 const look = (name) => G.GZ_LOOKS.find((L) => L.name === name);
 const wear = (name, s = G.GZ_DEFAULTS) => G.GZ_SANITIZE({ ...s, ...G.GZ_LOOK_APPLY(s, look(name)) });
@@ -153,7 +153,7 @@ test('kept identity follows the code even when an old entry carries another vali
 test('an ambiguous code hash is refused rather than wearing or removing another Look', () => {
   // Force the rare hash collision at the identity boundary; both original favorites must survive outside the catalogue.
   const context = vm.createContext({ GZ_LOOKS: G.GZ_LOOKS, GZ_LOOK_ON: G.GZ_LOOK_ON });
-  vm.runInContext(read('lib/looks.js').replace('`c:${hash(code)}`', "'c:00000000000000'"), context);
+  vm.runInContext(read('looks/looks.js').replace('`c:${hash(code)}`', "'c:00000000000000'"), context);
   const favorites = [{ code: 'first', name: 'One' }, { code: 'second', name: 'Two' }];
   assert.equal(context.GZ_CATALOG.keptAll(favorites).length, 0, 'neither ambiguous id may be picked');
   assert.equal(favorites.length, 2, 'originals stay available for recovery');
@@ -174,7 +174,7 @@ const worker = (local = {}, syncStore = {}) => {
   });
   const context = vm.createContext({
     URL, console: { ...console, warn() {} }, TextEncoder, TextDecoder, Blob, CompressionStream, DecompressionStream, btoa, atob, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto,
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), context); },
     chrome: {
       runtime: {
         id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'),
@@ -183,7 +183,7 @@ const worker = (local = {}, syncStore = {}) => {
       storage: { local: area(local, 'local'), sync: area(syncStore, 'sync'), onChanged: { addListener: (f) => changed.push(f) } },
     },
   });
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   const send = (msg, sender) => new Promise((res) => {
     let kept = false;
     for (const f of messages) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r)))) === true) kept = true;
@@ -233,7 +233,7 @@ test('a kept Look put on by id from the popup wears its code as "Use this theme"
   assert.equal(s.navbar.on, false, 'whether the bar is on stays the student\'s');
   assert.ok(w.sync.lookX, 'its parts went with it');
   const got = await S.decode(favorites[3].code);
-  const parts = await require('../../extension/lib/lookparts.js').fromStored(w.sync.lookX, { get: async () => ({}) });
+  const parts = await require('../../extension/looks/lookparts.js').fromStored(w.sync.lookX, { get: async () => ({}) });
   assert.deepEqual(parts, got.parts);
   const cat = await C.build(favorites, S.decode);
   assert.equal(C.worn({ ...s, parts }, C.list(cat))?.id, night.id, 'and it is the Look the picker shows pressed');
@@ -248,11 +248,11 @@ test('rotation turns to a kept Look ticked by id, and one ticked by its code bef
   }
 });
 
-test('lib/looks.js loads on demand as the worker injects it: it ends on a value, and a second injection keeps the first', () => {
+test('looks/looks.js loads on demand as the worker injects it: it ends on a value, and a second injection keeps the first', () => {
   const context = vm.createContext({ GZ_LOOKS: G.GZ_LOOKS, GZ_LOOK_ON: G.GZ_LOOK_ON });
-  const first = vm.runInContext(read('lib/looks.js'), context);
+  const first = vm.runInContext(read('looks/looks.js'), context);
   assert.ok(first, 'no last value: the worker would answer "did not finish"');
-  assert.equal(vm.runInContext(read('lib/looks.js'), context), first);
+  assert.equal(vm.runInContext(read('looks/looks.js'), context), first);
   assert.equal(vm.runInContext('GZ_CATALOG', context).list().length, G.GZ_LOOKS.length);
 });
 
@@ -268,7 +268,7 @@ test('a course page asks the worker for its Look\'s parts by id: a kept Look\'s 
   assert.deepEqual(got.parts, (await S.decode(gallery.code)).parts);
   assert.equal(got.parts.x.pointer, 'lava');
   assert.ok(got.parts.x.bg.shader.src.length > 100, 'the shader comes with it');
-  assert.deepEqual((await w.send({ type: 'glaze:looks', op: 'parts', id: 'Graveyard' }, w.popup)).parts, require('../../extension/lib/lookset.js')(look('Graveyard')));
+  assert.deepEqual((await w.send({ type: 'glaze:looks', op: 'parts', id: 'Graveyard' }, w.popup)).parts, require('../../extension/looks/lookset.js')(look('Graveyard')));
   assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'parts', id: 'c:00000000000000' }, w.popup), { ok: false, error: 'gone' });
   assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'parts', id: 'Nope' }, w.popup), { ok: false, error: 'sender' });
 });

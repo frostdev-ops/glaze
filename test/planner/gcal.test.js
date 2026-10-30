@@ -1,9 +1,9 @@
-// Google Calendar sync (lib/gcal.js) against a local mock of Google's API (checks/mocks/gcal-mock.js, 127.0.0.1 only): connect,
+// Google Calendar sync (planner/gcal.js) against a local mock of Google's API (checks/mocks/gcal-mock.js, 127.0.0.1 only): connect,
 // create, incremental update, delete, the conflict rule, 401 token refresh, 429 backoff, link another device, disconnect.
 // Nothing here reaches Google: every request is checked to go to the mock.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../../extension/lib/gcal.js');
+const G = require('../../extension/planner/gcal.js');
 const M = require('../../checks/mocks/gcal-mock.js');
 
 const SRC = 'https://canvas.test/3';
@@ -254,13 +254,13 @@ test('Google only: the addresses, the one scope, and the manifest\'s client aski
   assert.ok(!m.permissions.includes('identity') && !m.permissions.includes('identity.email') && !('key' in m), 'optional, never identity.email, no dev key');
 });
 
-// ---- the worker's side (lib/background.js 'glaze:gcal'), with Chrome's identity API stubbed and Google's addresses
+// ---- the worker's side (background/background.js 'glaze:gcal'), with Chrome's identity API stubbed and Google's addresses
 // mapped onto the mock (anything else is refused) ----
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
-// on: the build-time switch (lib/gcal.js ON) turned on in the worker's copy, as tools/dev/dev-gcal.sh does.
+// on: the build-time switch (planner/gcal.js ON) turned on in the worker's copy, as tools/dev/dev-gcal.sh does.
 const switched = (src, on) => (on ? src.replace('  const ON = false;\n', '  const ON = true;\n') : src);
 // failSet(patch): a storage write that fails, as a full disk or a quota does. identity.hold: what getAuthToken waits on.
 const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet = () => false } = {}) => {
@@ -305,7 +305,7 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
       assert.ok(url.startsWith(`${G.API}/`) || url === G.REVOKE, `only Google's two addresses: ${url}`);
       return fetch(url.replace(G.API, mock.api).replace(G.REVOKE, mock.revoke), init);
     },
-    importScripts: (...files) => { for (const f of files) vm.runInContext(switched(read(`lib/${f}`), on && f === 'gcal.js'), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(switched(read(`background/${f}`), on && f === '../planner/gcal.js'), context); },
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         onInstalled: { addListener: (f) => (listeners.installed ||= []).push(f) }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
@@ -320,16 +320,16 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
       },
     },
   });
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   const send = (m, sender) => new Promise((res) => { for (const f of listeners) f(structuredClone(m), sender, (r) => res(structuredClone(r))); });
   // change(): a change made elsewhere (the popup, the editor), heard as Chrome tells it.
   const change = (name, patch) => { const c = Object.fromEntries(Object.keys(patch).map((k) => [k, { oldValue: store[name][k], newValue: patch[k] }])); Object.assign(store[name], patch); fire(name, c); };
   return { store, identity, asked, send, hooks, change, registered: () => registered, install: () => { for (const f of listeners.installed) f(); } };
 };
-// What the page sends with its batch (lib/calexport.js consent), worked out from the worker's storage as it is now.
-const D = require('../../extension/defaults.js');
-const T = require('../../extension/lib/todo.js');
-const X = require('../../extension/lib/calexport.js');
+// What the page sends with its batch (planner/calexport.js consent), worked out from the worker's storage as it is now.
+const D = require('../../extension/content/defaults.js');
+const T = require('../../extension/planner/todo.js');
+const X = require('../../extension/planner/calexport.js');
 const consentOf = (w, who = SITE_SRC) => { const z = D.GZ_SANITIZE(w.store.sync); return X.consent(z, z.todo, w.store.local.gradescope, who); };
 const EDITOR = { id: 'glaze', url: 'chrome-extension://x/options.html#gcal' };
 const PAGE = { id: 'glaze', tab: { id: 4 }, frameId: 0, url: 'https://school.instructure.com/courses/7' };
@@ -348,7 +348,7 @@ withMock('worker: only the editor connects; a page syncs only its own site\'s ac
   assert.ok(mock.calendars.has(cal));
   assert.equal(w.store.local.gcal.owner, 'student@example.edu');
   const reg = structuredClone(w.registered().find((s) => s.id === 'gz-gcal'));
-  assert.deepEqual([reg.js, reg.matches, reg.excludeMatches], [['features/gcal.js'], ['https://*.instructure.com/*', 'https://*.blackboard.com/ultra', 'https://*.blackboard.com/ultra/*'], ['https://canvadocs.instructure.com/*']]);
+  assert.deepEqual([reg.js, reg.matches, reg.excludeMatches], [['planner/page/gcal.js'], ['https://*.instructure.com/*', 'https://*.blackboard.com/ultra', 'https://*.blackboard.com/ultra/*'], ['https://canvadocs.instructure.com/*']]);
   assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR), { ok: false, error: 'connected' }, 'one calendar per connection');
   assert.deepEqual(await sync({ src: 'https://other.instructure.com/3' }), { ok: false, error: 'sender' });
   assert.deepEqual(await sync({ src: SITE_SRC, from: 'soon' }), { ok: false, error: 'sender' });
@@ -397,16 +397,16 @@ withMock('worker: disconnect deletes the calendar when asked, revokes the grant,
   assert.equal(mock.calendars.size, 1, 'kept, as chosen');
 });
 
-// ---- the build-time switch (lib/gcal.js ON): off in the repo and the store package until Google verifies the app ----
+// ---- the build-time switch (planner/gcal.js ON): off in the repo and the store package until Google verifies the app ----
 test('switch off (the repo as it is): no settings section, no sync, no page script, even with a connection left from a dev build', async () => {
-  assert.equal(G.ON, false, 'lib/gcal.js ON stays false until Google verifies the app');
+  assert.equal(G.ON, false, 'planner/gcal.js ON stays false until Google verifies the app');
   // The section is hidden in the page itself, and only the switch shows it; the editor loads the switch.
   assert.match(read('options.html'), /<div class="group" id="gcal" hidden>/);
-  assert.match(read('options.html'), /<script src="lib\/gcal\.js"><\/script>[\s\S]*<script src="options\.js"><\/script>/);
-  const js = read('options.js');
+  assert.match(read('options.html'), /<script src="planner\/gcal\.js"><\/script>[\s\S]*<script src="settings\/options\.js"><\/script>/);
+  const js = read('settings/options.js');
   const gate = js.indexOf('if (GZ_GCAL.ON) {');
   assert.ok(gate > 0 && js.indexOf("$('#gcal').hidden = false") > gate && js.indexOf("type: 'glaze:gcal'") > gate, 'everything for it sits behind the switch');
-  assert.ok(!/gcal|Google Calendar/i.test(read('features/palette.js')), 'no palette entry');
+  assert.ok(!/gcal|Google Calendar/i.test(read('navigation/page/palette.js')), 'no palette entry');
   const mock = await M.start();
   try {
     const w = worker(mock, { on: false, local: { gcal: { gen: 'g', cal: 'c_1@group.calendar.google.com', last: {} }, canvas: [] } });
@@ -415,7 +415,7 @@ test('switch off (the repo as it is): no settings section, no sync, no page scri
     }
     w.install();
     await settle();
-    assert.ok(!w.registered().some((s) => s.id === 'gz-gcal'), 'features/gcal.js never registered');
+    assert.ok(!w.registered().some((s) => s.id === 'gz-gcal'), 'planner/page/gcal.js never registered');
     const on = worker(mock, { local: { gcal: { gen: 'g', cal: 'c_1@group.calendar.google.com', last: {} }, canvas: [], ultra: ['https://bb.school.edu'] } });
     on.install();
     await settle();
@@ -439,10 +439,10 @@ test('the store package leaves Google sync out while the switch is off; scripts/
     const packed = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json']));
     const { oauth2, optional_permissions: optional, ...rest } = repo, store = optional.filter((p) => p !== 'identity');
     assert.deepEqual(packed, store.length ? { ...rest, optional_permissions: store } : rest, 'the store manifest: the same, without oauth2 and the optional identity permission');
-    assert.match(execFileSync('unzip', ['-p', zip, 'lib/gcal.js']).toString(), /\n {2}const ON = false;\n/);
+    assert.match(execFileSync('unzip', ['-p', zip, 'planner/gcal.js']).toString(), /\n {2}const ON = false;\n/);
     const dev = JSON.parse(fs.readFileSync(path.join(dir, 'dev/manifest.json')));
     assert.deepEqual([dev.oauth2, dev.optional_permissions, dev.key], [oauth2, repo.optional_permissions, fs.readFileSync(keyFile, 'utf8')]);
-    assert.match(fs.readFileSync(path.join(dir, 'dev/lib/gcal.js'), 'utf8'), /\n {2}const ON = true;\n/);
+    assert.match(fs.readFileSync(path.join(dir, 'dev/planner/gcal.js'), 'utf8'), /\n {2}const ON = true;\n/);
     assert.equal(G.ON, false, "the repo's switch is untouched");
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
@@ -531,7 +531,7 @@ withMock('review: a plan change that can\'t be written here isn\'t taken as done
   assert.equal(mock.calendars.get(cal).events.get(on).start.date, '2026-10-21', 'and is never written over from here');
 });
 
-// The page's own compose (features/calexport.js, as features/gcal.js calls it), reading the same storage as the worker.
+// The page's own compose (planner/page/calexport.js, as planner/page/gcal.js calls it), reading the same storage as the worker.
 const composer = (store) => {
   const get = (area) => (keys, cb) => { const all = structuredClone(store[area]); cb(keys === null ? all : Object.fromEntries([keys].flat().filter((k) => k in all).map((k) => [k, all[k]]))); };
   const planner = [{ plannable_type: 'assignment', plannable_id: '1', course_id: '7', context_name: 'Biology', plannable: { title: 'Lab 1' }, plannable_date: '2026-10-20T03:59:00Z', html_url: '/courses/7/assignments/1' }];
@@ -544,7 +544,7 @@ const composer = (store) => {
       profile: async () => ({ id: '3', time_zone: 'America/New_York' }), canvasCourses: async () => [{ id: '7', name: 'Biology' }] },
   });
   vm.runInContext('globalThis.globalThis = this; Date.UTC = Object.getPrototypeOf(Date).UTC; Date.parse = Object.getPrototypeOf(Date).parse;', c);
-  for (const f of ['lib/color.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/todo.js', 'lib/ics.js', 'lib/calexport.js', 'lib/gradescope.js', 'lib/classes.js', 'features/calexport.js']) vm.runInContext(read(f), c);
+  for (const f of ['core/color.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'planner/todo.js', 'planner/ics.js', 'planner/calexport.js', 'planner/gradescope.js', 'planner/classes.js', 'planner/page/calexport.js']) vm.runInContext(read(f), c);
   return () => c.GZ_CAL_UI.compose(null, () => true);
 };
 
@@ -566,7 +566,7 @@ withMock('review (P1): the Gradescope answer taken back while the token is await
   const n = w.identity.asked;
   const running = send(c);
   await until(() => w.identity.asked > n);
-  w.store.local.gradescope.bind[SITE_SRC].show = false; // "Not here", as lib/gradescope.js keeps it
+  w.store.local.gradescope.bind[SITE_SRC].show = false; // "Not here", as planner/gradescope.js keeps it
   open();
   assert.deepEqual(await running, { ok: false, error: 'stopped' });
   assert.deepEqual(eventWrites(mock), [], 'neither HW 3 nor anything else from that batch');
@@ -577,7 +577,7 @@ withMock('review (P1): the Gradescope answer taken back while the token is await
   assert.deepEqual(mock.live(cal).map((e) => e.summary), ['Lab 1']);
 });
 
-// Blackboard Ultra pages are a source too (B2): the page composes from Ultra's due items (lib/ultra.js page.due, as
+// Blackboard Ultra pages are a source too (B2): the page composes from Ultra's due items (courses/ultra.js page.due, as
 // content-ultra.js gives them: links whole, on the site), and the worker takes the batch only from an Ultra page of that
 // account's own site.
 const ULTRA = 'https://bb.example.edu', ULTRA_SRC = `${ULTRA}/_900_1`;
@@ -590,13 +590,13 @@ const ultraComposer = (store) => {
     TextEncoder, URL, Date: class extends Date { constructor(...a) { super(...(a.length ? a : [NOW])); } static now() { return NOW; } },
     location: { origin: ULTRA, host: 'bb.example.edu' },
     chrome: { runtime: {}, storage: { sync: { get: get('sync') }, local: { get: get('local') } } },
-    fetch: async () => { throw new Error('an Ultra page asks lib/ultra.js, never Canvas'); },
+    fetch: async () => { throw new Error('an Ultra page asks courses/ultra.js, never Canvas'); },
     GZ_ULTRA: { page: { due: async (from, to) => { asked.push([from, to]); return { items: items.filter((i) => i.at >= from && i.at < to), complete: true }; } } },
     GZ_CTX: { site: 'ultra', t: (k, v = {}) => k.replace(/\{(\w+)\}/g, (_, x) => v[x]), need: async () => {}, settings: () => D.GZ_SANITIZE(store.sync),
       profile: async () => ({ id: '_900_1', time_zone: 'America/New_York' }), canvasCourses: async () => [{ id: '_101_1', name: 'Biology' }] },
   });
   vm.runInContext('globalThis.globalThis = this; Date.UTC = Object.getPrototypeOf(Date).UTC; Date.parse = Object.getPrototypeOf(Date).parse;', c);
-  for (const f of ['lib/color.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/todo.js', 'lib/ics.js', 'lib/calexport.js', 'lib/gradescope.js', 'lib/classes.js', 'features/calexport.js']) vm.runInContext(read(f), c);
+  for (const f of ['core/color.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'planner/todo.js', 'planner/ics.js', 'planner/calexport.js', 'planner/gradescope.js', 'planner/classes.js', 'planner/page/calexport.js']) vm.runInContext(read(f), c);
   return { compose: () => c.GZ_CAL_UI.compose(null, () => true), asked };
 };
 
@@ -618,8 +618,8 @@ withMock('Ultra pages sync too: the page composes from Ultra\'s due items, and t
   assert.equal((await send(ULTRA_SRC, page)).ok, true);
   assert.deepEqual(mock.live(cal).map((e) => e.summary), ['Lab 1']);
   assert.ok(w.store.local.gcal.last[ULTRA_SRC] > 0);
-  // The page side runs there too, by the site's part and its _N_N account (features/gcal.js).
-  assert.match(read('features/gcal.js'), /ctx\.site !== 'canvas' && ctx\.site !== 'ultra'/);
+  // The page side runs there too, by the site's part and its _N_N account (planner/page/gcal.js).
+  assert.match(read('planner/page/gcal.js'), /ctx\.site !== 'canvas' && ctx\.site !== 'ultra'/);
 });
 
 // ---- Codex's fix verification (W13): a change while a guard's own read is on its way. Each failed before its fix. ----
@@ -695,13 +695,13 @@ test('review (B2): the page tells the worker whether its batch was read whole, a
     });
     c.window.top = c.window;
     c.globalThis = c;
-    vm.runInContext(read('features/gcal.js'), c);
+    vm.runInContext(read('planner/page/gcal.js'), c);
   });
   await run1(false);
   await run1(true);
   await run1(undefined); // a Canvas page's compose has no whole: its reads are whole
   assert.deepEqual(sent.map((m) => [m.src, m.whole]), [['https://bb.example.edu/_900_1', false], ['https://bb.example.edu/_900_1', true], ['https://bb.example.edu/_900_1', true]]);
-  assert.match(read('lib/background.js'), /typeof m\.whole !== 'boolean'\) return \{ ok: false, error: 'sender' \}/); // an omitted flag is refused, never taken as whole
+  assert.match(read('background/background.js'), /typeof m\.whole !== 'boolean'\) return \{ ok: false, error: 'sender' \}/); // an omitted flag is refused, never taken as whole
 });
 
 withMock('review (B2 residual): a batch that doesn\'t say it was read whole deletes nothing for being missing', async (mock) => {

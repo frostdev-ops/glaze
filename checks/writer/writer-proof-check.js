@@ -85,7 +85,7 @@ const rss = (profile) => {
       return r.fulfill({ contentType: 'application/json', body: JSON.stringify(data) });
     });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
-    const G = require(path.join(root, 'defaults.js'));
+    const G = require(path.join(root, 'content/defaults.js'));
     const settings = G.GZ_SANITIZE({ navbar: { on: false }, footer: false, preset: 'Frost', enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, drafts: true } });
     await worker.evaluate(async ({ settings, sites }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings); await chrome.storage.local.set({ ultra: sites }); }, { settings, sites: SITES });
     const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/popup.html`); await env.ultraReady(opts); await opts.close();
@@ -221,7 +221,7 @@ const rss = (profile) => {
     memory.sixTabs = rss(profile);
 
     // ---- idle: the worker closes, the next lint brings it back ----
-    await frames[0].fr.evaluate(() => { const w = new SharedWorker('lib/harper/shared.js', { type: 'module', name: 'glaze-harper' }); w.port.start(); w.port.postMessage({ op: 'idle', ms: 2000 }); });
+    await frames[0].fr.evaluate(() => { const w = new SharedWorker('vendor/harper/shared.js', { type: 'module', name: 'glaze-harper' }); w.port.start(); w.port.postMessage({ op: 'idle', ms: 2000 }); });
     await pause(4000);
     memory.idle = rss(profile);
     await p.bringToFront();

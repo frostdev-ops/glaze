@@ -15,8 +15,8 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const G = require('../../extension/defaults.js');
-const I = require('../../extension/lib/i18n.js');
+const G = require('../../extension/content/defaults.js');
+const I = require('../../extension/core/i18n.js');
 for (const l of ['de', 'es', 'fr', 'nl', 'pt-BR']) require(`../../extension/i18n/${l}.js`);
 const { SCORE } = require('./import-truth.js');
 
@@ -41,7 +41,7 @@ const frames = (page) => page.evaluate(() => document.querySelectorAll('iframe[s
   const m = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
   // Glaze's first script is one entry per site (content-ultra.js, content-canvas.js): localhost gets Canvas's, as
   // tools/dev/canvas-shots.js does.
-  const glaze = m.content_scripts.filter((e) => e.js.at(-1) === 'content.js');
+  const glaze = m.content_scripts.filter((e) => e.js.at(-1) === 'content/content.js');
   for (const e of [...m.content_scripts.filter((x) => !glaze.includes(x)), ...m.web_accessible_resources]) e.matches.push('http://localhost/*');
   m.content_scripts.push({ ...glaze.find((e) => e.matches.includes('https://*.instructure.com/*')), matches: ['http://localhost/*'], exclude_matches: undefined });
   m.host_permissions.push('http://localhost/*');

@@ -4,9 +4,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http'), net = require('node:net');
 const NET = require('../../tools/dev/practice-ai.js');
-const T = require('../../extension/lib/ai/task.js');
-require('../../extension/lib/ai/tasks/writer-feedback.js'); require('../../extension/lib/ai/tasks/writer-complete.js'); require('../../extension/lib/ai/tasks/writer-decide.js');
-const X = require('../../extension/lib/ai/text.js');
+const T = require('../../extension/ai/task.js');
+require('../../extension/ai/tasks/writer-feedback.js'); require('../../extension/ai/tasks/writer-complete.js'); require('../../extension/ai/tasks/writer-decide.js');
+const X = require('../../extension/ai/text.js');
 
 // A raw request through the proxy: the first line of its answer, or 'closed' when the proxy drops the connection.
 const through = (port, lines) => new Promise((resolve) => {
@@ -60,7 +60,7 @@ test('the stand-in\'s Feedback, gray text and autocorrect call pass Writer\'s ow
 });
 
 test('the practice visual reader answers both harness and Chat Completions image requests within Writer bounds', () => {
-  const I = require('../../extension/lib/ai/tasks/writer-image.js'), R = require('../../extension/lib/ai/request.js'), O = require('../../extension/lib/ai/providers/openai.js');
+  const I = require('../../extension/ai/tasks/writer-image.js'), R = require('../../extension/ai/request.js'), O = require('../../extension/ai/providers/openai.js');
   const input = I.input({ name: 'explore3.png', image: { mime: 'image/png', data: 'iVBORw0KGgo=' }, context: { assignment: { title: 'Essay 2', instructions: 'Compare two scenes.' } } });
   const request = I.build(input);
   for (const messages of [request.messages, R.clean(request).messages.map(O.toWire)]) {

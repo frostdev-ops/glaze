@@ -647,7 +647,7 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
   const bytes = (s) => (typeof s === 'string' && B64.test(s) ? Buffer.from(s, 'base64url') : null);
   const sigOf = (s) => (typeof s === 'string' && SIG.test(s) ? Buffer.from(s, 'base64url') : null);
   // What a signature covers: the session, the kind, its place (a batch's number, a trim's end, a file's id, a create's
-  // expiry), then the bytes, in one of two formats; lib/sharing.js makes the same. gzs1, which older versions write:
+  // expiry), then the bytes, in one of two formats; sharing/sharing.js makes the same. gzs1, which older versions write:
   // `gzs1|<sid>|<kind>|<extra>`, then the bytes. Nothing ends `extra`, so a batch's signature over bytes that start with
   // a digit also held at a longer number: a read link's holder could take a later place in the log with a copy no member
   // can open. gzs2: "gzs2", then sid, kind, extra and the bytes, each after its length in 4 bytes (big-endian).
@@ -674,7 +674,7 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
   };
   // A write taken in gzs2, in the transaction that takes it: from then on, the session takes gzs2 only.
   const took = (row, v) => { if (v === 2 && row.gzs !== 2) q.gzs2.run(row.sid); };
-  // A share id bound to a key (lib/sharing.js createBound): these four bytes, then the first 12 of SHA-256('glaze share
+  // A share id bound to a key (sharing/sharing.js createBound): these four bytes, then the first 12 of SHA-256('glaze share
   // id' + the public key). With v2 enabled only that key makes a new bound id, signed. An unregistered old random id
   // has the prefix once in 2^32 and cannot be made after enablement; existing rows keep their own keys.
   const BOUND = Buffer.from([0x67, 0x7a, 0x62, 0x31]);

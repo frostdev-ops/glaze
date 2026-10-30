@@ -53,7 +53,7 @@ test('review: a busy sheet retains keyboard focus and Cancel revokes its run', a
 
 test('review: the submit sheet uses singular English for one check and one page', () => {
   const path = require('node:path');
-  const I = process.env.WRITER_I18N_SOURCE ? require('node:vm').runInNewContext(require('node:fs').readFileSync(path.resolve(process.env.WRITER_I18N_SOURCE), 'utf8') + '\nGZ_I18N', { Intl }) : require('../../extension/lib/i18n.js');
+  const I = process.env.WRITER_I18N_SOURCE ? require('node:vm').runInNewContext(require('node:fs').readFileSync(path.resolve(process.env.WRITER_I18N_SOURCE), 'utf8') + '\nGZ_I18N', { Intl }) : require('../../extension/core/i18n.js');
   assert.equal(I.t('{n} checks open', { n: 1 }, 'en'), '1 check open');
   assert.equal(I.t('{n} pages', { n: 1 }, 'en'), '1 page');
   assert.equal(I.t('{n} checks open', { n: 2 }, 'en'), '2 checks open');

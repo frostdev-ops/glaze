@@ -1,12 +1,12 @@
 // Mods' reads of the student's plans and grades follow the account signed in on the page that asks, never another account
-// that used the same school in this browser. The broker (lib/modbroker.js) with stand-in storage, and the worker
-// (lib/background.js) end to end, which asks Glaze's own content script in the exact document for its account.
+// that used the same school in this browser. The broker (mods/modbroker.js) with stand-in storage, and the worker
+// (background/background.js) end to end, which asks Glaze's own content script in the exact document for its account.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const B = require('../../extension/lib/modbroker.js');
+const B = require('../../extension/mods/modbroker.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const SITE = 'https://school.instructure.com';
@@ -104,12 +104,12 @@ test('a declarative widget reads the signed-in account\'s data only, and nothing
 });
 
 // ---- the worker, end to end ---------------------------------------------------------------------------------------------
-// lib/background.js in a VM. Each document is { origin, doc (content.js's __gzDoc), account (GZ_CTX.account) }; the
+// background/background.js in a VM. Each document is { origin, doc (content.js's __gzDoc), account (GZ_CTX.account) }; the
 // worker's script runs there through chrome.scripting.executeScript, by documentId where the sender has one.
 const worker = ({ eventPage = false, scheme = 'chrome-extension' } = {}) => {
   const store = { sync: { version: 2, enabled: true, enhance: {} }, local: { mods: [ID], [`mod:${ID}`]: rec(), ...cached() }, session: {} };
   const listeners = [], probes = [], docs = new Map();
-  // Values as the worker's own realm makes them (lib/modapi.js checks for plain objects of its realm).
+  // Values as the worker's own realm makes them (mods/modapi.js checks for plain objects of its realm).
   const area = (s) => ({
     get: async (k) => vm.runInContext('JSON', context).parse(JSON.stringify(k === null ? s : Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]])))),
     set: async (v) => { Object.assign(s, structuredClone(v)); },
@@ -118,7 +118,7 @@ const worker = ({ eventPage = false, scheme = 'chrome-extension' } = {}) => {
   const context = vm.createContext({
     URL, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, Intl, setTimeout, clearTimeout, crypto: globalThis.crypto,
     AbortController, AbortSignal, DOMException, atob, btoa,
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), context); },
     chrome: {
       runtime: {
         id: 'glaze', getURL: (f = '') => `${scheme}://x/${f}`, getManifest: () => require('../../extension/manifest.json'),
@@ -144,12 +144,12 @@ const worker = ({ eventPage = false, scheme = 'chrome-extension' } = {}) => {
   });
   if (eventPage) {
     // The Firefox package preloads these in order and replaces importScripts with a no-op.
-    const files = [...read('lib/background.js').matchAll(/importScripts\(([^)]*)\)/g)]
+    const files = [...read('background/background.js').matchAll(/importScripts\(([^)]*)\)/g)]
       .flatMap(([, args]) => [...args.matchAll(/'([^']+)'/g)].map(([, f]) => f));
     for (const f of new Set(files)) context.importScripts(f);
     context.importScripts = () => {};
   }
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   // doc: the document behind the frame now (by documentId, else by tab and frame).
   const send = (msg, sender, doc) => new Promise((res) => {
     if (doc) docs.set(sender.documentId || `${sender.tab.id}:${sender.frameId}`, doc);

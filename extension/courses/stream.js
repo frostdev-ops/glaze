@@ -1,6 +1,6 @@
 // Only deadline events borrow their due date. An announcement about an assignment is still an announcement.
 var GZ_STREAM = globalThis.GZ_STREAM || (() => {
-  const P = typeof GZ_PAGE !== 'undefined' ? GZ_PAGE : require('./page.js');
+  const P = typeof GZ_PAGE !== 'undefined' ? GZ_PAGE : require('../core/page.js');
   const json = (text) => { try { return JSON.parse(text); } catch { return null; } };
   const deadline = (type) => /(?:^|:)(?:DUE|OVERDUE)$/i.test(type || '');
   const encouragement = (meta) => meta?.streamType === 'bb_tel:stu_grade' && meta.notificationType === 'GradeIncreased';

@@ -1,4 +1,4 @@
-// The array-shaping lookup functions (lib/sheet-fn-lookup2.js). Function cases are the worked examples on Microsoft's
+// The array-shaping lookup functions (documents/sheets/sheet-fn-lookup2.js). Function cases are the worked examples on Microsoft's
 // page for each function, support.microsoft.com/en-us/excel/functions/<name>-function (areas, take, drop, choosecols,
 // chooserows, vstack, expand, tocol, torow, wraprows, wrapcols) and support.microsoft.com/office/
 // hstack-function-98c4ab76-10fe-4b4f-8d5f-af1c125fe8c2. The pages give their data as a flat list of cells and describe
@@ -12,14 +12,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../../extension/lib/sheet-model.js');
-const C = require('../../extension/lib/sheet-calc.js');
-require('../../extension/lib/sheet-fn-math.js');
-require('../../extension/lib/sheet-fn-logical.js');
-require('../../extension/lib/sheet-fn-text.js');
-require('../../extension/lib/sheet-fn-info.js');
-require('../../extension/lib/sheet-fn-lookup.js');
-require('../../extension/lib/sheet-fn-lookup2.js');
+const M = require('../../extension/documents/sheets/sheet-model.js');
+const C = require('../../extension/documents/sheets/sheet-calc.js');
+require('../../extension/documents/sheets/sheet-fn-math.js');
+require('../../extension/documents/sheets/sheet-fn-logical.js');
+require('../../extension/documents/sheets/sheet-fn-text.js');
+require('../../extension/documents/sheets/sheet-fn-info.js');
+require('../../extension/documents/sheets/sheet-fn-lookup.js');
+require('../../extension/documents/sheets/sheet-fn-lookup2.js');
 
 const book = (cells = {}, { sheets = ['Sheet1'] } = {}) => {
   const wb = M.workbook();
@@ -57,7 +57,7 @@ const NAMES = 'AREAS TAKE DROP CHOOSECOLS CHOOSEROWS VSTACK HSTACK EXPAND TOCOL 
 
 test('the shaping functions are registered and nothing sets a timer', () => {
   for (const name of NAMES) assert.ok(C.fn(name), name);
-  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-fn-lookup2.js'), 'utf8')));
+  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/documents/sheets/sheet-fn-lookup2.js'), 'utf8')));
 });
 
 // A1:C3 = 1..9 by rows; F1:H2 = "x", #DIV/0!, blank / 10, blank, "y"; E1:E3 blank (the probes' data).

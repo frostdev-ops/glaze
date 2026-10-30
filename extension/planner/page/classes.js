@@ -1,8 +1,8 @@
 // Class schedule (W14), on Canvas and Blackboard Ultra, loaded on demand: the command palette ("Class schedule"), the
 // agenda tile and the reminders hub open it (open()). A schedule is read on this device from an .ics file or a calendar
 // link on this site (Ultra's own "Share calendar" link pasted by the student, say), a PDF, a picture or screenshot (also
-// pasted), a registrar's page saved as HTML, a Word file or pasted text (lib/classes.js reads it; lib/ics.js and
-// features/import.js turn files into text). Every class it finds is shown for review, each field editable and each guess
+// pasted), a registrar's page saved as HTML, a Word file or pasted text (planner/classes.js reads it; planner/ics.js and
+// planner/page/import.js turn files into text). Every class it finds is shown for review, each field editable and each guess
 // marked (a row read from a picture the OCR engine wasn't sure of, too), matched to one of the student's courses on this
 // site by code first, then name; nothing is kept until Save. Kept in storage.local (classes:<site>/<user>) through the
 // worker's queue ('glaze:classes'). Nothing is sent anywhere: a calendar link is read only when it is on this site.
@@ -36,7 +36,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
   };
   const lang = () => GZ_I18N.locale(ctx.locale());
   const send = (m) => new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:classes', key, ...m }, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } });
-  // A write through the worker, stamped with when the student asked for it (lib/classes.js change weighs it by that), then
+  // A write through the worker, stamped with when the student asked for it (planner/classes.js change weighs it by that), then
   // the list, if the dialog is still where it was asked from.
   // An answer for a view that's gone changes nothing here, not even what's kept in memory: the dialog drawn since read
   // storage afresh, and storage's change events keep it current. tz: the zone the times are in (the Canvas profile's),
@@ -95,15 +95,15 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
 
   // ---- reading a schedule --------------------------------------------------------------------------------------
   const cancelled = () => Object.assign(new Error('cancelled'), { cancelled: true });
-  const oops = (msg) => Object.assign(new Error(msg), { mine: true }); // translated, like features/import.js
-  const TOO_BIG = new Set(['calendar file too large', 'calendar too complex', 'calendar time zone too large']); // lib/ics.js parse
+  const oops = (msg) => Object.assign(new Error(msg), { mine: true }); // translated, like planner/page/import.js
+  const TOO_BIG = new Set(['calendar file too large', 'calendar too complex', 'calendar time zone too large']); // planner/ics.js parse
   // signal: Stop reading, another view or the dialog closed. Whatever a wait here ends with, it is checked after.
   const read = async (file, text, link, signal) => {
     const live = () => { if (signal.aborted) throw cancelled(); };
-    // A calendar goes to lib/ics.js as bytes: it unfolds lines before decoding them, as a fold can split a character.
+    // A calendar goes to planner/ics.js as bytes: it unfolds lines before decoding them, as a fold can split a character.
     // What the reader refuses (in English, for the code) is said in the page's language.
     const ics = async (s) => {
-      await ctx.need('lib/ics.js', () => globalThis.GZ_ICS);
+      await ctx.need('planner/ics.js', () => globalThis.GZ_ICS);
       live();
       try { return C.fromIcs(s, { tz }); } catch (e) { throw oops(TOO_BIG.has(e?.message) ? t('This calendar is too big to read.') : t("Couldn't read that.")); }
     };
@@ -134,7 +134,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
         live();
         return ics(b);
       }
-      await ctx.need('features/import.js', () => globalThis.GZ_IMPORT);
+      await ctx.need('planner/page/import.js', () => globalThis.GZ_IMPORT);
       live();
       const r = await GZ_IMPORT.read(file, { signal, progress: (s) => { if (!signal.aborted) say(s); } });
       live();
@@ -349,7 +349,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
   };
   const open = async () => {
     if (box) { box.querySelector('.gz-cl-close')?.focus(); return true; }
-    await Promise.all([ctx.need('lib/todo.js', () => globalThis.GZ_TODO), ctx.need('lib/classes.js', () => globalThis.GZ_CLASSES)]);
+    await Promise.all([ctx.need('planner/todo.js', () => globalThis.GZ_TODO), ctx.need('planner/classes.js', () => globalThis.GZ_CLASSES)]);
     C = globalThis.GZ_CLASSES;
     const [p, list0] = await Promise.all([ctx.profile(), ctx.canvasCourses()]);
     if (!GZ_TODO.ID.test(String(p?.id))) throw new Error('no profile');

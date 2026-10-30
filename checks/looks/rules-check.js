@@ -1,7 +1,7 @@
 // LMS rules (x.rules), headless: the real extension on the Ultra preview and on saved Canvas and Moodle pages under invented
 // school origins. The rules reach the pages the way a Look's parts do: Canvas and Moodle read them from storage (a Look saved
 // the way the editor saves it, sync `lookX`), the Ultra preview is sent them with its settings (it ignores storage); content.js
-// loads features/rules.js itself. The boards' course cards (Glaze's own, on Canvas's Dashboard and Ultra's Courses page) wear
+// loads looks/page/rules.js itself. The boards' course cards (Glaze's own, on Canvas's Dashboard and Ultra's Courses page) wear
 // a Look's card rules as the LMS's cards do. All other requests abort; no LMS needed.
 //   NODE_PATH=/path/to/node_modules nice node checks/looks/rules-check.js [out dir for screenshots]
 const { chromium } = require('playwright');
@@ -9,17 +9,17 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const G = require('../../extension/defaults.js');
+const G = require('../../extension/content/defaults.js');
 // A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
 const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://moodle.school.test/*', 'https://bb.school.test/*']);
 const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
-const W = require('../../extension/lib/widgets.js');
+const W = require('../../extension/core/widgets.js');
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-rules-shots-'));
 const CANVAS = 'https://rules.school.instructure.com', MOODLE = 'https://moodle.school.test', ULTRA = 'https://bb.school.test';
 const fixture = (name) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', name), 'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
 const PAGES = { [`${CANVAS}/`]: 'canvas-dashboard-cards.html', [`${CANVAS}/courses/25`]: 'canvas-course-home.html', [`${CANVAS}/courses/25/quizzes/7/take`]: 'canvas-quiz-take.html', [`${MOODLE}/my/`]: 'moodle-dashboard.html' };
-// The boards' course cards (features/coursecards.js), where lib/parts.js finds them.
+// The boards' course cards (courses/page/coursecards.js), where looks/parts.js finds them.
 const BOARD = { canvas: '.gz-w-body > .ic-DashboardCard[data-gz-tile-card]', ultra: '.gz-w-body > article.gz-course-card' };
 let checks = 0;
 const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); console.log(`ok   ${label}`); checks++; };

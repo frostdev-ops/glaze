@@ -1,17 +1,17 @@
 // Planning on Blackboard Ultra (B2), the parts that don't touch a page: Ultra accounts' own keys, Ultra's courses in
-// Canvas's course shape, an Ultra page's due items (lib/ultra.js pageDue), Gradescope courses placed with Ultra courses,
+// Canvas's course shape, an Ultra page's due items (courses/ultra.js pageDue), Gradescope courses placed with Ultra courses,
 // and the background worker taking an Ultra page's writes for its own site only. Synthetic fixtures (test/fixtures/ultra-*.json).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const U = require('../../extension/lib/ultra.js');
-const T = require('../../extension/lib/todo.js');
-const R = require('../../extension/lib/remind.js');
-const CL = require('../../extension/lib/classes.js');
-const X = require('../../extension/lib/calexport.js');
-const G = require('../../extension/lib/gradescope.js');
+const U = require('../../extension/courses/ultra.js');
+const T = require('../../extension/planner/todo.js');
+const R = require('../../extension/planner/remind.js');
+const CL = require('../../extension/planner/classes.js');
+const X = require('../../extension/planner/calexport.js');
+const G = require('../../extension/planner/gradescope.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const load = (n) => JSON.parse(read(`../test/fixtures/ultra-${n}.json`));
@@ -53,7 +53,7 @@ test("Ultra's courses in Canvas's course shape: code, term dates, closed ones re
   assert.deepEqual(U.list([], { origin: o }), []);
 });
 
-// Ultra's answers by path, as the student's own Ultra would give them (lib/ultra.js read's f).
+// Ultra's answers by path, as the student's own Ultra would give them (courses/ultra.js read's f).
 const ultra = (answers) => {
   const asked = [];
   const f = async (url, init) => {
@@ -66,7 +66,7 @@ const ultra = (answers) => {
   return { f, asked };
 };
 
-test("an Ultra page's reads, all through lib/ultra.js's reader: the student and courses once a page, what's due once per range however many features ask, links on the site", async () => {
+test("an Ultra page's reads, all through courses/ultra.js's reader: the student and courses once a page, what's due once per range however many features ask, links on the site", async () => {
   const { f, asked } = ultra({
     '/learn/api/v1/users/me': { id: '_900_1' },
     '/learn/api/v1/users/_900_1/memberships': load('memberships'),
@@ -127,7 +127,7 @@ test('Gradescope courses can be placed with Ultra courses, and show for that Ult
   assert.equal(G.ask(rec, o, '_900_1'), null);
 });
 
-// The background worker (lib/background.js), with its storage in memory: who may write.
+// The background worker (background/background.js), with its storage in memory: who may write.
 const worker = ({ sessionFail = null } = {}) => {
   const m = require('../../extension/manifest.json');
   const store = { sync: { version: 2, enabled: true, enhance: { gradescope: true } }, local: {}, session: {} };
@@ -140,7 +140,7 @@ const worker = ({ sessionFail = null } = {}) => {
   const listeners = [], installed = [];
   const context = vm.createContext({
     URL, console, TextEncoder, structuredClone, Promise, Date, Intl, setTimeout, clearTimeout, crypto: globalThis.crypto,
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), context); },
     chrome: {
       runtime: {
         id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => m,
@@ -152,7 +152,7 @@ const worker = ({ sessionFail = null } = {}) => {
       scripting: { getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {}, executeScript: async () => [{ result: true }] }, // the page has Glaze already
     },
   });
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   const send = (msg, sender) => new Promise((res) => {
     let kept = false;
     for (const f of listeners) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r)))) === true) kept = true;
@@ -162,7 +162,7 @@ const worker = ({ sessionFail = null } = {}) => {
 };
 
 test('a fresh install keeps its starter layout on later updates, while an older install keeps its defaults', async () => {
-  const W = require('../../extension/lib/widgets.js');
+  const W = require('../../extension/core/widgets.js');
   const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
   const fresh = worker();
   fresh.installed[0]({ reason: 'install' }); await settle();
@@ -181,7 +181,7 @@ test("the worker takes an Ultra page's planning writes for its own site's accoun
   const own = `todo:${o}/_900_1`;
   const until = async (f) => { for (let i = 0; i < 100 && !f(); i++) await new Promise((r) => setTimeout(r, 2)); };
   // An /ultra address alone isn't Ultra, and nor is a page saying so: only the student's yes on the page approves the site
-  // (WP-C2, features/consent.js), from its top frame, over https, on an /ultra page.
+  // (WP-C2, settings/page/consent.js), from its top frame, over https, on an /ultra page.
   assert.deepEqual(await w.send(todo(own), page), nope, 'a host the student has not approved');
   const yes = { type: 'glaze:consent', op: 'yes', kind: 'ultra' };
   await w.send({ type: 'glaze:ultra' }, page);

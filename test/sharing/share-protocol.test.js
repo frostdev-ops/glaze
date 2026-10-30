@@ -8,11 +8,11 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const G = require('../../extension/lib/sharing.js');
-const S = require('../../extension/lib/sessions.js');
-const N = require('../../extension/lib/notes.js');
-const T = require('../../extension/lib/todo.js');
-const K = require('../../extension/lib/cards.js');
+const G = require('../../extension/sharing/sharing.js');
+const S = require('../../extension/sharing/sessions.js');
+const N = require('../../extension/planner/notes.js');
+const T = require('../../extension/planner/todo.js');
+const K = require('../../extension/courses/cards.js');
 const { relay, LIMIT, fromEnv } = require('../../server/relay.js');
 
 const memory = () => { const m = new Map(); return { m, put: async (k, b) => { m.set(k, Buffer.from(b)); }, get: async (k) => m.get(k) || null, del: async (k) => { m.delete(k); } }; };
@@ -28,7 +28,7 @@ const signWith = async (k, bytes) => G.b64(new Uint8Array(await crypto.subtle.si
 const json = async (res) => ({ status: res.status, body: res.status === 204 ? null : await res.json() });
 const post = (url, body, headers = {}) => fetch(url, { method: 'POST', headers, body: JSON.stringify(body) }).then(json);
 
-// The two formats, written out byte by byte here, apart from lib/sharing.js and server/relay.js. gzs1: the text
+// The two formats, written out byte by byte here, apart from sharing/sharing.js and server/relay.js. gzs1: the text
 // `gzs1|<sid>|<kind>|<extra>`, then the data. gzs2: "gzs2", then sid, kind, extra and data, each after its length as a
 // 4-byte big-endian number; its associated data (AES-GCM) is the same without the data's field.
 const field = (x) => { const b = Buffer.from(x); const n = Buffer.alloc(4); n.writeUInt32BE(b.length); return [n, b]; };
@@ -46,10 +46,10 @@ const sha = (bytes) => crypto.createHash('sha256').update(bytes).digest();
 const createUnsigned = (r, k, del = crypto.randomBytes(32)) => post(`${r.url}/s`, { sid: k.sid, pub: G.b64(k.pub), del: sha(del).toString('base64url') });
 const fileId = () => G.b64(crypto.getRandomValues(new Uint8Array(16)));
 
-// Actual pre-S2 source, frozen at f61431b, with its imports resolved as they were from lib/sharing.js.
+// Actual pre-S2 source, frozen at f61431b, with its imports resolved as they were from sharing/sharing.js.
 const oldClient = () => {
   const vm = require('node:vm'), { createRequire } = require('node:module');
-  const context = vm.createContext({ module: { exports: {} }, require: createRequire(path.join(__dirname, '../../extension/lib/sharing.js')),
+  const context = vm.createContext({ module: { exports: {} }, require: ((r) => (id) => r({ './notes.js': './planner/notes.js', './share.js': './sharing/share.js' }[id] || id))(createRequire(path.join(__dirname, '../../extension/manifest.json'))),
     crypto: globalThis.crypto, fetch, TextEncoder, TextDecoder, URL, AbortController, Uint8Array, DataView, setTimeout, clearTimeout, atob, btoa });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../fixtures/sharing-gzs1.txt'), 'utf8'), context);
   return context.module.exports;
@@ -483,7 +483,7 @@ test('the relay\'s database goes to version 2; its sessions take gzs1 until they
   assert.equal(r.db.prepare('SELECT gzs FROM sessions WHERE sid = ?').get(k.sid).gzs, 2);
 });
 
-// The worker's broker (lib/sessions.js) as test/sharing/sessions-sync.test.js runs it, without a surface open.
+// The worker's broker (sharing/sessions.js) as test/sharing/sessions-sync.test.js runs it, without a surface open.
 const clone = (x) => (x === undefined ? x : structuredClone(x));
 const area = (data = {}) => ({ data, get: async (keys) => Object.fromEntries([].concat(keys ?? Object.keys(data)).filter((k) => k in data).map((k) => [k, clone(data[k])])),
   set: async (patch) => { Object.assign(data, clone(patch)); return true; }, remove: async () => true });

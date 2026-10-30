@@ -1,7 +1,7 @@
-// Announcements in Glaze's pop-up and hover preview (features/announce.js): the parts that don't touch the page, so node
+// Announcements in Glaze's pop-up and hover preview (courses/page/announce.js): the parts that don't touch the page, so node
 // can test them: which way an entry point opens them, which clicks stay the browser's, each site's request and answer, and
 // which links on the sites' own lists are announcements (find).
-// The pop-up, its motion and the body's safe path are lib/popup.js's.
+// The pop-up, its motion and the body's safe path are core/popup.js's.
 // Classic script; module.exports for node. Loaded on demand: a second injection keeps the first.
 var GZ_ANNOUNCE_LIB = globalThis.GZ_ANNOUNCE_LIB || (() => {
   // Its settings are GZ_SPEC.announce (defaults.js): open, the everyday way; glaze (Better To Do, widgets and search), ultra,
@@ -21,7 +21,7 @@ var GZ_ANNOUNCE_LIB = globalThis.GZ_ANNOUNCE_LIB || (() => {
   const str = (v, n = 300) => (typeof v === 'string' ? v.slice(0, n) : '');
   const ms = (v) => { const t = typeof v === 'number' ? v : Date.parse(v); return Number.isFinite(t) && t > 0 ? t : null; };
   const ID = { canvas: /^\d{1,20}$/, ultra: /^_\d{1,20}_\d{1,20}$/, moodle: /^\d{1,20}$/ };
-  const own = (v, origin) => (globalThis.GZ_POPUP_LIB || require('./popup.js')).own(v, origin);
+  const own = (v, origin) => (globalThis.GZ_POPUP_LIB || require('../core/popup.js')).own(v, origin);
   // What open() and preview() are given, checked: { site, origin, courseId, id, url, title, course, entry, key }, or null.
   // Moodle's discussion needs no course.
   const ref = (x, origin) => {
@@ -37,7 +37,7 @@ var GZ_ANNOUNCE_LIB = globalThis.GZ_ANNOUNCE_LIB || (() => {
   };
 
   // ---- each site's announcement ------------------------------------------------------------------------------------
-  // An item: { title, author, at (ms), html (as sent; only ever shown through lib/popup.js safe), files: [{ name, url }], unread
+  // An item: { title, author, at (ms), html (as sent; only ever shown through core/popup.js safe), files: [{ name, url }], unread
   // (true, false, or null when the site doesn't say), locked (nothing to show here: the site's page says why) }.
   const files = (list, origin, name, url) => (Array.isArray(list) ? list : []).slice(0, 50)
     .map((f) => ({ name: str(f?.[name], 255).trim() || 'file', url: own(f?.[url], origin) })).filter((f) => f.url);
@@ -54,7 +54,7 @@ var GZ_ANNOUNCE_LIB = globalThis.GZ_ANNOUNCE_LIB || (() => {
       }),
       mark: (r, it) => (it.unread && !it.locked ? { url: `${r.origin}/api/v1/courses/${r.courseId}/discussion_topics/${r.id}/read`, method: 'PUT' } : null),
     },
-    // Blackboard Ultra: the public announcements API search already reads (lib/ultra.js SEARCH_KINDS). Its answer names the
+    // Blackboard Ultra: the public announcements API search already reads (courses/ultra.js SEARCH_KINDS). Its answer names the
     // author by id only, so no author; embedded files come as Blackboard's URL stub, which is this site. Ultra's read state
     // (readStatus, its private list) has no write Glaze can confirm, so nothing is marked here.
     ultra: {

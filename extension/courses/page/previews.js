@@ -14,8 +14,8 @@ var GZ_PEEK = globalThis.GZ_PEEK || (() => {
     if (hit && Date.now() - hit.at < 60000) return hit.p;
     // Absolute URL: Ultra's <base href> points at its CDN, so a relative one would go there. Only the fields shown,
     // and only those kept: never an item's contentDetail, where an LTI link keeps its tool's secret and key. Through
-    // lib/ultra.js's reader: GET, this site, redirects refused (one means signed out).
-    const p = ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA)
+    // courses/ultra.js's reader: GET, this site, redirects refused (one means signed out).
+    const p = ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA)
       .then(() => GZ_ULTRA.read({ origin: location.origin }).get(`/learn/api/v1/courses/${cid}/contents/${fid}/children?fields=${GZ_ULTRA.PEEK_FIELDS}`))
       .then((j) => j?.results?.map(GZ_ULTRA.peekItem) || null).catch(() => null);
     peeks.set(key, { at: Date.now(), p });

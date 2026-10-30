@@ -1,4 +1,4 @@
-// lib/ai/local/store.js in Chromium with Glaze loaded unpacked: real OPFS, fetch and crypto.subtle in an extension page.
+// ai/local/store.js in Chromium with Glaze loaded unpacked: real OPFS, fetch and crypto.subtle in an extension page.
 // The check plays Hugging Face: huggingface.co's resolve URL answers 302 to us.aws.cdn.hf.co, which answers 206 Range
 // replies with `Access-Control-Allow-Origin: *`, as probe 4 measured live. A 4.5 MiB "model" in 1 MiB chunks downloads,
 // is cancelled after two chunks, resumes with only the rest (one chunk corrupted once on the way, refetched), verifies,
@@ -91,7 +91,7 @@ const ok = (value, label, detail) => { results.push({ label, pass: !!value, ...(
     const page = await context.newPage();
     page.setDefaultTimeout(60000);
     await page.goto(`chrome-extension://${id}/popup.html`); // no meta CSP of its own (allow.html's says connect-src 'none')
-    await page.addScriptTag({ url: `chrome-extension://${id}/lib/ai/local/store.js` });
+    await page.addScriptTag({ url: `chrome-extension://${id}/ai/local/store.js` });
     await page.evaluate((models) => { window.S = GZ_AI_STORE.create({ models }); window.seen = []; }, MODELS);
 
     ok((await page.evaluate(() => S.status('tiny'))).state === 'missing', 'a new profile has no model');
@@ -145,7 +145,7 @@ const ok = (value, label, detail) => { results.push({ label, pass: !!value, ...(
 
     // A dedicated Worker reads the same file.
     const spawned = page.waitForEvent('worker');
-    await page.evaluate((src) => { window.w = new Worker(src); }, `chrome-extension://${id}/lib/ai/local/store.js`);
+    await page.evaluate((src) => { window.w = new Worker(src); }, `chrome-extension://${id}/ai/local/store.js`);
     const w = await spawned;
     const inWorker = await w.evaluate(async ([models, o, n]) => {
       const s = GZ_AI_STORE.create({ models });
@@ -176,7 +176,7 @@ const ok = (value, label, detail) => { results.push({ label, pass: !!value, ...(
     hold = new Promise((r) => { letGo = r; });
     const other = await context.newPage();
     await other.goto(`chrome-extension://${id}/popup.html`);
-    await other.addScriptTag({ url: `chrome-extension://${id}/lib/ai/local/store.js` });
+    await other.addScriptTag({ url: `chrome-extension://${id}/ai/local/store.js` });
     await other.evaluate((models) => { window.S = GZ_AI_STORE.create({ models }); }, MODELS);
     const at = log.length;
     await page.evaluate(() => { window.pending = S.download('tiny').then((r) => ({ r }), (e) => ({ reason: e.reason, name: e.name })); });

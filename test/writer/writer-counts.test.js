@@ -2,9 +2,9 @@
 // spaces, paragraphs, sentences and reading time, for the whole document and for a selection.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../../extension/lib/writer-schema.js');
-const E = require('../../extension/lib/writer-editor.js');
-const C = require('../../extension/writer-counts.js');
+const S = require('../../extension/writer/writer-schema.js');
+const E = require('../../extension/writer/writer-editor.js');
+const C = require('../../extension/writer/frame/writer-counts.js');
 const FX = require('../fixtures/writer-paper-fixtures.js');
 
 const BLOCK = { align: null, indent: 0, line: null, first: null };

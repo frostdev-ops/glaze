@@ -1,4 +1,4 @@
-// One slide of lib/pptx.js's model as DOM, for the slides viewer (slides-kind.js): the slide at its own size in CSS pixels
+// One slide of documents/slides/pptx.js's model as DOM, for the slides viewer (slides-kind.js): the slide at its own size in CSS pixels
 // (9525 EMU each, 96 to the inch), each shape a box at its place with its own SVG (an EMU viewBox: one SVG holding the
 // whole slide in EMU breaks in Chromium past ~3.4×10⁷), its text as HTML over it. Fills: solid, linear and path
 // gradients, a pattern as a simple hatch, pictures; lines with their dashes, caps, joins and arrowheads; pictures cropped

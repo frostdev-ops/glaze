@@ -3,10 +3,10 @@
 // unchanged (checked against quill@1.3.7). paper holds a whole paper. Lists are flat, as in Quill and Word: each item
 // carries its indent level. parse never touches a live document: the HTML is rebuilt from an allowlist into a small
 // tree of its own, then read by ProseMirror's DOMParser through the same parseDOM rules the view uses.
-// Classic script after lib/pm.js; module.exports for node.
+// Classic script after vendor/pm.js; module.exports for node.
 var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   const PM = typeof GZ_PM !== 'undefined' ? GZ_PM
-    : require('vm').runInThisContext(require('fs').readFileSync(require('path').join(__dirname, 'pm.js'), 'utf8'), { filename: 'lib/pm.js' });
+    : require('vm').runInThisContext(require('fs').readFileSync(require('path').join(__dirname, '../vendor/pm.js'), 'utf8'), { filename: 'vendor/pm.js' });
   const { Schema, DOMParser } = PM.model;
 
   const MAX_INDENT = 8, ALIGNS = ['left', 'center', 'right', 'justify'];
@@ -14,7 +14,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   const limit = () => { throw Object.assign(new RangeError('writer-schema: input exceeds safe limits'), { code: 'WRITER_INPUT_LIMIT' }); };
   const FONTS = ['Times New Roman', 'Arial', 'Calibri', 'Courier New'];
   const SAME_METRICS = { tinos: 'Times New Roman', arimo: 'Arial', carlito: 'Calibri', cousine: 'Courier New' };
-  // An imported file's well-known fonts (lib/writer-styles.js LOCAL), kept by name with their bundled twin behind them.
+  // An imported file's well-known fonts (writer/writer-styles.js LOCAL), kept by name with their bundled twin behind them.
   const LOCAL = { aptos: ['Aptos', 'Calibri'], 'aptos display': ['Aptos Display', 'Calibri'], 'calibri light': ['Calibri Light', 'Calibri'], cambria: ['Cambria', 'Times New Roman'],
     georgia: ['Georgia', 'Times New Roman'], 'century gothic': ['Century Gothic', 'Arial'], 'book antiqua': ['Book Antiqua', 'Times New Roman'] };
   const familyCSS = (font) => { const l = LOCAL[font.toLowerCase()]; return l ? `"${l[0]}", "${l[1]}"` : font; };

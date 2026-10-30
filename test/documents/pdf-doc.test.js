@@ -1,4 +1,4 @@
-// lib/pdf-doc.js on pdf.js in node, against the fixtures of tools/fidelity/pdf-fixtures.js: each fixture is first read back to
+// documents/pdf/pdf-doc.js on pdf.js in node, against the fixtures of tools/fidelity/pdf-fixtures.js: each fixture is first read back to
 // show it is what it claims, then every operation is round-tripped and the result read back with pdf.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -10,7 +10,7 @@ const F = require('../../tools/fidelity/pdf-fixtures.js');
 const root = path.join(__dirname, '../../extension');
 let loaded = null;
 const load = () => loaded ||= (async () => {
-  const url = (f) => pathToFileURL(path.join(root, 'lib/pdfjs', f)).href;
+  const url = (f) => pathToFileURL(path.join(root, 'vendor/pdfjs', f)).href;
   const [log, warn] = [console.log, console.warn];
   console.log = console.warn = () => {}; // pdf.js warns at import that node has no canvas
   try {
@@ -89,7 +89,7 @@ test('the large fixture: pages of noise that does not compress, about the size a
   assert.deepEqual(pages, Array.from({ length: 6 }, (_, i) => `Page ${i + 1} of 6 0`));
 });
 
-// ---- lib/pdf-doc.js ----------------------------------------------------------------------------------------------------
+// ---- documents/pdf/pdf-doc.js ----------------------------------------------------------------------------------------------------
 test('fixture downloads are bounded and leave no download directory on failure', async (t) => {
   const fs = require('node:fs'), os = require('node:os');
   const { spawnSync } = require('node:child_process');
@@ -117,7 +117,7 @@ test('fixture downloads are bounded and leave no download directory on failure',
   });
 });
 
-const D = require('../../extension/lib/pdf-doc.js');
+const D = require('../../extension/documents/pdf/pdf-doc.js');
 const api = async () => D.use(await load());
 const sha = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 const THREE = ['Alpha page one 0', 'Bravo page two 0', 'Charlie page three 0'];
@@ -267,7 +267,7 @@ test('thumbnail honours lowered byte limits, caps every result and releases canv
       getContext() { return { fillStyle: '', fillRect() {} }; }
       async convertToBlob() { return { size: 25000, arrayBuffer: async () => new ArrayBuffer(25000) }; }
     } };
-  vm.runInNewContext(fs.readFileSync(path.join(root, 'lib/pdf-doc.js'), 'utf8'), context);
+  vm.runInNewContext(fs.readFileSync(path.join(root, 'documents/pdf/pdf-doc.js'), 'utf8'), context);
   const drawn = context.module.exports.use({ AnnotationMode: { ENABLE_STORAGE: 3 } });
   const page = { getViewport: ({ scale }) => ({ width: 200 * scale, height: 100 * scale }), render: () => ({ promise: Promise.resolve() }) };
   const result = await drawn.thumbnail(page, 200, { limits: { thumbnail: 100 } });
@@ -348,7 +348,7 @@ test('bake snapshots merge inputs and operations, and names unreadable output as
 
 test('pdf.js refuses an inflated save before allocating the output buffer', async () => {
   const fs = require('node:fs'), vm = require('node:vm');
-  const worker = fs.readFileSync(path.join(root, 'lib/pdfjs/pdf.worker.mjs'), 'utf8');
+  const worker = fs.readFileSync(path.join(root, 'vendor/pdfjs/pdf.worker.mjs'), 'utf8');
   const writer = worker.slice(worker.indexOf('async function incrementalUpdate('), worker.indexOf('\n;// ./src/core/editor/pdf_editor.js'));
   const allocations = [];
   const write = vm.runInNewContext(`(${writer})`, {
@@ -512,7 +512,7 @@ test('fidelity fails on unexpected open refusals and keeps Swift caches in its t
         if (cmd === 'xcrun') fs.writeFileSync(${JSON.stringify(compiler)}, JSON.stringify({ args, env: opts.env }));
         return ['which', 'xcrun'].includes(cmd) ? { status: 0, stdout: '', stderr: '' } : { status: 1, stdout: '', stderr: 'fixture reader unavailable' };
       };
-      require(${JSON.stringify(path.join(root, 'lib/pdf-doc.js'))}).use = () => ({ open: async () => { const e = Error('unexpected refusal'); e.name = 'PdfInvalidError'; throw e; } });`);
+      require(${JSON.stringify(path.join(root, 'documents/pdf/pdf-doc.js'))}).use = () => ({ open: async () => { const e = Error('unexpected refusal'); e.name = 'PdfInvalidError'; throw e; } });`);
     const r = spawnSync(process.execPath, ['--require', preload, path.join(__dirname, '../../tools/fidelity/pdf-fidelity.js'), path.join(tmp, 'outputs'), '--small'],
       { encoding: 'utf8', env: { ...process.env, TMPDIR: tmp }, timeout: 60000 });
     assert.equal(r.status, 1, 'an unexpected editor refusal must fail the fidelity run');

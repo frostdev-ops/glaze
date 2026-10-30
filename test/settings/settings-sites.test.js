@@ -1,12 +1,12 @@
-// Settings → Backup and privacy → Sites (options.js): adding a school's site the first screen's way (lib/site.js allow), and
-// Remove handing the browser's grant back (lib/site.js handBack). Options.js's Sites block runs here on stand-in elements
-// with a stubbed chrome and lib/site.js whose checks answer as each test says.
+// Settings → Backup and privacy → Sites (options.js): adding a school's site the first screen's way (core/site.js allow), and
+// Remove handing the browser's grant back (core/site.js handBack). Options.js's Sites block runs here on stand-in elements
+// with a stubbed chrome and core/site.js whose checks answer as each test says.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const I = require('../../extension/lib/i18n.js');
+const I = require('../../extension/core/i18n.js');
 const NARROW = ['https://*.instructure.com/*', 'https://*.blackboard.com/*', 'https://*.moodlecloud.com/*', 'https://frostdev.io/*', 'https://share.frostdev.io/*'];
 const tick = async (n = 8) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 
@@ -38,10 +38,10 @@ const sites = ({ lists = {}, hosts = NARROW, held = [], granted = true, found = 
     },
   };
   const ctx = vm.createContext({ URL, Object, Array, Set, Map, Promise, AbortSignal, document: { createElement: mk }, $: (s) => nodes[s], chrome,
-    t: (k, v) => I.t(k, v, 'en'), GZ_BUILT_IN: require('../../extension/defaults.js').GZ_BUILT_IN });
-  vm.runInContext(read('lib/site.js'), ctx);
+    t: (k, v) => I.t(k, v, 'en'), GZ_BUILT_IN: require('../../extension/content/defaults.js').GZ_BUILT_IN });
+  vm.runInContext(read('core/site.js'), ctx);
   Object.assign(ctx.GZ_SITE, { probe: async () => found, nearby: async () => near });
-  const src = read('options.js');
+  const src = read('settings/options.js');
   const block = src.slice(src.indexOf('  // ---- Sites:'), src.indexOf('\n', src.indexOf('  const readSites')));
   vm.runInContext(`${block}; this.readSites = readSites;`, ctx);
   ctx.readSites();
@@ -179,8 +179,8 @@ test('Settings: the add form sits in Sites, above the list, in the Backup panel 
   const panel = html.slice(html.indexOf('data-editor-panel="backup"'), html.indexOf('data-editor-panel="about"'));
   assert.match(panel, /<section id="sites"[\s\S]*?<form class="row site-add" id="site-add" novalidate autocomplete="off">[\s\S]*?<input id="site-address"[^>]*translate="no"[\s\S]*?<button type="submit" class="primary" id="site-allow">Allow<\/button>[\s\S]*?<\/form>[\s\S]*?id="site-note" role="alert" hidden[\s\S]*?id="site-picks"[\s\S]*?id="site-list"/);
   assert.match(panel, /<span>School address<\/span>/, 'the field is labelled');
-  assert.ok(read('options.js').includes("['backup', 'Privacy and data']"), 'embedded Settings gates the Privacy and data panel to its own tab');
-  assert.ok(html.indexOf('<script src="lib/site.js"></script>') > 0 && html.indexOf('<script src="lib/site.js"></script>') < html.indexOf('<script src="options.js"></script>'));
+  assert.ok(read('settings/options.js').includes("['backup', 'Privacy and data']"), 'embedded Settings gates the Privacy and data panel to its own tab');
+  assert.ok(html.indexOf('<script src="core/site.js"></script>') > 0 && html.indexOf('<script src="core/site.js"></script>') < html.indexOf('<script src="settings/options.js"></script>'));
 });
 
 

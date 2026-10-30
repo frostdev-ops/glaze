@@ -1,10 +1,10 @@
-// Glaze's first screen (features/welcome.html), opened once when Glaze is installed on a browser that asks for each site
-// (lib/background.js): a school on its own address needs its host granted before Glaze can reach it. The student types or
-// pastes it (lib/site.js); Allow asks the browser for exactly that host, then checks that it is Blackboard, Canvas or
+// Glaze's first screen (settings/welcome.html), opened once when Glaze is installed on a browser that asks for each site
+// (background/background.js): a school on its own address needs its host granted before Glaze can reach it. The student types or
+// pastes it (core/site.js); Allow asks the browser for exactly that host, then checks that it is Blackboard, Canvas or
 // Moodle before Glaze takes it: anything else has its grant handed straight back, with course sites nearby to pick instead.
 // Open goes there. All sites asks for every https site at once, after which Glaze asks on each school's pages itself
-// (features/consent.js). It wears the Frostdev Look: its terrain (lib/scene.js), palette, pointers and motion
-// (features/motionx.js), all from the Look's own definitions. It talks only to the school sites the student names.
+// (settings/page/consent.js). It wears the Frostdev Look: its terrain (looks/scene.js), palette, pointers and motion
+// (looks/page/motionx.js), all from the Look's own definitions. It talks only to the school sites the student names.
 // Classic script; module.exports for node (the button's state).
 var GZ_WELCOME = globalThis.GZ_WELCOME || (() => {
   // The button: nothing to do yet ('none', shown as a dimmed Allow), Glaze can already reach the site ('open'), or it must
@@ -25,7 +25,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
   GZ_I18N.page();
   const still = matchMedia('(prefers-reduced-motion: reduce)');
 
-  // The Frostdev Look, as defaults.js defines it: its palette on <html> (features/motionx.js reads the colours there), its
+  // The Frostdev Look, as defaults.js defines it: its palette on <html> (looks/page/motionx.js reads the colours there), its
   // terrain behind everything, and its pointer's, typing's and success's motion.
   const { colors: palette, bg } = GZ_LOOKS.find((l) => l.name === 'Frostdev');
   for (const [k, v] of Object.entries(palette)) html.style.setProperty(k, v);
@@ -37,7 +37,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
     const L = GZ_SCENE_LOOK(bg.intensity);
     scene?.update({ kind: 'scene', name: bg.scene, palette, ground: palette['--gz-surface-2'], colors: bg.colors, dim: L.dim, amount: L.amount, speed: still.matches ? 0 : L.pace });
   };
-  import(chrome.runtime.getURL('lib/scene.js')).then((m) => {
+  import(chrome.runtime.getURL('looks/scene.js')).then((m) => {
     scene = m.start(canvas, () => true, () => { scene = null; canvas.classList.remove('live'); });
     paint();
     requestAnimationFrame(() => scene && canvas.classList.add('live'));
@@ -50,7 +50,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
     settings: () => ({ extras: { pointerAnim: true } }),
   });
   const fx = document.createElement('script');
-  fx.src = chrome.runtime.getURL('features/motionx.js');
+  fx.src = chrome.runtime.getURL('looks/page/motionx.js');
   fx.onload = () => globalThis.GZ_MOTIONX?.sync();
   document.body.append(fx);
   // The Look's "complete" effect (contour rings and its snowflake) from the middle of el.
@@ -132,7 +132,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
     check();
     input.focus();
   };
-  // Allow (lib/site.js, as Settings → Sites does): the browser's prompt opens from the click that called this. Granted, the
+  // Allow (core/site.js, as Settings → Sites does): the browser's prompt opens from the click that called this. Granted, the
   // site is checked; Open only once the worker has checked it too and registered its first page. A site that isn't
   // Blackboard, Canvas or Moodle gives its grant back at once, and the student gets the course sites nearby to pick.
   const allow = (s) => {

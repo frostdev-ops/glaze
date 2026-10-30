@@ -1,4 +1,4 @@
-// The editor's builders for a Look's nav layout and page tweaks (lib/editor-xparts.js): what they write is already what
+// The editor's builders for a Look's nav layout and page tweaks (settings/editor-xparts.js): what they write is already what
 // the parts' cleaners keep, so it round-trips through GZ_XPARTS and a glaze2 code; Glaze settings can't be hidden; and
 // the options page and the preview are wired to them. The page itself is checked headless (checks/settings/xparts-editor-check.js).
 const test = require('node:test');
@@ -6,19 +6,19 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const G = require('../../extension/defaults.js');
-const Parts = require('../../extension/lib/parts.js');
-const L = require('../../extension/lib/navlayout.js');
-const X = require('../../extension/lib/lookparts.js');
-const S = require('../../extension/lib/share.js');
-const E = require('../../extension/lib/editor-xparts.js');
+const G = require('../../extension/content/defaults.js');
+const Parts = require('../../extension/looks/parts.js');
+const L = require('../../extension/navigation/navlayout.js');
+const X = require('../../extension/looks/lookparts.js');
+const S = require('../../extension/sharing/share.js');
+const E = require('../../extension/settings/editor-xparts.js');
 
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const t = (s, vars = {}) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k]);
 
 test('builder redraw never passes absent optional hints as visible null text', () => {
-  const source = read('lib/editor-xparts.js');
+  const source = read('settings/editor-xparts.js');
   const section = source.slice(source.indexOf('    const redraw ='), source.indexOf('    // A live region'));
   const seen = [];
   const redraw = vm.runInNewContext(`${section}\nredraw`, { document: {}, focusTo: '', CSS: {} });
@@ -167,13 +167,13 @@ test('every part of each site is in one labelled group, and the builder offers o
 });
 
 test('the options page loads the builders in their own sections and redraws them with the rest', () => {
-  const html = read('options.html'), js = read('options.js');
+  const html = read('options.html'), js = read('settings/options.js');
   for (const [route, id] of [['look/nav-layout', 'xnav'], ['look/rules', 'xrules']]) {
     const section = html.match(new RegExp(`<section[^>]*data-editor-section="${route}"[^>]*>([\\s\\S]*?)</section>`));
     assert.ok(section, route);
     assert.match(section[1], new RegExp(`<div id="${id}"></div>`));
   }
-  assert.match(html, /<script src="lib\/parts\.js"><\/script>[\s\S]*<script src="lib\/editor-xparts\.js"><\/script>[\s\S]*<script src="options\.js"><\/script>/);
+  assert.match(html, /<script src="looks\/parts\.js"><\/script>[\s\S]*<script src="settings\/editor-xparts\.js"><\/script>[\s\S]*<script src="settings\/options\.js"><\/script>/);
   assert.match(js, /GZ_XEDIT\.mount\(\{ s, t, save, refresh, frame, navItems: \(\) => navItems, preview: /);
   assert.match(js.slice(js.indexOf('  const refresh = () => {'), js.indexOf('  const fill = () => {')), /GZ_XEDIT\.render\(\);/);
   // Its strings are written by the module through t(), so the page holds no untranslated words of its own: only the path and
@@ -185,15 +185,15 @@ test('the options page loads the builders in their own sections and redraws them
 });
 
 test('the preview draws page tweaks: Ultra through its real runtime, Canvas and Moodle through the rules code on their mock', async () => {
-  const source = read('lib/editor-preview.js');
+  const source = read('settings/editor-preview.js');
   const ultra = source.split("if (site === 'ultra') {")[1].split('} else {')[0];
-  assert.match(ultra, /'lib\/lookx\.js', 'features\/lookx\.js', 'features\/rules\.js'/);
+  assert.match(ultra, /'looks\/lookx\.js', 'looks\/page\/lookx\.js', 'looks\/page\/rules\.js'/);
   const other = source.split("document.getElementById('preview-menu').remove();")[1];
-  assert.match(other, /for \(const file of \['lib\/lookx\.js', 'features\/lookx\.js', 'features\/rules\.js', 'features\/motionx\.js'\]\) await load\(file\);/);
-  assert.ok(other.indexOf('globalThis.GZ_CTX ||=') < other.indexOf("'features/rules.js'"), 'rules.js reads GZ_CTX as it loads');
+  assert.match(other, /for \(const file of \['looks\/lookx\.js', 'looks\/page\/lookx\.js', 'looks\/page\/rules\.js', 'looks\/page\/motionx\.js'\]\) await load\(file\);/);
+  assert.ok(other.indexOf('globalThis.GZ_CTX ||=') < other.indexOf("'looks/page/rules.js'"), 'rules.js reads GZ_CTX as it loads');
   assert.match(other, /globalThis\.GZ_RULES\?\.sync\(\);/);
   // The pointer worn (the student's, or the Look's) on the mock, so hovering the preview uses it: synced on every paint.
-  assert.ok(other.indexOf('globalThis.GZ_CTX ||=') < other.indexOf("'features/lookx.js'"), 'lookx.js reads GZ_CTX as it loads');
+  assert.ok(other.indexOf('globalThis.GZ_CTX ||=') < other.indexOf("'looks/page/lookx.js'"), 'lookx.js reads GZ_CTX as it loads');
   assert.match(other, /globalThis\.GZ_LOOKX\?\.sync\(\);/);
   assert.match(other, /partsOn: \(\) => settings\.enabled && context\.page !== 'quiz',/);
   const getter = source.match(/globalThis\.GZ_CTX \|\|= Object\.freeze\(\{[\s\S]*?\}\);/)[0], loaded = [];
@@ -204,9 +204,9 @@ test('the preview draws page tweaks: Ultra through its real runtime, Canvas and 
   context.settings.enabled = false;
   assert.equal(context.GZ_CTX.on(), false);
   // The preview loads what a page script asks for, as the page would.
-  await context.GZ_CTX.need('lib/parts.js', () => true);
-  await context.GZ_CTX.need('lib/parts.js', () => false);
-  assert.deepEqual(loaded, ['lib/parts.js']);
+  await context.GZ_CTX.need('looks/parts.js', () => true);
+  await context.GZ_CTX.need('looks/parts.js', () => false);
+  assert.deepEqual(loaded, ['looks/parts.js']);
 });
 
 test('editing an imported link icon replaces its effective override', async () => {

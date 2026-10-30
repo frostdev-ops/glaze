@@ -1,10 +1,10 @@
-// Glaze Writer's paper storage (lib/writer-papers.js) over a stand-in chrome.storage.local: keys, autosave, versions on
+// Glaze Writer's paper storage (writer/writer-papers.js) over a stand-in chrome.storage.local: keys, autosave, versions on
 // submit, before an import or restore, before a big edit and every 10 minutes, the caps, the list, and presets. That the
 // editor frame and papers.html see the same store in Chrome is checks/writer/writer-paper-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const PA = require('../../extension/lib/writer-papers.js');
-globalThis.GZ_WRITER_STYLES = require('../../extension/lib/writer-styles.js');
+const PA = require('../../extension/writer/writer-papers.js');
+globalThis.GZ_WRITER_STYLES = require('../../extension/writer/writer-styles.js');
 
 const store = () => {
   const data = {};

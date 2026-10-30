@@ -1,4 +1,4 @@
-// DrawingML shape geometry (lib/pptx-geom.js): the guide formula evaluator and its built-in guides, arcTo drawn as SVG
+// DrawingML shape geometry (documents/slides/pptx-geom.js): the guide formula evaluator and its built-in guides, arcTo drawn as SVG
 // arcs, custom geometry (custGeom), and every preset against stored path snapshots.
 // The snapshots are test/fixtures/pptx-geom/<preset>.json. After a reviewed change to the geometry, rewrite them with
 //   GZ_GEOM_SNAPSHOTS=write node --test test/documents/pptx-geom.test.js
@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const G = require('../../extension/lib/pptx-geom.js');
+const G = require('../../extension/documents/slides/pptx-geom.js');
 
 const SNAPSHOTS = path.join(__dirname, '../fixtures/pptx-geom');
 const WRITE = process.env.GZ_GEOM_SNAPSHOTS === 'write';
@@ -295,7 +295,7 @@ test('the preset transcription can be regenerated from DrawingML XML', () => {
   const child = spawnSync('python3', [path.join(__dirname, '../pptx-geom-presets.py'), '-', 'rect'], { input: xml, encoding: 'utf8' });
   assert.ifError(child.error);
   assert.equal(child.status, 0, child.stderr);
-  const source = fs.readFileSync(path.join(__dirname, '../../extension/lib/pptx-geom.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/documents/slides/pptx-geom.js'), 'utf8');
   assert.equal(child.stdout.trimEnd(), `  const PRESETS = {\n${source.match(/^    rect: \{[\s\S]*?\n    \},/m)[0]}\n  };`);
 });
 

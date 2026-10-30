@@ -2,10 +2,10 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
 const { El } = require('../stand-in-dom.js');
-const M = require('../../extension/lib/sheet-model.js'), SD = require('../../extension/sheet-data.js'), PA = require('../../extension/lib/writer-papers.js');
-const CALC = require('../../extension/lib/sheet-calc.js'), NF = require('../../extension/lib/sheet-numfmt.js');
-require('../../extension/lib/sheet-fn-math.js');
-const source = fs.readFileSync(require.resolve('../../extension/sheet-grid.js'), 'utf8');
+const M = require('../../extension/documents/sheets/sheet-model.js'), SD = require('../../extension/documents/sheets/sheet-data.js'), PA = require('../../extension/writer/writer-papers.js');
+const CALC = require('../../extension/documents/sheets/sheet-calc.js'), NF = require('../../extension/documents/sheets/sheet-numfmt.js');
+require('../../extension/documents/sheets/sheet-fn-math.js');
+const source = fs.readFileSync(require.resolve('../../extension/documents/sheets/sheet-grid.js'), 'utf8');
 const KEY = 'doc:00000000-0000-4000-8000-000000000001';
 const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(setImmediate); };
 // A save in flight (a version packed through CompressionStream first) lands when it lands: wait for what it stores.
@@ -42,7 +42,7 @@ const frame = (options = {}) => {
   };
   doc.fire = fire;
   const ctx = vm.createContext({ ...(options.ctx || {}), console: { error() {} }, document: doc, Map, Set, Uint8Array, structuredClone, performance, Intl,
-    AbortController, innerWidth: 640, innerHeight: 900, GZ_SHEET_MODEL: M, GZ_SHEET_FORMULA: require('../../extension/lib/sheet-formula.js'),
+    AbortController, innerWidth: 640, innerHeight: 900, GZ_SHEET_MODEL: M, GZ_SHEET_FORMULA: require('../../extension/documents/sheets/sheet-formula.js'),
     GZ_SHEET_CALC: CALC, GZ_SHEET_NUMFMT: NF, GZ_SHEET_DATA: options.SD || SD,
     chrome: { storage: { local: store, onChanged: { addListener: (f) => changes.add(f), removeListener: (f) => changes.delete(f) } } },
     getComputedStyle: () => ({ fontSize: '13px', fontFamily: 'Arial' }),
@@ -215,7 +215,7 @@ test('sheet operations undo and redo through autosave with matching books bands 
 });
 
 // A workbook read from an .xlsx keeps what Glaze doesn't model, with cell references in it: the grid tells the codec of
-// every operation it applies (do, undo, redo: lib/sheet-xlsx.js track) and asks it before a structural one (locked), which
+// every operation it applies (do, undo, redo: documents/sheets/sheet-xlsx.js track) and asks it before a structural one (locked), which
 // it refuses when kept parts would point at the wrong cells.
 test('the grid tracks each applied operation with the codec and refuses a structural edit it locks', async () => {
   const calls = [];

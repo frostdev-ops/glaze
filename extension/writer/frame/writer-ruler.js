@@ -15,7 +15,7 @@ var GZ_WRITER_RULER = globalThis.GZ_WRITER_RULER || (() => {
   const h = (tag, cls, kids = []) => { const e = document.createElement(tag); if (cls) e.className = cls; e.append(...kids); return e; };
   let on = true, paper = null, el = null, strip = null, ticks = null, marks = null, tickKey = '', frame = 0, drag = null;
 
-  // Settings → Writer (lib/writer-settings.js): writer.ruler, which ⋯ → Show ruler sets.
+  // Settings → Writer (writer/writer-settings.js): writer.ruler, which ⋯ → Show ruler sets.
   const SET = globalThis.GZ_WRITER_SETTINGS;
   SET?.follow((w) => { on = w?.ruler !== false; draw(); });
   const toggle = async () => {

@@ -1,16 +1,16 @@
-// Reminders on the page (features/reminders.js) in a VM with an inert DOM, storage and worker: one timer to the next
+// Reminders on the page (planner/page/reminders.js) in a VM with an inert DOM, storage and worker: one timer to the next
 // reminder (never an interval), one toast in one tab for what came due, nothing in a hidden tab until it's shown, a
 // reminder lost to no tab that closes or goes quiet mid-claim, and no planner request that To Do or the card tasks will make.
-// What's due when is lib/remind.js, tested in remind.test.js.
+// What's due when is planner/remind.js, tested in remind.test.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
-const T = require('../../extension/lib/todo.js');
-const R = require('../../extension/lib/remind.js');
-const C = require('../../extension/lib/classes.js');
+const D = require('../../extension/content/defaults.js');
+const T = require('../../extension/planner/todo.js');
+const R = require('../../extension/planner/remind.js');
+const C = require('../../extension/planner/classes.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
@@ -53,7 +53,7 @@ const world = (dueIn, { cacheAge = 0, at: clock } = {}) => {
   w.release = () => { for (const f of w.waiting.splice(0)) f(); };
   const Clock = class extends Date { static now() { return w.now(); } };
   // A tab's own hold: its answers wait for its release(). failConfirm: the worker can't keep its acknowledgements.
-  // gs: a stored Gradescope record (lib/gradescope.js), with enhance.gradescope on.
+  // gs: a stored Gradescope record (planner/gradescope.js), with enhance.gradescope on.
   w.tab = ({ hidden = false, pathname = '/courses/25/assignments', enhance = {}, cards = false, hold = false, gs = null } = {}) => {
     if (gs) box.gradescope = structuredClone(gs);
     const changed = [];
@@ -105,12 +105,12 @@ const world = (dueIn, { cacheAge = 0, at: clock } = {}) => {
     c.globalThis = c;
     vm.createContext(c);
     if (gs) {
-      // lib/todo.js's Gradescope parts use the page's own globals (GZ_CTX, document): here it runs in the page's VM.
+      // planner/todo.js's Gradescope parts use the page's own globals (GZ_CTX, document): here it runs in the page's VM.
       delete c.GZ_TODO;
       c.GZ_SPEC = D.GZ_SPEC;
-      for (const f of ['lib/todo.js', 'lib/gradescope.js']) vm.runInContext(read(f), c);
+      for (const f of ['planner/todo.js', 'planner/gradescope.js']) vm.runInContext(read(f), c);
     }
-    const ui = vm.runInContext(read('features/reminders.js'), c);
+    const ui = vm.runInContext(read('planner/page/reminders.js'), c);
     const toast = () => body.children[0]?.children[0] || null;
     const ops = (op) => sent.filter((m) => m.op === op);
     own.release = () => { own.hold = false; for (const f of own.waiting.splice(0)) f(); };
@@ -259,7 +259,7 @@ test("the Dashboard's planner view: card tasks run and ask, reminders don't: one
   assert.match(html, /id="DashboardCard_Container" style="display: none;?"/, 'the fixture is the planner view');
   const has = (sel) => (sel === '.ic-DashboardCard' && /class="ic-DashboardCard"/.test(html) ? {} : null);
   // Canvas's part's own gate (content-canvas.js), run over that page.
-  const src = read('content-canvas.js');
+  const src = read('content/content-canvas.js');
   const line = (name) => src.match(new RegExp(`^  const ${name} = \\(\\) => [^\\n]*;$`, 'm'))[0];
   const started = [];
   const CT = { sync: (on) => started.push(on) };
@@ -290,7 +290,7 @@ test("the Dashboard's planner view: card tasks run and ask, reminders don't: one
   };
   c.globalThis = c;
   vm.createContext(c);
-  vm.runInContext(read('features/cardtasks.js'), c).sync(true);
+  vm.runInContext(read('courses/page/cardtasks.js'), c).sync(true);
   await settle();
   const planner = (l) => l.filter((u) => u.includes('/api/v1/planner/items')).length;
   assert.equal(planner(fetched), 1, 'the card tasks asked');
@@ -418,7 +418,7 @@ test('a worker that never keeps the acknowledgement gets five retries, a lease a
   assert.deepEqual(w.box[KEY].seen, {});
 });
 
-// Gradescope (lib/gradescope.js): the one-time question is asked in the hub too, quietly, never as a toast; one answer.
+// Gradescope (planner/gradescope.js): the one-time question is asked in the hub too, quietly, never as a toast; one answer.
 const GS_ID = '0123456789abcdef01234567';
 const gsRecord = (bind = {}) => ({
   acct: { id: GS_ID, name: 'Sam' }, map: { 77: { to: `canvas:${ORIGIN}/25`, name: 'BIO' } }, bind,

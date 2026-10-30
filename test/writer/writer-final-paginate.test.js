@@ -1,10 +1,10 @@
-// Glaze Writer's page plan (lib/writer-paginate.js plan) on hostile page setups, a heading before a table, and page
+// Glaze Writer's page plan (writer/writer-paginate.js plan) on hostile page setups, a heading before a table, and page
 // breaks in a row. The ordinary cases are test/writer/writer-paper-paginate.test.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
-const P = require('../../extension/lib/writer-paginate.js');
+const P = require('../../extension/writer/writer-paginate.js');
 
 const LH = 36.8, geo = { body: 864, stride: 1082.4, notes: [], sep: 18.4 }; // 23 double-spaced lines a page
 const text = (n, o = {}) => ({ kind: 'text', lines: Array.from({ length: n }, () => ({ h: o.h || LH, notes: [] })), after: 0, before: o.before || 0, keepNext: !!o.keepNext, widow: o.widow });
@@ -13,7 +13,7 @@ const breaks = (blocks, g = geo) => P.plan(blocks, g).breaks.map(({ b, l }) => [
 
 // plan() in a child with a time limit, so a plan that never ends fails the test instead of hanging the suite.
 const bounded = (body) => {
-  const lib = JSON.stringify(path.join(__dirname, '../../extension/lib'));
+  const lib = JSON.stringify(path.join(__dirname, '../../extension/writer'));
   const r = spawnSync(process.execPath, ['-e', `const P = require(${lib} + '/writer-paginate.js'), ST = require(${lib} + '/writer-styles.js');\n${body}`], { timeout: 5000, encoding: 'utf8' });
   assert.equal(r.signal, null, 'plan() finishes');
   assert.equal(r.status, 0, r.stderr);

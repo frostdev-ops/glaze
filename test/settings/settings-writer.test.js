@@ -1,11 +1,11 @@
 // Settings → Writer: the `writer` settings key every Writer part reads (defaults.js GZ_SPEC.writer), its reader in the frame
-// (lib/writer-settings.js) and the gate on the editor's input rules, the section in options.html, its words in the five
+// (writer/writer-settings.js) and the gate on the editor's input rules, the section in options.html, its words in the five
 // catalogues, docs/features.md's lines, and the backup carrying it. Each switch in a browser is checks/settings/settings-writer-check.js
 // (the section) and the writer-proof, writer-compose and writer-submit checks (the behaviour).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path');
-const D = require('../../extension/defaults.js');
+const D = require('../../extension/content/defaults.js');
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 
 // The names stream F's files read (writer-paper.js, writer-ruler.js, writer-paste.js) and the defaults the brief fixes.
@@ -16,13 +16,13 @@ test('the writer key: every name, its default, and what it takes', () => {
     compose: { markdown: true, target: true, quote: true },
     submit: { rememberText: true, text: false },
   });
-  const ST = require('../../extension/lib/writer-styles.js');
-  assert.deepEqual(D.GZ_SPEC.writer.format[1], ST.IDS, 'the formats are lib/writer-styles.js IDS');
+  const ST = require('../../extension/writer/writer-styles.js');
+  assert.deepEqual(D.GZ_SPEC.writer.format[1], ST.IDS, 'the formats are writer/writer-styles.js IDS');
   // The paper's zoom menu (writer-paper.js) as percents.
-  const steps = /\.\.\.\[([\d., ]+)\]\.map\(\(z\) => \(\{ label: `\$\{z \* 100\}%`/.exec(read('writer-paper.js'));
+  const steps = /\.\.\.\[([\d., ]+)\]\.map\(\(z\) => \(\{ label: `\$\{z \* 100\}%`/.exec(read('writer/frame/writer-paper.js'));
   assert.ok(steps, 'writer-paper.js zoom steps');
   assert.deepEqual(D.GZ_SPEC.writer.zoom[1], ['fit', ...steps[1].split(',').map((z) => Math.round(+z * 100))]);
-  assert.equal(D.GZ_DEFAULTS.writer.versions, require('../../extension/lib/writer-papers.js').CAP.versions, 'the versions kept today');
+  assert.equal(D.GZ_DEFAULTS.writer.versions, require('../../extension/writer/writer-papers.js').CAP.versions, 'the versions kept today');
   assert.deepEqual(D.GZ_SPEC.writer.versions[1], [10, 25, 40, 50, 100]);
   assert.deepEqual(D.GZ_SPEC.writer.dialect[1], ['en-US', 'en-GB', 'en-CA', 'en-AU']);
 });
@@ -54,8 +54,8 @@ test('backup: the export (Settings, sanitised) carries writer, and a restore rea
   assert.deepEqual(back.writer, s.writer);
   assert.equal(back.writer.versions, 100);
   // options.js's export spreads the whole state; its restore sanitises the file.
-  assert.match(read('options.js'), /const settings = \{ \.\.\.s, nav, navbar/);
-  assert.match(read('options.js'), /const next = \{ \.\.\.GZ_SANITIZE\(raw\)/);
+  assert.match(read('settings/options.js'), /const settings = \{ \.\.\.s, nav, navbar/);
+  assert.match(read('settings/options.js'), /const next = \{ \.\.\.GZ_SANITIZE\(raw\)/);
 });
 
 test('only two numeric endpoints declare a range; mixed choices keep their types', () => {
@@ -70,16 +70,16 @@ test('only two numeric endpoints declare a range; mixed choices keep their types
   } finally { spec[1] = rule; }
 });
 
-// ---- lib/writer-settings.js -------------------------------------------------------------------------------------------
+// ---- writer/writer-settings.js -------------------------------------------------------------------------------------------
 const reader = (stored) => {
   const listeners = [];
   let value = stored;
   const sync = { get: async () => (value === undefined ? {} : { writer: value }), set: async (o) => { const old = value; value = o.writer; for (const fn of listeners) fn({ writer: { oldValue: old, newValue: value } }, 'sync'); } };
   const prev = globalThis.chrome;
   globalThis.chrome = { storage: { sync, onChanged: { addListener: (fn) => listeners.push(fn) } } };
-  delete require.cache[require.resolve('../../extension/lib/writer-settings.js')];
+  delete require.cache[require.resolve('../../extension/writer/writer-settings.js')];
   delete globalThis.GZ_WRITER_SETTINGS;
-  const W = require('../../extension/lib/writer-settings.js');
+  const W = require('../../extension/writer/writer-settings.js');
   delete globalThis.GZ_WRITER_SETTINGS;
   return { W, sync, restore: () => { globalThis.chrome = prev; }, value: () => value };
 };
@@ -115,7 +115,7 @@ test('a settings change during the initial read wins over its older snapshot', a
 });
 
 // ---- the gate on the editor's input rules ---------------------------------------------------------------------------------
-const E = require('../../extension/lib/writer-editor.js'), S = require('../../extension/lib/writer-schema.js'), O = require('../../extension/lib/writer-objects.js');
+const E = require('../../extension/writer/writer-editor.js'), S = require('../../extension/writer/writer-schema.js'), O = require('../../extension/writer/writer-objects.js');
 const typer = (mode, off) => {
   const extra = mode === 'paper' && O.plugins ? O.plugins(S.paper) : [];
   const view = { composing: false, state: null, dispatch(tr) { this.state = this.state.apply(tr); } };
@@ -205,11 +205,11 @@ test('Settings → Writer: its own tab and six sections, the two switches first,
   assert.match(panel, /data-key="writer\.pdf"[^\n]*\n<div class="wr-row"><span class="wr-name" id="writer-slides-name">Slides<\/span><input type="checkbox" data-key="writer\.slides" aria-labelledby="writer-slides-name"><\/div>/);
   for (const id of ['writer-paper-list', 'writer-clear-all', 'writer-words', 'writer-words-clear']) assert.match(panel, new RegExp(`id="${id}"`), id);
   assert.match(html, /<dialog id="writer-clear"/);
-  assert.match(html, /<script src="lib\/editor-writer\.js"><\/script>/);
+  assert.match(html, /<script src="settings\/editor-writer\.js"><\/script>/);
 });
 
-test('every word lib/editor-writer.js shows is in the five catalogues', () => {
-  const src = read('lib/editor-writer.js');
+test('every word settings/editor-writer.js shows is in the five catalogues', () => {
+  const src = read('settings/editor-writer.js');
   const words = [...src.matchAll(/\bt\('((?:[^'\\]|\\.)+)'/g)].map((m) => m[1].replace(/\\(.)/g, '$1'));
   assert.ok(words.length > 5);
   for (const f of ['de', 'es', 'fr', 'nl', 'pt-BR']) {
@@ -239,7 +239,7 @@ test('dialect: the worker builds Harper in the dialect asked for, and switches a
   }
   const ctx = vm.createContext({ LocalLinter, Dialect: { American: 0, British: 1, Australian: 2, Canadian: 3 }, slimBinary: {}, crypto: { randomUUID: () => 'w' }, performance,
     onconnect: null, close() {}, setTimeout: () => 1, clearTimeout() {} });
-  vm.runInContext(read('lib/harper/shared.js').replace(/^import .*;\n/gm, ''), ctx);
+  vm.runInContext(read('vendor/harper/shared.js').replace(/^import .*;\n/gm, ''), ctx);
   const p = { got: [], postMessage(m) { this.got.push(m); }, close() {} };
   ctx.onconnect({ ports: [p] });
   const send = (m) => p.onmessage({ data: m });
@@ -255,7 +255,7 @@ test('dialect: the worker builds Harper in the dialect asked for, and switches a
 });
 
 test('papers by course, from the paper index; the dictionary as kept', () => {
-  const WE = require('../../extension/lib/editor-writer.js');
+  const WE = require('../../extension/settings/editor-writer.js');
   const rows = [
     { key: 'bb.school.test|_9_1|_101_1|_7_1', course: 'ENG 101' }, { key: 'bb.school.test|_9_1|_101_1|_8_1', course: '' },
     { key: 'bb.school.test|_9_1|_202_1|_7_1', course: 'HIS 210' }, { key: 'broken' }, null,
@@ -263,7 +263,7 @@ test('papers by course, from the paper index; the dictionary as kept', () => {
   assert.deepEqual(WE.byCourse(rows).map((c) => [c.name, c.keys.length]), [['ENG 101', 2], ['HIS 210', 1]]);
   assert.deepEqual(WE.byCourse([{ key: 'bb.school.test|_9_1|_303_1|_1_1' }])[0].name, '_303_1', 'a course with no name shows its id');
   assert.deepEqual(WE.words(['a', 3, '', ' ', 'B']), ['a', 'B']);
-  assert.deepEqual(WE.FORMATS, require('../../extension/lib/writer-styles.js').IDS.map((id) => [id, require('../../extension/lib/writer-styles.js').FORMATS[id].label]));
+  assert.deepEqual(WE.FORMATS, require('../../extension/writer/writer-styles.js').IDS.map((id) => [id, require('../../extension/writer/writer-styles.js').FORMATS[id].label]));
 });
 
 test('a word taken out of the personal dictionary is unknown again: the worker forgets it and builds Harper again', async () => {
@@ -277,7 +277,7 @@ test('a word taken out of the personal dictionary is unknown again: the worker f
     async lint(text) { return text.includes('rememory') ? [{ span: () => ({ start: 0, end: 8 }), lint_kind: () => 'Spelling', message: () => 'm', get_problem_text: () => 'rememory', suggestions: () => [] }] : []; }
   }
   const ctx = vm.createContext({ LocalLinter, Dialect: { American: 0 }, slimBinary: {}, crypto: { randomUUID: () => 'w' }, performance, onconnect: null, close() {}, setTimeout: () => 1, clearTimeout() {} });
-  vm.runInContext(read('lib/harper/shared.js').replace(/^import .*;\n/gm, ''), ctx);
+  vm.runInContext(read('vendor/harper/shared.js').replace(/^import .*;\n/gm, ''), ctx);
   const p = { got: [], postMessage(m) { this.got.push(m); }, close() {} };
   ctx.onconnect({ ports: [p] });
   const send = async (m) => { p.onmessage({ data: m }); await flush(); };
@@ -293,14 +293,14 @@ test('a word taken out of the personal dictionary is unknown again: the worker f
 
 
 test('Settings groups standalone and recovery documents so every counted paper is visible', () => {
-  const WE = require('../../extension/lib/editor-writer.js'), PA = require('../../extension/lib/writer-papers.js');
+  const WE = require('../../extension/settings/editor-writer.js'), PA = require('../../extension/writer/writer-papers.js');
   const keys = [PA.newKey(), 'recovery:1234'];
   const groups = WE.byCourse(keys.map((key) => ({ key })));
   assert.deepEqual(groups, [{ id: 'documents', name: 'Documents', keys }]);
 });
 
 test('Settings lists and counts no document in Trash, and Clear all clears those too', () => {
-  const WE = require('../../extension/lib/editor-writer.js'), PA = require('../../extension/lib/writer-papers.js');
+  const WE = require('../../extension/settings/editor-writer.js'), PA = require('../../extension/writer/writer-papers.js');
   const doc = PA.newKey(), binned = PA.newKey(), paper = 'bb.school.test|_9_1|_101_1|_7_1', gone = 'bb.school.test|_9_1|_101_1|_8_1';
   const rows = [{ key: doc }, { key: binned, trashed: 1 }, { key: paper, course: 'ENG 101' }, { key: gone, course: 'ENG 101', trashed: 2 }];
   assert.deepEqual(WE.byCourse(rows).map((c) => [c.name, c.keys]), [['Documents', [doc]], ['ENG 101', [paper]]]);
@@ -309,8 +309,8 @@ test('Settings lists and counts no document in Trash, and Clear all clears those
 
 
 test('Clear all stays enabled with only Trash and confirms every paper it removes', async () => {
-  const vm = require('node:vm'), WE = require('../../extension/lib/editor-writer.js'), PA = require('../../extension/lib/writer-papers.js');
-  const source = read('lib/editor-writer.js'), from = source.indexOf('    const drawPapers = '), to = source.indexOf("    dialog.addEventListener('close'", from);
+  const vm = require('node:vm'), WE = require('../../extension/settings/editor-writer.js'), PA = require('../../extension/writer/writer-papers.js');
+  const source = read('settings/editor-writer.js'), from = source.indexOf('    const drawPapers = '), to = source.indexOf("    dialog.addEventListener('close'", from);
   const nodes = new Map(), $ = (id) => {
     if (!nodes.has(id)) nodes.set(id, { textContent: '', replaceChildren() {}, showModal() {}, focus() {} });
     return nodes.get(id);
@@ -327,8 +327,8 @@ test('Clear all stays enabled with only Trash and confirms every paper it remove
 });
 
 test('each Clear… confirms and reports what it clears: a course’s papers, Documents, or papers and documents', async () => {
-  const vm = require('node:vm'), WE = require('../../extension/lib/editor-writer.js'), PA = require('../../extension/lib/writer-papers.js');
-  const source = read('lib/editor-writer.js'), from = source.indexOf('    const drawPapers = '), to = source.indexOf("    $('writer-clear-all').addEventListener", from);
+  const vm = require('node:vm'), WE = require('../../extension/settings/editor-writer.js'), PA = require('../../extension/writer/writer-papers.js');
+  const source = read('settings/editor-writer.js'), from = source.indexOf('    const drawPapers = '), to = source.indexOf("    $('writer-clear-all').addEventListener", from);
   const rows = [{ key: PA.newKey() }, { key: 'bb.school.test|_9_1|_101_1|_7_1', course: 'ENG 101' }];
   // Settings' papers code with stand-ins for the page; each removal redraws, as storage.onChanged does there.
   const panel = async (remove) => {

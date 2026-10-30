@@ -1,18 +1,18 @@
-// A paper frame's key (lib/writer-papers.js keyOf) can come after the frame opens: writer-paper.js's saving and loading
+// A paper frame's key (writer/writer-papers.js keyOf) can come after the frame opens: writer-paper.js's saving and loading
 // blocks, run over the real schema, styles, format and papers store (an in-memory storage.local and sessionStorage), with
-// the page's context arriving after load(), as lib/writer-context-assignment.js send() hands it over.
+// the page's context arriving after load(), as writer/writer-context-assignment.js send() hands it over.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const S = require('../../extension/lib/writer-schema.js');
-const E = require('../../extension/lib/writer-editor.js');
-const ST = require('../../extension/lib/writer-styles.js');
-const F = require('../../extension/lib/writer-format.js');
-const PA = require('../../extension/lib/writer-papers.js');
+const S = require('../../extension/writer/writer-schema.js');
+const E = require('../../extension/writer/writer-editor.js');
+const ST = require('../../extension/writer/writer-styles.js');
+const F = require('../../extension/writer/writer-format.js');
+const PA = require('../../extension/writer/writer-papers.js');
 
-const source = fs.readFileSync(process.env.WRITER_PAPER_SOURCE || path.join(__dirname, '../../extension/writer-paper.js'), 'utf8');
+const source = fs.readFileSync(process.env.WRITER_PAPER_SOURCE || path.join(__dirname, '../../extension/writer/frame/writer-paper.js'), 'utf8');
 const cut = (a, b) => { const i = source.indexOf(a), j = source.indexOf(b, i); assert.ok(i >= 0 && j > i, a); return source.slice(i, j); };
 // Open from Documents' pick, with the format change and the restore its Undo runs ('' in a source without it).
 const PICK = source.includes('    // ---- Open from Documents') ? cut('    // ---- Open from Documents', '    let docsSheet') : '';

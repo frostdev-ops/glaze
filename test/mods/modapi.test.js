@@ -1,8 +1,8 @@
-// Code mods' API v1 cleaners (lib/modapi.js) and the broker's calls built on them (lib/modbroker.js): every refusal.
+// Code mods' API v1 cleaners (mods/modapi.js) and the broker's calls built on them (mods/modbroker.js): every refusal.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const A = require('../../extension/lib/modapi.js');
-const B = require('../../extension/lib/modbroker.js');
+const A = require('../../extension/mods/modapi.js');
+const B = require('../../extension/mods/modbroker.js');
 
 const T = (x) => ({ type: 'text', text: x });
 const stack = (children, more = {}) => ({ type: 'stack', children, ...more });

@@ -1,10 +1,10 @@
 // Look parts that move, on the LMS page: a Look's animations (x.anim), the effects that play on events (x.fx), the
 // pointer's animation (x.cursor) and typing's (x.type). content.js loads this (need) once the worn Look has one of them, and calls sync() when its
 // parts change ('glaze:parts') and off() when Glaze turns off. The parts come from GZ_CTX.parts() (cleaned,
-// lib/lookparts.js), the events from GZ_CTX.moment() ('glaze:moment' on the document); the pure half is lib/motionx.js.
+// looks/lookparts.js), the events from GZ_CTX.moment() ('glaze:moment' on the document); the pure half is looks/motionx.js.
 // Classic script; a second injection keeps the first.
 //
-// Animations are CSS text built from numbers (lib/motionx.js compile) and put on the page as a constructed stylesheet
+// Animations are CSS text built from numbers (looks/motionx.js compile) and put on the page as a constructed stylesheet
 // (adoptedStyleSheets), not as a <style> element. A school's Content-Security-Policy can carry `style-src` without
 // 'unsafe-inline', which refuses an inline <style> that a page's own scripts add; a stylesheet built through CSSOM
 // (replaceSync, like style.setProperty and the canvas) is not a source that policy checks. Measured in
@@ -16,15 +16,15 @@
 //
 // What plays is nothing when motion is off (the level, or reduced motion through it): effects check
 // html[data-gz-motion] as they start and every frame, the pointer's also data-gz-no-hover, and the animations' own
-// knobs (motion.css) do the same for CSS. Never on a quiz or a tool's page (lib/lookx.js quiet). The pointer itself is
-// the system's, drawn by features/lookx.js as a CSS cursor; what this draws goes around it, never in its place. One canvas
+// knobs (motion.css) do the same for CSS. Never on a quiz or a tool's page (looks/lookx.js quiet). The pointer itself is
+// the system's, drawn by looks/page/lookx.js as a CSS cursor; what this draws goes around it, never in its place. One canvas
 // (#gz-fx, pointer-events none, hidden from a screen reader) is made for an effect and removed when none is left;
 // frames run only while something is alive or the pointer is moving, and not while the page is hidden.
 var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
   const ctx = globalThis.GZ_CTX;
   if (!ctx) return null; // a frame-only injection can outlive its document
   const html = document.documentElement;
-  const lib = () => Promise.all([ctx.need('lib/motionx.js', () => globalThis.GZ_MX), ctx.need('lib/lookx.js', () => globalThis.GZ_LX)]);
+  const lib = () => Promise.all([ctx.need('looks/motionx.js', () => globalThis.GZ_MX), ctx.need('looks/lookx.js', () => globalThis.GZ_LX)]);
   const quiet = () => !!globalThis.GZ_LX?.quiet(location.pathname, document);
   let live = true;
   const moving = () => live && /^(subtle|expressive)$/.test(html.getAttribute('data-gz-motion') || '');
@@ -72,7 +72,7 @@ var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
     snow: (g, h) => { for (let i = 0; i < 3; i++) { const a = (i * Math.PI) / 3; g.moveTo(Math.cos(a) * h, Math.sin(a) * h); g.lineTo(-Math.cos(a) * h, -Math.sin(a) * h); } },
     heart: (g, h) => { g.moveTo(0, h * 0.9); g.bezierCurveTo(-h * 1.3, -h * 0.1, -h * 0.6, -h * 1.1, 0, -h * 0.35); g.bezierCurveTo(h * 0.6, -h * 1.1, h * 1.3, -h * 0.1, 0, h * 0.9); },
     leaf: (g, h) => { g.moveTo(0, -h); g.quadraticCurveTo(h * 0.9, -h * 0.2, 0, h); g.quadraticCurveTo(-h * 0.9, -h * 0.2, 0, -h); },
-    // The marks (lib/motionx.js MARKS).
+    // The marks (looks/motionx.js MARKS).
     bat: (g, h) => {
       const half = [[0.12, -0.42], [0.22, -0.2], [0.5, -0.5], [1, -0.38], [0.82, -0.06], [0.62, 0.1], [0.46, -0.02], [0.3, 0.2], [0.12, 0.06], [0, 0.36]];
       g.moveTo(0, -0.3 * h);
@@ -107,7 +107,7 @@ var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
     shard: (g, h) => { g.moveTo(0, -h); g.lineTo(h * 0.38, -h * 0.15); g.lineTo(0, h); g.lineTo(-h * 0.3, h * 0.1); g.closePath(); },
   };
   const STROKED = new Set(['snow', 'bubble', 'flake']);
-  // A contour ring (lib/motionx.js ring): traced, grown and lifted with its age; one the pointer let go keeps a 6 px clear
+  // A contour ring (looks/motionx.js ring): traced, grown and lifted with its age; one the pointer let go keeps a 6 px clear
   // zone round the pointer's tip, wherever it is now.
   const contour = (g, p, a) => {
     const t = Math.min(1, p.age / p.life), e = 1 - (1 - t) ** 3, r = p.r0 + (p.s - p.r0) * e, y = p.y - p.lift * e;
@@ -257,7 +257,7 @@ var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
   const play = (e) => {
     const { name, x, y } = e.detail || {};
     const f = typeof name === 'string' && Object.hasOwn(fxs, name) ? fxs[name] : null;
-    // A mod the student lets replace this moment's effect plays its own instead (features/mods.js).
+    // A mod the student lets replace this moment's effect plays its own instead (mods/page/mods.js).
     if (!f || globalThis.GZ_MODS?.replaces(`effect:${name}`) || document.hidden || !moving() || !ctx.on() || quiet()) return;
     // A page of cards can find several at once (new grades on each): one effect, not a dozen.
     const now = performance.now();

@@ -1,15 +1,15 @@
 // The editor's motion builders: per moment, a ready animation or one
 // built from 2–8 stops (x.anim); per event, an effect (x.fx); and a typing effect (x.type). The Look's pointer (x.pointer)
-// and its animation (x.cursor) are under Look › Pointer (lib/editor-pointer.js). Names, limits and what an
-// absent value means are lib/motionx.js's (GZ_MX), which draws them. Shared controls and the save path are in
-// lib/editor-x.js; the preview plays them (lib/editor-preview.js) unless motion is off. Extension settings page only; the
+// and its animation (x.cursor) are under Look › Pointer (settings/editor-pointer.js). Names, limits and what an
+// absent value means are looks/motionx.js's (GZ_MX), which draws them. Shared controls and the save path are in
+// settings/editor-x.js; the preview plays them (settings/editor-preview.js) unless motion is off. Extension settings page only; the
 // tables have module.exports for node.
 var GZ_EDITOR_XMOTION = globalThis.GZ_EDITOR_XMOTION || (() => {
   const X = typeof GZ_EDITOR_X !== 'undefined' ? GZ_EDITOR_X : require('./editor-x.js');
-  const MX = () => (typeof GZ_MX !== 'undefined' ? GZ_MX : require('./motionx.js'));
+  const MX = () => (typeof GZ_MX !== 'undefined' ? GZ_MX : require('../looks/motionx.js'));
   const MOMENTS = { 'page.enter': 'Page enter', 'panel.enter': 'Panel enter', 'card.enter': 'Card enter', 'card.hover': 'Card hover', 'tile.enter': 'Tile enter', 'rail.open': 'Rail open', 'tooltip.in': 'Tooltip', 'button.press': 'Button press' };
   const HELD = ['card.hover', 'button.press']; // states that last while they do, not entrances that play once
-  // The pointer sets' names (lib/motionx.js POINTERS), and the typing effects'.
+  // The pointer sets' names (looks/motionx.js POINTERS), and the typing effects'.
   const POINTERS = { aqua: 'Aqua', lilac: 'Lilac', pearl: 'Pearl', aurora: 'Aurora', quill: 'Quill', terminal: 'Terminal', lava: 'Lava', neon: 'Neon', clear: 'Clear', lagoon: 'Lagoon', rose: 'Rose', ghost: 'Ghost', pumpkin: 'Pumpkin', frostdev: 'Frostdev', own: 'Your own picture' };
   const TYPES = { embers: 'Embers', ink: 'Ink', sparks: 'Sparks', pixels: 'Pixels', petals: 'Petals', snow: 'Snow', bubbles: 'Bubbles', wisps: 'Wisps', contour: 'Contours' };
   const EVENTS = { complete: 'You complete an item', submit: 'You hand in work', grade: 'A new grade arrives', streak: 'Your streak grows', 'timer.done': 'A focus timer ends', 'look.rotate': 'Your Look rotates' };
@@ -46,7 +46,7 @@ var GZ_EDITOR_XMOTION = globalThis.GZ_EDITOR_XMOTION || (() => {
   const presetsFor = (moment) => PRESETS[moment] || ENTER;
   // The ready animation a moment's value is, or '' (built by hand).
   const presetOf = (moment, a) => Object.entries(presetsFor(moment)).find(([, [, p]]) => GZ_XPARTS_SAME(p, a))?.[0] || '';
-  const GZ_XPARTS_SAME = (a, b) => (typeof GZ_XPARTS !== 'undefined' ? GZ_XPARTS : require('./lookparts.js')).same(a, b);
+  const GZ_XPARTS_SAME = (a, b) => (typeof GZ_XPARTS !== 'undefined' ? GZ_XPARTS : require('../looks/lookparts.js')).same(a, b);
   // A stop added between two others: halfway, with the values it would have there unset (they blend through it).
   const between = (stops, i) => ({ at: Math.round(((stops[i].at + (stops[i + 1]?.at ?? 1)) / 2) * 1000) / 1000 });
 

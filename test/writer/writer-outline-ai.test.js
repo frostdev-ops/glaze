@@ -1,10 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const T = require('../../extension/lib/ai/task.js');
-require('../../extension/lib/ai/providers/mock.js');
-const O = require('../../extension/lib/ai/tasks/writer-outline.js');
-const C = require('../../extension/lib/writer-outline.js');
-const F = require('../../extension/lib/writer-format.js'), S = require('../../extension/lib/writer-schema.js'), ST = require('../../extension/lib/writer-styles.js');
+const T = require('../../extension/ai/task.js');
+require('../../extension/ai/providers/mock.js');
+const O = require('../../extension/ai/tasks/writer-outline.js');
+const C = require('../../extension/writer/writer-outline.js');
+const F = require('../../extension/writer/writer-format.js'), S = require('../../extension/writer/writer-schema.js'), ST = require('../../extension/writer/writer-styles.js');
 const blocks = [
   { id: 'b0', kind: 'paragraph', text: 'School gardens connect lessons with everyday life.' },
   { id: 'b1', kind: 'paragraph', text: 'Students can compare the growth of different plants.' },
@@ -132,7 +132,7 @@ test('outline fit and both inference attempts cap Advanced output at 256 tokens 
 test('a measured response cutoff gets exactly one section-local regeneration without echoing partial output', async () => {
   const failure = { code: 'request-rejected', category: 'request-rejected', reason: 'response-limit', phase: 'response', actual: 1025, limit: 1024,
     detail: 'UNTRUSTED PARTIAL ANSWER MUST NOT REACH A REPAIR PROMPT' };
-  const seen = [], output = await O.orchestrate(input(), { text: require('../../extension/lib/ai/text.js'), signal: new AbortController().signal, fits: () => true, limits: { calls: 64 },
+  const seen = [], output = await O.orchestrate(input(), { text: require('../../extension/ai/text.js'), signal: new AbortController().signal, fits: () => true, limits: { calls: 64 },
     ask: async (request, options) => {
       seen.push({ request, options }); const i = seen.length - 1;
       if (i === 1) throw failure;
@@ -146,17 +146,17 @@ test('a measured response cutoff gets exactly one section-local regeneration wit
   assert.ok(JSON.stringify(seen[2].request).includes(blocks[1].text));
   assert.ok(!JSON.stringify(seen[2].request).includes(blocks[0].text));
   let calls = 0;
-  await assert.rejects(O.orchestrate(input(), { text: require('../../extension/lib/ai/text.js'), signal: new AbortController().signal, fits: () => true, limits: { calls: 64 },
+  await assert.rejects(O.orchestrate(input(), { text: require('../../extension/ai/text.js'), signal: new AbortController().signal, fits: () => true, limits: { calls: 64 },
     ask: async () => { calls++; throw failure; } }), (e) => e === failure);
   assert.equal(calls, 2, 'a second known cutoff is returned without another regeneration');
   const control = new AbortController(); let cancelled = 0;
-  await assert.rejects(O.orchestrate(input(), { text: require('../../extension/lib/ai/text.js'), signal: control.signal, fits: () => true, limits: { calls: 64 },
+  await assert.rejects(O.orchestrate(input(), { text: require('../../extension/ai/text.js'), signal: control.signal, fits: () => true, limits: { calls: 64 },
     ask: async () => { cancelled++; control.abort(); throw failure; } }), (e) => e === failure);
   assert.equal(cancelled, 1, 'cancellation wins before a known cutoff can regenerate');
   for (const change of [{ phase: 'measure' }, { reason: 'response-context' }, { actual: 1024 }, { actual: 1.5 }, { limit: 0 }, { limit: -1 },
     { actual: Number.MAX_SAFE_INTEGER + 1 }, { category: 'connection-lost', code: 'connection-lost' }, { category: 'invalid-response', code: 'invalid-response' }]) {
     let attempts = 0; const error = { ...failure, ...change };
-    await assert.rejects(O.orchestrate(input(), { text: require('../../extension/lib/ai/text.js'), signal: new AbortController().signal, fits: () => true, limits: { calls: 64 },
+    await assert.rejects(O.orchestrate(input(), { text: require('../../extension/ai/text.js'), signal: new AbortController().signal, fits: () => true, limits: { calls: 64 },
       ask: async () => { attempts++; throw error; } }), (e) => e === error);
     assert.equal(attempts, 1, JSON.stringify(change));
   }

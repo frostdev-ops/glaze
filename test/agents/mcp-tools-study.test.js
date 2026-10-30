@@ -1,12 +1,12 @@
-// The courses group's MCP tools (lib/mcp/tools-study.js): accounts_list, courses_list, todo_list and schedule_list over
+// The courses group's MCP tools (agents/tools-study.js): accounts_list, courses_list, todo_list and schedule_list over
 // Glaze's caches, which test/helpers/mcp-caches.cjs makes with the code that writes them. Each answer is the slim shape
-// lib/modbroker.js gives a mod on that account's page, and no account ever sees another's.
+// mods/modbroker.js gives a mod on that account's page, and no account ever sees another's.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const ST = require('../../extension/lib/mcp/tools-study.js');
-const B = require('../../extension/lib/modbroker.js');
-const AT = require('../../extension/lib/ai/tools.js');
-const S = require('../../extension/lib/ai/schema.js');
+const ST = require('../../extension/agents/tools-study.js');
+const B = require('../../extension/mods/modbroker.js');
+const AT = require('../../extension/ai/tools.js');
+const S = require('../../extension/ai/schema.js');
 const C = require('../helpers/mcp-caches.cjs');
 
 const { CANVAS, ULTRA, NOW } = C;
@@ -46,7 +46,7 @@ test('each tool is a read tool GZ_AI_TOOLS takes, in the courses group, scoped t
     assert.equal(d.group, 'courses', t.name);
     assert.equal(d.scope, t.name === 'accounts_list' ? undefined : 'account', t.name);
     assert.ok(S.clean(d.parameters), t.name);
-    // The view adds account (lib/mcp/registry.js) and the harness reason; neither is a tool's own.
+    // The view adds account (agents/registry.js) and the harness reason; neither is a tool's own.
     assert.ok(!['account', 'reason'].some((k) => Object.hasOwn(d.parameters.properties, k)), t.name);
     assert.ok(d.title && d.description.length <= AT.LIMIT.description, t.name);
   }
@@ -78,7 +78,7 @@ test('accounts_list: every account with a planner or Insights record kept, newes
   assert.match(none.missing, /^Open /);
 });
 
-// The broker's items with Glaze's own mark beside each (lib/mcp/tools-study.js marked): none here.
+// The broker's items with Glaze's own mark beside each (agents/tools-study.js marked): none here.
 const unmarked = (items) => items.map((i) => ({ ...i, marked: null }));
 // Without complete (Glaze's list's own done, from the cache's items), to compare with the broker's slim items.
 const plain = (items) => items.map(({ complete, ...i }) => i);

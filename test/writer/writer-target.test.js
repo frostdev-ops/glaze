@@ -1,8 +1,8 @@
-// Glaze Writer's targets (lib/writer-target.js): the words, sources and replies a discussion prompt asks for, read from the
+// Glaze Writer's targets (writer/writer-target.js): the words, sources and replies a discussion prompt asks for, read from the
 // ways prompts really say them, and nothing read where a prompt doesn't say it plainly.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const T = require('../../extension/lib/writer-target.js');
+const T = require('../../extension/writer/writer-target.js');
 
 const NONE = { minWords: null, maxWords: null, sources: null, replies: null, reply: { minWords: null, maxWords: null, sources: null } };
 // The fields a case names, the rest null.

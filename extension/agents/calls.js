@@ -1,22 +1,22 @@
-// The one call path for agent apps' tools/call (lib/mcp/wire.js's call; a later WebMCP adapter is another caller): Glaze
-// on, the tool listed, the app paired and the tool's group granted (asked in the approval window, lib/mcp/approve.js, with a
+// The one call path for agent apps' tools/call (agents/wire.js's call; a later WebMCP adapter is another caller): Glaze
+// on, the tool listed, the app paired and the tool's group granted (asked in the approval window, agents/approve.js, with a
 // decline remembered so it is never asked again), the arguments checked, the account resolved, the caches refreshed through
 // an open tab, then the tool run (a change only once the student allows it and access is re-checked), its
 // answer wrapped and capped, and one activity row of metadata logged for every call past the tool's lookup.
-// create({ registry ({ get(name, state), describe(tool) }: lib/mcp/registry.js's), state() → its state, grants (a
+// create({ registry ({ get(name, state), describe(tool) }: agents/registry.js's), state() → its state, grants (a
 //   GZ_MCP_GRANTS.open store), settings() → { on } (GZ_MCP_GRANTS.clean of storage.local mcp), enabled() → Glaze's own
 //   switch (sync enabled), approve: { ask(kind: 'pair' | 'grant' | 'action', view, { signal, progress }) → 'yes' | 'no' |
 //   'timeout' | 'cancelled' | 'interrupted' | 'busy' }, accounts() → accounts_list's items, refresh(account, group,
 //   { signal, tool }) → { ok, source: 'tab' } | null (null: no tab to read), local, keys (a tool's ctx: storage.local and
 //   its keys), now, record(row) (GZ_MCP_GRANTS.record's), turn(f) (the broker's serializer), timers? ({ setTimeout,
-//   clearTimeout }) }) → { call } for lib/mcp/wire.js create.
+//   clearTimeout }) }) → { call } for agents/wire.js create.
 // A view: { app: { name (as the app reports itself), exe }, tool: { name, title }, group, mod? (a mod tool's: its mod's name
 // in the state the call was listed from), summary? (an action's: the tool's
 // summarize, from Glaze's own data, never the model's words) }. progress may be given (message) or (n, total, message).
 // The answer: structuredContent { note, account, source: 'tab' | 'cache', at, ageSeconds, ...the rest of the tool's }, and
-// the same JSON in content[0].text; past LIMIT.text characters both hold the harness's omission receipt (lib/ai/loop.js
-// output) under omitted. A tool's failure ({ ok: false, error }, lib/ai/tools.js toolFailure) is isError with its text.
-// Classic script for the worker, after lib/ai/{schema,tools,failure,loop}.js and lib/mcp/grants.js; module.exports for node.
+// the same JSON in content[0].text; past LIMIT.text characters both hold the harness's omission receipt (ai/loop.js
+// output) under omitted. A tool's failure ({ ok: false, error }, ai/tools.js toolFailure) is isError with its text.
+// Classic script for the worker, after ai/{schema,tools,failure,loop}.js and agents/grants.js; module.exports for node.
 var GZ_MCP_CALLS = globalThis.GZ_MCP_CALLS || (() => {
   const S = () => (typeof GZ_AI_SCHEMA !== 'undefined' ? GZ_AI_SCHEMA : require('../ai/schema.js'));
   const T = () => (typeof GZ_AI_TOOLS !== 'undefined' ? GZ_AI_TOOLS : require('../ai/tools.js'));

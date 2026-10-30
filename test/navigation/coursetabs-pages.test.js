@@ -1,8 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
-const L = require('../../extension/lib/coursetabs.js');
-const source = fs.readFileSync(require.resolve('../../extension/features/coursetabs.js'), 'utf8');
+const L = require('../../extension/navigation/coursetabs.js');
+const source = fs.readFileSync(require.resolve('../../extension/navigation/page/coursetabs.js'), 'utf8');
 const part = (a, b) => source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a)));
 const origin = 'https://school.instructure.com';
 

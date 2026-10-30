@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const Z = require('../../extension/lib/zip.js');
-const P = require('../../extension/lib/pptx.js');
+const Z = require('../../extension/core/zip.js');
+const P = require('../../extension/documents/slides/pptx.js');
 
 // The deck under test/fixtures/pptx/deck, laid out as its package: zipped here as it stands, or with parts swapped.
 const DIR = path.join(__dirname, '../fixtures/pptx/deck');
@@ -157,7 +157,7 @@ test('shapes: presets with adjust values, custom geometry, style references, lin
 
   const tri = named(s3, 'Triangle');
   assert.equal(tri.flipH, true);
-  // lib/pptx-geom.js's input: custom geometry as written, values as numbers or guide names.
+  // documents/slides/pptx-geom.js's input: custom geometry as written, values as numbers or guide names.
   assert.deepEqual(tri.geometry, {
     avLst: [], gdLst: [{ name: 'mid', fmla: '*/ w 1 2' }], cxnLst: [], rect: { l: '0', t: '0', r: 'r', b: 'b' },
     pathLst: [{ w: 100, h: 100, fill: 'norm', stroke: true, cmds: [
@@ -518,7 +518,7 @@ test('relationship targets stay within the package while root paths and parent p
   const escaped = rels.replace('Target="slides/slide1.xml"', 'Target="../../ppt/slides/slide1.xml"');
   const d = await P.read(pack({ 'ppt/_rels/presentation.xml.rels': escaped }));
   assert.equal(d.slides[0].missing, true);
-  const D = require('../../extension/lib/doctext.js');
+  const D = require('../../extension/core/doctext.js');
   assert.equal((await D.rels(D.unzip(pack({ 'ppt/_rels/presentation.xml.rels': escaped })), 'ppt/presentation.xml')).get('rId2').path, 'ppt/slides/slide1.xml');
 });
 
@@ -545,7 +545,7 @@ test('a layout\'s colour-map override reaches its slides that keep the master ma
 });
 
 test('shared master chart titles are parsed once per part', async () => {
-  const D = require('../../extension/lib/doctext.js'), original = D.tokens;
+  const D = require('../../extension/core/doctext.js'), original = D.tokens;
   let parsed = 0;
   D.tokens = function* (src, ...args) {
     if (src.includes('shared-chart-probe')) parsed++;

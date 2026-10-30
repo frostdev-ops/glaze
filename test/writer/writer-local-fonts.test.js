@@ -3,10 +3,10 @@
 // and its bundled twin where not, named in the .docx's fontTable; a paste still sets only the four.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const ST = require('../../extension/lib/writer-styles.js');
-const S = require('../../extension/lib/writer-schema.js');
-const P = require('../../extension/writer-paste.js');
-const X = require('../../extension/lib/writer-docx.js');
+const ST = require('../../extension/writer/writer-styles.js');
+const S = require('../../extension/writer/writer-schema.js');
+const P = require('../../extension/writer/frame/writer-paste.js');
+const X = require('../../extension/writer/writer-docx.js');
 
 const mla = ST.FORMATS.mla9;
 

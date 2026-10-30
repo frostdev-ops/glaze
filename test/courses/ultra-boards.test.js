@@ -1,18 +1,18 @@
-// Blackboard Ultra's boards (B7b): features/widgets.js and features/dashboard.js on synthetic Courses, Institution and
+// Blackboard Ultra's boards (B7b): core/page/widgets.js and courses/page/dashboard.js on synthetic Courses, Institution and
 // course pages built from the B7 and B8 spikes (and B0's anchors), in a VM with the stand-in DOM laying the page
 // out like Ultra at 1280 px: a 200 px nav, the page from 200 to 1280, the To Do column its last 320 px, a course's 94 px
 // top bar. The tiles float in the page's layer at the column's top, the column makes room for them; Edit layout lets
 // them move (pointer and keys, snapped, kept across a reload); a narrow window stacks them and keeps the layout; a tile
-// can float over every page, once. Layout changes go to the worker as patches (lib/widgets.js change, here the real
+// can float over every page, once. Layout changes go to the worker as patches (core/widgets.js change, here the real
 // one on a shared store). The Dashboard's tabs, its To Do, and the landing.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
-const W = require('../../extension/lib/widgets.js');
-const K = require('../../extension/lib/cards.js');
+const D = require('../../extension/content/defaults.js');
+const W = require('../../extension/core/widgets.js');
+const K = require('../../extension/courses/cards.js');
 const { El } = require('../stand-in-dom.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
@@ -26,8 +26,8 @@ const later = () => { let done; const p = new Promise((res, rej) => { done = { r
 // column under the courses). store: one shared by two tabs. hold: { file: promise } for need(). header: false for a
 // Dashboard page without the header's anchors. landed: the worker's tabs that landed; tab: this one's id.
 // courses: the student's courses ({ id, name, code, term, slot }), with the board's course cards, their dialog and the card
-// painter and editor loaded for real (features/coursecards.js, features/cards.js, lib/cards.js), their styles saved by
-// the worker's lib/cards.js ultraChange into `sync` and this computer's `local`.
+// painter and editor loaded for real (courses/page/coursecards.js, courses/page/cards.js, courses/cards.js), their styles saved by
+// the worker's courses/cards.js ultraChange into `sync` and this computer's `local`.
 // Elements are compared with ===: an assertion message would print the whole stand-in document.
 const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, sync = {}, nav = 'navigate', path: where, hold = {}, header = true, landed = new Set(), tab = 1, acted = 0, history = 1, enhance = {}, holdReplies = false, courses = null } = {}) => {
   const doc = { activeElement: null, root: null };
@@ -80,7 +80,7 @@ const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, 
   const changed = (ch, a = 'local') => { for (const f of [...listeners]) f(ch, a); };
   const settings = D.GZ_SANITIZE({ ...sync, enhance: { notes: true, widgets: true, ...enhance } });
   const store = shared || { ...structuredClone(local) };
-  // The worker's side, as lib/background.js runs it: the layout's changes on what is stored (lib/widgets.js change).
+  // The worker's side, as background/background.js runs it: the layout's changes on what is stored (core/widgets.js change).
   const area = {
     get: async (keys) => Object.fromEntries([keys].flat().filter((k) => k in store).map((k) => [k, structuredClone(store[k])])),
     set: async (v) => { wrote.push(structuredClone(v)); Object.assign(store, structuredClone(v)); return true; },
@@ -115,8 +115,8 @@ const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, 
       site: 'ultra', t: (k, v) => (v ? k.replace(/\{(\w+)\}/g, (_, n) => v[n]) : k), locale: () => 'en', settings: () => settings, acted: () => (typeof acted === 'function' ? acted() : acted),
       need: async (f) => {
         loads.push(f); if (hold[f]) await hold[f];
-        if (f === 'features/pet.js') c.GZ_WIDGETS_UI.register('pet', () => ({}));
-        const name = { 'features/dashboard.js': 'GZ_DASH_UI', ...(courses && { 'features/coursecards.js': 'GZ_COURSE_CARDS', 'features/cards.js': 'GZ_CARD_UI', 'lib/cards.js': 'GZ_CARDS' }) }[f];
+        if (f === 'pet/page/pet.js') c.GZ_WIDGETS_UI.register('pet', () => ({}));
+        const name = { 'courses/page/dashboard.js': 'GZ_DASH_UI', ...(courses && { 'courses/page/coursecards.js': 'GZ_COURSE_CARDS', 'courses/page/cards.js': 'GZ_CARD_UI', 'courses/cards.js': 'GZ_CARDS' }) }[f];
         if (name && !c[name]) vm.runInContext(read(f), c);
       },
       ...(courses && {
@@ -148,8 +148,8 @@ const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, 
     doc.root.setAttribute('data-gz-motion', 'calm');
   }
   vm.createContext(c);
-  if (courses) vm.runInContext(read('lib/color.js'), c);
-  const ui = vm.runInContext(read('features/widgets.js').replace('return { sync, cover, hub: open, register, declare, who: account, avatar, catalog };',
+  if (courses) vm.runInContext(read('core/color.js'), c);
+  const ui = vm.runInContext(read('core/page/widgets.js').replace('return { sync, cover, hub: open, register, declare, who: account, avatar, catalog };',
     'return { sync, cover, hub: open, register, declare, who: account, avatar, catalog, probeLayout: layoutBoard };'), c);
   const tile = (id) => doc.querySelector(`section[data-tile="${id}"]`);
   const ev = (type, x = {}) => ({ type, target: null, button: 0, pointerId: 1, clientX: 0, clientY: 0, altKey: false, shiftKey: false, preventDefault() {}, stopPropagation() {}, ...x });
@@ -559,7 +559,7 @@ test("Dashboard: its own board before Ultra's page, headed Dashboard, with tabs 
   assert.equal(board.dataset.board, 'dash');
   // Those widgets with Better To Do's tile (Codex B7b 5), none over another.
   assert.deepEqual(board.querySelectorAll('section.gz-w').map((x) => x.dataset.tile).sort(), ['agenda', 'notes', 'quotes', 'timer', 'todo']);
-  assert.ok(p.tile('todo').querySelector('.gz-w-todo-spot'), "the place features/todo.js puts Better To Do's list");
+  assert.ok(p.tile('todo').querySelector('.gz-w-todo-spot'), "the place planner/page/todo.js puts Better To Do's list");
   const boxes = board.querySelectorAll('section.gz-w').map((x) => ({ left: px(x.style.left), top: px(x.style.top), w: W.WIDTH[x.dataset.size], h: 200 }));
   for (const a of boxes) for (const b of boxes) if (a !== b) assert.ok(!(a.left < b.left + b.w && b.left < a.left + a.w && a.top < b.top + b.h && b.top < a.top + a.h), 'no overlap');
   assert.ok(px(board.querySelector('.gz-dash-grid').style.height) >= 400, 'the room grows to hold them');
@@ -620,7 +620,7 @@ test('Dashboard: without the header, the tabs go right above the board', async (
 // Codex B7b 3: a Dashboard load that fails after the student moved on touches nothing of the next page.
 test('a stale Dashboard load never hides the Courses page that came after it', async () => {
   const slow = later();
-  const p = page({ at: 'dash', hold: { 'features/dashboard.js': slow } });
+  const p = page({ at: 'dash', hold: { 'courses/page/dashboard.js': slow } });
   p.ui.sync(true);
   await settle();
   p.c.location.pathname = '/ultra/course';
@@ -721,7 +721,7 @@ test('migration: a tile that floated over every Ultra page before (B5) still doe
 });
 
 test('landing: opt-in, once in a tab (the worker remembers it, not the page), never on a reload, never after the student moved', async () => {
-  const go = async (o) => { const p = page({ at: 'courses', ...o }); vm.runInContext(read('features/dashboard.js'), p.c); await p.c.GZ_DASH_UI.land(o.from); await settle(); return p; };
+  const go = async (o) => { const p = page({ at: 'courses', ...o }); vm.runInContext(read('courses/page/dashboard.js'), p.c); await p.c.GZ_DASH_UI.land(o.from); await settle(); return p; };
   assert.deepEqual((await go({ from: '/ultra', path: '/ultra/stream' })).clicks, [], 'off by default');
   const opt = { sync: { widgets: { land: true } } };
   const landed = new Set();
@@ -739,8 +739,8 @@ test('landing: opt-in, once in a tab (the worker remembers it, not the page), ne
   assert.deepEqual((await go({ ...opt, from: '/ultra', path: '/ultra/institution-page' })).clicks, [], 'there already');
   // Codex B7b 2: the landing waited for its library; meanwhile the student chose Courses (a click, a new history entry).
   const lib = later();
-  const q = page({ at: 'courses', ...opt, path: '/ultra/stream', hold: { 'lib/widgets.js': lib } });
-  vm.runInContext(read('features/dashboard.js'), q.c);
+  const q = page({ at: 'courses', ...opt, path: '/ultra/stream', hold: { 'core/widgets.js': lib } });
+  vm.runInContext(read('courses/page/dashboard.js'), q.c);
   const going = q.c.GZ_DASH_UI.land('/ultra');
   await settle();
   q.c.GZ_CTX.acted = () => 1;
@@ -761,7 +761,7 @@ test('the Dashboard is on by default with its own switch: its widgets and To Do 
   fresh.ui.sync(true);
   await settle();
   assert.deepEqual(fresh.doc.querySelectorAll('#gz-dash section.gz-w').map((x) => x.dataset.tile), ['pet', 'timer', 'notes', 'quotes', 'todo'], 'owner 2026-10-20: starter Dashboard widgets');
-  // A device updated from a version whose layouts started with four widgets keeps them (lib/widgets.js kept).
+  // A device updated from a version whose layouts started with four widgets keeps them (core/widgets.js kept).
   const p = page({ at: 'dash', enhance: off, local: { widgetLayout: W.kept(false) } });
   p.ui.sync(true);
   await settle();
@@ -823,8 +823,8 @@ test('layout callbacks arriving backwards cannot redraw an older fold or overwri
 test('landing rechecks current master and Dashboard settings after a delayed library or worker reply', async () => {
   for (const key of ['enabled', 'dashboard', 'land']) {
     const lib = later();
-    const p = page({ sync: { widgets: { land: true } }, path: '/ultra/stream', hold: { 'lib/widgets.js': lib } });
-    vm.runInContext(read('features/dashboard.js'), p.c);
+    const p = page({ sync: { widgets: { land: true } }, path: '/ultra/stream', hold: { 'core/widgets.js': lib } });
+    vm.runInContext(read('courses/page/dashboard.js'), p.c);
     const going = p.c.GZ_DASH_UI.land('/ultra');
     await settle();
     if (key === 'enabled') p.settings.enabled = false;
@@ -882,7 +882,7 @@ test('Dashboard widgets floated explicitly remain available with legacy Widgets 
 
 test('an unavailable widget library fails open to the native Institution page', async () => {
   const lib = later();
-  const p = page({ at: 'dash', hold: { 'lib/widgets.js': lib } });
+  const p = page({ at: 'dash', hold: { 'core/widgets.js': lib } });
   p.doc.root.setAttribute('data-gz-dash', '');
   p.ui.sync(true);
   lib.rej(Error('unavailable'));
@@ -935,7 +935,7 @@ test('landing works before the lazy widgets schema reaches content settings, and
   const p = page({ sync: { widgets: { land: true } }, path: '/ultra/stream' });
   delete p.settings.widgets;
   p.doc.querySelector('a').attrs.href = 'https://other.test/ultra/institution-page';
-  vm.runInContext(read('features/dashboard.js'), p.c);
+  vm.runInContext(read('courses/page/dashboard.js'), p.c);
   await p.c.GZ_DASH_UI.land('/ultra');
   await settle();
   assert.deepEqual(p.clicks, ['assign https://school.blackboard.test/ultra/institution-page']);
@@ -998,7 +998,7 @@ test('Ultra edit controls stay below the room on both boards and keep the toolba
 });
 
 
-// ---- the boards' Course cards dialog (features/coursecards.js, opened from widgets.js's Add row) -----------------
+// ---- the boards' Course cards dialog (courses/page/coursecards.js, opened from widgets.js's Add row) -----------------
 const COURSES = [
   { id: '_101_1', name: 'Biology', code: 'BIO-101', term: 'Fall 2026', slot: 3 },
   { id: '_102_1', name: 'Chemistry', code: 'CHEM-110', term: 'Fall 2026', slot: 5 },
@@ -1388,7 +1388,7 @@ test('Course cards: opening the full editor cancels a quick picture still decodi
 });
 
 test('Course cards: Style waits for the shared card editor to load', async () => {
-  const loaded = later(), p = cardsPage({ hold: { 'features/cards.js': loaded } });
+  const loaded = later(), p = cardsPage({ hold: { 'courses/page/cards.js': loaded } });
   const { dlg } = await openCards(p);
   const style = itemOf(dlg, '_101_1').querySelector('.gz-ccm-style');
   assert.equal(style.disabled, true, 'choices cannot be silently dropped during loading');
@@ -1488,7 +1488,7 @@ test('a fresh first Dashboard fills when delayed course metadata arrives without
 
 test("a tile's Fold, Remove and Float sit above its resize corner, which a folded tile brings up beside them", () => {
   // Both are positioned children of the tile, the corner last; its 24px reach covered a folded tile's Unfold.
-  const css = read('features/apps.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = read('core/page/apps.css').replace(/\/\*[\s\S]*?\*\//g, '');
   const z = (sel) => [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter(([, s]) => s.split(',').some((x) => x.trim() === sel))
     .map(([, , body]) => /z-index:\s*(-?\d+)/.exec(body)?.[1]).filter(Boolean).map(Number).at(-1) ?? 0;
   assert.ok(z('.gz-w-tools') > z('.gz-w-resize') && z('.gz-w-tools') > z('.gz-w-resize::before'), `tools ${z('.gz-w-tools')}, corner ${z('.gz-w-resize')}`);

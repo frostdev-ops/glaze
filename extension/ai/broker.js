@@ -1,33 +1,33 @@
 // The AI harness's broker (docs/ai-harness.md), in the worker: the one place a model is asked, and the only one that holds
 // the connections (a provider's key, an endpoint's address and key). A feature asks over a runtime port named 'glaze:ai'
-// (lib/background.js checks who opened it: Glaze's own pages, or Glaze in a frame of a site it runs on, never a quiz's page).
+// (background/background.js checks who opened it: Glaze's own pages, or Glaze in a frame of a site it runs on, never a quiz's page).
 //   page → { id, op: 'run', feature, task, input }  { id, op: 'cancel' }  { id, op: 'status', feature }
 //          { id, op: 'confirm', confirmId, approve }  { id, op: 'warm', feature, task, input }
-//   worker → the run's events, each { id, type, … } (lib/ai/loop.js: thinking, text_delta, says, note, step_start, step,
+//   worker → the run's events, each { id, type, … } (ai/loop.js: thinking, text_delta, says, note, step_start, step,
 //          pending, usage, reply), then { id, type: 'end', output?, pending?, steps?, meta } or { id, type: 'error', error,
 //          reference?, status? }. status → { id, type: 'status', on, allowed, ready?, why?, provider?, caps?, to? }. confirm →
 //          { id, type: 'confirmed', result } | { id, type: 'declined' } | { id, type: 'error', error, note }. warm → { id,
 //          type: 'warmed', ok }: a task with warm: true has its first request built as a run's would be and the provider
-//          readies a session for its instructions (lib/ai/providers.js warm), admitted as a run is; nothing is asked of the
+//          readies a session for its instructions (ai/providers.js warm), admitted as a run is; nothing is asked of the
 //          model, counted or recorded.
-// A run is checked here before anything is sent: Glaze and AI on, the feature allowed (lib/ai/settings.js), the task known,
-// a model chosen for the feature (its own, else the overall one: lib/ai/settings.js resolve) on a connection whose settings
-// are clean, the model one its catalog lists (lib/ai/models.js select; unverified when no list could be had), what the task needs within what the provider and catalog say, the browser holding the connection's
+// A run is checked here before anything is sent: Glaze and AI on, the feature allowed (ai/settings.js), the task known,
+// a model chosen for the feature (its own, else the overall one: ai/settings.js resolve) on a connection whose settings
+// are clean, the model one its catalog lists (ai/models.js select; unverified when no list could be had), what the task needs within what the provider and catalog say, the browser holding the connection's
 // host, the input within LIMIT, one run at a time for a tab's feature and LIMIT.perMinute of them (a task's rate may say
 // otherwise: its own perMinute, and supersede, where a new run of it cancels the one in flight). Every request goes out
 // through a fetch pinned to the connection's host and to the generation it was admitted on: a connection changed mid-run
 // sends nothing more ('changed'). A closed port cancels its runs and drops what waits for a confirm (keep the port open while
 // a run is in flight: its state dies with the worker). A page is told codes, never a provider's words, an address or a key.
-// A run takes the effort the student set for its model when the model takes it (lib/ai/models.js efforts), else its task's
-// own, and in Advanced the feature's tuning (lib/ai/settings.js tuning). Each run leaves one row in storage.local aiCalls
-// (lib/ai/failure.js record: the last 40, metadata only; provider: the connection's id, the on-device model's provider on
+// A run takes the effort the student set for its model when the model takes it (ai/models.js efforts), else its task's
+// own, and in Advanced the feature's tuning (ai/settings.js tuning). Each run leaves one row in storage.local aiCalls
+// (ai/failure.js record: the last 40, metadata only; provider: the connection's id, the on-device model's provider on
 // this device), one refused before admission too when its provider can be named; a supersede task's runs share one row a minute per tab and feature, with
 // their count. The sender check (env.allowed) may refuse one message with a code (the writer's 'attempt', or 'timeout' past
 // LIMIT.sender) instead of the whole port. A port's messages are taken in the order sent.
 // A connection's catalog is kept for LIMIT.listed per generation, and a changed connection drops it and the providers'
 // warm sessions (release).
 // Settings (options.html, its top frame) keeps the connections with 'glaze:ai-config' (config below). An older Settings'
-// store is read as lib/ai/settings.js migrate gives it, and written back so before Settings changes a connection (upgrade).
+// store is read as ai/settings.js migrate gives it, and written back so before Settings changes a connection (upgrade).
 // Classic script: the worker imports it on first use; module.exports for node.
 var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   const R = () => (typeof GZ_AI_REQUEST !== 'undefined' ? GZ_AI_REQUEST : require('./request.js'));
@@ -70,7 +70,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   };
   const CONNECTIONS = 'connections';
   const stored = async (env) => { const v = await env.vault.get(CONNECTIONS); return isObj(v) ? v : {}; };
-  // The connections, and the settings with them, as lib/ai/settings.js migrate reads an older Settings' store.
+  // The connections, and the settings with them, as ai/settings.js migrate reads an older Settings' store.
   const connections = async (env) => A().migrate(undefined, await stored(env)).connections;
   const view = async (env) => { const [raw, all] = await Promise.all([env.settings(), stored(env)]); const m = A().migrate(raw, all); return { s: m.settings, all: m.connections }; };
   // Outline has its own consent switch, but always uses Feedback's connection, model, effort and tuning.
@@ -82,7 +82,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     const cfg = p && p.config(raw);
     return cfg ? { id, p, cfg, generation: rec.generation } : null;
   };
-  // The connection a feature runs on with its model (lib/ai/settings.js resolve) and, in Advanced, the context its tuning
+  // The connection a feature runs on with its model (ai/settings.js resolve) and, in Advanced, the context its tuning
   // gives: → { id, p, cfg, generation, sel, tune, kept? } or null.
   const using = async (s, feature, all) => {
     const sel = A().resolve(s, feature);
@@ -96,8 +96,8 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   // A row's provider: an endpoint's connection id ('openrouter', one the student added), or the provider of a model on this
   // computer.
   const shown = (use) => (use.p.id === 'openai' ? use.id : use.p.id);
-  // What the student set that a run's requests take (lib/ai/task.js over): the effort when the model takes it (takes:
-  // lib/ai/models.js efforts), and in Advanced the feature's temperature, output and timeout.
+  // What the student set that a run's requests take (ai/task.js over): the effort when the model takes it (takes:
+  // ai/models.js efforts), and in Advanced the feature's temperature, output and timeout.
   const over = (use, takes = []) => ({ ...(use.sel.effort && takes.includes(use.sel.effort) && { effort: use.sel.effort }),
     ...Object.fromEntries(['temperature', 'maxTokens', 'timeoutMs'].filter((k) => use.tune[k] !== undefined).map((k) => [k, use.tune[k]])) });
   // "On this device" (Settings' 'device' connection) is one choice: Apple Intelligence where Safari offers it, unless this
@@ -187,13 +187,13 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   };
 
   // ---- a port ---------------------------------------------------------------------------------------------------------
-  // env: { allowed({ op, feature }) (a promise of true, false or a code: lib/background.js's sender check; false closes the
+  // env: { allowed({ op, feature }) (a promise of true, false or a code: background/background.js's sender check; false closes the
   // port, a code refuses only that message), who (the sender's tab), settings() (storage.local ai),
   // enabled() (Glaze's switch), vault (get, set, remove), local (storage.local: get, set; the call record), reach(url),
   // fetch, task(id), tools?, now? }.
   const connect = (port, env) => {
     const mine = new Map(); // run id → AbortController
-    const confirms = new Map(); // parked calls (lib/ai/loop.js), for this port only
+    const confirms = new Map(); // parked calls (ai/loop.js), for this port only
     let closed = false;
     const close = () => { if (closed) return; closed = true; for (const c of mine.values()) c.abort(new DOMException('Closed', 'AbortError')); mine.clear(); confirms.clear(); };
     const post = (m) => { if (closed) return; try { port.postMessage(m); } catch { close(); } };
@@ -412,18 +412,18 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
       caps: { ...P().caps(use.p, use.cfg), ...(typeof images === 'boolean' && { images }) }, ...(identity && { identity }), ...(use.p.origin && { to: dest(use) }) };
   };
 
-  // ---- Settings' connections (lib/background.js 'glaze:ai-config', from options.html's top frame only) ------------------
+  // ---- Settings' connections (background/background.js 'glaze:ai-config', from options.html's top frame only) ------------------
   //   { op: 'get' } → { ok, connections: { [id]: { provider, name?, …settings without the key, key: masked or '', origin } },
   //     providers }
   //   { op: 'set', id, cfg: { provider, name?, …settings } } → { ok, origin } | { ok: false, error: 'setup', note }. A
-  //     preset's id (lib/ai/settings.js PRESETS) is always at its preset's address; any other an endpoint the student named.
+  //     preset's id (ai/settings.js PRESETS) is always at its preset's address; any other an endpoint the student named.
   //     A cfg with no key keeps the kept one, but only for the same address: a key never follows a changed address. A new
-  //     address or key is a new generation. A model is the settings' (lib/ai/settings.js), never a connection's.
+  //     address or key is a new generation. A model is the settings' (ai/settings.js), never a connection's.
   //   { op: 'remove', id } → { ok }
   //   { op: 'test', id } → { ok, state, reason?, status?, reference?, source? }: the provider's status (its key checked), once
   //     its host is held.
   //   { op: 'models', id } → { ok, models: [{ id, name, efforts, … }], source, at } | { ok: false, error }: its catalog, for a
-  //     model picker, each model with the efforts it takes (lib/ai/models.js efforts; [] for none).
+  //     model picker, each model with the efforts it takes (ai/models.js efforts; [] for none).
   //   { op: 'test', provider: 'device' } → { ok, state, reason? }: a provider with a model on this computer, before any
   //     connection uses it. { op: 'prepare', provider: 'device' } (from a click) → { ok, state, reason? } once its model is
   //     downloaded and loaded; meanwhile env.say({ type: 'glaze:ai-config', event: 'progress', provider, loaded: 0..1 }).
@@ -442,8 +442,8 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   };
   let turn = Promise.resolve();
   const queued = (f) => { const next = turn.then(f, f); turn = next.catch(() => {}); return next; };
-  // An older Settings' store written back as lib/ai/settings.js migrate reads it, the settings first and under Settings' own
-  // lock (lib/editor-ai.js write), the connections only once the settings read back hold every model: written alone they
+  // An older Settings' store written back as ai/settings.js migrate reads it, the settings first and under Settings' own
+  // lock (settings/editor-ai.js write), the connections only once the settings read back hold every model: written alone they
   // still find the model in the connections; the connections alone would lose it. → true once the store is in its shape.
   const upgrade = async (env) => {
     const save = async () => {

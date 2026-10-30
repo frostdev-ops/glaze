@@ -1,11 +1,11 @@
-// x.bg.media (lib/lookparts.js): a video, an animated picture or a Lottie animation as a Look part. Every refusal here is a code
+// x.bg.media (looks/lookparts.js): a video, an animated picture or a Lottie animation as a Look part. Every refusal here is a code
 // from a stranger that must not get in: an address that is not https or not a public host, a file name that is not a SHA-256, a
 // type or fit that is not one of the few, numbers out of range, keys nobody defined.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const X = require('../../extension/lib/lookparts.js');
-const S = require('../../extension/lib/share.js');
-const G = require('../../extension/defaults.js');
+const X = require('../../extension/looks/lookparts.js');
+const S = require('../../extension/sharing/share.js');
+const G = require('../../extension/content/defaults.js');
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const HASH = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ'; // 43 characters of base64url

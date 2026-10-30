@@ -1,4 +1,4 @@
-// The background worker's sidebar writes ('glaze:sidebar', lib/background.js with lib/sidebar.js), its storage in
+// The background worker's sidebar writes ('glaze:sidebar', background/background.js with navigation/sidebar.js), its storage in
 // memory: who may write which account's record, changes from two tabs in the queue, a failed write, the one-time move
 // of To Do, and a new install's mark.
 const test = require('node:test');
@@ -6,8 +6,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const S = require('../../extension/lib/sidebar.js');
-const W = require('../../extension/lib/widgets.js');
+const S = require('../../extension/navigation/sidebar.js');
+const W = require('../../extension/core/widgets.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const CANVAS = 'https://school.instructure.com', CANVAS2 = 'https://other.instructure.com', ULTRA = 'https://bb.example.edu', ULTRA2 = 'https://bb.other.edu';
@@ -15,9 +15,9 @@ const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setI
 
 // Evaluate the shipped context and adapter exports, with their actual cached identity readers. Other helpers are idle.
 const pageContext = (site, origin, account, reads) => {
-  const part = read(`content-${site}.js`);
+  const part = read(`content/content-${site}.js`);
   const adapter = /ctx: (\{[^\n]+\}),\n/.exec(part)[1];
-  const core = read('content.js');
+  const core = read('content/content.js');
   const context = core.slice(core.indexOf('globalThis.GZ_CTX = Object.freeze({'), core.indexOf('\n\n  // Independent card/widget stores'));
   const readers = site === 'canvas' ? part.slice(part.indexOf('  let mine = null;'), part.indexOf('  // Who is signed in'))
     : part.slice(part.indexOf('  let meId = null;'), part.indexOf('  const covered ='));
@@ -55,7 +55,7 @@ const worker = ({ local = {}, state = null, production = false, manualTimers = f
     URL, console, TextEncoder, structuredClone, Promise, Date, Intl,
     setTimeout: manualTimers ? (fn, ms) => { const id = ++timerId; timers.set(id, { fn, ms }); return id; } : setTimeout,
     clearTimeout: manualTimers ? (id) => timers.delete(id) : clearTimeout, crypto: globalThis.crypto,
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), context); },
     chrome: {
       runtime: {
         id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => m,
@@ -81,7 +81,7 @@ const worker = ({ local = {}, state = null, production = false, manualTimers = f
       },
     },
   });
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   const send = (msg, sender) => new Promise((res) => {
     pages.set(sender.documentId || `${sender.tab.id}:${sender.frameId}`, sender);
     let kept = false;
@@ -99,7 +99,7 @@ const CP = at(`${CANVAS}/courses/1`), UP = at(`${ULTRA}/ultra/course`);
 test('the broker identity reader exists on the real frozen page context and uses each adapter cache', async () => {
   for (const [sender, key, site, origin] of [[CP, cKey(), 'canvas', CANVAS], [UP, uKey(), 'ultra', ULTRA]]) {
     const reads = [], page = pageContext(site, origin, () => site === 'canvas' ? '42' : '_9_1', reads);
-    const called = /String\(await c\.(\w+)\(\)\)/.exec(read('lib/background.js'))[1];
+    const called = /String\(await c\.(\w+)\(\)\)/.exec(read('background/background.js'))[1];
     assert.equal(vm.runInContext('Object.isFrozen(GZ_CTX)', page), true);
     assert.equal(typeof page.GZ_CTX[called], 'function', `${site}: the broker's reader is exported`);
     assert.equal(await page.GZ_CTX[called](), site === 'canvas' ? '42' : '_9_1');
@@ -315,11 +315,11 @@ test('a new install marks its layout fresh, an update does not, and the mark giv
   assert.equal(fresh.store.local.widgetLayout.sidebarFresh, true, 'kept by later updates');
   const r = await fresh.send(sb(uKey(), [{ op: 'migrate' }]), UP);
   assert.deepEqual(S.docked(r.rec).map((x) => x.id), ['todo', 'settings']); // owner, 2026-10-20
-  const settings = require('../../extension/defaults.js').GZ_SANITIZE(fresh.store.sync, fresh.store.local.freshDefaults.fresh);
+  const settings = require('../../extension/content/defaults.js').GZ_SANITIZE(fresh.store.sync, fresh.store.local.freshDefaults.fresh);
   assert.equal(settings.enhance.notes, true);
   assert.equal(settings.enhance.pet, true);
   assert.deepEqual(fresh.store.sync.enhance, {}, 'initial feature choices are not uploaded over pending sync');
-  // A layout change keeps the mark (lib/widgets.js layout passes it through).
+  // A layout change keeps the mark (core/widgets.js layout passes it through).
   await fresh.send({ type: 'glaze:widgetLayout', ops: [{ s: 'cdash', id: 'notes', set: { on: true } }] }, CP);
   assert.equal(fresh.store.local.widgetLayout.sidebarFresh, true);
   const old = worker();

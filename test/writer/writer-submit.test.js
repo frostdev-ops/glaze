@@ -1,4 +1,4 @@
-// Glaze Writer's submit step, the pure parts (lib/writer-submit.js) over the probed attempt shape
+// Glaze Writer's submit step, the pure parts (writer/writer-submit.js) over the probed attempt shape
 // (test/fixtures/ultra-writer-attempt.html): the file name, Ultra's upload input and footer buttons, when the file shows as
 // attached, the note and text as Quill ops, and the step order that keeps Ultra's Submit last. The sheet and the page's
 // side in a browser: checks/writer/writer-submit-check.js.
@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { El } = require('../stand-in-dom.js');
 const { parse } = require('../fixture-dom.js');
-const S = require('../../extension/lib/writer-submit.js');
+const S = require('../../extension/writer/writer-submit.js');
 
 const page = (f = 'ultra-writer-attempt.html') => { const doc = { activeElement: null }; doc.root = new El('html', doc); doc.body = parse(fs.readFileSync(path.join(__dirname, '../fixtures', f), 'utf8'), doc); return doc.body; };
 const editorOf = (body) => body.querySelector('#bb-editorassignment-attempt-authoring-submission');
@@ -96,7 +96,7 @@ test('the note, then the paper\'s text, as one plain insert Quill keeps', () => 
   assert.deepEqual(S.delta({ note: 'Hi,\r\n\r\n\r\nsee attached.  ', text: 'Title\n\nFirst paragraph.\nSecond\tparagraph.\n\n' }),
     [{ insert: 'Hi,\n\nsee attached.\n\nTitle\n\nFirst paragraph.\nSecond\tparagraph.\n' }]);
   assert.deepEqual(S.delta({ text: 'Only\u0000the text' }), [{ insert: 'Only the text\n' }]);
-  for (const d of [S.delta({ note: 'a' }), S.delta({ text: 'b\nc' })]) assert.ok(d.length === 1 && Object.keys(d[0]).join() === 'insert' && d[0].insert.endsWith('\n'), 'lib/writer-main.js takes it: plain inserts ending in a newline');
+  for (const d of [S.delta({ note: 'a' }), S.delta({ text: 'b\nc' })]) assert.ok(d.length === 1 && Object.keys(d[0]).join() === 'insert' && d[0].insert.endsWith('\n'), 'writer/writer-main.js takes it: plain inserts ending in a newline');
 });
 
 test('the steps: Ultra\'s Submit is reachable only after every step before it, in turn; any failure ends the run', () => {

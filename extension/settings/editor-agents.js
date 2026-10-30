@@ -1,7 +1,7 @@
 // Settings → Agents: agent access's switch, the glaze-mcp helper's link, the apps the student paired with the groups each may
-// use, and the activity list. The worker keeps all of it (lib/background.js 'glaze:mcp-config': state once as the page
+// use, and the activity list. The worker keeps all of it (background/background.js 'glaze:mcp-config': state once as the page
 // opens, set, apps, grant, revoke, forget; from this top frame only), and the student's consent in its own database. The link
-// is storage.session mcpLink (lib/agent-link.js status), read here and followed through storage.onChanged. The worker hears
+// is storage.session mcpLink (agents/agent-link.js status), read here and followed through storage.onChanged. The worker hears
 // from this page as it opens (state is a trigger there, so a helper installed since connects) and, on Chrome, once more
 // after WAIT of Starting…; otherwise never, so a page left open doesn't wake it into another try at a helper. Turning on
 // asks the browser for nativeMessaging first, in the click, as Firefox loses the gesture across an await (Safari holds it
@@ -9,7 +9,7 @@
 // the link says restart; Firefox connects at once. Turning off lets the worker end the link before the permission goes.
 // Forget all apps asks first, as Settings → Writer's Clear all papers and documents does. Firefox says not-installed for a
 // helper that doesn't list Glaze too, and nothing about why one exited, so no line rests on forbidden or the error. The
-// activity list is storage.local mcpCalls (lib/mcp/grants.js record), metadata only. Every word reaches the page as
+// activity list is storage.local mcpCalls (agents/grants.js record), metadata only. Every word reaches the page as
 // textContent.
 // Extension options page only (mount); the pure helpers are for node tests.
 var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
@@ -19,7 +19,7 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
   // browser, so the same click asks for that consent, and turning off gives it back.
   const FIREFOX = { ...NATIVE, data_collection: ['websiteContent'] };
   const SETUP = 'npx glaze-mcp setup', DOCTOR = 'npx glaze-mcp doctor', UPDATE = 'npx glaze-mcp@latest setup';
-  // lib/agent-link.js's no-node: the browser-started helper found no Node.js of the system's own (Claude's runtime can't be
+  // agents/agent-link.js's no-node: the browser-started helper found no Node.js of the system's own (Claude's runtime can't be
   // one). Tried again on triggers only.
   const NO_NODE = 'no-node';
   // Chrome stops an idle worker about 30-40 s after its last event and starts one only for the next, which this page doesn't
@@ -27,16 +27,16 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
   // its start; one that still answers restart is kept up by something else, and the line says to restart the browser.
   // Glaze never reloads itself from here: that would reload open documents and Writer frames mid-save.
   const WAIT = 60e3;
-  // Glaze's groups (lib/ai/tools.js GROUPS), named as the approval window names them; a mod's group is mod:<id>.
+  // Glaze's groups (ai/tools.js GROUPS), named as the approval window names them; a mod's group is mod:<id>.
   const GROUPS = ['courses', 'grades', 'writer', 'assignments'];
-  // What lib/mcp/grants.js records of a call's end.
+  // What agents/grants.js records of a call's end.
   const OUTCOMES = ['ok', 'error', 'declined', 'timeout', 'interrupted', 'refused', 'busy', 'cancelled', 'invalid'];
   const ID = /^[a-z2-7]{16}$/, MOD = /^mod:([a-z2-7]{16})$/, TOOL = /^[a-z][a-z0-9_]{0,63}$/;
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
   const str = (v) => (typeof v === 'string' ? v : '');
 
   const browserOf = (url) => (/^safari-web-extension:/i.test(url) ? 'safari' : /^moz-extension:/i.test(url) ? 'firefox' : 'chrome');
-  // What Settings says of the link (status: lib/agent-link.js status()) → { tone: 'ok' | 'wait' | 'bad', text, command?,
+  // What Settings says of the link (status: agents/agent-link.js status()) → { tone: 'ok' | 'wait' | 'bad', text, command?,
   // act? }, or null while it is off. The command goes where text says {command}; act: 'allow' (ask for nativeMessaging),
   // or 'site' (the page's link to frostdev.io/glaze, for
   // the DMG build of the Glaze app, the one with the agent bridge). On Safari the helper is that app, which starts by itself:
@@ -62,10 +62,10 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
   const outcome = (o, t) => ({ ok: t('Done'), error: t('Failed'), declined: t('Declined'), timeout: t('Timed out'), interrupted: t('Interrupted'), refused: t('Refused'),
     busy: t('Busy'), cancelled: t('Cancelled'), invalid: t('Invalid request') }[o] || o);
   const failed = (o) => ['error', 'timeout', 'interrupted'].includes(o);
-  // The activity rows, newest first, as far as they are what lib/mcp/grants.js records; nothing else of a row is kept.
+  // The activity rows, newest first, as far as they are what agents/grants.js records; nothing else of a row is kept.
   const rows = (calls) => (Array.isArray(calls) ? calls : []).filter((r) => isObj(r) && Number.isFinite(r.at) && OUTCOMES.includes(r.outcome) && TOOL.test(str(r.tool)))
     .map((r) => ({ at: r.at, app: ID.test(str(r.app)) ? r.app : '', tool: r.tool, outcome: r.outcome })).sort((a, b) => b.at - a.at);
-  // The apps as the worker lists them (lib/mcp/grants.js records): only what the cards show.
+  // The apps as the worker lists them (agents/grants.js records): only what the cards show.
   const appsOf = (list) => (Array.isArray(list) ? list : []).filter((a) => isObj(a) && ID.test(str(a.id))).map((a) => ({
     id: a.id, name: str(a.name), exe: str(a.exe), at: Number.isFinite(a.at) ? a.at : null, used: Number.isFinite(a.used) ? a.used : null,
     grants: Object.keys(isObj(a.grants) ? a.grants : {}).filter((g) => a.grants[g] === true && (GROUPS.includes(g) || MOD.test(g))), declined: isObj(a.declined) && a.declined.pair !== undefined,

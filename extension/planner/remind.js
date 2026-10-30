@@ -1,21 +1,21 @@
 // Reminders and streaks (Canvas, W11): the parts that don't touch the page, so node can test them. Every category is
 // the student's own opt-in and off by default (defaults.js enhance.remind, remindPlan, remindExam, streak). Days and
-// "a day before" are counted in the student's Canvas time zone through lib/todo.js, which is loaded first.
-// Classic script; module.exports for node. Loaded on demand (features/reminders.js asks for it): a second injection keeps the first.
+// "a day before" are counted in the student's Canvas time zone through planner/todo.js, which is loaded first.
+// Classic script; module.exports for node. Loaded on demand (planner/page/reminders.js asks for it): a second injection keeps the first.
 var GZ_REMIND = globalThis.GZ_REMIND || (() => {
   const T = globalThis.GZ_TODO || require('./todo.js');
   const H = 36e5, DAY = T.DAY;
 
   // Its settings (storage.sync `remind`; the categories' switches are in enhance), added to GZ_SPEC from here as
-  // lib/todo.js does. m15…d2: lead times before a due date, as many as wanted; exam: how long before an exam;
+  // planner/todo.js does. m15…d2: lead times before a due date, as many as wanted; exam: how long before an exam;
   // plan: minutes before a focus session.
   const SPEC = {
     m15: [false, 'bool'], h1: [false, 'bool'], h3: [true, 'bool'], d1: [false, 'bool'], d2: [false, 'bool'],
     exam: ['2d', ['1d', '2d', '3d', '1w']], plan: ['15', ['0', '5', '15', '30', '60']],
-    // cls: minutes before a class in the class schedule (lib/classes.js events; the switch is enhance.remindClass).
+    // cls: minutes before a class in the class schedule (planner/classes.js events; the switch is enhance.remindClass).
     cls: ['10', ['5', '10', '15', '30']],
   };
-  (typeof GZ_SPEC !== 'undefined' ? GZ_SPEC : require('../defaults.js').GZ_SPEC).remind = SPEC;
+  (typeof GZ_SPEC !== 'undefined' ? GZ_SPEC : require('../content/defaults.js').GZ_SPEC).remind = SPEC;
   // Hours as lengths of time; days as the same time of day that many days before, so a day's lead is still "the day
   // before at 23:59" across a daylight-saving change.
   const LEADS = { m15: 0.25 * H, h1: H, h3: 3 * H, d1: '1', d2: '2' };
@@ -35,7 +35,7 @@ var GZ_REMIND = globalThis.GZ_REMIND || (() => {
   const isExam = (r) => r.type === 'quiz' || WORD.test(r.title || '') || COMPOUND.test(r.title || '');
 
   // ---- what to remind of ---------------------------------------------------------------------------------------
-  // rows: what's open on the student's list (lib/todo.js build, done ones left out); cats: { due, exam, plan } on;
+  // rows: what's open on the student's list (planner/todo.js build, done ones left out); cats: { due, exam, plan } on;
   // o: the remind settings; extra: reminders other packages make (class start, study), in the same shape.
   // → [{ id, key, cat, at (when it fires), until (when it stops mattering), end (the deadline or session), title, … }].
   // An id is the item and the moment, so a moved due date is a new reminder. Two at one moment are one; an exam's wins.
@@ -104,7 +104,7 @@ var GZ_REMIND = globalThis.GZ_REMIND || (() => {
   // Days in a row with nothing missed. Missed: work that wanted handing in (a submission, or the student's own task
   // with a due date) and is past due and not done, or was handed in late. Excused never counts, and nothing counts
   // from before the streak started or that a restore forgave. Today counts once nothing due today is still open.
-  // b: lib/todo.js build() over the last month (past: 'month'); s: the stored streak or null; today: a day number in tz.
+  // b: planner/todo.js build() over the last month (past: 'month'); s: the stored streak or null; today: a day number in tz.
   // → { start, asOf, best, was, keys, broke, current, extended }: a miss moves the start to the day after it, and keeps
   // the start before (was) and what was missed (keys) for a restore.
   // Late is late whether or not the student ticked it (manual "done means"); open is Canvas's rule, ticks aside.
@@ -164,13 +164,13 @@ var GZ_REMIND = globalThis.GZ_REMIND || (() => {
     };
   };
 
-  // ---- writes: one at a time, in the background worker (lib/background.js 'glaze:remind') ----
+  // ---- writes: one at a time, in the background worker (background/background.js 'glaze:remind') ----
   // m: { key, op, … } from a Canvas page. Two steps, so a reminder is never lost to a tab that closed or went quiet
   // between asking and showing: claim (tab) leases the reminders no other tab has shown or holds, answering which;
   // confirm (tab, lease), sent once the toast is on screen, marks them seen. An unconfirmed lease runs out (LEASE).
   // snooze: one reminder, until a time; mute/unmute: an item; streak: the page's reckoning, kept only if the stored
   // streak is still the one it reckoned from (from: its start), so a restore made in another tab isn't undone;
-  // restore: one of this month's. area: { local } as lib/background.js gives it.
+  // restore: one of this month's. area: { local } as background/background.js gives it.
   // → { ok, data, and claimed, lease, until (a claim) or confirmed (a confirm) } or { ok: false, error }.
   const change = async (m, area, now = Date.now()) => {
     if (typeof m?.key !== 'string' || !STORE_KEY.test(m.key)) return { ok: false, error: 'bad' };

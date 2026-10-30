@@ -1,27 +1,27 @@
-// The courses group's tools for agent apps (lib/mcp/*.js): the school accounts Glaze holds data for and, for one of them, its
-// courses, to-do list and schedule, read from Glaze's own caches with lib/modbroker.js's runners, so an app gets the slim
+// The courses group's tools for agent apps (agents/*.js): the school accounts Glaze holds data for and, for one of them, its
+// courses, to-do list and schedule, read from Glaze's own caches with mods/modbroker.js's runners, so an app gets the slim
 // shapes a mod gets, and marking a to-do done. Nothing here reads the LMS: the call core refreshes through an open tab first,
 // and adds the note, source and age. An item's done is the LMS's own (Canvas's planner mark); marked is Glaze's own mark on
 // this device, which Glaze's list uses unless Canvas sync is on (then the list follows Canvas's, and marked is null).
-// todo_mark_done marks the way Glaze's list does (features/todo.js mark, lib/todo.js change): with Canvas sync on, Canvas's
-// planner through the account's tab (lib/mcp/tab.js mark, with the page's CSRF token), else Glaze's own mark.
-// An account is '<origin>/<uid>' (Canvas's user id, or Ultra's _N_N), as lib/todo.js and lib/insights.js key theirs.
+// todo_mark_done marks the way Glaze's list does (planner/page/todo.js mark, planner/todo.js change): with Canvas sync on, Canvas's
+// planner through the account's tab (agents/tab.js mark, with the page's CSRF token), else Glaze's own mark.
+// An account is '<origin>/<uid>' (Canvas's user id, or Ultra's _N_N), as planner/todo.js and planner/insights.js key theirs.
 // run(args, ctx): ctx { account (the resolved account; accounts_list takes none), local (storage.local's { get }), keys?()
 // (storage.local's keys; else one get(null)), now?() }. → { account, at (the cache's own time in ms, or null where it keeps
 // none), items } (todo_list and schedule_list add covers: the span the planner was read for, and whether it was read whole);
 // with nothing kept for that account, { account, at: null, items: [], missing: what to open in the LMS }; and for an
 // account or arguments Glaze can't use, { ok: false, error }.
-// register(registry, deps?): deps { sync (storage.sync: the list's settings), tabs (lib/mcp/tabs.js create's) }; todo_mark_done
+// register(registry, deps?): deps { sync (storage.sync: the list's settings), tabs (agents/tabs.js create's) }; todo_mark_done
 // is added only with them.
 // The planner cache (storage.local todoCache) is one account's at a time. seenCourses keeps one list a school, which every
 // account signed in there adds to without its identity. Only this account's planner and Insights prove course membership.
-// Classic script for the worker, after lib/ai/tools.js and lib/modbroker.js; module.exports for node.
+// Classic script for the worker, after ai/tools.js and mods/modbroker.js; module.exports for node.
 var GZ_MCP_STUDY = globalThis.GZ_MCP_STUDY || (() => {
-  const B = () => (typeof GZ_MODBROKER !== 'undefined' ? GZ_MODBROKER : require('../modbroker.js'));
-  const T = () => (typeof GZ_TODO !== 'undefined' ? GZ_TODO : require('../todo.js'));
-  const Z = () => (typeof GZ_SANITIZE !== 'undefined' ? GZ_SANITIZE : require('../../defaults.js').GZ_SANITIZE);
+  const B = () => (typeof GZ_MODBROKER !== 'undefined' ? GZ_MODBROKER : require('../mods/modbroker.js'));
+  const T = () => (typeof GZ_TODO !== 'undefined' ? GZ_TODO : require('../planner/todo.js'));
+  const Z = () => (typeof GZ_SANITIZE !== 'undefined' ? GZ_SANITIZE : require('../content/defaults.js').GZ_SANITIZE);
   const DAY = 864e5;
-  // days: the most a to-do list looks ahead and a schedule spans (lib/modbroker.js schedule's); course: an id's characters.
+  // days: the most a to-do list looks ahead and a schedule spans (mods/modbroker.js schedule's); course: an id's characters.
   const LIMIT = { days: 60, course: 40 };
   const UID = /^(\d{1,20}|_\d{1,20}_\d{1,20})$/;
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
@@ -64,8 +64,8 @@ var GZ_MCP_STUDY = globalThis.GZ_MCP_STUDY || (() => {
       : m[4] === undefined ? new Date(y, mo - 1, d + (end ? 1 : 0)).getTime() - (end ? 1 : 0) : new Date(y, mo - 1, d, h, mi, s, ms).getTime();
     return at >= 0 ? at : null;
   };
-  // The to-do list's settings (storage.sync todo, cleaned as the list cleans them; lib/todo.js adds their spec), and whether a
-  // mark goes to the site: only Canvas has a planner for it, with sync on (features/todo.js toSite).
+  // The to-do list's settings (storage.sync todo, cleaned as the list cleans them; planner/todo.js adds their spec), and whether a
+  // mark goes to the site: only Canvas has a planner for it, with sync on (planner/page/todo.js toSite).
   const prefs = async (deps) => {
     let raw;
     try { raw = (await deps?.sync?.get('todo'))?.todo; } catch { /* the defaults */ }
@@ -80,7 +80,7 @@ var GZ_MCP_STUDY = globalThis.GZ_MCP_STUDY || (() => {
     const k = T().storeKey(who.origin, who.uid), d = T().clean((await ctx.local.get(k))[k]);
     return new Map(Object.entries(d.items).filter(([, v]) => typeof v.done === 'boolean').map(([key, v]) => [key, v.done]));
   };
-  // Glaze's own mark beside each item, and complete: done as Glaze's list shows it (lib/todo.js isDone over the cached item).
+  // Glaze's own mark beside each item, and complete: done as Glaze's list shows it (planner/todo.js isDone over the cached item).
   const marked = (items, m, c, o) => {
     const raw = new Map(c.items.filter(isObj).map((i) => [`${i.type}:${i.id}`, i]));
     return items.map((i) => {
@@ -112,7 +112,7 @@ var GZ_MCP_STUDY = globalThis.GZ_MCP_STUDY || (() => {
   };
   const host = (who) => new URL(who.origin).host;
   const noTab = (who) => `Open ${host(who)} in this browser, signed in as this account, to sync it. ${NOTHING}`;
-  // storage.local as lib/todo.js change writes it: set says whether it worked.
+  // storage.local as planner/todo.js change writes it: set says whether it worked.
   const area = (local) => ({ local: { get: (k) => local.get(k), set: (v) => Promise.resolve(local.set(v)).then(() => true, () => false) } });
   const approved = new WeakMap();
   const fingerprint = (m) => JSON.stringify([m.who.account, m.key, m.say, m.site, m.item.aid || '', m.item.ov?.id || '']);
@@ -204,7 +204,7 @@ var GZ_MCP_STUDY = globalThis.GZ_MCP_STUDY || (() => {
         approved.set(ctx, fingerprint(m));
         return m.say;
       },
-      // In the broker's turn (lib/mcp/calls.js), with the same edit or the same planner write Glaze's list makes for a tick.
+      // In the broker's turn (agents/calls.js), with the same edit or the same planner write Glaze's list makes for a tick.
       run: async (args, ctx) => {
         const m = await marking(args, ctx, deps);
         if (m.error) return fail(m.error);
@@ -221,14 +221,14 @@ var GZ_MCP_STUDY = globalThis.GZ_MCP_STUDY || (() => {
         const ov = r.ok === true && isObj(r.ov) && r.ov.done === true && /^\d{1,20}$/.test(r.ov.id) ? { id: r.ov.id, done: true, dismissed: r.ov.dismissed === true } : null;
         if (!ov) return fail(r.error === 'timeout' || r.uncertain === true ? "Canvas didn't confirm the mark, so it may or may not be in its planner; todo_list shows it once Glaze reads the planner again."
           : `Canvas didn't confirm the mark. ${NOTHING}`);
-        // The kept planner takes Canvas's override, as the list keeps it after a tick (features/todo.js mark).
+        // The kept planner takes Canvas's override, as the list keeps it after a tick (planner/page/todo.js mark).
         const c = plan(who, await ctx.local.get('todoCache')), it = c?.items.find((i) => isObj(i) && `${i.type}:${i.id}` === key);
         if (it) { it.ov = ov; await T().change({ key: store, cache: c }, area(ctx.local)); }
         return { account: who.account, at, item: { type: item.type, id: item.id, title, done: ov.done, marked: null }, where: 'canvas' };
       },
     }] : []),
   ];
-  // Adds them to a lib/ai/tools.js registry (its define checks each) → the tools as added.
+  // Adds them to a ai/tools.js registry (its define checks each) → the tools as added.
   const register = (registry, deps) => tools(deps).map((t) => registry.add(t));
   return { LIMIT, parse, env, none, tools, register };
 })();

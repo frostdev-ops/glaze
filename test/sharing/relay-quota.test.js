@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
-const G = require('../../extension/lib/sharing.js');
+const G = require('../../extension/sharing/sharing.js');
 const { relay, LIMIT, RATE, IPV6 } = require('../../server/relay.js');
 
 const DAY = 864e5;
@@ -23,7 +23,7 @@ const tmp = (t) => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-qu
 const id = () => G.b64(crypto.getRandomValues(new Uint8Array(16)));
 const today = () => Math.floor(Date.now() / DAY);
 const scale = (bits) => (IPV6 || []).find(([b]) => b === bits)?.[1] ?? { 64: 1, 56: 2, 48: 4 }[bits];
-// A device as the extension runs it (lib/sharing.js), optionally from a forwarded client address.
+// A device as the extension runs it (sharing/sharing.js), optionally from a forwarded client address.
 const device = (r, ip, type = 'notes', opts = {}) => {
   const d = { local: {}, st: G.create(type, { server: r.url, ...opts }) };
   const f = (u, init = {}) => fetch(u, ip ? { ...init, headers: { ...init.headers, 'x-real-ip': ip } } : init);

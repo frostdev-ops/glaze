@@ -19,7 +19,7 @@ class El {
   getBoundingClientRect() { return { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 }; } getClientRects() { return []; }
 }
 
-// An Ultra page with Glaze navigation on (its default), so syncNav needs features/navbar.js. `answer(n)` is the worker's
+// An Ultra page with Glaze navigation on (its default), so syncNav needs navigation/page/navbar.js. `answer(n)` is the worker's
 // reply to the n-th ask for it (a value, or a promise); every other file is refused for good.
 const boot = async (answer) => {
   let now = 0;
@@ -48,7 +48,7 @@ const boot = async (answer) => {
     chrome: { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://glaze/${p}`, lastError: undefined,
       sendMessage: (m) => {
         if (m?.type !== 'glaze:load') return Promise.resolve({ ok: false });
-        if (!m.files.includes('features/navbar.js')) return Promise.resolve({ ok: false, error: 'not loadable' });
+        if (!m.files.includes('navigation/page/navbar.js')) return Promise.resolve({ ok: false, error: 'not loadable' });
         asks.push(now);
         return Promise.resolve(answer(asks.length, c)).then((r) => {
           if (r?.ok) c.GZ_NAVBAR_UI ||= { sync: () => syncs.push(now), live: () => false };
@@ -57,8 +57,8 @@ const boot = async (answer) => {
       } },
       storage: { sync: { get: (k, cb) => cb({}) }, local: area(), onChanged: { addListener: (f) => changed.push(f) } } } });
   c.window = c; c.top = c; c.globalThis = c;
-  for (const f of ['lib/color.js', 'lib/i18n.js', 'lib/page.js', 'lib/grades.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/nav.js', 'content-ultra.js']) vm.runInContext(read(f), c, { filename: f });
-  vm.runInContext(read('content.js'), c, { filename: 'content.js' });
+  for (const f of ['core/color.js', 'core/i18n.js', 'core/page.js', 'planner/grades.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'navigation/nav.js', 'content/content-ultra.js']) vm.runInContext(read(f), c, { filename: f });
+  vm.runInContext(read('content/content.js'), c, { filename: 'content/content.js' });
   await settle();
   // Time passes, and nothing else happens on the page: only timers that come due run.
   const wait = async (ms) => {

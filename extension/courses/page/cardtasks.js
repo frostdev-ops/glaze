@@ -1,6 +1,6 @@
 // Tasks on course cards (enhance.cardTasks): Canvas's Dashboard cards and Blackboard Ultra's Courses page cards. Loaded
 // on demand: the site's part (syncCardTasks) calls sync(on) from content.js's passes while cards are on the page. Each
-// card lists its course's next items as Better To Do sees them (lib/todo.js build and card: its timeframe, past-due
+// card lists its course's next items as Better To Do sees them (planner/todo.js build and card: its timeframe, past-due
 // window, done rules, ticks on this device and marks in Canvas), from the same planner answer (storage.local todoCache).
 // The site is asked only when that answer is missing or over two minutes old and the To Do list isn't on the page to ask
 // itself, and what comes back is kept there for the list (and on Canvas the popup) too. Reads only: nothing here writes
@@ -12,10 +12,10 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   const FRESH = 120000; // as the list's
   const ACCEPT = 'application/json+canvas-string-ids, application/json';
   const TONE = { Missing: 'err', 'Submitted late': 'warn', Submitted: 'ok', Graded: 'ok', Excused: 'ok', Done: 'ok' };
-  let L = null; // lib/todo.js
+  let L = null; // planner/todo.js
   let tz, uid = '', key = '', o = null, data = null, cache = null;
   let on = false, starting = null, asking = null, failed = 0, listed = false;
-  let gs = null; // Gradescope's items for this site (lib/todo.js gradescope)
+  let gs = null; // Gradescope's items for this site (planner/todo.js gradescope)
   let asked = null; // Gradescope's one-time question, while it's on the page
 
   const get = (keys) => new Promise((res) => { try { chrome.storage.local.get(keys, (r) => res(chrome.runtime.lastError ? {} : r || {})); } catch { res({}); } });
@@ -31,7 +31,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     : ['.ic-DashboardCard', (el) => el.querySelector('a[href*="/courses/"]')?.getAttribute('href')?.match(/\/courses\/(\d+)/)?.[1], (el) => el.querySelector(':scope > .ic-DashboardCard__header'), (el) => el.getAttribute('aria-label') || ''];
   const keep = (e) => e.stopPropagation();
 
-  // ---- Canvas: the planner, as the list asks for it (features/todo.js pages and load) ----
+  // ---- Canvas: the planner, as the list asks for it (planner/page/todo.js pages and load) ----
   // ponytail: ten pages (1,000 items), as there.
   const pages = async (path) => {
     const out = [];
@@ -52,8 +52,8 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     return Date.parse(c.start) <= Date.parse(need.start) && Date.parse(c.end) >= Date.parse(need.end) - L.DAY;
   };
   // Kept in the list's shape, so the list takes it as its own. A teacher's list also wants the grading: for a teacher,
-  // teach is null, and the list keeps these planner items and asks for the grading alone (features/todo.js load).
-  // It's kept through the worker, only if no newer one is stored (lib/todo.js publishIn): an answer asked for before the
+  // teach is null, and the list keeps these planner items and asks for the grading alone (planner/page/todo.js load).
+  // It's kept through the worker, only if no newer one is stored (planner/todo.js publishIn): an answer asked for before the
   // one already kept (the list's, another tab's) is dropped, and the newer one shown.
   const load = async () => {
     const now = Date.now();
@@ -61,7 +61,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     let c, due;
     if (ultra) {
       // Ultra: no teachers' grading, and no popup list from here (content.js keeps Ultra's own). Read only while still on.
-      await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA);
+      await ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA);
       if (!on) throw new Error('off');
       const r = await GZ_ULTRA.page.due(Date.parse(start), Date.parse(end));
       c = { key, at: now, start, end, teach: o.teacher, progress: o.progress, items: r.items, complete: r.complete, grading: [], sums: {} };
@@ -135,7 +135,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
       render(el, cid, head, nameOf(el), { L, o, data, cache, uid, tz, extra: gs(now, uid) });
     }
 
-    // Gradescope's one-time question (lib/todo.js gradescope question), one quiet line above the first card's tasks,
+    // Gradescope's one-time question (planner/todo.js gradescope question), one quiet line above the first card's tasks,
     // unless Better To Do on this page asks it already (one question a page); drawn again only when what it asks
     // changes, so a pass never moves focus off it.
     const q = document.getElementById('gz-todo') ? null : gs?.question(uid, t, 'gz-ct-ask') ?? null;
@@ -158,7 +158,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   const onShow = () => { if (document.visibilityState === 'visible') refresh(); };
   // Who's signed in (their id names their data and the cache; their Canvas time zone counts the days), what's kept.
   const start = async () => {
-    await ctx.need('lib/todo.js', () => globalThis.GZ_TODO);
+    await ctx.need('planner/todo.js', () => globalThis.GZ_TODO);
     L = globalThis.GZ_TODO;
     const [p] = await Promise.all([ctx.profile(), readPrefs()]);
     if (!L.ID.test(String(p?.id))) throw new Error('no profile');

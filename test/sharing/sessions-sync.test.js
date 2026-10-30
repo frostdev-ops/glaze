@@ -1,4 +1,4 @@
-// The sync loop (lib/sessions.js over lib/sharing.js): what a local save costs with several shares open, which doorbell
+// The sync loop (sharing/sessions.js over sharing/sharing.js): what a local save costs with several shares open, which doorbell
 // rings start a sync, presence without a batch a minute, unsent edits kept to one copy, one share that fails never
 // holding up the others, and a log compacted before the relay's cap. A localhost disk relay only; no live relay.
 const test = require('node:test');
@@ -6,11 +6,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const G = require('../../extension/lib/sharing.js');
-const S = require('../../extension/lib/sessions.js');
-const N = require('../../extension/lib/notes.js');
-const T = require('../../extension/lib/todo.js');
-const K = require('../../extension/lib/cards.js');
+const G = require('../../extension/sharing/sharing.js');
+const S = require('../../extension/sharing/sessions.js');
+const N = require('../../extension/planner/notes.js');
+const T = require('../../extension/planner/todo.js');
+const K = require('../../extension/courses/cards.js');
 const { relay, diskStore, LIMIT } = require('../../server/relay.js');
 
 const NK = 'notesIdx:https://school.instructure.com/5', TK = 'todo:https://school.instructure.com/5';
@@ -35,7 +35,7 @@ const start = async (t, opts = {}) => {
   const address = await r.listen(0, '127.0.0.1');
   return { r, url: `http://127.0.0.1:${address.port}` };
 };
-// A device as the worker runs it: one queue for every session operation (lib/background.js's sessionTurn), its relay
+// A device as the worker runs it: one queue for every session operation (background/background.js's sessionTurn), its relay
 // requests noted as "<method> <session>", and its sockets kept to see which open and which this device closes.
 const device = (url, { WebSocket: W = WebSocket, now } = {}) => {
   const local = localArea({ [NK]: N.clean({}), [TK]: T.clean({}) }), db = database(), notes = notesDB(), serial = K.queue();
@@ -123,11 +123,11 @@ test('the worker names what changed: a Notes or To Do key, or the Look; nothing 
   const changed = [], changes = [], connections = [], area = localArea();
   const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
     GZ_SESSIONS: { make: () => ({ connect: () => () => {}, changed: (keys) => changed.push(keys) }) },
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), ctx); },
     chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: { addListener() {} }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener: (fn) => connections.push(fn) } },
       storage: { local: area, sync: area, onChanged: { addListener: (fn) => changes.push(fn) } } } });
-  vm.runInContext(read('lib/background.js'), ctx);
+  vm.runInContext(read('background/background.js'), ctx);
   for (const connect of connections) connect({ name: 'glaze:sessions', sender: { id: 'glaze', url: 'chrome-extension://glaze/options.html', origin: 'chrome-extension://glaze', frameId: 0 },
     onMessage: { addListener() {} }, onDisconnect: { addListener() {} }, postMessage() {}, disconnect() {} });
   await new Promise(setImmediate);

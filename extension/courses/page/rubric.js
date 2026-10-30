@@ -1,5 +1,5 @@
 // Assignment and discussion rubrics, read with the student's session. The site's controls stay in place and work until a complete
-// rubric is ready; the same read-only table goes inline or into Glaze's shared pop-up. Loaded by features/routes.js.
+// rubric is ready; the same read-only table goes inline or into Glaze's shared pop-up. Loaded by content/routes.js.
 var GZ_RUBRIC_UI = globalThis.GZ_RUBRIC_UI || (() => {
   const ctx = globalThis.GZ_CTX;
   if (!ctx) return null;
@@ -20,9 +20,9 @@ td[aria-current] { background:var(--gz-accent-soft,#e2f2ff); box-shadow:inset 0 
 @media print { .scroll { overflow:visible; } table { min-width:0!important; } }`;
   let R, wanted = false, active = null, cached = null, epoch = 0, pending = null, queued = false, stopped = false, masterOff = false, changedPrefs;
   const ready = Promise.all([
-    ctx.need('lib/rubric.js', () => globalThis.GZ_RUBRIC_LIB),
-    ctx.need('lib/lmsq.js', () => globalThis.GZ_LMSQ),
-    ctx.need('features/popup.js', () => globalThis.GZ_POPUP).then(() => GZ_POPUP.ready),
+    ctx.need('courses/rubric.js', () => globalThis.GZ_RUBRIC_LIB),
+    ctx.need('courses/lmsq.js', () => globalThis.GZ_LMSQ),
+    ctx.need('courses/page/popup.js', () => globalThis.GZ_POPUP).then(() => GZ_POPUP.ready),
   ]).then(() => { R = globalThis.GZ_RUBRIC_LIB; if (wanted) sync(); });
   ready.catch(() => {});
   const shown = (e) => !!e?.isConnected && !!e.getClientRects().length && !e.closest('[hidden], [inert], [aria-hidden="true"]');
@@ -170,7 +170,7 @@ td[aria-current] { background:var(--gz-accent-soft,#e2f2ff); box-shadow:inset 0 
       try { submission = await get(`${path}/submissions/self?include[]=rubric_assessment&include[]=full_rubric_assessment`, signal, live); } catch (e) { if (!live()) throw e; }
       return R.parse.canvas(assignment, submission, { courseId: route.courseId, assignmentId: route.assignmentId, userId: uid });
     }
-    await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA); if (!live()) throw Error('stale');
+    await ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA); if (!live()) throw Error('stale');
     const reader = GZ_ULTRA.read({ origin: location.origin, signal, live, f: (...args) => GZ_LMSQ.fetch(...args, 0, live), maxPages: 3, maxRequests: 6 });
     const rows = await reader.grades(route.courseId, uid);
     // The query is the student's rows alone; Ultra's row for an item never opened carries no userId. Another user's id

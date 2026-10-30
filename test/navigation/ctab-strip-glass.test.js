@@ -25,7 +25,7 @@ const rules = (file) => {
   return out;
 };
 const body = (file, sel) => rules(file).filter(([s]) => s === sel).map(([, b]) => b).join(';');
-const TABS = 'features/coursetabs.css', THEME = 'theme.css';
+const TABS = 'navigation/page/coursetabs.css', THEME = 'content/theme.css';
 
 test('the strip is a floating glass bar, not a band across the page', () => {
   const box = body(TABS, '#gz-ctabs');
@@ -100,7 +100,7 @@ test('Ultra\'s list toolbar (Announcements: its count and search) has no band; e
   assert.match(pill[1], /var\(--gz-surface-paint/);
 });
 
-const SIDEBAR = 'features/sidebar.css', CANVAS = 'canvas.css';
+const SIDEBAR = 'navigation/page/sidebar.css', CANVAS = 'content/canvas.css';
 const ruleWith = (file, ...parts) => rules(file).filter(([s]) => parts.every((p) => s.includes(p)));
 const glass = (b, what) => {
   assert.match(b, /color-mix\(in srgb, var\(--gz-surface-paint[^;]*var\(--gz-glass-mix/, `${what}: the Look's surface at its glass mix`);
@@ -146,7 +146,7 @@ test('a routed page\'s breadcrumb row is a floating glass panel like the course 
   assert.ok(rules(THEME).some(([s]) => s.includes('#site-wrap header[class*="makeStylesheader-"]:not(.bb-course-navigation *, content-page-header > *)')));
   assert.match(body(THEME, '#site-wrap .discussion-container .panel-header.panel-header-directive.has-controls'), /margin-block-start:\s*var\(--gz-float-gap/);
   // The sticky routed header holding the strip is clear, with the course bar's veil behind it, not a filled band.
-  const sticky = ruleWith('extras.css', '.routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs)')[0];
+  const sticky = ruleWith('content/extras.css', '.routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs)')[0];
   assert.match(sticky[1], /background:\s*transparent/);
   assert.ok(ruleWith(THEME, 'div.bb-course-navigation::before', '.routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs)::before').length >= 2, 'veiled, with and without scroll timelines');
 });

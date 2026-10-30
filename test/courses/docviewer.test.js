@@ -1,4 +1,4 @@
-// The DocViewer: its manifest entry, its budget, and what the Canvas page tells a canvadocs frame (features/docs.js,
+// The DocViewer: its manifest entry, its budget, and what the Canvas page tells a canvadocs frame (courses/page/docs.js,
 // run in a VM with stand-ins, and content.js's hook). The frame's side and the drawing run in
 // a headless browser against test/fixtures/canvas-docviewer.html (checks/courses/docviewer-check.js); the math is test/looks/ink.test.js.
 const test = require('node:test');
@@ -7,23 +7,23 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const m = require('../../extension/manifest.json');
-const D = require('../../extension/defaults.js');
+const D = require('../../extension/content/defaults.js');
 
 const root = path.join(__dirname, '../../extension');
 const DOCS = ['https://canvadocs.instructure.com/*']; // what Canvas's own entry leaves out: the US host
 // The viewer entry matches every instructure.com host, so the regional ones (canvadocs-syd, canvadocs-eu…) get it too; the
 // script keeps to canvadocs hostnames itself. Match patterns can't say "canvadocs-*", and a list of regions would go stale.
 const VIEWER_MATCHES = ['https://*.instructure.com/*'];
-const entry = m.content_scripts.find((c) => c.js.includes('features/docviewer.js'));
+const entry = m.content_scripts.find((c) => c.js.includes('courses/page/docviewer.js'));
 
 test('canvadocs gets its own small script in every frame, and not the first content script', () => {
   assert.deepEqual(entry.matches, VIEWER_MATCHES);
-  assert.deepEqual(entry.js, ['lib/ink.js', 'lib/surfaces.js', 'features/docviewer.js']);
+  assert.deepEqual(entry.js, ['courses/ink.js', 'looks/surfaces.js', 'courses/page/docviewer.js']);
   assert.equal(entry.all_frames, true, 'the viewer is always framed');
   assert.equal(entry.run_at, 'document_start');
-  const glaze = m.content_scripts.filter((x) => x.js.includes('content.js'));
-  assert.deepEqual(glaze.find((c) => c.js.includes('content-canvas.js')).exclude_matches, DOCS);
-  assert.ok(glaze.find((c) => c.js.includes('content-ultra.js')).matches.every((p) => p.startsWith('https://*.blackboard.com/')), 'nor does Ultra\'s: Blackboard\'s hosts only');
+  const glaze = m.content_scripts.filter((x) => x.js.includes('content/content.js'));
+  assert.deepEqual(glaze.find((c) => c.js.includes('content/content-canvas.js')).exclude_matches, DOCS);
+  assert.ok(glaze.find((c) => c.js.includes('content/content-ultra.js')).matches.every((p) => p.startsWith('https://*.blackboard.com/')), 'nor does Ultra\'s: Blackboard\'s hosts only');
   assert.deepEqual(glaze.find((c) => c.matches.includes('https://*.moodlecloud.com/*')).matches, ['https://*.moodlecloud.com/*'], 'nor MoodleCloud\'s');
 });
 
@@ -32,7 +32,7 @@ const matchesHost = (pattern, host) => { const h = /^https:\/\/([^/]+)\//.exec(p
 const runViewer = (hostname) => {
   const ctx = vm.createContext({ document: { contentType: 'text/html', documentElement: {} }, top: {}, location: { hostname }, parent: {}, GZ_INK: {}, URL }); // no Canvas page named: it stops after the hostname gate
   ctx.window = ctx;
-  vm.runInContext(fs.readFileSync(path.join(root, 'features/docviewer.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(root, 'courses/page/docviewer.js'), 'utf8'), ctx);
   return ctx.__gzDocs === true;
 };
 test('regional DocViewer hosts get the viewer script, and it keeps to canvadocs hostnames', () => {
@@ -46,14 +46,16 @@ test('regional DocViewer hosts get the viewer script, and it keeps to canvadocs 
   assert.ok(!DOCS.some((p) => matchesHost(p, 'canvadocs-syd.instructure.com')), 'Canvas\'s entry only skips the US host: the page side bails on the others');
 });
 
-// A ratchet, as the first script's: lib/ink.js and features/docviewer.js as W9 left them (with the review's fixes), plus about 2%.
+// A ratchet, as the first script's: courses/ink.js and courses/page/docviewer.js as W9 left them (with the review's fixes), plus about 2%.
 const DOCVIEWER_BASELINE = 34317; // Shared surface model and local viewer controls, including message validation.
+// The extension's code by feature area (2026-10-30): the same files under their new folders' paths. Measured against 1cec2e64.
+const DOCVIEWER_AREA_PATHS = 14;
 test('the DocViewer script stays within its budget', () => {
   const total = entry.js.reduce((n, f) => n + fs.statSync(path.join(root, f)).size, 0);
-  assert.ok(total <= Math.round(DOCVIEWER_BASELINE * 1.02), `${total} bytes in ${entry.js.join(', ')}: over ${DOCVIEWER_BASELINE} + 2%`);
+  assert.ok(total <= Math.round(DOCVIEWER_BASELINE * 1.02) + DOCVIEWER_AREA_PATHS, `${total} bytes in ${entry.js.join(', ')}: over ${DOCVIEWER_BASELINE} + 2%`);
 });
 
-// features/docs.js answers; content-canvas.js only hands it the message (and loads it for that).
+// courses/page/docs.js answers; content-canvas.js only hands it the message (and loads it for that).
 const page = ({ src, href = 'https://school.instructure.com/courses/1/modules', profile = () => Promise.resolve({ id: '170000000000077' }) } = {}) => {
   const sent = [];
   const frame = { closed: false, postMessage: (msg, origin) => sent.push({ msg, origin }) };
@@ -72,13 +74,13 @@ const page = ({ src, href = 'https://school.instructure.com/courses/1/modules', 
   ctx.globalThis = ctx;
   ctx.GZ_CTX = { site: 'canvas', canvasCourseKey: () => { const id = new URL(href).pathname.match(/\/courses\/(\d+)/)?.[1]; return id ? `canvas:${new URL(href).origin}/${id}` : null; }, t: (w) => ({ Pen: 'Stift' })[w] || w, on: () => true, darkTheme: () => true, settings: () => settings, wordsIn: later, PREVIEWS: 'iframe', DOC: '.doc',
     profile: () => { ctx.profiles = (ctx.profiles || 0) + 1; return profile(); } };
-  vm.runInContext(fs.readFileSync(path.join(root, 'features/docs.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(root, 'courses/page/docs.js'), 'utf8'), ctx);
   const ask = (data, origin = 'https://canvadocs.instructure.com', source = frame) => ctx.GZ_DOCS.ask({ data, origin, source });
   return { sent, ask, frame, iframe, docs: ctx.GZ_DOCS, later, settings, ctx, timers };
 };
 
-test('Canvas\'s part (content-canvas.js) loads features/docs.js for a canvadocs frame\'s question only, and hands it the message', async () => {
-  const src = fs.readFileSync(path.join(root, 'content-canvas.js'), 'utf8');
+test('Canvas\'s part (content-canvas.js) loads courses/page/docs.js for a canvadocs frame\'s question only, and hands it the message', async () => {
+  const src = fs.readFileSync(path.join(root, 'content/content-canvas.js'), 'utf8');
   const line = src.split('\n').find((l) => l.includes("e.data?.gz === 'docs?'"));
   const asked = [];
   let listener;
@@ -91,7 +93,7 @@ test('Canvas\'s part (content-canvas.js) loads features/docs.js for a canvadocs 
   assert.deepEqual(asked, []);
   listener({ data: { gz: 'docs?' }, origin: 'https://canvadocs.instructure.com' });
   await new Promise(setImmediate);
-  assert.deepEqual(asked, ['features/docs.js', 'https://canvadocs.instructure.com']);
+  assert.deepEqual(asked, ['courses/page/docs.js', 'https://canvadocs.instructure.com']);
 });
 
 const BLOB = encodeURIComponent(JSON.stringify({ user_id: 170000000000042, attachment_id: 21, type: 'canvadoc' }));

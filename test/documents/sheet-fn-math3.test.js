@@ -1,4 +1,4 @@
-// The further math and matrix functions (lib/sheet-fn-math3.js). Cases are the worked examples on Microsoft's page for
+// The further math and matrix functions (documents/sheets/sheet-fn-math3.js). Cases are the worked examples on Microsoft's page for
 // each function, https://support.microsoft.com/en-us/excel/functions/<name>-function: acosh, asinh, atanh, cot, csc, sec,
 // acot, coth, csch, sech, acoth, ceiling-precise, floor-precise, iso-ceiling, sqrtpi, combina, permutationa, multinomial,
 // sumx2my2, sumx2py2, sumxmy2, mmult, mdeterm, minverse, munit (MMULT's, MINVERSE's and MUNIT's examples are screenshots).
@@ -8,13 +8,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../../extension/lib/sheet-model.js');
-const C = require('../../extension/lib/sheet-calc.js');
-require('../../extension/lib/sheet-fn-math.js');
-require('../../extension/lib/sheet-fn-math2.js');
-require('../../extension/lib/sheet-fn-logical.js');
-require('../../extension/lib/sheet-fn-lookup.js');
-require('../../extension/lib/sheet-fn-math3.js');
+const M = require('../../extension/documents/sheets/sheet-model.js');
+const C = require('../../extension/documents/sheets/sheet-calc.js');
+require('../../extension/documents/sheets/sheet-fn-math.js');
+require('../../extension/documents/sheets/sheet-fn-math2.js');
+require('../../extension/documents/sheets/sheet-fn-logical.js');
+require('../../extension/documents/sheets/sheet-fn-lookup.js');
+require('../../extension/documents/sheets/sheet-fn-math3.js');
 
 const book = (cells = {}, { sheets = ['Sheet1'] } = {}) => {
   const wb = M.workbook();
@@ -75,7 +75,7 @@ const NAMES = ('ACOSH ASINH ATANH COT CSC SEC ACOT COTH CSCH SECH ACOTH CEILING.
 test('the functions are registered, none volatile, and nothing sets a timer', () => {
   assert.equal(NAMES.length, 25);
   for (const name of NAMES) { assert.ok(C.fn(name), name); assert.ok(!C.fn(name).volatile, name); }
-  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-fn-math3.js'), 'utf8')), 'no timers');
+  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/documents/sheets/sheet-fn-math3.js'), 'utf8')), 'no timers');
 });
 
 test('inverse hyperbolic functions: the pages\' examples, domains, and where Excel overflows squaring', () => {

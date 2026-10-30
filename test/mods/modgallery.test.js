@@ -1,12 +1,12 @@
-// "Use in Glaze" from the gallery's mod pages: lib/gallery.js hands { id, hash } to the worker, which downloads that exact
-// bundle (lib/modbundle.js offer) and leaves an offer for the editor's prompt. Sender checks, the one request it makes, the
+// "Use in Glaze" from the gallery's mod pages: looks/gallery.js hands { id, hash } to the worker, which downloads that exact
+// bundle (mods/modbundle.js offer) and leaves an offer for the editor's prompt. Sender checks, the one request it makes, the
 // hash, id, signature and blocklist refusals, the size cap, and the broker taking 'gallery' (Reviewed) only for that offer.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const M = require('../../extension/lib/modbundle.js');
+const M = require('../../extension/mods/modbundle.js');
 
 const enc = new TextEncoder();
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
@@ -97,7 +97,7 @@ test('offer: the size cap holds whatever Content-Length says', async () => {
   assert.ok(pulled <= M.CAP.archive + (3 << 16), `read ${pulled} bytes`);
 });
 
-// lib/background.js in a vm, as test/mods/modbundle.test.js runs it.
+// background/background.js in a vm, as test/mods/modbundle.test.js runs it.
 const worker = (globals = {}) => {
   const local = {};
   const area = (s) => ({
@@ -109,7 +109,7 @@ const worker = (globals = {}) => {
   const context = vm.createContext({
     URL, URLSearchParams, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, AbortController, AbortSignal, Response, crypto: globalThis.crypto, atob, btoa, navigator: {},
     Blob, CompressionStream, DecompressionStream, DOMException, setTimeout, clearTimeout, ...globals,
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), context); },
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         openOptionsPage: async () => { opened.push('options'); }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
@@ -118,7 +118,7 @@ const worker = (globals = {}) => {
       scripting: { getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {} },
     },
   });
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   const send = (m, sender) => new Promise((res) => { let n = 0; for (const f of listeners) if (f(structuredClone(m), sender, (r) => res(structuredClone(r))) === true) n++; if (!n) setTimeout(res, 0); });
   const settle = async () => { for (let i = 0; i < 50; i++) await new Promise((r) => setTimeout(r, 2)); };
   return { local, send, settle, opened };

@@ -1,11 +1,11 @@
-// Glaze's local tokenizer (lib/ai/local/tokenizer.js) against a model's own: every line of a JSONL of references
+// Glaze's local tokenizer (ai/local/tokenizer.js) against a model's own: every line of a JSONL of references
 // { text, ids, plain } made with HF tokenizers must give exactly `ids` with added tokens parsed (specials: true), and
 // exactly `plain` (HF with its added tokens taken out) the default way, and decode back to the text. Then encode speed.
 // Not in the suite: it needs the model's tokenizer.json and the references, which stay out of the repo.
 //   node checks/ai/local-tokenizer-check.js <tokenizer.json> <refs.jsonl> [--config tokenizer_config.json]
 //     [--gguf kv.json (the GGUF's tokenizer.* keys as JSON: checked the same way)] [--out results.json]
 const fs = require('node:fs');
-const K = require('../../extension/lib/ai/local/tokenizer.js');
+const K = require('../../extension/ai/local/tokenizer.js');
 
 const args = process.argv.slice(2);
 const flag = (name) => { const i = args.indexOf(name); return i < 0 ? null : args.splice(i, 2)[1]; };

@@ -8,7 +8,7 @@ const para = (...content) => ({ type: 'paragraph', attrs: BLOCK, content });
 const text = (t, marks) => ({ type: 'text', text: t, ...(marks && { marks }) });
 
 test('F5: a paper\'s words are counted as the status bar counts them, hard breaks and all', () => {
-  const S = require('../../extension/lib/writer-schema.js'), E = require('../../extension/lib/writer-editor.js'), P = require('../../extension/lib/writer-papers.js');
+  const S = require('../../extension/writer/writer-schema.js'), E = require('../../extension/writer/writer-editor.js'), P = require('../../extension/writer/writer-papers.js');
   const docs = {
     hardBreak: [para(text('one'), { type: 'hard_break' }, text('two'))],
     marks: [para(text('alpha'), text('beta', [{ type: 'bold' }]))],
@@ -23,7 +23,7 @@ test('F5: a paper\'s words are counted as the status bar counts them, hard break
 });
 
 const page = require('../helpers/writer-submit-page.cjs');
-const L = require('../../extension/lib/writer-submit.js');
+const L = require('../../extension/writer/writer-submit.js');
 const done = (p) => p.sent.filter((m) => m.type === 'submit:done').map((m) => (m.ok ? 'ok' : m.error));
 
 test('D9: once Writer has clicked Ultra\'s Submit, Ultra\'s Save and Close works again (after the paper saves)', async () => {
@@ -43,7 +43,7 @@ test('D9: once Writer has clicked Ultra\'s Submit, Ultra\'s Save and Close works
 // The frame between its ready (the page is armed and catches Ultra's file area and Submit) and the paper's mount.
 const early = (file) => {
   const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-  const { El } = require('../stand-in-dom.js'), I = require('../../extension/lib/i18n.js');
+  const { El } = require('../stand-in-dom.js'), I = require('../../extension/core/i18n.js');
   const doc = { activeElement: null }, handles = {}, hooks = {}, opened = [], timers = [];
   doc.root = new El('html', doc); doc.documentElement = doc.root;
   doc.body = new El('body', doc); doc.root.append(doc.body); doc.body.append(new El('main', doc));
@@ -62,7 +62,7 @@ const early = (file) => {
 };
 
 test('D8: a file handed over from Ultra\'s file area before the paper has mounted waits for it, never dropped', async () => {
-  const f = early('writer-import.js');
+  const f = early('writer/frame/writer-import.js');
   const opened = [];
   f.ctx.GZ_WRITER_SUBMIT_SHEET = { open: (api, file) => opened.push(file), close: () => {}, busy: () => false };
   f.handles['import:file']({ name: 'Rivera_Essay2.pdf', mime: 'application/pdf', bytes: new Uint8Array([1, 2, 3]).buffer });
@@ -73,7 +73,7 @@ test('D8: a file handed over from Ultra\'s file area before the paper has mounte
 });
 
 test('D8: Ultra\'s Submit pressed before the paper has mounted opens the sheet once it has', async () => {
-  const f = early('writer-submit.js');
+  const f = early('writer/frame/writer-submit.js');
   f.handles['submit:open']({});
   await f.flush(); await f.later();
   assert.equal(f.ctx.GZ_WRITER_SUBMIT_SHEET.opened(), false);
@@ -247,8 +247,8 @@ test('D7: the Submit is recorded in the very turn Ultra\'s Submit is clicked, ne
   assert.equal(u.ops.filter((o) => o === 'commit').length, 1, 'a run that never clicks records nothing');
 });
 
-// lib/writer-papers.js over a plain object (the worker's storage.local in ultra()).
-const PA = require('../../extension/lib/writer-papers.js');
+// writer/writer-papers.js over a plain object (the worker's storage.local in ultra()).
+const PA = require('../../extension/writer/writer-papers.js');
 const over = (data = {}) => ({ data, get: async (k) => ({ [k]: data[k] === undefined ? undefined : structuredClone(data[k]) }),
   set: async (o) => { Object.assign(data, structuredClone(o)); }, remove: async (ks) => { for (const k of [].concat(ks)) delete data[k]; } });
 const paperDoc = (t) => ({ type: 'doc', content: [para(text(t))] });
@@ -394,7 +394,7 @@ test('D4: an empty text box shows no Keep switch', async () => {
 
 test('D8: while a paper\'s frame reopens, Ultra\'s Submit still waits for Writer, and the new frame opens the sheet', async () => {
   const p = page();
-  // features/writer.js reopen(): the old frame and port gone, a new pass asked for.
+  // writer/page/writer.js reopen(): the old frame and port gone, a new pass asked for.
   p.box.reopening = true; p.box.ready = false; p.box.frame.remove(); p.box.frame = null; const port = p.box.port; p.box.port = null;
   const during = p.fire(p.button(), 'click');
   assert.ok(during.stopped, 'Ultra never hears a Submit pressed while the frame reopens');

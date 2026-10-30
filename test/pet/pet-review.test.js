@@ -1,5 +1,5 @@
 const test = require('node:test'), assert = require('node:assert/strict');
-const P = require('../../extension/lib/pet.js'), T = require('../../extension/lib/todo.js'), D = require('../../extension/defaults.js');
+const P = require('../../extension/pet/pet.js'), T = require('../../extension/planner/todo.js'), D = require('../../extension/content/defaults.js');
 const now = Date.parse('2026-10-15T16:00:00Z'), tz = 'UTC', today = T.dayOf(now, tz);
 const row = { type: 'assignment', id: '1', at: now - T.DAY, sub: { submitted: true }, ov: null };
 const insights = { at: now, courses: [{ id: '1', items: [{ k: 'assignment:1', n: 'Work', a: now - 2 * T.DAY, d: now - T.DAY, s: 'on' }] }] };
@@ -88,7 +88,7 @@ test('unsubmitted work that has never earned XP does not create zero-credit hist
 
 
 test('NEW-1: stale W11 state credits only its calculated closed days before a later miss is reckoned', () => {
-  const R = require('../../extension/lib/remind.js');
+  const R = require('../../extension/planner/remind.js');
   const stale = { start: today - 20, best: 10, asOf: today - 10 };
   const missDay = today - 5;
   const planner = [{ ...row, at: T.midnight(missDay, tz) + 20 * 36e5, sub: { submitted: false, missing: true } }];

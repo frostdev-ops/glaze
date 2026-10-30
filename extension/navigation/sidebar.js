@@ -1,19 +1,19 @@
 // The sidebar's state (the page's own sidebar content, then the widgets docked under it), the parts that don't touch
 // the page, so node can test them. Classic script; module.exports for node. Loaded by the background worker for its
-// writes ('glaze:sidebar') and on demand by the pages, after lib/widgets.js. A second injection keeps the first.
+// writes ('glaze:sidebar') and on demand by the pages, after core/widgets.js. A second injection keeps the first.
 //
 // One record per account, device-local like the widgets' layout: storage.local sidebar:<lms>:<origin>/<uid>. The layout
-// (storage.local widgetLayout, lib/widgets.js) stays where each widget sits on a board or floats, with its spot and
+// (storage.local widgetLayout, core/widgets.js) stays where each widget sits on a board or floats, with its spot and
 // size; the record only says where a widget goes instead (dest), in what order the dock shows them, and the dock's
 // own fold and height. Docking never rewrites the layout, so a widget moved back finds its old spot.
 var GZ_SIDEBAR = globalThis.GZ_SIDEBAR || (() => {
-  const W = () => (typeof GZ_WIDGETS !== 'undefined' && GZ_WIDGETS ? GZ_WIDGETS : require('./widgets.js'));
+  const W = () => (typeof GZ_WIDGETS !== 'undefined' && GZ_WIDGETS ? GZ_WIDGETS : require('../core/widgets.js'));
   const own = (o, k) => !!o && typeof o === 'object' && Object.hasOwn(o, k);
   const obj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
 
   // ---- the key ----------------------------------------------------------------------------------------------------
   // sidebar:<canvas|ultra>:<origin>/<uid>: Canvas's numeric user id, Ultra's _1_1. https, or a development build's local
-  // Canvas (http://localhost, as lib/widgets.js course). The worker checks the origin and the sending document's account.
+  // Canvas (http://localhost, as core/widgets.js course). The worker checks the origin and the sending document's account.
   const LMS = ['canvas', 'ultra'];
   const KEY = /^sidebar:(canvas|ultra):(https:\/\/[a-z\d.-]+(?::\d+)?|http:\/\/localhost(?::\d+)?)\/(\d{1,20}|_\d{1,20}_\d{1,20})$/i;
   const key = (lms, origin, uid) => {
@@ -37,7 +37,7 @@ var GZ_SIDEBAR = globalThis.GZ_SIDEBAR || (() => {
   // offer: Ultra's boards disagreed about To Do, so the page offers to dock it (migrate). chose: the width and To Do's
   // scope the student chose here (width, scope); until then the sidebar settings' (sidebar.width, sidebar.todo) hold. A
   // record from before chose counts a width or scope that isn't the default as chosen.
-  const ID = /^[a-z][a-z0-9]{1,15}$/; // a tile (lib/widgets.js TILES, MORE_ID, mod ids); never a course card
+  const ID = /^[a-z][a-z0-9]{1,15}$/; // a tile (core/widgets.js TILES, MORE_ID, mod ids); never a course card
   const DESTS = ['dock', 'board', 'float', 'off'];
   const FAMILY = /^[a-z][a-z0-9-]{1,23}$/;
   const WIDTH = 352, MIN_WIDTH = 288, MAX_WIDTH = 480;
@@ -79,7 +79,7 @@ var GZ_SIDEBAR = globalThis.GZ_SIDEBAR || (() => {
       .flatMap((a) => Array.isArray(a) ? a : []).filter((x) => typeof x?.id === 'string' && ID.test(x.id));
     return W().layout(raw, Object.fromEntries(kept.map((x) => [x.id, { size: x.size }])));
   };
-  // Where the layout alone puts a widget on this site (as features/widgets.js draws it without the sidebar): floating
+  // Where the layout alone puts a widget on this site (as core/page/widgets.js draws it without the sidebar): floating
   // wins over a board, as a floating tile is on no board. board: this page's board, if any.
   const legacy = (lay, lms, id, board) => {
     const float = lms === 'ultra' ? lay.boards.pages.find((x) => x.id === id) : lay.tiles.find((x) => x.id === id && x.float);
@@ -98,7 +98,7 @@ var GZ_SIDEBAR = globalThis.GZ_SIDEBAR || (() => {
     return board ? { to: 'board', board } : null;
   };
   // Each widget's one destination on this page: Map id → { where: 'dock' | 'board' | 'float' | 'off', board?, tile?, dock? }.
-  // lay: the layout (lib/widgets.js layout); rec: this account's record, or null. site: 'canvas' | 'ultra'; board: this
+  // lay: the layout (core/widgets.js layout); rec: this account's record, or null. site: 'canvas' | 'ultra'; board: this
   // page's board or null; enabled: enhance.sidebar; allowed(id): its switch is on here; dockable(id): it may dock (not
   // a course card). Without the sidebar, or without a choice in the record, the layout decides as before; a choice in the
   // record suppresses the other copies but leaves their spots in the layout. dock: its entry (fold, h).
@@ -137,7 +137,7 @@ var GZ_SIDEBAR = globalThis.GZ_SIDEBAR || (() => {
   // the desktop preference.
   const GAP = 16, MAIN = 720, MAIN_GRADES = 900;
   // A column the student must see while working there (a quiz's timer and question list) keeps its place beside the
-  // content down to this much room for the content (features/sidebar.js minMain).
+  // content down to this much room for the content (navigation/page/sidebar.js minMain).
   const MAIN_KEEP = 480;
   // min: the main column's room instead (the sidebar settings' sidebar.min or sidebar.grades).
   const mode = ({ vw, left = 0, right = 0, width = WIDTH, grades = false, min, empty = false, open = true } = {}) => {
@@ -259,7 +259,7 @@ var GZ_SIDEBAR = globalThis.GZ_SIDEBAR || (() => {
   // ---- migration ----------------------------------------------------------------------------------------------------
   // Once per account, in the worker's queue, from the layout stored then (raw: storage.local widgetLayout as stored, so
   // its marks are read as they are). To Do the student had moves into the dock, remembering where it was for Move back;
-  // a To Do they removed stays removed. A new install (lib/widgets.js layout's sidebarFresh) starts with To Do on, but a
+  // a To Do they removed stays removed. A new install (core/widgets.js layout's sidebarFresh) starts with To Do on, but a
   // later removal still wins. On Ultra, boards that disagree about To Do are left as they are and the page offers to
   // dock it (offer). On Ultra the dock replaces the Courses page's column board, so its widgets dock too (owner,
   // 2026-10-19). todo: enhance.todo (with Better To Do off, To Do stays). Done is mig: 1; the layout and its marks are
@@ -326,7 +326,7 @@ var GZ_SIDEBAR = globalThis.GZ_SIDEBAR || (() => {
     return (await local.set({ [m.key]: r })) ? { ok: true, rec: r } : { ok: false, error: 'write' };
   };
 
-  // A course tab's frame asking the page around it to send its changes (features/coursetabs.js): its own site's and
+  // A course tab's frame asking the page around it to send its changes (navigation/page/coursetabs.js): its own site's and
   // account's record, ops the worker would take, small, with the request's number and the frame's gen (a string) to
   // answer with. Anything else is not sent.
   const RELAY_MAX = 8192;

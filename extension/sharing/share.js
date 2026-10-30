@@ -1,12 +1,12 @@
 // Theme codes: a palette, look, background and course cards as one line of text to paste into someone else's Glaze.
-// "glaze1:" + base64url(deflate-raw(JSON)). No server: the code is the settings. A Look with Look parts (lib/lookparts.js)
+// "glaze1:" + base64url(deflate-raw(JSON)). No server: the code is the settings. A Look with Look parts (looks/lookparts.js)
 // is "glaze2:", the same keys plus `x` (the parts) and `m` (the mods it works with), with higher limits; a Look without
-// them is still glaze1, readable by every Glaze. Classic script after defaults.js and lib/lookparts.js; module.exports
+// them is still glaze1, readable by every Glaze. Classic script after defaults.js and looks/lookparts.js; module.exports
 // for node.
 const GZ_SHARE = (() => {
-  const G = typeof GZ_SANITIZE !== 'undefined' ? { GZ_COLORS, GZ_SPEC, GZ_SANITIZE } : require('../defaults.js');
-  const K = typeof GZ_CARDS !== 'undefined' ? GZ_CARDS : require('./cards.js');
-  const X = typeof GZ_XPARTS !== 'undefined' ? GZ_XPARTS : require('./lookparts.js');
+  const G = typeof GZ_SANITIZE !== 'undefined' ? { GZ_COLORS, GZ_SPEC, GZ_SANITIZE } : require('../content/defaults.js');
+  const K = typeof GZ_CARDS !== 'undefined' ? GZ_CARDS : require('../courses/cards.js');
+  const X = typeof GZ_XPARTS !== 'undefined' ? GZ_XPARTS : require('../looks/lookparts.js');
   const PREFIX = 'glaze1:';
   const PREFIX2 = 'glaze2:';
   // Look minus tooltips and hints: those are how Glaze behaves, not how a theme looks.
@@ -17,7 +17,7 @@ const GZ_SHARE = (() => {
   // Glaze's own navigation bar, how it looks and sits (`v`); whether it is on is the student's, not the theme's.
   const NAVBAR = Object.keys(G.GZ_SPEC.navbar).filter((k) => k !== 'on');
   // The sidebar's appearance (`s`): its style, surface and corners. Never whether it is on, where it shows, its layout
-  // or anything of an account's (lib/sidebar.js records stay on the device).
+  // or anything of an account's (navigation/sidebar.js records stay on the device).
   const SIDEBAR = ['style', 'surface', 'radius'];
   const MAX_CODE = 4000;
   const MAX_JSON = 8192;
@@ -26,10 +26,10 @@ const GZ_SHARE = (() => {
   const pick = (o, keys) => Object.fromEntries(keys.map((k) => [k, o[k]]));
 
   // Course cards, when they are more than the defaults: how they look (k), and a set of card styles (d) that
-  // takes turns on the cards of whoever uses the code. `cards` is the cards sync item (lib/cards.js): its theme set,
+  // takes turns on the cards of whoever uses the code. `cards` is the cards sync item (courses/cards.js): its theme set,
   // or else the styles given to courses, linked pictures only. A picture kept on this computer never leaves it.
   const cardSet = (cards = {}) => (cards['*'] || Object.entries(cards).filter(([k]) => k !== '*').map(([, v]) => v)).filter((v) => v && !v.i).slice(0, K.SET_MAX);
-  // `parts` is { x, m } as lib/lookparts.js cleans them (or none): the code is glaze2 when there are any.
+  // `parts` is { x, m } as looks/lookparts.js cleans them (or none): the code is glaze2 when there are any.
   // A picture's address goes only with a Look that shows it: one tried and set aside stays stored, and may be private.
   // files: whether a background that is a file kept on this computer (`file:<hash>`) may go in the code. A Look share sends
   // that file beside the code, so it may; a code someone pastes can't bring it, so for "Copy theme code" (files: false) the
@@ -83,7 +83,7 @@ const GZ_SHARE = (() => {
   // The code is untrusted: every key must be one Glaze knows and every value must come through
   // GZ_SANITIZE unchanged, or the whole code is refused. Returns { colors, look, bg, nav, navbar, sidebar, card, cards, parts }; parts is
   // { x, m } for a glaze2 code that has them, else null.
-  // why is English with {placeholders}; the editor shows it translated (lib/i18n.js).
+  // why is English with {placeholders}; the editor shows it translated (core/i18n.js).
   const fail = (why, vars = {}) => { throw Object.assign(new Error(why.replace(/\{(\w+)\}/g, (_, k) => vars[k])), { why, vars }); };
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const decode = async (code) => {
@@ -108,7 +108,7 @@ const GZ_SHARE = (() => {
     for (const k of Object.keys(card)) if (!K.LOOK.includes(k) || !same(cardClean[k], card[k])) fail("That theme code has a setting Glaze can't use ({setting}).", { setting: `card.${k}` });
     // Each card style exactly as Glaze keeps it, and never a picture from someone's computer.
     const set = (raw.d || []).map((v) => { const x = K.style(v); if (!x || x.i || !same(x, v)) fail("That theme code has a setting Glaze can't use ({setting}).", { setting: 'card style' }); return x; });
-    // Look parts and mod references: each exactly as lib/lookparts.js keeps them. The part that fails is named.
+    // Look parts and mod references: each exactly as looks/lookparts.js keeps them. The part that fails is named.
     let parts = null;
     for (const [k, rule] of [['x', X.clean], ['m', X.mods]]) {
       if (!(k in raw)) continue;

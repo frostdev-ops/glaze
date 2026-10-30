@@ -1,13 +1,13 @@
 // Glaze — media backgrounds (bg.kind "media"): a looping video, an animated picture or a Lottie animation behind the page.
 // content.js imports this module only once a Look with one is worn, and only in the top frame, so none of it costs anything
-// otherwise; Lottie's player (lib/lottie/, the official light build: no expressions, so no eval) is imported only for a
+// otherwise; Lottie's player (vendor/lottie/, the official light build: no expressions, so no eval) is imported only for a
 // Lottie animation. Always muted, never with controls, drawn behind the page like the scenes. Motion off draws the first
 // frame and stops; a hidden tab pauses; a Glaze reloaded under the page keeps the last frame. What can't be shown (an
 // address that doesn't load, a host page's policy, a file that isn't on this computer) leaves the gradient: onFail says why.
 //
 // start(host, live, onFail) → { update(o), draw(), stop() }. host is an empty element in the page; o is { x, ground, speed }:
 // x the Look's parts (GZ_CTX.parts()), ground the colour the dim fades toward, speed 0 for a still frame.
-// Sources are cleaned before they get here (lib/lookparts.js): an https address, or `file:<sha-256>` for a file kept on this
+// Sources are cleaned before they get here (looks/lookparts.js): an https address, or `file:<sha-256>` for a file kept on this
 // computer (kept by the worker, put by the editor, a Look share or the gallery), or `mod:<id>/<path>` for a file
 // an installed mod carries, asked of the worker ('glaze:modpage' media), which checks the mod and cleans the file. A video or
 // picture at an https address is asked of the worker too ('glaze:remoteMedia'): it fetches the address with no referrer, under
@@ -17,7 +17,7 @@
 const FITS = { cover: ['cover', 'xMidYMid slice'], contain: ['contain', 'xMidYMid meet'], fill: ['fill', 'none'] };
 const MIMES = { video: ['video/webm', 'video/mp4'], image: ['image/webp', 'image/avif'] };
 const DEFAULTS = { fit: 'cover', dim: 40, loop: true };
-// The longest side a picture or video may have once the browser has decoded it: lib/media.js's LIMIT.bg.image.side, which the worker
+// The longest side a picture or video may have once the browser has decoded it: looks/media.js's LIMIT.bg.image.side, which the worker
 // held the container to. The decoder is the one that has to hold the frames, so it is asked again.
 const SIDE = 4096;
 const tooBig = (w, h) => w > SIDE || h > SIDE;
@@ -29,7 +29,7 @@ const tell = (m) => { if (/-extension:$/.test(location.protocol) && parent !== w
 
 let lottieLoad = null, lottieAttempt = 0;
 // A rejected module URL stays failed in the browser, even after its promise is forgotten.
-const loadLottie = () => (lottieLoad ||= import(chrome.runtime.getURL(`lib/lottie/lottie_light_canvas.js?gzMediaRetry=${lottieAttempt++}`)).then(() => {
+const loadLottie = () => (lottieLoad ||= import(chrome.runtime.getURL(`vendor/lottie/lottie_light_canvas.js?gzMediaRetry=${lottieAttempt++}`)).then(() => {
   if (typeof globalThis.lottie?.loadAnimation !== 'function') throw new Error('lottie');
   return globalThis.lottie;
 }).catch((error) => {
@@ -74,7 +74,7 @@ const carried = async (src, type) => {
   const r = await send({ type: 'glaze:modpage', op: 'media', src });
   return r?.kind === type ? filed(r, type) : null;
 };
-// A video or picture at an https address, as bytes: fetched and cleaned by the worker (lib/media.js remote), which refuses what
+// A video or picture at an https address, as bytes: fetched and cleaned by the worker (looks/media.js remote), which refuses what
 // is past the limits a kept file has. why 'limits' tells the editor the file is too big, not that the link is wrong.
 const fetched = async (src, type) => {
   const r = await send({ type: 'glaze:remoteMedia', src, kind: type });

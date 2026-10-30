@@ -1,13 +1,13 @@
-// Mod channels: an author's signed .glazemod carried by a share session (lib/sharing.js) of its own kind, 'modchannel',
+// Mod channels: an author's signed .glazemod carried by a share session (sharing/sharing.js) of its own kind, 'modchannel',
 // with one entity 'm' whose 'bundle' field is the encrypted file's reference. Links, sealing and the relay are the share
 // sessions' own. The relay's sealing only says the file came from whoever holds the
-// channel's edit key: a bundle is taken only as lib/modbundle.js would take a file installed by hand (its own author
+// channel's edit key: a bundle is taken only as mods/modbundle.js would take a file installed by hand (its own author
 // signature, the pinned key, a higher version, a prompt when it asks for more, the blocklist).
 // Worker only. The worker's vault keeps `modChannelOwn:<id>`, the author's session (edit key) for a mod they publish;
 // `modChannel:<id>` a followed mod's last check { tried, at, seen, error, pending: { zip, hash, version } }. The followed
 // read link is the mod record's own `channel`.
 var GZ_MODCHANNEL = globalThis.GZ_MODCHANNEL || (() => {
-  const C = typeof GZ_SHARING !== 'undefined' ? GZ_SHARING : require('./sharing.js');
+  const C = typeof GZ_SHARING !== 'undefined' ? GZ_SHARING : require('../sharing/sharing.js');
   const B = () => (typeof GZ_MODBUNDLE !== 'undefined' ? GZ_MODBUNDLE : require('./modbundle.js'));
   const DAY = 864e5;
   const OWN = (id) => `modChannelOwn:${id}`, STATE = (id) => `modChannel:${id}`;
@@ -76,7 +76,7 @@ var GZ_MODCHANNEL = globalThis.GZ_MODCHANNEL || (() => {
   const ownLink = async (id, { local }) => { const v = (await local.get(OWN(id)))[OWN(id)]; return v?.link ? { ok: true, link: v.link, version: v.version } : { ok: false, error: 'missing' }; };
 
   // The follower's side, for each installed mod with a channel (or only `id`): at most daily unless `force` (the editor
-  // opening, Check now). A newer bundle that asks for nothing new is installed as an update through lib/modbundle.js;
+  // opening, Check now). A newer bundle that asks for nothing new is installed as an update through mods/modbundle.js;
   // one that asks for more waits in `pending` for the editor's prompt. Failures are kept in the state, quietly.
   // env: { local, fetch, now, blocked, enqueue, install }; install(m) is the worker's 'glaze:mods' install.
   const runs = new WeakMap();

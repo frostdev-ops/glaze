@@ -3,9 +3,9 @@
 // one and replace all, each one undoable step of its own; the decorations plugin's current match.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../../extension/lib/writer-schema.js');
-const E = require('../../extension/lib/writer-editor.js');
-const FIND = require('../../extension/writer-find.js');
+const S = require('../../extension/writer/writer-schema.js');
+const E = require('../../extension/writer/writer-editor.js');
+const FIND = require('../../extension/writer/frame/writer-find.js');
 const FX = require('../fixtures/writer-paper-fixtures.js');
 const { undo } = GZ_PM.history;
 

@@ -1,13 +1,13 @@
 // The example mods (examples/mods): each mod folder loads the way dev mode loads one and packs into a signed bundle that
 // validates (manifest, permissions, sizes), and the ones with code run against the real client (mods/host.js) and the
-// real broker (lib/modbroker.js).
+// real broker (mods/modbroker.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const M = require('../../extension/lib/modbundle.js');
-const B = require('../../extension/lib/modbroker.js');
+const M = require('../../extension/mods/modbundle.js');
+const B = require('../../extension/mods/modbroker.js');
 
 const root = path.join(__dirname, '../../examples/mods');
 const enc = new TextEncoder();
@@ -29,9 +29,9 @@ test('the mod examples are all here', () => {
 });
 
 test('shader-background is a Look-parts example that round-trips as a wearable theme code', async () => {
-  const X = require('../../extension/lib/lookparts.js'), S = require('../../extension/lib/share.js'), G = require('../../extension/defaults.js');
+  const X = require('../../extension/looks/lookparts.js'), S = require('../../extension/sharing/share.js'), G = require('../../extension/content/defaults.js');
   const src = fs.readFileSync(path.join(__dirname, '../../examples/looks/shader-background/shader.glsl'), 'utf8');
-  assert.equal(require('../../extension/lib/glsl.js').check(src).ok, true);
+  assert.equal(require('../../extension/looks/glsl.js').check(src).ok, true);
   const parts = { bg: { shader: { src } } };
   assert.deepEqual(X.clean(parts), parts);
   const code = await S.encode(G.GZ_SANITIZE({ bg: { kind: 'shader' } }), {}, { x: parts });
@@ -132,7 +132,7 @@ const run = async (name, { local = {}, grants = {}, events = [] } = {}) => {
     mods: [ID], ...local,
   });
   let turn = Promise.resolve();
-  // An agent app's call to a code tool waits for its answer, as lib/mcp/modroute.js settle takes it.
+  // An agent app's call to a code tool waits for its answer, as agents/modroute.js settle takes it.
   const answers = [];
   const env = { site: SITE, local: l, sync: area({}), fetch: async () => { throw new Error('no network'); }, queue: (f) => (turn = turn.then(f, f)), keys: async () => Object.keys(l.data),
     record: async (id) => (await l.get(`mod:${id}`))[`mod:${id}`], blocklist: async () => null, account: async () => '5', tool: (call, out) => { answers.push([call, out]); return true; } };

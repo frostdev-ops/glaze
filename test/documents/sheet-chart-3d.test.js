@@ -1,14 +1,14 @@
-// 3-D pie and column charts (lib/sheet-chart-xml.js reads c:view3D, explosions, c:shape and the walls; lib/sheet-chart.js
+// 3-D pie and column charts (documents/sheets/sheet-chart-xml.js reads c:view3D, explosions, c:shape and the walls; documents/sheets/sheet-chart.js
 // projects them into the SVG scene): a 3-D pie's tilted ellipse, its front rim and cut faces in painter's order, an
 // exploded slice's offset and percent labels; a 3-D column's front, top and side faces for clustered, stacked and
 // standard groupings; the kinds still framed name their type; the work stays bounded; and the parts round-trip untouched.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const X = require('../../extension/lib/sheet-xlsx.js');
-const C = require('../../extension/lib/sheet-calc.js');
-const D = require('../../extension/lib/doctext.js');
-const CX = require('../../extension/lib/sheet-chart-xml.js');
-const CH = require('../../extension/lib/sheet-chart.js');
+const X = require('../../extension/documents/sheets/sheet-xlsx.js');
+const C = require('../../extension/documents/sheets/sheet-calc.js');
+const D = require('../../extension/core/doctext.js');
+const CX = require('../../extension/documents/sheets/sheet-chart-xml.js');
+const CH = require('../../extension/documents/sheets/sheet-chart.js');
 const FX = require('../fixtures/sheets/charts.js');
 
 const RAD = Math.PI / 180;
@@ -195,7 +195,7 @@ test('3-D bar labels: negative endpoints, reversed axes and stacked segment cent
 test('3-D pie: rotations are reduced to one turn before geometry work', () => {
   // This finite XML number makes turn++ stop advancing in the old rim loop.
   const run = require('node:child_process').spawnSync(process.execPath, ['-e', `
-    const CX = require('./lib/sheet-chart-xml.js'), CH = require('./lib/sheet-chart.js');
+    const CX = require('./documents/sheets/sheet-chart-xml.js'), CH = require('./documents/sheets/sheet-chart.js');
     const FX = require('./test/fixtures/sheets/charts.js');
     const xml = FX.CHARTS.pie3d.replace('<c:rotY val="0"/>', '<c:rotY val="1.3282328232823282e+22"/>');
     console.log(JSON.stringify(CH.scene(CX.resolve(CX.chart(xml), () => null), 480, 300).marks));

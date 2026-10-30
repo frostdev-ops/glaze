@@ -1,10 +1,10 @@
-// The editor's Look parts builders: what lib/editor-xbg.js (backgrounds) and
-// lib/editor-xmotion.js (animations, event effects, the cursor) share. They edit s.parts ({ x, m }, ui.js) and save it
-// through the editor's own save path, so a Look's parts are written with the Look (lib/lookparts.js write) and a theme
+// The editor's Look parts builders: what settings/editor-xbg.js (backgrounds) and
+// settings/editor-xmotion.js (animations, event effects, the cursor) share. They edit s.parts ({ x, m }, ui.js) and save it
+// through the editor's own save path, so a Look's parts are written with the Look (looks/lookparts.js write) and a theme
 // code carries the active parts (glaze2). Every change goes through GZ_XPARTS.bundle first; inactive background drafts stay
 // in storage for switching back. Extension settings page only; the pure helpers have module.exports for node.
 var GZ_EDITOR_X = globalThis.GZ_EDITOR_X || (() => {
-  const XP = () => (typeof GZ_XPARTS !== 'undefined' ? GZ_XPARTS : require('./lookparts.js'));
+  const XP = () => (typeof GZ_XPARTS !== 'undefined' ? GZ_XPARTS : require('../looks/lookparts.js'));
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
   const empty = (v) => v == null || (Array.isArray(v) ? !v.length : isObj(v) && !Object.keys(v).length);
 
@@ -108,9 +108,9 @@ var GZ_EDITOR_X = globalThis.GZ_EDITOR_X || (() => {
   // A polite status line: read out when it changes, after typing or a move rests.
   const status = (props = {}) => el('p', { class: 'desc', role: 'status', 'aria-live': 'polite', ...props });
 
-  // Messages from the preview frame (lib/scene.js tell): fn(data) for those that come from it.
+  // Messages from the preview frame (looks/scene.js tell): fn(data) for those that come from it.
   const fromPreview = (fn) => addEventListener('message', (e) => { if (api && e.origin === location.origin && e.source === api.frame.contentWindow) fn(e.data || {}); });
-  // Asks the preview to replay its entrances ('enter') or fire an event moment (lib/editor-preview.js).
+  // Asks the preview to replay its entrances ('enter') or fire an event moment (settings/editor-preview.js).
   const play = (moment) => api.frame.contentWindow?.postMessage({ gzPreviewMoment: moment }, location.origin);
   // What the preview can't show right now, in words, or ''.
   const motionNote = () => {

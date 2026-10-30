@@ -94,7 +94,7 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
     tellDocs();
     // This part already loads for Ultra's preview frames, even with reading tools off. Keep their viewer hook lazy too.
     if (globalThis.GZ_BB_PREVIEW_UI) GZ_BB_PREVIEW_UI.sync();
-    else if (ultra && ctx.on() && ctx.settings().enhance.bbPreviews && ctx.settings().writer.pdf && document.querySelector(PREVIEWS)) ctx.need('features/bbpreview.js', () => globalThis.GZ_BB_PREVIEW_UI).then(() => GZ_BB_PREVIEW_UI.sync(), () => {});
+    else if (ultra && ctx.on() && ctx.settings().enhance.bbPreviews && ctx.settings().writer.pdf && document.querySelector(PREVIEWS)) ctx.need('courses/page/bbpreview.js', () => globalThis.GZ_BB_PREVIEW_UI).then(() => GZ_BB_PREVIEW_UI.sync(), () => {});
     const on = ctx.solo && ctx.on() && ctx.settings().enhance.toggles;
     const doc = on && !(!ultra && document.querySelector('.ef-file-preview-overlay, #file-preview-modal-alert')) && document.querySelector(DOC);
     if (focusAt && (focusAt !== doc || focusPath !== location.pathname)) setFocus(false);
@@ -152,7 +152,7 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
     setFocus(false);
   };
   // ---- Canvas's document viewer ----------------------------------------------------------------------------------
-  // features/docviewer.js, in a canvadocs frame of this page, asks (content.js hands the message here) for the palette,
+  // courses/page/docviewer.js, in a canvadocs frame of this page, asks (content.js hands the message here) for the palette,
   // the switches, which file and whose (the frame's /api/v1/canvadoc_session blob names both; else this page's file),
   // and Glaze's words. Answered at that frame's origin only, never '*'; told again when any of it changes (every sync:
   // content.js calls it from applySettings and disable) and once the words are in.

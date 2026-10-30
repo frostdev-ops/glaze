@@ -1,4 +1,4 @@
-// VDB ISPMT DOLLARDE DOLLARFR (lib/sheet-fn-financial2.js). Cases are the worked examples on Microsoft's pages for
+// VDB ISPMT DOLLARDE DOLLARFR (documents/sheets/sheet-fn-financial2.js). Cases are the worked examples on Microsoft's pages for
 // each function (support.microsoft.com/en-us/office/vdb-function-dde4e207-f3fa-488d-91d2-66d55e861d73,
 // ispmt-function-fa58adb6-9d39-4ce0-8f43-75399cea56cc, dollarde-function-db85aab0-1677-428a-9dfd-a38476693427,
 // dollarfr-function-0835d163-3023-4a33-9824-3042c5d4f495), their Remarks, and what Excel 16.114.1 gave for the rest
@@ -8,11 +8,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../../extension/lib/sheet-model.js');
-const C = require('../../extension/lib/sheet-calc.js');
-require('../../extension/lib/sheet-fn-math.js');
-require('../../extension/lib/sheet-fn-info.js');
-require('../../extension/lib/sheet-fn-financial2.js');
+const M = require('../../extension/documents/sheets/sheet-model.js');
+const C = require('../../extension/documents/sheets/sheet-calc.js');
+require('../../extension/documents/sheets/sheet-fn-math.js');
+require('../../extension/documents/sheets/sheet-fn-info.js');
+require('../../extension/documents/sheets/sheet-fn-financial2.js');
 
 const book = (rows = []) => {
   const wb = M.workbook();
@@ -44,7 +44,7 @@ const prints = (e, rows) => {
 
 test('the functions are registered, and nothing sets a timer', () => {
   for (const name of ['VDB', 'ISPMT', 'DOLLARDE', 'DOLLARFR']) assert.ok(C.fn(name), name);
-  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-fn-financial2.js'), 'utf8')));
+  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/documents/sheets/sheet-fn-financial2.js'), 'utf8')));
 });
 
 test('VDB: Microsoft\'s examples', () => {
@@ -107,7 +107,7 @@ test('DOLLARDE and DOLLARFR reject negative fractions before truncation', () => 
 
 test('VDB handles long asset lives without allocating a schedule per period', () => {
   const { execFileSync } = require('node:child_process');
-  const script = `const F = require('./lib/sheet-fn-financial2.js');
+  const script = `const F = require('./documents/sheets/sheet-fn-financial2.js');
     console.log(JSON.stringify([F.VDB.fn([1000,100,1e9,0,1e9,2,false], {}), F.VDB.fn([1000,100,1e9,0,1e9,0,true], {}), F.VDB.fn([1000,100,1e30,0,9e29,2,false], {})]));`;
   const result = execFileSync(process.execPath, [...process.execArgv, '-e', script], { cwd: path.join(__dirname, '../../extension'), encoding: 'utf8', timeout: 3000 });
   const values = JSON.parse(result);

@@ -13,10 +13,10 @@
 //                      object works too: '{enabled:false}', '{bg:{kind:"scene",scene:"horizon"}}'
 //   --out <dir>        where the PNGs go (default: a new temp dir, printed). Named <look>-<page>.png
 //   --course-menu     open Glaze’s Dashboard Course menu and enable tint in the throwaway capture profile
-//   --sync <json>      more sync items saved beside the settings, such as the course cards' (lib/cards.js):
+//   --sync <json>      more sync items saved beside the settings, such as the course cards' (courses/cards.js):
 //                     '{card:{pet:"cat"},cards:{"canvas:{origin}/{bio}":{k:"solid",c:"#e11d48"}}}'; {origin} is the
 //                     local Canvas, {bio} and the others its course ids
-//   --local <json>     storage.local items saved before the pages load, such as stickers (lib/lookx.js):
+//   --local <json>     storage.local items saved before the pages load, such as stickers (looks/lookx.js):
 //                     '{"stk:{origin}/courses/{bio}":[{id:"a",s:"study/coffee",x:80,y:200,w:120,r:-6}]}'
 //                      {me} is the signed-in user's id there and in --sync
 //   --width, --height  viewport, 1440x900 by default;  --full  captures the whole page
@@ -54,7 +54,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const G = require('../../extension/defaults.js');
+const G = require('../../extension/content/defaults.js');
 const { redact, fixture } = require('./redact.js');
 const { auditFrame } = require('./audit.js');
 
@@ -139,12 +139,12 @@ const devCopy = (dest) => {
   for (const d of ['assets/art/pets', 'assets/art/stickers', 'assets/art/cursors']) fs.cpSync(path.join(root, d), path.join(dest, d), { recursive: true });
   const m = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
   // Glaze's first script is one entry per site, each with its own part (content-ultra.js, content-canvas.js): localhost
-  // gets the one the LMS under test runs, as lib/background.js would register it (Moodle's: Canvas's without its part).
-  const glaze = (m.content_scripts || []).filter((e) => e.js.at(-1) === 'content.js');
+  // gets the one the LMS under test runs, as background/background.js would register it (Moodle's: Canvas's without its part).
+  const glaze = (m.content_scripts || []).filter((e) => e.js.at(-1) === 'content/content.js');
   for (const e of [...(m.content_scripts || []).filter((x) => !glaze.includes(x)), ...(m.web_accessible_resources || [])]) e.matches.push('http://localhost/*');
   const canvas = glaze.find((e) => e.matches.includes('https://*.instructure.com/*'));
-  m.content_scripts.push({ ...canvas, matches: ['http://localhost/*'], exclude_matches: undefined, js: canvas.js.filter((f) => LMS === 'canvas' || f !== 'content-canvas.js') });
-  // And to inject there: Glaze's on-demand files (lib/background.js 'glaze:load') need host access.
+  m.content_scripts.push({ ...canvas, matches: ['http://localhost/*'], exclude_matches: undefined, js: canvas.js.filter((f) => LMS === 'canvas' || f !== 'content/content-canvas.js') });
+  // And to inject there: Glaze's on-demand files (background/background.js 'glaze:load') need host access.
   m.host_permissions = [...(m.host_permissions || []), 'http://localhost/*'];
   fs.writeFileSync(path.join(dest, 'manifest.json'), JSON.stringify(m, null, 2));
 };
@@ -390,7 +390,7 @@ const lightShare = async (page, jpegs) => page.evaluate(async (list) => {
 const english = (url, words) => {
   const lang = new URL(url, BASE).searchParams.get('glaze_lang');
   if (!lang) return null;
-  const I = require('../../extension/lib/i18n.js');
+  const I = require('../../extension/core/i18n.js');
   const cat = globalThis.GZ_LANGS[I.CODES.find((c) => c === lang || c.split('-')[0] === lang.split('-')[0])] || {};
   const bits = [];
   for (const [k, v] of Object.entries(cat)) {

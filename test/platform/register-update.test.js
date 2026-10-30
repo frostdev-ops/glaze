@@ -1,4 +1,4 @@
-// A school's own site stays registered while Glaze is installed or updated: the real lib/background.js in a VM, its
+// A school's own site stays registered while Glaze is installed or updated: the real background/background.js in a VM, its
 // registrations kept by a stand-in chrome.scripting that refuses what Chrome refuses and records the registered set after
 // every call. A page can load between any two calls, so every approved site's registration is there at every step: changed
 // ones are updated in place, missing ones added, obsolete ones removed. A browser without updateContentScripts replaces a
@@ -14,7 +14,7 @@ const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const manifest = require('../../extension/manifest.json');
 const plain = (x) => JSON.parse(JSON.stringify(x));
 const settle = async (n = 80) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
-const CANVAS_FIRST = manifest.content_scripts.find((c) => c.js.includes('content-canvas.js')).js;
+const CANVAS_FIRST = manifest.content_scripts.find((c) => c.js.includes('content/content-canvas.js')).js;
 const C = 'https://canvas.school.edu', M = 'https://moodle.school.edu', B = 'https://bb.school.edu';
 const SITES = [`${C}/*`, `${M}/*`, `ultra:${B}`];
 
@@ -71,7 +71,7 @@ const worker = ({ registered = [], update = true, ignoreUpdate = [], local = {},
   const context = vm.createContext({
     URL, console: { ...console, warn: (...args) => w.warnings.push(args.map(String).join(' ')) }, setTimeout, clearTimeout, TextEncoder, TextDecoder, structuredClone, crypto: globalThis.crypto, atob, btoa, navigator: {}, AbortSignal,
     fetch: async () => { throw new TypeError('Failed to fetch'); },
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('lib', f)), context, { filename: f }); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('background', f)), context, { filename: f }); },
     chrome: {
       runtime: {
         id: 'glaze', getURL: (p = '') => `chrome-extension://glaze/${p}`, getManifest: () => manifest,
@@ -88,7 +88,7 @@ const worker = ({ registered = [], update = true, ignoreUpdate = [], local = {},
       action: { setIcon: async () => {} },
     },
   });
-  vm.runInContext(read('lib/background.js'), context, { filename: 'lib/background.js' });
+  vm.runInContext(read('background/background.js'), context, { filename: 'background/background.js' });
   w.install = async (reason) => { for (const f of installed) f({ reason }); await settle(); };
   w.start = () => { for (const f of startup) f(); };
   w.change = (name, patch) => {
@@ -152,7 +152,7 @@ test('update after a site was taken off in Settings: the others stay through it,
 
 test('update where a registration changed (an older file list, older matches): it is updated in place, never missing', async () => {
   const was = await before();
-  const old = was.map((s) => (s.id === `${C}/*` ? { ...s, js: s.js.filter((f) => f !== 'content-canvas.js') }
+  const old = was.map((s) => (s.id === `${C}/*` ? { ...s, js: s.js.filter((f) => f !== 'content/content-canvas.js') }
     : s.id === `ultra:${B}` ? { ...s, matches: [`${B}/ultra/*`] } : s));
   old.push({ id: 'gz-retired', matches: [`${C}/*`], js: ['features/retired.js'], runAt: 'document_idle', persistAcrossSessions: true });
   const w = worker({ registered: old, local, sync });
@@ -166,7 +166,7 @@ test('update where a registration changed (an older file list, older matches): i
 
 test('a browser without updateContentScripts (older Firefox, Safari): a changed registration is replaced on its own, the rest stay', async () => {
   const was = await before({ update: false });
-  const old = was.map((s) => (s.id === `${C}/*` ? { ...s, js: s.js.filter((f) => f !== 'content-canvas.js') }
+  const old = was.map((s) => (s.id === `${C}/*` ? { ...s, js: s.js.filter((f) => f !== 'content/content-canvas.js') }
     : s.id === `ultra:${B}` ? { ...s, matches: [`${B}/ultra/*`] } : s));
   const w = worker({ registered: old, local, sync, update: false });
   await w.install('update');
@@ -193,7 +193,7 @@ for (const [id, key, value, expected] of [
   [`${C}/*`, 'matchOriginAsFallback', true, false],
   ['gz-notes-home', 'allFrames', true, false],
   [`${C}/*`, 'world', 'MAIN', 'ISOLATED'],
-  [`${C}/*`, 'css', ['canvas.css'], []],
+  [`${C}/*`, 'css', ['content/canvas.css'], []],
   [`${C}/*`, 'excludeMatches', [`${C}/excluded/*`], []],
   [`${C}/*`, 'runAt', 'document_end', 'document_start'],
   [`${C}/*`, 'allFrames', false, true],
@@ -261,7 +261,7 @@ for (const failed of ['update', 'register', 'unregister']) test(`a failed ${fail
   const was = await before();
   const other = 'https://canvas.other.edu/*';
   const old = was.map((s) => s.id === `${C}/*` ? { ...s, runAt: 'document_end' } : s);
-  old.push({ id: 'gz-retired', matches: [`${C}/*`], js: ['lib/detect.js'] });
+  old.push({ id: 'gz-retired', matches: [`${C}/*`], js: ['content/detect.js'] });
   const w = worker({ registered: old, local: { ...local, canvas: [...local.canvas, other] }, sync, held: [...SITES.slice(0, 2), `${B}/*`, other] });
   w.write = async (op) => { if (op === failed) throw Error(`injected ${failed} failure`); };
   await w.install('update');

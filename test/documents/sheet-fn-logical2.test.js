@@ -1,4 +1,4 @@
-// XOR and SWITCH (lib/sheet-fn-logical2.js). Cases are the worked examples on Microsoft's pages for each function
+// XOR and SWITCH (documents/sheets/sheet-fn-logical2.js). Cases are the worked examples on Microsoft's pages for each function
 // (support.microsoft.com/en-us/office/xor-function-1548d4c2-5e47-4f77-9a92-0533bba14f37,
 // switch-function-47ab33c0-28ce-4530-8a45-d532ec4aa25e), their Remarks, and what Excel 16.114.1 gave for the rest
 // (probes of 2026-10-30, ~/Projects/glaze-plans/sheets/fn-rest-excel-probes-2026-10-30.txt).
@@ -6,14 +6,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../../extension/lib/sheet-model.js');
-const C = require('../../extension/lib/sheet-calc.js');
-require('../../extension/lib/sheet-fn-math.js');
-require('../../extension/lib/sheet-fn-logical.js');
-require('../../extension/lib/sheet-fn-date.js');
-require('../../extension/lib/sheet-fn-info.js');
-require('../../extension/lib/sheet-fn-lookup.js');
-require('../../extension/lib/sheet-fn-logical2.js');
+const M = require('../../extension/documents/sheets/sheet-model.js');
+const C = require('../../extension/documents/sheets/sheet-calc.js');
+require('../../extension/documents/sheets/sheet-fn-math.js');
+require('../../extension/documents/sheets/sheet-fn-logical.js');
+require('../../extension/documents/sheets/sheet-fn-date.js');
+require('../../extension/documents/sheets/sheet-fn-info.js');
+require('../../extension/documents/sheets/sheet-fn-lookup.js');
+require('../../extension/documents/sheets/sheet-fn-logical2.js');
 
 const book = (cells = {}) => {
   const wb = M.workbook();
@@ -32,7 +32,7 @@ const cases = (e, rows) => { for (const [f, want] of rows) assert.equal(calc(e, 
 
 test('XOR and SWITCH are registered, and nothing sets a timer', () => {
   for (const name of ['XOR', 'SWITCH']) assert.ok(C.fn(name), name);
-  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-fn-logical2.js'), 'utf8')));
+  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/documents/sheets/sheet-fn-logical2.js'), 'utf8')));
 });
 
 test('XOR: true when an odd number of its values are TRUE', () => {

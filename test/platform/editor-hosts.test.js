@@ -1,4 +1,4 @@
-// The hosts a Look's media and a mod reach, asked for in the click that adds them (lib/site.js reach, from Glaze's own pages):
+// The hosts a Look's media and a mod reach, asked for in the click that adds them (core/site.js reach, from Glaze's own pages):
 // the editor's mod install prompt (its network:<host> permissions and a remote background's host), a network permission
 // switched on later, a channel on a relay of one's own, and Gradescope's switch in Settings. Held already, the browser says
 // yes without a prompt; refused, nothing is added. chrome.permissions is stood in: a headless browser can't answer its prompt.
@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const M = require('../../extension/lib/modbundle.js');
+const M = require('../../extension/mods/modbundle.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 // Web Crypto (a mod's signature and hashes) finishes off the main thread, after any fixed number of turns on a busy machine:
@@ -27,7 +27,7 @@ const t = (k, vars = {}) => k.replace(/\{(\w+)\}/g, (s, n) => (n in vars ? Strin
 const AUTHOR = { kty: 'OKP', crv: 'Ed25519', d: 'nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A', x: '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo' };
 const u8 = (s) => new TextEncoder().encode(s);
 
-// lib/site.js's reach in a page of Glaze's: what the browser was asked, whether inside a click, and what it answers.
+// core/site.js's reach in a page of Glaze's: what the browser was asked, whether inside a click, and what it answers.
 const pageChrome = ({ answer = () => true, manifest = { host_permissions: ['https://frostdev.io/*', 'https://share.frostdev.io/*'] }, respond = async () => ({ ok: true }), list = [] } = {}) => {
   const asked = [], sent = [], state = { active: false };
   const chrome = {
@@ -41,7 +41,7 @@ const pageChrome = ({ answer = () => true, manifest = { host_permissions: ['http
 test('reach: one request for every host, inside the click, the worker told first; Safari\'s every-site manifest asks nothing', async () => {
   const p = pageChrome();
   const g = vm.createContext({ chrome: p.chrome, URL, Promise, console });
-  vm.runInContext(read('lib/site.js'), g);
+  vm.runInContext(read('core/site.js'), g);
   p.state.active = true;
   const r = g.GZ_SITE.reach(['https://api.weather.gov/points', 'https://media.example/a.webm', 'https://api.weather.gov/x']);
   p.state.active = false;
@@ -53,13 +53,13 @@ test('reach: one request for every host, inside the click, the worker told first
   for (const answer of [() => false, () => { throw new Error('This function must be called during a user gesture'); }]) {
     const q = pageChrome({ answer });
     const h = vm.createContext({ chrome: q.chrome, URL, Promise, console });
-    vm.runInContext(read('lib/site.js'), h);
+    vm.runInContext(read('core/site.js'), h);
     assert.equal(await h.GZ_SITE.reach(['https://api.weather.gov/']), false);
   }
   // Local hosts by their portless pattern; anything else is no host to ask for.
   const l = pageChrome();
   const lg = vm.createContext({ chrome: l.chrome, URL, Promise, console });
-  vm.runInContext(read('lib/site.js'), lg);
+  vm.runInContext(read('core/site.js'), lg);
   assert.equal(await lg.GZ_SITE.reach(['http://localhost:8787/j']), true);
   assert.deepEqual(l.asked, [[['http://localhost/*'], false]]);
   for (const bad of [['http://school.example/'], ['ftp://x.example/'], ['nonsense'], []]) assert.equal(await lg.GZ_SITE.reach(bad), bad.length === 0, String(bad));
@@ -67,7 +67,7 @@ test('reach: one request for every host, inside the click, the worker told first
   // Safari keeps <all_urls>: nothing to ask.
   const s = pageChrome({ manifest: { host_permissions: ['<all_urls>'] } });
   const sg = vm.createContext({ chrome: s.chrome, URL, Promise, console });
-  vm.runInContext(read('lib/site.js'), sg);
+  vm.runInContext(read('core/site.js'), sg);
   assert.equal(await sg.GZ_SITE.reach(['https://api.weather.gov/']), true);
   assert.deepEqual(s.asked, []);
 });
@@ -87,9 +87,9 @@ const editor = (chromeRig, data = {}) => {
   const chrome = { ...chromeRig.chrome, storage: { local, onChanged: { addListener() {} } } };
   chrome.runtime.getManifest = ((m) => () => ({ ...m(), sandbox: {} }))(chrome.runtime.getManifest);
   const ctx = vm.createContext({ chrome, document, URL, Promise, console, TextEncoder, TextDecoder, crypto: globalThis.crypto, Uint8Array, atob, btoa, Blob, structuredClone,
-    requestAnimationFrame: (f) => f(), confirm: () => true, GZ_MODBUNDLE: M, GZ_XPARTS: require('../../extension/lib/lookparts.js'), GZ_MODAPI: require('../../extension/lib/modapi.js') });
-  vm.runInContext(read('lib/site.js'), ctx);
-  vm.runInContext(read('lib/editor-mods.js'), ctx);
+    requestAnimationFrame: (f) => f(), confirm: () => true, GZ_MODBUNDLE: M, GZ_XPARTS: require('../../extension/looks/lookparts.js'), GZ_MODAPI: require('../../extension/mods/modapi.js') });
+  vm.runInContext(read('core/site.js'), ctx);
+  vm.runInContext(read('settings/editor-mods.js'), ctx);
   ctx.GZ_MODSEDIT.mount({ t, and: (a) => a.join(' and '), when: String, show() {} });
   const $ = (id) => document.getElementById(id);
   // A .glazemod file opened: the prompt comes up. Install clicked inside the browser's activation, then the dialog closes.
@@ -180,7 +180,7 @@ test('a mod channel\'s relay is asked for in Read code\'s click before the chann
 
 // ---- Settings: the Gradescope switch -------------------------------------------------------------------------------------
 test('Settings: the Gradescope switch asks for www.gradescope.com in its click; refused, it stays off and nothing is saved', () => {
-  const src = read('options.js');
+  const src = read('settings/options.js');
   const at = src.indexOf("if (key === 'enhance.gradescope'");
   assert.ok(at > 0, 'the switch has its own path');
   const body = src.slice(at, src.indexOf('\n', at));

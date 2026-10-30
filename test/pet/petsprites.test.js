@@ -1,5 +1,5 @@
 const test = require('node:test'), assert = require('node:assert/strict');
-const S = require('../../extension/lib/petsprites.js'), P = require('../../extension/lib/pet.js');
+const S = require('../../extension/pet/petsprites.js'), P = require('../../extension/pet/pet.js');
 
 test('both ChatGPT layouts validate without trusting metadata paths or versions', () => {
   assert.equal(S.meta({ name: '<img onerror=x>', spritesheet: 'https://bad.test/x' }, 1536, 1872).spriteVersionNumber, 1);
@@ -44,12 +44,12 @@ test('adding a pet selection preserves XP, rewards, provider clocks and habitat'
 
 test('pet library writes are restricted to the top-level editor; LMS reads need a confirmed site and opt-in', async () => {
   const fs = require('node:fs'), vm = require('node:vm');
-  const source = fs.readFileSync(require.resolve('../../extension/lib/background.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../../extension/background/background.js'), 'utf8');
   const setup = source.slice(source.indexOf('const fromEditor'), source.indexOf('// The notes app'));
   const local = { ultra: ['https://school.test'] }, sync = { enhance: { pet: true } };
   const chrome = { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://glaze/${p}`, getManifest: () => ({ host_permissions: ['<all_urls>'] }) },
     storage: { local: { get: async () => local }, sync: { get: async () => sync } } };
-  const allow = vm.runInNewContext(`${setup} BROKER.petSprites.allow`, { chrome, URL, GZ_PET: P, GZ_SANITIZE: require('../../extension/defaults.js').GZ_SANITIZE, GZ_BUILT_IN: require('../../extension/defaults.js').GZ_BUILT_IN, GZ_LOCAL_DEV: require('../../extension/defaults.js').GZ_LOCAL_DEV });
+  const allow = vm.runInNewContext(`${setup} BROKER.petSprites.allow`, { chrome, URL, GZ_PET: P, GZ_SANITIZE: require('../../extension/content/defaults.js').GZ_SANITIZE, GZ_BUILT_IN: require('../../extension/content/defaults.js').GZ_BUILT_IN, GZ_LOCAL_DEV: require('../../extension/content/defaults.js').GZ_LOCAL_DEV });
   const editor = { id: 'glaze', frameId: 0, origin: 'chrome-extension://glaze', url: 'chrome-extension://glaze/options.html#look/pets' };
   assert.equal(await allow({ op: 'import' }, editor), true);
   assert.equal(await allow({ op: 'delete' }, { ...editor, frameId: 1 }), false);
@@ -85,7 +85,7 @@ test('normalization derives counts from decoded alpha and the broker preserves t
   const rgba = new Uint8ClampedArray(1536 * 2288 * 4), frameCounts = [7, ...S.COUNTS.slice(1)];
   for (let row = 0; row < 11; row++) for (let col = 0; col < frameCounts[row]; col++) rgba[((row * 208 + 10) * 1536 + col * 192 + 10) * 4 + 3] = 255;
   const encoded = new Uint8Array([82, 73, 70, 70, 0, 0, 0, 0, 87, 69, 66, 80]);
-  const lib = vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/lib/petsprites.js'), 'utf8'), {
+  const lib = vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/pet/petsprites.js'), 'utf8'), {
     GZ_DOCTEXT: { imageSize: () => ({ w: 1536, h: 2288 }) }, Uint8Array, Blob, TextDecoder, atob, btoa, crypto: globalThis.crypto,
     createImageBitmap: async () => ({ width: 1536, height: 2288, close() {} }),
     OffscreenCanvas: class { getContext() { return { drawImage() {}, getImageData: () => ({ data: rgba }) }; } convertToBlob() { return Promise.resolve(new Blob([encoded], { type: 'image/webp' })); } },

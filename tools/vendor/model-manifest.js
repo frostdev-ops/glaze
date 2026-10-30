@@ -1,13 +1,13 @@
-// One entry of lib/ai/local/models.json (read by lib/ai/local/store.js): a Hugging Face file pinned to a commit, streamed
+// One entry of ai/local/models.json (read by ai/local/store.js): a Hugging Face file pinned to a commit, streamed
 // once for the SHA-256 of each 64 MB chunk and of the whole file. Size and LFS SHA-256 come from HF's API at that commit;
 // the whole-file hash must match it. --local hashes a copy already here instead of downloading, once its size matches.
 //   node tools/vendor/model-manifest.js --repo <owner/name> --commit <sha> --file <f.gguf> --tier <n>
-//     [--local <path>] [--id <id>] [--name <name>] [--quant <Q>] [--license <id>] [--stock] [--out lib/ai/local/models.json]
+//     [--local <path>] [--id <id>] [--name <name>] [--quant <Q>] [--license <id>] [--stock] [--out ai/local/models.json]
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { Readable } = require('node:stream');
-const S = require('../../extension/lib/ai/local/store.js');
+const S = require('../../extension/ai/local/store.js');
 
 const CHUNK = 67108864;
 const args = process.argv.slice(2);
@@ -15,7 +15,7 @@ const flag = (name) => { const i = args.indexOf(name); return i < 0 ? null : arg
 const bool = (name) => { const i = args.indexOf(name); return i < 0 ? false : (args.splice(i, 1), true); };
 const repo = flag('--repo'), commit = flag('--commit'), file = flag('--file'), local = flag('--local');
 const tier = Number(flag('--tier')), stock = bool('--stock');
-const out = path.resolve(flag('--out') || path.join(__dirname, '../../extension/lib/ai/local/models.json'));
+const out = path.resolve(flag('--out') || path.join(__dirname, '../../extension/ai/local/models.json'));
 const base = file && path.basename(file).replace(/\.gguf$/i, '');
 const id = flag('--id') || (base && base.toLowerCase());
 const name = flag('--name') || (base && base.replace(/-/g, ' '));

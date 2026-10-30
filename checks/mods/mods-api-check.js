@@ -131,7 +131,7 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
       await chrome.storage.local.set({ ultra: [origin], mods: mods.map((m) => m.id), modOrder: [ID.data, ID.rail, ID.nav], ...Object.fromEntries(mods.map((m) => [`mod:${m.id}`, m])),
         [`modReplace:${ID.data}`]: { 'effect:complete': true }, [`modSettings:${ID.data}`]: { plant: 'Cactus' },
         widgetLayout: GZ_WIDGETS.layout({ tiles: [{ id: `m${ID.data.slice(0, 14)}0`, size: 'm' }], boards: { pages: [{ id: `m${ID.data.slice(0, 14)}0`, on: true, size: 'm' }] } }, { [`m${ID.data.slice(0, 14)}0`]: { size: 'm' } }), ...over });
-    }, { origin, mods: MODS(), ID, over }).then(() => delay(300)).then(() => until(() => sw.evaluate(() => chrome.scripting.getRegisteredContentScripts().then((l) => l.some((x) => x.id.startsWith('ultra:')) || chrome.runtime.getManifest().content_scripts.some((x) => x.js.includes('content-ultra.js') && x.matches.includes('https://*/ultra/*')))), 'the loopback Ultra registered'));
+    }, { origin, mods: MODS(), ID, over }).then(() => delay(300)).then(() => until(() => sw.evaluate(() => chrome.scripting.getRegisteredContentScripts().then((l) => l.some((x) => x.id.startsWith('ultra:')) || chrome.runtime.getManifest().content_scripts.some((x) => x.js.includes('content/content-ultra.js') && x.matches.includes('https://*/ultra/*')))), 'the loopback Ultra registered'));
 
     for (const mode of ['strict', 'permissive']) {
       console.log(`-- ${mode} page policy`);

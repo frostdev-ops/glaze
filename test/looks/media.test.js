@@ -1,4 +1,4 @@
-// lib/media.js: the containers it reads (WebP, AVIF, WebM, MP4), the Lottie cleaner, and the files the worker keeps for a Look.
+// looks/media.js: the containers it reads (WebP, AVIF, WebM, MP4), the Lottie cleaner, and the files the worker keeps for a Look.
 // Everything here is someone else's bytes, so each reader is tried on real encoder output (test/fixtures/media/) and on files
 // built to be wrong in the ways that matter: lengths that lie, sizes and frame counts over a limit, things that reach out or run
 // away. A reader that takes less than a file holds returns the cleaned copy, which must come back unchanged when read again.
@@ -6,7 +6,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../../extension/lib/media.js');
+const M = require('../../extension/looks/media.js');
 
 const fx = (f) => new Uint8Array(fs.readFileSync(path.join(__dirname, '../fixtures/media', f)));
 const text = (f) => fs.readFileSync(path.join(__dirname, '../fixtures/media', f), 'utf8');
@@ -282,7 +282,7 @@ test('Lottie from bytes: UTF-8 text that is JSON, with a byte-order mark and whi
 });
 
 // ---- the files this computer keeps --------------------------------------------------------------------------------------
-// storage.local (data: the index) and the worker's files store (files: its records, by hash), as lib/background.js gives them.
+// storage.local (data: the index) and the worker's files store (files: its records, by hash), as background/background.js gives them.
 const area = (data = {}, records = new Map()) => ({
   data, records,
   local: {
@@ -429,11 +429,11 @@ test('check refuses what is not a media file, and the limits for a sticker are t
 });
 
 // ---- the vendored player ------------------------------------------------------------------------------------------------
-test('the Lottie player in lib/lottie/ is the pinned official readable light canvas build, with one comment line, one cut and its licence', () => {
+test('the Lottie player in vendor/lottie/ is the pinned official readable light canvas build, with one comment line, one cut and its licence', () => {
   const crypto = require('node:crypto');
   const script = fs.readFileSync(path.join(__dirname, '../../tools/vendor/vendor-lottie.sh'), 'utf8');
   const version = /^version=(\S+)$/m.exec(script)[1], out = /^out_sha256=([0-9a-f]{64})$/m.exec(script)[1];
-  const file = fs.readFileSync(path.join(__dirname, '../../extension/lib/lottie/lottie_light_canvas.js'), 'utf8');
+  const file = fs.readFileSync(path.join(__dirname, '../../extension/vendor/lottie/lottie_light_canvas.js'), 'utf8');
   assert.equal(file.split('\n')[0], `// lottie-web ${version} light canvas build (MIT, lib/lottie/LICENSE), as published after this line but for one cut. Fetched by scripts/vendor-lottie.sh.`);
   assert.equal(crypto.createHash('sha256').update(file).digest('hex'), out, 'the file is what the script builds from the pinned release');
   assert.match(/^file_sha256=([0-9a-f]{64})$/m.exec(script)[1], /^[0-9a-f]{64}$/);
@@ -443,7 +443,7 @@ test('the Lottie player in lib/lottie/ is the pinned official readable light can
   // The one cut: lottie's optional Web Worker, built from a function's own text, is gone.
   assert.match(file, /scripts\/vendor-lottie\.sh cut the Web Worker/);
   assert.doesNotMatch(file, /new Worker\(|fn\.toString\(\)/);
-  assert.match(fs.readFileSync(path.join(__dirname, '../../extension/lib/lottie/LICENSE'), 'utf8'), /^\s*The MIT License \(MIT\)/);
+  assert.match(fs.readFileSync(path.join(__dirname, '../../extension/vendor/lottie/LICENSE'), 'utf8'), /^\s*The MIT License \(MIT\)/);
   // The light build has no expressions: nothing in it turns text into code, and it fetches or imports nothing of its own accord.
   assert.doesNotMatch(file, /\beval\s*\(|new\s+Function\s*\(|\bFunction\s*\(\s*["'`]|importScripts|\bimport\s*\(/);
   assert.match(file, /runExpressions/, 'it is the build that knows expressions exist, and leaves them out');
@@ -453,12 +453,12 @@ test('the Lottie player in lib/lottie/ is the pinned official readable light can
 test('the page may load the player and the media module, and the first script loads neither', () => {
   const manifest = require('../../extension/manifest.json');
   const web = manifest.web_accessible_resources.flatMap((e) => e.resources);
-  for (const f of ['lib/scene-media.js', 'lib/lottie/lottie_light_canvas.js']) {
+  for (const f of ['looks/scene-media.js', 'vendor/lottie/lottie_light_canvas.js']) {
     assert.ok(web.includes(f), `${f} is web-accessible`);
     assert.ok(fs.existsSync(path.join(__dirname, '../../extension', f)), `${f} exists`);
     assert.ok(!manifest.content_scripts.some((c) => c.js.includes(f)), `${f} is not in a content script's list`);
   }
-  const content = fs.readFileSync(path.join(__dirname, '../../extension/content.js'), 'utf8');
+  const content = fs.readFileSync(path.join(__dirname, '../../extension/content/content.js'), 'utf8');
   assert.ok(!/lottie/i.test(content), 'content.js does not know Lottie');
   assert.match(content, /import\(chrome\.runtime\.getURL\((?:file|`\$\{file\}[^`]*`)\)(?: \+ `[^`]*`)?\)/);
 });
@@ -500,7 +500,7 @@ test('PNG stickers are accepted, bounded and stripped of metadata before display
   const png = new Uint8Array(fs.readFileSync(path.join(__dirname, '../../extension/icons/icon16.png')));
   const got = M.check(png, 'sticker');
   assert.deepEqual([got?.type, got?.mime, got?.w, got?.h, got?.animated], ['image', 'image/png', 16, 16, false]);
-  const crc = require('../../extension/lib/zip.js').crc32;
+  const crc = require('../../extension/core/zip.js').crc32;
   const part = (id, bytes) => Uint8Array.from([...be(bytes.length), ...ascii(id), ...bytes, ...be(crc(Uint8Array.from([...ascii(id), ...bytes])))]);
   const textChunk = part('tEXt', ascii('Comment\0private information'));
   const dirty = Uint8Array.from([...png.subarray(0, 33), ...textChunk, ...png.subarray(33)]);
@@ -527,7 +527,7 @@ test('embedded Lottie pictures use their real bounded dimensions and are cleaned
   assert.ok(got);
   assert.deepEqual([got.json.assets[0].w, got.json.assets[0].h], [16, 16]);
   const secret = Buffer.from('private text');
-  const crc = require('../../extension/lib/zip.js').crc32;
+  const crc = require('../../extension/core/zip.js').crc32;
   const chunk = Uint8Array.from([...be(secret.length), ...ascii('tEXt'), ...secret, ...be(crc(Uint8Array.from([...ascii('tEXt'), ...secret])))]);
   const dirty = Uint8Array.from([...png.subarray(0, 33), ...chunk, ...png.subarray(33)]);
   const clean = M.lottie(picture(dirty));

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const PA = require('../../extension/lib/writer-papers.js');
-const S = require('../../extension/lib/writer-schema.js');
+const PA = require('../../extension/writer/writer-papers.js');
+const S = require('../../extension/writer/writer-schema.js');
 const doc = (text) => S.parse(S.paper, `<p>${text}</p>`).toJSON();
 const storage = () => {
   const data = {};

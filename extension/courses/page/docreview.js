@@ -57,7 +57,7 @@ var GZ_DOCREVIEW = globalThis.GZ_DOCREVIEW || (() => {
   const sheet = (doc) => {
     if (doc.getElementById('gz-review-css')) return;
     const el = doc.createElement('link'); el.id = 'gz-review-css'; el.rel = 'stylesheet';
-    el.href = chrome.runtime.getURL('features/docreview.css'); doc.head.append(el);
+    el.href = chrome.runtime.getURL('courses/page/docreview.css'); doc.head.append(el);
   };
   const relayable = (e, origin, source, current) => e.origin === origin && e.source === source && current === true
     && !Array.isArray(e.data) && e.data?.gzCtab === 'review' && typeof e.data.on === 'boolean' && Object.keys(e.data).length === 2;

@@ -1,5 +1,5 @@
-// The agent approval window in a real Chromium (lib/mcp/approve.js, lib/mcp/approve.html), headless, in a staged copy of the
-// extension whose worker hands the check its own approval window (lib/background.js mcpCore, which routes glaze:mcp-ask and
+// The agent approval window in a real Chromium (agents/approve.js, agents/approve.html), headless, in a staged copy of the
+// extension whose worker hands the check its own approval window (background/background.js mcpCore, which routes glaze:mcp-ask and
 // windows.onRemoved to it; the copy's worker is a new file, the checkout's is untouched). Asks made in the worker open one
 // popup that shows the oldest; its words are the record's: Glaze's sentence for a pairing and a grant, the summary for an
 // action, the app's name "as the app reports itself" and its program. Allow and Don't allow resolve the ask, Escape is Don't
@@ -49,9 +49,9 @@ const check = async (name, test) => {
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nmcp-approve-check\n`);
     const ext = require('../../tools/dev/check-env.js').staged(root, [], scratch);
     // The staged files are hard links to the checkout: replace the worker's, never write through it.
-    const worker0 = fs.readFileSync(path.join(ext, 'lib/background.js'), 'utf8');
-    fs.rmSync(path.join(ext, 'lib/background.js'));
-    fs.writeFileSync(path.join(ext, 'lib/background.js'), worker0 + SHIM);
+    const worker0 = fs.readFileSync(path.join(ext, 'background/background.js'), 'utf8');
+    fs.rmSync(path.join(ext, 'background/background.js'));
+    fs.writeFileSync(path.join(ext, 'background/background.js'), worker0 + SHIM);
     await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
       ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: null, reducedMotion: 'reduce', locale: 'en-US',
@@ -60,8 +60,8 @@ const check = async (name, test) => {
     require('../../tools/dev/check-env.js').noFirstRun(context);
     context.setDefaultTimeout(15000);
     await context.route('**/*', (r) => (new URL(r.request().url()).protocol === 'chrome-extension:' ? r.continue() : r.abort()));
-    const worker = context.serviceWorkers().find((w) => w.url().endsWith('/lib/background.js')) || await context.waitForEvent('serviceworker');
-    const base = `chrome-extension://${new URL(worker.url()).host}`, PAGE = `${base}/lib/mcp/approve.html`;
+    const worker = context.serviceWorkers().find((w) => w.url().endsWith('/background/background.js')) || await context.waitForEvent('serviceworker');
+    const base = `chrome-extension://${new URL(worker.url()).host}`, PAGE = `${base}/agents/approve.html`;
     await until(() => worker.evaluate(() => typeof globalThis.approveCheck?.ask === 'function'), 'the worker loads approve.js');
     const errors = [];
     const contrastIssues = [];

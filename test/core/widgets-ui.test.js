@@ -1,14 +1,14 @@
-// Dashboard widgets on a page (features/widgets.js) in a VM with an inert DOM, storage and timers: a tile that goes
+// Dashboard widgets on a page (core/page/widgets.js) in a VM with an inert DOM, storage and timers: a tile that goes
 // before its storage answers arms nothing, and a note that didn't save stays unsaved and is tried again.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
-const W = require('../../extension/lib/widgets.js');
+const D = require('../../extension/content/defaults.js');
+const W = require('../../extension/core/widgets.js');
 
-const read = (f) => process.env.GZ_P4_WIDGET_BASE && f === 'features/widgets.js'
+const read = (f) => process.env.GZ_P4_WIDGET_BASE && f === 'core/page/widgets.js'
   ? require('node:child_process').execFileSync('git', ['show', `${process.env.GZ_P4_WIDGET_BASE}:${f}`], { cwd: path.join(__dirname, '../../extension'), encoding: 'utf8' })
   : fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(setImmediate); };
@@ -41,7 +41,7 @@ const page = ({ local = {}, sync = {}, replies = [], clock = { t: Date.now() }, 
   const c = {
     console, URL, URLSearchParams, Intl, Date: FakeDate, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String,
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' },
-    GZ_TODO: require('../../extension/lib/todo.js'), GZ_CLASSES: require('../../extension/lib/classes.js'),
+    GZ_TODO: require('../../extension/planner/todo.js'), GZ_CLASSES: require('../../extension/planner/classes.js'),
     GZ_CTX: { t: (k) => k, locale: () => 'en', need: async () => {}, capi, settings: () => ({ enhance: { notes: true, widgets: true } }), profile: async () => ({ id: '3', time_zone: tz }),
       ...(ultra && { site: 'ultra', capi: () => { throw new Error('not on Ultra'); }, profile: () => { throw new Error('not on Ultra'); } }) },
     location: ultra ? { origin: 'https://school.blackboard.test', pathname: '/ultra/course' } : { origin: 'https://canvas.test', pathname: '/' },
@@ -62,7 +62,7 @@ const page = ({ local = {}, sync = {}, replies = [], clock = { t: Date.now() }, 
   vm.createContext(c);
   if (ultra) {
     ultra.requests = []; ultra.asked = []; ultra.pending = [];
-    c.GZ_PAGE = require('../../extension/lib/page.js'); c.GZ_COURSES = D.GZ_COURSES;
+    c.GZ_PAGE = require('../../extension/core/page.js'); c.GZ_COURSES = D.GZ_COURSES;
     c.fetch = async (address, init) => {
       const u = new URL(address), uid = ultra.uid || '_5_1';
       assert.equal(u.origin, c.location.origin); assert.equal(init.credentials, 'same-origin');
@@ -80,11 +80,11 @@ const page = ({ local = {}, sync = {}, replies = [], clock = { t: Date.now() }, 
       else throw new Error(`unexpected Ultra API: ${u.pathname}`);
       return { ok: true, text: async () => JSON.stringify(value) };
     };
-    vm.runInContext(read('lib/ultra.js'), c);
+    vm.runInContext(read('courses/ultra.js'), c);
   }
   // The widgets themselves, reached as todo-ui.test.js reaches the list's insides: through the source's return.
-  const src = read('features/widgets.js').replace('  return { sync, cover, hub: open, register, declare, who: account, avatar, catalog };', '  return { sync, cover, hub: open, register, declare, who: account, avatar, catalog, probe: { WIDGETS, tileEl, added, tiles, draw, onShow, seatAfter: typeof seatAfter === "function" ? seatAfter : null, layout: (x) => { lay = x; }, set: (w, s, m) => { W = w; o = s; me = m; }, hubFrom: (b) => { hubButton = b; }, state: (x) => { on = x.on; lay = x.lay; board = drawn = null; floats = x.floats; ro = x.ro; } } };');
-  assert.notEqual(src, read('features/widgets.js'));
+  const src = read('core/page/widgets.js').replace('  return { sync, cover, hub: open, register, declare, who: account, avatar, catalog };', '  return { sync, cover, hub: open, register, declare, who: account, avatar, catalog, probe: { WIDGETS, tileEl, added, tiles, draw, onShow, seatAfter: typeof seatAfter === "function" ? seatAfter : null, layout: (x) => { lay = x; }, set: (w, s, m) => { W = w; o = s; me = m; }, hubFrom: (b) => { hubButton = b; }, state: (x) => { on = x.on; lay = x.lay; board = drawn = null; floats = x.floats; ro = x.ro; } } };');
+  assert.notEqual(src, read('core/page/widgets.js'));
   const ui = vm.runInContext(src, c);
   ui.probe.set(W, D.GZ_SANITIZE({}).widgets, { uid: ultra ? '_5_1' : '3', tz: ultra ? undefined : 'UTC' });
   const answer = () => { while (reads.length) reads.shift()(); };
@@ -181,7 +181,7 @@ test('a note is stamped when it is typed, not when it is saved', async () => {
 });
 
 test('a floating widget is never wider or taller than the window, whatever its size', () => {
-  const css = read('features/apps.css');
+  const css = read('core/page/apps.css');
   for (const sel of ['#gz-float .gz-w {', '#gz-float .gz-w[data-size="m"] {', '#gz-float .gz-w[data-size="l"] {']) {
     const rule = css.slice(css.indexOf(sel), css.indexOf('}', css.indexOf(sel)));
     assert.match(rule, /width: min\([^;]+, calc\(100vw - 24px\)\)/, sel);
@@ -190,14 +190,14 @@ test('a floating widget is never wider or taller than the window, whatever its s
 });
 
 test("a tile's resize corner, drawn at 18px, takes presses over 24 (WCAG 2.5.8), inside the tile", () => {
-  const css = read('features/apps.css');
+  const css = read('core/page/apps.css');
   assert.match(css.slice(css.indexOf('.gz-w-resize {')), /^[^}]*position: absolute; right: 0; bottom: 0; width: 18px; height: 18px;/);
   assert.ok(css.includes('.gz-w-resize::before { content: ""; position: absolute; inset: -6px 0 0 -6px; }'));
 });
 
 test('the grid shows tiles in their saved order, which is also the keyboard and screen-reader order', () => {
   // grid-auto-flow: dense would fill gaps with later tiles, so what you see would not be the order you set or tab through.
-  const css = read('features/apps.css');
+  const css = read('core/page/apps.css');
   const rules = [...css.matchAll(/([^{}]*\.gz-dash-grid[^{}]*)\{([^}]*)\}/g)];
   assert.ok(rules.length);
   for (const [, sel, body] of rules) assert.doesNotMatch(body, /grid-auto-flow:\s*[^;]*dense/, sel.trim());
@@ -303,7 +303,7 @@ test('the agenda puts a class kept in another zone on the student\'s own day, at
   assert.doesNotMatch(nyFri, /Night lab/);
 });
 
-test("Ultra: the agenda reads the day from Ultra's To Do and calendar (lib/ultra.js), never Canvas's planner, and links into Ultra", async () => {
+test("Ultra: the agenda reads the day from Ultra's To Do and calendar (courses/ultra.js), never Canvas's planner, and links into Ultra", async () => {
   const text = (el) => [el.textContent || '', ...(el.children || []).map((c) => (typeof c === 'object' ? text(c) : String(c)))].join(' ');
   const now = Date.parse('2026-10-15T16:00:00Z');
   const ultra = { asked: [], items: [
@@ -645,7 +645,7 @@ test('a covered agenda neither refetches for storage updates nor paints a late r
 });
 
 test('simultaneous top floating and course-frame timers announce a deadline only after one queued advance wins', async () => {
-  const Store = require('../../extension/lib/nav-store.js'), K = require('../../extension/lib/cards.js');
+  const Store = require('../../extension/navigation/nav-store.js'), K = require('../../extension/courses/cards.js');
   const clock = { t: 1e12 }, running = { phase: 'work', end: clock.t + 1000, left: 0 }, values = { widgetTimer: running };
   const area = { sync: { get: async () => ({}) }, local: { get: async () => values, set: async (v) => { Object.assign(values, v); return true; } } };
   const serial = K.queue(), moments = [];
@@ -675,7 +675,7 @@ test('a covered notes save completes without repainting outgoing content, then p
 });
 
 const dockAndFloat = () => {
-  const { El } = require('../stand-in-dom.js'), S = require('../../extension/lib/sidebar.js');
+  const { El } = require('../stand-in-dom.js'), S = require('../../extension/navigation/sidebar.js');
   const p = page(), doc = { visibilityState: 'visible' }, loads = [], counts = { contexts: 0, suspended: 0, resumed: 0 }; let visible = true;
   doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
   Object.assign(doc, { documentElement: doc.root, createElement: (tag) => new El(tag, doc), querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s),
@@ -934,7 +934,7 @@ test('a study buddy that was left for good, or stopped, is not brought back by a
 
 test('a pre-bfcache buddy read cannot overwrite newer reads after restore', async () => {
   const p = page(), local = { petCharacter: 'cat' }, pending = [];
-  p.c.GZ_PET_SPRITES = require('../../extension/lib/petsprites.js');
+  p.c.GZ_PET_SPRITES = require('../../extension/pet/petsprites.js');
   const choices = [];
   p.c.GZ_PET_PLAYER = { mount: (_, selected) => { choices.push(selected.name); return { stop() {}, rest() {}, sleep() {}, wake() {} }; } };
   p.c.chrome.storage.local.get = (keys, cb) => { const snapshot = structuredClone(local); pending.push(() => cb(snapshot)); };

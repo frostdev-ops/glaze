@@ -11,7 +11,7 @@ const read = (f) => fs.readFileSync(path.join(process.env.GZ_CTAB_REPO || path.j
 const rules = (f) => [...read(f).replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, sel, body]) => [sel.trim(), body]);
 const has = (f, sel, prop) => rules(f).some(([s, b]) => s.split(/,(?![^(]*\))/).some((x) => x.trim() === sel) && prop.test(b));
 
-for (const f of ['extras.css', 'canvas.css']) {
+for (const f of ['content/extras.css', 'content/canvas.css']) {
   test(`${f}: a see-through frame paints no ground and no background layer of its own`, () => {
     assert.ok(has(f, 'html[data-gz-bg][data-gz-through]', /background:\s*transparent\s*!important/), 'html ground');
     assert.ok(has(f, 'html[data-gz-through]::before', /content:\s*none/), 'the background layer');
@@ -24,17 +24,17 @@ for (const f of ['extras.css', 'canvas.css']) {
 }
 
 test('extras.css: an Ultra course panel inside a see-through frame drops its copy of the background', () => {
-  assert.ok(has('extras.css', 'html[data-gz-through] :is(.panel-wrap, .bb-offcanvas-panel)::before', /content:\s*none/));
+  assert.ok(has('content/extras.css', 'html[data-gz-through] :is(.panel-wrap, .bb-offcanvas-panel)::before', /content:\s*none/));
 });
 
 test('canvas.css: the page under a course frame keeps its scene showing', () => {
-  const hidden = rules('canvas.css').filter(([s, b]) => s.startsWith('html[data-gz-ctab-framed]') && /visibility:\s*hidden/.test(b));
+  const hidden = rules('content/canvas.css').filter(([s, b]) => s.startsWith('html[data-gz-ctab-framed]') && /visibility:\s*hidden/.test(b));
   assert.ok(hidden.length);
   for (const [s] of hidden) assert.ok(!s.includes('#gz-scene'), s);
 });
 
 test('motion.css: covering a page pauses its ambient motion, not its background drift', () => {
-  const m = rules('motion.css');
+  const m = rules('content/motion.css');
   assert.ok(m.some(([s, b]) => s === ':root' && /--gz-ambient:\s*var\(--gz-drift\)/.test(b) && /--gz-drift:\s*paused/.test(b)));
   assert.ok(m.some(([s, b]) => s === 'html[data-gz-motion="expressive"]' && /--gz-drift:\s*running/.test(b)));
   assert.ok(m.some(([s, b]) => s === 'html[data-gz-motion="off"]' && /--gz-drift:\s*paused/.test(b)));
@@ -44,17 +44,17 @@ test('motion.css: covering a page pauses its ambient motion, not its background 
 });
 
 test('coursetabs.css: the covered page hides its own strip while a see-through frame shows', () => {
-  assert.ok(has('features/coursetabs.css', 'html[data-gz-ctab-framed]:has(> body > #gz-ctabs-frames > iframe[data-gz-through]) #gz-ctabs:not([data-at="over"])', /visibility:\s*hidden\s*!important/));
+  assert.ok(has('navigation/page/coursetabs.css', 'html[data-gz-ctab-framed]:has(> body > #gz-ctabs-frames > iframe[data-gz-through]) #gz-ctabs:not([data-at="over"])', /visibility:\s*hidden\s*!important/));
 });
 
 // ---- content.js -----------------------------------------------------------------------------------------------------
-const source = read('content.js');
+const source = read('content/content.js');
 const a = source.indexOf('  // ---- animated background'), b = source.indexOf('  // ---- course colors and tint', a);
 const block = source.slice(a, b).replace(/import\((chrome\.runtime\.getURL\((?:file|`\$\{file\}[^`]*`)\)(?: \+ `[^`]*`)?)\)/, 'importScene($1, file)');
 const on = source.match(/^  const on = .*;$/m)[0];
 const settle = () => new Promise(setImmediate);
 
-// tabFrame: '' on the page itself. through: what lib/scene-host.js answers (tested below on its own).
+// tabFrame: '' on the page itself. through: what looks/scene-host.js answers (tested below on its own).
 const rig = ({ tabFrame = '_1_1', ultra = true, kind = 'scene', bg = 'scene', through = true, framed = false, modBg = false } = {}) => {
   const log = { starts: 0, stops: 0, needs: [], asked: [], pointer: [] };
   const attrs = new Map([['data-gz-bg', bg], ['data-gz-motion', 'normal']]);
@@ -120,7 +120,7 @@ test('a frame asks for the scene host first, on Ultra and Canvas', () => {
   for (const ultra of [true, false]) {
     const r = rig({ ultra }); r.ctx.GZ_SCENE_HOST = undefined; r.api.syncScene();
     assert.ok(!r.attrs.has('data-gz-through'));
-    assert.ok(r.log.needs.includes('lib/scene-host.js'));
+    assert.ok(r.log.needs.includes('looks/scene-host.js'));
   }
 });
 
@@ -139,8 +139,8 @@ test('content.js tells a frame what its background is made of: the page publishe
   assert.match(source, /JSON\.stringify\(\[s\.bg, colors, partsOf\(\)\?\.bg, html\.getAttribute\('data-gz-motion'\),/);
 });
 
-// ---- lib/scene-host.js --------------------------------------------------------------------------------------------
-const hostSource = read('lib/scene-host.js');
+// ---- looks/scene-host.js --------------------------------------------------------------------------------------------
+const hostSource = read('looks/scene-host.js');
 // A frame (frame: true) under a page whose <html> carries key, or the page itself.
 const host = ({ frame = true, key = 'k1', layers = [] } = {}) => {
   const listeners = new Map(), pageListeners = new Map(), frames = [], posted = [], observed = [], vars = {};
@@ -361,7 +361,7 @@ test('a frame drawing its own scene runs it on the page\'s clock; the page keeps
 });
 
 test('background layers and the scene sit on the viewport, or a frame\'s copy on the page\'s, with today\'s values outside frames', () => {
-  for (const f of ['extras.css', 'canvas.css']) {
+  for (const f of ['content/extras.css', 'content/canvas.css']) {
     const r = rules(f);
     const layer = r.find(([s, b]) => s.startsWith('html:where([data-gz-bg]:not([data-gz-bg="solid"]))::before') && /content:\s*""/.test(b))[1];
     const scene = r.find(([s]) => s === '#gz-scene')[1];
@@ -377,7 +377,7 @@ test('background layers and the scene sit on the viewport, or a frame\'s copy on
 });
 
 test('content.js aligns aurora animations through the lazy host', () => {
-  assert.match(source, /if \(kind === 'aurora'\) need\('lib\/scene-host.js'/);
+  assert.match(source, /if \(kind === 'aurora'\) need\('looks\/scene-host.js'/);
   assert.match(source, /GZ_SCENE_HOST\?\.drift\(html\)/);
 });
 

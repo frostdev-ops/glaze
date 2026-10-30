@@ -20,7 +20,7 @@ const renderer = (sheet = class { constructor() { this.cssRules = [{}]; } }) => 
     document: { documentElement: { lang: 'en' }, hidden: false, addEventListener() {}, createElement: (tag) => new Element(tag), createElementNS: (ns, tag) => new Element(tag) },
     CSSStyleSheet: sheet, Intl, Date, setTimeout, clearTimeout,
   });
-  return vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/features/modui.js'), 'utf8'), ctx);
+  return vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/mods/page/modui.js'), 'utf8'), ctx);
 };
 
 test('progress components always have accessible names and preserve explicit labels', () => {

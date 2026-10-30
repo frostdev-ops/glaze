@@ -7,7 +7,7 @@
 // first), and footnotes at the foot of the page their reference is on.
 // Incremental: a block's lines are measured once per version of it (ProseMirror reuses unchanged nodes), so an edit
 // measures only the blocks it touched; the plan over all of them is arithmetic.
-// plan() is pure (node tests); plugin() needs a page. Classic script after lib/pm.js and lib/writer-styles.js;
+// plan() is pure (node tests); plugin() needs a page. Classic script after vendor/pm.js and writer/writer-styles.js;
 // module.exports for node.
 var GZ_WRITER_PAGINATE = globalThis.GZ_WRITER_PAGINATE || (() => {
   const ST = () => (typeof GZ_WRITER_STYLES !== 'undefined' ? GZ_WRITER_STYLES : require('./writer-styles.js'));

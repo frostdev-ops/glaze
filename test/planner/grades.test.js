@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const R = require('../../extension/lib/grades.js');
-const C = require('../../extension/lib/gradecalc.js'); // the what-if calculator, loaded on demand
+const R = require('../../extension/planner/grades.js');
+const C = require('../../extension/planner/gradecalc.js'); // the what-if calculator, loaded on demand
 
 // A gradebook record as Ultra returns it with expand=column.
 let n = 0;
@@ -50,7 +50,7 @@ test("Ultra's own categories, titled with its language key, read as their names;
   const cat = (title, own = false) => ({ gradebookCategory: { title, isUserDefined: own } });
   const rows = spanish();
   for (const [i, c] of [[0, cat('DISCUSSION.NAME')], [4, cat('SELF_AND_PEER.NAME')], [7, cat('Exam.name', true)], [8, cat('Final project', true)]]) Object.assign(rows[i].column, c);
-  // The empty category has no item to name it: its title from Ultra's list of categories (features/grades.js names).
+  // The empty category has no item to name it: its title from Ultra's list of categories (planner/page/grades.js names).
   const m = C.model(rows, { _6_1: 'QUIZ.NAME' });
   assert.equal(m.kind, 'weighted');
   assert.deepEqual(m.course.groups.map((x) => [x.name, x.sys]),
@@ -141,7 +141,7 @@ test("the old Ultra what-if's saved scores move into the what-if store, and go o
   assert.deepEqual(r.kept.s, { [open.id]: [40, null] });
   assert.deepEqual(r.gone.map((x) => x.id), [graded.id]);
   assert.ok(Math.abs(m.percent(new Map(Object.entries(r.what.scores))) - C.calc(m.course, r.what).current) < 1e-12);
-  // Kept as the worker keeps Canvas's (lib/background.js 'glaze:whatif'), by Ultra's ids.
+  // Kept as the worker keeps Canvas's (background/background.js 'glaze:whatif'), by Ultra's ids.
   const all = C.applyWhatIf({ op: 'course', cid: '_1_1', at: 5, rec: { ...r.kept, p: [{ id: 'pa1', g: '_6_1', n: 'Final', s: 90, pp: 100 }] } }, {}, 0).all;
   assert.deepEqual(Object.keys(all), ['_1_1']);
   assert.deepEqual(all._1_1.s[open.id].slice(0, 2), [40, null]);

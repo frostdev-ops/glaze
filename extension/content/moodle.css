@@ -1,4 +1,4 @@
-/* Glaze — Moodle. The stylesheet content.js loads on Moodle pages (the hosts lib/detect.js finds) in place of
+/* Glaze — Moodle. The stylesheet content.js loads on Moodle pages (the hosts content/detect.js finds) in place of
    theme.css and extras.css, as canvas.css does on Canvas; motion.css loads beside it for the motion knobs.
    It matches what content.js puts on <html> (the --gz-* vars, the data-gz-* attributes) and the sweep's tags.
    Written against Boost, Moodle's default theme: 5.x (Bootstrap 5, measured on 5.3) and, where the markup is the
@@ -16,9 +16,9 @@
       data-gz-dark, on a dark palette. */
 
 /* Bundled faces, as in theme.css (which Moodle doesn't load). Relative URLs resolve against this sheet's own URL. */
-@font-face { font-family: "Glaze Inter"; src: url("fonts/inter.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
-@font-face { font-family: "Glaze Atkinson"; src: url("fonts/atkinson-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
-@font-face { font-family: "Glaze Atkinson"; src: url("fonts/atkinson-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+@font-face { font-family: "Glaze Inter"; src: url("../fonts/inter.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Glaze Atkinson"; src: url("../fonts/atkinson-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Glaze Atkinson"; src: url("../fonts/atkinson-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
 
 /* Colors and look values are not defaulted here: content.js writes every --gz-* value on <html> first. */
 :root {
@@ -731,7 +731,7 @@ html[data-gz-motion="expressive"]::view-transition-old(root), html[data-gz-motio
   border-radius: var(--gz-radius-sm); box-shadow: var(--gz-shadow); backdrop-filter: blur(var(--gz-glass)); animation: var(--gz-tip-in);
 }
 .gz-tip-sub { display: block; margin-top: 0.1rem; font-weight: 400; color: var(--gz-ink-muted); }
-/* Grades on course cards: features/moodle.js tags a card's name with the course's total from Moodle's grades overview
+/* Grades on course cards: courses/page/moodle.js tags a card's name with the course's total from Moodle's grades overview
    (data-gz-grade) and, where it is a percentage, its band (data-gz-chip). The chip has a surface of its own. */
 html[data-gz-enhance-overall] [data-region="course-content"] [data-gz-grade]::after {
   content: attr(data-gz-grade);
@@ -838,7 +838,7 @@ html:not([data-gz-enhance-coursemenu]) .gz-cm-btn { display: none; }
   #gz-cm .gz-cm-tint input:checked { background: Highlight !important; border-color: Highlight !important; }
   #gz-cm .gz-cm-tint input:checked::before { background: HighlightText; }
 }
-/* A card in its course's own Look or tint: features/moodle.js puts that palette on the card (--gz-*), and what the page
+/* A card in its course's own Look or tint: courses/page/moodle.js puts that palette on the card (--gz-*), and what the page
    derives from the palette is derived again here, from the card's. */
 html [data-region="course-content"][data-gz-course-look] {
   --gz-panel: var(--gz-surface-fill, var(--gz-surface));
@@ -853,7 +853,7 @@ html [data-region="course-content"][data-gz-course-look] {
   color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-panel); border-color: var(--gz-border-line, var(--gz-line)) !important;
 }
 html [data-region="course-content"][data-gz-course-look="light"] { --gz-on-soft: var(--gz-accent-hi); }
-/* A card's course color, toned as canvas.css and theme.css tone theirs: Moodle's own (--gz-course-raw, features/moodle.js) is
+/* A card's course color, toned as canvas.css and theme.css tone theirs: Moodle's own (--gz-course-raw, courses/page/moodle.js) is
    70% itself and 30% a grey as light as the muted ink, mixed in OKLab; data-gz-raw-courses (toning off) keeps Moodle's. A
    color picked for the course is the card's --gz-course as is. */
 html [data-region="course-content"][style*="--gz-course-raw"] { --gz-course: color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0)); }
@@ -863,7 +863,7 @@ html[data-gz-raw-courses] [data-region="course-content"][style*="--gz-course-raw
    First paint words come from content.js; the renderer then supplies the measured room inline. */
 html[data-gz-navbar] { --gz-navbar-left: 0px; --gz-navbar-top: 0px; --gz-navbar-bottom: 0px; }
 html[data-gz-navbar] :is(nav.navbar.fixed-top, #theme_boost-drawers-primary, [data-target="theme_boost-drawers-primary"]) { display: none !important; }
-/* Everything in that navbar has a place in the bar (features/navbar-moodle.js): its links, menus and Edit mode switch. The bar's
+/* Everything in that navbar has a place in the bar (navigation/page/navbar-moodle.js): its links, menus and Edit mode switch. The bar's
    own sheet styles only its pin as a toggle, so the Edit mode switch is lit from here, by part, while editing is on. */
 html #gz-navbar::part(switch-on) { color: var(--gz-accent-hi, #6fdcff); background: var(--nb-active, color-mix(in srgb, var(--gz-accent-hi, #6fdcff) 15%, transparent)); }
 @media (forced-colors: active) { html #gz-navbar::part(switch-on) { border: 2px solid Highlight; } }

@@ -151,14 +151,14 @@ async function battery(secret, mode, sink, plain, stun) {
     const ids = ['abcdefghijklmnop', 'qrstuvwxyz234567', 'aaaaaaaaaaaaaaab', 'aaaaaaaaaaaaaaac', 'aaaaaaaaaaaaaaad'];
     const b64 = (s) => Buffer.from(s).toString('base64');
     const SECRET = 'GLAZE_SECRET_GPA_397_SID_428171', FRAME = 'FRAME_PROBE_ONLY';
-    const recordMod = (id, data, active = true) => ({ id, enabled: active, hash: 'fixture', key: 'fixture-key', grants: data ? { grades: true } : {}, manifest: { name: 'Local fixture', permissions: data ? [{ id: 'grades', why: 'test' }] : [], hooks: 'hooks.js', ui: data ? {} : { tiles: [{ id: 'fixture', file: 'ui.html' }] } }, files: { 'hooks.js': b64('void 0'), 'ui.html': b64('<!doctype html><script src="ui.js"></script>'), 'ui.js': b64('void 0') } });
+    const recordMod = (id, data, active = true) => ({ id, enabled: active, hash: 'fixture', key: 'fixture-key', grants: data ? { grades: true } : {}, manifest: { name: 'Local fixture', permissions: data ? [{ id: 'grades', why: 'test' }] : [], hooks: 'hooks.js', ui: data ? {} : { tiles: [{ id: 'fixture', file: 'ui.html' }] } }, files: { 'hooks.js': b64('void 0'), 'ui.html': b64('<!doctype html><script src="core/ui.js"></script>'), 'core/ui.js': b64('void 0') } });
     const install = async (mods) => sw.evaluate(async ({ mods, origin, secret }) => {
       // Keep the host approval between cases. Clearing it briefly unregisters Ultra; a readiness poll could see the
       // old registration just before that queued unregister and load the next page in the gap.
       await chrome.storage.local.remove(Object.keys(await chrome.storage.local.get(null)).filter((k) => k !== 'ultra'));
       // This fixture measures the mod hosts; the ordinary navbar intentionally uses an open shadow root.
       await chrome.storage.sync.set({ enabled: true, enhance: {}, navbar: { on: false } });
-      // A frame UI runs in its slot: each frame mod's tile floats over every page (features/widgets.js, features/mods.js).
+      // A frame UI runs in its slot: each frame mod's tile floats over every page (core/page/widgets.js, mods/page/mods.js).
       const floating = mods.filter((m) => m.manifest.ui.tiles?.length).map((m) => ({ id: `m${m.id.slice(0, 14)}0`, on: true }));
       await chrome.storage.local.set({ ultra: [origin], mods: mods.map((m) => m.id), ...Object.fromEntries(mods.map((m) => [`mod:${m.id}`, m])), [`insights:${origin}/_900_1`]: { at: 1, courses: [{ id: '1', name: secret, trend: [[1, 97]] }] },
         widgetLayout: { boards: { pages: floating } } });
@@ -188,7 +188,7 @@ async function battery(secret, mode, sink, plain, stun) {
       const data = recordMod(ids[0], true), frame = recordMod(ids[1], false);
       data.files['hooks.js'] = b64(`glaze.grades().then(g=>(${battery})(g[0].name,'data',${JSON.stringify(sinkUrl)},${JSON.stringify(plainUrl)},${stunPort}));`);
       frame.files['hooks.js'] = b64("try { const bc=new BroadcastChannel('mod-probe');bc.onmessage=e=>glaze.storage.set('crossMod',e.data); } catch {}");
-      frame.files['ui.js'] = b64(`glaze.grades().then(()=>glaze.storage.set('dataDenied',false),()=>glaze.storage.set('dataDenied',true));(${battery})(${JSON.stringify(FRAME)},${JSON.stringify('frame-' + pageMode)},${JSON.stringify(sinkUrl)},${JSON.stringify(plainUrl)},${stunPort});`);
+      frame.files['core/ui.js'] = b64(`glaze.grades().then(()=>glaze.storage.set('dataDenied',false),()=>glaze.storage.set('dataDenied',true));(${battery})(${JSON.stringify(FRAME)},${JSON.stringify('frame-' + pageMode)},${JSON.stringify(sinkUrl)},${JSON.stringify(plainUrl)},${stunPort});`);
       await install([data, frame]);
       const page = await context.newPage(); await page.goto(origin + '/ultra/' + pageMode);
       const dr = await until(() => stored(ids[0], 'report'), 'data Worker report');
@@ -257,7 +257,7 @@ async function battery(secret, mode, sink, plain, stun) {
       await page.close();
     }
     const busy = recordMod(ids[1], false), survivor = recordMod(ids[0], true);
-    busy.files['ui.js'] = b64('setTimeout(()=>{const end=performance.now()+6500;while(performance.now()<end){}},500)');
+    busy.files['core/ui.js'] = b64('setTimeout(()=>{const end=performance.now()+6500;while(performance.now()<end){}},500)');
     await install([busy, survivor]);
     const page = await context.newPage(); await page.goto(origin + '/ultra/permissive');
     await until(async () => (await state(page))?.gone?.[ids[1]], 'busy frame stopped by watchdog');
@@ -265,7 +265,7 @@ async function battery(secret, mode, sink, plain, stun) {
     results.busyFrame = { pageMaxGapMs: +maxGap.toFixed(1), pageResponsive: maxGap < 500, state: await state(page) };
     assert.ok(results.busyFrame.pageResponsive, 'busy frame leaves LMS responsive');
     await page.close();
-    busy.files['ui.js'] = b64('setTimeout(()=>{while(true){}},500)');
+    busy.files['core/ui.js'] = b64('setTimeout(()=>{while(true){}},500)');
     survivor.files['hooks.js'] = b64("glaze.storage.get('starts').then(n=>glaze.storage.set('starts',(n||0)+1));");
     await install([busy, survivor]);
     const hung = await context.newPage(); await hung.goto(origin + '/ultra/permissive');

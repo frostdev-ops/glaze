@@ -42,8 +42,8 @@ const attempt = `<section class="routed-page route-view-container bb-offcanvas-c
         .makeStylesbody-0-2-1120 { padding:30px; } .makeStylescontainer-0-2-1034 { display:flex; gap:24px; } .makeStylesauthoring-0-2-1036 { flex:1; max-width:890px; } .makeStylesdetails-0-2-1037 { flex:none; width:360px; display:flex; flex-direction:column; padding:16px 20px; border:1px solid var(--gz-line); border-radius:16px; background:var(--gz-surface); position:sticky; top:30px; align-self:start; }
         [contenteditable] { min-height:150px; border:1px solid var(--gz-line); padding:16px; } .makeStylesfooterWrapper-0-2-1068 { flex:none; } footer { padding:16px 30px; display:flex; justify-content:flex-end; gap:12px; background:var(--gz-surface); } #gz-footer { position:fixed; bottom:0; height:25px; left:0; right:0; text-align:center; }
       </style><div id="site-wrap">${isAttempt ? attempt : overview(kind === 'overview-enabled' ? 'enabled' : 'disabled', !kind.includes('no-description'), kind.includes('submitted'), !kind.includes('no-details'))}</div><div id="gz-footer">Glaze</div>`);
-      for (const file of ['features/apps.css', 'features/sidebar.css']) await page.addStyleTag({ path: path.join(root, file) });
-      for (const file of ['lib/widgets.js', 'lib/sidebar.js']) await page.addScriptTag({ path: path.join(root, file) });
+      for (const file of ['core/page/apps.css', 'navigation/page/sidebar.css']) await page.addStyleTag({ path: path.join(root, file) });
+      for (const file of ['core/widgets.js', 'navigation/sidebar.js']) await page.addScriptTag({ path: path.join(root, file) });
       await page.evaluate(({ style, surface, isAttempt }) => {
         window.nativeHost = document.querySelector(isAttempt ? '[class*="makeStylesdetails-"]' : '.overview-attempts-section');
         window.nativeAction = document.getElementById('native-action');
@@ -58,7 +58,7 @@ const attempt = `<section class="routed-page route-view-container bb-offcanvas-c
         window.SET = {enhance:{sidebar:true,notes:true,widgets:true},sidebar:{style,surface}};
         window.GZ_CTX = {site:'ultra',t:(s,v)=>s.replace(/\{(\w+)\}/g,(_,k)=>v?.[k]??''),need:async()=>{},account:async()=>'_42_1',courseId:()=>'_101_1',settings:()=>SET};
       }, { style, surface, isAttempt });
-      await page.addScriptTag({ path: path.join(root, 'features/sidebar.js') });
+      await page.addScriptTag({ path: path.join(root, 'navigation/page/sidebar.js') });
       await page.evaluate(async () => { GZ_SIDEBAR_UI.sync(true); await GZ_SIDEBAR_UI.ready(); });
       await page.waitForFunction(() => !!GZ_SIDEBAR_UI.host(), null, { timeout:5000 }).catch(async e => { console.error(await page.evaluate(() => ({active:GZ_SIDEBAR_UI.active(),failed:GZ_SIDEBAR_UI.failed(),context:GZ_SIDEBAR_UI.context()})), errors); throw e; });
       await page.evaluate(() => { const tile=document.createElement('section');tile.className='gz-w';tile.style.minHeight='1500px';tile.innerHTML='<h3>Notes</h3><textarea aria-label="Widget notes">Fictional notes</textarea><button id="widget-end">Widget end</button>';GZ_SIDEBAR_UI.host().widgets.append(tile);GZ_SIDEBAR_UI.drawn(1); });

@@ -1,23 +1,23 @@
-// The PDF kind on the Documents page (papers.html, after papers.js; lib/doc-kinds.js): with Settings → Writer → PDFs on
+// The PDF kind on the Documents page (papers.html, after papers.js; documents/doc-kinds.js): with Settings → Writer → PDFs on
 // (writer.pdf), a .pdf imports as a document whose record holds the file (STORE below), shows its first page on the home's
-// card, exports as itself, and opens in pdf.js's own viewer (lib/pdfjs: pdf.mjs and pdf_viewer.mjs, imported only when a
+// card, exports as itself, and opens in pdf.js's own viewer (vendor/pdfjs: pdf.mjs and pdf_viewer.mjs, imported only when a
 // PDF is first read; pdf.js parses in its module worker, pdf.worker.mjs): the visible pages drawn, zoom, the text layer and
-// pdf.js's find, AcroForm fields filled and kept (saved by lib/pdf-doc.js, or as pdf.js writes them where that isn't
+// pdf.js's find, AcroForm fields filled and kept (saved by documents/pdf/pdf-doc.js, or as pdf.js writes them where that isn't
 // loaded), the file's permissions honoured, and a form only XFA can show refused. The page itself stays white, a
 // print document; its chrome is the paper's (writer-paper.css: the top bar, the toolbar, ⋯) in the student's Look.
 // Off, Documents takes Word files only, as before, and a PDF already kept still lists, opens and fills. pdf.js's words are
-// Glaze's (lib/pdf-l10n.js).
+// Glaze's (documents/pdf/pdf-l10n.js).
 var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   const url = (f) => chrome.runtime.getURL(f);
   const UNREAD = 'That file could not be read.', TOO_BIG = GZ_DOC_KINDS.KINDS.pdf.big;
   const PAGES = 500;
   const TOO_BIG_SAVE = 'This PDF is too big to save.';
 
-  // ---- storage: the one place a PDF's bytes are kept and read back: the worker's file store (lib/doc-files.js, over its
+  // ---- storage: the one place a PDF's bytes are kept and read back: the worker's file store (documents/doc-files.js, over its
   // port), the record pointing at them (file: { hash, size, type }), up to the kind's max. A record from before the store
   // holds them as base64 in `file`: read as before, and moved over as it is opened. Where the store is unavailable, a PDF
   // up to the old 3 MB is kept that way still. Nothing else here reads `file`.
-  const files = () => GZ_WRITER_PAPER.need(['lib/doc-files.js']).then(() => GZ_DOC_FILES);
+  const files = () => GZ_WRITER_PAPER.need(['documents/doc-files.js']).then(() => GZ_DOC_FILES);
   // A refusal of the store's, as the page says it.
   class FileError extends RangeError { constructor(why) { super(GZ_DOC_KINDS.SAYS[why] || UNREAD); this.why = why; } }
   const b64 = (bytes) => {
@@ -65,11 +65,11 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
 
   // ---- pdf.js, imported the first time a PDF is read
   let lib = null, viewerLib = null;
-  const pdfjs = () => (lib ||= import(url('lib/pdfjs/pdf.mjs')).then((P) => { P.GlobalWorkerOptions.workerSrc = url('lib/pdfjs/pdf.worker.mjs'); return P; }));
-  const viewerjs = () => (viewerLib ||= pdfjs().then(() => import(url('lib/pdfjs/pdf_viewer.mjs'))));
-  // lib/pdf-doc.js over this pdf.js (papers.html loads it before this file), or null where it isn't loaded: then pdf.js
+  const pdfjs = () => (lib ||= import(url('vendor/pdfjs/pdf.mjs')).then((P) => { P.GlobalWorkerOptions.workerSrc = url('vendor/pdfjs/pdf.worker.mjs'); return P; }));
+  const viewerjs = () => (viewerLib ||= pdfjs().then(() => import(url('vendor/pdfjs/pdf_viewer.mjs'))));
+  // documents/pdf/pdf-doc.js over this pdf.js (papers.html loads it before this file), or null where it isn't loaded: then pdf.js
   // directly, the same checks.
-  const GET = { wasmUrl: url('lib/pdfjs/'), isEvalSupported: false, enableXfa: false, verbosity: 0 };
+  const GET = { wasmUrl: url('vendor/pdfjs/'), isEvalSupported: false, enableXfa: false, verbosity: 0 };
   let docLib = null;
   const pdfdoc = () => (typeof globalThis.GZ_PDF_DOC?.use === 'function' ? (docLib ||= pdfjs().then((P) => GZ_PDF_DOC.use(P, GET))) : null);
   // bytes (a copy goes to the worker) → { task, doc }, or a RangeError(UNREAD) for a file that is no PDF, is locked, has
@@ -95,7 +95,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     return { task, doc };
   };
   // Page 1 as a small picture (a data URL), as filled in: what the home's card shows (204 px wide, 408 on a 2× screen).
-  // Try lib/pdf-doc.js's PNG (24 KB at most) once at full size, else a JPEG drawn here: a scan or a photo fits 24 KB of
+  // Try documents/pdf/pdf-doc.js's PNG (24 KB at most) once at full size, else a JPEG drawn here: a scan or a photo fits 24 KB of
   // PNG only as a postage stamp. At most two draws, including the JPEG.
   const picture = async (doc) => {
     const lib2 = pdfdoc(), page = await doc.getPage(1);
@@ -136,7 +136,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   const nameOf = (rec) => `${String(rec?.title || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Document'}.pdf`;
 
   // ---- the page code GZ_DOC_KINDS takes
-  // A file's bytes and what pdf.js makes of them, each stage told to progress (lib/doc-kinds.js progress): reading, page 1
+  // A file's bytes and what pdf.js makes of them, each stage told to progress (documents/doc-kinds.js progress): reading, page 1
   // read and drawn, the bytes copied into the store. → the record's fields for the file.
   const bring = async (f, progress) => {
     const p = typeof progress === 'function' ? progress : () => {};
@@ -156,7 +156,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   // A PDF file as a new standalone document, its title the file's name, its first page drawn for the card. → its key.
   const importFile = async (file, { progress = null } = {}) => {
     if (!Number.isSafeInteger(file?.size) || file.size <= 0 || file.size > STORE.max) throw new RangeError(TOO_BIG);
-    await GZ_WRITER_PAPER.need(['lib/writer-papers.js', 'lib/doc-home.js']);
+    await GZ_WRITER_PAPER.need(['writer/writer-papers.js', 'documents/doc-home.js']);
     const fields = await bring(file, progress);
     const key = GZ_WRITER_PAPERS.newKey(), title = GZ_DOC_HOME.stem(file.name);
     await papers().save(key, { kind: 'pdf', ...fields, title, named: !!title }, { reason: 'import' });
@@ -195,11 +195,11 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const root = document.documentElement;
     const life = new AbortController(), signal = life.signal;
     if (host) words = host.t || null; else root.dataset.mode = 'pdf';
-    await GZ_WRITER_PAPER.need(['lib/writer-papers.js', 'lib/pdf-l10n.js']);
+    await GZ_WRITER_PAPER.need(['writer/writer-papers.js', 'documents/pdf/pdf-l10n.js']);
     const sheet = (href) => new Promise((ok) => { document.head.append(h('link', { rel: 'stylesheet', href, onload: ok, onerror: ok })); });
     const st = papers(), PA = GZ_WRITER_PAPERS;
     let rec = src ? null : await st.get(key);
-    const [P, V] = await Promise.all([pdfjs(), viewerjs(), sheet('lib/pdfjs/pdf_viewer.css')]);
+    const [P, V] = await Promise.all([pdfjs(), viewerjs(), sheet('vendor/pdfjs/pdf_viewer.css')]);
 
     // The chrome: Documents and the title, the save state; zoom, find and ⋯; the pages.
     const own = !host && PA.local(key);
@@ -236,7 +236,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const finder = new V.PDFFindController({ eventBus: bus, linkService: links });
     const l10n = GZ_PDF_L10N.make({ t, lang: locale() });
     const viewer = new V.PDFViewer({ container: scroll, viewer: pagesEl, eventBus: bus, linkService: links, findController: finder, l10n, annotationMode: src ? P.AnnotationMode.ENABLE : P.AnnotationMode.ENABLE_FORMS,
-      annotationEditorMode: P.AnnotationEditorType.DISABLE, enablePermissions: true, imageResourcesPath: url('lib/pdfjs/images/'), removePageBorders: false });
+      annotationEditorMode: P.AnnotationEditorType.DISABLE, enablePermissions: true, imageResourcesPath: url('vendor/pdfjs/images/'), removePageBorders: false });
     links.setViewer(viewer);
     l10n.translate(scroll);
     const refuse = (e) => {
@@ -476,7 +476,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   // kept as a version first (the 'import' save), its title the assignment's. → the record.
   const into = async (key, f, { progress = null } = {}) => {
     if (!Number.isSafeInteger(f?.size) || f.size <= 0 || f.size > STORE.max) throw new RangeError(TOO_BIG);
-    await GZ_WRITER_PAPER.need(['lib/writer-papers.js']);
+    await GZ_WRITER_PAPER.need(['writer/writer-papers.js']);
     const fields = await bring(f, progress);
     return (await papers().save(key, { kind: 'pdf', doc: null, words: 0, ...fields }, { reason: 'import' })).paper;
   };
@@ -486,7 +486,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   // The switch as Settings shows it: the stored value through defaults.js, so no stored key means the default. writer.html
   // has defaults.js already (a second copy would redeclare its constants); papers.html loads it on demand, after the three
   // scripts it reads as it loads, in papers.js's order (need() shares their loads).
-  const DEFAULTS = ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js'];
+  const DEFAULTS = ['core/color.js', 'looks/surfaces.js', 'looks/fonts.js', 'content/defaults.js'];
   const on = Promise.resolve().then(() => (typeof GZ_SANITIZE === 'function' ? null : GZ_WRITER_PAPER.need(DEFAULTS)))
     .then(() => chrome.storage.sync.get('writer')).then((r) => GZ_SANITIZE({ writer: r?.writer }).writer.pdf === true, () => false);
   GZ_DOC_KINDS.wait(on.then((yes) => { GZ_DOC_KINDS.register('pdf', { edit, view: (key, host) => edit(key, { host }), show: (src, host) => edit(null, { host, src: { ...src } }), into, says: { size: TOO_BIG, read: UNREAD, ...GZ_DOC_KINDS.SAYS }, thumb, file, exportFile, text, measure, ...(yes && { importFile }) }); }));

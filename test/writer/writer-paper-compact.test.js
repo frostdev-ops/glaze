@@ -1,13 +1,13 @@
 // An assignment's paper in its compact box (writer-paper.js): the projection it writes into Ultra's box (project(): what
-// Ultra's Quill can hold, as Quill ops lib/writer-main.js takes), and the page around it (features/writer-submit.js): its
+// Ultra's Quill can hold, as Quill ops writer/writer-main.js takes), and the page around it (writer/page/writer-submit.js): its
 // Submit and Save and Close stay Ultra's, and Ultra's file area hands Writer a Word file only. The switch, the box and
 // the sync are checks/writer/writer-submit-check.js's compact section in a browser.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const S = globalThis.GZ_WRITER_SCHEMA = require('../../extension/lib/writer-schema.js');
-const P = require('../../extension/writer-paper.js');
-const L = require('../../extension/lib/writer-submit.js');
+const S = globalThis.GZ_WRITER_SCHEMA = require('../../extension/writer/writer-schema.js');
+const P = require('../../extension/writer/frame/writer-paper.js');
+const L = require('../../extension/writer/writer-submit.js');
 const FX = require('../fixtures/writer-paper-fixtures.js');
 const page = require('../helpers/writer-submit-page.cjs');
 
@@ -42,7 +42,7 @@ test('project: past compose\'s input limit (50k tags or 2 MB) nothing is project
   assert.equal(P.project(N.node('doc', null, [N.node('paragraph', null, [t('x'.repeat(S.MAX_INPUT + 1))])])), null, 'nor over 2 MB of text');
 });
 
-// lib/writer-main.js in the page's world, over a stand-in Quill: what it answers for the projection's ops.
+// writer/writer-main.js in the page's world, over a stand-in Quill: what it answers for the projection's ops.
 const main = (delta) => {
   const listeners = {}, said = [];
   const root = { innerHTML: '', isConnected: true };
@@ -50,7 +50,7 @@ const main = (delta) => {
   const box = { __quill: quill, querySelector: () => root };
   const doc = { documentElement: { hasAttribute: () => false, setAttribute() {} }, querySelector: () => box,
     addEventListener: (type, fn) => { (listeners[type] ||= []).push(fn); }, dispatchEvent: (e) => { for (const fn of listeners[e.type] || []) fn(e); } };
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../extension/lib/writer-main.js'), 'utf8'), { document: doc, JSON, CustomEvent: class { constructor(type, o) { this.type = type; this.detail = o.detail; } } });
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../extension/writer/writer-main.js'), 'utf8'), { document: doc, JSON, CustomEvent: class { constructor(type, o) { this.type = type; this.detail = o.detail; } } });
   doc.addEventListener('gz-writer:done', (e) => said.push(JSON.parse(e.detail)));
   doc.dispatchEvent({ type: 'gz-writer:set', detail: JSON.stringify({ id: 'gzw-1', delta }) });
   return { ok: said[0]?.ok === true, set: quill.set };

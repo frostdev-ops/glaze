@@ -4,7 +4,7 @@
 // pages are drawn within a second of the switch; a key typed every 200 ms while the pages are laid out lands (in the
 // document and drawn) within 300 ms of its press, or of the end of the switch's own task for a key pressed during it (the
 // browser restyling and laying out the whole paper in the page's column, one task nothing in Writer can split), none lost;
-// once laid out, the same pages and breaks as the paper laid out whole from scratch (lib/writer-paginate.js whole), each
+// once laid out, the same pages and breaks as the paper laid out whole from scratch (writer/writer-paginate.js whole), each
 // line starting where ProseMirror's posAtCoords puts it. Times come from the frame itself: the switch's click, each key's
 // event time, the transaction that took it and the frame drawn after; long tasks from its PerformanceObserver.
 // PROFILE=1 also records a CPU profile of the frame across the switch (profile.json, the top functions printed);
@@ -134,7 +134,7 @@ const top = (profile, n = 25) => {
       return r.fulfill({ contentType: 'application/json', body: JSON.stringify(data) });
     });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
-    const G = require(path.join(root, 'defaults.js'));
+    const G = require(path.join(root, 'content/defaults.js'));
     const settings = G.GZ_SANITIZE({ writer: { full: false }, navbar: { on: false }, footer: false, preset: 'Frost', enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, drafts: true } });
     await worker.evaluate(async ({ settings, site }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings); await chrome.storage.local.set({ ultra: [site] }); }, { settings, site });
     const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/popup.html`); await env.ultraReady(opts); await opts.close();

@@ -1,7 +1,7 @@
 // Glaze's PDF documents on pdf.js: open a file and say what it allows; save what its editor changed, as an incremental
 // update (annotations and fields stay editable, nothing is flattened); bake page changes (reorder, delete, duplicate,
 // rotate, blank pages, another PDF's pages) into new bytes in one pass; read a page's picture and text.
-// The caller passes pdf.js's module (lib/pdfjs/pdf.mjs, its worker set) to use(); this file imports nothing, so node runs it.
+// The caller passes pdf.js's module (vendor/pdfjs/pdf.mjs, its worker set) to use(); this file imports nothing, so node runs it.
 // Each result carries the SHA-256 of the bytes it replaces (base) beside its own (hash), so a record can step back once.
 // Refusals are Errors named Pdf…Error. Every limit can be lowered per call with { limits }.
 // Classic script; module.exports for node.

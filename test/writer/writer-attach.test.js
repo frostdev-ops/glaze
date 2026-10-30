@@ -1,17 +1,17 @@
 // Glaze Writer's Feedback with the files an assignment attaches (owner, 2026-10-27: "images and documents given with an
 // assignment must be attached and sent to the model for feedback"): Ultra's attachment links read from the instructions'
-// HTML (lib/writer-context-assignment.js attached), the files read within their bounds when Feedback asks (read,
+// HTML (writer/writer-context-assignment.js attached), the files read within their bounds when Feedback asks (read,
 // attachments), a document's text fenced as data and a picture read once before text-only assessment
-// (lib/ai/tasks/writer-feedback.js), a requirement copied from an attached document kept, and a test never read.
+// (ai/tasks/writer-feedback.js), a requirement copied from an attached document kept, and a test never read.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const zlib = require('node:zlib');
-const C = require('../../extension/lib/writer-context-assignment.js');
-const D = require('../../extension/lib/doctext.js');
-const T = require('../../extension/lib/ai/task.js');
-require('../../extension/lib/ai/providers/mock.js');
-const W = require('../../extension/lib/ai/tasks/writer-context.js');
-const FB = require('../../extension/lib/ai/tasks/writer-feedback.js');
+const C = require('../../extension/writer/writer-context-assignment.js');
+const D = require('../../extension/core/doctext.js');
+const T = require('../../extension/ai/task.js');
+require('../../extension/ai/providers/mock.js');
+const W = require('../../extension/ai/tasks/writer-context.js');
+const FB = require('../../extension/ai/tasks/writer-feedback.js');
 const item = require('../fixtures/ultra-writer-attach-content.json');
 
 const ORIGIN = 'https://bb.school.example.edu';
@@ -87,7 +87,7 @@ test('read: a document as its text, a picture as itself, within the bounds; pict
   assert.equal(long[0].text.length, 50000, 'a complete document is preserved past the former 20k cutoff');
 });
 
-// The page's side of Feedback's ask: features/writer.js hands it a paper box's 'attachments' message.
+// The page's side of Feedback's ask: writer/page/writer.js hands it a paper box's 'attachments' message.
 const page = (box, { bodies = {} } = {}) => {
   const fetched = [];
   Object.assign(globalThis, {
@@ -118,7 +118,7 @@ test('attachments: the page reads the box\'s files once, GET with the session, a
   }
 });
 
-test('features/writer.js hands a paper\'s attachments ask to the context builder', async () => {
+test('writer/page/writer.js hands a paper\'s attachments ask to the context builder', async () => {
   const content = require('../helpers/writer-content.cjs');
   const c = content({ fixture: 'attempt' });
   c.location.pathname = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';

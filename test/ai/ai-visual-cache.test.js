@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { webcrypto } = require('node:crypto');
-const V = require('../../extension/lib/ai/visual-cache.js');
+const V = require('../../extension/ai/visual-cache.js');
 
 const scope = { school: 'https://school.example', account: 'student-1', assignment: 'course-1/item-2' };
 const context = { instructions: 'Describe the chart.', description: 'Assignment description.', rubric: { title: 'Analysis', criteria: [{ id: 'one', points: 10 }] }, locale: 'en' };
@@ -149,7 +149,7 @@ test('concurrent adapters sharing a store cannot lose writes, and stores stay in
 test('browser locks protect transactions across separately loaded worker modules', async () => {
   const area = store(); let tail = Promise.resolve(), calls = 0;
   const locks = { request(name, work) { assert.equal(name, V.LOCK); calls++; const p = tail.then(work); tail = p.catch(() => {}); return p; } };
-  const path = require.resolve('../../extension/lib/ai/visual-cache.js'); delete require.cache[path];
+  const path = require.resolve('../../extension/ai/visual-cache.js'); delete require.cache[path];
   const fresh = require(path);
   await Promise.all([make(area, { locks }).set(picture(1), reading()), fresh.create({ store: area, scope, context, now: () => 1000, crypto: webcrypto, locks }).set(picture(2), reading())]);
   assert.equal(area.data[V.KEY].entries.length, 2);
@@ -194,7 +194,7 @@ test('transient failures use exactly the same scope, context, byte identity and 
   assert.equal(await cache.getFailure({ ...picture(), contextComplete: false }), null);
   for (const options of [{ scope: { ...scope, school: 'elsewhere.example' } }, { scope: { ...scope, account: 'student-2' } }, { scope: { ...scope, assignment: 'elsewhere' } }, { context: { ...context, locale: 'fr' } }, { version: 'next-schema' }]) assert.equal(await make(area, options).getFailure(picture()), null);
   assert.equal(await make(store()).getFailure(picture()), null);
-  const path = require.resolve('../../extension/lib/ai/visual-cache.js'); delete require.cache[path];
+  const path = require.resolve('../../extension/ai/visual-cache.js'); delete require.cache[path];
   const fresh = require(path).create({ store: area, scope, context, crypto: webcrypto, now: () => 1000, locks: null });
   assert.equal(await fresh.getFailure(picture()), null, 'a worker restart does not restore failure guards');
 });

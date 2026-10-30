@@ -1,11 +1,11 @@
-// The grades group's tools for agent apps (lib/mcp/*.js): an account's latest grade in each course, and one course's grade
+// The grades group's tools for agent apps (agents/*.js): an account's latest grade in each course, and one course's grade
 // over the term and its work, from Insights' record for that account (storage.local insights:<origin>/<uid>,
-// lib/insights.js), which Glaze keeps once the student opens Insights. grades_list is lib/modbroker.js's grades, so an app
-// gets the shape a mod gets. Accounts, run, ctx and what they answer as lib/mcp/tools-study.js's. A course whose teacher
+// planner/insights.js), which Glaze keeps once the student opens Insights. grades_list is mods/modbroker.js's grades, so an app
+// gets the shape a mod gets. Accounts, run, ctx and what they answer as agents/tools-study.js's. A course whose teacher
 // shows letter grades only (Canvas's restrict_quantitative_data) has no percentage or points here, as Insights shows none.
-// Classic script for the worker, after lib/mcp/tools-study.js; module.exports for node.
+// Classic script for the worker, after agents/tools-study.js; module.exports for node.
 var GZ_MCP_GRADES = globalThis.GZ_MCP_GRADES || (() => {
-  const B = () => (typeof GZ_MODBROKER !== 'undefined' ? GZ_MODBROKER : require('../modbroker.js'));
+  const B = () => (typeof GZ_MODBROKER !== 'undefined' ? GZ_MODBROKER : require('../mods/modbroker.js'));
   const ST = () => (typeof GZ_MCP_STUDY !== 'undefined' ? GZ_MCP_STUDY : require('./tools-study.js'));
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
   const arr = (v) => (Array.isArray(v) ? v : []);
@@ -58,7 +58,7 @@ var GZ_MCP_GRADES = globalThis.GZ_MCP_GRADES || (() => {
       },
     },
   ];
-  // Adds them to a lib/ai/tools.js registry (its define checks each) → the tools as added.
+  // Adds them to a ai/tools.js registry (its define checks each) → the tools as added.
   const register = (registry) => tools().map((t) => registry.add(t));
   return { tools, register };
 })();

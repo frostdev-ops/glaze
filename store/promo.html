@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Glaze promo tile</title>
-<!-- The store's promo images, drawn with the extension's own animated background (lib/scene.js) so
+<!-- The store's promo images, drawn with the extension's own animated background (looks/scene.js) so
      they show the real thing. tools/release/store-screenshots.js renders ?size=marquee (1400x560) and
      ?size=tile (440x280) from here. Not part of the package. -->
 <style>
@@ -35,7 +35,7 @@
     </div>
   </div>
 <script type="module">
-  import { start } from '../extension/lib/scene.js';
+  import { start } from '../extension/looks/scene.js';
   const size = new URLSearchParams(location.search).get('size') || 'marquee';
   document.body.className = size;
   // Frost's accent, bright accent and success, at a high intensity, still (time 0) so every render matches.

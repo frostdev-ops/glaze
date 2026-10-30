@@ -1,14 +1,14 @@
 // The spreadsheet grid of Documents (sheet-kind.js mounts it): its pure parts first (offsets, selection, the data edge,
 // fill series, the clipboard's TSV and HTML), then the grid itself (mount): a virtualized DOM of pooled cells in four
 // frozen quadrants over one native scroller, the formula bar, sheet tabs, menus, find and replace, and the status bar.
-// Every change is an operation of the workbook model (lib/sheet-model.js) applied through the calc engine
-// (lib/sheet-calc.js), whose inverse is the undo step and whose changed cells mark the parts the next autosave writes
+// Every change is an operation of the workbook model (documents/sheets/sheet-model.js) applied through the calc engine
+// (documents/sheets/sheet-calc.js), whose inverse is the undo step and whose changed cells mark the parts the next autosave writes
 // (sheet-data.js plan). parseDelimited and writeDelimited are adapted from Rimeward's notebook-spreadsheet.ts (MIT, the
 // same owner), as are the keyboard and clipboard handlers' shapes.
 // Classic script; module.exports for node.
 var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
-  const M = typeof GZ_SHEET_MODEL !== 'undefined' ? GZ_SHEET_MODEL : require('./lib/sheet-model.js');
-  const FX = () => (typeof GZ_SHEET_FORMULA !== 'undefined' ? GZ_SHEET_FORMULA : require('./lib/sheet-formula.js'));
+  const M = typeof GZ_SHEET_MODEL !== 'undefined' ? GZ_SHEET_MODEL : require('./sheet-model.js');
+  const FX = () => (typeof GZ_SHEET_FORMULA !== 'undefined' ? GZ_SHEET_FORMULA : require('./sheet-formula.js'));
 
   // ---- offsets: a Fenwick tree of each index's size beyond the base, so a row's top and the row under a pixel are a few
   // steps among a million rows. A hidden row or column is size 0.
@@ -560,7 +560,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     }, { passive: true });
     const sizing = new ResizeObserver(() => { layout(); draw(true); });
     sizing.observe(gridEl);
-    // The sheet's charts (lib/sheet-chart.js, loaded with the grid): a layer in each pane, placed as the cells are drawn.
+    // The sheet's charts (documents/sheets/sheet-chart.js, loaded with the grid): a layer in each pane, placed as the cells are drawn.
     const charts = globalThis.GZ_SHEET_CHART?.layer({ panes: Q, wb: () => wb, sheet: S, geo: () => ({ R, C, FR, FC, FW, FH }), reach, t }) ?? null;
 
     // Scrolls the cell into view, past the frozen panes.
@@ -643,7 +643,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       schedule();
     };
     // A grid-level operation the model has no op for: a sheet hidden (kept in its keep, as a file's state="hidden").
-    // A workbook from an .xlsx keeps parts that refer to its cells: the codec, where loaded (lib/sheet-xlsx.js), refuses a
+    // A workbook from an .xlsx keeps parts that refer to its cells: the codec, where loaded (documents/sheets/sheet-xlsx.js), refuses a
     // structural operation they'd point wrongly after (locked) and is told of every operation applied, do, undo or redo
     // (track), so it moves their references when it writes the file.
     const X = () => globalThis.GZ_SHEET_XLSX || null;

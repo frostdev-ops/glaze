@@ -1,11 +1,11 @@
-// Share sessions' pure parts (lib/sharing.js, spike S6): links, sealing and tampering, the merge (any order converges,
+// Share sessions' pure parts (sharing/sharing.js, spike S6): links, sealing and tampering, the merge (any order converges,
 // clocks far ahead are held, untrusted values are cleaned), edits, and conflict copies. test/sharing/relay.test.js runs
 // devices against a local relay.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../../extension/lib/sharing.js');
-const D = require('../../extension/defaults.js');
-const L = require('../../extension/lib/share.js');
+const G = require('../../extension/sharing/sharing.js');
+const D = require('../../extension/content/defaults.js');
+const L = require('../../extension/sharing/share.js');
 
 const bytes = (n, x = 7) => new Uint8Array(n).fill(x);
 const editKeys = () => G.keys({ sid: crypto.getRandomValues(new Uint8Array(16)), seed: crypto.getRandomValues(new Uint8Array(32)) });
@@ -234,14 +234,14 @@ test('adapters: a notes file is a reference checked field by field', async () =>
 });
 
 // The extension loads these as classic scripts in one page, with no require(): the adapters must find the codecs there
-// (lib/share.js declares GZ_SHARE as a top-level const, which isn't a property of globalThis).
+// (sharing/share.js declares GZ_SHARE as a top-level const, which isn't a property of globalThis).
 test('adapters work as classic scripts, without require()', async () => {
   const vm = require('node:vm');
   const fs = require('node:fs');
   const path = require('node:path');
   const ctx = vm.createContext({ crypto, TextEncoder, TextDecoder, Blob, CompressionStream, DecompressionStream, btoa, atob, URL, console });
-  // The worker's order (lib/background.js importScripts), then this file.
-  for (const f of ['lib/color.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/cards.js', 'lib/lookparts.js', 'lib/share.js', 'lib/doctext.js', 'lib/notes.js', 'lib/sharing.js']) {
+  // The worker's order (background/background.js importScripts), then this file.
+  for (const f of ['core/color.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'courses/cards.js', 'looks/lookparts.js', 'sharing/share.js', 'core/doctext.js', 'planner/notes.js', 'sharing/sharing.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8'), ctx, { filename: f });
   }
   const code = await L.encode(D.GZ_SANITIZE({}));

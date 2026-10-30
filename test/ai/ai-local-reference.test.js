@@ -1,11 +1,11 @@
-// The local engine's reference forward pass (lib/ai/local/reference.js) on a tiny random lfm3 model in F32, written
+// The local engine's reference forward pass (ai/local/reference.js) on a tiny random lfm3 model in F32, written
 // here as a GGUF: its logits against a plain re-statement of the graph below (no caches, every position recomputed
 // from scratch), the same logits whether a prompt is fed at once, in chunks or a token at a time, the sliding window,
 // and the sampling helpers. checks/ai/local-reference-check.js holds it to llama.cpp on the real model.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../../extension/lib/ai/local/gguf.js');
-const R = require('../../extension/lib/ai/local/reference.js');
+const G = require('../../extension/ai/local/gguf.js');
+const R = require('../../extension/ai/local/reference.js');
 
 // conv, full, conv, sliding: 16 wide, 4 query heads over 2 KV heads of 8, window 3, conv width 3.
 const C = { E: 16, H: 4, Hkv: 2, hd: 8, ff: 24, V: 40, window: 3, L: 3, kinds: ['conv', 'full', 'conv', 'swa'], eps: 1e-5 };

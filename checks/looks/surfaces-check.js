@@ -2,7 +2,7 @@
 // EXT=/path/to/checkout/extension NODE_PATH=/path/to/playwright node checks/looks/surfaces-check.js /path/to/receipts
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
-const ext = process.env.EXT || path.resolve(__dirname, '../../extension'), G = require(path.join(ext, 'defaults.js'));
+const ext = process.env.EXT || path.resolve(__dirname, '../../extension'), G = require(path.join(ext, 'content/defaults.js'));
 const output = process.argv[2]; if (!output) throw Error('Choose a receipt folder.');
 const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');

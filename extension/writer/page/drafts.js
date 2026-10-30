@@ -1,4 +1,4 @@
-// Draft backup (enhance.drafts), loaded on demand: content.js loads this (after lib/drafts.js) once an editor it backs
+// Draft backup (enhance.drafts), loaded on demand: content.js loads this (after writer/drafts.js) once an editor it backs
 // up is on the page or written in, hands it what was written meanwhile, then every keydown, input and paste (write) and
 // its passes (watch). Ultra's editors (Quill), and Canvas's plain-text Inbox compose.
 // What you write is copied to storage.local a second after you stop, keyed by the site, who you are and the editor (on
@@ -6,7 +6,7 @@
 // on that page, the editor closes or empties with all of what you wrote showing on the page more often than as you sent it
 // (the post went through), when you clear the editor,
 // or after 14 days. When that editor turns up empty again (a reload, a crash, a timed-out session) a bar above it offers
-// the copy back. Restoring types it in through the browser's own editing, so Quill and Ultra take it as your edit. Each page's copy is its own (lib/drafts.js change, in the worker's queue): what you type
+// the copy back. Restoring types it in through the browser's own editing, so Quill and Ultra take it as your edit. Each page's copy is its own (writer/drafts.js change, in the worker's queue): what you type
 // replaces only this page's, so one an earlier page or another tab kept stays beside it until you restore it, dismiss it,
 // or it posts, and is offered again when the editor is empty.
 // Classic script, through GZ_CTX; a second injection keeps the first.
@@ -15,7 +15,7 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   const ultra = ctx.site === 'ultra';
   const { t, locale, capi, profile, canvasCourses, local } = ctx;
   const EDITOR = ctx.draftEditor; // Ultra's Quill editors, or Canvas's Inbox compose body
-  const writer = (ed) => !!ed?.closest?.('[data-gz-writer]'); // Glaze Writer's (features/writer.js) until it's given back
+  const writer = (ed) => !!ed?.closest?.('[data-gz-writer]'); // Glaze Writer's (writer/page/writer.js) until it's given back
   let account = null; // who you are: { user }, and on Canvas your courses, which its Inbox key names
   let accountLoading = false, accountJob = null;
   let accountRetry = 0;

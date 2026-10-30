@@ -1,28 +1,28 @@
 // Mod tools: mod.json's `tools`, which agent apps the student connects (Settings → AI → Agents) may call on a mod's behalf. A
 // tool is declarative, { name, title, description, from, select?, where?, sort?, limit?, input? }, answered by Glaze from
-// what it keeps (lib/modbroker.js's todo, schedule, courses and grades answers) with none of the mod's code, or
+// what it keeps (mods/modbroker.js's todo, schedule, courses and grades answers) with none of the mod's code, or
 // { name, title, description, code: true, input? }, answered by the mod's Worker. clean checks them as strictly as
-// lib/modbundle.js checks the rest of mod.json; apply is the declarative runner; defs are what the tool registry lists.
+// mods/modbundle.js checks the rest of mod.json; apply is the declarative runner; defs are what the tool registry lists.
 // Classic script for the worker and the editor; module.exports for node.
 var GZ_MODTOOLS = globalThis.GZ_MODTOOLS || (() => {
   // A code tool's input is in the AI harness's schema subset; only a code tool needs it.
-  const S = () => (typeof GZ_AI_SCHEMA !== 'undefined' ? GZ_AI_SCHEMA : require('./ai/schema.js'));
+  const S = () => (typeof GZ_AI_SCHEMA !== 'undefined' ? GZ_AI_SCHEMA : require('../ai/schema.js'));
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
   const own = (o, k) => Object.hasOwn(o, k);
   const DAY = 864e5;
   // Tools a mod, a title's and a description's characters, tests a tool, items an answer, the app's days, a test's days,
-  // a text test's characters; the registry's title and description in UTF-16 units (lib/ai/tools.js).
+  // a text test's characters; the registry's title and description in UTF-16 units (ai/tools.js).
   const LIMIT = { tools: 8, title: 60, description: 500, where: 8, items: 200, days: 60, span: 366, eq: 300, shownTitle: 120, shownDescription: 1024 };
 
-  // As lib/modbundle.js refuses a manifest: the English with {field}, which the editor shows through t().
+  // As mods/modbundle.js refuses a manifest: the English with {field}, which the editor shows through t().
   const WHY = "That mod's mod.json has a value Glaze can't use ({field}).";
   const bad = (field) => { throw Object.assign(new Error(WHY.replace('{field}', field)), { why: WHY, vars: { field } }); };
   const keys = (o, allowed, field, req = []) => { if (!isObj(o) || Object.keys(o).some((k) => !allowed.includes(k)) || req.some((k) => !own(o, k))) bad(field); };
-  // One line of text, as lib/modbundle.js's line().
+  // One line of text, as mods/modbundle.js's line().
   const line = (v, max) => typeof v === 'string' && v.length > 0 && v.length <= max * 2 && v === v.replace(/\s+/g, ' ').trim()
     && !/[\p{Cc}\p{Bidi_Control}]/u.test(v) && [...v].length <= max;
 
-  // Each source's answer, field by field, as lib/modbroker.js's CALLS give it (test/modtools.test.js holds them to it):
+  // Each source's answer, field by field, as mods/modbroker.js's CALLS give it (test/modtools.test.js holds them to it):
   // text, a time (ms since 1970, or null), a flag, a number or null, a colour or null.
   const PLAN = { id: 'text', type: 'text', courseId: 'text', course: 'text', title: 'text', due: 'time', url: 'text', done: 'flag', submitted: 'flag', graded: 'flag', late: 'flag', missing: 'flag' };
   const FIELDS = { todo: PLAN, schedule: PLAN, courses: { id: 'text', name: 'text', code: 'text', color: 'color' }, grades: { courseId: 'text', name: 'text', percent: 'number', at: 'time' } };
@@ -96,14 +96,14 @@ var GZ_MODTOOLS = globalThis.GZ_MODTOOLS || (() => {
     return tools;
   };
 
-  // What tools ask the student to consent to, as lib/modbundle.js caps: each tool by its name and where its answer comes
+  // What tools ask the student to consent to, as mods/modbundle.js caps: each tool by its name and where its answer comes
   // from, so a new tool, or one reading something else, asks again.
   const caps = (m) => (Array.isArray(m?.tools) ? m.tools : []).filter(isObj).map((t) => `tool:${t.name}@${isCode(t) ? 'code' : t.from}`);
   // The permissions tools need, sorted: agents, and each declarative tool's source's.
   const needs = (tools) => (Array.isArray(tools) && tools.length ? [...new Set(['agents', ...tools.filter((t) => isObj(t) && !isCode(t)).map((t) => PERM[t.from]).filter(Boolean)])].sort() : []);
 
   // ---- the declarative runner ------------------------------------------------------------------------------------------
-  // tool: one clean() kept; items: its source's answer (lib/modbroker.js CALLS: the planner's items for todo and schedule);
+  // tool: one clean() kept; items: its source's answer (mods/modbroker.js CALLS: the planner's items for todo and schedule);
   // args: the app's, already checked against defs()' parameters; now: ms. → the items that pass every test (a schedule's
   // only dated ones; the app's course and days when the tool takes them), sorted (empty values last, ties in the source's
   // order), at most limit (and 200), each with only the selected fields (all the source's, by default), as new objects.
@@ -132,7 +132,7 @@ var GZ_MODTOOLS = globalThis.GZ_MODTOOLS || (() => {
   };
 
   // ---- what the registry lists ---------------------------------------------------------------------------------------
-  // Shown to apps without the format and direction characters a prompt drops (lib/modbundle.js prompt), and within the
+  // Shown to apps without the format and direction characters a prompt drops (mods/modbundle.js prompt), and within the
   // registry's lengths: cut by whole characters, with an ellipsis.
   const shown = (v) => String(v).replace(/[\p{Cf}\p{Bidi_Control}]/gu, '');
   const cut = (v, max) => {
@@ -145,7 +145,7 @@ var GZ_MODTOOLS = globalThis.GZ_MODTOOLS || (() => {
     course: (t) => ({ type: 'string', minLength: 1, maxLength: 40, description: t.from === 'courses' ? 'Only this course, by its id.' : "Only this course's items, by the course's id." }),
     days: (t) => ({ type: 'integer', minimum: 1, maximum: LIMIT.days, description: t.from === 'grades' ? 'Only grades Glaze read within this many days before now.' : 'Only items due within this many days from now.' }),
   };
-  // rec: an installed mod's record (lib/modbundle.js change). → the descriptors of the tools its grants allow: none without
+  // rec: an installed mod's record (mods/modbundle.js change). → the descriptors of the tools its grants allow: none without
   // agents, and a declarative tool only with its source's permission. The caller lists only mods that are on, not blocked and
   // (code tools) able to run, and adds each tool's run.
   const defs = (rec) => {

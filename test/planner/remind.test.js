@@ -1,12 +1,12 @@
-// Reminders and streak (lib/remind.js): lead times across DST and midnight in the Canvas zone, exam titles in Glaze's six
+// Reminders and streak (planner/remind.js): lead times across DST and midnight in the Canvas zone, exam titles in Glaze's six
 // languages, missed reminders shown once, the streak's rules, and the device state the worker keeps.
 // The browser here is in Tokyo while the student's Canvas is in New York: nothing may lean on the machine's zone.
 process.env.TZ = 'Asia/Tokyo';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const T = require('../../extension/lib/todo.js');
-const R = require('../../extension/lib/remind.js');
-const D = require('../../extension/defaults.js');
+const T = require('../../extension/planner/todo.js');
+const R = require('../../extension/planner/remind.js');
+const D = require('../../extension/content/defaults.js');
 
 const NY = 'America/New_York';
 const at = (iso) => Date.parse(iso);

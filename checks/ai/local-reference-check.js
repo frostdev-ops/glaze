@@ -1,4 +1,4 @@
-// The local engine's reference forward pass (lib/ai/local/reference.js) against llama.cpp on the same GGUF, and any
+// The local engine's reference forward pass (ai/local/reference.js) against llama.cpp on the same GGUF, and any
 // two runs against each other (HF transformers too). Not in the suite: it needs the model and hours of CPU.
 // A run is a folder of dumps, one per prompt of checks/ai/local-reference-prompts.json: <id>.json { prompt (token ids),
 // gen (greedy: gen[0] from the prompt, gen[s + 1] from decode step s), vocab } and <id>.prefill.f32 / <id>.decode.f32,
@@ -20,7 +20,7 @@ const args = process.argv.slice(2);
 const flag = (name, dflt) => { const i = args.indexOf(name); return i < 0 ? dflt : args.splice(i, 2)[1]; };
 const has = (name) => { const i = args.indexOf(name); if (i >= 0) args.splice(i, 1); return i >= 0; };
 
-// A file as a source for lib/ai/local/gguf.js.
+// A file as a source for ai/local/gguf.js.
 const fileSource = (file) => {
   const fd = fs.openSync(file, 'r');
   return { size: fs.fstatSync(fd).size, read(o, n) { const b = Buffer.allocUnsafe(n); let got = 0; while (got < n) { const r = fs.readSync(fd, b, got, n - got, o + got); if (!r) break; got += r; } return new Uint8Array(b.buffer, b.byteOffset, got); } };
@@ -53,8 +53,8 @@ if (mode === 'tsv') {
 } else if (mode === 'worker') {
   // One child: loads the model once and runs the prompts the parent sends.
   const [model, llamaDir, outDir, steps, chunk] = args;
-  const G = require('../../extension/lib/ai/local/gguf.js');
-  const R = require('../../extension/lib/ai/local/reference.js');
+  const G = require('../../extension/ai/local/gguf.js');
+  const R = require('../../extension/ai/local/reference.js');
   (async () => {
     const t0 = performance.now();
     const m = await R.load(await G.open(fileSource(model)));

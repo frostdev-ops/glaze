@@ -1,4 +1,4 @@
-// Glaze Writer's Ultra adapter (lib/writer-ultra.js) over the probed box shapes (test/fixtures/ultra-writer-*): which box
+// Glaze Writer's Ultra adapter (writer/writer-ultra.js) over the probed box shapes (test/fixtures/ultra-writer-*): which box
 // is what, its send button, what a reply answers, and what stays Ultra's.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { El } = require('../stand-in-dom.js');
 const { parse } = require('../fixture-dom.js');
-const U = require('../../extension/lib/writer-ultra.js');
+const U = require('../../extension/writer/writer-ultra.js');
 
 const raw = (f) => fs.readFileSync(path.join(__dirname, '../fixtures', f), 'utf8');
 const page = (f) => { const doc = { activeElement: null }; doc.root = new El('html', doc); doc.body = parse(raw(f), doc); return doc.body; };
@@ -61,7 +61,7 @@ test('a collapsed discussion composer stays native until Ultra activates its edi
   assert.deepEqual(U.boxes(body, { path: DISCUSSION }).map((b) => b.kind), ['reply'], 'focus can draw a toolbar before the click activates Ultra');
   controls.className = 'form-buttons panel-editor-controls';
   controls.removeAttribute('aria-hidden');
-  // Live Ultra, 2026-10-28: an activated Post stays open while its blur is kept from Ultra (features/writer.js), so Writer
+  // Live Ultra, 2026-10-28: an activated Post stays open while its blur is kept from Ultra (writer/page/writer.js), so Writer
   // takes it on the click rather than after the first keystroke.
   assert.equal(post.editor.textContent, '');
   assert.deepEqual(U.boxes(body, { path: DISCUSSION }).map((b) => b.kind), ['post', 'reply'], 'the activated editor mounts Writer while still empty');
@@ -205,10 +205,10 @@ test('native attachments and formatting outside the frame schema are never taken
 });
 
 // The quick look and the frame's own check agree where it matters: everything compose itself writes into Ultra's editor
-// passes the quick look, so a box Writer has synced is never taken back from it; the frame (lib/writer-schema.js loses)
+// passes the quick look, so a box Writer has synced is never taken back from it; the frame (writer/writer-schema.js loses)
 // has the last word on the rest.
 test('what compose writes into Ultra\'s editor passes the quick look', () => {
-  const S = require('../../extension/lib/writer-schema.js');
+  const S = require('../../extension/writer/writer-schema.js');
   const doc = S.parse(S.compose, '<h3>Title</h3><p class="ql-align-center">Centered <strong>bold</strong> <a href="https://x.test/a">link</a></p>'
     + '<ol><li>One</li><li class="ql-indent-1">One a</li></ol><ul><li class="ql-indent-2 ql-align-right">Bullet</li></ul><p class="ql-indent-3">Indented <em>it</em> <s>s</s> <u>u</u> x<sup>2</sup> H<sub>2</sub>O</p>'
     + '<pre class="ql-syntax" spellcheck="false">code\n</pre><h4 class="ql-align-justify">Small</h4><p><br></p>');

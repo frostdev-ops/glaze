@@ -27,7 +27,7 @@ var GZ_SCENE_HOST = (() => {
   const home = (ultra) => find(ultra)[0];
   const hosts = new WeakMap();
   // A course tab's frame (content.js syncThrough). Wearing the page's background with no layer over its course page, it lets
-  // the page's show through, and the page hides its own strip under it (features/coursetabs.css). Drawing one of its own, it
+  // the page's show through, and the page hides its own strip under it (navigation/page/coursetabs.css). Drawing one of its own, it
   // draws it where the page's is (--gz-vx/vy/vw/vh: the page's viewport in the frame's pixels) and on the page's clock. The
   // scenes of both hear the pointer over both, for their parallax.
   let shown = false, visible = false, armed = false, pointAt = null, followed = null, relaying = false, at = [0, 0];
@@ -123,7 +123,7 @@ var GZ_SCENE_HOST = (() => {
       try { frameElement?.toggleAttribute('data-gz-through', shown); } catch { /* left the page */ }
       return on;
     },
-    // A frame's own scene runs on the page's clock (lib/scene.js opts.clock), when the page has one.
+    // A frame's own scene runs on the page's clock (looks/scene.js opts.clock), when the page has one.
     clock() {
       if (!signature || pageRoot()?.getAttribute('data-gz-bg-key') !== signature) return undefined;
       const [t, at] = (pageRoot()?.getAttribute('data-gz-scene-clock') || '').split(',').map(Number);

@@ -1,4 +1,4 @@
-// The worker's link to the glaze-mcp host (lib/agent-link.js), against a fake connectNative: every state, the browsers' own
+// The worker's link to the glaze-mcp host (agents/agent-link.js), against a fake connectNative: every state, the browsers' own
 // error strings, backoff on fake timers, triggers, reassembly per connection, bye and disconnect on stop, Safari's serial
 // batches, instance filter and keep-alive, and that nothing else in the repo calls connectNative.
 const test = require('node:test');
@@ -6,9 +6,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const L = require('../../extension/lib/agent-link.js');
-const F = require('../../extension/lib/agent-frames.js');
-const G = require('../../extension/lib/mcp/grants.js');
+const L = require('../../extension/agents/agent-link.js');
+const F = require('../../extension/agents/agent-frames.js');
+const G = require('../../extension/agents/grants.js');
 
 const root = path.join(__dirname, '../../extension');
 const HOST = 'io.frostdev.glaze_mcp', APP = 'io.frostdev.Glaze';
@@ -116,7 +116,7 @@ const connected = async (opts) => {
 };
 const said = (w, kind) => w.events.filter((e) => e[0] === kind);
 
-test('off unless storage.local mcp says on, as lib/mcp/grants.js reads it; the first pass overwrites a stale session', async () => {
+test('off unless storage.local mcp says on, as agents/grants.js reads it; the first pass overwrites a stale session', async () => {
   for (const mcp of [undefined, null, {}, { on: false }, { on: 'true' }, { on: 1 }, true, ['on']]) {
     assert.equal(G.clean(mcp).on, false);
     const w = world({ on: false, local: mcp === undefined ? {} : { mcp } });
@@ -825,20 +825,20 @@ test('C2: Safari keep-alive sends native traffic before hello and throughout exi
 });
 
 test('nothing but the link calls connectNative', () => {
-  const own = new Set(['extension/lib/agent-link.js', 'safari/Glaze/Glaze Extension/Resources/lib/agent-link.js']);
+  const own = new Set(['extension/agents/agent-link.js', 'safari/Glaze/Glaze Extension/Resources/agents/agent-link.js']);
   // The one exception: the Windows CI check's test extension, whose echo worker stands in for the link, calls it once.
   const ECHO = 'checks/agents/mcp-windows-check.js', repo = path.join(root, '..');
   const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[\s;{}()])\/\/[^\n]*/gm, '$1');
   const files = execFileSync('git', ['ls-files', '-z'], { cwd: repo, encoding: 'utf8' }).split('\0')
     .filter((f) => /\.(m|c)?js$|\.html?$/.test(f) && !f.startsWith('test/') && fs.existsSync(path.join(repo, f)));
-  assert.ok(files.includes('extension/lib/background.js') && files.includes('mcp/bin/glaze-mcp.js'), 'the scan sees the worker and the helper');
+  assert.ok(files.includes('extension/background/background.js') && files.includes('mcp/bin/glaze-mcp.js'), 'the scan sees the worker and the helper');
   const callers = files.filter((f) => !own.has(f) && f !== ECHO && /connectNative/.test(code(fs.readFileSync(path.join(repo, f), 'utf8'))));
   assert.deepEqual(callers, []);
   assert.ok(files.includes(ECHO), `${ECHO} is tracked`);
   const echo = code(fs.readFileSync(path.join(repo, ECHO), 'utf8'));
   assert.equal(echo.split('connectNative').length, 2, `${ECHO} names connectNative once`);
   assert.match(echo, /\nfunction echoWorker\(\) \{\n(?:(?!\n\}\n)[^])*\n {4}const port = chrome\.runtime\.connectNative\('io\.frostdev\.glaze_mcp'\);\n/, 'inside its test extension\'s worker');
-  assert.match(code(fs.readFileSync(path.join(root, 'lib/agent-link.js'), 'utf8')), /\.connectNative\(/);
+  assert.match(code(fs.readFileSync(path.join(root, 'agents/agent-link.js'), 'utf8')), /\.connectNative\(/);
   assert.match(code('// connectNative(x)\nnothing()'), /^\s*nothing/, 'a comment doesn\'t count');
   assert.match(code('chrome.runtime.connectNative(x)'), /connectNative/);
 });

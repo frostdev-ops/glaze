@@ -1,4 +1,4 @@
-// Local annotations in Canvas's document viewer (features/docviewer.js): where they are kept, the stroke math and the
+// Local annotations in Canvas's document viewer (courses/page/docviewer.js): where they are kept, the stroke math and the
 // file they export to. Pure, so node can test it; classic script for the content script, module.exports for node.
 //
 // A page is W units wide in its own, unrotated frame, and as tall as its shape makes it (h). A stroke is

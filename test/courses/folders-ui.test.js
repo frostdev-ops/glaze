@@ -1,6 +1,6 @@
 // Synthetic Ultra outline: real B9 module, inert DOM and extension storage, no network surface.
 const test = require('node:test'), assert = require('node:assert/strict'), vm = require('node:vm'), fs = require('node:fs');
-const F = require(process.env.GZ_B9_LIB || '../../extension/lib/folders.js');
+const F = require(process.env.GZ_B9_LIB || '../../extension/courses/folders.js');
 const ROW = '.content-list-item[data-content-id]';
 class E {
   constructor(tag = 'div') { this.tagName = tag; this.children = []; this.dataset = {}; this.attrs = {}; this.listeners = {}; this._text = ''; }
@@ -45,7 +45,7 @@ const fixture = () => {
   const ctx = { on: () => on, settings: () => ({ enhance: { hideFolders: enabled } }), courseId: () => cid,
     toggleOf: (r) => r.querySelector(`#folder-title-${r.dataset.contentId}`) || r.querySelector(`#learning-module-title-${r.dataset.contentId}`), t: (k, args) => k.replace(/\{(\w+)\}/g, (_, p) => args[p]) };
   const c = vm.createContext({ document, location, chrome, GZ_CTX: ctx, GZ_FOLDERS: F, MutationObserver: class { constructor(f) { mutations = f; } observe() { watched.on = true; } disconnect() { watched.on = false; } }, requestAnimationFrame: (f) => frames.push(f), setTimeout: (f) => { timers.set(++timerId, f); return timerId; }, clearTimeout: (id) => timers.delete(id) });
-  vm.runInContext(fs.readFileSync(process.env.GZ_B9_FEATURE || require.resolve('../../extension/features/folders.js'), 'utf8'), c);
+  vm.runInContext(fs.readFileSync(process.env.GZ_B9_FEATURE || require.resolve('../../extension/courses/page/folders.js'), 'utf8'), c);
   const ui = c.GZ_FOLDER_UI;
   const click = async (el, type = 'click', isTrusted = true, detail = 0) => { const e = { isTrusted, detail, preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } }; el.listeners[type](e); await settle(); return e; };
   return { ui, parent, child, module, plain, outline, document, store, sent, click, redraw: () => { mutations([{ type: 'attributes', target: outline }]); while (frames.length) frames.shift()(); }, mutate: (records = [{ type: 'attributes', target: outline }]) => mutations(records), watched, frames,

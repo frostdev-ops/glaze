@@ -1,8 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const C = require('../../extension/lib/classes.js');
-const T = require('../../extension/lib/todo.js');
-const I = require('../../extension/lib/ics.js');
+const C = require('../../extension/planner/classes.js');
+const T = require('../../extension/planner/todo.js');
+const I = require('../../extension/planner/ics.js');
 const NY = 'America/New_York', LA = 'America/Los_Angeles';
 const key = C.storeKey('https://canvas.test', '3');
 const p = (more = {}) => ({ days: [1], start: 540, end: 600, loc: 'Room 1', from: '2026-10-05', to: '2026-11-30', skip: [], ...more });
@@ -99,7 +99,7 @@ test('period and course limits leave earlier batch edits and tombstones untouche
 });
 
 test('mixed-zone instants pass intact through reminder, agenda and export consumers with legacy fallbacks', () => {
-  const R = require('../../extension/lib/remind.js'), W = require('../../extension/lib/widgets.js'), X = require('../../extension/lib/calexport.js');
+  const R = require('../../extension/planner/remind.js'), W = require('../../extension/core/widgets.js'), X = require('../../extension/planner/calexport.js');
   for (const tz of [NY, LA]) {
     const store = { tz: 'America/Phoenix', courses: [{ id: '_25_1', name: 'Biology', periods: [p({ tz: NY }), p({ tz: LA }), p({ start: 720, end: 780 })] }] };
     const day = C.dayNum('2026-11-02'), from = T.midnight(day, tz), to = T.midnight(day + 1, tz);

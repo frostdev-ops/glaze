@@ -2,9 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const L = require('../../extension/lib/coursetabs.js');
-const U = require('../../extension/lib/ultra.js');
-const source = fs.readFileSync(require.resolve('../../extension/features/coursetabs.js'), 'utf8');
+const L = require('../../extension/navigation/coursetabs.js');
+const U = require('../../extension/courses/ultra.js');
+const source = fs.readFileSync(require.resolve('../../extension/navigation/page/coursetabs.js'), 'utf8');
 const part = (a,b) => source.slice(source.indexOf(a),source.indexOf(b,source.indexOf(a)));
 const origin = 'https://bb.school.test';
 const redirect = '/ultra/redirect?redirectType=nautilus&courseId=_101_1&contentId=_900_1&parentId=_800_1';
@@ -59,7 +59,7 @@ test('Ultra never reads or replays even 100 remembered folders over a 2000-row o
   for(const enabled of [false,true]) {
     let clicks=0,queries=0,reads=0;
     const rows=Array.from({length:2000},(_,i)=>({dataset:{contentId:`_${i+10}_1`}}));
-    const ui=vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/features/place.js'),'utf8'),{
+    const ui=vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/navigation/page/place.js'),'utf8'),{
       GZ_CTX:{site:'ultra',settings:()=>({enhance:{place:enabled}}),on:()=>true},
       document:{addEventListener(){},querySelectorAll(){queries++;return rows;}},
       chrome:{storage:{local:{get(){reads++;}}}},setTimeout(){throw Error('no restore timers');},clearTimeout(){},
@@ -76,7 +76,7 @@ test('Ultra never reads or replays even 100 remembered folders over a 2000-row o
 });
 
 test('discussion body results follow the native content link after the list renders, and user input cancels', () => {
-  const script=fs.readFileSync(require.resolve('../../extension/features/discussion-nav.js'),'utf8');
+  const script=fs.readFileSync(require.resolve('../../extension/courses/page/discussion-nav.js'),'utf8');
   function run({links=[],hidden=false,pathname='/ultra/courses/_101_1/engagement',storage={value:JSON.stringify({cid:'_101_1',title:'Discussion',at:1000})}}={}) {
     let now=1000;
     const calls=[],timers=new Map(),events=new Map();let serial=0;
@@ -120,7 +120,7 @@ test('explicit navigation respects native edits and restarts the frame loading l
 });
 
 test('the shared palette content reader retains course-link identity under the API field projection', async () => {
-  const ultra=fs.readFileSync(require.resolve('../../extension/content-ultra.js'),'utf8');
+  const ultra=fs.readFileSync(require.resolve('../../extension/content/content-ultra.js'),'utf8');
   const begin=ultra.indexOf('  const contents = new Map();');
   const end=ultra.indexOf('  // What they',begin);
   const item={id:'_999_1',title:'Linked discussion',contentHandler:{id:'resource/x-bb-courselink',isBbPage:false}};

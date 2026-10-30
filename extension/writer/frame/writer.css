@@ -1,9 +1,9 @@
 /* Glaze Writer's editor frame (writer.html): compose mode as glaze-plans/writer/mockups (A, B) draws it, in the Look's
    tokens, which the page hands in (writer.js look). Motion: transform and opacity only, 120–180 ms ease-out, none while
    typing, none at motion level off or with reduced motion. */
-@font-face { font-family: "Glaze Inter"; src: url("fonts/inter.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
-@font-face { font-family: "Glaze Atkinson"; src: url("fonts/atkinson-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
-@font-face { font-family: "Glaze Atkinson"; src: url("fonts/atkinson-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+@font-face { font-family: "Glaze Inter"; src: url("../../fonts/inter.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Glaze Atkinson"; src: url("../../fonts/atkinson-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Glaze Atkinson"; src: url("../../fonts/atkinson-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
 
 :root {
   --gz-accent: #17c8f4; --gz-accent-hi: #6fdcff; --gz-accent-soft: #082f49; --gz-accent-ink: #04121f;
@@ -12,7 +12,7 @@
   --gz-radius: 12px; --gz-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --pop-mix: #1b2d45; --shadow: 0 12px 32px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.35);
   --t: 150ms; color-scheme: dark;
-  /* The Look's surfaces as the page hands them in (features/writer.js look): the ground is the page's, transparent over a
+  /* The Look's surfaces as the page hands them in (writer/page/writer.js look): the ground is the page's, transparent over a
      background; a paper's panels are the glass of the cards beside it, which the page blurs behind the frame (theme.css); a
      compose box is the surface of Ultra's editor boxes; cards sit a step down in either. */
   --ground: var(--gz-ground, var(--gz-surface-2));

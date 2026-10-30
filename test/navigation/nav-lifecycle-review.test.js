@@ -4,8 +4,8 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const source = () => process.env.GZ_B7C_REVIEW_BASE
-  ? require('node:child_process').execFileSync('git', ['show', `${process.env.GZ_B7C_REVIEW_BASE}:features/nav.js`], { cwd: path.join(__dirname, '../../extension'), encoding: 'utf8' })
-  : fs.readFileSync(require.resolve('../../extension/features/nav.js'), 'utf8');
+  ? require('node:child_process').execFileSync('git', ['show', `${process.env.GZ_B7C_REVIEW_BASE}:navigation/page/nav.js`], { cwd: path.join(__dirname, '../../extension'), encoding: 'utf8' })
+  : fs.readFileSync(require.resolve('../../extension/navigation/page/nav.js'), 'utf8');
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 const turn = () => new Promise(setImmediate);
 // Today at local noon: the Next due key changes at local midnight, so a clock that starts here and moves a minute or

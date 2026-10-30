@@ -55,7 +55,7 @@ const HARNESS = `(() => {
     if (crypto.createHash('sha256').update(quill).digest('hex') !== QUILL.sha256) throw Error('Quill 1.3.7 hash mismatch');
 
     ext = require('../../tools/dev/check-env.js').staged(root, [`${site}/*`]);
-    for (const [name, source] of [['writer-paper.js', process.env.WRITER_PAPER_SOURCE], ['writer-cite.js', process.env.WRITER_CITE_SOURCE]]) if (source) {
+    for (const [name, source] of [['writer/frame/writer-paper.js', process.env.WRITER_PAPER_SOURCE], ['writer/frame/writer-cite.js', process.env.WRITER_CITE_SOURCE]]) if (source) {
       const file = path.join(ext, name);
       fs.rmSync(file); fs.writeFileSync(file, fs.readFileSync(source));
     }
@@ -86,7 +86,7 @@ const HARNESS = `(() => {
       return r.fulfill({ contentType: 'application/json', body: JSON.stringify(data) });
     });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
-    const G = require(path.join(root, 'defaults.js'));
+    const G = require(path.join(root, 'content/defaults.js'));
     const settings = G.GZ_SANITIZE({ writer: { full: true }, navbar: { on: false }, footer: false, preset: 'Frost', enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, drafts: true } });
     await worker.evaluate(async ({ settings, site }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings); await chrome.storage.local.set({ ultra: [site] }); }, { settings, site });
     const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/popup.html`); await env.ultraReady(opts); await opts.close();
@@ -209,7 +209,7 @@ const HARNESS = `(() => {
     check(await fr.evaluate(() => document.querySelector('.gp-sheet .gp-hdr').textContent === 'Rivera 1'), 'running header "Rivera 1"');
     check(await p.evaluate(() => __native().includes('treats memory less as a record than as a debt') && !__native().includes('Alex Rivera')), 'paper mode never writes into Ultra\'s editor');
     const ctx = await fr.evaluate(() => GZ_WRITER_PAPER.current().context());
-    check(ctx.assignment?.rubric?.criteria?.length > 0 && /Write 1,200 words/.test(ctx.assignment.instructions), 'context carries instructions and the rubric (lib/rubric.js) for the AI');
+    check(ctx.assignment?.rubric?.criteria?.length > 0 && /Write 1,200 words/.test(ctx.assignment.instructions), 'context carries instructions and the rubric (courses/rubric.js) for the AI');
 
     // ---- the 6-page fixtures
     const pages = {};

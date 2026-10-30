@@ -1,5 +1,5 @@
 // Planning on Blackboard Ultra pages (B2): Better To Do, tasks on cards and reminders in a VM with an inert DOM, storage
-// and worker, on Ultra's anchors (page anchors): where each goes, that only Ultra is asked (lib/ultra.js
+// and worker, on Ultra's anchors (page anchors): where each goes, that only Ultra is asked (courses/ultra.js
 // pageDue, never Canvas's planner), that a tick stays on this device whatever todo.sync says, and when content-ultra.js
 // loads each. The module's closure is reached by a probe appended to its return value here, in the test only.
 const test = require('node:test');
@@ -7,9 +7,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
-const T = require('../../extension/lib/todo.js');
-const R = require('../../extension/lib/remind.js');
+const D = require('../../extension/content/defaults.js');
+const T = require('../../extension/planner/todo.js');
+const R = require('../../extension/planner/remind.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
@@ -55,7 +55,7 @@ class E {
   get text() { return [this.textContent || '', ...this.children.map((c) => (c && typeof c === 'object' ? c.text : c ? String(c) : ''))].filter(Boolean).join(' '); }
 }
 
-// Ultra's answer for the student's work (lib/ultra.js page.due's shape): links whole, on the site.
+// Ultra's answer for the student's work (courses/ultra.js page.due's shape): links whole, on the site.
 const item = (id, cid, title, at, sub = null) => ({ type: 'assignment', id, cid, course: cid === '_101_1' ? 'Biology' : 'History', title, at, url: `${O}/ultra/redirect?redirectType=nautilus&courseId=${cid}&contentId=_9${id}`, sub, ov: null, aid: id, read: false, note: '', ws: '', allDay: false });
 const ITEMS = [item('_603_1', '_101_1', 'Lab report', NOW + 5 * H), item('_604_1', '_104_1', 'Essay', NOW + 30 * H)];
 
@@ -106,7 +106,7 @@ const page = ({ path = '/ultra/course', course = '', complete = true, prefs = {}
     chrome: {
       runtime: {
         lastError: undefined,
-        // The worker's 'glaze:todo' (lib/background.js BROKER): lib/todo.js change over this storage.
+        // The worker's 'glaze:todo' (background/background.js BROKER): planner/todo.js change over this storage.
         sendMessage: (m, cb) => {
           sent.push(local(m));
           const area = { get: async (k) => local(Object.fromEntries([k].flat().filter((x) => x in store).map((x) => [x, store[x]]))), set: async (v) => { Object.assign(store, local(v)); return true; } };
@@ -126,9 +126,9 @@ const page = ({ path = '/ultra/course', course = '', complete = true, prefs = {}
 };
 const probe = (src, fields) => src.replace(/( {2}return \{\s*sync,)/, `$1 probe: { ${fields} },`).replace(/var (GZ_\w+) = globalThis\.\1 \|\|/, 'var $1 =');
 
-test('Better To Do on Ultra\'s Courses page: right before Ultra\'s own To Do (hidden by features/apps.css only while it\'s there), from Ultra only', async () => {
+test('Better To Do on Ultra\'s Courses page: right before Ultra\'s own To Do (hidden by core/page/apps.css only while it\'s there), from Ultra only', async () => {
   const p = page({ complete: false });
-  vm.runInContext(probe(read('features/todo.js'), 'get: () => ({ box, cache, who, key })'), p.c);
+  vm.runInContext(probe(read('planner/page/todo.js'), 'get: () => ({ box, cache, who, key })'), p.c);
   const L = p.c.GZ_TODO_UI;
   L.sync(true);
   await settle();
@@ -147,7 +147,7 @@ test('Better To Do on Ultra\'s Courses page: right before Ultra\'s own To Do (hi
   // The kept answer has no due list of Canvas's (the popup's is content.js's own on Ultra), and the CSS hides Ultra's list
   // only while Glaze's is right before it.
   assert.equal(p.sent.find((m) => m.cache).due, undefined);
-  assert.match(read('features/apps.css'), /#gz-todo ~ :is\([^)]*\bbb-todo\b[^)]*\) \{ display: none !important; \}/);
+  assert.match(read('core/page/apps.css'), /#gz-todo ~ :is\([^)]*\bbb-todo\b[^)]*\) \{ display: none !important; \}/);
   // Turned off: it goes, and Ultra's own list is all that's left.
   L.sync(false);
   assert.deepEqual(p.panel.children.map((x) => x.tagName), ['BB-TODO']);
@@ -155,7 +155,7 @@ test('Better To Do on Ultra\'s Courses page: right before Ultra\'s own To Do (hi
 
 test("on a course's outline: a block of the right column before Details & Actions, that course's work only", async () => {
   const p = page({ path: '/ultra/courses/_101_1/outline', course: '_101_1' });
-  vm.runInContext(probe(read('features/todo.js'), 'get: () => ({ box })'), p.c);
+  vm.runInContext(probe(read('planner/page/todo.js'), 'get: () => ({ box })'), p.c);
   p.c.GZ_TODO_UI.sync(true);
   await settle();
   const { box } = p.c.GZ_TODO_UI.probe.get();
@@ -167,7 +167,7 @@ test("on a course's outline: a block of the right column before Details & Action
 
 test('a tick on Ultra stays on this device, even with "Tick off in Canvas too" on', async () => {
   const p = page({ prefs: { sync: true } });
-  vm.runInContext(probe(read('features/todo.js'), 'onChange, render, get: () => ({ box })'), p.c);
+  vm.runInContext(probe(read('planner/page/todo.js'), 'onChange, render, get: () => ({ box })'), p.c);
   p.c.GZ_TODO_UI.sync(true);
   await settle();
   const tick = { dataset: { act: 'done' }, checked: true, getBoundingClientRect: () => ({ left: 0, top: 0, width: 20, height: 20 }), closest: () => ({ dataset: { key: 'assignment:_603_1' } }) };
@@ -179,7 +179,7 @@ test('a tick on Ultra stays on this device, even with "Tick off in Canvas too" o
 
 test("tasks on Ultra's course cards: after the card's details, from the same answer, and the card's own click left to the course", async () => {
   const p = page();
-  vm.runInContext(read('features/cardtasks.js'), p.c);
+  vm.runInContext(read('courses/page/cardtasks.js'), p.c);
   p.c.GZ_CARD_TASKS.sync(true);
   await settle();
   assert.equal(p.due.length, 1);
@@ -203,7 +203,7 @@ test("tasks on Ultra's course cards: after the card's details, from the same ans
 
 test('reminders on Ultra: quiet on a test, assignment or tool page; links made whole; Ultra asked only when no list or cards will', async () => {
   const p = page({ path: '/ultra/stream' });
-  vm.runInContext(probe(read('features/reminders.js'), 'quiet, theyAsk, abs, load'), p.c);
+  vm.runInContext(probe(read('planner/page/reminders.js'), 'quiet, theyAsk, abs, load'), p.c);
   const M = p.c.GZ_REMIND_UI.probe;
   const at = (path) => { p.c.location.pathname = path; };
   at('/ultra/courses/_101_1/outline/assessment/_700_1/overview'); assert.equal(M.quiet(), true);
@@ -218,7 +218,7 @@ test('reminders on Ultra: quiet on a test, assignment or tool page; links made w
 });
 
 test('content-ultra.js loads each where it goes: Better To Do on the Courses page and outlines, cards with cards, reminders anywhere; top frame only', async () => {
-  const src = read('content-ultra.js');
+  const src = read('content/content-ultra.js');
   const decls = ['load', 'top', 'sidebarHere', 'sidebarOn', 'syncTodo', 'syncCardTasks', 'syncRemind'].map((n) => src.match(new RegExp(` {2}const ${n} = .*\\n`))[0]).join('');
   const asked = [];
   const ctx = {
@@ -234,24 +234,24 @@ test('content-ultra.js loads each where it goes: Better To Do on the Courses pag
   vm.createContext(ctx);
   vm.runInContext(`${decls}\nglobalThis.all = () => [syncTodo(), syncCardTasks(), syncRemind()];`, ctx);
   const run = async (path, cards = true) => { asked.length = 0; ctx.location.pathname = path; ctx.cards = cards; await Promise.all(ctx.all()); return [...asked]; };
-  assert.deepEqual(await run('/ultra/course'), ['features/todo.js', 'features/cardtasks.js', 'features/reminders.js', 'todo true', 'cards true', 'remind true']);
-  assert.deepEqual(await run('/ultra/course', false), ['features/todo.js', 'cards false', 'features/reminders.js', 'todo true', 'remind true'], 'no cards drawn yet: none asked');
-  assert.deepEqual(await run('/ultra/courses/_101_1/outline'), ['features/todo.js', 'cards false', 'features/reminders.js', 'todo true', 'remind true']);
-  assert.deepEqual(await run('/ultra/courses/_101_1/grades'), ['todo false', 'cards false', 'features/reminders.js', 'remind true']);
-  assert.deepEqual(await run('/ultra/coursesx'), ['todo false', 'cards false', 'features/reminders.js', 'remind true']);
+  assert.deepEqual(await run('/ultra/course'), ['planner/page/todo.js', 'courses/page/cardtasks.js', 'planner/page/reminders.js', 'todo true', 'cards true', 'remind true']);
+  assert.deepEqual(await run('/ultra/course', false), ['planner/page/todo.js', 'cards false', 'planner/page/reminders.js', 'todo true', 'remind true'], 'no cards drawn yet: none asked');
+  assert.deepEqual(await run('/ultra/courses/_101_1/outline'), ['planner/page/todo.js', 'cards false', 'planner/page/reminders.js', 'todo true', 'remind true']);
+  assert.deepEqual(await run('/ultra/courses/_101_1/grades'), ['todo false', 'cards false', 'planner/page/reminders.js', 'remind true']);
+  assert.deepEqual(await run('/ultra/coursesx'), ['todo false', 'cards false', 'planner/page/reminders.js', 'remind true']);
   ctx.window.top = {}; // a frame inside the page
   ctx.solo = false;
   assert.deepEqual(await run('/ultra/course'), ['todo false', 'cards false', 'remind false']);
   // A course tab's frame is a page of its own (its To Do panel), but reminders stay the page's around it.
   ctx.solo = true; ctx.tabFrame = '_101_1';
-  assert.deepEqual(await run('/ultra/courses/_101_1/outline'), ['features/todo.js', 'cards false', 'remind false', 'todo true']);
+  assert.deepEqual(await run('/ultra/courses/_101_1/outline'), ['planner/page/todo.js', 'cards false', 'remind false', 'todo true']);
 });
 
 // ---- Codex's B2 review: each failed before its fix ----
 
-test('review (B2 1): a module that lands after Glaze or its switch went off stays off; a list turned off while lib/ultra.js loads reads nothing', async () => {
+test('review (B2 1): a module that lands after Glaze or its switch went off stays off; a list turned off while courses/ultra.js loads reads nothing', async () => {
   // content-ultra.js: the switches are asked again when the file lands, not taken from when it was asked for.
-  const src = read('content-ultra.js');
+  const src = read('content/content-ultra.js');
   const decls = ['load', 'top', 'sidebarHere', 'sidebarOn', 'syncTodo'].map((n) => src.match(new RegExp(` {2}const ${n} = .*\\n`))[0]).join('');
   let arrive;
   const asked = [];
@@ -269,9 +269,9 @@ test('review (B2 1): a module that lands after Glaze or its switch went off stay
   await late;
   assert.deepEqual(asked, [false]);
 
-  // Better To Do: off() while lib/ultra.js is on its way, so the read is never asked.
-  const p = page({ hold: ['lib/ultra.js'] });
-  vm.runInContext(probe(read('features/todo.js'), 'get: () => ({ box })'), p.c);
+  // Better To Do: off() while courses/ultra.js is on its way, so the read is never asked.
+  const p = page({ hold: ['courses/ultra.js'] });
+  vm.runInContext(probe(read('planner/page/todo.js'), 'get: () => ({ box })'), p.c);
   p.c.GZ_TODO_UI.sync(true);
   await settle();
   p.c.GZ_TODO_UI.sync(false);
@@ -281,16 +281,16 @@ test('review (B2 1): a module that lands after Glaze or its switch went off stay
   assert.deepEqual(p.panel.children.map((x) => x.tagName), ['BB-TODO']);
 
   // Tasks on cards and reminders, the same.
-  const q = page({ hold: ['lib/ultra.js'] });
-  vm.runInContext(read('features/cardtasks.js'), q.c);
+  const q = page({ hold: ['courses/ultra.js'] });
+  vm.runInContext(read('courses/page/cardtasks.js'), q.c);
   q.c.GZ_CARD_TASKS.sync(true);
   await settle();
   q.c.GZ_CARD_TASKS.sync(false);
   q.release();
   await settle();
   assert.deepEqual(q.due, []);
-  const r = page({ path: '/ultra/stream', hold: ['lib/ultra.js'] });
-  vm.runInContext(read('features/reminders.js'), r.c);
+  const r = page({ path: '/ultra/stream', hold: ['courses/ultra.js'] });
+  vm.runInContext(read('planner/page/reminders.js'), r.c);
   r.c.GZ_REMIND_UI.sync(true);
   await settle();
   r.c.GZ_REMIND_UI.sync(false);
@@ -303,12 +303,12 @@ test("review (B2 2): on Ultra the cards and the reminders count this device's ti
   const now = Date.now();
   const stored = { [KEY]: { tasks: [], items: { 'assignment:_603_1': { done: true } } } };
   const p = page({ prefs: { sync: true }, stored });
-  vm.runInContext(read('features/cardtasks.js'), p.c);
+  vm.runInContext(read('courses/page/cardtasks.js'), p.c);
   p.c.GZ_CARD_TASKS.sync(true);
   await settle();
   assert.ok(!p.card.children[1].text.includes('Lab report'), 'ticked done here: off the card');
   const r = page({ path: '/ultra/stream', prefs: { sync: true }, enhance: { remind: true }, stored: { ...stored, todoCache: { key: KEY, at: now, start: new Date(now - 9 * 864e5).toISOString(), end: new Date(now + 9 * 864e5).toISOString(), teach: true, progress: true, items: ITEMS, grading: [], sums: {} } } });
-  vm.runInContext(probe(read('features/reminders.js'), 'reckon'), r.c);
+  vm.runInContext(probe(read('planner/page/reminders.js'), 'reckon'), r.c);
   r.c.GZ_REMIND_UI.sync(true);
   await settle();
   const { b } = r.c.GZ_REMIND_UI.probe.reckon(now);
@@ -319,7 +319,7 @@ test("review (B2 2): on Ultra the cards and the reminders count this device's ti
 test('review (B2 3): when Ultra sent only part of the calendar, a card and the list say so, never "Nothing due" or "Nothing to do"', async () => {
   const MISSING = 'Blackboard sent only part of your calendar, so some work may be missing.';
   const p = page({ complete: false, items: [] });
-  vm.runInContext(read('features/cardtasks.js'), p.c);
+  vm.runInContext(read('courses/page/cardtasks.js'), p.c);
   p.c.GZ_CARD_TASKS.sync(true);
   await settle();
   const ct = p.card.children[1];
@@ -327,19 +327,19 @@ test('review (B2 3): when Ultra sent only part of the calendar, a card and the l
   assert.ok(!ct.text.includes('Nothing due'));
   // With some work there, the list stays and the line follows it.
   const q = page({ complete: false });
-  vm.runInContext(read('features/cardtasks.js'), q.c);
+  vm.runInContext(read('courses/page/cardtasks.js'), q.c);
   q.c.GZ_CARD_TASKS.sync(true);
   await settle();
   assert.ok(q.card.children[1].text.includes('Lab report') && q.card.children[1].text.includes(MISSING));
   // A complete answer with nothing in it is "Nothing due", as before.
   const w = page({ items: [] });
-  vm.runInContext(read('features/cardtasks.js'), w.c);
+  vm.runInContext(read('courses/page/cardtasks.js'), w.c);
   w.c.GZ_CARD_TASKS.sync(true);
   await settle();
   assert.equal(w.card.children[1].text, 'Nothing due');
   // Better To Do: the line, and no "Nothing to do".
   const l = page({ complete: false, items: [] });
-  vm.runInContext(probe(read('features/todo.js'), 'get: () => ({ box })'), l.c);
+  vm.runInContext(probe(read('planner/page/todo.js'), 'get: () => ({ box })'), l.c);
   l.c.GZ_TODO_UI.sync(true);
   await settle();
   const t = l.c.GZ_TODO_UI.probe.get().box.text;
@@ -358,7 +358,7 @@ test('NEW-1: Ultra W11 stores its calculation day without changing a stable run'
     const area = { get: async () => r.store, set: async (v) => { Object.assign(r.store, v); return true; } };
     R.change(m, { local: area }, NOW).then(cb);
   };
-  vm.runInContext(read('features/reminders.js'), r.c);
+  vm.runInContext(read('planner/page/reminders.js'), r.c);
   r.c.GZ_REMIND_UI.sync(true); await settle();
   assert.equal(r.store[rk].streak.asOf, today);
   assert.equal(r.sent.filter((m) => m.op === 'streak').length, 1);

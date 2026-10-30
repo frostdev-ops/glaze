@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Rebuild lib/pdfjs/: Mozilla's prebuilt pdf.js (Apache-2.0, lib/pdfjs/LICENSE), only what Glaze uses. The two modules
+# Rebuild vendor/pdfjs/: Mozilla's prebuilt pdf.js (Apache-2.0, vendor/pdfjs/LICENSE), only what Glaze uses. The two modules
 # Glaze's reader (reader.html) needs to pull the text out of a PDF and to draw a scanned page for OCR, plus the
 # JBIG2/CCITT and JPEG 2000 decoders scanned pages are often stored in (wasm, BSD; their licenses beside them). And
 # pdf.js's viewer layer, for PDF documents: pdf_viewer.mjs, pdf_viewer.css and the pictures that stylesheet names
-# (lib/pdfjs/images; pdf.js's own, and one of Firefox's under the MPL-2.0, lib/pdfjs/LICENSE_MPL).
-# The modules also bundle core-js (MIT, lib/pdfjs/LICENSE_CORE_JS).
+# (vendor/pdfjs/images; pdf.js's own, and one of Firefox's under the MPL-2.0, vendor/pdfjs/LICENSE_MPL).
+# The modules also bundle core-js (MIT, vendor/pdfjs/LICENSE_CORE_JS).
 # The legacy build, because the modern one calls Promise.try, Map.prototype.getOrInsertComputed and friends
 # unpolyfilled, which Chrome 116 and Safari 17 lack. Even the legacy build skips Promise.withResolvers (Chrome 119,
 # Safari 17.4), so a one-line fallback goes on top of each module. The readable modules, not the minified ones: the
@@ -22,7 +22,7 @@
 # multiple of 90 fails the call, as pdf.js's other bad entries do.
 # tools/vendor/vendor-pdfjs-limits.js adds an optional output byte limit, checked before allocating a saved or extracted PDF.
 # Each cut and the patch match its upstream text exactly once or the script stops. Every download is checked against the
-# SHA-256 pinned here before anything in lib/pdfjs changes. Run it to upgrade pdf.js (new version, new hash); the output
+# SHA-256 pinned here before anything in vendor/pdfjs changes. Run it to upgrade pdf.js (new version, new hash); the output
 # is checked in, so the extension itself still has no build step.
 # Usage: tools/vendor/vendor-pdfjs.sh
 set -euo pipefail
@@ -56,14 +56,14 @@ tar -xzf "$tmp/pdfjs.tgz" -C "$tmp"
 src="$tmp/package"
 
 shim='Promise.withResolvers||=function(){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return{promise,resolve,reject}};'
-rm -rf lib/pdfjs
-mkdir -p lib/pdfjs/images
+rm -rf vendor/pdfjs
+mkdir -p vendor/pdfjs/images
 for f in build/pdf.mjs build/pdf.worker.mjs web/pdf_viewer.mjs; do
   { echo "// pdf.js $version legacy build (Apache-2.0, lib/pdfjs/LICENSE). Built by scripts/vendor-pdfjs.sh."
     echo "$shim"
-    sed '/^\/\/# sourceMappingURL=/d' "$src/legacy/$f"; } > "lib/pdfjs/${f#*/}"
+    sed '/^\/\/# sourceMappingURL=/d' "$src/legacy/$f"; } > "vendor/pdfjs/${f#*/}"
 done
-node - lib/pdfjs/pdf.mjs lib/pdfjs/pdf.worker.mjs lib/pdfjs/pdf_viewer.mjs <<'EOF'
+node - vendor/pdfjs/pdf.mjs vendor/pdfjs/pdf.worker.mjs vendor/pdfjs/pdf_viewer.mjs <<'EOF'
 const fs = require('node:fs');
 // pdf.js's calls of the old escape functions, written out exactly (test/vendor-pdfjs.test.js compares them with the
 // originals): %XX and %uXXXX back to characters, and characters to them the way escape wrote them.
@@ -126,7 +126,7 @@ for (const file of process.argv.slice(2)) {
 }
 EOF
 # The rotation patch (see the top).
-node - lib/pdfjs/pdf.worker.mjs <<'EOF'
+node - vendor/pdfjs/pdf.worker.mjs <<'EOF'
 const fs = require('node:fs');
 const file = process.argv[2];
 let src = fs.readFileSync(file, 'utf8');
@@ -150,15 +150,15 @@ patch('      copyLevel\n    } = this.oldPages[pageIndex];\n', '      copyLevel,\
 patch('    pageDict.set("Rotate", rotate);\n', '    pageDict.set("Rotate", (rotate + extraRotate) % 360);\n');
 fs.writeFileSync(file, src);
 EOF
-cp "$tmp/brotli-dictionary.bin" "$tmp/LICENSE_BROTLI" "$tmp/LICENSE_MPL" "$tmp/LICENSE_CORE_JS" lib/pdfjs/
-node ../tools/vendor/vendor-pdfjs-limits.js lib/pdfjs
-node ../tools/vendor/vendor-pdfjs-brotli.js lib/pdfjs/pdf.worker.mjs lib/pdfjs/brotli-dictionary.bin
-cp "$src/LICENSE" lib/pdfjs/LICENSE
-for f in jbig2.wasm openjpeg.wasm LICENSE_JBIG2 LICENSE_PDFJS_JBIG2 LICENSE_OPENJPEG LICENSE_PDFJS_OPENJPEG; do cp "$src/wasm/$f" lib/pdfjs/; done
+cp "$tmp/brotli-dictionary.bin" "$tmp/LICENSE_BROTLI" "$tmp/LICENSE_MPL" "$tmp/LICENSE_CORE_JS" vendor/pdfjs/
+node ../tools/vendor/vendor-pdfjs-limits.js vendor/pdfjs
+node ../tools/vendor/vendor-pdfjs-brotli.js vendor/pdfjs/pdf.worker.mjs vendor/pdfjs/brotli-dictionary.bin
+cp "$src/LICENSE" vendor/pdfjs/LICENSE
+for f in jbig2.wasm openjpeg.wasm LICENSE_JBIG2 LICENSE_PDFJS_JBIG2 LICENSE_OPENJPEG LICENSE_PDFJS_OPENJPEG; do cp "$src/wasm/$f" vendor/pdfjs/; done
 { echo "/* pdf.js $version legacy viewer styles (Apache-2.0, lib/pdfjs/LICENSE). Built by scripts/vendor-pdfjs.sh. */"
-  sed '/^\/\*# sourceMappingURL=/d' "$src/legacy/web/pdf_viewer.css"; } > lib/pdfjs/pdf_viewer.css
-for image in $(grep -oE 'url\("?images/[A-Za-z0-9_-]+\.(svg|gif)' lib/pdfjs/pdf_viewer.css | sed -E 's/^url\("?//' | sort -u); do
-  cp "$src/legacy/web/$image" "lib/pdfjs/$image"
+  sed '/^\/\*# sourceMappingURL=/d' "$src/legacy/web/pdf_viewer.css"; } > vendor/pdfjs/pdf_viewer.css
+for image in $(grep -oE 'url\("?images/[A-Za-z0-9_-]+\.(svg|gif)' vendor/pdfjs/pdf_viewer.css | sed -E 's/^url\("?//' | sort -u); do
+  cp "$src/legacy/web/$image" "vendor/pdfjs/$image"
 done
 
-echo "lib/pdfjs: pdf.js $version ($(du -sh lib/pdfjs | cut -f1), $(find lib/pdfjs -type f -exec cat {} + | gzip -9 | wc -c | awk '{printf "%.0f KB", $1/1024}') gzipped)"
+echo "vendor/pdfjs: pdf.js $version ($(du -sh vendor/pdfjs | cut -f1), $(find vendor/pdfjs -type f -exec cat {} + | gzip -9 | wc -c | awk '{printf "%.0f KB", $1/1024}') gzipped)"

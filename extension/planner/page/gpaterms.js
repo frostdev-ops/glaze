@@ -1,13 +1,13 @@
-// The GPA's past terms, trends and goal, loaded on demand: features/grades.js draws it in the Dashboard's GPA (Ultra: on its
+// The GPA's past terms, trends and goal, loaded on demand: planner/page/grades.js draws it in the Dashboard's GPA (Ultra: on its
 // Grades page), under "Past terms, trends and goal", while that is open (and asks for it from the command palette).
 // - Past terms: typed in, or read on this device from a transcript's text, a PDF, a picture or screenshot (also
-//   pasted), a web page or a Word file (features/import.js), and always shown for review before they are kept.
+//   pasted), a web page or a Word file (planner/page/import.js), and always shown for review before they are kept.
 //   Pass/fail, withdrawn and transfer rows are listed, not counted. Any AI reading waits on the owner.
 // - Trends: term and cumulative GPA over time, an inline chart in the palette's colors, with the same figures as a
 //   table for screen readers and keyboards.
 // - Goal: a cumulative or term GPA to reach; what this term needs, and one way there from the grades now, with the
-//   lowest percent for each letter and, on request, what the course's work left needs (features/grades.js needFor).
-// The arithmetic is lib/gpa.js. Kept in storage.local through the service worker's queue (features/grades.js savePast).
+//   lowest percent for each letter and, on request, what the course's work left needs (planner/page/grades.js needFor).
+// The arithmetic is planner/gpa.js. Kept in storage.local through the service worker's queue (planner/page/grades.js savePast).
 var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
   const X = globalThis.GZ_CTX;
   const { t, locale } = X;
@@ -20,7 +20,7 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
   const note = (text, cls = 'gz-gpa-note') => make('p', { className: cls, textContent: text });
   const sum = (list, k) => list.reduce((n, x) => n + k(x), 0);
   const one = (x) => new Intl.NumberFormat(GZ_I18N.locale(locale()), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(x);
-  const docIn = () => X.need('lib/doctext.js', () => globalThis.GZ_DOCTEXT);
+  const docIn = () => X.need('core/doctext.js', () => globalThis.GZ_DOCTEXT);
   // What the view keeps between draws: terms in review, the import's text, a word for the student, the terms open, the
   // goal kind picked before a value, the courses' answers, and where focus goes next.
   // reading: the AbortController and words of a PDF or picture being read, until it ends or another read starts; ocr:
@@ -73,7 +73,7 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
   };
 
   // ---- trends ------------------------------------------------------------------------------------------------------
-  // s: lib/gpa.js series, oldest first, the last one this term's when `now`. The chart is drawn for sighted readers; the
+  // s: planner/gpa.js series, oldest first, the last one this term's when `now`. The chart is drawn for sighted readers; the
   // table under it has the same figures and is what a screen reader reads.
   const NS = 'http://www.w3.org/2000/svg';
   const svg = (tag, attrs = {}, ...kids) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); e.append(...kids); return e; };
@@ -106,7 +106,7 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
   };
 
   // ---- the goal ----------------------------------------------------------------------------------------------------
-  // What the work left in a course needs for a letter's lowest percent, once asked (features/grades.js needFor).
+  // What the work left in a course needs for a letter's lowest percent, once asked (planner/page/grades.js needFor).
   const needText = (r, min) => (r == null ? t("Glaze couldn't load this course's scores.")
     : !r.left ? t('Nothing left to change: {pct}.', { pct: r.best == null ? '–' : api.pct(r.best) })
       : r.reachable === false ? t('Out of reach: full marks on the {n} items left would make {pct}.', { n: r.left, pct: api.pct(r.best) })
@@ -127,8 +127,8 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
     const out = [make('div', { className: 'gz-gpa-switches' }, make('label', {}, t('Goal GPA'), ' ', value), make('label', {}, t('Goal for'), ' ', kind))];
     if (!g) return out;
     // This term: every course with credits that counts, graded yet or not; a course whose letter has no grade points
-    // (Pass, Excellent), or whose best on its scale has none (lib/gpa.js noGpa), is no GPA course. The most each can
-    // make is the best letter it can still give (lib/gpa.js topOf: its scale, and what its work left reaches once
+    // (Pass, Excellent), or whose best on its scale has none (planner/gpa.js noGpa), is no GPA course. The most each can
+    // make is the best letter it can still give (planner/gpa.js topOf: its scale, and what its work left reaches once
     // asked), with its bonus.
     const eligible = rows.filter((r) => r.credits > 0 && (r.pts != null || !r.letter));
     const bonus = (r) => (w ? r.p.l || 0 : 0);
@@ -233,7 +233,7 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
       if (first || !el) redraw(); else el.textContent = s;
     };
     try {
-      await X.need('features/import.js', () => globalThis.GZ_IMPORT);
+      await X.need('planner/page/import.js', () => globalThis.GZ_IMPORT);
       const r = await GZ_IMPORT.read(file, { signal: ctl.signal, progress: prog });
       if (V.reading?.ctl === ctl) V.reading = null;
       if (!ctl.signal.aborted) show(r.text, r.ocr); // a read called off shows nothing, whenever its answer comes
@@ -245,7 +245,7 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
   const importer = () => {
     const area = f(label(make('textarea', { rows: 5, value: V.text, placeholder: 'Fall 2024\nBIO 101  Introduction to Biology  4.0  A-' }), t("Your transcript's text")), 'imp:text');
     area.addEventListener('input', () => { V.text = area.value; });
-    // A table copied from a web page keeps its rows when its HTML is read (lib/doctext.js).
+    // A table copied from a web page keeps its rows when its HTML is read (core/doctext.js).
     area.addEventListener('paste', (e) => {
       // A screenshot of the transcript, read like a picture file.
       const img = e.isTrusted && [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith('image/'));
@@ -348,10 +348,10 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
     if (focus) (el.querySelector(`[data-f="${CSS.escape(focus)}"]`) || (focus === 'hist' ? el.closest('details')?.querySelector('summary') : null))?.focus();
   };
 
-  // stop(): the GPA panel is going (features/grades.js, Glaze or the GPA turned off, another page): a read stops now.
+  // stop(): the GPA panel is going (planner/page/grades.js, Glaze or the GPA turned off, another page): a read stops now.
   return { draw, stop: () => V.reading?.ctl.abort() };
 })();
 
 // Node takes the module; a page that loaded this on demand gets it as the script's last value, which is how
-// lib/background.js knows it ran to the end.
+// background/background.js knows it ran to the end.
 if (typeof module !== 'undefined') module.exports = GZ_GPA_TERMS; else GZ_GPA_TERMS;

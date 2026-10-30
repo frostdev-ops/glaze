@@ -1,9 +1,9 @@
-// The frame's side of the papers store (lib/writer-papers.js open() without a store): reads from storage.local, writes
+// The frame's side of the papers store (writer/writer-papers.js open() without a store): reads from storage.local, writes
 // through the worker ('glaze:writerPapers'), each save carrying the revision it last saw so another editor's newer
 // text is kept as a version. Here the worker is the same module over the same in-memory storage, answering late.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const PA = require('../../extension/lib/writer-papers.js');
+const PA = require('../../extension/writer/writer-papers.js');
 
 const memory = () => {
   const data = {};
@@ -21,7 +21,7 @@ test('an unanswered worker save releases its queue at 60 s, and a late answer ca
       sent.push(m);
       return sent.length === 1 ? new Promise((r) => { answer = r; }) : Promise.resolve({ ok: true, value: { paper: { revision: sent.length } } });
     } } } });
-  vm.runInContext(fs.readFileSync(require.resolve('../../extension/lib/writer-papers.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/writer/writer-papers.js'), 'utf8'), ctx);
   const store = ctx.GZ_WRITER_PAPERS.open();
   await store.get(KEY);
   const lost = store.save(KEY, { doc: doc('Before.') }); lost.catch(() => {});
@@ -89,7 +89,7 @@ test('a page cannot call the worker-only submitted writer through its local stor
   assert.equal(PA.open().submitted, undefined);
 });
 
-// Documents as a page of an LMS tab (features/settingspage.js): each document its frame loads claims a one-use pass that
+// Documents as a page of an LMS tab (settings/page/settingspage.js): each document its frame loads claims a one-use pass that
 // Glaze's page got for that tab ('glaze:papers' job), and only that frame, as that document, then writes like the home's
 // own tab does: saves, removes and Trash/Restore. A site framing papers.html itself gets no pass.
 test('the worker takes papers writes from an LMS tab\'s Documents frame only once its document claims a one-use pass', async () => {
@@ -208,7 +208,7 @@ test('the worker takes trash, untrash and purge from Glaze\'s paper pages, and p
   assert.equal(w.store.local[`writerPaper:${live}`].trashed, trashed.value.trashed);
   assert.equal(w.store.local.writerPapers.find((r) => r.key === live).trashed, trashed.value.trashed);
   assert.deepEqual(await send('purge', []), { ok: true, value: [] });
-  // Documents inside a school's page (features/settingspage.js): its frame writes to the Trash once it claimed its pass.
+  // Documents inside a school's page (settings/page/settingspage.js): its frame writes to the Trash once it claimed its pass.
   const lms = { id: 'glaze', frameId: 0, url: 'https://school.instructure.com/courses/1', origin: 'https://school.instructure.com', tab: { id: 9, url: 'https://school.instructure.com/courses/1' }, documentId: 'top' };
   const frame = { id: 'glaze', frameId: 7, url: `${EXT}/papers.html`, origin: EXT, tab: lms.tab, documentId: 'd1' };
   assert.deepEqual(await send('untrash', [live], frame), { ok: false, error: 'sender' }, 'a frame that claimed nothing');

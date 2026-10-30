@@ -1,14 +1,14 @@
-// A browser's LMS tabs for lib/mcp/tabs.js and lib/mcp/tab.js (test/mcp-tabs, mcp-assign, mcp-todo-write): chrome.tabs.query's
+// A browser's LMS tabs for agents/tabs.js and agents/tab.js (test/mcp-tabs, mcp-assign, mcp-todo-write): chrome.tabs.query's
 // answer and chrome.scripting.executeScript into a tab's top frame, which is a vm context standing for Glaze's own world
 // there: GZ_CTX as content.js makes it (site, on, account, profile, canvasCourses, myCourses, settings, need), defaults.js,
 // location, the page's fetch (routes: path → JSON, or a function of (url, init)), storage and runtime.sendMessage. A func
 // runs from its source, as the browser serializes it; a file runs as the extension's. The worker's publish paths
-// ('glaze:todo', 'glaze:insights') write `store` as lib/background.js's broker does, through lib/todo.js and lib/insights.js.
+// ('glaze:todo', 'glaze:insights') write `store` as background/background.js's broker does, through planner/todo.js and planner/insights.js.
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const T = require('../../extension/lib/todo.js');
-const I = require('../../extension/lib/insights.js');
+const T = require('../../extension/planner/todo.js');
+const I = require('../../extension/planner/insights.js');
 
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
@@ -17,7 +17,7 @@ const writerArea = (store) => ({
   get: async (keys) => Object.fromEntries([].concat(keys).filter((k) => Object.hasOwn(store, k)).map((k) => [k, structuredClone(store[k])])),
   set: async (patch) => { Object.assign(store, structuredClone(patch)); return true; },
 });
-const FIRST = ['lib/color.js', 'lib/i18n.js', 'lib/page.js', 'lib/grades.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js'];
+const FIRST = ['core/color.js', 'core/i18n.js', 'core/page.js', 'planner/grades.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js'];
 const json = (body, status = 200, headers = {}) => ({ ok: status >= 200 && status < 300, status, headers: { get: (k) => headers[k.toLowerCase()] ?? null }, text: async () => JSON.stringify(body) });
 
 // One tab: its tabs.Tab fields, and its top frame's world. ctx: GZ_CTX's own answers over the defaults.
@@ -94,8 +94,8 @@ const browser = (tabs) => {
   };
   return { tabs: { query: async () => tabs.map((t) => structuredClone(t.info)) }, scripting: { executeScript }, calls, byId };
 };
-// lib/background.js modQuiet: Glaze stays out of these pages.
-const LX = require('../../extension/lib/lookx.js');
+// background/background.js modQuiet: Glaze stays out of these pages.
+const LX = require('../../extension/looks/lookx.js');
 const quiet = (p) => LX.quiet(p) || /\/(quizzes|external_tools|assessment|attempt|lti)(\/|$)|\/mod\/(quiz|lti)(\/|$)/.test(p);
 
 // The real worker (test/helpers/worker-env.cjs), its tabs the fake browser's, agent access on and one app
@@ -105,7 +105,7 @@ const PEER = { name: 'node', exe: '/Applications/Claude.app/Contents/MacOS/Claud
 const boot = async ({ local = {}, sync = {}, tabs = [] } = {}) => {
   const worker = require('./worker-env.cjs');
   const { fakeIDB } = require('./fake-idb.cjs');
-  const G = require('../../extension/lib/mcp/grants.js');
+  const G = require('../../extension/agents/grants.js');
   const idb = fakeIDB().indexedDB;
   idb.dbs.set('glaze-mcp-settings', new Map([['settings', new Map([['on', true]])]]));
   await G.open(idb).pair(PEER, 'Claude', ['courses', 'grades', 'assignments']);
@@ -131,7 +131,7 @@ const answer = async (env, value) => {
     const rec = Object.values(env.store.session).find((r) => r?.state === 'waiting' && r.kind === 'action');
     const win = env.store.session.mcpAskWindow && env.windows.made.find((x) => x.id === env.store.session.mcpAskWindow.id);
     if (rec && win) {
-      const s = { id: 'glaze', tab: { id: win.tabs[0].id, windowId: win.id }, frameId: 0, url: 'chrome-extension://x/lib/mcp/approve.html' };
+      const s = { id: 'glaze', tab: { id: win.tabs[0].id, windowId: win.id }, frameId: 0, url: 'chrome-extension://x/agents/approve.html' };
       await env.w.send({ type: 'glaze:mcp-ask', id: rec.id, answer: value }, s);
       return rec;
     }

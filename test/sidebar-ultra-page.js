@@ -1,12 +1,12 @@
-// The stand-in Ultra pages the sidebar's Ultra tests run features/sidebar.js (and features/widgets.js) on: test/
+// The stand-in Ultra pages the sidebar's Ultra tests run navigation/page/sidebar.js (and core/page/widgets.js) on: test/
 // sidebar-ultra.test.js and test/navigation/sidebar-absorb.test.js. No tests here.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../extension/defaults.js');
-const W = require('../extension/lib/widgets.js');
-const S = require('../extension/lib/sidebar.js');
+const D = require('../extension/content/defaults.js');
+const W = require('../extension/core/widgets.js');
+const S = require('../extension/navigation/sidebar.js');
 const { El } = require('./stand-in-dom.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../extension', f), 'utf8');
@@ -54,7 +54,7 @@ const LIVE = {
 };
 
 // at: 'courses' | 'outline' | 'detail' | 'stream' (no column), or a LIVE page; width: the window; stored: storage.local; enhance;
-// widgets: run features/widgets.js too; todo: a stand-in Better To Do (features/todo.js) that mounts a list.
+// widgets: run core/page/widgets.js too; todo: a stand-in Better To Do (planner/page/todo.js) that mounts a list.
 const page = ({ at = 'outline', width = 1600, stored = {}, enhance = {}, widgets = false, todo = false, registration = null } = {}) => {
   const doc = { activeElement: null };
   const make = (t) => new El(t, doc);
@@ -175,8 +175,8 @@ const page = ({ at = 'outline', width = 1600, stored = {}, enhance = {}, widgets
   // Course cards, as far as a board needs them: a tile's body.
   c.GZ_COURSE_CARDS = { fill: (body) => { body.append('A course'); return {}; }, sync() {}, picker: { close() {} }, title: () => 'A course' };
   vm.createContext(c);
-  const side = vm.runInContext(read('features/sidebar.js'), c);
-  const ui = widgets ? vm.runInContext(read('features/widgets.js'), c) : null;
+  const side = vm.runInContext(read('navigation/page/sidebar.js'), c);
+  const ui = widgets ? vm.runInContext(read('core/page/widgets.js'), c) : null;
   // A pass of the site's part (content-ultra.js syncWidgets): the sidebar as its switch says, then the widgets.
   const pass = async () => { const on = settings().enhance.sidebar; side.sync(on); await settle(); ui?.sync(true); await settle(); side.sync(on); await settle(); };
   const resize = async (w) => { c.innerWidth = w; for (const l of winListeners.filter((x) => x.type === 'resize')) l.f(); await settle(); };

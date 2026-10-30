@@ -54,7 +54,7 @@ test('Firefox Allow frame reports a missing button after the download and frame 
 });
 
 test('Firefox Allow frame reports its URL state when the frame lookup rejects', async () => {
-  await assert.rejects(allowFrame(allowBrowser({ frameError: true }), 'tab'), /no moz-extension:\/\/check\/features\/allow.html in the frame/);
+  await assert.rejects(allowFrame(allowBrowser({ frameError: true }), 'tab'), /no moz-extension:\/\/check\/courses\/allow.html in the frame/);
 });
 
 test('Firefox Allow frame must belong to module 73\'s header', async () => {
@@ -131,7 +131,7 @@ test('every click rests before it measures and presses', async () => {
 });
 
 test('Firefox frame lookup binds the URL to the frame element in the requested header', async () => {
-  const prefix = 'moz-extension://check/features/allow.html';
+  const prefix = 'moz-extension://check/courses/allow.html';
   const header = { context: 'header-frame', url: 'about:blank' };
   const other = { context: 'other-frame', url: prefix };
   const send = async (method, params) => {

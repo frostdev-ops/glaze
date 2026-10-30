@@ -1,9 +1,9 @@
 // Declarative widgets: a mod without code whose tiles and rail widgets are lists of blocks in its mod.json. Glaze draws them
 // itself, from the blocks and the student's own data on this device; nothing a mod supplies ever runs, and a block can name
 // only what the allowlists below hold: data paths, Glaze's own button actions and the mod's own pictures. blocks() is a
-// strict cleaner like the others (lib/modapi.js): an unknown key, a wrong type or a value over a limit refuses the whole
+// strict cleaner like the others (mods/modapi.js): an unknown key, a wrong type or a value over a limit refuses the whole
 // list (null) and nothing is trimmed, so what was signed is what gets drawn. resolve() turns cleaned blocks and the data a
-// widget was granted into a component tree, which the worker cleans once more and features/modui.js draws.
+// widget was granted into a component tree, which the worker cleans once more and mods/page/modui.js draws.
 //
 // Text takes {path} holes and {{ }} for a brace; nothing else in it is special and it is only ever set as text. The data
 // paths, each needing the permission shown (the mod declares it, with a reason, and the student grants it):
@@ -18,7 +18,7 @@
 // calendar, never an address the mod chose. Classic script for the worker, the editor and node.
 var GZ_MODWIDGET = globalThis.GZ_MODWIDGET || (() => {
   const A = () => (typeof GZ_MODAPI !== 'undefined' ? GZ_MODAPI : require('./modapi.js'));
-  const C = () => (typeof GZ_GRADECALC !== 'undefined' ? GZ_GRADECALC : require('./gradecalc.js'));
+  const C = () => (typeof GZ_GRADECALC !== 'undefined' ? GZ_GRADECALC : require('../planner/gradecalc.js'));
   const own = (o, k) => Object.hasOwn(o, k);
   const LIMIT = { blocks: 12, template: 200, holes: 8, items: 10, line: 120, shown: 80 };
 

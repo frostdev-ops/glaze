@@ -19,12 +19,12 @@ test('the docs mirror and the docs index list docs/agents.md', () => {
 });
 
 test('the policy names every place agent access keeps something, as the code names it', () => {
-  const G = require('../../extension/lib/mcp/grants.js'), A = require('../../extension/lib/mcp/tools-assign.js'), P = require('../../extension/lib/mcp/approve.js');
-  const L = require('../../extension/lib/agent-link.js');
-  const worker = read('lib/background.js');
+  const G = require('../../extension/agents/grants.js'), A = require('../../extension/agents/tools-assign.js'), P = require('../../extension/agents/approve.js');
+  const L = require('../../extension/agents/agent-link.js');
+  const worker = read('background/background.js');
   assert.ok(worker.includes("indexedDB.open('glaze-mcp-settings'"), 'the switch is kept in glaze-mcp-settings');
   assert.ok(worker.includes('`mcpConn:${c}`'), "Safari's connections are kept as mcpConn:<c>");
-  assert.match(read('lib/mcp/writer.js'), /const SALT = 'mcpDocSalt'/);
+  assert.match(read('agents/writer.js'), /const SALT = 'mcpDocSalt'/);
   const text = section();
   for (const name of [G.DB, 'glaze-mcp-settings', G.KEY, G.CALLS, A.PREFIX, A.INDEX, L.KEY, L.INSTANCE, P.PREFIX, P.WINDOW, 'mcpConn:', 'mcpDocSalt']) {
     assert.ok(text.includes(`\`${name}`), `PRIVACY.md's Agent access names ${name}`);
@@ -50,7 +50,7 @@ test('the policy states what agent access sends, what waits for the student and 
 });
 
 test("the activity list's outcomes in docs/agents.md are the ones Settings shows", () => {
-  const E = require('../../extension/lib/editor-agents.js'), I = require('../../extension/lib/i18n.js');
+  const E = require('../../extension/settings/editor-agents.js'), I = require('../../extension/core/i18n.js');
   const list = agents().match(/how it ended \(([^)]*)\)/)?.[1] || '';
   const said = list.split(/, | or /);
   const labels = E.OUTCOMES.map((o) => E.outcome(o, (k, v) => I.t(k, v, 'en')));
@@ -69,13 +69,13 @@ test('the permission list matches the manifest: nativeMessaging is optional outs
 });
 
 test('docs/agents.md names the approval window\'s groups and buttons as Glaze shows them', () => {
-  const page = read('lib/mcp/approve-page.js'), html = read('lib/mcp/approve.html'), text = agents();
+  const page = read('agents/approve-page.js'), html = read('agents/approve.html'), text = agents();
   for (const [, words] of page.matchAll(/(?:courses|grades|writer|assignments): t\('([^']+)'\)/g)) assert.ok(text.includes(words), words);
   for (const button of [...html.matchAll(/<button id="(?:yes|no)"[^>]*>([^<]+)</g)].map((x) => x[1].replace('&#39;', "'"))) assert.ok(text.includes(button), button);
 });
 
 // Settings → AI → Agents: helper states and commands from the merged options page.
-const editor = path.join(root, 'lib/editor-agents.js');
+const editor = path.join(root, 'settings/editor-agents.js');
 test('docs/agents.md covers each helper state and its command', () => {
   const E = require(editor), text = agents(), id = 'abcdefghijklmnopabcdefghijklmnop';
   const states = ['connected', 'connecting', 'restart', 'not-installed', 'forbidden', 'exited', 'old-helper', E.NO_NODE, 'needs-permission'];
@@ -104,7 +104,7 @@ test('agent docs distinguish local transport from school reads and mod network g
 });
 
 test('approval retention includes action text and cleanup is conditional on later activity', () => {
-  const text = section(), P = require('../../extension/lib/mcp/approve.js');
+  const text = section(), P = require('../../extension/agents/approve.js');
   assert.equal(P.KEEP, 3600e3);
   assert.match(text, /action summary[^.]*document text or citation details/);
   assert.match(text, /eligible for cleanup an hour after creation/);
@@ -134,7 +134,7 @@ test('agent identity and helper uninstall claims do not promise verified identit
 
 test('all agent Settings paths include AI, including the helper and mod permission copy', () => {
   for (const file of ['../docs/mods-api.md', '../docs/agents.md', '../PRIVACY.md', '../docs/privacy.md', '../mcp/README.md',
-    '../mcp/lib/agent.js', 'lib/editor-mods.js', 'lib/modtools.js']) {
+    '../mcp/lib/agent.js', 'settings/editor-mods.js', 'mods/modtools.js']) {
     assert.doesNotMatch(read(file), /Settings → Agents/, file);
     assert.match(read(file), /Settings → AI → Agents/, file);
   }
@@ -144,7 +144,7 @@ test('features lists Agents and the AI harness describes the active Writer bridg
   assert.match(read('../docs/features.md'), /\[Agents\]\(agents\.md\)/);
   const text = plain(read('../docs/ai-harness.md'));
   assert.doesNotMatch(text, /for a later MCP integration|nothing offers them to a model yet/);
-  assert.match(text, /lib\/mcp\/writer\.js/);
+  assert.match(text, /agents\/writer\.js/);
   assert.match(text, /Settings → AI → Agents/);
 });
 

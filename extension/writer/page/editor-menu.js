@@ -1,6 +1,6 @@
 // Ultra opens an editor's toolbar menus (style, font, size, colour…) below their button, inside the page's scroller, which
 // clips them: at the foot of a test the colour menu's last colours sat under the scroller's edge, out of reach. Once
-// Ultra has drawn an opened menu, it is scrolled into view as far as it needs. A page feature (features/routes.js).
+// Ultra has drawn an opened menu, it is scrolled into view as far as it needs. A page feature (content/routes.js).
 var GZ_EDITOR_MENU = globalThis.GZ_EDITOR_MENU || (() => {
   const ctx = globalThis.GZ_CTX;
   if (!ctx) return null;

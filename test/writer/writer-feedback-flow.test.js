@@ -1,9 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const T = require('../../extension/lib/ai/task.js');
-const F = require('../../extension/lib/ai/tasks/writer-feedback.js');
-const X = require('../../extension/lib/ai/text.js');
-require('../../extension/lib/ai/providers/mock.js');
+const T = require('../../extension/ai/task.js');
+const F = require('../../extension/ai/tasks/writer-feedback.js');
+const X = require('../../extension/ai/text.js');
+require('../../extension/ai/providers/mock.js');
 const rubric = () => ({ criteria: [
   { id: 'claim', label: 'Claim', detail: 'Explain the benefit.', points: 40, cells: [] },
   { id: 'examples', label: 'Examples', detail: 'Use two concrete examples.', points: 60, cells: [] },
@@ -208,7 +208,7 @@ test('the run spends at most four focused repairs across many rubric decisions',
 });
 
 test('global rubric instructions reach each local criterion rather than disappearing between parsed rows', async () => {
-  const C = require('../../extension/lib/writer-context-assignment.js');
+  const C = require('../../extension/writer/writer-context-assignment.js');
   const input = raw();
   input.context.assignment.rubric = C.rubricOf({ ...rubric(), levels: [], detail: 'All categories require two interview sources.' });
   const { cfg, result } = run(input);

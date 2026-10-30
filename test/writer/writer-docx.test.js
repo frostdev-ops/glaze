@@ -1,15 +1,15 @@
-// Glaze Writer's .docx (lib/writer-docx.js): the package export writes, part by part, against golden XML; doctext reads
+// Glaze Writer's .docx (writer/writer-docx.js): the package export writes, part by part, against golden XML; doctext reads
 // it back to the paper's text; importing it gives the paper back; and the import's limits for hostile files. Word opening
 // these files is tools/fidelity/writer-word-fidelity.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const S = require('../../extension/lib/writer-schema.js');
-const X = require('../../extension/lib/writer-docx.js');
-const ST = require('../../extension/lib/writer-styles.js');
-const D = require('../../extension/lib/doctext.js');
-const Z = require('../../extension/lib/zip.js');
+const S = require('../../extension/writer/writer-schema.js');
+const X = require('../../extension/writer/writer-docx.js');
+const ST = require('../../extension/writer/writer-styles.js');
+const D = require('../../extension/core/doctext.js');
+const Z = require('../../extension/core/zip.js');
 const FX = require('../fixtures/writer-paper-fixtures.js');
 
 const date = new Date('2026-10-27T12:00:00Z');
@@ -172,7 +172,7 @@ test('a coloured, highlighted run exports its stored colour and highlighter, wha
 
 
 test('Blank Word round trip keeps one body and no header or reference list page', async () => {
-  const doc = S.paper.nodeFromJSON(require('../../extension/lib/writer-format.js').template(ST.FORMATS.plain, {}, [{ type: 'paragraph', content: [{ type: 'text', text: 'Field notes' }] }]));
+  const doc = S.paper.nodeFromJSON(require('../../extension/writer/writer-format.js').template(ST.FORMATS.plain, {}, [{ type: 'paragraph', content: [{ type: 'text', text: 'Field notes' }] }]));
   const out = X.exportDocx(doc, { format: 'plain', date });
   assert.ok(!Object.keys(out.parts).some((k) => /header\d+\.xml$/.test(k)));
   const back = S.paper.nodeFromJSON((await X.importDocx(out.bytes, { format: 'plain' })).doc);

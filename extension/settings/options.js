@@ -3,7 +3,7 @@
 // everything else saves on change.
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
-// In the browser's language (lib/i18n.js): this page's own text now, and every word written later.
+// In the browser's language (core/i18n.js): this page's own text now, and every word written later.
 GZ_I18N.page();
 const t = (key, vars) => GZ_I18N.t(key, vars, GZ_I18N.ui());
 // Ultra's own colour for each course slot: the picker starts there.
@@ -45,7 +45,7 @@ let followSection = () => {}, searchPreview = () => {};
 const editor = GZ_EDITOR.mount({ onRoute: (route, part) => followSection(route, part) });
 GZ_INFO.mount();
 
-// Opened as a page of the school's site (features/settingspage.js): the same Settings, with Close and a way to its own tab.
+// Opened as a page of the school's site (settings/page/settingspage.js): the same Settings, with Close and a way to its own tab.
 // The page around can't read this frame, but it could cover it and borrow a click, so what holds keys and grants (sharing,
 // mods, backups) asks for a tab of its own. The worker refuses those operations from a frame anyway; it trusts this frame, once
 // it has claimed its ticket, only for the writes that hold no keys or grants (nicknames, Look media, the pet library).
@@ -72,7 +72,7 @@ if (embedded) {
       .then((r) => { if (!r?.ok) throw Error('refused'); }).then(leave, () => {});
   };
   ownTabAt = (hash) => ownTab(hash);
-  // Nor any permissions API: a control that needs a grant (lib/site.js reach) opens Settings' own tab at its section.
+  // Nor any permissions API: a control that needs a grant (core/site.js reach) opens Settings' own tab at its section.
   if (typeof chrome.permissions?.request !== 'function') {
     GZ_SITE.elsewhere = (from, action) => { const at = from?.closest?.('[data-editor-section]')?.dataset.editorSection; ownTab(at ? `#${at}` : location.hash, action); };
   }
@@ -96,7 +96,7 @@ if (embedded) {
   }
 }
 // A section's parts are its children, and the children of the boxes in it (groups, More options, the navigation's bodies), each
-// box's own heading aside. A match inside a closed More options opens it; leaving the search closes it again (lib/editor.js).
+// box's own heading aside. A match inside a closed More options opens it; leaving the search closes it again (settings/editor.js).
 const BOX = '.group, .nb-body, .nb-group, .nav-own, .stack, details.more';
 const filter = () => {
   const words = GZ_FIND.parse(finder.value);
@@ -181,7 +181,7 @@ addEventListener('keydown', (e) => {
   finder.select();
 });
 
-// ---- what's new: once per version, after an update (lib/news.js) ----
+// ---- what's new: once per version, after an update (settings/news.js) ----
 GZ_NEWS.check((notes) => {
   GZ_NEWS.seen();
   if (!notes.length) return;
@@ -197,7 +197,7 @@ GZ_UI.load().then((s) => {
   // A pasted theme code shows in the preview until it is used or cancelled.
   let offer = null;
   let courses = {}; // course id -> { name, slot, org }, from the content script
-  // The Looks catalogue (lib/looks.js): built in, then the kept Looks the worker decoded into storage.local lookCatalog. Every
+  // The Looks catalogue (looks/looks.js): built in, then the kept Looks the worker decoded into storage.local lookCatalog. Every
   // list of Looks here reads it, drawn again when it changes (a Look saved, installed, renamed or removed, here or elsewhere).
   let catalog = GZ_CATALOG.list();
   const previewItems = () => navItems.links.length ? navItems : GZ_NAV.clean({ ...navItems, links: [{ id: 'previewlinkx', n: t('Research resources and academic support'), u: 'https://example.invalid/research', i: 'book', tab: true }] });
@@ -307,7 +307,7 @@ GZ_UI.load().then((s) => {
   const set = (path, v) => { const ks = path.split('.'); const last = ks.pop(); ks.reduce((o, k) => o[k], s)[last] = v; if (ks[0] === 'nav') pendingNav.add(last); if (ks[0] === 'navbar') pendingNavbar.add(last); };
   const group = (path) => path.split('.')[0];
 
-  // Relay preference and explicit health action; sessions themselves are lib/sessions-ui.js's.
+  // Relay preference and explicit health action; sessions themselves are sharing/sessions-ui.js's.
   const defaultRelay = 'https://share.frostdev.io';
   let relayBusy = false, relayKept = defaultRelay;
   const relayStatus = (text, error = false) => { $('#relay-status').textContent = text; $('#relay-status').classList.toggle('error', error); };
@@ -473,7 +473,7 @@ GZ_UI.load().then((s) => {
     $('[data-key="nav.detailed"]').checked = s.nav.detailed;
     $('#auto-times').hidden = s.auto.mode !== 'schedule';
     for (const el of $$('[data-tint]')) el.hidden = !s.courses.tint;
-    // A control only where it has an effect (lib/editor.js SHOW); a More options with nothing left to show goes too.
+    // A control only where it has an effect (settings/editor.js SHOW); a More options with nothing left to show goes too.
     for (const el of $$('[data-show]')) el.hidden = !GZ_EDITOR.SHOW[el.dataset.show](s);
     for (const d of $$('details.more')) d.hidden = ![...d.children].some((el) => el.tagName !== 'SUMMARY' && !el.hidden);
     showResets();
@@ -753,7 +753,7 @@ GZ_UI.load().then((s) => {
   });
   chrome.storage.sync.get('navItems', (r) => { navItems = N.clean(r?.navItems); renderNavItems(); showNavPreview(); });
   chrome.storage.onChanged.addListener((changes, area) => { if (area === 'sync' && changes.navItems) { navItems = N.clean(changes.navItems.newValue); renderNavItems(); showNavPreview(); } });
-  // A Look's own nav layout and page tweaks (lib/editor-xparts.js): they edit s.parts and save it with the Look.
+  // A Look's own nav layout and page tweaks (settings/editor-xparts.js): they edit s.parts and save it with the Look.
   GZ_XEDIT.mount({ s, t, save, refresh, frame, navItems: () => navItems, preview: (site) => contextPreview(site, site === previewSite ? previewPage : 'courses') });
 
   let navPick = 0, navReview = 0, navRendered = '', navImage = null;
@@ -999,7 +999,7 @@ GZ_UI.load().then((s) => {
         save(['courses']);
       });
       tint.append(box, t('Tint'));
-      // Its own Look on its pages (by id, lib/looks.js), or the student's theme. Look names are names: not translated. One this
+      // Its own Look on its pages (by id, looks/looks.js), or the student's theme. Look names are names: not translated. One this
       // device doesn't keep shows as the theme, which it wears here.
       const look = Object.assign(document.createElement('select'), { title: t('Look for {name}', { name: c.name }) });
       look.dataset.settingControl = 'courses.looks';
@@ -1023,18 +1023,18 @@ GZ_UI.load().then((s) => {
   };
   chrome.storage.local.get('seenCourses', (r) => renderCourses(r?.seenCourses));
 
-  // ---- course cards: a theme's set of card styles (lib/cards.js), worn by cards without their own ----
+  // ---- course cards: a theme's set of card styles (courses/cards.js), worn by cards without their own ----
   const renderCardSet = (raw) => {
     const n = GZ_CARDS.styles(raw)['*']?.length || 0;
     $('#card-set').hidden = !n;
     $('#card-set-note').textContent = n ? t('{n} card styles from a theme take turns on the cards that have no style of their own.', { n }) : '';
   };
   chrome.storage.sync.get('cards', (r) => renderCardSet(r?.cards));
-  // Card writes go through the background worker, one at a time with every Canvas tab's (lib/cards.js change).
+  // Card writes go through the background worker, one at a time with every Canvas tab's (courses/cards.js change).
   const cardsOp = (op) => new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:cards', ...op }, (r) => res(!chrome.runtime.lastError && r?.ok)));
   $('#card-set-clear').addEventListener('click', async () => { const ok = await cardsOp({ set: [] }); hint(ok ? t('Saved') : t('Not saved. Try again in a moment.'), !ok); });
 
-  // ---- Gradescope (lib/gradescope.js): which Canvas or Ultra course each Gradescope course goes with, changed here too ----
+  // ---- Gradescope (planner/gradescope.js): which Canvas or Ultra course each Gradescope course goes with, changed here too ----
   // Writes go through the worker's queue ('glaze:gradescope'), as the bar's on Gradescope do.
   let gsSeen = {};
   const gsOp = (op) => new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:gradescope', ...op }, (r) => res(!chrome.runtime.lastError && r?.ok)))
@@ -1066,8 +1066,8 @@ GZ_UI.load().then((s) => {
   $('#gs-ask').addEventListener('click', () => gsOp({ op: 'hide', hide: false }));
   $('#gs-forget').addEventListener('click', () => gsOp({ op: 'bind', key: null }));
 
-  // ---- Google Calendar sync (lib/gcal.js, through the worker: 'glaze:gcal'), Chrome only ----
-  // Behind the build-time switch (lib/gcal.js ON): off, the section stays hidden and nothing here runs.
+  // ---- Google Calendar sync (planner/gcal.js, through the worker: 'glaze:gcal'), Chrome only ----
+  // Behind the build-time switch (planner/gcal.js ON): off, the section stays hidden and nothing here runs.
   if (GZ_GCAL.ON) {
     $('#gcal').hidden = false; $('#sharing-calendar').hidden = false; for (const link of $$('[data-gcal-link]')) link.hidden = false;
     // Offered where chrome.identity.getAuthToken signs in with the browser's own Google account: Google Chrome (and plain
@@ -1172,10 +1172,10 @@ GZ_UI.load().then((s) => {
     if (area === 'local' && (changes.gradescope || changes.seenCourses)) gsLoad();
     if (area === 'sync' && changes.cards) renderCardSet(changes.cards.newValue);
     if (area === 'sync' || (area === 'local' && changes.freshDefaults)) syncSettings();
-    if (area === 'local' && changes[GZ_MEDIA.INDEX]) GZ_EDITOR_XBG.kept(); // the files kept for backgrounds (lib/media.js)
+    if (area === 'local' && changes[GZ_MEDIA.INDEX]) GZ_EDITOR_XBG.kept(); // the files kept for backgrounds (looks/media.js)
   });
 
-  // ---- share: a theme code is the palette, look and background, checked by lib/share.js ----
+  // ---- share: a theme code is the palette, look and background, checked by sharing/share.js ----
   let partsStorageRead = 0;
   const partsStorage = async () => {
     const mine = ++partsStorageRead, { lookX } = await chrome.storage.sync.get('lookX');
@@ -1195,10 +1195,10 @@ GZ_UI.load().then((s) => {
     try { code = await GZ_SHARE.encode(s, cards, s.parts, { files: false }); } catch (e) { return hint(t(e.why || e.message, e.vars), true); }
     try { await navigator.clipboard.writeText(code); hint(t('Theme code copied.')); } catch { $('#share-code').value = code; $('#share-code').select(); hint(t('Copy the code from the box.')); }
   });
-  // from: the gallery Look the code came with ({ name, author, gallery }), one of the student's own (lib/looks.js kept, with
+  // from: the gallery Look the code came with ({ name, author, gallery }), one of the student's own (looks/looks.js kept, with
   // `kept`), or null for a pasted code.
   let from = null;
-  // The background file the worker kept for a gallery or share offer, pending (lib/media.js) until the offer is used: any other
+  // The background file the worker kept for a gallery or share offer, pending (looks/media.js) until the offer is used: any other
   // end of the offer, or leaving the editor, lets it go. used: the Look (or a favorite) now names it, so it stays.
   let offerFile = '', offerGeneration = 0;
   const letGo = (used = false) => {
@@ -1217,7 +1217,7 @@ GZ_UI.load().then((s) => {
     try { got = await GZ_SHARE.decode(code); } catch (e) { if (generation !== offerGeneration) return; endOffer(); return hint(t(e.why || e.message, e.vars), true); }
     if (generation !== offerGeneration) return; // Cancel, another code or leaving the editor won while decoding.
     const and = (names) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(names);
-    // A Look part's sentence (lib/lookparts.js): a list in it is Glaze's own names, each translated, then joined.
+    // A Look part's sentence (looks/lookparts.js): a list in it is Glaze's own names, each translated, then joined.
     const say = (n) => t(n.why, n.vars && Object.fromEntries(Object.entries(n.vars).map(([k, v]) => [k, Array.isArray(v) ? and(v.map((w) => t(w))) : v])));
     // Every code is someone else's Look here (pasted, the gallery's, a Look share's): one that takes away signing out or
     // the account, or adds a link without https or named as Glaze's own, is refused whole, with its reasons.
@@ -1280,17 +1280,17 @@ GZ_UI.load().then((s) => {
       for (const k of GZ_HISTORY.KEYS) s[k] = offer[k];
       s.card = offer.card;
       s.nav = offer.nav;
-      // How Glaze's own navigation bar looks and sits (lib/share.js NAVBAR); whether it is on stays the student's.
+      // How Glaze's own navigation bar looks and sits (sharing/share.js NAVBAR); whether it is on stays the student's.
       s.navbar = { ...offer.navbar, on: s.navbar.on };
-      // The sidebar's appearance a Look brings (lib/share.js): its style, surface and corners only.
+      // The sidebar's appearance a Look brings (sharing/share.js): its style, surface and corners only.
       const sidebarLook = ['style', 'surface', 'radius'].some((k) => s.sidebar[k] !== offer.sidebar[k]);
       if (sidebarLook) for (const k of ['style', 'surface', 'radius']) s.sidebar[k] = offer.sidebar[k];
       pendingNav.clear();
-      // A theme's card styles take turns on the cards without their own (lib/cards.js).
+      // A theme's card styles take turns on the cards without their own (courses/cards.js).
       const set = offer.cardSet;
       if (set.length) cardsOp({ set });
       $('#share-code').value = '';
-      // A Look from the gallery is one of the student's own from now on (lib/looks.js), in the picker with the rest.
+      // A Look from the gallery is one of the student's own from now on (looks/looks.js), in the picker with the rest.
       if (from?.gallery) keepFavorite(GZ_CATALOG.make(chosen.code, from.name, from.author, 'gallery'));
       endOffer(true); // its background file, if it brought one, is kept now
       fill();
@@ -1308,7 +1308,7 @@ GZ_UI.load().then((s) => {
     });
   });
 
-  // ---- gallery, favorites and history: kept on this device (storage.local), lib/history.js ----
+  // ---- gallery, favorites and history: kept on this device (storage.local), looks/history.js ----
   const local = chrome.storage.local;
   const chips = (colors) => {
     const box = Object.assign(document.createElement('span'), { className: 'chips' });
@@ -1356,7 +1356,7 @@ GZ_UI.load().then((s) => {
   // it, which wear the student's theme again.
   const removeKept = (f) => chrome.runtime.sendMessage({ type: 'glaze:looks', op: 'remove', id: GZ_CATALOG.kept(f).id })
     .then((r) => { if (!r?.ok) hint(t('Not saved. Try again in a moment.'), true); }, () => hint(t('Not saved. Try again in a moment.'), true));
-  // A kept Look picked (lib/looks.js): its code goes through the offer and "Use this theme" as it did when it came, at once.
+  // A kept Look picked (looks/looks.js): its code goes through the offer and "Use this theme" as it did when it came, at once.
   const wearKept = async (E) => {
     const f = GZ_CATALOG.keptAll(favorites).find((x) => x.id === E.id);
     if (!f) return;
@@ -1384,7 +1384,7 @@ GZ_UI.load().then((s) => {
   };
   // Redrawn only when what it shows changes: History itself, or which entries are worn now and which is the Previous Look (a
   // slider moves neither, so a drag cleans one theme per tick and builds no rows). Each entry's theme and name are made once,
-  // when History comes in (lib/history.js), and its name again when the Looks catalogue does.
+  // when History comes in (looks/history.js), and its name again when the Looks catalogue does.
   const renderHistory = (() => {
     let drawn = '', from = null, named = null, entries = [], shown = '';
     return () => {
@@ -1417,13 +1417,13 @@ GZ_UI.load().then((s) => {
   // The worker merges keeps and removals against storage, so two Settings tabs cannot replace each other's lists.
   const keepFavorite = (favorite) => chrome.runtime.sendMessage({ type: 'glaze:looks', op: 'keep', favorite })
     .then((r) => { const ok = r?.ok === true; hint(t(ok ? 'Saved to your favorites.' : 'Not saved. Try again in a moment.'), !ok); }, () => hint(t('Not saved. Try again in a moment.'), true));
-  // Kept with the student's Looks (lib/looks.js): in the picker at once, pressed while it is the one on offer.
+  // Kept with the student's Looks (looks/looks.js): in the picker at once, pressed while it is the one on offer.
   $('#share-fav').addEventListener('click', () => {
     const f = GZ_CATALOG.make(offer.code, from?.name || offer.preset || t('Custom theme'), from?.author || '', from?.gallery ? 'gallery' : from?.from || 'saved');
     letGo(true); // a favorite names its background file: it stays
     keepFavorite(f);
   });
-  // A Look picked on the gallery (lib/gallery.js, then the background): previewed here; the student decides.
+  // A Look picked on the gallery (looks/gallery.js, then the background): previewed here; the student decides.
   // The editor the worker opens takes it (openOptionsPage: a tab of its own). Settings framed in a school's page, open or
   // not, would otherwise take it first, and that tab would show nothing.
   const takeOffer = async () => {
@@ -1449,7 +1449,7 @@ GZ_UI.load().then((s) => {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     if (changes[GZ_CATALOG.KEY]) takeCatalog(changes[GZ_CATALOG.KEY].newValue);
-    // The worker brings the catalogue up to date (lib/background.js looks: build), awake or not.
+    // The worker brings the catalogue up to date (background/background.js looks: build), awake or not.
     if (changes.lookFavorites) { favorites = GZ_HISTORY.favorites(changes.lookFavorites.newValue); renderFavorites(); chrome.runtime.sendMessage({ type: 'glaze:looks', op: 'build' }, () => void chrome.runtime.lastError); }
     if (changes.lookHistory) { history = GZ_HISTORY.entries(changes.lookHistory.newValue); renderHistory(); }
     if (changes.galleryOffer?.newValue) takeOffer();
@@ -1471,8 +1471,8 @@ GZ_UI.load().then((s) => {
     }
   }).catch(() => {});
 
-  // ---- Look rotation's list: kept on this computer (storage.local), lib/lookx.js. Your own pointer picture is
-  // lib/editor-pointer.js's. ----
+  // ---- Look rotation's list: kept on this computer (storage.local), looks/lookx.js. Your own pointer picture is
+  // settings/editor-pointer.js's. ----
   let rotateLooks = [];
   const renderExtras = () => {
     $('#rotate-at').hidden = s.extras.rotate !== 'daily';
@@ -1497,7 +1497,7 @@ GZ_UI.load().then((s) => {
     if (changes.rotateLooks || changes.lookFavorites) renderRotate();
   });
 
-  // ---- the restore list (#restore-pick): what a read file holds (lib/backup.js read), every category ticked; an old Notes
+  // ---- the restore list (#restore-pick): what a read file holds (background/backup.js read), every category ticked; an old Notes
   // zip goes into an account on this device. → { ticked: Set, account } once Restore is pressed, or null.
   const askRestore = (() => {
     const dialog = $('#restore-pick'), cats = $('#restore-cats'), go = $('#restore-ok'), field = $('#restore-account-field'), select = $('#restore-account');
@@ -1535,7 +1535,7 @@ GZ_UI.load().then((s) => {
   })();
 
   // ---- backup ----
-  // One file (lib/backup.js): the settings, with Better To Do's own tasks and plans (storage.local, per Canvas site and user)
+  // One file (background/backup.js): the settings, with Better To Do's own tasks and plans (storage.local, per Canvas site and user)
   // and the pet beside them, card styles and bookmarks (a picture kept on this computer stays here), Look favorites, every
   // Notes account, and this device's own records. Restore… lists what a file holds; each ticked category joins what is here.
   const backupNames = () => ({ settings: t('Settings and Looks'), notes: t('Notes'), tasks: t('Tasks and pet'), dashNotes: t('Dashboard notes'),
@@ -1586,7 +1586,7 @@ GZ_UI.load().then((s) => {
     if (next.navbar.brand === 'custom') next.navbar.brand = 'glaze';
     const mediaSrc = raw.parts?.x?.bg?.media?.src;
     // A kept file isn't in a backup: unless this computer still has it (a backup put back where it was made), as the worker
-    // that keeps it lists it (lib/media.js).
+    // that keeps it lists it (looks/media.js).
     const kept = typeof mediaSrc === 'string' && mediaSrc.startsWith('file:') ? mediaSrc.slice(5) : '';
     const mediaMissing = next.bg.kind === 'media' && !!kept
       && !(await chrome.runtime.sendMessage({ type: 'glaze:media', op: 'list' }).catch(() => null))?.files?.some((f) => f.h === kept);
@@ -1683,7 +1683,7 @@ GZ_UI.load().then((s) => {
     const touched = GZ_EDITOR.reset(s, Object.keys(defaults), defaults);
     pendingNav.clear();
     // Keep image IDs, per-course styles/bookmarks, local data and share keys: the worker resets only the files kept for Looks'
-    // backgrounds (lib/media.js). The Look's parts go too: they are part of the Look being reset.
+    // backgrounds (looks/media.js). The Look's parts go too: they are part of the Look being reset.
     s.parts = null;
     GZ_EDITOR_X.render(true); // Discard unsaved shader text even when there were no saved parts.
     save([...touched, 'parts']);
@@ -1694,7 +1694,7 @@ GZ_UI.load().then((s) => {
     chrome.runtime.sendMessage({ type: 'glaze:sites', op: 'reset' }).catch(() => {});
   });
 
-  // ---- Sites: the sites the student said yes to (lib/background.js approved), each with Remove, which only the worker does.
+  // ---- Sites: the sites the student said yes to (background/background.js approved), each with Remove, which only the worker does.
   // Each LMS's own hosts (GZ_BUILT_IN) are Glaze's anyway, so they aren't listed.
   const KINDS = { canvas: 'Canvas', moodle: 'Moodle', ultra: 'Blackboard Ultra' };
   const siteSaid = (text) => { $('#site-status').textContent = text; };
@@ -1718,7 +1718,7 @@ GZ_UI.load().then((s) => {
         remove.disabled = true;
         const done = await chrome.runtime.sendMessage({ type: 'glaze:sites', op: 'remove', origin }).catch(() => null);
         if (!done?.ok) { remove.disabled = false; siteSaid(t('Not saved. Try again in a moment.')); return; }
-        // And the browser's grant for it, where the student gave one for exactly this site (lib/site.js handBack).
+        // And the browser's grant for it, where the student gave one for exactly this site (core/site.js handBack).
         const site = GZ_SITE.address(origin);
         if (site?.origin === origin) await GZ_SITE.handBack(site);
         siteSaid(t('Removed {site}. Glaze no longer runs there.', { site: host }));
@@ -1730,7 +1730,7 @@ GZ_UI.load().then((s) => {
     }));
     $('#site-empty').hidden = sites.size > 0;
   };
-  // Add a site, the first screen's way (lib/site.js allow): the browser's prompt from the submit itself, then the check;
+  // Add a site, the first screen's way (core/site.js allow): the browser's prompt from the submit itself, then the check;
   // a course site is listed with its LMS, anything else has its grant handed back, with the course sites nearby to pick.
   // Where Glaze holds every site (Safari), a school's own site is added from its pages' card instead.
   const addForm = $('#site-add'), addInput = $('#site-address'), addGo = $('#site-allow');
@@ -1784,7 +1784,7 @@ GZ_UI.load().then((s) => {
     fill(); save(touched);
     });
   }
-  // A Look's own navigation layout and page tweaks are parts of the Look (lib/editor-xparts.js), not settings: the section's
+  // A Look's own navigation layout and page tweaks are parts of the Look (settings/editor-xparts.js), not settings: the section's
   // Reset takes that part out of the Look, as its own button does, and can be undone.
   const LOOK_PART = { 'look/nav-layout': 'nav', 'look/rules': 'rules' };
   const LOOK_PARTS = { 'look/pointer': ['pointer', 'cursor'], 'look/motion': ['anim', 'fx', 'type'] };
@@ -1821,30 +1821,30 @@ GZ_UI.load().then((s) => {
     }
     $('#nav-reset').hidden = JSON.stringify(navItems) === JSON.stringify(N.clean()) && !navDiffers([...Object.keys(N.SPEC).filter((k) => k !== 'li'), 'labels', 'size', 'collapsed', 'logo']);
   };
-  // Look parts builders (lib/editor-x*.js): they edit s.parts and save it like any other key. The pointer's cards
-  // (lib/editor-pointer.js) are the student's, not the Look's: they save extras; its This Look's pointer edits s.parts.
+  // Look parts builders (settings/editor-x*.js): they edit s.parts and save it like any other key. The pointer's cards
+  // (settings/editor-pointer.js) are the student's, not the Look's: they save extras; its This Look's pointer edits s.parts.
   GZ_EDITOR_X.mount({ s, save: (...args) => { showResets(); save(...args); }, preview, t, frame, hint });
   $('#editor-version').textContent = `Glaze ${chrome.runtime.getManifest().version}`;
   GZ_PET_LIBRARY.mount($('#pet-library'), t);
-  // Mods (lib/editor-mods.js): installed mods, adding one, its install prompt and dev mode.
-  const widgets = GZ_WIDGETEDIT.mount({ t, show: (route) => editor.show(route, { scroll: true }) }); // widgets made of blocks (lib/editor-widget.js)
-  navbarEditor = GZ_NAVBAREDIT.mount({ t, settings: () => s, hint }); // Glaze navigation's items (lib/editor-navbar.js)
+  // Mods (settings/editor-mods.js): installed mods, adding one, its install prompt and dev mode.
+  const widgets = GZ_WIDGETEDIT.mount({ t, show: (route) => editor.show(route, { scroll: true }) }); // widgets made of blocks (settings/editor-widget.js)
+  navbarEditor = GZ_NAVBAREDIT.mount({ t, settings: () => s, hint }); // Glaze navigation's items (settings/editor-navbar.js)
   GZ_MODSEDIT.mount({ t, and: (list) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(list), edit: widgets.edit, canEdit: widgets.canEdit,
     when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium' }).format(at), show: (route) => editor.show(route, { scroll: true }) });
-  // AI (lib/editor-ai.js): its switch, the providers, the overall model and each feature's own, and the record of calls.
-  // Writer (lib/editor-writer.js): the selects' choices, the papers kept by course and the personal dictionary.
+  // AI (settings/editor-ai.js): its switch, the providers, the overall model and each feature's own, and the record of calls.
+  // Writer (settings/editor-writer.js): the selects' choices, the papers kept by course and the personal dictionary.
   GZ_WRITEREDIT.mount({ t, hint, elsewhere: ownTabAt });
   GZ_AIEDIT.mount({ t, when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium', timeStyle: 'short' }).format(at),
     pct: (x) => GZ_I18N.pct(Math.round(x * 100), GZ_I18N.ui()) });
-  // Agents (lib/editor-agents.js): agent access, the helper's link, the paired apps and their groups, and the activity list.
+  // Agents (settings/editor-agents.js): agent access, the helper's link, the paired apps and their groups, and the activity list.
   GZ_AGENTSEDIT.mount({ t, hint, when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium', timeStyle: 'short' }).format(at),
     day: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium' }).format(at) });
   followSection(editor.route(), editor.part());
 
-  // Opening the editor wakes the mod blocklist check, which asks only if one is due (lib/blocklist.js).
+  // Opening the editor wakes the mod blocklist check, which asks only if one is due (mods/blocklist.js).
   try { chrome.runtime.sendMessage({ type: 'glaze:blocklist' }, () => void chrome.runtime.lastError); } catch { /* no worker */ }
 
-  // Report a problem: a GitHub issue filled in here with the version, browser and system (lib/widgets.js feedback).
+  // Report a problem: a GitHub issue filled in here with the version, browser and system (core/widgets.js feedback).
   $('#report-link').href = GZ_WIDGETS.feedback({ version: chrome.runtime.getManifest().version, ua: navigator.userAgent, lang: navigator.language });
 
   fill();

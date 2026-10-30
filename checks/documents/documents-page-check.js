@@ -1,4 +1,4 @@
-// Documents as a page of the site (features/settingspage.js, papers.js's embedded section), headless: the real extension on
+// Documents as a page of the site (settings/page/settingspage.js, papers.js's embedded section), headless: the real extension on
 // saved Ultra, Canvas and Moodle pages under invented school origins, Glaze's bar holding its Documents, Search and Settings
 // items. The bar's Documents opens it beside the bar, marked where you are, the page under it out of reach; a document opens
 // in the same frame and Back returns to the list (the tab's history one entry per document, the page told no key); typing
@@ -12,9 +12,9 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
 const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
-const G = require(path.join(root, 'defaults.js'));
-const PA = require(path.join(root, 'lib/writer-papers.js'));
-const ZIP = require(path.join(root, 'lib/zip.js'));
+const G = require(path.join(root, 'content/defaults.js'));
+const PA = require(path.join(root, 'writer/writer-papers.js'));
+const ZIP = require(path.join(root, 'core/zip.js'));
 const CANVAS = 'https://emb.school.instructure.com', MOODLE = 'https://moodle.school.test', ULTRA = 'https://bb.school.test';
 const fixture = (name) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', name), 'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
 const PAGES = { [`${CANVAS}/`]: 'canvas-dashboard-cards.html', [`${MOODLE}/my/`]: 'moodle-dashboard.html', [`${ULTRA}/ultra/course`]: 'ultra-courses.html' };
@@ -32,7 +32,7 @@ const docx = (text) => Buffer.concat(ZIP.zip([{ name: 'word/document.xml', data:
 // Writer's gray text: the model's answer to writer.complete after the student types " it" at the end of LAST.
 const LAST = 'When Sethe returns to the clearing, the memory is not something she owns;';
 const GHOST = ' arrives uninvited and rearranges the present.';
-// In the worker: Chrome's Prompt API as lib/ai/providers/device.js reads it (checks/documents/documents-ai-check.js's stand-in).
+// In the worker: Chrome's Prompt API as ai/providers/device.js reads it (checks/documents/documents-ai-check.js's stand-in).
 const INSTALL = () => {
   if (globalThis.__lm) return 'kept';
   const lm = globalThis.__lm = { prompts: [] };

@@ -6,8 +6,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-require('../../extension/lib/coursetabs.js');
-const D = require('../../extension/defaults.js');
+require('../../extension/navigation/coursetabs.js');
+const D = require('../../extension/content/defaults.js');
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const between = (src, a, b) => { const i = src.indexOf(a); assert.ok(i >= 0, a); const j = src.indexOf(b, i); assert.ok(j > i, b); return src.slice(i, j); };
 const S = (navbar = {}, enhance = {}, tabs = {}) => D.GZ_SANITIZE({ navbar: { on: true, ...navbar }, enhance: { tabs: true, ...enhance }, tabs });
@@ -33,8 +33,8 @@ test("the rule: 'nav' only where this page's bar is a top bar that holds the tab
   assert.equal(R(S({ place: 'none' }), false), 'above');
 });
 
-test("features/coursetabs.js resolves 'auto' from the bar on the page (the page around a tab's frame), beside 'nav'", () => {
-  const src = read('features/coursetabs.js');
+test("navigation/page/coursetabs.js resolves 'auto' from the bar on the page (the page around a tab's frame), beside 'nav'", () => {
+  const src = read('navigation/page/coursetabs.js');
   const at = (stored, words, framed = false) => {
     const doc = (w) => ({ documentElement: { getAttribute: () => w } });
     const ctx = vm.createContext({ P: () => ({ at: stored }), framed, innerWidth: 1280, document: doc(framed ? 'rail open float' : words), parent: { innerWidth: 1280, document: doc(words) }, GZ_TABS_AUTO: D.GZ_TABS_AUTO });
@@ -51,7 +51,7 @@ test("features/coursetabs.js resolves 'auto' from the bar on the page (the page 
 });
 
 test("auto keeps the strip on phones, where the navigation is a bottom bar", () => {
-  const src = read('features/coursetabs.js');
+  const src = read('navigation/page/coursetabs.js');
   for (const innerWidth of [390, 899, 900, 1280]) {
     const ctx = vm.createContext({ P: () => ({ at: 'auto' }), framed: false, innerWidth,
       document: { documentElement: { getAttribute: () => 'top float tabs' } } });
@@ -64,7 +64,7 @@ test('changing a top bar to a rail repositions automatic tabs even when both bar
   const placed = [];
   const ctx = vm.createContext({ words: 'top float tabs', lay: { words: 'rail open float tabs', tabs: true, left: 272, top: 0 },
     X: { setVar() {} }, html: { setAttribute() {} }, tabsApi: () => ({ place: () => placed.push(true) }) });
-  vm.runInContext(`${between(read('features/navbar.js'), '  const room = () => {', '  const geometry = ')}\nroom();`, ctx);
+  vm.runInContext(`${between(read('navigation/page/navbar.js'), '  const room = () => {', '  const geometry = ')}\nroom();`, ctx);
   assert.equal(placed.length, 1, 'the old hidden strip must be restored immediately');
 });
 
@@ -73,7 +73,7 @@ test('the first paint without a cached strip keeps no room for one on a top-bar 
   const canvas = (navbar, pathname = '/courses/5') => {
     const ctx = vm.createContext({ sessionStorage: { getItem: () => null }, location: { pathname }, setAttr: (k, v) => { attrs[k] = v; }, GZ_TABS_AUTO: D.GZ_TABS_AUTO,
       I: { links: [1], solo: true, settings: S(navbar) } });
-    vm.runInContext(`${between(read('content-canvas.js'), '  const paintTabs = () => {', '\n  const syncNav')}\npaintTabs();`, ctx);
+    vm.runInContext(`${between(read('content/content-canvas.js'), '  const paintTabs = () => {', '\n  const syncNav')}\npaintTabs();`, ctx);
     return attrs['data-gz-ctabs'];
   };
   assert.equal(canvas({ place: 'top' }), 'nav');
@@ -84,7 +84,7 @@ test('the first paint without a cached strip keeps no room for one on a top-bar 
     const ctx = vm.createContext({ sessionStorage: { getItem: () => null }, location: { pathname }, tabFrame, isPreview: true, GZ_TABS_AUTO: D.GZ_TABS_AUTO,
       parent: { innerWidth: 1280, document: { documentElement: { getAttribute: () => parentWords } } }, tabsOn: () => true,
       I: { settings: S(navbar), setAttr: (k, v) => { attrs[k] = v; } } });
-    vm.runInContext(`${between(read('content-ultra.js'), '  const paintCourses = () => {', '    if (isPreview) return;')}}\npaintCourses();`, ctx);
+    vm.runInContext(`${between(read('content/content-ultra.js'), '  const paintCourses = () => {', '    if (isPreview) return;')}}\npaintCourses();`, ctx);
     return attrs['data-gz-ctabs'];
   };
   assert.equal(ultra({ place: 'top' }), 'nav');
@@ -100,13 +100,13 @@ const worker = (sync, local = {}) => {
   const none = { addListener() {} };
   const ctx = vm.createContext({ URL, TextEncoder, TextDecoder, structuredClone, console: { ...console, warn() {} }, crypto, atob, btoa, setTimeout, clearTimeout, Date, navigator: {},
     GZ_SESSIONS: { make: () => ({ handle: async () => ({ ok: true }), connect: () => () => {}, stop() {}, changed() {} }) },
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), ctx); },
     chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: none, onConnect: none, onInstalled: { addListener: (f) => listeners.installed.push(f) }, onStartup: none },
     tabs: { onRemoved: none, query: async () => [] }, storage: { local: area(local), sync: area(sync), onChanged: none },
     scripting: { unregisterContentScripts: async () => {}, registerContentScripts: async () => {}, getRegisteredContentScripts: async () => [] },
     permissions: { contains: async () => false, getAll: async () => ({ origins: [] }) }, action: { setIcon: async () => {} }, declarativeContent: { onPageChanged: { removeRules: (a, f) => f?.(), addRules: (a, f) => f?.() } } } });
-  vm.runInContext(read('lib/background.js'), ctx);
+  vm.runInContext(read('background/background.js'), ctx);
   return { install: async (reason) => { for (const f of listeners.installed) f({ reason }); for (let i = 0; i < 40; i++) await new Promise(setImmediate); } };
 };
 

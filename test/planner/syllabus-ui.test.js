@@ -1,5 +1,5 @@
 // Syllabus import as it runs: the background worker's writes ('glaze:syllabus', 'glaze:gpascale') arriving in any
-// order, and features/syllabus.js on a small stand-in page while the code it waits for is held.
+// order, and planner/page/syllabus.js on a small stand-in page while the code it waits for is held.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -19,21 +19,21 @@ const area = (data = {}) => ({
   set: async (p) => { await null; Object.assign(data, structuredClone(p)); },
   remove: async (k) => { for (const x of [].concat(k)) delete data[x]; },
 });
-// lib/background.js on those areas; send(m) answers as the worker would to a Canvas tab on ORIGIN.
+// background/background.js on those areas; send(m) answers as the worker would to a Canvas tab on ORIGIN.
 const worker = () => {
   const listeners = [];
   const local = area(), sync = area();
   const none = { addListener() {} };
   const ctx = vm.createContext({
     URL, console, setTimeout, clearTimeout, TextEncoder, crypto: require('node:crypto').webcrypto,
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('lib', f)), ctx); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('background', f)), ctx); },
     chrome: {
       runtime: { id: ID, getURL: (p = '') => `chrome-extension://${ID}/${p}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: none, onStartup: none, onConnect: none },
       storage: { local, sync, onChanged: none },
       scripting: { executeScript: () => Promise.resolve([]) },
     },
   });
-  vm.runInContext(read('lib/background.js'), ctx);
+  vm.runInContext(read('background/background.js'), ctx);
   const sender = { id: ID, tab: { id: 1 }, frameId: 0, url: `${ORIGIN}/courses/25` };
   const send = (m) => new Promise((resolve) => { for (const f of listeners) f(m, sender, (r) => resolve(JSON.parse(JSON.stringify(r ?? null)))); });
   return { send, local: local.data, sync: sync.data };
@@ -72,7 +72,7 @@ test('two courses\' scales saved at once both reach the GPA', async () => {
 
 test('a GPA change that would push another course out of the full synced item is refused, never truncated', async () => {
   // Codex's witness: the synced item close to its 8 KB cap, then one course given a long scale.
-  const C = require('../../extension/lib/gradecalc.js');
+  const C = require('../../extension/planner/gradecalc.js');
   const raw = {};
   for (let i = 0; i < 100; i++) {
     const k = `canvas:${ORIGIN}/${10000 + i}`;
@@ -101,12 +101,12 @@ test('the GPA table and syllabus import share that one writer: a credits change 
   assert.equal((await w.send({ type: 'glaze:gpa', key, patch: { c: 3, l: 0 } })).ok, true, 'defaults take a choice away');
   assert.deepEqual(w.sync.gpaCourses, { [key]: { s: 'A 93, B 83' } });
   assert.deepEqual(await w.send({ type: 'glaze:gpa', key, patch: { c: 99 } }), { ok: false, error: 'bad' });
-  // features/grades.js writes no whole gpaCourses of its own any more.
-  assert.doesNotMatch(read('features/grades.js'), /storage\.sync\.set\(\{\s*gpaCourses/);
-  assert.doesNotMatch(read('features/syllabus.js'), /gpaCourses:/);
+  // planner/page/grades.js writes no whole gpaCourses of its own any more.
+  assert.doesNotMatch(read('planner/page/grades.js'), /storage\.sync\.set\(\{\s*gpaCourses/);
+  assert.doesNotMatch(read('planner/page/syllabus.js'), /gpaCourses:/);
 });
 
-// ---- features/syllabus.js on a stand-in page ----
+// ---- planner/page/syllabus.js on a stand-in page ----
 class El {
   constructor(tag) { Object.assign(this, { tagName: tag.toUpperCase(), children: [], attrs: {}, dataset: {}, style: {}, open: false, parentNode: null, on: {}, files: [], text: '' }); }
   append(...k) { for (const c of k) if (c && typeof c === 'object') { c.parentNode = this; this.children.push(c); } }
@@ -127,7 +127,7 @@ class El {
   get textContent() { return this.text; }
   set textContent(v) { this.text = String(v); }
 }
-// extra: more of the page's globals (a stand-in features/import.js, say).
+// extra: more of the page's globals (a stand-in planner/page/import.js, say).
 const page = (extra = {}) => {
   const body = new El('body');
   const state = { settings: { enabled: true, enhance: { syllabus: true } }, on: true, cid: '25' };
@@ -138,7 +138,7 @@ const page = (extra = {}) => {
     document: { body, activeElement: null, createElement: (t) => new El(t), getElementById: () => null, querySelector: () => null },
     location: { origin: ORIGIN, pathname: '/courses/25/modules' },
     chrome: undefined,
-    GZ_I18N: require('../../extension/lib/i18n.js'),
+    GZ_I18N: require('../../extension/core/i18n.js'),
     GZ_CTX: {
       t: (k) => k, locale: () => 'en', settings: () => state.settings, on: () => state.on, canvasCourseId: () => state.cid,
       profile: () => Promise.resolve({ id: 3 }), canvasCourses: () => Promise.resolve([{ id: '25' }]),
@@ -151,7 +151,7 @@ const page = (extra = {}) => {
     },
     ...extra,
   });
-  vm.runInContext(read('features/syllabus.js'), ctx);
+  vm.runInContext(read('planner/page/syllabus.js'), ctx);
   // Lets what's held through, and everything asked for after it.
   return { UI: ctx.GZ_SYL_UI, body, state, ctx, release: () => { open.now = true; while (held.length) held.shift()(); } };
 };
@@ -178,7 +178,7 @@ test('the dialog doesn\'t open when the feature was turned off while its code wa
 });
 
 test('a second Read it calls the first read off, Stop reading calls off the newest, and only a read still wanted is reviewed', async () => {
-  // features/import.js held: each read waits until the test answers it.
+  // planner/page/import.js held: each read waits until the test answers it.
   const reads = [];
   const p = page({ GZ_IMPORT: { read: (file, opts) => new Promise((resolve) => reads.push({ opts, resolve })), note: () => '', doubt: () => false } });
   const opening = p.UI.open();
@@ -229,7 +229,7 @@ test('a file is read only on the student\'s own click of Read it, never a script
   assert.equal(reads.length, 1, 'the student\'s click reads it');
 });
 
-// ACA-7: the date reader is told a term start only when the course has one; "now" is not a start (lib/syllabus.js extract).
+// ACA-7: the date reader is told a term start only when the course has one; "now" is not a start (planner/syllabus.js extract).
 test('a course with no term dates gives the date reader no start, one with a term gives its start', async () => {
   const startsFor = async (course) => {
     const p = page({ GZ_IMPORT: { read: async () => ({ text: 'Exam 1: September 1', ocr: null }), note: () => '', doubt: () => false } });

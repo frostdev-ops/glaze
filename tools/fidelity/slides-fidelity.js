@@ -1,5 +1,5 @@
 // Does the slides viewer draw a deck as PowerPoint does? Exports each slide of a .pptx to PNG with Microsoft PowerPoint on
-// this Mac (AppleScript), draws the same slides headless with lib/slides-render.js at the PNG's size, and compares them pixel
+// this Mac (AppleScript), draws the same slides headless with documents/slides/slides-render.js at the PNG's size, and compares them pixel
 // by pixel: a pixel differs when its channels differ by more than --tolerance in sum (default 96 of 765), a slide passes
 // when under --max of its pixels differ (default 0.02: a different slide of mostly white differs by as little as 3%; set
 // it from the first PowerPoint run). Writes ppt-<n>.png, glaze-<n>.png, diff-<n>.png (the differing
@@ -32,7 +32,7 @@ const running = () => { try { execFileSync('pgrep', ['-x', 'Microsoft PowerPoint
 const deckBytes = () => {
   const p = path.resolve(input);
   if (fs.statSync(p).isFile()) return fs.readFileSync(p);
-  const Z = require(path.join(root, 'lib/zip.js'));
+  const Z = require(path.join(root, 'core/zip.js'));
   const walk = (d, base = '') => fs.readdirSync(d, { withFileTypes: true }).filter((e) => e.name !== '.DS_Store')
     .flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name), `${base}${e.name}/`) : [[`${base}${e.name}`, fs.readFileSync(path.join(d, e.name))]]));
   return Buffer.concat(Z.zip(walk(p).sort(([a], [b]) => (a < b ? -1 : 1)).map(([name, data]) => ({ name, data: new Uint8Array(data), date: new Date(2026, 9, 30, 12) }))));
@@ -76,11 +76,11 @@ end tell`);
 // A page of the renderer's files alone (no extension), with the vendored fonts under the names writer-paper.css gives them.
 const stagePage = () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-slides-fidelity-'));
-  fs.mkdirSync(path.join(dir, 'lib/fonts'), { recursive: true });
-  for (const f of ['lib/doctext.js', 'lib/pptx.js', 'lib/pptx-geom.js', 'lib/slides-render.js', 'writer-paper.css']) fs.copyFileSync(path.join(root, f), path.join(dir, f));
-  for (const f of fs.readdirSync(path.join(root, 'lib/fonts'))) fs.copyFileSync(path.join(root, 'lib/fonts', f), path.join(dir, 'lib/fonts', f));
-  fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="writer-paper.css">'
-    + '<body style="margin:0;background:#fff"><script src="lib/doctext.js"></script><script src="lib/pptx-geom.js"></script><script src="lib/pptx.js"></script><script src="lib/slides-render.js"></script>');
+  fs.mkdirSync(path.join(dir, 'vendor/fonts'), { recursive: true });
+  for (const f of ['core/doctext.js', 'documents/slides/pptx.js', 'documents/slides/pptx-geom.js', 'documents/slides/slides-render.js', 'writer/frame/writer-paper.css']) { fs.mkdirSync(path.dirname(path.join(dir, f)), { recursive: true }); fs.copyFileSync(path.join(root, f), path.join(dir, f)); }
+  for (const f of fs.readdirSync(path.join(root, 'vendor/fonts'))) fs.copyFileSync(path.join(root, 'vendor/fonts', f), path.join(dir, 'vendor/fonts', f));
+  fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="writer/frame/writer-paper.css">'
+    + '<body style="margin:0;background:#fff"><script src="core/doctext.js"></script><script src="documents/slides/pptx-geom.js"></script><script src="documents/slides/pptx.js"></script><script src="documents/slides/slides-render.js"></script>');
   return dir;
 };
 

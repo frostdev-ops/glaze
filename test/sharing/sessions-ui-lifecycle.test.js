@@ -24,7 +24,7 @@ const page = async () => {
   const node = (id) => { if (!nodes.has(id)) nodes.set(id, new Element()); return nodes.get(id); };
   node('#panel-sharing').hidden = node('#panel-backup').hidden = true;
   const state = { ok: true, on: false, sessions: [], sources: [], accounts: [], relay: 'https://share.frostdev.io' };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/lib/sessions-ui.js'), 'utf8'), {
+  vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/sharing/sessions-ui.js'), 'utf8'), {
     URL, URLSearchParams, location: { search: '' }, navigator: {}, addEventListener() {},
     GZ_I18N: { t: (k) => k, ui: () => 'en' }, GZ_NOTES: { KEY: /^notesIdx:/ },
     document: { querySelector: node, createElement: (tag) => new Element(tag) },
@@ -52,7 +52,7 @@ const page = async () => {
 test('Settings sessions connect only while the Sharing panel is visible, including search filtering', async () => {
   const p = await page();
   assert.equal(p.ports.length, 0, 'opening another Settings tab is local only');
-  // lib/editor.js finding() unhides every panel; options.js filter() hides non-matches with .miss.
+  // settings/editor.js finding() unhides every panel; options.js filter() hides non-matches with .miss.
   p.panel.hidden = false; p.panel.classList.toggle('miss', true);
   await p.change('hidden');
   assert.equal(p.ports.length, 0, 'a non-matching search must not start sharing in a CSS-hidden panel');

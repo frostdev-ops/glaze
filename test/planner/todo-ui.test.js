@@ -1,13 +1,13 @@
-// Better To Do's page side (features/todo.js and its content.js hook) in a VM with an inert DOM, network and storage:
-// the lifecycle, request and write rules that lib/todo.js's table tests can't reach. The module's closure is reached
+// Better To Do's page side (planner/page/todo.js and its content.js hook) in a VM with an inert DOM, network and storage:
+// the lifecycle, request and write rules that planner/todo.js's table tests can't reach. The module's closure is reached
 // by appending a probe to its return value here, in the test only.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
-const T = require('../../extension/lib/todo.js');
+const D = require('../../extension/content/defaults.js');
+const T = require('../../extension/planner/todo.js');
 
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
@@ -65,7 +65,7 @@ const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, d
     addEventListener() {}, removeEventListener() {},
     chrome: {
       runtime: Object.assign(runtime, {
-        // The background worker's 'glaze:todo' (lib/background.js): one queue, lib/todo.js change, over this storage.
+        // The background worker's 'glaze:todo' (background/background.js): one queue, planner/todo.js change, over this storage.
         sendMessage: (m, cb) => {
           if (m?.type !== 'glaze:todo') return;
           const area = {
@@ -103,7 +103,7 @@ const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, d
     },
   };
   c.globalThis = c;
-  const src = read('features/todo.js').replace('  return { sync, add, cmds, mount, unmount, suspend, resume };', `  return { sync, add, cmds, mount, unmount, suspend, resume, probe: {
+  const src = read('planner/page/todo.js').replace('  return { sync, add, cmds, mount, unmount, suspend, resume };', `  return { sync, add, cmds, mount, unmount, suspend, resume, probe: {
     refresh, keepDraft, onStore, onChange, onShow, onSubmit, onClick, form: (x) => { form = x; }, formNow: () => form, save, rowOf, render, get: () => ({ data, cache, fetching, note: line?.textContent, box, dead, who }),
     seed(x) { L = GZ_TODO; who = { uid: '3', tz: 'America/New_York' }; key = 'todo:https://canvas.test/3'; prefs = { ...x.prefs };
       data = x.data || { tasks: [], items: {} }; cache = x.cache || null; started = Promise.resolve(); courses = { cids: null, names: {}, list: [] };
@@ -120,7 +120,7 @@ test('a late sharing loader for an old To Do mount cannot leave a port after tea
   const f = feature(), loaders = [];
   let ports = 0;
   f.c.GZ_SHARING_UI = { surface: () => { ports++; return () => { ports--; }; } };
-  f.c.GZ_CTX.need = (file) => file === 'features/sharing.js' ? new Promise((r) => loaders.push(r)) : Promise.resolve();
+  f.c.GZ_CTX.need = (file) => file === 'sharing/page/sharing.js' ? new Promise((r) => loaders.push(r)) : Promise.resolve();
   f.c.GZ_TODO_UI.sync(true); f.c.GZ_TODO_UI.sync(false); f.c.GZ_TODO_UI.sync(true);
   for (const done of loaders) done(); await settle();
   assert.equal(ports, 1);
@@ -128,7 +128,7 @@ test('a late sharing loader for an old To Do mount cannot leave a port after tea
 });
 
 test('a module that arrives after the list was turned off stays off', async () => {
-  const decls = read('content-canvas.js').match(/ {2}const sidebarHere = .*\n(?: {2}const \w+ = .*\n)*? {2}const syncTodo = .*\n/)[0];
+  const decls = read('content/content-canvas.js').match(/ {2}const sidebarHere = .*\n(?: {2}const \w+ = .*\n)*? {2}const syncTodo = .*\n/)[0];
   let arrive;
   const ctx = { I: { links: [1], settings: { enhance: { todo: true } } }, location: { pathname: '/' }, need: () => new Promise((r) => { arrive = r; }) };
   vm.createContext(ctx);
@@ -379,7 +379,7 @@ test("the worker takes To Do writes from a Canvas page for its own site's accoun
   const listeners = [];
   const context = vm.createContext({
     URL, console, TextEncoder, structuredClone, Promise, Date, Intl, setTimeout, clearTimeout, crypto: globalThis.crypto,
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), context); },
     chrome: {
       runtime: {
         id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => m,
@@ -388,7 +388,7 @@ test("the worker takes To Do writes from a Canvas page for its own site's accoun
       storage: { local: area(store.local, 'local'), sync: area(store.sync, 'sync'), onChanged: { addListener() {} } },
     },
   });
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   const send = (msg, sender) => new Promise((res) => {
     let kept = false;
     for (const f of listeners) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r)))) === true) kept = true;
@@ -633,7 +633,7 @@ test("the head: Add task and ⋯ only; ⋯ opens Share sessions and Export, and 
   await settle();
 });
 
-// An announcement in the list opens in Glaze's pop-up (features/announce.js, stood in for here) as its settings say, and
+// An announcement in the list opens in Glaze's pop-up (courses/page/announce.js, stood in for here) as its settings say, and
 // keeps the browser's own for a modifier or middle click; once Canvas has it as read, the list says so too.
 test('an announcement opens through GZ_ANNOUNCE for a plain click; Ctrl, Cmd, Shift, Alt keep the browser\'s', async () => {
   const f = feature();
@@ -657,7 +657,7 @@ test('an announcement opens through GZ_ANNOUNCE for a plain click; Ctrl, Cmd, Sh
   f.p.onClick(e);
   assert.equal(e.prevented, true);
   await settle();
-  assert.deepEqual(loaded, ['features/announce.js']);
+  assert.deepEqual(loaded, ['courses/page/announce.js']);
   const r = gone[0];
   assert.deepEqual({ site: r.site, entry: r.entry, courseId: r.courseId, id: r.id, url: r.url, title: r.title, course: r.course },
     { site: 'canvas', entry: 'glaze', courseId: '25', id: '7', url: 'https://canvas.test/courses/25/discussion_topics/7', title: 'Lab moved', course: 'BIO' });

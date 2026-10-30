@@ -28,8 +28,8 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
         .participant-card-wrap { display: block; width: 100%; min-height: 56px; text-align: left; border: 0; border-bottom: 1px solid #dde3eb; background: white; padding: 8px; font: inherit; }
         bb-participant-card, [bb-intersection-observer-target] { display: block; }
       </style><div id="site-wrap"><section class="routed-page route-view-container"><content-page-header>Course / Discussion</content-page-header><div class="routed-page-body"><div id="learningModulePanelContainerId"><div id="full-discussions" class="full course-discussion" bb-intersection-observer-root><div class="course-main-container"><div class="thread">Native discussion thread</div><div class="layer-details"><div><bb-discussion-settings><div class="full-panel-details"><div class="discussion-settings student-details"><h3>Details &amp; Information</h3><p>Discussion due Sunday.</p></div></div></bb-discussion-settings></div><div id="full-panel-details"><div class="discussion-participants show-for-large-up"><h3>Participation</h3><ul id="participantsFilterList">${Array.from({ length: 24 }, (_, i) => `<li><button class="participant-card-wrap" data-index="${i}"><bb-participant-card><div bb-intersection-observer-target intersection-observer-target-id="${i}"></div></bb-participant-card></button></li>`).join('')}</ul></div></div></div></div></div></div></div></section></div>`);
-      for (const file of ['features/apps.css', 'features/sidebar.css']) await page.addStyleTag({ path: path.join(root, file) });
-      for (const file of ['lib/widgets.js', 'lib/sidebar.js']) await page.addScriptTag({ path: path.join(root, file) });
+      for (const file of ['core/page/apps.css', 'navigation/page/sidebar.css']) await page.addStyleTag({ path: path.join(root, file) });
+      for (const file of ['core/widgets.js', 'navigation/sidebar.js']) await page.addScriptTag({ path: path.join(root, file) });
       await page.evaluate(({ style, surface }) => {
         window.nativeHost = document.querySelector('.layer-details');
         window.nativeTargets = [...document.querySelectorAll('[bb-intersection-observer-target]')];
@@ -48,7 +48,7 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
         window.SET = { enhance: { sidebar: true }, sidebar: { style, surface, open: 'expanded' } };
         window.GZ_CTX = { site: 'ultra', t: (s, v) => s.replace(/\{(\w+)\}/g, (_, k) => v?.[k] ?? ''), need: async () => {}, account: async () => '_42_1', courseId: () => '_101_1', settings: () => SET };
       }, { style, surface });
-      await page.addScriptTag({ path: path.join(root, 'features/sidebar.js') });
+      await page.addScriptTag({ path: path.join(root, 'navigation/page/sidebar.js') });
       await page.evaluate(async () => { GZ_SIDEBAR_UI.sync(true); await GZ_SIDEBAR_UI.ready(); });
       await page.waitForSelector('[data-gz-sidebar-host]');
       await page.waitForTimeout(180);

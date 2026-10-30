@@ -5,7 +5,7 @@
 // the pop-up with the page left where it was and its own handlers never hearing it, a modifier click passing through, and
 // an unreadable announcement opening the site's page. Screenshots of each list with the pop-up open.
 const fs = require('node:fs'), path = require('node:path');
-const G = require('../../extension/defaults.js');
+const G = require('../../extension/content/defaults.js');
 const UB = 'https://bb.school.test', MD = 'https://moodle.school.test';
 const fixture = (name) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', name), 'utf8');
 const day = (n) => new Date(Date.now() + n * 864e5).toISOString();

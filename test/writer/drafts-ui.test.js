@@ -1,4 +1,4 @@
-// The draft backup as a student meets it (ACA-4, ACA-6): content.js's draft hooks, lib/drafts.js and features/drafts.js
+// The draft backup as a student meets it (ACA-4, ACA-6): content.js's draft hooks, writer/drafts.js and writer/page/drafts.js
 // running together in a VM on a stand-in page, over one in-memory storage.local that a later "page" shares with an earlier
 // one, as a reload or a second sign-in on the same browser profile would. Time is the test's: nothing waits.
 const test = require('node:test');
@@ -10,7 +10,7 @@ const { El, matches } = require('../stand-in-dom.js');
 
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const source = read('content.js');
+const source = read('content/content.js');
 const block = (from, to) => { const a = source.indexOf(from), b = source.indexOf(to, a); assert.ok(a > 0 && b > a, `markers ${from} … ${to}`); return source.slice(a, b); };
 const settle = async (n = 12) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 
@@ -20,7 +20,7 @@ const FIRST = 'My first attempt at this reply, long enough to keep.';
 const SECOND = 'A second attempt, also long enough to be worth keeping.';
 const T0 = Date.UTC(2026, 9, 20, 12);
 
-// The worker (lib/background.js) the pages over one storage share, on the test's clock: what they send it ('glaze:drafts')
+// The worker (background/background.js) the pages over one storage share, on the test's clock: what they send it ('glaze:drafts')
 // runs in its one queue, against that storage.
 const workers = new WeakMap();
 let tabs = 0;
@@ -34,14 +34,14 @@ const workerFor = (store, clock) => {
   class Clock extends Date { static now() { return clock.now; } constructor(...a) { super(...(a.length ? a : [clock.now])); } }
   const context = vm.createContext({
     URL, console, TextEncoder, TextDecoder, structuredClone, Promise, Date: Clock, setTimeout, clearTimeout, crypto: globalThis.crypto, atob, btoa, navigator: {},
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), context); },
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area(store), sync: area({}), onChanged: { addListener() {} } },
     },
   });
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   const send = (m, sender, cb) => {
     for (const f of listeners) if (f(structuredClone(m), sender, (r) => cb?.(r === undefined ? r : structuredClone(r))) === true) return;
     Promise.resolve().then(() => cb?.());

@@ -11,7 +11,7 @@
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto'), fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const env = require('./check-env.js'), M = require('../../checks/mocks/ultra-mock.js'), NET = require('./practice-ai.js');
-const DT = require('../../extension/lib/doctext.js');
+const DT = require('../../extension/core/doctext.js');
 
 const usage = 'NODE_PATH=/Users/jame/Projects/gemino/node_modules node tools/dev/writer-practice.js [--ext <extension folder>] [--fresh] [--ai mock] [--smoke]';
 const options = (args) => {
@@ -69,7 +69,7 @@ const stage = (src, to, hosts = []) => {
 
 // ---- AI in the practice window ----------------------------------------------------------------------------------------
 // What the proxy lets through: an address one of Glaze's AI connections names (the worker's own store, glaze-ai/vault,
-// lib/ai/broker.js) and Glaze holds the grant for. Read in the worker, the one place that may ask (a key never leaves it):
+// ai/broker.js) and Glaze holds the grant for. Read in the worker, the one place that may ask (a key never leaves it):
 // for every previously allowed address (a removed connection or grant must stop working at once). Unknown addresses
 // share a negative cache for 300 ms, so the browser's own background requests don't keep waking the worker.
 const connections = async (context, id) => {
@@ -344,7 +344,7 @@ const run = async ({ context, mock, shots, errors, ai }) => {
   const read = squash(await DT.docx(new Uint8Array(fs.readFileSync(file))));
   const paras = docText.split('\n').map(squash).filter((x) => x.length > 20), missing = paras.filter((x) => !read.includes(x));
   // doctext includes the Word running header before the body; this MLA fixture exports "Rivera 1".
-  check(paras.length >= 15 && !missing.length && read === squash(`Rivera 1 ${docText}`), `lib/doctext.js reads the received .docx back as the complete paper, in order (${paras.length} paragraphs)`);
+  check(paras.length >= 15 && !missing.length && read === squash(`Rivera 1 ${docText}`), `core/doctext.js reads the received .docx back as the complete paper, in order (${paras.length} paragraphs)`);
   const boxText = text(fs.readFileSync(path.join(sub.dir, 'text.html'), 'utf8'));
   check(boxText === squash(`Thank you for reading. ${docText}`), 'the text box got exactly the note, then the complete paper\'s text');
   const json = JSON.parse(fs.readFileSync(path.join(sub.dir, 'submission.json'), 'utf8'));

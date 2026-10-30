@@ -38,7 +38,7 @@ var GZ_EDITOR = (() => {
   };
   // Old sections that became a part of another section's More options: their address opens it there.
   const INSIDE = { 'blackboard/stream': 'bb-stream', 'blackboard/nav': 'bb-navigation' };
-  // A control shows only where it has an effect ([data-show] names its rule). Surface opacity: lib/surfaces.js paints its value only
+  // A control shows only where it has an effect ([data-show] names its rule). Surface opacity: looks/surfaces.js paints its value only
   // over a blurred, non-solid page; elsewhere any custom value is opaque.
   const SHOW = {
     surfaceOpacity: (s) => s.look.glass > 0 && s.bg.kind !== 'solid',

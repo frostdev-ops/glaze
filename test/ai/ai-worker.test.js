@@ -1,4 +1,4 @@
-// The AI harness in the real worker (lib/background.js in a vm, test/helpers/worker-env.cjs): who may open the 'glaze:ai' port
+// The AI harness in the real worker (background/background.js in a vm, test/helpers/worker-env.cjs): who may open the 'glaze:ai' port
 // and who may keep connections, where the key is kept (the worker's own IndexedDB: not storage.local, which any page's script
 // can read, nor sync), that neither a Back up file nor a shared Look carries AI's settings or a key, and that the writer
 // frame is judged by the frame it sits in and its tab's page, with an Ultra attempt open to the writer's features only once
@@ -97,7 +97,7 @@ test('a run from a page reaches only the connection\'s server, with the key, and
   live(w, lms());
   const { port, say } = w.connect('glaze:ai', lms());
   await w.settle();
-  // A task the worker would import with the harness (lib/background.js aiFiles); here added in its realm.
+  // A task the worker would import with the harness (background/background.js aiFiles); here added in its realm.
   require('node:vm').runInContext(`GZ_AI_TASKS.add({ id: 'example.echo', version: 1, input: (r) => r, check: (o) => o,
     build: (i, { text }) => text.request({ system: 'Echo.', data: [{ label: 'text', text: i.text }] }),
     output: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'], additionalProperties: false } })`, w.context);
@@ -126,9 +126,9 @@ test('AI is off by default: a fresh worker has no settings for it, and a page is
 });
 
 test('a Back up file and a shared Look carry none of AI\'s settings, its connections or a key', async () => {
-  const G = require('../../extension/defaults.js');
-  const BK = require('../../extension/lib/backup.js');
-  const SH = require('../../extension/lib/share.js');
+  const G = require('../../extension/content/defaults.js');
+  const BK = require('../../extension/background/backup.js');
+  const SH = require('../../extension/sharing/share.js');
   const local = { ai: { on: true, use: 'main', features: { syllabus: true } }, aiCalls: [{ id: 'r', task: 't', state: 'completed' }], connections: { main: { key: KEY } }, aiKey: KEY };
   const settings = G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ai: { on: true }, aiKey: KEY });
   assert.equal(settings.ai, undefined, 'not a synced setting');
@@ -144,8 +144,8 @@ test('a Back up file and a shared Look carry none of AI\'s settings, its connect
 
 test('nothing of AI is in a page\'s first script, and the worker loads it only when a port opens', () => {
   const m = require('../../extension/manifest.json');
-  for (const c of m.content_scripts) for (const f of c.js) assert.ok(!f.startsWith('lib/ai/'), f);
-  const bg = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
+  for (const c of m.content_scripts) for (const f of c.js) assert.ok(!f.startsWith('ai/'), f);
+  const bg = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
   assert.ok(!/^importScripts\([^)]*ai\//m.test(bg), 'not in the worker\'s first imports');
   const w = worker();
   assert.equal(w.context.GZ_AI_BROKER, undefined);
@@ -153,14 +153,14 @@ test('nothing of AI is in a page\'s first script, and the worker loads it only w
 
 test('Firefox\'s event page loads every file of the harness the worker would import, by name', () => {
   // tools/build/package-firefox.sh: the files named in the worker's importScripts calls, as it reads them.
-  const bg = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
-  const named = new Set([...bg.matchAll(/importScripts\(([^)]*)\)/g)].flatMap(([, a]) => [...a.matchAll(/'([^']+)'/g)].map(([, f]) => `lib/${f}`)));
+  const bg = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
+  const named = new Set([...bg.matchAll(/importScripts\(([^)]*)\)/g)].flatMap(([, a]) => [...a.matchAll(/'([^']+)'/g)].map(([, f]) => path.posix.normalize(`background/${f}`))));
   // The local engine's files before its provider step names them (4.0.1): the worker doesn't load them yet.
   const unwired = ['local/tokenizer.js', 'local/gguf.js', 'local/quant.js', 'local/reference.js', 'local/store.js'];
-  const shipped = fs.readdirSync(path.join(__dirname, '../../extension/lib/ai'), { recursive: true }).filter((f) => f.endsWith('.js') && f !== 'providers/mock.js' && !unwired.includes(f)).map((f) => `lib/ai/${f}`);
+  const shipped = fs.readdirSync(path.join(__dirname, '../../extension/ai'), { recursive: true }).filter((f) => f.endsWith('.js') && f !== 'providers/mock.js' && !unwired.includes(f)).map((f) => `ai/${f}`);
   assert.ok(shipped.length >= 14);
   for (const f of shipped) assert.ok(named.has(f), `${f} is named in an importScripts call`);
-  assert.ok(!named.has('lib/ai/providers/mock.js'), 'the mock is for tests and the eval');
+  assert.ok(!named.has('ai/providers/mock.js'), 'the mock is for tests and the eval');
 });
 
 test('AI rejects opaque frames, foreign top pages and assessment ancestors', async () => {
@@ -231,7 +231,7 @@ const live2 = (w) => {
 };
 const frame = (tab, extra = {}) => ({ id: 'glaze', frameId: 3, url: `${EXT}/writer.html`, origin: EXT, tab: { id: 5, url: tab }, ...extra });
 const top = (url, extra = {}) => ({ id: 'glaze', frameId: 0, documentId: 'top-doc', url, origin: new URL(url).origin, tab: { id: 5, url }, ...extra });
-// The writer's claim of its pass names the frame it sits in (lib/background.js glaze:writer).
+// The writer's claim of its pass names the frame it sits in (background/background.js glaze:writer).
 const seat = (w, writer = frame(w.page), host = top(w.page)) => vm.runInContext('aiFrameHost', w.context)(writer, host);
 // Each status asked on a port of its own.
 const ask = async (w, sender, feature = 'completion') => {
@@ -351,7 +351,7 @@ test('the word goes when the tab goes anywhere else, is kept through a fragment 
   assert.deepEqual([w.store.session.aiAttempts, w.store.session.aiHosts], [{}, {}]);
 });
 
-// Documents as a page of an LMS tab (features/settingspage.js): each document its frame loads claims a pass the tab's page
+// Documents as a page of an LMS tab (settings/page/settingspage.js): each document its frame loads claims a pass the tab's page
 // asked for ('glaze:papers'), and that claim seats it as Writer's claim does, judged by the page it sits in.
 test("Documents' frame in a school's page asks as Writer's frame does, seated by its own document's pass, judged by the page it sits in", async () => {
   const w = writerOn();

@@ -3,7 +3,7 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), assert = require('node:assert/strict');
 const root = process.env.EXT || path.resolve(__dirname, '../../extension'), out = process.argv[2];
-const source = fs.readFileSync(path.join(root, 'content.js'), 'utf8');
+const source = fs.readFileSync(path.join(root, 'content/content.js'), 'utf8');
 const start = source.indexOf('  const placeScene = '), end = source.indexOf('  const stopScene = ', start);
 const placement = source.slice(start, end);
 const lock = require('../../tools/dev/check-env.js').lockPath();
@@ -43,8 +43,8 @@ const failures = [], results = []; let browser, held = false;
         item.innerHTML = '<header></header><div class="scroll-content"></div>';
         document.querySelector('.course-content-container').append(item);
       });
-      for (const sheet of ['theme.css', 'extras.css']) await page.addStyleTag({ path: path.join(root, sheet) });
-      await page.addScriptTag({ path: path.join(root, 'lib/scene-host.js') });
+      for (const sheet of ['content/theme.css', 'content/extras.css']) await page.addStyleTag({ path: path.join(root, sheet) });
+      await page.addScriptTag({ path: path.join(root, 'looks/scene-host.js') });
       // Draw a known scene frame: pixel assertions catch clipping/occlusion independently of renderer/GPU variability.
       await page.evaluate(({ placement, ultra }) => {
         const sceneCanvas = document.createElement('canvas'); sceneCanvas.id = 'gz-scene';

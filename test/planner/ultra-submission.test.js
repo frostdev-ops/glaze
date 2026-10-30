@@ -2,8 +2,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
-const P = require('../../extension/lib/page.js'), G = require('../../extension/lib/grades.js');
-const source = fs.readFileSync(require.resolve('../../extension/content-ultra.js'), 'utf8');
+const P = require('../../extension/core/page.js'), G = require('../../extension/planner/grades.js');
+const source = fs.readFileSync(require.resolve('../../extension/content/content-ultra.js'), 'utf8');
 const settle = () => new Promise(setImmediate);
 const { El } = require('../stand-in-dom.js');
 const row = (columnId, patch = {}) => ({
@@ -54,7 +54,7 @@ test('the gradebook requests expanded submission data and redraws for each chang
   const bookFor = vm.runInNewContext(`${gate}${source.slice(start, end)} bookFor`, {
     books: new Map(), covered: (rows, complete) => Object.defineProperty(rows, 'complete', { value: complete }),
     Date: { now: () => now }, me: async () => '_900_1', GZ_PAGE: P, locale: () => 'en', onBook: () => changed++, location: { pathname: '/ultra/courses/_101_1/grades' },
-    // lib/ultra.js's reader through the site's queue (WP-A1); its get() is what asks.
+    // courses/ultra.js's reader through the site's queue (WP-A1); its get() is what asks.
     reader: async () => ({ get: async (path) => { asked.push(path); return { results: [structuredClone(grade)], ...(partial && { paging: { nextPage: '?offset=200' } }) }; } }),
   });
   bookFor('_101_1'); await settle();

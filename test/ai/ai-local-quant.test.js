@@ -1,10 +1,10 @@
-// The local engine's dequantization (lib/ai/local/quant.js): blocks built here field by field, each value checked
+// The local engine's dequantization (ai/local/quant.js): blocks built here field by field, each value checked
 // against ggml-quants.c's formula written out again below, and seeded random blocks whose output must hash to what
 // ggml 0.28 (llama.cpp b11960) gives from type_traits.to_float, bit for bit.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const Q = require('../../extension/lib/ai/local/quant.js');
+const Q = require('../../extension/ai/local/quant.js');
 
 const f = Math.fround;
 // binary16 bits of a few values the blocks use.

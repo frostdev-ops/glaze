@@ -1,4 +1,4 @@
-// Mod bundles (lib/modbundle.js): the zip reader's limits, paths and kinds, mod.json's strict check, the hash, id and
+// Mod bundles (mods/modbundle.js): the zip reader's limits, paths and kinds, mod.json's strict check, the hash, id and
 // signature contract against fixed vectors, tampering, glazemod1: codes, the author's key and backup file, the install and
 // update rules, WebCrypto support, and the worker's 'glaze:mods' broker with its sender checks.
 const test = require('node:test');
@@ -8,14 +8,14 @@ const path = require('node:path');
 const vm = require('node:vm');
 const zlib = require('node:zlib');
 const nodeCrypto = require('node:crypto');
-const M = require('../../extension/lib/modbundle.js');
-const { crc32 } = require('../../extension/lib/zip.js');
+const M = require('../../extension/mods/modbundle.js');
+const { crc32 } = require('../../extension/core/zip.js');
 
 const enc = new TextEncoder();
 const u8 = (s) => enc.encode(s);
 const b64u = (b) => Buffer.from(b).toString('base64url');
 
-// RFC 8032's first test key, as a JWK. The vectors below were computed apart from lib/modbundle.js: Python's hashlib,
+// RFC 8032's first test key, as a JWK. The vectors below were computed apart from mods/modbundle.js: Python's hashlib,
 // base64 and json, and the RFC's own reference Ed25519 code (scratch script, 2026-10-17); Python's zipfile and Info-ZIP's
 // unzip -t read the packed zip without errors.
 const AUTHOR = { kty: 'OKP', crv: 'Ed25519', d: 'nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A', x: '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo' };
@@ -161,7 +161,7 @@ test('zip bombs: overlapping entries, lying sizes and huge declarations are refu
   // Two central entries naming one local entry.
   await assert.rejects(M.read(rawZip(tiny([{ name: 'a.txt', data: 'x' }, { name: 'a.txt', data: 'x', at: first, skip: true }]))), DAMAGED, 'one entry twice');
   // Inflation is told to stop at each entry's declared size.
-  const X = require('../../extension/lib/lookparts.js'), inflate = X.inflate, caps = [];
+  const X = require('../../extension/looks/lookparts.js'), inflate = X.inflate, caps = [];
   X.inflate = (b, cap) => { caps.push(cap); return inflate(b, cap); };
   try { await M.read(rawZip(tiny([{ name: 'a.txt', data: 'a'.repeat(5000), method: 8 }]))); } finally { X.inflate = inflate; }
   assert.deepEqual(caps, [5000]);
@@ -498,7 +498,7 @@ test('WebCrypto Ed25519: detect support once and refuse signed and dev installs 
     return typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop];
   } });
   const context = vm.createContext({ crypto: { subtle }, TextEncoder, TextDecoder, Uint8Array, atob, btoa, require: (f) => require(`../../extension/lib/${f}`) });
-  const old = vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/lib/modbundle.js'), 'utf8'), context);
+  const old = vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/mods/modbundle.js'), 'utf8'), context);
   const r = await vector(), bare = { ...r.files };
   delete bare['mod.sig'];
   for (const files of [r.files, bare]) await assert.rejects(old.bundle(Object.entries(files)), /[Uu]pdate your browser/);
@@ -571,7 +571,7 @@ const worker = (local = {}, globals = {}, own = false) => {
   const context = vm.createContext({
     URL, URLSearchParams, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, AbortController, crypto: globalThis.crypto, atob, btoa, navigator: {},
     Blob, CompressionStream, DecompressionStream, DOMException, setTimeout, clearTimeout, ...globals,
-    importScripts: (...files) => { for (const f of files) { imported.push(f); vm.runInContext(read(`lib/${f}`), context); } },
+    importScripts: (...files) => { for (const f of files) { imported.push(f); vm.runInContext(read(`background/${f}`), context); } },
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
@@ -581,7 +581,7 @@ const worker = (local = {}, globals = {}, own = false) => {
     },
   });
   if (own) clone = vm.runInContext('(v) => structuredClone === undefined ? v : JSON.parse(JSON.stringify(v))', context);
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   const send = (m, sender) => new Promise((res) => { for (const f of listeners) f(clone(m), sender, (r) => res(structuredClone(r))); });
   return { store, send, imported, context };
 };
@@ -592,7 +592,7 @@ test('broker: only the editor\'s own top frame may use glaze:mods', async () => 
   const w = worker();
   const list = { type: 'glaze:mods', op: 'list' };
   assert.deepEqual(await w.send(list, EDITOR), { ok: true, mods: [] });
-  assert.ok(w.imported.includes('modbundle.js') && w.imported.includes('zip.js'), 'loaded on first use');
+  assert.ok(w.imported.includes('../mods/modbundle.js') && w.imported.includes('../core/zip.js'), 'loaded on first use');
   const senders = {
     'an LMS page': { id: 'glaze', tab: { id: 4 }, frameId: 0, url: 'https://school.instructure.com/courses/7', origin: 'https://school.instructure.com' },
     'the popup': { id: 'glaze', url: 'chrome-extension://x/popup.html', frameId: 0, origin: 'chrome-extension://x' },
@@ -734,7 +734,7 @@ test('Remove can be retried when persisting the cleared stop note fails', async 
 
 test('broker: the blocklist (GZ_BLOCKLIST) stops installs, updates and turning a blocked mod back on; the list keeps its reason', async () => {
   const listed = new Set(), REASON = 'Sends grades away.';
-  // lib/blocklist.js's shape: blocked(local, { id, hash, key }) → a promise of its reason, or ''.
+  // mods/blocklist.js's shape: blocked(local, { id, hash, key }) → a promise of its reason, or ''.
   const asked = [];
   const w = worker({}, { GZ_BLOCKLIST: { blocked: async (local, { id, hash, key }) => { asked.push(typeof local.get); return [id, hash, key].some((v) => listed.has(v)) ? REASON : ''; } } });
   const send = (m) => w.send({ type: 'glaze:mods', ...m }, EDITOR);
@@ -748,7 +748,7 @@ test('broker: the blocklist (GZ_BLOCKLIST) stops installs, updates and turning a
   listed.add(v2.hash);
   assert.deepEqual(await install(v2), refused, 'a blocked update');
   assert.equal(w.store.local[`mod:${v1.id}`].version, '1.2.0');
-  // What lib/blocklist.js does to an installed mod it blocks; the list shows why, and it can't be turned back on.
+  // What mods/blocklist.js does to an installed mod it blocks; the list shows why, and it can't be turned back on.
   w.store.local[`mod:${v1.id}`] = { ...w.store.local[`mod:${v1.id}`], enabled: false, blocked: REASON };
   const [shown] = (await send({ op: 'list' })).mods;
   assert.deepEqual([shown.enabled, shown.blocked], [false, REASON]);
@@ -785,10 +785,10 @@ test('broker: a fresh worker loads and enforces the real blocklist for installs,
 });
 
 test('broker: wired as the other brokers are, and cached at install for later worker starts', () => {
-  const src = read('lib/background.js');
-  // A manifest's tools are checked with lib/modtools.js, whose code tools' input is in lib/ai/schema.js's subset.
-  assert.match(src, /BROKER_FILES\.mods = \['zip\.js', 'modapi\.js', 'modwidget\.js', 'ai\/schema\.js', 'modtools\.js', 'modbundle\.js', 'blocklist\.js'\];/);
-  assert.match(src, /addEventListener\?\.\('install', \(\) => importScripts\('zip\.js', 'modapi\.js', 'modwidget\.js', 'ai\/schema\.js', 'modtools\.js', 'modbundle\.js'\)\)/);
+  const src = read('background/background.js');
+  // A manifest's tools are checked with mods/modtools.js, whose code tools' input is in ai/schema.js's subset.
+  assert.match(src, /BROKER_FILES\.mods = \['\.\.\/core\/zip\.js', '\.\.\/mods\/modapi\.js', '\.\.\/mods\/modwidget\.js', '\.\.\/ai\/schema\.js', '\.\.\/mods\/modtools\.js', '\.\.\/mods\/modbundle\.js', '\.\.\/mods\/blocklist\.js'\];/);
+  assert.match(src, /addEventListener\?\.\('install', \(\) => importScripts\('\.\.\/core\/zip\.js', '\.\.\/mods\/modapi\.js', '\.\.\/mods\/modwidget\.js', '\.\.\/ai\/schema\.js', '\.\.\/mods\/modtools\.js', '\.\.\/mods\/modbundle\.js'\)\)/);
   assert.match(src, /allow: \(m, s\) => fromEditor\(s\) && s\.frameId === 0 && ownOrigin\(s\.origin\) && GZ_MODBUNDLE\.OPS\.includes\(m\.op\)/);
   // Safari gives a sender's origin with its UUID lowercased, getURL uppercase: the comparison ignores case.
   assert.match(src, /const OWN_ORIGIN = chrome\.runtime\.getURL\(''\)\.replace\(\/\\\/\$\/, ''\)\.toLowerCase\(\);\nconst ownOrigin = \(o\) => typeof o === 'string' && o\.toLowerCase\(\) === OWN_ORIGIN;/);
@@ -1025,7 +1025,7 @@ test('plan: adding or changing a remote background host prompts without granting
   assert.deepEqual(M.caps(manifest(`file:${'a'.repeat(43)}`)), [], 'local media adds no remote capability');
 });
 
-// ---- agent tools (lib/modtools.js) ------------------------------------------------------------------------------------
+// ---- agent tools (mods/modtools.js) ------------------------------------------------------------------------------------
 const TOOL = { name: 'due_soon', title: 'Due soon', description: 'Open to-dos due this week.', from: 'todo', where: [{ field: 'done', eq: false }] };
 const CODE_TOOL = { name: 'ask', title: 'Ask', description: 'Asks the mod.', code: true, input: { type: 'object', properties: { q: { type: 'string' } }, additionalProperties: false } };
 const AGENTS = { id: 'agents', why: 'Lets the agent apps you connect ask what is due.' };

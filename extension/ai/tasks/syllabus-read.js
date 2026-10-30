@@ -1,16 +1,16 @@
-// syllabus.read (docs/ai-harness.md): a model reads a syllabus for the import dialog (features/syllabus.js), which has read
-// it on this device first (lib/syllabus.js extract()). The model never works anything out: it copies each value as the
+// syllabus.read (docs/ai-harness.md): a model reads a syllabus for the import dialog (planner/page/syllabus.js), which has read
+// it on this device first (planner/syllabus.js extract()). The model never works anything out: it copies each value as the
 // syllabus writes it ("Thursday, Oct 1", "Friday of week 3", "20%") with the words it came from (quote). check() keeps only
-// values whose quote is in the text; Glaze then reads each value with lib/syllabus.js's own readers and puts it beside
-// what extract() found (lib/syllabus-ai.js). A long syllabus goes in parts sized to the provider's context, each part
+// values whose quote is in the text; Glaze then reads each value with planner/syllabus.js's own readers and puts it beside
+// what extract() found (planner/syllabus-ai.js). A long syllabus goes in parts sized to the provider's context, each part
 // its own request; pictures (calendars, charts) go with the first part, to a model that takes them.
 // input: { text, images?: [{ type: 'image', mime, data (base64) }], names?: [the course's and instructor's names from the
-// LMS, an exact-spelling hint] }. Classic script for the worker (lib/background.js aiFiles); module.exports for node.
+// LMS, an exact-spelling hint] }. Classic script for the worker (background/background.js aiFiles); module.exports for node.
 var GZ_AI_TASK_SYLLABUS = globalThis.GZ_AI_TASK_SYLLABUS || (() => {
   const S = typeof GZ_AI_SCHEMA !== 'undefined' ? GZ_AI_SCHEMA : require('../schema.js');
   const R = typeof GZ_AI_REQUEST !== 'undefined' ? GZ_AI_REQUEST : require('../request.js');
   const T = typeof GZ_AI_TASKS !== 'undefined' ? GZ_AI_TASKS : require('../task.js');
-  // text: characters read (lib/syllabus.js MAX); parts: requests one syllabus may take; the lists' longest.
+  // text: characters read (planner/syllabus.js MAX); parts: requests one syllabus may take; the lists' longest.
   const LIMIT = { text: 200000, parts: 8, names: 8, images: 8, hours: 20, meetings: 20, scale: 20, weights: 20, dates: 100, quote: 500, value: 200 };
   const KINDS = ['exam', 'due', 'other'];
 
@@ -68,7 +68,7 @@ var GZ_AI_TASK_SYLLABUS = globalThis.GZ_AI_TASK_SYLLABUS || (() => {
       temperature: 0, maxTokens: answerTokens(caps),
     });
   };
-  // Parts of about a third of what the harness lets a part's data take (lib/ai/task.js budget: 0.6 of the context), so the
+  // Parts of about a third of what the harness lets a part's data take (ai/task.js budget: 0.6 of the context), so the
   // instructions, the schema and a long answer fit beside it on a small model (8k tokens on this computer). More than
   // LIMIT.parts is refused before anything is sent.
   const split = (inp, { budget, text }) => {
@@ -109,7 +109,7 @@ var GZ_AI_TASK_SYLLABUS = globalThis.GZ_AI_TASK_SYLLABUS || (() => {
   };
 
   // ---- the check: grounding -----------------------------------------------------------------------------------------
-  // A value stays only when its quote is in the syllabus (lib/ai/text.js source: quotes, dashes and spaces folded), and
+  // A value stays only when its quote is in the syllabus (ai/text.js source: quotes, dashes and spaces folded), and
   // the complete copied value is in that quote too. Ungrounded values are dropped;
   // an oversized answer is refused rather than cut down.
   const check = (out, inp) => {

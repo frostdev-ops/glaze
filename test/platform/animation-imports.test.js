@@ -7,8 +7,8 @@ const { execFileSync } = require('node:child_process');
 
 const root = path.join(__dirname, '../../extension');
 const loaders = [
-  { file: 'lib/scene-media.js', end: '\nconst layer =', name: 'loadLottie', media: true },
-  { file: 'features/lookx.js', end: '\n  const mute =', name: 'lottieIn', media: false },
+  { file: 'looks/scene-media.js', end: '\nconst layer =', name: 'loadLottie', media: true },
+  { file: 'looks/page/lookx.js', end: '\n  const mute =', name: 'lottieIn', media: false },
 ];
 const rig = ({ file, end, name }, failure) => {
   const source = process.env.GZ_ANIMATION_IMPORT_BASE

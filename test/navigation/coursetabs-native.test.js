@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
 const root = process.env.GZ_B8_REPO || path.join(__dirname, '../../extension');
-const source = fs.readFileSync(path.join(root, 'content-ultra.js'), 'utf8');
+const source = fs.readFileSync(path.join(root, 'content/content-ultra.js'), 'utf8');
 
 test('automatic native new-content callbacks wait while a tab\'s frame covers the page; live and explicit reads remain', async () => {
   const render = source.slice(source.indexOf('  const renderNew = '), source.indexOf('  // ---- new content (Extras)'));
@@ -14,7 +14,7 @@ test('automatic native new-content callbacks wait while a tab\'s frame covers th
     GZ_CTABS: { showing: () => active }, tabFrame: '', seen: {}, courseId: () => '_102_1',
     location: { pathname: '/ultra/courses/_102_1/outline' },
     renderItems(cid) { nativePasses++; fns.courseItems(cid); },
-    // The course's contents come through lib/ultra.js's paged reader and the site's queue (WP-A1).
+    // The course's contents come through courses/ultra.js's paged reader and the site's queue (WP-A1).
     reader: async () => ({ list: async () => { requests++; return { items: [], complete: true }; } }), covered: (rows) => rows,
   });
   const settle = async () => { for (let i = 0; i < 4; i++) await new Promise(setImmediate); };

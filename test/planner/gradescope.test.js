@@ -1,4 +1,4 @@
-// Gradescope in Better To Do (lib/gradescope.js): reading a course page row by row, guessing the Canvas course, what's
+// Gradescope in Better To Do (planner/gradescope.js): reading a course page row by row, guessing the Canvas course, what's
 // kept and for whom, and the items it adds to Better To Do; the worker's rules and the Gradescope page's start. Gradescope's
 // markup is from public knowledge of its pages (there's no test account): the real pages are checked by an owner before
 // release (W10).
@@ -8,9 +8,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const nodeCrypto = require('node:crypto');
-const D = require('../../extension/defaults.js');
-const T = require('../../extension/lib/todo.js');
-const G = require('../../extension/lib/gradescope.js');
+const D = require('../../extension/content/defaults.js');
+const T = require('../../extension/planner/todo.js');
+const G = require('../../extension/planner/gradescope.js');
 
 const at = (s) => Date.parse(s);
 const O = D.GZ_SANITIZE({}).todo;
@@ -249,7 +249,7 @@ test('on a Canvas page: off means no file is asked for and nothing is added', ()
     globalThis.GZ_CTX = { settings: () => ({ enhance: { gradescope: true } }), need: (f) => { asked.push(f); return new Promise(() => {}); } };
     assert.deepEqual(gs(Date.now(), '111'), []); // asked for, not in yet
     gs(Date.now(), '111');
-    assert.deepEqual(asked, ['lib/gradescope.js']); // once
+    assert.deepEqual(asked, ['planner/gradescope.js']); // once
     // Glaze switched off as a whole: nothing, whatever the Gradescope switch says.
     const off = T.gradescope(() => {});
     globalThis.GZ_CTX = { settings: () => ({ enabled: false, enhance: { gradescope: true } }), need: (f) => { asked.push(f); return new Promise(() => {}); } };
@@ -283,7 +283,7 @@ test('the worker: who may write, the script on Gradescope only while on, and the
       const p = new URL(url).pathname;
       return { ok: true, url, text: async () => pages[p] };
     },
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), context); },
     chrome: {
       runtime: {
         id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => m,
@@ -302,7 +302,7 @@ test('the worker: who may write, the script on Gradescope only while on, and the
       },
     },
   });
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   const send = (msg, sender) => new Promise((res) => {
     let kept = false;
     for (const f of listeners) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r)))) === true) kept = true;
@@ -448,7 +448,7 @@ test('on Gradescope: only with Glaze and its switch on; whose account first; red
     });
     context.window = context;
     context.window.top = context;
-    for (const f of ['lib/color.js', 'lib/i18n.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/gradescope.js', 'features/gradescope.js']) vm.runInContext(read(f), context);
+    for (const f of ['core/color.js', 'core/i18n.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'planner/gradescope.js', 'planner/page/gradescope.js']) vm.runInContext(read(f), context);
     await work.settle();
     return { fetched, drawn, sent };
   };
@@ -509,7 +509,7 @@ test('on Gradescope: the bar is drawn only if both switches still hold after eve
     });
     context.window = context;
     context.window.top = context;
-    for (const f of ['lib/color.js', 'lib/i18n.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/gradescope.js', 'features/gradescope.js']) vm.runInContext(read(f), context);
+    for (const f of ['core/color.js', 'core/i18n.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'planner/gradescope.js', 'planner/page/gradescope.js']) vm.runInContext(read(f), context);
     await work.settle();
     const off = async (patch) => {
       Object.assign(sync, patch);

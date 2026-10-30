@@ -1,5 +1,5 @@
 // pdf.js's words in Glaze's (pdf-kind.js's viewer): the l10n object pdf.js's PDFViewer, annotation layer and editors take
-// (getLanguage, getDirection, get, translate, translateOnce, pause, resume, destroy), reading Glaze's catalogue (lib/i18n.js)
+// (getLanguage, getDirection, get, translate, translateOnce, pause, resume, destroy), reading Glaze's catalogue (core/i18n.js)
 // instead of pdf.js's Fluent files. pdf.js marks an element with data-l10n-id (and data-l10n-args); translate(root) fills
 // every such element under root now and as they are added or change, until pause() or destroy(). Each id is in IDS (its
 // text, or its attributes, as Glaze keys; a date in the page's language) or QUIET (nothing shown: helper text, a tooltip

@@ -1,5 +1,5 @@
-// The worker glue for agent apps (lib/background.js): the real worker in a vm (test/helpers/worker-env.cjs) with a fake
-// connectNative, from the helper's frames through lib/agent-link.js, lib/mcp/wire.js, lib/mcp/calls.js, the registry and
+// The worker glue for agent apps (background/background.js): the real worker in a vm (test/helpers/worker-env.cjs) with a fake
+// connectNative, from the helper's frames through agents/agent-link.js, agents/wire.js, agents/calls.js, the registry and
 // the approval window, and back. What loads and when, the triggers, glaze:mcp-ask and glaze:mcp-config senders, the off
 // switch, list_changed, and a restart.
 const test = require('node:test');
@@ -8,7 +8,7 @@ const vm = require('node:vm');
 const worker = require('../helpers/worker-env.cjs');
 const { fakeIDB } = require('../helpers/fake-idb.cjs');
 const C = require('../helpers/mcp-caches.cjs');
-const G = require('../../extension/lib/mcp/grants.js');
+const G = require('../../extension/agents/grants.js');
 
 const META = { 'io.modelcontextprotocol/protocolVersion': '2026-07-28', 'io.modelcontextprotocol/clientCapabilities': {} };
 const SUB = 'io.modelcontextprotocol/subscriptionId';
@@ -77,7 +77,7 @@ const nodeHost = (w, { missing = false } = {}) => {
   return host;
 };
 
-// The Glaze app's agent bridge on Safari (lib/agent-link.js's contract): batches in through sendNativeMessage, frames out
+// The Glaze app's agent bridge on Safari (agents/agent-link.js's contract): batches in through sendNativeMessage, frames out
 // as dispatches scoped to the session's i and s. The app outlives the worker and keeps its connections.
 const safariApp = () => {
   const app = { frames: [], session: null, port: null };
@@ -128,7 +128,7 @@ const boot = ({ store = store0(), idb = fakeIDB().indexedDB, base, safari = fals
 const connected = (env) => until(() => env.store.session.mcpLink?.state === 'connected', 'the link to connect');
 const config = (env, m, sender = EDITOR) => env.w.send({ type: 'glaze:mcp-config', ...m }, sender);
 // The student answers the waiting ask of this kind in the window that shows it.
-const fromWindow = (win) => ({ id: 'glaze', tab: { id: win.tab, windowId: win.id }, frameId: 0, url: 'chrome-extension://x/lib/mcp/approve.html' });
+const fromWindow = (win) => ({ id: 'glaze', tab: { id: win.tab, windowId: win.id }, frameId: 0, url: 'chrome-extension://x/agents/approve.html' });
 const waiting = (env, kind) => until(() => Object.values(env.store.session).find((r) => r?.state === 'waiting' && r.kind === kind), `a ${kind} ask`);
 const shown = (env) => until(() => env.store.session.mcpAskWindow && env.windows.made.find((x) => x.id === env.store.session.mcpAskWindow.id), 'the approval window');
 const answer = async (env, kind, value) => {
@@ -172,7 +172,7 @@ test('MCP loads only while it is on: the link at worker start, the rest with the
 });
 
 // A student who never turned agent access on: removing a site, or Reset everything, clears the kept assignment reads with
-// lib/mcp/tools-assign.js alone, and leaves storage as it was.
+// agents/tools-assign.js alone, and leaves storage as it was.
 test('a site removal or Reset everything with agent access never on loads only the assignment cache\'s file and adds nothing', async () => {
   const env = boot({ store: store0({ on: false, local: { canvas: [C.CANVAS] } }) });
   await env.w.settle();
@@ -237,7 +237,7 @@ test('a tools/call read: the pairing window, Allow, then the answer from the cac
   a.send(CALL(1, 'todo_list'));
   const rec = await waiting(env, 'pair'), win = await shown(env);
   assert.deepEqual({ app: rec.app, tool: rec.tool, group: rec.group }, { app: { name: 'Claude', exe: PEER.exe }, tool: { name: 'todo_list', title: 'To-do list' }, group: 'courses' });
-  assert.deepEqual({ type: win.type, url: win.url, focused: win.focused }, { type: 'popup', url: 'chrome-extension://x/lib/mcp/approve.html', focused: true });
+  assert.deepEqual({ type: win.type, url: win.url, focused: win.focused }, { type: 'popup', url: 'chrome-extension://x/agents/approve.html', focused: true });
   // Only the window's own tab may answer.
   const ask = { type: 'glaze:mcp-ask', id: rec.id, answer: 'yes' };
   for (const s of [{ ...fromWindow(win), tab: { id: 999, windowId: win.id } }, { ...fromWindow(win), frameId: 1 }, EDITOR, { ...fromWindow(win), id: 'evil' },
@@ -446,7 +446,7 @@ test('glaze:mcp-config state brings the link to the setting: a helper installed 
   assert.equal(inWorker(off.w, 'typeof GZ_AGENT_LINK'), 'undefined', 'nor loads the link');
 });
 
-test('the mods broker loads lib/modtools.js before lib/modbundle.js, with MCP off', async () => {
+test('the mods broker loads mods/modtools.js before mods/modbundle.js, with MCP off', async () => {
   const env = boot({ store: store0({ on: false }) });
   assert.deepEqual(await env.w.send({ type: 'glaze:mods', op: 'list' }, EDITOR), { ok: true, mods: [] });
   assert.equal(inWorker(env.w, 'typeof GZ_MODTOOLS'), 'object');

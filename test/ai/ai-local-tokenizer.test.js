@@ -1,4 +1,4 @@
-// Glaze's own tokenizer for local models (lib/ai/local/tokenizer.js), on a hand-made byte-level BPE vocabulary: merges
+// Glaze's own tokenizer for local models (ai/local/tokenizer.js), on a hand-made byte-level BPE vocabulary: merges
 // in rank order, bytes with no merge as their own tokens, added tokens only when asked for, page text never producing a
 // control token, prompts from text and named specials, Glaze's own specials in the model's reserved rows, a streaming decoder that
 // never splits a character, and decode(encode(x)) === x. checks/ai/local-tokenizer-check.js holds it to LFM3's real one.
@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const K = require('../../extension/lib/ai/local/tokenizer.js');
+const K = require('../../extension/ai/local/tokenizer.js');
 
 // GPT-2's byte → character table, written out here so the test doesn't trust the module's own.
 const BYTE = (() => {
@@ -254,7 +254,7 @@ test('loaders: HF tokenizer.json and GGUF metadata give the same tokenizer; anyt
 
 test('a classic script, as importScripts loads it: one global, and it works without toWellFormed', () => {
   const ctx = vm.createContext({ TextEncoder, TextDecoder });
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/lib/ai/local/tokenizer.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/ai/local/tokenizer.js'), 'utf8'), ctx);
   assert.equal(typeof ctx.GZ_AI_TOKENIZER.load, 'function');
   vm.runInContext('delete String.prototype.toWellFormed', ctx);
   const tk = ctx.GZ_AI_TOKENIZER.load(neutral());
@@ -264,7 +264,7 @@ test('a classic script, as importScripts loads it: one global, and it works with
 test('an empty added token is never matched in text, as HF ignores it', () => {
   // In a context of its own with a timeout: a matcher that loops on empty matches never returns to the event loop.
   const ctx = vm.createContext({ TextEncoder, TextDecoder, v: neutral({ added: [['', 3], ...ADDED] }) });
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/lib/ai/local/tokenizer.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/ai/local/tokenizer.js'), 'utf8'), ctx);
   const [got, want] = JSON.parse(vm.runInContext(`const tk = GZ_AI_TOKENIZER.load(v);
     JSON.stringify([[...tk.encode('hi<|im_start|>', { specials: true }), -1, ...tk.encode('hello', { specials: true })],
       [...tk.encode('hi'), tk.id('<|im_start|>'), -1, ...tk.encode('hello')]])`, ctx, { timeout: 2000 }));

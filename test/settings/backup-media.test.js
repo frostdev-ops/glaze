@@ -2,15 +2,15 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const G = require('../../extension/defaults.js');
-const P = require('../../extension/lib/lookparts.js');
-const C = require('../../extension/lib/cards.js');
-const B = require('../../extension/lib/navbar.js');
-const BK = require('../../extension/lib/backup.js');
+const G = require('../../extension/content/defaults.js');
+const P = require('../../extension/looks/lookparts.js');
+const C = require('../../extension/courses/cards.js');
+const B = require('../../extension/navigation/navbar.js');
+const BK = require('../../extension/background/backup.js');
 
-const source = fs.readFileSync(require.resolve('../../extension/options.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../extension/settings/options.js'), 'utf8');
 const backup = source.slice(source.indexOf('  // ---- backup ----'), source.indexOf('  // The defaults this device started with'));
-// kept: the files this computer keeps for backgrounds, as the worker lists them (lib/media.js).
+// kept: the files this computer keeps for backgrounds, as the worker lists them (looks/media.js).
 const restore = async (src, kind = 'media', extra = {}, roundTrip = false, stored = {}, kept = []) => {
   let raw = { ...structuredClone(G.GZ_DEFAULTS), bg: { ...G.GZ_DEFAULTS.bg, kind }, parts: { x: { bg: { media: { type: 'video', src } }, cursor: { kind: 'glow' } } }, ...extra };
   const elements = {}, sent = [], hints = [], s = {};
@@ -19,7 +19,7 @@ const restore = async (src, kind = 'media', extra = {}, roundTrip = false, store
   const context = {
     s, GZ_UI: { load: async () => ({ ...staged.restore.settings, parts: staged.restore.parts }) }, navItems: {}, navigator: {}, document: { createElement: () => ({ click() {} }) }, URL: { createObjectURL: (blob) => { exported = blob; return 'blob:test'; }, revokeObjectURL() {} }, Blob, setTimeout: () => 0, structuredClone, GZ_SANITIZE: G.GZ_SANITIZE, GZ_CARDS: C, GZ_XPARTS: P,
     GZ_TODO: { STORE_KEY: /^todo:/ }, GZ_PET: { KEY: /^pet:/, backup: () => ({}) }, GZ_NAVBAR: B, GZ_FOLDERS: { backup: () => ({}) }, N: { clean: () => ({}) },
-    GZ_BACKUP: BK, GZ_HISTORY: require('../../extension/lib/history.js'), GZ_ZIP: require('../../extension/lib/zip.js'), askRestore: async (f, plan) => ({ ticked: new Set(Object.keys(plan.cats)), account: '' }),
+    GZ_BACKUP: BK, GZ_HISTORY: require('../../extension/looks/history.js'), GZ_ZIP: require('../../extension/core/zip.js'), askRestore: async (f, plan) => ({ ticked: new Set(Object.keys(plan.cats)), account: '' }),
     $: (id) => (elements[id] ||= { focus() {}, addEventListener: (type, fn) => { elements[id][type] = fn; } }),
     addEventListener() {}, removeEventListener() {}, flush() {}, fill() {}, renderNavItems() {}, showNavPreview() {}, cardsOp: async () => true,
     hint: (...v) => hints.push(v), t: (text, vars) => text.replace(/\{(\w+)\}/g, (_, k) => vars[k]),

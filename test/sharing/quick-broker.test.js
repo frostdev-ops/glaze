@@ -15,11 +15,11 @@ const worker = () => {
     Date: class extends Date { static now() { return clock; } }, navigator: {},
     GZ_SESSIONS: { make: () => ({ handle: async (m) => { handled.push(structuredClone(m)); return { ok: true, scope: m.scope }; },
       connect: () => { clients++; return () => { clients--; }; }, stop() {}, changed() {} }) },
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), ctx); },
     chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: { addListener: (f) => listeners.push(f) }, onConnect: { addListener: (f) => connects.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} } },
       tabs: { create: async (o) => { opened.push(structuredClone(o)); return { id: 50 }; }, update: async () => {}, onRemoved: { addListener: (f) => removed.push(f) } }, storage: { local: area, sync: area, session: { ...area, set: async (o) => { opened.push(structuredClone(o)); } }, onChanged: { addListener() {} } } } });
-  vm.runInContext(read('lib/background.js'), ctx);
+  vm.runInContext(read('background/background.js'), ctx);
   const send = (m, s) => new Promise((resolve) => { for (const f of listeners) if (f(m, s, (r) => resolve(structuredClone(r))) === true) return; resolve(null); });
   const lms = { id: 'glaze', frameId: 0, url: 'https://school.instructure.com/courses/1', tab: { id: 9 } };
   const panel = { id: 'glaze', frameId: 4, url: 'chrome-extension://glaze/sharing/quick.html', tab: { id: 9 } };

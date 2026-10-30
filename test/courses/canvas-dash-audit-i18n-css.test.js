@@ -3,9 +3,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-require('../../extension/lib/i18n.js');
+require('../../extension/core/i18n.js');
 const read = (f) => fs.readFileSync(require.resolve(`../../extension/${f}`), 'utf8');
-const sources = ['content-canvas.js', 'features/folders.js', 'features/widgets.js', 'features/coursecards.js', 'features/coursemenu.js'].map(read);
+const sources = ['content/content-canvas.js', 'courses/page/folders.js', 'core/page/widgets.js', 'courses/page/coursecards.js', 'navigation/page/coursemenu.js'].map(read);
 
 // Follow test/platform/i18n.test.js: scan only the first argument, including conditional literal keys.
 const literalKeys = (js) => {
@@ -32,13 +32,13 @@ const table = (source, name, scope = {}) => {
   const from = start + `const ${name} = `.length, to = source.indexOf(';', from);
   return vm.runInNewContext(`(${source.slice(from, to)})`, scope);
 };
-const widgets = read('features/widgets.js'), folders = read('features/folders.js');
+const widgets = read('core/page/widgets.js'), folders = read('courses/page/folders.js');
 const keys = new Set([
   ...sources.flatMap(literalKeys),
   ...Object.values(table(widgets, 'NAMES')), ...Object.values(table(widgets, 'EXTRA')),
   ...table(widgets, 'QUOTES').map(([, text]) => text), ...table(widgets, 'CHEERS'), ...table(widgets, 'HUB').map(([name]) => name),
   ...Object.values(table(folders, 'WORDS', { canvas: true })),
-  ...table(read('features/coursemenu.js'), 'TONES'),
+  ...table(read('navigation/page/coursemenu.js'), 'TONES'),
   'Breathe in', 'Hold', 'Breathe out', 'Course progress: {done} of {n} items complete',
 ]);
 const vars = (s) => [...new Set([...s.matchAll(/\{(\w+)(?:\|lower)?\}/g)].map((m) => m[1]))].sort();
@@ -53,12 +53,12 @@ for (const lang of ['de', 'es', 'fr', 'nl', 'pt-BR']) test(`Canvas dashboard, me
   }
 });
 
-const css = read('canvas.css').replace(/\/\*[\s\S]*?\*\//g, '');
+const css = read('content/canvas.css').replace(/\/\*[\s\S]*?\*\//g, '');
 const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => [m[1].trim(), m[2]]);
 
 test('first-paint strip reservation has its size sheet before the lazy feature starts', () => {
-  const core = read('content.js'), sizes = read('features/coursetabs.css');
-  assert.match(core, /const SHEETS = [^\n]*'features\/coursetabs\.css'/);
+  const core = read('content/content.js'), sizes = read('navigation/page/coursetabs.css');
+  assert.match(core, /const SHEETS = [^\n]*'navigation\/page\/coursetabs\.css'/);
   for (const [size, height] of [['small', 34], ['large', 48]]) assert.ok(sizes.includes(`html[data-gz-ctabs~="${size}"] { --gz-ctabs-bar: ${height}px; }`));
   assert.ok(sizes.includes('html[data-gz-ctabs] { --gz-ctabs-bar: 40px; --gz-ctabs-h: calc(var(--gz-ctabs-bar) + var(--gz-float-gap)); }'), 'the footprint holds the bar and its gap');
   assert.ok(rules.some(([sel, body]) => sel.includes(':not(:has(> #gz-ctabs))::before') && /flex:\s*0 0 100%/.test(body) && /height:\s*var\(--gz-ctabs-h, 40px\)/.test(body)));

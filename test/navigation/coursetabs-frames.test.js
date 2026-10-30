@@ -1,11 +1,11 @@
-// Course tabs' live frames (features/coursetabs.js): each picked tab runs as a page of its own in a frame named
+// Course tabs' live frames (navigation/page/coursetabs.js): each picked tab runs as a page of its own in a frame named
 // gz-ctab:<course>, hidden while another is shown; the strip in a frame sends its picks to the page around it.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
 const root = process.env.GZ_B8_REPO || path.join(__dirname, '../../extension');
-const source = fs.readFileSync(path.join(root, 'features/coursetabs.js'), 'utf8');
-const L = require(path.join(root, 'lib/coursetabs.js'));
+const source = fs.readFileSync(path.join(root, 'navigation/page/coursetabs.js'), 'utf8');
+const L = require(path.join(root, 'navigation/coursetabs.js'));
 const part = (a, b) => source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a)));
 const origin = 'https://bb.school.test';
 
@@ -251,7 +251,7 @@ test('same-course frame navigation reports a move without needing a scroll', () 
 });
 
 test('covered-page CSS restores visibility for its strip, footer, native dialogs and notifications', () => {
-  const css = fs.readFileSync(path.join(root, 'extras.css'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'content/extras.css'), 'utf8');
   // Visibility inherits through #site-wrap even into high-z-index and top-layer descendants.
   const rules = [...css.matchAll(/([^{}]+)\{([^{}]*\bvisibility\s*:\s*visible[^{}]*)\}/g)];
   for (const selector of ['#gz-ctabs', '#gz-footer', 'dialog[open]', '[role="dialog"]', '[role="alertdialog"]', '[role="alert"]', '[role="status"]', '.MuiModal-root', '.MuiSnackbar-root']) {
@@ -260,7 +260,7 @@ test('covered-page CSS restores visibility for its strip, footer, native dialogs
 });
 
 test('the worker takes a course tab\'s frame as its Ultra page: its origin stands in for the about:blank it reports', () => {
-  const bg = fs.readFileSync(path.join(root, 'lib/background.js'), 'utf8');
+  const bg = fs.readFileSync(path.join(root, 'background/background.js'), 'utf8');
   const block = bg.slice(bg.indexOf('const addressOf = '), bg.indexOf('const fromUltra = '));
   const { ultraAt, ultraPage } = vm.runInNewContext(`${block}\n({ ultraAt, ultraPage });`, { PAGE: 'page', requestAnimationFrame() {}, nudge() {}, keepPage() {}, spare: new Map(), next: new Map(), popping: false, chrome: { runtime: { id: 'glaze' } }, URL });
   const tab = { id: 1, url: `${origin}/ultra/courses/_1_1/outline` };

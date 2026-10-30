@@ -1,4 +1,4 @@
-// The worker's agent link (lib/agent-link.js) in headless Firefox on the Mac, with the real glaze-mcp helper and agents, over
+// The worker's agent link (agents/agent-link.js) in headless Firefox on the Mac, with the real glaze-mcp helper and agents, over
 // WebDriver BiDi. Firefox runs the worker as an event page, with extensions.background.idle.timeout at 3 s here, and answers
 // permissions.request itself (extensions.webextOptionalPermissionPrompts off). The check shows:
 //   1. nativeMessaging granted from a trusted click in Settings reaches the event page that started without it, whose
@@ -11,7 +11,7 @@
 // Isolation: the staged package's host name is io.frostdev.glaze_mcp_check_<pid> (patched once), the only file written
 // outside temp folders is that manifest in ~/Library/Application Support/Mozilla/NativeMessagingHosts (removed at the end,
 // with any folder the check made for it), and the helper and agents run with a temp HOME, so the run folder is the check's.
-// This file names connectNative only in comments: test/agents/agent-link.test.js lets lib/agent-link.js alone call it, so the
+// This file names connectNative only in comments: test/agents/agent-link.test.js lets agents/agent-link.js alone call it, so the
 // link's own state is the evidence (restart when it is missing).
 //   FIREFOX=<Firefox.app> nice -n 10 lockf -k <heavy lock> node checks/firefox/agent-link-firefox-check.mjs [<evidence folder>]
 // The evidence folder gets results.json, check.log and firefox.log (the helper's stderr included).
@@ -56,15 +56,15 @@ const stage = () => {
   execFileSync('unzip', ['-q', path.join(dist, fs.readdirSync(dist).find((f) => f.endsWith('-firefox.zip'))), '-d', dir]);
   fs.rmSync(dist, { recursive: true, force: true });
   // The host name, exactly once: the link's HOST, which its Firefox not-installed string is made from.
-  const f = path.join(dir, 'lib/agent-link.js'), src = fs.readFileSync(f, 'utf8'), lit = `'${REAL}'`;
+  const f = path.join(dir, 'agents/agent-link.js'), src = fs.readFileSync(f, 'utf8'), lit = `'${REAL}'`;
   const n = src.split(lit).length - 1;
-  if (n !== 1) throw new Error(`the staged lib/agent-link.js names ${lit} ${n} times, not once`);
+  if (n !== 1) throw new Error(`the staged agents/agent-link.js names ${lit} ${n} times, not once`);
   const patched = src.replace(lit, `'${NAME}'`);
   if (patched.includes(lit) || patched.split(`'${NAME}'`).length !== 2) throw new Error('the host name patch did not take exactly once');
   fs.writeFileSync(f, patched);
   const m = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
   if (!m.optional_permissions?.includes('nativeMessaging') || m.permissions.includes('nativeMessaging')) throw new Error('the package must ask for nativeMessaging as optional');
-  if (!m.background.scripts.includes('lib/agent-link.js')) throw new Error('the event page does not load lib/agent-link.js');
+  if (!m.background.scripts.includes('agents/agent-link.js')) throw new Error('the event page does not load agents/agent-link.js');
   return dir;
 };
 // Firefox starts the launcher with the manifest's path and Glaze's id; it logs each start and runs the helper under the
@@ -274,7 +274,7 @@ const checkRun = async () => {
   ok(true, `Firefox reads user host manifests from ${HOSTS}`);
   await b.install(pkg);
   await b.inChrome(WATCH);
-  const welcome = await until(() => b.find(`${EXT}features/welcome.html`), 'the first-run tab', 10000).catch(() => null);
+  const welcome = await until(() => b.find(`${EXT}settings/welcome.html`), 'the first-run tab', 10000).catch(() => null);
   if (welcome) await b.close(welcome);
   let c = await settings(b);
   writeManifest([ID]);

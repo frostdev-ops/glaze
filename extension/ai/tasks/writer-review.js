@@ -1,11 +1,11 @@
 // writer.review (docs/ai-harness.md, Writer): "Check with AI" in Glaze Writer (writer-ai.js) — grammar, spelling,
 // punctuation, style and clarity problems in the student's draft, each anchored to the exact words it is about
-// (lib/ai/text.js anchor: the quote and the words around it) so the frame can underline them (GZ_WRITER_ISSUES source 'ai').
+// (ai/text.js anchor: the quote and the words around it) so the frame can underline them (GZ_WRITER_ISSUES source 'ai').
 // Suggestions replace the quoted words only; one that rewrites more than the quote is dropped, and an issue whose words aren't
 // in the draft (or are there more than once and the words around don't say which) is dropped. A long draft goes in parts.
 // input: { text (the document's text, blocks joined by '\n': GZ_WRITER_SCHEMA.text), mode, kind, context }.
 // output: { issues: [{ start, end, quote, kind, message, suggestions }] } (UTF-16 offsets in text, sorted).
-// Classic script for the worker (lib/background.js aiFiles); module.exports for node.
+// Classic script for the worker (background/background.js aiFiles); module.exports for node.
 var GZ_AI_TASK_WRITER_REVIEW = globalThis.GZ_AI_TASK_WRITER_REVIEW || (() => {
   const S = typeof GZ_AI_SCHEMA !== 'undefined' ? GZ_AI_SCHEMA : require('../schema.js');
   const R = typeof GZ_AI_REQUEST !== 'undefined' ? GZ_AI_REQUEST : require('../request.js');

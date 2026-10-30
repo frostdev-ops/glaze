@@ -1,9 +1,9 @@
 // Glaze's mods host: a manifest sandbox page (an opaque origin, no extension APIs, the sandbox
-// CSP), framed by features/mods.js inside a closed shadow root. It takes one handshake, from its parent, with the one-use
+// CSP), framed by mods/page/mods.js inside a closed shadow root. It takes one handshake, from its parent, with the one-use
 // nonce in its own address, and from then on talks only over the port that came with it. There it starts each mod: a
 // Worker (blob:) for the mod's logic, and frame UIs (sandboxed srcdoc whose only script is mods/boot.js). Each has a
 // channel of its own; what a mod sends goes up as { mod, via, id, call, args }, tagged here with which mod and where from,
-// and each answer goes back to that one alone. The worker checks every call (lib/modbroker.js).
+// and each answer goes back to that one alone. The worker checks every call (mods/modbroker.js).
 (() => {
   const want = location.hash.slice(1);
   let BOOT = new URL('boot.js', location.href).href;

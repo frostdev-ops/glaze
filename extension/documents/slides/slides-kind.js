@@ -1,21 +1,21 @@
 // Slide decks on the Documents page (papers.html). Settings → Writer → Slides (writer.slides, its default in defaults.js) permits
 // importing .pptx and .ppsx files; existing decks always remain available for viewing. Documents of the slides kind
-// (lib/doc-kinds.js), each card showing slide 1, and open in a viewer: a rail of thumbnails, the slide (lib/slides-render.js
-// on lib/pptx.js's model), zoom, find in the slides' and notes' text, the speaker notes, and Present (a dialog, full screen
+// (documents/doc-kinds.js), each card showing slide 1, and open in a viewer: a rail of thumbnails, the slide (documents/slides/slides-render.js
+// on documents/slides/pptx.js's model), zoom, find in the slides' and notes' text, the speaker notes, and Present (a dialog, full screen
 // where the browser allows, Rimeward's keys, hidden slides skipped). Its chrome wears the Look; the slide stays as authored.
 // Export gives back the bytes imported. A viewer, never an editor: the record only changes by the page's rename.
-// Storage (STORE): the deck's bytes in the worker's file store (lib/doc-files.js, over its port), the record pointing at
+// Storage (STORE): the deck's bytes in the worker's file store (documents/doc-files.js, over its port), the record pointing at
 // them (file: { hash, size, type }), up to the kind's max; a record from before the store holds them as base64, read as
 // before and moved over as it is opened, and where the store is unavailable a deck up to the old 3 MB is kept that way still.
 // Nothing else reads or writes the bytes.
 (() => {
   const DK = globalThis.GZ_DOC_KINDS;
   const locale = (() => { try { return chrome.i18n.getUILanguage(); } catch { return globalThis.navigator?.language || 'en'; } })();
-  // lib/i18n.js's GZ_I18N is a page-wide const, not a property of the window.
+  // core/i18n.js's GZ_I18N is a page-wide const, not a property of the window.
   // An assignment's frame says its words in the page's language (writer.js t).
   let words = null;
   const t = (k, v) => (words ? words(k, v) : typeof GZ_I18N !== 'undefined' ? GZ_I18N.t(k, v, locale) : k);
-  const LIBS = ['lib/doctext.js', 'lib/pptx.js', 'lib/pptx-geom.js', 'lib/slides-render.js'];
+  const LIBS = ['core/doctext.js', 'documents/slides/pptx.js', 'documents/slides/pptx-geom.js', 'documents/slides/slides-render.js'];
   const need = (files) => GZ_WRITER_PAPER.need(files);
   // What the page says when it refuses a deck (papers.js translates them).
   const SAYS = { size: DK.KINDS.slides.big, read: 'That file could not be read as a PowerPoint presentation.', ...DK.SAYS };
@@ -28,7 +28,7 @@
     return btoa(s);
   };
   const unb64 = (s) => { const bin = atob(s), out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; };
-  const files = () => need(['lib/doc-files.js']).then(() => GZ_DOC_FILES);
+  const files = () => need(['documents/doc-files.js']).then(() => GZ_DOC_FILES);
   // A refusal of the store's, as the page says it.
   class FileError extends RangeError { constructor(why) { super(DK.SAYS[why] || SAYS.read); this.why = why; } }
   const LEGACY = 3e6; // base64 of 3 MB is the record's 4 MB
@@ -106,7 +106,7 @@
   const FAMILY = { carlito: 'Calibri', arimo: 'Arial', tinos: 'Times New Roman', cousine: 'Courier New' };
   const fonts = new Map();
   const fontData = (file) => {
-    if (!fonts.has(file)) fonts.set(file, fetch(chrome.runtime.getURL(`lib/fonts/${file}.woff2`)).then((r) => r.arrayBuffer()).then((b) => `data:font/woff2;base64,${b64(new Uint8Array(b))}`));
+    if (!fonts.has(file)) fonts.set(file, fetch(chrome.runtime.getURL(`vendor/fonts/${file}.woff2`)).then((r) => r.arrayBuffer()).then((b) => `data:font/woff2;base64,${b64(new Uint8Array(b))}`));
     return fonts.get(file);
   };
   // The bundled faces a slide's text uses, as @font-face rules a picture of it can carry.
@@ -176,7 +176,7 @@
   // ---- import and export
   const stem = (name) => (globalThis.GZ_DOC_HOME ? GZ_DOC_HOME.stem(name) : String(name || '').replace(/\.[^./\\]+$/, '').trim().slice(0, 120));
   // A deck file's bytes, read, its first slide drawn and its words taken, then copied into the store, each stage told to
-  // progress (lib/doc-kinds.js progress). → the record's fields for it.
+  // progress (documents/doc-kinds.js progress). → the record's fields for it.
   const bring = async (f, progress) => {
     const p = typeof progress === 'function' ? progress : () => {};
     p({ stage: 'read', done: 0, total: f.size });
@@ -566,7 +566,7 @@
   // with no stored choice gets the default). papers.html loads defaults.js on demand, after the scripts it uses at load (in
   // papers.js's order, so the loads are shared); writer.html has it already, and a second load would redeclare its consts.
   // The page waits before it routes or draws.
-  const DEFAULTS = ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js'];
+  const DEFAULTS = ['core/color.js', 'looks/surfaces.js', 'looks/fonts.js', 'content/defaults.js'];
   const sanitizer = () => (typeof GZ_SANITIZE === 'function' ? null : GZ_WRITER_PAPER.need(DEFAULTS));
   const on = Promise.resolve().then(sanitizer).then(() => chrome.storage.sync.get('writer')).then((r) => GZ_SANITIZE({ writer: r?.writer }).writer.slides === true).catch(() => false);
   DK.wait(on.then((yes) => DK.register('slides', { edit, view: (key, host) => edit(key, { host }), into, thumb, file, exportFile, text, ...(yes && { importFile }), measure, copy, says: SAYS, exportLabel: 'Export .pptx' })));

@@ -1,4 +1,4 @@
-// Agent apps' live refresh in a real Chromium (lib/mcp/tabs.js, lib/mcp/tab.js), headless, in a staged copy of the extension
+// Agent apps' live refresh in a real Chromium (agents/tabs.js, agents/tab.js), headless, in a staged copy of the extension
 // whose worker carries a hook for the check
 // (the copy's worker is a new file, the checkout's is untouched). Synthetic Canvas and Ultra schools under invented origins,
 // every other request aborted and DNS resolving nowhere; Glaze's own page features are off, so every planner and gradebook
@@ -11,8 +11,8 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
 const env = require('../../tools/dev/check-env.js');
 const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
-const G = require(path.join(root, 'defaults.js'));
-const I = require(path.join(root, 'lib/insights.js'));
+const G = require(path.join(root, 'content/defaults.js'));
+const I = require(path.join(root, 'planner/insights.js'));
 const CANVAS = 'https://school.instructure.com', ULTRA = 'https://bb.school.test';
 const A = `${CANVAS}/5`, UL = `${ULTRA}/_900_1`;
 const fixture = (n) => JSON.parse(fs.readFileSync(path.join(__dirname, '../../test/fixtures', n), 'utf8'));
@@ -36,7 +36,7 @@ const now = Date.now(), DAY = 864e5;
 const planner = (id, title, days) => ({ plannable_type: 'assignment', plannable_id: id, course_id: 25, context_name: 'BIO 1100', plannable_date: new Date(now + days * DAY).toISOString(),
   html_url: `${CANVAS}/courses/25/assignments/${id}`, plannable: { title }, submissions: { submitted: false, excused: false, graded: false, late: false, missing: false, redo_request: false }, planner_override: null });
 const PLANNER = [planner(1, 'Lab report', 2), planner(2, 'Reading response', 5)];
-// This term's courses as a student, as Insights reads them (lib/insights.js term), with the local Canvas's gradebooks.
+// This term's courses as a student, as Insights reads them (planner/insights.js term), with the local Canvas's gradebooks.
 const TERM = { id: 5, name: 'Fall', start_at: new Date(now - 60 * DAY).toISOString(), end_at: new Date(now + 60 * DAY).toISOString() };
 const GRADES = fixture('canvas-grades.json').courses;
 const COURSES = GRADES.map(({ course }) => ({ ...course, name: course.course_code, term: TERM, enrollments: [{ type: 'student', ...course.enrollment }] }));
@@ -80,9 +80,9 @@ const check = async (name, test) => {
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nmcp-refresh-check\n`);
     const ext = require('../../tools/dev/check-env.js').staged(root, [`${ULTRA}/*`], scratch);
     // The staged files are hard links to the checkout: replace the worker's, never write through it.
-    const worker0 = fs.readFileSync(path.join(ext, 'lib/background.js'), 'utf8');
-    fs.rmSync(path.join(ext, 'lib/background.js'));
-    fs.writeFileSync(path.join(ext, 'lib/background.js'), worker0 + SHIM);
+    const worker0 = fs.readFileSync(path.join(ext, 'background/background.js'), 'utf8');
+    fs.rmSync(path.join(ext, 'background/background.js'));
+    fs.writeFileSync(path.join(ext, 'background/background.js'), worker0 + SHIM);
     await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
       ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC',
@@ -115,7 +115,7 @@ const check = async (name, test) => {
       if (u.pathname.endsWith('.css')) return r.fulfill({ contentType: 'text/css', body: '' });
       return r.fulfill({ contentType: 'text/html', body: /\/quizzes\//.test(u.pathname) ? QUIZ : DASH });
     });
-    const worker = context.serviceWorkers().find((w) => w.url().endsWith('/lib/background.js')) || await context.waitForEvent('serviceworker');
+    const worker = context.serviceWorkers().find((w) => w.url().endsWith('/background/background.js')) || await context.waitForEvent('serviceworker');
     const base = `chrome-extension://${new URL(worker.url()).host}`;
     const settings = G.GZ_SANITIZE({ navbar: { on: false }, footer: false, enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), insights: true } });
     // An hour-old planner and a day-old Insights record for the Canvas account, as the page's features kept them.
@@ -218,7 +218,7 @@ const check = async (name, test) => {
       assert.equal(await refresh(A, 'courses'), null);
       assert.equal(asked.length, n);
     });
-    await check('Ultra: the planner is read afresh through lib/ultra.js in the account\'s tab', async () => {
+    await check('Ultra: the planner is read afresh through courses/ultra.js in the account\'s tab', async () => {
       const ultra = await context.newPage();
       await ultra.goto(`${ULTRA}/ultra/course`);
       await ready(ultra);

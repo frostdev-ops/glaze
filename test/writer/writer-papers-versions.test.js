@@ -1,10 +1,10 @@
-// Settings → Writer → Papers → Versions kept (writer.versions): lib/writer-papers.js caps each paper's versions at the count
+// Settings → Writer → Papers → Versions kept (writer.versions): writer/writer-papers.js caps each paper's versions at the count
 // chosen, read from storage.sync `writer` where the worker runs it, keeping the newest and the last submitted.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const PA = require('../../extension/lib/writer-papers.js');
-const D = require('../../extension/defaults.js');
-globalThis.GZ_WRITER_STYLES = require('../../extension/lib/writer-styles.js');
+const PA = require('../../extension/writer/writer-papers.js');
+const D = require('../../extension/content/defaults.js');
+globalThis.GZ_WRITER_STYLES = require('../../extension/writer/writer-styles.js');
 
 const store = () => {
   const data = {};
@@ -55,7 +55,7 @@ test('restoring a version restores its imported-format choice, including older v
 
 test('the paper applies the restored version format choice before checking its document', async () => {
   const fs = require('node:fs'), vm = require('node:vm');
-  const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer-paper.js'), 'utf8');
+  const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer/frame/writer-paper.js'), 'utf8');
   const from = source.indexOf('    const restore = async '), to = source.indexOf('    const docx = ', from);
   let checked;
   const ctx = vm.createContext({ key: K, keep: false, paper: {}, save: async () => true,
@@ -67,7 +67,7 @@ test('the paper applies the restored version format choice before checking its d
 
 test('the Versions menu offers every retained version when more than forty are kept', async () => {
   const fs = require('node:fs'), vm = require('node:vm');
-  const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer-paper.js'), 'utf8');
+  const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer/frame/writer-paper.js'), 'utf8');
   const from = source.indexOf('    const versions = async'), to = source.indexOf('    const restore = ', from);
   let click, menu;
   const h = (tag, props, ...kids) => ({ tag, props, kids, addEventListener() {} });
@@ -82,7 +82,7 @@ test('the Versions menu offers every retained version when more than forty are k
 
 test('the status menu offers Open from Documents on an assignment\'s paper, in its frame or papers.html, never on a standalone document; the compact box\'s Versions shows versions alone', async () => {
   const fs = require('node:fs'), vm = require('node:vm');
-  const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer-paper.js'), 'utf8');
+  const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer/frame/writer-paper.js'), 'utf8');
   const from = source.indexOf('    const versions = async'), to = source.indexOf('    const restore = ', from);
   const items = async (standalone, own, compact = false) => {
     let click, menu;
@@ -101,7 +101,7 @@ test('the status menu offers Open from Documents on an assignment\'s paper, in i
 
 test('a restore the store refuses, or of a version gone meanwhile, says so and leaves the paper as it was', async () => {
   const fs = require('node:fs'), vm = require('node:vm');
-  const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer-paper.js'), 'utf8');
+  const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer/frame/writer-paper.js'), 'utf8');
   const from = source.indexOf('    const restore = async '), to = source.indexOf('    const docx = ', from);
   for (const restoreIt of [async () => { throw new Error('QUOTA_BYTES quota exceeded'); }, async () => null]) {
     const toasts = [], applied = [];
@@ -115,7 +115,7 @@ test('a restore the store refuses, or of a version gone meanwhile, says so and l
 
 test('Open from Documents lists no document in Trash', async () => {
   const fs = require('node:fs'), vm = require('node:vm');
-  const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer-paper.js'), 'utf8');
+  const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer/frame/writer-paper.js'), 'utf8');
   const head = '    const fromDocsSheet = async () => {', from = source.indexOf(head), to = source.indexOf('      const layer = ', from);
   assert.ok(from > 0 && to > from);
   const live = PA.newKey(), binned = PA.newKey(), older = PA.newKey();

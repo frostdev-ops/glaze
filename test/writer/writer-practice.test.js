@@ -132,7 +132,7 @@ test('the practice route blocks page traffic even to an AI host and continues on
     assert.equal(await request(null), 'aborted', 'a page cannot reach even a permitted AI origin');
     assert.equal(await request('https://page.example/worker.js'), 'aborted', 'nor can a page service worker');
     assert.equal(await request('chrome-extension://another/worker.js'), 'aborted', 'nor another extension');
-    assert.equal(await request(`chrome-extension://${id}/lib/background.js`), 'continued', 'only this extension worker may reach the proxy');
+    assert.equal(await request(`chrome-extension://${id}/background/background.js`), 'continued', 'only this extension worker may reach the proxy');
   } finally {
     if (practice === undefined) delete process.env.GLAZE_PRACTICE; else process.env.GLAZE_PRACTICE = practice;
     fs.rmSync(tmp, { recursive: true, force: true });
@@ -150,7 +150,7 @@ test('the worker allow-list returns only saved, granted origins and never connec
     transaction: (name) => { assert.equal(name, 'vault'); return { objectStore: (store) => { assert.equal(store, 'vault'); return { get: (key) => { assert.equal(key, 'connections'); return request(saved); } }; } }; } };
   const globals = { URL, indexedDB: { databases: async () => [{ name: 'glaze-ai' }], open: (name) => { assert.equal(name, 'glaze-ai'); return request(db); } },
     chrome: { permissions: { contains: async ({ origins }) => origins.length === 1 && origins[0] === 'https://ai.example/*' } } };
-  const worker = { url: () => 'chrome-extension://own/lib/background.js', evaluate: (fn) => require('node:vm').runInNewContext(`(${fn})()`, globals) };
+  const worker = { url: () => 'chrome-extension://own/background/background.js', evaluate: (fn) => require('node:vm').runInNewContext(`(${fn})()`, globals) };
   const context = { serviceWorkers: () => [worker] };
   const list = JSON.parse(JSON.stringify(await connections(context, 'own')));
   assert.deepEqual(list, [{ protocol: 'https:', host: 'ai.example', port: 8443 }]);

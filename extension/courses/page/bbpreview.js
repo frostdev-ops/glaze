@@ -2,7 +2,7 @@
 // loaded on demand: content.js loads this once a preview's frame is on an Ultra page and hands it each pass. Ultra converts
 // every attachment to a PDF and shows it in its own viewer, a frame at the attachment's data-bbfile viewerUrl (live probe,
 // 2026-10-30; the shapes: scripts/ultra-mock.js PREVIEW). Expanded, or open already, the worker is asked for that PDF
-// (lib/bb-preview.js) while Blackboard's frame stays. Done: this page reads the converted PDF from its presigned S3 address
+// (courses/bb-preview.js) while Blackboard's frame stays. Done: this page reads the converted PDF from its presigned S3 address
 // (the bucket lets the page's own origin read it, as the probe found; at most MAX, the worker asked again once if S3
 // refuses an address that ran out) while Glaze's viewer (writer.html in view mode, pdf-kind.js show) loads out of sight
 // beside Blackboard's frame; the bytes go to it over its port, and it takes Blackboard's place once its first page is
@@ -15,14 +15,14 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
   if (!X || X.site !== 'ultra') return null;
   const html = document.documentElement;
   const FRAMES = '#site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe:not(.gz-pv)';
-  const HEIGHT = 'max(640px, calc(100vh - 120px))'; // an assignment's paper (features/writer.js PAPER_HEIGHT)
-  const ASK = 20000, SHOW = 30000, EVERY = 15000, FOR = 5 * 60e3; // EVERY and FOR: lib/bb-preview.js, Ultra's own
+  const HEIGHT = 'max(640px, calc(100vh - 120px))'; // an assignment's paper (writer/page/writer.js PAPER_HEIGHT)
+  const ASK = 20000, SHOW = 30000, EVERY = 15000, FOR = 5 * 60e3; // EVERY and FOR: courses/bb-preview.js, Ultra's own
   const MAX = 50e6; // a converted PDF's bytes, at most
   const on = () => { const s = X.settings(); return X.on() && s.enabled !== false && s.enhance?.bbPreviews !== false && s.writer?.pdf !== false; };
   const views = new Map(); // Blackboard's frame → its view
   const answers = new Map(); // a frame's address → the worker's done answer, kept until two minutes before it ends
 
-  // The Look as the frame wears it (features/writer.js look).
+  // The Look as the frame wears it (writer/page/writer.js look).
   const TOKENS = [...GZ_COLORS.map(([k]) => k), '--gz-radius', '--gz-font', '--gz-ground', '--gz-surface-paint', '--gz-surface-paint-2', '--gz-surface-opacity', '--gz-glass-mix', '--gz-border-line', '--gz-border-strong'];
   const look = () => {
     const cs = getComputedStyle(html), bg = html.getAttribute('data-gz-bg'), glass = !!bg && bg !== 'solid';
@@ -140,7 +140,7 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
     v.reading = reading;
     v.bytes = pdfOf(v, reading.signal);
     v.bytes.catch((e) => { if (v.reading === reading) fail(v, String(e?.message || 'pdf').startsWith('pdf:') ? e.message : 'pdf'); });
-    const origin = src.slice(0, src.indexOf('/', src.indexOf('://') + 3)).toLowerCase(); // as features/writer.js
+    const origin = src.slice(0, src.indexOf('/', src.indexOf('://') + 3)).toLowerCase(); // as writer/page/writer.js
     const f = Object.assign(document.createElement('iframe'), { className: 'gz-pv', title: v.file.name || X.t('PDF') });
     f.setAttribute('data-gz-preview', '');
     f.tabIndex = -1;

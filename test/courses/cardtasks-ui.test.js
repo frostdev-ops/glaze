@@ -1,13 +1,13 @@
-// Tasks on course cards (features/cardtasks.js) in a VM with an inert DOM, network and storage: when it asks Canvas
+// Tasks on course cards (courses/page/cardtasks.js) in a VM with an inert DOM, network and storage: when it asks Canvas
 // (only with no fresh shared answer and no To Do list on the page, once), what it keeps (the list's shape), and that a
-// pass over unchanged cards writes nothing. What goes on a card is lib/todo.js card(), tested in todo.test.js.
+// pass over unchanged cards writes nothing. What goes on a card is planner/todo.js card(), tested in todo.test.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
-const T = require('../../extension/lib/todo.js');
+const D = require('../../extension/content/defaults.js');
+const T = require('../../extension/planner/todo.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(setImmediate); };
@@ -48,7 +48,7 @@ const cardFor = (cid) => {
 };
 const item = (id, at) => ({ plannable_type: 'assignment', plannable_id: id, course_id: 25, plannable_date: new Date(at).toISOString(), html_url: `/courses/25/assignments/${id}`, plannable: { title: `A${id}` }, submissions: { submitted: false } });
 
-// gs: a stored Gradescope record (lib/gradescope.js), with enhance.gradescope on.
+// gs: a stored Gradescope record (planner/gradescope.js), with enhance.gradescope on.
 const feature = ({ stored = {}, list = false, hold = false, gs = null } = {}) => {
   const state = { list, race: null }; // race: another context's newer answer, committed just before the cards' write
   const held = [];
@@ -78,7 +78,7 @@ const feature = ({ stored = {}, list = false, hold = false, gs = null } = {}) =>
     },
     chrome: {
       runtime: {
-        // The worker's 'glaze:todo' (lib/background.js BROKER): lib/todo.js change over this storage.
+        // The worker's 'glaze:todo' (background/background.js BROKER): planner/todo.js change over this storage.
         sendMessage: (m, cb) => {
           if (m.cache && state.race) { store.todoCache = state.race; state.race = null; }
           const local = { get: async (k) => Object.fromEntries(k.filter((x) => x in store).map((x) => [x, store[x]])), set: async (v) => { Object.assign(store, JSON.parse(JSON.stringify(v))); return true; } };
@@ -110,12 +110,12 @@ const feature = ({ stored = {}, list = false, hold = false, gs = null } = {}) =>
   c.globalThis = c;
   vm.createContext(c);
   if (gs) {
-    // lib/todo.js's Gradescope parts use the page's own globals (GZ_CTX, document): here it runs in the page's VM.
+    // planner/todo.js's Gradescope parts use the page's own globals (GZ_CTX, document): here it runs in the page's VM.
     delete c.GZ_TODO;
     c.GZ_SPEC = D.GZ_SPEC;
-    for (const f of ['lib/todo.js', 'lib/gradescope.js']) vm.runInContext(read(f), c);
+    for (const f of ['planner/todo.js', 'planner/gradescope.js']) vm.runInContext(read(f), c);
   }
-  vm.runInContext(read('features/cardtasks.js'), c);
+  vm.runInContext(read('courses/page/cardtasks.js'), c);
   return { m: c.GZ_CARD_TASKS, calls, store, cards, listeners, state, held };
 };
 const planner = (calls) => calls.filter((u) => u.includes('/planner/items')).length;
@@ -205,7 +205,7 @@ test("a list that goes without an answer (it failed) leaves the cards to ask for
 });
 
 test('one profile request a page, whoever asks (Better To Do and the cards)', async () => {
-  const decl = read('content-canvas.js').match(/ {2}let mine = null;\n {2}const profile = .*\n/)[0];
+  const decl = read('content/content-canvas.js').match(/ {2}let mine = null;\n {2}const profile = .*\n/)[0];
   const asked = [];
   const ctx = { capi: (u) => { asked.push(u); return Promise.resolve({ id: '3' }); } };
   vm.createContext(ctx);
@@ -238,7 +238,7 @@ test('a stale answer at startup with the list on the page: when the list goes, t
   assert.deepEqual(titles(f.cards[0]), ['A1', 'A2']);
 });
 
-// Gradescope (lib/gradescope.js): a Gradescope account's work shows for a Canvas account only once it says yes, and the
+// Gradescope (planner/gradescope.js): a Gradescope account's work shows for a Canvas account only once it says yes, and the
 // question is asked quietly wherever the work would show: here, one line above the first card's tasks.
 const GS_ID = '0123456789abcdef01234567';
 const gsRecord = (bind = {}) => ({

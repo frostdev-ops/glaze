@@ -8,7 +8,7 @@
 // The rules the gray text follows (fits, nextWord, consume, pause) are plain functions, for node tests.
 var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   // ---- the gray text's rules -----------------------------------------------------------------------------------------
-  // The same place lib/ai/tasks/writer-complete.js fits() takes: the caret right after a word or one space after it, in a
+  // The same place ai/tasks/writer-complete.js fits() takes: the caret right after a word or one space after it, in a
   // sentence of at least three words, with only white space after it in its line.
   const WORD = /[\p{L}\p{N}\p{M}]/u;
   const TAIL = /[\p{L}\p{N}\p{M}]+(?:['’-][\p{L}\p{N}\p{M}]+)*['’-]?$/u;
@@ -48,12 +48,12 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const PAUSE = { min: 250, max: 1000 };
   const pause = (score) => Math.round(Math.min(PAUSE.max, Math.max(PAUSE.min, 900 - 800 * score)));
   const learn = (score, took) => score * 0.8 + (took ? 0.2 : 0);
-  // The pause Advanced's tuning set for the gray text (Settings → AI, lib/ai/settings.js TUNE), else the adaptive one.
+  // The pause Advanced's tuning set for the gray text (Settings → AI, ai/settings.js TUNE), else the adaptive one.
   const wait = (s, score) => { const p = s?.mode === 'advanced' ? s.tune?.completion?.pause : undefined; return Number.isSafeInteger(p) && p >= 100 && p <= 2000 ? p : pause(score); };
   // The connection's name on the chip.
   const providerName = (st, t) => (st?.provider === 'device' ? t('Chrome on-device AI') : st?.provider === 'apple' ? t('Apple Intelligence') : st?.to || t('Endpoint'));
   const api = { fits, sentence, tailText, nextWord, consume, pause, wait, learn, providerName };
-  const D = typeof GZ_AI_FAILURE !== 'undefined' ? GZ_AI_FAILURE : typeof require === 'function' ? require('./lib/ai/failure.js') : null;
+  const D = typeof GZ_AI_FAILURE !== 'undefined' ? GZ_AI_FAILURE : typeof require === 'function' ? require('../../ai/failure.js') : null;
   const reasonText = (e) => D?.explain(e) || '';
 
   const F = globalThis.GZ_WRITER_FRAME;
@@ -228,12 +228,12 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const track = () => { const m = new Mapping(); trackers.add(m); return { m, done: () => trackers.delete(m) }; };
   let score = 0.5, timer = 0, flight = 0, shown = 0;
   // The sentences as the gray text shown here would have finished them, the newest 40: the model is told them and the task
-  // refuses them again (lib/ai/tasks/writer-complete.js input past). In memory only, for one document: a new editor state
+  // refuses them again (ai/tasks/writer-complete.js input past). In memory only, for one document: a new editor state
   // (another paper) or a document replaced whole (the page's own text, a version restored) starts it again.
   const past = [];
   // The gray text's model, readied as the box opens, on focus a minute later, and every 90 s while focused, so the first
-  // pause is as quick as the next (the owner, 2026-10-27; lib/ai/broker.js op warm: nothing is asked of the model). After a
-  // space and mid-word it reads different instructions (lib/ai/tasks/writer-complete.js), so both are readied.
+  // pause is as quick as the next (the owner, 2026-10-27; ai/broker.js op warm: nothing is asked of the model). After a
+  // space and mid-word it reads different instructions (ai/tasks/writer-complete.js), so both are readied.
   const WARM = { again: 60000 };
   let warmedAt = 0, keeping = 0;
   const warmUp = (now = false) => {
@@ -435,7 +435,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     return { format: f.label, font: f.font, size: f.size, line: f.line, margin: f.margins.every((m) => m === f.margins[0]) ? f.margins[0] : null, header, ...(mixed && { mixed: true }) };
   };
   const layoutChanged = () => { if (fb.grade && !fb.stale && fb.layoutKey !== JSON.stringify(layout())) { fb.stale = true; paint(); } };
-  // The assignment's attached files, read by the page for image preparation or Feedback (lib/writer-context-assignment.js
+  // The assignment's attached files, read by the page for image preparation or Feedback (writer/writer-context-assignment.js
   // attachments): [{ name, text } | { name, image }], none after two minutes. Pictures aren't read for a model known not to
   // take them.
   let asks = 0;

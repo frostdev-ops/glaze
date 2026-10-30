@@ -1,9 +1,9 @@
 // Ultra's To Do column on its base pages (Courses, Organizations), div.todo-panel: no rule beside it on any Look. Empty, its
-// left border drew a line down the page. As the sidebar (features/sidebar.css) it keeps the sidebar's edge.
+// left border drew a line down the page. As the sidebar (navigation/page/sidebar.css) it keeps the sidebar's edge.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path');
-const css = fs.readFileSync(path.join(__dirname, '../../extension/theme.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+const css = fs.readFileSync(path.join(__dirname, '../../extension/content/theme.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].flatMap(([, s, b]) => s.split(/,(?![^(]*\))/).map((x) => [x.trim(), b]));
 // [ids, classes and attributes, tags]; :not() counts as its most specific argument.
 const spec = (sel) => {

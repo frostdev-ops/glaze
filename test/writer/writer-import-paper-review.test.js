@@ -3,14 +3,14 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const source = () => fs.readFileSync(process.env.WRITER_PAPER_SOURCE || path.join(__dirname, '../../extension/writer-paper.js'), 'utf8');
+const source = () => fs.readFileSync(process.env.WRITER_PAPER_SOURCE || path.join(__dirname, '../../extension/writer/frame/writer-paper.js'), 'utf8');
 const paper = () => {
   const text = source(), from = text.indexOf('    // The paper becomes the Word file'), to = text.indexOf("    file.addEventListener('change'", from);
   const applied = [], saved = [], snapshots = [], notices = [], api = {}, root = { inert: false, isConnected: true };
   const view = { props: { editable: () => true }, state: { doc: { label: 'draft' } }, setProps(p) { Object.assign(this.props, p); }, focus() {} };
   const ctx = vm.createContext({ console: { error() {} }, RangeError, ArrayBuffer, Uint8Array, DOCX: [], format: {}, key: 'original', paper: {}, root, view, current: api, api,
     need: async () => {}, GZ_WRITER_DOCX: { importDocx: async () => ({ doc: { type: 'doc', text: 'imported' }, html: '<p>Imported</p>', warnings: [] }) },
-    S: { paper: { nodeFromJSON: (json) => ({ toJSON: () => json }) } }, PA: require('../../extension/lib/writer-papers.js'), keep: false,
+    S: { paper: { nodeFromJSON: (json) => ({ toJSON: () => json }) } }, PA: require('../../extension/writer/writer-papers.js'), keep: false,
     F: { check: () => ({ issues: [{ rule: 'spacing' }] }), KEPT: new Set(['spacing']) },
     save: async () => { snapshots.push(ctx.keep); return true; }, keepPictures: async () => {}, record: () => ({ keep: ctx.keep }), t: (k) => k, restore: () => {}, toast: (text, act) => notices.push({ text, act }),
     store: { save: async (k, patch) => { saved.push(k); return { paper: patch, version: { id: 'before' } }; } },

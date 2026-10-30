@@ -9,7 +9,7 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
 const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
-const D = require(path.join(root, 'defaults.js'));
+const D = require(path.join(root, 'content/defaults.js'));
 const CANVAS = 'https://canvas.school.test';
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 10000) => {
@@ -64,7 +64,7 @@ const check = async (name, test) => {
       const tab = await until(() => context.pages().find((p) => !before.has(p) && p.url().split(/[?#]/)[0] === PAPERS), 'papers.html in a new tab');
       await tab.close();
     };
-    // Documents beside Glaze's bar on a school's page (features/settingspage.js), its document shown once it claims its pass;
+    // Documents beside Glaze's bar on a school's page (settings/page/settingspage.js), its document shown once it claims its pass;
     // no tab opens. Left again with Escape.
     const opensInPage = async (p, act) => {
       const before = new Set(context.pages());
@@ -221,7 +221,7 @@ const check = async (name, test) => {
             const svg = item.locator('svg');
             const b = await svg.boundingBox();
             assert.ok(b?.width > 0 && b?.height > 0, `${L.name} ${mode}: icon has room`);
-            assert.equal(await svg.locator('path').getAttribute('d'), require('../../extension/lib/navbar.js').ICONS.documents, `${L.name} ${mode}: Documents drawing`);
+            assert.equal(await svg.locator('path').getAttribute('d'), require('../../extension/navigation/navbar.js').ICONS.documents, `${L.name} ${mode}: Documents drawing`);
             assert.equal(await svg.evaluate((e) => getComputedStyle(e).stroke), await item.evaluate((e) => getComputedStyle(e).color), `${L.name} ${mode}: inherits the item's ink`);
           }
         }

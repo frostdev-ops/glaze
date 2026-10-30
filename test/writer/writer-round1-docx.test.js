@@ -1,9 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../../extension/lib/writer-schema.js');
-const X = require('../../extension/lib/writer-docx.js');
-const E = require('../../extension/lib/writer-editor.js');
-globalThis.GZ_WRITER_OBJECTS_DOCX = require('../../extension/lib/writer-objects-docx.js');
+const S = require('../../extension/writer/writer-schema.js');
+const X = require('../../extension/writer/writer-docx.js');
+const E = require('../../extension/writer/writer-editor.js');
+globalThis.GZ_WRITER_OBJECTS_DOCX = require('../../extension/writer/writer-objects-docx.js');
 
 const trip = async (html) => S.paper.nodeFromJSON((await X.importDocx(X.exportDocx(S.parse(S.paper, html)).bytes)).doc);
 
@@ -41,7 +41,7 @@ test('horizontal rules round-trip in the body, quotes and table cells', async ()
 });
 
 test('picture captions export at the effective paper size for imports and presets', () => {
-  const ST = require('../../extension/lib/writer-styles.js');
+  const ST = require('../../extension/writer/writer-styles.js');
   const image = S.paper.node('image', { src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', display: 'block', caption: 'Caption' });
   for (const [format, setup] of [
     ['mla9', ST.pageSetup(ST.FORMATS.mla9, { size: 16 })],
@@ -54,7 +54,7 @@ test('picture captions export at the effective paper size for imports and preset
 });
 
 test('imported headings keep inherited and mixed run emphasis instead of taking the format emphasis', async () => {
-  const Z = require('../../extension/lib/zip.js');
+  const Z = require('../../extension/core/zip.js');
   const parts = X.exportDocx(S.parse(S.paper, '<h1>Plain <strong>bold</strong></h1>')).parts;
   parts['word/styles.xml'] = parts['word/styles.xml'].replace(/(<w:style w:type="paragraph" w:styleId="Heading1">[\s\S]*?<w:rPr>)[\s\S]*?(<\/w:rPr>)/, '$1<w:b w:val="0"/><w:i/>$2');
   const file = Buffer.concat(Z.zip(Object.entries(parts).map(([name, text]) => ({ name, data: new TextEncoder().encode(text) }))));

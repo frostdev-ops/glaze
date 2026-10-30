@@ -1,9 +1,9 @@
-// Documents' files: a PDF's or a deck's bytes (lib/doc-kinds.js), kept by the worker in its own IndexedDB, glaze-docs
-// (lib/background.js), by their SHA-256. writer.html in a school's page (whose IndexedDB the site around it partitions),
+// Documents' files: a PDF's or a deck's bytes (documents/doc-kinds.js), kept by the worker in its own IndexedDB, glaze-docs
+// (background/background.js), by their SHA-256. writer.html in a school's page (whose IndexedDB the site around it partitions),
 // papers.html and Settings' backup reach them over a runtime port (PORT), in chunks of CHUNK bytes, each sent as base64
 // (Safari's message size is the tightest) and acknowledged, a put's at most WINDOW ahead of its acknowledgements and a
 // get's each before the next, so neither side holds more than the one copy it is building and a few chunks. A record
-// points at its file as { hash, size, type } (lib/writer-papers.js); the worker keeps, per document, the hashes its
+// points at its file as { hash, size, type } (writer/writer-papers.js); the worker keeps, per document, the hashes its
 // record and versions point at (owners), and a file goes once no document points at it. One object store, string keys:
 // f:<hash> a file (its chunks' id and count, its owners), c:<id>:<n> a chunk, u:<id> an upload under way, o:<document>
 // the hashes a document holds.
@@ -12,7 +12,7 @@ var GZ_DOC_FILES = globalThis.GZ_DOC_FILES || (() => {
   const PORT = 'glaze:docFiles';
   const CHUNK = 384 << 10; // 512 KB as base64
   const WINDOW = 4; // a put's chunks on their way at once (client put)
-  // The largest file (lib/doc-kinds.js FILE; test/doc-files.test.js holds them equal) and what a record held inline before
+  // The largest file (documents/doc-kinds.js FILE; test/doc-files.test.js holds them equal) and what a record held inline before
   // the store (its base64 within the record's 4 MB), which a record may still hold, and a browser without the store writes.
   const MAX = 50e6, LEGACY = 3e6;
   // An upload, or a file nothing points at, stays this long before a sweep takes it: a restore uploads before it commits.

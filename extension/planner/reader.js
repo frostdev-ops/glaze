@@ -1,4 +1,4 @@
-// Glaze's reader (W23): reads a PDF or a picture on the device for the import dialogs (features/import.js). An extension
+// Glaze's reader (W23): reads a PDF or a picture on the device for the import dialogs (planner/page/import.js). An extension
 // page that a dialog opens in a hidden frame: pdf.js and the OCR engine need workers and WebAssembly, which a content
 // script can't host under the LMS page's CSP, and the service worker can start neither. It reads one file, handed to
 // it with a one-use pass from the worker and a MessageChannel, and answers on that channel only: progress, then the
@@ -11,9 +11,9 @@
   const fail = (code) => { throw Object.assign(new Error(code), { code }); };
   const LANGS = new Set(['eng', 'deu', 'spa', 'fra', 'nld', 'por']);
 
-  // The OCR engine in its own worker (lib/ocr.js), started on the first picture and kept for a file's other pages.
+  // The OCR engine in its own worker (planner/ocr.js), started on the first picture and kept for a file's other pages.
   const engine = (langs, say) => {
-    const w = new Worker(url('lib/ocr.js'));
+    const w = new Worker(url('planner/ocr.js'));
     let turn = null;
     w.onmessage = ({ data: m }) => (m.type === 'progress' ? say(m.p) : turn?.(m));
     w.onerror = (e) => { e.preventDefault(); turn?.({ type: 'error' }); };
@@ -27,7 +27,7 @@
       stop: () => w.terminate(),
     };
   };
-  // Pixels drawn on white, at most R.side on the longest side, as the engine wants them (lib/doctext.js pgm).
+  // Pixels drawn on white, at most R.side on the longest side, as the engine wants them (core/doctext.js pgm).
   const pixels = (src, w, h) => {
     const k = Math.min(1, R.side / Math.max(w, h));
     const c = new OffscreenCanvas(Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k)));
@@ -59,11 +59,11 @@
 
   const pdf = async (file, langs, say) => {
     if (file.size > R.pdf) fail('size');
-    const pdfjs = await import(url('lib/pdfjs/pdf.mjs'));
-    pdfjs.GlobalWorkerOptions.workerSrc = url('lib/pdfjs/pdf.worker.mjs');
+    const pdfjs = await import(url('vendor/pdfjs/pdf.mjs'));
+    pdfjs.GlobalWorkerOptions.workerSrc = url('vendor/pdfjs/pdf.worker.mjs');
     // maxImageSize: a picture inside the PDF over the same pixel limit as a photo is left undecoded (its page then reads
     // as blank, which the review says), whatever the size the page is drawn at.
-    const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), wasmUrl: url('lib/pdfjs/'), maxImageSize: R.pixels, enableXfa: false, disableFontFace: true, useSystemFonts: false, verbosity: 0 });
+    const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), wasmUrl: url('vendor/pdfjs/'), maxImageSize: R.pixels, enableXfa: false, disableFontFace: true, useSystemFonts: false, verbosity: 0 });
     let doc;
     try { doc = await task.promise; } catch (e) { await task.destroy().catch(() => {}); fail(e?.name === 'PasswordException' ? 'locked' : 'broken'); }
     let ocr = null;
@@ -107,7 +107,7 @@
   };
 
   // One file per reader, and only with the one-use pass Glaze's import got from the worker for this tab before it
-  // opened the frame (lib/background.js 'glaze:reader'): a site that frames this page itself can't get one, since web
+  // opened the frame (background/background.js 'glaze:reader'): a site that frames this page itself can't get one, since web
   // pages can't message the worker, so it can't set the reader to work. The answer goes back on the job's own channel.
   let taken = false;
   addEventListener('message', async (e) => {

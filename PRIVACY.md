@@ -1111,7 +1111,7 @@ A site you add is kept in a list in the extension's local storage (`canvas`, `mo
   with a one-use pass that Glaze's import gets from its own background worker, so a site that framed it itself can't
   make it read anything.
 - `identity` (Chrome only, optional) — not requested by released builds while Google Calendar sync is switched off
-  at build time (`ON` in `lib/gcal.js`): the Chrome, Firefox and Safari packaging scripts remove it, with the OAuth
+  at build time (`ON` in `planner/gcal.js`): the Chrome, Firefox and Safari packaging scripts remove it, with the OAuth
   client, from the manifest they ship. In a build that enables the sync it is asked for only when you press Connect in
   Google Calendar sync, and removed on Disconnect. It lets Chrome sign Glaze in to Google Calendar with the Google
   account in your browser; Chrome shows no warning for it. Glaze never asks for `identity.email` and never sees your

@@ -4,14 +4,14 @@
 // (the softness is the look), at most 30 frames a second, and all movement is worked out in the
 // shaders from one time uniform, so a frame is one uniform write and one draw. Motion off draws a
 // single still frame and stops; background tabs get no animation frames at all.
-// What is drawn: a built-in scene, a student's own shader (lib/glsl.js checks and wraps it),
+// What is drawn: a built-in scene, a student's own shader (looks/glsl.js checks and wraps it),
 // or up to four layers blended bottom first. All of them run under the budget guard below.
 // A retry must reload a failed dependency too: the browser remembers failed module URLs.
 const {
   WebGLRenderer, Scene, OrthographicCamera, PerspectiveCamera, Mesh, Points, PlaneGeometry,
   BufferGeometry, Float32BufferAttribute, ShaderMaterial, RawShaderMaterial, Color, ColorManagement,
   CustomBlending, AddEquation, OneFactor, DstColorFactor, OneMinusSrcAlphaFactor, OneMinusSrcColorFactor,
-} = await import(`./three.js${new URL(import.meta.url).search}`);
+} = await import(`../vendor/three.js${new URL(import.meta.url).search}`);
 
 // Colors pass through as written, the way CSS mixes them, so a scene matches the gradient under it.
 ColorManagement.enabled = false;
@@ -148,7 +148,7 @@ void main() {
 // top left: each plate's cut edge is lit where it faces it, and each plate drops a soft blue shadow onto the one below
 // (height sampled toward the light). The terrain rises toward the screen's edges so the reading area sits over the basin,
 // misted toward the ground. A faint indigo glow drifts round every 45 s. Its time starts 24 s in, the source's own still:
-// motion off shows that frame. uShift is the pointer's parallax, in screen units (lib/scene.js eases it).
+// motion off shows that frame. uShift is the pointer's parallax, in screen units (looks/scene.js eases it).
 const TOPOGRAPHY = `${FLAT}
 uniform float uDim;
 uniform vec2 uShift;
@@ -795,7 +795,7 @@ const tell = (m) => { if (/-extension:$/.test(location.protocol) && parent !== w
 //   kind 'shader' draws x.bg.shader.src and 'layers' draws x.bg.layers (x is the Look's parts, GZ_CTX.parts()); anything else
 //   draws the built-in `name`. palette is the --gz-* map that layers' colour names are looked up in.
 // onFail(why, errors, info) is called once, after the scene has stopped, when a background can't be shown; the caller keeps
-// its gradient. why: 'refused' (lib/glsl.js said no: it never reached GL), 'compile' (this device's compiler said no),
+// its gradient. why: 'refused' (looks/glsl.js said no: it never reached GL), 'compile' (this device's compiler said no),
 // 'lost' (a student's shader, and the GL context went), 'budget' (over budget at the last step) or 'empty' (nothing to
 // draw); or 'dropped' (a built-in scene or layers whose context the browser took and never gave back), which a new canvas
 // can show again. errors: [{ line, message }], lines in the student's own source. info: { level, ms } for 'budget'.
@@ -1005,7 +1005,7 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
         if (shader !== null) {
           // A shader reaches GL only through here, and only after the checker has passed it (again: the sanitizer did once).
           const G = globalThis.GZ_GLSL;
-          const checked = G ? G.check(shader) : { ok: false, errors: [{ line: 0, message: 'The shader checker (lib/glsl.js) is not loaded.' }] };
+          const checked = G ? G.check(shader) : { ok: false, errors: [{ line: 0, message: 'The shader checker (looks/glsl.js) is not loaded.' }] };
           if (!checked.ok) { name = ''; return fail('refused', checked.errors); }
           def = { scale: 0.6, custom: true, G, lines: shader.split('\n').length };
           parts = [{ object: new Mesh(new PlaneGeometry(2, 2), raw(G.VERT, G.wrap(shader))), camera: new OrthographicCamera(), u: U, rate: 1 }];
@@ -1050,7 +1050,7 @@ export const start = (canvas, live = () => true, onFail = () => {}, onStep = () 
     draw,
     stop,
     // The pointer over the other document (a course tab's frame, or the page around it), in this window's pixels
-    // (lib/scene-host.js passes it on), while the scene follows.
+    // (looks/scene-host.js passes it on), while the scene follows.
     point: (x, y) => { if (following) point(x, y); },
     get follows() { return following; },
     get clock() { return { ...clock }; },

@@ -1,6 +1,6 @@
 // Notes (Canvas and Blackboard Ultra, enhance.notes, off by default; the same switch as the Dashboard notes tile), loaded on demand: a notes
 // app over the page, like Insights. Opened from the command palette (Notes, New note, Course notes), the Dashboard notes
-// tile, a course card's create menu, a Course notes button on a course's home (features/notes-home.js, which the worker
+// tile, a course card's create menu, a Course notes button on a course's home (planner/page/notes-home.js, which the worker
 // registers only while Notes is on, calls home; on Ultra, content-ultra.js's pass calls sync on a course outline) and a
 // class reminder. On Ultra, links come from the course's content (the public contents API: titles and links only). It
 // opens only for the student's own click or key
@@ -10,10 +10,10 @@
 // shows is part of the page, as anything on screen is. Folders (per course or free-standing),
 // rich text, pictures and attachments, links to the course's Canvas files, pages and module items, search, sort and
 // filter, a trash kept 30 days, and export (one note as Markdown or HTML; everything as a zip) and import of that zip.
-// What it keeps is written by the service worker's queue ('glaze:notesapp', lib/notes.js run): the library's index in
+// What it keeps is written by the service worker's queue ('glaze:notesapp', planner/notes.js run): the library's index in
 // storage.local, bodies and files in the extension's own IndexedDB. Nothing goes in the school page's storage, and
 // nothing leaves the device: the only requests are read-only GETs to the student's own Canvas when they pick a link.
-// Every HTML that enters the editor (a paste, a drop, a load) and every save goes through lib/notes.js's sanitizer.
+// Every HTML that enters the editor (a paste, a drop, a load) and every save goes through planner/notes.js's sanitizer.
 // Loaded on demand: a second injection keeps the first.
 var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   const ctx = globalThis.GZ_CTX;
@@ -26,13 +26,13 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   // Typing and submitting also need the activation a real click or key gives (a script can make the browser type).
   const real = (e) => !!e?.isTrusted;
   const typed = (e) => real(e) && activated();
-  const libs = () => ctx.need('lib/doctext.js', () => globalThis.GZ_DOCTEXT).then(() => ctx.need('lib/notes.js', () => globalThis.GZ_NOTES));
+  const libs = () => ctx.need('core/doctext.js', () => globalThis.GZ_DOCTEXT).then(() => ctx.need('planner/notes.js', () => globalThis.GZ_NOTES));
   const uuid = () => crypto.randomUUID();
   const lang = () => GZ_I18N.locale(ctx.locale());
   const mb = (n) => (n >= 2 ** 30 ? `${GZ_I18N.num(Math.round(n / 2 ** 30 * 10) / 10, ctx.locale())} GB` : `${GZ_I18N.num(Math.max(0.1, Math.round(n / 2 ** 20 * 10) / 10), ctx.locale())} MB`);
   const day = (ms) => new Date(ms).toLocaleDateString(lang(), { month: 'short', day: 'numeric', ...(new Date(ms).getFullYear() !== new Date().getFullYear() && { year: 'numeric' }) });
   const when = (ms) => new Date(ms).toLocaleString(lang(), { dateStyle: 'medium', timeStyle: 'short' });
-  let N = null; // lib/notes.js
+  let N = null; // planner/notes.js
   let me = null; // { key, uid }
   const send = (m) => new Promise((res) => {
     try { chrome.runtime.sendMessage({ type: 'glaze:notesapp', key: me?.key, ...m }, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); }
@@ -75,7 +75,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
         let block = document.getElementById('gz-nt-block');
         if (!block) block = make('div', { id: 'gz-nt-block', className: 'outline-action-block' });
         if (b.parentNode !== block) block.append(b);
-        // Last of the page's blocks: with the sidebar (features/sidebar.js), above its widgets.
+        // Last of the page's blocks: with the sidebar (navigation/page/sidebar.js), above its widgets.
         const end = [...side.children].find((c) => c.id === 'gz-sb-widgets');
         if (end ? block.nextElementSibling !== end : side.lastElementChild !== block) { if (end) end.before(block); else side.append(block); }
       } else {
@@ -86,7 +86,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     if (!on) box?.close();
   };
   ctx.wordsIn?.add(() => sync());
-  // The course-home hook (features/notes-home.js), which the worker also puts into a course home already open when Notes
+  // The course-home hook (planner/page/notes-home.js), which the worker also puts into a course home already open when Notes
   // is turned on: the switches are read from storage now. A change that comes while that read is on its way supersedes
   // it (seen), so an older answer can't bring the button back after Notes was turned off.
   let seen = 0;
@@ -100,8 +100,8 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   try {
     chrome.storage.onChanged.addListener((ch, area) => { if (area === 'sync' && (ch.enhance || ch.enabled)) home(); });
   } catch { /* extension reloaded */ }
-  // Ultra's reader (lib/ultra.js): what the notes app asks of Blackboard goes only through it.
-  const reader = (o = {}) => ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.read({ origin: location.origin, ...o }));
+  // Ultra's reader (courses/ultra.js): what the notes app asks of Blackboard goes only through it.
+  const reader = (o = {}) => ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.read({ origin: location.origin, ...o }));
   const courseHere = () => location.pathname.match(ultra ? /^\/ultra\/courses\/(_\d+_\d+)/ : /^\/courses\/(\d+)/)?.[1] || '';
 
   // ---- the view ----------------------------------------------------------------------------------------------------
@@ -123,7 +123,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     try {
       await libs();
       N = globalThis.GZ_NOTES;
-      // Ultra: the student's id (/users/me) and their courses (memberships), through lib/ultra.js's reader.
+      // Ultra: the student's id (/users/me) and their courses (memberships), through courses/ultra.js's reader.
       const [p, list] = ultra ? await reader().then(async (r) => { const id = await r.me(); return [{ id }, await r.memberships(id).catch(() => [])]; })
         .then(([p, ms]) => [p, ms.filter((m) => m?.course).map((m) => ({ id: m.courseId, name: ctx.nickOf(m.courseId) || m.course.name }))])
         : await Promise.all([ctx.profile(), ctx.canvasCourses().catch(() => [])]);
@@ -141,7 +141,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     document.body.append(box);
     box.showModal();
     const sharedBox = box;
-    ctx.need('features/sharing.js', () => globalThis.GZ_SHARING_UI).then(() => { if (box === sharedBox) shareSurface = GZ_SHARING_UI.surface(); }).catch(() => {});
+    ctx.need('sharing/page/sharing.js', () => globalThis.GZ_SHARING_UI).then(() => { if (box === sharedBox) shareSurface = GZ_SHARING_UI.surface(); }).catch(() => {});
     drawLib();
     if (create) newNote(course); else drawEmpty();
     (create ? el.title : el.search).focus();
@@ -395,7 +395,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   const clean = () => !el.body?.isConnected || serialize() === cur.saved;
   const snapshot = (c) => (c === cur && el.body?.isConnected && c.saved != null ? serialize() : c.pending);
   // The editor's HTML as it is stored: sanitized, pictures by their id only. CUT instead when the sanitizer would have to
-  // leave part of it out (lib/notes.js parse): never a shortened copy to save, compare with what is stored, duplicate or export.
+  // leave part of it out (planner/notes.js parse): never a shortened copy to save, compare with what is stored, duplicate or export.
   const CUT = Symbol('cut');
   const warnSave = (c, text) => { c.warned = text; if (c === cur) say(text); return false; };
   const serialize = () => {
@@ -824,7 +824,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
       try {
         const path = k === 'file' ? `/courses/${cid}/files?per_page=100&sort=updated_at&order=desc` : k === 'page' ? `/courses/${cid}/pages?per_page=100&sort=title`
           : `/courses/${cid}/modules?include[]=items&per_page=50`;
-        // Ultra: the course's content items, whatever the Kind, through lib/ultra.js's reader (the public contents API, kept to
+        // Ultra: the course's content items, whatever the Kind, through courses/ultra.js's reader (the public contents API, kept to
         // titles, parents and links; GET on this site, redirects refused, stopped with the picker).
         // Only what the student may open now (search's rule), and said when not all of it could be read.
         const u = ultra && await (await reader({ signal: ctl.signal })).contents(cid);

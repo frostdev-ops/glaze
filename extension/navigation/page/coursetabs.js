@@ -1,5 +1,5 @@
 // Course tabs on Canvas and Blackboard Ultra (enhance.tabs), loaded on demand: each site loads this (after
-// lib/coursetabs.js) in the top frame, and in each tab's own frame, while the switch is on, calls sync() from its passes,
+// navigation/coursetabs.js) in the top frame, and in each tab's own frame, while the switch is on, calls sync() from its passes,
 // and held() from its mutation callback so the strip is back in a top bar Ultra has just drawn before that bar is painted.
 // Each course the student opens gets a tab, as a browser's pages do: closed, pinned and reordered with the mouse or the
 // keyboard, at most `cap` of them. The strip sits above the course's sticky top bar, between its two rows or below it; on
@@ -33,7 +33,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   let epoch = 0; // worker cache generation; pending replies from an older generation are ignored
   let who = null; // the site's signed-in account
   let loaded = false; // the stored list is in (or can't be: then this page's list only)
-  let tabs = []; // lib/coursetabs.js's list
+  let tabs = []; // navigation/coursetabs.js's list
   let lastPath = '';
   let last; // the course shown at the last pass
   let strip = null;
@@ -49,7 +49,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
 
   const local = (fn) => { try { if (chrome.runtime?.id) fn(chrome.storage.local); } catch { /* extension reloaded under the tab */ } };
   const key = () => L.storeKey(location.origin, who);
-  // The worker keeps sketches across reloads (lib/background.js 'glaze:snap'), for this site and account only.
+  // The worker keeps sketches across reloads (background/background.js 'glaze:snap'), for this site and account only.
   const send = (m) => {
     if (preview || framed || !who || !chrome.runtime?.id) return Promise.resolve(null);
     try { const sent = epoch; return Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:snap', uid: who, born: performance.timeOrigin, epoch, ...m })).then((r) => m.op === 'hello' || sent === epoch ? r : null, () => null); } catch { return Promise.resolve(null); }
@@ -173,7 +173,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     hadClear = !!header?.hasAttribute('data-gz-keep-clear');
     if (header && !hadClear) header.setAttribute('data-gz-keep-clear', '');
   };
-  // Glaze's own navigation bar holds the tabs too (features/navbar.js, data-gz-navbar's word `tabs`). At 'nav' they are only
+  // Glaze's own navigation bar holds the tabs too (navigation/page/navbar.js, data-gz-navbar's word `tabs`). At 'nav' they are only
   // there: no strip, in a tab's own frame either (the page around it has the bar). Where no bar holds them, 'nav' is 'above';
   // 'auto' is 'nav' where that bar is a top bar holding them, as defaults.js GZ_TABS_AUTO words it for the first paint.
   const navHolds = () => words().includes('tabs');
@@ -236,7 +236,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const make = () => {
     strip = document.createElement('div');
     strip.id = 'gz-ctabs';
-    strip.setAttribute('data-gz-keep-clear', ''); // floating widgets keep off it (features/widgets.js)
+    strip.setAttribute('data-gz-keep-clear', ''); // floating widgets keep off it (core/page/widgets.js)
     list = document.createElement('div');
     list.className = 'gz-ctabs-list';
     list.setAttribute('role', 'tablist');
@@ -310,7 +310,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (strip.style.getPropertyValue('--gz-ctab-w') !== `${p.width}px`) strip.style.setProperty('--gz-ctab-w', `${p.width}px`);
     set(list, 'aria-label', t('Course tabs'));
     strip.querySelector('#gz-ctabs-hint').textContent = t('Delete closes a tab, P pins it, and Shift with an arrow key moves it.');
-    // A tab opened, closed, pinned or moved glides to its place, and a closed one fades where it was (lib/motion.js);
+    // A tab opened, closed, pinned or moved glides to its place, and a closed one fades where it was (core/motion.js);
     // not on the first drawing of the strip, which has nothing to come from.
     const motion = list.children.length ? globalThis.GZ_MOTION : null;
     if (motion) motion.flip(() => [...list.children], () => fill(rows, cur, p), { ghosts: true, container: strip, within: list, skip: (e) => drag?.on && e.dataset.courseId === drag.cid });
@@ -406,9 +406,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
 
   // ---- pictures ------------------------------------------------------------------------------------------------
-  // How a course's page looked: a sketch (lib/coursetabs.js sketch) of whichever page is showing (this one or a tab's frame),
+  // How a course's page looked: a sketch (navigation/coursetabs.js sketch) of whichever page is showing (this one or a tab's frame),
   // taken here while this tab is the one on screen, once the page has finished building, without a tip of Glaze's; the
-  // worker keeps it (lib/background.js 'sketch'). Taken as the student is about to leave it (a press on a tab or on a link out
+  // worker keeps it (background/background.js 'sketch'). Taken as the student is about to leave it (a press on a tab or on a link out
   // of the course), and after it changes, scrolls or stays, at most each 15 s per page; at most one each 0.6 s. Shown, as a
   // stand-in, only while a tab's frame first loads, at the window size it was taken at.
   // The page's own markers only: Glaze's panels in it (its To Do, widgets) load on their own time.
@@ -430,7 +430,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       return { doc, frame: f.el };
     } catch { return null; }
   };
-  // The page on screen as lib/coursetabs.js sketches it, in this window: a frame's where the frame is. Its colours as
+  // The page on screen as navigation/coursetabs.js sketches it, in this window: a frame's where the frame is. Its colours as
   // painted, through a one-pixel canvas (any CSS colour the page computes: rgb, color-mix's, oklch's).
   let paint = null;
   const hexes = new Map();
@@ -592,7 +592,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     return true;
   };
   const cmdTo = (f, open) => { f.el.focus({ preventScroll: true }); f.el.contentWindow?.postMessage({ gzCtab: 'palette', open }, location.origin); };
-  // The sidebar (features/sidebar.js) works in the document on screen only: this page, or the tab's frame over it. A
+  // The sidebar (navigation/page/sidebar.js) works in the document on screen only: this page, or the tab's frame over it. A
   // frame learns which it is from the page around it ('visible'), and counts as hidden until then. Its record's changes
   // go through that page ('sidebar'), which sends them only for the frame on screen, signed in as the page is, and
   // answers that frame alone ('sidebar:ack', with the request's number and the gen it was asked with). A drawer open in
@@ -654,7 +654,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (e.origin !== location.origin || e.source !== src.el.contentWindow || Array.isArray(d) || d.gzCtab !== 'review'
       || typeof d.on !== 'boolean' || Object.keys(d).length !== 2 || !currentFrame(from, src)) return;
     const doc = src.el.contentDocument;
-    ctx.need('features/docreview.js', () => globalThis.GZ_DOCREVIEW).then(() => {
+    ctx.need('courses/page/docreview.js', () => globalThis.GZ_DOCREVIEW).then(() => {
       const current = () => currentFrame(from, src) && src.el.contentDocument === doc && ctx.on()
         && GZ_DOCREVIEW.pathOK(ctx.site, doc.location.pathname) && doc.documentElement.hasAttribute('data-gz-review-focus') && doc.documentElement.hasAttribute('data-gz-review');
       if (!GZ_DOCREVIEW.relayable(e, location.origin, src.el.contentWindow, currentFrame(from, src) && src.el.contentDocument === doc)) return;
@@ -675,7 +675,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const ack = (r) => { try { if (src.el.contentDocument === doc) src.el.contentWindow?.postMessage({ gzCtab: 'sidebar:ack', n: d.n, gen: d.gen, ok: r?.ok === true, ...(r?.ok === true && r.rec && { rec: r.rec }) }, location.origin); } catch { /* gone */ } };
     const current = () => currentFrame(from, src) && src.el.contentDocument === doc;
     if (!current()) { ack(null); return; }
-    (globalThis.GZ_SIDEBAR ? Promise.resolve() : ctx.need('lib/sidebar.js', () => globalThis.GZ_SIDEBAR)).then(() => {
+    (globalThis.GZ_SIDEBAR ? Promise.resolve() : ctx.need('navigation/sidebar.js', () => globalThis.GZ_SIDEBAR)).then(() => {
       if (!current() || !globalThis.GZ_SIDEBAR?.relayable(d, ctx.site === 'canvas' ? 'canvas' : 'ultra', location.origin, who)) { ack(null); return; }
       try { chrome.runtime.sendMessage({ type: 'glaze:sidebar', key: d.key, ops: d.ops }, (r) => ack(chrome.runtime.lastError ? null : r)); } catch { ack(null); }
     }, () => ack(null));
@@ -1528,7 +1528,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         if (e.data.on) { awayFrom = ''; pass(); toTop('drawn'); } else globalThis.GZ_CMD?.close();
       }
       // As Ctrl+K here would, or as Glaze's bar's Search does on its own page (open).
-      else if (e.data?.gzCtab === 'palette' && ctx.on()) { if (e.data.open === true) ctx.need('features/palette.js', () => globalThis.GZ_CMD).then(() => GZ_CMD.open(), () => {}); else ctx.askCmd(); }
+      else if (e.data?.gzCtab === 'palette' && ctx.on()) { if (e.data.open === true) ctx.need('navigation/page/palette.js', () => globalThis.GZ_CMD).then(() => GZ_CMD.open(), () => {}); else ctx.askCmd(); }
       else if (e.data?.gzCtab === 'sidebar:ack' && Number.isSafeInteger(e.data.n)) acked(e.data);
       else if (e.data?.gzCtab === 'timer:ack' && Number.isSafeInteger(e.data.n)) acked(e.data, 'timer');
       else if (e.data?.gzCtab === 'note' && typeof e.data.text === 'string' && e.data.text.length <= 500) say(e.data.text);
@@ -1544,7 +1544,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     try { history.pushState(null, '', location.origin + url); dispatchEvent(new PopStateEvent('popstate', { state: null })); } catch { location.assign(location.origin + url); }
   };
   const otherCourse = (bar, cid) => [...bar.querySelectorAll('a[href*="/courses/_"]')].some((a) => !a.getAttribute('href').includes(`/courses/${cid}/`));
-  // In a tab's frame, its scroll put back once when the page first comes (an outline's is features/place.js's), until it
+  // In a tab's frame, its scroll put back once when the page first comes (an outline's is navigation/page/place.js's), until it
   // holds; anything the student does first ends it. The page around waits for it (data-gz-placing).
   const scrollerOf = (el, content = false) => {
     let n = 0;
@@ -1930,7 +1930,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       on = true;
       // Its sheet comes in with content.js's (SHEETS). A page whose content script predates the sheet (an unpacked
       // extension changed on disk but not reloaded) would show the frames unstyled, in the page's flow: link it here.
-      if (!preview && !document.querySelector('link[href$="/features/coursetabs.css"]')) (document.head || html).append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href: chrome.runtime.getURL('features/coursetabs.css') }));
+      if (!preview && !document.querySelector('link[href$="/navigation/page/coursetabs.css"]')) (document.head || html).append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href: chrome.runtime.getURL('navigation/page/coursetabs.css') }));
       if (!strip) make();
       document.body.append(aside); // outside #site-wrap, which a shown frame hides
       listen(true);

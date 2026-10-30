@@ -1,9 +1,9 @@
-// Glaze's Allow frame (an extension page; features/download.js shows it in a Canvas module's header when Download all meets a
+// Glaze's Allow frame (an extension page; courses/page/download.js shows it in a Canvas module's header when Download all meets a
 // file server Glaze doesn't hold): one button for the host after #. Its click asks the browser for that host alone, and the
 // answer goes to the page around it, which asks the worker for the file again (the worker checks the grant itself, so a page
 // that frames this on its own cannot ask). Copy: the button.
 // Where the frame has no permissions API (Firefox gives an extension page framed in a web page none), its click has the worker
-// open this page in a tab of its own (lib/background.js, glaze:allow-tab): there the same button asks, the worker hears it
+// open this page in a tab of its own (background/background.js, glaze:allow-tab): there the same button asks, the worker hears it
 // was answered, checks the grant, tells the frame and closes the tab.
 (() => {
   const t = (key, vars) => GZ_I18N.t(key, vars, GZ_I18N.ui());

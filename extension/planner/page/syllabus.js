@@ -1,24 +1,24 @@
 // Syllabus import (W15), loaded on demand: content.js (syncSyl) on a course's home and Syllabus page while
 // enhance.syllabus is on, and the command palette's "Import a syllabus" on any page of a course. A syllabus (Canvas's own
 // Syllabus page as it's shown, a PDF, a picture or screenshot (also pasted), a Word, PowerPoint, web page or text file,
-// or pasted text) is read on this device by lib/syllabus.js (features/import.js for files), shown for review with every
+// or pasted text) is read on this device by planner/syllabus.js (planner/page/import.js for files), shown for review with every
 // field editable and the line it came from (a line read from a picture the OCR engine wasn't sure of marks a guess), and
 // kept only when the student saves: in storage.local per Canvas site, user and course, through the worker
 // ('glaze:syllabus'). On save the scale can become the course's in the GPA (sync gpaCourses), the dates can become the
 // student's own To Do tasks ('glaze:todo'); the professor, class times and dates show on the course home, the weights
-// beside the what-if calculator (features/grades.js). Nothing is sent anywhere, unless the student has turned on AI for
+// beside the what-if calculator (planner/page/grades.js). Nothing is sent anywhere, unless the student has turned on AI for
 // syllabus import (Settings → AI): then, after Glaze's own reading, the text (and a picture read, to a model that takes
-// pictures) goes to their connection ('glaze:ai' port, lib/ai/tasks/syllabus-read.js), and what it reads is put beside
-// Glaze's (lib/syllabus-ai.js), each value of it to check. The dialog says where an endpoint's text goes.
+// pictures) goes to their connection ('glaze:ai' port, ai/tasks/syllabus-read.js), and what it reads is put beside
+// Glaze's (planner/syllabus-ai.js), each value of it to check. The dialog says where an endpoint's text goes.
 // On Blackboard Ultra (content-ultra.js syncSyl), which has no syllabus tool: on a course's outline, in its right-hand
-// column, with a document of the course's own (its text from the public content API, lib/ultra.js) in place of Canvas's
+// column, with a document of the course's own (its text from the public content API, courses/ultra.js) in place of Canvas's
 // Syllabus page; kept per Ultra site, user and course, the scale for the course's GPA (ultra:<origin>/<id>).
 var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   const X = globalThis.GZ_CTX;
   const { t, locale, need } = X;
   const ultra = X.site === 'ultra';
   const cidHere = () => (ultra ? X.courseId() : X.canvasCourseId());
-  let L = null; // lib/syllabus.js
+  let L = null; // planner/syllabus.js
   let on = false, starting = null, failedAt = 0;
   let who = null; // { uid, cid, key, course }
   let rec = null; // what is kept for this course, or null
@@ -34,9 +34,9 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   const get = (area, k) => new Promise((res) => { try { store(area).get(k, (r) => res(chrome.runtime.lastError ? undefined : r?.[k])); } catch { res(undefined); } });
   const send = (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } });
   const page = () => document.getElementById('course_syllabus');
-  // Canvas's Syllabus page as the student sees it, its tables kept as rows (lib/doctext.js).
+  // Canvas's Syllabus page as the student sees it, its tables kept as rows (core/doctext.js).
   const pageText = () => (page()?.textContent.trim() ? globalThis.GZ_DOCTEXT.html(page().innerHTML) : '');
-  const docIn = () => need('lib/doctext.js', () => globalThis.GZ_DOCTEXT);
+  const docIn = () => need('core/doctext.js', () => globalThis.GZ_DOCTEXT);
 
   // ---- formatting -------------------------------------------------------------------------------------------------
   const dayName = (d, style = 'short') => new Intl.DateTimeFormat(lang(), { weekday: style, timeZone: 'UTC' }).format(Date.UTC(2024, 0, 1 + L.DAYS.indexOf(d)));
@@ -52,11 +52,11 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   // (ready), an answer for a course the page has left is dropped, and every action keeps the course it began in.
   const start = async (cid) => {
     // W14's day and time reader first: the extractor reads class times with it.
-    await need('lib/classes.js', () => globalThis.GZ_CLASSES);
-    await need('lib/syllabus.js', () => globalThis.GZ_SYLLABUS);
+    await need('planner/classes.js', () => globalThis.GZ_CLASSES);
+    await need('planner/syllabus.js', () => globalThis.GZ_SYLLABUS);
     L = globalThis.GZ_SYLLABUS;
-    // Ultra: you are the course list's user; the course's term (its start dates the syllabus's) is lib/ultra.js's reading.
-    if (ultra) await need('lib/ultra.js', () => globalThis.GZ_ULTRA);
+    // Ultra: you are the course list's user; the course's term (its start dates the syllabus's) is courses/ultra.js's reading.
+    if (ultra) await need('courses/ultra.js', () => globalThis.GZ_ULTRA);
     const mem = ultra && await X.myCourses();
     const m = ultra && mem.find((x) => x?.courseId === cid);
     const [p, list] = ultra ? [{ id: m?.userId }, Object.entries(GZ_ULTRA.courses(mem)).map(([id, c]) => ({ ...c, id }))]
@@ -94,7 +94,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   const where = () => {
     // Ultra: a block of its own in the outline's right-hand column, under Ultra's details and actions.
     const aside = ultra && document.querySelector('aside.outline-actions');
-    // With the sidebar (features/sidebar.js) the column ends with its widgets: a block goes above them.
+    // With the sidebar (navigation/page/sidebar.js) the column ends with its widgets: a block goes above them.
     if (aside) { const d = aside.querySelector('.js-details-and-actions'), end = [...aside.children].find((c) => c.id === 'gz-sb-widgets'); return (b) => (d ? d.after(b) : end ? end.before(b) : aside.append(b)); }
     if (ultra) return null;
     const side = document.getElementById('course_show_secondary');
@@ -154,7 +154,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
 
   // ---- reading ----------------------------------------------------------------------------------------------------
   const fromPage = () => open(null, true);
-  // An instant → UTC midnight of its day here (lib/syllabus.js week1), or undefined.
+  // An instant → UTC midnight of its day here (planner/syllabus.js week1), or undefined.
   const dayOf = (ms) => { if (!Number.isFinite(ms)) return undefined; const d = new Date(ms); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); };
   const options = (week1) => {
     const c = opened.course;
@@ -162,7 +162,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     // No start for a course with no term dates: the reader then places a year-less date by today, not as if today began the term.
     return { start: Number.isFinite(startAt) ? startAt : undefined, md: monthFirst(), hint: locale(), week1 };
   };
-  // ocr: what came from a picture (features/import.js); a field from a line the OCR engine wasn't sure of is a guess too.
+  // ocr: what came from a picture (planner/page/import.js); a field from a line the OCR engine wasn't sure of is a guess too.
   // week1: the course's own first day, for dates by course week.
   const extract = (text, ocr, week1 = dayOf(opened.own.start)) => {
     const o = options(week1);
@@ -297,7 +297,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       id = run.id;
       const end = await Promise.race([run, cancelled]);
       if (end.type !== 'end' || !end.output) throw Object.assign(new Error('ai'), { code: end.error });
-      await need('lib/syllabus-ai.js', () => globalThis.GZ_SYLLABUS_AI);
+      await need('planner/syllabus-ai.js', () => globalThis.GZ_SYLLABUS_AI);
       if (ctl.signal.aborted) throw new Error('stopped');
       return GZ_SYLLABUS_AI.merge(r, GZ_SYLLABUS_AI.interpret(end.output, r.opts, r, text));
     } catch (e) {
@@ -364,7 +364,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       try {
         let text = paste.value, ocr = null;
         if (f) {
-          await need('features/import.js', () => globalThis.GZ_IMPORT);
+          await need('planner/page/import.js', () => globalThis.GZ_IMPORT);
           ({ text, ocr } = await GZ_IMPORT.read(f, { signal: ctl.signal, progress: (s) => { say.textContent = s; } }));
         }
         if (ctl.signal.aborted) return;
@@ -409,8 +409,8 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   // has one. A document is a page: a folder Ultra marks isBbPage (as Ultra writes them), or a document with documents in
   // it; its text sits in its blocks (its children), titled like it, "ultraDocumentBody" or anything, so it's listed by its
   // own title, the blocks read as part of it, in order. A block can be only a file's link (data-bbfile on /bbcswebdav/,
-  // lib/page.js files()): on the student's click, never while listing, each such file is fetched with the session (Ultra
-  // sends it on to its file store) and read by features/import.js, in its place among the blocks' text, with the read's
+  // core/page.js files()): on the student's click, never while listing, each such file is fetched with the session (Ultra
+  // sends it on to its file store) and read by planner/page/import.js, in its place among the blocks' text, with the read's
   // progress, Stop, and its end when the dialog closes, as a chosen file is. A file that can't be fetched or read is left
   // out; with nothing read at all, the reason (the last file's own, or that it couldn't be read). Only the student's own
   // click reads, as Read it.
@@ -418,8 +418,8 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   const docPicker = (say, stop, desc) => {
     const box = make('div', { className: 'gz-syl-f', hidden: true });
     const cid = opened.cid, mine = dlg;
-    // Never contentDetail or the whole contentHandler: an LTI link keeps its tool's secret there (lib/ultra.js).
-    need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.read({ origin: location.origin, live: () => dlg === mine && allowed(cid) })
+    // Never contentDetail or the whole contentHandler: an LTI link keeps its tool's secret there (courses/ultra.js).
+    need('courses/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.read({ origin: location.origin, live: () => dlg === mine && allowed(cid) })
       .all(`/learn/api/public/v1/courses/${cid}/contents?recursive=true&limit=200&fields=id,parentId,title,body,contentHandler.id,contentHandler.isBbPage,availability.available`)).then((all) => {
       const avail = all.filter((c) => c?.availability?.available === 'Yes'); // not items held back from you (B0)
       const html = (d) => [d.body, ...avail.filter((c) => c.parentId === d.id).map((c) => c.body)].filter((b) => typeof b === 'string').join('\n');
@@ -482,7 +482,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
                 chunks.length = 0;
                 if (file.size > D.READ.pdf) throw tooLarge();
               } finally { if (body) { body.cancel().catch(() => {}); body.releaseLock(); } }
-              await need('features/import.js', () => globalThis.GZ_IMPORT);
+              await need('planner/page/import.js', () => globalThis.GZ_IMPORT);
               check();
               const got = await GZ_IMPORT.read(file, { signal, progress: (w) => { if (live() && reading === ctl && !signal.aborted) say.textContent = w; } });
               check();
@@ -498,7 +498,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
           for (const x of texts) if (typeof x === 'string' && typeof parts.at(-1) === 'string') parts[parts.length - 1] += x; else parts.push(x);
           const text = parts.map((x) => (typeof x === 'string' ? D.html(x) : x.text).trim()).filter(Boolean).join('\n\n');
           if (!text) { say.textContent = why?.mine ? why.message : t("Glaze couldn't read that file."); return; }
-          // The pictures' OCR as one (features/import.js note and doubt): pages, blank pages and unsure lines added up,
+          // The pictures' OCR as one (planner/page/import.js note and doubt): pages, blank pages and unsure lines added up,
           // confidence by page.
           const n = ocrs.reduce((k, o) => k + o.pages, 0);
           const ocr = ocrs.length ? { pages: n, conf: Math.round(ocrs.reduce((k, o) => k + o.conf * o.pages, 0) / n), unsure: ocrs.flatMap((o) => o.unsure), blank: ocrs.reduce((k, o) => k + (o.blank || 0), 0) } : null;
@@ -525,7 +525,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   const id = () => `gz-syl-${++uid}`;
   // A field: its label, the value to correct, a "Check this" / "Not found" mark and the line it came from.
   const mark = (conf, empty, saved) => (saved ? '' : conf === 'check' ? t('Check this') : empty ? t('Not found') : '');
-  // ai: the value is AI's (lib/syllabus-ai.js), marked as one.
+  // ai: the value is AI's (planner/syllabus-ai.js), marked as one.
   const note = (input, conf, src, saved, ai) => {
     const m = mark(conf, !src, saved);
     const tag = m && make('span', { id: id(), className: `gz-syl-conf${conf === 'check' ? ' gz-syl-check' : ''}${ai && !saved ? ' gz-syl-ai' : ''}`, textContent: m });
@@ -556,7 +556,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     row.append(label, days, from, '–', to, loc, x(name, () => { row.remove(); list.querySelector('input')?.focus(); }), tag, src);
     return row;
   };
-  // kept: the record this review began from, whose ids a new row mustn't take (lib/syllabus.js ids).
+  // kept: the record this review began from, whose ids a new row mustn't take (planner/syllabus.js ids).
   const dateRow = (list, d, n, saved, todo, kept) => {
     const name = d.title || t('Date {n}', { n });
     const title = attr(text(d.title, { maxLength: 200, className: 'gz-syl-label' }), { 'aria-label': t('What') });
@@ -599,7 +599,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     const blank = { label: '', days: [], start: '', end: '', location: '' };
     const hours = rows(t('Office hours'), r.hours, (l, m, n) => timeRow(l, m, n, saved), blank);
     const meets = rows(t('Class times'), r.meetings, (l, m, n) => timeRow(l, m, n, saved), blank);
-    // The day dates by course week count from (lib/syllabus.js week1): the syllabus's (with its line), the course's own, or
+    // The day dates by course week count from (planner/syllabus.js week1): the syllabus's (with its line), the course's own, or
     // the term's ("Check this"). Changing it moves each of those rows whose day the student hasn't set.
     const wk = r.week1?.value ? make('input', { type: 'date', value: r.week1.value }) : null;
     const wkSrc = r.week1?.from === 'text' ? r.week1.src : '';
@@ -627,7 +627,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       say.textContent = '';
       for (const el of dlg.querySelectorAll('[aria-invalid]')) el.removeAttribute('aria-invalid');
       const bad = (el, msg) => { el.setAttribute('aria-invalid', 'true'); el.focus(); say.textContent = msg; return null; };
-      await need('lib/gradecalc.js', () => globalThis.GZ_GRADECALC).catch(() => {});
+      await need('planner/gradecalc.js', () => globalThis.GZ_GRADECALC).catch(() => {});
       const C = globalThis.GZ_GRADECALC;
       if (!C) { say.textContent = t('Not saved. Try again in a moment.'); return; }
       const sc = scale.value.trim() ? C.parseScheme(scale.value) : [];
@@ -689,8 +689,8 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     const r = await send({ type: 'glaze:gpa', key: `${ultra ? 'ultra' : 'canvas'}:${location.origin}/${w.cid}`, patch: { s: C.schemeText(sc) } });
     return r?.ok ? '' : r?.error === 'full' ? t('Not saved: too many course settings are stored. Clear a course you no longer need.') : t('The scale could not be given to your GPA.');
   };
-  // Dates become the student's own To Do tasks (lib/todo.js importTask), one for each row of the record: what a save does to
-  // them is lib/syllabus.js taskEdits (a row ticked is added or brought up to date, an edited row moves its task, a row taken
+  // Dates become the student's own To Do tasks (planner/todo.js importTask), one for each row of the record: what a save does to
+  // them is planner/syllabus.js taskEdits (a row ticked is added or brought up to date, an edited row moves its task, a row taken
   // out takes it). was, now: the record's dates before and as saved; picked: the ids of the rows ticked. A second Save of one
   // review (the first one told of a problem) works out the same changes again, which do nothing twice.
   const syncTasks = async (w, was, now, picked) => {
@@ -712,5 +712,5 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
 })();
 
 // Node takes the module; a page that loaded this on demand gets it as the script's last value, which is how
-// lib/background.js knows it ran to the end.
+// background/background.js knows it ran to the end.
 if (typeof module !== 'undefined') module.exports = GZ_SYL_UI; else GZ_SYL_UI;

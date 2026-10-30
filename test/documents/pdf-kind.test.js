@@ -1,6 +1,6 @@
 // The PDF kind on the Documents page (pdf-kind.js, papers.html): loaded after papers.js and packaged, importing only with
 // Settings → Writer → PDFs on (writer.pdf) while a PDF already kept opens either way, its one storage seam (the bytes in the worker's file store,
-// lib/doc-files.js, a record from before it holding them as base64), and which files it refuses. The viewer itself is checks/documents/pdf-check.js.
+// documents/doc-files.js, a record from before it holding them as base64), and which files it refuses. The viewer itself is checks/documents/pdf-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
@@ -9,18 +9,18 @@ const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 
 test('papers.html loads the kind registry first and pdf-kind.js after papers.js; both package lists ship it', () => {
   const html = read('papers.html');
   const at = (src) => html.indexOf(`<script src="${src}"></script>`);
-  assert.ok(at('lib/doc-kinds.js') > 0 && at('lib/doc-kinds.js') < at('papers.js'), 'the registry before papers.js');
-  assert.ok(at('pdf-kind.js') > at('papers.js'), 'pdf-kind.js after papers.js');
-  assert.ok(at('lib/pdf-doc.js') > 0 && at('lib/pdf-doc.js') < at('pdf-kind.js'), 'lib/pdf-doc.js (open, save, thumbnail) before pdf-kind.js');
-  const pkg = read('../tools/build/package.sh').split('\n').filter((l) => / papers\.js /.test(l));
+  assert.ok(at('documents/doc-kinds.js') > 0 && at('documents/doc-kinds.js') < at('documents/papers.js'), 'the registry before papers.js');
+  assert.ok(at('documents/pdf/pdf-kind.js') > at('documents/papers.js'), 'pdf-kind.js after papers.js');
+  assert.ok(at('documents/pdf/pdf-doc.js') > 0 && at('documents/pdf/pdf-doc.js') < at('documents/pdf/pdf-kind.js'), 'documents/pdf/pdf-doc.js (open, save, thumbnail) before pdf-kind.js');
+  const pkg = read('../tools/build/package.sh').split('\n').filter((l) => / documents /.test(l));
   assert.equal(pkg.length, 2, 'chmod and zip');
-  for (const line of pkg) for (const f of ['pdf-kind.js', 'pdf-kind.css']) assert.ok(line.includes(` ${f} `), `${f} in: ${line.slice(0, 40)}…`);
+  for (const line of pkg) for (const f of ['documents/pdf/pdf-kind.js', 'documents/pdf/pdf-kind.css']) assert.ok(line.includes(` ${f.split('/')[0]} `), `${f} in: ${line.slice(0, 40)}…`);
 });
 
 // pdf-kind.js in a context of its own: the registry, a storage.sync answering writer.pdf, and need() loading defaults.js
 // (papers.html) or, with defaults: false, finding GZ_SANITIZE already there (writer.html).
-const G = require('../../extension/defaults.js');
-const F = require('../../extension/lib/doc-files.js');
+const G = require('../../extension/content/defaults.js');
+const F = require('../../extension/documents/doc-files.js');
 const { fakeIDB } = require('../helpers/fake-idb.cjs');
 // The worker's end: its file store over a fake IndexedDB, reached through ports that carry JSON as Chrome's do.
 const worker = (o = {}) => {
@@ -40,9 +40,9 @@ const worker = (o = {}) => {
   return { st, connect };
 };
 const load = (writer, { defaults = true, files = worker() } = {}) => {
-  delete require.cache[require.resolve('../../extension/lib/doc-kinds.js')];
+  delete require.cache[require.resolve('../../extension/documents/doc-kinds.js')];
   delete globalThis.GZ_DOC_KINDS;
-  const DK = require('../../extension/lib/doc-kinds.js');
+  const DK = require('../../extension/documents/doc-kinds.js');
   const needed = [];
   const ctx = vm.createContext({ GZ_DOC_KINDS: DK, console, URL, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, DataView, RangeError, Error, Promise, Object, Array, String, Number, Math, JSON, Map, Set, btoa, atob,
     chrome: { storage: { sync: { get: async () => (writer === undefined ? {} : { writer }) } }, runtime: { getURL: (f) => `chrome-extension://x/${f}`, connect: files.connect } } });
@@ -50,13 +50,13 @@ const load = (writer, { defaults = true, files = worker() } = {}) => {
   const ran = new Set();
   ctx.GZ_WRITER_PAPER = { need: async (files) => { for (const f of files) {
     needed.push(f);
-    if (f === 'defaults.js') { assert.ok(['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js'].every((x) => ran.has(x)), `defaults.js after what it reads (${needed})`); ctx.GZ_SANITIZE = G.GZ_SANITIZE; }
-    if (f === 'lib/doc-files.js' && !ran.has(f)) vm.runInContext(read(f), ctx);
+    if (f === 'content/defaults.js') { assert.ok(['core/color.js', 'looks/surfaces.js', 'looks/fonts.js'].every((x) => ran.has(x)), `defaults.js after what it reads (${needed})`); ctx.GZ_SANITIZE = G.GZ_SANITIZE; }
+    if (f === 'documents/doc-files.js' && !ran.has(f)) vm.runInContext(read(f), ctx);
     ran.add(f);
   } } };
   if (!defaults) ctx.GZ_SANITIZE = G.GZ_SANITIZE;
   ctx.globalThis = ctx;
-  vm.runInContext(read('pdf-kind.js'), ctx);
+  vm.runInContext(read('documents/pdf/pdf-kind.js'), ctx);
   return { DK, ctx, needed };
 };
 const imports = async (writer, o) => {
@@ -78,7 +78,7 @@ test('the switch reads as Settings shows it: no stored key, or a bad value, is t
   for (const writer of [undefined, { pdf: 'yes' }, { full: true }]) assert.equal((await imports(writer)).yes, G.GZ_DEFAULTS.writer.pdf, JSON.stringify(writer));
   // papers.html loads defaults.js for it, after the scripts defaults.js reads; writer.html already has it, and a second
   // copy would redeclare its constants.
-  assert.deepEqual((await imports(undefined)).needed, ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js']);
+  assert.deepEqual((await imports(undefined)).needed, ['core/color.js', 'looks/surfaces.js', 'looks/fonts.js', 'content/defaults.js']);
   assert.deepEqual((await imports(undefined, { defaults: false })).needed, []);
   assert.equal((await imports({ pdf: true }, { defaults: false })).yes, true);
 });

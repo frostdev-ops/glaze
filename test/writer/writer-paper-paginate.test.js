@@ -1,10 +1,10 @@
-// Glaze Writer's page plan (lib/writer-paginate.js plan): where pages end, as Word ends them by default: a line fits while
+// Glaze Writer's page plan (writer/writer-paginate.js plan): where pages end, as Word ends them by default: a line fits while
 // its bottom is inside the text area, 2-line widow and orphan control, headings kept with the next paragraph, page breaks,
 // and footnotes taking room at the foot of their page. The editor's measuring and the real pages are
 // checks/writer/writer-paper-check.js; Word's own pages, tools/fidelity/writer-word-fidelity.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const P = require('../../extension/lib/writer-paginate.js');
+const P = require('../../extension/writer/writer-paginate.js');
 
 const LH = 36.8, geo = { body: 864, stride: 1082.4, notes: [], sep: 18.4 }; // 23 double-spaced lines a page
 const text = (n, o = {}) => ({ kind: 'text', lines: Array.from({ length: n }, (_, i) => ({ h: LH, notes: o.notes?.[i] || [] })), after: o.after || 0, keepNext: !!o.keepNext });

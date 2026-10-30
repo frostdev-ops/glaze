@@ -17,7 +17,7 @@
 // Then rmsnorm·output_norm and the output matrix (token_embd when there is no output.weight). RMSNorm: x / √(mean x² + ε).
 // Numerics: every value an op stores is a float32 (Float32Array); inside an op, sums and products are JavaScript doubles
 // (dot products, norms, softmax, RoPE angles), so the reference is at least as exact as an f32-accumulating kernel.
-// Weights stay quantized in memory and are dequantized a row at a time (lib/ai/local/quant.js), bit for bit as ggml.
+// Weights stay quantized in memory and are dequantized a row at a time (ai/local/quant.js), bit for bit as ggml.
 // Classic script; node exports.
 var GZ_AI_REFERENCE = globalThis.GZ_AI_REFERENCE || (() => {
   let quant = null;

@@ -1,4 +1,4 @@
-// Dequantization of ggml blocks to Float32 for the local engine's reference (lib/ai/local/reference.js): Q4_0, Q8_0,
+// Dequantization of ggml blocks to Float32 for the local engine's reference (ai/local/reference.js): Q4_0, Q8_0,
 // Q4_K, Q5_K, Q6_K, F16, BF16 and F32, bit for bit as ggml-quants.c's dequantize_row_* computes them in float, every
 // product and difference rounded to float in the C source's order (Math.fround), with no fused multiply-add.
 // Block layouts (ggml-common.h), little-endian, ggml_half = IEEE binary16:

@@ -1,6 +1,6 @@
-// Course tabs on Canvas and Blackboard Ultra: what features/coursetabs.js decides without the page, so node can test it. Which
+// Course tabs on Canvas and Blackboard Ultra: what navigation/page/coursetabs.js decides without the page, so node can test it. Which
 // addresses a tab may go back to, the tab list's edits, and the sketches a tab's stand-in is drawn from.
-// Classic script; module.exports for node. Loaded on demand (each site asks for it before features/coursetabs.js);
+// Classic script; module.exports for node. Loaded on demand (each site asks for it before navigation/page/coursetabs.js);
 // the editor and the worker load it too. A second injection keeps the first.
 var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
   // A frame-only injection may land after navigation, before this document's bootstrap.
@@ -17,7 +17,7 @@ var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
     shape: ['tab', ['tab', 'rounded', 'pill', 'square']], size: ['medium', ['small', 'medium', 'large']], width: [180, [96, 320]],
     label: ['short', ['short', 'name', 'code']], mark: ['dot', ['dot', 'icon', 'none']], color: ['off', ['off', 'tint', 'theme']],
   };
-  (typeof GZ_SPEC !== 'undefined' ? GZ_SPEC : require('../defaults.js').GZ_SPEC).tabs = SPEC;
+  (typeof GZ_SPEC !== 'undefined' ? GZ_SPEC : require('../content/defaults.js').GZ_SPEC).tabs = SPEC;
 
   const ID = /^(?:_\d+_\d+|\d+)$/;
   const validId = (id, site) => typeof id === 'string' && id.length <= 80 && (site === 'canvas' ? /^\d+$/ : site === 'ultra' ? /^_\d+_\d+$/ : ID).test(id);
@@ -65,7 +65,7 @@ var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
     const q = typeof search === 'string' ? search.replace(/^\?/, '') : '';
     return q && q.length <= 600 ? `${path}?${q}` : path;
   };
-  // A Canvas page outside a course, for the frame those open in (features/coursetabs.js): a plain path of this site, no
+  // A Canvas page outside a course, for the frame those open in (navigation/page/coursetabs.js): a plain path of this site, no
   // traversal, doubled slash or escaped separator, nor a course's page (those are safe's).
   const outside = (path, search = '') => {
     if (typeof path !== 'string' || path.length > 600 || !/^\/(?:[\w\-.~/]|%[0-9a-fA-F]{2})*$/.test(path) || /(^|\/)\.\.?(\/|$)|\/\/|%(?:2[eEfF]|5[cC]|25)/.test(path) || /^\/courses\/\d+(?:[/?]|$)/.test(path)) return null;
@@ -155,7 +155,7 @@ var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
 
   // ---- sketches ----------------------------------------------------------------------------------------------
   // What a tab shows while its frame first loads: a stand-in drawn from a sketch of how its page last looked
-  // (features/coursetabs.js picture). The page takes it of what is on screen: the window's size, the course's scroll there,
+  // (navigation/page/coursetabs.js picture). The page takes it of what is on screen: the window's size, the course's scroll there,
   // its name, Glaze's strip's box, and up to BOXES of the page's boxes in the window, each [x, y, w, h, kind, colour, r].
   // kind: b a block, c a control, i an image, t text lines, h a heading's, n the course's name; colour #rrggbbaa, the
   // background as painted or, for text, its ink; r the corner radius, or for text the line pitch (a box holds a paragraph's

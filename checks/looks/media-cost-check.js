@@ -16,9 +16,9 @@ const origin = 'https://ultra.fixture.test';
 const ext = require('../../tools/dev/check-env.js').staged(path.join(__dirname, '../../extension'), [`${origin}/*`]);
 const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
-const D = require(path.join(ext, 'defaults.js'));
-const P = require(path.join(ext, 'lib/lookparts.js'));
-const M = require(path.join(ext, 'lib/media.js'));
+const D = require(path.join(ext, 'content/defaults.js'));
+const P = require(path.join(ext, 'looks/lookparts.js'));
+const M = require(path.join(ext, 'looks/media.js'));
 const fixture = '<!doctype html><html lang="en"><head><base href="//ultra-cdn.invalid/ultra/uiv4001.0.0-rel/"><meta charset="utf-8"><title>Ultra fixture</title></head><body><div id="site-wrap"><nav id="base_tools"><a href="/ultra/institution-page"><span>Institution Page</span></a><a href="/ultra/course">Courses</a></nav><main id="main-content"><div id="main-content-inner"><h1>Stream</h1></div></main></div></body></html>';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const have = (cmd) => spawnSync('which', [cmd]).status === 0;
@@ -92,7 +92,7 @@ const lottie = (n) => ({ v: '5.7.0', fr: 30, ip: 0, op: 90, w: 1280, h: 720, nm:
       }
       return total;
     };
-    // The fixture's site approved and its Ultra script registered (lib/background.js ensure) before the first page.
+    // The fixture's site approved and its Ultra script registered (background/background.js ensure) before the first page.
     await opts.evaluate((o) => chrome.storage.local.set({ ultra: [o] }), origin);
     for (let i = 0; !(await opts.evaluate(() => chrome.scripting.getRegisteredContentScripts().then((l) => l.some((x) => x.id.startsWith('ultra:'))))); i++) {
       if (i > 100) throw new Error('the fixture\'s Ultra script was never registered');

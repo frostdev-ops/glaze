@@ -1,5 +1,5 @@
 /* A PDF on the Documents page (pdf-kind.js): the card's first page, and the viewer's chrome around pdf.js's pages
-   (lib/pdfjs/pdf_viewer.css draws the pages, their text layer and form fields). The chrome is the paper's (writer-paper.css
+   (vendor/pdfjs/pdf_viewer.css draws the pages, their text layer and form fields). The chrome is the paper's (writer-paper.css
    .gp-top, .gp-tool, .gp-menu) in the student's Look; the pages are print, white whatever the Look. */
 .gd-pic .gq-thumb { width: 204px; height: auto; align-self: flex-start; zoom: var(--gd-thumb); background: #fff; border-radius: 2px; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
 :root:not([data-dark]) .gd-pic .gq-thumb { box-shadow: 0 1px 3px rgba(15,23,42,.16), 0 0 0 1px rgba(15,23,42,.06); }

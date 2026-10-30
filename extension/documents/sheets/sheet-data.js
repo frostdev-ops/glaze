@@ -1,5 +1,5 @@
 // A spreadsheet as Documents keeps it (sheet-kind.js, sheet-grid.js): the one module that knows its storage. The record
-// (writerPaper:<key>, lib/writer-papers.js) holds the book, everything of the workbook but its cells; the cells go in parts,
+// (writerPaper:<key>, writer/writer-papers.js) holds the book, everything of the workbook but its cells; the cells go in parts,
 // one per sheet per 1,000-row band (writerSheet:<key>:<sheet id>:<band>), each stamped with the record revision that wrote it
 // (the record's parts: name → revision), so a read that meets a part of another write knows it is torn. A save writes only
 // the parts whose content changed and the book only when it changed (plan: a 32-bit hash per part, kept from the last
@@ -36,7 +36,7 @@ var GZ_SHEET_DATA = globalThis.GZ_SHEET_DATA || (() => {
   };
 
   // A cell as [c, t, v, f, s, a, rich, cm, vm, dt], nothing past its last field; null where a field before it is missing.
-  // cm, vm and dt: a dynamic array's and a data table's (lib/sheet-xlsx.js), after the rest so older parts read the same.
+  // cm, vm and dt: a dynamic array's and a data table's (documents/sheets/sheet-xlsx.js), after the rest so older parts read the same.
   const FIELDS = ['t', 'v', 'f', 's', 'a', 'rich', 'cm', 'vm', 'dt'];
   const cellOut = (c, x) => {
     const out = [c, ...FIELDS.map((k) => (x[k] === undefined ? null : x[k]))];
@@ -156,7 +156,7 @@ var GZ_SHEET_DATA = globalThis.GZ_SHEET_DATA || (() => {
     }
     throw new Error('torn read of a spreadsheet');
   };
-  // A spreadsheet written through the worker (papers: lib/writer-papers.js open()): the parts plan() finds changed and the
+  // A spreadsheet written through the worker (papers: writer/writer-papers.js open()): the parts plan() finds changed and the
   // book when it changed, with the card's text, the search text and the counts; a packed version ({ reason, gz, cells })
   // when one is asked for. Nothing is sent when nothing changed and nothing else is asked. show: a cell's shown text.
   // → { sigs (for the next write; the old ones if the write fails, as it throws), saved (the worker's answer, or null) }.
@@ -169,7 +169,7 @@ var GZ_SHEET_DATA = globalThis.GZ_SHEET_DATA || (() => {
     p.sigs.revision = saved.paper.revision;
     return { sigs: p.sigs, saved };
   };
-  const GZ_SHEET_MODEL_OR = () => (typeof GZ_SHEET_MODEL !== 'undefined' ? GZ_SHEET_MODEL : require('./lib/sheet-model.js'));
+  const GZ_SHEET_MODEL_OR = () => (typeof GZ_SHEET_MODEL !== 'undefined' ? GZ_SHEET_MODEL : require('./sheet-model.js'));
 
   return { BAND, TEXT_CAP, VERSIONS_CAP, PART, keyOf, enc, dec, split, join, serialize, deserialize, sig, plan, measure, text, glance, isGlance, pack, unpack, read, write };
 })();

@@ -1,4 +1,4 @@
-// The Notes share panel: an extension frame that features/notes.js puts inside its Notes view. Invite links and keys
+// The Notes share panel: an extension frame that planner/page/notes.js puts inside its Notes view. Invite links and keys
 // stay in this frame and the worker; the school page around it cannot read them, and nothing here is posted to it.
 // Cross-origin frames get no confirm dialogs, so questions are asked inline. notes.js delivers a one-use ticket
 // directly to this extension window, never through a URL. Only the authenticated runtime port can use its scope.

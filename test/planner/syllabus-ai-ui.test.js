@@ -1,5 +1,5 @@
-// H4: the syllabus import dialog (features/syllabus.js) with AI, on a stand-in page whose 'glaze:ai' port is a stub of the
-// broker (lib/ai/broker.js): no port unless AI, a connection and syllabus import are all on; the status line while AI reads;
+// H4: the syllabus import dialog (planner/page/syllabus.js) with AI, on a stand-in page whose 'glaze:ai' port is a stub of the
+// broker (ai/broker.js): no port unless AI, a connection and syllabus import are all on; the status line while AI reads;
 // Stop and closing the dialog cancel the run; a failed or stopped run leaves Glaze's own reading; the privacy line says
 // where an endpoint's text goes; pictures go only to a model that takes them.
 const test = require('node:test');
@@ -67,7 +67,7 @@ const page = ({ ai, broker = () => {}, file = { name: 'syllabus.pdf' }, syllabus
     document: { body, activeElement: null, createElement: (t) => new El(t), getElementById: (id) => (id === 'course_syllabus' && syl) || null, querySelector: () => null },
     location: { origin: ORIGIN, pathname: '/courses/25/modules' },
     chrome,
-    GZ_I18N: require('../../extension/lib/i18n.js'),
+    GZ_I18N: require('../../extension/core/i18n.js'),
     GZ_IMPORT: { read: async () => ({ text: TEXT, ocr: null }), note: () => '', doubt: () => false },
     GZ_CTX: {
       t: (k, v) => (v ? k.replace(/\{(\w+)\}/g, (_, n) => v[n]) : k), locale: () => 'en', settings: () => ({ enabled: true, enhance: { syllabus: true } }), on: () => true, canvasCourseId: () => '25',
@@ -75,7 +75,7 @@ const page = ({ ai, broker = () => {}, file = { name: 'syllabus.pdf' }, syllabus
       need: (f, ready) => { if (!ready()) vm.runInContext(read(f), ctx); return Promise.resolve(); },
     },
   });
-  vm.runInContext(read('features/syllabus.js'), ctx);
+  vm.runInContext(read('planner/page/syllabus.js'), ctx);
   const open = async () => { await ctx.GZ_SYL_UI.open(); await settle(); const dlg = body.children[0]; dlg.all.find((e) => e.id === 'gz-syl-file').files = [file]; return dlg; };
   const button = (dlg, text) => dlg.all.find((e) => e.tagName === 'BUTTON' && e.text === text);
   const statusLine = (dlg) => dlg.all.filter((e) => /gz-syl-status/.test(e.className || '')).at(-1)?.text;

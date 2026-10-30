@@ -4,10 +4,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const D = require('../../extension/defaults.js');
-const C = require('../../extension/lib/color.js');
+const D = require('../../extension/content/defaults.js');
+const C = require('../../extension/core/color.js');
 
-const css = fs.readFileSync(path.join(__dirname, '../../extension/canvas.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+const css = fs.readFileSync(path.join(__dirname, '../../extension/content/canvas.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 // The declarations of the rule written with exactly this selector.
 const rule = (selector) => {
   const i = css.indexOf(`${selector} {`);
@@ -57,7 +57,7 @@ test('a scene Look\'s stand-in gradient (no WebGL, or until the scene draws) is 
   const fallback = '--gz-bg-tint: color-mix(in srgb, var(--gz-surface-2) calc(80% + var(--gz-bg-dim, 60%) / 4), transparent);';
   const selector = 'html[data-gz-bg]:is([data-gz-bg="scene"], [data-gz-bg="shader"], [data-gz-bg="layers"])';
   assert.equal(rule(selector), fallback);
-  const moodle = fs.readFileSync(path.join(__dirname, '../../extension/moodle.css'), 'utf8');
+  const moodle = fs.readFileSync(path.join(__dirname, '../../extension/content/moodle.css'), 'utf8');
   assert.ok(moodle.includes(`${selector} { ${fallback} }`), 'Moodle\'s backgrounds too');
   // After the base rule, at its specificity, so it wins.
   assert.ok(css.indexOf(`${selector} {`) > css.indexOf('html[data-gz-bg]:not([data-gz-bg="solid"]) {'));

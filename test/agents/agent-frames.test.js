@@ -1,11 +1,11 @@
-// The frames between the worker and the glaze-mcp host (lib/agent-frames.js): cutting a line into pieces, putting it
+// The frames between the worker and the glaze-mcp host (agents/agent-frames.js): cutting a line into pieces, putting it
 // back together, the exact shapes each side may send, and their size. The vectors in fixtures/agent-frames.json are
 // shared with the host's native codec (test/agents/mcp-native.test.js) and were worked out apart from this code.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const F = require('../../extension/lib/agent-frames.js');
+const F = require('../../extension/agents/agent-frames.js');
 const V = require('../fixtures/agent-frames.json');
 
 const root = path.join(__dirname, '../../extension');
@@ -15,7 +15,7 @@ const frameOf = (v) => (v.fill ? { ...v.frame, [v.fill.key]: build(v.fill.build)
 const high = (u) => u >= 0xd800 && u <= 0xdbff, low = (u) => u >= 0xdc00 && u <= 0xdfff;
 
 test('the host package carries a byte-identical copy', () => {
-  assert.ok(fs.readFileSync(path.join(__dirname, '../../mcp/lib/agent-frames.js')).equals(fs.readFileSync(path.join(root, 'lib/agent-frames.js'))));
+  assert.ok(fs.readFileSync(path.join(__dirname, '../../mcp/lib/agent-frames.js')).equals(fs.readFileSync(path.join(root, 'agents/agent-frames.js'))));
 });
 
 test('the limits: 160,000-unit pieces, 1,000,000-byte frames, 64 MiB lines', () => {
