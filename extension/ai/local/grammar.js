@@ -53,8 +53,11 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
   // byte into the node, the first id ending there and the next id with the same bytes.
   const vocab = (byteStrings, { eos = [] } = {}) => {
     const size = byteStrings.length, bytes = Array.from(byteStrings, (b) => (b && b.length ? Uint8Array.from(b) : null));
+    const ends = new Set([].concat(eos).filter((e) => e != null));
+    for (const e of ends) if (!Number.isInteger(e) || e < 0 || e >= size) fail(`end token ${e}`);
     const ids = [];
-    for (let i = 0; i < size; i++) if (bytes[i]) ids.push(i);
+    // advance() always treats an end id as control, even if its vocabulary entry has text bytes.
+    for (let i = 0; i < size; i++) if (bytes[i] && !ends.has(i)) ids.push(i);
     ids.sort((x, y) => {
       const a = bytes[x], b = bytes[y], n = Math.min(a.length, b.length);
       for (let k = 0; k < n; k++) if (a[k] !== b[k]) return a[k] - b[k];
@@ -88,10 +91,8 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
       tokNext[id] = tok[at]; tok[at] = id;
       prev = s;
     }
-    const ends = [].concat(eos).filter((e) => e != null);
-    for (const e of ends) if (!Number.isInteger(e) || e < 0 || e >= size) fail(`end token ${e}`);
     return {
-      size, words: (size + 31) >>> 5, bytes, eos: new Set(ends), nodes, longest, CAP: longest + 1,
+      size, words: (size + 31) >>> 5, bytes, eos: ends, nodes, longest, CAP: longest + 1,
       first: first.subarray(0, nodes), next: next.subarray(0, nodes), byte: byte.subarray(0, nodes), tok: tok.subarray(0, nodes), tokNext,
       tables: new Array(MICRO),
     };
@@ -434,11 +435,16 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
       return out.filter((c) => { const k = key(c, false); if (seen.has(k)) return false; seen.add(k); return true; });
     };
     const walk = (set, nd, m) => {
-      for (let c = first[nd]; c >= 0; c = next[c]) {
-        const ns = stepSet(set, byte[c]);
-        if (!ns.length) continue;
-        for (let t = tok[c]; t >= 0; t = tokNext[t]) m[t >>> 5] |= 1 << (t & 31);
-        if (first[c] >= 0) walk(ns, c, m);
+      // Token byte length is independent of JSON nesting depth and may exceed the call stack.
+      const stack = [set, nd];
+      while (stack.length) {
+        const at = stack.pop(), states = stack.pop();
+        for (let c = first[at]; c >= 0; c = next[c]) {
+          const ns = stepSet(states, byte[c]);
+          if (!ns.length) continue;
+          for (let t = tok[c]; t >= 0; t = tokNext[t]) m[t >>> 5] |= 1 << (t & 31);
+          if (first[c] >= 0) stack.push(ns, c);
+        }
       }
     };
     // Inside a string: the tokens that stay in it, by the table, then those that close it, walked on from its parent.

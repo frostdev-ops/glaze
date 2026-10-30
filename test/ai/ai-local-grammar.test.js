@@ -345,6 +345,48 @@ test('the end token only once the value is whole; nothing after it; no whitespac
   assert.throws(() => g.matcher().advance(VOCAB.bytes.length - 2), /not text/);
 });
 
+test('end tokens with text bytes stay out of masks until the value is whole', () => {
+  // An end id may also have bytes in a tokenizer's vocabulary. It must never act as text.
+  const v = G.vocab(['"', 'a', 'a', '"', 'null'].map((s) => enc.encode(s)).concat([null]), { eos: [1, 3, 4, 5] });
+  const m = G.compile({ type: 'string' }, v).matcher();
+  assert.deepEqual(allowed(m.mask()), [0]);
+  for (const end of v.eos) assert.throws(() => m.fork().advance(end), /whole/);
+  m.advance(0);
+  assert.deepEqual(allowed(m.mask()), [0, 2]);
+  for (const end of v.eos) assert.throws(() => m.fork().advance(end), /whole/);
+  m.advance(2);
+  m.advance(0);
+  assert.deepEqual(allowed(m.mask()), [1, 3, 4, 5]);
+  for (const end of v.eos) {
+    const fork = m.fork();
+    fork.advance(end);
+    assert.ok(fork.done);
+    assert.deepEqual(allowed(fork.mask()), []);
+  }
+});
+
+test('mask traversal handles long tokens without using the JavaScript call stack', () => {
+  const long = 'x'.repeat(20000);
+  const tokens = [`"${long}"`, `"${long}":null}`, `","${long}":null}`];
+  const bytes = Array.from({ length: 256 }, (_, b) => Uint8Array.of(b)).concat(tokens.map((s) => enc.encode(s)), [null]);
+  const end = bytes.length - 1, v = G.vocab(bytes, { eos: [end] });
+  // Cover traversal from the root, after a container opener, and past a string's closing quote.
+  for (const [schema, prefix, token] of [
+    [{ type: 'string' }, '', 256],
+    [{ type: 'object' }, '{', 257],
+    [S.obj({ x: { type: 'string' }, [long]: { type: 'null' } }, ['x']), '{"x":"', 258],
+  ]) {
+    const m = G.compile(schema, v).matcher();
+    for (const id of enc.encode(prefix)) m.advance(id);
+    assert.ok(allowed(m.mask()).includes(token));
+    m.advance(token);
+    assert.ok(m.complete);
+    assert.deepEqual(S.validate(JSON.parse(prefix + tokens[token - 256]), schema), []);
+    m.advance(end);
+    assert.ok(m.done);
+  }
+});
+
 test('pattern is not enforced: the grammar says so, and still writes strings', () => {
   const g = G.compile({ type: 'string', pattern: '^[a-z]+$' }, V);
   assert.equal(g.exact, false);
