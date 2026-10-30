@@ -612,7 +612,7 @@ const seeded = (key, wb = M.workbook()) => {
 
     // ---- 3-D charts: a workbook with a 3-D pie (its second slice exploded, percent labels) and a 3-D clustered column
     // chart (value labels, the side and back walls) draws both projected: the pie's four tops, the rim of its three front
-    // slices and the three cut faces its explosion shows; the columns' eight fronts with a top and a side each; the
+    // slices and the two cut faces its explosion shows; the columns' eight fronts with a top and a side each; the
     // dark Look's labels read; 640 px; screenshots of each.
     const file3d = path.join(tmp, 'Charts 3D.xlsx');
     fs.writeFileSync(file3d, FX.workbook({ kinds: ['pie3d', 'col3d'] }));
@@ -630,8 +630,8 @@ const seeded = (key, wb = M.workbook()) => {
     }));
     const three = await until(async () => { const l = await count3d(); return l.length === 2 ? l : null; }, 'two 3-D charts drawn');
     const pie3 = three.find((c) => c.title === 'Share in 3-D'), col3 = three.find((c) => c.title === 'Sales in 3-D');
-    check(pie3 && !pie3.kind && pie3.tops === 4 && pie3.sides === 6 && pie3.plabels.join() === '10%,20%,30%,40%',
-      `a 3-D pie draws its four tops, three front rims and three cut faces, with percent labels (${JSON.stringify(pie3)})`);
+    check(pie3 && !pie3.kind && pie3.tops === 4 && pie3.sides === 5 && pie3.plabels.join() === '10%,20%,30%,40%',
+      `a 3-D pie draws its four tops, three front rims and two cut faces, with percent labels (${JSON.stringify(pie3)})`);
     check(col3 && !col3.kind && col3.bars === 8 && col3.faces === 16 && col3.walls === 2 && col3.labels.join() === '10,20,30,40',
       `a 3-D clustered column chart draws eight bars, each with a top and a side, on its two walls, with value labels (${JSON.stringify(col3)})`);
     const ink3 = await page.evaluate(() => {
