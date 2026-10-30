@@ -4,10 +4,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const DK = require('../lib/doc-kinds.js');
 
-test('paper is the one kind, frozen', () => {
-  assert.deepEqual(Object.keys(DK.KINDS), ['paper']);
+test('paper and slides are the kinds, frozen', () => {
+  assert.deepEqual(Object.keys(DK.KINDS), ['paper', 'slides']);
   assert.deepEqual(DK.KINDS.paper, { label: 'Document', icon: 'paper', accept: ['.docx'], mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', max: 15e6, param: 'paper' });
-  assert.ok(Object.isFrozen(DK.KINDS) && Object.isFrozen(DK.KINDS.paper) && Object.isFrozen(DK.KINDS.paper.accept));
+  assert.deepEqual(DK.KINDS.slides, { label: 'Slides', icon: 'slides', accept: ['.pptx', '.ppsx'], mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', max: 50e6, param: 'slides' });
+  for (const k of Object.values(DK.KINDS)) assert.ok(Object.isFrozen(k) && Object.isFrozen(k.accept));
+  assert.ok(Object.isFrozen(DK.KINDS));
   assert.throws(() => { 'use strict'; DK.KINDS.paper.max = 1; });
 });
 
@@ -23,7 +25,9 @@ test('a file\'s kind is its extension\'s, any case', () => {
   assert.equal(DK.forFile('Essay.docx'), 'paper');
   assert.equal(DK.forFile('ESSAY.DOCX'), 'paper');
   assert.equal(DK.forFile('my.essay.Docx'), 'paper');
-  for (const name of ['essay.doc', 'essay.pdf', 'docx', 'essay', '', null, undefined, 'essay.docx.zip']) assert.equal(DK.forFile(name), null, String(name));
+  assert.equal(DK.forFile('Week 3.PPTX'), 'slides');
+  assert.equal(DK.forFile('show.ppsx'), 'slides');
+  for (const name of ['essay.doc', 'essay.pdf', 'docx', 'essay', '', null, undefined, 'essay.docx.zip', 'deck.ppt', 'deck.pptx.zip', 'deck.odp']) assert.equal(DK.forFile(name), null, String(name));
 });
 
 test('a kind\'s page code registers onto its facts', () => {
@@ -37,4 +41,43 @@ test('a kind\'s page code registers onto its facts', () => {
   assert.throws(() => DK.register('sheet', impl), /sheet/);
   assert.equal(DK.get('sheet'), null);
   assert.equal(DK.get('toString'), null);
+});
+
+// What the page opens is what its scripts registered: a kind with no importFile (writer.slides off: slides-kind.js registers
+// nothing) takes no file, and its extensions leave the file chooser's accept.
+test('only a registered kind with importFile opens files', async () => {
+  const fresh = () => { delete require.cache[require.resolve('../lib/doc-kinds.js')]; delete globalThis.GZ_DOC_KINDS; return require('../lib/doc-kinds.js'); };
+  const K = fresh();
+  assert.equal(K.opens('Essay.docx'), null, 'nothing registered: nothing opens');
+  assert.equal(K.accept(), '');
+  K.register('paper', { importFile: () => 'key', thumb: () => null });
+  assert.equal(K.opens('Essay.docx'), 'paper');
+  assert.equal(K.opens('Week 3.pptx'), null, 'slides not registered');
+  assert.equal(K.accept(), '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  K.register('slides', { thumb: () => null });
+  assert.equal(K.opens('Week 3.pptx'), null, 'a kind without importFile opens no file');
+  K.register('slides', { importFile: () => 'key', thumb: () => null });
+  assert.equal(K.opens('Week 3.pptx'), 'slides');
+  assert.equal(K.opens('Week 3.ppsx'), 'slides');
+  assert.equal(K.accept(), '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pptx,.ppsx,application/vnd.openxmlformats-officedocument.presentationml.presentation');
+  fresh();
+});
+
+// A kind's script may decide late whether it registers (slides-kind.js reads writer.slides first); the page waits for every
+// such decision before it routes or draws, and a script that fails doesn't hold the page.
+test('settled waits for every kind script, failed ones included', async () => {
+  const fresh = () => { delete require.cache[require.resolve('../lib/doc-kinds.js')]; delete globalThis.GZ_DOC_KINDS; return require('../lib/doc-kinds.js'); };
+  const K = fresh();
+  let late;
+  K.wait(new Promise((ok) => { late = ok; }).then(() => K.register('slides', { importFile: () => 'k' })));
+  K.wait(Promise.reject(new Error('a kind script failed')));
+  let done = false;
+  const all = K.settled().then(() => { done = true; });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(done, false, 'still waiting for the late kind');
+  late();
+  await all;
+  assert.equal(K.opens('a.pptx'), 'slides');
+  await K.settled();
+  fresh();
 });

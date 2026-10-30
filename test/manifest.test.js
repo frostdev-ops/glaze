@@ -172,7 +172,7 @@ test('Glaze\'s pages may compile WebAssembly for OCR; only the approved pages ar
   // Documents is exposed as Settings is (including dynamic URLs if that group uses them). Its Look's fonts use only the
   // catalogued font endpoints; scripts and styles remain local, with no broader network or form authority.
   assert.deepEqual(m.web_accessible_resources.find((w) => w.resources.includes('papers.html')), m.web_accessible_resources.find((w) => w.resources.includes('options.html')));
-  assert.match(fs.readFileSync(path.join(__dirname, '..', 'papers.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self' https:\/\/fonts\.gstatic\.com https:\/\/cdn\.jsdelivr\.net; connect-src 'self' https:\/\/fonts\.googleapis\.com https:\/\/fonts\.gstatic\.com https:\/\/cdn\.jsdelivr\.net; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'papers.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self' https:\/\/fonts\.gstatic\.com https:\/\/cdn\.jsdelivr\.net; connect-src 'self' https:\/\/fonts\.googleapis\.com https:\/\/fonts\.gstatic\.com https:\/\/cdn\.jsdelivr\.net; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   // Download all's Allow frame: one button, Glaze's files only, no network from the page itself.
   assert.match(fs.readFileSync(path.join(__dirname, '..', 'features/allow.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'none'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   // The Notes share panel: Glaze's files only, no network from the page itself (the worker talks to the relay).
@@ -181,9 +181,10 @@ test('Glaze\'s pages may compile WebAssembly for OCR; only the approved pages ar
   assert.match(reader, /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   // Glaze Writer's editor frame: Glaze's files only, no network from the page itself.
   assert.match(fs.readFileSync(path.join(__dirname, '..', 'writer.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
-  // Documents uses Settings' GZ_FONTS loader: selected Google Fonts and jsDelivr files, fetched without credentials.
+  // Documents uses Settings' GZ_FONTS loader: selected Google Fonts and jsDelivr files, fetched without credentials. Its slides
+  // draw their pictures from blob: URLs of the deck's own parts (slides-kind.js).
   const papers = fs.readFileSync(path.join(__dirname, '..', 'papers.html'), 'utf8');
-  assert.match(papers, /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self' https:\/\/fonts.gstatic.com https:\/\/cdn.jsdelivr.net; connect-src 'self' https:\/\/fonts.googleapis.com https:\/\/fonts.gstatic.com https:\/\/cdn.jsdelivr.net; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
+  assert.match(papers, /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self' https:\/\/fonts.gstatic.com https:\/\/cdn.jsdelivr.net; connect-src 'self' https:\/\/fonts.googleapis.com https:\/\/fonts.gstatic.com https:\/\/cdn.jsdelivr.net; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   assert.doesNotMatch(papers, /<style\b|<script(?![^>]*\bsrc=)/);
 });
 
