@@ -16,7 +16,11 @@ const setup = (site, framed) => `window.chrome={runtime:{getURL:()=>${JSON.strin
 const size = (f) => f.evaluate(() => { const r = document.querySelector('[data-gz-review-part="frame"], [role="tabpanel"] iframe, #preview_frame')?.getBoundingClientRect(); return r && { width: Math.round(r.width), height: Math.round(r.height), overflow: document.documentElement.scrollWidth - innerWidth }; });
 const set = (f, s) => f.evaluate((s) => { Object.assign(window.reviewSettings, s); window.reviewUI.sync(); }, s);
 const install = async (f, site, framed = '') => { await f.addScriptTag({ content: setup(site, framed) }); await f.addScriptTag({ content: js }); await f.evaluate(() => { window.reviewUI = GZ_DOCREVIEW.create(window.reviewContext); }); };
-const measure = async (f) => { await f.waitForTimeout(100); return size(f); };
+const painted = (f) => f.evaluate(async () => {
+  await document.fonts.ready;
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+});
+const measure = async (f) => { await painted(f); return size(f); };
 const same = (a, b) => a.width === b.width && a.height === b.height;
 const reachable = (f, selector) => f.locator(selector).evaluateAll((es) => es.length > 0 && es.every((e) => {
   e.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
@@ -66,7 +70,7 @@ const reachable = (f, selector) => f.locator(selector).evaluateAll((es) => es.le
     const compact = await measure(f); ok(compact.height >= before.height + 170 && compact.width === before.width, `Ultra compact ${JSON.stringify(compact)}`);
     await f.locator('#gz-review-feedback').click(); ok(await f.locator('#gz-review-feedback').getAttribute('aria-expanded') === 'true', 'feedback expands in place'); await f.locator('#gz-review-feedback').click();
     await f.evaluate(() => { const native = originalViewer.requestFullscreen.bind(originalViewer); window.fullscreenCalls = 0; originalViewer.requestFullscreen = () => { fullscreenCalls++; return native(); }; });
-    await f.locator('#gz-review-fullscreen').click(); await f.waitForTimeout(100);
+    await f.locator('#gz-review-fullscreen').click(); await f.waitForFunction(() => document.fullscreenElement === originalViewer);
     const full = await f.evaluate(async () => { const result = { calls: fullscreenCalls, entered: document.fullscreenElement === originalViewer }; if (document.fullscreenElement) await document.exitFullscreen(); return result; });
     ok(full.calls === 1 && full.entered, `fullscreen enters on the original iframe (${JSON.stringify(full)})`);
     await f.locator('#gz-review-focus').click(); const focus = await measure(f); ok(same(focus, { width: 1800, height: 815 }), `Ultra focus ${JSON.stringify(focus)}`);
@@ -97,7 +101,7 @@ const reachable = (f, selector) => f.locator(selector).evaluateAll((es) => es.le
     await set(f, G.GZ_DEFAULTS.docreview);
     await f.evaluate(() => { originalParent.hidden = true; }); await f.waitForFunction(() => !document.documentElement.hasAttribute('data-gz-review'));
     await f.evaluate(() => { originalParent.hidden = false; }); await f.waitForSelector('#gz-review-focus');
-    await f.evaluate(() => { document.querySelector('.review-grade').setAttribute('style', 'color: rgb(20, 30, 40)'); }); await f.waitForTimeout(100);
+    await f.evaluate(() => { document.querySelector('.review-grade').setAttribute('style', 'color: rgb(20, 30, 40)'); }); await painted(f);
     ok(await f.evaluate(() => document.querySelector('iframe') === originalViewer && originalViewer.parentNode === originalParent && originalViewer.getAttribute('src') === originalSrc && viewerLoads === 0), 'Instructions/file visibility and React attribute updates retain viewer identity and load count');
     await f.evaluate(() => { document.body.tabIndex = -1; document.body.focus(); for (const extra of [{ isComposing: true }, { ctrlKey: true }, { metaKey: true }, { altKey: true }, { shiftKey: true }]) document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', bubbles: true, ...extra })); });
     ok(!await f.evaluate(() => document.documentElement.hasAttribute('data-gz-review-focus')), 'composition and modifier shortcuts stay native');
