@@ -267,15 +267,26 @@ const main = async () => {
   if (url) {
     if (!/^[0-9a-f]{64}$/.test(sha || '')) throw new Error('--xfa-url needs --xfa-sha256 with the file\'s SHA-256');
     const box = fs.mkdtempSync(path.join(os.tmpdir(), 'gz-pdf-download-'));
-    const response = await fetch(url, { redirect: 'follow' });
-    if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
-    const data = Buffer.from(await response.arrayBuffer());
-    const got = crypto.createHash('sha256').update(data).digest('hex');
-    if (got !== sha) { fs.rmSync(box, { recursive: true, force: true }); throw new Error(`${url}: SHA-256 ${got}, expected ${sha}`); }
-    fs.writeFileSync(path.join(box, 'download.pdf'), data);
-    fs.copyFileSync(path.join(box, 'download.pdf'), path.join(dir, 'publicXfa.pdf'));
-    fs.rmSync(box, { recursive: true, force: true });
-    written.publicXfa = data;
+    try {
+      const response = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(300000) });
+      if (!response.ok || Number(response.headers.get('content-length')) > 50e6) {
+        await response.body?.cancel();
+        throw new Error(response.ok ? 'The XFA download exceeds 50 MB' : `${url}: HTTP ${response.status}`);
+      }
+      const file = path.join(box, 'download.pdf'), digest = crypto.createHash('sha256');
+      fs.writeFileSync(file, '');
+      let length = 0;
+      for await (const chunk of response.body) {
+        length += chunk.length;
+        if (length > 50e6) throw new Error('The XFA download exceeds 50 MB');
+        digest.update(chunk);
+        fs.appendFileSync(file, chunk);
+      }
+      const got = digest.digest('hex');
+      if (got !== sha) throw new Error(`${url}: SHA-256 ${got}, expected ${sha}`);
+      fs.copyFileSync(file, path.join(dir, 'publicXfa.pdf'));
+      written.publicXfa = { length };
+    } finally { fs.rmSync(box, { recursive: true, force: true }); }
   }
   for (const [name, data] of Object.entries(written)) console.log(`${name}.pdf\t${data.length} bytes`);
   console.log(dir);
