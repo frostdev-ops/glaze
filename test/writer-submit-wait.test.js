@@ -296,3 +296,20 @@ test('compact: removal, navigation and a missing footer end their held poll with
     assert.equal([...c.timers.values()].filter((t) => t.ms === 100).length, 0, why);
   }
 });
+
+test('compact: a disabled Ultra Submit pressed before readiness is held until the paper enables it', async () => {
+  const { c } = await attempt(false), b = c.doc.querySelector(SUBMIT);
+  b.disabled = true; b.setAttribute('disabled', '');
+  b.getBoundingClientRect = () => ({ left: 10, right: 90, top: 20, bottom: 50 });
+  for (const type of ['pointerdown', 'pointerup']) c.doc.dispatchEvent({ type, target: b, button: 0, clientX: 40, clientY: 30, preventDefault() {}, stopImmediatePropagation() {} });
+  assert.equal(b.getAttribute('aria-busy'), 'true');
+  c.emit({ type: 'view', full: false });
+  c.tick(100);
+  const request = flushes(c.ports[0])[0]?.request;
+  assert.ok(request, 'a disabled button emits no click: the pointer press must still ask for the paper');
+  b.disabled = false; b.removeAttribute('disabled');
+  c.emit({ type: 'compact:flushed', request, ...ok });
+  c.tick(100);
+  assert.equal(c.clicks.length, 1);
+  assert.equal(c.clicks[0], b);
+});
