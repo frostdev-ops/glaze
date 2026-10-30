@@ -108,9 +108,11 @@ test('DOLLARDE and DOLLARFR reject negative fractions before truncation', () => 
 test('VDB handles long asset lives without allocating a schedule per period', () => {
   const { execFileSync } = require('node:child_process');
   const script = `const F = require('./lib/sheet-fn-financial2.js');
-    console.log(JSON.stringify([F.VDB.fn([1000,100,1e9,0,1e9,2,false], {}), F.VDB.fn([1000,100,1e9,0,1e9,0,true], {})]));`;
+    console.log(JSON.stringify([F.VDB.fn([1000,100,1e9,0,1e9,2,false], {}), F.VDB.fn([1000,100,1e9,0,1e9,0,true], {}), F.VDB.fn([1000,100,1e30,0,9e29,2,false], {})]));`;
   const result = execFileSync(process.execPath, [...process.execArgv, '-e', script], { cwd: path.join(__dirname, '..'), encoding: 'utf8', timeout: 3000 });
-  assert.deepEqual(JSON.parse(result), [900, 0]);
+  const values = JSON.parse(result);
+  assert.deepEqual(values.slice(0, 2), [900, 0]);
+  assert.ok(Number.isFinite(values[2]) && values[2] > 0 && values[2] < 900);
   // 60-digit geometric sums: Excel's million-term accumulation loses about 2e-11 relative on the first case.
   close(book(), [['VDB(1000,100,1000000,0,1000000,2,TRUE)', 864.664987434044],
     ['VDB(1000,100,1000000,12345.5,543210.75,1.5,TRUE)', 538.9316910439447],
