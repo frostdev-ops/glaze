@@ -361,6 +361,17 @@ test('custGeom: non-finite numeric strings and stretched coordinates become zero
   });
 });
 
+test('custGeom: paths sharing a coordinate size evaluate their guides once', () => {
+  let evaluations = 0;
+  const model = {
+    gdLst: [{ name: 'x', get fmla() { evaluations++; return 'val hc'; } }],
+    pathLst: Array.from({ length: 100 }, () => ({ w: 10, h: 20, cmds: [moveTo('x', 'vc')] })),
+  };
+  const out = G.custom(model, 1000, 2000);
+  assert.ok(out.paths.every((p) => p.d === 'M 500 1000'));
+  assert.equal(evaluations, 2, 'one shape scope and one shared path scope, independent of the number of paths');
+});
+
 // ---- snapshots -----------------------------------------------------------------------------------------------------
 
 test('CI refuses snapshot regeneration before writing any fixture', () => {
