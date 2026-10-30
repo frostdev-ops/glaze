@@ -67643,6 +67643,7 @@ async function writeChanges(changes, xref, buffer = []) {
 }
 async function incrementalUpdate({
   originalData,
+  maxBytes = null,
   xrefInfo,
   changes,
   xref = null,
@@ -67691,6 +67692,10 @@ async function incrementalUpdate({
   }
   await (useXrefStream ? getXRefStreamTable(xrefInfo, baseOffset, newRefs, newXref, buffer) : getXRefTable(xrefInfo, baseOffset, newRefs, newXref, buffer));
   const totalLength = originalData.length + Math.sumPrecise(buffer.map(str => str.length));
+  // scripts/vendor-pdfjs-limits.js: refuse the exact output size before allocating its byte buffer.
+  if (maxBytes !== null && totalLength > maxBytes) {
+    throw new Error("PDF output exceeds byte limit");
+  }
   const array = new Uint8Array(totalLength);
   array.set(originalData);
   let offset = originalData.length;
@@ -68364,7 +68369,7 @@ class PDFEditor {
       return result;
     });
   }
-  async extractPages(pageInfos, annotationStorage, primaryDocument, handler, task) {
+  async extractPages(pageInfos, annotationStorage, primaryDocument, handler, task, maxBytes = null) {
     this.#primaryDocument = primaryDocument;
     pageInfos = this.#resolveInsertAfterIndices(pageInfos);
     const promises = [];
@@ -68512,7 +68517,7 @@ class PDFEditor {
     await this.#mergeAcroForms(allDocumentData);
     this.#buildOutline(allDocumentData);
     await this.#collectEmbeddedFiles(allDocumentData);
-    return this.writePDF();
+    return this.writePDF(maxBytes);
   }
   async #collectDocumentData(documentData) {
     const {
@@ -70132,7 +70137,7 @@ class PDFEditor {
       data: objStream
     });
   }
-  async writePDF() {
+  async writePDF(maxBytes = null) {
     await this.#makeRoot();
     const infoMap = this.#makeInfo();
     const [encryptRef, encrypt, fileIds] = await this.#makeEncrypt();
@@ -70140,6 +70145,7 @@ class PDFEditor {
     const header = stringToBytes(`%PDF-${this.version}\n%\xfa\xde\xfa\xce`);
     return incrementalUpdate({
       originalData: header,
+      maxBytes,
       changes,
       xrefInfo: {
         startXRef: null,
@@ -70754,6 +70760,7 @@ class WorkerMessageHandler {
     });
     handler.on("ExtractPages", async function ({
       pageInfos,
+      maxBytes,
       annotationStorage
     }) {
       if (!pageInfos) {
@@ -70830,8 +70837,11 @@ class WorkerMessageHandler {
         const pdfEditor = new PDFEditor();
         task = new WorkerTask(`ExtractPages: ${pageInfos.length} page(s)`);
         startWorkerTask(task);
-        return await pdfEditor.extractPages(pageInfos, annotationStorage, pdfManager.pdfDocument, handler, task);
+        return await pdfEditor.extractPages(pageInfos, annotationStorage, pdfManager.pdfDocument, handler, task, maxBytes);
       } catch (reason) {
+        if (reason.message === "PDF output exceeds byte limit") {
+          throw reason;
+        }
         warn(`extractPages: "${reason}".`);
         return null;
       } finally {
@@ -70845,7 +70855,8 @@ class WorkerMessageHandler {
       numPages,
       annotationStorage,
       supportsPrintToPDF,
-      filename
+      filename,
+      maxBytes
     }) {
       const globalPromises = [pdfManager.requestLoadedStream(), pdfManager.ensureCatalog("acroForm"), pdfManager.ensureCatalog("acroFormRef"), pdfManager.ensureDoc("startXRef"), pdfManager.ensureDoc("xref"), pdfManager.ensureCatalog("structTreeRoot")];
       const changes = new RefMap();
@@ -70960,6 +70971,7 @@ class WorkerMessageHandler {
       }
       return incrementalUpdate({
         originalData: stream.bytes,
+        maxBytes,
         xrefInfo: newXrefInfo,
         changes,
         xref,

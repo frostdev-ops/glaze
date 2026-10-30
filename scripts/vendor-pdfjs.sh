@@ -16,10 +16,11 @@
 # the old escape and unescape functions are written out as the same encoding and decoding.
 # The viewer's import of pdf.js's form-script sandbox (pdf.sandbox.mjs, not shipped) is cut, so a PDF's own JavaScript
 # never runs: the scripting manager fails to start a sandbox, logs it, and the document opens without its scripts.
-# One patch to pdf.js's code, in the worker: extractPages() takes `rotations` on each page entry, keyed like its
+# extractPages() takes `rotations` on each page entry, keyed like its
 # includePages by source page index, that turns that page a further multiple of 90 degrees clockwise: the copy's /Rotate
 # is (its own /Rotate + rotations[i]) % 360. pdf.js's own copy always keeps the page's /Rotate. A rotation that is not a
 # multiple of 90 fails the call, as pdf.js's other bad entries do.
+# scripts/vendor-pdfjs-limits.js adds an optional output byte limit, checked before allocating a saved or extracted PDF.
 # Each cut and the patch match its upstream text exactly once or the script stops. Every download is checked against the
 # SHA-256 pinned here before anything in lib/pdfjs changes. Run it to upgrade pdf.js (new version, new hash); the output
 # is checked in, so the extension itself still has no build step.
@@ -150,6 +151,7 @@ patch('    pageDict.set("Rotate", rotate);\n', '    pageDict.set("Rotate", (rota
 fs.writeFileSync(file, src);
 EOF
 cp "$tmp/brotli-dictionary.bin" "$tmp/LICENSE_BROTLI" "$tmp/LICENSE_MPL" "$tmp/LICENSE_CORE_JS" lib/pdfjs/
+node scripts/vendor-pdfjs-limits.js lib/pdfjs
 node scripts/vendor-pdfjs-brotli.js lib/pdfjs/pdf.worker.mjs lib/pdfjs/brotli-dictionary.bin
 cp "$src/LICENSE" lib/pdfjs/LICENSE
 for f in jbig2.wasm openjpeg.wasm LICENSE_JBIG2 LICENSE_PDFJS_JBIG2 LICENSE_OPENJPEG LICENSE_PDFJS_OPENJPEG; do cp "$src/wasm/$f" lib/pdfjs/; done
