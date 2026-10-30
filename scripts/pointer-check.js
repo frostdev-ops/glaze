@@ -24,6 +24,16 @@ const PAGE = fs.readFileSync(path.join(ext, 'test/fixtures/ultra-courses.html'),
 const SITE = 'https://bb.school.test';
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const probe = require('./pointer-probe.cjs');
+const animation = (frame, enabled) => {
+  let step = 0;
+  return probe(() => frame.evaluate((x) => {
+    const ctx = globalThis.GZ_CTX, extras = ctx?.settings().extras;
+    dispatchEvent(new PointerEvent('pointermove', { pointerType: 'mouse', clientX: x, clientY: 200, bubbles: true }));
+    const moving = /^(subtle|expressive)$/.test(document.documentElement.getAttribute('data-gz-motion') || '');
+    return { ready: !!globalThis.GZ_MOTIONX && !!ctx?.parts()?.cursor, enabled: moving && extras?.pointerOn !== false && extras?.pointerAnim !== false, drawn: !!document.getElementById('gz-fx') };
+  }, 200 + (++step % 12) * 15), enabled);
+};
 let fails = 0;
 const check = (name, ok, detail = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : `  ${detail}`}`); if (!ok) fails++; };
 const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Date.now() < end) { const v = await fn(); if (v) return v; await sleep(80); } return null; };
@@ -181,20 +191,16 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     await until(() => page.evaluate(() => document.querySelector('[data-pointer="own"]').tagName === 'BUTTON'));
 
     // ---- the animation switch ---------------------------------------------------------------------------------------------
-    // Moves the pointer once what was drawn before has faded (its canvas goes with it), and says whether anything is drawn.
-    const trail = () => preview().evaluate(async () => {
-      for (let i = 0; i < 100 && document.getElementById('gz-fx'); i++) await new Promise((r) => setTimeout(r, 50));
-      for (let i = 0; i < 12; i++) { dispatchEvent(new PointerEvent('pointermove', { pointerType: 'mouse', clientX: 200 + i * 15, clientY: 200, bubbles: true })); await new Promise(requestAnimationFrame); }
-      return !!document.getElementById('gz-fx');
-    });
-    check('the Look\'s pointer animation plays in the preview', await until(trail, 4000));
+    // Poll the live preview and send input from Node, without waiting for a previous canvas to fade in one call.
+    const trail = (enabled = true) => animation(preview(), enabled);
+    check('the Look\'s pointer animation plays in the preview', await trail());
     await page.click('[data-key="extras.pointerAnim"]');
-    check('Pointer animation off: saved, and the preview draws nothing around the pointer', await until(async () => (await sync()).pointerAnim === false) && !(await sleep(300), await trail()));
+    check('Pointer animation off: saved, and the preview draws nothing around the pointer', await until(async () => (await sync()).pointerAnim === false) && await trail(false));
     check('  this Look\'s animation is named beside the switch', await page.evaluate(() => /^This Look's: \S/.test(document.getElementById('pointer-anim-look').textContent)));
     await page.click('[data-pointer="pumpkin"]');
     await until(async () => (await sync()).pointer === 'pumpkin');
     await page.click('[data-key="extras.pointerAnim"]');
-    check('Pointer animation on again: it plays around Pumpkin', await until(async () => (await sync()).pointerAnim === true) && !!await wears('pumpkin') && !!await until(trail, 4000));
+    check('Pointer animation on again: it plays around Pumpkin', await until(async () => (await sync()).pointerAnim === true) && !!await wears('pumpkin') && !!await trail());
     await shot('pointer-setting-dark');
     await page.setViewportSize({ width: 390, height: 900 });
     await shot('pointer-setting-phone');
@@ -205,9 +211,9 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     check('at phone width, off: the heading keeps its switch in view', await page.evaluate(() => { const r = document.querySelector('[data-key="extras.pointerOn"]').getBoundingClientRect(); return r.width > 0 && r.right <= innerWidth; }));
     await page.setViewportSize({ width: 1400, height: 1000 });
     await shot('pointer-setting-dark-off');
-    check('the switch off: the system\'s pointer and nothing drawn around it in the preview', await wears('system') && !(await sleep(300), await trail()), await worn());
+    check('the switch off: the system\'s pointer and nothing drawn around it in the preview', await wears('system') && await trail(false), await worn());
     await page.click('[data-key="extras.pointerOn"]');
-    check('  on again: Pumpkin and its animation are back', await until(async () => (await sync()).pointerOn === true) && !!await wears('pumpkin') && !!await until(trail, 4000), await worn());
+    check('  on again: Pumpkin and its animation are back', await until(async () => (await sync()).pointerOn === true) && !!await wears('pumpkin') && !!await trail(), await worn());
 
     // ---- This Look's pointer: the Look's parts ---------------------------------------------------------------------------------
     const lookCursor = () => page.evaluate(async () => (await GZ_XPARTS.read(GZ_XPARTS.areas()))?.x?.cursor?.kind ?? null);
@@ -259,20 +265,16 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     check('Glaze off: the page is left with the system\'s', await shows('system') && await lms.evaluate(() => !document.documentElement.style.getPropertyValue('--gz-cursor')), await onPage());
     await page.evaluate(() => chrome.storage.sync.set({ enabled: true }));
     check('  and on again, the student\'s is back', await shows('neon'), await onPage());
-    const glow = () => lms.evaluate(async () => {
-      for (let i = 0; i < 100 && document.getElementById('gz-fx'); i++) await new Promise((r) => setTimeout(r, 50));
-      for (let i = 0; i < 12; i++) { dispatchEvent(new PointerEvent('pointermove', { pointerType: 'mouse', clientX: 300 + i * 10, clientY: 300, bubbles: true })); await new Promise(requestAnimationFrame); }
-      return !!document.getElementById('gz-fx');
-    });
-    check('the Look\'s pointer animation plays around the student\'s pointer', await until(glow, 4000));
+    const glow = (enabled = true) => animation(lms, enabled);
+    check('the Look\'s pointer animation plays around the student\'s pointer', await glow());
     await extras({ pointerAnim: false });
-    check('  Pointer animation off: nothing drawn around it', !(await sleep(600), await glow()));
+    check('  Pointer animation off: nothing drawn around it', await glow(false));
     await extras({ pointerAnim: true });
-    check('  on again: it plays', await until(glow, 4000));
+    check('  on again: it plays', await glow());
     await extras({ pointerOn: false });
-    check('the custom pointer off: nothing drawn around the pointer either', await shows('system') && !(await sleep(600), await glow()));
+    check('the custom pointer off: nothing drawn around the pointer either', await shows('system') && await glow(false));
     await extras({ pointerOn: true });
-    check('  on again: it plays', await until(glow, 4000));
+    check('  on again: it plays', await glow());
     // The command palette (Ctrl+K): a Pointer: entry per choice; their own picture only once there is one.
     await lms.keyboard.press('Control+k');
     await lms.waitForSelector('#gz-cmd input');
