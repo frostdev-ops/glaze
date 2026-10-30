@@ -228,3 +228,15 @@ test('database computed criteria, empty strings and blank field references agree
   cases(f, [['DSUM(A1:C5,"id",H1:H2)', 6], ['DSUM(A1:C5,"id",I1:I2)', 7], ['DSUM(A1:C5,"id",J1:J2)', 0],
     ['DSUM(A1:C5,"id",K1:K2)', 0], ['DSUM(A1:C5,"id",L1:L2)', 10]]);
 });
+
+test('computed criteria update with records and refuse untracked shifted references', () => {
+  const e = book({ ...grid('A1', [['id', 'value'], [1, 0], [2, 1], [3, 0]]), H1: 'computed', H2: '=B2>0' });
+  cases(e, [['DSUM(A1:B4,"id",H1:H2)', 2]]);
+  const sh = e.wb.sheets[0];
+  e.apply({ op: 'set', sheet: sh.id, r: 3, c: 1, cell: { t: 'n', v: 1 } });
+  cases(e, [['DSUM(A1:B4,"id",H1:H2)', 5]]);
+  // The engine only tracks the first criterion cell's dependencies. Relative references outside database would
+  // otherwise return stale results after another record changes; support needs an engine dependency hook.
+  const outside = book({ ...grid('A1', [['id'], [1], [2], [3]]), D2: 0, D3: 1, D4: 0, H1: 'computed', H2: '=D2>0' });
+  cases(outside, [['DSUM(A1:A4,"id",H1:H2)', '#VALUE!']]);
+});
