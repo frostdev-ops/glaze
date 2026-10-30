@@ -49,7 +49,7 @@ const cases = (e, rows, at) => { for (const [f, want] of rows) assert.equal(calc
 test('the information functions are registered', () => {
   const names = 'ISBLANK ISERR ISERROR ISNA ISNUMBER ISTEXT ISNONTEXT ISLOGICAL ISREF ISEVEN ISODD ISFORMULA N T TYPE ERROR.TYPE NA CELL INFO SHEET SHEETS FORMULATEXT'.split(' ');
   for (const name of names) assert.ok(C.fn(name), name);
-  assert.ok(C.fn('CELL').volatile && C.fn('INFO').volatile && C.fn('SHEET').volatile);
+  assert.ok(C.fn('CELL').volatile && C.fn('INFO').volatile && !C.fn('SHEET').volatile, 'moving a sheet recalculates SHEET without volatility');
   assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '..', 'lib', 'sheet-fn-info.js'), 'utf8')), 'no timers');
 });
 

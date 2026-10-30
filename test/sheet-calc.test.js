@@ -519,3 +519,16 @@ test('an argument left out counts as 0', () => {
     ['COUNT(1,,3)', 3], ['COUNTA(1,,3)', 3], ['COUNT(,)', 2], ['COUNTA(,)', 2], ['AND(TRUE,)', false], ['OR(FALSE,)', false],
   ]);
 });
+
+test('moving a sheet changes which sheets a 3-D reference spans', () => {
+  const e = book({ A1: 1, 'Sheet2!A1': 10, 'Sheet3!A1': 100, B1: '=SUM(Sheet1:Sheet2!A1)' }, { sheets: ['Sheet1', 'Sheet2', 'Sheet3'] });
+  const third = M.getSheet(e.wb, 'Sheet3').id;
+  assert.equal(val(e, 'B1'), 11);
+  e.apply({ op: 'moveSheet', sheet: third, to: 1 });
+  assert.equal(val(e, 'B1'), 111, 'Sheet3 is now between Sheet1 and Sheet2');
+  e.edit(third, 0, 0, '200');
+  assert.equal(val(e, 'B1'), 211, 'and is read as a precedent');
+  e.apply({ op: 'moveSheet', sheet: third, to: 2 });
+  e.edit(third, 0, 0, '300');
+  assert.equal(val(e, 'B1'), 11);
+});

@@ -132,6 +132,7 @@ test('sheets are added, moved, renamed and removed, each undoable', () => {
   const snap = structuredClone(wb);
   const mv = M.apply(wb, { op: 'moveSheet', sheet: data.id, to: 0 });
   assert.deepEqual(wb.sheets.map((s) => s.name), ['Data', 'Sheet1']);
+  assert.equal(mv.rebuild, true, 'a 3-D reference or SHEET() may now mean other sheets');
   M.apply(wb, mv.inverse);
   assert.deepEqual(wb, snap);
   const rn = M.apply(wb, { op: 'rename', sheet: data.id, name: 'Figures' });
