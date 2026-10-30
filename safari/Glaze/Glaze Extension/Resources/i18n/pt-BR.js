@@ -3529,7 +3529,6 @@
   "That would move cells off the sheet.": "Isso moveria células para fora da planilha.",
   "Currency": "Moeda",
   "Percent": "Porcentagem",
-  "Export .csv": "Exportar .csv",
   "Export .xlsx": "Exportar .xlsx",
   "Choose a spreadsheet smaller than 15 MB.": "Escolha uma planilha menor que 15 MB.",
   "Insert row above": "Inserir linha acima",

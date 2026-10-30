@@ -3529,7 +3529,6 @@
   "That would move cells off the sheet.": "Daarmee zouden cellen van het blad af schuiven.",
   "Currency": "Valuta",
   "Percent": "Percentage",
-  "Export .csv": ".csv exporteren",
   "Export .xlsx": ".xlsx exporteren",
   "Choose a spreadsheet smaller than 15 MB.": "Kies een spreadsheet kleiner dan 15 MB.",
   "Insert row above": "Rij erboven invoegen",

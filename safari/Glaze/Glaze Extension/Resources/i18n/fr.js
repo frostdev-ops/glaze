@@ -3529,7 +3529,6 @@
   "That would move cells off the sheet.": "Cela déplacerait des cellules hors de la feuille.",
   "Currency": "Monétaire",
   "Percent": "Pourcentage",
-  "Export .csv": "Exporter .csv",
   "Export .xlsx": "Exporter .xlsx",
   "Choose a spreadsheet smaller than 15 MB.": "Choisissez une feuille de calcul de moins de 15 Mo.",
   "Insert row above": "Insérer une ligne au-dessus",
