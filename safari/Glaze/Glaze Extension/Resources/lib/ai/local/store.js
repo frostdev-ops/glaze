@@ -51,10 +51,10 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
 
   // models: the entries, or a function giving them; left out, the shipped models.json. The rest stand in for the
   // browser's in tests. Every context of the extension (the worker, pages, Workers) may hold a store over the same OPFS:
-  // a model's writes (download, verify, remove) take the origin's Web Lock for it. Each remove raises the model's removal
-  // generation (kept in OPFS, changed only under the lock); a download remembers the generation it was asked for under
-  // and refuses to run, or to report ready, once a later remove has happened. Remove also tells the other contexts, over a
-  // BroadcastChannel, to stop downloads asked for up to the generation it read.
+  // a model's writes (download, verify, remove) take the origin's Web Lock for it, asked for when they're called, so the
+  // lock's queue orders them across contexts. Each remove raises the model's removal generation (kept in OPFS, changed
+  // only under the lock) and tells the other contexts, over a BroadcastChannel, to stop downloads up to the generation it
+  // read; a download reads its generation holding the lock and stops, without reporting ready, if a remove says so.
   const create = ({ models, fetch: get, root, estimate, subtle, locks, channel } = {}) => {
     get ||= (...a) => globalThis.fetch(...a);
     root ||= () => navigator.storage.getDirectory();
@@ -279,17 +279,15 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
         for (const f of job.listeners) try { f(p); } catch { /* a listener's own */ }
       };
       const { signal } = job.controller;
-      job.done = (async () => {
+      // The lock is asked for now, so its queue orders this download against removes in every context; the generation is
+      // read holding it. A remove queued behind it says so (its message, `cut`) before or while it runs.
+      job.done = held(id, signal, async () => {
         job.gen = await generation(id);
         if (job.gen <= job.cut) throw removed();
-        const m = await model(id);
-        return held(id, signal, async () => {
-          if (await generation(id) !== job.gen) throw removed();
-          const r = await fetchAll(m, signal, say);
-          if (signal.aborted) throw why(signal); // a remove during the last write: its files are going
-          return r;
-        });
-      })().finally(() => { if (jobs.get(id) === job) jobs.delete(id); });
+        const r = await fetchAll(await model(id), signal, say);
+        if (signal.aborted) throw why(signal); // a remove during the last write: its files are going
+        return r;
+      }).finally(() => { if (jobs.get(id) === job) jobs.delete(id); });
       return job;
     };
     // A caller's cancel ends its own wait; the download stops when the last caller still waiting cancels.
