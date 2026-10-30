@@ -427,8 +427,10 @@ const run = async () => {
     await until(() => b.value(`document.querySelectorAll('.gz-dl').length >= 1 && !!document.getElementById('gz-dl-73')`, mods), 'Download all buttons', SLOW);
     // Glaze's entrance (motion.css) carries the module and its button for most of a second after the page draws them, and a
     // loaded machine can reach the button inside it. Here the module moves for a second, farther and steadily: a click
-    // measured while it moves lands beside the button, so the click waits for it to rest.
-    await b.value(`(document.getElementById('context_module_73').animate([{ translate: 'none' }, { translate: '0 -400px' }], 1000), 1)`, mods);
+    // measured while it moves lands beside the button, so the click waits for it to rest. It moves by `top`, which Firefox
+    // animates on the main thread every frame; a compositor translate reaches the page's hit testing only now and then.
+    await b.value(`(() => { const m = document.getElementById('context_module_73'); m.style.position = 'relative';
+      m.animate([{ top: '0px' }, { top: '-400px' }], 1000).finished.then(() => m.style.removeProperty('position')); return 1; })()`, mods);
     await b.hover(mods, '#context_module_73 .ig-header');
     await b.click(mods, '#gz-dl-73');
     const frame = await allowFrame(b, mods);
