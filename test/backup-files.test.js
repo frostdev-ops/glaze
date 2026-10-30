@@ -13,7 +13,7 @@ const D = require('../defaults.js');
 const { fakeIDB } = require('./helpers/fake-idb.cjs');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const { execFileSync } = require('node:child_process');
+const path = require('node:path');
 globalThis.GZ_WRITER_STYLES = require('../lib/writer-styles.js');
 
 const NOW = Date.now() - 60000;
@@ -166,8 +166,8 @@ test('a reader from before the store sees only base64 records in papers, and no 
 test('a reader from before the store refuses a backup whose documents it would silently omit', async () => {
   const a = device();
   await seeded(a);
-  // The immutable main revision merged into this lane: the 4.0.0 reader before the file store.
-  const oldSource = execFileSync('git', ['show', '8434813b:lib/backup.js'], { cwd: __dirname, encoding: 'utf8' });
+  // The 4.0.0 reader before the file store, lib/backup.js as of 8434813b, kept as a file: CI's shallow checkout lacks it.
+  const oldSource = fs.readFileSync(path.join(__dirname, 'fixtures', 'backup-before-store.js'), 'utf8');
   const old = { exports: {} };
   vm.runInNewContext(oldSource, { module: old, require: (p) => require(`../lib/${p}`), Blob, TextEncoder, TextDecoder, Uint8Array, DataView, URL });
   const { file } = await backUp(a);

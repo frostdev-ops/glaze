@@ -29,6 +29,9 @@ const posixOnly = (why) => (POSIX ? false : why);
 const windowsOnly = (why) => (POSIX ? why : false);
 // Loaded per test, so a missing module fails that test alone.
 const N = () => require('../mcp/lib/nodes.js');
+// Whether setup would name the node running these tests. It won't on GitHub's hosted runners, where node sits under
+// /opt/hostedtoolcache, a folder anyone can write; nodes.js refuses that, as it should.
+const trusted = (platform) => !N().trust(platform).path(process.execPath);
 const M = () => require('../mcp/lib/mcpb.js');
 const P = () => require('../mcp/scripts/pack-mcpb.js');
 
@@ -247,8 +250,24 @@ test('all lists every candidate find would take, in order, past the ones to skip
 test('start writes the other nodes it finds into the launchers, after its own', { skip: posixOnly('POSIX modes and sh stand-ins') }, async (t) => {
   const h = macHome(t);
   const other = fakeNode(path.join(h.home, 'other', 'bin'));
-  await startAt(h, {}, { list: [h.node, other] });
+  const unsafe = fakeNode(path.join(h.home, 'shared'));
+  fs.chmodSync(path.dirname(unsafe), 0o777);
+  await startAt(h, {}, { list: [h.node, unsafe, other] });
   assert.deepEqual(L.parse(fs.readFileSync(path.join(h.hosts, 'chrome'), 'utf8')).also, [other]);
+});
+
+test('start never writes an unsafe running node as a primary or fallback', { skip: posixOnly('POSIX modes and sh stand-ins') }, async (t) => {
+  for (const fallback of [true, false]) await t.test(fallback ? 'another trusted node' : 'no node', async (t) => {
+    const h = macHome(t), unsafe = fakeNode(path.join(h.home, 'shared'));
+    fs.chmodSync(path.dirname(unsafe), 0o777);
+    const r = await startAt(h, {}, { execPath: unsafe, list: [unsafe, ...(fallback ? [h.node] : [])] });
+    assert.equal(r.node, fallback ? h.node : null);
+    for (const browser of ['chrome', 'firefox']) {
+      const l = L.parse(fs.readFileSync(path.join(h.hosts, browser), 'utf8'));
+      assert.equal(l.node, fallback ? h.node : null);
+      assert.deepEqual(l.also || [], []);
+    }
+  });
 });
 
 test('choose keeps a plain node by its stable PATH name, and under Claude finds a system one or none', async (t) => {
@@ -277,7 +296,7 @@ test('a stable PATH alias must be trusted even when it resolves to the running n
   assert.equal(got, node);
   fs.unlinkSync(alias);
   fs.symlinkSync(process.execPath, alias);
-  assert.equal(I.context({ platform: 'darwin', env }).node, process.execPath, 'setup also refuses the unsafe alias');
+  assert.equal(I.context({ platform: 'darwin', env }).node, trusted('darwin') ? process.execPath : null, 'setup also refuses the unsafe alias');
 });
 
 test('choose checks the running node file, ancestors and symlink targets before using it', { skip: posixOnly('POSIX modes and symlinks') }, async (t) => {
@@ -307,7 +326,7 @@ test('the new helper files reach nothing outside the computer and start processe
 test('install refuses to default to Claude\'s runtime when no node is given', () => {
   // context() names this node unless told otherwise; under Electron it names none, so setup can't start Claude's app.
   const ctx = I.context({ platform: 'darwin', env: { HOME: '/h' } });
-  assert.equal(typeof ctx.node, 'string');
+  assert.equal(ctx.node, trusted('darwin') ? process.execPath : null);
   assert.equal(I.context({ platform: 'darwin', env: { HOME: '/h' }, node: null }).node, null, 'null means no node, not the default');
 });
 
@@ -522,7 +541,13 @@ test('the command: --from=mcpb sets up, then runs agent mode; any other --from i
   assert.equal(out.status, 0, out.stderr);
   const { root, hosts } = B.folder(process.platform, { HOME: home, XDG_DATA_HOME: env.XDG_DATA_HOME });
   const l = L.parse(fs.readFileSync(path.join(hosts, B0.id), 'utf8'));
-  assert.equal(fs.realpathSync(l.node), fs.realpathSync(process.execPath));
+  assert.ok(l, 'setup wrote a recognized launcher');
+  if (trusted(process.platform)) assert.equal(fs.realpathSync(l.node), fs.realpathSync(process.execPath));
+  // Setup then names another node it finds and trusts, or none.
+  else assert.ok(l.node === null || (!N().trust(process.platform).path(l.node) && fs.realpathSync(l.node) !== fs.realpathSync(process.execPath)), `a node others can change goes in no launcher: ${l.node}`);
+  for (const node of [l.node, ...(l.also || [])].filter((n) => n !== null)) {
+    assert.equal(N().trust(process.platform).path(node), null, `every launcher candidate is trusted: ${node}`);
+  }
   assert.equal(l.script, path.join(root, VERSION, 'bin', 'glaze-mcp.js'));
   assert.doesNotMatch(out.stderr, /unknown option|GLAZE_MCP_BROWSER/);
   assert.equal(CLI.mode(['--from=mcpb']).mode, 'agent');
