@@ -363,6 +363,12 @@ test('typed input: numbers, percent, currency, dates, times, booleans, errors, f
   assert.deepEqual(p('3/0'), { t: 'n', v: M.toSerial(2000, 3, 1), fmt: 'mmm-yy' });
   assert.deepEqual(p('Mar 0'), { t: 'n', v: M.toSerial(2000, 3, 1), fmt: 'mmm-yy' });
   assert.deepEqual(p('Feb-30'), { t: 'n', v: M.toSerial(1930, 2, 1), fmt: 'mmm-yy' });
+  // Minutes and seconds of one digit (Excel 16 on the Mac).
+  assert.deepEqual(p('1:5'), { t: 'n', v: M.timeSerial(1, 5, 0), fmt: 'h:mm' });
+  assert.deepEqual(p('1:5:3'), { t: 'n', v: M.timeSerial(1, 5, 3), fmt: 'h:mm:ss' });
+  assert.deepEqual(p('1:5 PM'), { t: 'n', v: M.timeSerial(13, 5, 0), fmt: 'h:mm AM/PM' });
+  assert.deepEqual(p('13:5'), { t: 'n', v: M.timeSerial(13, 5, 0), fmt: 'h:mm' });
+  assert.deepEqual(p('3/4/2025 1:5'), { t: 'n', v: 45720 + M.timeSerial(1, 5, 0), fmt: 'm/d/yyyy h:mm' });
   assert.deepEqual(p('13:30'), { t: 'n', v: 0.5625, fmt: 'h:mm' });
   assert.deepEqual(p('1:30 PM'), { t: 'n', v: 0.5625, fmt: 'h:mm AM/PM' });
   assert.deepEqual(p('12:00:30 am'), { t: 'n', v: 30 / 86400, fmt: 'h:mm:ss AM/PM' });
