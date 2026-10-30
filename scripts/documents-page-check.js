@@ -61,7 +61,7 @@ const INSTALL = () => {
 let total = 0, failed = 0;
 const check = async (name, test) => {
   total++;
-  try { await test(); console.log(`ok ${name}`); } catch (e) { failed++; console.error(`FAIL ${name}: ${e.stack}`); }
+  try { await test(); console.log(`ok ${name}`); } catch (e) { failed++; console.error(`FAIL ${name}: ${e.stack}`); if (process.env.CHECK_FAIL_FAST) throw e; }
 };
 
 (async () => {
@@ -123,10 +123,18 @@ const check = async (name, test) => {
     const framed = (p, at = PAPERS) => p.frames().find((f) => f.url().split(/[?#]/)[0] === at && f.parentFrame());
     // Shown: the frame's document claimed its pass (papers.js lifts its veil), at the list or a document, with Close.
     const shown = async (p) => {
-      const f = await until(() => framed(p), 'the Documents frame');
-      await until(() => f.evaluate(() => !document.documentElement.style.getPropertyValue('opacity') && !document.body.inert
-        && (document.documentElement.dataset.mode ? !!document.querySelector('.gp-top > .gd-btn') && !!document.querySelector('.ProseMirror, .pdfViewer .annotationLayer input') : !document.getElementById('list').hidden && !!document.querySelector('#list > .gd-btn'))), 'Documents shows, its pass claimed');
-      return f;
+      try {
+        return await until(async () => {
+          const f = framed(p);
+          if (!f) return null;
+          const ready = await f.evaluate(() => !document.documentElement.style.getPropertyValue('opacity') && !document.body.inert
+            && (document.documentElement.dataset.mode ? !!document.querySelector('.gp-top > .gd-btn') && !!document.querySelector('.ProseMirror, .pdfViewer .annotationLayer input') : !document.getElementById('list').hidden && !!document.querySelector('#list > .gd-btn')));
+          return ready ? f : null;
+        }, 'Documents shows, its pass claimed');
+      } catch (e) {
+        console.error('Documents frame state:', await Promise.all(p.frames().filter((f) => f.url().includes('/papers.html')).map(async (f) => ({ url: f.url(), state: await f.evaluate(() => ({ mode: document.documentElement.dataset.mode, opacity: document.documentElement.style.opacity, inert: document.body.inert, text: document.body.innerText.slice(-800) })).catch(String) }))));
+        throw e;
+      }
     };
     // A shot once the frame has painted twice (an out-of-process frame draws on its own clock).
     const shoot = async (p, g, name) => {
