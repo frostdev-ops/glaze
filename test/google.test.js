@@ -20,6 +20,7 @@ const REAL = { ...C, chrome: '111-chrome.apps.googleusercontent.com', web: '222-
 const harness = ({ on = true, flow = 'chrome', config = REAL, granted = true, firefox = false, client = REAL.chrome, keep = false, up = [true, true], email = 'student@school.edu' } = {}) => {
   const local = {}, sync = {};
   const who = { sub: '1', email }; // the account Google's userinfo names for any token: changed to model another account
+  const owners = {}, gate = { picker: null }; // gate.picker: what the picker page's HEAD waits on
   const log = { fetch: [], launch: [], auth: [], removed: [], cleared: 0, permRemoved: [], native: [] };
   let clock = 1_000_000;
   let n = 0;
@@ -27,7 +28,7 @@ const harness = ({ on = true, flow = 'chrome', config = REAL, granted = true, fi
     getAuthToken: async (d) => {
       log.auth.push(d);
       if (identity.fail) throw new Error(identity.fail);
-      return { token: `chrome-tok-${++n}`, grantedScopes: identity.scopes || d.scopes };
+      return { token: identity.next?.shift() || `chrome-tok-${++n}`, grantedScopes: identity.scopes || d.scopes };
     },
     // Firefox's schema (toolkit/components/extensions/schemas/identity.json) takes { url, interactive } and refuses any other
     // key; it reads the redirect from the url's redirect_uri.
@@ -58,11 +59,13 @@ const harness = ({ on = true, flow = 'chrome', config = REAL, granted = true, fi
   const fetch = async (url, init = {}) => {
     log.fetch.push({ url, init });
     if (url === G.USERINFO) {
-      return init.headers?.authorization?.startsWith('Bearer ') ? new Response(JSON.stringify({ ...who, email_verified: true }), { status: 200 }) : new Response('', { status: 401 });
+      // owners: the account a particular token belongs to (Chrome's cache can hold another account's); else who.
+      const token = init.headers?.authorization?.replace(/^Bearer /, '');
+      return token ? new Response(JSON.stringify({ ...(owners[token] || who), email_verified: true }), { status: 200 }) : new Response('', { status: 401 });
     }
     if (url === G.REVOKE) return new Response('', { status: 200 });
     const i = config.picker.indexOf(url);
-    if (i >= 0) { if (up[i]) return new Response('', { status: 200 }); throw new TypeError('Failed to fetch'); }
+    if (i >= 0) { await gate.picker; if (up[i]) return new Response('', { status: 200 }); throw new TypeError('Failed to fetch'); }
     throw new Error(`unexpected request: ${url}`);
   };
   const g = G.create({
@@ -76,7 +79,7 @@ const harness = ({ on = true, flow = 'chrome', config = REAL, granted = true, fi
     keep: async () => keep,
     now: () => clock,
   });
-  return { g, local, sync, log, identity, who, tick: (ms) => { clock += ms; } };
+  return { g, local, sync, log, identity, who, owners, gate, tick: (ms) => { clock += ms; } };
 };
 // Every token that ever existed, and storage: none may be in it.
 const noToken = (h) => {
@@ -313,6 +316,36 @@ test('a token for another Google account than the one connected is refused, drop
     assert.deepEqual(await h.g.disconnect(), { ok: true, revoked: false, had: true });
     assert.ok(!h.log.fetch.some((f) => f.url === G.REVOKE), `${flow}: nothing revoked`);
     assert.deepEqual(h.local, {});
+  }
+});
+
+test('a token checked for one account is never taken for the next: Connect A, Disconnect, Connect B, then A\'s cached token', async () => {
+  const h = harness({ keep: true }); // Calendar holds the grant, so Disconnect leaves Chrome's cache as it is
+  const A = { sub: 'A', email: 'a@school.edu' }, B = { sub: 'B', email: 'b@gmail.com' };
+  Object.assign(h.owners, { 'tok-A': A, 'tok-B': B });
+  h.identity.next = ['tok-A'];
+  assert.deepEqual(await h.g.connect(), { ok: true, email: A.email });
+  await h.g.disconnect();
+  h.identity.next = ['tok-B'];
+  assert.deepEqual(await h.g.connect(), { ok: true, email: B.email });
+  h.identity.next = ['tok-A']; // Chrome hands back A's token
+  await assert.rejects(h.g.token(), (e) => e.why === 'account', 'A\'s token is refused while B is connected');
+  h.identity.next = ['tok-B'];
+  assert.equal(await h.g.token(), 'tok-B');
+});
+
+test('Disconnect stops a Pick under way: no picker opens with the token, and no files come back', async () => {
+  for (const keep of [true, false]) {
+    const h = harness({ keep });
+    await h.g.connect();
+    let open;
+    h.gate.picker = new Promise((r) => { open = r; });
+    const picking = h.g.pick();
+    while (!h.log.fetch.some((f) => C.picker.includes(f.url))) await new Promise((r) => setTimeout(r, 1)); // the probe is out
+    assert.equal((await h.g.disconnect()).ok, true);
+    open();
+    assert.deepEqual(await picking, { ok: false, why: 'connect' }, `keep ${keep}`);
+    assert.ok(!h.log.launch.length, 'the picker page never opened');
   }
 });
 

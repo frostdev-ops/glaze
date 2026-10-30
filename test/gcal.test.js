@@ -263,7 +263,7 @@ const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 // on: the build-time switch (lib/gcal.js ON) turned on in the worker's copy, as scripts/dev-gcal.sh does.
 const switched = (src, on) => (on ? src.replace('  const ON = false;\n', '  const ON = true;\n') : src);
 // failSet(patch): a storage write that fails, as a full disk or a quota does. identity.hold: what getAuthToken waits on.
-const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet = () => false } = {}) => {
+const worker = (mock, { on = true, drive = false, local = {}, sync = { enabled: true }, failSet = () => false } = {}) => {
   const store = { local, sync };
   // As chrome.storage: a read is served when it's asked (hooks.read runs after that, while the answer is on its way, as a
   // change landing then would), and every change is heard through onChanged.
@@ -306,7 +306,7 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
       assert.ok(url.startsWith(`${G.API}/`) || url === G.REVOKE, `only Google's two addresses: ${url}`);
       return fetch(url.replace(G.API, mock.api).replace(G.REVOKE, mock.revoke), init);
     },
-    importScripts: (...files) => { for (const f of files) vm.runInContext(switched(read(`lib/${f}`), on && f === 'gcal.js'), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(switched(read(`lib/${f}`), (on && f === 'gcal.js') || (drive && f === 'google.js')), context); },
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         onInstalled: { addListener: (f) => (listeners.installed ||= []).push(f) }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
@@ -408,6 +408,20 @@ withMock('worker: Calendar\'s disconnect while Drive still holds the shared gran
   assert.deepEqual([mock.revoked, w.identity.cleared, w.identity.removed], [[], 0, []]);
   assert.ok(!('gcal' in w.store.local) && !('gcalSync' in w.store.local));
   assert.deepEqual(w.store.local.google, { email: 'student@school.edu', flow: 'chrome', at: NOW }, 'Drive\'s record stays');
+});
+
+withMock('worker: Calendar\'s and Drive\'s Disconnects at once, in either order: one of them is the last and cleans up, never both "shared"', async (mock) => {
+  for (const first of ['gcal', 'google']) {
+    const w = worker(mock, { drive: true });
+    mock.tokens.add('tok-1');
+    await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
+    w.store.local.google = { email: 'student@school.edu', sub: '1', flow: 'web', at: NOW }; // Drive connected too
+    const cal = () => w.send({ type: 'glaze:gcal', op: 'disconnect' }, EDITOR), drive = () => w.send({ type: 'glaze:google', op: 'disconnect' }, EDITOR);
+    const [c, d] = first === 'gcal' ? await Promise.all([cal(), drive()]) : (([x, y]) => [y, x])(await Promise.all([drive(), cal()]));
+    assert.ok(c.ok && d.ok, JSON.stringify([c, d]));
+    assert.ok(!(c.shared === true && d.had === false), `${first} first: one of them cleans up (${JSON.stringify([c, d])})`);
+    assert.ok(!('gcal' in w.store.local) && !('google' in w.store.local));
+  }
 });
 
 test('Settings\' Calendar sign-in asks Chrome for Calendar\'s scope only', () => {
