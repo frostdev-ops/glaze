@@ -104,3 +104,16 @@ test('DOLLARDE and DOLLARFR: Microsoft\'s examples and Remarks', () => {
 test('DOLLARDE and DOLLARFR reject negative fractions before truncation', () => {
   cases(book(), [['DOLLARDE(1.02,-0.5)', '#NUM!'], ['DOLLARFR(1.125,-0.5)', '#NUM!']]);
 });
+
+test('VDB handles long asset lives without allocating a schedule per period', () => {
+  const { execFileSync } = require('node:child_process');
+  const script = `const F = require('./lib/sheet-fn-financial2.js');
+    console.log(JSON.stringify([F.VDB.fn([1000,100,1e9,0,1e9,2,false], {}), F.VDB.fn([1000,100,1e9,0,1e9,0,true], {})]));`;
+  const result = execFileSync(process.execPath, [...process.execArgv, '-e', script], { cwd: path.join(__dirname, '..'), encoding: 'utf8', timeout: 3000 });
+  assert.deepEqual(JSON.parse(result), [900, 0]);
+  // 60-digit geometric sums: Excel's million-term accumulation loses about 2e-11 relative on the first case.
+  close(book(), [['VDB(1000,100,1000000,0,1000000,2,TRUE)', 864.664987434044],
+    ['VDB(1000,100,1000000,12345.5,543210.75,1.5,TRUE)', 538.9316910439447],
+    ['VDB(1000,100,1000000,12345.5,543210.75,1.5,FALSE)', 541.9856807312959],
+    ['VDB(1000,100,1000000,990000.5,999999.75,1.5,FALSE)', 7.435398051215427]]);
+});
