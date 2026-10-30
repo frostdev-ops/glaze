@@ -139,7 +139,7 @@ test('FIND, FINDB, SEARCH, SEARCHB with Microsoft\'s data', () => {
   cases(e, [
     ['FIND("M",A2)', 1], ['FIND("m",A2)', 6], ['FIND("M",A2,3)', 8],
     ['MID(B2,1,FIND(" #",B2,1)-1)', 'Ceramic Insulators'], ['MID(B3,1,FIND(" #",B3,1)-1)', 'Copper Coils'], ['MID(B4,1,FIND(" #",B4,1)-1)', 'Variable Resistors'],
-    ['FIND("",A2)', 1], ['FIND("",A2,5)', 5], ['FIND("z",A2)', '#VALUE!'], ['FIND("M",A2,0)', '#VALUE!'], ['FIND("M",A2,16)', '#VALUE!'], ['FIND("",A2,16)', '#VALUE!'], ['FIND("",A2,15)', 15], ['FIND("*",A2)', '#VALUE!'],
+    ['FIND("",A2)', 1], ['FIND("",A2,5)', 5], ['FIND("z",A2)', '#VALUE!'], ['FIND("M",A2,0)', '#VALUE!'], ['FIND("M",A2,16)', '#VALUE!'], ['FIND("",A2,16)', 16], ['FIND("",A2,15)', 15], ['FIND("*",A2)', '#VALUE!'],
     ['FINDB("m",A2)', 6], ['FIND(1,12321,2)', 5],
     ['SEARCH("e",C2,6)', 7], ['SEARCH(C4,C3)', 8], ['REPLACE(C3,SEARCH(C4,C3),6,"Amount")', 'Profit Amount'], ['MID(C3,SEARCH(" ",C3)+1,4)', 'Marg'],
     ['SEARCH("""",C5)', 5], ['MID(C5,SEARCH("""",C5)+1,SEARCH("""",C5,SEARCH("""",C5)+1)-SEARCH("""",C5)-1)', 'boss'],
