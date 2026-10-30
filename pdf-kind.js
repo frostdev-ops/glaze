@@ -232,7 +232,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     zoomB.addEventListener('click', () => openMenu(zoomB, [...PRESETS.map(([v, label]) => [t(label), () => { viewer.currentScaleValue = v; }, { 'data-zoom': v }]),
       ...STEPS.map((n) => [`${n}%`, () => { viewer.currentScaleValue = String(n / 100); }, { 'data-zoom': String(n) }])]));
     // ⋯: Export .pdf (the pages panel's bake and the tools come in later steps).
-    moreB.addEventListener('click', () => openMenu(moreB, [[t('Export .pdf'), () => { flush().then(() => exportFile(key)).catch(() => say(t(UNREAD))); }, { 'data-act': 'export' }]]));
+    moreB.addEventListener('click', () => openMenu(moreB, [[t('Export .pdf'), () => { flush().then((ok) => ok && exportFile(key)).catch(() => say(t(UNREAD))); }, { 'data-act': 'export' }]]));
 
     // ---- find: pdf.js's find controller over the text layer, every hit highlighted, the current one counted
     const find = (type, back = false) => bus.dispatch('find', { source: findBar, type, query: q.value, caseSensitive: false, entireWord: false, matchDiacritics: false, highlightAll: true, findPrevious: back });
@@ -267,7 +267,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const say = (text) => { state.textContent = text; };
     let dirty = false, saving = null, timer = 0;
     const save = async () => {
-      if (!doc || !dirty) return;
+      if (!doc || !dirty) return true;
       dirty = false; clearTimeout(timer);
       say(t('Saving…'));
       try {
@@ -275,7 +275,8 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
         const thumbUrl = await picture(doc).catch(() => null);
         ({ paper: rec } = await st.save(key, { ...STORE.put(out), pages: doc.numPages, ...(thumbUrl && { thumb: thumbUrl }) }));
         say(dirty ? '' : t('Saved'));
-      } catch (e) { console.error(e); dirty = true; say(t(e instanceof RangeError ? TOO_BIG : 'Not saved. Try again in a moment.')); }
+        return true;
+      } catch (e) { console.error(e); dirty = true; say(t(e instanceof RangeError ? TOO_BIG : 'Not saved. Try again in a moment.')); return false; }
     };
     const flush = () => { const p = (saving || Promise.resolve()).then(save); saving = p; p.finally(() => { if (saving === p) saving = null; }); return p; };
     if (doc) {
@@ -285,7 +286,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     back.addEventListener('click', (e) => {
       if (!dirty && !saving) return;
       e.preventDefault();
-      flush().finally(() => location[window.top === window ? 'assign' : 'replace'](back.href));
+      flush().then((ok) => { if (ok) location[window.top === window ? 'assign' : 'replace'](back.href); });
     });
     addEventListener('pagehide', () => { if (dirty) flush(); });
 
