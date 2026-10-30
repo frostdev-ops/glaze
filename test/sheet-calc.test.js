@@ -214,6 +214,35 @@ test('an array formula evaluates its ranges whole and fills its range', () => {
   assert.equal(v('E1'), 1);
 });
 
+test('a dynamic array\'s formula is edited at its first cell, as Excel 365 allows; a legacy array\'s is refused', () => {
+  const wb = M.workbook();
+  const sh = wb.sheets[0];
+  const set = (ref, cell) => { const [r, c] = M.cellPosition(ref); M.apply(wb, { op: 'set', sheet: sh.id, r, c, cell }); };
+  set('A1', { t: 'n', v: 1 }); set('A2', { t: 'n', v: 2 }); set('A3', { t: 'n', v: 3 });
+  set('B1', { t: 'n', v: 0, f: 'A1:A3*2', a: 'B1:B3', cm: '1' }); set('B3', { t: 'n', v: 6, s: 1 });
+  set('C1', { t: 'n', v: 0, f: 'A1:A3*3', a: 'C1:C3' });
+  const e = C.engine(wb);
+  e.recalc();
+  const v = (ref) => out(e.value(sh.id, ...M.cellPosition(ref)));
+  const at = (ref) => M.cell(sh, ...M.cellPosition(ref));
+  assert.deepEqual(['B1', 'B2', 'B3'].map(v), [2, 4, 6]);
+  assert.throws(() => e.edit(sh.id, 1, 1, '9'), (x) => x.code === 'array-part', 'a cell of the spill stays part of it');
+  const res = e.edit(sh.id, 0, 1, '=A2:A3*10');
+  assert.deepEqual(['B1', 'B2', 'B3'].map(v), [20, null, null], 'the old spill goes; the new formula shows its first value');
+  assert.deepEqual(at('B1'), { t: 'n', v: 20, f: 'A2:A3*10', a: 'B1', cm: '1' }, 'still a dynamic array, evaluated whole');
+  assert.deepEqual(at('B3'), { t: 'z', s: 1 }, 'a spill cell keeps its format');
+  const redo = e.apply(res.inverse).inverse;
+  assert.deepEqual(['B1', 'B2', 'B3'].map(v), [2, 4, 6], 'undo brings the array back');
+  assert.equal(at('B1').a, 'B1:B3');
+  e.apply(e.apply(redo).inverse);
+  assert.deepEqual(['B1', 'B2', 'B3'].map(v), [2, 4, 6], 'redo and undo again: the batch covers the whole array');
+  assert.throws(() => e.apply({ op: 'batch', ops: [{ op: 'set', sheet: sh.id, r: 1, c: 1, cell: null }, { op: 'set', sheet: sh.id, r: 0, c: 0, cell: null }] }),
+    (x) => x.code === 'array-part', 'a batch covering part of an array is still refused');
+  e.edit(sh.id, 0, 1, '7');
+  assert.deepEqual(['B1', 'B2', 'B3'].map(v), [7, null, null], 'a value replaces the array');
+  assert.throws(() => e.edit(sh.id, 0, 2, '=1'), (x) => x.code === 'array-part', 'Excel refuses part of a Ctrl+Shift+Enter array');
+});
+
 test('an array formula\'s range moves with it when rows or columns are inserted or deleted', () => {
   const wb = M.workbook();
   const sh = wb.sheets[0];
