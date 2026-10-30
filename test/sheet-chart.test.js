@@ -208,6 +208,15 @@ test('frames: chartex reads its title value without text in its formatting', () 
   assert.equal(CH.scene(r, 400, 300).marks.title, 'Cash & flow');
 });
 
+test('frames: an unsupported logarithmic axis never draws a misleading linear plot', () => {
+  const xml = FX.CHARTS.scatter.replace('<c:orientation val="minMax"/>', '<c:logBase val="10"/><c:orientation val="minMax"/>');
+  const data = CX.resolve(CX.chart(xml), () => null);
+  const sc = CH.scene(data, 400, 300);
+  assert.equal(sc.marks.kind, 'Chart');
+  assert.equal(sc.marks.title, 'Spread');
+  assert.equal(sc.marks.points.length, 0);
+});
+
 test('layout: a clustered column\'s bar widths from gapWidth and overlap, nice ticks from 0', async () => {
   const { wb } = await open();
   const [column] = drawn(wb);
