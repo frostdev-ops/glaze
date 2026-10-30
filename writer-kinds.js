@@ -61,6 +61,7 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
       pages: () => v?.pages?.() || null, notify: (m) => v?.say?.(t(m)), focused: () => {}, resume: () => {}, look: () => null,
       version: async (reason = 'submit') => {
         if (!await surface.save()) return null;
+        if (typeof k.version === 'function') return k.version(key, reason).catch((e) => { console.error(e); return null; });
         return store().save(key, {}, { reason, expectedKind: id }).catch((e) => { console.error(e); return null; });
       },
       save: async () => !!v && await owns() && await v.save() && await owns(),
@@ -101,7 +102,7 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
       k = await kind(id);
       if (typeof k?.into !== 'function' || !key) throw new Error('no viewer');
       // The paper's last words saved first: into's 'import' save keeps them as the version.
-      if (shown) { if (!await shown.surface.save()) throw new Error('not saved'); }
+      if (shown) { if (!await (shown.id === 'sheet' ? shown.surface.version('import') : shown.surface.save())) throw new Error('not saved'); }
       else if (!await paper.save()) throw new Error('paper could not be saved');
       paper.hold();
       const rec = await k.into(key, f);
@@ -118,7 +119,7 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
     const { paper, surface, el } = shown;
     busy = true;
     try {
-      if (!await surface.save()) throw new Error('not saved');
+      if (!await (shown.id === 'sheet' ? surface.version('import') : surface.save())) throw new Error('not saved');
       el.inert = true;
       paper.unpark();
       // The paper importer validates and writes the Word document in one import save. A refusal leaves this file intact.
