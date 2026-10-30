@@ -3195,12 +3195,15 @@ const gcalOps = {
   },
   // drop: also delete the Glaze calendar; if that fails, nothing changes. Then the grant is revoked, Chrome forgets its
   // tokens and Glaze its state. → revoked: whether Google confirmed (false with no token to revoke: had). While Google Drive
-  // is connected (background/google.js) it holds the same grant, and a revocation would end its access too: only Calendar's state
-  // goes, and shared tells Settings to keep the identity permission.
+  // is connected (background/google.js) through Chrome's own client it holds the same grant, and a revocation would end its
+  // access too: only Calendar's state goes, and shared says so. Connected through the web client (Chrome's rare fallback),
+  // Drive's grant is its own: Calendar's is revoked, and identity stays for Drive. A build with Drive off has no Drive.
   disconnect: async (m) => {
     const g = await gcalState();
     if (m.drop === true && g?.cal) await GZ_GCAL.remove(gcalEnv, g.cal);
-    if (typeof (await chrome.storage.local.get('google')).google?.email === 'string') {
+    const drive = (await chrome.storage.local.get('google')).google;
+    const driveOn = typeof drive?.email === 'string' && googleLib().ON;
+    if (driveOn && drive.flow === 'chrome') {
       await chrome.storage.local.remove(['gcal', 'gcalSync']);
       serial(ensure);
       return { ok: true, revoked: false, had: false, shared: true };
@@ -3209,7 +3212,7 @@ const gcalOps = {
     const revoked = !!token && await GZ_GCAL.revoke(gcalEnv, token);
     await Promise.resolve().then(() => GZ_GCAL_AUTH.clear()).catch(() => {});
     // Release inside grantTurn, before another Connect can acquire identity. A delayed Settings reply owns no grant.
-    await Promise.resolve().then(() => chrome.permissions.remove({ permissions: ['identity'] })).catch(() => {});
+    if (!driveOn) await Promise.resolve().then(() => chrome.permissions.remove({ permissions: ['identity'] })).catch(() => {});
     await chrome.storage.local.remove(['gcal', 'gcalSync']);
     serial(ensure);
     return { ok: true, revoked, had: !!token };
@@ -3300,6 +3303,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // pages. Loaded the first time one asks; nothing runs for someone who never connects. The token stays here.
 globalThis.addEventListener?.('install', () => importScripts('oauth.js', 'google-config.js', 'google.js'));
 let google = null;
+const calendarOn = async () => GZ_GCAL.ON && !!(await chrome.storage.local.get('gcal')).gcal?.cal;
 const googleLib = () => { if (!globalThis.GZ_GOOGLE) importScripts('oauth.js', 'google-config.js', 'google.js'); return GZ_GOOGLE; };
 const openGoogle = () => {
   if (!google) {
@@ -3307,13 +3311,16 @@ const openGoogle = () => {
     const protocol = new URL(chrome.runtime.getURL('')).protocol;
     google = GZ_GOOGLE.create({
       config: GZ_GOOGLE_CONFIG, flow: GZ_GOOGLE.flowOf({ protocol, brands: navigator.userAgentData?.brands }), firefox: protocol === 'moz-extension:',
-      identity: () => chrome.identity, permissions: chrome.permissions, manifest: () => chrome.runtime.getManifest(), storage: chrome.storage.local,
+      // While Calendar sync is connected it signs in with identity too: Drive's Disconnect leaves the permission to it.
+      identity: () => chrome.identity, manifest: () => chrome.runtime.getManifest(), storage: chrome.storage.local,
+      permissions: { contains: (p) => chrome.permissions.contains(p), remove: async (p) => (await calendarOn() ? false : chrome.permissions.remove(p)) },
       fetch: (u, init) => fetch(u, init),
       native: (message) => chrome.runtime.sendNativeMessage(GZ_GOOGLE.APP, message),
       // iOS: the sign-in tab the student taps (the worker opens it, never a framed page).
       open: (url) => chrome.tabs.create({ url }),
-      // Calendar sync signs in with the same permission and Chrome's same cache: while it's connected, Disconnect leaves both.
-      keep: async () => GZ_GCAL.ON && !!(await chrome.storage.local.get('gcal')).gcal?.cal,
+      // Calendar sync signs in with Chrome's own client: a Drive connection through it shares Calendar's grant and Chrome's
+      // cache, and while Calendar is connected Disconnect leaves both. One through the web client lets its own grant go.
+      keep: async () => await calendarOn() && (await chrome.storage.local.get('google')).google?.flow === 'chrome',
     });
   }
   return google;
@@ -3343,9 +3350,10 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:drive' || m.op !== 'status') return;
   drivePage(s).then(async (ok) => {
     if (!ok) return { ok: false, why: 'sender' };
-    if (!googleLib().ON) return { ok: true, connected: false };
+    if (!googleLib().ON) return { ok: true, connected: false, picker: false };
     const g = await openGoogle().status();
-    return { ok: true, connected: g.ok === true && !!g.email };
+    // picker: From Google Drive works here (background/google.js status); Save to Drive needs only the connection.
+    return { ok: true, connected: g.ok === true && !!g.email, picker: g.ok === true && !!g.email && g.picker === true };
   }).then(reply, () => reply({ ok: false, why: 'network' }));
   return true;
 });
