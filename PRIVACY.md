@@ -145,8 +145,8 @@ Kept on this device:
 - assignment reads, `mcpRubric:<site>/<account>/<course>/<assignment>` with their index `mcpRubrics` in
   `chrome.storage.local`: the 100 used last, with no time-based expiry, so an app can read them, dated, with no tab
   open;
-- a random id for this browser profile, `mcpInstance` in `chrome.storage.local`, so an app can tell browsers apart. It
-  stays when agent access is turned off;
+- a random id for this browser profile, `mcpInstance` in the worker's IndexedDB `glaze-mcp-settings`, so an app can tell
+  browsers apart. It stays when agent access is turned off;
 - for the browser session only, in `chrome.storage.session`: the helper's state (`mcpLink`); approval records
   (`mcpAsk:<id>`) with app and tool details, the group or action summary, times and answer; the approval window's id
   (`mcpAskWindow`); on Safari each connection's protocol state (`mcpConn:<n>`); and the salt of Writer documents' keys

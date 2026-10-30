@@ -97,20 +97,26 @@
 
   // ---- files: .xlsx, .csv and .tsv through GZ_SHEET_XLSX
   const stem = (name) => (globalThis.GZ_DOC_HOME ? GZ_DOC_HOME.stem(name) : String(name || '').replace(/\.[^./\\]+$/, '').trim().slice(0, 120));
-  // A file as a workbook, its formulas calculated; a RangeError (SAYS) when it is too large or can't be read.
-  const workbookOf = async (file) => {
+  // A file as a workbook, its formulas calculated, each stage told to progress (lib/doc-kinds.js progress); a RangeError
+  // (SAYS) when it is too large or can't be read.
+  const workbookOf = async (file, progress = null) => {
     if (!Number.isSafeInteger(file?.size) || file.size <= 0 || file.size > DK.KINDS.sheet.max) throw new RangeError(SAYS.size);
+    const p = typeof progress === 'function' ? progress : () => {};
+    p({ stage: 'read', done: 0, total: file.size });
     await need([...ENGINE, 'sheet-grid.js']);
     const raw = await file.arrayBuffer();
     if (!(raw instanceof ArrayBuffer) || raw.byteLength !== file.size) throw new Error('invalid file read');
+    p({ stage: 'read', done: raw.byteLength, total: raw.byteLength });
+    p({ stage: 'prepare' });
     const X = await codecs(), bytes = new Uint8Array(raw);
     const wb = /\.(csv|tsv)$/i.test(file.name) ? X.readDelimited(bytes, { name: file.name }) : await X.read(bytes).catch(() => null);
     if (!wb?.sheets?.length) throw new RangeError(SAYS.read);
     GZ_SHEET_CALC.engine(wb).recalc();
     return wb;
   };
-  const importFile = async (file) => {
-    const wb = await workbookOf(file);
+  const importFile = async (file, { progress = null } = {}) => {
+    const wb = await workbookOf(file, progress);
+    progress?.({ stage: 'save' });
     const key = GZ_WRITER_PAPERS.newKey(), title = stem(file.name);
     await saveAll(key, wb, { named: !!title, title }, 'start');
     const notice = noticeOf(wb);
@@ -150,8 +156,9 @@
   // ---- the grid
   // A spreadsheet brought to an assignment (Open in Glaze, writer-kinds.js): the attempt's record becomes it, the paper it
   // held kept as a version first (the 'import' save), every part it had before dropped. → the record.
-  const into = async (key, f) => {
-    const wb = await workbookOf(f), SD = GZ_SHEET_DATA;
+  const into = async (key, f, { progress = null } = {}) => {
+    const wb = await workbookOf(f, progress), SD = GZ_SHEET_DATA;
+    progress?.({ stage: 'save' });
     let had = (await get([`writerPaper:${key}`]))[`writerPaper:${key}`];
     const prior = had?.kind === 'sheet' ? await SD.read(get, key) : null;
     if (prior) had = prior.rec;

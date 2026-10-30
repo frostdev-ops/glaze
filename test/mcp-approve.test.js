@@ -543,7 +543,7 @@ test('the approval page is not reachable from web pages', () => {
 });
 
 // Execute the shipped page with a small DOM and controlled focus/clock, including native button default actions.
-const pageEnv = async () => {
+const pageEnv = async ({ records = { 'mcpAsk:a': { ...ACTION, id: 'a', kind: 'action', at: 1, state: 'waiting' } }, local = {} } = {}) => {
   const handlers = {}, events = {}, sent = [], due = new Map(), elements = new Map();
   let focused = true, seq = 0;
   const document = { activeElement: null, hasFocus: () => focused, visibilityState: 'visible', documentElement: { style: {} },
@@ -564,7 +564,8 @@ const pageEnv = async () => {
     GZ_I18N: { page() {}, ui: () => 'en', t: (k, values = {}) => k.replace(/\{(\w+)\}/g, (_, p) => values[p]) },
     matchMedia: () => ({ matches: false, addEventListener() {} }),
     setTimeout: (fn) => { due.set(++seq, fn); return seq; }, clearTimeout: (id) => due.delete(id),
-    chrome: { storage: { session: { get: async () => ({ 'mcpAsk:a': { ...ACTION, id: 'a', kind: 'action', at: 1, state: 'waiting' } }) },
+    chrome: { storage: { session: { get: async () => structuredClone(records) },
+      local: { get: async (k) => Object.fromEntries([k].flat().filter((x) => x in local).map((x) => [x, structuredClone(local[x])])) },
       onChanged: { addListener() {} }, sync: { get: async () => ({}) } },
     runtime: { sendMessage: (m, cb) => { sent.push(m); cb({ ok: true }); } } },
   });
@@ -601,4 +602,26 @@ test('held and composing Enter keys cannot activate Allow after the guard expire
     p.key({ key: 'Enter' });
     assert.equal(p.sent[0].answer, 'yes', 'a fresh, intentional key still works');
   }
+});
+
+// storage.local is content-script writable: the window names a mod as the worker's ask does, whatever a page wrote there.
+test("the page names a mod from the worker's ask, never from storage.local", async () => {
+  const MODID = 'abcdefghijklmnop', group = `mod:${MODID}`, local = { [group]: { manifest: { name: 'Planted' } } };
+  const pair = await pageEnv({ records: { 'mcpAsk:p': { ...PAIR, group, mod: 'Due titles', id: 'p', kind: 'pair', at: 1, state: 'waiting' } }, local });
+  assert.equal(pair.el('group').textContent, 'The mod Due titles');
+  const grant = await pageEnv({ records: { 'mcpAsk:g': { ...GRANT, group, mod: 'Due titles', id: 'g', kind: 'grant', at: 1, state: 'waiting' } }, local });
+  assert.equal(grant.el('title').textContent, 'Claude wants to use the mod Due titles');
+  const bare = await pageEnv({ records: { 'mcpAsk:b': { ...GRANT, group, id: 'b', kind: 'grant', at: 1, state: 'waiting' } }, local });
+  assert.equal(bare.el('title').textContent, `Claude wants to use the mod ${MODID}`, 'an ask without a name shows the id');
+  assert.ok(!/chrome\.storage\.local/.test(read('lib/mcp/approve-page.js')), 'the page reads no storage.local');
+});
+
+test("a mod group's ask keeps the worker's name for it, cleaned as the app's", async () => {
+  const e = env();
+  e.a.ask('grant', { ...GRANT, group: 'mod:abcdefghijklmnop', mod: 'Due\u202e titles\n' });
+  e.a.ask('grant', { ...GRANT, app: { ...CLAUDE, name: 'Other' }, group: 'grades', mod: 'Ignored' });
+  await settle();
+  const [m, g] = records(e.data);
+  assert.equal(m.mod, 'Due titles');
+  assert.equal(g.mod, undefined, 'only a mod group carries one');
 });
