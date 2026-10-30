@@ -34,29 +34,43 @@ const api = (u) => {
 let checks = 0;
 const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); checks++; console.log(`ok   ${label}`); };
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
-// `label` names the state waited for; a function gives it with what the last look saw.
-const until = async (fn, label, ms = 10000) => { const end = Date.now() + ms; for (;;) { const v = await fn().catch(() => null); if (v) return v; if (Date.now() > end) throw new Error(`timed out: ${typeof label === 'function' ? label() : label}`); await pause(100); } };
 // A loaded machine's bound, for a wait a quiet one ends in well under a second.
 const SLOW = 60000;
+// The deadline also covers a page command that never answers. Read the label only when that deadline expires.
+const until = async (fn, label, ms = SLOW) => {
+  let timer;
+  const expired = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`timed out: ${typeof label === 'function' ? label() : label}`)), ms); });
+  try {
+    for (;;) {
+      const v = await Promise.race([Promise.resolve().then(fn).catch(() => null), expired]);
+      if (v) return v;
+      await Promise.race([pause(100), expired]);
+    }
+  } finally { clearTimeout(timer); }
+};
 // The element `selector` finds come to rest: no running animation that ends on it or on a box around it, across shadow
 // roots, no view transition over the page, and its box where the last look found it.
-const resting = (page, selector) => {
+const resting = (page, selector, [within, frameAt] = []) => {
+  const box = (s) => {
+    const e = document.querySelector(s); if (!e) return 'missing';
+    const ends = (a) => a.playState === 'running' && a.effect?.getComputedTiming().endTime < Infinity;
+    if (document.getAnimations().some((a) => a.playState === 'running' && a.effect?.pseudoElement?.startsWith('::view-transition'))) return 'moving';
+    for (let n = e; n; n = n.parentElement || n.parentNode?.host) if (n.getAnimations().some(ends)) return 'moving';
+    const r = e.getBoundingClientRect(); return [r.x + scrollX, r.y + scrollY, r.width, r.height].map(Math.round).join();
+  };
   let was = 'not looked at';
   return until(async () => {
-    const box = await page.evaluate((s) => {
-      const e = document.querySelector(s); if (!e) return 'missing';
-      const ends = (a) => a.playState === 'running' && a.effect?.getComputedTiming().endTime < Infinity;
-      if (document.getAnimations().some((a) => ends(a) && a.effect.pseudoElement?.startsWith('::view-transition'))) return 'moving';
-      for (let n = e; n; n = n.parentElement || n.parentNode?.host) if (n.getAnimations().some(ends)) return 'moving';
-      const r = e.getBoundingClientRect(); return [r.x + scrollX, r.y + scrollY, r.width, r.height].map(Math.round).join();
-    }, selector);
-    const still = /^[\d,-]+$/.test(box) && box === was;
-    was = box;
+    const seen = [await (within || page).evaluate(box, selector)];
+    if (within) seen.push(await page.evaluate(box, frameAt));
+    const still = seen.every((x) => /^[\d,-]+$/.test(x)) && seen.join(' | ') === was;
+    was = seen.join(' | ');
     return still;
   }, () => `${selector} to come to rest (${was})`, SLOW);
 };
 // Module `mid`'s Download all, pressed once its button rests.
-const press = async (page, mid) => { await resting(page, `#gz-dl-${mid}`); await page.click(`#gz-dl-${mid}`); };
+const press = async (page, mid) => { await resting(page, `#gz-dl-${mid}`); await page.click(`#gz-dl-${mid}`, { timeout: SLOW }); };
+// Both the Allow button in its own realm and the module frame around it must rest before the trusted click.
+const pressAllow = async (page, mid, frame) => { await resting(page, '#allow', [frame, `#context_module_${mid} .ig-header > .gz-dl-allow`]); await frame.locator('#allow').click({ timeout: SLOW }); };
 // Download all's Allow frame for module `mid`, from the click on its button: the download running, the frame in the module's
 // header, Glaze's page loaded in it, and its button shown (the worker took the frame's ticket). The error names the first
 // of those not reached.
@@ -69,8 +83,10 @@ const allowFrame = (page, mid, host) => {
     at = 0; if (!busy) return null;
     at = 1; if (!added) return null;
     at = 2;
-    const frame = page.frames().find((f) => f.url().startsWith(`chrome-extension://${id}/features/allow.html`));
-    if (!frame) return null;
+    const element = await page.$(`#context_module_${mid} .ig-header > .gz-dl-allow`);
+    let frame;
+    try { frame = await element?.contentFrame(); } finally { await element?.dispose(); }
+    if (!frame?.url().startsWith(`chrome-extension://${id}/features/allow.html`)) return null;
     at = 3;
     const shown = await frame.evaluate((h) => { const a = document.getElementById('allow'); return a?.textContent === `Allow ${h}` && !a.hidden; }, host);
     return shown && frame;
@@ -115,11 +131,13 @@ const allowFrame = (page, mid, host) => {
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errors.push(String(e)));
     await page.goto(`${O}/courses/25/modules`);
-    await until(() => page.evaluate(() => document.querySelectorAll('.gz-dl').length >= 3), 'Download all buttons').catch(async (e) => {
-      console.error(JSON.stringify(await page.evaluate(() => ({ modules: [...document.querySelectorAll('.context_module[data-module-id]')].map((m) => [m.dataset.moduleId, m.className, m.querySelectorAll('.context_module_item').length]),
-        glaze: [...document.documentElement.attributes].map((a) => a.name).filter((n) => n.startsWith('data-gz')).length, buttons: document.querySelectorAll('.gz-dl').length })), null, 0), apiAsked.slice(0, 40));
-      throw e;
-    });
+    let startup = 'page has not answered';
+    await until(async () => {
+      const state = await page.evaluate(() => ({ modules: [...document.querySelectorAll('.context_module[data-module-id]')].map((m) => [m.dataset.moduleId, m.className, m.querySelectorAll('.context_module_item').length]),
+        glaze: [...document.documentElement.attributes].map((a) => a.name).filter((n) => n.startsWith('data-gz')).length, buttons: document.querySelectorAll('.gz-dl').length }));
+      startup = JSON.stringify(state);
+      return state.buttons >= 3;
+    }, () => `Download all buttons (${startup}; API requests: ${JSON.stringify(apiAsked.slice(0, 40))})`);
     const label = (mid) => page.locator(`#gz-dl-${mid}`).textContent();
     const anyAllowFrame = () => page.frames().find((f) => f.url().startsWith(`chrome-extension://${id}/features/allow.html`));
     // The frame's chrome.permissions.request, recorded with whether it came inside the click, answered when the check says.
@@ -139,35 +157,38 @@ const allowFrame = (page, mid, host) => {
     ok(!fetched.some((u) => u.includes(A)), 'nothing was fetched from the file server before the grant');
     const marker = await sw.evaluate((k) => chrome.storage.session.get(k).then((r) => r[k]), `allow https://${A}/*`);
     ok(marker && !marker.kind, 'the worker noted it as a feature\'s ask (its grant is not taken for a school)');
-    await until(() => page.evaluate(() => document.querySelector('.gz-dl-allow')?.getBoundingClientRect().width > 40), 'the frame fitted to its button');
+    await until(() => page.evaluate(() => document.querySelector('#context_module_73 .ig-header > .gz-dl-allow')?.getBoundingClientRect().width > 40), 'module 73 Allow frame fitted to its button');
     await hover(73);
     await shot('download-1-allow-frame');
     await stub(fa);
-    const downloaded = page.waitForEvent('download', { timeout: 15000 });
-    await fa.locator('#allow').click();
-    const calls = await until(() => fa.evaluate(() => __gz.calls.length && __gz.calls), 'the request');
+    await pressAllow(page, 73, fa);
+    const calls = await until(() => fa.evaluate(() => __gz.calls.length && __gz.calls), `Allow ${A} to call permissions.request`);
     ok(JSON.stringify(calls) === JSON.stringify([[[`https://${A}/*`], true]]), `the click asks for https://${A}/* alone, inside the click (${JSON.stringify(calls)})`);
     await grant(A);
+    const downloaded = page.waitForEvent('download', { timeout: SLOW });
+    downloaded.catch(() => {}); // observed below; answering the frame can fail first
     await fa.evaluate(() => __gz.answer(true));
     const d = await downloaded;
     const zip = fs.readFileSync(await d.path());
     ok(d.suggestedFilename().endsWith('.zip') && zip.includes(Buffer.from('notes.pdf')) && zip.includes(Buffer.from(FILES[73].body)), `the zip completes with notes.pdf (${d.suggestedFilename()}, ${zip.length} bytes)`);
-    ok(await until(async () => /^Saved 1 file/.test(await label(73)), 'saved label'), `the panel says "${await label(73)}"`);
-    ok(!anyAllowFrame() && await page.locator('.gz-dl-allow').count() === 0, 'the frame is gone');
+    let says = '';
+    ok(await until(async () => /^Saved 1 file/.test(says = await label(73)), () => `module 73 saved label (Download all says "${says}")`), `the panel says "${await label(73)}"`);
+    await until(async () => !anyAllowFrame() && await page.locator('.gz-dl-allow').count() === 0, 'the Allow frame to go');
+    ok(true, 'the frame is gone');
     await hover(73);
     await shot('download-2-saved');
 
     // 2. Refused: the panel's existing error, nothing fetched from C.
-    await pause(6500); // the finished job's label clears after 6 s
+    await until(() => page.evaluate(() => { const d = document.getElementById('gz-dl-73'); return !!d && !d.hasAttribute('data-job'); }), 'module 73 Download all to return to idle');
     await hover(74);
     await press(page, 74);
     const fc = await allowFrame(page, 74, C);
     ok(fc.url().endsWith(`#${C}`), `a second host gets its own frame (${C})`);
     await stub(fc);
-    await fc.locator('#allow').click();
-    await until(() => fc.evaluate(() => __gz.calls.length), 'the request for C');
+    await pressAllow(page, 74, fc);
+    await until(() => fc.evaluate(() => __gz.calls.length), `Allow ${C} to call permissions.request`);
     await fc.evaluate(() => __gz.answer(false));
-    ok(await until(async () => (await label(74)) === 'Download failed', 'failed label'), 'refused: the download stops with the panel\'s error, "Download failed"');
+    ok(await until(async () => (says = await label(74)) === 'Download failed', () => `module 74 failed label (Download all says "${says}")`), 'refused: the download stops with the panel\'s error, "Download failed"');
     ok(!fetched.some((u) => u.includes(C)), 'and nothing is fetched from that host');
     await hover(74);
     await shot('download-3-refused');
@@ -186,7 +207,7 @@ const allowFrame = (page, mid, host) => {
     // 3. A redirect from a truly held start to B, a host Glaze doesn't hold.
     await hover(75);
     await press(page, 75);
-    const end = await until(async () => { const t = await label(75); return /Redirected file|Download failed|Saved|failed/.test(t) || anyAllowFrame() ? t || 'frame' : null; }, 'the redirect file');
+    const end = await until(async () => { says = await label(75); return /Redirected file|Download failed|Saved|failed/.test(says) || anyAllowFrame() ? says || 'frame' : null; }, () => `module 75 redirect file (Download all says "${says}")`);
     const asked = anyAllowFrame();
     console.log(`redirect files.redirect.test → ${B}: ${asked ? `the frame asks for ${asked.url().split('#')[1]}` : `no frame for ${B}; the panel says "${end}"`}; requests: ${fetched.filter((u) => /redirect|cdn-b/.test(u)).join(', ')}`);
     // The real-grant probe above confirms that Location is hidden. The narrowed worker refuses that redirect.

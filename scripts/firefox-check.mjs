@@ -187,8 +187,16 @@ const browser = (send, log, events = []) => {
   const b = {
     send, value, tree, log, events,
     find: async (prefix) => (await tree()).find((c) => c.url.startsWith(prefix))?.context,
-    // A frame in the tab `top` whose address starts with `prefix`.
-    frame: async (top, prefix) => flat((await tree()).filter((c) => c.context === top).flatMap((c) => c.children || [])).find((c) => c.url.startsWith(prefix))?.context,
+    // A frame in the tab `top` whose address starts with `prefix`, optionally bound to its actual element.
+    frame: async (top, prefix, selector) => {
+      let exact;
+      if (selector) {
+        const r = await send('script.evaluate', { expression: `document.querySelector(${JSON.stringify(selector)})?.contentWindow`, target: { context: top }, awaitPromise: false, resultOwnership: 'none' });
+        exact = r.result?.type === 'window' ? r.result.value.context : null;
+        if (!exact) return undefined;
+      }
+      return flat((await tree()).filter((c) => c.context === top).flatMap((c) => c.children || [])).find((c) => (!selector || c.context === exact) && c.url.startsWith(prefix))?.context;
+    },
     count: async (prefix) => (await tree()).filter((c) => c.url.startsWith(prefix)).length,
     // A tab, opened as the browser's own UI would (BiDi may not navigate to moz-extension: addresses).
     open: async (url) => {
@@ -257,7 +265,7 @@ const noErrors = async (b, label) => { const e = await b.errors(); ok(e.length =
 const resting = (b, context, element, [within, frameAt] = []) => {
   const box = (e) => `(() => { const e = ${e}; if (!e) return 'missing';
     const ends = (a) => a.playState === 'running' && a.effect?.getComputedTiming().endTime < Infinity;
-    if (document.getAnimations().some((a) => ends(a) && a.effect.pseudoElement?.startsWith('::view-transition'))) return 'moving';
+    if (document.getAnimations().some((a) => a.playState === 'running' && a.effect?.pseudoElement?.startsWith('::view-transition'))) return 'moving';
     for (let n = e; n; n = n.parentElement || n.parentNode?.host) if (n.getAnimations().some(ends)) return 'moving';
     const r = e.getBoundingClientRect(); return [r.x + scrollX, r.y + scrollY, r.width, r.height].map(Math.round).join(); })()`;
   let was = 'not looked at';
@@ -281,7 +289,7 @@ const allowFrame = (b, tab) => {
     at = 0; if (!busy) return false;
     at = 1; if (!added) return false;
     at = 2;
-    const frame = await b.frame(tab, `${EXT}features/allow.html`);
+    const frame = await b.frame(tab, `${EXT}features/allow.html`, '#context_module_73 .ig-header > .gz-dl-allow');
     if (!frame) return false;
     at = 3;
     const shown = await b.value(`(() => { const a = document.getElementById('allow'); return a?.textContent === 'Allow ${FILES}' && !a.hidden; })()`, frame);
