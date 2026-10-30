@@ -385,11 +385,14 @@ test('stop says bye, then disconnects the port itself (permissions.remove leaves
   p.host({ t: 'open', c: 1, peer: { verified: false } });
   w.events.length = 0;
   w.log.length = 0;
-  assert.deepEqual(await w.link.stop(), { state: 'off', at: w.now() });
-  assert.deepEqual(w.log, [['post', 'bye'], ['disconnect']]);
+  const at = w.now();
+  assert.deepEqual(await w.link.stop(), { state: 'off', at });
+  assert.deepEqual(w.log, [['post', 'bye']], 'the helper ends the port on bye');
+  await w.advance(1000);
+  assert.deepEqual(w.log, [['post', 'bye'], ['disconnect']], 'or it is disconnected after a second');
   assert.deepEqual(p.sent.at(-1), { t: 'bye' });
   assert.deepEqual(w.events, [['close', 1, 'stopped'], ['state', 'off']]);
-  assert.deepEqual(w.storage.session.data.mcpLink, { state: 'off', at: w.now() });
+  assert.deepEqual(w.storage.session.data.mcpLink, { state: 'off', at });
   assert.equal(w.link.send(1, 'x'), false);
   assert.equal(w.jobs.size, 0);
   assert.equal((await w.link.ensure()).state, 'connecting', 'the setting is still on, so a trigger connects again');
@@ -401,6 +404,29 @@ test('stop says bye, then disconnects the port itself (permissions.remove leaves
   assert.equal(backing.jobs.size, 0, 'stop cancels a pending retry');
   await backing.advance(120e3);
   assert.equal(backing.ports.length, 1);
+});
+
+// Agent access off: each connection's last lines (a subscription's end, then its notifications/cancelled) go before bye, and
+// Chrome and Firefox, which drop what a port still queues when it is disconnected, let the helper end the port after bye.
+test('stop lets every connection say its last lines before bye, and the helper end the port, or disconnects it after 1 s', async () => {
+  for (const exits of [true, false]) {
+    const w = await connected();
+    const p = w.port();
+    p.host({ t: 'open', c: 1, peer: { verified: false } });
+    w.link.attach({ close: (c) => { w.link.send(c, 'end'); w.link.send(c, 'cancelled'); } });
+    w.log.length = 0;
+    assert.equal((await w.link.stop()).state, 'off');
+    assert.deepEqual(p.sent.slice(-3).map((f) => f.d ?? f.t), ['end', 'cancelled', 'bye']);
+    assert.deepEqual(w.log, [['post', 'line'], ['post', 'line'], ['post', 'bye']], 'not disconnected yet');
+    const again = w.link.ensure();
+    await settle();
+    assert.equal(w.ports.length, 1, 'a new port waits for the old one to go');
+    if (exits) p.die('Native host has exited.'); else await w.advance(1000);
+    await again;
+    assert.deepEqual(w.log.slice(3).filter(([k]) => k === 'disconnect'), exits ? [] : [['disconnect']]);
+    assert.equal(w.ports.length, 2);
+    assert.equal(w.jobs.size > 0, true, 'the new port waits for its hello');
+  }
 });
 
 test('triggers: ensure follows the setting and the grant either way, one pass at a time', async () => {
@@ -415,6 +441,7 @@ test('triggers: ensure follows the setting and the grant either way, one pass at
   w.storage.local.data.mcp = { on: false };
   w.log.length = 0;
   assert.equal((await w.link.ensure()).state, 'off', 'turning it off is a trigger too');
+  await w.advance(1000);
   assert.deepEqual(w.log, [['post', 'bye'], ['disconnect']]);
   assert.deepEqual(said(w, 'close'), [['close', 1, 'stopped']]);
 
@@ -424,6 +451,7 @@ test('triggers: ensure follows the setting and the grant either way, one pass at
   w.permissions.granted = false;
   w.log.length = 0;
   assert.equal((await w.link.ensure()).state, 'needs-permission', 'a grant taken away elsewhere');
+  await w.advance(1000);
   assert.deepEqual(w.log, [['post', 'bye'], ['disconnect']]);
 
   w.permissions.granted = true;
@@ -679,6 +707,29 @@ test('R4: Safari fences immediately and queues bye after the outstanding batch',
   assert.equal(w.ports.length, 2);
   assert.notEqual(w.batches[2].msg.s, first.msg.s);
   assert.equal(w.link.status().state, 'connecting');
+});
+
+// Agent access off with a subscription open: its end and its notifications/cancelled are queued behind a batch in flight.
+test('Safari: lines still queued at stop go to the app before bye, a frame\'s bytes a batch', async () => {
+  const w = world({ browser: 'safari' });
+  await w.link.ensure();
+  const { i, s } = w.batches[0].msg;
+  w.port().host({ name: 'agent.frames', userInfo: { i, s, frames: [HELLO, { t: 'open', c: 1, peer: { verified: true } }] } });
+  w.batches[0].resolve({ ok: true });
+  await settle();
+  w.link.send(1, 'end');
+  assert.equal(w.batches.length, 2, 'the first line is in flight');
+  w.link.send(1, 'cancelled');
+  w.link.send(1, '\u0001'.repeat(F.PIECE * 2));
+  const stopping = w.link.stop();
+  w.batches[1].resolve({ ok: true });
+  await settle();
+  for (let n = 2; n < 5 && w.batches[n]; n++) { w.batches[n].resolve({ ok: true }); await settle(); }
+  assert.equal((await stopping).state, 'off');
+  const after = w.batches.slice(2).map((x) => x.msg);
+  assert.deepEqual(after.map((m) => m.frames.map((f) => (f.t === 'line' ? `${f.d.slice(0, 9)}${f.m ? '…' : ''}` : f.t))), [['cancelled', '\u0001'.repeat(9) + '…'], ['\u0001'.repeat(9), 'bye']]);
+  assert.deepEqual(after.map((m) => [m.i, m.s, m.seq]), [[i, s, 3], [i, s, 4]]);
+  assert.ok(after.every((m) => m.frames.reduce((n, f) => n + F.bytes(f), 0) <= F.FRAME));
 });
 
 test('R4: a stalled Safari teardown is bounded and cannot send a late bye', async () => {

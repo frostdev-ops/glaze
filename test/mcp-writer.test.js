@@ -2,7 +2,7 @@
 // read from Writer's own store in the broker's turn, and the three tools that need the document open in a Writer page,
 // through the page's port. Papers are made by lib/writer-papers.js's own save and sources by lib/writer-sources.js's, as
 // the editor writes them; the page is the real writer-mcp.js over a ProseMirror state with GZ_WRITER_ISSUES's plugin, and
-// the worker is the real lib/background.js with the step's wiring (test/helpers/mcp-writer-wiring.cjs).
+// the worker is the real lib/background.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -22,7 +22,6 @@ const ISSUES = require('../lib/writer-issues.js');
 const PM = globalThis.GZ_PM;
 const worker = require('./helpers/worker-env.cjs');
 const { fakeIDB } = require('./helpers/fake-idb.cjs');
-const { wired } = require('./helpers/mcp-writer-wiring.cjs');
 
 const root = path.join(__dirname, '..');
 const NOW = Date.parse('2026-10-29T15:00:00Z');
@@ -591,7 +590,7 @@ test('through calls.js: a change waits for the student, then runs in the broker\
 });
 
 // ---- the worker, wired -------------------------------------------------------------------------------------------------
-const BACKGROUND = wired(fs.readFileSync(path.join(root, 'lib/background.js'), 'utf8'));
+const BACKGROUND = fs.readFileSync(path.join(root, 'lib/background.js'), 'utf8');
 // Values from the worker's realm, as plain JSON (its objects' prototypes are its own).
 const inWorker = (w, code) => { const v = vm.runInContext(code, w.context); return v && typeof v.then === 'function' ? v.then((x) => JSON.parse(JSON.stringify(x ?? null))) : v; };
 const DOCS_PAGE = { id: 'glaze', url: `chrome-extension://x/papers.html?paper=${encodeURIComponent(ESSAY)}`, frameId: 0, origin: 'chrome-extension://x', tab: { id: 9, url: `chrome-extension://x/papers.html?paper=${encodeURIComponent(ESSAY)}` } };
@@ -655,6 +654,23 @@ test('the wired worker admits Writer\'s port as it does the AI\'s, only while ag
   q.page.on = true; // Settings' mirror says on; the worker's own switch says off.
   q.ready();
   await until(() => q.ports[0]?.worker.hungUp, 'refused with agent access off');
+  assert.equal(q.ports[0].worker.posted.length, 0);
+});
+
+// Glaze's content script on a school's page passes the AI port's rules (its AI features run there), but only Writer's own
+// pages hold a paper: a school page's port could otherwise claim a document and word the approval window's change.
+test('the wired worker refuses Writer\'s port from a school page that passes the AI port\'s rules', async () => {
+  const { w, store } = await bootWorker();
+  const url = 'https://bb.school.test/ultra/courses/_101_1/outline', tab = { id: 3, url };
+  store.local.ultra = ['https://bb.school.test'];
+  w.context.chrome.tabs.get = async () => tab;
+  w.context.chrome.scripting.executeScript = async () => [{ result: { href: url, origin: 'https://bb.school.test', ancestors: [] } }];
+  const sender = { id: 'glaze', url, origin: 'https://bb.school.test', frameId: 0, tab };
+  w.context.lmsSender = sender;
+  assert.equal(await inWorker(w, "aiSender(lmsSender, { op: 'run', feature: 'writing' })"), true, 'the school page passes the AI port\'s rules');
+  const q = writerPage({ link: intoWorker(w, sender) });
+  q.ready();
+  await until(() => q.ports[0]?.worker.hungUp, 'refused');
   assert.equal(q.ports[0].worker.posted.length, 0);
 });
 

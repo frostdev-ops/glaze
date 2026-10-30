@@ -1,8 +1,7 @@
-// Mods' code tools for agent apps (C14) in a real Chromium, headless: the real unpacked extension, staged, its worker with
-// C14's wiring while lib/background.js still holds the stub (test/helpers/modcode-wiring.cjs; the checkout's file is
-// untouched) and a hook for the check to run a tool as the registry lists it, as lib/mcp/calls.js runs one. A Canvas course
-// page Playwright serves for https://school.instructure.com (account 5), whose planner holds one item in the shape of the
-// live-shaped fixtures (test/helpers/mcp-caches.cjs); every other request is aborted and DNS resolves nowhere. A fixture
+// Mods' code tools for agent apps in a real Chromium, headless: the real unpacked extension, staged, its worker with a hook
+// for the check to run a tool as the registry lists it, as lib/mcp/calls.js runs one (the checkout's file is untouched). A
+// Canvas course page Playwright serves for https://school.instructure.com (account 5), whose planner holds one item in the
+// shape of the live-shaped fixtures (test/helpers/mcp-caches.cjs); every other request is aborted and DNS resolves nowhere. A fixture
 // mod's Worker answers its code tools there, in the real sandboxed mods host, through the content script (features/mods.js),
 // and its answers come back through the broker. It checks: the tool is listed once the sandbox ran; an answer that reads the
 // page and the student's plan; a mod's error; another account or no tab of the school says to open it; a mod turned off
@@ -11,7 +10,6 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
 const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
-const { wired } = require(path.join(root, 'test/helpers/modcode-wiring.cjs'));
 const SCHOOL = 'https://school.instructure.com', ACCOUNT = `${SCHOOL}/5`, ID = 'abcdefghijklmnop', TOOL = (n) => `mod_${ID}_${n}`;
 const TEXT = {
   open: "Open school.instructure.com, signed in as this account; this mod's tool runs there.",
@@ -75,7 +73,7 @@ const check = async (name, test) => {
     // The staged files are hard links to the checkout: replace the worker's, never write through it.
     const worker0 = fs.readFileSync(path.join(ext, 'lib/background.js'), 'utf8');
     fs.rmSync(path.join(ext, 'lib/background.js'));
-    fs.writeFileSync(path.join(ext, 'lib/background.js'), wired(worker0) + SHIM);
+    fs.writeFileSync(path.join(ext, 'lib/background.js'), worker0 + SHIM);
     await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
       ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 860 }, locale: 'en-US',

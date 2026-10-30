@@ -499,14 +499,13 @@ test('glaze.tools.handle takes only the code tools mod.json declares, a function
   assert.deepEqual(plain(f.out), [{ ran: true }], 'a frame never answers a call');
 });
 
-// ---- the real worker, with C14's wiring (test/helpers/modcode-wiring.cjs) -----------------------------------------------------
-const wired = () => require('./helpers/modcode-wiring.cjs').wired(read('lib/background.js'));
+// ---- the real worker ----------------------------------------------------------------------------------------------------------
 
 // The real worker with a school's tab: its content script's messages go to the worker's own listeners as that tab's top
 // frame, and the worker's tabs.sendMessage to that frame reaches the page.
 const wiredWorker = async ({ record = modRec() } = {}) => {
   const store = { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [], mods: [MOD], [`mod:${MOD}`]: record, modRuntime: { ok: true, at: 1 } }, session: {} };
-  const w = worker({ store, background: wired(), globals: { indexedDB: fakeIDB().indexedDB } });
+  const w = worker({ store, globals: { indexedDB: fakeIDB().indexedDB } });
   const sender = from(7);
   const s = school({ toWorker: (m) => w.send(m, sender) });
   w.context.chrome.scripting.executeScript = async () => [{ result: await s.ctx.GZ_CTX.account() }];

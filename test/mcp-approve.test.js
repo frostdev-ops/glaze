@@ -101,6 +101,24 @@ test('a kind or view Glaze never sends is a programming error', async () => {
   assert.equal(e.made.length, 0);
 });
 
+// The groups are lib/ai/tools.js's: each one a tool may name is one the window asks about and names, and one Settings
+// switches and names, so a new group can't be refused at its first call or left without a word.
+test('every group a tool may name is asked about and named in the window, and switched and named in Settings', async () => {
+  const TL = require('../lib/ai/tools.js'), E = require('../lib/editor-agents.js');
+  const page = read('lib/mcp/approve-page.js');
+  for (const group of TL.GROUPS) {
+    const e = env();
+    const got = outcome(e.a.ask('grant', { ...GRANT, group }));
+    await settle();
+    assert.equal(got.v, undefined, group);
+    assert.equal(records(e.data)[0]?.group, group);
+    assert.ok(new RegExp(`\\b${group}: t\\('[^']+'`).test(page.slice(page.indexOf('const label'), page.indexOf('const ENDED'))), `the window names ${group}`);
+    assert.ok(E.GROUPS.includes(group), `Settings switches ${group}`);
+    assert.notEqual(E.groupName(group, (x) => x), group, `Settings names ${group}`);
+  }
+  assert.deepEqual([...E.GROUPS].sort(), [...TL.GROUPS].sort());
+});
+
 for (const [name, kind, view] of [['unknown group', 'pair', { ...PAIR, group: 'Allow everything' }],
   ...[undefined, ' ', 'x'.repeat(2001)].map((summary, i) => [`invalid summary ${i}`, 'action', { ...ACTION, summary }])]) {
   test(`${name} is refused before opening`, async () => {

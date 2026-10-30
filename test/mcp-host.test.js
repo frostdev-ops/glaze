@@ -265,6 +265,27 @@ for (const [how, end] of [['the worker\'s bye', (b) => b.send({ t: 'bye' })], ['
   });
 }
 
+// Agent access turned off: the worker's last lines (a subscription's end, then its notifications/cancelled) come in the
+// same read as its bye, and every one of them still reaches its client before the socket closes.
+test('the worker\'s last lines before its bye reach every client, even in the same read', async (t) => {
+  const home = scratch(t);
+  const b = browser(t, home);
+  const { rec } = await b.start();
+  const one = await agent(rec), two = await agent(rec);
+  await opened(b);
+  await opened(b);
+  const pad = 'x'.repeat(200000);
+  const last = (c) => [`{"id":"listen:${c}","result":{"pad":"${pad}"}}`, `{"method":"notifications/cancelled","params":{"requestId":"listen:${c}"}}`];
+  const frames = [1, 2].flatMap((c) => last(c).flatMap((d) => F.split(c, d)));
+  b.p.stdin.write(Buffer.concat([...frames.map((f) => N.encode(f)), N.encode({ t: 'bye' })]));
+  const { code } = await b.exited;
+  assert.equal(code, 0, b.err());
+  await until('the clients see it', () => one.ended && two.ended, 2000);
+  const ends = (lines) => lines.map((l) => `${l.length}:${l.slice(-40)}`);
+  assert.deepEqual(ends(one.lines()), ends(last(1)));
+  assert.deepEqual(ends(two.lines()), ends(last(2)));
+});
+
 test('a bye in the same read as hello cleans up a socket whose listen is still starting', async (t) => {
   const home = scratch(t), b = browser(t, home);
   await b.take('hello', (f) => f.t === 'hello');

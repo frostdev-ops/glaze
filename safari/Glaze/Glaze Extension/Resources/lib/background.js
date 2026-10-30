@@ -1637,7 +1637,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // courses and the due list Glaze read there (the student's own notes and tasks stay); Reset everything empties the lists and
 // the Not nows. Pages open on a site removed keep Glaze until they reload, refused by every check above meanwhile.
 const forget = async (origin) => {
-  mcpFiles(); await GZ_MCP_ASSIGN.clear({ local: chrome.storage.local }, origin);
+  await mcpClearReads(origin);
   const u = new URL(origin);
   const got = await chrome.storage.local.get([...LMS, 'seenCourses', 'courseSlots', 'todoCache']);
   const patch = {};
@@ -1660,7 +1660,7 @@ const forget = async (origin) => {
   return true;
 };
 const forgetAll = async () => {
-  mcpFiles(); await GZ_MCP_ASSIGN.clear({ local: chrome.storage.local });
+  await mcpClearReads();
   const all = await chrome.storage.local.get(null), origins = new Set();
   for (const kind of LMS) for (const value of Array.isArray(all[kind]) ? all[kind] : []) {
     try { origins.add(new URL(value).origin); } catch { /* old invalid entry */ }
@@ -2362,7 +2362,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // (storage.local mcp, lib/mcp/grants.js): nothing of it loads until it is on. While it is on the link loads at worker start,
 // as ensure() must run then (a worker granted nativeMessaging connects once it restarts), and the rest with it; after a
 // switch-on, with the first frame. Glaze or agent access off ends every connection, and with them every ask waiting for
-// one, and the link; the apps and their grants stay. Every file by name in the three calls (scripts/package-firefox.sh).
+// one, and the link; the apps and their grants stay. Every file by name in literal importScripts calls (scripts/package-firefox.sh).
 const MCP_BROWSER = SAFARI ? 'safari' : new URL(chrome.runtime.getURL('')).protocol === 'moz-extension:' ? 'firefox' : 'chrome';
 const agentFiles = () => importScripts('agent-frames.js', 'agent-link.js');
 const grantFiles = () => importScripts('ai/request.js', 'ai/schema.js', 'ai/tools.js', 'mcp/grants.js');
@@ -2392,21 +2392,27 @@ const mcpGrants = () => (mcpGrantStore ||= GZ_MCP_GRANTS.open());
 // is each connection's engine state kept (storage.session mcpConn:<c>) and restored. Chrome and Firefox end the helper with
 // the worker's port, and the next helper numbers its connections from 1 again.
 const MCP_KEEP = MCP_BROWSER === 'safari';
+// The assignment reads agent apps had Glaze keep (lib/mcp/tools-assign.js clear), cleared with that file alone at off, at
+// Forget all apps, and for a site removal (scope: its origin) or Reset everything, whether or not agent access was ever on.
+const mcpClearReads = (scope) => {
+  if (typeof GZ_MCP_ASSIGN === 'undefined') importScripts('mcp/tools-assign.js');
+  return GZ_MCP_ASSIGN.clear({ local: chrome.storage.local }, scope);
+};
 
-// Group D's stubs: each step replaces its own here, and nothing else in this worker.
-// C11: an account's caches for a group read afresh through an open LMS tab → { ok, source: 'tab' }, or null with none open.
+// An account's caches for a group read afresh through an open LMS tab → { ok, source: 'tab' }, or null with none open.
 let mcpTabsMade = null;
 const mcpTabs = () => (mcpTabsMade ||= GZ_MCP_TABS.create({ tabs: chrome.tabs, scripting: chrome.scripting, quiet: modQuiet }));
 const mcpRefresh = (account, group, o) => mcpTabs().refresh(account, group, o);
-// C13: Writer's document tools that need an open Writer page (writer-mcp.js) reach it over port glaze:mcp-writer, admitted
-// with the AI port's sender rules while agent access is on (lib/mcp/writer.js pages) → the page's answer, or null with none.
+// Writer's document tools that need an open Writer page (writer-mcp.js) reach it over port glaze:mcp-writer, admitted
+// from Glaze's own pages only, with the AI port's sender rules, while agent access is on (lib/mcp/writer.js pages) → the
+// page's answer, or null with none.
 let mcpWriterHub = null;
 const mcpWriterPages = () => { if (typeof GZ_MCP_WRITER === 'undefined') importScripts('mcp/writer.js'); return (mcpWriterHub ||= GZ_MCP_WRITER.pages({ runtime: chrome.runtime })); };
 const mcpWriter = (key, op, args, o) => mcpWriterPages().call(key, op, args, o);
 chrome.runtime.onConnect.addListener((p) => {
-  if (p.name === 'glaze:mcp-writer') mcpWriterPages().connect(p, async () => await mcpOn() && await glazeOn() && await aiSender(p.sender || {}, { op: 'run', feature: 'writing' }) === true);
+  if (p.name === 'glaze:mcp-writer') mcpWriterPages().connect(p, async () => fromGlaze(p.sender || {}) && await mcpOn() && await glazeOn() && await aiSender(p.sender || {}, { op: 'run', feature: 'writing' }) === true);
 });
-// C14: a mod's code tool (the registry state's code), answered by its Worker through an open LMS tab.
+// A mod's code tool (the registry state's code), answered by its Worker through an open LMS tab.
 let mcpRoute = null;
 const mcpCode = (mod, name, args, ctx) => (mcpRoute ||= GZ_MCP_MODROUTE.create({ tabs: chrome.tabs, browser: MCP_BROWSER, quiet: modQuiet })).code(mod, name, args, ctx);
 
@@ -2566,7 +2572,7 @@ const mcpConfig = async (m) => {
     if (typeof m.on !== 'boolean') return { ok: false, error: 'args' };
     await mcpConsent(m.on);
     await local.set({ mcp: { on: m.on } });
-    if (!m.on) { mcpFiles(); await GZ_MCP_ASSIGN.clear({ local }); }
+    if (!m.on) await mcpClearReads();
     return { ok: true, link: (await mcpEnsure()) ?? MCP_OFF };
   }
   if (m.op === 'activity') { const rows = (await local.get('mcpCalls')).mcpCalls; return { ok: true, rows: Array.isArray(rows) ? rows : [] }; }
@@ -2576,7 +2582,7 @@ const mcpConfig = async (m) => {
   if (m.op === 'apps') return { ok: true, apps: await grants.list() };
   if (m.op === 'grant') return { ok: !!await grants.grant(m.app, m.group, m.on) };
   const ok = await (m.op === 'revoke' ? grants.revoke(m.app) : grants.forget());
-  if (ok && m.op === 'forget') { mcpFiles(); await GZ_MCP_ASSIGN.clear({ local }); await local.remove('mcpCalls'); }
+  if (ok && m.op === 'forget') { await mcpClearReads(); await local.remove('mcpCalls'); }
   return { ok };
 };
 chrome.runtime.onMessage.addListener((m, s, reply) => {

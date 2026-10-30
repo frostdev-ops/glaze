@@ -4,8 +4,6 @@
 // location, the page's fetch (routes: path → JSON, or a function of (url, init)), storage and runtime.sendMessage. A func
 // runs from its source, as the browser serializes it; a file runs as the extension's. The worker's publish paths
 // ('glaze:todo', 'glaze:insights') write `store` as lib/background.js's broker does, through lib/todo.js and lib/insights.js.
-// Also the worker wiring each step hands the orchestrator (lib/background.js's group D stubs), applied to the worker's
-// source for test/helpers/worker-env.cjs.
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
@@ -100,30 +98,7 @@ const browser = (tabs) => {
 const LX = require('../../lib/lookx.js');
 const quiet = (p) => LX.quiet(p) || /\/(quizzes|external_tools|assessment|attempt|lti)(\/|$)|\/mod\/(quiz|lti)(\/|$)/.test(p);
 
-// The worker wiring for lib/background.js's group D stubs, as the orchestrator applies it: [stub, wired] pairs. A source that
-// already holds the wired line is left as it is; one with neither throws, so a moved stub is found at once.
-const WIRING = [
-  ["'mcp/writer.js', 'mcp/wire.js'", "'mcp/writer.js', 'mcp/tabs.js', 'mcp/tools-assign.js', 'mcp/wire.js'"],
-  ['const mcpRefresh = async (account, group, { signal, tool } = {}) => null;',
-    'let mcpTabsMade = null;\nconst mcpTabs = () => (mcpTabsMade ||= GZ_MCP_TABS.create({ tabs: chrome.tabs, scripting: chrome.scripting, quiet: modQuiet }));\nconst mcpRefresh = (account, group, o) => mcpTabs().refresh(account, group, o);'],
-  ["if (!GZ_AI_TOOLS.get('accounts_list')) { GZ_MCP_STUDY.register(GZ_AI_TOOLS); GZ_MCP_GRADES.register(GZ_AI_TOOLS); }",
-    "if (!GZ_AI_TOOLS.get('accounts_list')) { const deps = { sync: chrome.storage.sync, tabs: mcpTabs() }; GZ_MCP_STUDY.register(GZ_AI_TOOLS, deps); GZ_MCP_GRADES.register(GZ_AI_TOOLS); GZ_MCP_ASSIGN.register(GZ_AI_TOOLS, deps); }"],
-  ['await local.set({ mcp: { on: m.on } });',
-    'await local.set({ mcp: { on: m.on } });\n    if (!m.on) { mcpFiles(); await GZ_MCP_ASSIGN.clear({ local }); }'],
-  ["return { ok: await (m.op === 'revoke' ? grants.revoke(m.app) : grants.forget()) };",
-    "const ok = await (m.op === 'revoke' ? grants.revoke(m.app) : grants.forget());\n  if (ok && m.op === 'forget') { mcpFiles(); await GZ_MCP_ASSIGN.clear({ local }); await local.remove('mcpCalls'); }\n  return { ok };"],
-  ['const forget = async (origin) => {',
-    'const forget = async (origin) => {\n  mcpFiles(); await GZ_MCP_ASSIGN.clear({ local: chrome.storage.local }, origin);'],
-  ['const forgetAll = async () => {',
-    'const forgetAll = async () => {\n  mcpFiles(); await GZ_MCP_ASSIGN.clear({ local: chrome.storage.local });'],
-];
-const wired = (src = read('lib/background.js')) => WIRING.reduce((s, [stub, line]) => {
-  if (s.includes(line)) return s;
-  if (!s.includes(stub)) throw new Error(`lib/background.js: no stub ${stub.slice(0, 60)}`);
-  return s.replace(stub, line);
-}, src);
-
-// The real worker (test/helpers/worker-env.cjs) with that wiring, its tabs the fake browser's, agent access on and one app
+// The real worker (test/helpers/worker-env.cjs), its tabs the fake browser's, agent access on and one app
 // paired with every group, as test/mcp-worker.test.js boots it. A tab's publish reaches this worker's broker as Chrome routes
 // a content script's message (route). → { w, store, b, windows }.
 const PEER = { name: 'node', exe: '/Applications/Claude.app/Contents/MacOS/Claude', ppid: 4242, verified: false };
@@ -135,7 +110,7 @@ const boot = async ({ local = {}, sync = {}, tabs = [] } = {}) => {
   idb.dbs.set('glaze-mcp-settings', new Map([['settings', new Map([['on', true]])]]));
   await G.open(idb).pair(PEER, 'Claude', ['courses', 'grades', 'assignments']);
   const store = { sync: { version: 2, enabled: true, enhance: {}, ...sync }, local: { ultra: [], mcp: { on: true }, ...local }, session: {} };
-  const w = worker({ store, background: wired(), globals: { indexedDB: idb } });
+  const w = worker({ store, globals: { indexedDB: idb } });
   const b = browser(tabs);
   Object.assign(w.context.chrome.tabs, b.tabs);
   w.context.chrome.scripting.executeScript = b.scripting.executeScript;
@@ -183,4 +158,4 @@ const conn = async (w) => {
   return { ask, send, call, lines };
 };
 
-module.exports = { tab, browser, publish, quiet, json, pause, writerArea, WIRING, wired, read, boot, off, answer, conn, PEER };
+module.exports = { tab, browser, publish, quiet, json, pause, writerArea, read, boot, off, answer, conn, PEER };
