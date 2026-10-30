@@ -658,6 +658,23 @@ test('the wired worker admits Writer\'s port as it does the AI\'s, only while ag
   assert.equal(q.ports[0].worker.posted.length, 0);
 });
 
+// Glaze's content script on a school's page passes the AI port's rules (its AI features run there), but only Writer's own
+// pages hold a paper: a school page's port could otherwise claim a document and word the approval window's change.
+test('the wired worker refuses Writer\'s port from a school page that passes the AI port\'s rules', async () => {
+  const { w, store } = await bootWorker();
+  const url = 'https://bb.school.test/ultra/courses/_101_1/outline', tab = { id: 3, url };
+  store.local.ultra = ['https://bb.school.test'];
+  w.context.chrome.tabs.get = async () => tab;
+  w.context.chrome.scripting.executeScript = async () => [{ result: { href: url, origin: 'https://bb.school.test', ancestors: [] } }];
+  const sender = { id: 'glaze', url, origin: 'https://bb.school.test', frameId: 0, tab };
+  w.context.lmsSender = sender;
+  assert.equal(await inWorker(w, "aiSender(lmsSender, { op: 'run', feature: 'writing' })"), true, 'the school page passes the AI port\'s rules');
+  const q = writerPage({ link: intoWorker(w, sender) });
+  q.ready();
+  await until(() => q.ports[0]?.worker.hungUp, 'refused');
+  assert.equal(q.ports[0].worker.posted.length, 0);
+});
+
 test('from paging reaches all 300 stored sources and every open issue beyond the old 200-row limit', async () => {
   const env = await opened({ html: `<p>${'word '.repeat(350)}</p>` });
   const sources = Array.from({ length: 300 }, (_, n) => ({ id: `s-source-${n}`, type: 'book', title: `Book ${n}` }));
