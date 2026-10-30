@@ -1,8 +1,10 @@
-// Glaze Writer's context for a discussion post or reply, and a message (the frame's `context`: what the target ring and the
-// AI know of the box). For a post or reply: the prompt (the public discussions API's topic.body, as lib/ultra.js reads
-// it), the thread (Ultra's messages and replies API, newest first, within a post count and a character budget, the
-// student's own posts marked), the post a reply answers, and the requirements lib/writer-target.js reads from the prompt.
-// A message gets its course and the student only. The discussion's forum id isn't the content id in Ultra's route (probe,
+// Glaze Writer's context for a discussion post or reply, a message and a journal (the frame's `context`: what the target
+// ring, Cite and the AI know of the box). Every one names what Cite keeps its sources under (lib/writer-sources.js keyOf):
+// the school's host, the student, the course and the item (itemOf). For a post or reply: the prompt (the public
+// discussions API's topic.body, as lib/ultra.js reads it), the thread (Ultra's messages and replies API, newest first,
+// within a post count and a character budget, the student's own posts marked), the post a reply answers, and the
+// requirements lib/writer-target.js reads from the prompt. A message gets its course and the student only; a journal keeps
+// what lib/writer-ultra.js read off its page (its prompt). The discussion's forum id isn't the content id in Ultra's route (probe,
 // 2026-10-26/27): it is found in the course's discussions list, by the gradebook column the route's content id has, else
 // by the page's title when exactly one discussion has it. Every read is a GET through the site's queue (lib/lmsq.js),
 // behind visible work, once a page; whatever fails leaves its field empty. The frame gets the context when it's ready and
@@ -17,10 +19,12 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
   const fold = (s) => squash(s).toLowerCase();
 
   // ---- pure ------------------------------------------------------------------------------------------------------------
-  // A discussion route's course and content ids, a message composer's course, or null.
+  // A discussion route's course and content ids, a journal's course and content ids, a message composer's course, or null.
   const route = (path = '', search = '') => {
     const d = /^\/ultra\/courses\/(_\d+_\d+)\/(?:.*\/)?discussion\/(_\d+_\d+)\/?$/.exec(path);
     if (d) return { course: d[1], content: d[2] };
+    const j = /^\/ultra\/courses\/(_\d+_\d+)\/(?:.*\/)?journal\/(_\d+_\d+)(?:\/|$)/.exec(path);
+    if (j) return { course: j[1], journal: j[2] };
     if (/^\/ultra\/messages\/create\/?$/.test(path)) { const c = new URLSearchParams(search).get('courseId'); return ID.test(c || '') ? { course: c } : null; }
     return null;
   };
@@ -82,17 +86,32 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
     const text = x?.text || squash(page.text).slice(0, LIMIT.post);
     return x || text ? { id, author: x?.author || '', text } : null;
   };
-  // The student, as users/me names them (when it does), else as their own posts do.
+  // The student: their id as users/me gives it, their name as users/me gives it (when it does), else as their own posts do.
   const userOf = (me, messages = []) => {
     const own = arr(messages).find((m) => me?.id && m?.userId === me.id && !m.postAsAnonymous);
     const given = squash(str(me?.givenName) || str(me?.name?.given) || str(own?.givenName)).slice(0, LIMIT.name);
     const family = squash(str(me?.familyName) || str(me?.name?.family) || str(own?.familyName)).slice(0, LIMIT.name);
-    return { name: [given, family].filter(Boolean).join(' '), given, family };
+    return { ...(ID.test(me?.id || '') && { id: me.id }), name: [given, family].filter(Boolean).join(' '), given, family };
   };
-  // The frame's context for one box. A message: its course and the student. A post or reply: the rest, with the
-  // requirements its kind answers to (GZ_WRITER_TARGET.forKind).
-  const contextOf = ({ kind, course = null, user = null, prompt = null, requirements = null, thread = [], replyTo = null } = {}) => {
-    const c = { kind, course: course && { id: course.id, name: course.name || '' }, user };
+  // The item a box's sources are kept under in its course, from its route: the discussion's content id for its post and
+  // every reply alike (one store, so a reply cites what the post cited; the route has it from the start, the forum id only
+  // after reads that can fail), the journal's content id, and for the New message composer (the one message box seen live,
+  // which has no conversation yet) the course's new message. '' where the route isn't the kind's: those sources last the
+  // frame's life.
+  const NEW_MESSAGE = 'new-message';
+  const itemOf = (kind, where) => {
+    if (kind === 'post' || kind === 'reply') return where?.content || '';
+    if (kind === 'journal') return where?.journal || '';
+    return kind === 'message' && where?.course && !where.content && !where.journal ? NEW_MESSAGE : '';
+  };
+  // The frame's context for one box: what its sources are kept under (school: the LMS's host, item: itemOf, the course's
+  // id and the student's), and with it, for a message, its course and the student; for a journal, what lib/writer-ultra.js
+  // read off its page (own); for a post or reply, the rest, with the requirements its kind answers to
+  // (GZ_WRITER_TARGET.forKind).
+  const contextOf = ({ kind, school = '', item = '', course = null, user = null, own = {}, prompt = null, requirements = null, thread = [], replyTo = null } = {}) => {
+    const ids = school && item ? { school, item: { id: item } } : {};
+    if (kind === 'journal') return { ...own, ...ids, course: course && { id: course.id }, user: user?.id ? { id: user.id } : null };
+    const c = { kind, ...ids, course: course && { id: course.id, name: course.name || '' }, user };
     if (kind === 'message') return c;
     return { ...c, prompt, requirements, thread, ...(kind === 'reply' && { replyTo }) };
   };
@@ -126,10 +145,10 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
   };
 
   // ---- on the page: features/writer.js's boxes -----------------------------------------------------------------------
-  const KINDS = new Set(['post', 'reply', 'message']);
+  const KINDS = new Set(['post', 'reply', 'message', 'journal']);
   const boxes = new Set();
   const sent = new WeakMap(); // box → { port, json } last sent
-  let page = null; // { key, path, base: Promise, thread: Promise|null, data, threadAt, sig, timer }
+  let page = null; // { key, where, school, me, live, data, threadAt, sig, timer, authors, thread: Promise|null, abort }
   let X = null, observer = null;
   const alive = (box) => box.frame === null || !!box.frame?.isConnected;
   // A read-only Quill body's text as lib/writer-ultra.js reads one, from HTML parsed inert (DOMParser: no scripts, no loads).
@@ -156,11 +175,11 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
     const m = arr(mem).find((x) => x?.courseId === cid || x?.course?.id === cid);
     return { id: cid, name: squash(str(m?.course?.displayName) || str(m?.course?.name)).slice(0, LIMIT.name) };
   };
-  // What a page's boxes share: the student, the course, the discussion and its prompt. Each part alone may fail.
-  const loadBase = async (where, live, signal) => {
+  // What a page's boxes share: the student (meP), the course, the discussion and its prompt; a journal, the student only.
+  // Each part alone may fail.
+  const loadBase = async (where, live, signal, meP) => {
     if (!live()) throw Error('stale');
-    // The student's id as content-ultra.js already asked it (users/me, once a page).
-    const meP = Promise.resolve().then(() => X.me()).then((id) => (ID.test(id || '') ? { id } : null), () => null);
+    if (where.journal) return { me: await meP, course: { id: where.course, name: '' }, discussion: null, prompt: null };
     const courseP = courseOf(where.course);
     if (!where.content) return { me: await meP, course: await courseP, discussion: null, prompt: null };
     const r = await reader(live, signal);
@@ -178,10 +197,11 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
   const send = (box) => {
     if (!page?.live() || !box.port || !box.ready || !alive(box)) return;
     const d = page.data || {};
-    const me = d.base?.me, raw = d.messages || [];
+    const me = page.me, raw = d.messages || [];
     const thread = d.base?.discussion ? threadOf(raw, { me: me?.id, keep: [...boxes].filter((b) => b.kind === 'reply').map(replyId), text: htmlText }) : [];
     const c = contextOf({
-      kind: box.kind, course: d.base?.course || null, user: (me || raw.length) ? userOf(me, raw) : null, prompt: d.base?.prompt || null,
+      kind: box.kind, school: page.school, item: itemOf(box.kind, page.where), course: d.base?.course || { id: page.where.course, name: '' },
+      user: (me || raw.length) ? userOf(me, raw) : null, own: box.context || {}, prompt: d.base?.prompt || null,
       requirements: d.base?.raw && globalThis.GZ_WRITER_TARGET ? GZ_WRITER_TARGET.forKind(d.base.raw, box.kind) : null,
       thread, replyTo: box.kind === 'reply' ? replyToOf(thread, replyId(box), box.context?.post) : null,
     });
@@ -233,7 +253,8 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
     sent.delete(box);
     if (!boxes.size) clear();
   };
-  // features/writer.js, as a box's frame comes up (and again when it reopens): context for post, reply and message boxes.
+  // features/writer.js, as a box's frame comes up (and again when it reopens): context for post, reply, message and journal
+  // boxes.
   const watch = (box, ctx) => {
     if (!box || !KINDS.has(box.kind) || !ctx) return;
     X = ctx;
@@ -243,11 +264,15 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
     const key = `${location.pathname}?${where.content ? '' : where.course}`;
     if (page?.key !== key) {
       clear();
-      const path = location.pathname, search = location.search, p = { key, where, data: null, threadAt: 0, sig: '', timer: 0, authors: new Map(), thread: null, abort: new AbortController() };
+      const path = location.pathname, search = location.search, p = { key, where, school: location.host.toLowerCase(), me: null, data: null, threadAt: 0, sig: '', timer: 0, authors: new Map(), thread: null, abort: new AbortController() };
       p.live = () => page === p && on() && location.pathname === path && location.search === search && [...boxes].some(alive);
       page = p;
-      X.need('lib/writer-target.js', () => globalThis.GZ_WRITER_TARGET).catch(() => {})
-        .then(() => loadBase(where, p.live, p.abort.signal))
+      // The student's id as content-ultra.js already asked it (users/me, once a page): the frames have their sources key
+      // as soon as it's in, before the rest is read.
+      const meP = Promise.resolve().then(() => X.me()).then((id) => (ID.test(id || '') ? { id } : null), () => null);
+      meP.then((me) => { p.me = me; if (me && p.live()) sendAll(); });
+      (where.journal ? Promise.resolve() : X.need('lib/writer-target.js', () => globalThis.GZ_WRITER_TARGET).catch(() => {}))
+        .then(() => loadBase(where, p.live, p.abort.signal, meP))
         .then((base) => { if (!p.live()) return; p.data = { base, messages: [] }; sendAll(); readThread(); }, () => {});
     }
     boxes.add(box);
@@ -257,7 +282,7 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
   // Who wrote a message in this page's thread ('' when unknown): the Quote pop's author (features/writer-quote.js).
   const author = (id) => page?.authors?.get(id) || '';
 
-  return { route, discussionOf, promptOf, authorOf, threadOf, replyToOf, userOf, contextOf, discussions, messages, forumPath, watch, unwatch, author, LIMIT };
+  return { route, discussionOf, promptOf, authorOf, threadOf, replyToOf, userOf, itemOf, contextOf, discussions, messages, forumPath, watch, unwatch, author, LIMIT };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_CONTEXT_DISCUSSION;
 GZ_WRITER_CONTEXT_DISCUSSION;
