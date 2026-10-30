@@ -312,3 +312,12 @@ test('in a 1904 workbook lookups match the serials its dates hold', () => {
     ['XLOOKUP(DATEVALUE("3/4/2025"),A1:A3,B1:B3)', 'tue'], ['INDEX(A1:A3,2)', 45720 - 1462],
   ]);
 });
+
+test('an array past the engine\'s 250,000-cell cap is #NUM!, as the engine\'s own arrays are', () => {
+  const e = book({ E60000: 1 });
+  cases(e, [
+    ['TRANSPOSE(A1:E60000)', '#NUM!'], ['SORT(A1:E60000)', '#NUM!'], ['UNIQUE(A1:E60000)', '#NUM!'], ['SORTBY(A1:E60000,E1:E60000)', '#NUM!'],
+    ['FILTER(A1:E60000,E1:E60000=1)', '#NUM!'], ['XLOOKUP(1,E1:E60000,A1:E60000)', 0], ['SEQUENCE(1000,1000)', '#NUM!'], ['SEQUENCE(250000)', 1],
+    ['ROW(A1:A300000)', '#NUM!'], ['COLUMN(A1:XFD1)', 1], ['ROWS(A1:E60000)', 60000],
+  ]);
+});
