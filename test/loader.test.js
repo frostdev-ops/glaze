@@ -117,6 +117,22 @@ test('success means the file ran to its end: an injection that fails, throws or 
   assert.deepEqual(await send(() => Promise.resolve([{ frameId: 3 }]), 'safari-web-extension:'), { ok: true });
 });
 
+test('only the browser host-permission refusal is final, not a script exception or a similar message', async () => {
+  const missing = 'Missing host permission for the tab or frames';
+  const similar = 'Missing host permission data; try again';
+  const message = { type: 'glaze:load', files: ['lib/drafts.js'], doc: 'A' };
+  for (const sender of [tab(), { ...tab(), documentId: 'A' }]) {
+    const refused = worker(() => Promise.reject(new Error(missing)));
+    assert.deepEqual(await refused.send(message, sender), { ok: false, error: 'sender' }, 'the document probe or injection is refused');
+    const retryable = worker(() => Promise.reject(new Error(similar)));
+    assert.deepEqual(await retryable.send(message, sender), { ok: false, error: similar }, 'a shared prefix does not prove a revoked grant');
+  }
+  const script = worker(() => Promise.resolve([{ frameId: 3, error: new Error(missing) }]));
+  assert.deepEqual(await script.send(message, { ...tab(), documentId: 'A' }), { ok: false, error: missing }, 'a script exception is still retryable');
+  const afterProbe = worker((o) => o.func ? Promise.resolve([{ result: true }]) : Promise.reject(new Error(missing)));
+  assert.deepEqual(await afterProbe.send(message, tab()), { ok: false, error: 'sender' }, 'a successful probe does not hide an injection refusal');
+});
+
 // What a feature file reads from content.js when it loads (features/*.js).
 const CTX = { placeAsked: () => 0, t: (k) => k, locale: () => 'en', capi() {}, canvasCourses() {}, canvasCourseId() {}, need() {}, settings: () => ({}), site: 'canvas', wordsIn: new Set() };
 // What a feature file touches as it loads: the listeners it adds (features/keys.js, coursemenu.js, previews.js).
