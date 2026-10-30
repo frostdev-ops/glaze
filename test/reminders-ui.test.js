@@ -39,12 +39,14 @@ class E {
 
 // One stored world (storage.local, the worker's queue, a clock both share) and as many tabs on it as a test opens.
 // hold: the worker's answers wait until release(), as a slow worker's would.
-const world = (dueIn, { cacheAge = 0 } = {}) => {
-  const w = { skew: 0, hold: false, waiting: [] };
+// at: the world's clock starts there (an instant) rather than at the real time.
+const world = (dueIn, { cacheAge = 0, at: clock } = {}) => {
+  const at = clock ?? NOW;
+  const w = { skew: clock === undefined ? 0 : clock - Date.now(), hold: false, waiting: [] };
   w.now = () => Date.now() + w.skew;
   const box = {
-    todoCache: { key: TODO, at: NOW - cacheAge, start: new Date(NOW - 8 * 864e5).toISOString(), end: new Date(NOW + 9 * 864e5).toISOString(), teach: true, progress: true, grading: [], sums: {},
-      items: [{ type: 'assignment', id: '7', cid: '25', course: 'Biology', title: 'Lab report', at: NOW + dueIn, url: '/courses/25/assignments/7', sub: { submitted: false }, ov: null }] },
+    todoCache: { key: TODO, at: at - cacheAge, start: new Date(at - 8 * 864e5).toISOString(), end: new Date(at + 9 * 864e5).toISOString(), teach: true, progress: true, grading: [], sums: {},
+      items: [{ type: 'assignment', id: '7', cid: '25', course: 'Biology', title: 'Lab report', at: at + dueIn, url: '/courses/25/assignments/7', sub: { submitted: false }, ov: null }] },
   };
   const area = { local: { get: async (ks) => Object.fromEntries(ks.filter((k) => k in box).map((k) => [k, structuredClone(box[k])])), set: async (p) => { Object.assign(box, structuredClone(p)); return true; } } };
   let turn = Promise.resolve();
@@ -475,27 +477,30 @@ test('Gradescope: "Not here" in the hub hides it everywhere, and nothing from it
   assert.deepEqual(a.ops('claim').flatMap((m) => m.ids).filter((id) => id.startsWith('gradescope:')), [], 'never reminded of');
 });
 
-test('class start (W14): a class in the class schedule reminds its lead time before, only with its own switch on', async () => {
-  const w = world(30 * 864e5, { cacheAge: 36e5 }); // nothing due soon, and Better To Do's copy is an hour old
-  const tz = 'America/New_York';
-  const at = Date.now() + 8 * 6e4;
-  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', weekday: 'short', hour: 'numeric', minute: 'numeric' }).formatToParts(at).map((x) => [x.type, x.value]));
-  const start = +p.hour * 60 + +p.minute;
-  w.box[C.storeKey(ORIGIN, '3')] = { courses: [{ id: '25', code: 'BIO 1100', name: 'Biology', periods: [{ days: [['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday)], start, end: Math.min(start + 50, 1439), loc: 'Room 9', from: '', to: '', skip: [] }] }] };
-  const off = w.tab({ enhance: { remind: true } });
-  off.ui.sync(true);
-  await settle();
-  assert.equal(off.toast(), null, 'class reminders are off');
-  const on = w.tab({ enhance: { remind: false, remindClass: true } });
-  on.ui.sync(true);
-  await settle();
-  // The lead time can cross midnight; this checks the class reminder, not its relative-date wording.
-  assert.match(on.toast()?.text || '', /Class .*Biology Room 9/);
-  assert.equal(on.ops('confirm').length, 1);
-  // Class reminders alone ask Canvas for nothing (Codex W14 review): not the planner, however old its copy.
-  assert.deepEqual(on.fetched, []);
-  assert.ok(off.fetched.length > 0, 'due-date reminders do ask, with the copy that old');
-});
+// On fixed clocks (New York): mid-morning; 23:51, a class at 23:59 that runs to midnight; 23:55, a class just past midnight.
+for (const now of ['2026-10-29T14:00:00Z', '2026-10-30T03:51:00Z', '2026-10-30T03:55:00Z']) {
+  test(`class start (W14) at ${now}: a class in the class schedule reminds its lead time before, only with its own switch on`, async () => {
+    const w = world(30 * 864e5, { cacheAge: 36e5, at: Date.parse(now) }); // nothing due soon, and Better To Do's copy is an hour old
+    const tz = 'America/New_York';
+    const at = w.now() + 8 * 6e4;
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', weekday: 'short', hour: 'numeric', minute: 'numeric' }).formatToParts(at).map((x) => [x.type, x.value]));
+    const start = +p.hour * 60 + +p.minute;
+    w.box[C.storeKey(ORIGIN, '3')] = { courses: [{ id: '25', code: 'BIO 1100', name: 'Biology', periods: [{ days: [['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday)], start, end: Math.min(start + 50, 1440), loc: 'Room 9', from: '', to: '', skip: [] }] }] };
+    const off = w.tab({ enhance: { remind: true } });
+    off.ui.sync(true);
+    await settle();
+    assert.equal(off.toast(), null, 'class reminders are off');
+    const on = w.tab({ enhance: { remind: false, remindClass: true } });
+    on.ui.sync(true);
+    await settle();
+    // The lead time can cross midnight; this checks the class reminder, not its relative-date wording.
+    assert.match(on.toast()?.text || '', /Class .*Biology Room 9/);
+    assert.equal(on.ops('confirm').length, 1);
+    // Class reminders alone ask Canvas for nothing (Codex W14 review): not the planner, however old its copy.
+    assert.deepEqual(on.fetched, []);
+    assert.ok(off.fetched.length > 0, 'due-date reminders do ask, with the copy that old');
+  });
+}
 
 
 test('NEW-1: W11 persists calculated day even when start and best do not change', async () => {
