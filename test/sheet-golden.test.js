@@ -400,7 +400,8 @@ test('every todo names a case', () => {
 
 const todoFor = (c, ok, got) => {
   const missing = [...new Set(F.tokenize(c.formula).filter((k) => k.k === 'fn' && !C.fn(k.name)).map((k) => k.name))];
-  return ok ? undefined : TODO[c.id] ?? (missing.length ? `not built: ${missing.join(', ')}` : undefined);
+  // An unbuilt call produces #NAME?. Its mere presence in an unused branch cannot excuse a wrong built result.
+  return ok ? undefined : TODO[c.id] ?? (missing.length && got?.t === 'e' && got.v === '#NAME?' ? `not built: ${missing.join(', ')}` : undefined);
 };
 
 test('automatic todos cannot cover a built function result or a colliding name', () => {
