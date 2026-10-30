@@ -218,8 +218,8 @@ test('DATEDIF: every unit, and "MD" counting back into a shorter month as Excel 
     ['DATEDIF(DATE(2011,1,31),DATE(2011,2,28),"M")', 0], ['DATEDIF(DATE(2011,1,31),DATE(2011,2,28),"MD")', 28], ['DATEDIF(DATE(2016,2,29),DATE(2017,2,28),"Y")', 0],
     ['DATEDIF(DATE(2016,2,29),DATE(2017,3,1),"Y")', 1], ['DATEDIF(DATE(2011,5,20),DATE(2012,5,19),"YM")', 11], ['DATEDIF(DATE(2011,5,20),DATE(2012,5,19),"YD")', 365],
     ['DATEDIF(DATE(2011,1,31),DATE(2011,3,1),"MD")', -2], ['DATEDIF(DATE(2011,1,31),DATE(2011,3,1),"M")', 1], ['DATEDIF(DATE(2011,3,31),DATE(2011,5,1),"MD")', 0],
-    // Excel's, as LibreOffice records them: "MD" rolls a missing day over into the end's month; "YD" adds 365 even across
-    // a February 29.
+    // Excel's results recorded by LibreOffice: "MD" rolls a missing day into the end's month; the YD case below
+    // remains 323 despite the leap year at the end (also confirmed live in Excel 16.114.1).
     ['DATEDIF(DATE(2012,1,28),DATE(2012,3,1),"MD")', 2], ['DATEDIF(DATE(2011,1,29),DATE(2011,3,1),"MD")', 0], ['DATEDIF(DATE(1988,6,22),DATE(2012,5,11),"YD")', 323],
   ]);
 });
