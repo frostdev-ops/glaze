@@ -284,7 +284,7 @@
   .wr-words li button:hover { color: var(--gz-err); }
   .wr-danger { color: var(--gz-err); border-color: color-mix(in srgb, var(--gz-err) 45%, var(--gz-border-strong, var(--gz-line-strong))); }
   .wr-danger:hover { color: var(--gz-err); border-color: var(--gz-err); }
-  #writer-clear .wr-go, #writer-clear .wr-go:hover { color: #fff; background: var(--gz-err); border-color: transparent; }
+  :is(#writer-clear, #agents-forget-ask) .wr-go, :is(#writer-clear, #agents-forget-ask) .wr-go:hover { color: #fff; background: var(--gz-err); border-color: transparent; }
   .ai-effort { --n: 4; --i: 0; position: relative; display: grid; gap: .3rem; padding-inline: 9px; }
   .ai-effort .track { position: relative; block-size: 6px; border-radius: calc(var(--gz-radius, 12px) / 2); background: var(--gz-line-strong); }
   .ai-effort .fill { position: absolute; inset-block: 0; inset-inline-start: 0; inline-size: calc(var(--i) / (var(--steps)) * 100%); border-radius: calc(var(--gz-radius, 12px) / 2); background: var(--gz-accent); transition: inline-size .22s var(--gz-ease); }
@@ -1733,7 +1733,7 @@
 <p class="desc" id="agents-said" role="status" aria-live="polite" hidden></p>
 <div class="ag-state" id="agents-state" hidden><span class="ag-dot" aria-hidden="true"></span><p id="agents-line" role="status" aria-live="polite"></p><button type="button" id="agents-copy" hidden>Copy</button><button type="button" id="agents-allow" hidden>Allow</button><button type="button" id="agents-restart" hidden>Restart</button><a id="agents-app" href="https://frostdev.io/glaze" target="_blank" rel="noopener" translate="no" hidden>frostdev.io/glaze</a></div>
 <div class="group" id="agents-apps-box" hidden>
-<div class="ag-head"><h3 id="agents-apps-head">Apps</h3><button type="button" id="agents-forget">Forget all apps</button></div>
+<div class="ag-head"><h3 id="agents-apps-head">Apps</h3><button type="button" class="wr-danger" id="agents-forget">Forget all apps</button></div>
 <ul class="ag-apps" id="agents-apps" aria-labelledby="agents-apps-head"></ul>
 </div>
 <div class="group" id="agents-activity" hidden>
@@ -1817,6 +1817,14 @@
       <h3 id="writer-clear-title"></h3>
       <p class="desc" id="writer-clear-note"></p>
       <div class="row"><button value="cancel" id="writer-clear-cancel">Cancel</button><button value="ok" class="primary wr-go" id="writer-clear-ok">Clear papers</button></div>
+    </form>
+  </dialog>
+  <!-- Settings → Agents' Forget all apps question (lib/editor-agents.js): only Forget all forgets. -->
+  <dialog id="agents-forget-ask" aria-labelledby="agents-forget-title" aria-describedby="agents-forget-note">
+    <form method="dialog">
+      <h3 id="agents-forget-title">Forget all apps?</h3>
+      <p class="desc" id="agents-forget-note">Every app must pair again, and the activity list is cleared.</p>
+      <div class="row"><button value="cancel" id="agents-forget-cancel">Cancel</button><button value="ok" class="primary wr-go">Forget all</button></div>
     </form>
   </dialog>
   <!-- Restore…'s list (options.js): what the picked file holds, all ticked; Cancel changes nothing. -->

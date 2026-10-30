@@ -7,9 +7,10 @@
 // asks the browser for nativeMessaging first, in the click, as Firefox loses the gesture across an await (Safari holds it
 // from the start). On Chrome only a worker started after the grant connects (the owner's restart decision), so until then
 // the link says restart; Firefox connects at once. Turning off lets the worker end the link before the permission goes.
-// Firefox says not-installed for a helper that doesn't list Glaze too, and nothing about why one exited, so no line rests on
-// forbidden or the error. The activity list is storage.local mcpCalls (lib/mcp/grants.js record), metadata only. Every word
-// reaches the page as textContent.
+// Forget all apps asks first, as Settings → Writer's Clear all papers and documents does. Firefox says not-installed for a
+// helper that doesn't list Glaze too, and nothing about why one exited, so no line rests on forbidden or the error. The
+// activity list is storage.local mcpCalls (lib/mcp/grants.js record), metadata only. Every word reaches the page as
+// textContent.
 // Extension options page only (mount); the pure helpers are for node tests.
 var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
   const TYPE = 'glaze:mcp-config', LINK = 'mcpLink', CALLS = 'mcpCalls', SETTING = 'mcp';
@@ -238,7 +239,14 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
       delete drawn.apps;
       await loadApps();
     };
-    $('agents-forget').addEventListener('click', () => change({ op: 'forget' }));
+    // Only Forget all forgets: Cancel, which has the focus, and Esc keep every app.
+    const forget = $('agents-forget-ask');
+    $('agents-forget').addEventListener('click', () => {
+      forget.returnValue = '';
+      forget.showModal();
+      $('agents-forget-cancel').focus(); // not autofocus, as Settings → Writer's question
+    });
+    forget.addEventListener('close', () => { if (forget.returnValue === 'ok') change({ op: 'forget' }); });
 
     // ---- the activity list -------------------------------------------------------------------------------------------
     const renderCalls = () => {

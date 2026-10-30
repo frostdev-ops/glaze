@@ -3,7 +3,7 @@
 // click's user activation is still live when it is called, then off before the permission goes; the link's states from real
 // helpers in the profile's NativeMessagingHosts (none, one that doesn't list this copy, one that exits at once, the real
 // glaze-mcp host under a scratch HOME) and every other state lib/agent-link.js reports as the page shows it; an app's card,
-// the activity list, 320px and search; a restart left in storage.session leaves Starting… after the page's one wait (light: the
+// the activity list, 320px, search, and Forget all apps' question; a restart left in storage.session leaves Starting… after the page's one wait (light: the
 // real worker answers; dark: an answer of restart stood in, which gets the restart line). Each state is shot in light and
 // dark, each scheme in a browser of its own. No network.
 // NODE_PATH=<playwright> nice -n 10 node scripts/settings-agents-check.js [shots folder]
@@ -296,6 +296,31 @@ async function pass(scheme) {
         assert.ok(await page.locator(sel).isVisible(), `${words} finds ${sel}`);
       }
       await page.locator('#find').fill('');
+    });
+
+    await check('forget', async () => {
+      const ask = page.locator('#agents-forget-ask'), apps = page.locator('#agents-apps .ag-app');
+      const n = await apps.count();
+      assert.ok(n > 0, 'apps to forget');
+      await page.locator('#agents-forget').click();
+      await ask.waitFor({ state: 'visible' });
+      assert.equal(await page.locator('#agents-forget-title').innerText(), 'Forget all apps?');
+      assert.equal(await page.evaluate(() => document.activeElement?.id), 'agents-forget-cancel');
+      await shoot('forget-ask', '#agents-forget-ask');
+      await page.locator('#agents-forget-cancel').click();
+      await ask.waitFor({ state: 'hidden' });
+      await pause(300);
+      assert.equal(await apps.count(), n, 'Cancel keeps every app');
+      await page.locator('#agents-forget').click();
+      await page.keyboard.press('Escape');
+      await ask.waitFor({ state: 'hidden' });
+      await pause(300);
+      assert.equal(await apps.count(), n, 'Esc keeps every app');
+      await page.locator('#agents-forget').click();
+      await ask.getByRole('button', { name: 'Forget all' }).click();
+      await page.locator('#agents-apps-box').waitFor({ state: 'hidden' });
+      await page.locator('#agents-activity').waitFor({ state: 'hidden' });
+      assert.equal(await apps.count(), 0);
     });
 
     await check('no-errors', async () => { assert.deepEqual(errors, []); });

@@ -33,7 +33,9 @@ const page = ({ browser = 'chrome', os = 'mac', on = false, link, apps = [], mod
       append(...k) { this.children.push(...k.map((x) => (typeof x === 'string' ? Object.assign(el('#text'), { textContent: x }) : x))); },
       replaceChildren(...k) { this.children = []; this.append(...k); },
       setAttribute(k, v) { this.attrs[k] = String(v); }, removeAttribute(k) { delete this.attrs[k]; }, getAttribute(k) { return this.attrs[k] ?? null; },
-      addEventListener(type, f) { (this.on[type] ||= []).push(f); }, focus() { doc.activeElement = this; } };
+      addEventListener(type, f) { (this.on[type] ||= []).push(f); }, focus() { doc.activeElement = this; },
+      // A <dialog>: closed by one of its form's buttons (value) or by Esc (nothing).
+      open: false, returnValue: '', showModal() { this.open = true; }, close(value) { this.open = false; if (value !== undefined) this.returnValue = value; for (const f of this.on.close || []) f(); } };
     return e;
   };
   const byId = (id) => {
@@ -506,9 +508,50 @@ test('Forget all apps forgets every app; a mod group an app still holds shows by
   const p = await open({ apps: APPS, mods: [] });
   assert.deepEqual(p.switches(p.card('Claude Code')).at(-1), [`The mod ${B}`, true]);
   await p.click('agents-forget');
+  p.$('agents-forget-ask').close('ok');
+  await settle();
   assert.deepEqual(p.ops().filter((o) => o === 'forget'), ['forget']);
   assert.equal(p.cards().length, 0);
   assert.equal(p.$('agents-apps-box').hidden, true);
+});
+
+// Finding 9 of the 4.0.0 beta: Forget all apps cleared every app and the activity list in one click. It asks first, as
+// Settings → Writer's Clear all papers and documents does, in a <dialog>, never the browser's confirm().
+test('Forget all apps asks first: Cancel (which has the focus) and Esc keep every app; only Forget all forgets', async () => {
+  const p = await open({ apps: APPS, mods: MODS });
+  const ask = p.$('agents-forget-ask'), forgets = () => p.ops().filter((o) => o === 'forget');
+  await p.click('agents-forget');
+  assert.equal(ask.open, true, 'a question first');
+  assert.equal(p.doc.activeElement, p.$('agents-forget-cancel'), 'Cancel has the focus');
+  assert.deepEqual(forgets(), []);
+  ask.close('cancel');
+  await settle();
+  assert.deepEqual(forgets(), [], 'Cancel');
+  await p.click('agents-forget');
+  ask.close();
+  await settle();
+  assert.deepEqual(forgets(), [], 'Esc');
+  assert.equal(p.cards().length, 2);
+  await p.click('agents-forget');
+  assert.equal(ask.returnValue, '', 'each question starts unanswered');
+  ask.close('ok');
+  await settle();
+  assert.deepEqual(forgets(), ['forget']);
+  assert.equal(p.cards().length, 0);
+
+  const html = read('options.html'), js = read('lib/editor-agents.js').replace(/\/\/[^\n]*/g, '');
+  assert.doesNotMatch(js, /\bconfirm\(/);
+  assert.match(html, /<button type="button" class="wr-danger" id="agents-forget">Forget all apps<\/button>/, 'drawn as Clear all papers and documents is');
+  const dialog = html.slice(html.indexOf('<dialog id="agents-forget-ask"'), html.indexOf('</dialog>', html.indexOf('<dialog id="agents-forget-ask"')));
+  assert.match(dialog, /^<dialog id="agents-forget-ask" aria-labelledby="agents-forget-title" aria-describedby="agents-forget-note">\s*<form method="dialog">/);
+  assert.match(dialog, /<h3 id="agents-forget-title">Forget all apps\?<\/h3>/);
+  assert.match(dialog, /<p class="desc" id="agents-forget-note">[^<]+<\/p>/);
+  assert.match(dialog, /<button value="cancel" id="agents-forget-cancel">Cancel<\/button><button value="ok" class="primary wr-go">Forget all<\/button>/);
+  assert.ok(html.indexOf('<dialog id="agents-forget-ask"') > html.indexOf('<div id="panel-backup"'), 'outside the sections, so settings search never hides it');
+  assert.match(html, /:is\(#writer-clear, #agents-forget-ask\) \.wr-go/, 'its Forget all is drawn as Clear all is');
+  const words = [...dialog.matchAll(/>([^<]+)</g)].map((m) => m[1].trim()).filter((w) => /\p{L}/u.test(w));
+  assert.equal(words.length, 4, words.join(' | '));
+  for (const lang of Object.keys(globalThis.GZ_LANGS)) for (const w of words) assert.notEqual(I.t(w, {}, lang), w, `${lang}: "${w}"`);
 });
 
 test('the activity list: time, app, tool and outcome, newest first, and nothing else of a row', async () => {
