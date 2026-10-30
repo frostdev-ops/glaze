@@ -437,3 +437,16 @@ test('paragraph default run properties apply below explicit run and end-paragrap
   ]);
   assert.equal(para.endSize, 14);
 });
+
+test('relationship targets stay within the package while root paths and parent paths resolve', async () => {
+  const rels = fixture('ppt/_rels/presentation.xml.rels');
+  for (const target of ['/ppt/slides/slide1.xml', '../ppt/slides/slide1.xml']) {
+    const d = await P.read(pack({ 'ppt/_rels/presentation.xml.rels': rels.replace('Target="slides/slide1.xml"', `Target="${target}"`) }));
+    assert.equal(d.slides[0].title, 'Cell Biology', target);
+  }
+  const escaped = rels.replace('Target="slides/slide1.xml"', 'Target="../../ppt/slides/slide1.xml"');
+  const d = await P.read(pack({ 'ppt/_rels/presentation.xml.rels': escaped }));
+  assert.equal(d.slides[0].missing, true);
+  const D = require('../lib/doctext.js');
+  assert.equal((await D.rels(D.unzip(pack({ 'ppt/_rels/presentation.xml.rels': escaped })), 'ppt/presentation.xml')).get('rId2').path, 'ppt/slides/slide1.xml');
+});
