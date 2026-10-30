@@ -325,3 +325,12 @@ test('incomplete beta preserves the small tail with a tiny shape', () => {
     assert.ok(Math.abs(got - want) <= 1e-12 * Math.abs(want), `${a}, ${b}, ${x}: ${got}; want ${want}`);
   }
 });
+
+test('discrete count functions terminate beyond integer precision', () => {
+  const { execFileSync } = require('node:child_process');
+  const source = `const C = require('./lib/sheet-calc.js'); require('./lib/sheet-fn-stats2.js');
+    const cases = [['BINOM.INV',[1e100,0.5,0.5]], ['BINOM.DIST.RANGE',[1e100,0.5,5e99]], ['HYPGEOM.DIST',[2.5e99,5e99,5e99,1e100,true]]];
+    console.log(JSON.stringify(cases.map(([name,args]) => { try { return C.fn(name).fn(args, {}); } catch (e) { return e.code; } })));`;
+  const got = execFileSync(process.execPath, [...process.execArgv, '-e', source], { cwd: path.join(__dirname, '..'), encoding: 'utf8', timeout: 3000 });
+  assert.deepEqual(JSON.parse(got), ['#NUM!', '#NUM!', '#NUM!']);
+});
