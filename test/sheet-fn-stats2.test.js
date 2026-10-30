@@ -250,3 +250,19 @@ test('the continuous distributions far into their tails, against 60-digit values
     ['T.INV(0.9,1)', 3.0776835371752534], ['T.INV(0.999,2)', 22.3271247701198754],
   ]);
 });
+
+// Review regression: both calls must handle the engine's 250,000-cell budget without spreading it into arguments.
+test('MODE.MULT accepts 250,000 values', () => {
+  const n = 250000, ctx = { value: (v) => v };
+  const values = Array.from({ length: n }, (_, i) => [i]);
+  assert.throws(() => C.fn('MODE.MULT').fn([values], ctx), (e) => e === C.lib.ERR.NA);
+});
+
+test('LINEST accepts 250,000 observations', () => {
+  const n = 250000, ctx = {};
+  const values = Array.from({ length: n }, (_, i) => [i]);
+  const ys = values.map(([x]) => [3 * x + 2]);
+  const fit = C.fn('LINEST').fn([ys, values, true, false], ctx);
+  assert.ok(Math.abs(fit[0][0] - 3) < 1e-12);
+  assert.ok(Math.abs(fit[0][1] - 2) < 1e-7);
+});
