@@ -309,3 +309,20 @@ test('a device with no favorites needs no empty catalogue write', async () => {
   assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'build' }, w.popup), { ok: true });
   assert.equal(w.local.lookCatalog, undefined, 'fresh install readiness must not be followed by an unnecessary local write');
 });
+
+test('parts reads accept approved LMS documents, reject mod origins, and refuse Looks Glaze will not wear', async () => {
+  const { favorites } = await fixtures();
+  const blocked = C.make(await code(wear('Graveyard'), { x: { nav: { hidden: ['logout'] } } }), 'Hidden logout', '', 'saved');
+  const w = worker({ lookFavorites: [blocked, ...favorites] });
+  const url = 'https://school.blackboard.com/ultra/courses/_101_1/outline';
+  const sender = { id: 'glaze', frameId: 0, tab: { id: 1, url }, url, origin: 'https://school.blackboard.com' };
+  const request = { type: 'glaze:looks', op: 'parts', id: 'Graveyard' };
+  for (const frameId of [0, 7]) assert.equal((await w.send(request, { ...sender, frameId })).ok, true);
+  for (const untrusted of [{ ...sender, url: 'https://unapproved.example/ultra/courses/_101_1/outline' },
+    { ...sender, frameId: 8, url: 'chrome-extension://x/mods/frame.html', origin: 'null' },
+    { ...w.popup, origin: 'null' }, { ...sender, id: 'another-extension' }]) {
+    assert.deepEqual(await w.send(request, untrusted), { ok: false, error: 'sender' });
+  }
+  assert.deepEqual(await w.send({ ...request, id: blocked.id }, sender), { ok: false, error: 'gone' });
+  assert.deepEqual(w.sync, {}, 'parts reads grant no settings writes or frame passes');
+});
