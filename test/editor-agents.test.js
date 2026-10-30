@@ -1,7 +1,7 @@
 // Settings → Agents (lib/editor-agents.js) on stand-in elements, with a stand-in worker answering glaze:mcp-config as
 // lib/background.js does: off by default, nativeMessaging asked for first in the switch's click (never on Safari), off sent
-// before the permission goes, the link's state read from storage.session mcpLink and never asked of the worker again, a
-// line for every state lib/agent-link.js reports, the apps' cards and their groups, the activity list (metadata only),
+// before the permission goes, the link's state read from storage.session mcpLink and asked of the worker only as the page
+// opens and once after a wait on Starting… (Chrome), a line for every state lib/agent-link.js reports, the apps' cards and their groups, the activity list (metadata only),
 // hidden on iOS and Android, and every word in every language.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -23,7 +23,8 @@ const tEn = (k, v) => I.t(k, v, 'en');
 //   mods: glaze:mods list's records; calls: storage.local mcpCalls; grant: the browser's answer to the permission request;
 //   fail: config ops the worker refuses.
 const page = ({ browser = 'chrome', os = 'mac', on = false, link, apps = [], mods = [], calls, grant = true, fail = [], embedded = false, next, reply = (m, r) => r, readStorage = (area, keys, r) => r } = {}) => {
-  const ids = new Map(), sent = [], asked = [], removed = [], copied = [], listeners = [], log = [];
+  const ids = new Map(), sent = [], asked = [], removed = [], copied = [], listeners = [], log = [], reloads = [], timers = new Map();
+  let timer = 0;
   let gesture = false;
   const doc = { activeElement: null };
   const walk = (e) => (e && typeof e === 'object' ? [e, ...e.children.flatMap(walk)] : []);
@@ -32,7 +33,9 @@ const page = ({ browser = 'chrome', os = 'mac', on = false, link, apps = [], mod
       append(...k) { this.children.push(...k.map((x) => (typeof x === 'string' ? Object.assign(el('#text'), { textContent: x }) : x))); },
       replaceChildren(...k) { this.children = []; this.append(...k); },
       setAttribute(k, v) { this.attrs[k] = String(v); }, removeAttribute(k) { delete this.attrs[k]; }, getAttribute(k) { return this.attrs[k] ?? null; },
-      addEventListener(type, f) { (this.on[type] ||= []).push(f); }, focus() { doc.activeElement = this; } };
+      addEventListener(type, f) { (this.on[type] ||= []).push(f); }, focus() { doc.activeElement = this; },
+      // A <dialog>: closed by one of its form's buttons (value) or by Esc (nothing).
+      open: false, returnValue: '', showModal() { this.open = true; }, close(value) { this.open = false; if (value !== undefined) this.returnValue = value; for (const f of this.on.close || []) f(); } };
     return e;
   };
   const byId = (id) => {
@@ -73,7 +76,7 @@ const page = ({ browser = 'chrome', os = 'mac', on = false, link, apps = [], mod
   };
   const chrome = {
     runtime: {
-      id: RUNTIME_ID, getURL: (p) => URLS[browser] + p, getPlatformInfo: async () => ({ os }),
+      id: RUNTIME_ID, getURL: (p) => URLS[browser] + p, getPlatformInfo: async () => ({ os }), reload: () => { reloads.push({ gesture }); },
       sendMessage: async (m) => {
         sent.push(structuredClone(m));
         log.push(`send ${m.type} ${m.op}`);
@@ -88,9 +91,12 @@ const page = ({ browser = 'chrome', os = 'mac', on = false, link, apps = [], mod
     },
   };
   const navigator = { clipboard: { writeText: async (s) => { copied.push(s); } } };
-  const window = {}; window.top = embedded ? {} : window;
+  const lifecycle = {};
+  const window = { addEventListener: (type, f) => { (lifecycle[type] ||= []).push(f); } }; window.top = embedded ? {} : window;
   const hints = [];
-  const ctx = vm.createContext({ chrome, window, navigator, document: doc, URL, Promise, Date, Number, Array, Object, Math, Map, Set, JSON, structuredClone });
+  // The page's timers run only when a test says the time has passed (elapse).
+  const setTimeout = (f, ms) => { timers.set(++timer, { f, ms }); return timer; }, clearTimeout = (id) => { timers.delete(id); };
+  const ctx = vm.createContext({ chrome, window, navigator, document: doc, URL, Promise, Date, Number, Array, Object, Math, Map, Set, JSON, structuredClone, setTimeout, clearTimeout });
   vm.runInContext(read('lib/editor-agents.js'), ctx);
   ctx.GZ_AGENTSEDIT.mount({ t: tEn, when: (at) => `@${at}`, day: (at) => `#${at}`, hint: (s) => hints.push(s) });
   const $ = (id) => doc.getElementById(id);
@@ -98,7 +104,11 @@ const page = ({ browser = 'chrome', os = 'mac', on = false, link, apps = [], mod
   const fire = (x, type) => { const e = target(x); gesture = true; try { for (const f of e.on[type] || []) f({ isTrusted: true, target: e, currentTarget: e, preventDefault() {} }); } finally { gesture = false; } };
   const all = (e = null) => (e ? [e.textContent, e.href, ...Object.values(e.attrs), ...e.children.flatMap((k) => all(k))] : [...ids.values()].flatMap((x) => all(x)));
   const p = {
-    $, sent, asked, removed, copied, hints, log, worker, local, session, walk,
+    $, sent, asked, removed, copied, hints, log, worker, local, session, walk, reloads, doc,
+    waits: () => [...timers.values()].map((x) => x.ms),
+    timerIds: () => [...timers.keys()],
+    lifecycle: async (type, event = {}) => { for (const f of lifecycle[type] || []) f(event); await settle(); },
+    elapse: async () => { for (const [k, x] of [...timers]) { timers.delete(k); x.f(); } await settle(); },
     ops: () => sent.filter((m) => m.type === 'glaze:mcp-config').map((m) => m.op),
     all,
     // A checkbox's click: the browser flips it, then the listeners run.
@@ -263,7 +273,7 @@ test('Safari holds nativeMessaging from the start: nothing is asked for or given
   assert.deepEqual(p.sent.filter((m) => m.op === 'set').map((m) => m.on), [true, false]);
 });
 
-test('the link state follows storage.session mcpLink; the page never asks the worker for it again, and keeps no timer', async () => {
+test('the link state follows storage.session mcpLink; a state change asks the worker nothing, and nothing polls', async () => {
   const p = await open({ on: true, link: { state: 'restart', at: 1 } });
   assert.equal(p.line(), 'Starting…');
   const sent = p.sent.length;
@@ -274,7 +284,143 @@ test('the link state follows storage.session mcpLink; the page never asks the wo
   await p.linked('exited', { error: 'Native host has exited.' });
   assert.match(p.line(), /^The helper stopped/);
   assert.equal(p.sent.length, sent, 'a state change sends nothing');
-  assert.doesNotMatch(read('lib/editor-agents.js').replace(/\/\/[^\n]*/g, ''), /setInterval|setTimeout|requestIdleCallback/, 'no poll');
+  assert.deepEqual(p.waits(), [], 'no timer outside Starting…');
+  const js = read('lib/editor-agents.js').replace(/\/\/[^\n]*/g, '');
+  assert.doesNotMatch(js, /setInterval|requestIdleCallback/, 'no poll');
+  assert.equal(js.match(/setTimeout\(/g).length, 1, 'one timer: Starting…\'s wait');
+});
+
+// Finding 2 of the 4.0.0 beta: on Chrome a worker that predates the grant has no connectNative, and Chrome starts the next
+// one only for an event, which an open Settings never sent, so Starting… stayed until something else woke Glaze.
+test('Starting… on Chrome is bounded: after the wait the page asks the worker once, and the state it answers shows', async () => {
+  const { WAIT } = E();
+  assert.ok(WAIT > 40e3 && WAIT <= 60e3, `${WAIT}: past Chrome's idle stop (30 s, checked every 10 s), within a minute`);
+  const p = await open({ on: true, link: { state: 'restart', at: 1 } });
+  assert.equal(p.line(), 'Starting…');
+  assert.deepEqual(p.waits(), [WAIT]);
+  const before = p.ops().length;
+  // A worker started for the ask connects as it starts; the helper isn't installed.
+  p.worker.link = { state: 'not-installed', at: 20, error: 'Specified native messaging host not found.' };
+  await p.elapse();
+  assert.deepEqual(p.ops().slice(before), ['state'], 'one ask');
+  assert.equal(p.line(), 'In Claude Desktop, add the Glaze extension. For other apps, run npx glaze-mcp setup');
+  assert.deepEqual(p.waits(), [], 'and no poll after it');
+});
+
+test('a worker still without connectNative after the wait: the line says to restart the browser, and Glaze reloads nothing', async () => {
+  const p = await open({ on: true, link: { state: 'restart', at: 1 } });
+  await p.elapse();
+  assert.equal(p.line(), 'Restart your browser to start the helper');
+  assert.equal(p.$('agents-state').dataset.tone, 'bad');
+  assert.equal(p.$('agents-copy').hidden, true);
+  assert.equal(p.$('agents-allow').hidden, true);
+  assert.deepEqual(p.reloads, [], 'Glaze never reloads itself: open documents and Writer saves stay as they are');
+  assert.deepEqual(p.waits(), [], 'asked once');
+  // Whatever the worker writes next replaces it.
+  await p.linked('connected');
+  assert.equal(p.line(), 'Ready');
+});
+
+test('the wait belongs to Starting…: a newer state, a newer write than the ask, or off ends it', async () => {
+  const p = await open({ on: true, link: { state: 'restart', at: 1 } });
+  await p.linked('connected');
+  assert.deepEqual(p.waits(), []);
+  await p.linked('connecting');
+  assert.equal(p.waits().length, 1, 'Starting… again, a wait again');
+  await p.toggle('agents-on');
+  assert.equal(p.$('agents-on').checked, false);
+  assert.deepEqual(p.waits(), []);
+
+  const gate = deferred();
+  const q = await open({ on: true, link: { state: 'restart', at: 1 }, reply: async (m, r) => { if (m.op === 'state' && gate.armed) await gate.promise; return r; } });
+  gate.armed = true;
+  const asking = q.elapse();
+  await q.linked('connected');
+  gate.resolve();
+  await asking;
+  assert.equal(q.line(), 'Ready', 'the worker\'s write after the ask wins over its answer');
+});
+
+test('opening Settings on a restart left by an earlier worker waits again from the start', async () => {
+  const p = await open({ on: true, link: { state: 'restart', at: 1 } });
+  assert.deepEqual(p.ops().filter((o) => o === 'state'), ['state'], 'asked once as it opens, a trigger in the worker');
+  assert.equal(p.waits().length, 1);
+});
+
+test('connecting and restart share one Starting… wait and one ask', async () => {
+  const p = await open({ on: true, link: { state: 'restart', at: 1 } });
+  const timer = p.timerIds();
+  await p.linked('connecting');
+  assert.deepEqual(p.timerIds(), timer, 'the same Starting… line keeps its original deadline');
+  p.worker.link = { state: 'restart', at: 20 };
+  const before = p.ops().length;
+  await p.elapse();
+  assert.equal(p.line(), 'Restart your browser to start the helper', 'the one answer of restart says so at once');
+  assert.deepEqual(p.waits(), [], 'the answer never starts a second wait');
+  await p.linked('restart');
+  await p.elapse();
+  assert.deepEqual(p.ops().slice(before), ['state'], 'still only one ask in this Starting… episode');
+});
+
+test('a recheck from an earlier Starting… episode cannot offer Restart in a fresh one', async () => {
+  const gate = deferred();
+  const p = await open({ on: true, link: { state: 'restart', at: 1 }, reply: async (m, r) => {
+    if (m.op === 'state' && gate.armed) { gate.armed = false; await gate.promise; }
+    return r;
+  } });
+  gate.armed = true;
+  const asking = p.elapse();
+  await p.toggle('agents-on');
+  await p.toggle('agents-on');
+  assert.equal(p.line(), 'Starting…');
+  gate.resolve();
+  await asking;
+  assert.equal(p.line(), 'Starting…', 'the old answer cannot consume the new episode\'s wait');
+  assert.deepEqual(p.waits(), [E().WAIT]);
+});
+
+test('leaving Settings cancels its wait, including late opening reads, and a restored page waits afresh', async () => {
+  const p = await open({ on: true, link: { state: 'restart', at: 1 } });
+  const before = p.ops().length;
+  await p.lifecycle('pagehide');
+  assert.deepEqual(p.waits(), [], 'no timer survives pagehide');
+  await p.linked('connecting');
+  await p.elapse();
+  assert.deepEqual(p.ops().slice(before), [], 'a hidden page cannot re-arm the wait');
+  await p.lifecycle('pageshow', { persisted: true });
+  assert.deepEqual(p.waits(), [E().WAIT], 'a restored page has one fresh wait');
+
+  const gate = deferred();
+  const q = page({ on: true, link: { state: 'restart', at: 1 }, reply: async (m, r) => {
+    if (m.op === 'state') await gate.promise;
+    return r;
+  } });
+  await settle();
+  await q.lifecycle('pagehide');
+  gate.resolve();
+  await settle();
+  assert.deepEqual(q.waits(), [], 'an opening reply after pagehide cannot start a wait');
+});
+
+test('Firefox and Safari keep their lines: no wait, no ask, no restart', async () => {
+  const { line } = E();
+  for (const browser of ['firefox', 'safari']) {
+    const p = await open({ browser, on: true, link: { state: 'connecting', at: 1 } });
+    assert.equal(p.line(), 'Starting…', browser);
+    assert.deepEqual(p.waits(), [], browser);
+    await p.linked('restart');
+    assert.deepEqual(p.waits(), [], browser);
+    assert.equal(line({ state: 'restart', at: 1 }, { browser, stuck: true }, tEn).text, 'Starting…', browser);
+  }
+});
+
+test('Settings has no control that reloads Glaze, on any browser', async () => {
+  assert.ok(!/id="agents-restart"/.test(read('options.html')));
+  for (const browser of ['chrome', 'firefox', 'safari']) {
+    const p = await open({ browser, on: true, link: { state: 'restart', at: 1 } });
+    await p.elapse();
+    assert.deepEqual(p.reloads, [], browser);
+  }
 });
 
 test('every state lib/agent-link.js reports has its line, with the command to run and Copy', async () => {
@@ -423,9 +569,50 @@ test('Forget all apps forgets every app; a mod group an app still holds shows by
   const p = await open({ apps: APPS, mods: [] });
   assert.deepEqual(p.switches(p.card('Claude Code')).at(-1), [`The mod ${B}`, true]);
   await p.click('agents-forget');
+  p.$('agents-forget-ask').close('ok');
+  await settle();
   assert.deepEqual(p.ops().filter((o) => o === 'forget'), ['forget']);
   assert.equal(p.cards().length, 0);
   assert.equal(p.$('agents-apps-box').hidden, true);
+});
+
+// Finding 9 of the 4.0.0 beta: Forget all apps cleared every app and the activity list in one click. It asks first, as
+// Settings → Writer's Clear all papers and documents does, in a <dialog>, never the browser's confirm().
+test('Forget all apps asks first: Cancel (which has the focus) and Esc keep every app; only Forget all forgets', async () => {
+  const p = await open({ apps: APPS, mods: MODS });
+  const ask = p.$('agents-forget-ask'), forgets = () => p.ops().filter((o) => o === 'forget');
+  await p.click('agents-forget');
+  assert.equal(ask.open, true, 'a question first');
+  assert.equal(p.doc.activeElement, p.$('agents-forget-cancel'), 'Cancel has the focus');
+  assert.deepEqual(forgets(), []);
+  ask.close('cancel');
+  await settle();
+  assert.deepEqual(forgets(), [], 'Cancel');
+  await p.click('agents-forget');
+  ask.close();
+  await settle();
+  assert.deepEqual(forgets(), [], 'Esc');
+  assert.equal(p.cards().length, 2);
+  await p.click('agents-forget');
+  assert.equal(ask.returnValue, '', 'each question starts unanswered');
+  ask.close('ok');
+  await settle();
+  assert.deepEqual(forgets(), ['forget']);
+  assert.equal(p.cards().length, 0);
+
+  const html = read('options.html'), js = read('lib/editor-agents.js').replace(/\/\/[^\n]*/g, '');
+  assert.doesNotMatch(js, /\bconfirm\(/);
+  assert.match(html, /<button type="button" class="wr-danger" id="agents-forget">Forget all apps<\/button>/, 'drawn as Clear all papers and documents is');
+  const dialog = html.slice(html.indexOf('<dialog id="agents-forget-ask"'), html.indexOf('</dialog>', html.indexOf('<dialog id="agents-forget-ask"')));
+  assert.match(dialog, /^<dialog id="agents-forget-ask" aria-labelledby="agents-forget-title" aria-describedby="agents-forget-note">\s*<form method="dialog">/);
+  assert.match(dialog, /<h3 id="agents-forget-title">Forget all apps\?<\/h3>/);
+  assert.match(dialog, /<p class="desc" id="agents-forget-note">[^<]+<\/p>/);
+  assert.match(dialog, /<button value="cancel" id="agents-forget-cancel">Cancel<\/button><button value="ok" class="primary wr-go">Forget all<\/button>/);
+  assert.ok(html.indexOf('<dialog id="agents-forget-ask"') > html.indexOf('<div id="panel-backup"'), 'outside the sections, so settings search never hides it');
+  assert.match(html, /:is\(#writer-clear, #agents-forget-ask\) \.wr-go/, 'its Forget all is drawn as Clear all is');
+  const words = [...dialog.matchAll(/>([^<]+)</g)].map((m) => m[1].trim()).filter((w) => /\p{L}/u.test(w));
+  assert.equal(words.length, 4, words.join(' | '));
+  for (const lang of Object.keys(globalThis.GZ_LANGS)) for (const w of words) assert.notEqual(I.t(w, {}, lang), w, `${lang}: "${w}"`);
 });
 
 test('the activity list: time, app, tool and outcome, newest first, and nothing else of a row', async () => {
@@ -449,6 +636,8 @@ test('the activity list: time, app, tool and outcome, newest first, and nothing 
   const { outcome, OUTCOMES } = E();
   assert.deepEqual(OUTCOMES, require('../lib/mcp/grants.js').OUTCOMES, 'every outcome lib/mcp/grants.js records');
   for (const o of OUTCOMES) assert.notEqual(outcome(o, tEn), o, o);
+  assert.equal(outcome('invalid', tEn), 'Invalid request', "an app's malformed call is not the student's refusal");
+  assert.notEqual(outcome('invalid', tEn), outcome('refused', tEn));
 });
 
 test('hidden on iOS and Android, where no helper can run; the worker is asked nothing there', async () => {

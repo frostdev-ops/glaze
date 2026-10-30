@@ -14,7 +14,13 @@ mkdir "$stage/Glaze"
 ditto "$app" "$stage/Glaze/Glaze.app"
 ln -s /Applications "$stage/Glaze/Applications"
 rm -f "$out"
-hdiutil create -quiet -volname Glaze -srcfolder "$stage/Glaze" -fs HFS+ -format UDZO -ov "$out"
+# hdiutil create can fail for a moment (a busy disk image service): say why, wait, and try again, three times at most.
+attempt=1
+while ! hdiutil create -volname Glaze -srcfolder "$stage/Glaze" -fs HFS+ -format UDZO -ov "$out"; do
+  if [ "$attempt" -ge 3 ]; then echo "make-dmg: hdiutil create failed $attempt times" >&2; exit 1; fi
+  attempt=$((attempt + 1))
+  sleep 5
+done
 codesign --force --sign "$identity" --timestamp "$out"
 
 if [ -n "${NOTARY_PROFILE:-}" ]; then

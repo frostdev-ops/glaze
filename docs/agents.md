@@ -95,13 +95,14 @@ a switch for each group. Each installed mod with tools is a group of its own.
 Turning the switch off ends every connection, cancels waiting requests, clears the kept assignment reads and gives back
 the optional browser permissions on Chrome, Edge and Firefox. The apps, groups, declines, activity and profile id stay.
 A change already started can finish. Removing a site clears its assignment reads; Reset everything clears them all while
-keeping agent access and grants. Neither uninstalls the helper. Helper uninstall leaves the run folder and modified
-copies alone.
+keeping agent access and grants. Neither uninstalls the helper. Helper uninstall empties the run folder, except a
+running helper's run file, and leaves modified copies alone.
 
 ## Activity
 
 **Activity** lists the last 200 calls, newest first: the tool, the app, when, and how it ended (Done, Failed, Declined,
-Timed out, Interrupted, Refused, Busy or Cancelled), never what was asked or answered. **Forget all apps** clears this list.
+Timed out, Interrupted, Refused, Busy, Cancelled or Invalid request), never what was asked or answered. **Forget all
+apps** clears this list.
 
 ## Troubleshooting
 
@@ -112,6 +113,7 @@ Settings → AI → Agents shows the helper's state, with **Copy** for a command
 | Ready | Connected. |
 | Starting… | Wait; the first time in Chrome, up to a minute. |
 | Allow Glaze to start the helper | Press **Allow**. |
+| Restart your browser to start the helper | Quit the browser and open it again. |
 | The helper is missing | Open the app bundle or run `npx glaze-mcp setup`. |
 | `npx glaze-mcp setup --extension-id <id>` | The helper doesn't let this copy of Glaze in, as with one loaded unpacked. Run the command shown. |
 | Update the helper: `npx glaze-mcp@latest setup` | |
@@ -123,6 +125,8 @@ Settings → AI → Agents shows the helper's state, with **Copy** for a command
 
 `npx glaze-mcp doctor` checks the helper's folders, each browser's setup, the Node.js each one starts, and whether a
 browser has agent access on now. An app with no browser to reach says "waiting for Glaze" in its log.
+In Safari, after a long idle, an app can time out before Glaze wakes: open a Blackboard or Canvas tab, or Glaze's
+popup, then ask again. If the app then shows Glaze as disconnected, reconnect it there (in Claude Code, `/mcp`).
 
 ## Browsers
 

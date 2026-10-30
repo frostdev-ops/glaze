@@ -11,6 +11,9 @@ const P = require('./peer.js');
 const HOLD = 1024 * 1024, POLL = 250;
 const USAGE = 'Usage: glaze-mcp [agent] [--browser <id>] [--instance <id>]\n';
 const SETTINGS = 'In Glaze, turn on Settings → AI → Agents; if it says the helper is missing, run: npx glaze-mcp setup';
+// Chromium on macOS and Linux reads a user's host manifests from its user data folder, so one started with another
+// (--user-data-dir) finds none where setup writes them.
+const DATA_DIR = 'A browser started with --user-data-dir reads helpers from <that folder>/NativeMessagingHosts, not the folders above; copy the manifest there';
 
 const usage = (message) => Object.assign(new Error(message), { code: 'USAGE' });
 const options = (args, env) => {
@@ -158,13 +161,14 @@ const doctor = async (ctx = {}) => {
   const platform = ctx.platform || process.platform, env = ctx.env || process.env;
   const rows = [];
   const add = (level, what, detail) => rows.push({ level, what, detail });
+  const hint = () => { if (platform !== 'win32') add('info', 'Hint', DATA_DIR); return rows; };
   let dir;
   try {
     dir = R.dir({ platform, env });
-    if (!R.check(dir)) { add('warn', 'Live', `no browser has turned on agent access yet. ${SETTINGS}`); return rows; }
+    if (!R.check(dir)) { add('warn', 'Live', `no browser has turned on agent access yet. ${SETTINGS}`); return hint(); }
   } catch (e) { add('fail', 'Live', e.message); return rows; }
   const all = R.list(dir, { platform });
-  if (!all.length) add('warn', 'Live', `no browser has agent access on now. ${SETTINGS}`);
+  if (!all.length) { add('warn', 'Live', `no browser has agent access on now. ${SETTINGS}`); return hint(); }
   for (const e of all) {
     const what = `Live ${e.rec.browser} (${e.rec.instance})`;
     if (!e.alive) { add('warn', what, `its host (pid ${e.rec.pid}) has gone; the next host or agent clears it`); continue; }

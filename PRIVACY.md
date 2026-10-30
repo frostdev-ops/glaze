@@ -159,7 +159,8 @@ data until removed or replaced by setup; native-messaging manifests also live in
 registrations under your Windows user's registry. While a helper runs, a run file beside its socket holds its process
 id, browser, profile id, start time and random token, without course data. Normal shutdown removes the socket and run
 file; a crash can leave them for the next host or agent to clean up. `npx glaze-mcp uninstall` removes owned manifests,
-launchers, saved extension ids and unchanged versioned copies; it leaves the run folder and modified copies alone.
+launchers, saved extension ids, unchanged versioned copies and the run folder, except a running helper's run file, which
+goes when the browser restarts; it leaves modified copies alone.
 
 **Turn off** ends every connection, cancels requests still waiting for you, clears the kept assignment reads and, on
 Chrome, Edge and Firefox, gives back the permissions below; the apps, groups and remembered declines stay. A change

@@ -80,8 +80,8 @@ test('without sync: Glaze\'s own mark, the list\'s edit, shown after as todo_lis
   assert.deepEqual(s[`todo:${A}`], { tasks: [], items: { 'assignment:1': { done: true } } });
   assert.equal(b.calls.length, 0);
   const listed = (await r.get('todo_list').run({}, ctx())).items;
-  assert.deepEqual(listed.map((i) => [i.id, i.done, i.marked]), [['1', false, true], ['2', false, null], ['3', false, null], ['4', false, null]]);
-  assert.deepEqual(Object.keys(listed[0]), ['id', 'type', 'courseId', 'course', 'title', 'due', 'url', 'done', 'submitted', 'graded', 'late', 'missing', 'marked']);
+  assert.deepEqual(listed.map((i) => [i.id, i.done, i.marked, i.complete]), [['1', false, true, true], ['2', false, null, false], ['3', false, null, true], ['4', false, null, false]]); // 3 was handed in: Glaze's list shows it done
+  assert.deepEqual(Object.keys(listed[0]), ['id', 'type', 'courseId', 'course', 'title', 'due', 'url', 'done', 'submitted', 'graded', 'late', 'missing', 'marked', 'complete']);
   // An item the student unticked that Canvas calls done: marking it done drops the mark, so it follows Canvas again.
   const back = await setup({ local: { [`todo:${A}`]: { tasks: [], items: { 'assignment:3': { done: false } } } } });
   await back.t.run({ type: 'assignment', id: '3' }, back.ctx());

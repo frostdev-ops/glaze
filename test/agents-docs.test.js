@@ -49,6 +49,14 @@ test('the policy states what agent access sends, what waits for the student and 
   assert.match(plain(read('docs/privacy.md')), /\]\(\.\.\/PRIVACY\.md#agent-access\)/);
 });
 
+test("the activity list's outcomes in docs/agents.md are the ones Settings shows", () => {
+  const E = require('../lib/editor-agents.js'), I = require('../lib/i18n.js');
+  const list = agents().match(/how it ended \(([^)]*)\)/)?.[1] || '';
+  const said = list.split(/, | or /);
+  const labels = E.OUTCOMES.map((o) => E.outcome(o, (k, v) => I.t(k, v, 'en')));
+  assert.deepEqual([...said].sort(), [...labels].sort(), 'docs/agents.md, under Activity');
+});
+
 test('the permission list matches the manifest: nativeMessaging is optional outside Safari', () => {
   const m = JSON.parse(read('manifest.json'));
   assert.ok(m.optional_permissions.includes('nativeMessaging'));
@@ -71,12 +79,16 @@ const editor = path.join(root, 'lib/editor-agents.js');
 test('docs/agents.md covers each helper state and its command', () => {
   const E = require(editor), text = agents(), id = 'abcdefghijklmnopabcdefghijklmnop';
   const states = ['connected', 'connecting', 'restart', 'not-installed', 'forbidden', 'exited', 'old-helper', E.NO_NODE, 'needs-permission'];
-  for (const browser of ['chrome', 'firefox', 'safari']) for (const state of states) {
-    const l = E.line({ state }, { browser, id }, (s) => s);
+  for (const browser of ['chrome', 'firefox', 'safari']) for (const state of states) for (const stuck of [false, true]) {
+    const l = E.line({ state }, { browser, id, stuck }, (s) => s);
     if (!l) continue;
     if (state !== 'not-installed') for (const part of l.text.split('{command}').map((s) => s.trim()).filter(Boolean)) assert.ok(text.includes(part), `${browser} ${state}: ${part}`);
     if (l.command) assert.ok(text.includes(`\`${l.command.replace(id, '<id>')}\``), l.command);
   }
+});
+
+test('the helper state table explains the browser restart immediately after Allow', () => {
+  assert.match(read('docs/agents.md'), /\| Allow Glaze to start the helper \| Press \*\*Allow\*\*\. \|\n\| Restart your browser to start the helper \| Quit the browser and open it again\. \|/);
 });
 
 
@@ -116,6 +128,7 @@ test('agent identity and helper uninstall claims do not promise verified identit
     assert.doesNotMatch(text, /only your user account can open/);
     assert.match(text, /modified copies/);
     assert.match(text, /run folder/);
+    assert.doesNotMatch(text, /leaves the run folder/, 'uninstall empties the run folder');
   }
 });
 
@@ -137,6 +150,11 @@ test('features lists Agents and the AI harness describes the active Writer bridg
 
 test('helper uninstall documents removal of otherwise empty Windows host keys', () => {
   assert.match(plain(read('mcp/README.md')), /otherwise empty host key/);
+});
+
+test("helper uninstall says a helper already running stops only when the browser restarts", () => {
+  const section = plain(read('mcp/README.md').split('\n## Uninstall\n')[1]?.split('\n## ')[0] || '');
+  assert.match(section, /Restart your browser to stop a helper that is still running/);
 });
 
 

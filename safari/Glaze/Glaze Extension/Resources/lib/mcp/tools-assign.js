@@ -43,7 +43,8 @@ var GZ_MCP_ASSIGN = globalThis.GZ_MCP_ASSIGN || (() => {
 
   // ---- a read, fitted and kept ----
   // What the tab answered, as data of the right kinds: the rubric is rubricOf's shape.
-  const number = (v) => Number.isFinite(v) && v >= 0 ? v : null;
+  // Without float noise (weights times the total: 0.14 × 5 = 0.7000000000000001), keeping every digit the site means.
+  const number = (v) => Number.isFinite(v) && v >= 0 ? Number(v.toPrecision(12)) : null;
   const percent = (v) => number(v) !== null && v <= 100;
   const rubric = (r) => {
     if (!isObj(r) || !Array.isArray(r.criteria)) return null;
@@ -60,7 +61,7 @@ var GZ_MCP_ASSIGN = globalThis.GZ_MCP_ASSIGN || (() => {
     };
   };
   const clean = (r) => ({
-    title: str(r.title, 300), due: when(r.due) || null, points: Number.isFinite(r.points) && r.points >= 0 ? r.points : null,
+    title: str(r.title, 300), due: when(r.due) || null, points: number(r.points),
     instructions: str(r.instructions, LIMIT.text), description: str(r.description, LIMIT.text),
     files: [...new Set(arr(r.files).filter((f) => typeof f === 'string' && f))].slice(0, LIMIT.files).map((f) => f.slice(0, 200)),
     rubric: rubric(r.rubric), ...(r.incomplete === true && { incomplete: true }),
@@ -187,6 +188,6 @@ var GZ_MCP_ASSIGN = globalThis.GZ_MCP_ASSIGN || (() => {
   ];
   // Adds them to a lib/ai/tools.js registry (its define checks each) → the tools as added.
   const register = (registry, deps) => tools(deps).map((t) => registry.add(t));
-  return { LIMIT, PREFIX, INDEX, tools, register, clear };
+  return { LIMIT, PREFIX, INDEX, tools, register, clear, clean }; // clean: for tests
 })();
 if (typeof module !== 'undefined') module.exports = GZ_MCP_ASSIGN; else GZ_MCP_ASSIGN;
