@@ -818,7 +818,7 @@ you import) are bundled. It makes requests in these cases:
   own buttons, when you post, reply, send or submit (Ctrl/⌘+Enter presses Post, Reply or Send; the submit sheet's
   Submit attaches the paper's .docx, or the PDF, deck or .xlsx open in its place, through Ultra's own upload, writes your
   note and clicks Ultra's Submit once). **Open in Glaze** beside an attached PDF, deck or spreadsheet reads that file from your
-  Blackboard site when you click it (20 MB at most) and keeps it as the attempt's document.
+  Blackboard site when you click it (50 MB at most) and keeps it as the attempt's document.
   Writer's frame may not connect anywhere itself; two things leave the device, each only as described:
   - **Citation lookups**, only when you click Look up in Cite, made by Glaze's worker with no cookies, referrer or cache,
     one 10-second deadline, at most 2 MB read and https all the way: a DOI to `doi.org` (falling back to
