@@ -775,6 +775,15 @@ test('review reader: imported strings obey the model text cap', async () => {
   assert.ok(wb.keep.problems.some((p) => p.code === 'text'));
 });
 
+test('review reader: an empty cached value is no value, never a shared string or text', async () => {
+  const wb = await X.read(synthetic({ 'xl/worksheets/sheet1.xml': `<worksheet ${NS}><sheetData><row r="1"><c r="A1"><v></v></c><c r="B1" t="s"><v/></c>`
+    + '<c r="C1" t="b"><v> </v></c><c r="D1" t="e"><v></v></c><c r="E1" s="1"><v/></c><c r="F1"><f>1+1</f><v></v></c><c r="G1" t="str"><f>""</f><v></v></c></row></sheetData></worksheet>' }));
+  for (const a of ['A1', 'B1', 'C1', 'D1']) assert.equal(at(wb, 'One', a), null, a);
+  assert.deepEqual(at(wb, 'One', 'E1'), { t: 'z', s: 1 });
+  assert.deepEqual(at(wb, 'One', 'F1'), { t: 'z', f: '1+1' });
+  assert.deepEqual(at(wb, 'One', 'G1'), { t: 's', v: '', f: '""' }, 'a formula\'s empty text stays text');
+});
+
 test('review writer: unchanged cellXfs retain flags, inheritance and unmodelled fields', async () => {
   const xf = '<xf numFmtId="164" fontId="1" fillId="2" borderId="1" xfId="1" applyFont="0" applyFill="0" applyNumberFormat="0" applyBorder="0" applyProtection="0" applyAlignment="0" pivotButton="1"><alignment relativeIndent="2"/><protection locked="0"/></xf>';
   const styles = STYLES.replace(/<cellXfs[\s\S]*?<\/cellXfs>/, `<cellXfs count="1">${xf}</cellXfs>`);
