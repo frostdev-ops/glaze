@@ -7,7 +7,7 @@ const fs = require('node:fs'), path = require('node:path'), vm = require('node:v
 const source = fs.readFileSync(path.join(__dirname, '../scripts/backup-check.js'), 'utf8');
 const origin = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop', version = '4.0.0';
 const navKey = `navbarSeen:${origin}`;
-const ready = () => ({ freshDefaults: { fresh: true, pending: false }, migrated: ['tabs-auto'], channelKeysMoved: true,
+const ready = () => ({ freshDefaults: { fresh: true, pending: false }, migrated: ['tabs-auto'], channelKeysMoved: true, lookCatalog: { sig: 'e3b0c442', looks: [] },
   newsSeen: version, [navKey]: [{ id: 'course', label: 'Courses', path: '/ultra/course' }] });
 const harness = (local, expired = false) => {
   const pageContext = vm.createContext({ location: { origin }, chrome: {
