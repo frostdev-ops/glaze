@@ -1,5 +1,5 @@
 // PDFs on the Documents page (papers.html, pdf-kind.js) in the real unpacked extension: with Settings → Writer → PDFs off
-// (writer.pdf, the default) a .pdf is refused as before, while a PDF already kept still opens; on, it imports as a card with its first page drawn, opens in the
+// (writer.pdf false) a .pdf is refused as before, while a PDF already kept still opens; on, it imports as a card with its first page drawn, opens in the
 // viewer (pdf.js's PDFViewer: three pages, zoom, the text layer's find, AcroForm fields) whose filled field is still filled
 // after closing and opening it again, Export .pdf downloads the filled file, and Esc and Back behave as a paper's. pdf.js
 // runs its own worker (never the fake one in the page), the page stays white under a dark Look while its chrome wears it,
