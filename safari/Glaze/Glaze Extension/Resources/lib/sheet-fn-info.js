@@ -75,7 +75,8 @@ var GZ_SHEET_FN_INFO = globalThis.GZ_SHEET_FN_INFO || (() => {
     if (typeof v === 'boolean') throw ERR.VALUE;
     return Math.abs(Math.trunc(num(v, ctx)) % 2) === (odd ? 1 : 0);
   } });
-  const ERROR_TYPES = { '#NULL!': 1, '#DIV/0!': 2, '#VALUE!': 3, '#REF!': 4, '#NAME?': 5, '#NUM!': 6, '#N/A': 7, '#GETTING_DATA': 8 };
+  const ERROR_TYPES = { '#NULL!': 1, '#DIV/0!': 2, '#VALUE!': 3, '#REF!': 4, '#NAME?': 5, '#NUM!': 6, '#N/A': 7, '#GETTING_DATA': 8,
+    '#SPILL!': 9, '#CONNECT!': 10, '#BLOCKED!': 11, '#UNKNOWN!': 12, '#FIELD!': 13, '#CALC!': 14 };
 
   const FNS = {
     ISBLANK: is((v) => v === null),
@@ -90,11 +91,12 @@ var GZ_SHEET_FN_INFO = globalThis.GZ_SHEET_FN_INFO || (() => {
     ISEVEN: parity(false),
     ISODD: parity(true),
     ISFORMULA: { p: ['r'], min: 1, max: 1, fn: ([v], ctx) => { const ref = reference(v); return ctx.formulaAt(ref.sheet, ref.r0, ref.c0) !== null; } },
-    // A range or an array formula's cells show the formula bar's text: the head's formula, an array's in braces.
+    // A range or an array formula's cells show the formula bar's text: the head's formula, a Ctrl+Shift+Enter array's in
+    // braces (a dynamic array's, cm, as typed).
     FORMULATEXT: { p: ['r'], min: 1, max: 1, fn: ([v], ctx) => {
       const ref = reference(v), cell = ctx.formulaAt(ref.sheet, ref.r0, ref.c0);
       if (!cell) throw ERR.NA;
-      return cell.a !== undefined ? `{=${cell.f}}` : `=${cell.f}`;
+      return cell.a !== undefined && cell.cm === undefined ? `{=${cell.f}}` : `=${cell.f}`;
     } },
     N: { p: ['v'], min: 1, max: 1, fn: ([v]) => (typeof v === 'number' ? v : v === true ? 1 : 0) },
     T: { p: ['v'], min: 1, max: 1, fn: ([v]) => (typeof v === 'string' ? v : '') },
