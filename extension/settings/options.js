@@ -1168,6 +1168,7 @@ GZ_UI.load().then((s) => {
       $('#gdrive-who').textContent = s?.email || '';
       $('#gdrive-connect').hidden = !!s?.email;
       $('#gdrive-disconnect').hidden = !s?.email;
+      if (s?.email) gsRender();
     };
     const gdLoad = () => gdOp('status').then(gdRender);
     gdLoad();
@@ -1186,9 +1187,18 @@ GZ_UI.load().then((s) => {
           const asked = chrome.permissions.request({ permissions: ['identity'] });
           if (!await Promise.resolve(asked).catch(() => false)) return hint(t("Glaze needs the browser's sign-in permission to connect."), true);
         }
+        const again = !!$('#gdrive-who').textContent;
         let r = await gdOp('connect');
         for (let n = 0; native && r.why === 'pending' && n < 40; n++) r = await gdOp('connect');
-        if (r.ok) { await gdLoad(); $('#gdrive-disconnect').focus(); return hint(t('Connected.')); }
+        if (r.ok) {
+          // Connected again, as Sync asked, to the account it is bound to: Sync starts afresh now, not after its wait. A first
+          // Connect is the worker's to turn Sync on, and another account its binding check's.
+          const st = again && (await chrome.storage.local.get('driveSync')).driveSync;
+          if (st?.on === true && st.account === r.email) chrome.runtime.sendMessage({ type: 'glaze:driveSync', op: 'set', on: true }, () => void chrome.runtime.lastError);
+          await gdLoad();
+          $('#gdrive-disconnect').focus();
+          return hint(t('Connected.'));
+        }
         hint(r.why === 'scope' ? t('Connect again and allow Google Drive access.') : r.why === 'cancel' ? '' : t("Google Drive didn't connect. Try again in a moment."), r.why !== 'cancel');
       } finally { gdBusy = false; }
     });
@@ -1221,6 +1231,8 @@ GZ_UI.load().then((s) => {
       $('#gdrive-sync-on').checked = st.on === true;
       $('#gdrive-sync-said').textContent = st.on !== true ? '' : st.busy && Date.now() - st.busy < 120e3 ? t('Syncing…')
         : st.problem ? t(SYNC_SAYS[st.problem] || "Couldn't sync. Glaze will try again soon.") : st.last ? t('Last synced {when}.', { when: gsWhen(st.last) }) : '';
+      // Connect stays beside Disconnect while that line asks for it.
+      $('#gdrive-connect').hidden = $('#gdrive-sync-said').textContent !== t(SYNC_SAYS.auth);
     };
     new MutationObserver(() => { gsRender(); }).observe($('#gdrive-who'), { childList: true, characterData: true, subtree: true });
     new MutationObserver(() => { gsRender(); }).observe($('#gdrive'), { attributes: true, attributeFilter: ['hidden'] });

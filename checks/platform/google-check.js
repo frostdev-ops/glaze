@@ -127,6 +127,9 @@ const HOSTS = ['accounts.google.com', 'openidconnect.googleapis.com', 'oauth2.go
     page.on('pageerror', (e) => errors.push(String(e)));
     await page.goto(`chrome-extension://${id}/options.html`);
     await env.installed(page);
+    // Sync to Google Drive switched off, as a student can: connecting would otherwise start it and ask Drive's API, which
+    // checks/documents/drive-sync-check.js stands in for. This check is the sign-in's.
+    await page.evaluate(() => chrome.storage.local.set({ driveSync: { on: false, off: true } }));
     // Every token the stand-ins hand out, looked for in all three storage areas.
     const noToken = async (label) => {
       const all = await page.evaluate(async () => JSON.stringify(await Promise.all(['local', 'sync', 'session'].map((a) => chrome.storage[a].get(null)))));

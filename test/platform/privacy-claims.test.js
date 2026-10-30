@@ -95,3 +95,32 @@ for (const [lang, account] of Object.entries(languages)) {
     assert.match(paragraph, grants[lang]);
   });
 }
+
+test('Calendar\'s Disconnect discloses that, while Google Drive shares the grant, it revokes nothing and keeps identity', () => {
+  const bg = read('background/background.js');
+  const bye = bg.slice(bg.indexOf('  disconnect: async (m) => {'), bg.indexOf('  sync: async (m, epoch) => {'));
+  assert.match(bye, /google\?\.email === 'string'\) \{\s*await chrome\.storage\.local\.remove\(\['gcal', 'gcalSync'\]\);[\s\S]*?shared: true \};/, 'the code: Drive connected, only Calendar\'s state goes');
+  const network = policy.slice(policy.indexOf('## Network requests'));
+  const calendar = network.slice(network.indexOf('- **Google Calendar sync**'), network.indexOf('- **Google Drive** (off until you connect)'));
+  assert.match(calendar.slice(calendar.indexOf('**Disconnect**')), /Google Drive[^.]*same access[^.]*doesn't revoke/);
+  const identity = policy.slice(policy.indexOf('- `identity` (Chrome only, optional)'), policy.indexOf('- `unlimitedStorage`'));
+  assert.match(identity, /removed on\s+Disconnect[^.;]*unless Google Drive/);
+  assert.match(read('../docs/privacy.md'), /\*\*Disconnect\*\* deletes them and revokes access[^.]*unless Google Drive/);
+});
+
+test('Safari\'s nativeMessaging and the storage permission name what Google Drive uses them for', () => {
+  assert.match(read('background/background.js'), /native: \(message\) => chrome\.runtime\.sendNativeMessage\(GZ_GOOGLE\.APP, message\)/, 'the code: Safari signs in through the handler');
+  const native = policy.slice(policy.indexOf('- `nativeMessaging`'), policy.indexOf('- `activeTab`'));
+  assert.match(native, /Google Drive/);
+  const storage = policy.slice(policy.indexOf('- `storage`'), policy.indexOf('- No permission for reading PDFs'));
+  assert.match(storage, /Sync to Google Drive/);
+});
+
+test('what Glaze stores says Sync to Google Drive copies records it otherwise keeps on this device only, the Gradescope account with them', () => {
+  const store = read('background/drive-store.js');
+  assert.match(store, /cat: 'gradescope'[^\n]*view: \(v\) => \(obj\(v\) \? \{ acct: v\.acct/, 'the code: Gradescope\'s account goes with its placings');
+  const stores = policy.slice(policy.indexOf('## What Glaze stores'), policy.indexOf('- **Glaze navigation**'));
+  assert.match(stores, /Sync to Google Drive[^.]*your own\s+Google Drive[^.]*on this device only/);
+  const data = policy.slice(policy.indexOf('in Glaze/Data, one JSON file per setting'), policy.indexOf('in Glaze/Backups'));
+  assert.match(data, /Gradescope's account/);
+});

@@ -143,14 +143,14 @@ test('Chrome: connect needs the identity permission, then signs in with getAuthT
   assert.deepEqual(await no.g.connect(), { ok: false, why: 'permission' });
   assert.deepEqual(no.local, {});
   const h = harness();
-  assert.deepEqual(await h.g.status(), { ok: true, flow: 'chrome', email: null });
+  assert.deepEqual(await h.g.status(), { ok: true, flow: 'chrome', email: null, picker: true });
   assert.deepEqual(await h.g.connect(), { ok: true, email: 'student@school.edu' });
   assert.deepEqual(h.log.auth, [{ interactive: true, scopes: C.scopes }]);
   assert.equal(h.log.fetch[0].url, G.USERINFO);
   assert.equal(h.log.fetch[0].init.headers.authorization, 'Bearer chrome-tok-1');
   assert.deepEqual(h.local.google, { email: 'student@school.edu', sub: '1', flow: 'chrome', at: 1_000_000 });
   assert.equal(await h.g.account(), 'student@school.edu');
-  assert.deepEqual(await h.g.status(), { ok: true, flow: 'chrome', email: 'student@school.edu' });
+  assert.deepEqual(await h.g.status(), { ok: true, flow: 'chrome', email: 'student@school.edu', picker: true });
   // Later, the worker's token never prompts.
   assert.equal(await h.g.token(), 'chrome-tok-2');
   assert.deepEqual(h.log.auth[1], { interactive: false, scopes: C.scopes });
@@ -169,7 +169,7 @@ test('Chrome: Drive unticked on Google\'s screen is no connection, and Chrome fo
 test('Chrome with another manifest client (a dev copy) uses the web flow; a browser without getAuthToken support falls back to it', async () => {
   const dev = harness({ client: '999-other.apps.googleusercontent.com' });
   dev.identity.answer = harness().identity.answer;
-  assert.deepEqual(await dev.g.status(), { ok: true, flow: 'web', email: null });
+  assert.deepEqual(await dev.g.status(), { ok: true, flow: 'web', email: null, picker: true });
   assert.equal((await dev.g.connect()).ok, true);
   assert.deepEqual([dev.log.auth.length, dev.log.launch.length, dev.local.google.flow], [0, 1, 'web']);
   const edge = harness();
@@ -233,7 +233,7 @@ test('Firefox: the loopback redirect Google accepts, in the url only, and only t
 test('without the Picker key, signing in, the token and Disconnect work, and only Pick says setup', async () => {
   for (const flow of ['chrome', 'web']) {
     const h = harness({ flow, config: { ...REAL, apiKey: 'PLACEHOLDER' } });
-    assert.deepEqual(await h.g.status(), { ok: true, flow, email: null }, `${flow}: Settings offers Connect`);
+    assert.deepEqual(await h.g.status(), { ok: true, flow, email: null, picker: false }, `${flow}: Settings offers Connect`);
     assert.deepEqual(await h.g.connect(), { ok: true, email: 'student@school.edu' });
     assert.equal(typeof await h.g.token(), 'string');
     assert.equal(await h.g.account(), 'student@school.edu');
@@ -426,6 +426,17 @@ test('Disconnect stops a failed silent renewal from opening another sign-in', as
   assert.equal(h.log.launch.length, 2, 'only Connect and the silent renewal; no prompt after Disconnect');
 });
 
+test('status says where the Picker works, so From Google Drive shows only there: not Safari\'s app flow, nor a build without its key', async () => {
+  for (const flow of ['chrome', 'web']) {
+    assert.equal((await harness({ flow }).g.status()).picker, true, flow);
+    assert.equal((await harness({ flow, config: { ...REAL, apiKey: 'PLACEHOLDER' } }).g.status()).picker, false, `${flow}: no Picker key`);
+  }
+  const s = harness({ flow: 'native', config: { ...REAL, native: true }, native: async (m) => (m.type === 'google.status' ? { ok: true } : null) });
+  s.local.google = { email: 'student@icloud.com', sub: '9', flow: 'native', at: 1 };
+  assert.deepEqual(await s.g.status(), { ok: true, flow: 'native', email: 'student@icloud.com', picker: false }, 'Safari: connected, Save to Drive and Sync work');
+  assert.deepEqual(await s.g.pick(), { ok: false, why: 'browser' }, 'and Pick refuses there, which reconnecting can\'t change');
+});
+
 test('native Disconnect cancels a pending sign-in even before an account is saved', async () => {
   const h = harness({ flow: 'native', config: { ...REAL, native: true }, native: async (m) => {
     if (m.type === 'google.status') return { ok: true };
@@ -503,6 +514,39 @@ test('Disconnect after a worker restart, when silent renewal fails, says Google 
   assert.deepEqual(await harness().g.disconnect(), { ok: true, revoked: false, had: false });
 });
 
+test('the web flow without the identity permission (taken back in the browser\'s add-on settings) asks for it, never a TypeError', async () => {
+  for (const firefox of [false, true]) {
+    const h = harness({ flow: 'web', firefox, granted: false });
+    h.local.google = { email: 'student@school.edu', sub: '1', flow: 'web', at: 1 };
+    await assert.rejects(h.g.token(), (e) => e.why === 'permission', 'a sync run');
+    await assert.rejects(h.g.token({ interactive: true }), (e) => e.why === 'permission', 'a Drive action');
+    assert.deepEqual(await h.g.pick(), { ok: false, why: 'permission' });
+    assert.deepEqual(h.log.launch, []);
+  }
+});
+
+test('offline: a sign-in the browser couldn\'t reach Google for says network, not that Drive needs connecting again', async () => {
+  // The worker's navigator.onLine: false only when the browser knows it is offline.
+  const offline = async (f) => {
+    const nav = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    Object.defineProperty(globalThis, 'navigator', { value: { onLine: false }, configurable: true, writable: true });
+    try { await f(); } finally { if (nav) Object.defineProperty(globalThis, 'navigator', nav); else delete globalThis.navigator; }
+  };
+  const w = harness({ flow: 'web' });
+  await w.g.connect();
+  w.tick(3600 * 1000);
+  w.identity.launchWebAuthFlow = async () => { throw new Error('Authorization page could not be loaded.'); };
+  await offline(() => assert.rejects(w.g.token(), (e) => e.why === 'network', 'web: the silent renewal'));
+  await assert.rejects(w.g.token(), (e) => e.why === 'auth', 'online: Google wants a sign-in (signed out, for one)');
+  const c = harness();
+  await c.g.connect();
+  c.identity.fail = 'OAuth2 request failed: Connection failed (-106).';
+  await offline(() => assert.rejects(c.g.token(), (e) => e.why === 'network', 'chrome: getAuthToken'));
+  await assert.rejects(c.g.token(), (e) => e.why === 'auth');
+  noToken(w);
+  noToken(c);
+});
+
 test('the picker\'s answer: our state, files with an id, a name and a type, or a cancel', () => {
   const s = 'S'.repeat(43);
   const file = { id: '1AbC_d-EfGh', name: 'Notes.pdf', mimeType: 'application/pdf' };
@@ -560,6 +604,76 @@ test('pick: frostdev.io first, its GitHub Pages copy when it doesn\'t load, the 
   assert.deepEqual(await stray.g.pick(), { ok: false, why: 'state' });
 
   assert.deepEqual(await harness().g.pick(), { ok: false, why: 'connect' });
+});
+
+// ---- Settings' Google Drive rows (settings/options.js), run in a VM with the worker and storage stubbed ----
+const settings = async ({ email = 'student@school.edu', sync = {}, connect = { ok: true, email } } = {}) => {
+  const vm = require('node:vm');
+  const src = fs.readFileSync(path.join(__dirname, '../../extension/settings/options.js'), 'utf8');
+  const block = src.slice(src.indexOf('  // ---- Google Drive (background/google.js'), src.indexOf('  // Another surface changed something'));
+  const els = {}, sent = [], heard = [], local = { driveSync: sync };
+  const el = (id, hidden = false) => {
+    const e = { id, observers: [], listeners: {}, checked: false, _hidden: hidden, _text: '', focus() {},
+      addEventListener(type, f) { (this.listeners[type] ||= []).push(f); },
+      get hidden() { return this._hidden; }, set hidden(v) { if (v !== this._hidden) { this._hidden = v; for (const f of this.observers) f(); } },
+      get textContent() { return this._text; }, set textContent(v) { if (String(v) !== this._text) { this._text = String(v); for (const f of this.observers) f(); } } };
+    els[`#${id}`] = e;
+  };
+  for (const [id, hidden] of [['gdrive', true], ['gdrive-who'], ['gdrive-connect'], ['gdrive-disconnect', true], ['gdrive-sync', true], ['gdrive-sync-said'], ['gdrive-sync-on']]) el(id, hidden);
+  const chrome = {
+    runtime: {
+      lastError: undefined,
+      sendMessage: (m, reply) => {
+        sent.push(structuredClone(m));
+        const r = m.type === 'glaze:google' ? (m.op === 'status' ? { ok: true, flow: 'chrome', email: local.google?.email || null } : m.op === 'connect' ? connect : { ok: true }) : { ok: true };
+        if (m.type === 'glaze:google' && m.op === 'connect' && r.ok) local.google = { email: r.email };
+        setTimeout(() => reply(r), 0);
+      },
+    },
+    permissions: { request: async () => true },
+    storage: { local: { get: async (k) => ({ [k]: structuredClone(local[k]) }) }, onChanged: { addListener: (f) => heard.push(f) } },
+  };
+  if (email) local.google = { email };
+  vm.runInNewContext(block, {
+    $: (s) => els[s], chrome, t: (s) => s, hint() {}, GZ_SITE: {}, GZ_I18N: { locale: () => 'en', ui: () => 'en' }, Intl, Date,
+    MutationObserver: class { constructor(f) { this.f = f; } observe(e) { e.observers.push(this.f); } },
+  });
+  const settle = () => new Promise((r) => setTimeout(r, 20));
+  await settle();
+  return {
+    els, sent, settle,
+    click: async (id) => { for (const f of els[id].listeners.click) await f({ isTrusted: true, currentTarget: els[id] }); await settle(); },
+    syncChange: async (next) => { local.driveSync = next; for (const f of heard) f({ driveSync: { newValue: next } }, 'local'); await settle(); },
+  };
+};
+
+test('Settings: while Sync asks to connect Google Drive again, Connect is there beside Disconnect, and connecting the same account again restarts Sync', async () => {
+  const A = 'student@school.edu';
+  for (const problem of ['auth', 'connect', 'account', 'scope', 'permission']) {
+    const s = await settings({ sync: { on: true, account: A, problem } });
+    assert.equal(s.els['#gdrive-who'].textContent, A);
+    assert.equal(s.els['#gdrive-sync-said'].textContent, 'Connect Google Drive again to keep syncing.', problem);
+    assert.deepEqual([s.els['#gdrive-connect'].hidden, s.els['#gdrive-disconnect'].hidden], [false, false], `${problem}: Connect offered, as the line says`);
+  }
+  for (const sync of [{ on: true, account: A, problem: 'network' }, { on: true, account: A, last: 1 }, { on: false, off: true, problem: 'account' }]) {
+    const s = await settings({ sync });
+    assert.deepEqual([s.els['#gdrive-connect'].hidden, s.els['#gdrive-disconnect'].hidden], [true, false], JSON.stringify(sync));
+  }
+  // The same account again: Sync turned on afresh (its problem cleared, a run now rather than after its wait).
+  const s = await settings({ sync: { on: true, account: A, problem: 'auth', wait: Date.now() + 3600e3 } });
+  await s.click('#gdrive-connect');
+  assert.deepEqual(s.sent.filter((m) => m.type === 'glaze:driveSync'), [{ type: 'glaze:driveSync', op: 'set', on: true }]);
+  await s.syncChange({ on: true, account: A, problem: null, busy: Date.now() });
+  assert.equal(s.els['#gdrive-connect'].hidden, true, 'and once it runs, only Disconnect');
+  // Another account: Sync's own binding check stops it there (background/background.js), Settings never rebinds it.
+  const b = await settings({ sync: { on: true, account: A, problem: 'account' }, connect: { ok: true, email: 'other@school.edu' } });
+  await b.click('#gdrive-connect');
+  assert.deepEqual(b.sent.filter((m) => m.type === 'glaze:driveSync'), []);
+  // Not connected: Connect alone, and nothing of Sync's.
+  const n = await settings({ email: null, sync: { on: true, account: A, problem: 'connect' } });
+  assert.deepEqual([n.els['#gdrive'].hidden, n.els['#gdrive-connect'].hidden, n.els['#gdrive-disconnect'].hidden, n.els['#gdrive-sync'].hidden], [false, false, true, true]);
+  await n.click('#gdrive-connect');
+  assert.deepEqual(n.sent.filter((m) => m.type === 'glaze:driveSync'), [], 'a first Connect: the worker turns Sync on itself');
 });
 
 test('the worker gives background/google.js a way to open the sign-in tab the student taps (iOS), from the worker', () => {
