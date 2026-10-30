@@ -4,6 +4,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { createRequire } = require('node:module');
+const vm = require('node:vm');
 const B = require('../mcp/lib/browsers.js');
 const I = require('../mcp/lib/install.js');
 const L = require('../mcp/lib/launcher.js');
@@ -93,6 +95,41 @@ test('uninstall keeps unrelated run-shaped files and links while removing dead r
   for (const [name, value] of Object.entries(keep)) assert.equal(fs.readFileSync(path.join(d, name), 'utf8'), value, name);
   assert.equal(fs.lstatSync(link).isSymbolicLink(), true);
   assert.equal(fs.readFileSync(outside, 'utf8'), 'leave me');
+});
+
+test('uninstall preserves foreign-owned installation files and run records', { skip: !POSIX }, async (t) => {
+  for (const kind of ['manifest', 'launcher', 'copy-file', 'run-record', 'run-temp']) await t.test(kind, async (t) => {
+    const home = scratch(t), c = ctx(home, node(path.join(home, 'bin')));
+    await I.setup({ ...c, browsers: ['chrome'] });
+    const root = I.context(c).root, d = R.ready(R.dir(c));
+    let dead = 0x3fffffff;
+    while (R.alive(dead)) dead--;
+    const record = { v: 1, pid: dead, browser: 'chrome', instance: 'foreign', path: R.socketPath(d, 'chrome', 'foreign'), token: R.token(), at: 1 };
+    const targets = {
+      manifest: I.manifestPath(I.context(c), B.table(c.platform, c.env).find((b) => b.id === 'chrome')),
+      launcher: path.join(root, 'hosts', 'chrome'),
+      'copy-file': path.join(root, VERSION, 'lib', 'nodes.js'),
+      'run-record': R.runFile(d, 'chrome', 'foreign'),
+      'run-temp': `${R.runFile(d, 'chrome', 'foreign')}.${dead}.abc.tmp`,
+    };
+    if (kind.startsWith('run-')) fs.writeFileSync(targets[kind], JSON.stringify(record), { mode: 0o600 });
+    const target = targets[kind], before = fs.readFileSync(target), opened = new Map();
+    const foreign = (st, f) => path.resolve(f) === target ? new Proxy(st, { get: (s, k) => k === 'uid' ? process.getuid() + 1 : Reflect.get(s, k) }) : st;
+    const shim = { ...fs,
+      lstatSync: (f, ...a) => foreign(fs.lstatSync(f, ...a), f),
+      openSync: (f, ...a) => { const fd = fs.openSync(f, ...a); opened.set(fd, path.resolve(f)); return fd; },
+      fstatSync: (fd, ...a) => foreign(fs.fstatSync(fd, ...a), opened.get(fd) || ''),
+    };
+    const load = (name, overrides = {}) => {
+      const file = require.resolve(`../mcp/lib/${name}.js`), req = createRequire(file), module = { exports: {} };
+      vm.runInNewContext(fs.readFileSync(file, 'utf8'), { module, exports: module.exports, __dirname: path.dirname(file), process, Buffer,
+        require: (n) => n === 'node:fs' ? shim : overrides[n] || req(n) }, { filename: file });
+      return module.exports;
+    };
+    const install = load('install', { './rendezvous.js': load('rendezvous') });
+    await install.uninstall(c);
+    assert.deepEqual(fs.readFileSync(target), before, kind);
+  });
 });
 
 test('bundle reuse retains safe installed fallbacks when its own discovery finds none', { skip: !POSIX }, async (t) => {
