@@ -747,7 +747,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       if (saving) saving.then(() => theirs(rev)); else theirs(rev);
     };
     chrome.storage.onChanged.addListener(onStore);
-    addEventListener('pagehide', () => { if (busy()) flush(); }, { signal });
+    addEventListener('pagehide', () => { if (busy()) { commit(); flush(); } }, { signal });
     // A tab closed while a save waits: the browser asks first, as for a PDF's unsaved form.
     addEventListener('beforeunload', (e) => { if (busy()) { commit(); flush(); e.preventDefault(); e.returnValue = ''; } }, { signal });
     document.addEventListener('visibilitychange', () => { if (document.hidden && busy()) flush(); }, { signal });
@@ -1467,6 +1467,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     sizes(); layout(); tabsDraw(); told(); circular(); drawNow(true);
     gridEl.focus({ preventScroll: true });
     const save = async () => { if (!commit()) return false; await flush(); return !busy(); };
+    // Embedded Documents' Close and history routes (papers.js beforeLeave) wait for the cell being written and the save.
+    addEventListener('glaze:papers:beforeleave', (e) => { if (busy()) e.detail.wait(save()); }, { signal });
     // The host saved first (writer-kinds.js): a write still in flight lands, then nothing of this grid listens or runs.
     const dispose = async () => {
       if (gone) return;

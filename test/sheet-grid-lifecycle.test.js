@@ -193,3 +193,18 @@ test('dispose ends every listener outside the grid, so an unmounted grid neither
   assert.equal(f.doc.getElementById('gx-grid'), null, 'its view is gone');
   assert.equal(f.timers.size, 0, 'no timer left');
 });
+
+test('embedded Close waits for the cell being written, and leaving the page commits it too', async () => {
+  const f = frame(), read = async () => (await SD.read(async (keys) => Object.fromEntries(keys.map((k) => [k, f.data[k]])), KEY))?.wb.sheets[0].rows.get(0)?.get(0)?.v;
+  const leave = () => { const waits = []; f.life['glaze:papers:beforeleave']({ detail: { wait: (p) => waits.push(p) } }); return waits; };
+  assert.equal(leave().length, 0, 'a clean grid lets Close go at once');
+  f.type('draft');
+  const waits = leave();
+  assert.equal(waits.length, 1, 'Close waits');
+  assert.equal(await waits[0], true, 'and goes once the cell is saved');
+  assert.equal(await read(), 'draft');
+  f.el('gx-grid').focus(); f.type('gone');
+  f.life.pagehide({ persisted: false });
+  await settle();
+  assert.equal(await read(), 'gone', 'pagehide (an iframe removed) keeps the open cell');
+});
