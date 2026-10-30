@@ -148,19 +148,21 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
   // 'f32' | 'f16', subgroups 'auto' | false, kernels (name → source, or a base URL; the package's by default), onProgress,
   // profile (timestamp-query, for forward's profile option) }.
   const create = async (gguf, opts = {}) => {
+    const halt = () => { if (opts.signal?.aborted) throw opts.signal.reason ?? new DOMException('Aborted', 'AbortError'); };
+    halt();
     let c;
     try { c = REF().config(gguf); } catch (e) { fail(e.message, 'model'); }
-    const halt = () => { if (opts.signal?.aborted) throw opts.signal.reason ?? new DOMException('Aborted', 'AbortError'); };
     if (typeof navigator === 'undefined' || !navigator.gpu) fail('no WebGPU', 'webgpu');
     let adapter = opts.adapter;
     if (!adapter) try { adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }); } catch { adapter = null; }
+    halt();
     if (!adapter) fail('no WebGPU adapter', 'webgpu');
     const precision = opts.precision || 'auto';
     const f16 = precision === 'f16' || (precision === 'auto' && adapter.features.has('shader-f16'));
     if (f16 && !adapter.features.has('shader-f16')) fail('this adapter has no shader-f16', 'webgpu');
     let sg = opts.subgroups !== false && adapter.features.has('subgroups');
     let device;
-    try { device = opts.device || await requestDevice(adapter, { f16, subgroups: sg, profile: opts.profile }); } catch (e) { fail(`no device: ${e.message}`, 'webgpu'); }
+    try { device = opts.device || await requestDevice(adapter, { f16, subgroups: sg, profile: opts.profile }); } catch (e) { halt(); fail(`no device: ${e.message}`, 'webgpu'); }
     // A device the engine made is the engine's to destroy (all its memory with it).
     const own = !opts.device;
     const bail = (e) => { if (own) device.destroy?.(); throw e; };
@@ -176,6 +178,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     let lost = null;
     device.lost.then((info) => { lost = info; });
     try {
+    halt();
 
     const src = typeof opts.kernels === 'function' ? opts.kernels : typeof opts.kernels === 'object' && opts.kernels ? (n) => opts.kernels[n] : defaultSource(opts.kernels);
     const sources = {};
@@ -206,7 +209,11 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
 
     // ---- buffers ----
     const S = GPUBufferUsage;
-    const buffer = (size, usage = S.STORAGE | S.COPY_SRC | S.COPY_DST) => device.createBuffer({ size: up(Math.max(size, 4), 4), usage });
+    const fits = (size, limit) => { if (!Number.isSafeInteger(size) || size < 0 || up(Math.max(size, 4), 4) > limit) fail(`buffer of ${size} bytes exceeds device limit ${limit}`, 'memory'); };
+    const buffer = (size, usage = S.STORAGE | S.COPY_SRC | S.COPY_DST) => {
+      fits(size, device.limits.maxBufferSize);
+      return device.createBuffer({ size: up(Math.max(size, 4), 4), usage });
+    };
     const upload = (data, usage) => {
       const b = buffer(data.byteLength, usage);
       device.queue.writeBuffer(b, 0, data.buffer, data.byteOffset, up(data.byteLength, 4) === data.byteLength ? data.byteLength : fail('upload: not whole words'));
@@ -214,13 +221,15 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     };
     const read = async (b, offset = 0, size = b.size - offset) => {
       const r = device.createBuffer({ size, usage: S.MAP_READ | S.COPY_DST });
-      const enc = device.createCommandEncoder();
-      enc.copyBufferToBuffer(b, offset, r, 0, size);
-      device.queue.submit([enc.finish()]);
-      await r.mapAsync(GPUMapMode.READ);
-      const out = r.getMappedRange().slice(0);
-      r.unmap(); r.destroy();
-      return out;
+      try {
+        const enc = device.createCommandEncoder();
+        enc.copyBufferToBuffer(b, offset, r, 0, size);
+        device.queue.submit([enc.finish()]);
+        await r.mapAsync(GPUMapMode.READ);
+        const out = r.getMappedRange().slice(0);
+        r.unmap();
+        return out;
+      } finally { r.destroy(); }
     };
     // Uniforms for one dispatch outside a session (the checks).
     const uniform = (words) => { const b = buffer(SLOT, S.UNIFORM | S.COPY_DST); device.queue.writeBuffer(b, 0, words); return b; };
@@ -310,8 +319,8 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     const unscoped = async (what) => { const e = await device.popErrorScope?.(); if (e) fail(`out of memory for ${what}`, 'memory'); };
     try {
       scope();
-      for (const size of layout.buffers) wbufs.push(buffer(size, S.STORAGE | S.COPY_DST));
-      await unscoped('the weights');
+      try { for (const size of layout.buffers) wbufs.push(buffer(size, S.STORAGE | S.COPY_DST)); }
+      finally { await unscoped('the weights'); }
       for (const t of infos) {
         halt();
         for (const run of layout.at[t.name]) {
@@ -320,6 +329,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
           const step = 32 << 20;
           for (let o = 0; o < bytes; o += step) {
             let chunk = await gguf.read(t.info, from + o, Math.min(step, bytes - o));
+            halt();
             if (chunk.byteLength % 4) { const p = new Uint8Array(up(chunk.byteLength, 4)); p.set(chunk); chunk = p; }
             device.queue.writeBuffer(wbufs[run.buffer], run.offset + o, chunk.buffer, chunk.byteOffset, chunk.byteLength);
             done += Math.min(step, bytes - o);
@@ -328,6 +338,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         }
       }
       await device.queue.onSubmittedWorkDone();
+      halt();
       if (lost) fail(`device lost: ${lost.message}`, 'lost');
     } catch (e) {
       for (const b of wbufs) b.destroy();
@@ -357,9 +368,12 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       sessions.add(close);
       try {
         device.pushErrorScope?.('out-of-memory');
-        const s = await createSession(opts, life);
-        if (await device.popErrorScope?.()) fail('out of memory for the session', 'memory');
+        let s, oom;
+        try { s = await createSession(opts, life); }
+        finally { oom = await device.popErrorScope?.(); }
+        if (oom) fail('out of memory for the session', 'memory');
         if (closed) fail('session destroyed');
+        if (lost) fail(`device lost: ${lost.message}`, 'lost');
         return s;
       } catch (e) { life.destroy(); throw e; }
     };
@@ -371,18 +385,23 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       }
       const H = c.nHead, V = c.vocab, K = c.lCache - 1, hidden = Math.max(3 * E, F), kvHeads = Math.max(...c.nHeadKv);
       const kvb = f16 ? 2 : 4;
-      const mk = (n) => life.own(buffer(n * 4));
+      // Session storage is bound whole. Reject limits before WebGPU can return a validation-only invalid buffer,
+      // and before allocating the host-side RoPE tables for an impossible context.
+      const storage = (bytes) => { fits(bytes, device.limits.maxStorageBufferBindingSize); return life.own(buffer(bytes)); };
+      const mk = (n) => storage(n * 4);
+      fits(ctx * c.nRot * 4, device.limits.maxStorageBufferBindingSize);
+      fits(ctx * c.nRotSwa * 4, device.limits.maxStorageBufferBindingSize);
       const B = {
         ids: mk(chunk), x: mk(chunk * E), n: mk(chunk * E), a: mk(chunk * E), y: mk(chunk * E),
         big: mk(chunk * hidden), up: mk(chunk * F), q: mk(chunk * H * hd), k: mk(chunk * kvHeads * hd), v: mk(chunk * kvHeads * hd), g: mk(chunk * H),
-        last: mk(V), lastIds: mk(1), mask: mk(Math.ceil(V / 32)), pen: mk(64), apart: mk(H * Math.ceil(ctx / 128) * (hd + 2)), part: mk(Math.ceil(V / 4096) * 2 * chunk), cand: mk(Math.ceil(V / 2048) * 64 * 2), top: mk(64 * 2),
+        last: mk(V), raw: mk(V), lastIds: mk(1), mask: mk(Math.ceil(V / 32)), pen: mk(64), apart: mk(H * Math.ceil(ctx / 128) * (hd + 2)), part: mk(Math.ceil(V / 4096) * 2 * chunk), cand: mk(Math.ceil(V / 2048) * 64 * 2), top: mk(64 * 2),
       };
       let all = null; // chunk × V logits, made on first use
       const state = c.layers.map((kind, i) => {
         if (kind === 'conv') return { conv: mk(K * E) };
         const width = c.nHeadKv[i] * hd, ring = kind === 'swa' && c.window + chunk < ctx ? c.window + chunk : 0;
         const slots = ring || ctx;
-        return { ring, K: life.own(buffer(slots * width * kvb)), V: life.own(buffer(slots * width * kvb)) };
+        return { ring, K: storage(slots * width * kvb), V: storage(slots * width * kvb) };
       });
       const ropeFull = life.own(upload(ropeTable(0, ctx, c.nRot, c.ropeBase, ropeFreqs), S.STORAGE | S.COPY_DST));
       const ropeSwa = life.own(upload(ropeTable(0, ctx, c.nRotSwa, c.ropeBaseSwa, null), S.STORAGE | S.COPY_DST));
@@ -560,8 +579,8 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
               pass.end();
             }
             device.queue.submit([enc.finish()]);
-            if (times) (res.profile ||= []).push(...await times());
             pos += T;
+            if (times) (res.profile ||= []).push(...await times());
             // With a signal, each chunk's work finishes before the next is checked: a cancel takes effect within a chunk.
             if (signal && !lastChunk) await device.queue.onSubmittedWorkDone();
             if (logits === 'all') {
@@ -577,6 +596,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
               }
             }
           }
+          if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
           if (rows) res.logits = rows;
           return res;
         } finally { busy = false; }
@@ -604,9 +624,15 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
           topK = k;
           lists.push(k === 1 ? (mask ? P.argmaxMask : P.argmax) : (mask ? P.topkMask : P.topk));
           fill(lists, 1);
-          const enc = device.createCommandEncoder(), pass = enc.beginComputePass();
+          const enc = device.createCommandEncoder();
+          // Penalties are per draw. Preserve raw logits even if the mask is empty or readback/cancellation fails, so
+          // a retry or a snapshot does not apply the penalty a second time.
+          const penalized = lists.includes(P.penalty);
+          if (penalized) enc.copyBufferToBuffer(B.last, 0, B.raw, 0, V * 4);
+          const pass = enc.beginComputePass();
           for (const l of lists) encode(pass, l, 1);
           pass.end();
+          if (penalized) enc.copyBufferToBuffer(B.raw, 0, B.last, 0, V * 4);
           device.queue.submit([enc.finish()]);
           if (k === 1) {
             const id = new Uint32Array(await read(B.lastIds, 0, 4))[0];
@@ -622,27 +648,36 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       const snaps = new Set();
       const snapshot = async ({ logits = false } = {}) => {
         if (life.closed()) fail('session destroyed');
+        if (lost) fail(`device lost: ${lost.message}`, 'lost');
         if (busy) fail('a forward step is running');
+        busy = true;
         const bufs = [];
         const copy = (src, size) => { const b = buffer(size); bufs.push([src, b, size]); return b; };
-        device.pushErrorScope?.('out-of-memory');
-        state.forEach((st, i) => {
-          if (c.layers[i] === 'conv') return copy(st.conv, st.conv.size);
-          const rows = st.ring ? st.K.size : pos * c.nHeadKv[i] * hd * kvb;
-          if (rows) { copy(st.K, rows); copy(st.V, rows); }
-        });
-        if (logits) copy(B.last, V * 4);
-        const oom = await device.popErrorScope?.();
-        if (oom) { for (const [, b] of bufs) b.destroy(); fail('out of memory for a snapshot', 'memory'); }
-        const enc = device.createCommandEncoder();
-        for (const [src, b, size] of bufs) enc.copyBufferToBuffer(src, 0, b, 0, size);
-        device.queue.submit([enc.finish()]);
-        const snap = {
-          pos, logits, bufs,
-          drop() { if (!snaps.delete(snap)) return; for (const [, b] of bufs) b.destroy(); },
-        };
-        snaps.add(snap);
-        return snap;
+        try {
+          device.pushErrorScope?.('out-of-memory');
+          let oom;
+          try {
+            state.forEach((st, i) => {
+              if (c.layers[i] === 'conv') return copy(st.conv, st.conv.size);
+              const rows = st.ring ? st.K.size : pos * c.nHeadKv[i] * hd * kvb;
+              if (rows) { copy(st.K, rows); copy(st.V, rows); }
+            });
+            if (logits) copy(B.last, V * 4);
+          } finally { oom = await device.popErrorScope?.(); }
+          if (life.closed()) fail('session destroyed');
+          if (lost) fail(`device lost: ${lost.message}`, 'lost');
+          if (oom) fail('out of memory for a snapshot', 'memory');
+          const enc = device.createCommandEncoder();
+          for (const [src, b, size] of bufs) enc.copyBufferToBuffer(src, 0, b, 0, size);
+          device.queue.submit([enc.finish()]);
+          const snap = {
+            pos, logits, bufs,
+            drop() { if (!snaps.delete(snap)) return; for (const [, b] of bufs) b.destroy(); },
+          };
+          snaps.add(snap);
+          return snap;
+        } catch (e) { for (const [, b] of bufs) b.destroy(); throw e; }
+        finally { busy = false; }
       };
       const restore = async (snap) => {
         if (life.closed()) fail('session destroyed');
@@ -695,10 +730,10 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     return top[keep - 1].id;
   };
   const checkSampler = ({ temperature = 1, topK = 0, topP = 1, repetitionPenalty = 1 } = {}) => {
-    if (!(temperature >= 0)) fail('sampler.temperature: a number ≥ 0');
+    if (!Number.isFinite(temperature) || temperature < 0) fail('sampler.temperature: a finite number ≥ 0');
     if (!Number.isInteger(topK) || topK < 0) fail('sampler.topK: an integer ≥ 0');
-    if (!(topP > 0 && topP <= 1)) fail('sampler.topP: a number in (0, 1]');
-    if (!(repetitionPenalty > 0)) fail('sampler.repetitionPenalty: a number > 0');
+    if (!Number.isFinite(topP) || !(topP > 0 && topP <= 1)) fail('sampler.topP: a finite number in (0, 1]');
+    if (!Number.isFinite(repetitionPenalty) || repetitionPenalty <= 0) fail('sampler.repetitionPenalty: a finite number > 0');
     return { temperature, topK, topP, repetitionPenalty };
   };
 
@@ -723,22 +758,33 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       if (!signal?.aborted && e && !e.reason) e.reason = engine.lost ? 'lost' : 'webgpu';
       throw e;
     }
-    let pending = null, ready = false, released = false, recent = [];
+    let pending = null, ready = false, released = false, running = false, recent = [];
     const snaps = new Map(); // model snap → { inner, pending, ready, recent }
-    const live = () => { if (released) fail('the model was released'); };
+    const live = () => {
+      if (released) fail('the model was released');
+      if (engine.lost) fail(`device lost: ${engine.lost.message}`, 'lost');
+    };
     const remember = (ids) => { recent = recent.concat(ids).slice(-64); };
     const halt = (sig) => { if (sig?.aborted) throw sig.reason ?? new DOMException('Aborted', 'AbortError'); };
     const feed = async (ids, opt) => {
       const t = pending === null ? ids : [pending, ...ids];
       if (!t.length) return;
-      pending = null; ready = false;
-      await s.forward(t, opt);
-      ready = true;
-      remember(t);
+      const start = s.pos;
+      try { await s.forward(t, opt); }
+      finally {
+        // Validation can reject before any work, and cancellation can stop between chunks. Only submitted tokens
+        // became part of the caches; retain the pending token and old logits when nothing was consumed.
+        const consumed = s.pos - start;
+        if (consumed) {
+          pending = null; ready = consumed === t.length;
+          remember(t.slice(0, consumed));
+        }
+      }
     };
     const snapshot = async () => {
       live();
       const inner = await s.snapshot({ logits: ready });
+      if (released) { inner.drop(); live(); }
       const snap = { drop() { const v = snaps.get(snap); if (!v) return; snaps.delete(snap); v.inner.drop(); } };
       snaps.set(snap, { inner, pending, ready, recent });
       return snap;
@@ -750,18 +796,26 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         live(); halt(sig);
         if (!Array.isArray(ids) && !ArrayBuffer.isView(ids)) fail('prefill: token ids');
         await feed(Array.from(ids), onRows ? { logits: 'all', onRows, signal: sig } : { logits: 'keep', signal: sig });
+        halt(sig);
         if (!snap) return undefined;
-        try { return await snapshot(); } catch (e) { if (e?.reason === 'memory') return null; throw e; }
+        try {
+          const result = await snapshot();
+          if (sig?.aborted) { result.drop(); halt(sig); }
+          return result;
+        } catch (e) { halt(sig); if (e?.reason === 'memory') return null; throw e; }
       },
       async decode({ sampler, mask = null, signal: sig, random = Math.random } = {}) {
         live(); halt(sig);
         const sp = checkSampler(sampler);
+        if (mask !== null && !(mask instanceof Uint32Array && mask.length === Math.ceil(engine.config.vocab / 32))) fail(`mask: a Uint32Array of ${Math.ceil(engine.config.vocab / 32)} words`);
+        if (model.pos >= context) fail(`context of ${context} positions is full`);
         if (pending !== null) await feed([], { logits: 'keep', signal: sig });
         if (!ready) fail('decode: nothing fed to decode from');
         halt(sig);
         const penalty = sp.repetitionPenalty !== 1 ? { ids: recent, r: sp.repetitionPenalty } : null;
         const k = sp.temperature === 0 || sp.topK === 1 ? 1 : Math.min(sp.topK || 64, 64);
         const r = await s.pick({ k, mask, penalty });
+        halt(sig);
         const id = k === 1 ? r.id : sample(r.top, sp, random);
         if (id === null) fail('decode: the mask allows no token');
         pending = id; ready = false;
@@ -783,6 +837,17 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       },
       get pos() { return s.pos + (pending === null ? 0 : 1); },
     };
+    // A model operation spans several session calls and awaits. Lock the whole transaction, including its host state.
+    for (const name of ['prefill', 'decode', 'snapshot', 'restore']) {
+      const action = model[name];
+      model[name] = async (...args) => {
+        live();
+        if (running) fail('a model operation is running');
+        running = true;
+        try { const result = await action(...args); live(); return result; }
+        finally { running = false; }
+      };
+    }
     return model;
   };
 
