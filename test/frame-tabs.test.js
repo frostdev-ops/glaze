@@ -1,8 +1,8 @@
 // Glaze's pages a site can frame (manifest web_accessible_resources) never reach tabs or windows through chrome or browser:
 // WebKit takes those calls only from the extension's own process, and Safari kills the page whose extension frame makes one
 // ("This webpage was reloaded because a problem occurred"). They ask the worker instead. Static: each page's script tags
-// and the package scripts their code names (libraries loaded later), any such reference outside comments; an alias of
-// chrome itself would get past it.
+// and the package scripts and modules their code names (libraries loaded later), any such reference at all, comments
+// included, so nothing in a string can hide one; an alias of chrome itself would get past it.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -16,9 +16,9 @@ const pages = () => JSON.parse(read('manifest.json')).web_accessible_resources
   .flatMap((w) => w.resources).filter((r) => r.endsWith('.html'));
 const from = (dir, src) => (src.startsWith('/') ? src.slice(1) : path.posix.normalize(path.posix.join(dir, src)));
 const tags = (page) => [...read(page).matchAll(/<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/g)].map((m) => from(path.posix.dirname(page), m[1]));
-const uncomment = (src) => src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:\\])\/\/.*$/gm, '$1');
-// Package scripts a file names in a string: './x.js' from its own folder, 'lib/x.js' or 'media.js' from the root or its folder.
-const named = (file, src) => [...src.matchAll(/['"`]([\w./-]+\.js)['"`]/g)]
+// Package scripts and modules a file names in a string, any query or hash aside: './x.js' from its own folder, 'lib/x.mjs'
+// or 'media.js' from the root or its folder.
+const named = (file, src) => [...src.matchAll(/['"`]([\w./-]+\.m?js)(?:[?#][^'"`]*)?['"`]/g)]
   .flatMap((m) => (/^\.\.?\//.test(m[1]) ? [] : [m[1]]).concat(from(path.posix.dirname(file), m[1]))).filter(exists);
 const REACH = /\b(?:chrome|browser)\s*(?:\?\.|\.)\s*(tabs|windows)\b|\b(?:chrome|browser)\s*(?:\?\.)?\s*\[\s*['"`](tabs|windows)['"`]\s*\]/g;
 
@@ -28,7 +28,7 @@ const reached = (page) => {
     if (seen.has(f)) return;
     seen.add(f);
     assert.ok(exists(f), `${page}: ${f}`);
-    const src = uncomment(read(f));
+    const src = read(f);
     for (const m of src.matchAll(REACH)) found.push(`${page} → ${f}:${src.slice(0, m.index).split('\n').length} ${m[0].replace(/\s+/g, '')}`);
     for (const n of named(f, src)) walk(n);
   };
@@ -46,14 +46,16 @@ test('no page a site can frame reaches tabs or windows itself', () => {
     found.push(...r.found);
   }
   assert.ok(reached('writer.html').files.has('lib/writer-docx.js'), 'libraries Writer loads later are scanned too');
+  assert.ok(reached('reader.html').files.has('lib/pdfjs/pdf.mjs'), 'and modules');
   assert.deepEqual(found, []);
 });
 
-test('the scan sees each way of writing the call', () => {
-  for (const code of ['chrome.tabs.create({})', 'chrome?.tabs.create({})', 'chrome.tabs?.create', 'browser.windows.getAll()', "chrome['tabs'].query({})", 'chrome\n  .tabs\n  .create({})']) {
-    assert.equal([...uncomment(code).matchAll(REACH)].length, 1, code);
+test('the scan sees each way of writing the call, and each way of naming a script', () => {
+  for (const code of ['chrome.tabs.create({})', 'chrome?.tabs.create({})', 'chrome.tabs?.create', 'browser.windows.getAll()', "chrome['tabs'].query({})",
+    'chrome\n  .tabs\n  .create({})', 'const marker = "//"; chrome.tabs.create({});', '`${x}` /* */ chrome.tabs.create({})']) {
+    assert.equal([...code.matchAll(REACH)].length, 1, code);
   }
-  assert.equal([...uncomment('// chrome.tabs.create\n/* browser.tabs */ x').matchAll(REACH)].length, 0, 'comments');
+  assert.deepEqual(named('lib/writer-papers.js', "['./writer-docx.js?v=1', 'lib/pdfjs/pdf.mjs#x', 'nowhere.js']"), ['lib/writer-docx.js', 'lib/pdfjs/pdf.mjs']);
 });
 
 test('the Notes share panel\'s Settings button asks the worker for Settings at its sessions', () => {
