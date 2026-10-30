@@ -99,7 +99,7 @@ test('stored decks are bounded before base64 decoding', () => {
   let decoded = 0;
   const { ctx } = load({ slides: true }, { atob: (s) => { decoded++; return atob(s); } });
   const S = ctx.GZ_SLIDES_KIND.STORE;
-  assert.equal(S.get({ file: 'A'.repeat(4e6 + 4), size: 3e6 + 3 }), null);
+  assert.ok(S.get({ file: 'A'.repeat(4e6 + 4), size: 3e6 + 3 }) === null, 'oversized stored deck is refused');
   assert.equal(decoded, 0, 'oversized stored input never reaches atob');
   assert.equal(S.get({ file: '' }), null);
 });
