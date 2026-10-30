@@ -290,3 +290,17 @@ test('inverse brackets retain finite roots in both extreme tails', () => {
   close(book(), [['T.INV.2T(1E-100,1)', 6.366197723675814e99], ['F.INV.RT(1E-100,1,1)', 4.052847345693495e199],
     ['GAMMA.INV(1E-100,0.5,1)', 7.853981633974483e-201], ['BETA.INV(1E-100,0.5,2)', 4.444444444444384e-201]]);
 });
+
+test('LINEST reports perfect fits and zero degrees of freedom as Excel does', () => {
+  const e = book();
+  for (const f of ['LINEST({2;4},{1;2},TRUE,TRUE)', 'LINEST({2;4;6},{1;2;3},TRUE,TRUE)', 'LINEST({1;1;1},{1;2;3},TRUE,TRUE)']) {
+    cases(e, [[`INDEX(${f},2,1)`, 0], [`INDEX(${f},2,2)`, 0], [`INDEX(${f},3,1)`, 1], [`INDEX(${f},3,2)`, 0], [`INDEX(${f},4,1)`, '#NUM!'], [`INDEX(${f},5,2)`, 0]]);
+  }
+  cases(e, [['INDEX(LINEST({2;4},{1;2},TRUE,TRUE),4,2)', 0],
+    ['INDEX(LINEST({2;4},{1,2;2,1},TRUE,TRUE),1,2)', 0]]);
+  close(e, [['INDEX(LINEST({2;4},{1,2;2,1},TRUE,TRUE),1,1)', -2]]);
+  // Excel's constant-X residuals/df do not describe the fitted intercept. Keep the well-defined intercept-only fit.
+  const constantX = 'LINEST({2;4;5},{1;1;1},TRUE,TRUE)';
+  cases(e, [[`INDEX(${constantX},4,2)`, 2], [`INDEX(${constantX},3,1)`, 0]]);
+  close(e, [[`INDEX(${constantX},5,2)`, 14 / 3], [`INDEX(${constantX},3,2)`, Math.sqrt(7 / 3)]]);
+});
