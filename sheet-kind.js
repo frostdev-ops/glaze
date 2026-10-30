@@ -66,7 +66,7 @@
     return ws.some((w) => w !== ws[0]) && largest > 0 ? ws.map((w) => w / largest) : null;
   };
   // ---- the card's charts: the record's summary (sheet-data.js charts) as a small picture of each kind over the cells it
-  // covers in A1:F4, the rest counted in the corner; a record kept before the summary counts its drawing's charts.
+  // covers in A1:F4, the undrawn charts counted in the corner; a record kept before the summary counts its drawing's charts.
   const NS = 'http://www.w3.org/2000/svg';
   const svgEl = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v)); return e; };
   const HEX = /^#[0-9a-f]{6}$/i;
@@ -138,12 +138,14 @@
     return n;
   };
   const chartsOn = (box, rec) => {
-    const list = Array.isArray(rec?.charts) ? rec.charts.filter((x) => x && Array.isArray(x.anchor) && x.anchor.length === 4 && x.anchor.every(Number.isSafeInteger)) : null;
-    let away = list ? 0 : counted(rec?.book);
+    const list = Array.isArray(rec?.charts) ? rec.charts.slice(-32).filter((x) => x && Array.isArray(x.anchor) && x.anchor.length === 4 && x.anchor.every(Number.isSafeInteger)) : null;
+    const kept = Array.isArray(rec?.charts) ? rec.charts.length : 0;
+    const total = Number.isSafeInteger(rec?.chartCount) && rec.chartCount >= 0 ? rec.chartCount : kept === 32 ? Math.max(kept, counted(rec?.book)) : kept;
+    let away = list ? Math.max(0, total - list.length) : counted(rec?.book);
     for (const x of list || []) {
       const [r0, c0, r1, c1] = x.anchor;
       if (r0 > 3 || c0 > 5 || r1 < 0 || c1 < 0 || r1 < r0 || c1 < c0) { away++; continue; }
-      const kind = typeof x.kind === 'string' ? x.kind : 'chart', colours = Array.isArray(x.colours) ? x.colours.filter((c) => HEX.test(c)).slice(0, 5) : [];
+      const kind = typeof x.kind === 'string' ? x.kind : 'chart', colours = Array.isArray(x.colours) ? x.colours.slice(0, 5).filter((c) => typeof c === 'string' && HEX.test(c)) : [];
       const m = h('i', { class: 'gx-th-chart', 'data-kind': kind });
       m.style.gridRow = `${Math.max(0, r0) + 2} / ${Math.min(3, r1) + 3}`;
       m.style.gridColumn = `${Math.max(0, c0) + 2} / ${Math.min(5, c1) + 3}`;
@@ -180,7 +182,7 @@
     const got = rec?.key ? await GZ_SHEET_DATA.read(get, rec.key) : null;
     if (!got) return {};
     const { book, parts } = GZ_SHEET_DATA.split(got.wb);
-    return { book, grid: got.rec.grid, charts: got.rec.charts, text: got.rec.text, cells: got.rec.cells, sheets: got.rec.sheets, parts: Object.fromEntries([...parts].map(([n, rows]) => [n, { rows }])) };
+    return { book, grid: got.rec.grid, charts: got.rec.charts, chartCount: got.rec.chartCount, text: got.rec.text, cells: got.rec.cells, sheets: got.rec.sheets, parts: Object.fromEntries([...parts].map(([n, rows]) => [n, { rows }])) };
   };
 
   // ---- files: .xlsx, .csv and .tsv through GZ_SHEET_XLSX
@@ -258,7 +260,7 @@
     return notice ? { ...paper, notice } : paper;
   };
   // An empty attempt started as a spreadsheet (writer-kinds.js): what its record takes; the grid opens a blank workbook.
-  const empty = () => ({ charts: [], grid: Array.from({ length: 4 }, () => Array(6).fill('')), text: '', cells: 0, sheets: 1 });
+  const empty = () => ({ charts: [], chartCount: 0, grid: Array.from({ length: 4 }, () => Array(6).fill('')), text: '', cells: 0, sheets: 1 });
   const create = () => `papers.html?sheet=${encodeURIComponent(GZ_WRITER_PAPERS.newKey())}&new`;
   // host: an assignment's frame (view below): { mount, t, title, tools }. → the grid's surface (sheet-grid.js mount).
   const edit = async (key, { fresh = false, host = null } = {}) => {

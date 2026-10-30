@@ -171,8 +171,11 @@ var GZ_SHEET_DATA = globalThis.GZ_SHEET_DATA || (() => {
   const write = async (papers, key, wb, sigs, { patch = {}, dirty = null, version = null, show = plain, reason, base = sigs?.revision ?? 0 } = {}) => {
     const p = plan(wb, sigs, dirty);
     if (!p.changed && !version && !Object.keys(patch).length) return { sigs, saved: null };
-    const m = measure(wb);
-    const saved = await papers.save(key, { kind: 'sheet', ...(p.book && { book: p.book }), grid: glance(wb, show), charts: charts(wb), text: text(wb, show), cells: m.cells, sheets: m.sheets, ...patch },
+    const m = measure(wb), allCharts = charts(wb);
+    // Keep the exact count, but only the top 32 markers that can paint on the card. Off-card descriptors add no value
+    // to storage or rendering; a later visible chart must not be lost behind earlier off-card ones.
+    const preview = allCharts?.filter(({ anchor: [r0, c0, r1, c1] }) => r0 <= 3 && c0 <= 5 && r1 >= 0 && c1 >= 0 && r1 >= r0 && c1 >= c0).slice(-32) ?? null;
+    const saved = await papers.save(key, { kind: 'sheet', ...(p.book && { book: p.book }), grid: glance(wb, show), charts: preview, chartCount: allCharts?.length ?? null, text: text(wb, show), cells: m.cells, sheets: m.sheets, ...patch },
       { base, parts: p.parts, drop: p.drop, changed: p.changed, ...(version && { version }), ...(reason && { reason }) });
     p.sigs.revision = saved.paper.revision;
     return { sigs: p.sigs, saved };
