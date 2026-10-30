@@ -83,6 +83,33 @@ const page = ({ sync = {}, local = {}, path: pathname = '/ultra/courses/_1_1/out
 };
 const GLOW = { x: { cursor: { kind: 'glow', size: 14 } } };
 
+test('course parts discard delayed replies, restore the theme, and stay independent in two tabs', async () => {
+  const a = page({ sync: { lookX: await X.pack(GLOW) } }), b = page();
+  const pending = new Map();
+  let course = 'Graveyard';
+  a.context.GZ_CTX.courseLook = () => course;
+  a.context.chrome.runtime.sendMessage = ({ id }) => new Promise((resolve) => pending.set(id, resolve));
+  b.context.GZ_CTX.courseLook = () => 'Terminal';
+  b.context.chrome.runtime.sendMessage = async () => ({ ok: true, parts: { x: { pointer: 'terminal' } } });
+  const first = a.run('GZ_XPARTS_PAGE.read()');
+  course = 'Frostdev';
+  const second = a.run('GZ_XPARTS_PAGE.read()');
+  pending.get('Frostdev')({ ok: true, parts: { x: { pointer: 'lava' } } });
+  await second;
+  assert.equal(a.now().pointer, 'lava');
+  pending.get('Graveyard')({ ok: true, parts: { x: { pointer: 'ghost' } } });
+  await first;
+  assert.equal(a.now().pointer, 'lava', 'late course reply cannot replace the current parts');
+  await b.run('GZ_XPARTS_PAGE.read()');
+  assert.equal(b.now().pointer, 'terminal');
+  course = null;
+  assert.equal(a.now(), null, 'old course parts are unavailable immediately');
+  await a.run('GZ_XPARTS_PAGE.read()');
+  assert.deepEqual(JSON.parse(JSON.stringify(a.now())), GLOW.x);
+  assert.equal(b.now().pointer, 'terminal', 'another tab keeps its own course');
+  assert.deepEqual(a.listeners, {}, 'course reads add no listeners or polling');
+});
+
 test('the page module reads the parts, fires glaze:parts when they change and not otherwise, and keeps them frozen', async () => {
   const p = page({ sync: { lookX: await X.pack(GLOW) } });
   assert.equal(p.now(), null, 'nothing before it has read');
