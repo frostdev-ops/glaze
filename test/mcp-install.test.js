@@ -593,6 +593,70 @@ test('doctor on Windows reads each key and follows it to our manifest', async (t
   assert.match(D.text(gone), /Google\\Chrome/);
 });
 
+test('doctor judges only the browsers set up, lists the others it finds, and fails when none is set up', { skip: posixOnly('a POSIX stand-in node') }, async (t) => {
+  const home = scratch(t), env = { HOME: home };
+  const all = B.table('linux', env), at = (id) => all.find((b) => b.id === id);
+  for (const id of ['chrome', 'chrome-beta', 'chromium', 'brave']) mk(at(id).data);
+  const ctx = { platform: 'linux', env, node: nodeAt(t), run: runner().run, src: PKG };
+  await I.setup({ ...ctx, browsers: ['chrome'] });
+  const r = await D.run(ctx);
+  assert.equal(r.ok, true, D.text(r));
+  assert.deepEqual(r.rows.filter((x) => x.level === 'fail'), [], D.text(r));
+  assert.ok(r.rows.some((x) => x.level === 'ok' && x.what === 'Google Chrome'), D.text(r));
+  const rest = r.rows.filter((x) => ['Google Chrome Beta', 'Chromium', 'Brave'].some((n) => x.what === n || x.detail.includes(n)));
+  assert.ok(rest.length && rest.every((x) => x.level === 'info'), D.text(r));
+  for (const n of ['Google Chrome Beta', 'Chromium', 'Brave']) assert.ok(rest.some((x) => x.detail.includes(n)), n);
+  assert.ok(rest.some((x) => /npx glaze-mcp setup --browser/.test(x.detail)), D.text(r));
+  const cli = io(ctx);
+  assert.equal(await CLI.main(['doctor'], cli), 0, cli.out());
+  // Our manifest where setup wasn't asked to write one is still ours to judge.
+  fs.mkdirSync(at('brave').dir, { recursive: true });
+  fs.writeFileSync(path.join(at('brave').dir, `${HOST}.json`), '{}');
+  const stray = await D.run(ctx);
+  assert.equal(stray.ok, false);
+  assert.ok(stray.rows.some((x) => x.level === 'fail' && x.what === 'Brave'), D.text(stray));
+  fs.rmSync(path.join(at('brave').dir, `${HOST}.json`));
+  // Folders but no browser: nothing is set up.
+  fs.rmSync(path.join(at('chrome').dir, `${HOST}.json`));
+  fs.rmSync(path.join(home, '.local', 'share', 'glaze-mcp', 'hosts', 'chrome'));
+  const none = await D.run(ctx);
+  assert.equal(none.ok, false, D.text(none));
+  assert.match(D.text(none), /^FAIL .*npx glaze-mcp setup/m);
+});
+
+test('doctor judges Firefox once set up for it, even where its data folder is elsewhere', { skip: posixOnly('a POSIX stand-in node') }, async (t) => {
+  for (const platform of ['linux', 'darwin']) {
+    const home = scratch(t), env = { HOME: home };
+    const all = B.table(platform, env), at = (id) => all.find((b) => b.id === id);
+    mk(at('chrome').data);
+    const ctx = { platform, env, node: nodeAt(t), run: runner().run, src: PKG };
+    await I.setup({ ...ctx, browsers: ['firefox'] });
+    assert.ok(fs.existsSync(path.join(at('firefox').dir, `${HOST}.json`)), platform);
+    const r = await D.run(ctx);
+    assert.equal(r.ok, true, `${platform}\n${D.text(r)}`);
+    assert.ok(r.rows.some((x) => x.level === 'ok' && x.what === 'Firefox'), `${platform}\n${D.text(r)}`);
+    assert.ok(!r.rows.some((x) => x.level !== 'info' && x.what === 'Google Chrome'), `${platform}\n${D.text(r)}`);
+    fs.writeFileSync(path.join(at('firefox').dir, `${HOST}.json`), '{}');
+    const bad = await D.run(ctx);
+    assert.ok(bad.rows.some((x) => x.level === 'fail' && x.what === 'Firefox'), `${platform}\n${D.text(bad)}`);
+  }
+});
+
+test('doctor on Windows judges a browser setup wrote for through its key, present or not, and lists the rest', async (t) => {
+  const base = scratch(t), reg = runner();
+  mk(base, 'Local', 'Google', 'Chrome', 'User Data');
+  const ctx = win(base, reg, { node: process.execPath });
+  await I.setup({ ...ctx, browsers: ['firefox'] });
+  const r = await D.run(ctx);
+  assert.equal(r.ok, true, D.text(r));
+  assert.ok(r.rows.some((x) => x.level === 'ok' && x.what === 'Firefox' && x.detail.startsWith(K('Mozilla'))), D.text(r));
+  assert.ok(r.rows.some((x) => x.level === 'info' && x.detail.includes('Google Chrome')), D.text(r));
+  reg.keys.delete(K('Mozilla'));
+  const gone = await D.run(ctx);
+  assert.equal(gone.ok, false);
+  assert.ok(gone.rows.some((x) => x.level === 'fail' && x.what === 'Firefox'), D.text(gone));
+});
+
 // ---- the command ------------------------------------------------------------------------------------------------------
 test('the command: agent by default; host from the browser\'s argv (Chromium, Windows --parent-window, Firefox)', () => {
   const M = CLI.mode;

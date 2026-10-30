@@ -1,6 +1,6 @@
-// doctor: reads what setup wrote and says what is wrong with it. It checks our folders (owner and modes), each present
-// browser's manifest (or, on Windows, the key that points at it), the extension ids it lets in, its launcher, the node
-// that launcher names and that node's version, and which copy it runs. It reads files, runs `node --version` and
+// doctor: reads what setup wrote and says what is wrong with it. It checks our folders (owner and modes), the manifest of
+// each browser set up (or, on Windows, the key that points at it), the extension ids it lets in, its launcher, the node
+// that launcher names and that node's version, and which copy it runs. Other browsers found are listed, not judged. It reads files, runs `node --version` and
 // `reg export`, and sends nothing anywhere. `live` is where the host and agent steps add a live handshake: an async
 // function returning more rows.
 'use strict';
@@ -106,16 +106,27 @@ const run = async (o = {}) => {
     return out;
   };
 
-  const present = B.present(B.table(ctx.platform, ctx.env));
-  if (!present.length) add('warn', 'Browsers', 'No supported browser found');
-  for (const b of present) {
+  // Judged: each browser setup wrote for (its launcher), or with our manifest (on Windows, its key). The others found here
+  // are only listed: setup may have been asked for some browsers only.
+  const all = B.table(ctx.platform, ctx.env), here = B.present(all);
+  const exists = (f) => { try { fs.lstatSync(f); return true; } catch { return false; } };
+  const others = [];
+  let judged = 0;
+  for (const b of all) {
+    const set = exists(L.file(ctx.platform, ctx.hosts, b.id));
     let file = I.manifestPath(ctx, b), via = '';
     if (ctx.platform === 'win32') {
+      if (!here.includes(b) && !set) continue;
       // The key the browser reads first.
       const v = await key(b.keys[0]);
+      if (!v && !set) { others.push(b); continue; }
+      judged++;
       if (!v) { add('fail', b.name, `${b.keys[0]} is missing. ${FIX}`); continue; }
       file = v;
       via = `${b.keys[0]} → `;
+    } else {
+      if (!exists(file) && !(set && here.includes(b))) { if (here.includes(b)) others.push(b); continue; }
+      judged++;
     }
     const problems = await check(b, file);
     if (problems.length) { for (const p of problems) add('fail', b.name, p); continue; }
@@ -127,6 +138,8 @@ const run = async (o = {}) => {
     if (copyVersion !== version) add('warn', b.name, `runs glaze-mcp ${copyVersion}; this is ${version}. To switch: npx glaze-mcp@${version} setup`);
   }
 
+  if (!judged) add('fail', 'Browsers', here.length ? `glaze-mcp is set up for no browser. ${FIX}` : `No supported browser found. ${FIX} --browser <id>`);
+  if (others.length) add('info', 'Not set up', `${others.map((b) => `${b.name} (${b.id})`).join(', ')}. To add one: npx glaze-mcp setup --browser <id>`);
   for (const [node, v] of nodes) add('info', 'Node', `${node} (${(await v) || 'no version'})`);
   if (typeof o.live === 'function') {
     try { for (const r of (await o.live(ctx)) || []) rows.push(r); } catch (e) { add('fail', 'Live check', e.message); }
