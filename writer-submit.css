@@ -80,4 +80,4 @@
 .gs-sheet .gs-doc:is([data-kind="xlsx"], [data-kind="xlsm"], [data-kind="csv"], [data-kind="tsv"]) { background: #16a34a; }
 .gs-sheet .gs-doc:is([data-kind="pptx"], [data-kind="ppsx"]) { background: #ea580c; }
 /* The compact box's sheet: the files alone, no preview. */
-.gs-sheet.gs-only { width: min(520px, 100%); grid-template-columns: minmax(0, 1fr); }
+.gs-sheet.gs-only { width: min(520px, 100%); grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
