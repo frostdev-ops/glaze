@@ -139,9 +139,16 @@ const fixture = () => {
     const wide = await until(() => page.evaluate(() => { const p = document.querySelector('.pdfViewer .page[data-page-number="1"]').getBoundingClientRect(), s = document.querySelector('.gq-scroll').getBoundingClientRect(); return p.width > s.width * 0.85 && p.width <= s.width ? { p: p.width, s: s.width } : null; }), 'page width');
     check(w1 > w0 && fit && wide, `zoom: in ${Math.round(w0)}→${Math.round(w1)}, whole page ${JSON.stringify(fit)}, page width ${JSON.stringify(wide)}`);
 
-    // ---- find: "page 2" in the text layer
+    // ---- find: "page 2" in the text layer. Ctrl+F is the viewer's even where the page takes it first, as an assignment's
+    // frame does for its parked paper (writer-find.js, at the document's capture phase): a stand-in for that here.
+    await page.evaluate(() => {
+      const grab = (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); e.stopPropagation(); globalThis.pdfCheckGrabbed = true; } };
+      document.addEventListener('keydown', grab, true);
+      globalThis.pdfCheckUngrab = () => document.removeEventListener('keydown', grab, true);
+    });
     await page.keyboard.press('Control+f');
     await until(() => page.evaluate(() => document.activeElement?.id === 'gq-find-q'), 'find opens on Ctrl+F');
+    check(await page.evaluate(() => { globalThis.pdfCheckUngrab(); return !globalThis.pdfCheckGrabbed; }), 'Ctrl+F opens the PDF\'s find ahead of a page handler that takes it at the document');
     await page.keyboard.type('page 2');
     const found = await until(() => page.evaluate(() => { const n = document.getElementById('gq-find-n').textContent, hit = document.querySelector('.page[data-page-number="2"] .textLayer .highlight'); return hit && /1/.test(n) ? { n, hit: hit.textContent } : null; }), 'find hits');
     check(found.n === '1 of 1' && /page 2|2/.test(found.hit), `find "page 2": one hit on page 2 (${JSON.stringify(found)})`);
