@@ -164,8 +164,8 @@ launchers, saved extension ids and unchanged versioned copies; it leaves the run
 **Turn off** ends every connection, cancels requests still waiting for you, clears the kept assignment reads and, on
 Chrome, Edge and Firefox, gives back the permissions below; the apps, groups and remembered declines stay. A change
 already started can finish. **Revoke** forgets one app with its groups and declines, so it asks to pair again. **Forget
-all apps** forgets every app with its groups and declines, and clears the kept assignment reads. Revoke and Forget all
-apps leave the activity list, agent switch and profile id. Neither uninstalls the helper.
+all apps** clears the activity list and kept assignment reads, and forgets every app with its groups and declines.
+Revoke leaves the activity list. Both leave the agent switch and profile id. Neither uninstalls the helper.
 
 Removing a site in **Settings → Privacy and data → Sites** clears that site's kept assignment reads, and Reset
 everything clears them all. Site removal and Reset everything leave the agent switch, apps, grants and activity

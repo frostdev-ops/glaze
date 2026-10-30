@@ -88,7 +88,7 @@ a switch for each group. Each installed mod with tools is a group of its own.
 - A group turned off is asked for again at the app's next request for it.
 - **Revoke** forgets the app; its next request asks to pair again.
 - An app you declined shows **Declined** and **Forget**, which lets Glaze ask again.
-- **Forget all apps** forgets every app, its groups and declines, and the assignment reads Glaze kept for apps.
+- **Forget all apps** clears the activity list and assignment reads and forgets every app, its groups and declines.
 
 Turning the switch off ends every connection, cancels waiting requests, clears the kept assignment reads and gives back
 the optional browser permissions on Chrome, Edge and Firefox. The apps, groups, declines, activity and profile id stay.
@@ -99,7 +99,7 @@ copies alone.
 ## Activity
 
 **Activity** lists the last 200 calls, newest first: the tool, the app, when, and how it ended (Done, Failed, Declined,
-Timed out, Interrupted, Refused, Busy or Cancelled), never what was asked or answered.
+Timed out, Interrupted, Refused, Busy or Cancelled), never what was asked or answered. **Forget all apps** clears this list.
 
 ## Troubleshooting
 

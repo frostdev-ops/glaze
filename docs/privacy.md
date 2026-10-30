@@ -47,9 +47,10 @@ calls' metadata (never their content), and the 100 assignment reads used last. S
 document text in action summaries; records no longer waiting become eligible for cleanup an hour after creation, on
 later requests or agent-worker startup, and may remain until session end. Turn off cancels waiting requests and clears
 assignment reads, keeping apps and grants; a change already started can finish. Revoke forgets one app; Forget all apps
-forgets all apps, grants and declines and clears assignment reads. Removing a site clears its assignment reads; Reset
-everything clears all assignment reads, keeping the switch, apps, grants and activity. None of these erases copies an
-app kept. On Firefox, turning agent access on also asks to share website content, which turning it off gives back.
+clears the activity list and assignment reads and forgets all apps, grants and declines. Removing a site clears its
+assignment reads; Reset everything clears all assignment reads, keeping the switch, apps, grants and activity. None of
+these erases copies an app kept. On Firefox, turning agent access on also asks to share website content, which turning
+it off gives back.
 
 Glaze stores your settings in `chrome.storage.sync`, including the course nicknames, colours, looks and tint
 you set in a course's menu. These follow Chrome sync (or Firefox Sync) when it's on; Safari keeps them on this device only.

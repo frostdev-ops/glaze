@@ -25,6 +25,8 @@ Edge and Firefox, program identities are also self-reported and unverified. Wind
 Other programs running as your user can reach the helper. See
 [Agents](https://github.com/frostdev-ops/glaze/blob/main/docs/agents.md) for approvals, tools and privacy.
 
+In Glaze, **Forget all apps** clears the activity list and assignment reads and forgets paired apps, grants and declines.
+
 For a copy of Glaze loaded unpacked, add `--dev <its folder>` (macOS and Linux) or `--extension-id <id>` with the id
 `chrome://extensions` shows. A manifest with a `key` also needs `--extension-id`. Setup remembers only ids explicitly
 given to it.
