@@ -368,3 +368,84 @@ RangeError: Maximum call stack size exceeded
 LARGE and SMALL sorted their full numeric input (source inspection).
 1000 array-member ISFORMULA lookups in a 10000-cell array: 104.36579100000002 ms
 The deterministic lookup regression observed 1999800 member visits for 200 lookups.
+
+--- Other-lane model observation ---
+Four sheets: First, Middle, Last, Summary. A1 values 1,2,4 on the first
+three, Summary!A1=SUM(First:Last!A1). Move Middle after Last via engine.apply:
+before move SUM(First:Last!A1) = 7
+after move SUM(First:Last!A1) = 7
+after explicit recalc SUM(First:Last!A1) = 5
+No protected file was edited.
+
+--- Regression commits and observed red counts ---
+84059d0a stats-coercion
+ℹ tests 15
+ℹ pass 11
+ℹ fail 4
+c239ff8e stats-selection
+ℹ tests 17
+ℹ pass 15
+ℹ fail 2
+7412b6bd stats-numeric
+ℹ tests 19
+ℹ pass 17
+ℹ fail 2
+ff49cb0b info-types
+ℹ tests 10
+ℹ pass 6
+ℹ fail 4
+81bc8524 info-lookup
+ℹ tests 11
+ℹ pass 10
+ℹ fail 1
+1c22278d info-formats
+ℹ tests 12
+ℹ pass 11
+ℹ fail 1
+c2c38ce4 stats-trim
+ℹ tests 20
+ℹ pass 19
+ℹ fail 1
+e5d6fca8 info-blank
+ℹ tests 12
+ℹ pass 11
+ℹ fail 1
+
+--- Final local check ---
+node --test test/sheet-*.test.js test/perf-budget.test.js
+ℹ full 198 ms, edit 1 ms
+ℹ tests 130
+ℹ suites 0
+ℹ pass 130
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 832.4035
+
+--- Final Linux runner check ---
+glaze-remote -e TZ=UTC -- node --test
+ℹ 4000x4000, 40000 words: 137.2 ms wall, 273.0 ms CPU
+ℹ accuracy
+ℹ edit to an open device: 3.1 ms (send, ring, catch up)
+ℹ full 236 ms, edit 1 ms
+ℹ 10000 words, 52690 UTF-16 units: median 152.1 ms, max 156.2 ms
+ℹ tests 6692
+ℹ suites 0
+ℹ pass 6671
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 16
+ℹ todo 0
+ℹ duration_ms 123765.072538
+
+Known failures, verbatim:
+✖ backup launch accepts a completed install and completed Settings startup (30038.728292ms)
+✖ backup launch waits for Settings' newsSeen write after install finishes (30033.294551ms)
+✖ backup launch waits for Settings' navbarSeen:chrome-extension://abcdefghijklmnopabcdefghijklmnop write after install finishes (30036.944261ms)
+✖ backup launch reports a Settings startup write that never completes (30036.58869ms)
+✖ installed polls a new profile until each install task has made its last write, and says so when one never does (30050.235858ms)
+
+--- Final Safari mirror check ---
+safari-resources: all 527 staged files are bundled by both extension targets
+Direct Xcode resources match all 527 current Safari package files.
