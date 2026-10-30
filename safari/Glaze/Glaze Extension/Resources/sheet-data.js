@@ -156,6 +156,14 @@ var GZ_SHEET_DATA = globalThis.GZ_SHEET_DATA || (() => {
     }
     throw new Error('torn read of a spreadsheet');
   };
+  // The card's charts (lib/sheet-chart-xml.js glance) on the active sheet: [] when it has no drawing, null when it has one
+  // but the chart reader isn't loaded (the card then counts the drawing's charts itself).
+  const charts = (wb) => {
+    const sh = wb.sheets[wb.active] || wb.sheets[0];
+    if (!sh?.keep?.drawing) return [];
+    const CX = typeof GZ_SHEET_CHART_XML !== 'undefined' ? GZ_SHEET_CHART_XML : globalThis.GZ_SHEET_CHART_XML;
+    try { return CX ? CX.glance(wb, sh) : null; } catch { return null; }
+  };
   // A spreadsheet written through the worker (papers: lib/writer-papers.js open()): the parts plan() finds changed and the
   // book when it changed, with the card's text, the search text and the counts; a packed version ({ reason, gz, cells })
   // when one is asked for. Nothing is sent when nothing changed and nothing else is asked. show: a cell's shown text.
@@ -163,15 +171,18 @@ var GZ_SHEET_DATA = globalThis.GZ_SHEET_DATA || (() => {
   const write = async (papers, key, wb, sigs, { patch = {}, dirty = null, version = null, show = plain, reason, base = sigs?.revision ?? 0 } = {}) => {
     const p = plan(wb, sigs, dirty);
     if (!p.changed && !version && !Object.keys(patch).length) return { sigs, saved: null };
-    const m = measure(wb);
-    const saved = await papers.save(key, { kind: 'sheet', ...(p.book && { book: p.book }), grid: glance(wb, show), text: text(wb, show), cells: m.cells, sheets: m.sheets, ...patch },
+    const m = measure(wb), allCharts = charts(wb);
+    // Keep the exact count, but only the top 32 markers that can paint on the card. Off-card descriptors add no value
+    // to storage or rendering; a later visible chart must not be lost behind earlier off-card ones.
+    const preview = allCharts?.filter(({ anchor: [r0, c0, r1, c1] }) => r0 <= 3 && c0 <= 5 && r1 >= 0 && c1 >= 0 && r1 >= r0 && c1 >= c0).slice(-32) ?? null;
+    const saved = await papers.save(key, { kind: 'sheet', ...(p.book && { book: p.book }), grid: glance(wb, show), charts: preview, chartCount: allCharts?.length ?? null, text: text(wb, show), cells: m.cells, sheets: m.sheets, ...patch },
       { base, parts: p.parts, drop: p.drop, changed: p.changed, ...(version && { version }), ...(reason && { reason }) });
     p.sigs.revision = saved.paper.revision;
     return { sigs: p.sigs, saved };
   };
   const GZ_SHEET_MODEL_OR = () => (typeof GZ_SHEET_MODEL !== 'undefined' ? GZ_SHEET_MODEL : require('./lib/sheet-model.js'));
 
-  return { BAND, TEXT_CAP, VERSIONS_CAP, PART, keyOf, enc, dec, split, join, serialize, deserialize, sig, plan, measure, text, glance, isGlance, pack, unpack, read, write };
+  return { BAND, TEXT_CAP, VERSIONS_CAP, PART, keyOf, enc, dec, split, join, serialize, deserialize, sig, plan, measure, text, glance, charts, isGlance, pack, unpack, read, write };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_SHEET_DATA; else GZ_SHEET_DATA;
