@@ -459,3 +459,10 @@ test('preset colours include standard long names and abbreviated aliases', async
     assert.deepEqual(named(d.slides[2], 'Default').fill, { type: 'solid', color }, val);
   }
 });
+
+test('a slide masterClrMapping bypasses the layout colour-map override', async () => {
+  const layout = fixture('ppt/slideLayouts/slideLayout1.xml').replace('<a:masterClrMapping/>', '<a:overrideClrMapping bg1="dk1" tx1="lt1"/>');
+  const d = await P.read(pack({ 'ppt/slideLayouts/slideLayout1.xml': layout }));
+  assert.deepEqual(d.slides[0].background, { type: 'solid', color: '#ffffff' });
+  assert.equal(named(d.slides[0], 'Title 1').text.paragraphs[0].runs[0].color, '#000000');
+});
