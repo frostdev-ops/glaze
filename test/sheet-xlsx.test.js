@@ -614,6 +614,7 @@ test('locked: structural edits a pivot, slicer, query, macro, external link or t
 
 test('write: a copied sheet gets its own part and leaves the original its drawing; macros make it .xlsm', async () => {
   const wb = await X.read(synthetic({ 'xl/vbaProject.bin': Uint8Array.from([0xd0, 0xcf, 0x11, 0xe0]),
+    'xl/worksheets/sheet1.xml': SHEET1.replace('mc:Ignorable="x14ac">', 'mc:Ignorable="x14ac" xmlns:xr="http://schemas.microsoft.com/office/spreadsheetml/2014/revision" xr:uid="{11691459-BD10-3A42-A056-F33732C221E5}">'),
     'xl/_rels/workbook.xml.rels': rels([['rId1', 'worksheet', 'worksheets/sheet1.xml'], ['rId2', 'worksheet', 'worksheets/sheet2.xml'], ['rId3', 'worksheet', '/xl/worksheets/sheet3.xml'], ['rId4', 'styles', 'styles.xml'], ['rId5', 'sharedStrings', 'sharedStrings.xml'], ['rId6', 'theme', 'theme/theme1.xml'], ['rId9', 'chartsheet', 'chartsheets/sheet1.xml'], ['rId11', 'vbaProject', 'vbaProject.bin']]) }));
   const one = M.getSheet(wb, 'One');
   const copy = { ...one, id: 77, name: 'One (2)', rows: new Map([...one.rows].map(([r, row]) => [r, new Map(row)])), keep: { ...one.keep } };
@@ -628,6 +629,8 @@ test('write: a copied sheet gets its own part and leaves the original its drawin
   assert.doesNotMatch(p[copyPart], /<drawing |<legacyDrawing /, 'the drawing stays with the original');
   assert.match(p[copyPart], /<hyperlink ref="A1" r:id="rId1"/, 'an external hyperlink is no part, so the copy keeps it');
   assert.match(p['xl/worksheets/sheet1.xml'], /<drawing r:id="rId2"\/>/);
+  assert.match(p['xl/worksheets/sheet1.xml'], /xr:uid="\{11691459/);
+  assert.doesNotMatch(p[copyPart], /xr:uid=/, 'a copy is not the sheet Excel tracks by that id');
   const again = await X.read(out);
   assert.deepEqual(again.sheets.map((s) => s.name), ['One', 'One (2)', 'Two', 'Split view']);
   assert.equal(M.cell(M.getSheet(again, 'One (2)'), 1, 0).v, 1.5);
