@@ -125,3 +125,30 @@ test('source saves enforce MAX and leave stored sources intact when quota refuse
   assert.equal(await S.save(k, [], area), false);
   assert.deepEqual(data, before);
 });
+
+// Clear, Delete forever and Trash's 30 days delete a paper's or document's saved sources with it: reopening the
+// assignment, or a new paper under that key, starts with none.
+test('a removed or purged paper takes its saved sources with it', async () => {
+  const data = {};
+  const area = {
+    get: async (k) => { const ks = k == null ? Object.keys(data) : [].concat(k); return Object.fromEntries(ks.filter((x) => x in data).map((x) => [x, structuredClone(data[x])])); },
+    set: async (o) => { Object.assign(data, structuredClone(o)); },
+    remove: async (k) => { for (const x of [].concat(k)) delete data[x]; },
+  };
+  let t = 1e12;
+  const api = PA.open(area, () => t);
+  const paper = { school: HOST, user: '_900_1', course: '_101_1', content: '_7_1' };
+  const k = PA.keyOf(paper), doc = PA.newKey(), source = [{ type: 'web', title: 'A source', URL: 'https://example.org/a' }];
+  const docOf = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Words.' }] }] };
+  for (const key of [k, doc]) await api.save(key, { ...(key === k ? paper : {}), title: 'Essay', doc: docOf });
+  const sk = S.keyOf({ paper }), dk = localKey(doc), other = localKey(PA.newKey());
+  assert.equal(sk, `writer:sources:${k}`);
+  for (const key of [sk, dk, other]) await S.save(key, source, area);
+  await api.remove(k);
+  assert.deepEqual(await S.load(sk, area), [], 'Clear: the assignment\'s sources go with its paper');
+  await api.trash(doc);
+  t += 31 * 864e5;
+  assert.deepEqual(await api.purge(), [doc]);
+  assert.deepEqual(await S.load(dk, area), [], 'Trash\'s 30 days: the document\'s sources go too');
+  assert.equal((await S.load(other, area)).length, 1, 'another document\'s stay');
+});
