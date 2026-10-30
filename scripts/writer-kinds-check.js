@@ -6,7 +6,8 @@
 // the paper's place, as tall as a paper; a field filled is saved; Submit… sends the saved PDF (its bytes, application/pdf,
 // Lastname_Title.pdf) through Ultra's upload once and clicks Ultra's Submit once; a reload opens the viewer again, the field
 // still filled. The same for a .pptx: the deck in the slides viewer, and Submit sends the very bytes brought. With
-// writer.sheets on and no spreadsheet kind in this build, neither Document/Spreadsheet nor New spreadsheet is offered.
+// no spreadsheet kind in this build, neither Document/Spreadsheet nor New spreadsheet is offered, even if the gate is
+// asked with a future spreadsheet preference (today's settings sanitizer does not retain writer.sheets).
 // Switches off: a PDF on Ultra's file area is Ultra's, as before (writer-submit-check.js covers the rest of today's flows).
 // GETs only, synthetic. NODE_PATH=<playwright> node scripts/writer-kinds-check.js [evidence directory]
 const { chromium } = require('playwright');
@@ -85,7 +86,7 @@ const holds = (bytes, value) => {
     const G = require(path.join(root, 'defaults.js'));
     const settings = (w) => G.GZ_SANITIZE({ navbar: { on: false }, footer: false, preset: 'Frost', enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, writerUploads: true, drafts: true }, writer: { full: false, ...w } });
     const reset = (w) => worker.evaluate(async ({ s, site }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(s); await chrome.storage.local.set({ ultra: [site] }); }, { s: settings(w), site });
-    await reset({ pdf: true, slides: true, sheets: true });
+    await reset({ pdf: true, slides: true });
     const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/popup.html`); await env.ultraReady(opts); await opts.close();
     const local = () => worker.evaluate(async () => chrome.storage.local.get(null));
     const record = async () => { const all = await local(), k = Object.keys(all).find((x) => x.startsWith('writerPaper:')); return k ? all[k] : null; };
@@ -111,11 +112,11 @@ const holds = (bytes, value) => {
     const shot = async (p, name) => { await pause(300); const f = path.join(out, name); await p.screenshot({ path: f }); return f; };
     const pdfBytes = PDF.acroform(), deckBytes = deck();
 
-    // ---- with writer.sheets on but no spreadsheet kind in this build: no choice offered
+    // ---- no spreadsheet kind in this build: no choice offered, including with the future preference passed to the gate
     let { p, el, fr } = await open();
     await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'compact');
     await quiet(() => fr.evaluate(() => !!document.querySelector('.gk-choose')), 'Document/Spreadsheet offered without a spreadsheet kind');
-    check(await fr.evaluate(() => !document.querySelector('.gk-choose') && ![...document.querySelectorAll('#menu [role="menuitem"]')].some((b) => /spreadsheet/i.test(b.textContent))), 'writer.sheets on, no spreadsheet kind here: no Document/Spreadsheet choice, no New spreadsheet');
+    check(await fr.evaluate(() => GZ_WRITER_KINDS.offers({ sheets: true }).length === 0 && !document.querySelector('.gk-choose') && ![...document.querySelectorAll('#menu [role="menuitem"]')].some((b) => /spreadsheet/i.test(b.textContent))), 'no spreadsheet kind here: even with sheets on the gate offers nothing; no Document/Spreadsheet choice or New spreadsheet');
     await fr.locator('#gw .ProseMirror').fill('Text beside the PDF.');
     await until(() => p.evaluate(() => __text().trim() === 'Text beside the PDF.'), 'compact text in Ultra');
 
