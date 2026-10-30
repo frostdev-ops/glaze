@@ -208,6 +208,29 @@ test('resets give back the defaults this device started with: a fresh install ke
   assert.match(source, /freshHere = r\?\.freshDefaults\?\.fresh === true; showResets\(\);/);
 });
 
+test('resets follow this device\'s defaults when the install marks it after Settings opened, or a restore unmarks it', () => {
+  const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
+  const helper = source.slice(source.indexOf('  let freshHere = false;'), source.indexOf('  // Two clicks, so a stray one'));
+  // The read answers before the install's write, or (another process) only after its change event.
+  for (const late of [false, true]) {
+    let answer, shown = 0;
+    const changed = [];
+    const ctx = vm.createContext({ GZ_SANITIZE: D.GZ_SANITIZE, GZ_CARDS: { settings: () => ({}) }, showResets() { shown++; },
+      chrome: { storage: { local: { get: (k, cb) => { answer = cb; } }, onChanged: { addListener: (f) => changed.push(f) } } } });
+    vm.runInContext(helper, ctx);
+    const notes = () => vm.runInContext('defaultsHere().enhance.notes', ctx);
+    if (!late) answer({});
+    for (const f of changed) f({ freshDefaults: { newValue: { fresh: true, pending: true } } }, 'local');
+    if (late) answer({});
+    assert.equal(notes(), true, late ? 'a read older than the change does not undo it' : 'the install marks this device fresh');
+    assert.ok(shown > 0, 'Reset buttons are shown again against the new defaults');
+    for (const f of changed) f({ freshDefaults: { oldValue: { fresh: true, pending: false }, newValue: { fresh: false, pending: false } } }, 'local');
+    assert.equal(notes(), false, 'a restored backup is not a fresh install');
+    for (const f of changed) f({ freshDefaults: { newValue: { fresh: true } } }, 'sync');
+    assert.equal(notes(), false, 'only this device\'s own mark counts');
+  }
+});
+
 test('E1 Ultra preview carries the chosen course color and nickname without saving a pending Look', () => {
   const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
   const preview = source.slice(source.indexOf('  const preview = () => {') + '  const preview = '.length, source.indexOf('\n  const contextPreview =')).replace(/;\s*$/, '');
