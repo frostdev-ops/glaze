@@ -117,6 +117,21 @@ test('lookup: oversized rectangles are refused before reading cells', () => {
   assert.equal(reads, 0, 'check the complete rectangle before allocating or visiting it');
 });
 
+test('lookup: sheet-scoped names use their own sheet and take precedence over workbook names', () => {
+  const wb = M.workbook(), other = M.sheet('Other data', 2);
+  wb.sheets[0].rows.set(0, new Map([[0, { t: 'n', v: 1 }]]));
+  other.rows.set(0, new Map([[0, { t: 'n', v: 7 }]]));
+  wb.sheets.push(other);
+  wb.names = [{ name: 'Values', ref: 'Sheet1!$A$1' }, { name: 'Values', sheet: 2, ref: '$A$1' },
+    { name: 'LocalOnly', sheet: 2, ref: 'Values' }];
+  const look = CX.lookup(wb);
+  assert.deepEqual(look("'Other data'!Values")?.map((x) => x.v), [7]);
+  assert.deepEqual(look("'Other data'!LocalOnly")?.map((x) => x.v), [7], 'nested local names keep their scope');
+  assert.deepEqual(look('Values')?.map((x) => x.v), [1]);
+  assert.equal(look('LocalOnly'), null, 'an unqualified chart name cannot borrow another sheet\'s local definition');
+  assert.equal(look('Missing!Values'), null);
+});
+
 test('resolve: hiding a point keeps each remaining slice and legend in its original colour', async () => {
   const { wb } = await open();
   wb.sheets[0].hidden.rows.add(2);
