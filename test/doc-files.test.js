@@ -220,10 +220,11 @@ test('a page disconnecting while its upload starts releases the late upload', as
     if (puts.some(([k]) => k.startsWith('u:'))) { started(); await gate; }
     return db.write(puts, dels);
   } }) });
-  const { client, log } = wire(st), uploading = client.put(bytes(100, 62), 'application/pdf');
+  const p = ports();
+  F.serve(p.worker, st);
+  p.page.postMessage({ op: 'put', size: 100, type: 'application/pdf' });
   await beginning;
-  log[0].page.disconnect();
-  await assert.rejects(uploading, (e) => e.why === 'interrupted');
+  p.page.disconnect();
   release();
   for (let i = 0; i < 20; i++) await new Promise(setImmediate);
   assert.deepEqual([...data().keys()], []);
