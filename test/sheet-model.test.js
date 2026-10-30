@@ -440,3 +440,15 @@ test('undo restores the exact serialized Map and Set order as well as cell and l
     assert.ok(serialize(wb).equals(before), op.op + ' ' + (op.axis || 'cells'));
   }
 });
+
+// Excel's row/column limits also bound the number of rows or columns an insertion can select.
+test('an insertion beyond the sheet boundary is refused even when no cells would be lost', () => {
+  for (const axis of ['row', 'col']) {
+    const wb = M.workbook(), max = axis === 'row' ? M.MAX_ROWS : M.MAX_COLS;
+    const before = structuredClone(wb);
+    for (const [at, n] of [[max - 1, 2], [0, max + 1]]) {
+      assert.throws(() => M.apply(wb, { op: 'insert', sheet: 1, axis, at, n }), (e) => e.code === 'bounds');
+      assert.deepEqual(wb, before);
+    }
+  }
+});
