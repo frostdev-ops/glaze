@@ -1,5 +1,5 @@
-// The PDF kind on the Documents page (pdf-kind.js, papers.html): loaded after papers.js and packaged, registered only with
-// Settings → Writer → PDFs on (writer.pdf), its one storage seam (the bytes as a base64 `file` field in the paper record
+// The PDF kind on the Documents page (pdf-kind.js, papers.html): loaded after papers.js and packaged, importing only with
+// Settings → Writer → PDFs on (writer.pdf) while a PDF already kept opens either way, its one storage seam (the bytes as a base64 `file` field in the paper record
 // until the worker's blob store takes them), and which files it refuses. The viewer itself is scripts/pdf-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -29,16 +29,19 @@ const load = (writer) => {
   return { DK, ctx };
 };
 
-test('off (the default), no PDF kind is registered: Documents opens Word files only', async () => {
+test('off (the default), Documents imports Word files only, and a PDF it already keeps still opens', async () => {
   for (const writer of [undefined, { pdf: false }, { pdf: 'yes' }, { full: true }]) {
     const { DK } = load(writer);
     await DK.settled();
-    assert.equal(DK.get('pdf').edit, undefined, JSON.stringify(writer));
+    const k = DK.get('pdf');
+    assert.equal(k.importFile, undefined, JSON.stringify(writer));
     assert.equal(DK.opens('Worksheet.pdf'), null);
+    assert.ok(!DK.accept().includes('pdf'));
+    for (const f of ['edit', 'thumb', 'exportFile', 'measure', 'file', 'text']) assert.equal(typeof k[f], 'function', `${f} with ${JSON.stringify(writer)}`);
   }
 });
 
-test('on, the PDF kind registers its page code', async () => {
+test('on, the PDF kind also imports', async () => {
   const { DK } = load({ pdf: true });
   await DK.settled();
   const k = DK.get('pdf');

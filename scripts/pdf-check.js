@@ -1,5 +1,5 @@
 // PDFs on the Documents page (papers.html, pdf-kind.js) in the real unpacked extension: with Settings → Writer → PDFs off
-// (writer.pdf, the default) a .pdf is refused as before; on, it imports as a card with its first page drawn, opens in the
+// (writer.pdf, the default) a .pdf is refused as before, while a PDF already kept still opens; on, it imports as a card with its first page drawn, opens in the
 // viewer (pdf.js's PDFViewer: three pages, zoom, the text layer's find, AcroForm fields) whose filled field is still filled
 // after closing and opening it again, Export .pdf downloads the filled file, and Esc and Back behave as a paper's. pdf.js
 // runs its own worker (never the fake one in the page), the page stays white under a dark Look while its chrome wears it,
@@ -195,6 +195,18 @@ const fixture = () => {
     await page.goBack();
     await until(() => page.evaluate(() => !document.getElementById('list').hidden && location.search === ''), 'Back to Documents');
     check(true, 'Back returns to Documents');
+
+    // ---- off again: no new PDFs, the one kept still lists and opens, filled
+    await worker.evaluate(async (s) => { await chrome.storage.sync.set(s); }, settings(false));
+    await openHome();
+    const offAgain = await page.evaluate((k) => ({ accept: document.getElementById('gd-file').accept, label: document.getElementById('gd-import').textContent, card: !!document.querySelector(`.gd-card[data-key="${k}"]`) }), key);
+    check(!/pdf/i.test(offAgain.accept) && offAgain.label === 'Import .docx…' && offAgain.card, `off again: Word files only to import, the kept PDF still listed (${JSON.stringify(offAgain)})`);
+    await page.setInputFiles('#gd-file', file);
+    await until(() => page.evaluate(() => document.getElementById('gd-said').textContent), 'off again: refusal');
+    check(((await local('writerPapers')) || []).length === 1, 'off again: a .pdf is refused, nothing new stored');
+    await page.click(`.gd-card[data-key="${key}"] .gd-title`);
+    const keptOff = await until(() => page.evaluate(() => document.querySelector('.page[data-page-number="1"] .annotationLayer input')?.value || null), 'the kept PDF opens with the switch off');
+    check(keptOff === 'Ada Lovelace', `off again: the kept PDF opens, filled (${keptOff})`);
 
     check(!errors.some((e) => /sender/.test(e)), 'no worker sender refusals');
     check(!errors.some((e) => /fake worker/i.test(e)), 'pdf.js never fell back to a fake worker');
