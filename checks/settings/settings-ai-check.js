@@ -214,6 +214,41 @@ async function pass(scheme) {
       assert.equal(await page.locator('#ai-providers .ai-prov', { hasText: 'Ollama' }).count(), 0, 'nor endpoints');
     });
 
+    // At 320px each feature's tuning and effort labels sit apart and inside their group, in Advanced and Simple.
+    await check('narrow', async () => {
+      // The visible labels of each group that crowd one another.
+      const crowded = () => page.evaluate(() => {
+        const bad = [];
+        const groups = [...document.querySelectorAll('#ai-feature-list .ai-tune .g')].map((g) => [g, g.querySelectorAll(':scope > .field > span, :scope > .field > output, :scope > button')])
+          .concat([...document.querySelectorAll('#ai-feature-list .ai-effort')].map((g) => [g, g.querySelectorAll('.stops button')]));
+        for (const [g, labels] of groups) {
+          const box = g.getBoundingClientRect(), what = (e) => `${e.closest('.ai-feat').querySelector('.name').textContent}: "${e.textContent}"`;
+          const shown = [...labels].filter((e) => e.checkVisibility() && e.getBoundingClientRect().width > 0).map((e) => [e, e.getBoundingClientRect()]);
+          for (const [e, r] of shown) if (r.left < box.left - 0.5 || r.right > box.right + 0.5 || r.top < box.top - 0.5 || r.bottom > box.bottom + 0.5) bad.push(`${what(e)} leaves its group`);
+          shown.forEach(([a, r], i) => shown.slice(i + 1).forEach(([b, q]) => {
+            if (Math.min(r.right, q.right) - Math.max(r.left, q.left) > 0.5 && Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top) > 0.5) bad.push(`${what(a)} overlaps ${what(b)}`);
+          }));
+        }
+        return bad;
+      });
+      await page.setViewportSize({ width: 320, height: 3000 });
+      try {
+        await page.locator('label', { hasText: 'Advanced' }).click();
+        await page.locator('#ai-feature-list .ai-tune').first().waitFor();
+        assert.ok(await page.locator('#ai-feature-list .ai-effort').count() > 0, 'an effort slider is shown');
+        assert.ok(await page.locator('#ai-feature-list .ai-tune .g output').count() > 0, 'tuning is shown');
+        assert.deepEqual(await crowded(), [], 'Advanced at 320px');
+        await shoot('advanced-320');
+        await page.locator('label', { hasText: 'Simple' }).click();
+        await page.locator('.ai-tune').first().waitFor({ state: 'detached' });
+        assert.deepEqual(await page.locator('#ai-feature-list .ai-feat').nth(2).locator('.ai-effort .stops button').allTextContents(), ['Default', 'Minimal', 'Low', 'Medium', 'High']);
+        assert.deepEqual(await crowded(), [], 'Simple at 320px');
+        await shoot('simple-320');
+      } finally {
+        await page.setViewportSize({ width: 1280, height: 3000 });
+      }
+    });
+
     await check('device', async () => {
       await page.locator('#ai-providers .ai-prov', { hasText: 'Chrome on-device AI' }).click();
       await page.locator('#ai-drawer .note').filter({ hasText: /\S/ }).waitFor();
