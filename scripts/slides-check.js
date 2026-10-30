@@ -32,7 +32,7 @@ const fixture = () => {
 
 (async () => {
   let context, held = false, tmp, passed = false;
-  const lock = env.lockPath();
+  const lock = require('./check-env.js').lockPath();
   try {
     for (let i = 0; ; i++) {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nslides-check\n`); break; }
@@ -44,7 +44,7 @@ const fixture = () => {
     fs.writeFileSync(file, deckBytes);
     const ext = env.staged(root, []);
     await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...env.chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1, locale: 'en-US',
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1, locale: 'en-US',
       reducedMotion: 'reduce', acceptDownloads: true, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     const first = env.noFirstRun(context); context.setDefaultTimeout(15000);
     await context.route('**/*', (r) => { const u = new URL(r.request().url()); if (u.protocol === 'chrome-extension:' || u.protocol === 'blob:' || u.protocol === 'data:') return r.continue(); requests.push(u.href); return r.abort(); });

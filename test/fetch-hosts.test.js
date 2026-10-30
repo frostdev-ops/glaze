@@ -97,6 +97,8 @@ const SITES = {
     { at: 'const nearby = async (site, { f = fetch', kind: 'open', why: 'no-cors existence checks whose answer is never read; the homepage read only when held' },
   ],
   'lib/editor-xbg.js': [{ at: 'fetch(`assets/shaders/', kind: 'extension' }],
+  // A deck's card picture carries the bundled faces its slide 1 uses (lib/fonts), read from the extension itself.
+  'slides-kind.js': [{ at: 'fetch(chrome.runtime.getURL(`lib/fonts/', kind: 'extension' }],
   'lib/ocr.js': [{ at: 'fetch(here(', kind: 'extension' }],
   'lib/lmsq.js': [{ at: 'return fetch(url, init)', kind: 'page' }],
   'lib/ultra.js': [{ at: 'f = (...a) => fetch(...a)', kind: 'page' }],
