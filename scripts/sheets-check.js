@@ -215,6 +215,20 @@ const seeded = (key, wb = M.workbook()) => {
     await page.click('.gx-tab >> text=Sheet2');
     await go('A1');
     check(await formula() === '=Data!A4' && await cell(0, 0) === '30', 'renaming Sheet1 to Data rewrites Sheet2\'s reference');
+    // Another sheet's cells by pointing: the formula stays open over Data, says no error, and lands back in Sheet2.
+    await go('A2');
+    await page.keyboard.type('=SUM(');
+    await page.click('.gx-tab >> text=Data');
+    await until(() => page.evaluate(() => document.querySelector('.gx-tab[aria-selected="true"]')?.textContent === 'Data' && !!document.querySelector('#gx-grid .gx-c[data-r="2"][data-c="0"]')), 'Data while writing');
+    const centre = (r, c) => page.evaluate(([r, c]) => { const b = document.querySelector(`#gx-grid .gx-c[data-r="${r}"][data-c="${c}"]`).getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; }, [r, c]);
+    const [from, to] = [await centre(1, 0), await centre(2, 0)];
+    await page.mouse.move(from.x, from.y); await page.mouse.down(); await page.mouse.move(to.x, to.y, { steps: 2 }); await page.mouse.up();
+    const pointed = { formula: await formula(), said: await page.evaluate(() => document.querySelector('.gx-said').textContent), editor: await page.evaluate(() => document.getElementById('gx-edit').hidden) };
+    check(pointed.formula === '=SUM(Data!A2:A3' && pointed.said === '' && pointed.editor, `pointing at Data's cells from Sheet2 puts them in, without an error (${JSON.stringify(pointed)})`);
+    await page.keyboard.type(')'); await page.keyboard.press('Enter');
+    await until(() => page.evaluate(() => document.querySelector('.gx-tab[aria-selected="true"]')?.textContent === 'Sheet2'), 'back on Sheet2');
+    await go('A2');
+    check(await formula() === '=SUM(Data!A2:A3)' && await cell(1, 0) === '30', 'and the formula lands in Sheet2!A2');
     await page.click('.gx-tab >> text=Data');
     await grid();
 

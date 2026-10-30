@@ -352,3 +352,25 @@ test('a cell starts with a character typed with AltGr or the Mac\'s Option; Wind
   mac.key('@', { altKey: true });
   assert.equal(mac.el('gx-edit').value, '@', 'Option+L on a German Mac');
 });
+
+test('a formula waiting for a reference stays open on another sheet, in the formula bar, without an error', () => {
+  const f = frame(), said = () => f.doc.querySelector('.gx-said').textContent;
+  f.fire(f.el('gx-add'), 'click');
+  f.type('=SUM('); f.el('gx-edit').setSelectionRange(5, 5);
+  f.fire(f.el('gx-tab-1'), 'click');
+  assert.equal(said(), '', 'no error for a formula still being written');
+  assert.equal(f.el('gx-tab-1').getAttribute('aria-selected'), 'true', 'Sheet1 shows');
+  assert.equal(f.el('gx-edit').hidden, true, 'the cell editor is not over Sheet1\'s cells');
+  assert.equal(f.doc.activeElement, f.el('gx-formula'));
+  const fx = f.el('gx-formula');
+  fx.value = '=SUM(Sheet1!A1:A2)'; f.fire(fx, 'input');
+  f.key('Enter');
+  assert.equal(f.wb.sheets[1].rows.get(0).get(0).f, 'SUM(Sheet1!A1:A2)', 'written in Sheet2!A1');
+  assert.equal(f.el('gx-tab-2').getAttribute('aria-selected'), 'true', 'back on Sheet2');
+  // Esc on the other sheet goes back too, the cell as it was.
+  f.key('ArrowUp'); f.type('=1+'); f.el('gx-edit').setSelectionRange(3, 3);
+  f.fire(f.el('gx-tab-1'), 'click');
+  f.key('Escape');
+  assert.equal(f.el('gx-tab-2').getAttribute('aria-selected'), 'true');
+  assert.equal(f.wb.sheets[1].rows.get(0).get(0).f, 'SUM(Sheet1!A1:A2)');
+});

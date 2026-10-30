@@ -828,7 +828,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       changed(res, { op: 'set' });
       return true;
     };
-    const cancel = () => { if (!editing) return; stopEdit(); gridEl.focus({ preventScroll: true }); };
+    // Back to the cell's own sheet if a reference was being looked for on another.
+    const cancel = () => { if (!editing) return; const home = editing.sheet; stopEdit(); if (home !== S().id) show(wb.sheets.findIndex((x) => x.id === home)); gridEl.focus({ preventScroll: true }); };
     // Where a reference can go: the formula's text before the caret ends in an operator, a parenthesis, a comma or the =.
     const pointable = () => {
       if (!editing) return false;
@@ -928,8 +929,9 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       s.addEventListener('click', () => { if (editing) { editing.point = null; typed(); } });
     }
     fx.addEventListener('focus', () => { if (!editing) startEdit(editText(...sel.active), 'edit', fx); else if (editing.surface === editor) { editing.surface = fx; editor.hidden = true; } });
-    editor.addEventListener('blur', () => { setTimeout(() => { if (editing?.surface === editor && document.activeElement !== editor && document.activeElement !== fx && !document.activeElement?.closest?.('.gx-menu')) commit(); }, 0); });
-    fx.addEventListener('blur', () => { setTimeout(() => { if (editing?.surface === fx && document.activeElement !== fx && document.activeElement !== gridEl) commit(); }, 0); });
+    // A sheet's tab pressed: show() decides.
+    editor.addEventListener('blur', () => { setTimeout(() => { if (editing?.surface === editor && document.activeElement !== editor && document.activeElement !== fx && !document.activeElement?.closest?.('.gx-menu, .gx-tabs')) commit(); }, 0); });
+    fx.addEventListener('blur', () => { setTimeout(() => { if (editing?.surface === fx && document.activeElement !== fx && document.activeElement !== gridEl && !document.activeElement?.closest?.('.gx-tabs')) commit(); }, 0); });
 
     // ---- the name box: a cell, a range, a sheet's or a name's; Enter goes there
     const goTo = (text) => {
@@ -1268,7 +1270,10 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     // menu key: rename, duplicate, delete, hide and unhide, move
     const show = (i) => {
       if (i < 0 || i >= wb.sheets.length || i === wb.active) return;
-      commit();
+      // A formula waiting for a reference stays open while another sheet shows, in the formula bar (its cell isn't
+      // there): a cell clicked goes in with its sheet's name.
+      if (!(editing && pointable())) commit();
+      if (editing?.surface === editor) { const at = editor.selectionStart; editing.surface = fx; editor.hidden = true; fx.setSelectionRange(at, at); }
       sels.set(S().id, { sel, sL: scroller.scrollLeft, sT: scroller.scrollTop });
       wb.active = i;
       const was = sels.get(S().id);
@@ -1282,7 +1287,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       gridEl.setAttribute('aria-label', S().name);
     };
     const tabOf = (el) => { const id = Number(el?.closest?.('.gx-tab')?.dataset.sheet); return Number.isInteger(id) ? wb.sheets.findIndex((s) => s.id === id) : -1; };
-    tabs.addEventListener('click', (e) => { const i = tabOf(e.target); if (i >= 0) { show(i); gridEl.focus({ preventScroll: true }); } });
+    tabs.addEventListener('click', (e) => { const i = tabOf(e.target); if (i >= 0) { show(i); (editing ? editing.surface : gridEl).focus({ preventScroll: true }); } });
     const renameTab = (i) => {
       const sh = wb.sheets[i], el = tabs.querySelector(`[data-sheet="${sh.id}"]`);
       if (!el) return;
