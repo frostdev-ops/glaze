@@ -3608,7 +3608,7 @@
   "The input fit, but the model exhausted its context while producing the answer.": "L’entrée tenait dans le contexte, mais le modèle l’a épuisé en produisant la réponse.",
   "The model exceeded this request’s output limit.": "Le modèle a dépassé la limite de sortie de cette requête.",
   "{n} bytes": "{n} octets",
-  "Agent apps you connect in Settings → Agents can use this mod’s tools.": "Les apps d’agents que vous connectez dans Réglages → Agents peuvent utiliser les outils de ce mod.",
+  "Agent apps you connect in Settings → AI → Agents can use this mod’s tools.": "Les apps d’agents que vous connectez dans Réglages → IA → Agents peuvent utiliser les outils de ce mod.",
   "Tool “{title}” — gives agent apps your to-dos, as Glaze last read them.": "Outil « {title} » — donne aux apps d’agents vos tâches, telles que Glaze les a lues en dernier.",
   "Tool “{title}” — gives agent apps your to-dos with due dates, as Glaze last read them.": "Outil « {title} » — donne aux apps d’agents vos tâches avec une échéance, telles que Glaze les a lues en dernier.",
   "Tool “{title}” — gives agent apps your courses, as Glaze last read them.": "Outil « {title} » — donne aux apps d’agents vos cours, tels que Glaze les a lus en dernier.",

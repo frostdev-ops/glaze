@@ -89,7 +89,7 @@ chooses what to allow, and can take any of it back later. A call without its gra
 | `nav.read` | `glaze.nav.model()` and the `nav.change`, `nav.navigate`, `nav.expand`, `nav.collapse` and `nav.sheet` events. Glaze's bar shows course names and unread counts, so this is personal data. |
 | `nav.items` | `glaze.nav.add()`, `glaze.nav.update()` and `glaze.nav.remove()`: up to 8 items of the mod's own in Glaze's bar, and the `nav.action` event. |
 | `nav.layout` | `glaze.nav.layout()`, a layout returned from `glaze.nav.items()`, and a `nav` in `glaze.look.override()`: a layout proposed over the student's while the mod runs. Its links go only to pages of the school's site. |
-| `agents` | Agent apps the student connects in **Settings → Agents** can call the mod's `tools`, below. |
+| `agents` | Agent apps the student connects in **Settings → AI → Agents** can call the mod's `tools`, below. |
 | `network:<host>` | `glaze.fetch()` to `https://<host>/`. The host is a lowercase DNS name with at least two labels: no port, wildcard, address or local name, and subdomains don't count. At most 8. |
 | `documents` | On the [Documents page](#the-documents-page): `glaze.documents.list()`, `open()`, `create()`, `add()`, `remove()` and `style()`, and the `documents.action` and `documents.change` events. The list holds the titles, courses and word counts of the student's documents, so this is personal data. |
 | `documents.read` | `glaze.documents.read()` and `glaze.documents.export()`: a document's text, and the file it saves as. Needs `documents` too. |
@@ -141,7 +141,7 @@ and `label` (one line, at most 60).
 
 ### `tools`
 
-Tools that agent apps the student connects in **Settings → Agents** can call. They need the `agents` permission, and each
+Tools that agent apps the student connects in **Settings → AI → Agents** can call. They need the `agents` permission, and each
 appears on its own line in the install prompt; an update that adds a tool, or changes where one's answers come from, asks
 again. Apps see a tool's title as "<mod name> (mod): <title>" and its description after "Written by the mod's author, not
 Glaze." Each tool has:

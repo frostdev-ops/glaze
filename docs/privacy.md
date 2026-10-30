@@ -34,6 +34,24 @@ Settings → AI, to the model you chose for it: Tab completion sends the text ar
 or assignment, and in a discussion your classmates' posts with their names; Feedback sends your draft with the
 assignment's instructions and rubric. Nothing goes to AI from a test.
 
+[Agent access](../PRIVACY.md#agent-access) (Settings → AI → Agents) is off by default. Apps on this computer connect
+through a local helper: `glaze-mcp`, or the downloaded Glaze Mac app on Safari. Glaze asks you to allow each app
+identity and data group: Courses, to-dos and schedule; Grades; Assignments and rubrics; Writer documents; each mod's
+tools. App names are self-reported, and program identities can be too. Every built-in change and every call to a
+mod's code tool waits for your OK in Glaze's window. Built-in agent tools never submit work. A mod's code tool can send
+the app's arguments and data the mod may read to its approved hosts. Agent access sends no data to FrostDev; the app may
+send what it gets to its own AI service, under that app's own policy.
+
+Glaze keeps app identities, grants and declines, the switch and profile id locally without a timed expiry, the last 200
+calls' metadata (never their content), and the 100 assignment reads used last. Session-only approval records can include
+document text in action summaries; records no longer waiting become eligible for cleanup an hour after creation, on
+later requests or agent-worker startup, and may remain until session end. Turn off cancels waiting requests and clears
+assignment reads, keeping apps and grants; a change already started can finish. Revoke forgets one app; Forget all apps
+clears the activity list and assignment reads and forgets all apps, grants and declines. Removing a site clears its
+assignment reads; Reset everything clears all assignment reads, keeping the switch, apps, grants and activity. None of
+these erases copies an app kept. On Firefox, turning agent access on also asks to share website content, which turning
+it off gives back.
+
 Glaze stores your settings in `chrome.storage.sync`, including the course nicknames, colours, looks and tint
 you set in a course's menu. These follow Chrome sync (or Firefox Sync) when it's on; Safari keeps them on this device only.
 
@@ -94,8 +112,8 @@ Course tabs show an automatic short name by default, with common term/section wr
 Reminders, what you've snoozed or muted and your streak stay on your device as well, and so do your marks on documents; reminders show only inside Canvas and Blackboard pages, and Glaze has no notifications permission.
 With Gradescope in To Do on, Glaze reads your own Gradescope course pages (read-only, signed in as you) and keeps the assignments on your device; nothing from Gradescope goes anywhere else.
 It has no analytics. Glaze's writes anywhere are opt-in: with Better To Do's "Tick off in Canvas too" on, ticking an item
-marks it done or not done in your own Canvas planner, as Canvas's List View does. Changing a course's nickname or
-color in its Canvas card menu saves that choice to your own Canvas site too, Sign out in Glaze's Canvas bar signs you out of Canvas as Canvas's own button does, and Moodle's Edit mode switch in Glaze's bar flips Moodle's own control. Apart from those clicks and the optional
+marks it done or not done in your own Canvas planner, as Canvas's List View does, and so does an agent app's mark done
+once you allow it. Changing a course's nickname or color in its Canvas card menu saves that choice to your own Canvas site too, Sign out in Glaze's Canvas bar signs you out of Canvas as Canvas's own button does, and Moodle's Edit mode switch in Glaze's bar flips Moodle's own control. Apart from those clicks and the optional
 sharing and mods described above, the extension's other requests are read-only and go to your own Blackboard, Canvas or Moodle site
 (folder previews; a folder's files when you click Download all; your grades and submission status for due dates, new-grade badges, the calculator and
 your overall grade on course cards; on Canvas a course's assignment groups when you use its what-if calculator;

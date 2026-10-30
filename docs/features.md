@@ -14,6 +14,8 @@ Its animated scene also stops and releases its rendering resources.
 
 The settings editor has eleven categories: **Look, Navigation, Courses, Study, Course pages, Writer, Sharing, Mods, AI, Privacy and data, and About**. **All settings** opens More options and reveals advanced sections; search covers every control. Search works across tabs; section links such as `#blackboard/nav` and older editor links reveal the right tab. Section resets change their own preferences; resetting preferences keeps your palettes, pictures, local notes/tasks, bookmarks and share keys. The live preview uses fictional local pages at real desktop or phone CSS widths, with site/page/appearance controls. Focusing a Blackboard course's editor controls previews that course's appearance; Blackboard nicknames can be edited here as well as on its course cards. Sharing includes the Relay origin under All settings and an explicit connection test; saving stays offline.
 
+- **[Agents](agents.md)** (Settings → AI → Agents, off by default): connect apps on this computer over MCP to courses, to-dos, grades, assignments and Writer documents. Allow each app identity and data group in Glaze; built-in changes and every mod code-tool call wait for your approval.
+
 ## Mods
 
 From Glaze 3.0.4: add backgrounds, animations, widgets, nav layouts and page tweaks made by others, each showing what it reads and why before you add it, or build your own widget with no code. Reviewed mods are in the [Mods gallery](https://frostdev.io/glaze/mods). Looks can have video and animated backgrounds too.

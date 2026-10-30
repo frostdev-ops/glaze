@@ -334,7 +334,7 @@ test('doctor\'s live check: a probe each live host answers without the worker he
   const home = scratch(t), ctx = { platform: process.platform, env: envFor(home) };
   const none = await A.doctor(ctx);
   assert.deepEqual(none.map((r) => r.level), ['warn']);
-  assert.match(none[0].detail, /Settings → Agents/);
+  assert.match(none[0].detail, /Settings → AI → Agents/);
   assert.equal(fs.existsSync(runDir(home)), false, 'the check makes nothing');
   const b = browser(t, home);
   const { rec } = await b.start();
