@@ -381,8 +381,11 @@ not those unknown legacy copies or unrelated stickers.
   long before, are settings and sync with them.
 - **Your Looks history and favorites**, in `chrome.storage.local`, on this device only: the last 20 themes
   you wore (palette, fonts, look and background, with when you last wore each), so Previous Look can take
-  you back, and the theme codes you saved as favorites, with the name and GitHub username of a gallery Look.
-  Clear history in the editor deletes the history; Remove deletes a favorite.
+  you back, and the theme codes you saved as favorites, with the name and GitHub username of a gallery Look,
+  and the catalogue Glaze reads them from in every Look picker (`lookCatalog`: each favorite's palette, look and
+  background as decoded from its code, rebuilt when the favorites change). A course set to wear a favorite keeps only its
+  id in your synced settings. Clear history in the editor deletes the history; Remove deletes a favorite, its catalogue
+  entry and any course's use of it.
 - **Ultra course cards as board tiles** are optional and device-local, in `widgetLayout` beside the existing widgets. Keys include the school’s origin and course ID; each board keeps at most 48 cards per school (384 across schools) and a bounded term label with its placement. Course titles, grades, progress and tasks come from metadata/readers Glaze already loaded, or the existing account-scoped planner copy. Board cards start no new course, gradebook or planner reads and add no tracking. Ultra’s original list and filters stay reachable. The Dashboard and Courses layouts are independent; removing a tile does not delete the course’s tasks, notes or style.
 - **Canvas and Blackboard Ultra course cards**, in `chrome.storage.sync` like your settings: your card settings (`card`), each course's
   card style (Canvas `cards`, Ultra `ucards`: colors, a gradient, a picture's `https://` link and how it is shown) and its bookmarks
