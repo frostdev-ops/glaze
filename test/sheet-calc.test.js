@@ -76,6 +76,9 @@ test('ROUND, ROUNDUP, ROUNDDOWN, INT, MOD, ABS, SQRT, POWER', () => {
     ['ROUNDUP(3.2,0)', 4], ['ROUNDUP(76.9,0)', 77], ['ROUNDUP(3.14159,3)', 3.142], ['ROUNDUP(-3.14159,1)', -3.2], ['ROUNDUP(31415.92654,-2)', 31500],
     ['ROUNDDOWN(3.2,0)', 3], ['ROUNDDOWN(76.9,0)', 76], ['ROUNDDOWN(3.14159,3)', 3.141], ['ROUNDDOWN(-3.14159,1)', -3.1], ['ROUNDDOWN(31415.92654,-2)', 31400],
     ['ROUND("2.5",)', 3], ['ROUND(TRUE,0)', 1], ['ROUND("x",0)', '#VALUE!'],
+    // Rounding past a number's 15 digits keeps it, however far that is (1E+21 and up once wrote "1e+21e-15", NaN).
+    ['ROUND(1234567.891,15)', 1234567.891], ['ROUND(1000000,15)', 1000000], ['ROUNDUP(5000000,15)', 5000000], ['ROUNDDOWN(2E+6,15)', 2e6],
+    ['ROUND(1E+21,0)', 1e21], ['ROUND(-1E+21,1)', -1e21], ['ROUND(1E+25,-3)', 1e25], ['ROUND(0.1+0.2,15)', 0.3], ['ROUND(-12.3456789012345678,14)', -12.3456789012346],
     ['INT(8.9)', 8], ['INT(-8.9)', -9], ['MOD(3,2)', 1], ['MOD(-3,2)', 1], ['MOD(3,-2)', -1], ['MOD(-3,-2)', -1], ['MOD(3,0)', '#DIV/0!'],
     ['ABS(2)', 2], ['ABS(-2)', 2], ['SQRT(16)', 4], ['SQRT(-16)', '#NUM!'], ['SQRT(ABS(-16))', 4],
     ['POWER(5,2)', 25], ['POWER(0,0)', '#NUM!'], ['POWER(0,-1)', '#DIV/0!'], ['POWER(-8,1/2)', '#NUM!'], ['POWER(-2,3)', -8], ['POWER(10,400)', '#NUM!'],
