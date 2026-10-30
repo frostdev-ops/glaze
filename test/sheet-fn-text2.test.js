@@ -68,7 +68,7 @@ test('TEXTBEFORE and TEXTAFTER with Microsoft\'s data', () => {
     ['TEXTAFTER(B2," ",,,1)', 'Aurelius'], ['TEXTAFTER(B3," ",,,0)', '#N/A'], ['TEXTAFTER(B3," ",,,1)', ''],
     // instance_num 0 or longer than the text is #VALUE!; case-insensitive with 1; several delimiters; if_not_found.
     ['TEXTBEFORE(A3,"red",0)', '#VALUE!'], ['TEXTAFTER(A3,"red",40)', '#VALUE!'], ['TEXTBEFORE(A3,"RED",2,1)', 'Little red Riding Hood\'s '],
-    ['TEXTBEFORE("a,b;c",{";",","},2)', 'a,b'], ['TEXTAFTER("a,b;c",C1:C2,-1)', 'c'], ['TEXTAFTER(A2,"basket",,,,"none")', 'none'], ['TEXTBEFORE("","x")', ''],
+    ['TEXTBEFORE("a,b;c",{";",","},2)', 'a,b'], ['TEXTAFTER("a,b;c",C1:C2,-1)', 'c'], ['TEXTAFTER(A2,"basket",,,,"none")', 'none'], ['TEXTBEFORE("","x")', '#VALUE!'],
     ['TEXTBEFORE(B3," ",-1,,1)', ''], ['TEXTAFTER(B3," ",-1,,1)', 'Socrates'], ['TEXTBEFORE(A2,"Red",1,2)', '#VALUE!'],
   ]);
   assert.deepEqual(spill({ B2: 'Marcus Aurelius', B3: 'Socrates', B4: 'Immanuel Kant' }, 'TEXTBEFORE(B2:B4," ",,,1)', 'D2:D4'), [['Marcus'], ['Socrates'], ['Immanuel']]);
@@ -199,7 +199,7 @@ test('VALUETOTEXT and ARRAYTOTEXT with Microsoft\'s data', () => {
 test('FIND, SEARCH and REPLACE preserve Unicode characters and distinguish byte functions', () => {
   cases(book(), [
     ['FIND("a","😀a")', 2], ['SEARCH("a","😀a")', 2], ['FINDB("a","😀a")', 3], ['SEARCHB("a","😀a")', 3],
-    ['REPLACE("😀a",2,1,"x")', '😀x'], ['REPLACE("😀a",1,1,"x")', 'xa'], ['SEARCH("?a","😀a")', 1],
+    ['REPLACE("😀a",2,1,"x")', '😀x'], ['REPLACE("😀a",1,1,"x")', 'xa'], ['SEARCH("?a","😀a")', '#VALUE!'],
   ]);
 });
 test('FIND accepts an empty target through the position after the last character', () => {
@@ -216,4 +216,13 @@ test('DOLLAR preserves a negative sign when rounded to zero; NUMBERVALUE overflo
 });
 test('SEARCH handles literal and trailing tildes without an invalid Unicode regular expression', () => {
   cases(book(), [['SEARCH("~","a~b")', 1], ['SEARCH("~~","a~b")', 2], ['SEARCH("~*","a*b")', 2], ['SUBSTITUTE("a*b?","*","x")', 'axb?']]);
+});
+test('SEARCH keeps Excel wildcard units and treats tilde as an escape before any character', () => {
+  cases(book(), [['SEARCH("??a","😀a")', 1], ['SEARCH("?a","x😀a")', '#VALUE!'], ['SEARCH("~a","cat")', 2], ['SEARCH("~.","a.b")', 2]]);
+});
+test('empty TEXTBEFORE and TEXTAFTER require an empty delimiter', () => {
+  cases(book(), [['TEXTBEFORE("","x")', '#VALUE!'], ['TEXTAFTER("","x",-1)', '#VALUE!'], ['TEXTBEFORE("","")', ''], ['TEXTAFTER("","")', '']]);
+});
+test('NUMBERVALUE uses Excel numeric limits', () => {
+  cases(book(), [['NUMBERVALUE("1e308")', '#VALUE!'], ['NUMBERVALUE("1e-309")', 0]]);
 });
