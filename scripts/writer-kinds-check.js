@@ -224,6 +224,10 @@ const holds = (bytes, value) => {
     const found = await fr.evaluate(() => ({ paper: document.querySelector('.ge-find')?.hidden !== false, own: document.activeElement?.id }));
     check(found.paper && found.own === 'gs-find-q', `Ctrl+F over the slides finds in the deck, the paper's find closed (${JSON.stringify(found)})`);
     await shot(p, 'kinds-slides-1440.png');
+    await fr.focus('.gk #gs-canvas');
+    await p.keyboard.press('Control+f');
+    await until(() => fr.evaluate(() => document.activeElement?.id === 'gs-find-q'), 'the deck\'s find on Ctrl+F');
+    check(await fr.evaluate(() => [...document.querySelectorAll('.ge-find')].every((b) => b.hidden)), 'Ctrl+F in the deck opens its own find, not the parked paper\'s');
     await tap(fr, '.gk .gp-submit');
     await until(() => sheetOf(fr), 'the deck\'s sheet');
     check((await sheetOf(fr)).name === 'Rivera_Essay2.pptx', `the sheet names the deck Lastname_Title.pptx (${(await sheetOf(fr)).name})`);

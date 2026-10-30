@@ -217,15 +217,18 @@ var GZ_SLIDES_RENDER = globalThis.GZ_SLIDES_RENDER || (() => {
     }
     if (at < text.length) el.append(text.slice(at));
   };
+  // A superscript or subscript is drawn smaller, as Office draws it, and raised or lowered by its baseline share of the
+  // run's own size.
+  const SCRIPT = 2 / 3;
   const runEl = (X, r, fs, ranges, offset) => {
     if (r.br) return html(X, 'br');
     const e = html(X, 'span');
     const lines = [r.underline && 'underline', r.strike && 'line-through'].filter(Boolean);
     style(e, {
-      'font-family': family(r.font), 'font-size': `${r2(r.size * PT * fs)}px`, 'font-weight': r.bold ? '700' : null, 'font-style': r.italic ? 'italic' : null,
+      'font-family': family(r.font), 'font-size': `${r2(r.size * PT * fs * (r.baseline ? SCRIPT : 1))}px`, 'font-weight': r.bold ? '700' : null, 'font-style': r.italic ? 'italic' : null,
       color: r.color == null ? 'transparent' : cssColor(r.color), 'text-decoration-line': lines.length ? lines.join(' ') : null,
       'text-decoration-style': r.underline ? UNDERLINE[r.underline] : r.strike === 'double' ? 'double' : null, 'background-color': r.highlight ? cssColor(r.highlight) : null,
-      'vertical-align': r.baseline ? `${r2(r.baseline * 100)}%` : null, 'text-transform': r.caps === 'all' ? 'uppercase' : null, 'font-variant-caps': r.caps === 'small' ? 'small-caps' : null,
+      'vertical-align': r.baseline ? `${r2(r.baseline * r.size * PT * fs)}px` : null, 'text-transform': r.caps === 'all' ? 'uppercase' : null, 'font-variant-caps': r.caps === 'small' ? 'small-caps' : null,
       'letter-spacing': r.spacing ? `${r2(r.spacing * PT * fs)}px` : null,
     });
     marked(X, e, r.text, ranges, offset);
@@ -235,7 +238,7 @@ var GZ_SLIDES_RENDER = globalThis.GZ_SLIDES_RENDER || (() => {
   const paraEl = (X, p, A) => {
     const el = html(X, 'div', 'gs-p'), first = p.runs.find((r) => !r.br && r.text), size = first ? first.size : p.endSize;
     style(el, {
-      'text-align': p.align, 'padding-left': len(Math.max(0, p.marL)), 'text-indent': len(p.indent), direction: p.rtl ? 'rtl' : null, 'font-size': `${r2(size * PT * A.fs)}px`,
+      'text-align': p.align, 'padding-inline-start': len(Math.max(0, p.marL)), 'text-indent': len(p.indent), direction: p.rtl ? 'rtl' : null, 'font-size': `${r2(size * PT * A.fs)}px`,
       'line-height': p.lineSpacing?.pt != null ? `${r2(p.lineSpacing.pt * PT)}px` : String(r4(Math.max(0.1, (p.lineSpacing?.pct ?? 1) - A.lr) * LINE)),
       'margin-top': gap(p.spaceBefore, size, A.fs), 'margin-bottom': gap(p.spaceAfter, size, A.fs), 'tab-size': p.defTab > 0 ? len(p.defTab) : null,
     });
@@ -243,7 +246,7 @@ var GZ_SLIDES_RENDER = globalThis.GZ_SLIDES_RENDER || (() => {
     if (b) {
       const bu = html(X, 'span', 'gs-bu');
       style(bu, { display: 'inline-block', 'min-width': len(Math.max(0, -p.indent)), 'text-indent': '0', 'font-family': family(b.font), 'font-size': `${r2(b.size * PT * A.fs)}px`,
-        color: cssColor(b.color), 'font-weight': 'normal', 'font-style': 'normal', 'padding-right': p.indent >= 0 ? '0.3em' : null, 'white-space': 'pre' });
+        color: cssColor(b.color), 'font-weight': 'normal', 'font-style': 'normal', 'padding-inline-end': p.indent >= 0 ? '0.3em' : null, 'white-space': 'pre' });
       const url = b.picture && X.url(b.picture.path);
       if (url) { const img = html(X, 'img'); img.setAttribute('src', url); img.setAttribute('alt', ''); style(img, { width: '0.8em', height: '0.8em', 'vertical-align': 'middle' }); bu.append(img); } else bu.textContent = b.text;
       el.append(bu);
@@ -266,6 +269,7 @@ var GZ_SLIDES_RENDER = globalThis.GZ_SLIDES_RENDER || (() => {
     return el;
   };
   // A shape's text in its geometry's text box less the insets, anchored top, middle or bottom, in columns where it has them.
+  // A paragraph's margin and indent are on its start side: the right of a right-to-left one.
   // A flipped shape's text still reads: flipped back across, or turned half round where it was flipped upside down.
   const VERTICAL = { vert: 'vertical-rl', eaVert: 'vertical-rl', mongolianVert: 'vertical-lr', wordArtVert: 'vertical-rl', wordArtVertRtl: 'vertical-rl', vert270: 'vertical-rl' };
   const bodyEl = (X, text, s, rect) => {

@@ -365,6 +365,63 @@ test('bounds: slides, shapes, group depth, table cells, text, part size, the arc
   await assert.rejects(P.read(new TextEncoder().encode('%PDF-1.7')), /not a zip/);
 });
 
+test('paragraphs, runs and each part\'s elements are bounded: kilobytes of deflated <a:p/> stay small', async () => {
+  const empties = (tag, n) => fixture('ppt/slides/slide3.xml').replace('<a:p>', `${tag.repeat(n)}<a:p>`);
+  const paras = await P.read(pack({ 'ppt/slides/slide3.xml': empties('<a:p/>', 5000) }), { limits: { paragraphs: 300 } });
+  assert.equal(paras.slides.flatMap(all).reduce((n, x) => n + (x.text?.paragraphs.length || 0) + (x.rows || []).flatMap((r) => r.cells).reduce((m, c) => m + c.text.paragraphs.length, 0), 0), 300);
+  assert.ok(paras.cut.text > 0);
+  const runs = await P.read(pack({ 'ppt/slides/slide3.xml': fixture('ppt/slides/slide3.xml').replace('<a:p>', `<a:p>${'<a:r><a:t/></a:r>'.repeat(5000)}`) }), { limits: { runs: 300 } });
+  assert.equal(runs.slides.flatMap(all).flatMap((x) => [x.text, ...(x.rows || []).flatMap((r) => r.cells.map((c) => c.text))]).filter(Boolean).reduce((n, t) => n + t.paragraphs.reduce((m, p) => m + p.runs.length, 0), 0), 300);
+  const nodes = await P.read(pack({ 'ppt/slides/slide3.xml': empties('<a:p/>', 5000) }), { limits: { nodes: 4000 } });
+  assert.equal(nodes.slides[2].broken, true, 'the slide past the element cap is unreadable');
+  assert.equal(nodes.slides[1].title, 'Membrane transport', 'the rest of the deck opens');
+  const cpu = process.cpuUsage(), big = await P.read(pack({ 'ppt/slides/slide3.xml': empties('<a:p/>', 1 << 20) })), used = process.cpuUsage(cpu);
+  assert.equal(big.slides[2].broken, true);
+  assert.ok(used.user + used.system < 2e6, `${used.user + used.system} microseconds of CPU`);
+});
+
+test('table cells, guides and path commands are bounded across the deck, not only per table or shape', async () => {
+  const row = `<a:tr h="1">${'<a:tc/>'.repeat(10)}</a:tr>`, tbl = `<a:tbl><a:tblGrid/>${row.repeat(10)}</a:tbl>`;
+  const frame = (i) => `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${900 + i}" name="T${i}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="0" y="0"/><a:ext cx="100" cy="100"/></p:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">${tbl}</a:graphicData></a:graphic></p:graphicFrame>`;
+  const tables = await P.read(pack({ 'ppt/slides/slide3.xml': fixture('ppt/slides/slide3.xml').replace('</p:spTree>', `${[0, 1, 2, 3, 4].map(frame).join('')}</p:spTree>`) }), { limits: { allCells: 250 } });
+  assert.deepEqual(['T0', 'T1', 'T2', 'T3', 'T4'].map((n) => named(tables.slides[2], n).type), ['table', 'table', 'box', 'box', 'box']);
+  const geom = '<a:custGeom><a:gdLst><a:gd name="g1" fmla="val 1"/><a:gd name="g2" fmla="val 2"/><a:gd name="g3" fmla="val 3"/></a:gdLst><a:pathLst><a:path w="10" h="10"><a:moveTo><a:pt x="0" y="0"/></a:moveTo>'
+    + `${'<a:lnTo><a:pt x="1" y="1"/></a:lnTo>'.repeat(9)}</a:path></a:pathLst></a:custGeom>`;
+  const sp = (i) => `<p:sp><p:nvSpPr><p:cNvPr id="${950 + i}" name="C${i}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>${geom}</p:spPr></p:sp>`;
+  const shapes = await P.read(pack({ 'ppt/slides/slide3.xml': fixture('ppt/slides/slide3.xml').replace('</p:spTree>', `${[0, 1, 2].map(sp).join('')}</p:spTree>`) }), { limits: { commands: 25, guides: 7 } });
+  const custom = shapes.slides.flatMap(all).map((x) => x.geometry).filter((x) => x?.pathLst);
+  assert.equal(custom.reduce((n, x) => n + x.pathLst.reduce((m, p) => m + p.cmds.length, 0), 0), 25);
+  assert.equal(custom.reduce((n, x) => n + x.avLst.length + x.gdLst.length, 0), 7);
+  const g = ['C0', 'C1', 'C2'].map((n) => named(shapes.slides[2], n).geometry);
+  assert.ok(g[2].pathLst[0].cmds.length < 10 && g[2].gdLst.length < 3, 'the last shape keeps what fit');
+  assert.ok(shapes.cut.shapes > 0);
+});
+
+test('the presentation element cap drops trailing content while the deck still opens', async () => {
+  const presentation = fixture('ppt/presentation.xml').replace('</p:presentation>',
+    `<p:extLst><p:ext uri="large-extension">${'<a:p/>'.repeat(5000)}</p:ext></p:extLst></p:presentation>`);
+  const d = await P.read(pack({ 'ppt/presentation.xml': presentation }), { limits: { nodes: 4000 } });
+  assert.equal(d.slides.length, 10);
+  assert.equal(d.slides[0].title, 'Cell Biology');
+  assert.deepEqual(d.size, (await deck()).size);
+  assert.ok(d.cut.parts > 0, 'the truncated presentation is counted');
+});
+
+test('custom geometry bounds guide evaluations across distinct path sizes and across the deck', async () => {
+  const guides = '<a:gd name="g1" fmla="val 1"/><a:gd name="g2" fmla="val 2"/><a:gd name="g3" fmla="val 3"/>';
+  const paths = [10, 20, 10].map((w) => `<a:path w="${w}" h="10"><a:moveTo><a:pt x="g1" y="0"/></a:moveTo></a:path>`).join('');
+  const shape = (i) => `<p:sp><p:nvSpPr><p:cNvPr id="${990 + i}" name="Work${i}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:custGeom><a:gdLst>${guides}</a:gdLst><a:pathLst>${paths}</a:pathLst></a:custGeom></p:spPr></p:sp>`;
+  const slide = fixture('ppt/slides/slide3.xml').replace(/<p:spTree>[\s\S]*?<\/p:spTree>/, `<p:spTree>${shape(0)}${shape(1)}</p:spTree>`);
+  const d = await P.read(pack({ 'ppt/slides/slide3.xml': slide }), { limits: { guideWork: 7 } });
+  const geometry = ['Work0', 'Work1'].map((name) => named(d.slides[2], name).geometry);
+  // One shape scope and two distinct path scopes, even though three paths draw.
+  const evaluations = geometry.reduce((n, g) => n + 3 * (g.avLst.length + g.gdLst.length), 0);
+  assert.ok(evaluations <= 7, `${evaluations} guide evaluations exceed the deck budget of 7`);
+  assert.equal(geometry[0].gdLst.length, 2, 'retain the guides that fit');
+  assert.ok(d.cut.shapes > 0, 'guide work omitted from later shapes is counted');
+  assert.equal(d.slides[0].title, 'Cell Biology');
+});
+
 test('missing media parts become picture boxes and are not listed as drawable media', async () => {
   const bytes = pack({ 'ppt/media/image1.png': null, 'ppt/media/image3.svg': null });
   const d = await P.read(bytes);
@@ -407,13 +464,27 @@ test('hostile numeric geometry and nested group scales keep model numbers finite
   assert.deepEqual(JSON.parse(JSON.stringify(d)), d);
 });
 
-test('placeholder idx defaults to zero before type fallback', async () => {
+test('placeholder idx defaults to zero and matches only a placeholder of the same kind, then type decides', async () => {
+  const base = await deck();
   const layout = fixture('ppt/slideLayouts/slideLayout2.xml').replace('ph type="title"', 'ph type="title" idx="0"');
-  const slide = fixture('ppt/slides/slide2.xml').replace('ph type="title"', 'ph');
+  const slide = fixture('ppt/slides/slide2.xml').replace('ph type="title"', 'ph type="title" idx="0"');
   const d = await P.read(pack({ 'ppt/slideLayouts/slideLayout2.xml': layout, 'ppt/slides/slide2.xml': slide }));
-  const title = named(d.slides[1], 'Title 1');
-  assert.deepEqual(title.bounds, named((await deck()).slides[1], 'Title 1').bounds);
-  assert.equal(title.text.paragraphs[0].runs[0].size, 44);
+  assert.deepEqual(named(d.slides[1], 'Title 1').bounds, named(base.slides[1], 'Title 1').bounds);
+  // LibreOffice's placeholders: the title and the body (<p:ph/>) both idx 0, the subtitle without idx.
+  const lo = await P.read(pack({
+    'ppt/slideLayouts/slideLayout2.xml': fixture('ppt/slideLayouts/slideLayout2.xml').replace('<p:ph idx="1"/>', '<p:ph/>'),
+    'ppt/slides/slide2.xml': fixture('ppt/slides/slide2.xml').replace('<p:ph idx="1"/>', '<p:ph/>'),
+    'ppt/slideLayouts/slideLayout1.xml': fixture('ppt/slideLayouts/slideLayout1.xml').replace('<p:ph type="subTitle" idx="1"/>', '<p:ph type="subTitle"/>'),
+    'ppt/slides/slide1.xml': fixture('ppt/slides/slide1.xml').replace('<p:ph type="subTitle" idx="1"/>', '<p:ph type="subTitle"/>'),
+  }));
+  for (const [n, name] of [[1, 'Content Placeholder 2'], [1, 'Title 1'], [0, 'Subtitle 2'], [0, 'Title 1']]) {
+    const was = named(base.slides[n], name), now = named(lo.slides[n], name);
+    assert.deepEqual(now.bounds, was.bounds, name);
+    assert.equal(now.text.paragraphs[0].runs[0].size, was.text.paragraphs[0].runs[0].size, name);
+  }
+  // A body placeholder written without idx is still the body, never the title.
+  const body = await P.read(pack({ 'ppt/slides/slide2.xml': fixture('ppt/slides/slide2.xml').replace('<p:ph idx="1"/>', '<p:ph type="body"/>') }));
+  assert.deepEqual(named(body.slides[1], 'Content Placeholder 2').bounds, named(base.slides[1], 'Content Placeholder 2').bounds);
 });
 
 test('long malformed attribute names do not cause quadratic attribute scans', async () => {
@@ -460,11 +531,17 @@ test('preset colours include standard long names and abbreviated aliases', async
   }
 });
 
-test('a slide masterClrMapping bypasses the layout colour-map override', async () => {
-  const layout = fixture('ppt/slideLayouts/slideLayout1.xml').replace('<a:masterClrMapping/>', '<a:overrideClrMapping bg1="dk1" tx1="lt1"/>');
+test('a layout\'s colour-map override reaches its slides that keep the master mapping; a slide\'s own override wins', async () => {
+  const MAP = 'bg1="dk1" tx1="lt1" bg2="dk2" tx2="lt2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"';
+  const layout = fixture('ppt/slideLayouts/slideLayout1.xml').replace('<a:masterClrMapping/>', `<a:overrideClrMapping ${MAP}/>`);
+  assert.ok(fixture('ppt/slides/slide1.xml').includes('<a:masterClrMapping/>'));
   const d = await P.read(pack({ 'ppt/slideLayouts/slideLayout1.xml': layout }));
-  assert.deepEqual(d.slides[0].background, { type: 'solid', color: '#ffffff' });
-  assert.equal(named(d.slides[0], 'Title 1').text.paragraphs[0].runs[0].color, '#000000');
+  assert.deepEqual(d.slides[0].background, { type: 'solid', color: '#000000' });
+  assert.equal(named(d.slides[0], 'Title 1').text.paragraphs[0].runs[0].color, '#ffffff');
+  const light = fixture('ppt/slides/slide1.xml').replace('<a:masterClrMapping/>', `<a:overrideClrMapping ${MAP.replace('bg1="dk1" tx1="lt1"', 'bg1="lt1" tx1="dk1"')}/>`);
+  const own = await P.read(pack({ 'ppt/slideLayouts/slideLayout1.xml': layout, 'ppt/slides/slide1.xml': light }));
+  assert.deepEqual(own.slides[0].background, { type: 'solid', color: '#ffffff' });
+  assert.equal(named(own.slides[0], 'Title 1').text.paragraphs[0].runs[0].color, '#000000');
 });
 
 test('shared master chart titles are parsed once per part', async () => {

@@ -1,5 +1,5 @@
 // Slide decks on the Documents page (papers.html, slides-kind.js) in the real unpacked extension: with Settings → Writer →
-// Slides off (writer.slides, the default) a .pptx is refused as before; on, the fixture deck (test/fixtures/pptx/deck, zipped
+// Slides set off (writer.slides: false; it defaults on) a .pptx is refused as before; on, the fixture deck (test/fixtures/pptx/deck, zipped
 // with lib/zip.js) imports as a card showing slide 1, opens in the viewer (the rail, slide 1, arrows and Page keys, zoom,
 // find in the slides' text, the notes), presents in a dialog whose keys are Rimeward's and which skips the hidden slide,
 // exports the bytes it was given, and Esc and Back behave as a paper's. The chrome wears a dark Look while the slide stays
@@ -51,7 +51,7 @@ const fixture = () => {
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
     const G = require(path.join(root, 'defaults.js'));
     // Frost: a dark Look, so the chrome is dark while the slide keeps its own white.
-    const settings = (slides) => G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true }, writer: { ...G.GZ_DEFAULTS.writer, slides } });
+    const settings = (slides) => G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true }, writer: { ...G.GZ_DEFAULTS.writer, sheets: false, pdf: false, slides } });
     const HOME = `chrome-extension://${id}/papers.html`;
     const page = await context.newPage();
     await page.addInitScript(() => {
@@ -243,6 +243,7 @@ const fixture = () => {
     const full = await until(() => page.evaluate(() => globalThis.fullscreenResult), 'fullscreen request settled');
     check(full.ok && await page.evaluate(() => !!document.fullscreenElement), `Present enters fullscreen from the button gesture (${JSON.stringify(full)})`);
     check((await pc()).n === '1 / 9', 'Present: 9 slides, the hidden one left out');
+    check(await page.evaluate(() => document.activeElement === document.querySelector('dialog.gs-present .gs-present-frame')), 'Present opens with the slide focused');
     const presentFit = await page.evaluate(() => { const r = document.querySelector('dialog.gs-present .gs-stage').getBoundingClientRect(); return { w: r.width, h: r.height, iw: innerWidth, ih: innerHeight }; });
     check(presentFit.w <= presentFit.iw + 1 && presentFit.h <= presentFit.ih + 1 && (Math.abs(presentFit.w - presentFit.iw) < 2 || Math.abs(presentFit.h - presentFit.ih) < 2), `the slide fills the screen (${JSON.stringify(presentFit)})`);
     await page.focus('dialog.gs-present button:last-child');
@@ -251,6 +252,7 @@ const fixture = () => {
     await page.keyboard.press('Shift+Tab');
     check(await page.evaluate(() => document.activeElement === document.querySelector('dialog.gs-present button:last-child')), 'Present traps Shift+Tab within the dialog');
     await shot('present-1280.png');
+    await page.focus('dialog.gs-present .gs-present-frame');
     await page.keyboard.press('ArrowRight');
     check((await pc()).n === '2 / 9', 'Present →');
     await page.keyboard.press(' ');
@@ -269,6 +271,11 @@ const fixture = () => {
     check((await pc()).n === '9 / 9', 'Present End');
     await page.keyboard.press('Home');
     check((await pc()).n === '1 / 9', 'Present Home');
+    await page.keyboard.press('ArrowRight');
+    await page.focus('dialog.gs-present button[aria-label="Previous"]');
+    await page.keyboard.press(' ');
+    check((await pc()).n === '1 / 9', 'Space on a focused button presses it (Previous from 2 / 9)');
+    await page.focus('dialog.gs-present .gs-present-frame');
     await page.keyboard.press('Escape');
     await until(() => page.evaluate(() => !document.querySelector('dialog.gs-present')), 'Esc ends the presentation');
     check(await page.evaluate(() => document.activeElement?.id === 'gs-present' && !document.fullscreenElement), 'Esc ends it, out of full screen, focus back on Present');
@@ -298,6 +305,20 @@ const fixture = () => {
     await page.goBack();
     await until(() => page.evaluate(() => !document.getElementById('list').hidden && location.search === ''), 'Back to Documents');
     check(true, 'Back returns to Documents');
+
+    // A slideshow retains its own extension in the viewer and in the unchanged download.
+    await page.setInputFiles('#gd-file', { name: 'Slideshow.ppsx', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.slideshow', buffer: deckBytes });
+    const showKey = await until(() => page.evaluate((k) => [...document.querySelectorAll('.gd-card')].find((c) => c.dataset.key !== k)?.dataset.key, key), 'the slideshow card');
+    await page.click(`.gd-card[data-key="${showKey}"] .gd-title`);
+    await until(() => page.locator('#gs-canvas .gs-slide').count(), 'the slideshow viewer');
+    await page.click('.gs-more');
+    const showLabel = await page.locator('.gs-menu [data-act="export"]').textContent();
+    check(showLabel === 'Export .ppsx', `a slideshow's viewer names Export .ppsx (${showLabel})`);
+    const showDownload = page.waitForEvent('download');
+    await page.click('.gs-menu [data-act="export"]');
+    const showFile = await showDownload, showPath = path.join(tmp, 'export.ppsx');
+    await showFile.saveAs(showPath);
+    check(showFile.suggestedFilename() === 'Slideshow.ppsx' && fs.readFileSync(showPath).equals(deckBytes), 'Export .ppsx downloads the slideshow as given');
 
     // Turning import off preserves the existing deck's card and viewer.
     await worker.evaluate(async (s) => { await chrome.storage.sync.set(s); }, settings(false));

@@ -1,4 +1,4 @@
-// Slide decks on the Documents page (papers.html). Settings → Writer → Slides (writer.slides, off by default) permits
+// Slide decks on the Documents page (papers.html). Settings → Writer → Slides (writer.slides, its default in defaults.js) permits
 // importing .pptx and .ppsx files; existing decks always remain available for viewing. Documents of the slides kind
 // (lib/doc-kinds.js), each card showing slide 1, and open in a viewer: a rail of thumbnails, the slide (lib/slides-render.js
 // on lib/pptx.js's model), zoom, find in the slides' and notes' text, the speaker notes, and Present (a dialog, full screen
@@ -409,10 +409,14 @@
       const seq = Rr.visible(deck);
       if (!seq.length || presenting) return;
       let i = Math.max(0, seq.findIndex((x) => x >= cur));
-      const frame = h('div', { class: 'gs-present-frame' }), counter = h('span', { class: 'gs-present-n' });
+      // The slide holds the focus, so Space and the arrows turn slides; a button the student tabs to presses as a button.
+      const frame = h('div', { class: 'gs-present-frame', tabindex: '-1' }), counter = h('span', { class: 'gs-present-n', 'aria-live': 'polite' });
       const dialog = h('dialog', { class: 'gs-present', 'aria-label': title });
       const paint = () => {
-        frame.replaceChildren(Rr.stage(deck.slides[seq[i]], deck, { document, media, labels, scale: Rr.fit(deck.size, innerWidth, innerHeight) }));
+        const st = Rr.stage(deck.slides[seq[i]], deck, { document, media, labels, scale: Rr.fit(deck.size, innerWidth, innerHeight) });
+        st.setAttribute('role', 'group');
+        st.setAttribute('aria-label', t('Slide {n}', { n: seq[i] + 1 }));
+        frame.replaceChildren(st);
         counter.textContent = `${i + 1} / ${seq.length}`;
       };
       const go = (by) => { const to = Math.max(0, Math.min(seq.length - 1, i + by)); if (to !== i) { i = to; paint(); } };
@@ -430,6 +434,7 @@
             e.preventDefault(); buttons[e.shiftKey ? buttons.length - 1 : 0].focus();
           }
         }
+        if (e.key === ' ' && e.target.closest?.('button')) return;
         if (NEXT.includes(e.key)) { e.preventDefault(); go(1); }
         if (BACK.includes(e.key)) { e.preventDefault(); go(-1); }
         if (e.key === 'Home') { e.preventDefault(); go(-seq.length); }
@@ -447,6 +452,7 @@
       document.body.append(dialog);
       paint();
       dialog.showModal();
+      frame.focus({ preventScroll: true });
       presenting = dialog;
       addEventListener('resize', paint);
       document.addEventListener('fullscreenchange', left);
@@ -454,11 +460,11 @@
     };
     presentB.addEventListener('click', present);
 
-    // ---- ⋯: Export .pptx
+    // ---- ⋯: export in the deck's own format
     const closeMenu = (back) => { if (!menu) return; menu.remove(); menu = null; moreB.setAttribute('aria-expanded', 'false'); if (back) moreB.focus(); };
     const openMenu = () => {
       menu = h('div', { class: 'pop gp-menu gs-menu', role: 'menu', 'aria-label': t('More') },
-        btn({ role: 'menuitem', tabindex: '-1', 'data-act': 'export', disabled: !bytes, onclick: () => { closeMenu(true); exportFile(key).catch((e) => console.warn(e)); } }, t('Export .pptx')));
+        btn({ role: 'menuitem', tabindex: '-1', 'data-act': 'export', disabled: !bytes, onclick: () => { closeMenu(true); exportFile(key).catch((e) => console.warn(e)); } }, t('Export .pptx').replace('.pptx', rec?.ext === '.ppsx' ? '.ppsx' : '.pptx')));
       document.body.append(menu);
       const r = moreB.getBoundingClientRect();
       menu.style.setProperty('left', `${Math.max(4, Math.min(r.right - menu.offsetWidth, innerWidth - menu.offsetWidth - 4))}px`);
@@ -477,10 +483,14 @@
     moreB.addEventListener('click', () => { if (menu) closeMenu(true); else openMenu(); });
     document.addEventListener('pointerdown', (e) => { if (menu && !menu.contains(e.target) && !moreB.contains(e.target)) closeMenu(); }, { capture: true, signal });
 
-    // ---- keys: the slides by arrows, Page Up and Down, Home and End; Ctrl+F finds
+    // ---- keys: the slides by arrows, Page Up and Down, Home and End; Ctrl+F finds, ahead of the parked paper's find in an
+    // assignment's frame (writer-find.js listens on the document)
+    addEventListener('keydown', (e) => {
+      if (e.defaultPrevented || presenting || menu || !deck) return;
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); e.stopPropagation(); q.focus(); q.select(); }
+    }, { capture: true, signal });
     document.addEventListener('keydown', (e) => {
       if (e.defaultPrevented || presenting || menu || !deck) return;
-      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); q.focus(); q.select(); return; }
       if (isField(e.target) || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
       const to = { ArrowRight: cur + 1, ArrowDown: cur + 1, PageDown: cur + 1, ArrowLeft: cur - 1, ArrowUp: cur - 1, PageUp: cur - 1, Home: 0, End: n - 1 }[e.key];
       if (to === undefined) return;
@@ -513,8 +523,13 @@
       words: measure({ text: words2 }).words, ...(thumbUrl && { thumb: thumbUrl }) }, { reason: 'import' })).paper;
   };
 
-  // Viewing stays registered; only import follows the switch. The page waits before it routes or draws.
-  const on = Promise.resolve().then(() => chrome.storage.sync.get('writer')).then((r) => r?.writer?.slides === true, () => false);
+  // Viewing stays registered; only import follows the switch, read through defaults.js as every Writer setting is (a device
+  // with no stored choice gets the default). papers.html loads defaults.js on demand, after the scripts it uses at load (in
+  // papers.js's order, so the loads are shared); writer.html has it already, and a second load would redeclare its consts.
+  // The page waits before it routes or draws.
+  const DEFAULTS = ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js'];
+  const sanitizer = () => (typeof GZ_SANITIZE === 'function' ? null : GZ_WRITER_PAPER.need(DEFAULTS));
+  const on = Promise.resolve().then(sanitizer).then(() => chrome.storage.sync.get('writer')).then((r) => GZ_SANITIZE({ writer: r?.writer }).writer.slides === true).catch(() => false);
   DK.wait(on.then((yes) => DK.register('slides', { edit, view: (key, host) => edit(key, { host }), into, thumb, file, exportFile, text, ...(yes && { importFile }), measure, copy, says: SAYS, exportLabel: 'Export .pptx' })));
   globalThis.GZ_SLIDES_KIND = Object.freeze({ STORE });
 })();
