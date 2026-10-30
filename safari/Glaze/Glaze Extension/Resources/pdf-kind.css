@@ -10,6 +10,7 @@
 .gq .gp-tool .gp-box { gap: 6px; min-width: 112px; justify-content: space-between; }
 .gq-ib { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; color: var(--gz-ink); flex: none; }
 .gq-ib:hover, .gq-ib[aria-expanded="true"] { background: var(--gz-line); }
+.gq-more .gp-ico { stroke-width: 3.2; }
 .gq-find { flex: none; display: flex; align-items: center; gap: 6px; padding: 6px 16px; border-bottom: 1px solid var(--edge); background: var(--panel); }
 .gq-find[hidden] { display: none; }
 .gq-find input { flex: 0 1 280px; min-width: 0; height: 32px; padding: 0 12px; border: 1px solid var(--gz-line-strong); border-radius: 8px; background: var(--gz-surface-2); color: var(--gz-ink); font: inherit; font-size: 13px; }
