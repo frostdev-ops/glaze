@@ -7,10 +7,8 @@
 // storage.local per Canvas site, person and file (lib/ink.js) and never sent anywhere. Undo, redo, clear page, export and
 // import as a file, a page saved as a picture. Canvas's own annotations are left alone: Glaze's layer takes the pointer
 // only while one of its tools is picked, and picking one of Canvas's puts Glaze's down.
-// What it can't know it asks the Canvas page around it (content.js, "DocViewer"): the palette, the switches, which file
-// and whose, and Glaze's words in the page's language. Asked at that page's origin only, answers taken only from it; the
-// page tells it again whenever any of that changes. No polling: a MutationObserver and a ResizeObserver, only while
-// annotations are on, put the layer back on pages the viewer draws again or resizes.
+// The Canvas parent supplies palette, switches, file identity and translations, accepted only from that origin.
+// While annotations are on, MutationObserver and ResizeObserver restore layers on redrawn or resized pages.
 (() => {
   if (window.__gzDocs || window.top === window || !/^canvadocs(-[\w-]+)?\.instructure\.com$/.test(location.hostname) || !/html/.test(document.contentType)) return;
   window.__gzDocs = true;
@@ -87,7 +85,7 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { if (!got) ask(); }, { once: true });
 
   // ---- annotations ------------------------------------------------------------------------------------------------
-  const stamp = Math.random().toString(36).slice(2); // this frame's own writes, told apart from another tab's
+  const stamp = Math.random().toString(36).slice(2); // this frame's writes
   let key = null;
   let pages = {}; // page number -> strokes
   let done = [], undone = [];
@@ -101,15 +99,20 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
   const width = () => (tool === 'hl' ? size * 6 : size * 1.2);
 
   const local = (f) => { try { return f(chrome.storage.local); } catch { return Promise.reject(new Error('reloaded')); } };
+  let saving = Promise.resolve();
   const save = () => {
     const k = key;
     if (!k) return;
-    local((s) => (Object.keys(pages).length ? s.set({ [k]: { v: 1, by: stamp, pages } }) : s.remove(k))).then(() => say(''), () => say(t("Couldn't save on this device")));
+    const value = { v: 1, by: stamp, pages: I.clean(pages) };
+    // Stamp clears before removal; serialize snapshots so Undo cannot overtake the removal.
+    saving = saving.catch(() => {}).then(() => local(async (s) => { await s.set({ [k]: value }); if (!Object.keys(value.pages).length) await s.remove(k); }));
+    saving.then(() => say(''), () => say(t("Couldn't save on this device")));
   };
   try {
     chrome.storage.onChanged.addListener((c, area) => {
-      // A removal while this tab holds no marks is its own clear (or changes nothing here): history stays.
-      if (area !== 'local' || !key || !(key in c) || c[key].newValue?.by === stamp || (!c[key].newValue && !Object.keys(pages).length)) return;
+      if (area !== 'local' || !key || !(key in c)) return;
+      const { oldValue, newValue } = c[key];
+      if (newValue?.by === stamp || (!newValue && oldValue?.by === stamp && !Object.keys(oldValue.pages || {}).length)) return;
       pages = I.clean(c[key].newValue?.pages);
       done = []; undone = [];
       gen++;
