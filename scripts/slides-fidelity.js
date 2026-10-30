@@ -7,7 +7,10 @@
 // unsaved; PowerPoint quits only if this script started it, and the script won't start while PowerPoint is running
 // (--force overrides: it then opens the deck in the session in use).
 // The terminal running it needs macOS's Automation permission for PowerPoint (System Settings → Privacy & Security →
-// Automation); its prompt was unanswered at the first run (2026-10-30), so no export has run end to end yet. Without PowerPoint:
+// Automation). NO EXPORT HAS WORKED YET (PowerPoint 16 on macOS 27, 2026-10-30): with the permission given, open, active
+// presentation and count of slides answer, but `save p in POSIX file "<folder>/png" as save as PNG file` returns without
+// error and writes nothing, in the folder or anywhere else, 5 s later either. Untried: a name ending .png, a pause before
+// close, each slide's `save as picture`. Without PowerPoint:
 //   --render-only writes the Glaze PNGs alone; --reference <folder> compares with PNGs already made (Slide1.png, … or any
 //   names numbered consecutively from 1, including hidden slides) instead of exporting. Incomplete references are refused.
 // NODE_PATH=<playwright> node scripts/slides-fidelity.js <deck.pptx | unzipped deck folder> [out folder] [--reference <folder>]
