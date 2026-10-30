@@ -4,8 +4,8 @@
 // converted.pdf served with Range). An expanded preview: Blackboard's frame until Glaze's viewer has drawn page 1, then
 // Glaze's in its place, page 1's text in it, its bytes read from S3 by the frame itself (Range too); the page box jumps; collapse and
 // expand; one already open when the switch comes on; the switch off, and Settings → Writer → PDFs off: Blackboard's frame;
-// "converting": Blackboard's frame while it waits, then Glaze's; the documents API failing: Blackboard's frame; an address
-// that ran out: asked again, then shown; Save to Documents: a PDF record in Documents; Open original: the file in a new
+// "converting": Blackboard's frame while it waits, then Glaze's; the documents API failing, or S3 refusing the frame:
+// Blackboard's frame; an address that ran out: asked again, then shown; Save to Documents: a PDF record in Documents; Open original: the file in a new
 // tab; dark documents inverts Blackboard's frame, never Glaze's; the keyboard reaches the frame and Esc returns to the
 // Preview button; at 640 px it fits. The browser's following of viewerUrl's 302 in the worker is stood in for (ultra-mock.js
 // WHERE: Playwright doesn't follow a routed redirect there); the real one is the owner's live check.
@@ -226,7 +226,18 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     check((await view(LAB)).bbShown, "the documents API failing: Blackboard's frame stays, no Glaze frame");
     await toggle(LAB);
 
-    // ---- converting: Blackboard's frame while Ultra's 15 s go by, then Glaze's
+    // ---- S3 refusing the frame every time (a run-out address, or no CORS for the extension's origin): asked again once,
+    // then Blackboard's frame
+    plan[LAB.hash] = { s3: 'fail' };
+    const refusedBefore = mock.seen.viewer;
+    await toggle(LAB);
+    await until(async () => /^ended:/.test((await view(LAB)).state), 'the viewer gives up', 40000, () => view(LAB));
+    const gaveUp = await view(LAB);
+    check(gaveUp.bbShown && !gaveUp.gz && gaveUp.state === 'ended:viewer:read' && mock.seen.viewer >= refusedBefore + 2, `S3 refusing the frame: asked again once, then Blackboard's frame (${gaveUp.state})`);
+    await toggle(LAB);
+
+    // ---- converting: Blackboard's frame while Ultra's 15 s go by, then Glaze's (a fresh page: no done answer kept)
+    await load();
     const t0 = Date.now();
     plan[LAB.hash] = { until: t0 + 8000 };
     mock.seen.asks.set(LAB.hash, 0);
