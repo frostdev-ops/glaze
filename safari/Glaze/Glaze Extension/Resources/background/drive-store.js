@@ -48,7 +48,8 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     // Gradescope: what the student chose (the account, each course's placing, the bar's dismissal, each Canvas account's
     // answer); what was read from Gradescope stays on the device that read it.
     { cat: 'gradescope', area: 'local', test: (k) => k === 'gradescope', view: (v) => (obj(v) ? { acct: v.acct ?? null, map: v.map ?? {}, hide: !!v.hide, bind: v.bind ?? {} } : v),
-      merge: (here, v) => ({ ...v, courses: obj(here?.courses) ? here.courses : {} }) },
+      merge: (here, v) => ({ ...v, courses: here?.acct?.id === v.acct?.id && obj(here?.courses)
+        ? Object.fromEntries(Object.entries(here.courses).filter(([id]) => v.map[id]?.to && v.map[id].to === here.map?.[id]?.to)) : {} }) },
     { cat: 'settings', area: 'sync', test: () => true },
     // Notes, in the order a record needs what it points at: an account's folders, then its files, then its notes.
     { cat: 'noteFolders', area: 'notes', test: (k) => NREC.exec(k)?.[2] !== undefined, order: 1 },
@@ -98,8 +99,35 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
   // record with no such rule keep this device's. local: storage.local.
   const join = async (cat, key, value, local, notes) => {
     // Notes: a note's newer text, every folder either side has; a file is the same file on both.
-    if (cat === 'notes') { const here = (await notes.get(key))[key]; if (!here || (value.note.at || 0) > (here.note.at || 0)) await notes.set({ [key]: value }); return; }
-    if (cat === 'noteFolders') { const here = (await notes.get(key))[key]; await notes.set({ [key]: { folders: { ...value.folders, ...here?.folders } } }); return; }
+    if (cat === 'notes' || cat === 'noteFolders') {
+      const here = (await notes.get(key))[key];
+      // A first meeting joins independent metadata edits as well as the newer text. Note.at only dates the text.
+      const time = (n) => Number.isFinite(n) && n > 0 ? n : 0;
+      const merge = (a, b, fields) => {
+        const latest = (n) => Math.max(time(n.at), time(n.del), ...fields.map((f) => time(n.ft?.[f])));
+        const out = { ...a, ft: { ...a.ft } };
+        for (const f of fields) if ((b.ft?.[f] || 0) > (a.ft?.[f] || 0)) {
+          out[f] = b[f]; out.ft[f] = b.ft[f];
+          if (f === 'course') out.cn = b.cn;
+        }
+        const trash = latest(b) > latest(a) ? b : a;
+        delete out.del; delete out.with;
+        if (trash.del) { out.del = trash.del; if (trash.with) out.with = trash.with; }
+        return out;
+      };
+      let next = value;
+      if (cat === 'notes' && here) {
+        const body = (value.note.at || 0) > (here.note.at || 0) ? value : here;
+        next = { note: { ...body.note, ...merge(here.note, value.note, ['title', 'folder', 'course']), at: body.note.at }, html: body.html };
+      } else if (cat === 'noteFolders') {
+        const folders = { ...value.folders, ...here?.folders };
+        for (const [id, f] of Object.entries(value.folders)) if (here?.folders[id]) folders[id] = merge(here.folders[id], f, ['name', 'course', 'order']);
+        next = { folders };
+      }
+      if (canon(next) === canon(here)) return;
+      if (!await notes.replace(key, here, next)) throw new Fail('stale');
+      return;
+    }
     if (cat === 'noteFiles' || cat === 'gradescope') return;
     const r = cat === 'tasks' ? { tasks: key.startsWith('todo:') ? { tasks: { [key]: value } } : { tasks: {}, pets: { [key]: value } } }
       : ['dashNotes', 'classes', 'gpa'].includes(cat) ? { [cat]: { [key]: value } } : cat === 'widgets' ? { widgets: value }
@@ -116,9 +144,10 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
   };
 
   // Notes as an area of records (keys above): local (storage.local), db (the worker's Notes database, background/background.js
-  // NOTES_DB), run(m) (planner/notes.js run in the worker's queue). A value: a note { note: its index entry without this
+  // NOTES_DB), run(m, onChange) (planner/notes.js run), turn(fn) (the worker's queue). Reads and comparisons share a turn
+  // with their writes. A value: a note { note: its index entry without this
   // device's revision, excerpt and save id, html }, an account's { folders }, a file { kind, name, type, note, data }.
-  const notesArea = ({ local, db, run }) => {
+  const notesArea = ({ local, db, run, turn = (f) => f() }) => {
     const N = L.notes();
     const scope = (acct) => acct.slice('notesIdx:'.length);
     const ok = (r) => { if (!r?.ok) throw new Fail(r?.error === 'big' || r?.error === 'bad' || r?.error === 'type' ? 'bad' : 'stale'); return r; };
@@ -139,14 +168,14 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       const r = rev > 0 ? ok(await run({ key: acct, op: 'load', id: m[4] })) : { html: '' };
       return { note, html: r.html };
     };
-    const write = async (key, v) => {
+    const write = async (key, v, onChange) => {
       const m = NREC.exec(key);
       if (!m) throw new Fail('bad');
-      if (m[2]) return ok(await run({ key: m[1], op: 'folders', folders: v.folders }));
-      if (m[3]) return ok(await run({ key: m[1], op: 'file', id: m[3], kind: v.kind, name: v.name, data: v.data, note: v.note }));
-      return ok(await run({ key: m[1], op: 'put', id: m[4], note: v.note, html: v.html }));
+      if (m[2]) return ok(await run({ key: m[1], op: 'folders', folders: v.folders }, onChange));
+      if (m[3]) return ok(await run({ key: m[1], op: 'file', id: m[3], kind: v.kind, name: v.name, data: v.data, note: v.note }, onChange));
+      return ok(await run({ key: m[1], op: 'put', id: m[4], note: v.note, html: v.html }, onChange));
     };
-    const drop = async (key) => { const m = NREC.exec(key); if (m?.[4]) ok(await run({ key: m[1], op: 'drop', id: m[4] })); };
+    const drop = async (key, onChange) => { const m = NREC.exec(key); if (m?.[4]) ok(await run({ key: m[1], op: 'drop', id: m[4] }, onChange)); };
     return {
       keys: async () => {
         const out = [];
@@ -156,14 +185,14 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         }
         return out;
       },
-      get: async (key) => { const v = await read(key); return v === undefined ? {} : { [key]: v }; },
-      set: async (o) => { for (const [k, v] of Object.entries(o)) await write(k, v); return true; },
-      remove: async (keys) => { for (const k of [].concat(keys)) await drop(k); return true; },
-      replace: async (key, expected, value) => {
+      get: (key) => turn(async () => { const v = await read(key); return v === undefined ? {} : { [key]: v }; }),
+      set: (o) => turn(async () => { for (const [k, v] of Object.entries(o)) await write(k, v); return true; }),
+      remove: (keys) => turn(async () => { for (const k of [].concat(keys)) await drop(k); return true; }),
+      replace: (key, expected, value, onChange) => turn(async () => {
         if (canon(await read(key)) !== canon(expected)) return false;
-        if (value === undefined) await drop(key); else await write(key, value);
+        if (value === undefined) await drop(key, onChange); else await write(key, value, onChange);
         return true;
-      },
+      }),
     };
   };
 
@@ -178,9 +207,20 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     const stamps = async () => (await S.get(STAMPS))[STAMPS] || {};
     // The stamps' read and write one at a time: the listener's and a take's would otherwise lose each other's.
     let turn = Promise.resolve();
-    const restamp = (patch) => { const p = turn.then(async () => { await S.set({ [STAMPS]: { ...(await stamps()), ...patch } }); }); turn = p.catch(() => {}); return p; };
+    const restamp = (patch, expected) => {
+      const p = turn.then(async () => {
+        const here = await stamps();
+        const next = expected ? Object.fromEntries(Object.entries(patch).filter(([id]) => here[id] === expected[id])) : patch;
+        if (Object.keys(next).length) await S.set({ [STAMPS]: { ...here, ...next } });
+      });
+      turn = p.catch(() => {}); return p;
+    };
     const valueOf = async (area, key) => { const v = (await env.area(area).get(key))[key], d = defOf(area, key); return d?.view ? d.view(v) : v; };
-    const owned = new Map(); // `${area}:${key}` of a Notes record this layer is writing → how many such writes are on their way
+    const owned = new Map(); // Notes record id → the exact index transition this layer is committing in the broker queue
+    const transition = (key, before, after) => {
+      const m = NREC.exec(key), part = (idx) => m[2] ? idx.folders : idx.notes[m[4]];
+      return canon({ before: part(before) ?? null, after: part(after) ?? null });
+    };
     const put = async (h, r, was) => {
       await S.set({ [REC + h]: r, ...(r.id && { [FILE + r.id]: `r:${h}` }) });
       if (was?.id && was.id !== r.id) await S.remove(FILE + was.id);
@@ -195,7 +235,10 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
           const N = L.notes(), was = N.clean(c.oldValue), is = N.clean(c.newValue);
           const ids = [...new Set([...Object.keys(was.notes), ...Object.keys(is.notes)])].filter((id) => canon(was.notes[id]) !== canon(is.notes[id])).map((id) => `notes:${key}|${id}`);
           if (canon(was.folders) !== canon(is.folders)) ids.push(`notes:${key}|folders`);
-          for (const id of ids) { if (owned.get(id) > 0) owned.set(id, owned.get(id) - 1); else mine[id] = at; }
+          for (const id of ids) {
+            if (owned.get(id) === transition(id.slice(6), was, is)) owned.delete(id);
+            else mine[id] = at;
+          }
           continue;
         }
         if (!catOf(area, key)) continue;
@@ -233,6 +276,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     const take = async (h, got, R, was, expected) => {
       const a = env.area(got.area), id = `${got.area}:${got.key}`, d = defOf(got.area, got.key);
       if (d?.immutable && got.value === undefined) return; // a file is never taken away: Notes' own clean-up does that
+      const stampBefore = (await stamps())[id];
       let write = got.value, before = expected;
       // A record seen through a view (Gradescope): what this device alone keeps stays beside what came.
       if (d?.merge) {
@@ -241,11 +285,11 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         before = raw; write = got.value === undefined ? undefined : d.merge(raw, got.value);
       }
       applying.set(id, canon(write ?? null));
-      if (got.area === 'notes') owned.set(id, (owned.get(id) || 0) + 1);
       try {
-        if (!await a.replace(got.key, before, write)) throw new Fail('stale');
-      } catch (e) { applying.delete(id); if (got.area === 'notes') owned.set(id, Math.max(0, owned.get(id) - 1)); throw e; }
-      await restamp({ [id]: got.at });
+        const onChange = got.area === 'notes' && !d?.immutable ? (old, next) => owned.set(id, transition(got.key, old, next)) : undefined;
+        if (!await a.replace(got.key, before, write, onChange)) throw new Fail('stale');
+      } catch (e) { applying.delete(id); owned.delete(id); throw e; }
+      await restamp({ [id]: got.at }, { [id]: stampBefore });
       // A later local write is still dirty even if it lands before the sync bookkeeping finishes.
       await put(h, { area: got.area, key: got.key, cat: got.cat, id: R.id, lsum: await sumOf(got.area, got.key, got.value), rsum: got.sum, at: got.at, seen: got.at }, was);
     };
@@ -275,9 +319,15 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       }
       const def = defOf(area, key), cat = def?.cat;
       if (!cat) return;
-      if (def.immutable && was) return; // a picture or attachment, once in Drive, never changes
       const value = await valueOf(area, key), lsum = await sumOf(area, key, value), at = st[`${area}:${key}`] || 0;
-      if (def.immutable && value === undefined) return;
+      if (def.immutable) {
+        // The bytes never change, but Notes may have cleaned up this device's copy since it last used them.
+        if (value === undefined) {
+          if (R && !R.removed) { const got = await fetchRec(ctx, R, h); if (got.value !== undefined) await take(h, got, R, was, value); }
+          return;
+        }
+        if (was && R && !R.removed) return;
+      }
       if (!was) {
         if (!R || R.removed) { if (value !== undefined) await push(ctx, h, area, key, cat, null, at || now()); return; }
         const got = await fetchRec(ctx, R, h);
@@ -313,7 +363,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
           const v = await valueOf('notes', r.key);
           for (const id of v ? L.notes().refs(v.html) : []) {
             const k = `${r.key.slice(0, r.key.lastIndexOf('|'))}|file|${id}`, fh = await hk('notes', k);
-            if (!await recOf(fh)) await one(ctx, fh, { area: 'notes', key: k });
+            if (!await recOf(fh) || await valueOf('notes', k) === undefined) await one(ctx, fh, { area: 'notes', key: k });
           }
         }
       } catch (e) {

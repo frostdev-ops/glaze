@@ -3403,8 +3403,8 @@ const openDriveSync = () => {
       return true;
     }) });
   // Notes through their own queue's run, as the Notes app's changes go (BROKER.notesapp).
-  const notesArea = GZ_DRIVE_STORE.notesArea({ local: { get: (k) => chrome.storage.local.get(k), keys: () => keysOf('local') }, db: NOTES_DB,
-    run: (m) => turn(() => GZ_NOTES.run(m, { local: brokerArea('local') }, NOTES_DB)).catch(() => ({ ok: false, error: 'db' })) });
+  const notesArea = GZ_DRIVE_STORE.notesArea({ local: { get: (k) => chrome.storage.local.get(k), keys: () => keysOf('local') }, db: NOTES_DB, turn,
+    run: (m, onChange) => GZ_NOTES.run(m, { local: brokerArea('local'), onChange }, NOTES_DB).catch(() => ({ ok: false, error: 'db' })) });
   driveStore = GZ_DRIVE_STORE.create({
     area: (a) => (a === 'notes' ? notesArea : areaOf(a)), store: { get: (k) => chrome.storage.local.get(k), set: (o) => chrome.storage.local.set(o), remove: (k) => chrome.storage.local.remove(k), keys: () => keysOf('local') },
     hash: async (text) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))].map((b) => b.toString(16).padStart(2, '0')).join(''),
