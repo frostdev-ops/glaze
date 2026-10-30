@@ -307,7 +307,7 @@ test('synthetic: sheets, names, sizes, merges, freeze panes, filter and sort, ke
   assert.equal(one.keep.xml.find((x) => x.name === 'hyperlinks').xml, '<hyperlinks><hyperlink ref="A1" r:id="rId1" display="site"/><hyperlink ref="B5" location="\'Two\'!A1"/></hyperlinks>');
   assert.equal(one.keep.view.attrs.zoomScale, '125');
   assert.deepEqual(one.keep.rels.map((r) => r.id), ['rId1', 'rId2', 'rId3', 'rId4']);
-  assert.deepEqual(one.keep.drawing, { id: 'rId2', path: 'xl/drawings/drawing1.xml' });
+  assert.deepEqual(one.keep.drawing, { id: 'rId2', path: 'xl/drawings/drawing1.xml', charts: ['xl/charts/chart1.xml'] }, 'where the charts lane finds them in keep.parts');
   assert.equal(one.keep.comments, 'xl/comments1.xml');
   assert.match(one.keep.root, /^<worksheet [^>]*mc:Ignorable="x14ac">$/);
 });
