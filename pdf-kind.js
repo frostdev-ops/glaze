@@ -278,10 +278,21 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
         return true;
       } catch (e) { console.error(e); dirty = true; say(t(e instanceof RangeError ? TOO_BIG : 'Not saved. Try again in a moment.')); return false; }
     };
-    const flush = () => { const p = (saving || Promise.resolve()).then(save); saving = p; p.finally(() => { if (saving === p) saving = null; }); return p; };
+    const flush = () => {
+      clearTimeout(timer);
+      if (!saving) saving = (async () => {
+        while (dirty) if (!await save()) return false;
+        return true;
+      })().finally(() => { saving = null; });
+      return saving;
+    };
     if (doc) {
-      doc.annotationStorage.onSetModified = () => { dirty = true; say(''); clearTimeout(timer); timer = setTimeout(flush, 1000); };
-      ui.addEventListener('change', (e) => { if (e.target.closest?.('.annotationLayer')) { clearTimeout(timer); timer = setTimeout(flush, 0); } });
+      const modified = () => { dirty = true; say(''); clearTimeout(timer); timer = setTimeout(flush, 1000); };
+      doc.annotationStorage.onSetModified = modified;
+      // pdf.js only calls onSetModified once until its current save finishes. Track each input as well, so a field
+      // changed during that save cannot be mistaken for the value its worker already captured.
+      ui.addEventListener('input', (e) => { if (e.target.closest?.('.annotationLayer')) modified(); });
+      ui.addEventListener('change', (e) => { if (e.target.closest?.('.annotationLayer')) { modified(); flush(); } });
     }
     back.addEventListener('click', (e) => {
       if (!dirty && !saving) return;
