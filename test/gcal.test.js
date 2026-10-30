@@ -209,6 +209,22 @@ withMock('link another device: the code opens the same calendar, and that device
   await assert.rejects(G.link(b, 'their@group.calendar.google.com'), (x) => x.code === 'denied', 'a calendar Glaze did not make is out of reach');
 });
 
+// Codex, 4.0.1: a newly linked device has no deletion history, and a full listing leaves cancelled events out.
+withMock('link another device: a deadline deleted in Google stays deleted on the linked device', async (mock) => {
+  const a = env(mock);
+  const { cal } = await G.connect(a);
+  await run(a, cal, G.fresh());
+  const lab = mock.live(cal).find((x) => x.summary === 'Lab 1').id;
+  mock.del(cal, lab);
+  const b = env(mock);
+  await G.link(b, cal);
+  const st = G.fresh();
+  await run(b, cal, st);
+  assert.ok(!mock.live(cal).some((x) => x.id === lab), 'not put back');
+  assert.ok(st.gone.includes(lab) && !(lab in st.map));
+  assert.equal(mock.live(cal).length, 4);
+});
+
 withMock('disconnect: the calendar deleted if asked, and the grant revoked with the token in the body, not the address', async (mock) => {
   const e = env(mock);
   const { cal } = await G.connect(e);
