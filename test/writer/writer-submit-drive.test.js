@@ -51,7 +51,7 @@ const standIn = () => {
   return { files, asked, ended, drive: D.create({ fetch, token: async () => 'ya29.unit' }) };
 };
 
-const setup = ({ connected = true, picked = [], pick = null } = {}) => {
+const setup = ({ connected = true, picker = connected, picked = [], pick = null } = {}) => {
   const s = sheet(), d = standIn(), store = new Map(), ports = [];
   let n = 0;
   s.picks = [];
@@ -66,7 +66,7 @@ const setup = ({ connected = true, picked = [], pick = null } = {}) => {
     },
   } };
   // The page's client connects as the frame's chrome does (drive.js runs in this realm, the sheet in its own).
-  s.ctx.GZ_DRIVE = { ...D, client: () => D.client(() => s.ctx.chrome.runtime.connect({ name: D.PORT })), page: { connected: () => connected } };
+  s.ctx.GZ_DRIVE = { ...D, client: () => D.client(() => s.ctx.chrome.runtime.connect({ name: D.PORT })), page: { connected: () => connected, picker: () => picker } };
   s.ctx.GZ_DOC_KINDS = K;
   s.ctx.AbortController = AbortController; // a frame has it; the helper's context doesn't
   s.ctx.GZ_DOC_FILES = { client: () => ({ put: async (b) => { store.set(++n, b); return n; }, get: async (r) => store.get(r) }) };
@@ -79,13 +79,16 @@ const settle = async (s, n = 6) => { for (let i = 0; i < n; i++) await s.flush()
 const bytes = (n, b = 7) => new Uint8Array(n).fill(b);
 const file = (id, name, mimeType, size) => ({ id, name, mimeType, ...(size != null && { size: String(size) }) });
 
-test('From Google Drive shows only while Drive is connected', async () => {
+test('From Google Drive shows only while Drive is connected and the Picker works here', async () => {
   const off = setup({ connected: false });
   await off.open();
   assert.equal(off.doc.querySelector('.gs-drive'), null);
   const on = setup();
   await on.open();
   assert.equal(on.doc.querySelector('.gs-drive').textContent, 'From Google Drive');
+  const safari = setup({ picker: false });
+  await safari.open();
+  assert.equal(safari.doc.querySelector('.gs-drive'), null, 'connected where the Picker doesn\'t work (Safari): no button');
   const none = sheet();
   await none.open();
   assert.equal(none.doc.querySelector('.gs-drive'), null, 'no Drive script: no button');
