@@ -14,7 +14,7 @@ Productivity
 
 ## Detailed description
 
-Give Canvas, Blackboard Ultra and Moodle your own theme and dark mode. On Canvas and Blackboard Ultra, Glaze adds a student planner, to-do list, GPA calculator and notes. Free, with no Glaze account, ads or analytics.
+Give Canvas, Blackboard Ultra and Moodle your own theme and dark mode. On Canvas and Blackboard Ultra, Glaze adds a student planner, to-do list, GPA calculator and notes. Glaze Writer replaces Blackboard Ultra's editor, and Documents keeps your papers in one place. Free, with no Glaze account, ads or analytics.
 
 YOUR LOOK
 
@@ -33,6 +33,15 @@ PLAN AND STUDY ON CANVAS AND BLACKBOARD ULTRA
 • Import your class schedule or a syllabus from a PDF or photo, read on your device, and export deadlines as a calendar file (.ics).
 • Notes with folders and attachments, a focus timer and a pet habitat.
 • Course tabs keep up to 4 course pages live alongside the main page.
+
+GLAZE WRITER AND DOCUMENTS
+
+• On Blackboard Ultra, Glaze Writer takes the place of the editor in discussions, journals, messages, assignments and tests; ⋯ › Blackboard editor gives a box back to Blackboard.
+• Assignments open in a light editor whose text goes into Blackboard's text box, so Blackboard's own Submit sends it. Full writer gives real pages in MLA 9, APA 7, Chicago 17, Blank or your own format, with format checks, footnotes, versions, .docx import and export, and a submit sheet that attaches the .docx.
+• Spelling, grammar and autocorrect run on your device. Cite looks up a DOI, ISBN or web address only when you click; sources stay with each assignment, journal, discussion or course's new messages.
+• AI is optional and off until you set it up in Settings › AI. Tab completion only finishes the current sentence, and Feedback assesses your paper against the rubric and instructions. Glaze never drafts. Tests get proofing only.
+• Documents keeps every paper and document in one place, from Glaze's toolbar icon, Ctrl+K or Glaze navigation. Start one in Blank, MLA, APA or Chicago, or import a Word file; deleted documents wait 30 days in Trash.
+• Documents wears your Look, and Writer's pages follow a dark Look; Light page keeps them white.
 
 CANVAS
 
@@ -54,7 +63,7 @@ MOODLE
 
 AT YOUR SCHOOL
 
-Works from install on instructure.com, blackboard.com and moodlecloud.com. Install access also covers frostdev.io and share.frostdev.io; other hosts are requested when needed. Add your school's own address in Settings › Privacy and data › Sites; Back up… and Restore… there save everything in one file. Glaze never changes grades. Submitting coursework or sending messages requires your action. Writer can attach your .docx and submit it through Blackboard after you confirm. What-if scores stay on your device.
+Works from install on instructure.com, blackboard.com and moodlecloud.com. Install access also covers frostdev.io and share.frostdev.io; other hosts are requested when needed. Add your school's own address in Settings › Privacy and data › Sites; Back up… and Restore… there save everything in one file. Glaze never changes grades. What you write reaches Blackboard only through its own Post, Reply, Send or Submit, when you press it; Full writer's submit sheet attaches your .docx and submits it after you confirm. What-if scores stay on your device.
 
 PRIVACY
 

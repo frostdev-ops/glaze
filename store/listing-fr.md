@@ -6,7 +6,7 @@ Canvas, Blackboard et Moodle : thèmes et mode sombre. Agenda, GPA et notes sur 
 
 ## Detailed description
 
-Personnalisez Canvas, Blackboard Ultra et Moodle avec des thèmes et un mode sombre. Sur Canvas et Blackboard Ultra, Glaze ajoute un agenda étudiant, une liste de tâches, un calcul de moyenne (GPA) et des notes personnelles. Gratuit, sans compte Glaze, publicité ni outil d’analyse.
+Personnalisez Canvas, Blackboard Ultra et Moodle avec des thèmes et un mode sombre. Sur Canvas et Blackboard Ultra, Glaze ajoute un agenda étudiant, une liste de tâches, un calcul de moyenne (GPA) et des notes personnelles. Glaze Writer remplace l’éditeur de Blackboard Ultra, et Documents réunit vos travaux au même endroit. Gratuit, sans compte Glaze, publicité ni outil d’analyse.
 
 VOTRE APPARENCE
 
@@ -25,6 +25,15 @@ PLANIFIER ET ÉTUDIER SUR CANVAS ET BLACKBOARD ULTRA
 • Importez votre emploi du temps ou un plan de cours depuis un PDF ou une photo, lu sur votre appareil, et exportez vos échéances en fichier de calendrier (.ics).
 • Notes avec dossiers et pièces jointes, minuteur de concentration et habitat du compagnon.
 • Les onglets de cours gardent jusqu’à 4 pages de cours actives en plus de la page principale.
+
+GLAZE WRITER ET DOCUMENTS
+
+• Sur Blackboard Ultra, Glaze Writer remplace l’éditeur dans les discussions, journaux, messages, devoirs et tests ; ⋯ › Éditeur Blackboard rend une zone à Blackboard.
+• Les devoirs s’ouvrent dans un éditeur léger qui écrit dans la zone de texte de Blackboard ; le bouton de remise de Blackboard l’envoie. Writer complet offre de vraies pages en MLA 9, APA 7, Chicago 17, Vierge ou votre propre format, avec vérification du format, notes de bas de page, versions, import et export .docx et une fenêtre de remise qui joint le .docx.
+• Orthographe, grammaire et correction automatique fonctionnent sur votre appareil. Citer recherche un DOI, un ISBN ou une adresse web seulement quand vous cliquez ; les sources restent avec chaque devoir, journal ou discussion, ou avec les nouveaux messages d’un cours.
+• L’IA est facultative et désactivée tant que vous ne la configurez pas dans Réglages › IA. La complétion avec Tab termine seulement la phrase en cours, et les commentaires évaluent votre travail selon la grille et les consignes. Glaze ne rédige jamais à votre place. Les tests n’ont que la correction.
+• Documents réunit tous vos travaux et documents au même endroit, depuis l’icône Glaze de la barre d’outils, Ctrl+K ou la navigation Glaze. Commencez en Vierge, MLA, APA ou Chicago, ou importez un fichier Word ; les documents supprimés attendent 30 jours dans la Corbeille.
+• Documents adopte votre style, et les pages de Writer suivent un style sombre ; Page claire les garde blanches.
 
 CANVAS
 
@@ -46,7 +55,7 @@ MOODLE
 
 DANS VOTRE ÉTABLISSEMENT
 
-Fonctionne dès l’installation sur instructure.com, blackboard.com et moodlecloud.com. L’installation demande aussi l’accès à frostdev.io et share.frostdev.io ; les autres hôtes sont autorisés à la demande. Ajoutez l’adresse de votre établissement dans Réglages › Confidentialité et données › Sites ; « Sauvegarder… » et « Restaurer… » y gardent tout dans un seul fichier. Glaze ne modifie jamais les notes. Rendre un travail ou envoyer un message nécessite votre action. Après votre confirmation, Writer peut joindre votre .docx et le rendre via Blackboard. Les notes simulées restent sur votre appareil.
+Fonctionne dès l’installation sur instructure.com, blackboard.com et moodlecloud.com. L’installation demande aussi l’accès à frostdev.io et share.frostdev.io ; les autres hôtes sont autorisés à la demande. Ajoutez l’adresse de votre établissement dans Réglages › Confidentialité et données › Sites ; « Sauvegarder… » et « Restaurer… » y gardent tout dans un seul fichier. Glaze ne modifie jamais les notes. Ce que vous écrivez n’arrive sur Blackboard que par ses propres boutons de publication, de réponse, d’envoi ou de remise, quand vous les utilisez ; la fenêtre de remise de Writer complet joint votre .docx et le remet après votre confirmation. Les notes simulées restent sur votre appareil.
 
 CONFIDENTIALITÉ
 

@@ -6,7 +6,7 @@ Canvas, Blackboard en Moodle: thema’s en donkere modus. Planner, GPA en notiti
 
 ## Detailed description
 
-Geef Canvas, Blackboard Ultra en Moodle je eigen thema en donkere modus. Op Canvas en Blackboard Ultra voegt Glaze een studentenplanner, takenlijst, GPA-calculator en notities toe. Gratis, zonder Glaze-account, advertenties of gebruiksanalyses.
+Geef Canvas, Blackboard Ultra en Moodle je eigen thema en donkere modus. Op Canvas en Blackboard Ultra voegt Glaze een studentenplanner, takenlijst, GPA-calculator en notities toe. Glaze Writer vervangt de editor van Blackboard Ultra, en Documenten bewaart je werkstukken op één plek. Gratis, zonder Glaze-account, advertenties of gebruiksanalyses.
 
 JOUW UITERLIJK
 
@@ -25,6 +25,15 @@ PLANNEN EN STUDEREN OP CANVAS EN BLACKBOARD ULTRA
 • Importeer je lesrooster of een syllabus uit een pdf of foto, gelezen op je apparaat, en exporteer deadlines als agendabestand (.ics).
 • Notities met mappen en bijlagen, een focustimer en een huisdierverblijf.
 • Cursustabbladen houden naast de hoofdpagina maximaal 4 cursuspagina’s actief.
+
+GLAZE WRITER EN DOCUMENTEN
+
+• Op Blackboard Ultra neemt Glaze Writer de editor over in discussies, dagboeken, berichten, opdrachten en toetsen; ⋯ › Blackboard-editor geeft een vak terug aan Blackboard.
+• Opdrachten openen in een lichte editor waarvan de tekst in het tekstvak van Blackboard komt, zodat de eigen inleverknop van Blackboard hem verstuurt. Volledige Writer geeft echte pagina’s in MLA 9, APA 7, Chicago 17, Leeg of je eigen opmaak, met opmaakcontroles, voetnoten, versies, .docx-import en -export en een inleverscherm dat de .docx bijvoegt.
+• Spelling, grammatica en autocorrectie werken op je apparaat. Citeren zoekt een DOI, ISBN of webadres alleen op als je klikt; bronnen blijven bij elke opdracht, elk dagboek, elke discussie of de nieuwe berichten van een cursus.
+• AI is optioneel en staat uit tot je het instelt in Instellingen › AI. Aanvullen met Tab maakt alleen de huidige zin af, en Feedback toetst je werk aan het beoordelingsschema en de instructies. Glaze schrijft nooit een tekst voor je. Toetsen krijgen alleen tekstcontrole.
+• Documenten bewaart al je werkstukken en documenten op één plek, via het Glaze-pictogram in de werkbalk, Ctrl+K of de Glaze-navigatie. Begin met Leeg, MLA, APA of Chicago of importeer een Word-bestand; verwijderde documenten wachten 30 dagen in de Prullenbak.
+• Documenten krijgt je stijl, en de pagina’s van Writer volgen een donkere stijl; Lichte pagina houdt ze wit.
 
 CANVAS
 
@@ -46,7 +55,7 @@ MOODLE
 
 OP JE SCHOOL
 
-Werkt direct na installatie op instructure.com, blackboard.com en moodlecloud.com. Bij installatie wordt ook toegang tot frostdev.io en share.frostdev.io gevraagd; andere hosts vragen toestemming wanneer dat nodig is. Voeg het eigen adres van je school toe in Instellingen › Privacy en gegevens › Sites; “Back-up maken…” en “Herstellen…” daar bewaren alles in één bestand. Glaze wijzigt nooit cijfers. Werk inleveren of berichten versturen vereist jouw actie. Na jouw bevestiging kan Writer je .docx via Blackboard uploaden en inleveren. Wat-als-cijfers blijven op je apparaat.
+Werkt direct na installatie op instructure.com, blackboard.com en moodlecloud.com. Bij installatie wordt ook toegang tot frostdev.io en share.frostdev.io gevraagd; andere hosts vragen toestemming wanneer dat nodig is. Voeg het eigen adres van je school toe in Instellingen › Privacy en gegevens › Sites; “Back-up maken…” en “Herstellen…” daar bewaren alles in één bestand. Glaze wijzigt nooit cijfers. Wat je schrijft komt alleen in Blackboard via de eigen knoppen om te plaatsen, te reageren, te versturen of in te leveren, als jij erop drukt; het inleverscherm van Volledige Writer voegt je .docx bij en levert die in na jouw bevestiging. Wat-als-cijfers blijven op je apparaat.
 
 PRIVACY
 

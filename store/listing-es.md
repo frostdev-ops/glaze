@@ -6,7 +6,7 @@ Canvas, Blackboard y Moodle: temas y modo oscuro. Agenda, GPA y notas en Canvas 
 
 ## Detailed description
 
-Personaliza Canvas, Blackboard Ultra y Moodle con temas y modo oscuro. En Canvas y Blackboard Ultra, Glaze añade una agenda para estudiantes, una lista de tareas, una calculadora de promedio (GPA) y notas. Gratis, sin cuenta de Glaze, anuncios ni analíticas.
+Personaliza Canvas, Blackboard Ultra y Moodle con temas y modo oscuro. En Canvas y Blackboard Ultra, Glaze añade una agenda para estudiantes, una lista de tareas, una calculadora de promedio (GPA) y notas. Glaze Writer sustituye al editor de Blackboard Ultra, y Documentos reúne tus trabajos en un solo lugar. Gratis, sin cuenta de Glaze, anuncios ni analíticas.
 
 TU ASPECTO
 
@@ -25,6 +25,15 @@ PLANIFICA Y ESTUDIA EN CANVAS Y BLACKBOARD ULTRA
 • Importa tu horario de clases o un programa del curso desde un PDF o una foto, leído en tu dispositivo, y exporta tus entregas como archivo de calendario (.ics).
 • Notas con carpetas y adjuntos, un temporizador de concentración y el hábitat de la mascota.
 • Las pestañas de cursos mantienen activas hasta 4 páginas de cursos junto a la página principal.
+
+GLAZE WRITER Y DOCUMENTOS
+
+• En Blackboard Ultra, Glaze Writer sustituye al editor en debates, diarios, mensajes, tareas y exámenes; ⋯ › Editor de Blackboard devuelve un cuadro a Blackboard.
+• Las tareas se abren en un editor ligero cuyo texto va al cuadro de texto de Blackboard, así que el propio botón de entrega de Blackboard lo envía. Writer completo ofrece páginas reales en MLA 9, APA 7, Chicago 17, En blanco o tu propio formato, con revisión del formato, notas al pie, versiones, importación y exportación .docx y una ventana de entrega que adjunta el .docx.
+• La ortografía, la gramática y la autocorrección se ejecutan en tu dispositivo. Citar busca un DOI, un ISBN o una dirección web solo cuando haces clic; las fuentes se guardan con cada tarea, diario o debate, o con los mensajes nuevos de cada curso.
+• La IA es opcional y está desactivada hasta que la configures en Ajustes › IA. Completar con Tab solo termina la frase actual, y los comentarios evalúan tu trabajo según la rúbrica y las instrucciones. Glaze nunca redacta por ti. Los exámenes solo tienen corrección.
+• Documentos reúne todos tus trabajos y documentos en un solo lugar, desde el icono de Glaze en la barra de herramientas, Ctrl+K o la navegación de Glaze. Empieza uno En blanco, MLA, APA o Chicago, o importa un archivo de Word; los documentos eliminados esperan 30 días en la Papelera.
+• Documentos lleva tu estilo, y las páginas de Writer siguen un estilo oscuro; Página clara las mantiene blancas.
 
 CANVAS
 
@@ -46,7 +55,7 @@ MOODLE
 
 EN TU CENTRO
 
-Funciona desde la instalación en instructure.com, blackboard.com y moodlecloud.com. La instalación también pide acceso a frostdev.io y share.frostdev.io; los demás hosts se solicitan cuando hacen falta. Añade la dirección propia de tu centro en Ajustes › Privacidad y datos › Sitios; ahí, «Hacer una copia…» y «Restaurar…» guardan todo en un solo archivo. Glaze nunca cambia calificaciones. Entregar trabajos o enviar mensajes requiere una acción tuya. Tras tu confirmación, Writer puede adjuntar tu .docx y entregarlo a través de Blackboard. Las calificaciones hipotéticas se quedan en tu dispositivo.
+Funciona desde la instalación en instructure.com, blackboard.com y moodlecloud.com. La instalación también pide acceso a frostdev.io y share.frostdev.io; los demás hosts se solicitan cuando hacen falta. Añade la dirección propia de tu centro en Ajustes › Privacidad y datos › Sitios; ahí, «Hacer una copia…» y «Restaurar…» guardan todo en un solo archivo. Glaze nunca cambia calificaciones. Lo que escribes llega a Blackboard solo con sus propios botones de publicar, responder, enviar o entregar, cuando los pulsas; la ventana de entrega de Writer completo adjunta tu .docx y lo entrega tras tu confirmación. Las calificaciones hipotéticas se quedan en tu dispositivo.
 
 PRIVACIDAD
 

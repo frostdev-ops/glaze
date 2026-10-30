@@ -6,7 +6,7 @@ Canvas, Blackboard & Moodle: Designs und Dunkelmodus. Planer, GPA und Notizen au
 
 ## Detailed description
 
-Gestalte Canvas, Blackboard Ultra und Moodle mit eigenen Designs und Dunkelmodus. Auf Canvas und Blackboard Ultra bietet Glaze einen Planer für Studierende, eine To-do-Liste, einen GPA-Rechner und Notizen. Kostenlos, ohne Glaze-Konto, Werbung oder Nutzungsanalysen.
+Gestalte Canvas, Blackboard Ultra und Moodle mit eigenen Designs und Dunkelmodus. Auf Canvas und Blackboard Ultra bietet Glaze einen Planer für Studierende, eine To-do-Liste, einen GPA-Rechner und Notizen. Glaze Writer ersetzt den Editor von Blackboard Ultra, und Dokumente hält deine Arbeiten an einem Ort. Kostenlos, ohne Glaze-Konto, Werbung oder Nutzungsanalysen.
 
 DEIN AUSSEHEN
 
@@ -25,6 +25,15 @@ PLANEN UND LERNEN AUF CANVAS UND BLACKBOARD ULTRA
 • Importiere deinen Stundenplan oder einen Kursplan aus einer PDF-Datei oder einem Foto, gelesen auf deinem Gerät, und exportiere Fristen als Kalenderdatei (.ics).
 • Notizen mit Ordnern und Anhängen, ein Fokus-Timer und ein Haustier-Zuhause.
 • Kurs-Tabs halten neben der Hauptseite bis zu 4 Kursseiten aktiv.
+
+GLAZE WRITER UND DOKUMENTE
+
+• Auf Blackboard Ultra ersetzt Glaze Writer den Editor in Diskussionen, Journalen, Nachrichten, Aufgaben und Tests; ⋯ › Blackboard-Editor gibt ein Feld an Blackboard zurück.
+• Aufgaben öffnen sich in einem schlanken Editor, dessen Text in Blackboards Textfeld landet, sodass Blackboards eigene Abgabe-Schaltfläche ihn abschickt. Voller Writer bietet echte Seiten in MLA 9, APA 7, Chicago 17, Leer oder deinem eigenen Format, mit Formatprüfung, Fußnoten, Versionen, .docx-Import und -Export und einem Abgabefenster, das die .docx anhängt.
+• Rechtschreibung, Grammatik und Autokorrektur laufen auf deinem Gerät. „Zitieren“ sucht eine DOI, ISBN oder Webadresse nur, wenn du klickst; Quellen bleiben bei der jeweiligen Aufgabe, dem Journal, der Diskussion oder den neuen Nachrichten eines Kurses.
+• KI ist optional und aus, bis du sie unter Einstellungen › KI einrichtest. Die Tab-Vervollständigung beendet nur den aktuellen Satz, und Feedback bewertet deine Arbeit anhand von Bewertungsraster und Anweisungen. Glaze verfasst keine Entwürfe. Tests erhalten nur Korrekturhilfen.
+• Dokumente hält alle Arbeiten und Dokumente an einem Ort, erreichbar über das Glaze-Symbol in der Symbolleiste, Strg+K oder die Glaze-Navigation. Beginne mit Leer, MLA, APA oder Chicago oder importiere eine Word-Datei; gelöschte Dokumente bleiben 30 Tage im Papierkorb.
+• Dokumente trägt dein Design, und die Seiten von Writer folgen einem dunklen Design; Helle Seite lässt sie weiß.
 
 CANVAS
 
@@ -46,7 +55,7 @@ MOODLE
 
 AN DEINER SCHULE
 
-Funktioniert ab der Installation auf instructure.com, blackboard.com und moodlecloud.com. Bei der Installation wird auch Zugriff auf frostdev.io und share.frostdev.io angefordert; weitere Hosts werden bei Bedarf angefragt. Füge die eigene Adresse deiner Schule unter Einstellungen › Datenschutz und Daten › Websites hinzu; „Sichern…“ und „Wiederherstellen…“ dort speichern alles in einer Datei. Glaze ändert keine Noten. Abgaben und Nachrichten erfordern dein Zutun. Nach deiner Bestätigung kann Writer deine .docx über Blackboard hochladen und abgeben. Was-wäre-wenn-Werte bleiben auf deinem Gerät.
+Funktioniert ab der Installation auf instructure.com, blackboard.com und moodlecloud.com. Bei der Installation wird auch Zugriff auf frostdev.io und share.frostdev.io angefordert; weitere Hosts werden bei Bedarf angefragt. Füge die eigene Adresse deiner Schule unter Einstellungen › Datenschutz und Daten › Websites hinzu; „Sichern…“ und „Wiederherstellen…“ dort speichern alles in einer Datei. Glaze ändert keine Noten. Was du schreibst, erreicht Blackboard nur über dessen eigene Schaltflächen zum Posten, Antworten, Senden oder Abgeben, wenn du sie drückst; das Abgabefenster von Voller Writer hängt deine .docx an und gibt sie nach deiner Bestätigung ab. Was-wäre-wenn-Werte bleiben auf deinem Gerät.
 
 DATENSCHUTZ
 
