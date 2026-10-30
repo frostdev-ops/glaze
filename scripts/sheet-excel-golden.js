@@ -31,7 +31,9 @@ const script = (family, list, file) => {
     else if (v.e) lines.push(`set formula of ${r} to ${str(v.e)}`);
     else lines.push(`set formula2 of ${r} to ${str(v.f)}`);
   }
-  const tryEach = (sheet, cell, commands) => lines.push('try', ...commands, 'on error m number n',
+  // A refusal is an error, or a cell Excel left without the formula and said nothing.
+  const tryEach = (sheet, cell, commands) => lines.push('try', ...commands,
+    `if (has formula of ${at(sheet, cell)}) is not true then error "Excel kept no formula and gave no error"`, 'on error m number n',
     `set end of out to "R" & ${US} & ${str(`${sheet}!${cell}`)} & ${US} & my fieldText(m & " (" & n & ")")`, 'end try');
   const groups = new Set();
   for (const c of list) {
@@ -90,17 +92,21 @@ on run
       end repeat
       ${lines.join('\n      ')}
       set shown to {}
-      repeat with s in worksheets of wb
-        set end of shown to name of s
+      repeat with i from 1 to count of worksheets of wb
+        set end of shown to name of worksheet i of wb
       end repeat
       set AppleScript's text item delimiters to ${US}
       set end of out to "S" & ${US} & (shown as text)
       save workbook as wb filename ${str(file)} file format Excel XML file format
+      set wb to workbook ${str(path.basename(file))}
       close wb saving no
       set wb to missing value
       on error m number n
         try
           if wb is not missing value then close wb saving no
+        end try
+        try
+          close workbook ${str(path.basename(file))} saving no
         end try
         set screen updating to oldUpdating
         set display alerts to oldAlerts
@@ -136,7 +142,8 @@ const main = async () => {
     tmp = box('golden');
     for (const family of names) {
       const list = cases.filter((c) => c.family === family);
-      const file = path.join(tmp, `${family}.xlsx`);
+      // A name no other open workbook has: Excel keeps one workbook of a name open at a time.
+      const file = path.join(tmp, `glaze-golden-${process.pid}-${family}.xlsx`);
       const t = Date.now();
       const out = osa(script(family, list, file), 1000000);
       timing.push(`${family} ${((Date.now() - t) / 1000).toFixed(1)} s`);
