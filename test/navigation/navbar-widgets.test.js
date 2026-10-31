@@ -229,6 +229,19 @@ test('Ultra next due validates course and content ids before building a link', a
   assert.equal(node.box.href, 'https://school.test/ultra/redirect?redirectType=nautilus&courseId=_1_1&contentId=_2_1');
 });
 
+test("D: Ultra's next due asks the planner for the page's confirmed student, the one /users/me at first paint answered", async () => {
+  const asked = [];
+  const { w, X } = harness({ site: 'ultra', need: (_, c) => {
+    c.GZ_ULTRA = { page: { planned: async (from, to, cache, uid) => { asked.push(uid); return { key: 'todo:school', items: [] }; } } };
+    c.GZ_TODO = { clean: () => ({ items: {} }), isDone: () => false };
+    return Promise.resolve();
+  } });
+  X.me = async () => '_9_1';
+  w.set(['next']); await settle(); await settle(); await settle();
+  assert.deepEqual(asked, ['_9_1']);
+  for (const f of ['navigation/page/nav.js', 'navigation/page/navbar-widgets.js']) assert.match(fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8'), /GZ_ULTRA\.page\.planned\(\+start, \+end, local\.todoCache, await Promise\.resolve\(X\.me\?\.\(\)\)\.catch\(\(\) => ''\)\)/, f);
+});
+
 test('late local reads and timer replies cannot overwrite a newer storage read', async () => {
   const pending = [];
   let reply;

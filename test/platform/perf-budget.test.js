@@ -150,6 +150,10 @@ const ULTRA_SIGNOUT = { ultra: 243, canvas: 0, moodle: 0 };
 // the queue (courses/lmsq.js) loads on demand. Measured against 7bf3623.
 // Review versus immutable f8dc85a: liveness/auth/member failure guards and incomplete Canvas-list checks included.
 const LMS_REQUESTS = { ultra: 1769, canvas: 201, moodle: 0 };
+// Ultra's /users/me at first paint (D, coordinator-approved 2026-10-30, measured against 3298f6f9): content-ultra.js asks it
+// straight away, before the stores' files load, so personal panels can show their kept copy the moment it confirms who's
+// signed in; courses/ultra.js takes the same request. 297 bytes on Ultra.
+const ULTRA_EARLY_ME = 297;
 // Shortcut roles and IME (WP-N2; the owner's audit-fix allowance): content.js's keyOn skips menus, menubars, lists, grids, trees and
 // comboboxes across composed event paths, preserves queued IME flags and ignores Safari keyCode 229: 365 bytes/site. Canvas's
 // frame word also distinguishes course Hide from a disabled menu (+8 bytes). Measured against immutable WP-N2 base f8dc85a.
@@ -305,7 +309,7 @@ const FIRST_SCRIPT = { ultra: entry((c) => c.js.includes('content/content-ultra.
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + UI_SWAP + ULTRA_VT_ABORT[site] + VT_GUARD[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS + SYLLABUS_DOCS + WRITER + WRITER_SETTINGS + CTAB_PALETTE[site] + LOOK_CATALOG + COURSE_LOOKS_SYNC + BB_PREVIEWS + CANVAS_OPEN + AREA_PATHS[site] + ULTRA_PASSES[site] + CTAB_STANDBY + NAV_FIRST_PAINT[site];
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + (site === 'ultra' ? ULTRA_EARLY_ME : 0) + UI_SWAP + ULTRA_VT_ABORT[site] + VT_GUARD[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS + SYLLABUS_DOCS + WRITER + WRITER_SETTINGS + CTAB_PALETTE[site] + LOOK_CATALOG + COURSE_LOOKS_SYNC + BB_PREVIEWS + CANVAS_OPEN + AREA_PATHS[site] + ULTRA_PASSES[site] + CTAB_STANDBY + NAV_FIRST_PAINT[site];
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }
