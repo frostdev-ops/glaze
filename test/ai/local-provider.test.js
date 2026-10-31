@@ -525,7 +525,7 @@ test('a feature on Glaze\'s model: status says download until it is ready; a run
   assert.deepEqual([p.posted[0].ready, p.posted[0].why, p.posted[0].provider], [false, 'download', 'local']);
   await LOCAL.prepare(LOCAL.config({}));
   p.say({ id: 2, op: 'status', feature: 'writing' }); await settle();
-  assert.deepEqual(p.posted[1], { id: 2, type: 'status', on: true, allowed: true, ready: true, provider: 'local', caps: { text: true, json: true, stream: true, tools: false, images: false, local: true, context: 16000 }, identity: p.posted[1].identity });
+  assert.deepEqual(p.posted[1], { id: 2, type: 'status', on: true, allowed: true, ready: true, provider: 'local', caps: { text: true, json: true, stream: true, tools: false, images: false, local: true, context: LOCAL.CONTEXT - LOCAL.CONTEXT / 10 }, identity: p.posted[1].identity });
   p.say({ id: 3, op: 'run', feature: 'writing', task: TASK.id, input: { text: 'hi' } }); await settle(80);
   const end = p.posted.find((m) => m.type === 'end');
   assert.ok(end, JSON.stringify(p.posted));

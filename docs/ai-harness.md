@@ -479,7 +479,8 @@ second for a task that only reads pictures, `writer.image`) and `cfg.weights`, a
 only (undiscovered, missing or not ready: `provider-unavailable`, `assets`), so a request is never planned for one model and read by
 another. A catalog without a selected text model is not cached; the next run discovers a completed download or a recovered
 store read. A picture request goes to the picture model whatever the window: its own is the larger. In Advanced a feature's
-context still replaces the window. `test/ai/local-window.test.js` holds `writer.review` and `syllabus.read` through the
+context replaces the window up to the model's own: a Glaze-tuned model never gets more than its 4,096. A status and a
+warm-up use the same window as the run (the broker's `sized`), so Writer's status says 4,096 for a tuned model. `test/ai/local-window.test.js` holds `writer.review` and `syllabus.read` through the
 broker to lfm-tune's training examples (fixture: `tools/dev/local-window-fixture.js`). The system turn is the prefix kept
 warm: up to three per loaded model, as snapshots. Sampling: the request's temperature, else LFM3's GGUF defaults
 (temperature 0.1, top-k 50); output up to the request's `maxTokens` (1,024 by default) and refused before reading when the

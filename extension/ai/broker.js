@@ -161,6 +161,24 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     return list;
   };
 
+  // The cfg a task runs with on a connection, given its catalog: → { chosen (M().select's), cfg }. Glaze's own model: the
+  // window of the text model its catalog chose, which then runs the text requests (weights); a task that only reads pictures
+  // plans for the picture model's. Advanced's context replaces the window, but never past that model's own (a Glaze-tuned
+  // model's trained 4,096; a stock one's 16,000, which its caps hold anyway). Throws as select does, or 'pictures'/'assets'.
+  const sized = (use, list, task) => {
+    const pics = task.caps?.images === true;
+    const chosen = M().select(use.cfg.model, list, { tools: !!task.tools, images: pics });
+    const known = list?.models.find((x) => x.id === chosen.model), planned = (pics && known?.pictures?.context?.inputLimit) || chosen.caps.context;
+    if (use.p.id === 'local' && (pics ? !known?.pictures?.context?.inputLimit : typeof known?.weights !== 'string')) {
+      throw F().modelFailure({ category: 'provider-unavailable', reason: pics ? 'pictures' : 'assets' });
+    }
+    const ceiling = use.p.id === 'local' ? (pics ? known.pictures.context : known.context)?.window : undefined;
+    const context = use.cfg.context ? (Number.isSafeInteger(ceiling) && ceiling > 0 ? Math.min(use.cfg.context, ceiling) : use.cfg.context) : planned;
+    const cfg = { ...use.cfg, ...(context && { context }), ...(chosen.caps.images !== undefined && use.cfg.images === undefined && { images: chosen.caps.images }),
+      ...(typeof known?.weights === 'string' && { weights: known.weights }) };
+    return { chosen, cfg };
+  };
+
   // ---- limits shared by every port ------------------------------------------------------------------------------------
   const inflight = new Map(); // `${who}|${feature}` (a supersede task: `…|${task}`) → AbortController
   const admitted = new Map(); // controller → the connection admitted for a run or confirmation
@@ -277,8 +295,11 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
       mine.set(m.id, control);
       try {
         const { task, use } = await F().wait(() => admit(m), both.signal);
-        const req = task.warm === true && typeof use.p.warm === 'function' && T().prepare(task, m.input, { provider: use.p, cfg: use.cfg, over: over(use) });
-        done(!!req && await P().warm(use.p, req, use.cfg, { signal: both.signal }));
+        if (task.warm !== true || typeof use.p.warm !== 'function') return done(false);
+        // Built as the run's would be: for the window and model its catalog gives (sized).
+        const { cfg } = sized(use, await catalog(env, use, both.signal, (env.now || Date.now)()), task);
+        const req = T().prepare(task, m.input, { provider: use.p, cfg, over: over(use) });
+        done(!!req && await P().warm(use.p, req, cfg, { signal: both.signal }));
       } catch { done(false); } finally { mine.delete(m.id); deadline.done(); both.done(); }
     };
     // Admission: → { s, task, use } or throws a code.
@@ -326,16 +347,8 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         // Glaze's own picture download may finish in its host after Settings' prepare answered (four minutes), with no
         // connection change: a task that may carry pictures reads its catalog again; others (the gray text) keep theirs.
         const list = await catalog(env, use, control.signal, now(), use.p.id === 'local' && (task.caps.images === true || task.id === 'writer.feedback'));
-        const chosen = M().select(use.cfg.model, list, { tools: !!task.tools, images: !!task.caps.images });
+        const { chosen, cfg } = sized(use, list, task);
         const takes = use.p.id === 'openai' ? M().efforts(use.cfg.base, use.cfg.model, list?.models.find((x) => x.id === use.cfg.model)) : [];
-        // Glaze's own model: the window of the text model its catalog chose, which then runs the text requests (weights); a
-        // task that only reads pictures plans for the picture model's.
-        const known = list?.models.find((x) => x.id === chosen.model), planned = (task.caps.images === true && known?.pictures?.context?.inputLimit) || chosen.caps.context;
-        if (use.p.id === 'local' && (task.caps.images === true ? !known?.pictures?.context?.inputLimit : typeof known?.weights !== 'string')) {
-          throw F().modelFailure({ category: 'provider-unavailable', reason: task.caps.images === true ? 'pictures' : 'assets' });
-        }
-        const cfg = { ...use.cfg, ...(planned && !use.cfg.context && { context: planned }), ...(chosen.caps.images !== undefined && use.cfg.images === undefined && { images: chosen.caps.images }),
-          ...(typeof known?.weights === 'string' && { weights: known.weights }) };
         if (rate ? often(`${env.who}|${m.feature}|${m.task}`, now(), rate.perMinute || LIMIT.perMinute, '|rated') : often(key, now())) throw R().error('often');
         if (control.signal.aborted) throw Object.assign(R().error('cancelled'), { category: 'cancelled' });
         const remember = (id) => { const parked = confirms.get(id); if (parked) Object.assign(parked, { runId: m.id, feature: m.feature, task: m.task, to: m.to, use }); };
@@ -425,8 +438,11 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     // A stable writing configuration identity contains only model selection and tuning, never the connection cfg.
     const identity = m.feature === 'writing' ? JSON.stringify([use.p.id, use.id, use.cfg.model || '', use.generation || '',
       Object.keys(use.tune).sort().map((key) => [key, use.tune[key]]), use.sel.effort || '']) : undefined;
+    // Glaze's own model: the window its text model runs with (sized; its catalog reads only this computer's store).
+    let cfg = use.cfg;
+    if (ready && use.p.id === 'local') { try { cfg = sized(use, await catalog(env, use, undefined, (env.now || Date.now)()), {}).cfg; } catch { /* its caps' */ } }
     return { on, allowed: true, ready, ...(why && { why }), ...(reason && { reason }), provider: use.p.id,
-      caps: { ...P().caps(use.p, use.cfg), ...(typeof images === 'boolean' && { images }) }, ...(identity && { identity }), ...(use.p.origin && { to: dest(use) }) };
+      caps: { ...P().caps(use.p, cfg), ...(typeof images === 'boolean' && { images }) }, ...(identity && { identity }), ...(use.p.origin && { to: dest(use) }) };
   };
 
   // ---- Settings' connections (background/background.js 'glaze:ai-config', from options.html's top frame only) ------------------
