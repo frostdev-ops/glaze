@@ -29,9 +29,9 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const LIMIT = { prepare: 240000 };
   // Tokens a task's request may reason in before its answer; 0 answers directly. Judgement thinks; extraction and the
   // latency-bound calls don't. A task with calls (its requests' task.call, ai/task.js ask) has a row per call, and a request
-  // without one answers directly. writer.feedback makes a decide call per criterion, so only that one thinks: explain and
-  // summary were trained in think mode too (lfm-tune FORMAT-v2) and may be switched on here; scan, a little, also was.
-  const THINK = Object.freeze({ 'writer.feedback': Object.freeze({ decide: 256, explain: 0, summary: 0, scan: 0 }),
+  // without one answers directly. writer.feedback's decide, explain and summary think; scan answers directly: its 49
+  // think-mode training examples (lfm-tune FORMAT-v2) are too few to trust.
+  const THINK = Object.freeze({ 'writer.feedback': Object.freeze({ decide: 256, explain: 256, summary: 256, scan: 0 }),
     'writer.review': 256, 'study.help': 256, 'agent.tools': 256,
     'writer.complete': 0, 'writer.outline': 0, 'writer.requirements': 0, 'writer.cite': 0, 'writer.sources': 0, 'writer.decide': 0,
     'syllabus.read': 0, 'writer.image': 0 });
