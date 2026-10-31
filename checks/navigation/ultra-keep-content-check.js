@@ -79,6 +79,12 @@ const OUTLINE = () => {
       }
       return null;
     }, 15000, `${title} drawn`);
+    // An item link in the outline row in view: a click there scrolls nothing (Playwright brings a link out of view into it).
+    const linkInView = (w, href) => w.evaluate((href) => {
+      const row = document.elementFromPoint(700, 430)?.closest('.content-list-item');
+      document.getElementById('gz-in-view')?.remove();
+      row.querySelector('h3').append(Object.assign(document.createElement('a'), { id: 'gz-in-view', href, textContent: ' (open)' }));
+    }, href);
     const cls = (w) => w.evaluate(() => { window.gzCLS = 0; new PerformanceObserver((l) => { for (const e of l.getEntries()) if (!e.hadRecentInput) window.gzCLS += e.value; }).observe({ type: 'layout-shift' }); });
 
     // ---- this page's own course ----
@@ -87,7 +93,8 @@ const OUTLINE = () => {
     await page.evaluate(`(() => { const x = (${OUTLINE})(); window.gzOutline = x.o; x.sc.scrollTop = 900; })()`);
     const before = await page.evaluate(`(${OUTLINE})().at`);
     let mark = docs.length;
-    await page.click('a.b8b-document');
+    await linkInView(page, '/ultra/courses/_101_1/document/_8110_1?view=content&state=view');
+    await page.click('#gz-in-view');
     let item = await itemDrawn('_101_1', 'Routed reading');
     await shot('page-item');
     const kept = await page.evaluate(() => ({ same: window.gzOutline.isConnected, path: location.pathname, top: document.querySelector('.course-content-container > .panel-wrap')?.scrollTop }));
@@ -120,7 +127,8 @@ const OUTLINE = () => {
     let base = await until(() => onScreen('_102_1'), 15000, '_102_1 on screen');
     await outlineDrawn(base);
     await base.evaluate(() => { window.gzOutline = document.querySelector('.course-outline-content'); document.querySelector('.course-content-container > .panel-wrap').scrollTop = 700; });
-    await base.click('a.b8b-assignment');
+    await linkInView(base, '/ultra/courses/_102_1/assessment/_8120_1/overview?courseId=_102_1');
+    await base.click('#gz-in-view');
     item = await itemDrawn('_102_1', 'Writing overview');
     const under = await base.evaluate(() => ({ same: window.gzOutline.isConnected, top: document.querySelector('.course-content-container > .panel-wrap').scrollTop, path: location.pathname }));
     check(under.same && under.top === 700 && under.path.endsWith('/outline') && await named('_102_1') === 2, `in a tab's frame, the item opens in an item frame over its kept outline (${JSON.stringify(under)})`);

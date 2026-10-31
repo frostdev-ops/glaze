@@ -2208,7 +2208,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       frameEpoch++; unStandby();
       for (const f of frames.values()) f.stale = true;
     }
-    if (area === 'sync' && c.tabs) readPrefs().then(pass);
+    if (area === 'sync' && c.tabs) readPrefs().then(() => { pass(); standbyLater(); });
     // Another of this browser's tabs changed the list: taken, with this page's own course as this page knows it.
     if (area === 'local' && who && c[key()] && !preview) {
       const got = L.clean(c[key()].newValue?.tabs, ctx.site);
