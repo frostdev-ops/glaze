@@ -1511,3 +1511,100 @@ test('a JSON copy whose upload Drive took but whose answer never came is this de
   assert.ok(P.trashed(await a.papers.get(key)), 'still in Trash here');
   noDeletes(drive);
 });
+
+test('a full pass detects an own file deleted for good while Sync was off', async () => {
+  const drive = standin(), a = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000b01';
+  await a.papers.save(key, { doc: doc('Keep these words'), title: 'Essay', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  await a.sync.set(false);
+  drive.remove(exportOf(drive, key).meta.id);
+  assert.ok((await a.sync.set(true)).ok);
+  assert.ok(P.trashed(await a.papers.get(key)), 'the missing file moves the document into Trash');
+  assert.equal(textOf((await a.papers.get(key)).doc), 'Keep these words');
+  assert.ok(drive.view(sidecarOf(drive, key).meta.id).trashed, 'its JSON copy follows');
+  noDeletes(drive);
+});
+
+test('a same-content copy naming a replacement file ignores deletion of the old kept file', async () => {
+  const drive = standin(), a = device(drive), b = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000b02';
+  await a.papers.save(key, { doc: doc('Current essay'), title: 'Essay', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  assert.ok((await b.sync.set(true)).ok);
+  const old = exportOf(drive, key).meta.id;
+  drive.edit(old, 'PK outside Word edit');
+  assert.ok((await b.sync.run()).ok);
+  const replacement = sidecarJson(drive, key).file;
+  assert.notEqual(replacement, old);
+  drive.remove(old);
+  assert.ok((await a.sync.run()).ok);
+  assert.ok(!P.trashed(await a.papers.get(key)), 'deleting the kept file does not trash its replacement');
+  assert.ok((await b.sync.run()).ok);
+  assert.ok(!P.trashed(await b.papers.get(key)), 'no false Trash reaches the other device');
+  assert.ok(!drive.view(replacement).trashed && !drive.view(sidecarOf(drive, key).meta.id).trashed);
+  const link = (await a.store.get(S.DOC + sha(key).slice(0, 32)))[S.DOC + sha(key).slice(0, 32)];
+  assert.equal(link.file, replacement);
+  noDeletes(drive);
+});
+
+test('editing a saved Drive copy before a stopped conflict retries preserves both PDF edits', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-000000000b03';
+  const first = await a.files.put(enc('%PDF first'), MIME.pdf);
+  await a.papers.save(key, { kind: 'pdf', file: first, size: first.size, title: 'Reading', named: true });
+  assert.ok((await a.sync.set(true)).ok); assert.ok((await b.sync.set(true)).ok);
+  const remote = await a.files.put(enc('%PDF remote edit'), MIME.pdf), mine = await b.files.put(enc('%PDF local edit'), MIME.pdf);
+  await a.papers.save(key, { file: remote, size: remote.size });
+  await a.sync.touched(key); await a.fire();
+  await b.papers.save(key, { file: mine, size: mine.size });
+  await b.sync.touched(key);
+  const save = b.env.papers.save;
+  b.env.papers.save = async (k, patch, o) => {
+    const out = await save(k, patch, o);
+    if (k !== key) { b.env.papers.save = save; throw Object.assign(new Error('stopped'), { why: 'network' }); }
+    return out;
+  };
+  assert.equal((await b.sync.run()).ok, false);
+  const copy = (await b.papers.list()).find((r) => r.key !== key);
+  assert.ok(copy, 'Drive\'s side was saved before the stop');
+  const edited = await b.files.put(enc('%PDF student edits the saved copy'), MIME.pdf);
+  await b.papers.save(copy.key, { file: edited, size: edited.size });
+  await b.sync.touched(copy.key);
+  clock.t = (await state(b)).wait + 1;
+  assert.ok((await b.sync.run()).ok);
+  const hashes = await Promise.all((await b.papers.list()).map(async (r) => (await b.papers.get(r.key)).file.hash));
+  for (const ref of [remote, mine, edited]) assert.ok(hashes.includes(ref.hash), `preserved ${ref.hash}`);
+  assert.ok((await a.sync.run()).ok); assert.ok((await b.sync.run()).ok);
+  const uploads = drive.log.filter((r) => r.path.startsWith('/upload/')).length;
+  assert.ok((await a.sync.run()).ok); assert.ok((await b.sync.run()).ok);
+  assert.equal(drive.log.filter((r) => r.path.startsWith('/upload/')).length, uploads, 'settles without more uploads');
+  noDeletes(drive);
+});
+
+test('a kept mark whose answer is lost still repairs the detached document on the next run', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  let cut = false;
+  const lost = { ...drive, fetch: async (u, i = {}) => {
+    const r = await drive.fetch(u, i);
+    if (cut && i.method === 'PATCH' && String(i.body).includes('"glaze":"kept"')) { cut = false; throw new TypeError('Failed to fetch'); }
+    return r;
+  } };
+  const a = device(lost, { clock }), key = 'doc:00000000-0000-4000-8000-000000000b04';
+  await a.papers.save(key, { doc: doc('Essay text'), title: 'Essay', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  assert.ok((await a.sync.run()).ok, 'consume the original uploads');
+  const old = exportOf(drive, key).meta.id;
+  drive.edit(old, 'PK edited outside Glaze');
+  cut = true;
+  assert.equal((await a.sync.run()).ok, false);
+  assert.equal(drive.files.get(old).meta.appProperties.glaze, 'kept', 'the mark landed despite the lost answer');
+  clock.t = (await state(a)).wait + 1;
+  assert.ok((await a.sync.run()).ok);
+  assert.ok((await a.sync.run()).ok);
+  const own = exportOf(drive, key);
+  assert.ok(own && own.meta.id !== old, 'the document gets its replacement without another local edit');
+  assert.equal(sidecarJson(drive, key).file, own.meta.id);
+  assert.equal(drive.files.get(old).bytes.toString(), 'PK edited outside Glaze');
+  noDeletes(drive);
+});
