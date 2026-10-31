@@ -400,10 +400,12 @@ Google Drive, including ones described below as on this device only or never syn
   Once **Sync to Google Drive** is on, `chrome.storage.local` also holds its state, on this device only, and keeps it
   when Sync is turned off: whether it is
   on, the account it is bound to, the ids of the Glaze folder and its Data and Backups folders, Drive's change-list page
-  token, when it last synced and what last stopped it (`driveSync`); for each document and each synced record, the ids
+  token, when it last synced, what last stopped it and whether the day's backup was skipped because Drive was full
+  (`driveSync`); for each document and each synced record, the ids
   of its Drive files and a SHA-256 of what each side last held (`driveSyncDoc:…`, `driveSyncRec:…`, `driveSyncFile:…`);
   which documents were saved since their last upload (`driveSyncDirty`); for a document whose Drive file was seen ahead
-  of its JSON copy, how many times and since when (`driveSyncWaiting`); and when each synced setting or record last
+  of its JSON copy, how many times and since when (`driveSyncWaiting`); the ids of a document's duplicate Drive files
+  still to be moved into Glaze/Data (`driveSyncAway`); and when each synced setting or record last
   changed here, Sync on or off (`driveSyncStamps`). Connecting another account deletes all of it.
 - **Gradescope in To Do** (off by default), in `chrome.storage.local`, on this device only: which Gradescope account
   it's from (your name on Gradescope, and a SHA-256 hash of your Gradescope email address, never the address itself),
