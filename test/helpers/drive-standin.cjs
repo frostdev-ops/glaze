@@ -2,7 +2,8 @@
 // and its browser check (scripts/drive-sync-check.js). Its shapes are test/fixtures/drive/v3.js's (the discovery document's,
 // not seen live): files.get (fields masks, alt=media), files.list (the q terms Glaze sends), files.create and files.update
 // (metadata, multipart and resumable), changes.getStartPageToken and changes.list (each file's latest change once, paged).
-// version moves on every change to a file, headRevisionId on every new content; a trashed folder's files read as trashed.
+// version moves on every change to a file, headRevisionId on every new content, sha256Checksum is the bytes'; a trashed
+// folder's files read as trashed.
 // The student's own actions in Drive, or another app's: trash, untrash, remove (deleted for good), edit (new content, the
 // app's properties kept). fail() queues an error answer for the next request that matches. A DELETE (files.delete) deletes
 // a file Glaze made for good, a folder with everything in it, answered 204 as Drive does; each is logged with what it deleted
@@ -14,6 +15,7 @@
 // sessions; cut(keep) keeps the first keep bytes of the next chunk and never answers it (a worker stopped mid-request). A
 // request without those headers is answered as before.
 'use strict';
+const { createHash } = require('node:crypto');
 const { ERRORS } = require('../fixtures/drive/v3.js');
 
 const FOLDER = 'application/vnd.google-apps.folder';
@@ -84,7 +86,7 @@ const standin = ({ tokens = null, owner = 'student@school.edu' } = {}) => {
   const time = () => new Date(clock += 1000).toISOString();
   const changed = (id) => feed.push({ n: ++seq, fileId: id, time: time() });
   const trashedOf = (f) => !!f && (f.meta.explicitlyTrashed || f.meta.parents.some((p) => trashedOf(files.get(p))));
-  const view = (f) => ({ kind: 'drive#file', ...f.meta, trashed: trashedOf(f), ...(f.bytes && { size: String(f.bytes.length) }) });
+  const view = (f) => ({ kind: 'drive#file', ...f.meta, trashed: trashedOf(f), ...(f.bytes && { size: String(f.bytes.length), sha256Checksum: createHash('sha256').update(f.bytes).digest('hex') }) });
   const bump = (f, content) => {
     f.meta.version = String(Number(f.meta.version) + 1);
     if (content) f.meta.headRevisionId = `0B${(++revs).toString(36)}Rev`;

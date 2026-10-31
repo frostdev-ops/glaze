@@ -147,6 +147,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       await more?.forget();
     };
     const hk = async (key) => (await env.hash(key)).slice(0, 32);
+    const bytesSum = async (bytes) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((x) => x.toString(16).padStart(2, '0')).join('');
     // The documents saved since they were last pushed: key → a count, so a save during a push keeps its mark.
     const mark = (key) => held('dirty', async () => { const m = (await S.get(DIRTY))[DIRTY] || {}; m[key] = (m[key] || 0) + 1; await S.set({ [DIRTY]: m }); });
     const unmark = (key, n) => held('dirty', async () => { const m = (await S.get(DIRTY))[DIRTY] || {}; if (m[key] === n) { delete m[key]; await S.set({ [DIRTY]: m }); } });
@@ -466,23 +467,39 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (!ex && !onWay && d?.json && d.rsum === sum && d.lsum === sum) return d;
       const base = ((onWay ? onWay.info?.name : ex?.name) || `${safe(l.rec.title) || 'Untitled'}${EXT[kind]}`).replace(/\.[^.]+$/, '');
       let file = d?.file || null, fh = d?.fh || null;
-      // A document going up for the first time may have a file there already: its push stopped before the JSON copy went.
-      if (!file && !d?.json && (ex || onWay)) file = (await D((c) => c.find(`'${folder}' in parents and appProperties has { key='key' and value='${h}' } and appProperties has { key='glaze' and value='file' } and trashed=false`, { pageSize: 10 })))
-        .files.filter((f) => f.appProperties?.key === h && f.appProperties?.glaze === 'file').sort((a, b) => (a.id < b.id ? -1 : 1))[0]?.id || null;
+      // No copy yet: the file its last push left before it stopped (recorded below, or found by its tag when Drive's answer
+      // never came), written into only while it is as Glaze wrote it: its head revision the one recorded, or, found by its
+      // tag, its bytes' SHA-256 the one Glaze wrote on it (b). One edited outside Glaze since, or in Drive's trash, is kept
+      // as it is, and a new file goes beside it.
+      if (!d?.json && (ex || onWay)) {
+        const F = file ? await meta(file) : (await D((c) => c.find(`'${folder}' in parents and appProperties has { key='key' and value='${h}' } and appProperties has { key='glaze' and value='file' } and trashed=false`, { pageSize: 10 })))
+          .files.filter((f) => f.appProperties?.key === h && f.appProperties?.glaze === 'file').sort(byId)[0] || null;
+        file = null; fh = null;
+        if (F && !F.removed && F.appProperties?.glaze === 'file' && F.appProperties?.key === h) {
+          const same = F.id === d?.file ? !!F.headRevisionId && F.headRevisionId === d.fh : !!F.appProperties.b && String(F.sha256Checksum || '').toLowerCase() === F.appProperties.b;
+          if (same && F.trashed === false) { file = F.id; fh = F.headRevisionId || null; }
+          else await D((c) => c.patch(F.id, { appProperties: { glaze: 'kept', sum: null } }));
+        }
+      }
       if (ex || onWay) {
         const r = await up(`u:${h}:file`, sum, d?.file || d?.json ? file : undefined, async () => {
           ex ||= await env.exportOf(key, l.rec, l.parts);
           if (!ex) return null;
-          const meta = { name: ex.name, appProperties: { glaze: 'file', key: h, sum } };
+          const meta = { name: ex.name, appProperties: { glaze: 'file', key: h, sum, b: await bytesSum(ex.bytes) } };
           return { bytes: ex.bytes, id: file, meta, create: { ...meta, mimeType: ex.mime, parents: [folder] }, mime: ex.mime, info: { name: ex.name } };
         }, owner);
-        if (r) { file = r.file.id; fh = r.file.headRevisionId || null; }
+        if (r) {
+          file = r.file.id; fh = r.file.headRevisionId || null;
+          // Recorded before the copy goes: a push that stops between the two meets this file's revision next time, so an edit
+          // made outside Glaze meanwhile is told from Glaze's own.
+          await putDoc(h, { ...(d || { key, h, kind, json: null, jh: null, rsum: null, lsum: null, rev: -1, trashed: false }), file, fh, fsum: sum }, d);
+        }
       }
       // updated: Last edited where it was pushed, for a first meeting's later-edited rule (not in the sum: no change by itself).
       const text = JSON.stringify({ glaze: 'document', v: 1, ...b, file, fileRev: fh, updated: Number.isFinite(l.rec.updated) ? l.rec.updated : 0 });
-      const meta = { name: `${base}.glaze.json`, appProperties: { glaze: 'doc', key: h, sum, rev: String(l.rec.revision || 0) } };
+      const copy = { name: `${base}.glaze.json`, appProperties: { glaze: 'doc', key: h, sum, rev: String(l.rec.revision || 0) } };
       const r = await up(`u:${h}:json`, await env.hash(text), d?.json || null,
-        async () => ({ bytes: new TextEncoder().encode(text), id: d?.json || null, meta, create: { ...meta, mimeType: JSON_TYPE, parents: [folder] }, mime: JSON_TYPE }), owner);
+        async () => ({ bytes: new TextEncoder().encode(text), id: d?.json || null, meta: copy, create: { ...copy, mimeType: JSON_TYPE, parents: [folder] }, mime: JSON_TYPE }), owner);
       return putDoc(h, { key, h, kind, json: r.file.id, jh: r.file.headRevisionId || null, file, fh, fsum: sum, rsum: sum, lsum: sum, rev: l.rec.revision || 0, trashed: false }, d);
     };
     // Drive's side kept here, recorded before this device's goes up: what follows (and a retry after a push that failed) meets
@@ -526,7 +543,10 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       }
       const named = E;
       if (d && E && E.id !== d.file) E = undefined;
-      if (R === undefined) R = d?.json ? await meta(d.json) : d ? null : !lt && l ? await lookup(h, folder) : null;
+      if (R === undefined) R = d?.json ? await meta(d.json) : !lt && l ? await lookup(h, folder) : null;
+      // This device's first push stopped before its copy went, and another device's copy is there: a first meeting, this
+      // device's file put away as a losing copy's is.
+      if (d && !d.json && R) { gone = d; await away([gone.file], h); await dropDoc(h, d); d = null; }
       // This device's copy moved out of the Glaze folder (put away by the device whose copy it was, as above, or moved by
       // the student): no longer the document's; the folder's copy is, met as a first meeting, or this device's goes up anew.
       if (d && R && !R.removed && R.id === d.json && Array.isArray(R.parents) && !R.parents.includes(folder)) {

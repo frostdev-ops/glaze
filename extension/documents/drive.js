@@ -24,8 +24,9 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
   const META = 'id,name,mimeType,size,trashed,capabilities(canEdit,canDownload)';
   const SAVED = 'id,name,mimeType';
   // What Sync to Google Drive (documents/drive-sync.js) reads of a file: where it is, whether it is in Trash, Glaze's own properties on it,
-  // and its revisions (version: every change; headRevisionId: every new content).
-  const SYNC = 'id,name,mimeType,parents,trashed,explicitlyTrashed,appProperties,headRevisionId,version,size';
+  // its revisions (version: every change; headRevisionId: every new content) and its bytes' SHA-256 (sha256Checksum: absent
+  // until Drive has one), checked against the one Glaze wrote on a file it may adopt.
+  const SYNC = 'id,name,mimeType,parents,trashed,explicitlyTrashed,appProperties,headRevisionId,version,size,sha256Checksum';
   // An upload larger than this goes resumable: Drive's guide gives multipart "5 MB or less".
   const SMALL = 5 << 20;
   // A resumable session's chunks (and Sync's ranged downloads, documents/drive-sync.js): multiples of 256 KiB, as Drive's

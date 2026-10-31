@@ -56,8 +56,10 @@ const ERRORS = {
 //   removed: "by deletion or loss of access") }.
 //   File.version: int64 as a string, "monotonically increasing", every change; headRevisionId: "only available for files with
 //   binary content"; appProperties: "private to the requesting app", a null value clears one in an update; explicitlyTrashed
-//   versus trashed (a trashed folder's files are trashed, not explicitly).
-const SYNC_FIELDS = ['id', 'name', 'mimeType', 'parents', 'trashed', 'explicitlyTrashed', 'appProperties', 'headRevisionId', 'version', 'size'];
+//   versus trashed (a trashed folder's files are trashed, not explicitly); sha256Checksum: "The SHA256 checksum associated
+//   with this file, if available. This field is only populated for files with content stored in Google Drive" (its form not
+//   given there: Glaze compares it to its own hex digest case-blind, and a file it can't match is treated as edited).
+const SYNC_FIELDS = ['id', 'name', 'mimeType', 'parents', 'trashed', 'explicitlyTrashed', 'appProperties', 'headRevisionId', 'version', 'size', 'sha256Checksum'];
 const folder = { id: '1GlZ_fold', name: 'Glaze', mimeType: 'application/vnd.google-apps.folder', parents: ['0AroOt_pVA'], trashed: false, explicitlyTrashed: false, appProperties: { glaze: 'root' }, version: '3' };
 const sidecar = { id: '1JsN_side', name: 'Essay.glaze.json', mimeType: 'application/json', parents: [folder.id], trashed: false, explicitlyTrashed: false,
   appProperties: { glaze: 'doc', key: '0f1e2d3c4b5a69788796a5b4c3d2e1f0', sum: 'ab'.repeat(32), rev: '7' }, headRevisionId: '0B4mJsNrEv1', version: '5', size: '2048' };
