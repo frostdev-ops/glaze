@@ -38,14 +38,20 @@ const parts = (sel) => {
 const theme = cssRules('content/theme.css');
 // A selector's specificity as one comparable number (ids, classes, types; 1000 of each is plenty): :is(), :not() and
 // :has() count their most specific argument, :where() nothing.
-const specificity = (sel) => {
+const specificity = (sel) => specificityScore(sel);
+const specificityScore = (sel, argument = false) => {
   let n = 0, s = sel.replace(/"[^"]*"/g, '""');
   for (let m; (m = s.match(/:(is|not|has|where)\(/));) {
     let depth = 1, j = m.index + m[0].length;
     for (; depth && j < s.length; j++) if (s[j] === '(') depth++; else if (s[j] === ')') depth--;
-    if (m[1] !== 'where') n += Math.max(...parts(s.slice(m.index + m[0].length, j - 1)).map(specificity));
+    const scores = parts(s.slice(m.index + m[0].length, j - 1)).map((p) => specificityScore(p, true));
+    // :is() and :where() discard invalid arms. Pseudo-elements cannot occur in their arguments (nor in :not/:has).
+    const forgiving = m[1] === 'is' || m[1] === 'where';
+    if (!forgiving && scores.some(Number.isNaN)) return NaN;
+    if (m[1] !== 'where') n += Math.max(0, ...scores.filter((v) => !Number.isNaN(v)));
     s = s.slice(0, m.index) + ' ' + s.slice(j);
   }
+  if (argument && /::|:(?:before|after|first-line|first-letter)\b/.test(s)) return NaN;
   n += 1e6 * (s.match(/#[\w-]+/g) || []).length;
   n += 1e3 * (s.match(/\.[\w-]+|\[[^\]]*\]|(?<!:):(?!:)[\w-]+(\([^)]*\))?/g) || []).length;
   n += (s.match(/(^|[\s>+~(])[a-z][\w-]*|::[\w-]+/gi) || []).length;
@@ -62,6 +68,16 @@ test('specificity counts the way the cascade does', () => {
   assert.equal(specificity('.MuiModal-root *:not(a):not(.MuiButton-root):not(svg :is(path, g))'), 2e3 + 3);
   assert.equal(specificity('#site-wrap .MuiInputBase-root:hover .MuiOutlinedInput-notchedOutline'), 1e6 + 3e3);
   assert.equal(specificity('html[data-gz-bg] .panel-wrap::before'), 2e3 + 2);
+  assert.equal(specificity(':is(.panel, #ignored::before)'), 1e3);
+  assert.equal(specificity(':is(.panel, :is(#ignored::before, a))'), 1e3);
+});
+
+test('solid-background panels retain the valid list specificity after splitting', () => {
+  const rules = theme.filter(([s, b]) => s.startsWith('html[data-gz-bg="solid"] :where(.MuiDrawer-paper)') && /^\s*backdrop-filter:\s*none;?\s*$/.test(b));
+  assert.equal(rules.length, 1);
+  // The original list's strongest valid arm: the discussion header. Its ::before arm was invalid inside :is().
+  const expected = specificity('html[data-gz-bg="solid"] #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls');
+  for (const selector of parts(rules[0][0])) assert.equal(specificity(selector), expected, selector);
 });
 // The first rule after `from` with a selector matching `sel` and a body matching `body`: its index, or -1.
 const after = (from, sel, body) => theme.findIndex(([s, b], i) => i > from && parts(s).some((p) => sel.test(p)) && body.test(b));
