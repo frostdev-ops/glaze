@@ -47,7 +47,7 @@ const notesDb = () => {
   };
 };
 // refuse(patch): storage.sync's refusal of a write, as Chrome's message, or null (its limits: test 'a Settings value storage.sync refuses').
-const device = (drive, { account = 'student@school.edu', clock = { t: Date.parse('2026-10-30T12:00:00Z') }, snapshots = false, refuse = null } = {}) => {
+const device = (drive, { account = 'student@school.edu', clock = { t: Date.parse('2026-10-30T12:00:00Z') }, snapshots = false, refuse = null, stage = null } = {}) => {
   const heard = [], local = area('local', heard), sync = area('sync', heard), now = () => clock.t, who = { account };
   if (refuse) { const set = sync.set; sync.set = async (o) => { const no = refuse(o); if (no) throw new Error(no); return set(o); }; }
   const papers = P.open(local, now, { versions: () => 40, files: { own: async () => ({ missing: [] }) } });
@@ -74,7 +74,7 @@ const device = (drive, { account = 'student@school.edu', clock = { t: Date.parse
     parts: async () => ({}), files: { has: async () => false, put: async () => { throw new Error('no files here'); } },
     exportOf: async (key, rec) => ({ name: `${rec.title || 'Untitled'}.docx`, mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', bytes: new TextEncoder().encode(JSON.stringify(rec.doc)) }),
     pack: async () => '', hash: async (s) => sha(s), copyName: (t) => `${t} (Drive copy)`, now, sleep: async (ms) => { log.sleep.push(ms); }, random: () => 0, locks: null,
-    timer: () => () => {}, more: store,
+    timer: () => () => {}, more: store, stage,
   });
   const settle = () => new Promise((r) => setTimeout(r, 5));
   const on = async () => { who.on = true; await settle(); const r = await sync2.set(true); await settle(); return r; };
@@ -1527,4 +1527,88 @@ test('a later change back to the synced value wins over an earlier change that r
   clock.t += 1000; await b.settings.set({ enabled: false });
   assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
   assert.equal((await a.settings.get('enabled')).enabled, false);
+});
+
+test('wanted pictures are released on ordinary runs when a note drops them or is deleted', async () => {
+  const drive = standin(), a = device(drive);
+  assert.ok((await a.on()).ok);
+  const wanted = () => [...a.local.m.values()].filter((v) => v?.cat === 'noteFiles' && v.want && !v.id);
+  for (const [i, remove] of ['edit', 'delete'].entries()) {
+    a.clock.t += 1000;
+    const note = nid(i + 1), picture = nid(500 + i);
+    assert.ok((await a.notesOp({ key: ACCT, op: 'save', id: note, base: 0, sid: `missing-${i}`, html: `<p>Waiting</p><img data-gz-file="${picture}">` })).ok);
+    assert.ok((await a.run({ push: true })).ok);
+    assert.equal(wanted().length, 1, 'the missing picture is wanted');
+    a.clock.t += 1000;
+    if (remove === 'edit') {
+      assert.ok((await a.notesOp({ key: ACCT, op: 'save', id: note, base: (await idxOf(a)).notes[note].rev, sid: 'without-picture', html: '<p>Text only</p>' })).ok);
+    } else {
+      assert.ok((await a.notesOp({ key: ACCT, op: 'trash', ids: [note] })).ok);
+      assert.ok((await a.notesOp({ key: ACCT, op: 'purge', ids: [note] })).ok);
+    }
+    assert.ok((await a.run({ push: true })).ok);
+    assert.equal(wanted().length, 0, `no abandoned want after ${remove}`);
+  }
+});
+
+test('a wanted picture still arrives for a conflict copy after its original note is deleted', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const id = nid(1), copy = nid(2), pic = nid(500), html = `<p>Waiting</p><img data-gz-file="${pic}">`;
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  assert.ok((await a.notesOp({ key: ACCT, op: 'save', id, base: 0, sid: 'original', html })).ok);
+  assert.ok((await a.run({ push: true })).ok); assert.ok((await b.run()).ok);
+  // Notes' normal stale-save path makes a copy that references the same picture id.
+  clock.t += 1000;
+  const copied = await b.notesOp({ key: ACCT, op: 'save', id, base: 0, copy, sid: 'copy', html });
+  assert.ok(copied.ok && copied.conflict);
+  assert.ok((await b.run({ push: true })).ok);
+  clock.t += 1000;
+  assert.ok((await b.notesOp({ key: ACCT, op: 'trash', ids: [id] })).ok);
+  assert.ok((await b.notesOp({ key: ACCT, op: 'purge', ids: [id] })).ok);
+  assert.ok((await b.run({ push: true })).ok);
+  assert.ok((await a.run()).ok); assert.ok((await b.run()).ok);
+  // The original device recovers and uploads the picture only now.
+  assert.ok((await a.notesOp({ key: ACCT, op: 'file', id: pic, kind: 'image', name: 'cell.png', data: PNG.toString('base64'), note: id })).ok);
+  assert.ok((await a.run({ full: true })).ok);
+  assert.ok((await b.run()).ok);
+  assert.match(await noteOf(b, copy), new RegExp(pic), 'the surviving copy still uses the picture');
+  assert.deepEqual(Buffer.from(b.db.stores.blobs.get(`https://school.instructure.com/42/${pic}`) || []), PNG, 'the copy gets its wanted picture');
+});
+
+test('a staged wanted-picture replay does not import bytes for a note deleted for good', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), chunks = new Map();
+  const stage = {
+    keys: async (prefix) => [...chunks.keys()].filter((k) => k.startsWith(prefix)).sort(),
+    entries: async (prefix) => [...chunks].filter(([k]) => k.startsWith(prefix)).sort(([a], [b]) => a.localeCompare(b)),
+    write: async (puts = [], drops = []) => { for (const k of drops) chunks.delete(k); for (const [k, v] of puts) chunks.set(k, structuredClone(v)); },
+  };
+  const b = device(drive, { clock, stage }), id = nid(1), pic = nid(500), big = Buffer.concat([PNG, Buffer.alloc(4 << 20)]);
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  assert.ok((await a.notesOp({ key: ACCT, op: 'save', id, base: 0, sid: 'waiting', html: `<p>Waiting</p><img data-gz-file="${pic}">` })).ok);
+  assert.ok((await a.run({ push: true })).ok); assert.ok((await b.run()).ok);
+  assert.ok((await a.notesOp({ key: ACCT, op: 'file', id: pic, kind: 'image', name: 'large.png', data: big.toString('base64'), note: id })).ok);
+  assert.ok((await a.run({ full: true })).ok);
+  const f = recFile(drive, 'notes', `${ACCT}|file|${pic}`);
+  drive.offline((x) => x.path === `/drive/v3/files/${f.meta.id}` && x.query.alt === 'media');
+  assert.equal((await b.run({ full: true })).ok, false, 'the wanted download is staged and interrupted');
+  assert.ok(Object.values((await b.local.get(S.MOVES))[S.MOVES] || {}).some((t) => t.dir === 'down'), 'a download waits to replay');
+  assert.ok((await b.notesOp({ key: ACCT, op: 'trash', ids: [id] })).ok);
+  assert.ok((await b.notesOp({ key: ACCT, op: 'purge', ids: [id] })).ok);
+  clock.t = (await b.local.get(S.STATE))[S.STATE].wait + 1;
+  assert.ok((await b.run({ push: true })).ok);
+  assert.equal(b.db.stores.blobs.has(`https://school.instructure.com/42/${pic}`), false, 'replay rechecks whether a note still uses the picture');
+  assert.equal(Object.keys((await b.local.get(S.MOVES))[S.MOVES] || {}).length, 0, 'the abandoned transfer settles');
+});
+
+test('a full pass uses its listing for a wanted picture that has never arrived', async () => {
+  const drive = standin(), a = device(drive), id = nid(1), pic = nid(500);
+  assert.ok((await a.on()).ok);
+  assert.ok((await a.notesOp({ key: ACCT, op: 'save', id, base: 0, sid: 'missing', html: `<p>Waiting</p><img data-gz-file="${pic}">` })).ok);
+  assert.ok((await a.run({ push: true })).ok);
+  const from = drive.log.length;
+  for (let i = 0; i < 3; i++) assert.ok((await a.run({ full: true })).ok);
+  const lookups = drive.log.slice(from).filter((x) => x.path === '/drive/v3/files' && /key='key'/.test(x.query.q || ''));
+  assert.equal(lookups.length, 0, 'the full listing already says the wanted picture is absent');
+  const k = ST.REC + sha(`notes\n${ACCT}|file|${pic}`).slice(0, 32);
+  assert.equal((await a.local.get(k))[k]?.want, `${ACCT}|${id}`, 'still wanted while the note uses it');
 });
