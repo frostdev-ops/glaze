@@ -23,7 +23,8 @@
 // join goes up at the time of the latest change it holds.
 // Two files for one record (first syncs that overlapped): every device keeps the lowest id, met as a first meeting. A
 // deleted key is a tombstone that deletes it on the other side; a tombstone never deletes a record met for the first time.
-// State: driveSyncRec:<h> { area, key, cat, id, lsum, rsum, at, seen } and driveSyncFile:<id> 'r:<h>'; the folders and the
+// State: driveSyncRec:<h> { area, key, cat, id, lsum, rsum, at, seen } (or, for a picture a note here uses that Drive doesn't
+// have yet, { area, key, cat, id: null, want: the note's key }) and driveSyncFile:<id> 'r:<h>'; the folders and the
 // last snapshot on driveSync (data, backups, snap); a record file or the day's zip larger than one request on its way in
 // documents/drive-sync.js's transfers (driveSyncMoves 'R:<h>', 'r:<h>', 'snap').
 // Classic script for the worker; module.exports for node.
@@ -476,7 +477,11 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         // The bytes never change, but Notes may have cleaned up this device's copy since it last used them: fetched again
         // only for a note that uses it again (x.need), never for one deleted with its note.
         if (value === undefined) {
-          if (R && !R.removed && x.need) { const got = await fetchRec(ctx, R, h, owner); if (got.value !== undefined) await take(h, got, R, was, value); }
+          // One a note here wanted before Drive had it (was.want: that note's key): fetched now, while that note still uses
+          // it; let go once it doesn't.
+          const need = x.need || (!!was?.want && await uses(was.want, key));
+          if (was?.want && !was.id && !need) { await S.remove(REC + h); return; }
+          if (R && !R.removed && need) { const got = await fetchRec(ctx, R, h, owner); if (got.value !== undefined) await take(h, got, R, was, value); }
           return;
         }
         if (was && R && !R.removed) return;
@@ -519,6 +524,11 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       }
       return push(ctx, h, area, key, cat, was, at || now());
     };
+    // Whether the note at noteKey here shows the picture or attachment at fileKey (both Notes record keys).
+    const uses = async (noteKey, fileKey) => {
+      const v = await valueOf('notes', noteKey).catch(() => undefined);
+      return !!v && L.notes().refs(v.html).has(fileKey.slice(fileKey.lastIndexOf('|') + 1));
+    };
     // The file another device made for h first, if any (oldest id first), so two devices never keep two.
     const lookup = async (ctx, h) => {
       const r = await ctx.D((c) => c.find(`'${ctx.data}' in parents and appProperties has { key='key' and value='${h}' } and appProperties has { key='glaze' and value='rec' } and trashed=false`, { pageSize: 10 }));
@@ -535,7 +545,12 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
             const k = `${r.key.slice(0, r.key.lastIndexOf('|'))}|file|${id}`, fh = await hk('notes', k);
             // Its file as this pass met it (a full pass's listing, a change page), else looked up.
             const R = ctx.known?.get(fh);
-            if (!await recOf(fh) || await valueOf('notes', k) === undefined) await one(ctx, fh, { area: 'notes', key: k, need: true, ...(R && { R }) });
+            if (!await recOf(fh) || await valueOf('notes', k) === undefined) {
+              await one(ctx, fh, { area: 'notes', key: k, need: true, ...(R && { R }) });
+              // Not in Drive yet (its device's push stopped between the note and it, say): wanted by this note, so it is
+              // fetched once it comes (one, was.want), not passed over as a picture no note here asked for.
+              if (!await recOf(fh) && await valueOf('notes', k) === undefined) await put(fh, { area: 'notes', key: k, cat: 'noteFiles', id: null, want: r.key }, null);
+            }
           }
         }
       } catch (e) {
