@@ -295,3 +295,24 @@ test('in its frame, Glaze routes in place within its own course only, goes back 
   assert.deepEqual(routed.at(-1), ['replace', `${origin}/ultra/profile`]);
   assert.deepEqual([p.c.awayFrom, p.c.lastPath, p.c.restored], ['', '', false]);
 });
+
+test('another tab shown before the item is drawn hides the kept outline too; a tab closed with its item open leaves no item state behind', () => {
+  assert.match(part('  const show = async (cid) => {', '  // A tab: its frame'), /for \(const \[k, a\] of spare\) if \(k !== cid\) for \(const g of a\) \{ g\.el\.style\.visibility = 'hidden'; g\.el\.inert = true; \}/,
+    'no frame kept beside another course stays on screen');
+  const { p, base, it } = opened();
+  // The tab let go of (its frames gone), then its course's outline shown again in a new frame.
+  p.c.frames.delete('_2_1'); p.c.spare.delete('_2_1');
+  const fresh = frame(OUT);
+  p.c.frames.set('_2_1', fresh);
+  msg(p, fresh, { gzCtab: 'item', url: DOC });
+  assert.notEqual(p.c.frames.get('_2_1'), fresh, 'an item opens again');
+  assert.deepEqual([...p.c.spare.get('_2_1')], [fresh]);
+  assert.ok(base && it);
+  // A popstate with no live item of that course stops nothing of Ultra's.
+  const q = opened();
+  q.p.c.frames.delete('_2_1'); q.p.c.spare.delete('_2_1');
+  q.p.setKey(1);
+  const pop = { stopped: false, stopImmediatePropagation() { this.stopped = true; } };
+  q.p.api.onItemPop(pop);
+  assert.equal(pop.stopped, false);
+});
