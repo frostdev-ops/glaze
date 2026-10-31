@@ -1455,3 +1455,30 @@ test('a device whose download stopped before its link was kept meets the documen
   assert.equal(!!sidecarOf(drive, key).meta.explicitlyTrashed, ta, 'and so does Drive');
   noDeletes(drive);
 });
+
+test('a new file whose upload Drive took but whose answer never came, after a Word file was kept, is reused: one file of the document\'s own', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  let dying = false;
+  const text = (x) => (typeof x === 'string' ? x : Buffer.from(x || []).toString('latin1'));
+  const cut = { ...drive, fetch: async (u, i = {}) => {
+    if (dying && u.includes('/upload/') && text(i.body).includes('"glaze":"file"')) { dying = false; await drive.fetch(u, i); throw new TypeError('Failed to fetch'); }
+    return drive.fetch(u, i);
+  } };
+  const a = device(cut, { clock });
+  const key = 'doc:00000000-0000-4000-8000-000000000a19';
+  await a.papers.save(key, { doc: doc('Draft'), title: 'Essay', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  const first = exportOf(drive, key).meta.id;
+  drive.edit(first, 'PK edited in Word');
+  dying = true;
+  assert.equal((await a.sync.run()).ok, false, 'the new file\'s answer lost');
+  clock.t = (await state(a)).wait + 1;
+  assert.ok((await a.sync.run()).ok);
+  await a.papers.save(key, { doc: doc('Then edited here') });
+  await a.sync.touched(key); await a.fire();
+  const folder = glazeFolder(drive).meta.id;
+  const own = [...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'file' && f.meta.appProperties.key === sha(key).slice(0, 32) && f.meta.parents.includes(folder) && !drive.view(f.meta.id).trashed);
+  assert.equal(own.length, 1, 'one file of its own in Glaze/');
+  assert.equal(sidecarJson(drive, key).file, own[0].meta.id);
+  assert.equal(drive.files.get(first).bytes.toString(), 'PK edited in Word');
+});
