@@ -213,6 +213,14 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // the push left it (holds: its sync waits, keeping only what a meeting named for its next step). A download is a read
     // that its owner, met again, finds whole in the stage, kept until the owner is met without waiting on it.
     const stage = env.stage || null;
+    // Whether the stage opens (IndexedDB can be refused: a private window, no room): asked once a worker, the first time a
+    // transfer would use it; refused, every transfer goes in one go within the worker's life, as with no stage.
+    let opens = null;
+    const usable = async () => {
+      if (!stage) return false;
+      if (opens === null) { try { await stage.keys('\u0001'); opens = true; } catch (e) { console.warn('Sync to Google Drive: no stage for transfers', e?.why || e); opens = false; } }
+      return opens;
+    };
     const moves = async () => (await S.get(MOVES))[MOVES] || {};
     const moveOf = async (slot) => (await moves())[slot] || null;
     const setMove = (slot, t) => held('moves', async () => {
@@ -273,7 +281,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (t) await dropMove(slot);
       const m = await make();
       if (!m) return null;
-      if (!stage || m.bytes.length <= BIG) return { file: await send(m, m.bytes), info: m.info ?? null };
+      if (m.bytes.length <= BIG || !await usable()) return { file: await send(m, m.bytes), info: m.info ?? null };
       await setMove(slot, { dir: 'up', tag, aim: target === undefined ? m.id ?? null : target ?? null, size: m.bytes.length, b: await bytesSum(m.bytes), id: m.id ?? null, rev: m.rev ?? null,
         sum: m.sum ?? null, meta: m.meta, create: m.create, mime: m.mime, info: m.info ?? null, owner, since: now(), session: null, file: null, commit });
       await staged(slot, m.bytes);
@@ -288,7 +296,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         if (Number.isSafeInteger(size) && size > BIG) throw new Fail('large');
         return D((c) => c.media(f.id, Math.min(max, BIG))).catch((e) => { throw e?.why === 'size' ? new Fail('large') : e; });
       }
-      if (!stage || !Number.isSafeInteger(size) || size <= BIG || typeof f.headRevisionId !== 'string') return D((c) => c.media(f.id, max));
+      if (!Number.isSafeInteger(size) || size <= BIG || typeof f.headRevisionId !== 'string' || !await usable()) return D((c) => c.media(f.id, max));
       if (size > max) throw new Fail('size');
       const tag = `${f.id}:${f.headRevisionId}:${size}`, t = await moveOf(slot);
       // A copy's or record's read of another file of the same document or record, at a lower id and out of Drive's trash
@@ -403,9 +411,14 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     const transfers = async (folder) => {
       if (!staging || !stage) return;
       const named = new Set(Object.keys(await moves()).map((s) => `${s}@`));
+      if (!named.size) return;
+      // The stage no longer opens (an earlier worker's could): each transfer let go, its owner going again in one go.
+      if (!await usable()) {
+        for (const [slot, t] of Object.entries(await moves())) { await setMove(slot, null); await replay(t.owner, folder); }
+        return;
+      }
       const loose = (await stage.keys('')).filter((k) => !named.has(k.slice(0, k.lastIndexOf('@') + 1)));
       if (loose.length) await stage.write([], loose);
-      if (!named.size) return;
       const stop = env.alive?.() || null, tries = new Map();
       try {
         for (;;) {
