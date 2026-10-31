@@ -1103,3 +1103,76 @@ test('a note moved out of a folder that is then deleted keeps its newer text on 
   }
   noDeletes(drive);
 });
+
+// A picture or attachment is fetched for a note that uses it. One whose note was deleted for good stays in Drive (records are
+// never deleted), but neither a full pass nor a device joining brings it down again.
+test('a deleted note\'s pictures are not downloaded again, by a full pass or a device joining', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock });
+  const id = nid(1), picture = nid(500), fileKey = `https://school.instructure.com/42/${picture}`;
+  await a.notesOp({ key: ACCT, op: 'file', id: picture, kind: 'image', name: 'cell.png', data: PNG.toString('base64'), note: id });
+  await a.notesOp({ key: ACCT, op: 'save', id, base: 0, sid: 'a1', html: `<p>Picture</p><img data-gz-file="${picture}">`, title: 'Cells' });
+  assert.ok((await a.on()).ok);
+  const pic = recFile(drive, 'notes', `${ACCT}|file|${picture}`);
+  assert.ok(pic, 'the picture went up with its note');
+  clock.t += 1000; await a.notesOp({ key: ACCT, op: 'trash', ids: [id] });
+  clock.t += 1000; await a.notesOp({ key: ACCT, op: 'purge', ids: [id] });
+  assert.equal(a.db.stores.blobs.get(fileKey), undefined, 'Notes let the picture go with its note');
+  const fetched = () => drive.log.filter((x) => x.method === 'GET' && x.path === `/drive/v3/files/${pic.meta.id}` && x.query.alt === 'media').length;
+  const n = fetched();
+  assert.ok((await a.run()).ok);
+  assert.equal(body(recFile(drive, 'notes', `${ACCT}|${id}`)).deleted, true);
+  assert.equal(fetched(), n, 'the next run, hearing its own upload back, leaves it in Drive');
+  assert.equal(a.db.stores.blobs.get(fileKey), undefined);
+  assert.ok((await a.run({ full: true })).ok);
+  assert.equal(fetched(), n, 'a full pass leaves it in Drive');
+  assert.equal(a.db.stores.blobs.get(fileKey), undefined);
+  const b = device(drive, { clock });
+  assert.ok((await b.on()).ok);
+  assert.equal(fetched(), n, 'a device joining leaves it in Drive');
+  assert.equal(b.db.stores.blobs.get(fileKey), undefined);
+  assert.equal(b.db.stores.files.size, 0, 'nothing of it on the new device');
+});
+
+// Two devices signed in to different Gradescope accounts: each keeps its own account, placings and what it read. The
+// Gradescope record in Drive is whichever device's placings changed last; the other passes it by, and a daily check (which
+// only reads assignments again) sends nothing, so neither account replaces the other back and forth.
+test('two devices signed in to different Gradescope accounts each keep their own; daily checks flip nothing', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const sam = { id: 'a'.repeat(24), name: 'Sam' }, alex = { id: 'b'.repeat(24), name: 'Alex' };
+  const gs = (acct, gid, to, title) => GS.clean({ acct, map: { [gid]: { to, name: 'Course' } }, courses: { [gid]: { at: 5, bad: 0, rows: [{ id: '9', title }] } }, hide: false,
+    bind: { 'https://school.instructure.com/42': { id: acct.id, show: true } } });
+  const mine = async (d) => (await d.local.get('gradescope')).gradescope;
+  await a.local.set({ gradescope: gs(sam, '111', 'canvas:https://school.instructure.com/7', 'Lab 1') });
+  assert.ok((await a.on()).ok);
+  await b.local.set({ gradescope: gs(alex, '222', 'canvas:https://school.instructure.com/8', 'Quiz 1') });
+  assert.ok((await b.on()).ok);
+  assert.ok((await a.run()).ok); assert.ok((await b.run()).ok);
+  const check = async () => {
+    const ga = await mine(a), gb = await mine(b);
+    assert.equal(ga.acct.id, sam.id, 'A keeps its own Gradescope account');
+    assert.deepEqual(Object.keys(ga.map), ['111'], 'and its own placings');
+    assert.ok(ga.courses['111']?.rows.length, 'and what it read');
+    assert.equal(gb.acct.id, alex.id, 'B keeps its own');
+    assert.deepEqual(Object.keys(gb.map), ['222']);
+    assert.ok(gb.courses['222']?.rows.length);
+  };
+  await check();
+  const ups = () => drive.log.filter((x) => x.upload?.meta?.appProperties?.cat === 'gradescope').length, n = ups();
+  for (let i = 2; i <= 4; i++) {
+    clock.t += 864e5;
+    await a.local.set({ gradescope: { ...(await mine(a)), courses: { 111: { at: clock.t, bad: 0, rows: [{ id: '9', title: `Lab ${i}` }] } } } });
+    await b.local.set({ gradescope: { ...(await mine(b)), courses: { 222: { at: clock.t, bad: 0, rows: [{ id: '9', title: `Quiz ${i}` }] } } } });
+    assert.ok((await a.run()).ok); assert.ok((await b.run()).ok);
+    await check();
+  }
+  assert.equal(ups(), n, 'the daily checks sent nothing');
+  // A device on A's account still gets A's placings.
+  const c = device(drive, { clock });
+  await c.local.set({ gradescope: GS.clean({ acct: sam, map: {}, courses: {}, hide: false, bind: {} }) });
+  assert.ok((await c.on()).ok);
+  clock.t += 1000;
+  await a.local.set({ gradescope: { ...(await mine(a)), map: { ...(await mine(a)).map, 333: { to: 'canvas:https://school.instructure.com/9', name: 'Chem' } } } });
+  assert.ok((await a.run()).ok); assert.ok((await c.run()).ok); assert.ok((await b.run()).ok);
+  assert.deepEqual(Object.keys((await mine(c)).map).sort(), ['111', '333'], 'the same account\'s placings reach it');
+  await check();
+});

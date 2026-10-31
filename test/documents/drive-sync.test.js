@@ -1054,3 +1054,34 @@ test('a document with no file to make here goes up once, not again on every run'
   assert.equal(sidecarJson(drive, key).record.title, 'Old reading, renamed');
   noDeletes(drive);
 });
+
+// A device with no Glaze file of its own for a paper (it let its file go as edited outside Glaze, and its new one never went
+// up) that takes another device's newer content must take the file that device's JSON copy names, never write one more
+// .docx beside it.
+test('a device without a file of its own takes the .docx Drive\'s copy names, never a second one beside it', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-000000000851', files = () => [...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'file' && f.meta.appProperties.key === sha(key).slice(0, 32));
+  await a.papers.save(key, { doc: doc('Glaze text'), title: 'Essay', named: true });
+  assert.ok((await a.sync.set(true)).ok); assert.ok((await b.sync.set(true)).ok);
+  const word = exportOf(drive, key).meta.id;
+  // Edited in Word: B sees it first and lets that file go, but its new file never reaches Drive.
+  drive.edit(word, enc('Edited in Word'));
+  drive.offline((x) => x.path.startsWith('/upload/'));
+  assert.equal((await b.sync.run()).why, 'network');
+  assert.equal(drive.files.get(word).meta.appProperties.glaze, 'kept');
+  // A edits: its new file and copy go up.
+  clock.t += 1000;
+  await a.papers.save(key, { doc: doc('A edits') });
+  await a.sync.touched(key);
+  assert.ok((await a.sync.run()).ok);
+  const mine = files();
+  assert.equal(mine.length, 1);
+  // B takes A's edit and A's file with it.
+  clock.t = (await state(b)).wait + 1;
+  assert.ok((await b.sync.run()).ok);
+  assert.equal(textOf((await b.papers.get(key)).doc), 'A edits');
+  assert.deepEqual(files().map((f) => f.meta.id), [mine[0].meta.id], 'one .docx for the paper, A\'s');
+  assert.equal((await b.store.get(`${S.DOC}${sha(key).slice(0, 32)}`))[`${S.DOC}${sha(key).slice(0, 32)}`].file, mine[0].meta.id, 'B follows it');
+  assert.equal(sidecarJson(drive, key).file, mine[0].meta.id);
+  noDeletes(drive);
+});
