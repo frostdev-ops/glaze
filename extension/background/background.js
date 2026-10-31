@@ -1181,7 +1181,7 @@ const copyState = async () => {
   await chrome.storage.session.set({ ultraCopyEpochs: copyEpochs });
   return copyEpochs;
 };
-const purgeCopies = async (origin) => {
+const purgeCopies = async (origin, retire = true) => {
   const state = await copyState();
   if (origin) state.sites[origin] = crypto.randomUUID();
   else { state.all = crypto.randomUUID(); state.sites = {}; }
@@ -1189,6 +1189,9 @@ const purgeCopies = async (origin) => {
   if (chrome.storage.session) await chrome.storage.session.set({ ultraCopyEpochs: state });
   const drop = await copyKeys(origin);
   if (drop.length) await chrome.storage.local.remove(drop);
+  // Content scripts cannot read session storage. Notify every open visit, even if no copy was saved yet, so an old
+  // read cannot paint after a purge. Sign-out/Reset retire the document; the switch can be turned on again there.
+  await chrome.storage.local.set({ [origin ? `ultraCopyFence:${origin}` : 'ultraCopyFence']: { epoch: origin ? state.sites[origin] : state.all, retire } });
 };
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:ultraCopy') return;
@@ -1200,7 +1203,11 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     const settings = await chrome.storage.sync.get(['enabled', 'enhance']);
     if (settings.enabled === false || settings.enhance?.instant === false) return { ok: false };
     const state = await copyState(), epoch = `${state.all}/${state.sites[origin] || ''}`;
-    if (m.op === 'begin') return { epoch };
+    if (m.op === 'begin') {
+      const keys = ['ultraCopyFence', `ultraCopyFence:${origin}`], fences = await chrome.storage.local.get(keys);
+      if ((m.fence ?? '/') !== keys.map((k) => fences[k]?.epoch || '').join('/')) return { ok: false };
+      return { epoch };
+    }
     const r = m.record;
     if (m.epoch !== epoch || r?.v !== 1 || typeof r.uid !== 'string' || !/^_\d+_\d+$/.test(r.uid) || !['grades', 'courses', 'stream'].includes(r.kind)
       || !Number.isFinite(r.at) || !Array.isArray(r.nodes) || JSON.stringify(r).length > 201024) return { ok: false };
@@ -1210,7 +1217,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   return true;
 });
 chrome.storage.onChanged.addListener((c, area) => {
-  if (area === 'sync' && c.enhance?.newValue?.instant === false) (brokerTurn ||= GZ_CARDS.queue())(() => purgeCopies()).catch(() => {});
+  if (area === 'sync' && c.enhance?.newValue?.instant === false) (brokerTurn ||= GZ_CARDS.queue())(() => purgeCopies(null, false)).catch(() => {});
 });
 chrome.tabs?.onRemoved?.addListener((id) => {
   chrome.storage.session?.remove([`landed:${id}`, ...Object.keys(FRAMED).map((what) => frameKey(what, id))]).catch(() => {});

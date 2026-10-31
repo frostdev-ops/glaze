@@ -20,7 +20,7 @@ var GZ_INSTANT = globalThis.GZ_INSTANT || (() => {
     try { const u = new URL(document.baseURI); if (u.protocol === 'https:' && u.origin !== location.origin) cdn = u.origin; } catch { /* none */ }
     return { origin: location.origin, cdn, base: document.baseURI };
   };
-  const read = (k) => new Promise((res) => { try { chrome.storage.local.get(k, (r) => res(chrome.runtime.lastError ? null : r?.[k] ?? null)); } catch { res(null); } });
+  const read = (k) => new Promise((res) => { try { chrome.storage.local.get(k, (r) => res(chrome.runtime.lastError ? null : Array.isArray(k) ? r : r?.[k] ?? null)); } catch { res(null); } });
   const send = (m) => { try { return Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:ultraCopy', ...m })).catch(() => null); } catch { return Promise.resolve(null); } };
   const drop = () => { signout(); send({ op: 'drop' }); };
   const signedOut = (e) => e === 401 || /HTTP 401/.test(e?.message || '');
@@ -126,7 +126,10 @@ var GZ_INSTANT = globalThis.GZ_INSTANT || (() => {
     x.mo = new MutationObserver(() => { if (!x.frame) x.frame = requestAnimationFrame(() => check(x)); });
     x.mo.observe(document.body || html, { childList: true, subtree: true });
     x.timer = setTimeout(() => { if (v !== x) return; x.expired = true; unpaint(x); stop(x); }, LAST);
-    const lease = send({ op: 'begin' }).then((r) => { x.epoch = r?.epoch || ''; });
+    const fences = ['ultraCopyFence', `ultraCopyFence:${location.origin}`];
+    // Bind the request to the purge state this visit observed locally, before it can be delayed on the way to the worker.
+    const lease = read(fences).then((r) => r && v === x && !x.expired && on()
+      ? send({ op: 'begin', fence: fences.map((k) => r[k]?.epoch || '').join('/') }) : null).then((r) => { x.epoch = r?.epoch || ''; });
     // The last student's copy is read while the one signed in is confirmed; only that student's paints.
     const copies = new Map();
     const copyOf = (uid) => (L.ID.test(uid) ? (copies.has(uid) || copies.set(uid, read(L.key(location.origin, uid, kind))), copies.get(uid)) : Promise.resolve(null));
@@ -147,6 +150,13 @@ var GZ_INSTANT = globalThis.GZ_INSTANT || (() => {
   };
   const end = (x) => { stop(x); unpaint(x); if (v === x) v = null; };
   const signout = () => { out = true; if (v) end(v); };
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    const fences = [changes.ultraCopyFence, changes[`ultraCopyFence:${location.origin}`]].filter(Boolean);
+    if (!fences.length) return;
+    if (fences.some((c) => c.newValue?.retire !== false)) signout();
+    else if (v) end(v);
+  });
 
   // on: the switch and Glaze on this page. me: content-ultra.js's confirmed student. settled: the stored settings are in.
   const sync = (want, who, ready) => {

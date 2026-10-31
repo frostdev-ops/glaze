@@ -153,11 +153,11 @@ test('copies are keyed by site, student and page, and only the right student\'s 
 
 // ---- the page script ----
 // The top page on Ultra, with the stand-in DOM: me() answers when told (who.answer), Ultra's view is put in by fill().
-const site = ({ path = '/ultra/grades', local = {}, last = '_900_1', instant = true, enabled = true, frame = false, send } = {}) => {
+const site = ({ path = '/ultra/grades', local = {}, last = '_900_1', instant = true, enabled = true, frame = false, send, get } = {}) => {
   const doc = makeDoc(), html = new El('html', doc), body = new El('body', doc);
   doc.root.append(html); html.append(body);
   const main = new El('main', doc); main.className = 'bb-offcanvas-container'; body.append(main);
-  const frames = [], observers = [], idle = [], sent = [], timers = [], events = new Map();
+  const frames = [], observers = [], idle = [], sent = [], timers = [], events = new Map(), changes = [];
   let answer, fail;
   const who = new Promise((res, rej) => { answer = res; fail = rej; });
   const settings = { enabled, enhance: { ...D.GZ_SANITIZE({}).enhance, instant } };
@@ -177,7 +177,8 @@ const site = ({ path = '/ultra/grades', local = {}, last = '_900_1', instant = t
       if (send) return send(m);
       if (m.op === 'put') local[L.key(ORIGIN, m.record.uid, m.record.kind)] = structuredClone(m.record);
       return Promise.resolve(m.op === 'begin' ? { epoch: 'test' } : { ok: true });
-    } }, storage: { local: { get: (k, cb) => cb(structuredClone({ [k]: local[k] })), set: (o) => Object.assign(local, structuredClone(o)) } } },
+    } }, storage: { local: { get: get || ((k, cb) => cb(structuredClone(Object.fromEntries([].concat(k).map((key) => [key, local[key]]))))), set: (o) => Object.assign(local, structuredClone(o)) },
+      onChanged: { addListener: (f) => changes.push(f) } } },
     GZ_CTX: { settings: () => settings, need: async () => {} },
     GZ_ULTRA: { page: { known: async () => (last ? { id: last } : null) } },
   });
@@ -189,6 +190,7 @@ const site = ({ path = '/ultra/grades', local = {}, last = '_900_1', instant = t
   const frame1 = async () => { for (const o of observers.filter((x) => x.on)) o.f([]); for (const f of frames.splice(0)) f(); await settle(); for (const f of frames.splice(0)) f(); await settle(); };
   const copy = () => main.querySelector('#gz-instant');
   return { c, doc, html, main, local, settings, location, sent, idle, timers, answer, fail, fill, frame1, copy, events,
+    changed: (ch, area) => { for (const f of changes) f(ch, area); },
     sync: (on = instant, ready = Promise.resolve()) => c.GZ_INSTANT.sync(on, () => who, ready) };
 };
 const stored = (uid, kind, f, at = Date.now() - 60000) => {
@@ -501,6 +503,85 @@ test('snapshot saves require a trusted top page, current visit and bounded recor
   assert.equal(Object.keys(w.store.local).some((key) => key.startsWith('ultraCopy:')), false);
   assert.equal((await w.send(message, from)).ok, true);
   assert.deepEqual(w.store.local[L.key(ORIGIN, record.uid, record.kind)], record);
+});
+
+test('a purge retires painted and pending copies in other tabs, including an empty reset', async (t) => {
+  for (const reason of ['sign-out', 'reset', 'empty-reset', 'remove', 'switch']) await t.test(reason, async () => {
+    const local = { ultra: [], ...(reason === 'empty-reset' ? {} : stored('_900_1', 'grades', 'ultra-instant-grades.html')) };
+    const w = workerEnv({ store: { sync: { version: 2, enabled: true, enhance: { instant: true } }, local, session: {} } });
+    const from = { id: 'glaze', tab: { id: 3, url: `${ORIGIN}/ultra/grades` }, frameId: 0, url: `${ORIGIN}/ultra/grades` };
+    const editor = { id: 'glaze', tab: { id: 5 }, frameId: 0, url: 'chrome-extension://x/options.html' };
+    const p = site({ local, send: (m) => w.send(m, from) });
+    let deliver;
+    const q = site({ local, send: (m) => w.send(m, from), get: (k, cb) => {
+      const result = structuredClone(Object.fromEntries([].concat(k).map((key) => [key, local[key]])));
+      if (typeof k === 'string' && k.startsWith('ultraCopy:')) deliver = () => cb(result);
+      else cb(result);
+    } });
+    for (const tab of [p, q]) { w.context.chrome.storage.onChanged.addListener(tab.changed); tab.sync(); tab.answer('_900_1'); }
+    await settle();
+    if (reason !== 'empty-reset') assert.ok(p.copy(), 'the other tab has painted');
+    assert.ok(deliver, 'the second tab has a local read in flight');
+    if (reason === 'sign-out') await w.send({ type: 'glaze:ultraCopy', op: 'drop' }, from);
+    else if (reason === 'switch') await w.context.chrome.storage.sync.set({ enhance: { instant: false } });
+    else await w.send({ type: 'glaze:sites', op: reason === 'remove' ? 'remove' : 'reset', origin: ORIGIN }, editor);
+    await w.settle();
+    deliver(); await settle();
+    for (const tab of [p, q]) {
+      assert.equal(!!tab.copy(), false, 'the purge removes visible copies and cancels old reads');
+      assert.equal(tab.c.GZ_INSTANT.now(), null, 'even a visit with no saved copy is retired');
+      assert.equal(tab.html.dataset.gzInstant, undefined, 'Ultra is visible');
+      tab.fill('ultra-instant-grades.html'); await tab.frame1();
+      for (const f of tab.events.get('pagehide') || []) f();
+      for (const f of tab.idle.splice(0)) f();
+    }
+    await w.settle();
+    assert.equal(Object.keys(local).some((k) => k.startsWith('ultraCopy:')), false, 'no stale save after the purge');
+    if (reason === 'switch') {
+      p.settings.enhance.instant = false; p.sync(false);
+      await w.context.chrome.storage.sync.set({ enhance: { instant: true } });
+      p.settings.enhance.instant = true; p.sync(); await settle();
+      for (const f of p.idle.splice(0)) f();
+      await w.settle();
+      assert.ok(local[L.key(ORIGIN, '_900_1', 'grades')], 'the switch can be turned on again in this document');
+    } else {
+      p.sync(); await settle();
+      for (const f of p.events.get('pagehide') || []) f();
+      await w.settle();
+      assert.equal(Object.keys(local).some((k) => k.startsWith('ultraCopy:')), false, 'an old document cannot acquire a new lease on another sync');
+    }
+  });
+});
+
+test('another site signing out does not retire this site\'s painted copy', async () => {
+  const local = { ultra: [], ...stored('_900_1', 'grades', 'ultra-instant-grades.html') };
+  const w = workerEnv({ store: { sync: { version: 2, enabled: true, enhance: {} }, local, session: {} } });
+  const from = { id: 'glaze', tab: { id: 3, url: `${ORIGIN}/ultra/grades` }, frameId: 0, url: `${ORIGIN}/ultra/grades` };
+  const p = site({ local, send: (m) => w.send(m, from) });
+  w.context.chrome.storage.onChanged.addListener(p.changed);
+  p.sync(); p.answer('_900_1'); await settle();
+  const other = 'https://other.blackboard.com/ultra/grades';
+  await w.send({ type: 'glaze:ultraCopy', op: 'drop' }, { ...from, url: other, tab: { id: 4, url: other } });
+  assert.equal(!!p.copy(), true, 'a different site\'s purge has no effect here');
+  p.fill('ultra-instant-grades.html'); await p.frame1();
+  for (const f of p.idle.splice(0)) f();
+  await w.settle();
+  assert.ok(local[L.key(ORIGIN, '_900_1', 'grades')], 'its lease is still valid');
+});
+
+test('a lease request delayed across sign-out cannot authorize a stale visit', async () => {
+  const local = { ultra: [] }, w = workerEnv({ store: { sync: { version: 2, enabled: true, enhance: {} }, local, session: {} } });
+  const from = { id: 'glaze', tab: { id: 3, url: `${ORIGIN}/ultra/grades` }, frameId: 0, url: `${ORIGIN}/ultra/grades` };
+  let deliver;
+  const p = site({ local, send: (m) => m.op === 'begin' ? new Promise((resolve) => { deliver = () => w.send(m, from).then(resolve); }) : w.send(m, from) });
+  p.sync(); p.answer('_900_1'); await settle();
+  p.fill('ultra-instant-grades.html'); await p.frame1();
+  await w.send({ type: 'glaze:ultraCopy', op: 'drop' }, from);
+  await deliver(); await settle();
+  for (const f of p.idle.splice(0)) f();
+  for (const f of p.events.get('pagehide') || []) f();
+  await w.settle();
+  assert.equal(Object.keys(local).some((k) => k.startsWith('ultraCopy:')), false, 'the delayed begin must not return a current lease');
 });
 
 // ---- the worker ----
