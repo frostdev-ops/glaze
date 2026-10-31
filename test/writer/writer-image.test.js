@@ -315,6 +315,14 @@ test('only exact copies of the file name or a whole context line are dropped; si
   assert.deepEqual(I.check({ ...reading(), requirements: [...copies, ...kept] }, inp).requirements, kept);
 });
 
+test('quoted metadata copies are dropped with a final period inside or outside the quotes', () => {
+  const inp = I.input({ ...raw(), name: 'Rubric.png', context: 'Use two sources.' });
+  const copies = ['"Rubric.png".', '“Rubric.png”.', "'Rubric'.", '"Use two sources".', '“Use two sources”.',
+    '"Use two sources."', '"Use two sources.".', 'Use two sources.'];
+  const kept = ['Use two sources!', 'use two sources.', 'Use two sources?'];
+  assert.deepEqual(I.check({ ...reading(), requirements: [...copies, ...kept] }, inp).requirements, kept);
+});
+
 test('on a model on this computer the reader is told the file name is not in the picture', async () => {
   const local = { caps: { context: 8192, images: true, local: true }, replies: [{ json: reading() }], seen: [] };
   await T.run(I.task, raw(), { provider: 'mock', cfg: local });
