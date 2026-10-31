@@ -605,6 +605,26 @@ const KNOWN = {
     stops: 'net.PATCH',
     repro: [{ t: 'paper', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2 }, { t: 'paper', k: 'edit', d: 1, pick: 0, pick2: 0, s: 3 }, { t: 'run', d: 1, how: 'run', s: 4, kill: 72, apply: true }, { t: 'drive', k: 'outsideDocx', pick: 0, s: 5 }],
   },
+  'restored-folder': {
+    fixed: true,
+    about: 'a device connecting while the Glaze folder is in Drive\'s trash makes a Glaze of its own; once the student restores the old one, that device follows it, but the documents already in it (from before its page token) never reach it',
+    skips: () => false,
+    join: [0],
+    repro: [{ t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2 }, { t: 'drive', k: 'trashRoot', pick: 0, s: 3 }, { t: 'account', d: 1, to: 'A', s: 4 }, { t: 'run', d: 1, how: 'startup', s: 5 }],
+  },
+  'revive-removed': {
+    fixed: true,
+    about: 'a document in Trash here whose JSON copy was then deleted for good in Drive, sent up again live by another device (restored wins): this device lets its link go and keeps the document in Trash',
+    skips: () => false,
+    repro: [{ t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'startup', s: 2 }, { t: 'account', d: 0, to: 'B', s: 3 }, { t: 'run', d: 1, how: 'poke', s: 4 }, { t: 'drive', k: 'trashDoc', pick: 0, s: 5 }, { t: 'run', d: 1, how: 'poke', s: 6 }, { t: 'drive', k: 'removeDoc', pick: 0.9, s: 7 }],
+  },
+  'unlinked-copy': {
+    fixed: true,
+    about: 'a first push whose JSON copy Drive took but whose answer never came: the next run hears of that copy in Drive\'s changes but passes over it as another device\'s (none linked here yet), and while Drive\'s search lags makes a second one: two copies stay, and a device linked to the first never gets this one\'s later edits',
+    skips: () => false,
+    stops: 'net.POST',
+    repro: [{ t: 'lag', n: 3 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, kill: 126, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }],
+  },
 };
 
 // ---- a run of one list of operations
