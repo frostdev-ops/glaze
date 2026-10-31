@@ -86,3 +86,11 @@ test('the still-aside requirement catches Details growth during sidebar adoption
     { t: 500, host: 'native', details: 231, [notes]: 421, [dock]: 600 },
   ]), 'inserting only the sidebar header remains an allowed adoption');
 });
+
+test('the still-aside requirement rejects a run where the widget dock never appears', () => {
+  const notes = 'aside.outline-actions > #gz-nt-block';
+  assert.throws(() => requireStillAside([
+    { t: 200, host: 'native', details: 231, [notes]: 421 },
+    { t: 500, host: 'native', details: 231, [notes]: 421 },
+  ]), /My widgets showed/, 'an absent dock has no movements, but does not prove that both blocks stayed put');
+});
