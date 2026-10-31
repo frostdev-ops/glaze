@@ -706,6 +706,15 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         for (const f of r.files) if (HASH.test(f.appProperties?.key || '') && (!remote.has(f.appProperties.key) || f.id < remote.get(f.appProperties.key).id)) remote.set(f.appProperties.key, f);
         page = r.nextPageToken || null;
       } while (page);
+      // Each document's own file too, in Drive's trash or not: one trashed or edited while no change could say so (Sync off,
+      // or the token lost) is met as its change would have been.
+      const own = new Map();
+      do {
+        const r = await D((c) => c.find(`'${folder}' in parents and appProperties has { key='glaze' and value='file' }`, { pageToken: page }));
+        for (const f of r.files) own.set(f.id, f);
+        page = r.nextPageToken || null;
+      } while (page);
+      const E = (d) => (d?.file && own.get(d.file)) || undefined;
       const seen = new Set(), waiting = new Set();
       for (const row of await env.papers.list()) {
         if (!syncable(row.key) || !KINDS.includes(row.kind || 'paper')) continue;
@@ -713,10 +722,10 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         seen.add(h);
         const d = await docOf(h);
         const R = remote.get(h) || null;
-        if (await one(row.key, h, { R: !d?.json || (R && R.id <= d.json) ? R : undefined, folder }) === 'pending') waiting.add(row.key);
+        if (await one(row.key, h, { R: !d?.json || (R && R.id <= d.json) ? R : undefined, E: E(d), folder }) === 'pending') waiting.add(row.key);
       }
-      for (const [h, R] of remote) if (!seen.has(h)) { seen.add(h); const d = await docOf(h); await one(null, h, { R: d?.json && R.id > d.json ? undefined : R, folder }); }
-      for (const k of (await S.keys()).filter((x) => x.startsWith(DOC))) if (!seen.has(k.slice(DOC.length))) await one(null, k.slice(DOC.length), { folder });
+      for (const [h, R] of remote) if (!seen.has(h)) { seen.add(h); const d = await docOf(h); await one(null, h, { R: d?.json && R.id > d.json ? undefined : R, E: E(d), folder }); }
+      for (const k of (await S.keys()).filter((x) => x.startsWith(DOC))) if (!seen.has(k.slice(DOC.length))) await one(null, k.slice(DOC.length), { E: E(await docOf(k.slice(DOC.length))), folder });
       for (const [k, n] of Object.entries(dirt)) if (!waiting.has(k)) await unmark(k, n);
       if (more) await more.full(hooks(folder));
       await setState({ token });
