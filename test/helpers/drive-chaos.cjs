@@ -603,7 +603,8 @@ class World {
     this.deleted = new Set(); // document keys deleted for good somewhere
     this.outside = new Map(); // Drive file id → its bytes, as an outside edit left them
     this.notes = new Map(); // note id → [{ step, dev, kind, text, rec }]
-    this.settings = new Map(); // Settings key → the last change made to it { v (JSON), step, dev }
+    this.settings = new Map(); // Settings key → the last change made to it { v (JSON), step, dev, before, ok }
+    this.bound = new Set(); // devices Sync has been bound to an account on (driveSync.account), ever
     this.met = false; // a first meeting happened (an account switched, a device joining late)
     this.offEdited = new Set(); // documents saved while their device had Sync off
     this.n = 0;
@@ -647,6 +648,8 @@ class World {
     return tokensIn(JSON.stringify(rec.doc || ''))[0] || null;
   }
   noteIdx(dev) { return N.clean(this.get(dev, NOTES)); }
+  // Whether Sync has ever been bound to an account on dev (background.js stamps changes only from then on).
+  connected(dev) { if (typeof this.get(dev, 'driveSync')?.account === 'string') this.bound.add(dev.name); return this.bound.has(dev.name); }
   noteHtml(dev, id) { const n = this.noteIdx(dev).notes[id]; if (!n) return undefined; const b = dev.disk.notesdb.get(`bodies\u0000${SITE}/${id}/${n.rev}`); return b ? b.html : n.rev > 0 ? null : ''; }
 
   // ---- what each operation does on its device (no waiting for the device to settle: an injected one runs inside a run)
@@ -712,9 +715,15 @@ class World {
       const v = op.k === 'preset' ? raw : api.lib('GZ_SANITIZE')({ [op.k]: raw })[op.k];
       note(`setting ${op.k}=${JSON.stringify(v).slice(0, 40)}`);
       const was = dev.disk.sync.get(op.k);
+      // Made on a device Sync was never bound on: its first connection joins with Restore's rules, so a value Drive holds
+      // then wins over it (the owner's rule). ok: the values the key may end with, this change's and, while every later
+      // change is one of these, the last change made on a connected device.
+      const before = !this.connected(dev);
       return ctx.chrome.storage.sync.set({ [op.k]: v }).then(() => {
         // A change that landed (an equal write is none): the value every device must end with, unless a later one comes.
-        if (dev.disk.sync.get(op.k) !== was) this.settings.set(op.k, { v: dev.disk.sync.get(op.k), step, dev: dev.name });
+        if (dev.disk.sync.get(op.k) === was) return;
+        const prev = this.settings.get(op.k), now = dev.disk.sync.get(op.k);
+        this.settings.set(op.k, { v: now, step, dev: dev.name, before, ok: before ? [...(prev ? (prev.before ? prev.ok : [prev.v]) : []), now] : [now] });
       }, (e) => note(`  refused: ${e.message}`));
     }
     if (op.t === 'task') {
@@ -874,6 +883,7 @@ class World {
     if (masked(op)) { this.trace(`#${this.step} (${describe(op)}: skipped, known ${masked(op)})`); return; }
     if (op.inject && masked(op.inject.op)) op = (({ inject, ...x }) => x)(op);
     const dev = op.d === undefined ? null : this.devices[op.d];
+    for (const d of this.devices) this.connected(d);
     this.clock += 1000 + rng(op.s || this.step).int(120e3);
     if (dev) dev.opRng = rng((op.s || 7) ^ 0x5bd1e995);
     if (op.t === 'time') { this.clock += op.ms; this.trace(`#${this.step} ${describe(op)}`); return; }
@@ -1031,10 +1041,12 @@ class World {
       }
     }
     // Settings: the later change wins, key by key (first meetings included: Settings take the later change there too), so
-    // each key ends as its last change left it. Switching accounts A→B→A brings older Settings back (a known limit).
+    // each key ends as its last change left it. Switching accounts A→B→A brings older Settings back (a known limit). By
+    // design, a device's first connection joins with Restore's rules: changes made there before it was ever connected give
+    // way to Drive's value, the last change made on a connected device (or an earlier such change, Drive's then).
     for (const [k, x] of this.settings) {
       const got = this.devices[0].disk.sync.get(k);
-      if (got !== x.v && !this.accounts) F('lww:settings', `${k} is ${got ?? 'missing'} everywhere, its last change was ${x.v} (#${x.step} on ${x.dev})`);
+      if (got !== x.v && !this.accounts && !(x.before && x.ok.includes(got))) F('lww:settings', `${k} is ${got ?? 'missing'} everywhere, its last change was ${x.v} (#${x.step} on ${x.dev})`);
     }
     // Every picture a note shows is on each device that holds the note.
     for (const dev of this.devices) {

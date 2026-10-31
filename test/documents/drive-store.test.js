@@ -1427,3 +1427,21 @@ test('equal legacy and explicit Trash times merge identically in either directio
   b.folders[nid(900)].ft.trash = 25;
   assert.deepEqual(ST.mergeFolders(a, b), ST.mergeFolders(b, a));
 });
+
+// A value from before a device was ever connected has no time of its own. Sent up as of the moment it connected, it beat a
+// later change another device hadn't pushed yet (the chaos run's lww:settings at seeds 19, 116, 124, 140).
+test('a value from before a device was ever connected goes up older than any timed change: a later change another device hasn\'t pushed still wins', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), c = device(drive, { clock });
+  assert.ok((await a.on()).ok);
+  clock.t += 60e3; await c.settings.set({ footer: true }); // C never connected: no time kept for it
+  clock.t += 60e3; await a.settings.set({ footer: false }); // later, on a connected device, not pushed yet
+  clock.t += 60e3; assert.ok((await c.on()).ok);
+  assert.ok(body(recFile(drive, 'sync', 'footer')).at < clock.t - 120e3, 'C\'s value goes up older than A\'s change');
+  assert.ok((await a.run()).ok); assert.ok((await c.run()).ok);
+  for (const d of [a, c]) assert.equal((await d.settings.get('footer')).footer, false, 'the later change wins on both');
+  // A device connecting for the first time still takes Drive's value over its own from before.
+  const e = device(drive, { clock });
+  await e.settings.set({ footer: true });
+  assert.ok((await e.on()).ok);
+  assert.equal((await e.settings.get('footer')).footer, false);
+});
