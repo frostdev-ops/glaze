@@ -422,11 +422,17 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     };
     // Drive's side of a conflict kept beside this device's: a version, or a document of its own (a PDF's, and one too big
     // to be a version: writer/writer-papers.js keep's RangeError).
+    // The copy's key comes from the document and Drive's side, and it is marked before it is saved: a worker stopped between
+    // the save and the conflict's record meets the same conflict again and finds that copy, never making a second one, and
+    // the copy goes up though its save's storage event was never heard.
     const keepOther = async (key, l, got) => {
       const apart = async () => {
-        const k = P().newKey(), title = env.copyName(String(got.record.title || l?.rec.title || (got.kind === 'pdf' ? 'PDF' : '')));
-        await env.papers.save(k, { ...got.record, title, named: true }, { reason: 'auto', ...(got.kind === 'sheet' && { parts: got.parts, changed: true }) });
+        const x = await env.hash(`copy:${await hk(key)}:${canon(body(key, { ...got.record, kind: got.kind }, got.parts))}`);
+        const k = `doc:${x.slice(0, 8)}-${x.slice(8, 12)}-4${x.slice(13, 16)}-${(8 | (parseInt(x[16], 16) & 3)).toString(16)}${x.slice(17, 20)}-${x.slice(20, 32)}`;
+        const title = env.copyName(String(got.record.title || l?.rec.title || (got.kind === 'pdf' ? 'PDF' : '')));
         await mark(k);
+        if (await env.papers.get(k)) return;
+        await env.papers.save(k, { ...got.record, title, named: true }, { reason: 'auto', ...(got.kind === 'sheet' && { parts: got.parts, changed: true }) });
       };
       if (got.kind === 'pdf') return apart();
       try {
