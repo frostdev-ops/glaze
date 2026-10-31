@@ -105,13 +105,13 @@ test('the config: Glaze\'s clients in project 1071735898350, three scopes, the t
   assert.equal(C.appId, '1071735898350');
   assert.match(C.apiKey, /^AIza[\w-]{35}$/);
   assert.doesNotMatch(JSON.stringify(C) + fs.readFileSync(path.join(__dirname, '../../extension/background/google-config.js'), 'utf8'), /GOCSPX|client_secret|secret/i, 'client ids and a browser key only, never a secret');
-  assert.equal(C.native, false, 'Safari waits for the app');
-  assert.deepEqual(['chrome', 'web', 'native'].map((f) => G.ready(C, f)), [true, true, false]);
+  assert.equal(C.native, true, 'Safari signs in through the Glaze app');
+  assert.deepEqual(['chrome', 'web', 'native'].map((f) => G.ready(C, f)), [true, true, true]);
   assert.equal(G.pickable(C), true);
   for (const f of ['chrome', 'web', 'native']) assert.equal(G.ready(BLANK, f), false, f);
   assert.equal(G.ready(REAL, 'chrome'), true);
   assert.equal(G.ready(REAL, 'web'), true);
-  assert.equal(G.ready(REAL, 'native'), false, 'native also needs config.native');
+  assert.equal(G.ready({ ...REAL, native: false }, 'native'), false, 'native also needs config.native');
   assert.equal(G.ready({ ...REAL, apiKey: '' }, 'web'), true, 'signing in needs no Picker key');
   assert.equal(G.ready({ ...REAL, web: '' }, 'web'), false);
   assert.equal(G.pickable(REAL), true);
@@ -126,8 +126,8 @@ test('placeholders: status says setup on every browser, and connect does nothing
     assert.deepEqual(await h.g.connect(), { ok: false, why: 'setup' });
     assert.deepEqual([h.log.auth, h.log.launch, h.log.fetch], [[], [], []]);
   }
-  const s = harness({ flow: 'native' });
-  assert.deepEqual(await s.g.status(), { ok: false, why: 'browser' }, 'Safari: no native sign-in yet');
+  const s = harness({ flow: 'native', config: { ...REAL, native: false } });
+  assert.deepEqual(await s.g.status(), { ok: false, why: 'browser' }, 'Safari with its sign-in switched off');
 });
 
 test('which flow: Google Chrome and Chromium use getAuthToken; Edge, Brave and Firefox the web flow; Safari the app', () => {
@@ -1228,17 +1228,18 @@ test('packages: switched on, the shipped config gives Chrome Calendar\'s client 
 });
 
 // ---- the build-time switch (background/google.js ON): on since 4.0.1, everywhere but Safari (background/google-config.js native) ----
-test('Drive is switched on: the shipped worker offers Chrome, Edge, Brave and Firefox their sign-in, and Safari nothing yet', async () => {
+test('Drive is switched on: the shipped worker offers Chrome, Edge, Brave, Firefox and Safari their sign-in', async () => {
   assert.equal(G.ON, true);
-  assert.equal(C.native, false, 'Safari waits for its app sign-in');
+  assert.equal(C.native, true, 'Safari signs in through the Glaze app');
   for (const [flow, firefox] of [['chrome', false], ['web', false], ['web', true]]) {
     const h = harness({ on: G.ON, config: C, flow, firefox, client: C.chrome });
     assert.deepEqual(await h.g.status(), { ok: true, flow, email: null, picker: true }, `${flow}${firefox ? ' (Firefox)' : ''}`);
   }
-  const safari = harness({ on: G.ON, config: C, flow: 'native' });
-  assert.deepEqual(await safari.g.status(), { ok: false, why: 'browser' });
-  assert.deepEqual(await safari.g.connect(), { ok: false, why: 'browser' });
-  assert.deepEqual([safari.log.native, safari.log.fetch, safari.local], [[], [], {}]);
+  const safari = harness({ on: G.ON, config: C, flow: 'native', native: async (m) => (m.type === 'google.status' ? { ok: true, email: null, sub: null, pending: false } : null) });
+  assert.deepEqual(await safari.g.status(), { ok: true, flow: 'native', email: null, picker: false, pending: false });
+  const bare = harness({ on: G.ON, config: C, flow: 'native' });
+  assert.deepEqual(await bare.g.status(), { ok: false, why: 'setup' }, 'no Settings row while the handler can\'t reach its app group');
+  assert.deepEqual([bare.log.fetch, bare.local], [[], {}]);
   const src = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
   const at = src.indexOf("m?.type !== 'glaze:google'");
   assert.match(src.slice(at, src.indexOf('return true;', at)), /if \(!GZ_GOOGLE\.ON\) \{ reply\(\{ ok: false, why: 'off' \}\); return; \}/, 'a build with the switch off still refuses every operation');

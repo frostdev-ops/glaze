@@ -380,7 +380,7 @@ ones described below as on this device only or never synced.
   your "do on" days and focus sessions and your Gradescope work, with **course and assignment names**, links to them on
   your Canvas site and your tasks' notes, and the Canvas site's address in each event's identifier. Once saved, it is
   an ordinary file on your device; what happens to it after you import it is up to you and your calendar provider.
-- **Google Calendar sync** (Chrome, off until you connect), in `chrome.storage.local` (`gcal` and `gcalSync`), on this device only: the ID of
+- **Google Calendar sync** (Chrome and Safari, off until you connect), in `chrome.storage.local` (`gcal` and `gcalSync`), on this device only: the ID of
   the calendar named Glaze that Glaze made in your Google account (or that you linked with a code from another device),
   the Google account Google names as that calendar's owner (its email address, shown as "Connected to …"), when you
   connected, when each Canvas site and account last synced and how the last sync ended. For each event Glaze wrote: an
@@ -388,14 +388,18 @@ ones described below as on this device only or never synced.
   and, for a "do on" day or focus session, which Better To Do item it belongs to, that plan's date or time, when the
   event ends, a hash of what was written and Google's version tag for it; Google's sync cursor; and the IDs of deadline
   events you deleted in Google Calendar, so Glaze doesn't put them back, including deleted event IDs not yet matched
-  to an export, and markers for events Glaze removed while unselected. No sign-in token: Chrome keeps that itself.
+  to an export, and markers for events Glaze removed while unselected. No sign-in token: Chrome keeps that itself. In
+  Safari, the Glaze extension keeps Calendar's refresh token in its own Keychain items, on this device only, and access
+  tokens only in memory.
   **Disconnect** deletes all of it.
-- **Google Drive** (Chrome, Edge, Brave and Firefox, off until you connect; Safari doesn't offer it):
+- **Google Drive** (Chrome, Edge, Brave, Firefox and Safari, off until you connect):
   `chrome.storage.local` holds one record, `google`, on this device only: the email address of
   the Google account you connected (shown as the connected account), its Google account id (`sub`, used to keep access
   bound to that account), which sign-in flow Glaze used and when you connected (`{ email, sub, flow, at }`). No access
   token is stored there: Chrome keeps it in its own sign-in cache; Edge, Brave and Firefox hold it only in the memory
-  of Glaze's background worker. **Disconnect** deletes the record.
+  of Glaze's background worker. In Safari, the Glaze extension keeps Drive's refresh token in its own Keychain items, on
+  this device only, apart from Calendar's, and access tokens only in memory. **Disconnect** deletes the record (in
+  Safari, Drive's refresh token too).
   Once **Sync to Google Drive** is on, `chrome.storage.local` also holds its state, on this device only, and keeps it
   when Sync is turned off: whether it is
   on, the account it is bound to, the ids of the Glaze folder and its Data and Backups folders, Drive's change-list page
@@ -779,14 +783,17 @@ you import) are bundled. It makes requests in these cases:
   isn't kept. If Glaze, the Gradescope switch or your Gradescope answer changes, or the dialog closes, while Canvas
   answers, no file is saved. With Gradescope in
   To Do on, the Gradescope work comes from what's already kept on this device; nothing is asked of Gradescope.
-- **Google Calendar sync** (Chrome, off until you connect). The only destination is Google's Calendar API at
-  `https://www.googleapis.com`; requests carry the access token Chrome gives Glaze, never cookies, and never follow a
-  redirect. There is no Glaze server.
+- **Google Calendar sync** (Chrome and Safari, off until you connect). The only destination is Google's Calendar API at
+  `https://www.googleapis.com`; requests carry the access token Chrome gives Glaze (in Safari, the one the Glaze
+  extension renews at `https://oauth2.googleapis.com`), never cookies, and never follow a redirect. There is no Glaze
+  server.
   - **Connect** (your click in Settings → Sharing → Google Calendar sync): Chrome asks for the `identity` permission and
     shows Google's own sign-in and consent for one scope, `https://www.googleapis.com/auth/calendar.app.created` ("make
     secondary Google calendars, and see, create, change and delete events on them"). With it Glaze can't see or change
-    your other calendars, nor list them. Chrome talks to Google for the sign-in itself. Glaze then creates one calendar
-    named Glaze, with your time zone. **Link another device** opens that same calendar by its ID instead of making one.
+    your other calendars, nor list them. Chrome talks to Google for the sign-in itself. In Safari, the Glaze app shows
+    Google's sign-in for that scope with `openid` and `email` (the account the grant belongs to), and the extension
+    exchanges the code at `https://oauth2.googleapis.com`; it is a grant of its own, apart from Google Drive's. Glaze then
+    creates one calendar named Glaze, with your time zone. **Link another device** opens that same calendar by its ID instead of making one.
   - **Sync**: a Canvas or Blackboard page works out what Export calendar (.ics) would save, with the same choices, and Glaze sends
     Google what changed: for each event its title (an assignment, task, plan or class name), the course name, your
     task's notes, its date or time, the class's room, and the link back to the item on your Canvas or Blackboard site. No
@@ -794,19 +801,23 @@ you import) are bundled. It makes requests in these cases:
     in the Glaze calendar: an edited deadline is written over; a deleted one stays deleted; a "do on" day or focus
     session you move or delete there moves or clears that plan in Better To Do. It runs when a Canvas or Blackboard
     page opens if the last sync was 15 minutes ago or more, every 15 minutes while such a page stays open, and 10 seconds
-    after your Better To Do data, class schedule or export choices change. Nothing runs with no Canvas or Blackboard
-    page open; a Blackboard page reads what's due as described above.
+    after your Better To Do data, class schedule or export choices change. In Safari a run stops after 20 seconds and the
+    page sends the rest a minute later. Nothing runs with no Canvas or Blackboard page open; a Blackboard page reads
+    what's due as described above.
   - **Disconnect** works on this device only and doesn't revoke Glaze's access with Google: if you choose, Glaze deletes
     the Glaze calendar first; then Chrome forgets its tokens, Glaze removes the `identity` permission (unless Google Drive
-    is connected on this device) and deletes what it stored. Google Calendar sync and Google
+    is connected on this device) and deletes what it stored. In Safari, the extension forgets Calendar's refresh token;
+    Drive's stays. Google Calendar sync and Google
     Drive on your other devices keep working. To remove Glaze's access everywhere, use
     https://myaccount.google.com/connections.
   - Uninstalling Glaze deletes what it stored on the device but doesn't remove Google's access either: remove it at
     https://myaccount.google.com/connections.
-  - Edge, Brave, Safari and Firefox don't offer it; Export calendar (.ics) works everywhere.
-- **Google Drive** (Chrome, Edge, Brave and Firefox, off until you connect; Safari doesn't offer it). The requests go
+  - Edge, Brave and Firefox don't offer it; Export calendar (.ics) works everywhere.
+- **Google Drive** (Chrome, Edge, Brave, Firefox and Safari, off until you connect). The requests go
   directly between your browser and Google: `https://accounts.google.com` to sign in,
-  `https://openidconnect.googleapis.com` for your account's email address and `https://www.googleapis.com` for Drive.
+  `https://openidconnect.googleapis.com` for your account's email address and `https://www.googleapis.com` for Drive;
+  and `https://oauth2.googleapis.com`, from Safari's Glaze app and extension, to exchange the sign-in code and renew
+  access tokens.
   To pick a file, Glaze also opens a static picker page (below). There is no Glaze server, and nothing goes to Frostdev.
   - **Connect** (your click in Glaze's settings): Chrome, Edge and Brave ask for the `identity` permission (Firefox has
     no optional `identity`, so its package holds it from install, with no prompt) and Google shows its own
@@ -814,12 +825,16 @@ you import) are bundled. It makes requests in these cases:
     `drive.file` Glaze can reach only the Drive files it creates and the files you pick in Google's Picker; it can't
     list or open anything else in your Drive. The email address is used to show which account is connected. Glaze never
     stores the access token in extension storage: Chrome keeps it in its own sign-in cache (`getAuthToken`); Edge, Brave
-    and Firefox hold it only in the background worker's memory (`launchWebAuthFlow`).
+    and Firefox hold it only in the background worker's memory (`launchWebAuthFlow`). Safari has no `identity`
+    permission: the Glaze app shows Google's sign-in, and the extension keeps the refresh token in its own Keychain
+    items and access tokens only in memory.
   - **The picker page**: to pick a file, Glaze opens `https://frostdev.io/glaze/drive-picker/`, or its copy at
     `https://frostdev-ops.github.io/glaze-drive-picker/` when frostdev.io doesn't answer. The page loads Google's
     Picker. The access token reaches it in the address's fragment, which browsers don't send to servers, and the page
     sends the token only to Google. The ids, names and types of the files you pick come back to Glaze in the redirect's
-    fragment. frostdev.io and GitHub see an ordinary page request (your IP address and browser headers), never the token
+    fragment. Safari opens the page in a tab, and it comes back to a Glaze page (`documents/picked.html`) that hands
+    that fragment to Glaze's background worker and closes; while you pick, the worker keeps the pick's state and tab in
+    Safari's session storage (memory, never the token), until it ends. frostdev.io and GitHub see an ordinary page request (your IP address and browser headers), never the token
     or file contents.
   - **Open from Drive**: Glaze downloads the file you picked, or exports a Google Doc as .docx, a Sheet as .xlsx and
     Slides as .pptx, and imports it into Documents on this device.
@@ -868,7 +883,8 @@ you import) are bundled. It makes requests in these cases:
     hand-in.
   - **Disconnect** works on this device only and doesn't revoke Glaze's access with Google: the browser forgets its
     cached tokens, Glaze removes the `identity` permission (unless Google Calendar sync is
-    connected on this device; Firefox's package holds it) and deletes the `google` record. Google Drive and Google
+    connected on this device; Firefox's package holds it) and deletes the `google` record (in Safari, the extension
+    forgets Drive's refresh token; Calendar's stays). Google Drive and Google
     Calendar sync on your other devices, and Calendar sync on this one, keep working. To remove Glaze's access
     everywhere, use https://myaccount.google.com/connections.
   - Uninstalling Glaze doesn't remove Google's access either, and files in your Drive stay there: remove access at
@@ -1179,7 +1195,8 @@ A site you add is kept in a list in the extension's local storage (`canvas`, `mo
 - `unlimitedStorage` — requested at install, so the browser doesn't clear your notes, pictures, attachments and the
   files kept for Look backgrounds to free space. Nothing more is stored or sent because of it; Chrome shows no warning
   for it.
-- `nativeMessaging` — on Safari, requested at install: to use on-device AI through the containing app, to ask the Mac
+- `nativeMessaging` — on Safari, requested at install: to sign in to Google Drive and Google Calendar sync through the
+  Glaze app, to use on-device AI through the containing app, to ask the Mac
   app to check for updates (the App Store apps ignore update requests) and, with agent access on, to reach the downloaded
   Mac app's agent helper. On Chrome,
   Edge and Firefox, optional: asked for only when you turn on agent access in **Settings → AI → Agents**, and given back
@@ -1231,9 +1248,10 @@ press it (see Glaze Writer above). Glaze never changes grades.
 
 ## Google user data
 
-Google Calendar sync (Chrome, off until you connect) and Google Drive (Chrome, Edge, Brave and Firefox, off until you
-connect) are the only parts of Glaze that use Google APIs. Calendar sync asks for one scope,
-`https://www.googleapis.com/auth/calendar.app.created`, and talks only to `www.googleapis.com`; Drive asks for
+Google Calendar sync (Chrome and Safari, off until you connect) and Google Drive (Chrome, Edge, Brave, Firefox and
+Safari, off until you connect) are the only parts of Glaze that use Google APIs. Calendar sync asks for one scope,
+`https://www.googleapis.com/auth/calendar.app.created` (with `openid` and `email` in Safari), and talks only to
+`www.googleapis.com` (and `oauth2.googleapis.com` in Safari, for its tokens); Drive asks for
 `drive.file`, `openid` and `email`, so Glaze sees only the files it made or you picked, as described above. Export
 calendar (.ics) needs no Google account.
 
