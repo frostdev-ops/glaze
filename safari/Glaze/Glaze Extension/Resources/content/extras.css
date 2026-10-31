@@ -587,3 +587,12 @@ html[data-gz-ctab-framed] #site-wrap,
 html[data-gz-ctab-framed] > body > .routed-page.bb-offcanvas-container { visibility: hidden !important; }
 /* Native dialogs and notices can live inside the covered app and still sit above the frame. */
 html[data-gz-ctab-framed] #site-wrap :is(#gz-ctabs, #gz-footer, dialog[open], [role="dialog"], [role="alertdialog"], [role="alert"], [role="status"], .MuiModal-root, .MuiPopover-root, .MuiSnackbar-root):not(.MuiModal-hidden, .MuiModal-hidden *, [aria-hidden="true"], [aria-hidden="true"] *, [hidden], [hidden] *) { visibility: visible; }
+
+/* Ultra's instant copies (courses/page/instant.js): the student's last view of Grades, Courses or Activity, inert over the
+   main area, a little subdued, while Ultra's own view builds hidden beneath it, keeping its layout; it fades out once that's
+   ready (at once under reduced motion). */
+#gz-instant { position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none; opacity: .85; filter: saturate(.8); transition: opacity .15s ease-out; }
+#gz-instant[data-out] { opacity: 0; }
+html[data-gz-instant] main.bb-offcanvas-container > :not([id^="gz-"]) { visibility: hidden !important; }
+html[data-gz-motion="off"] #gz-instant { transition: none; }
+@media (prefers-reduced-motion: reduce) { #gz-instant { transition: none; } }

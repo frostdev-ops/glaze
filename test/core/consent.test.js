@@ -211,11 +211,14 @@ test('review: Reset clears scoped records and planner cache while retaining note
   const w = worker({ local: { ultra: [A], seenCourses: { _1_1: { site: A, name: 'A' } }, courseSlots: { _1_1: '2' }, [`dueWeek:${A}`]: { at: 1, list: [] },
     [`seenCoursesAt ${A}`]: 1, todoCache: { key: `todo:${A}/_1_1` }, [`todo:${A}/_1_1`]: task, [`notes:${A}/_1_1`]: note,
     // The last student and the gradebooks kept for Ultra pages (courses/ultra.js page), here and on a Blackboard host no list holds.
-    [`ultraMe:${A}`]: { uid: '_1_1' }, [`ultraBooks:${A}/_1_1`]: {}, 'ultraMe:https://x.blackboard.com': { uid: '_2_1' }, 'ultraBooks:https://x.blackboard.com/_2_1': {} },
+    [`ultraMe:${A}`]: { uid: '_1_1' }, [`ultraBooks:${A}/_1_1`]: {}, 'ultraMe:https://x.blackboard.com': { uid: '_2_1' }, 'ultraBooks:https://x.blackboard.com/_2_1': {},
+    // The instant copies of Grades, Courses and Activity (courses/instant.js), here and on that other host.
+    [`ultraCopy:${A}/_1_1/grades`]: {}, 'ultraCopy:https://x.blackboard.com/_2_1/stream': {} },
   session: { [`ultraMine:${A}`]: { uid: '_1_1', mem: [] } } });
   assert.deepEqual(await w.send({ type: 'glaze:sites', op: 'reset' }, editor), { ok: true });
-  for (const key of [`dueWeek:${A}`, `seenCoursesAt ${A}`, 'todoCache', `ultraMe:${A}`, `ultraBooks:${A}/_1_1`, 'ultraMe:https://x.blackboard.com', 'ultraBooks:https://x.blackboard.com/_2_1']) assert.equal(w.store.local[key], undefined, key);
-  assert.deepEqual(w.store.session, {});
+  for (const key of [`dueWeek:${A}`, `seenCoursesAt ${A}`, 'todoCache', `ultraMe:${A}`, `ultraBooks:${A}/_1_1`, 'ultraMe:https://x.blackboard.com', 'ultraBooks:https://x.blackboard.com/_2_1',
+    `ultraCopy:${A}/_1_1/grades`, 'ultraCopy:https://x.blackboard.com/_2_1/stream']) assert.equal(w.store.local[key], undefined, key);
+  assert.deepEqual(Object.keys(w.store.session), ['ultraCopyEpochs'], 'only the fence against stale snapshot saves remains');
   assert.deepEqual(w.store.local.seenCourses, {});
   assert.deepEqual(w.store.local[`todo:${A}/_1_1`], task);
   assert.deepEqual(w.store.local[`notes:${A}/_1_1`], note);
@@ -248,7 +251,7 @@ test("an Ultra site's student and memberships: kept in the worker's session for 
   assert.equal(w.store.session[`ultraMine:${B}`].uid, '_900_1');
   // Removing the site forgets it.
   assert.deepEqual(await w.send({ type: 'glaze:sites', op: 'remove', origin: B }, editor), { ok: true });
-  assert.deepEqual(w.store.session, {});
+  assert.deepEqual(Object.keys(w.store.session), ['ultraCopyEpochs'], 'its memberships go; only the fence for instant copies stays');
 });
 
 test('an Ultra identity touch cannot overwrite a newer account saved by another page', async () => {
@@ -321,6 +324,7 @@ test('Settings\' Remove unregisters a site, takes it off its list and forgets wh
     courseSlots: { _5_1: '2', _6_1: '3' }, [`seenCoursesAt ${B}`]: 1, [`seenCoursesAt moodle:${M}/moodle/`]: 1,
     [`dueWeek:${B}`]: { at: 1, list: [] }, [`dueWeek:${A}`]: { at: 1, list: [] }, todoCache: { key: `todo:${B}/_9_1`, at: 1, items: [] }, [`notes:${B}/_9_1`]: { text: 'mine', at: 1 },
     [`ultraMe:${B}`]: { uid: '_9_1' }, [`ultraBooks:${B}/_9_1`]: {}, 'ultraBooks:https://bb.other.edu/_9_1': {}, [`ultraBooks:${B}:8443/_9_1`]: {},
+    [`ultraCopy:${B}/_9_1/grades`]: {}, [`ultraCopy:${B}/_8_1/courses`]: {}, 'ultraCopy:https://bb.other.edu/_9_1/grades': {}, [`ultraCopy:${B}:8443/_9_1/grades`]: {},
   } });
   w.installed[0]({ reason: 'update' });
   await settle();
@@ -333,8 +337,9 @@ test('Settings\' Remove unregisters a site, takes it off its list and forgets wh
   assert.deepEqual(L.ultra, []);
   assert.deepEqual(Object.keys(L.seenCourses).sort(), ['_6_1', `canvas:${A}/12`, `moodle:${M}/moodle/3`], 'its courses go; other sites\' stay');
   assert.deepEqual(L.courseSlots, { _6_1: '3' });
-  for (const k of [`seenCoursesAt ${B}`, `dueWeek:${B}`, 'todoCache', `ultraMe:${B}`, `ultraBooks:${B}/_9_1`]) assert.ok(!(k in L), k);
+  for (const k of [`seenCoursesAt ${B}`, `dueWeek:${B}`, 'todoCache', `ultraMe:${B}`, `ultraBooks:${B}/_9_1`, `ultraCopy:${B}/_9_1/grades`, `ultraCopy:${B}/_8_1/courses`]) assert.ok(!(k in L), k);
   assert.ok('ultraBooks:https://bb.other.edu/_9_1' in L && `ultraBooks:${B}:8443/_9_1` in L, 'another site\'s, or the same host on a port, stay');
+  assert.ok('ultraCopy:https://bb.other.edu/_9_1/grades' in L && `ultraCopy:${B}:8443/_9_1/grades` in L, 'and their instant copies');
   assert.deepEqual(L[`notes:${B}/_9_1`], { text: 'mine', at: 1 }, 'the student\'s own notes stay');
   assert.ok(`dueWeek:${A}` in L);
   assert.deepEqual(await w.send({ type: 'glaze:notes', key: `notes:${B}/_9_1`, text: 'x', at: 2 }, page(`${B}/ultra/course`)), denied, 'its pages are no longer trusted');

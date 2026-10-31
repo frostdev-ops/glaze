@@ -541,9 +541,10 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     };
     const me = () => (meP ||= (async () => {
       // Share the page's request and its failure gate; use this reader only when no page identity is available.
-      const [c, uid] = await Promise.all([kept(), Promise.resolve().then(() => env.me?.()).then((id) => (ID.test(id) ? id : reader().me()))]);
+      const cache = kept(), uid = await Promise.resolve().then(() => env.me?.()).then((id) => (ID.test(id) ? id : reader().me()));
       remember(uid);
-      if (c?.uid === uid) send({ type: 'glaze:ultraMine', op: 'touch', uid });
+      // The site's answer confirms identity. The worker's membership copy is optional and must not hold up a paint.
+      cache.then((c) => { if (c?.uid === uid) send({ type: 'glaze:ultraMine', op: 'touch', uid }); });
       return uid;
     })().catch((e) => { meP = null; copy = null; throw e; }));
     const mine = () => (mineP ||= (async () => {
