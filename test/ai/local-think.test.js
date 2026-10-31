@@ -289,6 +289,23 @@ test('the policy: a task the table names thinks on a fast enough tier; other tas
   assert.equal(mode(s), 'think');
 });
 
+test('writer.feedback thinks per call: decide only; explain, summary, scan and a request without a call answer directly; other tasks as before', async () => {
+  const FEEDBACK = task('writer.feedback');
+  const s = setup({ rates: FAST });
+  const asked = async (t, call) => {
+    const req = request(t, { text: 'x' });
+    await P.run('local', { ...req, task: { ...req.task, ...(call && { call }) } }, LOCAL.config({}));
+    return s.runs.at(-1).think ? 'think' : 'direct';
+  };
+  assert.equal(await asked(FEEDBACK, 'decide'), 'think');
+  assert.equal(s.runs.at(-1).think.budget, LOCAL.THINK['writer.feedback'].decide);
+  for (const call of ['explain', 'summary', 'scan', undefined, 'constructor']) assert.equal(await asked(FEEDBACK, call), 'direct', String(call));
+  assert.equal(await asked(REVIEW), 'think');
+  assert.equal(await asked(REVIEW, 'decide'), 'think', 'a task without calls keeps its own budget');
+  assert.equal(await asked(REQS), 'direct');
+  assert.deepEqual(LOCAL.THINK['writer.feedback'], { decide: 256, explain: 0, summary: 0, scan: 0 });
+});
+
 test('a stock model never thinks: its own template\'s <think></think>, however fast', async () => {
   const s = setup({ here: { 'lfm3-q4': 'ready' }, rates: { 'lfm3-q4': 500 }, reply: '{"text":"ok"}' });
   const r = await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({}));

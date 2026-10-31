@@ -182,6 +182,18 @@ test('staged feedback discovers exact requirements without a structured rubric, 
   }
 });
 
+test('each local Feedback request names its kind on its task info: scan, decide, explain, summary', async () => {
+  const input = raw(), assignment = input.context.assignment, requirement = 'Use two concrete examples.';
+  delete assignment.rubric; delete assignment.files; assignment.instructions = requirement;
+  const { cfg, result } = run(input, (req) => req.schema.properties.status ? { json: { status: 'met', quotes: catalogs(req, true).slice(0, 1).map((p) => p.id), facts: catalogs(req, false).slice(0, 6).map((p) => p.id), level: null, score: null, complete: true } }
+    : req.schema.properties.comment ? { json: { comment: 'Your draft gives two examples.' } }
+    : req.schema.properties.quotes ? { json: { quotes: JSON.parse(blocks(req).at(-1).text).map((p) => p.id), complete: true } }
+    : { json: { summary: 'Your paper gives two examples.' } }, { local: true, context: 4096, images: false });
+  assert.equal((await result).output.criteria[0]?.id, requirement);
+  assert.deepEqual(cfg.seen.map((req) => req.task), ['scan', 'decide', 'explain', 'summary'].map((call) => ({ id: 'writer.feedback', version: F.task.version, call })));
+  assert.deepEqual(cfg.seen.map((req) => req.messages[0].content[0].text.split(' ').slice(0, 2).join(' ')), ['Read this', 'Decide only', 'Explain only', 'Summarize only']);
+});
+
 test('a visual rubric request reads the image once before text-only criterion assessments', async () => {
   const input = raw(); input.context.assignment.files.push({ name: 'Diagram.png', image: { mime: 'image/png', data: 'iVBORw0KGgo=' } });
   const { cfg, result } = run(input, answer, { local: true, context: 8192, images: true });

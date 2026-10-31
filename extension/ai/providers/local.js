@@ -28,10 +28,17 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const windowOf = (m) => (m && !m.stock ? { window: TUNED, inputLimit: TUNED } : { window: CONTEXT, inputLimit: CONTEXT - CONTEXT / 10 });
   const LIMIT = { prepare: 240000 };
   // Tokens a task's request may reason in before its answer; 0 answers directly. Judgement thinks; extraction and the
-  // latency-bound calls don't.
-  const THINK = Object.freeze({ 'writer.feedback': 256, 'writer.review': 256, 'study.help': 256, 'agent.tools': 256,
+  // latency-bound calls don't. A task with calls (its requests' task.call, ai/task.js ask) has a row per call, and a request
+  // without one answers directly. writer.feedback makes a decide call per criterion, so only that one thinks: explain and
+  // summary were trained in think mode too (lfm-tune FORMAT-v2) and may be switched on here; scan, a little, also was.
+  const THINK = Object.freeze({ 'writer.feedback': Object.freeze({ decide: 256, explain: 0, summary: 0, scan: 0 }),
+    'writer.review': 256, 'study.help': 256, 'agent.tools': 256,
     'writer.complete': 0, 'writer.outline': 0, 'writer.requirements': 0, 'writer.cite': 0, 'writer.sources': 0, 'writer.decide': 0,
     'syllabus.read': 0, 'writer.image': 0 });
+  const thinkFor = (task) => {
+    const row = Object.hasOwn(THINK, task?.id || '') ? THINK[task.id] : 0;
+    return typeof row === 'number' ? row : (typeof task.call === 'string' && Object.hasOwn(row, task.call) ? row[task.call] : 0);
+  };
   // Decode tokens a second below which every task answers directly: a full budget then costs at most 256 / 40 = 6.4 s. The
   // ladder's measured machines decode 79 to 133 (ai/local/ladder.js: M5 Pro Q8_0 78.9 to RTX 3080 Ti Q4_K_M 133.2), so each
   // thinks at every tier, with room for a busier GPU; a computer near the ladder's floor (MIN_TPS 15) would wait 17 s.
@@ -89,7 +96,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   };
   // The tokens this request reasons in on model m: its task's budget, for a Glaze-tuned model this computer runs fast enough.
   const budget = async (req, m) => {
-    const b = m.stock ? 0 : THINK[req.task?.id] || 0;
+    const b = m.stock ? 0 : thinkFor(req.task);
     return b && (await known()).get(m.id) >= THINK_TPS ? b : 0;
   };
 
@@ -228,7 +235,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     return status(cfg);
   };
 
-  const provider = { id: 'local', config, caps, status, prepare, run, warm, catalog, release, remove, accept, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS,
+  const provider = { id: 'local', config, caps, status, prepare, run, warm, catalog, release, remove, accept, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
     _env: (e) => { env = e; preparing.text = preparing.pictures = null; broken = null; rates = null; measured.clear(); } };
   return P.add(provider);
 })();

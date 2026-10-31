@@ -68,8 +68,10 @@ test('think mode as trained: the host\'s force-close is FORMAT-v2\'s `\\n</think
   assert.deepEqual([...tok.encodeWith(think.close)], THINK.close);
   assert.deepEqual(THINK.close, [...tok.encode('\n'), tok.id('</think>')]);
   assert.deepEqual(think.after, [], 'the answer right after </think>');
-  assert.deepEqual(Object.keys(LOCAL.THINK).filter((t) => LOCAL.THINK[t] > 0).sort(), [...THINK.tasks].sort());
-  for (const t of THINK.tasks) assert.equal(LOCAL.THINK[t], THINK.budget, t);
+  // A task's budget, or each of its calls' (writer.feedback's): only tasks training thought on think, at its budget.
+  const budgets = (t) => (typeof LOCAL.THINK[t] === 'number' ? [LOCAL.THINK[t]] : Object.values(LOCAL.THINK[t]));
+  assert.deepEqual(Object.keys(LOCAL.THINK).filter((t) => budgets(t).some((b) => b > 0)).sort(), [...THINK.tasks].sort());
+  for (const t of THINK.tasks) assert.ok(budgets(t).every((b) => b === 0 || b === THINK.budget), t);
   assert.deepEqual(Object.keys(LOCAL.THINK).sort(), [...F.TASKS].sort(), 'one row for each task');
   assert.throws(() => F.format(requestOf(c), { dialect: 'chatml', think: true }), /think/, 'a stock model never thinks');
 });
@@ -98,7 +100,10 @@ test('the real tasks\' requests reach the local provider with their own task and
   LOCAL._env({ store: { list: async () => [{ id: 'glaze-tuned', tier: 1, size: 1, state: 'ready' }] },
     link: { kind: 'worker', up: true, call: async (op, m) => { if (op === 'run') sent.push(m.parts); return op === 'run' ? { text: '', finish: 'stop' } : {}; } }, gpu: () => ({}) });
   const provider = { ...LOCAL, run: (req, cfg, o) => { seen.push(req); return LOCAL.run(req, cfg, o); } };
-  const covered = new Set();
+  const covered = new Set(), calls = new Set();
+  // writer.feedback's kinds of request, by the system text each was trained on (lfm-tune FORMAT-v2's think data).
+  const KINDS = [['decide', 'Decide only the supplied criterion'], ['explain', 'Explain only this checked criterion decision'],
+    ['summary', 'Summarize only the checked assessments'], ['scan', 'Read this entire source chunk']];
   try {
     for (const r of inputs.runs) {
       built = []; seen = []; sent = [];
@@ -108,7 +113,9 @@ test('the real tasks\' requests reach the local provider with their own task and
         const at = `${r.name}, request ${i + 1}`, sys = sysText(req.messages[0]);
         const b = [...built].reverse().find((x) => x.user === userKey(req.messages) && sys.startsWith(x.rendered));
         assert.ok(b, `${at}: built by text.request`);
-        assert.deepEqual(req.task, { id: r.task, version: T.get(r.task).version }, at);
+        const call = r.task === 'writer.feedback' ? KINDS.find(([, start]) => b.args.system.startsWith(start))?.[0] : undefined;
+        assert.deepEqual(req.task, { id: r.task, version: T.get(r.task).version, ...(call && { call }) }, at);
+        if (r.task === 'writer.feedback') { assert.ok(call, `${at}: a Feedback request of a known kind`); calls.add(call); }
         assert.deepEqual(req.fenced, { context: (b.args.context || []).length, data: (b.args.data || []).length }, at);
         const parts = sent[i];
         assert.deepEqual(parts.slice(0, 4), [{ special: '<|startoftext|>' }, { special: '<|im_start|>' }, { text: 'system\n' }, { special: `<|gz_task:${r.task}|>` }], at);
@@ -125,6 +132,7 @@ test('the real tasks\' requests reach the local provider with their own task and
     }
   } finally { X.request = request; LOCAL._env(null); }
   assert.deepEqual([...covered].sort(), [...TRAINED].sort());
+  assert.ok(calls.size, 'Feedback\'s requests name their kind (writer-feedback-flow.test.js runs every kind)');
 });
 
 test('models.json marks the stock models; a model without `stock` (the coming fine-tune) reads Glaze\'s format', async () => {

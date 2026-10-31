@@ -390,3 +390,10 @@ test('OpenRouter Anthropic routes emit an explicit stable-block cache marker; ot
     }
   }
 });
+
+test('the harness\'s own task info (an orchestrated call\'s kind included) and fence counts never reach the server', async () => {
+  const s = server(done('{"answer":"x"}'));
+  await P.run('openai', ask({ schema: SCHEMA, task: { id: 'writer.feedback', version: 9, call: 'decide' }, fenced: { context: 0, data: 1 } }), cfg(), { fetch: s.fetch });
+  const body = s.calls[0].init.body;
+  assert.ok(!/writer\.feedback|"call"|"task"|"fenced"|decide/.test(body), body);
+});
