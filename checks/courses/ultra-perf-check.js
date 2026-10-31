@@ -29,6 +29,9 @@ const NEO_MEMORY_MB = 8192;
 // The Neo's panel is 2408×1506; macOS draws it at 2× by default. Sources disagree on the default "looks like" size, so a
 // 1280×800 window's viewport stands in for it.
 const NEO_VIEWPORT = { width: 1280, height: 800 }, NEO_SCALE = 2;
+// PERF_WIDTH: a wider window than the device's, in CSS pixels. At 1280 Glaze's sidebar is a closed drawer beside the synthetic
+// outline (its page starts at 472 px); from about 1560 it is the outline's right column, as on the owner's Mac.
+const WIDTH = Number(process.env.PERF_WIDTH) || 0;
 // Pins this process to 6 cores, so the browsers it launches inherit them; null where taskset is missing (macOS).
 const pinCores = () => { try { execFileSync('taskset', ['-a', '-cp', '0-5', String(process.pid)], { stdio: 'ignore' }); return '0-5'; } catch { return null; } };
 module.exports = { NEO_CHROME_SPEEDOMETER, NEO_CHROME_SOURCE, pinCores, stageSpeed: (...a) => stageSpeed(...a), summarize: (...a) => summarize(...a) };
@@ -88,13 +91,19 @@ function instrument(timed) {
 const rows = (kind, n) => Array.from({ length: n }, (_, i) => kind === 'outline'
   ? `<div class="content-list-item" data-content-id="_${1000 + i}_1"><h3><button id="folder-title-_${1000 + i}_1" aria-expanded="false">Folder ${i}</button></h3><span>Due: October 20, 2026</span></div>`
   : `<div class="native-row"><span>Sample ${i}</span><button>Open</button><div>Course information</div></div>`).join('');
+// The outline's right column as the owner's Course Content had it (2026-10-31, structure only, synthetic text): Faculty and
+// the schedule hidden and empty, Details & Actions there but empty until Ultra fills it (DETAILS_FILL).
+const ASIDE = '<aside class="js-course-info-skip-link-target outline-actions"><bb-course-instructors class="outline-action-block block-display top-block" style="display:none"></bb-course-instructors>'
+  + '<div class="js-details-and-actions outline-action-block"></div><bb-course-schedule class="conditional-block react-container" style="display:none"></bb-course-schedule></aside>';
+// Ms after the outline is drawn, and how many of Details & Actions' seven 33 px rows (231 px, as live) are in by then.
+const DETAILS_FILL = [[300, 2], [500, 7]];
 const routeBody = (kind) => `<section class="route-view-container ${kind === 'outline' ? 'course' : ''}"><h1 elementtiming="title">${kind}</h1>${kind === 'course'
   ? `<div class="courses-panel"><div class="course-org-list">${Array.from({ length: 24 }, (_, i) => `<article class="element-card course-element-card" data-course-id="_${101 + i}_1"><div class="course-banner"></div><div class="element-details"><h4 class="course-title"><span class="js-course-title-element">Course ${i}</span></h4><div class="course-status">Open</div></div></article>`).join('')}</div></div>`
-  : rows(kind, kind === 'outline' ? 240 : 30)}</section>`;
-const fixture = `<!doctype html><html lang="en"><head><base href="//ultra-cdn.invalid/ultra/uiv4001.0.0-rel/"><meta charset="utf-8"><title>Ultra performance fixture</title><style>body{margin:0;font:14px sans-serif}nav{position:fixed;width:200px}main{margin-left:200px}.native-row,.content-list-item{padding:4px;border-bottom:1px solid #ddd}</style></head><body><div id="site-wrap"><nav id="base_tools"><a href="/ultra/institution-page"><span>Institution Page</span></a><a href="/ultra/course">Courses</a></nav><main id="main-content"><div id="main-content-inner">${routeBody('stream')}</div></main></div><aside id="gz-perf-own"></aside></body></html>`;
+  : kind === 'outline' ? `<div class="course-content-container"><div class="course-outline-grid"><section class="course-outline-content"><div class="outline-column">${rows(kind, 240)}</div></section>${ASIDE}</div></div>` : rows(kind, 30)}</section>`;
+const fixture = `<!doctype html><html lang="en"><head><base href="//ultra-cdn.invalid/ultra/uiv4001.0.0-rel/"><meta charset="utf-8"><title>Ultra performance fixture</title><style>body{margin:0;font:14px sans-serif}nav{position:fixed;width:200px}main{margin-left:200px}.native-row,.content-list-item{padding:4px;border-bottom:1px solid #ddd}.course-outline-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;align-items:start}.outline-actions{display:flex;flex-direction:column}</style></head><body><div id="site-wrap"><nav id="base_tools"><a href="/ultra/institution-page"><span>Institution Page</span></a><a href="/ultra/course">Courses</a></nav><main id="main-content"><div id="main-content-inner">${routeBody('stream')}</div></main></div><aside id="gz-perf-own"></aside></body></html>`;
 
 async function settle(page, change) {
-  return page.evaluate(async ({ change, body }) => {
+  return page.evaluate(async ({ change, body, fill }) => {
     const start = performance.now();
     let last = start, changes = 0, held = 0;
     const mo = new MutationObserver((rs) => { last = performance.now(); changes += rs.length; });
@@ -102,6 +111,8 @@ async function settle(page, change) {
     if (['outline', 'grades', 'course'].includes(change)) {
       history.pushState({}, '', location.origin + (change === 'course' ? '/ultra/course' : `/ultra/courses/_101_1/${change}`));
       document.getElementById('main-content-inner').innerHTML = body;
+      // Ultra fills the outline's Details & Actions late, in steps.
+      if (change === 'outline') for (const [ms, n] of fill) setTimeout(() => { const d = document.querySelector('.js-details-and-actions'); if (d) d.innerHTML = Array.from({ length: n }, (_, i) => `<div style="height:33px;box-sizing:border-box">Action ${i + 1}</div>`).join(''); }, ms);
     } else if (change === 'own') {
       const own = document.getElementById('gz-perf-own');
       for (let i = 0; i < 30; i++) { own.textContent = `Widget ${i}`; await new Promise((r) => setTimeout(r, 20)); }
@@ -113,9 +124,9 @@ async function settle(page, change) {
     }
     mo.disconnect();
     return { elapsed: performance.now() - start, lastMutation: last - start, changes, held, stillHeld: !!document.querySelector('[data-gz-loading]'), longTasks: window.perfLongTasks, nodes: document.body.querySelectorAll('*').length, rows: document.querySelectorAll('.native-row, .content-list-item, .course-element-card').length,
-      ...(window.perfSpeed && { sample: document.querySelector('.content-list-item, .course-element-card, .native-row')?.outerHTML.slice(0, 1200) }),
+      ...(window.perfSpeed && { sample: document.querySelector('.content-list-item, .course-element-card, .native-row')?.outerHTML.slice(0, 1200), sidebar: document.documentElement.getAttribute('data-gz-sidebar') }),
       ...(window.perfSpeed && { window: [change ? start : 0, performance.now()] }) };
-  }, { change, body: routeBody(change) });
+  }, { change, body: routeBody(change), fill: DETAILS_FILL });
 }
 
 // PERF_SPEED: what the page observes in its own world from its first script: when Glaze's look lands on <html>
@@ -330,7 +341,7 @@ if (require.main === module) (async () => {
   if (neo) assert.ok(cpuRate >= 1, 'PERF_DEVICE=neo needs NEO_CPU_RATE (run checks/courses/neo-calibrate.js) or PERF_CPU_RATE');
   const pinned = neo ? pinCores() : null;
   const device = (speed || neo) ? { name: neo ? 'MacBook Neo' : 'runner', cpuRate, rateSource: neo ? (process.env.PERF_CPU_RATE ? 'PERF_CPU_RATE' : 'NEO_CPU_RATE') : null, runnerSpeedometer: RUNNER_SPEEDOMETER,
-    neoChromeSpeedometer: neo ? NEO_CHROME_SPEEDOMETER : null, pinned, browserCores: null, viewport: neo ? { ...NEO_VIEWPORT, scale: NEO_SCALE } : { width: 1280, height: 900, scale: 1 },
+    neoChromeSpeedometer: neo ? NEO_CHROME_SPEEDOMETER : null, pinned, browserCores: null, viewport: { ...(neo ? NEO_VIEWPORT : { width: 1280, height: 900 }), ...(WIDTH && { width: WIDTH }), scale: neo ? NEO_SCALE : 1 },
     memoryBudgetMB: neo ? NEO_MEMORY_MB : null, unthrottled: neo ? ['the extension worker', 'options.html (the driver)'] : [] } : null;
   // PERF_SPEED adds a Glaze-off control (the plain extension with enabled: false) ahead of the two usual passes.
   const passes = speed ? [{ instrumented: false, glaze: 'off' }, { instrumented: false, glaze: 'on' }, { instrumented: true, glaze: 'on' }] : [{ instrumented: false }, { instrumented: true }];
@@ -353,7 +364,7 @@ if (require.main === module) (async () => {
       const profile = path.join(scratch, instrumented ? 'instrumented-profile' : glaze === 'off' ? 'plain-off-profile' : 'plain-profile');
       await require('../../tools/dev/wait-for-browser.js')();
       context = await chromium.launchPersistentContext(profile, {
-        ...chromeLaunch, headless: true, viewport: neo ? NEO_VIEWPORT : { width: 1280, height: 900 }, ...(neo && { deviceScaleFactor: NEO_SCALE }), reducedMotion: 'reduce',
+        ...chromeLaunch, headless: true, viewport: { ...(neo ? NEO_VIEWPORT : { width: 1280, height: 900 }), ...(WIDTH && { width: WIDTH }) }, ...(neo && { deviceScaleFactor: NEO_SCALE }), reducedMotion: 'reduce',
         args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--renderer-process-limit=1', '--disable-background-networking'],
       });
       context.setDefaultTimeout(10000);
@@ -373,7 +384,12 @@ if (require.main === module) (async () => {
         blocked.push(u.href); return r.abort();
       });
       const opts = await context.newPage(); await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
-      const reset = () => opts.evaluate(async (defaults) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(defaults); await chrome.storage.local.set({ ultra: ['https://ultra.fixture.test'] }); }, glaze === 'off' ? { ...D.GZ_DEFAULTS, enabled: false } : D.GZ_DEFAULTS);
+      // What Glaze measured of the course's layout (detailsHeight:<origin>, navigation/page/sidebar.js) stays from one rep to
+      // the next: rep 0 opens the course for the first time, the later reps as a student who has opened it before.
+      const reset = () => opts.evaluate(async (defaults) => {
+        const seen = Object.fromEntries(Object.entries(await chrome.storage.local.get(null)).filter(([k]) => k.startsWith('detailsHeight:')));
+        await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(defaults); await chrome.storage.local.set({ ultra: ['https://ultra.fixture.test'], ...seen });
+      }, glaze === 'off' ? { ...D.GZ_DEFAULTS, enabled: false } : D.GZ_DEFAULTS);
       // PERF_DEVICE=neo: the Neo's CPU speed on the page and on every frame in a process of its own.
       const prepare = async (page) => {
         if (!cpuRate) return;
