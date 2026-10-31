@@ -908,6 +908,17 @@ const KNOWN = {
       { t: 'paper', k: 'new', d: 0, pick: 0.48847157787531614, pick2: 0.13594817533157766, s: 284901788 }, { t: 'sheet', k: 'edit', d: 0, pick: 0.2808572859503329, pick2: 0.7145665257703513, s: 104306932 },
       { t: 'faults', d: 0, p: 0.05, quota: false, refuse: 2 }, { t: 'sync', d: 0, on: true, s: 1838228239 }, { t: 'account', d: 0, to: 'B', s: 863251049 }],
   },
+  'staged-own-file-dropped': {
+    fixed: false,
+    tiny: true,
+    staged: true,
+    devices: 3,
+    join: [0, 1],
+    about: 'two devices each write a paper a new .docx after the old one was edited outside Glaze: the one whose copy goes second follows the other\'s file, and its own new file, its copy never sent, stays visible beside it in Glaze/ for good (found by the bar sweep, seed 9500065)',
+    skips: () => false,
+    repro: [{ t: 'paper', k: 'edit', d: 1, pick: 0.4102183519862592, pick2: 0.7268775182310492, s: 381382203 }, { t: 'run', d: 1, how: 'startup', s: 11655903 }, { t: 'paper', k: 'edit', d: 1, pick: 0.49151708907447755, pick2: 0.836380569729954, s: 262429425 },
+      { t: 'faults', d: 0, p: 0.15, quota: false, refuse: 0 }, { t: 'run', d: 0, how: 'poke', s: 1885313995 }, { t: 'drive', k: 'outsideDocx', pick: 0.6393347012344748, s: 1120477327 }, { t: 'sync', d: 0, on: true, s: 327744370 }],
+  },
   // Open, accepted by the owner: Settings written straight to storage.sync between the worker's compare and its write (a few
   // milliseconds) are written over by Drive's value. Found 2026-10-31 (seed 300933, 80 operations, 3 devices).
   'settings-cas': {
