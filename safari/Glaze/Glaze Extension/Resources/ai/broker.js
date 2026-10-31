@@ -296,11 +296,13 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
       try {
         const { task, use } = await F().wait(() => admit(m), both.signal);
         if (task.warm !== true || typeof use.p.warm !== 'function') return done(false);
+        // A connection changed while it reads the catalog ends it (revoke), as it ends a run.
+        admitted.set(control, use);
         // Built as the run's would be: for the window and model its catalog gives (sized).
         const { cfg } = sized(use, await catalog(env, use, both.signal, (env.now || Date.now)()), task);
         const req = T().prepare(task, m.input, { provider: use.p, cfg, over: over(use) });
-        done(!!req && await P().warm(use.p, req, cfg, { signal: both.signal }));
-      } catch { done(false); } finally { mine.delete(m.id); deadline.done(); both.done(); }
+        done(!!req && !both.signal.aborted && await P().warm(use.p, req, cfg, { signal: both.signal }));
+      } catch { done(false); } finally { mine.delete(m.id); admitted.delete(control); deadline.done(); both.done(); }
     };
     // Admission: → { s, task, use } or throws a code.
     const admit = async (m) => {
