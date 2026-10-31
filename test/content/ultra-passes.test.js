@@ -23,7 +23,7 @@ test('a failed startup read still completes consumers when the direct fallback t
   assert.equal(answered, true, 'settings readiness must settle even after extension reload');
 });
 
-const boot = async ({ pathname = '/ultra/stream', localGet } = {}) => {
+const boot = async ({ pathname = '/ultra/stream', localGet, byId = false, frames = null } = {}) => {
   let now = 0;
   const timers = [], styleReads = [], radiusReads = [], loads = [], localGets = [], syncGets = [], changed = [], listeners = {}, observers = [];
   class El {
@@ -37,7 +37,7 @@ const boot = async ({ pathname = '/ultra/stream', localGet } = {}) => {
     all() { return this.kids.flatMap((k) => [k, ...k.all()]); }
     setAttribute(k, v) { this.attrs.set(k, String(v)); } getAttribute(k) { return this.attrs.has(k) ? this.attrs.get(k) : null; }
     hasAttribute(k) { return this.attrs.has(k); } removeAttribute(k) { this.attrs.delete(k); } toggleAttribute(k, on) { if (on) this.attrs.set(k, ''); else this.attrs.delete(k); }
-    getAttributeNames() { return [...this.attrs.keys()]; } addEventListener() {} removeEventListener() {}
+    getAttributeNames() { return [...this.attrs.keys()]; } addEventListener(type, f) { ((this.heard ||= {})[type] ||= []).push(f); } removeEventListener() {}
     querySelector() { return null; } querySelectorAll(sel) { return sel === '*' ? this.all() : []; } getElementsByTagName(t) { return t === '*' ? this.all() : []; }
     getElementsByClassName() { return []; } closest() { return null; } matches() { return false; } contains() { return false; }
     append(...n) { for (const k of n) { k.parentElement = this; this.kids.push(k); } } appendChild(n) { this.append(n); return n; } prepend(...n) { this.append(...n); } before() {} after() {} remove() {}
@@ -51,7 +51,7 @@ const boot = async ({ pathname = '/ultra/stream', localGet } = {}) => {
   const big = tree(100), small = tree(3);
   body.append(big, small);
   const document = { contentType: 'text/html', documentElement: html, head, body, readyState: 'interactive', hidden: false, visibilityState: 'visible',
-    querySelector: () => null, querySelectorAll: (sel) => (sel === '*' ? html.all() : []), getElementById: () => null, getElementsByTagName: () => [], getElementsByClassName: () => [],
+    querySelector: () => null, querySelectorAll: (sel) => (sel === '*' ? html.all() : []), getElementById: (id) => (byId ? html.all().find((e) => e.id === id) || null : null), getElementsByTagName: () => [], getElementsByClassName: () => [],
     createElement: (t) => new El(t), createElementNS: (_, t) => new El(t), createTextNode: () => new El('#text'),
     createTreeWalker: () => ({ nextNode: () => null }), createRange: () => ({ selectNodeContents() {}, getBoundingClientRect: () => ({}) }),
     addEventListener: (type, f) => (listeners[type] ||= []).push(f), removeEventListener() {}, fonts: { load: () => Promise.resolve([]), add() {} } };
@@ -65,7 +65,7 @@ const boot = async ({ pathname = '/ultra/stream', localGet } = {}) => {
     MutationObserver: class { constructor(f) { this.f = f; } observe(target, o) { observers.push({ f: this.f, target, o }); } disconnect() {} takeRecords() { return []; } },
     IntersectionObserver: class { observe() {} unobserve() {} disconnect() {} }, PerformanceObserver: class { observe() {} },
     addEventListener() {}, removeEventListener() {}, postMessage() {}, open() {},
-    setTimeout: (f, ms = 0) => { timers.push({ f, at: now + ms }); return timers.length; }, clearTimeout() {}, setInterval: () => 1, clearInterval() {}, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
+    setTimeout: (f, ms = 0) => { timers.push({ f, at: now + ms }); return timers.length; }, clearTimeout() {}, setInterval: () => 1, clearInterval() {}, requestAnimationFrame: (f) => (frames ? frames.push(f) : 1), cancelAnimationFrame() {},
     performance: { now: () => now }, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} }, innerHeight: 900, innerWidth: 1400,
     fetch: () => Promise.reject(new Error('offline')),
     chrome: { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://glaze/${p}`, lastError: undefined, getManifest: () => ({}),
@@ -272,4 +272,16 @@ test('the due-list memo expires in an open document', async () => {
   const n = calls; now += 120001;
   await p.c.GZ_CTX.dueWeek();
   assert.ok(calls > n, 'a failed or cached answer does not live forever');
+});
+
+test("Glaze's footer waits for its stylesheet: in before it, it sat after the page and then jumped into view", async () => {
+  const p = await boot({ byId: true });
+  const footers = () => p.body.kids.filter((e) => e.id === 'gz-footer');
+  const theme = p.html.all().find((e) => e.tagName === 'LINK' && e.href.endsWith('content/theme.css'));
+  assert.ok(theme, 'the theme sheet is on the page');
+  assert.equal(footers().length, 0, 'no footer while its sheet is still loading');
+  theme.sheet = {};
+  for (const f of theme.heard?.load || []) f({ type: 'load' });
+  await p.wait(200);
+  assert.equal(footers().length, 1, 'the footer once its sheet is in');
 });
