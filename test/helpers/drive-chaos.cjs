@@ -909,7 +909,7 @@ const KNOWN = {
       { t: 'faults', d: 0, p: 0.05, quota: false, refuse: 2 }, { t: 'sync', d: 0, on: true, s: 1838228239 }, { t: 'account', d: 0, to: 'B', s: 863251049 }],
   },
   'staged-own-file-dropped': {
-    fixed: false,
+    fixed: true,
     tiny: true,
     staged: true,
     devices: 3,
