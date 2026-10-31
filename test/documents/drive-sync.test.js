@@ -1431,3 +1431,27 @@ test('a document restored from Drive\'s trash whose file was deleted there for g
   assert.ok(!P.trashed(await a.papers.get(key)), 'an edit afterwards leaves it out of Trash');
   noDeletes(drive);
 });
+
+test('a device whose download stopped before its link was kept meets the document again when another device trashes it', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-000000000a18';
+  assert.ok((await a.sync.set(true)).ok); assert.ok((await b.sync.set(true)).ok);
+  await a.papers.save(key, { doc: doc('Shared'), title: 'Shared', named: true });
+  await a.sync.touched(key); await a.fire();
+  // B takes the paper, and its worker stops right after that write, before the paper's link is kept.
+  const save = b.env.papers.save;
+  b.env.papers.save = async (k, patch, o) => { const out = await save(k, patch, o); b.env.papers.save = save; throw Object.assign(new Error('stopped'), { why: 'network' }); };
+  clock.t += 60e3;
+  assert.equal((await b.sync.run()).ok, false);
+  assert.ok(await b.papers.get(key), 'B holds it, unlinked');
+  await a.papers.trash(key);
+  await a.sync.touched(key); await a.fire();
+  clock.t = (await state(b)).wait + 1;
+  assert.ok((await b.sync.run()).ok);
+  assert.ok((await a.sync.run()).ok);
+  assert.ok((await b.sync.run()).ok);
+  const ta = P.trashed(await a.papers.get(key)), tb = P.trashed(await b.papers.get(key));
+  assert.equal(ta, tb, 'both devices hold it the same way');
+  assert.equal(!!sidecarOf(drive, key).meta.explicitlyTrashed, ta, 'and so does Drive');
+  noDeletes(drive);
+});
