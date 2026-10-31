@@ -376,7 +376,9 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         || !Number.isFinite(j.at) || (j.deleted !== true && j.value === undefined)) throw new Fail('bad');
       const value = j.deleted === true ? undefined : (env.clean || clean)(j.cat, j.key, j.value);
       if (j.deleted !== true && value === undefined) throw new Fail('bad');
-      return { area: j.area, key: j.key, cat: j.cat, at: j.at, value, sum: R.appProperties?.sum };
+      // Its sum from what came, as its writer summed it, never from the metadata it was asked by: a change page read before
+      // this device's own write since names the file as it was then.
+      return { area: j.area, key: j.key, cat: j.cat, at: j.at, value, sum: await sumOf(j.area, j.key, j.deleted === true ? undefined : j.value) };
     };
     // Drive's value here: written (or removed, for a tombstone) as this layer's own, at its time. o.pending: a merge of both
     // sides on its way up (meet), kept dirty here until it lands.
