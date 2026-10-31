@@ -91,6 +91,7 @@ NEW IN 4.0.1
 • Attach from Documents adds your documents to a Blackboard Ultra assignment's submission. Workbooks from .xlsm export and submit as .xlsm.
 • Canvas: Open in Glaze on PDF, slide and spreadsheet files. Slides get Print with notes…, and Documents cards show a spreadsheet's charts.
 • Writer's Feedback answers in your draft's language, and its citation comments and checks work in all six languages.
+• When one of Feedback's comments fails its checks, Writer shows the rubric rating it checked instead of withholding the grade.
 • Firefox: Google Drive (Settings › Writer › Papers) opens, saves, attaches and syncs your documents. Off until you connect.
 • Firefox: a site whose access you took back is no longer retried.
 • Chrome: Google Calendar sync (Settings › Sharing) keeps a calendar named Glaze in your Google account up to date, and Google Drive (Settings › Writer › Papers) opens, saves, attaches and syncs your documents. Both stay off until you connect.

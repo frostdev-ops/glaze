@@ -83,6 +83,7 @@ NEU IN 4.0.1
 • Aus Dokumenten anhängen fügt deine Dokumente der Abgabe einer Aufgabe in Blackboard Ultra hinzu. Arbeitsmappen aus .xlsm werden als .xlsm exportiert und abgegeben.
 • Canvas: In Glaze öffnen bei PDF-, Folien- und Tabellendateien. Folien bekommen Mit Notizen drucken…, und die Karten unter Dokumente zeigen die Diagramme einer Tabelle.
 • Das Feedback von Writer antwortet in der Sprache deines Entwurfs, und seine Zitierhinweise und -prüfungen funktionieren in allen sechs Sprachen.
+• Besteht ein Kommentar des Feedbacks seine Prüfungen nicht, zeigt Writer die geprüfte Bewertung nach dem Bewertungsraster, statt die Note zurückzuhalten.
 • Firefox: Google Drive (Einstellungen › Writer › Arbeiten) öffnet, speichert, hängt an und synchronisiert deine Dokumente. Aus, bis du dich verbindest.
 • Firefox: Eine Website, der du den Zugriff entzogen hast, wird nicht mehr erneut angefragt.
 • Chrome: Google Kalender-Synchronisierung (Einstellungen › Teilen) hält einen Kalender namens Glaze in deinem Google-Konto aktuell, und Google Drive (Einstellungen › Writer › Arbeiten) öffnet, speichert, hängt an und synchronisiert deine Dokumente. Beides bleibt aus, bis du dich verbindest.
