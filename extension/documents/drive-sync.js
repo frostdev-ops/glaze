@@ -550,10 +550,15 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       }
       const named = E;
       if (d && E && E.id !== d.file) E = undefined;
-      if (R === undefined) R = d?.json ? await meta(d.json) : !lt && l ? await lookup(h, folder) : null;
-      // This device's first push stopped before its copy went, and another device's copy is there: a first meeting, this
-      // device's file put away as a losing copy's is.
-      if (d && !d.json && R) { gone = d; await away([gone.file], h); await dropDoc(h, d); d = null; }
+      if (R === undefined) R = d?.json ? await meta(d.json) : d || (!lt && l) ? await lookup(h, folder) : null;
+      // This device's first push stopped before its copy's answer came (its file recorded): a copy naming that file is its own,
+      // as Drive took it, and linked so; another device's is met as a first meeting, this device's file put away as a losing
+      // copy's is.
+      if (d && !d.json && R && !R.removed) {
+        const j = await readCopy(R, h, key, owner);
+        if (j.file && j.file === d.file) d = await putDoc(h, { ...d, json: R.id, jh: R.headRevisionId || null, rsum: j.sum, lsum: j.sum === d.fsum ? j.sum : null, rev: -1 }, d);
+        else { gone = d; await away([gone.file], h); await dropDoc(h, d); d = null; }
+      }
       // This device's copy moved out of the Glaze folder (put away by the device whose copy it was, as above, or moved by
       // the student): no longer the document's; the folder's copy is, met as a first meeting, or this device's goes up anew.
       if (d && R && !R.removed && R.id === d.json && Array.isArray(R.parents) && !R.parents.includes(folder)) {
