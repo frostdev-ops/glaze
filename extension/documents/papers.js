@@ -237,6 +237,8 @@
     // ---- state
     // Text is bounded by characters, thumbnails by count (including those held in a detached card). Search retains each
     // row's match separately, so evicting text never removes a result. Epochs reject reads started before a stored edit.
+    // tooLarge: documents Sync to Google Drive leaves on this device (documents/drive-sync.js driveSyncLarge), while it is on.
+    let tooLarge = new Set();
     let rows = [], view = 'grid', sortBy = 'updated', course = 'all', kind = '', words = [], shown = [], current = null, focusNext = null, seq = 0;
     try { if (localStorage.getItem(VIEW) === 'list') view = 'list'; } catch { /* storage can be unavailable */ }
     let active = true, life = 0, textSize = 0;
@@ -290,8 +292,9 @@
         const link = h('a', { class: 'gd-title', id, href: `papers.html?${k.param}=${encodeURIComponent(r.key)}`, tabindex: '-1' });
         const more = btn({ class: 'gd-more', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': t('More'), 'aria-describedby': id, title: t('More'), tabindex: '-1' }, icon('dots'));
         const pic = h('div', { class: 'gd-pic', 'data-key': r.key }), meta = h('p', { class: 'gd-meta' }), badge = h('span', { class: 'gd-badge', text: t('Submitted'), hidden: true });
-        const el = h('li', { class: 'gd-card', 'data-key': r.key }, pic, h('div', { class: 'gd-info' }, icon(k.icon, 'gd-kind'), h('div', { class: 'gd-text' }, link, meta), badge, more));
-        c = { el, link, more, pic, meta, badge, row: r, title: null, metaText: null };
+        const large = h('p', { class: 'gd-large', text: t('Too large to sync'), hidden: true });
+        const el = h('li', { class: 'gd-card', 'data-key': r.key }, pic, h('div', { class: 'gd-info' }, icon(k.icon, 'gd-kind'), h('div', { class: 'gd-text' }, link, meta, large), badge, more));
+        c = { el, link, more, pic, meta, badge, large, row: r, title: null, metaText: null };
         cards.set(r.key, c);
         const th = thumbs.get(r.key);
         if (th?.el) pic.append(th.el);
@@ -302,6 +305,7 @@
       if (c.title !== title && !(renaming?.k === r.key)) { c.title = title; c.link.textContent = title; }
       if (c.metaText !== m) { c.metaText = m; c.meta.textContent = m; }
       c.badge.hidden = !r.submitted;
+      c.large.hidden = !tooLarge.has(r.key);
       return c.el;
     };
     // The choices the rows hold: their courses (the filter shows once one has a course) and kinds (once there are two).
@@ -374,6 +378,8 @@
         do {
           again = false;
           rows = await st.list();
+          const s = await chrome.storage.local.get(['driveSync', 'driveSyncLarge']);
+          tooLarge = new Set(s.driveSync?.on === true ? Object.keys(s.driveSyncLarge?.docs || {}) : []);
           for (const k of gone) if (!rows.some((r) => r.key === k)) gone.delete(k);
           for (const [k, into] of moving) { const r = rows.find((x) => x.key === k); if (!r || PA.trashed(r) === into) moving.delete(k); }
           render();
@@ -434,7 +440,8 @@
       if (area !== 'local' || !active) return;
       for (const [name, ch] of Object.entries(changes)) if (name.startsWith(PAPER)) stale(name.slice(PAPER.length), ch.newValue);
       if (words.length) gen++;
-      if (INDEX in changes || (words.length && Object.keys(changes).some((n) => n.startsWith(PAPER)))) refresh();
+      const sync = changes.driveSync && changes.driveSync.oldValue?.on !== changes.driveSync.newValue?.on;
+      if (INDEX in changes || sync || 'driveSyncLarge' in changes || (words.length && Object.keys(changes).some((n) => n.startsWith(PAPER)))) refresh();
     };
     chrome.storage.onChanged.addListener(changed);
     addEventListener('pagehide', () => { active = false; life++; gen++; io.disconnect(); near.clear(); closeMenu(); dismiss(); chrome.storage.onChanged.removeListener(changed); });

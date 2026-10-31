@@ -7,9 +7,9 @@
 //   Glaze/Data (another device's dictionary joined with this one's), a snapshot zip in Glaze/Backups; the line says when it
 //   last synced. A Settings change goes up 5 s after.
 //   Another device's change comes in when Documents opens; a document trashed in Glaze goes to Drive's trash 5 s after;
-//   one edited on both sides keeps Drive's as a version; a PDF larger than one request goes up in chunks through a resumable
-//   session (Drive answering 308 with what it holds, under the worker's redirect: 'error') and another device's comes down by
-//   ranges into the worker's stage; Off sends nothing more. No cookie, no token in storage, nothing deleted, no other host.
+//   one edited on both sides keeps Drive's as a version; a PDF larger than one request stays on this device, Documents marking
+//   it "Too large to sync" and Settings counting it, with nothing of it sent or staged, and another device's is never brought
+//   (4.0.1: large items sync from 4.0.2); Off sends nothing more. No cookie, no token in storage, nothing deleted, no other host.
 //   NODE_PATH=<installed playwright> nice node checks/documents/drive-sync-check.js [evidence directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
@@ -183,20 +183,28 @@ const fileOf = (key, role) => [...drive.files.values()].find((f) => f.meta.appPr
     await until(async () => fileOf(sheet, 'doc').meta.explicitlyTrashed && fileOf(sheet, 'file').meta.explicitlyTrashed, 'both files in Drive\'s trash', 20000);
     ok(drive.log.every((x) => x.method !== 'DELETE'), 'nothing deleted for good');
 
-    // ---- larger than one request: up in chunks (a 308 with Drive's Range after each but the last), another device's down by
-    // ranges, each applied once whole
+    // ---- larger than one request (4.0.1): stays here, marked on its card and counted in Settings, nothing of it sent or
+    // staged; another device's is never brought
     const BIG = 12 << 20, big = 'doc:00000000-0000-4000-8000-00000000c004', mine = crypto.randomBytes(BIG);
     let at = drive.log.length;
     await sw.evaluate(async ({ k, b64 }) => {
       const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)), ref = await openDocFiles().put(bytes, 'application/pdf');
       await openPapers().save(k, { kind: 'pdf', file: ref, size: ref.size, pages: 1, title: 'Big reader', named: true });
     }, { k: big, b64: mine.toString('base64') });
-    await until(async () => fileOf(big, 'doc') && fileOf(big, 'file')?.bytes.equals(mine), 'the 12 MB PDF in Drive, whole, and its JSON copy', 60000);
-    const sent = drive.log.slice(at).filter((x) => x.chunk && !x.chunk.status);
-    ok(sent.length >= 2 && sent[0].chunk.from === 0 && (sent[0].chunk.to + 1) % (256 << 10) === 0 && sent.at(-1).chunk.to === BIG - 1 && sent.every((x, i) => !i || x.chunk.from === sent[i - 1].chunk.to + 1),
-      `up in 256 KiB-multiple chunks, each from where Drive's 308 said (${sent.map((x) => `${x.chunk.from}-${x.chunk.to}`).join(', ')})`);
-    ok(JSON.parse(fileOf(big, 'doc').bytes.toString('utf8')).file === fileOf(big, 'file').meta.id, 'its JSON copy names it');
-    ok(JSON.stringify(await local('driveSyncMoves') || {}) === '{}', 'nothing left on its way');
+    await until(async () => !!(await local('driveSyncLarge'))?.docs?.[big], 'the 12 MB PDF marked too large to sync', 30000);
+    ok(!fileOf(big, 'doc') && !fileOf(big, 'file'), 'nothing of it in Drive');
+    ok(drive.log.slice(at).every((x) => !(x.size > 5 << 20) && x.query?.uploadType !== 'resumable' && !x.chunk), 'no upload past one request, no resumable session');
+    ok(JSON.stringify(await local('driveSyncMoves') || {}) === '{}', 'nothing staged');
+    ok(!!(await local(`writerPaper:${big}`)) && !(await local(`writerPaper:${big}`)).trashed, 'it stays here, live');
+    await home.bringToFront();
+    const mark = home.locator(`.gd-card[data-key="${big}"] .gd-large`);
+    await until(async () => (await mark.count()) === 1 && await mark.isVisible(), 'Documents marks it', 15000);
+    ok((await mark.textContent()) === 'Too large to sync', `Documents marks it "${await mark.textContent()}"`);
+    ok(await home.locator('.gd-large:visible').count() === 1, 'and only it');
+    await home.screenshot({ path: path.join(out, 'sync-3-too-large.png') });
+    await settings.bringToFront();
+    await until(async () => (await said.textContent()).includes('1 item is too large to sync.'), 'Settings counts it', 15000);
+    await settings.screenshot({ path: path.join(out, 'sync-3-settings.png') });
     const atlas = 'doc:00000000-0000-4000-8000-00000000c005', theirs = crypto.randomBytes(BIG), hash = crypto.createHash('sha256').update(theirs).digest('hex');
     const record = { kind: 'pdf', title: 'Atlas', named: true, pages: 1, size: BIG, file: { hash, size: BIG, type: 'application/pdf' } }, sum = sha(canon({ key: atlas, kind: 'pdf', record }));
     const theirFile = drive.seed({ name: 'Atlas.pdf', mimeType: 'application/pdf', parents: [folder.meta.id], appProperties: { glaze: 'file', key: tag(atlas), sum } }, theirs);
@@ -204,10 +212,9 @@ const fileOf = (key, role) => [...drive.files.values()].find((f) => f.meta.appPr
       JSON.stringify({ glaze: 'document', v: 1, key: atlas, kind: 'pdf', record, file: theirFile.meta.id, fileRev: theirFile.meta.headRevisionId, updated: 1 }));
     at = drive.log.length;
     ok((await sw.evaluate(() => openDriveSync().run()))?.ok === true, 'a run hears of another device\'s 12 MB PDF');
-    ok((await local(`writerPaper:${atlas}`))?.file?.hash === hash && await sw.evaluate((h) => openDocFiles().stat(h).then((f) => f?.size), hash) === BIG, 'it comes in whole, its bytes in the file store');
-    const read = drive.log.slice(at).filter((x) => x.range);
-    ok(read.length >= 2 && read[0].range.from === 0 && read.every((x, i) => !i || x.range.from === read[i - 1].range.to + 1), `by ranges (${read.map((x) => `${x.range.from}-${x.range.to}`).join(', ')})`);
-    ok(JSON.stringify(await local('driveSyncMoves') || {}) === '{}', 'its stage let go');
+    ok(!(await local(`writerPaper:${atlas}`)), 'it never comes here');
+    ok(!drive.log.slice(at).some((x) => x.path.endsWith(theirFile.meta.id) && x.query?.alt === 'media'), 'its bytes never asked for');
+    ok(JSON.stringify(await local('driveSyncMoves') || {}) === '{}', 'nothing staged');
 
     // ---- Off: nothing more
     await box.click();
