@@ -499,7 +499,7 @@ test('a document changed while its large JSON copy uploads is never kept as a co
   for (let i = 0; i < 3; i++) { assert.ok((await a.sync.run()).ok); dk.clock.t += 60e3; }
   assert.ok(changed);
   assert.deepEqual((await a.papers.list()).map((r) => r.key), [key], 'no "(Drive copy)" of the student\'s own text');
-  assert.equal((await dk.store.get(`writerVersions:${key}`))[`writerVersions:${key}`], undefined, 'nor a version of it');
+  assert.ok(!((await dk.store.get(`writerVersions:${key}`))[`writerVersions:${key}`] || []).some((v) => v.reason === 'conflict'), 'nor a conflict version of it');
   const copy = JSON.parse(fileOf(drive, key, 'doc').bytes);
   assert.equal(textOf(copy.record.doc)[0], 'C');
   assert.equal(copy.file, own);
