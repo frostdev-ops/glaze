@@ -394,7 +394,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         if (ldirty && (await sumOf(key, l)) === got.sum) { await agreed(key, h, R, got, l, d); return; }
         // Then this device's goes up as a change of its own, into the file Drive's copy names (another device may have left
         // the one this device knew) and as that file stands (edited outside Glaze since: kept as it is).
-        if (ldirty) { await keepOther(key, l, got); await kept(h, { ...d, file: got.file, fh: got.fileRev, fsum: got.sum }, R); return sync(key, h, { folder }); }
+        if (ldirty) { await keepOther(key, l, got); await kept(h, { ...d, ...(got.file && { file: got.file, fh: got.fileRev, fsum: got.sum }) }, R); return sync(key, h, { folder }); }
         const now2 = await take(key, l, got);
         if (force || got.external) return push(key, h, now2, { ...d, json: R.id }, folder);
         await agreed(key, h, R, got, now2, d);
