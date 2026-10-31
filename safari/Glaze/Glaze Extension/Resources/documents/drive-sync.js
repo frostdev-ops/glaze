@@ -51,8 +51,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
   const STRIP = ['key', 'revision', 'titled', 'edited', 'lastVersion', 'parts', 'partDrops', 'drive', 'trashed', 'updated'];
   // copy: how long a file that moved on waits for its JSON copy (tries, or ms since first seen) before it stands alone.
   // again: how long after a full pass the next run lists the documents once more (Drive's search may not show a file made just
-  // before the pass's page token yet, and its change came before that token).
-  const WAIT = { push: 5000, pull: 30e3, retry: [1000, 2000, 4000, 8000, 16000], run: 60e3, most: 3600e3, copy: { tries: 3, ms: 10 * 60e3 }, again: 60e3 };
+  // before the pass's page token yet, and its change came before that token). lag: how long a new file whose upload's answer
+  // never came may stay out of Drive's search before another is made.
+  const WAIT = { push: 5000, pull: 30e3, retry: [1000, 2000, 4000, 8000, 16000], run: 60e3, most: 3600e3, copy: { tries: 3, ms: 10 * 60e3 }, again: 60e3, lag: 60e3 };
   const MAX_JSON = 64e6;
   // Larger than this, a transfer waits for the run's last step (documents/drive.js SMALL: an upload past it goes resumable);
   // the stage keeps its bytes in pieces of up to PIECE, each at its offset.
@@ -438,6 +439,11 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       return w.n >= WAIT.copy.tries || now() - w.since >= WAIT.copy.ms;
     });
     const unwait = (h) => held('waiting', async () => { const m = (await S.get(WAITING))[WAITING]; if (m?.[h]) { delete m[h]; await S.set({ [WAITING]: m }); } });
+    // A new file's upload under way for h (driveSyncWaiting 'up:<h>' until its answer comes): a push that finds no file by its
+    // tag afterwards waits for Drive's search before making another.
+    const uploading = (h) => held('waiting', async () => { const m = (await S.get(WAITING))[WAITING] || {}; if (!m[`up:${h}`]) { m[`up:${h}`] = { n: 0, since: now() }; await S.set({ [WAITING]: m }); } });
+    // A Glaze file whose bytes are still the ones Glaze wrote on it (b, against Drive's checksum).
+    const unchanged = (F) => !!F?.appProperties?.b && String(F.sha256Checksum || '').toLowerCase() === F.appProperties.b;
     // Drive's side written here as the document's current state. → the record and its parts as written.
     const take = async (key, l, got) => {
       const { paper } = await env.papers.save(key, got.record, { reason: l && kindOf(l.rec) !== got.kind ? 'import' : 'auto', base: l ? l.rec.revision || 0 : 0, expectedRevision: l?.rec.revision || 0, rename: true,
@@ -496,19 +502,28 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       // Drive's answer never came), written into only while it is as Glaze wrote it: its head revision the one recorded, or,
       // found by its tag, its bytes' SHA-256 the one Glaze wrote on it (b). One edited outside Glaze since, or in Drive's
       // trash, is kept as it is, and a new file goes beside it; a second one as Glaze wrote it is put away as a losing copy's.
+      // Found by its tag in Drive's trash too: one as Glaze wrote it is put away (the student restoring it later finds it in
+      // Glaze/Data, never a second file beside the document's), one edited outside Glaze kept as it is.
       if ((ex || onWay) && (!file || !d?.json)) {
-        const found = file ? [await meta(file)] : (await D((c) => c.find(`'${folder}' in parents and appProperties has { key='key' and value='${h}' } and appProperties has { key='glaze' and value='file' } and trashed=false`, { pageSize: 10 })))
+        const found = file ? [await meta(file)] : (await D((c) => c.find(`'${folder}' in parents and appProperties has { key='key' and value='${h}' } and appProperties has { key='glaze' and value='file' }`, { pageSize: 10 })))
           .files.filter((f) => f.appProperties?.key === h && f.appProperties?.glaze === 'file').sort(byId);
         file = null; fh = null;
         for (const F of found) {
           if (F.removed || F.appProperties?.glaze !== 'file' || F.appProperties?.key !== h) continue;
-          const same = F.trashed === false && (F.id === d?.file ? !!F.headRevisionId && F.headRevisionId === d.fh : !!F.appProperties.b && String(F.sha256Checksum || '').toLowerCase() === F.appProperties.b);
+          const glazes = F.id === d?.file ? !!F.headRevisionId && F.headRevisionId === d.fh : unchanged(F), same = F.trashed === false && glazes;
           if (same && !file) { file = F.id; fh = F.headRevisionId || null; }
-          else if (same) await putAway(F.id, folder);
+          else if (glazes) await putAway(F.id, folder);
           else await D((c) => c.patch(F.id, { appProperties: { glaze: 'kept', sum: null } }));
         }
+        // Nothing found at all, though a new file's upload went less than WAIT.lag ago (its answer never came): Drive's search may
+        // not show it yet, so no second file is made beside it until then.
+        const went = !found.length && (await S.get(WAITING))[WAITING]?.[`up:${h}`];
+        if (went && now() - (went.since || 0) < WAIT.lag) throw new Fail('stale');
+        // Past it, a new file is made, and the folder is listed once more a minute later for the first, should it show then.
+        if (went) { const st = await state(); if (!st.again || st.again > now() + WAIT.again) await setState({ again: now() + WAIT.again }); }
       }
       if (ex || onWay) {
+        if (!file) await uploading(h);
         const r = await up(`u:${h}:file`, sum, d?.file || d?.json ? file : undefined, async () => {
           ex ||= await env.exportOf(key, l.rec, l.parts);
           if (!ex) return null;
@@ -517,6 +532,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         }, owner);
         if (r) {
           file = r.file.id; fh = r.file.headRevisionId || null;
+          await unwait(`up:${h}`);
           // Recorded before the copy goes: a push that stops between the two meets this file's revision next time, so an edit
           // made outside Glaze meanwhile is told from Glaze's own.
           await putDoc(h, { ...(d || { key, h, kind, json: null, jh: null, rsum: null, lsum: null, rev: -1, trashed: false }), file, fh, fsum: sum }, d);
@@ -632,7 +648,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         if (lost) got.external = true; // sent up again below, with a file of its own
         if (gone?.file) { if (gone.file !== got.file) await putAway(gone.file, folder); await away([gone.file], null); }
         const source = { ...restore, json: R.id, file: got.file, fh: got.fileRev, fsum: got.sum };
-        if (!l) { const now2 = await take(got.key, null, got); if (got.external) return push(got.key, h, now2, source, folder); await agreed(got.key, h, R, got, now2, null); return; }
+        // Marked before it is written: a worker stopped before its link lands meets it again on the next run, never leaving a
+        // document here that no run goes back to.
+        if (!l) { await mark(got.key); const now2 = await take(got.key, null, got); if (got.external) return push(got.key, h, now2, source, folder); await agreed(got.key, h, R, got, now2, null); return; }
         if ((await sumOf(key, l)) !== got.sum) {
           // Both hold it, as with Restore: the later edited stays current, the other kept beside it (a PDF: both documents).
           if (got.kind !== 'pdf' && got.kind === kindOf(l.rec) && got.updated > (l.rec.updated || 0)
@@ -694,6 +712,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (lt !== was && there !== undefined) to = lt && there;
       else if (lt !== was) to = lt;
       else if (there !== undefined) to = there;
+      // Out of Trash here because Drive's side came back (restored wins): its content is weighed as at a first meeting below.
+      const revived = lt && !to;
       if (to !== was || (rt !== null && rt !== to) || (et !== null && et !== to)) {
         if (to !== lt) await (to ? env.papers.trash(key) : env.papers.untrash(key));
         // Into Drive's trash the copy first, out of it the file first: a device meeting the document between the two moves
@@ -732,7 +752,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         await mark(key);
         d = await tagKept(h, await putDoc(h, { ...d, file: null, fh: null, fsum: null, keep: d.file }, d));
         force = true;
-      } else if (E && !E.removed && E.id === d.file && E.appProperties?.glaze !== 'file') {
+      } else if (E && !E.removed && E.id === d.file && (E.appProperties?.glaze !== 'file' || (Array.isArray(E.parents) && !E.parents.includes(folder)))) {
         // One another device kept so (or anything else no longer Glaze's file): never written again.
         await putDoc(h, { ...d, file: null, fh: null, fsum: null }, d);
         Object.assign(d, { file: null, fh: null, fsum: null });
@@ -745,14 +765,22 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         // the file it names is no longer this document's Glaze file as that copy wrote it (let go above as edited outside
         // Glaze): then a file of its own goes up.
         if (ldirty && (await sumOf(key, l)) === got.sum) {
-          if (!force || !got.file || got.external || await adopt(got, h)) { await agreed(key, h, R, got, l, d); return; }
+          if (!force || !got.file || got.external || await adopt(got, h, folder)) { await agreed(key, h, R, got, l, d); return; }
           return push(key, h, l, { ...d, json: R.id }, folder);
         }
         // Then this device's goes up as a change of its own, into the file Drive's copy names (another device may have left
         // the one this device knew) and as that file stands (edited outside Glaze since: kept as it is).
         if (ldirty) { await keepOther(key, l, got); await kept(h, { ...d, ...(got.file && { file: got.file, fh: got.fileRev, fsum: got.sum }) }, R); return sync(key, h, { folder }); }
+        // Brought back from Trash here by Drive's side, which holds an older edit than this device's (another device back on its
+        // account sending its own older copy up, say): never taken over this one. Both kept, this device's current and sent
+        // up, Drive's beside it, as at a first meeting.
+        if (revived && got.updated < (l.rec.updated || 0) && (await sumOf(key, l)) !== got.sum) {
+          await keepOther(key, l, got);
+          await kept(h, { ...d, ...(got.file && { file: got.file, fh: got.fileRev, fsum: got.sum }), lsum: null, rev: -1 }, R);
+          return sync(key, h, { folder });
+        }
         const now2 = await take(key, l, got);
-        if (force && got.file && !got.external && await adopt(got, h)) { await agreed(key, h, R, got, now2, d); return; }
+        if (force && got.file && !got.external && await adopt(got, h, folder)) { await agreed(key, h, R, got, now2, d); return; }
         if (force || got.external) return push(key, h, now2, { ...d, json: R.id }, folder);
         await agreed(key, h, R, got, now2, d);
         return;
@@ -766,9 +794,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // No Glaze file of its own here (none yet, or the one it had is no longer Glaze's): the one Drive's copy names, while it is
     // still this document's Glaze file and not edited outside Glaze since that copy was written. Never a new one beside it.
     // One edited outside since is kept as it is, and a new one goes up. → whether it is the document's
-    const adopt = async (got, h) => {
+    const adopt = async (got, h, folder) => {
       const F = await meta(got.file);
-      const ours = !F.removed && F.trashed === false && F.appProperties?.glaze === 'file' && F.appProperties?.key === h;
+      const ours = !F.removed && F.trashed === false && F.appProperties?.glaze === 'file' && F.appProperties?.key === h && (!Array.isArray(F.parents) || F.parents.includes(folder));
       const outside = !!F.headRevisionId && F.headRevisionId !== got.fileRev && (F.appProperties?.sum === got.sum || rewritten(F));
       if (ours && !outside) return true;
       if (ours && !FILES.includes(got.kind)) await D((c) => c.patch(got.file, { appProperties: { glaze: 'kept', sum: null } }));
@@ -892,6 +920,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       // One only Drive holds, in its trash and never linked here: nothing to meet (each device's own were met above).
       for (const [h, R] of remote) if (!seen.has(h)) { seen.add(h); const d = await docOf(h); if (d || !R.trashed) await one(null, h, { R, E: await E(d), folder, files: own }); }
       for (const k of (await S.keys()).filter((x) => x.startsWith(DOC))) if (!seen.has(k.slice(DOC.length))) await one(null, k.slice(DOC.length), { E: await E(await docOf(k.slice(DOC.length))), folder, files: own });
+      for (const F of own.values()) await held(`doc:${F.appProperties?.key}`, () => stray(F, folder));
       for (const [k, n] of Object.entries(dirt)) if (!waiting.has(k)) await unmark(k, n);
       if (more) await more.full(hooks(folder));
       await setState({ token, again: now() + WAIT.again });
@@ -901,7 +930,30 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // already is passed over.
     const recheck = async (folder) => {
       for (const [h, R] of await copies(folder)) { const d = await docOf(h); if (d ? d.json !== R.id : !R.trashed) await one(null, h, { R, folder }); }
+      for (const F of await owns(folder)) await stray(F, folder);
       await setState({ again: 0 });
+    };
+    // Every document's own file in the folder, in Drive's trash too.
+    const owns = async (folder) => {
+      const out = [];
+      let page = null;
+      do {
+        const r = await D((c) => c.find(`'${folder}' in parents and appProperties has { key='glaze' and value='file' }`, { pageToken: page }));
+        out.push(...r.files);
+        page = r.nextPageToken || null;
+      } while (page);
+      return out;
+    };
+    // A Glaze file of a document beside the one its copy names (an upload whose answer never came while Drive's search didn't
+    // show it, an old file the student restored from Drive's trash): while the copy is the one this device agreed with, as
+    // Glaze wrote it it is put away in Glaze/Data (a losing copy's), and edited outside Glaze it is kept as it is.
+    const stray = async (F, folder) => {
+      const h = F?.appProperties?.key, d = HASH.test(h || '') ? await docOf(h) : null;
+      if (!d?.json || !d.file || F.id === d.file || F.removed || F.trashed !== false || F.appProperties?.glaze !== 'file' || !(F.parents || []).includes(folder)) return;
+      const R = await meta(d.json);
+      if (R.removed || R.trashed !== false || R.appProperties?.sum !== d.rsum || (d.jh && R.headRevisionId !== d.jh)) return;
+      if (unchanged(F)) await putAway(F.id, folder);
+      else await D((c) => c.patch(F.id, { appProperties: { glaze: 'kept', sum: null } }));
     };
     // What changed in Drive since the token, a page at a time, each page's documents done before the token moves past it.
     const pull = async (st, folder) => {
@@ -929,12 +981,13 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
             if (!out(f)) { if (!x.R || x.R.id === f.id || out(x.R) || (!f.trashed && !x.R.removed && (x.R.trashed || f.id < x.R.id))) x.R = f; }
             else if (!x.R && (await S.get(FILE + f.id))[FILE + f.id] === h) x.R = f;
           }
-          else if (role === 'file') at(h).E = f;
+          else if (role === 'file') { at(h).E = f; (at(h).files ||= []).push(f); }
         }
-        for (const [h, x] of docs) {
+        for (const [h, { files, ...x }] of docs) {
           const d = await docOf(h);
           if (!d && !x.R) continue;
           await one(null, h, { ...x, folder });
+          for (const f of files || []) await held(`doc:${h}`, () => stray(f, folder));
         }
         if (more) await more.changes(r.changes, hooks(folder));
         token = r.nextPageToken || r.newStartPageToken;
@@ -1014,7 +1067,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         if (changed) await forget();
         // No page token until this full pass completes: what was saved here while off (never marked) goes up on a later full
         // pass if this one stops short, never left behind by a run reading only the changes since a token from before.
-        await setState({ ...(changed && { folder: null, data: null, backups: null, snap: null, snapSkip: null, last: null }),
+        await setState({ ...(changed && { folder: null, data: null, moving: null, backups: null, snap: null, snapSkip: null, last: null }),
           token: null, again: 0, on: true, off: false, account: who, problem: null, wait: 0, fails: 0 }, () => request === switching);
         if (request !== switching) return { ok: false, why: 'off' };
         return runNow({ full: true });
