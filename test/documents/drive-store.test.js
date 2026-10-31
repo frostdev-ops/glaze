@@ -1060,4 +1060,12 @@ test('the pet\'s record settles between two devices whose focus timers differ: n
     clock.t += 60e3; assert.ok((await a.run()).ok); await show(a); assert.ok((await a.run()).ok);
   }
   assert.equal(ups(), settled, 'the pet\'s record no longer goes up on each pull');
+  // What the pet is still goes both ways; each device keeps its own timer's state.
+  const local = (d) => ({ get: (k) => d.local.get(k), set: async (o) => { await d.local.set(o); return true; } });
+  clock.t += 60e3;
+  assert.ok((await PETS.change({ op: 'habitat', habitat: 'garden', key: PET, tz: 'UTC' }, { local: local(a), sync: a.settings })).ok);
+  assert.ok((await a.run()).ok); assert.ok((await b.run()).ok); await show(b);
+  assert.equal((await b.local.get(PET))[PET].habitat, 'garden', 'A\'s habitat reached B');
+  assert.match((await b.local.get(PET))[PET].timerSignal, /^rest:/, 'B keeps its own timer\'s state');
+  assert.match((await a.local.get(PET))[PET].timerSignal, /^work:.*:focus$/, 'and A its own');
 });

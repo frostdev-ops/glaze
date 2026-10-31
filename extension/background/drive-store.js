@@ -38,7 +38,12 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
   // What syncs, by category: the store's keys (background/backup.js STORES, planner/todo.js STORE_KEY, pet/pet.js KEY,
   // writer/writer-sources.js's keys) in their area.
   const CATS = [
-    { cat: 'tasks', area: 'local', test: (k) => /^(?:todo|pet):https?:\/\/[a-z\d.-]+(?::\d+)?\/(?:\d+|_\d+_\d+)$/i.test(k) },
+    { cat: 'tasks', area: 'local', test: (k) => /^todo:https?:\/\/[a-z\d.-]+(?::\d+)?\/(?:\d+|_\d+_\d+)$/i.test(k) },
+    // The pet: what its widget reads into it from this device alone each time it shows (the focus timer's state here, the
+    // character this device chose or drew) stays here, beside what came; each device writing its own over the other's
+    // would send the record back and forth on every pull.
+    { cat: 'tasks', area: 'local', test: (k) => /^pet:https?:\/\/[a-z\d.-]+(?::\d+)?\/(?:\d+|_\d+_\d+)$/i.test(k), view: (v) => petView(v),
+      merge: (here, v) => (obj(v) ? { ...v, ...Object.fromEntries(PET_HERE.filter((f) => obj(here) && here[f] !== undefined).map((f) => [f, here[f]])) } : v) },
     { cat: 'dashNotes', area: 'local', test: (k) => /^notes:https?:\/\/[a-z\d.-]+(?::\d+)?\/(\d+|_\d+_\d+)$/i.test(k) },
     { cat: 'classes', area: 'local', test: (k) => /^classes:https?:\/\/[a-z\d.-]+(?::\d+)?\/(?:\d+|_\d+_\d+)$/i.test(k) },
     { cat: 'gpa', area: 'local', test: (k) => /^gpaTerms:https?:\/\/[a-z\d.-]+(?::\d+)?:\w{1,40}$/i.test(k) },
@@ -74,10 +79,12 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     sync: () => (typeof GZ_DRIVE_SYNC !== 'undefined' ? GZ_DRIVE_SYNC : require('../documents/drive-sync.js')),
   };
   const obj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+  const PET_HERE = ['timerSignal', 'sprite'];
+  const petView = (v) => (obj(v) ? Object.fromEntries(Object.entries(v).filter(([f]) => !PET_HERE.includes(f))) : v);
   // A value from Drive as its store keeps it (each store's own cleaner), or undefined when it isn't one.
   const clean = (cat, key, v) => {
     try {
-      if (cat === 'tasks') return key.startsWith('todo:') ? (obj(v) ? L.todo().clean(v) : undefined) : L.pet().backup({ [key]: v })?.[key];
+      if (cat === 'tasks') return key.startsWith('todo:') ? (obj(v) ? L.todo().clean(v) : undefined) : petView(L.pet().backup({ [key]: v })?.[key]);
       if (cat === 'dashNotes') return obj(v) ? L.widgets().cleanNote(v) : undefined;
       if (cat === 'classes') return obj(v) ? L.classes().clean(v) : undefined;
       if (cat === 'gpa') return obj(v) ? L.gpa().clean(v) : undefined;
@@ -159,6 +166,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       const T = L.todo(), here = T.clean((await local.get(key))[key]), ids = new Set(here.tasks.map((t) => t.id));
       value = T.clean({ tasks: [...here.tasks, ...value.tasks.filter((t) => !ids.has(t.id))], items: { ...value.items, ...here.items } });
     }
+    if (cat === 'tasks' && !key.startsWith('todo:')) value = defOf('local', key).merge((await local.get(key))[key], value);
     const r = cat === 'tasks' ? { tasks: key.startsWith('todo:') ? { tasks: { [key]: value } } : { tasks: {}, pets: { [key]: value } } }
       : ['dashNotes', 'classes', 'gpa'].includes(cat) ? { [cat]: { [key]: value } } : cat === 'widgets' ? { widgets: value }
         : key === 'lookFavorites' ? { favorites: value } : cat === 'writerWords' ? { writerWords: value } : null;
