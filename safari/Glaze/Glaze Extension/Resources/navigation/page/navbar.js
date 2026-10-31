@@ -1031,8 +1031,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   };
   const queue = () => { if (!queued && !sleeping) queued = requestAnimationFrame(() => { queued = 0; sync(); }); };
   chrome.storage.onChanged.addListener((c, area) => {
-    const fence = area === 'local' && (c.ultraCopyFence || c[`ultraCopyFence:${location.origin}`]);
-    if (X.site === 'ultra' && fence) {
+    const fence = X.site === 'ultra' && area === 'local' && (c.ultraCopyFence || c[`ultraCopyFence:${location.origin}`]);
+    if (fence) {
       GZ_NAV.drop();
       try { sessionStorage.removeItem(KEEP); } catch { /* blocked */ }
       if (fence.newValue?.retire !== false) { forget(); me = ''; }
