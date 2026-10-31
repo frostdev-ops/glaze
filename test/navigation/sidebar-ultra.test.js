@@ -1247,7 +1247,7 @@ test("a layout batches its reads before writes, with at most one re-measure afte
   }
 });
 
-test('unchanged layouts measure once, and changed column offsets get one re-measure', async () => {
+test("layouts measure once; changed column offsets move the pinned column's height by as much, without measuring again", async () => {
   const p = page({ stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
   await p.pass();
   let reads = 0;
@@ -1257,7 +1257,9 @@ test('unchanged layouts measure once, and changed column offsets get one re-meas
   p.$('.bb-course-navigation').box = { left: 200, top: 0, width: 1400, height: 400 };
   reads = 0;
   await p.resize(1600);
-  assert.equal(reads, 2, 'the changed top is applied before the one re-measure');
+  assert.equal(reads, 1, 'a new top is not measured again');
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '400px');
+  assert.equal(p.$('.gz-sb-jump').hidden, true, 'the column pinned 340 px lower is 460 px tall: under 60% of the window, no Jump to widgets');
   reads = 0;
   await p.resize(1600);
   assert.equal(reads, 1, 'the next pass is steady again');

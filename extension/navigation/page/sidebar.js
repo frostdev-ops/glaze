@@ -1033,8 +1033,12 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     // column's height and the bar). Merely writing the repeat's results afterwards would leave those reads stale again.
     let g = measure(review, nativeRoot, css);
     const h = html(), seen = (e, k) => e.getAttribute(k);
-    const geometry = () => [...GEOMETRY.map((k) => seen(h, k)), seen(host.el, 'data-gz-sb-overlay'), seen(host.el, 'data-gz-sb-page-hidden'), ...GEOMETRY_VARS.map((k) => h.style.getPropertyValue(k)), edge.hidden, launch.hidden, pageHead.hidden, edge.parentNode, launch.parentNode, rare(seen(h, 'data-gz-sb-family'))];
-    const was = geometry();
+    const geometry = () => [...GEOMETRY.map((k) => seen(h, k)), seen(host.el, 'data-gz-sb-overlay'), seen(host.el, 'data-gz-sb-page-hidden'), h.style.getPropertyValue('--gz-sidebar-w'), edge.hidden, launch.hidden, pageHead.hidden, edge.parentNode, launch.parentNode, rare(seen(h, 'data-gz-sb-family'))];
+    const offsetsNow = () => GEOMETRY_VARS.map((k) => h.style.getPropertyValue(k));
+    const was = geometry(), wasOffsets = offsetsNow();
+    // The column's end as the offsets put it (sidebar.css --gz-sb-end), before they are written.
+    const end = (foot) => Math.max(parseFloat(css?.getPropertyValue('--gz-sb-bottom')) || 0, foot);
+    const end0 = end(parseFloat(h.style.getPropertyValue('--gz-sb-foot')) || 0), top0 = parseFloat(h.style.getPropertyValue('--gz-sb-top')) || 0;
     if (next !== 'drawer' && drawer) closeDrawer(false);
     // Glaze's own column fixed at the edge (A.own) keeps the page's content clear of it, below the adapter's top.
     setAttr(h, 'data-gz-sb-fixed', host.own && A.own ? '' : false);
@@ -1060,7 +1064,11 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       setVar('--gz-sb-foot', `${g.foot}px`);
     };
     offsets();
-    if (geometry().some((v, i) => v !== was[i])) g = measure(review, nativeRoot, css, setVar);
+    const moved = offsetsNow().some((v, i) => v !== wasOffsets[i]);
+    // A native root's column is placed from the offsets themselves: measured again. Elsewhere new offsets only move the
+    // column's own ends: a column pinned between them (Ultra's, its own content) changes height by as much, from what was read.
+    if (geometry().some((v, i) => v !== was[i]) || (moved && nativeRoot)) g = measure(review, nativeRoot, css, setVar);
+    else if (moved && self() && g.pageH) g.pageH = Math.max(0, g.pageH - (g.top - top0) - (end(g.foot) - end0));
     watchNativeScroll(nativeRoot, g.scroller);
     watchTop(g.headers);
     jump.hidden = cfg().jump === false || pageEmpty || !docked || !(g.pageH > innerHeight * 0.6);
@@ -1092,7 +1100,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // <html>'s attributes a layout writes that move what it measures. data-gz-sb-family only does so for its rarer kinds
   // (rare): sidebar.css and theme.css lay out assessments and discussions, not the rest, by it.
   const GEOMETRY = ['data-gz-sb-fixed', 'data-gz-sb-ultra', 'data-gz-sb-tool', 'data-gz-sb-assessment', 'data-gz-sb-native-root', 'data-gz-sb-layer', 'data-gz-sidebar', 'data-gz-sidebar-open'];
-  const GEOMETRY_VARS = ['--gz-sidebar-w', '--gz-sb-left', '--gz-sb-top', '--gz-sb-native-offset', '--gz-sb-native-top', '--gz-sb-native-end', '--gz-sb-foot'];
+  const GEOMETRY_VARS = ['--gz-sb-left', '--gz-sb-top', '--gz-sb-native-offset', '--gz-sb-native-top', '--gz-sb-native-end', '--gz-sb-foot'];
   const rare = (f) => (['assessment', 'discussion'].includes(f) ? f : '');
   // What a layout measures: where the content starts, the column's top under the headers, a native root's
   // scroller and edges, Glaze's footer, the page's height in the column, and the bar under the edge buttons.
