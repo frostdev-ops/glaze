@@ -648,6 +648,14 @@ const KNOWN = {
     stops: 'net.POST',
     repro: [{ t: 'paper', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2, kill: 126, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }, { t: 'paper', k: 'edit', d: 0, pick: 0, pick2: 0, s: 4 }],
   },
+  'meet-stop': {
+    fixed: true,
+    about: 'a deck met while its file was in Drive\'s trash (linked to wait for it) and met afresh once the file comes back, with the worker stopped midway: the link was let go first, so the file\'s change finds nothing to meet and the device never gets the deck',
+    skips: () => false,
+    stops: 'local.get',
+    repro: [{ t: 'slides', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2 }, { t: 'drive', k: 'trashDoc', pick: 0, s: 3 }, { t: 'run', d: 0, how: 'startup', s: 4 },
+      { t: 'drive', k: 'untrashDoc', pick: 0, s: 5 }, { t: 'run', d: 0, how: 'run', s: 6, kill: 62, apply: true }],
+  },
   // Open: within the accepted limit that switching accounts A→B→A brings older data back. Found 2026-10-31 (seed 60348,
   // 140 operations, 2 devices).
   'stale-restore': {
