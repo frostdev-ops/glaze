@@ -72,7 +72,7 @@ function probe() {
   const vtHeld = () => {
     const vt = document.activeViewTransition;
     if (!vt) return false;
-    if (!vts.has(vt)) { vts.set(vt, true); if (run) run.transitions++; vt.updateCallbackDone.then(() => vts.set(vt, false), () => vts.set(vt, false)); }
+    if (!vts.has(vt)) { vts.set(vt, true); if (run) run.transitions++; vt.ready.then(() => vts.set(vt, false), () => vts.set(vt, false)); }
     return vts.get(vt);
   };
   const frame = () => {
@@ -85,7 +85,7 @@ function probe() {
       press: !!document.querySelector('[data-gz-press]') || !!bar()?.querySelector('[data-gz-press]') };
     f.main = f.skel || f.spin || f.dest || f.anchorGone;
     run.frames.push(f);
-    if ((run.clickAt != null && location.href !== run.from && f.dest && !f.skel && !window.__loading) || run.frames.length > 1800) { run.done = true; return; }
+    if ((run.clickAt != null && location.href !== run.from && f.dest && !f.skel && !f.held && !window.__loading) || run.frames.length > 1800) { run.done = true; return; }
     requestAnimationFrame(frame);
   };
   addEventListener('pointerdown', (e) => { if (e.isTrusted && run && run.downAt == null) { run.downAt = e.timeStamp; requestAnimationFrame(frame); } }, true);
