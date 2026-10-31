@@ -668,11 +668,11 @@ test('pick: frostdev.io first, its GitHub Pages copy when it doesn\'t load, the 
 });
 
 // ---- Settings' Google Drive rows (settings/options.js), run in a VM with the worker and storage stubbed ----
-const settings = async ({ email = 'student@school.edu', sync = {}, connect = { ok: true, email }, firefox = false } = {}) => {
+const settings = async ({ email = 'student@school.edu', sync = {}, connect = { ok: true, email }, firefox = false, large } = {}) => {
   const vm = require('node:vm');
   const src = fs.readFileSync(path.join(__dirname, '../../extension/settings/options.js'), 'utf8');
   const block = src.slice(src.indexOf('  // ---- Google Drive (background/google.js'), src.indexOf('  // Another surface changed something'));
-  const els = {}, sent = [], heard = [], asked = [], hints = [], local = { driveSync: sync };
+  const els = {}, sent = [], heard = [], asked = [], hints = [], local = { driveSync: sync, ...(large && { driveSyncLarge: large }) };
   const el = (id, hidden = false) => {
     const e = { id, observers: [], listeners: {}, checked: false, _hidden: hidden, _text: '', focus() {},
       addEventListener(type, f) { (this.listeners[type] ||= []).push(f); },
@@ -694,7 +694,7 @@ const settings = async ({ email = 'student@school.edu', sync = {}, connect = { o
     },
     // Firefox's permissions API takes only optional permissions, and identity isn't one there: asked for it, it throws.
     permissions: { request: async (p) => { asked.push(structuredClone(p)); if (firefox) throw new TypeError('Type error for parameter permissions'); return true; } },
-    storage: { local: { get: async (k) => ({ [k]: structuredClone(local[k]) }) }, onChanged: { addListener: (f) => heard.push(f) } },
+    storage: { local: { get: async (k) => Object.fromEntries([].concat(k).map((x) => [x, structuredClone(local[x])])) }, onChanged: { addListener: (f) => heard.push(f) } },
   };
   chrome.runtime.getURL = (p = '') => `${firefox ? 'moz-extension://6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b' : 'chrome-extension://abcdefghijklmnopabcdefghijklmnop'}/${p}`;
   if (email) local.google = { email };
@@ -779,6 +779,19 @@ test('Settings: a day whose backup Drive had no room for says so beside when Syn
   assert.doesNotMatch(older.els['#gdrive-sync-said'].textContent, /backup/, 'only for the day it covers');
   const made = await settings({ sync: { on: true, account: A, last: now, snap: now, snapSkip: null } });
   assert.doesNotMatch(made.els['#gdrive-sync-said'].textContent, /backup/);
+});
+
+// Sync to Google Drive in 4.0.1 (documents/drive-sync.js driveSyncLarge, background/drive-store.js snapSkip 'large'): what stays
+// on this device as too large to sync is counted beside when Sync last ran, only when there is any; a day's zip past the
+// limit says so for that day.
+test('Settings: what is too large to sync is counted beside when Sync last ran, only if any; a day\'s zip too large says so', async () => {
+  const A = 'student@school.edu', now = Date.now();
+  const s = await settings({ sync: { on: true, account: A, last: now, snap: now, problem: null }, large: { docs: { 'doc:00000000-0000-4000-8000-000000000001': true }, recs: { 'local:writerWords': true } } });
+  assert.match(s.els['#gdrive-sync-said'].textContent, /^Last synced .+\. Too large to sync: 2\.$/);
+  const none = await settings({ sync: { on: true, account: A, last: now, problem: null }, large: { docs: {}, recs: {} } });
+  assert.match(none.els['#gdrive-sync-said'].textContent, /^Last synced [^.]+\.$/, 'nothing said when none is');
+  const zip = await settings({ sync: { on: true, account: A, last: now, snap: now - 3600e3, snapSkip: 'large', problem: null } });
+  assert.match(zip.els['#gdrive-sync-said'].textContent, /^Last synced .+\. Today's backup was too large\.$/);
 });
 
 test('the worker gives background/google.js a way to open the sign-in tab the student taps (iOS), from the worker', () => {
