@@ -232,7 +232,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     const at12 = (n) => String(n).padStart(12, '0');
     const unstage = async (slot) => { const ks = await stage.keys(`${slot}@`); if (ks.length) await stage.write([], ks); };
     // Keep the owner recorded for as long as any staged bytes can remain after a worker stops.
-    const dropMove = async (slot) => { if (stage) await unstage(slot); await setMove(slot, null); };
+    const dropMove = async (slot) => { if (await usable()) await unstage(slot); await setMove(slot, null); };
     // Each piece its own copy: IndexedDB would keep a view's whole buffer.
     const staged = async (slot, bytes) => {
       const puts = [];
