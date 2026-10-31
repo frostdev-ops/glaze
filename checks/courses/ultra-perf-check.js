@@ -184,10 +184,11 @@ function tabsRoute(r, u) {
   if (u.pathname.startsWith('/learn/api/')) return r.fulfill({ status: 404, json: {} });
   return null;
 }
-async function courseTabOpen(context, opts, prepare) {
-  await opts.evaluate(async (s) => { await chrome.storage.session.clear(); await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); await chrome.storage.local.set({ ultra: ['https://bb.school.test'] }); },
+// editor, not opts: narrow-check-seeds.test.js runs the file's first opts.evaluate as the speed runs' reset.
+async function courseTabOpen(context, editor, prepare) {
+  await editor.evaluate(async (s) => { await chrome.storage.session.clear(); await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); await chrome.storage.local.set({ ultra: ['https://bb.school.test'] }); },
     { ...D.GZ_DEFAULTS, navbar: { ...D.GZ_DEFAULTS.navbar, on: false }, enhance: { ...D.GZ_DEFAULTS.enhance, sidebar: false }, tabs: { ...D.GZ_SANITIZE({}).tabs, ahead: false } });
-  await require('../../tools/dev/check-env.js').ultraReady(opts);
+  await require('../../tools/dev/check-env.js').ultraReady(editor);
   const page = await context.newPage(); const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   try {
@@ -297,8 +298,8 @@ if (require.main === module) (async () => {
         m.host_permissions.push('https://ultra.fixture.test/*');
         fs.writeFileSync(path.join(ext, 'manifest.json'), JSON.stringify(m));
       }
-      await require('../../tools/dev/wait-for-browser.js')();
       const profile = path.join(scratch, instrumented ? 'instrumented-profile' : glaze === 'off' ? 'plain-off-profile' : 'plain-profile');
+      await require('../../tools/dev/wait-for-browser.js')();
       context = await chromium.launchPersistentContext(profile, {
         ...chromeLaunch, headless: true, viewport: neo ? NEO_VIEWPORT : { width: 1280, height: 900 }, ...(neo && { deviceScaleFactor: NEO_SCALE }), reducedMotion: 'reduce',
         args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--renderer-process-limit=1', '--disable-background-networking'],
