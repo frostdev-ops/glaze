@@ -943,6 +943,26 @@ const KNOWN = {
       { t: 'faults', d: 0, p: 0.15, quota: false, refuse: 1 }, { t: 'run', d: 0, how: 'timers', s: 1157860440 }, { t: 'drive', k: 'trashData', pick: 0.8646272781770676, s: 592490877 },
       { t: 'note', k: 'edit', d: 0, pick: 0.5276434142142534, pick2: 0.32105529750697315, s: 1516532219 }, { t: 'run', d: 0, how: 'timers', s: 614898878, after: 'driveSyncDoc:' }, { t: 'run', d: 0, how: 'run', s: 1595333163 }],
   },
+  'staged-take-stop': {
+    fixed: false,
+    tiny: true,
+    staged: true,
+    devices: 3,
+    join: [0, 2],
+    about: 'a worker stopped while taking another device\'s PDF from its staged read (after marking it, before saving it): the next run meets the mark with no copy to read, lets the read go unused, and the PDF never comes (found by the bar sweep, seeds 9500841, 9500973)',
+    skips: () => false,
+    repro: [{ t: 'pdf', k: 'edit', d: 2, pick: 0.6396182728931308, pick2: 0.7343572643585503, s: 1870759343 }, { t: 'run', d: 2, how: 'timers', s: 963650092 }, { t: 'run', d: 0, how: 'poke', s: 1893922477, after: 'driveSyncDirty' }],
+  },
+  'staged-replay-lost': {
+    fixed: false,
+    tiny: true,
+    staged: true,
+    devices: 3,
+    join: [0, 1],
+    about: 'two devices\' first uploads of Notes\' folders overlapping, one staged: its answer written, the meeting with the other device\'s lower id that waited on it fails (Drive busy), and with the transfer already let go no run ever meets that file: the folders never converge (found by the bar sweep, seed 9500913)',
+    skips: () => false,
+    repro: [{ t: 'sheet', k: 'new', d: 0, pick: 0.0005167394410818815, pick2: 0.944620011607185, s: 463542006 }, { t: 'run', d: 0, how: 'timers', s: 1732642908 }, { t: 'folder', k: 'rename', d: 0, pick: 0.08206198690459132, pick2: 0.4447550403419882, s: 7503228 }, { t: 'slides', k: 'edit', d: 0, pick: 0.14362404658459127, pick2: 0.7645050184801221, s: 612798184 }, { t: 'time', ms: 89614943 }, { t: 'setting', k: 'preset', d: 1, pick: 0.08503693481907248, pick2: 0.6097094353754073, s: 741330601 }, { t: 'folder', k: 'new', d: 1, pick: 0.20517836906947196, pick2: 0.6513672687578946, s: 1526126662 }, { t: 'paper', k: 'edit', d: 0, pick: 0.7705752935726196, pick2: 0.7185106063261628, s: 395626547 }, { t: 'faults', d: 0, p: 0.05, quota: false, refuse: 0 }, { t: 'run', d: 0, how: 'poke', s: 409358450 }, { t: 'run', d: 1, how: 'startup', s: 2028041668 }, { t: 'run', d: 0, how: 'poke', s: 1206227927 }],
+  },
   // Open, accepted by the owner: Settings written straight to storage.sync between the worker's compare and its write (a few
   // milliseconds) are written over by Drive's value. Found 2026-10-31 (seed 300933, 80 operations, 3 devices).
   'settings-cas': {
