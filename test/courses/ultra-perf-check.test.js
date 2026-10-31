@@ -55,3 +55,15 @@ test('title paint measures the load from navigation and routes from insertion, i
   assert.equal(titlePaint.course, 40, 'synchronous insertion and observer delivery time belong to the route');
   assert.equal(titlePaint.outline, 40, 'the measurement survives a capped attribution log');
 });
+
+test('title paint keeps navigation as the load origin when settle records its later sampling start', () => {
+  const stages = { initial: { window: [0, 900], inserted: 700 }, courses: { window: [1000, 1900], inserted: 1000 },
+    outline: { window: [2000, 2900], inserted: 2140 } };
+  const probe = { lcp: [], fonts: [], titles: [{ text: 'stream', renderTime: 80 }, { text: 'course', renderTime: 1040 },
+    { text: 'outline', renderTime: 2180 }] };
+  const start = source.indexOf('          const stageOf = '), end = source.indexOf('          speedResult = ', start);
+  const titlePaint = vm.runInNewContext(`${source.slice(start, end)}; titlePaint;`, { probe, stages, courses: stages.courses });
+  assert.equal(titlePaint.stream, 80, 'initial settle starts after paint; its timestamp is not the navigation origin');
+  assert.equal(titlePaint.course, 40);
+  assert.equal(titlePaint.outline, 40, 'a delayed route still measures from its actual insertion');
+});
