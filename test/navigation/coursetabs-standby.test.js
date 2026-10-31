@@ -19,7 +19,7 @@ const SECTION = () => part('  const frameEl = ', '  // The stand-in over a frame
 
 // A standby whose Glaze has said it is loaded and who is signed in, on Ultra's light page.
 const standbyOf = (over = {}) => {
-  const doc = { body: {}, location: { origin, pathname: '/ultra/profile', search: '' }, querySelector: () => null };
+  const doc = { body: {}, location: { origin, pathname: '/ultra/profile', search: '' }, querySelector: () => null, querySelectorAll: () => [] };
   const posted = [];
   const win = { name: 'gz-ctab:standby', postMessage: (m, o) => posted.push([structuredClone(m), o]) }; // (as posted: a copy)
   const attrs = new Set(['data-ready']);
@@ -334,4 +334,19 @@ test('picked and on screen, an adopted standby stays hidden on its own page unti
     assert.equal(f.el.style.visibility, shown, why);
   }
   assert.match(part('  const picture = ', '  const unpicture = '), /if \(showing === cid && !f\.ready && !pic && !f\.adopting\) f\.el\.style\.visibility = ''/, 'with no sketch, not shown while it adopts');
+});
+
+test('only a course drawn after the adoption counts as routed: the light page\'s own panel never does, nor does watch settle first', () => {
+  const p = run();
+  const { doc, s } = standbyOf();
+  const old = {};
+  doc.querySelectorAll = () => [old];
+  doc.querySelector = (q) => (q === '.routed-page' ? old : null);
+  p.api.standby = s;
+  const f = p.api.adopt('_2_1', '/ultra/courses/_2_1/outline', { cid: '_2_1' });
+  p.timers.length = 0; p.api.adopting('_2_1', f);
+  f.adopting.ok = true; doc.location.pathname = '/ultra/courses/_2_1/outline';
+  for (let i = 0; i < 101; i++) { p.tick(50); p.step(); }
+  assert.deepEqual(p.did.filter(([k]) => k === 'load'), [['load', '_2_1', '/ultra/courses/_2_1/outline']], 'the page it had, still there: not routed');
+  assert.match(part('  const watch = ', '  const open = '), /&& !f\.adopting/, 'watch waits for the route to be confirmed');
 });
