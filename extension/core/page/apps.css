@@ -25,9 +25,20 @@
 #gz-float .gz-w[data-dragging] { cursor: grabbing; opacity: 0.92; }
 /* Fixed over the page, a floating tile would print over the first sheet's text: printed, the page is itself. */
 @media print { #gz-float { display: none !important; } }
-.gz-w :is(button, input, select, textarea) { font: inherit; }
+.gz-w button,
+.gz-w input,
+.gz-w select,
+.gz-w textarea { font: inherit; }
 .gz-w [hidden], .gz-game-dialog [hidden], #gz-hub [hidden], #gz-ccm [hidden], .gz-tour [hidden] { display: none !important; }
-.gz-w :is(button, input, select, textarea, a, [tabindex]):focus-visible, :is(#gz-hub, #gz-ccm, .gz-tour) :is(button, input, a):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+.gz-w :where(button):is(button, [tabindex]):focus-visible,
+.gz-w :where(input):is(input, [tabindex]):focus-visible,
+.gz-w :where(select):is(select, [tabindex]):focus-visible,
+.gz-w :where(textarea):is(textarea, [tabindex]):focus-visible,
+.gz-w :where(a):is(a, [tabindex]):focus-visible,
+.gz-w [tabindex]:focus-visible,
+:is(#gz-hub, #gz-ccm, .gz-tour) button:focus-visible,
+:is(#gz-hub, #gz-ccm, .gz-tour) input:focus-visible,
+:is(#gz-hub, #gz-ccm, .gz-tour) a:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 .gz-w-head { display: flex; align-items: center; gap: 0.35rem; min-width: 0; padding-inline-end: 4.5rem; }
 :is(#gz-dash, #gz-float, #gz-room) .gz-w-head h3 { margin: 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Over the resize corner, which comes up beside them on a folded tile. */
@@ -48,11 +59,14 @@
    and the dark-page detector's hover/focus fill, which can tag a neutral custom accent as native light paper. */
 :is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) .gz-w-main.gz-w-main { color: var(--gz-accent-ink) !important; background: var(--gz-accent) !important; border-color: var(--gz-accent); }
 :is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) .gz-w-main.gz-w-main:hover { color: var(--gz-accent-ink) !important; filter: brightness(1.08); }
-:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) :is(.gz-w-small, .gz-w-icon) {
+:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) .gz-w-small,
+:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) .gz-w-icon {
   padding: 0.05rem 0.55rem; border: 1px solid transparent; border-radius: 999px; background: none; cursor: pointer; color: var(--gz-ink-muted); line-height: 1.5;
 }
 :is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) .gz-w-icon { min-width: 1.7rem; padding: 0.05rem 0.3rem; font-size: 1rem; line-height: 1.3; }
-:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) :is(.gz-w-small, .gz-w-icon):hover, :is(#gz-dash, #gz-toolbar) .gz-w-small[aria-pressed="true"] { color: var(--gz-accent); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
+:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) .gz-w-small:hover,
+:is(.gz-w, #gz-dash, #gz-toolbar, #gz-hub, #gz-ccm, .gz-tour, .gz-game-dialog) .gz-w-icon:hover,
+:is(#gz-dash, #gz-toolbar) .gz-w-small[aria-pressed="true"] { color: var(--gz-accent); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 :is(.gz-w, #gz-dash, #gz-ccm, .gz-tour, .gz-game-dialog) button:disabled { opacity: 0.45; cursor: default; }
 /* Notes: the text with its links, until clicked; then the box to type in. Height by the tile's size. */
 .gz-w-note-view, .gz-w-note {
@@ -60,8 +74,10 @@
   border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius-sm); color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface));
   white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5;
 }
-.gz-w[data-size="m"] :is(.gz-w-note-view, .gz-w-note) { min-height: 10rem; max-height: 20rem; }
-.gz-w[data-size="l"] :is(.gz-w-note-view, .gz-w-note) { min-height: 16rem; max-height: 32rem; }
+.gz-w[data-size="m"] .gz-w-note-view,
+.gz-w[data-size="m"] .gz-w-note { min-height: 10rem; max-height: 20rem; }
+.gz-w[data-size="l"] .gz-w-note-view,
+.gz-w[data-size="l"] .gz-w-note { min-height: 16rem; max-height: 32rem; }
 .gz-w-note { resize: vertical; }
 .gz-w-note-view { cursor: text; }
 .gz-w-note-view a { color: var(--gz-accent); text-decoration: underline; }
@@ -101,12 +117,18 @@ html[data-gz-motion="off"] .gz-w-breath:is([data-phase="in"], [data-phase="hold"
 .gz-w-body:has(.gz-w-breath) { display: grid; justify-items: center; gap: 0.3rem; }
 /* Study buddy: click for a word of encouragement, which floats up and away. */
 .gz-w-pet { display: block; margin: 0 auto; padding: 0; border: 0; background: none; cursor: pointer; }
-.gz-w-pet :is(img,canvas) { display: block; width: 6rem; height: 6rem; object-fit: contain; }
-html:not([data-gz-motion="off"]) .gz-w-pet :is(img,canvas) { transition: transform 0.2s; }
-html:not([data-gz-motion="off"]) .gz-w-pet:hover :is(img,canvas) { transform: rotate(-4deg) scale(1.04); }
-.gz-game-avatar .gz-w-pet :is(img,canvas) { width: 72px; height: 72px; }
-.gz-nav-pet .gz-w-pet :is(img,canvas) { width: 28px; height: 28px; }
-.gz-pet .gz-w-pet :is(img,canvas) { width: 64px; height: 64px; }
+.gz-w-pet img,
+.gz-w-pet canvas { display: block; width: 6rem; height: 6rem; object-fit: contain; }
+html:not([data-gz-motion="off"]) .gz-w-pet img,
+html:not([data-gz-motion="off"]) .gz-w-pet canvas { transition: transform 0.2s; }
+html:not([data-gz-motion="off"]) .gz-w-pet:hover img,
+html:not([data-gz-motion="off"]) .gz-w-pet:hover canvas { transform: rotate(-4deg) scale(1.04); }
+.gz-game-avatar .gz-w-pet img,
+.gz-game-avatar .gz-w-pet canvas { width: 72px; height: 72px; }
+.gz-nav-pet .gz-w-pet img,
+.gz-nav-pet .gz-w-pet canvas { width: 28px; height: 28px; }
+.gz-pet .gz-w-pet img,
+.gz-pet .gz-w-pet canvas { width: 64px; height: 64px; }
 .gz-w-body:has(> .gz-w-pet) { position: relative; display: grid; justify-items: center; gap: 0.3rem; }
 .gz-w-cheer { position: absolute; top: 40%; inset-inline: 0; pointer-events: none; text-align: center; font-weight: 700; font-size: 1rem; color: var(--gz-accent); }
 html:not([data-gz-motion="off"]) .gz-w-cheer { animation: gz-w-rise 1.6s ease-out forwards; }
@@ -156,7 +178,10 @@ html[data-gz-motion="off"] .gz-w-cheer { top: 0; }
 }
 #gz-nt[open] { display: flex; flex-direction: column; }
 #gz-nt::backdrop { background: rgb(0 0 0 / 0.35); }
-#gz-nt :is(p, h2, h3, ul) { margin: 0; }
+#gz-nt p,
+#gz-nt h2,
+#gz-nt h3,
+#gz-nt ul { margin: 0; }
 #gz-nt h2 { font: 600 18px/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); }
 #gz-nt h2:focus { outline: none; }
 #gz-nt h3 { font: 600 11px/1.3 var(--gz-font); letter-spacing: 0.06em; text-transform: uppercase; color: var(--gz-ink-muted); }
@@ -167,7 +192,8 @@ html[data-gz-motion="off"] .gz-w-cheer { top: 0; }
 #gz-nt button:disabled { opacity: 0.45; cursor: default; }
 #gz-nt button[type="submit"], #gz-nt .gz-nt-empty button { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); font-weight: 600; }
 #gz-nt :focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
-#gz-nt :is(input, select) { box-sizing: border-box; margin: 0; padding: 0.3rem 0.5rem; font: inherit; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm); }
+#gz-nt input,
+#gz-nt select { box-sizing: border-box; margin: 0; padding: 0.3rem 0.5rem; font: inherit; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm); }
 #gz-nt .gz-nt-field { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--gz-ink-muted); }
 #gz-nt .gz-nt-say { padding: 0.45rem 1.1rem; font-size: 12px; color: var(--gz-ink-muted); border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); }
 #gz-nt .gz-nt-say:empty { display: none; }
@@ -184,7 +210,10 @@ html[data-gz-motion="off"] .gz-w-cheer { top: 0; }
 #gz-nt .gz-nt-filters { display: grid; gap: 0.35rem; }
 #gz-nt .gz-nt-filters .gz-nt-field { justify-content: space-between; }
 #gz-nt .gz-nt-filters select { max-width: 12rem; }
-#gz-nt :is(.gz-nt-count, .gz-nt-usage, .gz-nt-when, .gz-nt-none) { font-size: 12px; color: var(--gz-ink-muted); }
+#gz-nt .gz-nt-count,
+#gz-nt .gz-nt-usage,
+#gz-nt .gz-nt-when,
+#gz-nt .gz-nt-none { font-size: 12px; color: var(--gz-ink-muted); }
 #gz-nt .gz-nt-list, #gz-nt .gz-nt-folders ul, #gz-nt .gz-nt-picks { display: grid; gap: 0.2rem; padding: 0; list-style: none; }
 #gz-nt .gz-nt-item, #gz-nt .gz-nt-picks button { display: grid; gap: 0.1rem; width: 100%; padding: 0.45rem 0.6rem; text-align: start; background: transparent; border: 1px solid transparent; border-radius: var(--gz-radius-sm); }
 #gz-nt .gz-nt-item:hover, #gz-nt .gz-nt-picks button:hover { background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); }
@@ -203,25 +232,37 @@ html[data-gz-motion="off"] .gz-w-cheer { top: 0; }
 #gz-nt .gz-nt-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
 #gz-nt .gz-nt-tools-bar { position: sticky; top: -0.9rem; z-index: 1; display: flex; flex-wrap: wrap; gap: 0.2rem; padding: 0.3rem 0; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); }
 #gz-nt .gz-nt-tools-bar button { min-width: 2rem; padding: 0.2rem 0.55rem; border-radius: var(--gz-radius-sm); }
-#gz-nt :is(.gz-nt-linkbar, .gz-nt-pick) { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; padding: 0.4rem 0.6rem; background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border-radius: var(--gz-radius-sm); }
+#gz-nt .gz-nt-linkbar,
+#gz-nt .gz-nt-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; padding: 0.4rem 0.6rem; background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border-radius: var(--gz-radius-sm); }
 #gz-nt .gz-nt-linkbar[hidden] { display: none; }
 #gz-nt .gz-nt-linkbar span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gz-ink-muted); }
 #gz-nt .gz-nt-pick { display: grid; }
 #gz-nt .gz-nt-picks { max-height: 16rem; overflow: auto; }
 #gz-nt .gz-nt-body { flex: 1; min-height: 12rem; padding: 0.2rem 0 2rem; font-size: 15px; line-height: 1.6; color: var(--gz-ink); outline: none; overflow-wrap: anywhere; }
 #gz-nt .gz-nt-body > :first-child { margin-top: 0; }
-#gz-nt .gz-nt-body :is(p, div, ul, ol, pre, blockquote, table, h1, h2, h3) { margin: 0 0 0.6em; }
+#gz-nt .gz-nt-body p,
+#gz-nt .gz-nt-body div,
+#gz-nt .gz-nt-body ul,
+#gz-nt .gz-nt-body ol,
+#gz-nt .gz-nt-body pre,
+#gz-nt .gz-nt-body blockquote,
+#gz-nt .gz-nt-body table,
+#gz-nt .gz-nt-body h1,
+#gz-nt .gz-nt-body h2,
+#gz-nt .gz-nt-body h3 { margin: 0 0 0.6em; }
 #gz-nt .gz-nt-body h1 { font: 700 1.6em/1.25 var(--gz-font-head, var(--gz-font)); }
 #gz-nt .gz-nt-body h2 { font: 600 1.3em/1.3 var(--gz-font-head, var(--gz-font)); }
 #gz-nt .gz-nt-body h3 { font: 600 1.1em/1.35 var(--gz-font-head, var(--gz-font)); letter-spacing: 0; text-transform: none; color: var(--gz-ink); }
-#gz-nt .gz-nt-body :is(ul, ol) { padding-inline-start: 1.6em; }
+#gz-nt .gz-nt-body ul,
+#gz-nt .gz-nt-body ol { padding-inline-start: 1.6em; }
 #gz-nt .gz-nt-body ul[data-check] { padding-inline-start: 0.2em; list-style: none; }
 #gz-nt .gz-nt-body ul[data-check] > li { position: relative; padding-inline-start: 1.7em; }
 #gz-nt .gz-nt-body ul[data-check] > li::before { content: "☐"; content: "☐" / var(--gz-nt-todo); position: absolute; inset-inline-start: 0; cursor: pointer; color: var(--gz-ink-muted); }
 #gz-nt .gz-nt-body ul[data-check] > li[data-done]::before { content: "☑"; content: "☑" / var(--gz-nt-done); color: var(--gz-accent); }
 #gz-nt .gz-nt-body ul[data-check] > li[data-done] { color: var(--gz-ink-muted); text-decoration: line-through; }
 #gz-nt .gz-nt-body blockquote { padding-inline-start: 0.9em; color: var(--gz-ink-muted); border-inline-start: 3px solid var(--gz-border-strong, var(--gz-line-strong)); }
-#gz-nt .gz-nt-body :is(code, pre) { font-family: var(--gz-font-mono, ui-monospace, monospace); font-size: 0.9em; background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border-radius: var(--gz-radius-sm); }
+#gz-nt .gz-nt-body code,
+#gz-nt .gz-nt-body pre { font-family: var(--gz-font-mono, ui-monospace, monospace); font-size: 0.9em; background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border-radius: var(--gz-radius-sm); }
 #gz-nt .gz-nt-body code { padding: 0.1em 0.3em; }
 #gz-nt .gz-nt-body pre { padding: 0.7em 0.9em; overflow: auto; white-space: pre-wrap; }
 #gz-nt .gz-nt-body pre code { padding: 0; background: none; }
@@ -231,7 +272,8 @@ html[data-gz-motion="off"] .gz-w-cheer { top: 0; }
 #gz-nt .gz-nt-body img { max-width: 100%; height: auto; border-radius: var(--gz-radius-sm); }
 #gz-nt .gz-nt-body img:not([src]) { display: inline-block; min-width: 6rem; min-height: 3rem; background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); }
 #gz-nt .gz-nt-body table { border-collapse: collapse; }
-#gz-nt .gz-nt-body :is(th, td) { padding: 0.25em 0.5em; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); }
+#gz-nt .gz-nt-body th,
+#gz-nt .gz-nt-body td { padding: 0.25em 0.5em; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); }
 #gz-nt .gz-nt-body hr { border: 0; border-top: 1px solid var(--gz-border-strong, var(--gz-line-strong)); }
 #gz-nt .gz-nt-body[contenteditable="false"] { color: var(--gz-ink-muted); }
 #gz-nt .gz-nt-actions { padding-top: 0.6rem; border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
@@ -245,18 +287,27 @@ html[data-gz-motion="off"] .gz-w-cheer { top: 0; }
    (owner decision A). Ultra's column is 320px wide; on a narrow window Ultra moves it under the courses at full width,
    so the grid lays out by the panel's own width. No heading: Hide widgets, in the toolbar, takes them away. */
 #gz-panel { margin: 0 0 calc(1rem * var(--gz-space, 1)); padding: 1rem 1rem 0.25rem; font-family: var(--gz-font); color: var(--gz-ink); }
-#gz-panel :is(button, a, select, textarea, [tabindex]):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#gz-panel :where(button):is(button, [tabindex]):focus-visible,
+#gz-panel :where(a):is(a, [tabindex]):focus-visible,
+#gz-panel :where(select):is(select, [tabindex]):focus-visible,
+#gz-panel :where(textarea):is(textarea, [tabindex]):focus-visible,
+#gz-panel [tabindex]:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 #gz-panel [hidden] { display: none !important; }
 :is(#gz-room, #gz-float, #gz-panel, #gz-toolbar)[hidden], :is(#gz-room, #gz-dash) .gz-w[hidden] { display: none !important; }
 /* Better To Do in its tile on the Courses page: Ultra's own To Do steps aside (core/page/widgets.js sets the mark). */
 html[data-gz-todo-tile] div.todo-panel > bb-todo { display: none !important; }
-html[data-gz-canvas-todo] #right-side :is(.Sidebar__TodoListContainer, .todo-list-header, ul.to-do-list) { display: none !important; }
+html[data-gz-canvas-todo] #right-side :where(.Sidebar__TodoListContainer):is(.Sidebar__TodoListContainer, ul.to-do-list),
+html[data-gz-canvas-todo] #right-side :where(.todo-list-header):is(.todo-list-header, ul.to-do-list),
+html[data-gz-canvas-todo] #right-side ul.to-do-list { display: none !important; }
 /* With the sidebar (navigation/page/sidebar.js), Better To Do drawn in the dock or on the board, or removed on purpose (core/page/widgets.js todoIn). */
-html[data-gz-sidebar-todo] #right-side :is(.Sidebar__TodoListContainer, .todo-list-header, ul.to-do-list) { display: none !important; }
+html[data-gz-sidebar-todo] #right-side :where(.Sidebar__TodoListContainer):is(.Sidebar__TodoListContainer, ul.to-do-list),
+html[data-gz-sidebar-todo] #right-side :where(.todo-list-header):is(.todo-list-header, ul.to-do-list),
+html[data-gz-sidebar-todo] #right-side ul.to-do-list { display: none !important; }
 html[data-gz-sidebar-todo] div.todo-panel > bb-todo { display: none !important; }
 /* The Courses page's toolbar, in Ultra's header tools beside the page's title. */
 #gz-toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 0.4rem; font-family: var(--gz-font); font-size: 0.875rem; line-height: 1.4; color: var(--gz-ink); }
-#gz-toolbar :is(button, a):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#gz-toolbar button:focus-visible,
+#gz-toolbar a:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 #gz-panel-body { container-type: inline-size; }
 
 /* ---- Free boards: the Courses page's tiles float in #gz-room, a layer first in the page with no height of its
@@ -301,7 +352,8 @@ html[data-gz-sidebar-todo] div.todo-panel > bb-todo { display: none !important; 
 /* Resized (its body a height of its own): what doesn't fit scrolls inside, and the notes fill it. */
 .gz-w > .gz-w-body[style*="height"] { min-height: 0; max-height: none; overflow: auto; overscroll-behavior: contain; }
 .gz-w > .gz-w-body[style*="height"]:has(> .gz-w-note) { display: flex; flex-direction: column; gap: 0.4rem; }
-.gz-w-body[style*="height"] > :is(.gz-w-note-view, .gz-w-note) { flex: 1 1 auto; min-height: 2.5rem; max-height: none; }
+.gz-w-body[style*="height"] > .gz-w-note-view,
+.gz-w-body[style*="height"] > .gz-w-note { flex: 1 1 auto; min-height: 2.5rem; max-height: none; }
 .gz-w-body[style*="height"] > .gz-w-note-app { align-self: flex-start; }
 .gz-w[data-tile="todo"] #gz-todo .gz-todo-head { position: sticky; top: 0; z-index: 1; background: var(--gz-surface-grain, none), var(--gz-panel, var(--gz-surface-paint, var(--gz-surface))); }
 /* The line a dragged tile met. */
@@ -372,10 +424,16 @@ html[data-gz-dash]:not([data-gz-dash="ip"]) institution-page-home { display: non
    React list, or a teacher's server-drawn heading and list), on Ultra in the Courses page's To Do column. The site's own
    is hidden only while Glaze's is on the page, right before it, so it comes back the moment Glaze's goes. On an Ultra
    course's outline it's a block of the right column of its own, and nothing is hidden. */
-#gz-todo ~ :is(.Sidebar__TodoListContainer, .todo-list-header, ul.to-do-list, bb-todo) { display: none !important; }
+#gz-todo ~ :where(.Sidebar__TodoListContainer):is(.Sidebar__TodoListContainer, ul.to-do-list),
+#gz-todo ~ :where(.todo-list-header):is(.todo-list-header, ul.to-do-list),
+#gz-todo ~ ul.to-do-list,
+#gz-todo ~ :where(bb-todo):is(bb-todo, ul.to-do-list) { display: none !important; }
 #gz-todo { margin: 0 0 1.5rem; font-size: 0.875rem; color: var(--gz-ink); }
 #gz-todo:not(:first-child) { margin-top: 1rem; }
-#gz-todo :is(button, input, select, textarea) { font: inherit; }
+#gz-todo button,
+#gz-todo input,
+#gz-todo select,
+#gz-todo textarea { font: inherit; }
 #gz-todo .gz-todo-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); padding-bottom: 0.5rem; }
 :is(#right-side, #site-wrap, .gz-w) #gz-todo .gz-todo-head h2 { flex: 1 0 auto; margin: 0; padding: 0; border: 0; }
 #site-wrap #gz-todo .gz-todo-head h2 { font: 600 1.125rem/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); }
@@ -390,14 +448,16 @@ html[data-gz-dash]:not([data-gz-dash="ip"]) institution-page-home { display: non
 #application .ic-DashboardCard > .gz-ct-ask, #site-wrap article[id^="course-list-course-"] > .gz-ct-ask { margin: 0; padding: 0.4rem 0.6rem 0; }
 #gz-todo .gz-todo-empty { margin: 0.75rem 0; color: var(--gz-ink-muted); }
 #gz-todo .gz-todo-group { margin-top: calc(0.9rem * var(--gz-space)); }
-:is(#right-side, #site-wrap, .gz-w) #gz-todo :is(h3, summary) {
+:is(#right-side, #site-wrap, .gz-w) #gz-todo h3,
+:is(#right-side, #site-wrap, .gz-w) #gz-todo summary {
   display: flex; align-items: baseline; gap: 0.4rem; margin: 0 0 0.25rem; padding: 0; border: 0;
   font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-muted);
 }
 #gz-todo summary { cursor: pointer; list-style-position: inside; }
 #gz-todo .gz-todo-group[data-kind="past"] h3 { color: var(--gz-err); }
 #gz-todo .gz-todo-n { font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--gz-ink-faint); font-variant-numeric: tabular-nums; }
-#gz-todo :is(.gz-todo-list, .gz-todo-steps) { list-style: none; margin: 0; padding: 0; }
+#gz-todo .gz-todo-list,
+#gz-todo .gz-todo-steps { list-style: none; margin: 0; padding: 0; }
 #gz-todo .gz-todo-item {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0 0.5rem; align-items: start;
   margin: 0; padding: calc(0.45rem * var(--gz-space)) 0.35rem; border-radius: var(--gz-radius-sm); border-inline-start: 3px solid transparent;
@@ -406,7 +466,11 @@ html[data-gz-dash]:not([data-gz-dash="ip"]) institution-page-home { display: non
 #gz-todo .gz-todo-item[data-urgent] { border-inline-start-color: var(--gz-warn); }
 #gz-todo .gz-todo-item[data-urgent="past"] { border-inline-start-color: var(--gz-err); }
 /* Glaze's words can be English on a right-to-left page: each bit of text takes its own direction. */
-#gz-todo :is(.gz-todo-count, .gz-todo-say, .gz-todo-title, .gz-todo-meta > *, .gz-todo-n) { unicode-bidi: plaintext; }
+#gz-todo .gz-todo-count,
+#gz-todo .gz-todo-say,
+#gz-todo .gz-todo-title,
+#gz-todo .gz-todo-n,
+#gz-todo :is(.gz-todo-meta > *) { unicode-bidi: plaintext; }
 #gz-todo .gz-todo-item:is(.gz-todo-news, .gz-todo-grade) { grid-template-columns: minmax(0, 1fr); }
 #gz-todo input[type="checkbox"] { width: 1.05rem; height: 1.05rem; margin: 0.1rem 0 0; accent-color: var(--gz-accent); cursor: pointer; }
 #gz-todo .gz-todo-title {
@@ -434,8 +498,14 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 #gz-todo .gz-todo-head [data-act="tools"] { min-width: 1.8rem; justify-content: center; letter-spacing: 0.05em; }
 #gz-todo .gz-todo-tools { display: flex; flex-wrap: wrap; flex-basis: 100%; gap: 0.25rem 0.5rem; padding-top: 0.25rem; }
 #gz-todo .gz-todo-btn { padding: 0.25rem 0.9rem; border: 1px solid var(--gz-accent); border-radius: 999px; cursor: pointer; font-weight: 600; color: var(--gz-accent-ink); background: var(--gz-accent); }
-#gz-todo :is(button, input, select, textarea, a, summary):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
-#gz-todo :is(.gz-todo-detail, .gz-todo-form) {
+#gz-todo button:focus-visible,
+#gz-todo input:focus-visible,
+#gz-todo select:focus-visible,
+#gz-todo textarea:focus-visible,
+#gz-todo a:focus-visible,
+#gz-todo summary:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#gz-todo .gz-todo-detail,
+#gz-todo .gz-todo-form {
   grid-column: 1 / -1; display: grid; gap: 0.45rem; margin: 0.45rem 0 0.2rem; padding: 0.65rem;
   background: var(--gz-surface-grain, none), var(--gz-band, color-mix(in srgb, var(--gz-ink) 5%, var(--gz-surface-paint, var(--gz-surface)))); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius-sm);
 }
@@ -448,7 +518,9 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 #gz-todo .gz-todo-steps .gz-todo-gone { color: var(--gz-ink-faint); text-decoration: line-through; }
 #gz-todo .gz-todo-row { display: flex; flex-wrap: wrap; align-items: end; gap: 0.4rem; margin: 0; }
 #gz-todo .gz-todo-field { display: grid; gap: 0.15rem; flex: 1 1 8rem; margin: 0; font-size: 0.75rem; color: var(--gz-ink-muted); }
-#gz-todo :is(.gz-todo-detail, .gz-todo-form) :is(input:not([type="checkbox"]), select, textarea) {
+#gz-todo :is(.gz-todo-detail, .gz-todo-form) input:not([type="checkbox"]),
+#gz-todo :is(.gz-todo-detail, .gz-todo-form) :where(select):is(select, input:not([type="checkbox"])),
+#gz-todo :is(.gz-todo-detail, .gz-todo-form) :where(textarea):is(textarea, input:not([type="checkbox"])) {
   width: 100%; min-width: 0; box-sizing: border-box; margin: 0; padding: 0.25rem 0.4rem; height: auto;
   color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm);
 }
@@ -461,7 +533,8 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
    (Ultra), each a link with its date and the To Do's status chip. Nothing moves, so there's nothing for reduced motion to stop. */
 :is(#application .ic-DashboardCard, #site-wrap article[id^="course-list-course-"]) > .gz-ct { margin: 0; padding: 0.4rem 0.6rem 0.2rem; list-style: none; font: 0.8125rem/1.35 var(--gz-font); color: var(--gz-ink); }
 /* Ultra's card is a wrapping row (B7.md): the list takes a whole line of its own, the card's width, never its longest title's. */
-#site-wrap article[id^="course-list-course-"] > :is(.gz-ct, .gz-ct-ask) { flex: 0 0 100%; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+#site-wrap article[id^="course-list-course-"] > .gz-ct,
+#site-wrap article[id^="course-list-course-"] > .gz-ct-ask { flex: 0 0 100%; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
 #site-wrap article[id^="course-list-course-"] > .gz-ct { align-self: stretch; border-top: 1px solid var(--gz-border-line, var(--gz-line)); cursor: auto; }
 /* Ultra's card has a fixed height (284px, B7.md): with the list it grows instead, and its grid row with it. */
 #site-wrap article[id^="course-list-course-"]:has(> .gz-ct) { height: auto !important; min-height: 284px; }
@@ -472,7 +545,8 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 :is(#application, #site-wrap) .gz-ct-t { flex: 1 1 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 :is(#application, #site-wrap) .gz-ct-when { font-size: 0.92em; color: var(--gz-ink-muted); }
 :is(#application, #site-wrap) .gz-ct [data-past] .gz-ct-when { color: var(--gz-err); }
-:is(#application, #site-wrap) .gz-ct [data-done] :is(.gz-ct-t, .gz-ct-when) { text-decoration: line-through; font-weight: 400; color: var(--gz-ink-muted); }
+:is(#application, #site-wrap) .gz-ct [data-done] .gz-ct-t,
+:is(#application, #site-wrap) .gz-ct [data-done] .gz-ct-when { text-decoration: line-through; font-weight: 400; color: var(--gz-ink-muted); }
 :is(#application, #site-wrap) p.gz-ct { padding-block: 0.5rem; color: var(--gz-ink-muted); }
 :is(#application, #site-wrap) .gz-ct .gz-ct-part { padding: 0.2rem 0.3rem; font-size: 0.92em; color: var(--gz-ink-muted); }
 :is(#application, #site-wrap) .gz-ct .gz-todo-chip { font-size: 0.92em; }
@@ -504,8 +578,11 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
   border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; cursor: pointer; box-shadow: none;
 }
 :is(.gz-rm-toast, #gz-rm) button:hover { border-color: var(--gz-accent); }
-:is(.gz-rm-toast, #gz-rm) :is([data-act="hide"], [data-act="close"]) { flex: none; width: 1.75rem; height: 1.75rem; padding: 0; font-size: 16px; line-height: 1; }
-:is(.gz-rm-toast, #gz-rm, #gz-todo .gz-rm-head) :focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+:is(.gz-rm-toast, #gz-rm) [data-act="hide"],
+:is(.gz-rm-toast, #gz-rm) [data-act="close"] { flex: none; width: 1.75rem; height: 1.75rem; padding: 0; font-size: 16px; line-height: 1; }
+:where(.gz-rm-toast):is(.gz-rm-toast, #gz-todo .gz-rm-head) :focus-visible,
+:where(#gz-rm):is(#gz-rm, #gz-todo .gz-rm-head) :focus-visible,
+:is(#gz-todo .gz-rm-head) :focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 #gz-rm {
   box-sizing: border-box; width: min(480px, calc(100vw - 24px)); max-height: calc(100vh - 24px); padding: 0; overflow: auto;
   font: 13px/1.45 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface));
@@ -557,7 +634,8 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 
 /* The what-if calculator above a course's grades (Ultra: under its overall grade) and the GPA on the Dashboard (Ultra:
    on Grades), planner/page/grades.js: panels in the course-progress box's language. */
-:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) {
+:is(#application, #site-wrap) #gz-calc,
+:is(#application, #site-wrap) #gz-gpa {
   margin: 0 0 calc(1.25rem * var(--gz-space)); padding: 0.2rem 1rem; font-size: 0.875rem; color: var(--gz-ink-muted);
   background: var(--gz-surface-grain, none), var(--gz-panel); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius);
 }
@@ -565,7 +643,10 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 :is(#application, #site-wrap) #gz-calc[open] { padding-bottom: 0.9rem; }
 :is(#application, #site-wrap) #gz-calc > summary { display: flex; align-items: baseline; gap: 0.75rem; padding: 0.55rem 0; cursor: pointer; color: var(--gz-ink); font-weight: 600; }
 :is(#application, #site-wrap) #gz-calc > summary b { margin-inline-start: auto; font-variant-numeric: tabular-nums; color: var(--gz-accent); }
-:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) :is(summary, button, input, select):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) summary:focus-visible,
+:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) button:focus-visible,
+:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) input:focus-visible,
+:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) select:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 :is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) input:is([type="number"], [type="text"]), :is(#application, #site-wrap) #gz-gpa select {
   width: 5.5em; height: auto; margin: 0; padding: 0.15rem 0.45rem; font: inherit; font-variant-numeric: tabular-nums; box-shadow: none;
   color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: calc(var(--gz-radius, 12px) * 1 / 2);
@@ -573,7 +654,8 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 :is(#application, #site-wrap) #gz-calc input[type="number"] { text-align: end; }
 :is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) input[aria-invalid="true"] { border-color: var(--gz-err); }
 :is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) input[type="checkbox"] { margin: 0; accent-color: var(--gz-accent); }
-:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) :is(.gz-calc-note, .gz-gpa-note) { margin: 0.3rem 0 0.5rem; color: var(--gz-ink-muted); }
+:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) .gz-calc-note,
+:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) .gz-gpa-note { margin: 0.3rem 0 0.5rem; color: var(--gz-ink-muted); }
 :is(#application, #site-wrap) #gz-gpa .gz-gpa-note:empty { display: none; }
 :is(#application, #site-wrap) #gz-calc .gz-calc-gone { margin: 0.3rem 0 0.6rem; padding: 0.5rem 0.75rem; list-style: none; color: var(--gz-ink); background: var(--gz-accent-soft); border-radius: calc(var(--gz-radius, 12px) * 2 / 3); }
 :is(#application, #site-wrap) #gz-calc .gz-calc-totals { display: flex; flex-wrap: wrap; gap: 0.5rem 1.75rem; margin: 0.4rem 0 0.8rem; }
@@ -594,13 +676,15 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 :is(#application, #site-wrap) #gz-calc .gz-calc-score { font-variant-numeric: tabular-nums; white-space: nowrap; }
 :is(#application, #site-wrap) #gz-calc .gz-calc-tag { padding: 0 0.5em; border-radius: 999px; font-size: 0.75rem; font-weight: 600; color: var(--gz-ink-muted); background: var(--gz-accent-soft); }
 :is(#application, #site-wrap) #gz-calc .gz-calc-tag[hidden] { display: none; }
-:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) :is(.gz-calc-btn, .gz-calc-x) {
+:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) .gz-calc-btn,
+:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) .gz-calc-x {
   padding: 0.15rem 0.7rem; font: 600 12px/1.5 var(--gz-font); cursor: pointer;
   color: var(--gz-ink-muted); background: transparent; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px;
 }
 :is(#application, #site-wrap) #gz-calc .gz-calc-x { padding: 0 0.5rem; font-size: 14px; }
 :is(#application, #site-wrap) #gz-calc .gz-calc-group > .gz-calc-btn { margin-top: 0.45rem; }
-:is(#application, #site-wrap) #gz-calc :is(.gz-calc-btn, .gz-calc-x):hover { color: var(--gz-ink); border-color: var(--gz-accent); }
+:is(#application, #site-wrap) #gz-calc .gz-calc-btn:hover,
+:is(#application, #site-wrap) #gz-calc .gz-calc-x:hover { color: var(--gz-ink); border-color: var(--gz-accent); }
 :is(#application, #site-wrap) #gz-calc .gz-calc-target { display: flex; align-items: center; gap: 0.4rem; margin: 0.9rem 0 0; font-weight: 400; color: var(--gz-ink); }
 :is(#application, #site-wrap) #gz-calc .gz-calc-out { margin: 0.4rem 0 0; color: var(--gz-ink); }
 :is(#application, #site-wrap) #gz-calc .gz-calc-out:empty { display: none; }
@@ -617,7 +701,8 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 :is(#application, #site-wrap) #gz-gpa .gz-gpa-switches label { display: flex; align-items: center; gap: 0.35rem; margin: 0; font-weight: 400; color: var(--gz-ink); }
 :is(#application, #site-wrap) #gz-gpa .gz-gpa-scroll { overflow-x: auto; }
 :is(#application, #site-wrap) #gz-gpa table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-:is(#application, #site-wrap) #gz-gpa :is(th, td) { padding: 0.35rem 0.5rem; text-align: start; vertical-align: middle; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); }
+:is(#application, #site-wrap) #gz-gpa th,
+:is(#application, #site-wrap) #gz-gpa td { padding: 0.35rem 0.5rem; text-align: start; vertical-align: middle; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); }
 :is(#application, #site-wrap) #gz-gpa thead th { font-size: 0.75rem; font-weight: 600; color: var(--gz-ink-muted); }
 :is(#application, #site-wrap) #gz-gpa tbody th { font-weight: 600; color: var(--gz-ink); }
 :is(#application, #site-wrap) #gz-gpa tbody th small { display: block; font-weight: 400; color: var(--gz-ink-muted); }
@@ -638,7 +723,8 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 :is(#application, #site-wrap) #gz-gpa .gz-gpa-key { display: flex; gap: 1.25rem; margin: 0.2rem 0 0.4rem; }
 :is(#application, #site-wrap) #gz-gpa .gz-gpa-key span::before { content: ""; display: inline-block; width: 1.4em; margin-inline-end: 0.4em; vertical-align: middle; border-top: 3px solid var(--gz-accent); }
 :is(#application, #site-wrap) #gz-gpa .gz-gpa-key .gz-cum::before { border-top: 2px dashed var(--gz-ink-muted); }
-:is(#application, #site-wrap) #gz-gpa :is(.gz-gpa-term, .gz-gpa-review) { margin: 0.4rem 0; padding: 0.2rem 0.75rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius-sm); }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-term,
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-review { margin: 0.4rem 0; padding: 0.2rem 0.75rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius-sm); }
 :is(#application, #site-wrap) #gz-gpa .gz-gpa-term > summary { cursor: pointer; padding: 0.35rem 0; color: var(--gz-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 :is(#application, #site-wrap) #gz-gpa .gz-gpa-term legend { padding: 0 0.3rem; font-weight: 600; color: var(--gz-ink); }
 :is(#application, #site-wrap) #gz-gpa .gz-gpa-review { border-color: var(--gz-accent); padding-bottom: 0.6rem; }
@@ -650,7 +736,8 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 :is(#application, #site-wrap) #gz-gpa .gz-gpa-up { font-weight: 700; color: var(--gz-accent); }
 :is(#application, #site-wrap) #gz-gpa .gz-gpa-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0.5rem 0; }
 :is(#application, #site-wrap) #gz-gpa textarea { display: block; width: 100%; box-sizing: border-box; margin: 0.3rem 0; padding: 0.4rem 0.5rem; font: 13px/1.4 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: calc(var(--gz-radius, 12px) * 1 / 2); }
-:is(#application, #site-wrap) #gz-gpa :is(textarea, input[type="file"]):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+:is(#application, #site-wrap) #gz-gpa :where(textarea):is(textarea, input[type="file"]):focus-visible,
+:is(#application, #site-wrap) #gz-gpa input[type="file"]:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 :is(#application, #site-wrap) #gz-gpa .gz-calc-out { margin: 0.4rem 0; color: var(--gz-ink); }
 /* Insights (planner/page/insights.js): its Dashboard button (Ultra: in Glaze's panel or the Courses header) and its dialog; charts in the palette's accent and status colors. */
 #dashboard_header_container .gz-ins-open { margin-inline-end: 0.5rem; }
@@ -680,10 +767,12 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 #gz-ins .gz-ins-tiles small { color: var(--gz-ink-muted); }
 #gz-ins .gz-ins-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 #gz-ins .gz-ins-table caption { padding: 0 0 0.3rem; text-align: start; font-weight: 600; color: var(--gz-ink); }
-#gz-ins .gz-ins-table :is(th, td) { padding: 0.3rem 0.5rem; text-align: start; vertical-align: middle; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); }
+#gz-ins .gz-ins-table th,
+#gz-ins .gz-ins-table td { padding: 0.3rem 0.5rem; text-align: start; vertical-align: middle; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); }
 #gz-ins .gz-ins-table thead th { font-weight: 600; color: var(--gz-ink-muted); }
 #gz-ins .gz-ins-table :is(tbody, tfoot) th { font-weight: 600; color: var(--gz-ink); }
-#gz-ins .gz-ins-table tfoot :is(th, td) { border-bottom: 0; }
+#gz-ins .gz-ins-table tfoot th,
+#gz-ins .gz-ins-table tfoot td { border-bottom: 0; }
 #gz-ins .gz-ins-bar { display: block; width: 7rem; height: 0.5rem; background: var(--gz-line); border-radius: 999px; overflow: hidden; }
 #gz-ins .gz-ins-bar .gz-on { fill: var(--gz-ok); }
 #gz-ins .gz-ins-bar .gz-late { fill: var(--gz-warn); }
@@ -714,14 +803,21 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 #gz-syl a { color: var(--gz-accent); }
 :is(#gz-syl, #gz-syl-dlg) .gz-syl-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
 #gz-syl.gz-syl-bar .gz-syl-actions { margin: 0; }
-:is(#gz-syl, #gz-syl-dlg) :is(button, input, select, textarea) { font: inherit; }
+:is(#gz-syl, #gz-syl-dlg) button,
+:is(#gz-syl, #gz-syl-dlg) input,
+:is(#gz-syl, #gz-syl-dlg) select,
+:is(#gz-syl, #gz-syl-dlg) textarea { font: inherit; }
 :is(#gz-syl, #gz-syl-dlg) button {
   margin: 0; padding: 0.3rem 0.75rem; font-size: 0.8125rem; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2));
   border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; cursor: pointer; box-shadow: none;
 }
 :is(#gz-syl, #gz-syl-dlg) button:hover { border-color: var(--gz-accent); }
 :is(#gz-syl, #gz-syl-dlg) .gz-syl-main { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); }
-:is(#gz-syl, #gz-syl-dlg) :is(button, input, select, textarea, summary):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+:is(#gz-syl, #gz-syl-dlg) button:focus-visible,
+:is(#gz-syl, #gz-syl-dlg) input:focus-visible,
+:is(#gz-syl, #gz-syl-dlg) select:focus-visible,
+:is(#gz-syl, #gz-syl-dlg) textarea:focus-visible,
+:is(#gz-syl, #gz-syl-dlg) summary:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 #gz-syl h2:focus { outline: none !important; box-shadow: none !important; } /* focused only to move the reader there after a save */
 #gz-syl-dlg {
   box-sizing: border-box; width: min(720px, calc(100vw - 24px)); max-height: calc(100vh - 24px); padding: 0; overflow: auto;
@@ -734,12 +830,16 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 #gz-syl-dlg .gz-syl-top { display: flex; align-items: center; gap: 0.75rem; }
 #gz-syl-dlg h2 { flex: 1; margin: 0; font: 600 16px/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); }
 #gz-syl-dlg .gz-syl-x { flex: none; width: 1.75rem; height: 1.75rem; padding: 0; font-size: 16px; line-height: 1; }
-#gz-syl-dlg :is(.gz-syl-desc, small, .gz-syl-status) { margin: 0; font-size: 12px; color: var(--gz-ink-muted); }
+#gz-syl-dlg .gz-syl-desc,
+#gz-syl-dlg :where(small):is(small, .gz-syl-desc),
+#gz-syl-dlg .gz-syl-status { margin: 0; font-size: 12px; color: var(--gz-ink-muted); }
 #gz-syl-dlg .gz-syl-status:empty { display: none; }
 #gz-syl-dlg .gz-syl-f { display: grid; gap: 0.2rem; }
 #gz-syl-dlg .gz-syl-lab { display: flex; align-items: center; gap: 0.5rem; }
 #gz-syl-dlg label { font-weight: 600; color: var(--gz-ink); }
-#gz-syl-dlg :is(input:not([type="checkbox"]), select, textarea) {
+#gz-syl-dlg input:not([type="checkbox"]),
+#gz-syl-dlg :where(select):is(select, input:not([type="checkbox"])),
+#gz-syl-dlg :where(textarea):is(textarea, input:not([type="checkbox"])) {
   width: 100%; min-height: 2rem; height: auto; margin: 0; padding: 0.3rem 0.5rem; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2));
   border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm); box-shadow: none; color-scheme: inherit;
 }
@@ -757,20 +857,26 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 #gz-syl-dlg .gz-syl-rows:empty { display: none; }
 #gz-syl-dlg .gz-syl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.5rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); }
 #gz-syl-dlg .gz-syl-row:last-child { padding-bottom: 0; border-bottom: 0; }
-#gz-syl-dlg .gz-syl-row > :is(.gz-syl-conf, .gz-syl-src) { flex-basis: 100%; }
+#gz-syl-dlg .gz-syl-row > .gz-syl-conf,
+#gz-syl-dlg .gz-syl-row > .gz-syl-src { flex-basis: 100%; }
 #gz-syl-dlg .gz-syl-row > .gz-syl-conf { flex-basis: auto; }
 #gz-syl-dlg .gz-syl-row .gz-syl-label { flex: 1 1 10rem; width: auto; }
-#gz-syl-dlg .gz-syl-row :is(input[type="time"], input[type="date"], select) { width: auto; }
+#gz-syl-dlg .gz-syl-row input[type="time"],
+#gz-syl-dlg .gz-syl-row input[type="date"],
+#gz-syl-dlg .gz-syl-row :where(select):is(select, input[type="time"]) { width: auto; }
 #gz-syl-dlg .gz-syl-row .gz-syl-loc { flex: 1 1 8rem; width: auto; }
 #gz-syl-dlg .gz-syl-days { display: inline-flex; gap: 0.15rem; }
 #gz-syl-dlg .gz-syl-days label { display: grid; justify-items: center; gap: 0.1rem; min-width: 1.6rem; font-size: 11px; font-weight: 500; color: var(--gz-ink-muted); cursor: pointer; }
-#gz-syl-dlg :is(.gz-syl-todo, .gz-syl-check-row) { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 500; cursor: pointer; }
+#gz-syl-dlg .gz-syl-todo,
+#gz-syl-dlg .gz-syl-check-row { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 500; cursor: pointer; }
 #gz-syl-dlg .gz-syl-read pre { max-height: 14rem; overflow: auto; margin: 0.4rem 0 0; padding: 0.5rem; font-size: 12px; white-space: pre-wrap; background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border-radius: var(--gz-radius-sm); }
 #gz-syl-dlg .gz-syl-read summary { cursor: pointer; color: var(--gz-ink-muted); }
 /* Ultra's own for these: Glaze's panels are its surface (no --gz-panel there); the what-if sits under the overall grade's
    bar, the GPA above the terms, syllabus import is one of the outline's blocks, and theme.css's clearing of the text in
    Ultra's own legends (MUI's notched outlines) leaves Glaze's alone. Insights' header button when Glaze's panel is off. */
-#site-wrap :is(#gz-calc, #gz-gpa, #gz-syl) { --gz-panel: var(--gz-surface-paint, var(--gz-surface)); }
+#site-wrap #gz-calc,
+#site-wrap #gz-gpa,
+#site-wrap #gz-syl { --gz-panel: var(--gz-surface-paint, var(--gz-surface)); }
 #site-wrap #gz-calc { margin-top: calc(14px * var(--gz-space)); }
 #site-wrap #gz-gpa { margin-bottom: calc(1.25rem * var(--gz-space)); }
 #site-wrap .outline-actions #gz-syl { margin: 0 0 calc(14px * var(--gz-space)); }
@@ -789,13 +895,16 @@ html[data-gz-course-tiles] #DashboardCard_Container { display: none !important; 
 #gz-ccm { width: min(48rem, calc(100vw - 1rem)); max-height: calc(100vh - 2rem); box-sizing: border-box; }
 #gz-ccm * { box-sizing: border-box; }
 #gz-ccm > .gz-w-faint { margin-top: 0.3rem; }
-#gz-ccm :is(button, input) { font: inherit; }
+#gz-ccm button,
+#gz-ccm input { font: inherit; }
 #gz-ccm .gz-ccm-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-top: 0.8rem; }
-#gz-ccm :is(input[type="search"], input[type="url"]) {
+#gz-ccm input[type="search"],
+#gz-ccm input[type="url"] {
   flex: 1 1 12rem; min-width: 0; min-height: 2rem; margin: 0; padding: 0.3rem 0.6rem; color: var(--gz-ink); color-scheme: inherit;
   background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm); box-shadow: none;
 }
-#gz-ccm :is(input[type="search"], input[type="url"]):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
+#gz-ccm input[type="search"]:focus-visible,
+#gz-ccm input[type="url"]:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
 #gz-ccm .gz-ccm-count { margin: 0.5rem 0 0; font-size: 0.8rem; font-weight: 600; color: var(--gz-ink-muted); }
 #gz-ccm .gz-ccm-term { margin-top: 0.9rem; }
 #gz-ccm .gz-ccm-termhead { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.4rem; margin-bottom: 0.4rem; }
@@ -853,7 +962,9 @@ html[data-gz-card-plain] .gz-course-card .course-banner::after { display: none; 
 html[data-gz-card-condensed] .gz-course-card .course-banner { height: 56px; }
 .gz-course-card .element-details { padding: 12px; min-width: 0; }
 .gz-course-card .course-title { display: block; font-size: 1.1rem; font-weight: 650; color: var(--gz-text); overflow-wrap: anywhere; }
-.gz-course-card :is(.course-id, .gz-course-term, .gz-course-grade) { margin: 4px 0; font-size: .85rem; overflow-wrap: anywhere; }
+.gz-course-card .course-id,
+.gz-course-card .gz-course-term,
+.gz-course-card .gz-course-grade { margin: 4px 0; font-size: .85rem; overflow-wrap: anywhere; }
 .gz-course-card .gz-course-term { color: var(--gz-muted); }
 .gz-course-card .gz-cm-btn { position: absolute; inset: 8px 8px auto auto; width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--gz-border-line, var(--gz-line)); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-text); }
 .gz-course-card .gz-bm { position: absolute; z-index: 2; top: 8px; left: 8px; right: 48px; display: flex; flex-wrap: wrap; gap: 4px; }
@@ -875,12 +986,14 @@ html[data-gz-card-condensed] .gz-course-card .course-banner { height: 56px; }
 .gz-game-actor[hidden]{display:none!important}
 .gz-game-actor[data-wander="true"]{position:absolute;z-index:2147483000;filter:drop-shadow(0 5px 4px #17233325)}
 .gz-game-actor .gz-game-avatar,.gz-game-actor .gz-w-pet{display:block;position:static;margin:0;width:100%;height:100%;padding:0;border:0;background:none}
-.gz-game-actor .gz-w-pet :is(img,canvas){display:block;width:100%;height:100%;object-fit:contain;max-width:none;pointer-events:none}
+.gz-game-actor .gz-w-pet img,
+.gz-game-actor .gz-w-pet canvas{display:block;width:100%;height:100%;object-fit:contain;max-width:none;pointer-events:none}
 .gz-game-actor[data-dragging="true"],.gz-game-item[data-dragging="true"]{cursor:grabbing!important;z-index:2147483001!important;filter:drop-shadow(0 8px 7px #17233340)}
 .gz-game-home{position:fixed;z-index:2147483002;bottom:16px;right:20px;left:auto;transform:none;font:10px/1.2 system-ui,sans-serif!important;border:1px solid #77978e!important;border-radius:var(--gz-radius,12px)!important;padding:3px 7px!important;background:#f3faf8!important;color:#253449!important;white-space:nowrap;cursor:pointer}
 .gz-game-home[hidden]{display:none!important}
 /* Stepping aside while the site's panel or dialog, or Glaze's Settings, is open (pet/page/petworld.js). */
-html:is([data-gz-yield],[data-gz-settings]) :is(.gz-game-world,.gz-game-home){visibility:hidden!important}
+html:is([data-gz-yield],[data-gz-settings]) .gz-game-world,
+html:is([data-gz-yield],[data-gz-settings]) .gz-game-home{visibility:hidden!important}
 .gz-game-reaction{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);padding:5px 9px;border-radius:var(--gz-radius,12px);background:var(--gz-surface-fill,var(--gz-surface,#fff));color:var(--gz-ink,#253449);box-shadow:0 3px 14px #17233324;white-space:nowrap;pointer-events:none;font-weight:700}
 .gz-game-reaction:empty{display:none}
 :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-item,.gz-game-item[data-outside="true"]{position:absolute;display:block;z-index:2;padding:0;border:0;background:none;box-shadow:none;cursor:grab;touch-action:none;user-select:none}
@@ -991,7 +1104,8 @@ html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="stretch"] .gz-gam
 .gz-w[data-tile="pet"] > .gz-w-body[style*="height"] .gz-game-habitat{height:clamp(64px,min(58cqi,100cqb - 5.5rem),100cqb)}
 .gz-w[data-tile="pet"] > .gz-w-body[style*="height"] .gz-game-controls{min-height:0;overflow:auto;overscroll-behavior:contain}
 @container gz-tile (height >= 520px) { .gz-w[data-tile="pet"] > .gz-w-body[style*="height"] .gz-game-habitat{height:clamp(64px,min(58cqi,100cqb - 13rem),100cqb)} }
-@container gz-tile (height < 520px) and (width < 600px) { .gz-w[data-tile="pet"] :is(.gz-game-tabs,.gz-game-panel){display:none!important} }
+@container gz-tile (height < 520px) and (width < 600px) { .gz-w[data-tile="pet"] .gz-game-tabs,
+ .gz-w[data-tile="pet"] .gz-game-panel{display:none!important} }
 @container gz-tile (height < 380px) and (width < 600px) { :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-vitals{display:none!important} }
 @container gz-tile (height < 300px) and (width < 600px) {
   :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-actions{grid-template-columns:minmax(0,1fr) auto}
@@ -1001,7 +1115,8 @@ html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="stretch"] .gz-gam
 @container gz-tile (width < 300px) {
   :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-actions{grid-template-columns:minmax(0,1fr) auto}
   :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-primary{grid-column:1/-1}
-  .gz-w[data-tile="pet"] :is(.gz-game-tabs,.gz-game-panel){display:none!important}
+  .gz-w[data-tile="pet"] .gz-game-tabs,
+  .gz-w[data-tile="pet"] .gz-game-panel{display:none!important}
 }
 @container gz-tile (width < 240px) { :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-vitals{display:none!important} }
 @container gz-tile (width >= 600px) {
@@ -1013,7 +1128,8 @@ html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="stretch"] .gz-gam
   .gz-w[data-tile="pet"] > .gz-w-body[style*="height"] .gz-game-habitat{height:auto;aspect-ratio:5/3;max-height:100%;align-self:start}
   .gz-w[data-tile="pet"] > .gz-w-body[style*="height"] .gz-game-controls{align-self:stretch}
 }
-@container gz-tile (width >= 600px) and (aspect-ratio < 3/2) and (height < 520px) { .gz-w[data-tile="pet"] :is(.gz-game-tabs,.gz-game-panel){display:none!important} }
+@container gz-tile (width >= 600px) and (aspect-ratio < 3/2) and (height < 520px) { .gz-w[data-tile="pet"] .gz-game-tabs,
+ .gz-w[data-tile="pet"] .gz-game-panel{display:none!important} }
 /* Wide but tall (a dragged height under 3:2): one column again, the room at its aspect and the panels under it. */
 @container gz-tile (width >= 600px) and (aspect-ratio < 3/2) {
   :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game{grid-template-columns:minmax(0,1fr);grid-template-areas:"stage" "controls"}
@@ -1029,7 +1145,8 @@ html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="stretch"] .gz-gam
 .gz-w-clock { font-size: clamp(2rem, min(16cqi, 32cqb), 5.5rem); }
 .gz-w-quote { font-size: clamp(0.95rem, 4.6cqi, 1.6rem); }
 .gz-w-breath { width: clamp(2.5rem, min(34cqi, 100cqb - 6.5rem), 11rem); height: clamp(2.5rem, min(34cqi, 100cqb - 6.5rem), 11rem); margin: 0.2rem auto; }
-.gz-w[data-tile="buddy"] .gz-w-pet :is(img,canvas) { width: clamp(4rem, min(32cqi, 100cqb - 1rem), 11rem); height: clamp(4rem, min(32cqi, 100cqb - 1rem), 11rem); }
+.gz-w[data-tile="buddy"] .gz-w-pet img,
+.gz-w[data-tile="buddy"] .gz-w-pet canvas { width: clamp(4rem, min(32cqi, 100cqb - 1rem), 11rem); height: clamp(4rem, min(32cqi, 100cqb - 1rem), 11rem); }
 .gz-w[data-tile^="course:"] .gz-course-card .course-banner { height: clamp(0px, 100cqb - 7rem, var(--gz-card-h, 128px)); }
 .gz-w[data-tile^="course:"] .ic-DashboardCard__header_image { max-height: max(0px, 100cqb - 7rem); overflow: hidden; }
 /* Dragged to a height: what a widget shows sits in the middle of its tile, not at the top of an empty box. */
@@ -1047,5 +1164,6 @@ html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="stretch"] .gz-gam
 /* To Do in a narrow tile: its count and tools on fewer rows, so the list starts sooner. */
 @container gz-tile (width < 260px) {
   .gz-w[data-tile="todo"] #gz-todo .gz-todo-head { gap: 0.15rem 0.3rem; font-size: 0.8rem; }
-  .gz-w[data-tile="todo"] #gz-todo .gz-todo-head :is(button, a) { padding-inline: 0.4rem; }
+  .gz-w[data-tile="todo"] #gz-todo .gz-todo-head button,
+  .gz-w[data-tile="todo"] #gz-todo .gz-todo-head a { padding-inline: 0.4rem; }
 }

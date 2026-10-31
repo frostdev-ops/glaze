@@ -33,11 +33,14 @@ html[data-gz-bg]:is([data-gz-bg="scene"], [data-gz-bg="shader"], [data-gz-bg="la
 }
 /* Keep viewport backgrounds below a panel's header. Off-canvas shells also own the close button
    that hangs into Ultra's side gutter: clip vertically, but let the backdrop cover that gutter. */
-html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *) { isolation: isolate; clip-path: inset(0); background: transparent !important; }
-html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.bb-offcanvas-panel, .bb-offcanvas-panel .panel-wrap):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *) { clip-path: inset(0 -100vmax); }
+html[data-gz-bg]:not([data-gz-bg="solid"]) .panel-wrap:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *),
+html[data-gz-bg]:not([data-gz-bg="solid"]) .bb-offcanvas-panel:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *) { isolation: isolate; clip-path: inset(0); background: transparent !important; }
+html[data-gz-bg]:not([data-gz-bg="solid"]) :where(.bb-offcanvas-panel):is(.bb-offcanvas-panel, .bb-offcanvas-panel .panel-wrap):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *),
+html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.bb-offcanvas-panel .panel-wrap):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *) { clip-path: inset(0 -100vmax); }
 /* :where() keeps this base layer at element specificity, so the per-kind rules below refine it. */
 html:where([data-gz-bg]:not([data-gz-bg="solid"]))::before,
-html:where([data-gz-bg]:not([data-gz-bg="solid"])) :where(.panel-wrap, .bb-offcanvas-panel):where(:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *))::before {
+html:where([data-gz-bg]:not([data-gz-bg="solid"])) :where(.panel-wrap):where(:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *))::before,
+html:where([data-gz-bg]:not([data-gz-bg="solid"])) :where(.bb-offcanvas-panel):where(:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *))::before {
   content: "";
   position: fixed;
   /* The viewport, or in a course tab's frame the page's (looks/scene-host.js --gz-vx/vy/vw/vh), so its copy lines up. */
@@ -51,7 +54,12 @@ html:where([data-gz-bg]:not([data-gz-bg="solid"])) :where(.panel-wrap, .bb-offca
   filter: blur(var(--gz-bg-blur, 0px));
 }
 /* Cards over a picture: a little see-through, never so much that text sits on the image. */
-html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.element-card, .MuiCard-root, .panel, .todo-item, article, .content-list-item .itemContainer),
+html[data-gz-bg]:not([data-gz-bg="solid"]) :where(.element-card):is(.element-card, .content-list-item .itemContainer),
+html[data-gz-bg]:not([data-gz-bg="solid"]) :where(.MuiCard-root):is(.MuiCard-root, .content-list-item .itemContainer),
+html[data-gz-bg]:not([data-gz-bg="solid"]) :where(.panel):is(.panel, .content-list-item .itemContainer),
+html[data-gz-bg]:not([data-gz-bg="solid"]) :where(.todo-item):is(.todo-item, .content-list-item .itemContainer),
+html[data-gz-bg]:not([data-gz-bg="solid"]) :where(article):is(article, .content-list-item .itemContainer),
+html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.content-list-item .itemContainer),
 html[data-gz-bg]:not([data-gz-bg="solid"]) #site-wrap .content-list-item .content-list-item .itemContainer {
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, 88%), transparent) !important;
 }
@@ -60,7 +68,8 @@ html[data-gz-bg]:not([data-gz-bg="solid"]) #site-wrap .content-list-item .conten
    the GPU slides the already-painted layer instead of repainting gradients every frame; the layer
    is oversized so the drift never shows an edge. */
 html[data-gz-bg="aurora"]::before,
-html[data-gz-bg="aurora"] :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)::before {
+html[data-gz-bg="aurora"] .panel-wrap:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)::before,
+html[data-gz-bg="aurora"] .bb-offcanvas-panel:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)::before {
   left: calc(var(--gz-vx, 0px) - var(--gz-vw, 100%) * .18);
   top: calc(var(--gz-vy, 0px) - var(--gz-vh, 100%) * .18);
   width: calc(var(--gz-vw, 100%) * 1.36);
@@ -76,7 +85,8 @@ html[data-gz-bg="aurora"] :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.
 }
 /* Promoted only where it drifts: a promoted layer holds its own GPU copy. */
 html[data-gz-motion="expressive"][data-gz-bg="aurora"]::before,
-html[data-gz-motion="expressive"][data-gz-bg="aurora"] :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)::before { will-change: transform; }
+html[data-gz-motion="expressive"][data-gz-bg="aurora"] .panel-wrap:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)::before,
+html[data-gz-motion="expressive"][data-gz-bg="aurora"] .bb-offcanvas-panel:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)::before { will-change: transform; }
 @keyframes gz-aurora {
   0% { transform: translate3d(-5%, -3%, 0) rotate(-4deg) scale(1); }
   50% { transform: translate3d(4%, 2%, 0) rotate(3deg) scale(1.06); }
@@ -93,11 +103,14 @@ html[data-gz-bg]:not([data-gz-bg="solid"]) #main-content { isolation: isolate; }
 html[data-gz-bg]:not([data-gz-bg="solid"]) .course-content-container > .panel-wrap[data-gz-scene-host] { clip-path: none; }
 /* A narrower/shorter scroller must not paint a second fallback over the shell's scene. Its
    content still clips normally; partial-width sheets retain their own opaque backgrounds. */
-html[data-gz-bg]:not([data-gz-bg="solid"]) [data-gz-scene-host] :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)::before { content: none; }
+html[data-gz-bg]:not([data-gz-bg="solid"]) [data-gz-scene-host] .panel-wrap:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)::before,
+html[data-gz-bg]:not([data-gz-bg="solid"]) [data-gz-scene-host] .bb-offcanvas-panel:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)::before { content: none; }
 /* A course tab's frame wearing the page's background (content.js data-gz-through) is see-through: the page under it draws
    the one background, edge to edge around the rail. */
 html[data-gz-bg][data-gz-through] { background: transparent !important; }
-html[data-gz-through]::before, html[data-gz-through] :is(.panel-wrap, .bb-offcanvas-panel)::before { content: none; }
+html[data-gz-through]::before,
+html[data-gz-through] .panel-wrap::before,
+html[data-gz-through] .bb-offcanvas-panel::before { content: none; }
 #gz-scene {
   position: fixed;
   left: calc(var(--gz-vx, 0px) - var(--gz-bg-blur, 0px) * 2);
@@ -111,13 +124,19 @@ html[data-gz-through]::before, html[data-gz-through] :is(.panel-wrap, .bb-offcan
 /* No blur set, no filter: even blur(0) gives the layer an offscreen copy on the GPU. Every element is a style
    container, so this reads the --gz-bg-blur content.js sets on <html>. */
 @container style(--gz-bg-blur: 0px) {
-  html::before, html :is(.panel-wrap, .bb-offcanvas-panel)::before, #gz-scene { filter: none; }
+  html::before,
+  html .panel-wrap::before,
+  html .bb-offcanvas-panel::before,
+  #gz-scene { filter: none; }
 }
 
 /* Expressive: a soft light follows the pointer across a hovered card (content.js feeds
    --gz-mx/--gz-my in viewport pixels, hence the fixed attachment). After the background-mode
    card rule above so it wins the tie. */
-html[data-gz-motion="expressive"] :is(.element-card, .content-list-item > .itemContainer, .element-list-row, .messages-container-summary):hover {
+html[data-gz-motion="expressive"] :where(.element-card):is(.element-card, .content-list-item > .itemContainer):hover,
+html[data-gz-motion="expressive"] :is(.content-list-item > .itemContainer):hover,
+html[data-gz-motion="expressive"] :where(.element-list-row):is(.element-list-row, .content-list-item > .itemContainer):hover,
+html[data-gz-motion="expressive"] :where(.messages-container-summary):is(.messages-container-summary, .content-list-item > .itemContainer):hover {
   background-image: radial-gradient(240px circle at var(--gz-mx, -999px) var(--gz-my, -999px), color-mix(in srgb, var(--gz-accent) 12%, transparent), transparent 70%) !important;
   background-attachment: fixed !important;
 }
@@ -126,7 +145,8 @@ html[data-gz-motion="expressive"] :is(.element-card, .content-list-item > .itemC
 
 /* Reading width: running text keeps to a comfortable measure. Documents are already a centered
    column (theme.css); capping .document-body here pinned them, narrow, to the left. */
-html[data-gz-enhance-reading] #site-wrap :is(.bb-editor-container.is-read-only .ql-editor, .bbml-content) { max-width: 72ch; }
+html[data-gz-enhance-reading] #site-wrap :is(.bb-editor-container.is-read-only .ql-editor),
+html[data-gz-enhance-reading] #site-wrap :where(.bbml-content):is(.bbml-content, .bb-editor-container.is-read-only .ql-editor) { max-width: 72ch; }
 /* …in the middle of its card, which is often wider than the measure. */
 html[data-gz-enhance-reading] #site-wrap .bb-editor-container.is-read-only .ql-editor { margin-inline: auto; }
 /* …except a test's prompts and answers, which keep to the start of their card and rows, in line with each other. */
@@ -370,7 +390,9 @@ html[data-gz-footer] #gz-doc-tools { bottom: calc(var(--gz-footer-h) + 0.75rem);
 /* Focus mode: the document alone. Its title bar, a learning module's bar (Contents, the module, its
    arrows) and Previous / Next go, and the main menu and course tabs under the panel, should they
    show. A reading-progress line runs along the top. */
-html[data-gz-focus] :is(#base_tools, .bb-ui-navigation-list-horizontal, course-banner),
+html[data-gz-focus] #base_tools,
+html[data-gz-focus] :where(.bb-ui-navigation-list-horizontal):is(.bb-ui-navigation-list-horizontal, #base_tools),
+html[data-gz-focus] :where(course-banner):is(course-banner, #base_tools),
 html[data-gz-focus] #site-wrap section.route-view-container:has(.document-content-root) > div > div:not(:has(.document-content-root)),
 html[data-gz-focus] #site-wrap div:has(+ div > .document-content-root),
 html[data-gz-focus] #site-wrap div:has(> .js-content-navigator-previous, > .js-content-navigator-next) { display: none !important; }
@@ -605,13 +627,23 @@ html[data-gz-ctabs]:not([data-gz-ctabs~="above"]) .routed-page.bb-offcanvas-cont
 html[data-gz-ctabs] .routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs) { position: sticky; top: 0; z-index: 2; background: transparent; }
 #gz-ctabs[data-at="routed"] { position: sticky; top: 0; z-index: 2; }
 /* Native panel headers pull into their scroller's padding; after a tab row that would cover the subtitle. */
-#gz-ctabs[data-at="nested"] + :is(.panel-header, header) { margin-block-start: 0 !important; }
+#gz-ctabs[data-at="nested"] + .panel-header,
+#gz-ctabs[data-at="nested"] + :where(header):is(header, .panel-header) { margin-block-start: 0 !important; }
 /* The covered app keeps its layout, scroll and state without drawing its glass panels. The
    scene moves outside it and keeps moving; its fallback stays too, so the shared navbar's gutters retain their background. */
 html[data-gz-ctab-framed] #site-wrap,
 html[data-gz-ctab-framed] > body > .routed-page.bb-offcanvas-container { visibility: hidden !important; }
 /* Native dialogs and notices can live inside the covered app and still sit above the frame. */
-html[data-gz-ctab-framed] #site-wrap :is(#gz-ctabs, #gz-footer, dialog[open], [role="dialog"], [role="alertdialog"], [role="alert"], [role="status"], .MuiModal-root, .MuiPopover-root, .MuiSnackbar-root):not(.MuiModal-hidden, .MuiModal-hidden *, [aria-hidden="true"], [aria-hidden="true"] *, [hidden], [hidden] *) { visibility: visible; }
+html[data-gz-ctab-framed] #site-wrap #gz-ctabs:not(.MuiModal-hidden, .MuiModal-hidden *, [aria-hidden="true"], [aria-hidden="true"] *, [hidden], [hidden] *),
+html[data-gz-ctab-framed] #site-wrap #gz-footer:not(.MuiModal-hidden, .MuiModal-hidden *, [aria-hidden="true"], [aria-hidden="true"] *, [hidden], [hidden] *),
+html[data-gz-ctab-framed] #site-wrap :where(dialog[open]):is(dialog[open], #gz-ctabs):not(.MuiModal-hidden, .MuiModal-hidden *, [aria-hidden="true"], [aria-hidden="true"] *, [hidden], [hidden] *),
+html[data-gz-ctab-framed] #site-wrap :where([role="dialog"]):is([role="dialog"], #gz-ctabs):not(.MuiModal-hidden, .MuiModal-hidden *, [aria-hidden="true"], [aria-hidden="true"] *, [hidden], [hidden] *),
+html[data-gz-ctab-framed] #site-wrap :where([role="alertdialog"]):is([role="alertdialog"], #gz-ctabs):not(.MuiModal-hidden, .MuiModal-hidden *, [aria-hidden="true"], [aria-hidden="true"] *, [hidden], [hidden] *),
+html[data-gz-ctab-framed] #site-wrap :where([role="alert"]):is([role="alert"], #gz-ctabs):not(.MuiModal-hidden, .MuiModal-hidden *, [aria-hidden="true"], [aria-hidden="true"] *, [hidden], [hidden] *),
+html[data-gz-ctab-framed] #site-wrap :where([role="status"]):is([role="status"], #gz-ctabs):not(.MuiModal-hidden, .MuiModal-hidden *, [aria-hidden="true"], [aria-hidden="true"] *, [hidden], [hidden] *),
+html[data-gz-ctab-framed] #site-wrap :where(.MuiModal-root):is(.MuiModal-root, #gz-ctabs):not(.MuiModal-hidden, .MuiModal-hidden *, [aria-hidden="true"], [aria-hidden="true"] *, [hidden], [hidden] *),
+html[data-gz-ctab-framed] #site-wrap :where(.MuiPopover-root):is(.MuiPopover-root, #gz-ctabs):not(.MuiModal-hidden, .MuiModal-hidden *, [aria-hidden="true"], [aria-hidden="true"] *, [hidden], [hidden] *),
+html[data-gz-ctab-framed] #site-wrap :where(.MuiSnackbar-root):is(.MuiSnackbar-root, #gz-ctabs):not(.MuiModal-hidden, .MuiModal-hidden *, [aria-hidden="true"], [aria-hidden="true"] *, [hidden], [hidden] *) { visibility: visible; }
 
 /* Ultra's instant copies (courses/page/instant.js): the student's last view of Grades, Courses or Activity, or of a course's
    Course Content, Announcements or Gradebook, inert over the main area (a course's own on its pages), a little subdued, while
@@ -619,7 +651,8 @@ html[data-gz-ctab-framed] #site-wrap :is(#gz-ctabs, #gz-footer, dialog[open], [r
    motion). In a course tab's frame on screen, its page shows under the copy even while the page around has it as hidden. */
 #gz-instant { position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none; opacity: .85; filter: saturate(.8); transition: opacity .15s ease-out; }
 #gz-instant[data-out] { opacity: 0; }
-html[data-gz-instant] :is(main.bb-offcanvas-container, main.course-main-content) > :not([id^="gz-"]) { visibility: hidden !important; }
+html[data-gz-instant] main.bb-offcanvas-container > :not([id^="gz-"]),
+html[data-gz-instant] main.course-main-content > :not([id^="gz-"]) { visibility: hidden !important; }
 html[data-gz-instant-frame] #site-wrap { visibility: visible !important; }
 html[data-gz-motion="off"] #gz-instant { transition: none; }
 @media (prefers-reduced-motion: reduce) { #gz-instant { transition: none; } }

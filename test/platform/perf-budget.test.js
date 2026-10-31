@@ -603,6 +603,120 @@ test('Ultra\'s :has() rules keep a small change from restyling the whole page', 
   }
 });
 
+// ---- Rules Chrome tries on every element ------------------------------------------------------------------------------
+// Chrome files each selector of a rule under the id, class, tag or attribute of its rightmost compound and tries it only on
+// elements that have one; a compound whose only key is a multi-argument :is()/:where() (or `[class*=…]`, which every
+// classed element has) is tried on every element each style pass, and a compound left of a descendant or child combinator
+// with no key gives Chrome's ancestor filter nothing, so each candidate walks the page up. 270 such rules made a course open
+// cost 67 ms of style on the Neo profile (perf/css-cost, 2026-10-31). Write one selector per argument instead:
+//   `X :is(.a, .b)` → `X .a, X .b`;  `X :where(.a, .b)` → `X :where(.a), X :where(.b)`;  and when the arguments' specificities
+//   differ, a lower one is raised to the list's by its shortest top argument: `:is(.c, a.b)` → `:where(.c):is(.c, a.b), a.b`.
+// sidebar.css is counted, not yet rewritten.
+const SPLIT_LEFT = { 'navigation/page/sidebar.css': 15 };
+// What remains tried on every element once split (`*`, `[class*=…]`, :not(), pseudo-elements …), and the rules with a
+// [class*=…] or a :has() in those sheets: the counts may fall, never rise.
+const UNKEYED_MAX = 190, CLASS_STAR_MAX = 162, HAS_MAX = 140;
+const cssRules = (css) => {
+  css = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const out = [];
+  const block = (from) => { let depth = 0, q = null; for (let i = from; i < css.length; i++) { const c = css[i]; if (q) { if (c === '\\') i++; else if (c === q) q = null; } else if (c === '"' || c === "'") q = c; else if (c === '{') depth++; else if (c === '}' && --depth === 0) return i; } return css.length; };
+  const walk = (from, to) => {
+    let start = from, q = null;
+    for (let i = from; i < to; i++) {
+      const c = css[i];
+      if (q) { if (c === '\\') i++; else if (c === q) q = null; continue; }
+      if (c === '"' || c === "'") { q = c; continue; }
+      if (c === ';' || c === '}') { start = i + 1; continue; }
+      if (c !== '{') continue;
+      const prelude = css.slice(start, i).trim(), end = block(i);
+      // Grouping at-rules hold rules; the rest (@keyframes, @font-face …) hold none. A rule's own nested rules stay out.
+      if (prelude[0] === '@') { if (/^@(media|supports|layer|container|scope|starting-style|document)\b/i.test(prelude)) walk(i + 1, end); }
+      else out.push(prelude);
+      i = end; start = end + 1;
+    }
+  };
+  walk(0, css.length);
+  return out;
+};
+const depth0 = (text, at) => {
+  const cuts = []; let depth = 0, q = null;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '\\') i++; else if (c === q) q = null; continue; }
+    if (c === '\\') { i++; continue; }
+    if (c === '"' || c === "'") q = c; else if (c === '(' || c === '[') depth++; else if (c === ')' || c === ']') depth--; else if (!depth && at(c)) cuts.push(i);
+  }
+  return cuts;
+};
+const selectorList = (text) => { const parts = []; let s = 0; for (const i of depth0(text, (c) => c === ',')) { parts.push(text.slice(s, i).trim()); s = i + 1; } parts.push(text.slice(s).trim()); return parts; };
+// [{ comb, text }] for each compound of a complex selector.
+const compoundsOf = (sel) => {
+  const t = sel.trim(), out = []; let start = 0, comb = '';
+  const cuts = depth0(t, (c) => /[\s>+~]/.test(c));
+  for (let k = 0; k < cuts.length; k++) {
+    if (cuts[k] < start) continue;
+    let j = cuts[k]; while (j < t.length && /[\s>+~]/.test(t[j])) j++;
+    out.push({ comb, text: t.slice(start, cuts[k]) }); comb = t.slice(cuts[k], j).trim() || ' '; start = j;
+  }
+  out.push({ comb, text: t.slice(start) });
+  return out.filter((p) => p.text);
+};
+// The simple selectors of a compound outside parentheses: kind, name, argument.
+const simplesOf = (comp) => {
+  const out = []; let i = 0;
+  const ident = (j) => { while (j < comp.length && /[\w-]|\\/.test(comp[j])) j += comp[j] === '\\' ? 2 : 1; return j; };
+  const close = (j, open, shut) => { let d = 0; for (; j < comp.length; j++) { if (comp[j] === open) d++; else if (comp[j] === shut && --d === 0) return j; } return j; };
+  while (i < comp.length) {
+    const c = comp[i];
+    if (c === '*') { out.push({ kind: '*' }); i++; } else if (c === '.' || c === '#') { out.push({ kind: c }); i = ident(i + 1); } else if (c === '[') {
+      const j = close(i, '[', ']'), m = /^\[\s*([\w-]+)\s*([~|^$*]?=)?/.exec(comp.slice(i, j + 1)); out.push({ kind: '[', name: m[1].toLowerCase(), op: m[2] || '' }); i = j + 1;
+    } else if (c === ':') {
+      const element = comp[i + 1] === ':', j = ident(i + (element ? 2 : 1)), name = comp.slice(i + (element ? 2 : 1), j).toLowerCase();
+      if (comp[j] === '(') { const k = close(j, '(', ')'); out.push({ kind: element ? '::' : ':', name, arg: comp.slice(j + 1, k) }); i = k + 1; } else { out.push({ kind: element ? '::' : ':', name }); i = j; }
+    } else if (/[\w-]|\\/.test(c)) { out.push({ kind: 'tag' }); i = ident(i); } else i++;
+  }
+  return out;
+};
+const lastOf = (sel) => compoundsOf(sel).at(-1)?.text || '';
+const oneArg = (s) => (s.name === 'is' || s.name === 'where') && s.arg != null && selectorList(s.arg).length === 1;
+// Filed by Chrome: an id, class, tag or attribute (`class` only by name), or a one-argument :is()/:where() it files.
+const keyedComp = (comp) => simplesOf(comp).some((s) => ['#', '.', 'tag'].includes(s.kind) || (s.kind === '[' && !(s.name === 'class' && s.op)) || (oneArg(s) && keyedComp(lastOf(s.arg))));
+// What the ancestor filter takes from a compound: the same, `class` attributes aside.
+const hashedComp = (comp) => simplesOf(comp).some((s) => ['#', '.', 'tag'].includes(s.kind) || (s.kind === '[' && s.name !== 'class') || (oneArg(s) && hashedComp(lastOf(s.arg))));
+// A list beside a one-argument :where() only raises that argument's specificity (the idiom below): it is not tried alone.
+const listedKeys = (comp) => !simplesOf(comp).some((s) => s.name === 'where' && oneArg(s)) && simplesOf(comp).some((s) => (s.name === 'is' || s.name === 'where') && s.arg != null && selectorList(s.arg).length > 1 && selectorList(s.arg).some((a) => keyedComp(lastOf(a))));
+// A selector that could be split: its rightmost compound unkeyed but listing keyed arguments, or (its rightmost unkeyed) the
+// compound before a descendant or child combinator with no key of its own but a list of keyed ones.
+const splittable = (sel) => {
+  const parts = compoundsOf(sel), last = parts.at(-1);
+  if (!last || keyedComp(last.text)) return false;
+  if (listedKeys(last.text)) return true;
+  const before = parts.at(-2);
+  return !!before && /^>?$/.test(last.comb.trim()) && !hashedComp(before.text) && listedKeys(before.text);
+};
+const ultraSelectors = (f) => cssRules(read(f)).filter((s) => !s.includes('&')).flatMap(selectorList);
+test('Ultra\'s sheets file every rule they can: no list in a rule\'s rightmost part that one selector per entry would avoid', () => {
+  for (const f of ULTRA_SHEETS) {
+    const left = ultraSelectors(f).filter(splittable);
+    assert.ok(left.length <= (SPLIT_LEFT[f] || 0), `${f}: ${left.length - (SPLIT_LEFT[f] || 0)} more selectors Chrome tries on every element (one selector per argument files them):\n${left.slice(0, 5).join('\n')}`);
+  }
+});
+test('Ultra\'s sheets: rules tried on every element, [class*=…] and :has() only fall', () => {
+  const all = ULTRA_SHEETS.flatMap(ultraSelectors), rules = ULTRA_SHEETS.flatMap((f) => cssRules(read(f)));
+  const unkeyed = all.filter((s) => !keyedComp(lastOf(s))).length, classStar = rules.filter((r) => /\[class\s*\*=/.test(r)).length, has = rules.filter((r) => r.includes(':has(')).length;
+  assert.ok(unkeyed <= UNKEYED_MAX, `${unkeyed} selectors tried on every element (was ${UNKEYED_MAX}): give each a class, id, tag or attribute in its rightmost part`);
+  assert.ok(classStar <= CLASS_STAR_MAX, `${classStar} rules with a [class*=…] (was ${CLASS_STAR_MAX}): every classed element checks one`);
+  assert.ok(has <= HAS_MAX, `${has} rules with a :has() (was ${HAS_MAX})`);
+  if (unkeyed < UNKEYED_MAX || classStar < CLASS_STAR_MAX || has < HAS_MAX) console.log(`perf-budget: lower UNKEYED_MAX to ${unkeyed}, CLASS_STAR_MAX to ${classStar}, HAS_MAX to ${has}`);
+});
+test('the rule scan sees what Chrome files', () => {
+  assert.deepEqual(cssRules('a{}@media (x){b{c:d}}@keyframes k{from{e:f}}d{&:hover{}}@layer l;e,f{}'), ['a', 'b', 'd', 'e,f']);
+  for (const [sel, keyed] of [['#site-wrap .a', true], ['#site-wrap :is(.a, .b)', false], ['#site-wrap :where(.a)', true], ['x [class*="y"]', false], ['x [data-y]', true],
+    [':where(.c):is(.c, a.b)', true], [':is(.a, .b) *', false], ['a > :not(.b)', false], ['::selection', false], ['span::before', true]]) assert.equal(keyedComp(lastOf(sel)), keyed, sel);
+  for (const [sel, can] of [['#site-wrap :is(.a, .b)', true], [':is(.a, .b) *', true], [':is(.a, .b) > *', true], [':is(.a, .b) + *', false], ['.x :is(.a, .b) *', true],
+    ['#site-wrap .a', false], ['#site-wrap :is([class*="a"], [class*="b"])', false], ['#site-wrap :where(:not(a, b))', false], ['.a:is(.b, .c) *', false]]) assert.equal(splittable(sel), can, sel);
+});
+
 test('review: local development policy is loaded by the worker, outside every first content script', () => {
   assert.doesNotMatch(read('content/defaults.js'), /GZ_LOCAL_DEV/, 'local developer policy belongs in the worker');
 });
