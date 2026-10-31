@@ -121,6 +121,7 @@ function probe() {
 // PERF_DEVICE=neo: the MacBook Neo's window as checks/courses/ultra-perf-check.js has it (1280×800 at 2×, 6 cores).
 // FEEL_MEASURE=n: no assertions; the tour n times with Glaze on and off, each click's medians to ultra-feel-measure.json.
 const neo = process.env.PERF_DEVICE === 'neo', measureReps = Number(process.env.FEEL_MEASURE || 0);
+if (!Number.isSafeInteger(measureReps) || measureReps < 0) throw Error('FEEL_MEASURE must be a non-negative safe integer');
 const pinned = neo ? require('../courses/ultra-perf-check.js').pinCores() : null;
 let checks = 0;
 const evidence = { checks: [], clicks: [] };
