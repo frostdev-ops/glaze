@@ -78,7 +78,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       await page.waitForFunction(() => !document.documentElement.matches(':active-view-transition'), null, { timeout: 3000 }).catch(() => {});
     };
     const store = (o = {}) => opts.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); await chrome.storage.local.set({ ultra: ['https://bb.school.test'] }); },
-      { ...G.GZ_DEFAULTS, colors: G.GZ_PRESETS.find(([n]) => n === (o.preset || 'Frost'))[1], preset: o.preset || 'Frost', navbar: { ...G.GZ_DEFAULTS.navbar, on: false }, enhance: { ...G.GZ_DEFAULTS.enhance, sidebar: false, ...o.enhance }, tabs: { ...G.GZ_SANITIZE({}).tabs, ...o.tabs }, nav: { ...G.GZ_DEFAULTS.nav, ...o.nav } });
+      { ...G.GZ_DEFAULTS, colors: G.GZ_PRESETS.find(([n]) => n === (o.preset || 'Frost'))[1], preset: o.preset || 'Frost', navbar: { ...G.GZ_DEFAULTS.navbar, on: false }, enhance: { ...G.GZ_DEFAULTS.enhance, sidebar: false, ...o.enhance }, tabs: { ...G.GZ_SANITIZE({}).tabs, ahead: false, ...o.tabs }, nav: { ...G.GZ_DEFAULTS.nav, ...o.nav } });
     const session = () => opts.evaluate(() => chrome.storage.session.get(null));
     const pictured = (cid, route) => opts.evaluate(async ({ cid, route }) => {
       const until = performance.now() + 10000;

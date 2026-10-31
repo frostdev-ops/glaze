@@ -30,7 +30,7 @@ const check = (value,label) => { assert.ok(value,label); results.push(label); };
       return r.abort();
     });
     const opts=await ctx.newPage(); await opts.goto(`chrome-extension://${id}/options.html`);
-    const settings={...G.GZ_DEFAULTS,navbar:{...G.GZ_DEFAULTS.navbar,on:true,place:'top',style:'float'},bg:{...G.GZ_DEFAULTS.bg,kind:'scene',scene:'contours'},motion:{...G.GZ_DEFAULTS.motion,level:'off'},enhance:Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map(k=>[k,['sidebar','notes','widgets','tabs','place'].includes(k)]))};
+    const settings={...G.GZ_DEFAULTS,tabs:{ahead:false},navbar:{...G.GZ_DEFAULTS.navbar,on:true,place:'top',style:'float'},bg:{...G.GZ_DEFAULTS.bg,kind:'scene',scene:'contours'},motion:{...G.GZ_DEFAULTS.motion,level:'off'},enhance:Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map(k=>[k,['sidebar','notes','widgets','tabs','place'].includes(k)]))};
     await opts.evaluate(async({settings,origin,uid})=>{
       await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings);
       await chrome.storage.local.set({ultra:[origin],[`sidebar:ultra:${origin}/${uid}`]:{v:1,rev:1,mig:1,dock:[{id:'notes'}],dest:{notes:'dock'}},[`ctabs:${origin}:${uid}`]:{tabs:[101,102].map((n,i)=>({cid:`_${n}_1`,name:`Course ${n}`,path:`/ultra/courses/_${n}_1/outline`,top:0,at:i,pin:true}))}});

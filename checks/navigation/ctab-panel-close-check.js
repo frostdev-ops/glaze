@@ -41,7 +41,7 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
     });
     const opts = await ctx.newPage(); await opts.goto(`chrome-extension://${id}/options.html`);
     // Ultra's own announcement panel, which this checks, is what the site's page setting opens (the pop-up is announce-check's).
-    const settings = { ...G.GZ_DEFAULTS, navbar: { ...G.GZ_DEFAULTS.navbar, on: false }, enhance: Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, ['tabs', 'place'].includes(k)])), tabs: G.GZ_SANITIZE({}).tabs,
+    const settings = { ...G.GZ_DEFAULTS, navbar: { ...G.GZ_DEFAULTS.navbar, on: false }, enhance: Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, ['tabs', 'place'].includes(k)])), tabs: { ...G.GZ_SANITIZE({}).tabs, ahead: false }, // frames load cold here (checks/navigation/ultra-standby-check.js has the standby)
       announce: { ...G.GZ_DEFAULTS.announce, ultra: 'site' } };
     await opts.evaluate(async ({ settings, key, site }) => {
       await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings);

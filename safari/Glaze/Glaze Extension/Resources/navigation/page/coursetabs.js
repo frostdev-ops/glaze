@@ -7,7 +7,8 @@
 // A tab picked from the strip runs as a live page of its own, in a frame over this page (live tabs, below), kept running
 // while hidden: what was typed, an upload under way, open folders and the scroll are there again when it is picked again.
 // While a tab's frame first loads, a stand-in drawn from a sketch of how that course's page last looked covers it (this page
-// sketches what is on screen; memory and storage.session only, never disk). Nothing is fetched or opened in the background.
+// sketches what is on screen; memory and storage.session only, never disk). Nothing of a course loads before its tab is
+// pointed at, pressed or picked (on Ultra, ahead of time: a standby Ultra waits for the next one, below).
 // The list is kept per site and account (storage.local ctabs:<origin>:<uid>); identity comes from the site's existing
 // once-per-page reader (Canvas's profile or Ultra's /users/me).
 // Classic script, through GZ_CTX; a second injection keeps the first.
@@ -64,7 +65,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     else local((s) => s.set({ [key()]: { tabs } }));
   };
   const save = () => { if (framed) return saveNow(); clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 600); };
-  const framed = ctx.tabFrame; // in a tab's own frame: its course; '' on the page itself
+  let framed = ctx.tabFrame; // in a tab's own frame: its course ('standby' in Ultra's standby until adopted); '' on the page itself
   let closedCourse = ''; // a closed surrounding Canvas course stays covered until native navigation
   const here = () => (preview ? demo : ctx.courseId() === closedCourse ? '' : ctx.courseId());
   const shown = (e) => !!e && e.getClientRects().length > 0;
@@ -1069,7 +1070,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   // Pages that do something as they load (a quiz attempt, a tool launched, a submission): never loaded ahead or again
   // unasked.
-  const acts = (path) => /\/(?:quizzes\/\d+\/take|external_tools|lti|sessionless_launch|submissions)(?:[/?#]|$)/.test(path);
+  const acts = (path) => /\/(?:quizzes\/\d+\/take|assessment\/_\d+_\d+\/attempt|external_tools|lti|sessionless_launch|submissions)(?:[/?#]|$)/.test(path);
   // A kept page is quiet as a page left behind: its media paused; embedded documents stay live, since a tool may hold
   // unsaved work we can't observe. After a moment it isn't drawn at all (no style, layout, paint or
   // animation frames, about half of what a hidden Canvas page costs while idle), its scroll noted to put back.
@@ -1202,7 +1203,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         d.addEventListener('scroll', scrolled, { capture: true, passive: true });
       }
       const built = doc && doc === d && doc !== f.stale && (cid === PAGE ? !/^\/courses\/\d+/.test(doc.location.pathname) : L.owns(doc.location.pathname, cid)) && (ctx.site === 'canvas' ? canvasContent(doc) : [doc.querySelector('.bb-course-navigation'), doc.querySelector('.routed-page')].some(shown))
-        && !loading(doc.body) && !doc.documentElement.matches('[data-gz-placing]');
+        && !loading(doc.body) && !doc.documentElement.matches('[data-gz-placing]') && !f.adopting;
       if (built && now - changed > 300) {
         clean();
         f.slow = false;
@@ -1234,6 +1235,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const x = tabs.find((y) => y.cid === cid);
     if (!x && !(cid === PAGE && url)) return null;
     url ||= L.target(x, P().place);
+    const kept = cid !== PAGE && adopt(cid, url, x);
+    if (kept) return kept;
     const el = frameEl(cid, url, cid === PAGE ? t('Canvas') : x.name || t('Course'));
     const f = { el, at: Date.now(), ready: false, url, dirty: false };
     frames.set(cid, f);
@@ -1275,13 +1278,179 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     el.inert = true;
     return el;
   };
+  // ---- ahead of a click (Ultra) -------------------------------------------------------------------------------------
+  // Course tabs opened ahead of time (tabs.ahead). The standby: one more Ultra, booted hidden at idle on a light page of
+  // its own (STANDBY_AT), so that a tab picked with no live frame opens as a route in an Ultra already running (about
+  // 0.4 s on a real site) instead of a fresh boot (about 1.1 s). It is no tab's and doesn't count against LIVE. Picked
+  // (open), it becomes that course's frame (adopt): named for it, then routed in place by its own Glaze (adoptHere), in
+  // place of its own page in history. With no route in time it loads the course afresh, as a frame made for it does
+  // (adopting). The next one boots at the next idle. A press on a course's tab, or the pointer resting on it, starts its
+  // frame before the click shows it (warmTab).
+  const STANDBY = 'standby', STANDBY_AT = '/ultra/profile', ADOPT_ACK = 2000, ADOPT_ROUTE = 5000;
+  let standby = null, standbyTimer = 0, standbyIdle = 0, standbyMiss = 0, hoverTimer = 0, hoverCid = '';
+  const ahead = () => ctx.site === 'ultra' && on && !preview && !signedOut && P().ahead !== false;
+  // A tab with no live frame, other than this page's own course.
+  const useful = () => tabs.some((x) => x.cid !== ctx.courseId() && !frames.has(x.cid));
+  const unStandby = (miss = false) => { if (!standby) return; clearTimeout(standby.timer); standby.el.remove(); standby = null; if (miss) standbyMiss++; };
+  const stopAhead = () => {
+    clearTimeout(standbyTimer); standbyTimer = 0;
+    (globalThis.cancelIdleCallback || clearTimeout)(standbyIdle); standbyIdle = 0;
+    clearTimeout(hoverTimer); hoverTimer = 0; hoverCid = '';
+    unStandby();
+  };
+  // From each sync. Booted once this page and every frame have settled, on screen; a spinner that never goes waits about
+  // 20 s. One that went wrong (off Ultra, never ready, never routed) makes the next wait longer; after three, none.
+  const standbyLater = (wait = 2500, tries = 0) => {
+    if (standby && !standby.el.isConnected) standby = null; // (its host went with the tabs)
+    if (!ahead()) { stopAhead(); return; }
+    if (framed || !who) { unStandby(); return; }
+    if (standby || standbyTimer || standbyIdle || standbyMiss >= 3 || !loaded || !useful()) return;
+    standbyTimer = setTimeout(() => {
+      standbyTimer = 0;
+      standbyIdle = (globalThis.requestIdleCallback || setTimeout)(() => {
+        standbyIdle = 0;
+        if (standby || !ahead() || framed || !who || !useful()) return;
+        if (document.visibilityState !== 'visible' || (tries < 8 && (loading(document.body) || [...frames.values()].some((f) => !f.ready && !f.slow)))) return standbyLater(2500, tries + 1);
+        bootStandby();
+      }, { timeout: 5000 });
+    }, wait * 4 ** standbyMiss);
+  };
+  const bootStandby = () => {
+    hostIn();
+    const s = { el: frameEl(STANDBY, STANDBY_AT, ''), loaded: null, uid: '', accountDoc: null, timer: 0 };
+    s.el.addEventListener('load', () => {
+      let ultra = false; try { const w = s.el.contentWindow.location; ultra = w.origin === location.origin && w.pathname.startsWith('/ultra/'); } catch { /* another site */ }
+      if (standby === s && !ultra) { unStandby(true); standbyLater(); }
+    });
+    s.timer = setTimeout(() => { if (standby === s && !usable(s)) { unStandby(true); standbyLater(); } }, 30000);
+    standby = s;
+    host.prepend(s.el);
+  };
+  // Ready to take a course: its Glaze in (loaded) and signed in as this page, still on a page of Ultra's outside a course.
+  const usable = (s) => {
+    try {
+      const d = s.el.contentDocument;
+      return !!d?.body && s.el.isConnected && s.loaded === d && s.accountDoc === d && !!who && s.uid === who && d.location.origin === location.origin
+        && d.location.pathname.startsWith('/ultra/') && !L.courseOf(d.location.pathname, d.location.search);
+    } catch { return false; }
+  };
+  const adopt = (cid, url, x) => {
+    if (!standby) return null;
+    const s = standby;
+    clearTimeout(s.timer);
+    standby = null;
+    if (!ahead() || !usable(s) || !L.owns(url.split(/[?#]/)[0], cid) || acts(url)) { s.el.remove(); standbyLater(); return null; }
+    const el = s.el, doc = el.contentDocument;
+    // Its name is what a later load of it boots as (content.js tabFrame).
+    el.name = `gz-ctab:${cid}`;
+    try { el.contentWindow.name = el.name; } catch { /* gone */ }
+    el.title = x?.name || t('Course');
+    el.removeAttribute('data-ready');
+    // What its own page already drew (before) never counts as the course routed.
+    const f = { el, at: Date.now(), ready: false, url, dirty: false, uid: s.uid, accountDoc: doc,
+      adopting: { doc, at: performance.now(), ok: false, failed: false, before: [...doc.querySelectorAll('.bb-course-navigation, .routed-page')] } };
+    frames.set(cid, f);
+    guardFrame(cid, f);
+    watch(cid, f);
+    adopting(cid, f);
+    el.contentWindow.postMessage({ gzCtab: 'adopt', cid, url }, location.origin);
+    standbyLater();
+    return f;
+  };
+  // Its route, by state: its Glaze's answer within ADOPT_ACK, then its course drawn within ADOPT_ROUTE; else the course
+  // loads afresh in it, unless something was typed there. A document of its own (a load) is watch's alone.
+  const adopting = (cid, f) => {
+    const a = f.adopting;
+    const step = () => {
+      if (frames.get(cid) !== f || f.adopting !== a) return;
+      let d = null; try { d = f.el.contentDocument; } catch { /* another site */ }
+      if (d !== a.doc || f.ready) { f.adopting = null; return; }
+      const routed = a.ok && L.owns(d.location.pathname, cid) && [d.querySelector('.bb-course-navigation'), d.querySelector('.routed-page')].some((e) => shown(e) && !a.before.includes(e));
+      const late = a.failed || performance.now() - a.at > (a.ok ? ADOPT_ROUTE : ADOPT_ACK);
+      if (!routed && !late) { setTimeout(step, 50); return; }
+      f.adopting = null;
+      if (routed) standbyMiss = 0;
+      else { standbyMiss++; if (!f.dirty) load(cid, f, f.url); }
+      // On screen with no stand-in over it: shown as it loads from now on, as picture() does for any frame.
+      if (showing === cid && !f.ready && !pic) f.el.style.visibility = '';
+    };
+    setTimeout(step, 50);
+  };
+  // In the standby: its course, from the page around it. It becomes that course's frame, then goes there in place.
+  const adoptHere = (cid, url) => {
+    if (framed !== STANDBY) return;
+    const ok = ctx.site === 'ultra' && L.validId(cid, 'ultra') && typeof url === 'string' && url.length < 1300 && url.startsWith('/') && L.owns(url.split(/[?#]/)[0], cid);
+    if (ok) {
+      framed = cid; awayFrom = ''; last = undefined; lastPath = ''; restored = false;
+      try { window.name = `gz-ctab:${cid}`; } catch { /* the page around named it too */ }
+      // Absolute: Ultra's <base href> is its CDN. In place of the standby's page: Back goes where it went before.
+      try { history.replaceState(null, '', location.origin + url); dispatchEvent(new PopStateEvent('popstate', { state: null })); } catch { toTop('adopted', { cid, ok: false }); return; }
+    }
+    toTop('adopted', { cid, ok });
+    if (ok) pass();
+  };
+  const warmTab = (cid) => {
+    if (!ahead() || !L.validId(cid, ctx.site)) return;
+    if (framed) { if (framed !== STANDBY && cid !== framed) toTop('warm', { cid }); return; }
+    // Never past LIVE: only a click makes room.
+    if (!who || cid === showing || frames.has(cid) || cid === ctx.courseId() || frames.size - frames.has(PAGE) >= LIVE) return;
+    const x = tabs.find((x) => x.cid === cid);
+    if (!x || acts(L.target(x, P().place))) return;
+    hostIn();
+    open(cid);
+  };
+  // The course tab under a pointer: this strip's or Glaze's bar's (its shadow root is open), never their pin or close.
+  const pointed = (e) => {
+    for (const n of e.composedPath?.() || []) {
+      if (!(n instanceof Element)) continue;
+      if (n.matches('.gz-ctab-x, .gz-ctab-pin') || (n.dataset?.act && n.dataset.act !== 'tab')) return '';
+      if (n.dataset?.act === 'tab' || (n.classList.contains('gz-ctab') && n.closest('#gz-ctabs'))) return n.dataset.cid || n.dataset.courseId || '';
+    }
+    return '';
+  };
+  // A press, or about 150 ms of rest on the same tab. Not a touch: it may be the start of a scroll.
+  const onPoint = (e) => {
+    if (!e.isTrusted || e.pointerType === 'touch' || !ahead() || (e.type === 'pointerout' && e.relatedTarget)) return;
+    const cid = e.type === 'pointerout' || drag?.on ? '' : pointed(e);
+    if (e.type === 'pointerdown') {
+      clearTimeout(hoverTimer); hoverCid = '';
+      if (cid && !e.button && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) warmTab(cid);
+      return;
+    }
+    if (cid === hoverCid) return;
+    clearTimeout(hoverTimer);
+    hoverCid = cid;
+    if (cid) hoverTimer = setTimeout(() => { if (hoverCid === cid) warmTab(cid); }, 150);
+  };
+  // The standby's Glaze (in, signed in: hidden as any frame), an adopted frame's answer, and a press in the frame on screen.
+  const onAhead = (e) => {
+    const d = e.data;
+    if (e.origin !== location.origin || typeof d?.gzCtab !== 'string' || !on || preview) return;
+    if (framed) { if (e.source === window.top && d.gzCtab === 'adopt') adoptHere(d.cid, d.url); return; }
+    const s = standby;
+    if (s && e.source === s.el.contentWindow) {
+      let doc = null; try { doc = s.el.contentDocument; } catch { /* gone */ }
+      if (d.gzCtab === 'loaded') { s.loaded = doc; e.source.postMessage({ gzCtab: 'visible', on: false }, location.origin); }
+      else if (d.gzCtab === 'account' && L.validId(d.uid, ctx.site)) {
+        if (who && d.uid !== who) { send({ op: 'drop', signout: true }); revoke(); return; }
+        s.uid = d.uid; s.accountDoc = doc;
+      }
+      s.el.toggleAttribute('data-ready', usable(s));
+      return;
+    }
+    const [cid, f] = [...frames].find(([, g]) => g.el.contentWindow === e.source) || [];
+    if (!f) return;
+    if (d.gzCtab === 'adopted' && f.adopting && d.cid === cid) { if (d.ok === true) f.adopting.ok = true; else f.adopting.failed = true; }
+    else if (d.gzCtab === 'warm' && cid === showing && typeof d.cid === 'string') warmTab(d.cid);
+  };
   // The stand-in over a frame still loading (sketched at this window size and menu width), else the frame as it loads: the
   // sketch's boxes in their colours and corners, its lines of text as bars, its course name, over the page's own background.
   const picture = (cid, f) => {
     unpicture(true);
     const s = snaps.get(cid);
     const put = (snap) => {
-      if (showing !== cid || frames.get(cid) !== f || f.ready || f.slow || pic || !fits(snap, f.url)) { if (showing === cid && !f.ready && !pic) f.el.style.visibility = ''; return; }
+      // Shown as it loads, unless it is an adopted standby still on its own page (adopting shows it once routed).
+      if (showing !== cid || frames.get(cid) !== f || f.ready || f.slow || pic || !fits(snap, f.url)) { if (showing === cid && !f.ready && !pic && !f.adopting) f.el.style.visibility = ''; return; }
       const box = document.createElement('div');
       box.className = 'gz-ctabs-pic';
       // A Canvas frame sits inside the navigation's room; the sketch is of the whole window, so it moves by that room.
@@ -1787,6 +1956,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     document[f]('keydown', onLeave, true);
     document[f]('pointerdown', onLeave, true);
     if (ctx.site === 'canvas') { globalThis[f]('click', onCourseLink); document[f]('pointerdown', onPress, true); if (!framed && !preview) globalThis[f]('popstate', onPop); }
+    if (ctx.site !== 'canvas') { for (const t of ['pointerdown', 'pointerover', 'pointerout']) document[f](t, onPoint, { capture: true, passive: true }); globalThis[f]('message', onAhead); }
     globalThis[f]('pagehide', onHide);
     globalThis[f]('pageshow', onShow);
     globalThis[f]('resize', onResize);
@@ -1874,7 +2044,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (cid && !preview && loaded && !showing) {
       if (cid !== last || !tabs.some((x) => x.cid === cid)) visitTab(cid);
       notePlace(cid);
-      if (framed && !restored) {
+      if (framed && !restored && atView()) {
         restored = true;
         const x = tabs.find((y) => y.cid === cid);
         if (P().place && x?.top && x.path === location.pathname + location.search) scrollBack(x.top);
@@ -1893,6 +2063,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (gone) return;
     if (signedOut) want = false;
     if (!want) {
+      stopAhead();
       nudge();
       html.removeAttribute('data-gz-ctabs');
       keepClear(null);
@@ -1938,6 +2109,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       else { hello().then(() => { if (!on || signedOut) return; drawn = ''; local((s) => s.get(key(), (r) => { if (who) tabs = L.clean(r?.[key()]?.tabs, ctx.site); pass(); })); }); }
     }
     pass();
+    standbyLater();
   };
   const revoke = () => {
     saveNow();
@@ -1975,6 +2147,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     try { if (chrome.runtime?.id) { e.preventDefault(); return; } } catch { /* reloaded */ }
     gone = true;
     ++showTurn;
+    stopAhead();
     nudge();
     removeEventListener(TAKE, letGo);
     clearTimeout(saveTimer); clearTimeout(capTimer); clearTimeout(sayTimer);
@@ -2011,8 +2184,15 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     shut: (cid) => { if (on && tabs.some((x) => x.cid === cid)) shut(cid); },
     pin: (cid) => { if (on && tabs.some((x) => x.cid === cid)) pinTab(cid); },
     move: (cid, to) => { if (on && tabs.some((x) => x.cid === cid) && Number.isInteger(to)) moveTab(cid, to); },
-    // A press on one of the bar's links: its page starts loading (Canvas, in a frame that runs), ahead of the click.
-    warm: (href) => { if (on && ctx.site === 'canvas') warm(href); },
+    // A press on one of the bar's links: its page starts loading (Canvas, in a frame that runs; Ultra, a course tab's
+    // frame), ahead of the click.
+    warm: (href) => {
+      if (!on) return;
+      if (ctx.site === 'canvas') return warm(href);
+      let u; try { u = new URL(String(href), location.origin); } catch { return; }
+      const cid = u.origin === location.origin && L.courseOf(u.pathname, u.search);
+      if (cid) warmTab(cid);
+    },
     // Back to the page under the tabs (a frame was showing), as picking the page's own item would.
     leave: () => { if (on && showing) show(''); },
     signout: () => { if (on) signOut(); },
