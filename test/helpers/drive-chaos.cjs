@@ -735,7 +735,7 @@ const KNOWN = {
     about: 'a Settings change landing between the worker\'s read of the key and its write of Drive\'s value (the compare-and-write race, milliseconds, accepted) is written over',
     skips: (op) => op.t === 'run' && op.inject?.op?.t === 'setting',
     repro: [{ t: 'setting', k: 'colors', d: 1, pick: 0.58, pick2: 0.28, s: 525175327 }, { t: 'run', d: 1, how: 'run', s: 1121166915 },
-      { t: 'run', d: 0, how: 'poke', s: 867526412, inject: { at: 78, op: { t: 'setting', k: 'colors', d: 0, pick: 0.29, pick2: 0.5, s: 42 } } }],
+      { t: 'run', d: 0, how: 'poke', s: 867526412, inject: { at: 79, op: { t: 'setting', k: 'colors', d: 0, pick: 0.29, pick2: 0.5, s: 42 } } }],
   },
   'stale-restore': {
     fixed: true,
