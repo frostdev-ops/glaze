@@ -366,15 +366,17 @@
   // Kept per site (`dueWeek:<origin>`): another site's items (Blackboard and Canvas, or two schools) open nothing here.
   let dueSoon = null;
   const DUE = `dueWeek:${location.origin}`;
+  // Ultra's for two minutes, asked again behind the paint.
+  const DUE_TTL = ultra ? 12e4 : 6e5;
   let dueAt = 0, dueRead = 0, dueGone = false;
   const dueWeek = (force = false) => {
     if (dueGone) return Promise.resolve([]);
-    if (dueSoon && Date.now() - dueAt < 120000 && !force) return dueSoon;
+    if (dueSoon && (!ultra || Date.now() - dueAt < DUE_TTL) && !force) return dueSoon;
     const n = ++dueRead, now = dueAt = Date.now();
     return (dueSoon = new Promise((res) => stored(DUE, (r) => res(r?.[DUE]))).then((r) => {
       const kept = Array.isArray(r?.list) ? r.list : [];
-      if (!force && now - (r?.at || 0) < 120000) {
-        setTimeout(() => { if (n === dueRead) dueWeek(true); }, 0);
+      if (!force && now - (r?.at || 0) < DUE_TTL) {
+        if (ultra) setTimeout(() => { if (n === dueRead) dueWeek(true); }, 0);
         return kept;
       }
       const at = (days) => new Date(now + days * 864e5).toISOString();

@@ -470,7 +470,7 @@ const pageLoad = async ({ stored, root = ORIGIN, courses = [{ id: 16, fullname: 
     stored: (k, cb) => chrome.storage.local.get(k, cb), // content.js's startup read, here storage itself
   });
   ctx.window.top = ctx.window;
-  vm.runInContext(`let canvasRecorded = false; ${contentBlock('  const recordCourses = () => {', '\n  };\n')} let dueSoon = null; ${contentBlock('  const DUE =', '  }));\n')}
+  vm.runInContext(`let canvasRecorded = false; ${contentBlock('  const recordCourses = () => {', '\n  };\n')} let dueSoon = null; ${contentBlock('  const DUE =', '\n  };\n')}
     this.load = () => { recordCourses(); return dueWeek(); };`, ctx);
   await ctx.load();
   await settle(); await settle();
