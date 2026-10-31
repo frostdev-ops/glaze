@@ -221,7 +221,7 @@ test('successful backup restore cleans logos only after settings commit; failed 
   assert.deepEqual(writes, [{ freshDefaults: { fresh: false, pending: false } }]);
 });
 
-test('the shared planner reuses only this account covered fresh cache, otherwise a bounded shared memo', async () => {
+test('the shared planner reuses only this account covered fresh cache, otherwise the shared read (page.due, its own memo)', async () => {
   const U = moduleOf('courses/ultra.js'), now = Date.now(), from = now, to = now + 1000;
   global.location = { origin: 'https://school.test' };
   const profile = U.page.profile, due = U.page.due;
@@ -231,8 +231,8 @@ test('the shared planner reuses only this account covered fresh cache, otherwise
     const key = 'todo:https://school.test/_9_1', cache = { key, at: now, start: new Date(from).toISOString(), end: new Date(to).toISOString(), items: [{ title: 'Cached' }] };
     assert.equal((await U.page.planned(from, to, cache)).items[0].title, 'Cached'); assert.equal(calls, 0);
     assert.equal((await U.page.planned(from, to, { ...cache, key: 'todo:https://other.test/_9_1' })).items[0].title, 'Read');
-    await U.page.planned(from, to, { ...cache, at: now - 600001 }); assert.equal(calls, 1);
-    await U.page.planned(from + 1, to + 1, cache); assert.equal(calls, 2, 'uncovered range uses planner');
+    await U.page.planned(from, to, { ...cache, at: now - 600001 }); assert.equal(calls, 2, 'a stale copy is not taken');
+    await U.page.planned(from + 1, to + 1, cache); assert.equal(calls, 3, 'uncovered range uses planner');
   } finally { U.page.profile = profile; U.page.due = due; delete global.location; }
 });
 

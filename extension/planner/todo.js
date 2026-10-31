@@ -75,12 +75,13 @@ var GZ_TODO = globalThis.GZ_TODO || (() => {
     return { past: today - PAST[o.past], to, weekEnd: Math.min(weekEnd, to) };
   };
   // What to ask Canvas's planner for: a week back at least (announcements, what was done lately), and seven days
-  // ahead at least (the popup's due list comes from the same answer), a day of slack each side.
+  // ahead at least (the popup's due list comes from the same answer), a day of slack each side. Whole days, so the
+  // same range is asked all day and one read answers every feature asking for it.
   const fetchRange = (o, now, tz) => {
     const today = dayOf(now, tz);
     const { to } = span(o, today);
     const start = midnight(today - Math.max(PAST[o.past], 7) - 1, tz);
-    const end = Math.max(midnight(to + 1, tz), now + 8 * DAY);
+    const end = midnight(Math.max(to + 1, dayOf(now + 8 * DAY, tz) + 1), tz);
     return { start: new Date(start).toISOString(), end: new Date(end).toISOString() };
   };
 

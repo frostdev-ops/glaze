@@ -110,8 +110,8 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
     const say = (label, pct = 0) => { Object.assign(job, { label, pct }); paintDl(fid); };
     say(job.label);
     // Only the fields used: never an item's contentDetail, where an LTI link keeps its tool's secret and key. Through
-    // courses/ultra.js's reader: GET, this site, redirects refused (one means signed out).
-    const get = (path) => GZ_ULTRA.read({ origin: location.origin, signal: ctl.signal }).get(`/learn/api/${path}`);
+    // courses/ultra.js's reader: GET, this site, redirects refused (one means signed out), in the site's queue.
+    const get = (path) => need('courses/lmsq.js', () => globalThis.GZ_LMSQ).then(() => GZ_ULTRA.read({ origin: location.origin, signal: ctl.signal, f: (u, o) => GZ_LMSQ.fetch(u, o) }).get(`/learn/api/${path}`));
     const list = (id) => get(`v1/courses/${cid}/contents/${id}/children?limit=200&fields=${GZ_ULTRA.FILES_FIELDS}`).then((j) => j.results || []);
     const found = [];
     let skipped = 0;

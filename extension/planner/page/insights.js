@@ -121,9 +121,10 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
     const uid = mem.find((m) => /^_\d+_\d+$/.test(m?.userId || ''))?.userId;
     return { p: { id: uid }, term: GZ_ULTRA.current(mem, Date.now()), tz: GZ_TODO.zone(Intl.DateTimeFormat().resolvedOptions().timeZone) };
   };
+  // Through courses/ultra.js's gradebook store and the site's queue, like every gradebook read on the page.
   const ultraOne = async (c, uid, tz, at, go) => {
-    const r = GZ_ULTRA.read({ origin: location.origin, live: go });
-    const rows = await r.grades(c.id, uid);
+    const r = GZ_ULTRA.read({ origin: location.origin, live: go, f: (u, o) => ctx.need('courses/lmsq.js', () => globalThis.GZ_LMSQ).then(() => GZ_LMSQ.fetch(u, o, 0, go)) });
+    const rows = await GZ_ULTRA.page.book(c.id, uid, { live: go });
     const excepted = await GZ_ULTRA.excepts(r, c.m, c.id, rows, at);
     return { id: c.id, name: c.name, q: false, more: rows.complete === false, items: GZ_ULTRA.work(rows, at, excepted), trend: rows.complete === false ? [] : GZ_ULTRA.trend(rows, tz), gp: '' };
   };

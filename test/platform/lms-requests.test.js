@@ -74,7 +74,7 @@ const ultra = ({ answer, pathname = '/ultra/courses/_1_1/outline', local = {}, c
     cardsInView: { observe() {}, unobserve() {} }, inView, tagCards() {}, tagExtras() {}, courseSlots: {}, courseColors: () => ({}), varText: () => '', CARD: 'article', dueLabelled: () => false,
     links: [1], settings: { enabled: true, enhance: { inline: true, progress: true, newgrades: false, newcontent: false, ...enhance }, nav: { brand: 'x' }, courses: { names: {}, tint: false, tinted: [] }, sidebar: {} },
     observer: {}, worn: { nav: {} }, courseList: {} };
-  return { X: ctx.GZ_SITE_ULTRA(I), s, c, location, badges, local, I };
+  return { X: ctx.GZ_SITE_ULTRA(I), s, c, location, badges, local, I, ctx };
 };
 // A course card on the Courses page, on screen or not.
 const card = (cid, seen = true) => { const el = { isConnected: true }; return { id: `course-element-card${cid}`, el, seen, querySelector: (sel) => (sel.startsWith('h4') ? el : null) }; };
@@ -138,6 +138,59 @@ test('ULT-5: eight courses never have more than three requests open at once, and
     cards: ids.map((id, i) => card(id, i < 3)) });
   page.X.renderNew(); await settle(); page.X.renderNew(); await settle();
   assert.deepEqual(page.s.asked.filter((p) => /gradebook/.test(p)).map((p) => p.split('/')[5]), ids.slice(0, 3), 'the cards on screen, none off it');
+});
+
+// D: one gradebook store per site (courses/ultra.js page.book) behind the card badges, the planner, the GPA, Insights, the
+// rubric and agent apps; and the copy kept from the last visit drawing before the network answers.
+test('D: the badges and another feature asking for one course\'s gradebook at once send one request', async () => {
+  const held = [];
+  const u = ultra({ answer: (r) => (/users\/me$/.test(r.pathname) ? ME : new Promise((done) => held.push(() => done([200, { results: [{ columnId: '_5_1' }] }])))) });
+  const b = u.X.ctx.bookFor('_1_1');
+  await settle();
+  const other = u.ctx.GZ_ULTRA.page.book('_1_1', '_9_1');
+  const more = u.ctx.GZ_ULTRA.page.book('_1_1', '_9_1', { maxAge: 0 });
+  await settle();
+  for (const done of held.splice(0)) done();
+  await settle();
+  assert.equal(u.s.count(/gradebook\/grades/), 1);
+  assert.equal(await other, b.results);
+  assert.equal(await more, b.results, 'a read in flight answers whatever age is asked for');
+  assert.deepEqual(Object.keys(u.local[`ultraBooks:${ORIGIN}/_9_1`]), ['_1_1'], 'kept for the next page');
+});
+
+test('D: the badges draw the copy kept from the last visit while the gradebook is asked again', async () => {
+  const held = [];
+  const kept = { [`ultraBooks:${ORIGIN}/_9_1`]: { _1_1: { at: 1e12 - 864e5, rows: [{ columnId: '_5_1', status: 'GRADED', displayGrade: { text: 'A' } }], complete: true } } };
+  const u = ultra({ local: kept, answer: (r) => (/users\/me$/.test(r.pathname) ? ME : new Promise((done) => held.push(() => done([200, { results: [{ columnId: '_5_1', status: 'GRADED', displayGrade: { text: 'B' } }] }])))) });
+  const b = u.X.ctx.bookFor('_1_1');
+  await settle();
+  assert.equal(held.length, 1, 'asked again at once');
+  assert.deepEqual([b.saved, b.pending, [...b.results].map((r) => r.displayGrade.text)], [true, true, ['A']]);
+  held.shift()();
+  await settle();
+  assert.deepEqual([b.saved, b.pending, [...b.results].map((r) => r.displayGrade.text)], [false, false, ['B']]);
+});
+
+test("D: content.js's api asks Ultra through the site part's queue, so a 429 there holds it too; Canvas keeps plain fetch", async () => {
+  const u = ultra({ answer: (r) => (/users\/me$/.test(r.pathname) ? ME : /_1_1/.test(r.pathname) ? [429, {}, { 'Retry-After': '30' }] : [200, { results: [] }]) });
+  u.X.ctx.bookFor('_1_1'); await settle();
+  const late = u.X.fetch(`${ORIGIN}/learn/api/v1/calendars/calendarItems?since=x`, { credentials: 'same-origin', redirect: 'error', headers: { accept: 'application/json' } });
+  await settle();
+  assert.equal(u.s.count(/calendarItems/), 0, 'held while the school asked for 30 s');
+  await u.c.tick(30000);
+  assert.equal((await late).status, 200);
+  assert.equal(u.s.count(/calendarItems/), 1);
+  // content.js's api: the site part's fetch where it has one (Ultra's), else the browser's.
+  const core = read('content/content.js'), start = core.indexOf('  const api = '), end = core.indexOf('  // The Canvas course', start);
+  const defaults = vm.runInNewContext(`${core.match(/^ {2}const no = .*\n {2}const X = \{[\s\S]*?\};$/m)[0]} X`, { fetch: async () => { used.push('fetch'); return new Response('{"ok":1}'); } });
+  let used;
+  for (const [X, via] of [[{ ...defaults, fetch: async () => { used.push('part'); return new Response('{"ok":1}'); } }, 'part'], [defaults, 'fetch']]) {
+    used = [];
+    const g = vm.createContext({ location: { origin: ORIGIN }, Promise, JSON, X });
+    const { api } = vm.runInContext(`${core.slice(start, end)} ({ api })`, g);
+    assert.deepEqual(await api('/users/me'), { ok: 1 });
+    assert.deepEqual(used, [via]);
+  }
 });
 
 // courses/lmsq.js alone: its queue's order and its holds.

@@ -46,7 +46,7 @@ const page = ({ local = {}, sync = {}, replies = [], clock = { t: Date.now() }, 
       ...(ultra && { site: 'ultra', capi: () => { throw new Error('not on Ultra'); }, profile: () => { throw new Error('not on Ultra'); } }) },
     location: ultra ? { origin: 'https://school.blackboard.test', pathname: '/ultra/course' } : { origin: 'https://canvas.test', pathname: '/' },
     setTimeout: (f, ms) => { timers.set(++n, { f, ms }); return n; },
-    clearTimeout: (id) => timers.delete(id),
+    clearTimeout: (id) => timers.delete(id), cancelAnimationFrame() {},
     addEventListener: (type, f) => win.push({ type, f }), removeEventListener: (type, f) => { const i = win.findIndex((x) => x.type === type && x.f === f); if (i >= 0) win.splice(i, 1); },
     chrome: {
       runtime: { id: 'glaze', lastError: undefined, getURL: (p) => `chrome-extension://x/${p}`, getManifest: () => ({ version: '2.3.0' }), sendMessage: (m, cb) => { sent.push(m); const r = replies.shift() || { ok: true, kept: true }; if (hold) held.push(() => cb(r)); else Promise.resolve().then(() => cb(r)); } },
@@ -68,7 +68,7 @@ const page = ({ local = {}, sync = {}, replies = [], clock = { t: Date.now() }, 
       assert.equal(u.origin, c.location.origin); assert.equal(init.credentials, 'same-origin');
       ultra.requests.push(u.pathname);
       let value;
-      if (u.pathname === '/learn/api/v1/users/me') value = { id: uid };
+      if (u.pathname === '/learn/api/v1/users/me') { if (ultra.holdMe) await new Promise((resolve) => ultra.pending.push(resolve)); value = { id: ultra.uid || uid }; }
       else if (u.pathname === `/learn/api/v1/users/${uid}/memberships`) value = { results: [] };
       else if (u.pathname.endsWith('/todo/studentItems')) {
         ultra.asked.push({ origin: u.origin, from: Date.parse(u.searchParams.get('since')), to: Date.parse(u.searchParams.get('until')) });
@@ -322,13 +322,15 @@ test("Ultra: the agenda reads the day from Ultra's To Do and calendar (courses/u
   assert.ok(find(list, (e) => e.tagName === 'LI' && 'done' in e.dataset), 'handed in: done');
   assert.equal(ultra.asked.length, 1);
   assert.equal(ultra.asked[0].origin, 'https://school.blackboard.test', "this Ultra site's own");
-  assert.equal(ultra.asked[0].to - ultra.asked[0].from, 864e5, 'one day');
-  // The day again within two minutes: not asked again.
+  // The day is inside Better To Do's own range: that range is read (one To Do request, laid back from its end) and
+  // answers the days around it too, within two minutes.
+  const [lo, hi] = ultraDay(p);
+  assert.ok(ultra.asked[0].from <= lo && ultra.asked[0].to >= hi + 7 * 864e5, "Better To Do's range, which holds the day");
   find(body, (e) => e.attrs?.['aria-label'] === 'Next day').fire('click');
   for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
   find(body, (e) => e.attrs?.['aria-label'] === 'Previous day').fire('click');
   for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
-  assert.equal(ultra.asked.length, 2, 'the next day once, today from memory');
+  assert.equal(ultra.asked.length, 1, 'the next day and today from the same read');
 });
 
 const agendaText = (el) => [el.textContent || '', ...(el.children || []).map((c) => (typeof c === 'object' ? agendaText(c) : String(c)))].join(' ');
@@ -356,6 +358,35 @@ test('Ultra shared planner: an agenda reuses the profile and range already read 
   assert.equal(ultra.requests.filter((s) => s.endsWith('/memberships')).length, 1);
   assert.equal(ultra.asked.length, 1, 'the shared fresh range supplies the agenda');
   tile.stop();
+});
+
+test('D: the agenda draws the day kept for the student last seen on this site before /users/me answers', async () => {
+  const ultra = { holdMe: true, items: [] }, p = page({ ultra });
+  p.ui.probe.set(W, D.GZ_SANITIZE({}).widgets, null); // nobody confirmed on this page yet
+  p.local[`ultraMe:${p.c.location.origin}`] = { uid: '_5_1' };
+  p.local.todoCache = cachedDay(p);
+  const { body, tile } = await loadAgenda(p);
+  assert.match(agendaText(body), /Covered work/, 'drawn from what was kept');
+  assert.equal(ultra.asked.length, 0, 'nothing of To Do asked');
+  assert.equal(ultra.pending.length, 1, 'who is signed in still on its way');
+  ultra.holdMe = false; for (const resolve of ultra.pending.splice(0)) resolve();
+  for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
+  assert.match(agendaText(body), /Covered work/, 'the same student: as drawn');
+  assert.equal((await p.ui.who()).uid, '_5_1');
+  tile.stop();
+});
+
+test('D: the agenda drawn for another student than the one signed in is not kept as theirs', async () => {
+  const ultra = { holdMe: true, uid: '_6_1', items: [] }, p = page({ ultra });
+  p.ui.probe.set(W, D.GZ_SANITIZE({}).widgets, null);
+  p.local[`ultraMe:${p.c.location.origin}`] = { uid: '_5_1' };
+  p.local.todoCache = cachedDay(p);
+  const { body } = await loadAgenda(p);
+  assert.match(agendaText(body), /Covered work/);
+  ultra.holdMe = false; for (const resolve of ultra.pending.splice(0)) resolve();
+  for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
+  assert.equal((await p.ui.who()).uid, '_6_1', 'the account is the one signed in');
+  assert.equal(p.local[`ultraMe:${p.c.location.origin}`].uid, '_6_1', 'and remembered as the last one here');
 });
 
 test('Ultra shared planner: two agendas join an in-flight range and keep absolute own-site links', async () => {

@@ -226,7 +226,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
   // A change that finishes after the page moved on still counts (what is stored is adopted), but says nothing here.
   const op = (ops) => {
-    if (!active || asleep || !rec || !S?.ops(ops)) return Promise.resolve(false);
+    if (!active || asleep || !rec || !S?.ops(ops) || (ultra && S.key(LMS, location.origin, confirmedAccount) !== key)) return Promise.resolve(false);
     reads++;
     rec = S.apply(rec, ops, { lms: LMS });
     emit('change');
@@ -253,19 +253,27 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
 
   // Who is signed in: the page's account reader (content.js GZ_CTX.account), the uid the worker checks the key against.
-  const account = async () => String((await ctx.account()) ?? '');
+  // On Ultra the account last confirmed on this site answers first (courses/ultra.js page.known), so the dock draws before
+  // /users/me does; sync confirms it, and for another account starts again. Nothing is written for an unconfirmed one.
+  let confirmedAccount = '';
+  const account = async () => (confirmedAccount = String((await ctx.account()) ?? ''));
+  let seen = null;
+  const first = async () => (ultra && await (seen ||= ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA).then(() => globalThis.GZ_ULTRA?.page?.known?.(), () => null)
+    .then((k) => (/^_\d+_\d+$/.test(String(k?.id)) ? String(k.id) : '')))) || account();
   const start = async () => {
     const g = epoch;
     await ctx.need(['core/widgets.js', 'navigation/sidebar.js'], () => globalThis.GZ_WIDGETS && globalThis.GZ_SIDEBAR);
     if (g !== epoch) return false;
     S = globalThis.GZ_SIDEBAR;
-    const k = S.key(LMS, location.origin, await account());
+    const uid = await first();
+    const k = S.key(LMS, location.origin, uid);
     if (g !== epoch) return false;
     if (!k) throw new Error('no account');
     const r = await get(k);
     if (g !== epoch) return false;
     let next = S.clean(r[k]);
     // The one-time move into the dock is written first, and only then shown (navigation/sidebar.js migrate).
+    if (!next.mig && (await account()) !== uid) { if (g !== epoch) return false; seen = null; return start(); }
     if (!next.mig) { const a = await post(k, [{ op: 'migrate' }]); if (a?.ok && a.rec) next = S.clean(a.rec); }
     if (g !== epoch) return false;
     if (key !== k) gen++;
@@ -1286,9 +1294,11 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       if (!ok || !on) return;
       const g = epoch;
       let uid;
-      try { uid = await account(); } catch { if (g === epoch) teardown(); return; }
+      try { uid = await first(); } catch { if (g === epoch) teardown(); return; }
       if (g !== epoch || !on) return;
       if (S.key(LMS, location.origin, uid) !== key) { teardown(); sync(true); return; }
+      // Drawn for the account last seen here: once confirmed, another account's dock goes and theirs comes.
+      if (ultra) account().then((real) => { if (g === epoch && on && S.key(LMS, location.origin, real) !== key) { seen = null; teardown(); sync(true); } }, () => { if (g === epoch) teardown(); });
       if (covered()) { cover(); return; }
       if (!active) { addEventListener('resize', onResize); document.addEventListener('visibilitychange', cover); }
       // Ultra's passes come with every change Angular makes: once there, they are gathered into one a frame.

@@ -31,7 +31,9 @@ const size = (f) => fs.statSync(path.join(root, f)).size;
 // site; the nav layout (x.nav) 525 on Ultra, 545 on Canvas and 488 on Moodle; and the Look's parts themselves (package A)
 // 794 on every site: GZ_CTX.parts(), the check for a Look that has parts, the preview hand-over and two more values of
 // defaults.js's bg.kind. Everything else about them loads on demand (looks/lookparts.js, looks/page/lookparts.js).
-const FIRST_SCRIPT_BASELINE = { ultra: 225195 + 427 + 525 + 794, canvas: 201446 + 427 + 545 + 794, moodle: 172222 + 427 + 488 + 794 };
+// Ultra's stores (D, 2026-10-30, against a6fa9919): content-ultra.js's own identity, memberships and gradebook reads move to
+// courses/ultra.js on demand, 7 bytes fewer on Ultra.
+const FIRST_SCRIPT_BASELINE = { ultra: 225195 + 427 + 525 + 794 - 6, canvas: 201446 + 427 + 545 + 794, moodle: 172222 + 427 + 488 + 794 };
 // Look parts put small hooks in the first script; the owner approved raising the baseline for them
 // (2026-10-16). One line per package, the bytes it added: the motion package's moment emitter ('glaze:moment', the
 // completion and new-grade call sites) and the hook that loads looks/page/motionx.js when a Look has animations, effects or a

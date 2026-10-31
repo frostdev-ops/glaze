@@ -31,8 +31,8 @@ const ASK = ['core/i18n.js', 'settings/page/consent.js'];
 
 // ---- the worker -----------------------------------------------------------------------------------------------------
 // `granted`: the hosts Glaze holds (chrome.permissions), every one unless named; `m`: the manifest, Chrome's unless named.
-const worker = ({ local = {}, sync = {}, granted = () => true, m = manifest } = {}) => {
-  const store = { local: structuredClone(local), sync: structuredClone(sync) };
+const worker = ({ local = {}, sync = {}, granted = () => true, m = manifest, session = null } = {}) => {
+  const store = { local: structuredClone(local), sync: structuredClone(sync), ...(session && { session: structuredClone(session) }) };
   const listeners = [], changed = [], installed = [], ran = [], opened = [], checked = [];
   const w = { store, ran, opened, installed, checked, registered: [] };
   w.local = { set: (v) => context.chrome.storage.local.set(v) };
@@ -59,7 +59,7 @@ const worker = ({ local = {}, sync = {}, granted = () => true, m = manifest } = 
       },
       permissions: { contains: async ({ origins }) => { checked.push(...origins); return origins.every(granted); } },
       tabs: { query: async () => [], create: async (o) => { opened.push(o.url); }, onRemoved: { addListener() {} } },
-      storage: { local: area('local'), sync: area('sync'), onChanged: { addListener: (f) => changed.push(f) } },
+      storage: { local: area('local'), sync: area('sync'), ...(session && { session: area('session') }), onChanged: { addListener: (f) => changed.push(f) } },
       scripting: {
         getRegisteredContentScripts: async () => w.registered.map((s) => ({ ...s })),
         registerContentScripts: async (list) => { w.registered.push(...plain(list)); },
@@ -72,6 +72,7 @@ const worker = ({ local = {}, sync = {}, granted = () => true, m = manifest } = 
     },
   });
   vm.runInContext(read('background/background.js'), context, { filename: 'background/background.js' });
+  w.session = context.chrome.storage.session;
   // A message as the browser hands it on: its reply, or 'ignored' once nothing has answered.
   w.send = (m, s) => new Promise((res) => {
     let kept = false;
@@ -208,12 +209,65 @@ test('review: Reset clears scoped records and planner cache while retaining note
   const A = 'https://a.edu';
   const task = { items: [] }, note = { text: 'mine' };
   const w = worker({ local: { ultra: [A], seenCourses: { _1_1: { site: A, name: 'A' } }, courseSlots: { _1_1: '2' }, [`dueWeek:${A}`]: { at: 1, list: [] },
-    [`seenCoursesAt ${A}`]: 1, todoCache: { key: `todo:${A}/_1_1` }, [`todo:${A}/_1_1`]: task, [`notes:${A}/_1_1`]: note } });
+    [`seenCoursesAt ${A}`]: 1, todoCache: { key: `todo:${A}/_1_1` }, [`todo:${A}/_1_1`]: task, [`notes:${A}/_1_1`]: note,
+    // The last student and the gradebooks kept for Ultra pages (courses/ultra.js page), here and on a Blackboard host no list holds.
+    [`ultraMe:${A}`]: { uid: '_1_1' }, [`ultraBooks:${A}/_1_1`]: {}, 'ultraMe:https://x.blackboard.com': { uid: '_2_1' }, 'ultraBooks:https://x.blackboard.com/_2_1': {} },
+  session: { [`ultraMine:${A}`]: { uid: '_1_1', mem: [] } } });
   assert.deepEqual(await w.send({ type: 'glaze:sites', op: 'reset' }, editor), { ok: true });
-  for (const key of [`dueWeek:${A}`, `seenCoursesAt ${A}`, 'todoCache']) assert.equal(w.store.local[key], undefined, key);
+  for (const key of [`dueWeek:${A}`, `seenCoursesAt ${A}`, 'todoCache', `ultraMe:${A}`, `ultraBooks:${A}/_1_1`, 'ultraMe:https://x.blackboard.com', 'ultraBooks:https://x.blackboard.com/_2_1']) assert.equal(w.store.local[key], undefined, key);
+  assert.deepEqual(w.store.session, {});
   assert.deepEqual(w.store.local.seenCourses, {});
   assert.deepEqual(w.store.local[`todo:${A}/_1_1`], task);
   assert.deepEqual(w.store.local[`notes:${A}/_1_1`], note);
+});
+
+test("an Ultra site's student and memberships: kept in the worker's session for that site's pages and frames only", async () => {
+  const B = 'https://bb.school.edu';
+  const w = worker({ local: { ultra: [B] }, session: {} });
+  const top = page(`${B}/ultra/course`), frame = page(`${B}/ultra/courses/_1_1/outline`, { frameId: 4, tab: { id: 7, url: `${B}/ultra/course` } });
+  const mine = { uid: '_900_1', mem: [{ courseId: '_101_1', id: '_301_1' }], complete: true };
+  assert.equal(await w.send({ type: 'glaze:ultraMine', op: 'get' }, top), null);
+  const t0 = Date.now();
+  await w.send({ type: 'glaze:ultraMine', op: 'put', mine }, top);
+  const got = await w.send({ type: 'glaze:ultraMine', op: 'get' }, frame);
+  assert.deepEqual([got.uid, got.mem, got.complete], [mine.uid, mine.mem, true]);
+  assert.ok(got.read >= t0 && got.at === got.read);
+  // Touched by a page confirming the same student: at moves, read stays.
+  await new Promise((r) => setTimeout(r, 5));
+  await w.send({ type: 'glaze:ultraMine', op: 'touch', uid: '_900_1' }, top);
+  const touched = await w.send({ type: 'glaze:ultraMine', op: 'get' }, top);
+  assert.ok(touched.at > got.at && touched.read === got.read);
+  await w.send({ type: 'glaze:ultraMine', op: 'touch', uid: '_800_1' }, top);
+  assert.equal((await w.send({ type: 'glaze:ultraMine', op: 'get' }, top)).at, touched.at, 'another student touches nothing');
+  // Nobody else reads or writes it: another site, an unapproved one, a bad record.
+  assert.equal(await w.send({ type: 'glaze:ultraMine', op: 'get' }, page('https://bb.other.edu/ultra/course')), null);
+  assert.equal(await w.send({ type: 'glaze:ultraMine', op: 'get' }, page(`https://evil.test/ultra/course`)), null);
+  assert.equal(await w.send({ type: 'glaze:ultraMine', op: 'get' }, editor), null);
+  for (const bad of [{ ...mine, uid: '42' }, { ...mine, mem: 'x' }, null]) await w.send({ type: 'glaze:ultraMine', op: 'put', mine: bad }, top);
+  assert.deepEqual(Object.keys(w.store.session), [`ultraMine:${B}`]);
+  assert.equal(w.store.session[`ultraMine:${B}`].uid, '_900_1');
+  // Removing the site forgets it.
+  assert.deepEqual(await w.send({ type: 'glaze:sites', op: 'remove', origin: B }, editor), { ok: true });
+  assert.deepEqual(w.store.session, {});
+});
+
+test('an Ultra identity touch cannot overwrite a newer account saved by another page', async () => {
+  const B = 'https://bb.school.edu', key = `ultraMine:${B}`, sender = page(`${B}/ultra/course`);
+  const w = worker({ local: { ultra: [B] }, session: { [key]: { uid: '_800_1', mem: [], at: 1, read: 1 } } });
+  let release, first = true;
+  const get = w.session.get;
+  w.session.get = async (k) => {
+    const snapshot = await get(k);
+    if (k === key && first) { first = false; await new Promise((r) => { release = r; }); }
+    return snapshot;
+  };
+  const touch = w.send({ type: 'glaze:ultraMine', op: 'touch', uid: '_800_1' }, sender);
+  await settle();
+  const put = w.send({ type: 'glaze:ultraMine', op: 'put', mine: { uid: '_900_1', mem: [], complete: true } }, sender);
+  await settle();
+  release();
+  await Promise.all([touch, put]);
+  assert.equal(w.store.session[key].uid, '_900_1');
 });
 
 test('review: Glaze extension preview frames retain code-on-demand access', async () => {
@@ -266,6 +320,7 @@ test('Settings\' Remove unregisters a site, takes it off its list and forgets wh
     seenCourses: { _5_1: { name: 'B course', site: B }, _6_1: { name: 'Another Ultra', site: 'https://bb.other.edu' }, [`canvas:${A}/12`]: { name: 'A course' }, [`moodle:${M}/moodle/3`]: { name: 'M course' } },
     courseSlots: { _5_1: '2', _6_1: '3' }, [`seenCoursesAt ${B}`]: 1, [`seenCoursesAt moodle:${M}/moodle/`]: 1,
     [`dueWeek:${B}`]: { at: 1, list: [] }, [`dueWeek:${A}`]: { at: 1, list: [] }, todoCache: { key: `todo:${B}/_9_1`, at: 1, items: [] }, [`notes:${B}/_9_1`]: { text: 'mine', at: 1 },
+    [`ultraMe:${B}`]: { uid: '_9_1' }, [`ultraBooks:${B}/_9_1`]: {}, 'ultraBooks:https://bb.other.edu/_9_1': {}, [`ultraBooks:${B}:8443/_9_1`]: {},
   } });
   w.installed[0]({ reason: 'update' });
   await settle();
@@ -278,7 +333,8 @@ test('Settings\' Remove unregisters a site, takes it off its list and forgets wh
   assert.deepEqual(L.ultra, []);
   assert.deepEqual(Object.keys(L.seenCourses).sort(), ['_6_1', `canvas:${A}/12`, `moodle:${M}/moodle/3`], 'its courses go; other sites\' stay');
   assert.deepEqual(L.courseSlots, { _6_1: '3' });
-  for (const k of [`seenCoursesAt ${B}`, `dueWeek:${B}`, 'todoCache']) assert.ok(!(k in L), k);
+  for (const k of [`seenCoursesAt ${B}`, `dueWeek:${B}`, 'todoCache', `ultraMe:${B}`, `ultraBooks:${B}/_9_1`]) assert.ok(!(k in L), k);
+  assert.ok('ultraBooks:https://bb.other.edu/_9_1' in L && `ultraBooks:${B}:8443/_9_1` in L, 'another site\'s, or the same host on a port, stay');
   assert.deepEqual(L[`notes:${B}/_9_1`], { text: 'mine', at: 1 }, 'the student\'s own notes stay');
   assert.ok(`dueWeek:${A}` in L);
   assert.deepEqual(await w.send({ type: 'glaze:notes', key: `notes:${B}/_9_1`, text: 'x', at: 2 }, page(`${B}/ultra/course`)), denied, 'its pages are no longer trusted');
@@ -495,16 +551,21 @@ const ultraPart = ({ origin, local, courses }) => {
     chrome: { runtime: { id: ID, sendMessage: (m) => { sent.push(m); return Promise.resolve(); } },
       storage: { local: { get: (k, cb) => cb(structuredClone(local)), set: (o) => { Object.assign(local, structuredClone(o)); calls.push(['set', Object.keys(o)]); } }, sync: { get: (k, cb) => cb({}) }, onChanged: { addListener() {} } } },
     GZ_NAV: { native: () => null }, GZ_GRADES: require('../../extension/planner/grades.js'), GZ_PAGE: require('../../extension/core/page.js'), GZ_COURSES: require('../../extension/content/defaults.js').GZ_COURSES,
+    URL, URLSearchParams, Response,
   });
   ctx.globalThis = ctx; ctx.window = ctx; ctx.top = ctx; ctx.self = ctx;
   vm.runInContext(read('content/content-ultra.js'), ctx, { filename: 'content/content-ultra.js' });
-  const api = (p) => {
+  // The student and their courses: courses/ultra.js's page store (loaded on demand, as the worker puts it in), over the site.
+  const answer = (p) => {
     calls.push(['api', p]);
-    if (/users\/me$/.test(p)) return Promise.resolve({ id: '_9_1' });
-    if (/memberships/.test(p)) return Promise.resolve({ results: courses.map(([courseId, name], i) => ({ courseId, courseCardColorIndex: i, course: { name, displayId: name.slice(0, 3) } })), paging: {} });
-    return Promise.reject(404);
+    if (/users\/me$/.test(p)) return { id: '_9_1' };
+    if (/memberships/.test(p)) return { results: courses.map(([courseId, name], i) => ({ courseId, courseCardColorIndex: i, course: { name, displayId: name.slice(0, 3) } })), paging: {} };
+    return null;
   };
-  const I = { C: {}, html: new El(), isPreview: false, solo: true, tabFrame: '', need: () => Promise.reject(new Error('no')), t: (s) => s, locale: () => 'en', api,
+  const api = (p) => { const j = answer(p); return j ? Promise.resolve(j) : Promise.reject(404); };
+  ctx.fetch = async (url) => { const u = new URL(url), j = answer(u.pathname.replace('/learn/api/v1', '') + u.search); return new Response(JSON.stringify(j ?? {}), { status: j ? 200 : 404 }); };
+  const need = (file, ready) => { if (!ready()) vm.runInContext(read(file), ctx, { filename: file }); return ready() ? Promise.resolve() : Promise.reject(new Error('not ready')); };
+  const I = { C: {}, html: new El(), isPreview: false, solo: true, tabFrame: '', need, t: (s) => s, locale: () => 'en', api,
     courseId: () => null, markDue() {}, drawProgress() {}, cardBadge() {}, cardsInView: { observe() {}, unobserve() {} }, inView: new Set(),
     tagCards() {}, tagExtras() {}, courseSlots: {}, courseColors: () => ({}), varText: () => '', CARD: 'article', dueLabelled: () => false,
     links: [1], settings: { enabled: true, enhance: {}, nav: { brand: 'x' }, courses: { names: {}, tint: false, tinted: [] }, sidebar: {} },

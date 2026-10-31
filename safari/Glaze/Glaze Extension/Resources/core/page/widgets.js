@@ -171,6 +171,22 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     }).catch((e) => { if (asking === pending) asking = null; throw e; });
     return (asking = pending);
   };
+  // The agenda's first paint on Ultra: the student last confirmed on this site (courses/ultra.js page.known), so what's
+  // kept for them draws before /users/me answers; who() confirms it, and for a different student the tiles go and come
+  // back as theirs. Elsewhere, who().
+  const whoFirst = () => (!ultra ? who() : me ? Promise.resolve() : ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA).then(() => globalThis.GZ_ULTRA?.page?.known?.(), () => null).then((k) => {
+    if (me || !k || !/^_\d+_\d+$/.test(String(k.id))) return who();
+    const n = identity;
+    me = { uid: String(k.id), tz: undefined };
+    who().then(() => {
+      if (n !== identity || me?.uid === String(k.id)) return;
+      identity++;
+      me = asking = null;
+      teardown(true);
+      drawn = null;
+      if (on && W && lay) draw();
+    }, () => {});
+  }));
 
   // ---- the tiles ---------------------------------------------------------------------------------------------
   // Each widget fills its tile's body once; wake() runs when the page is shown again, update() when settings change,
@@ -272,7 +288,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       // Better To Do's copy when it's this account's, covers the day and is under ten minutes old; else this day alone.
       const items = async (d) => {
         const lo = L.midnight(d, me.tz), hi = L.midnight(d + 1, me.tz);
-        if (ultra) return (await GZ_ULTRA.page.planned(lo, hi, cache)).items;
+        if (ultra) return (await GZ_ULTRA.page.planned(lo, hi, cache, me.uid)).items;
         if (cache?.key === L.storeKey(location.origin, me.uid) && Date.now() - cache.at < 6e5 && Date.parse(cache.start) <= lo && Date.parse(cache.end) >= hi) return cache.items || [];
         const m = memo.get(d);
         if (m && Date.now() - m.at < 12e4) return m.items;
@@ -313,7 +329,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       };
       const schedule = button(t('Class schedule'), () => ctx.need('planner/page/classes.js', () => globalThis.GZ_CLASSES_UI).then(() => GZ_CLASSES_UI.open()).catch(() => {}), { className: 'gz-w-small gz-w-classes' });
       body.append(make('div', { className: 'gz-w-row' }, back, title, next, home), list, schedule);
-      Promise.all([ctx.need('planner/todo.js', () => globalThis.GZ_TODO), who()]).then(async () => {
+      Promise.all([ctx.need('planner/todo.js', () => globalThis.GZ_TODO), whoFirst()]).then(async () => {
         if (!alive) return;
         L = globalThis.GZ_TODO;
         const k = L.storeKey(location.origin, me.uid);

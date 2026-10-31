@@ -25,12 +25,12 @@ test('private content is asked for without contentDetail, by both callers', () =
   }
 });
 
-test('metadata reads refuse redirects: previews and Download all ask through the reader; only file bytes may follow one', async () => {
-  // The only fetch left in either is Download all's file bytes, which Blackboard hands to its file CDN by a redirect.
-  assert.doesNotMatch(src('courses/page/previews.js'), /\bfetch\(/);
-  assert.deepEqual(src('courses/page/download.js').match(/\bfetch\([^,]+/g), ['fetch(f.url']);
-  assert.match(src('courses/page/previews.js'), /GZ_ULTRA\.read\(\{ origin: location\.origin \}\)\.get\(`\/learn\/api\/v1\/courses\/\$\{cid\}\/contents\/\$\{fid\}\/children\?fields=/);
-  assert.match(src('courses/page/download.js'), /const get = \(path\) => GZ_ULTRA\.read\(\{ origin: location\.origin, signal: ctl\.signal \}\)\.get\(/);
+test('metadata reads refuse redirects: previews and Download all ask through the reader, in the site\'s queue; only file bytes may follow one', async () => {
+  // The only plain fetch left in either is Download all's file bytes, which Blackboard hands to its file CDN by a redirect.
+  assert.doesNotMatch(src('courses/page/previews.js'), /(?<![.\w])fetch\(/);
+  assert.deepEqual(src('courses/page/download.js').match(/(?<![.\w])fetch\([^,]+/g), ['fetch(f.url']);
+  assert.match(src('courses/page/previews.js'), /GZ_ULTRA\.read\(\{ origin: location\.origin, f: \(u, o\) => GZ_LMSQ\.fetch\(u, o\) \}\)\.get\(`\/learn\/api\/v1\/courses\/\$\{cid\}\/contents\/\$\{fid\}\/children\?fields=/);
+  assert.match(src('courses/page/download.js'), /const get = \(path\) => need\('courses\/lmsq\.js', \(\) => globalThis\.GZ_LMSQ\)\.then\(\(\) => GZ_ULTRA\.read\(\{ origin: location\.origin, signal: ctl\.signal, f: \(u, o\) => GZ_LMSQ\.fetch\(u, o\) \}\)\.get\(/);
   // A signed-out answer (a redirect, which fetch then refuses) fails the read, recoverably, with nothing else asked.
   const asked = [];
   const f = async (url, init) => { asked.push([url, init.redirect]); throw new TypeError('Failed to fetch'); };
@@ -453,7 +453,7 @@ test('the reader: GET only, to this site, redirects refused, paged and bounded, 
   assert.equal(none.asked.length, 0);
 });
 
-test('planner: everything due, one request at a time from this site, due-date exceptions honoured', async () => {
+test('planner: everything due from this site, due-date exceptions honoured', async () => {
   const { f, asked } = ultra({
     '/learn/api/v1/users/me': { id: '_900_1' },
     '/learn/api/v1/users/_900_1/memberships': load('memberships'),
@@ -476,9 +476,11 @@ test('planner: everything due, one request at a time from this site, due-date ex
   assert.equal(by._613_1.course, 'ENG 1100: College Writing');
   assert.ok(asked.every(({ url, init }) => url.startsWith(`${o}/learn/api/`) && init.method === 'GET'));
   const paths = asked.map(({ url }) => new URL(url).pathname);
-  assert.equal(paths.filter((p) => p.endsWith('/studentItems')).length, 2, 'four weeks of To Do in two slices');
+  // Two weeks back to two weeks on: To Do for what's left of it, one slice laid back from its end; the calendar has it all.
+  const todo = asked.filter(({ url }) => url.includes('/studentItems')).map(({ url }) => new URL(url).searchParams);
+  assert.deepEqual(todo.map((q) => [Date.parse(q.get('since')), Date.parse(q.get('until'))]), [[LATER, LATER + 14 * 864e5]]);
   assert.equal(asked.find(({ url }) => url.includes('/_302_1/exceptions')).url.split('columnId=')[1], '_613_1');
-  assert.equal(asked.length, 9);
+  assert.equal(asked.length, 8);
 });
 
 test('a due-date exception counts for its own column only, not one whose id starts the same', async () => {

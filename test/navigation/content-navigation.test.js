@@ -124,12 +124,15 @@ test('the shared palette content reader retains course-link identity under the A
   const begin=ultra.indexOf('  const contents = new Map();');
   const end=ultra.indexOf('  // What they',begin);
   const item={id:'_999_1',title:'Linked discussion',contentHandler:{id:'resource/x-bb-courselink',isBbPage:false}};
+  // courses/ultra.js's content store, over an API that sends only the fields asked for.
+  const store=require('../helpers/ultra-page.cjs').ultraFor({origin:()=>origin,fetch:async(url)=>{
+    const fields=new URL(url).searchParams.get('fields').split(',');
+    const projected={id:item.id,title:item.title,contentHandler:{isBbPage:false}};
+    if(fields.includes('contentHandler.id'))projected.contentHandler.id=item.contentHandler.id;
+    return {ok:true,status:200,text:async()=>JSON.stringify({results:[projected]})};
+  }});
   const reader=vm.runInNewContext(ultra.slice(begin,end)+'\ncourseItems;', {
-    Map,Date,renderNew(){},covered:xs=>xs,reader:async()=>({list:async(path,fields)=>{
-      const projected={id:item.id,title:item.title,contentHandler:{isBbPage:false}};
-      if(fields.split(',').includes('contentHandler.id'))projected.contentHandler.id=item.contentHandler.id;
-      return {items:[projected],complete:true};
-    }})
+    Map,Date,renderNew(){},covered:xs=>xs,stores:async()=>store.page
   });
   const rows=await reader('_101_1').p;
   assert.equal(U.contentLink(rows[0],'_101_1',origin),null,'a course link with no canonical alternate never uses its outline id');

@@ -33,31 +33,31 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   };
 
   // ---- the gradebook --------------------------------------------------------------------------
-  // One /users/me for everything that asks at once. A failure (this, a gradebook) is asked again after a minute, a 401
-  // (signed out) once the page changes.
+  // Who's signed in, their courses, gradebooks and content: courses/ultra.js's stores, through the site's queue. A failure
+  // (this, a gradebook) is asked again after a minute, a 401 (signed out) once the page changes.
   let meId = null;
   let meFailed = null;
   const route = () => location.pathname + (location.search || '');
   const failed = (e, at = route()) => ({ at: Date.now(), out: (e === 401 || /HTTP 401/.test(e?.message)) && at });
   const askAgain = (f) => (f.out ? f.out !== route() : Date.now() - f.at >= 60000);
+  const stores = () => need(['courses/lmsq.js', 'courses/ultra.js'], () => globalThis.GZ_LMSQ && globalThis.GZ_ULTRA)
+    .then(() => { GZ_ULTRA.page.alive(() => I.settings.enabled && !!I.links.length); return GZ_ULTRA.page; });
   const me = () => {
     if (meFailed && askAgain(meFailed)) meId = meFailed = null;
     const at = route();
-    return (meId ||= api('/users/me').then((m) => m.id).catch((e) => { meFailed = failed(e, at); throw e; }));
+    return (meId ||= stores().then((s) => s.me()).catch((e) => { meFailed = failed(e, at); throw e; }));
   };
-  // Gradebooks and contents, fanned out over course cards: courses/ultra.js's reader through the site's queue (courses/lmsq.js).
-  const reader = () => need(['courses/lmsq.js', 'courses/ultra.js'], () => globalThis.GZ_LMSQ && globalThis.GZ_ULTRA)
-    .then(() => { const live = () => I.settings.enabled && !!I.links.length; return GZ_ULTRA.read({ origin: location.origin, live, f: (u, o) => GZ_LMSQ.fetch(u, o, 0, live) }); });
   const covered = (rows, complete) => Object.defineProperty(rows, 'complete', { value: complete });
-  // One page of memberships, shared by names and due-date exceptions.
+  // Shared by names and due-date exceptions.
   let memberships = null;
   let membershipsFailed = null;
   const myCourses = () => {
     if (membershipsFailed && askAgain(membershipsFailed)) memberships = membershipsFailed = null;
     const at = route();
-    return (memberships ||= me().then((id) => api(`/users/${id}/memberships?expand=course&limit=200`))
-      .then((j) => covered(j.results || [], !j.paging?.nextPage)).catch((e) => { membershipsFailed = failed(e, at); return covered([], false); }));
+    return (memberships ||= stores().then((s) => s.mine()).then((m) => m.mem).catch((e) => { membershipsFailed = failed(e, at); return covered([], false); }));
   };
+  const rowsOf = (cid, id) => stores().then((s) => s.book(cid, id));
+  const keptRows = (cid, id) => stores().then((s) => s.saved(cid, id));
   // Planning (planner/page/todo.js…), as Canvas's part: courses/ultra.js reads; each file loaded once on, asked again as it lands.
   const page = (k) => () => need('courses/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page[k]());
   const load = (on, file, n) => (on() ? need(file, () => globalThis[n]).then(() => globalThis[n].sync(!!on()), () => {}) : globalThis[n]?.sync(false));
@@ -73,6 +73,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const syncCardTasks = () => load(() => top()?.cardTasks && /^\/ultra\/course\/?$/.test(location.pathname) && document.querySelector(CARD), 'courses/page/cardtasks.js', 'GZ_CARD_TASKS');
   // Reminders and floating widgets are the page's, once: never again in a course tab's frame over it.
   const syncRemind = () => load(() => !tabFrame && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => top()?.[k]), 'planner/page/reminders.js', 'GZ_REMIND_UI');
+  const syncAhead = () => load(() => !tabFrame && top()?.prefetch, 'courses/page/ahead.js', 'GZ_AHEAD');
 
   // Only submitted attempts have a hand-in date. A newer draft leaves earlier submission timing unknown.
   // Course and item due-date exceptions suppress lateness.
@@ -88,24 +89,30 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     return excepted.then((exc) => new Set(waiting.filter((g) => !exc(g.columnId) && g.lastAttempt?.status !== 'IN_PROGRESS'
       && GZ_GRADES.late(g.lastAttempt?.attemptDate, g.column.dueDate)).map((g) => g.columnId)));
   };
-  // Per-course gradebook cache. Only due-date chips ask for lateness; changed answers re-tag the page.
+  // Per-course gradebook cache. Only due-date chips ask for lateness; changed answers re-tag the page. The last visit's
+  // copy draws (saved) until the first answer.
   const books = new Map();
+  const take = (b, rows, lateCols) => {
+    const key = JSON.stringify([rows.map((g) => [g.columnId, g.status, g.isExempt, g.displayGrade, g.submissionStatus?.status, g.lastAttempt?.status, g.lastAttempt?.attemptDate]), [...(lateCols || [])], rows.complete !== false]);
+    b.results = rows;
+    if (key === b.key) return;
+    Object.assign(b, { grades: GZ_PAGE.gradesByContent(rows), overall: GZ_PAGE.overall(rows, locale()), key });
+    onBook();
+  };
   const bookFor = (cid, late = false) => {
     let b = books.get(cid);
     if (!b || (!b.pending && (b.fail ? askAgain(b.fail) : Date.now() - b.at > 60000 || (late && !b.late)))) {
+      const first = !b;
       b = { key: '', ...b, at: Date.now(), route: route(), pending: true, fail: null };
       books.set(cid, b);
-      // One page (200 grades); calculators reject an incomplete answer.
-      Promise.all([me(), reader()]).then(([id, r]) => r.get(`/learn/api/v1/courses/${cid}/gradebook/grades?userId=${id}&limit=200&includeNoGradeItems=true&expand=column,lastAttempt,submissionStatus`))
-        .then((j) => (late || b.late ? lateIn(cid, j.results) : Promise.resolve(undefined)).then((lateCols) => {
+      const asked = me();
+      if (first) asked.then((id) => keptRows(cid, id)).then((k) => { if (k && b.pending && !b.results) { b.saved = true; take(b, k.rows); } }, () => {});
+      asked.then((id) => rowsOf(cid, id))
+        .then((rows) => (late || b.late ? lateIn(cid, rows) : Promise.resolve(undefined)).then((lateCols) => {
           b.pending = false;
-          const complete = !j.paging?.nextPage;
-          const key = JSON.stringify([j.results.map((g) => [g.columnId, g.status, g.isExempt, g.displayGrade, g.submissionStatus?.status, g.lastAttempt?.status, g.lastAttempt?.attemptDate]), [...(lateCols || [])], complete]);
+          b.saved = false;
           b.late = lateCols;
-          b.results = covered(j.results, complete);
-          if (key === b.key) return;
-          Object.assign(b, { grades: GZ_PAGE.gradesByContent(j.results), overall: GZ_PAGE.overall(j.results, locale()), key });
-          onBook();
+          take(b, rows, lateCols);
         }))
         .catch((e) => { b.pending = false; b.fail = failed(e, b.route); });
     }
@@ -324,11 +331,11 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // The course's items come from one paged read (ten pages of 200 at most), shared with the command palette and
   // asked again after five minutes at most, with only the fields used.
   const contents = new Map(); // cid → { at, p, items }
-  const courseItems = (cid) => {
+  const courseItems = (cid, prio = 0) => {
     let c = contents.get(cid);
     if (!c || Date.now() - c.at > 300000) {
       c = { at: Date.now(), items: c?.items };
-      c.p = reader().then((r) => r.list(`/learn/api/public/v1/courses/${cid}/contents`, 'id,parentId,title,availability.available,links,contentHandler.id,contentHandler.isBbPage', true))
+      c.p = stores().then((s) => s.outline(cid, { prio }))
         .then((j) => { c.items = covered(j.items.filter((i) => i.availability?.available !== 'No'), j.complete); renderNew(); return c.items; }, () => c.items || []);
       contents.set(cid, c);
     }
@@ -780,10 +787,12 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   }
 
   return {
+    // content.js's api(), in the site's queue.
+    fetch: (u, o) => need('courses/lmsq.js', () => globalThis.GZ_LMSQ).then(() => GZ_LMSQ.fetch(u, o), () => fetch(u, o)),
     paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, stop: () => { GZ_NAV.drop(); syncDashboard(); globalThis.GZ_STREAM_UI?.sync(false); globalThis.GZ_NAVBAR_UI?.sync(); globalThis.GZ_FOLDER_UI?.sync(false); cardsIO.disconnect(); onScreen.clear(); },
     renderProgress, renderNew, renderCalc, syncSyl, syncInsights: () => (syncInsights(), syncTabs()), openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
     unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); },
-    syncTodo, syncCardTasks, syncRemind, syncWidgets,
+    syncTodo, syncCardTasks, syncRemind: () => (syncRemind(), syncAhead()), syncWidgets,
     ctx: { canvasPeek: () => ({ me: meId, courses: memberships, books }), me, myCourses, courseItems, bookFor, courseColor, profile: page('profile'), canvasCourses: page('courses') },
   };
 });

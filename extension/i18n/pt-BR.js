@@ -1593,6 +1593,8 @@
   "With more, the tab you used longest ago closes, and the strip says which. Pinned tabs never close on their own.": "Com mais, a aba usada há mais tempo fecha, e a barra diz qual. Abas fixadas nunca fecham sozinhas.",
   "Go back to where you were": "Voltar aonde você estava",
   "Open course tabs ahead of time": "Abrir as abas de cursos com antecedência",
+  "Load course data ahead of time": "Carregar os dados do curso com antecedência",
+  "On Blackboard, your To Do and grades are read while the page is idle, and a course's content when you point at it, so they open at once.": "No Blackboard, suas tarefas e notas são lidas enquanto a página está ociosa, e o conteúdo de um curso quando você aponta para ele, para que abram na hora.",
   "Tab buttons": "Botões das abas",
   "Shape": "Formato",
   "Tab": "Aba",

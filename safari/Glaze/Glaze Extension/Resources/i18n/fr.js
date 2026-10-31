@@ -1593,6 +1593,8 @@
   "With more, the tab you used longest ago closes, and the strip says which. Pinned tabs never close on their own.": "Au-delà, l'onglet utilisé il y a le plus longtemps se ferme, et la barre indique lequel. Les onglets épinglés ne se ferment jamais d'eux-mêmes.",
   "Go back to where you were": "Revenir là où vous étiez",
   "Open course tabs ahead of time": "Ouvrir les onglets de cours à l’avance",
+  "Load course data ahead of time": "Charger les données des cours à l'avance",
+  "On Blackboard, your To Do and grades are read while the page is idle, and a course's content when you point at it, so they open at once.": "Sur Blackboard, vos tâches et vos notes sont lues pendant que la page est au repos, et le contenu d'un cours dès que vous le pointez, pour qu'ils s'ouvrent aussitôt.",
   "Tab buttons": "Boutons d'onglet",
   "Shape": "Forme",
   "Tab": "Onglet",

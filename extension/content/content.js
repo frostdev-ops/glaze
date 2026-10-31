@@ -75,7 +75,7 @@
   const no = () => {};
   const X = { record: () => Promise.resolve(), planner: no, tagCards: no, tagExtras: no, lift: no, gate: no, stop: no, renderProgress: no,
     renderNew: no, renderCalc: no, openNew: no, paintCourses: no, tintOf: no, courseColor: no, paintNav: no, paintTabs: no, syncNav: no, nickOf: () => '', syncNames: no,
-    unname: no, holding: () => false, syncTodo: no, syncCardTasks: no, syncWidgets: no, syncRemind: no, syncSyl: no, syncInsights: no, ctx: {} };
+    unname: no, holding: () => false, syncTodo: no, syncCardTasks: no, syncWidgets: no, syncRemind: no, syncSyl: no, syncInsights: no, fetch: (u, o) => fetch(u, o), ctx: {} };
 
   const hasText = (e) => { for (const n of e.childNodes) if (n.nodeType === 3 && n.textContent.trim()) return true; return false; };
   // On Canvas, the whole document: put on a school's own host by background/background.js mid-load, the body can be
@@ -447,13 +447,10 @@
   words();
 
   // ---- the gradebook --------------------------------------------------------------------------
-  // Due-date status, new grades and the what-if calculator read the student's own gradebook records,
-  // asked of their own Blackboard (same origin, their session) the way Ultra's Grades page asks: at
-  // most once a minute per course, and only for courses on the page where one of those is showing
-  // (content-ultra.js). Absolute URLs: Ultra's <base href> points at its CDN.
-  // Canvas's REST API is the same thing under /api/v1 (capi): its string-id JSON keeps long ids exact, and an
-  // older Canvas starts a response with `while(1);`.
-  const api = (path, base = '/learn/api/v1', accept = 'application/json', reply) => fetch(`${location.origin}${base}${path}`, { credentials: 'same-origin', redirect: 'error', headers: { accept } })
+  // The student's own LMS (same origin, their session), through the site part's queue where it has one (X.fetch).
+  // Absolute URLs: Ultra's <base href> points at its CDN. Canvas's REST API is the same thing under /api/v1 (capi): its
+  // string-id JSON keeps long ids exact, and an older Canvas starts a response with `while(1);`.
+  const api = (path, base = '/learn/api/v1', accept = 'application/json', reply) => X.fetch(`${location.origin}${base}${path}`, { credentials: 'same-origin', redirect: 'error', headers: { accept } })
     .then((r) => (r.ok ? (reply?.(r), r.text()) : Promise.reject(r.status))).then((text) => JSON.parse(text.replace(/^while\(1\);/, '')));
   const capi = (path, reply) => api(path, '/api/v1', 'application/json+canvas-string-ids', reply);
   // The Canvas course this page is in (/courses/:id/...), or undefined.
