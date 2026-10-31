@@ -362,6 +362,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (early) {
       if (!el || !cid) return;
       const of = viewOf(n).cid;
+      // An empty block already observed for the outgoing course is still theirs until the view proves otherwise.
+      if (held?.el === el && held.cid !== cid && of !== cid) return;
       if ((of && of !== cid) || (filled(el) && el.getBoundingClientRect().height > 0)) return;
     }
     unhold();
