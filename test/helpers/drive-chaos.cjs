@@ -633,6 +633,13 @@ const KNOWN = {
     repro: [{ t: 'words', k: 'add', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'poke', s: 2 }, { t: 'words', k: 'add', d: 1, pick: 0, pick2: 0, s: 3 }, { t: 'run', d: 1, how: 'timers', s: 4 },
       { t: 'sync', d: 2, on: true, s: 5 }, { t: 'drive', k: 'trashData', pick: 0, s: 6 }, { t: 'run', d: 2, how: 'poke', s: 7 }],
   },
+  'relinked-copy': {
+    fixed: true,
+    about: 'a first push whose JSON copy Drive took but whose answer never came, the document then taken and edited on another device: the first device links the copy as its own push and, holding its own older text as a change not yet sent, writes it over the other device\'s edit, which no device keeps',
+    skips: () => false,
+    stops: 'net.POST',
+    repro: [{ t: 'paper', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2, kill: 126, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }, { t: 'paper', k: 'edit', d: 0, pick: 0, pick2: 0, s: 4 }],
+  },
   // Open: within the accepted limit that switching accounts A→B→A brings older data back. Found 2026-10-31 (seed 60348,
   // 140 operations, 2 devices).
   'stale-restore': {
