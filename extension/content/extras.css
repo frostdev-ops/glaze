@@ -581,6 +581,9 @@ html[data-gz-hide-tab-achievements] .bb-ui-navigation-list-horizontal li:has(> a
 @keyframes gz-skel { to { opacity: .55; } }
 html[data-gz-motion="off"] #gz-skel > * { animation: none; }
 @media (prefers-reduced-motion: reduce) { #gz-skel > * { animation: none; } }
+@media screen and (forced-colors: active) {
+  #site-wrap .js-course-navigation a[data-gz-press]::after { forced-color-adjust: none; background: Highlight; }
+}
 [data-gz-skel-host] > :not(#gz-skel, div.bb-course-navigation) { visibility: hidden !important; }
 html[data-gz-skel] main div.spinner.bb-secondary-color-2 { visibility: hidden !important; }
 

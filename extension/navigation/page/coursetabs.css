@@ -61,7 +61,8 @@ html[data-gz-bg="solid"] #gz-ctabs::before, html[data-gz-bg="solid"] #gz-doc-too
 /* Forced colours drop the fills: the current tab is edged and underlined in the system's highlight, as the rail's item is. */
 @media screen and (forced-colors: active) {
   #gz-ctabs .gz-ctab[aria-selected="true"] { border: 2px solid Highlight; }
-  #gz-ctabs .gz-ctab[aria-selected="true"]::after { forced-color-adjust: none; background: Highlight; }
+  #gz-ctabs .gz-ctab[data-gz-press] { outline: 2px solid Highlight; outline-offset: -2px; }
+  #gz-ctabs .gz-ctab[aria-selected="true"]::after, #gz-ctabs .gz-ctab[data-gz-press]::after { forced-color-adjust: none; background: Highlight; }
 }
 #gz-ctabs .gz-ctab[data-drag] { z-index: 2; cursor: grabbing; box-shadow: var(--gz-shadow); }
 /* Each course's own colour (--gz-course, as Course colors resolves it): the dot or icon, a tint, or more of it. */

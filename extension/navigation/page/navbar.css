@@ -401,6 +401,7 @@ a.widget[aria-disabled="true"] { cursor: default; }
 @media screen and (forced-colors: active) {
   .ind, .tind, .pill, :is(.chip, .row, .tsub .item)[aria-current="page"], .pin[aria-pressed="true"] { border: 2px solid Highlight; }
   .ind::before, .tind::after { forced-color-adjust: none; background: Highlight; }
+  :is(.item, .chip, .row, .tab)[data-gz-press] { outline: 2px solid Highlight; outline-offset: -2px; }
 }
 
 /* ---- motion: off, and the student's reduced motion ---- */

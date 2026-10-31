@@ -40,10 +40,14 @@ var GZ_FEEDBACK = globalThis.GZ_FEEDBACK || (() => {
   const targetOf = (e) => {
     for (const n of e.composedPath?.() || []) {
       if (!n?.matches) continue;
+      if (n.matches('a[href]')) {
+        const target = (n.getAttribute('target') || '').toLowerCase();
+        if (n.hasAttribute('download') || target && target !== '_self') return null;
+      }
       const bar = n.getRootNode?.()?.host;
       if (bar?.id === 'gz-navbar') {
         if (n.matches('.ctab-go')) return { el: n, group: bar, kind: 'tab' };
-        if (n.matches('a[href]') && n.getAttribute('target') !== '_blank') return { el: n, group: bar, kind: 'bar' };
+        if (n.matches('a[href]')) return { el: n, group: bar, kind: 'bar' };
       } else if (n.matches('#gz-ctabs .gz-ctab')) return { el: n, group: n.closest('#gz-ctabs'), kind: 'tab' };
       else if (n.matches('.js-course-navigation a[href]')) return { el: n, group: n.closest('.js-course-navigation'), kind: 'course' };
       else if (n.matches('article.course-element-card')) return { el: n, group: null, kind: 'card' };
@@ -129,7 +133,8 @@ var GZ_FEEDBACK = globalThis.GZ_FEEDBACK || (() => {
     return u.pathname + u.search === here() ? '' : u.pathname + u.search;
   };
   // The main area on screen: a course's over the page's, else the page's.
-  const front = () => [...document.querySelectorAll('main.course-main-content')].find(shown) || document.querySelector('main.bb-offcanvas-container, main#main-content');
+  const front = () => [...document.querySelectorAll('main.course-main-content')].find(shown)
+    || [...document.querySelectorAll('main.bb-offcanvas-container, main#main-content')].find(shown);
   // The part of it a page's view fills: a course's tool area under its own tabs, else the main area, short of the course's tabs.
   const areaOf = (m) => {
     if (!m) return null;
@@ -184,12 +189,13 @@ var GZ_FEEDBACK = globalThis.GZ_FEEDBACK || (() => {
   // A page's view is in: its own markers, new since the click; or, with no spinners and content in, once it showed spinners,
   // a moment after the address changed when it has a new view or new words, or a second after when none ever showed.
   const textOf = (m) => areaOf(m)?.textContent.length ?? -1;
-  const filled = (m) => [...(areaOf(m)?.children || [])].some((k) => k.matches && !ours(k) && !k.matches(`${SPIN}, div.bb-course-navigation`) && !!k.textContent.trim());
+  const filled = (m) => [...(areaOf(m)?.children || [])].some((k) => k.matches && shown(k) && !ours(k) && !k.matches(`${SPIN}, div.bb-course-navigation`) && !!k.textContent.trim());
+  const spinnersOf = (m) => [...(m?.querySelectorAll(SPIN) || [])].filter((e) => shown(e) && !ours(e));
   const ready = (x, m) => {
     if (!m) return false;
     const mark = pageOf(location.pathname)[2];
-    if (mark && [...m.querySelectorAll(mark)].some((e) => !x.stale.has(e) && !ours(e))) return true;
-    if (m.querySelector(SPIN) || !filled(m)) return false;
+    if (mark && [...m.querySelectorAll(mark)].some((e) => shown(e) && !x.stale.has(e) && !ours(e))) return true;
+    if (spinnersOf(m).length || !filled(m)) return false;
     const since = performance.now() - x.routedAt;
     if (x.spun || since > 1000) return true;
     const fresh = !x.old.has(m) || [...m.querySelectorAll('.route-view-container')].some((e) => !x.old.has(e)) || textOf(m) !== x.text;
@@ -199,24 +205,29 @@ var GZ_FEEDBACK = globalThis.GZ_FEEDBACK || (() => {
     x.frame = 0;
     if (v !== x) return;
     if (!wanted()) { end(x); return; }
-    if (here() !== x.at && !x.routed) { x.routed = true; x.routedAt = performance.now(); x.landed = here(); }
+    if (copied(x)) { end(x); return; }
+    if (here() !== x.at && !x.routed) {
+      if (here() !== x.dest) { end(x); return; }
+      x.routed = true; x.routedAt = performance.now(); x.landed = here();
+    }
     // Another page opened since: not the click's to show.
     else if (x.routed && here() !== x.landed) { end(x); return; }
     // Ultra drew its tabs again: its own marks are on the new ones.
     if (p?.visit === x && !p.el.isConnected) unpress();
     const m = front();
-    if (m?.querySelector(SPIN)) x.spun = true;
+    if (x.routed && spinnersOf(m).some((e) => !x.spinners.has(e))) x.spun = true;
     if (x.routed && ready(x, m)) { end(x); return; }
     if (!seat(x)) end(x);
   };
-  // An instant copy that wasn't there at the click: it's the page, so the skeleton goes.
-  const copied = (x) => { const c = document.getElementById('gz-instant'); return !!c && c !== x.copy; };
+  // Only a new copy on the destination can take over: a pending source-page cache read may also finish after the click.
+  const copied = (x) => { const c = document.getElementById('gz-instant'); return here() === x.dest && !!c && c !== x.copy; };
   const start = (dest) => {
     end();
     const [, shape, mark] = pageOf(dest.split('?')[0]);
     const m = front();
-    const x = { at: here(), shape, routed: false, routedAt: 0, landed: '', spun: false, copy: document.getElementById('gz-instant'),
-      stale: new Set(mark ? document.querySelectorAll(mark) : []), old: new Set(document.querySelectorAll('main, .route-view-container')), text: textOf(m),
+    const x = { at: here(), dest, shape, routed: false, routedAt: 0, landed: '', spun: false, copy: document.getElementById('gz-instant'),
+      stale: new Set(mark ? document.querySelectorAll(mark) : []), spinners: new Set(document.querySelectorAll(SPIN)),
+      old: new Set(document.querySelectorAll('main, .route-view-container')), text: textOf(m),
       box: draw(shape), host: null, tx: 0, ty: 0, frame: 0, moving: 0 };
     x.onMove = () => { if (!x.moving) x.moving = requestAnimationFrame(() => { x.moving = 0; place(x); }); };
     x.ro = new ResizeObserver(x.onMove);
@@ -233,6 +244,13 @@ var GZ_FEEDBACK = globalThis.GZ_FEEDBACK || (() => {
       if (!x.frame) x.frame = requestAnimationFrame(() => check(x));
     });
     x.mo.observe(document.body || html, { childList: true, subtree: true });
+    // A route can change without touching the DOM, and the last mutation can arrive before a readiness deadline.
+    // Keep a bounded check alive while loading, coalesced with mutation checks into the next frame.
+    x.poll = setTimeout(function poll() {
+      if (v !== x) return;
+      if (!x.frame) x.frame = requestAnimationFrame(() => check(x));
+      x.poll = setTimeout(poll, 100);
+    }, 100);
     x.cap = setTimeout(() => end(x), LAST);
     x.wait = setTimeout(() => { if (v === x && !x.routed && here() === x.at) end(x); }, WAIT);
     return x;
@@ -244,6 +262,7 @@ var GZ_FEEDBACK = globalThis.GZ_FEEDBACK || (() => {
     x.ro.disconnect();
     clearTimeout(x.cap);
     clearTimeout(x.wait);
+    clearTimeout(x.poll);
     cancelAnimationFrame(x.frame);
     cancelAnimationFrame(x.moving);
     removeEventListener('scroll', x.onMove, { capture: true });
