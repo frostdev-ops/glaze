@@ -920,7 +920,7 @@ const KNOWN = {
       { t: 'faults', d: 0, p: 0.15, quota: false, refuse: 0 }, { t: 'run', d: 0, how: 'poke', s: 1885313995 }, { t: 'drive', k: 'outsideDocx', pick: 0.6393347012344748, s: 1120477327 }, { t: 'sync', d: 0, on: true, s: 327744370 }],
   },
   'staged-reasked-edit': {
-    fixed: false,
+    fixed: true,
     tiny: true,
     staged: true,
     devices: 3,
@@ -931,7 +931,7 @@ const KNOWN = {
       { t: 'drive', k: 'outsideDocx', pick: 0.605260512791574, s: 712871565 }, { t: 'paper', k: 'edit', d: 0, pick: 0.12561764963902533, pick2: 0.8504263516515493, s: 1788424472 }],
   },
   'staged-stale-parent': {
-    fixed: false,
+    fixed: true,
     tiny: true,
     staged: true,
     devices: 3,
