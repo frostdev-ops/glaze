@@ -60,7 +60,8 @@ const ultraPlan = (at = NOW - 120e3, complete = true) => {
 const seenCache = (file, start, end, scope) => new Promise((resolve, reject) => {
   const store = {};
   const local = { get: (k, cb) => cb({ [k]: store[k] }), set: (patch) => { Object.assign(store, structuredClone(patch)); resolve(store); } };
-  const record = vm.runInNewContext(part(file, start, end) + '\nrecord;', { chrome: { storage: { local } }, Date: { now: () => NOW - 300e3 }, ...scope });
+  // content.js's startup read (stored) is the same storage.local read.
+  const record = vm.runInNewContext(part(file, start, end) + '\nrecord;', { chrome: { storage: { local } }, stored: (k, cb) => local.get(k, cb), Date: { now: () => NOW - 300e3 }, ...scope });
   Promise.resolve(record()).catch(reject);
 });
 // Both course caches come from the unmodified content-script writer, with only its LMS/extension APIs replaced.
