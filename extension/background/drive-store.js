@@ -494,7 +494,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       if (Object.keys(settled).length) await unstamp(settled);
       await snapshot(ctx);
     };
-    // The daily snapshot: Back up…'s zip in Backups, the newest SNAP.keep kept, older ones moved to Drive's trash.
+    // The daily snapshot: Back up…'s zip in Backups, the newest SNAP.keep kept, older ones deleted for good.
     const snapshot = async (ctx) => {
       const st = (await S.get(STATE))[STATE] || {};
       if (!env.snapshot || (st.snap && now() - st.snap < SNAP.every)) return;
@@ -506,9 +506,9 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       // A note saved while it was read (background/backup.js notesOut 'changed'): the next run tries again.
       try { made = await env.snapshot(); } catch (e) { if (e?.why === 'changed') return; return skip(e); }
       if (!made) return skip();
-      let r, same, up;
+      let r, same, up, backups;
       try {
-        const backups = await sub(ctx, 'backups', 'Backups');
+        backups = await sub(ctx, 'backups', 'Backups');
         r = await ctx.D((c) => c.find(`'${backups}' in parents and appProperties has { key='glaze' and value='snapshot' } and trashed=false`, { fields: 'id,name,trashed,appProperties,version', pageSize: 100 }));
         // Another device's of the same day (its name is the day's) is replaced, a new revision of the one file: five kept are five days.
         same = r.files.filter((f) => f.name === made.name).sort((a, b) => (a.id < b.id ? -1 : 1))[0];
@@ -517,7 +517,14 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       await ctx.state({ snap: now(), snapSkip: null });
       const all = same ? r.files : [...r.files, { id: up.id, name: made.name }];
       const old = all.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : a.id < b.id ? 1 : -1)).slice(SNAP.keep);
-      for (const f of old) await ctx.D((c) => c.patch(f.id, { trashed: true }));
+      // Copies of what is on the device, never the student's own (the owner's call): deleted for good, not left in Drive's trash
+      // counting against their storage. Each only once Drive says it is still a zip Glaze made and tagged as a snapshot, in
+      // Backups and not in the trash; one that isn't stays. Gone already, or one Drive won't let go: passed over.
+      for (const f of old) {
+        const m = await ctx.D((c) => c.file(f.id)).catch((e) => { if (e.why === 'missing') return null; throw e; });
+        if (m?.appProperties?.glaze !== 'snapshot' || m.mimeType !== ZIP || m.trashed !== false || !(m.parents || []).includes(backups)) continue;
+        await ctx.D((c) => c.remove(f.id)).catch((e) => { if (e.why !== 'missing' && e.why !== 'denied') throw e; });
+      }
     };
     const forget = async () => {
       const keys = (await S.keys()).filter((k) => k.startsWith(REC) || k === STAMPS);

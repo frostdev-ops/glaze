@@ -846,8 +846,8 @@ you import) are bundled. It makes requests in these cases:
       pictures) and anything else **Back up…** leaves out.
     - Deleting follows Glaze's Trash: a document moved to Trash in Glaze moves its Drive files to Drive's trash, and one
       trashed or deleted in Drive moves the document to Glaze's Trash; a setting or record deleted on one device is
-      deleted on the others, its file kept in Drive saying so. Glaze never deletes a Drive file for good: an older
-      snapshot goes to Drive's trash, which Google empties after 30 days.
+      deleted on the others, its file kept in Drive saying so. Glaze deletes no Drive file for good except its own daily zips
+      past the newest five.
     - Glaze reaches only the files it made there (`drive.file`); turning Sync off or disconnecting leaves the folder in
       your Drive.
   - **Submit from Drive**: Glaze downloads the Drive file you pick and attaches it to your Blackboard Ultra assignment's

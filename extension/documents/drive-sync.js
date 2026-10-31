@@ -25,7 +25,7 @@
 //   Trash: a document trashed or restored in Glaze moves its two files into or out of Drive's trash; a file trashed or
 //     restored in Drive moves the document into or out of Glaze's Trash (both changed: restored wins). A document deleted
 //     for good here (Delete forever, Trash's 30 days, Clear) has its files trashed in Drive; a file deleted for good in Drive
-//     (a 404, or removed from the changes) puts the document in Trash here. Nothing is ever deleted for good by Glaze.
+//     (a 404, or removed from the changes) puts the document in Trash here. No document is ever deleted for good by Glaze.
 // When: turning it on uploads every document and takes Drive's (a full pass, the page token taken first); then each run
 // reads the changes since its token and pushes the documents saved since (driveSyncDirty, marked by the worker as they are
 // written), each push 5 s after the last save (WAIT.push). Runs start when it is turned on, when the browser starts or
