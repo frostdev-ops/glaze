@@ -562,8 +562,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (!d) {
         if (R?.removed) R = !lt && l ? await lookup(h, folder) : null;
         if (!R) { if (l && !lt) await push(key, h, l, null, folder); return; }
-        // In Drive's trash and in Trash here, or never here: nothing to meet.
-        if (R.trashed && (!l || lt)) return;
+        // In Drive's trash and in Trash here, or never here: nothing to meet. Met by its tag alone, its copy says whether this
+        // device holds it (a download stopped before its link was kept, say).
+        if (R.trashed && (lt || (!l && key))) return;
         const j = await readCopy(R, h, key, owner);
         // Met by its tag alone (Drive's changes) while this device holds that document too, unlinked (written before its first
         // push, or its link let go): a first meeting with this device's own, never a download over it.
@@ -574,7 +575,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         // (meet) so that either file's next change meets it again.
         const F = j.file ? (files?.get(j.file) || await meta(j.file)) : null, ft = !!F && !F.removed && F.trashed === true;
         if (R.trashed || ft) {
-          if (!l || lt) { await putDoc(h, { key: j.key, h, kind: j.kind, json: R.id, file: j.file, meet: true }, null); return; }
+          if (!l || lt) { if (!R.trashed) await putDoc(h, { key: j.key, h, kind: j.kind, json: R.id, file: j.file, meet: true }, null); return; }
           if (ft) await trashTo(j.file, false);
           if (R.trashed) await trashTo(R.id, false);
           R = { ...R, trashed: false, explicitlyTrashed: false };
@@ -821,7 +822,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         const R = remote.get(h) || null;
         if (await one(row.key, h, { R: R || (d?.json ? undefined : null), E: E(d), folder, files: own }) === 'pending') waiting.add(row.key);
       }
-      for (const [h, R] of remote) if (!seen.has(h)) { seen.add(h); await one(null, h, { R, E: E(await docOf(h)), folder, files: own }); }
+      // One only Drive holds, in its trash and never linked here: nothing to meet (each device's own were met above).
+      for (const [h, R] of remote) if (!seen.has(h)) { seen.add(h); const d = await docOf(h); if (d || !R.trashed) await one(null, h, { R, E: E(d), folder, files: own }); }
       for (const k of (await S.keys()).filter((x) => x.startsWith(DOC))) if (!seen.has(k.slice(DOC.length))) await one(null, k.slice(DOC.length), { E: E(await docOf(k.slice(DOC.length))), folder, files: own });
       for (const [k, n] of Object.entries(dirt)) if (!waiting.has(k)) await unmark(k, n);
       if (more) await more.full(hooks(folder));
@@ -831,7 +833,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // pass's page token, so its change never comes either) is met now, as that pass would have; one this device is linked to
     // already is passed over.
     const recheck = async (folder) => {
-      for (const [h, R] of await copies(folder)) if ((await docOf(h))?.json !== R.id) await one(null, h, { R, folder });
+      for (const [h, R] of await copies(folder)) { const d = await docOf(h); if (d ? d.json !== R.id : !R.trashed) await one(null, h, { R, folder }); }
       await setState({ again: 0 });
     };
     // What changed in Drive since the token, a page at a time, each page's documents done before the token moves past it.
