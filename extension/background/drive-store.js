@@ -491,7 +491,11 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         // with one, so a later change another device hasn't pushed yet still wins over it.
         if (!R || R.removed) { if (value !== undefined) await push(ctx, h, area, key, cat, null, at || UNTIMED); return; }
         const got = await fetchRec(ctx, R, h, owner);
-        if (got.sum === lsum) return put(h, { area, key, cat, id: R.id, lsum, rsum: got.sum, at: got.at, seen: Math.max(at, got.at) }, null);
+        if (got.sum === lsum) {
+          // The same value on both sides, changed here later than Drive's: sent again with this device's time (retold below).
+          if (at > got.at && !def.view && !MERGE[cat]) return push(ctx, h, area, key, cat, { id: R.id }, at);
+          return put(h, { area, key, cat, id: R.id, lsum, rsum: got.sum, at: got.at, seen: Math.max(at, got.at) }, null);
+        }
         if (value === undefined) { if (got.value !== undefined) await take(h, got, R, null, value); else await put(h, { area, key, cat, id: R.id, lsum, rsum: got.sum, at: got.at, seen: got.at }, null); return; }
         if (got.value === undefined) return push(ctx, h, area, key, cat, { id: R.id }, Math.max(at, got.at + 1) || now());
         // First meeting, both hold it: Settings by time; the rest joined as Restore joins.
@@ -515,13 +519,26 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       // Its file gone or in Drive's trash: put back from here, unchanged since it last synced with the time of that change.
       if (!R || R.removed) { if (value !== undefined) await push(ctx, h, area, key, cat, { ...was, id: null }, at || (lsum === was.lsum && was.at) || now()); else await S.remove([REC + h, ...(was.id ? [FILE + was.id] : [])]); return; }
       const ldirty = lsum !== was.lsum, rdirty = R.appProperties?.sum !== was.rsum;
-      if (!ldirty && !rdirty) { if (at > (was.seen || 0)) await put(h, { ...was, seen: at }, was); return; }
+      // The value as it was, sent again later by another device (a change back to it): retold, Drive's time for it, is weighed
+      // against a change here as a change of its own. Content alone tells neither side of it.
+      const rat = Number(R.appProperties?.at), retold = !rdirty && Number.isFinite(rat) && rat > (was.at || 0) ? rat : 0;
+      if (!ldirty && !rdirty) {
+        // A change back to the value already synced, made here later than it: sent again with its time, so an earlier change
+        // another device hasn't pushed yet doesn't go up over it unseen. Only where the whole value is the record: a view
+        // (the pet, Gradescope) keeps fields of this device's own, and Notes merge field by field.
+        if (at > (was.seen || 0) && at > Math.max(was.at || 0, retold) && !def.view && !MERGE[cat]) return push(ctx, h, area, key, cat, was, at);
+        if (at > (was.seen || 0) || retold) await put(h, { ...was, seen: Math.max(was.seen || 0, at), ...(retold && { at: retold }) }, was);
+        return;
+      }
       if (rdirty) {
         const got = await fetchRec(ctx, R, h, owner);
-        if (!ldirty) return take(h, got, R, was, value);
+        // Unchanged here by content, but changed and back since it synced (where the whole value is the record): weighed by
+        // time like any other change made here.
+        if (!ldirty) return at > (was.seen || 0) && at > got.at && !def.view && !MERGE[cat] ? push(ctx, h, area, key, cat, was, at) : take(h, got, R, was, value);
         if (MERGE[cat] && got.value !== undefined && value !== undefined) return meet(ctx, h, got, R, was, value, at);
         if (got.at >= (at || 0)) return take(h, got, R, was, value);
       }
+      if (at && retold > at) return take(h, await fetchRec(ctx, R, h, owner), R, was, value);
       return push(ctx, h, area, key, cat, was, at || now());
     };
     // Whether the note at noteKey here shows the picture or attachment at fileKey (both Notes record keys).
