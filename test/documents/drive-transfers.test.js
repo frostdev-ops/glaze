@@ -180,6 +180,26 @@ test('a large record replacing a missing Drive file resumes its new session acro
   assert.deepEqual(await moves(dk), {});
 });
 
+test('a queued Word upload never resumes into a file preserved after an outside edit', async () => {
+  const drive = standin(), dk = disk(), key = 'doc:00000000-0000-4000-8000-00000000a013', a = worker(drive, dk);
+  await a.papers.save(key, { doc: doc('Original paper'), title: 'Paper', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  const old = fileOf(drive, key, 'file').meta.id;
+  await a.papers.save(key, { doc: doc('C'.repeat(6 * MiB)) });
+  await a.sync.touched(key);
+  await stopped(a.sync.run({ push: true }), drive.cut(MiB, (e) => e.chunk && !e.chunk.status));
+  const outside = enc('PK the student edited this Word file in another app');
+  drive.edit(old, outside);
+  const b = worker(drive, dk);
+  assert.ok((await b.sync.run()).ok);
+  assert.equal(sha(drive.files.get(old).bytes), sha(outside), 'the outside edit is never overwritten by the old session');
+  assert.equal(drive.files.get(old).meta.appProperties.glaze, 'kept');
+  const own = fileOf(drive, key, 'file');
+  assert.ok(own && own.meta.id !== old, 'Glaze writes its new file beside the preserved one');
+  assert.equal(JSON.parse(fileOf(drive, key, 'doc').bytes).file, own.meta.id);
+  assert.deepEqual(await moves(dk), {});
+});
+
 test('a worker stopped mid-chunk: the next one asks Drive where the session stands and goes on from there', async () => {
   const drive = standin(), dk = disk(), key = 'doc:00000000-0000-4000-8000-00000000a001', big = bytesOf(20 * MiB, 7);
   const a = worker(drive, dk);
