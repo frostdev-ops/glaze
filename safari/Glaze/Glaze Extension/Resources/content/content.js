@@ -398,7 +398,7 @@
   };
   words();
 
-  // ---- the site's API --------------------------------------------------------------------------
+  // ---- the gradebook --------------------------------------------------------------------------
   // The student's own LMS (same origin, their session), through the site part's queue where it has one (X.fetch).
   // Absolute URLs: Ultra's <base href> points at its CDN. Canvas's REST API is the same thing under /api/v1 (capi): its
   // string-id JSON keeps long ids exact, and an older Canvas starts a response with `while(1);`.
