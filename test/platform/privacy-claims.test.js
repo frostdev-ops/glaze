@@ -105,16 +105,33 @@ for (const [lang, account] of Object.entries(languages)) {
   });
 }
 
-test('Calendar\'s Disconnect discloses that, while Google Drive shares the grant, it revokes nothing and keeps identity', () => {
+// Disconnect is this device only (owner, 2026-10-31): Calendar's and Drive's forget the sign-in here and never revoke
+// Google's grant; removing Glaze everywhere is Google's own account page, which the privacy texts name.
+test('Disconnect, for Calendar and Drive, is disclosed as this device only, never revoking Google\'s access', () => {
   const bg = read('background/background.js');
   const bye = bg.slice(bg.indexOf('  disconnect: async (m) => {'), bg.indexOf('  sync: async (m, epoch) => {'));
-  assert.match(bye, /if \(driveOn && drive\.flow === 'chrome'\) \{\s*await chrome\.storage\.local\.remove\(\['gcal', 'gcalSync'\]\);[\s\S]*?shared: true \};/, 'the code: Drive connected through Chrome\'s own client, only Calendar\'s state goes');
+  assert.ok(bye.length > 0);
+  assert.doesNotMatch(bye + read('planner/gcal.js') + read('background/google.js'), /GZ_GCAL\.revoke|REVOKE|oauth2\.googleapis\.com\/revoke/, 'the code: nothing revokes');
+  assert.match(bye, /if \(!driveOn\) await Promise\.resolve\(\)\.then\(releaseIdentity\)/, 'the code: identity goes once Drive isn\'t connected either');
   const network = policy.slice(policy.indexOf('## Network requests'));
   const calendar = network.slice(network.indexOf('- **Google Calendar sync**'), network.indexOf('- **Google Drive** (off until you connect)'));
-  assert.match(calendar.slice(calendar.indexOf('**Disconnect**')), /Google Drive[^.]*same access[^.]*doesn't revoke/);
+  const drive = network.slice(network.indexOf('- **Google Drive** (off until you connect)'), network.indexOf('- **Tasks on course cards**'));
+  for (const [name, part] of [['Calendar', calendar], ['Drive', drive]]) {
+    assert.doesNotMatch(part, /revocation|to revoke|asks Google to revoke/, name);
+    const d = part.slice(part.indexOf('**Disconnect**'));
+    assert.match(d, /this device only[^.]*doesn't revoke/, name);
+    assert.match(d, /other devices/, name);
+    assert.match(d, /https:\/\/myaccount\.google\.com\/connections/, name);
+  }
+  assert.match(calendar.slice(calendar.indexOf('**Disconnect**')), /`identity`[^.]*unless Google Drive is connected on this device/);
+  assert.match(drive.slice(drive.indexOf('**Disconnect**')), /`identity`[^.]*unless Google Calendar sync is connected on this device/);
   const identity = policy.slice(policy.indexOf('- `identity` (Chrome only, optional)'), policy.indexOf('- `unlimitedStorage`'));
   assert.match(identity, /removed on\s+Disconnect[^.;]*unless Google Drive/);
-  assert.match(read('../docs/privacy.md'), /\*\*Disconnect\*\* deletes them and revokes access[^.]*unless Google Drive/);
+  assert.match(identity, /removed on Disconnect, unless Google Calendar sync/);
+  const docs = read('../docs/privacy.md');
+  assert.doesNotMatch(docs, /revoke/i);
+  assert.match(docs, /\*\*Disconnect\*\* deletes them on this device only[^.]*unless Google Drive/);
+  assert.match(docs, /Disconnect forgets the sign-in on this device only[^.]*myaccount\.google\.com\/connections/);
 });
 
 test('Safari\'s nativeMessaging and the storage permission name what Google Drive uses them for', () => {
@@ -166,7 +183,7 @@ test('Sync to Google Drive\'s storage disclosure names every key it keeps, and t
 });
 
 // Safari signs in with the authorization code flow in its handler (safari/…/GlazeGoogle.swift): the code is exchanged and
-// access tokens renewed at oauth2.googleapis.com/token, not only revoked there.
+// access tokens renewed at oauth2.googleapis.com/token.
 test('Safari\'s token requests to oauth2.googleapis.com are disclosed in both privacy texts', () => {
   const swift = fs.readFileSync(path.join(__dirname, '../../safari/Glaze/Glaze Extension/GlazeGoogle.swift'), 'utf8');
   assert.match(swift, /static let tokenURL = URL\(string: "https:\/\/oauth2\.googleapis\.com\/token"\)!/);

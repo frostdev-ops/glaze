@@ -1,5 +1,5 @@
 // Google sign-in for Drive (background/google.js, background/google-config.js) and the Picker hand-off, with chrome.identity, permissions,
-// storage and fetch stubbed: connect on each flow, silent renewal, a state that isn't ours refused, Disconnect revoking, no
+// storage and fetch stubbed: connect on each flow, silent renewal, a state that isn't ours refused, Disconnect on this device only, no
 // token ever in storage, the picker's fragment and the picker page's fallback order. The packaging side
 // (tools/build/oauth-manifest.js) is at the end.
 const test = require('node:test');
@@ -63,7 +63,6 @@ const harness = ({ on = true, flow = 'chrome', config = REAL, granted = true, fi
       const token = init.headers?.authorization?.replace(/^Bearer /, '');
       return token ? new Response(JSON.stringify({ ...(owners[token] || who), email_verified: true }), { status: 200 }) : new Response('', { status: 401 });
     }
-    if (url === G.REVOKE) return new Response('', { status: 200 });
     const i = config.picker.indexOf(url);
     if (i >= 0) { await gate.picker; if (up[i]) return new Response('', { status: 200 }); throw new TypeError('Failed to fetch'); }
     throw new Error(`unexpected request: ${url}`);
@@ -232,7 +231,7 @@ test('Firefox: the loopback redirect Google accepts, in the url only, and only t
   assert.equal(h.log.launch[1].interactive, false);
   assert.equal((await h.g.pick()).ok, true);
   assert.deepEqual(Object.keys(h.log.launch.at(-1)).sort(), ['interactive', 'url'], 'the picker too');
-  assert.deepEqual(await h.g.disconnect(), { ok: true, revoked: true, had: true });
+  assert.deepEqual(await h.g.disconnect(), { ok: true });
   assert.deepEqual(h.log.permRemoved, [], 'identity is the package\'s own on Firefox: nothing to give back');
 });
 
@@ -247,7 +246,7 @@ test('without the Picker key, signing in, the token and Disconnect work, and onl
     assert.deepEqual(await h.g.pick(), { ok: false, why: 'setup' });
     assert.equal(h.log.launch.length, before, 'no picker opened');
     assert.ok(!h.log.fetch.some((f) => C.picker.includes(f.url)), 'nor probed');
-    assert.deepEqual(await h.g.disconnect(), { ok: true, revoked: true, had: true });
+    assert.deepEqual(await h.g.disconnect(), { ok: true });
   }
 });
 
@@ -272,34 +271,42 @@ test('a reply that isn\'t for our state is refused, and nothing is kept', async 
   assert.deepEqual(await c.g.connect(), { ok: false, why: 'cancel' });
 });
 
-test('disconnect revokes the grant, clears the cached tokens, gives identity back and forgets the account', async () => {
+// Disconnect is this device only (owner, 2026-10-31): Google's grant stays, so Drive and Calendar on the student's other
+// devices, and Calendar here, keep working. Removing Glaze everywhere is Google's own account page.
+test('Disconnect forgets the account, its tokens and identity here, and never revokes Google\'s grant', async () => {
+  assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '../../extension/background/google.js'), 'utf8'), /oauth2\.googleapis\.com\/revoke|REVOKE/, 'no revoke path left');
   const h = harness();
   await h.g.connect();
-  assert.deepEqual(await h.g.disconnect(), { ok: true, revoked: true, had: true });
-  const r = h.log.fetch.find((f) => f.url === G.REVOKE);
-  assert.deepEqual([r.init.method, r.init.headers['content-type'], r.init.body], ['POST', 'application/x-www-form-urlencoded', 'token=chrome-tok-2']);
-  assert.deepEqual([h.log.removed, h.log.cleared, h.log.permRemoved], [['chrome-tok-2'], 1, [{ permissions: ['identity'] }]]);
+  const asked = h.log.fetch.length, auth = h.log.auth.length;
+  assert.deepEqual(await h.g.disconnect(), { ok: true });
+  assert.equal(h.log.fetch.length, asked, 'nothing sent to Google');
+  assert.equal(h.log.auth.length, auth, 'no token asked for');
+  assert.deepEqual([h.log.cleared, h.log.permRemoved], [1, [{ permissions: ['identity'] }]]);
   assert.deepEqual(h.local, {});
   assert.equal(await h.g.account(), null);
-  careful(h);
+  await assert.rejects(h.g.token(), (e) => e.why === 'connect');
 
   const w = harness({ flow: 'web' });
   await w.g.connect();
-  assert.deepEqual(await w.g.disconnect(), { ok: true, revoked: true, had: true });
-  assert.equal(w.log.fetch.find((f) => f.url === G.REVOKE).init.body, 'token=web-tok-1');
+  const sent = w.log.fetch.length, launched = w.log.launch.length;
+  assert.deepEqual(await w.g.disconnect(), { ok: true });
+  assert.deepEqual([w.log.fetch.length, w.log.launch.length], [sent, launched]);
   await assert.rejects(w.g.token(), (e) => e.why === 'connect', 'the token is gone from memory');
   assert.deepEqual(w.log.permRemoved, [{ permissions: ['identity'] }]);
 
-  // Calendar sync connected: the grant they share isn't revoked, and its permission and Chrome's cache stay.
+  // Calendar sync connected through Chrome's own client: its permission and Chrome's cache stay.
   for (const flow of ['chrome', 'web']) {
     const k = harness({ flow, keep: true });
     await k.g.connect();
-    assert.deepEqual(await k.g.disconnect(), { ok: true, revoked: false, had: false });
-    assert.ok(!k.log.fetch.some((f) => f.url === G.REVOKE), `${flow}: nothing revoked while Calendar uses the grant`);
+    const before = k.log.fetch.length;
+    assert.deepEqual(await k.g.disconnect(), { ok: true });
+    assert.equal(k.log.fetch.length, before, `${flow}: nothing sent to Google`);
     assert.deepEqual([k.log.cleared, k.log.permRemoved], [0, []]);
     assert.deepEqual(k.local, {});
     await assert.rejects(k.g.token(), (e) => e.why === 'connect', `${flow}: Drive's own state is gone`);
   }
+  // Nothing connected: the same answer.
+  assert.deepEqual(await harness().g.disconnect(), { ok: true });
 });
 
 test('drop(token): a token Google answered 401 to is forgotten, and the next token() is a fresh one, silently', async () => {
@@ -326,7 +333,7 @@ test('drop(token): a token Google answered 401 to is forgotten, and the next tok
   await harness().g.drop('x'); // not connected: nothing to do, and no throw
 });
 
-test('a token for another Google account than the one connected is refused, dropped, never used or revoked', async () => {
+test('a token for another Google account than the one connected is refused, dropped and never used', async () => {
   for (const flow of ['chrome', 'web']) {
     const h = harness({ flow });
     await h.g.connect();
@@ -343,9 +350,7 @@ test('a token for another Google account than the one connected is refused, drop
     assert.deepEqual(await h.g.pick(), { ok: false, why: 'account' });
     assert.ok(!h.log.fetch.some((f) => C.picker.includes(f.url)), `${flow}: no picker opened with it`);
     assert.deepEqual(h.local.google.email, 'student@school.edu', 'the connection is still the one made');
-    // Disconnect can't revoke the connected account's grant with another's token: it revokes nothing and says Google may still hold it.
-    assert.deepEqual(await h.g.disconnect(), { ok: true, revoked: false, had: true });
-    assert.ok(!h.log.fetch.some((f) => f.url === G.REVOKE), `${flow}: nothing revoked`);
+    assert.deepEqual(await h.g.disconnect(), { ok: true });
     assert.deepEqual(h.local, {});
   }
 });
@@ -448,11 +453,11 @@ test('native Disconnect cancels a pending sign-in even before an account is save
     if (m.type === 'google.status') return { ok: true };
     if (m.type === 'google.connect') return { ok: true, open: 'io.frostdev.glaze-google://signin', opened: true };
     if (m.type === 'google.finish') return { ok: false, why: 'pending' };
-    if (m.type === 'google.disconnect') return { ok: true, revoked: false, had: false };
+    if (m.type === 'google.disconnect') return { ok: true, had: false };
     throw new Error(m.type);
   } });
   assert.deepEqual(await h.g.connect(), { ok: false, why: 'pending' });
-  assert.deepEqual(await h.g.disconnect(), { ok: true, revoked: false, had: false });
+  assert.deepEqual(await h.g.disconnect(), { ok: true });
   assert.equal(h.log.native.filter((m) => m.type === 'google.disconnect').length, 1);
   await h.g.connect();
   assert.equal(h.log.native.filter((m) => m.type === 'google.connect').length, 2, 'the old pending attempt is not resumed');
@@ -499,25 +504,23 @@ test('native drop forwards the refused token so the handler can renew it', async
   assert.equal(await h.g.token(), 'native-new');
 });
 
-test('Disconnect after a worker restart, when silent renewal fails, says Google may still hold the grant', async () => {
+test('Disconnect after a worker restart asks Google for nothing: no silent renewal, no request', async () => {
   const h = harness({ flow: 'web' });
   await h.g.connect();
-  // A new worker over the same storage: nothing in memory, and Google wants the student to sign in again.
+  const launched = h.log.launch.length;
+  // A new worker over the same storage: nothing in memory.
   const restarted = G.create({
     on: true, config: REAL, flow: 'web', firefox: false,
-    identity: () => ({ ...h.identity, launchWebAuthFlow: async (d) => { h.log.launch.push(d); return `${REDIRECT}#${new URLSearchParams({ error: 'interaction_required', state: new URL(d.url).searchParams.get('state') })}`; } }),
+    identity: () => ({ ...h.identity, launchWebAuthFlow: async (d) => { h.log.launch.push(d); throw new Error('no sign-in expected'); } }),
     permissions: { contains: async () => true, remove: async (p) => { h.log.permRemoved.push(p); return true; } },
     manifest: () => ({ oauth2: { client_id: REAL.chrome } }),
     storage: { get: async (k) => structuredClone(Object.fromEntries([].concat(k).filter((x) => x in h.local).map((x) => [x, h.local[x]]))), set: async (v) => Object.assign(h.local, v), remove: async (k) => { for (const x of [].concat(k)) delete h.local[x]; } },
-    fetch: async (url) => { h.log.fetch.push({ url, init: {} }); return new Response('', { status: 200 }); },
+    fetch: async (url) => { throw new Error(`unexpected request: ${url}`); },
     keep: async () => false, now: () => 2_000_000,
   });
-  assert.deepEqual(await restarted.disconnect(), { ok: true, revoked: false, had: true });
-  assert.equal(h.log.launch.at(-1).interactive, false, 'never a prompt');
-  assert.ok(!h.log.fetch.some((f) => f.url === G.REVOKE));
+  assert.deepEqual(await restarted.disconnect(), { ok: true });
+  assert.equal(h.log.launch.length, launched, 'never a sign-in');
   assert.deepEqual([h.local, h.log.permRemoved], [{}, [{ permissions: ['identity'] }]]);
-  // Nothing was connected: nothing to warn about.
-  assert.deepEqual(await harness().g.disconnect(), { ok: true, revoked: false, had: false });
 });
 
 test('the web flow without the identity permission (taken back in the browser\'s add-on settings) asks for it, never a TypeError', async () => {
@@ -617,7 +620,7 @@ const settings = async ({ email = 'student@school.edu', sync = {}, connect = { o
   const vm = require('node:vm');
   const src = fs.readFileSync(path.join(__dirname, '../../extension/settings/options.js'), 'utf8');
   const block = src.slice(src.indexOf('  // ---- Google Drive (background/google.js'), src.indexOf('  // Another surface changed something'));
-  const els = {}, sent = [], heard = [], asked = [], local = { driveSync: sync };
+  const els = {}, sent = [], heard = [], asked = [], hints = [], local = { driveSync: sync };
   const el = (id, hidden = false) => {
     const e = { id, observers: [], listeners: {}, checked: false, _hidden: hidden, _text: '', focus() {},
       addEventListener(type, f) { (this.listeners[type] ||= []).push(f); },
@@ -633,6 +636,7 @@ const settings = async ({ email = 'student@school.edu', sync = {}, connect = { o
         sent.push(structuredClone(m));
         const r = m.type === 'glaze:google' ? (m.op === 'status' ? { ok: true, flow: firefox ? 'web' : 'chrome', email: local.google?.email || null } : m.op === 'connect' ? connect : { ok: true }) : { ok: true };
         if (m.type === 'glaze:google' && m.op === 'connect' && r.ok) local.google = { email: r.email };
+        if (m.type === 'glaze:google' && m.op === 'disconnect') delete local.google;
         setTimeout(() => reply(r), 0);
       },
     },
@@ -643,13 +647,13 @@ const settings = async ({ email = 'student@school.edu', sync = {}, connect = { o
   chrome.runtime.getURL = (p = '') => `${firefox ? 'moz-extension://6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b' : 'chrome-extension://abcdefghijklmnopabcdefghijklmnop'}/${p}`;
   if (email) local.google = { email };
   vm.runInNewContext(block, {
-    $: (s) => els[s], chrome, t: (s) => s, hint() {}, GZ_SITE: {}, GZ_I18N: { locale: () => 'en', ui: () => 'en' }, Intl, Date,
+    $: (s) => els[s], chrome, t: (s) => s, hint: (text, bad = false) => hints.push([text, bad]), GZ_SITE: {}, GZ_I18N: { locale: () => 'en', ui: () => 'en' }, Intl, Date,
     MutationObserver: class { constructor(f) { this.f = f; } observe(e) { e.observers.push(this.f); } },
   });
   const settle = () => new Promise((r) => setTimeout(r, 20));
   await settle();
   return {
-    els, sent, settle, asked,
+    els, sent, settle, asked, hints,
     click: async (id) => { for (const f of els[id].listeners.click) await f({ isTrusted: true, currentTarget: els[id] }); await settle(); },
     syncChange: async (next) => { local.driveSync = next; for (const f of heard) f({ driveSync: { newValue: next } }, 'local'); await settle(); },
   };
@@ -682,6 +686,16 @@ test('Settings: while Sync asks to connect Google Drive again, Connect is there 
   assert.deepEqual([n.els['#gdrive'].hidden, n.els['#gdrive-connect'].hidden, n.els['#gdrive-disconnect'].hidden, n.els['#gdrive-sync'].hidden], [false, false, true, true]);
   await n.click('#gdrive-connect');
   assert.deepEqual(n.sent.filter((m) => m.type === 'glaze:driveSync'), [], 'a first Connect: the worker turns Sync on itself');
+});
+
+test('Settings: Disconnect says only that it disconnected, for Drive and Calendar alike, and never sends the student to Google', async () => {
+  const s = await settings();
+  await s.click('#gdrive-disconnect');
+  assert.deepEqual(s.hints, [['Disconnected.', false]]);
+  assert.deepEqual([s.els['#gdrive-connect'].hidden, s.els['#gdrive-disconnect'].hidden], [false, true]);
+  const src = fs.readFileSync(path.join(__dirname, '../../extension/settings/options.js'), 'utf8');
+  assert.doesNotMatch(src, /myaccount\.google\.com|revoked/);
+  assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '../../extension/options.html'), 'utf8'), /asks Google to remove/);
 });
 
 test('Settings on Firefox: Connect goes straight to Google, never asking Firefox for identity (the package holds it; Firefox has no optional identity)', async () => {
