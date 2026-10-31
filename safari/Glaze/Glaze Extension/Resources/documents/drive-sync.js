@@ -575,9 +575,11 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       // This device's first push stopped before its copy's answer came (its file recorded): a copy naming that file is its own,
       // as Drive took it, and linked so; another device's is met as a first meeting, this device's file put away as a losing
       // copy's is.
+      // Both sides agreed on what that push sent (fsum): a copy changed since is another device's change, and this device's
+      // own is weighed against what it sent, never taken as one not yet sent.
       if (d && !d.json && R && !R.removed) {
         const j = await readCopy(R, h, key, owner);
-        if (j.file && j.file === d.file) d = await putDoc(h, { ...d, json: R.id, jh: R.headRevisionId || null, rsum: j.sum, lsum: j.sum === d.fsum ? j.sum : null, rev: -1 }, d);
+        if (j.file && j.file === d.file) d = await putDoc(h, { ...d, json: R.id, jh: R.headRevisionId || null, rsum: d.fsum ?? j.sum, lsum: d.fsum ?? null, rev: -1 }, d);
         else { gone = d; await away([gone.file], h); await dropDoc(h, d); d = null; }
       }
       // This device's copy moved out of the Glaze folder (put away by the device whose copy it was, as above, or moved by
