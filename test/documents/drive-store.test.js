@@ -1030,3 +1030,34 @@ test('Glaze/Data put in Drive\'s trash: records go back into a new Data, one fil
   assert.equal(live('local', 'writerWords').length, 1, 'and one for the dictionary');
   noDeletes(drive);
 });
+
+// The pet's record (planner's tasks category) carries what its device alone reads into it each time its widget shows: the
+// focus timer's state there (timerSignal, from widgetTimer) and the character it wears (sprite, from petCharacter and that
+// device's own drawings). Taken whole from Drive, each device's widget wrote its own back over the other's: the record went
+// back and forth between the two on every pull, for as long as both showed the pet.
+test('the pet\'s record settles between two devices whose focus timers differ: no echo on every pull', async () => {
+  const PETS = require('../../extension/pet/pet.js');
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const PET = 'pet:https://school.instructure.com/42';
+  // The pet widget's read (pet/page/pet.js update), through the worker's queue as its write says whether it worked.
+  const show = async (d) => {
+    const r = await PETS.change({ op: 'read', key: PET, tz: 'UTC' }, { local: { get: (k) => d.local.get(k), set: async (o) => { await d.local.set(o); return true; } }, sync: d.settings });
+    assert.ok(r.ok, JSON.stringify(r));
+  };
+  await a.local.set({ [PET]: PETS.clean({}), widgetTimer: { phase: 'work', end: Date.now() + 3600e3, left: 0 } });
+  await b.local.set({ widgetTimer: { phase: 'rest', end: 0, left: 300e3 } });
+  await show(a);
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  assert.ok((await b.local.get(PET))[PET], 'B has the pet');
+  const ups = () => drive.log.filter((x) => x.upload && x.upload.meta.appProperties?.key === sha(`local\n${PET}`).slice(0, 32)).length;
+  for (let i = 0; i < 2; i++) {
+    clock.t += 60e3; await show(b); assert.ok((await b.run()).ok);
+    clock.t += 60e3; assert.ok((await a.run()).ok); await show(a); assert.ok((await a.run()).ok);
+  }
+  const settled = ups();
+  for (let i = 0; i < 3; i++) {
+    clock.t += 60e3; assert.ok((await b.run()).ok); await show(b); assert.ok((await b.run()).ok);
+    clock.t += 60e3; assert.ok((await a.run()).ok); await show(a); assert.ok((await a.run()).ok);
+  }
+  assert.equal(ups(), settled, 'the pet\'s record no longer goes up on each pull');
+});
