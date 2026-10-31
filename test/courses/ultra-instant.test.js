@@ -140,6 +140,29 @@ test('each page\'s ready markers: every grades tile filled, a course card, a str
   assert.equal(L.kindOf('/ultra/courses/_1_1/outline'), '');
 });
 
+test('Grades tiles keep their Looks part and theme surfaces in the live shape and the instant copy', () => {
+  const P = require('../../extension/looks/parts.js');
+  const { cssRules, winner } = require('../helpers/css-cascade.cjs');
+  const theme = cssRules('content/theme.css');
+  const { doc, main } = page('ultra-instant-grades.html');
+  const box = new El('div', doc);
+  box.id = 'gz-instant';
+  L.build(doc, box, L.capture(main, CTX).nodes, CTX);
+  main.append(box);
+  const node = (e) => e && ({ tag: e.tagName.toLowerCase(), id: e.id, cls: e.className.split(/\s+/), attrs: e.attrs, parent: node(e.parentElement) });
+  const background = (e) => winner(theme, node(e), 'background(?:-color)?')?.[0];
+  for (const scope of [main, box]) {
+    const tiles = scope.querySelectorAll(P.get('ultra.grades-tile').s).filter((e) => scope === box || !e.closest('#gz-instant'));
+    assert.equal(tiles.length, 2, 'Looks finds both course tiles');
+    for (const tile of tiles) {
+      if (scope === main) assert.equal(tile.parentElement.tagName, 'BB-BASE-GRADES-STUDENT', 'the native tile is a direct child');
+      assert.match(background(tile), /var\(--gz-surface-(paint|fill)/, 'the tile keeps the Look surface');
+      assert.equal(background(tile.querySelector('.grades-header')), 'transparent', 'the title band shares the tile surface');
+    }
+    assert.match(background(tiles[1].querySelector('.base-grades-empty-state')), /var\(--gz-ground\)/, 'an empty course remains styled');
+  }
+});
+
 test('copies are keyed by site, student and page, and only the right student\'s and page\'s is usable', () => {
   assert.equal(L.key(ORIGIN, '_900_1', 'grades'), `ultraCopy:${ORIGIN}/_900_1/grades`);
   const rec = { v: L.VERSION, uid: '_900_1', kind: 'grades', at: Date.now() - 1000, nodes: [] };

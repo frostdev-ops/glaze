@@ -1,21 +1,21 @@
 <!doctype html>
-<!-- Ultra's Grades page as the owner's site showed it, Glaze on (glaze-plans/perf-ultra/0b/baseline.md, "Ready markers"): one
-tile per course under bb-base-grades-student, each with its header, current grade, recent and upcoming rows (or the empty
-state) and the toggle. Synthetic text. -->
+<!-- Ultra's Grades page as the owner's site showed it, Glaze on (glaze-plans/perf-ultra/0b/baseline.md, "Ready markers"; the
+tile's place rechecked live 2026-10-31): one bb-base-grades-student per course in its term's slide, its tile the direct
+child, with its header, current grade, recent and upcoming rows (or the empty state) and the toggle. Synthetic text. -->
 <html lang="en"><head><meta charset="utf-8"><base href="https://cdn.ultra.test/ultra/uiv4001.0.0-rel/"><title>Grades</title></head>
 <body><div id="site-wrap"><main class="bb-offcanvas-container" id="main-content">
-<bb-base-grades-student><div class="base-grades-list">
-<div class="base-grades-course-tile" id="course-tile-_101_1">
+<div class="base-grades"><div class="carousel"><div class="carousel-slide hidden-slide" id="container-term-_1_1"><div class="grades-list"><div class="base-grades-term-wrapper"></div></div></div><div class="carousel-slide" id="container-term-current"><div class="grades-list"><div class="base-grades-term-wrapper"><div><div>
+<bb-base-grades-student id="card__101_1"><div class="element-card tile base-grades-course-tile active-course">
 <div class="grades-header"><span class="course-number">FIX-101</span><h3 class="subheader"><a class="bb-click-target" href="/ultra/courses/_101_1/grades">Sample Course One</a></h3><bb-schedule-outline><span class="schedule">Fall term</span></bb-schedule-outline></div>
 <div class="current-grade"><span class="grade-label">Overall grade</span><span class="grade-value">B+</span></div>
 <div class="recent-upcoming"><div class="element-card"><div class="element-details"><div class="name">Practice quiz 1</div><div class="grade">8/10</div></div></div><div class="element-card"><div class="element-details"><div class="name">Practice essay</div><div class="due">Due Nov 4</div></div></div></div>
 <a class="grades-toggle" href="#">View all</a>
-</div>
-<div class="base-grades-course-tile" id="course-tile-_102_1">
+</div></bb-base-grades-student>
+<bb-base-grades-student id="card__102_1"><div class="element-card tile base-grades-course-tile active-course">
 <div class="grades-header"><span class="course-number">FIX-102</span><h3 class="subheader"><a class="bb-click-target" href="/ultra/courses/_102_1/grades">Sample Course Two</a></h3><bb-schedule-outline><span class="schedule">Fall term</span></bb-schedule-outline></div>
 <div class="current-grade"><span class="grade-label">Overall grade</span><span class="grade-value">-</span></div>
 <div class="recent-upcoming"><div class="base-grades-empty-state"><span>No recent or upcoming work</span></div></div>
 <a class="grades-toggle" href="#">View all</a>
-</div>
 </div></bb-base-grades-student>
+</div></div></div></div></div></div></div>
 </main></div></body></html>
