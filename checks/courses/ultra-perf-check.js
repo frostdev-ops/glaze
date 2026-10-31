@@ -506,7 +506,7 @@ if (require.main === module) (async () => {
           // Observer delivery is later than insertion and its diagnostic log is capped; use the stage's actual start.
           const titlePaint = Object.fromEntries(probe.titles.map((x) => {
             const stage = x.text === 'stream' ? 'initial' : x.text === 'course' ? 'courses' : x.text;
-            return [x.text, x.renderTime - (stages[stage]?.inserted ?? stages[stage]?.window[0] ?? 0)];
+            return [x.text, x.renderTime - (stage === 'initial' ? 0 : stages[stage]?.inserted ?? stages[stage]?.window[0] ?? 0)];
           }));
           speedResult = { styledAt: probe.styledAt, fcp: probe.fcp, lcp: loaded?.ms ?? null, lcpElement: loaded?.el ?? null, lcpAll: last?.ms ?? null, lcpEntry, lcpEntries: probe.lcp.map((e) => ({ ...e, stage: stageOf(e.ms) })), titlePaint,
             headings: probe.h1, fonts: probe.fonts, glazeNodes: probe.glaze, titles: probe.titles,
