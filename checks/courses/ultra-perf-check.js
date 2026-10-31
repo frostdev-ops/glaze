@@ -600,11 +600,13 @@ if (require.main === module) (async () => {
       const returning = results.filter((r) => r.rep > 0 && r.glaze !== 'off');
       assert.ok(returning.length, 'a returning visit was measured');
       for (const r of returning) {
-        const { frames, shifts } = r.outline.aside, moves = [];
-        for (let i = 1; i < frames.length; i++) for (const block of ['aside.outline-actions > #gz-nt-block', 'aside.outline-actions > #gz-sb-widgets']) {
-          const was = frames[i - 1][block], now = frames[i][block];
-          if (was != null && now != null && was !== now) moves.push({ t: frames[i].t, block, from: was, to: now,
-            adopt: !frames[i - 1].host && !!frames[i].host && frames[i - 1].details === frames[i].details });
+        const { frames, shifts } = r.outline.aside, moves = [], seen = new Map();
+        for (const frame of frames) for (const block of ['aside.outline-actions > #gz-nt-block', 'aside.outline-actions > #gz-sb-widgets']) {
+          const previous = seen.get(block), was = previous?.[block], now = frame[block];
+          if (now == null) continue;
+          if (was != null && was !== now) moves.push({ t: frame.t, block, from: was, to: now,
+            adopt: !previous.host && !!frame.host && previous.details === frame.details });
+          seen.set(block, frame);
         }
         r.outline.aside.moves = moves;
         console.log(JSON.stringify({ rep: r.rep, instrumented: r.instrumented, asideMoves: moves, asideShifts: shifts }));
