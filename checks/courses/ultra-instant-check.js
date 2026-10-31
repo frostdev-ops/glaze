@@ -44,13 +44,13 @@ const until = async (f, what, timeout = 15000) => {
 
 (async () => {
   let context, held = false;
-  const lock = env.lockPath(), scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-instant-')));
+  const lock = require('../../tools/dev/check-env.js').lockPath(), scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-instant-')));
   try {
     fs.mkdirSync(lock); held = true;
-    const ext = env.staged(source, [`${ORIGIN}/*`]);
+    const ext = require('../../tools/dev/check-env.js').staged(source, [`${ORIGIN}/*`]);
     await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      ...env.chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 },
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'],
     });
     context.setDefaultTimeout(15000);
