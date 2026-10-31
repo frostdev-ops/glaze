@@ -355,3 +355,14 @@ test("search takes a course's documents from a fresh read with their bodies (a h
   const search = fs.readFileSync(path.join(__dirname, '../../extension/navigation/page/search.js'), 'utf8');
   assert.match(search, /U\.page\?\.outlineNow\?\.\(course\.id, \{ body: true \}\)/);
 });
+
+test('the kept gradebooks are read from storage once a page per student, however many cards ask', async () => {
+  const s = site({ local: { [`ultraBooks:${O}/_900_1`]: { _101_1: { at: LATER, rows: [{ columnId: '_1_1' }], complete: true }, _102_1: { at: LATER, rows: [], complete: false } } } });
+  let reads = 0;
+  const get = s.env.local.get;
+  s.env.local.get = (k) => { reads++; return get(k); };
+  const page = U.makePage(s.env);
+  const [a, b, c] = await Promise.all([page.saved('_101_1', '_900_1'), page.saved('_102_1', '_900_1'), page.saved('_103_1', '_900_1')]);
+  assert.equal(reads, 1);
+  assert.deepEqual([a.rows.length, a.rows.complete, b.rows.complete, c], [1, true, false, null]);
+});
