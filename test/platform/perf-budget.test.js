@@ -278,6 +278,12 @@ const AREA_PATHS = { ultra: 573, canvas: 514, moodle: 395 };
 // content.js loads the already-lazy courses/page/docs.js where a Canvas page shows a file preview or links a file (162), on every
 // site (one shared file); docs.js loads courses/page/canvasopen.js, which does the rest. Measured against f3e110c2.
 const CANVAS_OPEN = 162;
+// Glaze's own work on Ultra pages (plan step C, 2026-10-30; a named raise under the 2026-10-19 approval): need() groups a
+// feature's files into one worker round trip, a class or style change sweeps its element rather than its subtree, a hidden
+// tab's passes wait until it is shown, the startup storage.local reads go in one get, and settings and course-list changes
+// apply from their new values. All of it is the passes and loader in the shared content.js (5,555 bytes on every site) and
+// Ultra's groups and startup reads in content-ultra.js (521). Measured against a6fa9919.
+const ULTRA_PASSES = { ultra: 5555 + 521, canvas: 5555, moodle: 5555 };
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what background/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;
@@ -286,7 +292,7 @@ const FIRST_SCRIPT = { ultra: entry((c) => c.js.includes('content/content-ultra.
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + UI_SWAP + ULTRA_VT_ABORT[site] + VT_GUARD[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS + SYLLABUS_DOCS + WRITER + WRITER_SETTINGS + CTAB_PALETTE[site] + LOOK_CATALOG + COURSE_LOOKS_SYNC + BB_PREVIEWS + CANVAS_OPEN + AREA_PATHS[site];
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + UI_SWAP + ULTRA_VT_ABORT[site] + VT_GUARD[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS + SYLLABUS_DOCS + WRITER + WRITER_SETTINGS + CTAB_PALETTE[site] + LOOK_CATALOG + COURSE_LOOKS_SYNC + BB_PREVIEWS + CANVAS_OPEN + AREA_PATHS[site] + ULTRA_PASSES[site];
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }
@@ -443,6 +449,9 @@ const STYLE_READS = [
   // passes only the subtrees the mutation observer reports. Its own colour reads, and an InstUI icon's.
   ['content/content.js', "querySelectorAll('*')", 2],
   ['content/content.js', 'getComputedStyle(e)', 2],
+  // A class or style change's own subtree (attributeRoots): only one under 64 elements is swept with it; the live list is
+  // indexed at 64, so a big container stops counting there.
+  ['content/content.js', "getElementsByTagName('*')", 1],
   ['content/content.js', 'getComputedStyle(p)', 1], // a highlight's fill above an element
   ['content/content-ultra.js', 'getComputedStyle(p)', 1], // a course slot's probe
   ['courses/page/docs.js', 'getComputedStyle(p)', 1], // the scroller above the document in focus mode

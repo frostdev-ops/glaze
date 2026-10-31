@@ -166,7 +166,8 @@ const page = ({ frame = '', body = false, marker = true, wrapper = true, cached 
   return { c, doc, html, head, body: bodyEl, El, events, queries, requests, sent, storage, observers, timeouts, intervals, session, done,
     answer, loaded, advance, addBody, fire: (type, data) => fire(doc, type, data), fireOn: fire,
     detect: () => { hasMarker = true; observers.find((o) => o.active && o.target === doc).deliver([]); },
-    change: async (settings) => { raw = settings; for (const f of changes) f({ enabled: { newValue: settings.enabled } }, 'sync'); await answer(); },
+    // A change carries its keys' new values, and is applied from them.
+    change: async (settings) => { raw = settings; for (const f of changes) f(Object.fromEntries(Object.keys(settings).map((k) => [k, { newValue: settings[k] }])), 'sync'); await settle(); },
     sweep: () => observers.find((o) => o.active && o.target === bodyEl),
     sheets: () => head.children.filter((el) => el.tagName === 'LINK'),
   };

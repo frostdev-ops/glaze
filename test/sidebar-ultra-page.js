@@ -103,7 +103,7 @@ const page = ({ at = 'outline', width = 1600, stored = {}, enhance = {}, widgets
       site: 'ultra', solo: true, t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n]), locale: () => 'en', settings, acted: () => 0,
       account: async () => '_3_1', profile: async () => ({ id: '_3_1', time_zone: 'UTC' }),
       courseId: () => c.location.pathname.match(/\/ultra\/courses\/(_\d+_\d+)\//)?.[1],
-      need: async (f) => { loads.push(f); },
+      need: async (f) => { loads.push(...[].concat(f)); },
     },
     chrome: {
       runtime: { id: 'glaze', lastError: undefined, getURL: (p) => p, getManifest: () => ({ version: '3' }), sendMessage: (m, cb) => {

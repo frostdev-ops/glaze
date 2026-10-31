@@ -46,7 +46,7 @@ const page = ({ fixture = 'canvas-course-home.html', where = '/courses/25', widt
     GZ_CTX: {
       site: 'canvas', t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n]), locale: () => 'en', settings,
       account: async () => '3', profile: async () => ({ id: '3', time_zone: 'UTC' }), canvasCourseId: () => where.match(/^\/courses\/(\d+)/)?.[1] || '',
-      need: async (f) => { loads.push(f); },
+      need: async (f) => { loads.push(...[].concat(f)); },
     },
     chrome: {
       runtime: { id: 'glaze', lastError: undefined, getURL: (p) => p, getManifest: () => ({ version: '3' }), sendMessage: (m, cb) => {

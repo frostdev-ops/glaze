@@ -63,7 +63,7 @@ const ultra = ({ answer, pathname = '/ultra/courses/_1_1/outline', local = {}, c
   ctx.globalThis = ctx; ctx.window = ctx; ctx.top = ctx;
   vm.runInContext(read('content/content-ultra.js'), ctx);
   const need = (file, ready) => {
-    try { if (!ready()) vm.runInContext(read(file), ctx); } catch (e) { return Promise.reject(e); }
+    try { if (!ready()) for (const f of [].concat(file)) vm.runInContext(read(f), ctx); } catch (e) { return Promise.reject(e); }
     return ready() ? Promise.resolve() : Promise.reject(new Error('not ready'));
   };
   const api = (p, base = '/learn/api/v1') => s.fetch(`${ORIGIN}${base}${p}`).then((r) => (r.ok ? r.text() : Promise.reject(r.status))).then((t) => JSON.parse(t));
@@ -299,7 +299,7 @@ const modulesPage = (mods) => {
     Date: c.Date, setTimeout: c.setTimeout, clearTimeout() {}, WeakMap, Map, Set, Promise, URL, Response, console };
   g.globalThis = g;
   vm.createContext(g);
-  ctx.need = (file, ready) => { try { if (!ready()) vm.runInContext(read(file), g); } catch (e) { return Promise.reject(e); } return ready() ? Promise.resolve() : Promise.reject(new Error('not ready')); };
+  ctx.need = (file, ready) => { try { if (!ready()) for (const f of [].concat(file)) vm.runInContext(read(f), g); } catch (e) { return Promise.reject(e); } return ready() ? Promise.resolve() : Promise.reject(new Error('not ready')); };
   vm.runInContext(read('courses/page/download.js'), g);
   return { sync: () => g.GZ_DOWNLOAD.sync(), calls, held, buttons, c, ctx, g, peak: () => peak, open: () => open };
 };

@@ -55,7 +55,7 @@ test('content.js hands parts to the pages through GZ_CTX.parts(), asks only when
   assert.match(content, /globalThis\.GZ_XPARTS_PAGE\?\.preview\(e\.data\.gzPreviewParts\);/);
   // The first-paint path is untouched: parts are asked for after `ready`, which is the settings read.
   assert.ok(content.indexOf('  ready.then(() => modsIn(true));') > content.indexOf('const ready = load().then('));
-  assert.match(content.slice(content.indexOf('const load = () =>'), content.indexOf('// The previous palette covers')), /Object.keys\(GZ_DEFAULTS\), 'lookX'/);
+  assert.match(content.slice(content.indexOf('const SETTING_KEYS ='), content.indexOf('// The previous palette covers')), /Object.keys\(GZ_DEFAULTS\), 'lookX'/);
   // The worker allows the two files and brings the files they stand on.
   const worker = read('background/background.js');
   assert.match(worker, /'looks\/lookparts\.js', 'looks\/page\/lookparts\.js'/);
@@ -318,9 +318,10 @@ const loaders = async ({ lookX, mods = ['abcdefghijklmnop'], runtimes = false, e
     on: (s) => s.enabled, local: (f) => f({ get: (_, cb) => setImmediate(() => cb({ mods })) }),
     need: async (file) => { asked.push(file); ctx.GZ_XPARTS_PAGE ||= { read: () => reads.push('read') }; },
     chrome: { runtime: { sendMessage: async (m) => { messages.push(m); return {}; } }, storage: { onChanged: { addListener: (f) => { ctx.changed = f; } } } },
-    GZ_SPEC: {}, links: [], load: async () => ctx.settings, enable() {}, disable() {}, applySettings() {}, no() {},
+    GZ_SPEC: {}, links: [], looks: [], settingsKnown: true, load: async () => ctx.settings, enable() {}, disable() {}, applySettings() {}, no() {},
   });
   ctx.window.top = top ? ctx.window : {};
+  ctx.stored = (k, cb) => ctx.local((l) => l.get(k, cb)); // content.js's startup read, here storage itself
   if (runtimes) { ctx.GZ_MODS = {}; ctx.GZ_MODWIDGETS = {}; ctx.GZ_XPARTS_PAGE = { read: () => reads.push('read') }; }
   const start = content.slice(content.indexOf('  const partsIn ='), content.indexOf('  // The preview is fed'));
   const listener = content.slice(content.indexOf('  chrome.storage.onChanged.addListener((changes, area)'), content.indexOf('  // Moodle\'s course is on'));

@@ -511,7 +511,7 @@ test('content-ultra.js: the sidebar on the page and in a course tab\'s frame (do
   const src = read('content/content-ultra.js');
   assert.match(src, /const sidebarHere = \(\) => !!top\(\)\?\.sidebar && I\.settings\.sidebar\?\.ultra !== false && \/\^/);
   assert.match(src, /if \(e && tabFrame\) return sidebarOn\(\) && /);
-  assert.match(src, /const syncSidebar = \(\) => load\(sidebarHere, 'navigation\/page\/sidebar\.js', 'GZ_SIDEBAR_UI'\);/);
+  assert.match(src, /const syncSidebar = \(\) => load\(sidebarHere, \['core\/widgets\.js', 'navigation\/sidebar\.js', 'navigation\/page\/sidebar\.js'\], 'GZ_SIDEBAR_UI'\);/);
   assert.match(src, /\(e\.todo && sidebarOn\(\)\)/);
   assert.ok(src.includes("sidebarOn() && !globalThis.GZ_SIDEBAR_UI?.failed()"));
   assert.match(src, /const syncWidgets = \(\) => \{\n {4}syncSidebar\(\);/);

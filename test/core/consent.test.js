@@ -541,6 +541,7 @@ const dueWeekAt = (origin, stored, items) => {
   const ctx = vm.createContext({ ultra: true, moodle: false, location: { origin }, Date, Promise, Array,
     chrome: { storage: { local: { get: (k, cb) => cb(Object.fromEntries([k].flat().filter((x) => x in stored).map((x) => [x, structuredClone(stored[x])]))), set: (o) => Object.assign(stored, structuredClone(o)) } } },
     api: (p) => { asked.push(p); return Promise.resolve({ items }); }, GZ_DUE_WEEK: (j) => j.items, capi() {}, moodleIn() {} });
+  ctx.stored = (k, cb) => ctx.chrome.storage.local.get(k, cb); // content.js's startup read, here storage itself
   vm.runInContext(`let dueSoon = null; ${dueBlock()} this.dueWeek = dueWeek;`, ctx);
   return { list: ctx.dueWeek(), asked };
 };

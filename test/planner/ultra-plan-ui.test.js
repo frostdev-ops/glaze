@@ -225,7 +225,7 @@ test('content-ultra.js loads each where it goes: Better To Do on the Courses pag
     I: { links: [1], settings: { enhance: { todo: true, cardTasks: true, remind: false, remindExam: false, remindPlan: false, remindClass: false, streak: true } } },
     location: { pathname: '/ultra/course' }, window: {}, CARD: 'article[id^="course-list-course-"]', cards: true, tabFrame: '',
     document: { querySelector: () => (ctx.cards ? {} : null) },
-    need: async (file) => { asked.push(file); },
+    need: async (file) => { asked.push([].concat(file).join(' ')); },
     GZ_TODO_UI: { sync: (on) => asked.push(`todo ${on}`) }, GZ_CARD_TASKS: { sync: (on) => asked.push(`cards ${on}`) }, GZ_REMIND_UI: { sync: (on) => asked.push(`remind ${on}`) },
   };
   ctx.window.top = ctx.window;
@@ -233,10 +233,11 @@ test('content-ultra.js loads each where it goes: Better To Do on the Courses pag
   ctx.globalThis = ctx;
   vm.createContext(ctx);
   vm.runInContext(`${decls}\nglobalThis.all = () => [syncTodo(), syncCardTasks(), syncRemind()];`, ctx);
+  const TODO = 'courses/ultra.js planner/todo.js planner/page/todo.js'; // one load: the list, its data and Ultra's reader
   const run = async (path, cards = true) => { asked.length = 0; ctx.location.pathname = path; ctx.cards = cards; await Promise.all(ctx.all()); return [...asked]; };
-  assert.deepEqual(await run('/ultra/course'), ['planner/page/todo.js', 'courses/page/cardtasks.js', 'planner/page/reminders.js', 'todo true', 'cards true', 'remind true']);
-  assert.deepEqual(await run('/ultra/course', false), ['planner/page/todo.js', 'cards false', 'planner/page/reminders.js', 'todo true', 'remind true'], 'no cards drawn yet: none asked');
-  assert.deepEqual(await run('/ultra/courses/_101_1/outline'), ['planner/page/todo.js', 'cards false', 'planner/page/reminders.js', 'todo true', 'remind true']);
+  assert.deepEqual(await run('/ultra/course'), [TODO, 'courses/page/cardtasks.js', 'planner/page/reminders.js', 'todo true', 'cards true', 'remind true']);
+  assert.deepEqual(await run('/ultra/course', false), [TODO, 'cards false', 'planner/page/reminders.js', 'todo true', 'remind true'], 'no cards drawn yet: none asked');
+  assert.deepEqual(await run('/ultra/courses/_101_1/outline'), [TODO, 'cards false', 'planner/page/reminders.js', 'todo true', 'remind true']);
   assert.deepEqual(await run('/ultra/courses/_101_1/grades'), ['todo false', 'cards false', 'planner/page/reminders.js', 'remind true']);
   assert.deepEqual(await run('/ultra/coursesx'), ['todo false', 'cards false', 'planner/page/reminders.js', 'remind true']);
   ctx.window.top = {}; // a frame inside the page
@@ -244,7 +245,7 @@ test('content-ultra.js loads each where it goes: Better To Do on the Courses pag
   assert.deepEqual(await run('/ultra/course'), ['todo false', 'cards false', 'remind false']);
   // A course tab's frame is a page of its own (its To Do panel), but reminders stay the page's around it.
   ctx.solo = true; ctx.tabFrame = '_101_1';
-  assert.deepEqual(await run('/ultra/courses/_101_1/outline'), ['planner/page/todo.js', 'cards false', 'remind false', 'todo true']);
+  assert.deepEqual(await run('/ultra/courses/_101_1/outline'), [TODO, 'cards false', 'remind false', 'todo true']);
 });
 
 // ---- Codex's B2 review: each failed before its fix ----

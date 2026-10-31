@@ -59,7 +59,7 @@ const page = (row, { locale = 'en', labelText = 'Assessment due date:', dateText
   vm.runInContext(`${core.match(/const DUE_AT = [^\n]+\n\s*const dueLabelled = [^\n]+\n/)[0]}\n${core.match(/const markDue = [\s\S]*?\n {2}\};/)[0]}\n({ dueLabelled, markDue })`, ctx);
   const { dueLabelled, markDue } = vm.runInContext('({ dueLabelled, markDue })', ctx);
   vm.runInContext(read('content/content-ultra.js'), ctx);
-  const need = (file, ready) => { if (!ready()) vm.runInContext(read(file), ctx); return ready() ? Promise.resolve() : Promise.reject(new Error('not ready')); };
+  const need = (file, ready) => { if (!ready()) for (const f of [].concat(file)) vm.runInContext(read(f), ctx); return ready() ? Promise.resolve() : Promise.reject(new Error('not ready')); };
   const api = (p) => fetch(`${ORIGIN}/learn/api/v1${p}`).then((r) => r.json());
   const I = { C: {}, html: doc.root, isPreview: false, solo: true, tabFrame: '', need, t: (x) => x, locale: () => locale, api,
     courseId: () => location.pathname.match(/\/ultra\/courses\/(_\d+_\d+)\//)?.[1], markDue, drawProgress() {}, cardBadge() {},

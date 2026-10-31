@@ -22,9 +22,9 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
   });
   let data = null; // { card, cards, links, imgs }
   let reading = null;
-  const read = () => (reading ||= need('courses/cards.js', () => globalThis.GZ_CARDS).then(async () => {
+  // The stored styles are asked for while the reader loads.
+  const read = () => (reading ||= Promise.all([need('courses/cards.js', () => globalThis.GZ_CARDS), get('sync', ['card', cardsKey, linksKey, 'cards'])]).then(async ([, r]) => {
     K = globalThis.GZ_CARDS;
-    const r = await get('sync', ['card', cardsKey, linksKey, 'cards']);
     const cards = K.styles(r[cardsKey]);
     if (ultra && r.cards?.['*']) cards['*'] = K.styles({ '*': r.cards['*'] })['*'];
     const ids = Object.values(cards).flat().map((s) => s?.i).filter(Boolean);

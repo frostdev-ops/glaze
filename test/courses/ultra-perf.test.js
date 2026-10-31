@@ -59,7 +59,7 @@ test('Ultra native-added-subtree hooks run synchronously before the batched pass
   const start = core.indexOf('  const schedule = '), end = core.indexOf('  const startSweep = ', start);
   const added = [], dirty = new Set(); let pass;
   const schedule = vm.runInNewContext(`${core.slice(start, end)} schedule`, {
-    chrome: { runtime: { id: 'glaze' } }, observer: {}, ultra: true, dirty, full: false, timer: 0, hid: () => false,
+    chrome: { runtime: { id: 'glaze' } }, observer: {}, ultra: true, dirty, touched: new Set(), full: false, timer: 0, hid: () => false,
     X: { lift() {}, gate: (node) => added.push(node) }, flush: () => {}, setTimeout: (fn) => { pass = fn; return 1; },
   });
   const a = { nodeType: 1 }, b = { nodeType: 1 }, own = { closest: () => ({}) };
@@ -73,7 +73,7 @@ test('a course tab\'s hidden frame sweeps nothing and owes one full pass; the po
   const start = core.indexOf('  const schedule = '), end = core.indexOf('  const startSweep = ', start);
   let hidden = true, timers = 0;
   const context = vm.createContext({
-    chrome: { runtime: { id: 'glaze' } }, observer: {}, ultra: true, dirty: new Set([{}]), full: false, timer: 0, hid: () => hidden, GZ_LIGHT: light,
+    chrome: { runtime: { id: 'glaze' } }, observer: {}, ultra: true, dirty: new Set([{}]), touched: new Set(), full: false, timer: 0, hid: () => hidden, GZ_LIGHT: light,
     X: { lift() {}, gate() {} }, flush: () => {}, setTimeout: () => ++timers,
   });
   const schedule = vm.runInContext(`${core.slice(start, end)} schedule`, context);
@@ -89,17 +89,17 @@ test('a course tab\'s hidden frame sweeps nothing and owes one full pass; the po
 test('a lit card still sweeps native style, class and child changes', () => {
   const core = fs.readFileSync(process.env.PERF_CORE_SOURCE || require.resolve('../../extension/content/content.js'), 'utf8');
   const start = core.indexOf('  const schedule = '), end = core.indexOf('  const startSweep = ', start);
-  const dirty = new Set(), added = [];
+  const dirty = new Set(), touched = new Set(), added = [];
   const schedule = vm.runInNewContext(`${core.slice(start, end)} schedule`, {
-    chrome: { runtime: { id: 'glaze' } }, observer: {}, ultra: true, dirty, full: false, timer: 0, hid: () => false, GZ_LIGHT: light,
+    chrome: { runtime: { id: 'glaze' } }, observer: {}, ultra: true, dirty, touched, full: false, timer: 0, hid: () => false, GZ_LIGHT: light,
     X: { lift() {}, gate: (n) => added.push(n) }, flush() {}, setTimeout: () => 1,
   });
   const card = { closest: () => null, getAttribute: () => 'background: white; --gz-mx: 1px; --gz-my: 2px;' };
   schedule([{ type: 'attributes', attributeName: 'style', target: card, oldValue: '--gz-mx: 1px; --gz-my: 2px;' }]);
-  assert.ok(dirty.has(card), 'native background changes on a lit card must be themed');
-  dirty.clear();
+  assert.ok(touched.has(card), 'native background changes on a lit card must be themed');
+  touched.clear();
   schedule([{ type: 'attributes', attributeName: 'class', target: card, oldValue: 'native --gz-mx-card' }]);
-  assert.ok(dirty.has(card), 'only style records may be light-only writes');
+  assert.ok(touched.has(card), 'only style records may be light-only writes');
   const child = { nodeType: 1 };
   schedule([{ type: 'childList', target: card, addedNodes: [child] }]);
   assert.deepEqual(added, [child]);
@@ -112,7 +112,7 @@ test('a queued flush stays paused while hidden and rediscovers native roots on r
   const body = {}, gates = [], tags = [];
   const X = new Proxy({ gate: (n) => gates.push(n) }, { get: (o, k) => o[k] || (() => {}) });
   const context = vm.createContext({
-    timer: 1, dirty: new Set([{}]), full: true, wordsLate: false, hid: () => hidden, ultra: true,
+    timer: 1, dirty: new Set([{}]), touched: new Set(), full: true, wordsLate: false, hid: () => hidden, ultra: true, location: { pathname: '/ultra/stream' },
     outermost: () => [], words: () => true, sweepAll: () => sweeps++, sweepRoots() {},
     document: { body }, X, tagExtras: (r) => tags.push(r), themeEditors() {}, tip: null,
     tintKey: () => '', tinted: '', lookHere: () => '', looked: '', placeScene() {},

@@ -467,6 +467,7 @@ const pageLoad = async ({ stored, root = ORIGIN, courses = [{ id: 16, fullname: 
   const ctx = vm.createContext({ solo: true, tabFrame: '',
     ultra: false, moodle: true, window: {}, chrome, Date: { now: () => now }, Promise, Object,
     location: { origin: new URL(root).origin }, moodleIn: () => Promise.resolve(p.api),
+    stored: (k, cb) => chrome.storage.local.get(k, cb), // content.js's startup read, here storage itself
   });
   ctx.window.top = ctx.window;
   vm.runInContext(`let canvasRecorded = false; ${contentBlock('  const recordCourses = () => {', '\n  };\n')} let dueSoon = null; ${contentBlock('  const DUE =', '  }));\n')}

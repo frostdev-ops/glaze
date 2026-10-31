@@ -137,7 +137,7 @@ test('a delayed settings read cannot replace a newer install or sync snapshot', 
   for (const initial of [false, true]) {
     const sync = [], local = [];
     const load = vm.runInNewContext(`${part}\nload;`, { GZ_DEFAULTS: D.GZ_DEFAULTS, GZ_SANITIZE: D.GZ_SANITIZE, sessionStorage: { setItem() {} },
-      chrome: { runtime: {}, storage: { sync: { get: (_, cb) => sync.push(cb) }, local: { get: (_, cb) => local.push(cb) } } } });
+      chrome: { runtime: {}, storage: { sync: { get: (_, cb) => sync.push(cb) } } }, stored: (_, cb) => local.push(cb) });
     const older = load(), newer = load();
     sync[1](initial ? {} : { enhance: { notes: false } }); local[1]?.({ freshDefaults: { fresh: true } });
     const latest = await newer;

@@ -256,9 +256,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const account = async () => String((await ctx.account()) ?? '');
   const start = async () => {
     const g = epoch;
-    await ctx.need('core/widgets.js', () => globalThis.GZ_WIDGETS);
-    if (g !== epoch) return false;
-    await ctx.need('navigation/sidebar.js', () => globalThis.GZ_SIDEBAR);
+    await ctx.need(['core/widgets.js', 'navigation/sidebar.js'], () => globalThis.GZ_WIDGETS && globalThis.GZ_SIDEBAR);
     if (g !== epoch) return false;
     S = globalThis.GZ_SIDEBAR;
     const k = S.key(LMS, location.origin, await account());
@@ -1087,6 +1085,15 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
   const nativeModal = () => [...document.querySelectorAll('[role="dialog"], [role="alertdialog"], dialog[open]')].some((e) =>
     e !== host?.el && e !== A.layer?.() && !host?.el.contains(e) && e.style.display !== 'none' && !e.closest('[hidden], [aria-hidden="true"]') && (e.getClientRects?.().length ?? 1));
+  let modalFrame = 0;
+  // A check still waiting for its frame runs now: focus or a key may be on a native modal it hasn't seen yet.
+  const modalNow = () => { if (modalFrame) { cancelAnimationFrame(modalFrame); modalFrame = 0; modalSync(); } };
+  const modalSoon = () => {
+    if (modalFrame) return;
+    modalFrame = -1;
+    const id = requestAnimationFrame(() => { modalFrame = 0; modalSync(); });
+    if (modalFrame) modalFrame = id;
+  };
   const modalSync = () => {
     if (!drawer || !host) return;
     const away = nativeModal(), wanted = new Set();
@@ -1106,7 +1113,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     drawer = true;
     layout();
     modalSync();
-    modalObserver ||= new MutationObserver(modalSync);
+    // One check a frame: Ultra's ripples and popper moves change classes and styles many times a frame.
+    modalObserver ||= new MutationObserver(modalSoon);
     modalObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['role', 'aria-hidden', 'open', 'hidden', 'style', 'class'] });
     document.addEventListener('keydown', onKey);
     document.addEventListener('focusin', onFocus);
@@ -1121,6 +1129,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     forced = false;
     modalAway = false;
     modalObserver?.disconnect();
+    cancelAnimationFrame(modalFrame);
+    modalFrame = 0;
     for (const e of inerted) e.inert = false;
     inerted = [];
     document.removeEventListener('keydown', onKey);
@@ -1137,9 +1147,11 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     !x.disabled && x.type !== 'hidden' && (x.tabIndex ?? 0) >= 0 && !x.hidden && !x.closest('[hidden], [inert], [aria-hidden="true"]')
     && (x.getClientRects?.().length ?? 1) && (typeof getComputedStyle !== 'function' || getComputedStyle(x).visibility !== 'hidden'));
   const onFocus = (e) => {
+    modalNow();
     if (drawer && !modalAway && !host?.el.contains(e.target) && !menuEl?.contains(e.target)) (focusables()[0] || toggle).focus();
   };
   const onKey = (e) => {
+    modalNow();
     if (!drawer || modalAway || menuEl?.contains(e.target)) return;
     if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); closeDrawer(); return; }
     if (e.key !== 'Tab') return;

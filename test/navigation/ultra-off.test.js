@@ -103,8 +103,8 @@ const page = ({ cached = null, raw = {}, local = {}, pathname = '/ultra/course',
     sweeping: () => observers.some((o) => o.active && o.target === bodyEl),
     loaded: async () => { doc.body = bodyEl; html.append(bodyEl); doc.readyState = 'interactive'; for (const f of listeners.get('DOMContentLoaded') || []) f({ type: 'DOMContentLoaded' }); await settle(); },
     answer: async () => { assert.equal(typeof pendingSync, 'function', 'the settings read has started'); const f = pendingSync; pendingSync = null; f(); await settle(); },
-    // Glaze's switch changed elsewhere (the popup): storage.onChanged, then the settings read it starts.
-    change: async (next) => { Object.assign(raw, next); for (const f of changes) f(Object.fromEntries(Object.keys(next).map((k) => [k, { newValue: next[k] }])), 'sync'); await settle(); },
+    // Glaze's switch changed elsewhere (the popup): storage.onChanged, applied from its new values without reading again.
+    change: async (next) => { Object.assign(raw, next); for (const f of changes) f(Object.fromEntries(Object.keys(next).map((k) => [k, { newValue: next[k] }])), 'sync'); await settle(); assert.equal(pendingSync, null, 'no second settings read'); },
     localChange: async (next) => { for (const f of changes) f(Object.fromEntries(Object.keys(next).map((k) => [k, { newValue: next[k] }])), 'local'); await settle(); },
     kept: () => JSON.parse(session.get('gz-settings') || 'null'),
   };
@@ -150,9 +150,9 @@ test('CORE-1: turning Glaze off takes the early Ultra sheets off too, and turnin
   const p = page({ cached: D.GZ_SANITIZE({}), raw: {} }); await settle();
   await p.answer(); await p.loaded();
   assert.deepEqual(p.sheets(), ['theme.css', 'motion.css', 'extras.css', 'apps.css', 'coursetabs.css', 'sidebar.css', 'surfaces.css']);
-  await p.change({ enabled: false }); await p.answer();
+  await p.change({ enabled: false });
   assert.deepEqual(p.sheets(), []);
-  await p.change({ enabled: true }); await p.answer();
+  await p.change({ enabled: true });
   assert.deepEqual(p.sheets(), OWN, 'on again without a reload');
 });
 
@@ -160,7 +160,7 @@ test('CORE-1: a page that loaded with Glaze off themes again when it is turned o
   const p = page({ cached: D.GZ_SANITIZE({ enabled: false }), raw: { enabled: false } }); await settle();
   await p.answer(); await p.loaded();
   assert.deepEqual(p.sheets(), []);
-  await p.change({ enabled: true }); await p.answer();
+  await p.change({ enabled: true });
   assert.deepEqual(p.sheets(), OWN);
   assert.ok(p.html.style.getPropertyValue('--gz-surface'), 'the palette is on <html> again');
 });

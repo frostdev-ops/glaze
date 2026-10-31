@@ -240,8 +240,9 @@ test('late local reads and timer replies cannot overwrite a newer storage read',
   pending[0]({ widgetTimer: { end: 0 } }); await settle();
   assert.equal(node.box.hasAttribute('data-running'), true);
   node.go.dispatchEvent({ type: 'click' });
-  changes[0]({ widgetTimer: {} }, 'local');
-  pending[2]({ widgetTimer: { end: 0 } }); await settle();
+  // Once a read has landed, a change brings its own new value: nothing is read again.
+  changes[0]({ widgetTimer: { newValue: { end: 0 } } }, 'local'); await settle();
+  assert.equal(pending.length, 2, 'no read for a change that carries its value');
   reply({ ok: true, timer: { end: Date.now() + 60000 } }); await settle();
   assert.equal(node.box.hasAttribute('data-running'), false);
 });
