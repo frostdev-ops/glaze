@@ -50,11 +50,13 @@ test('local decisions cannot cite invented assignment facts or draft passage IDs
   }
 });
 
-test('unsafe or missing local comments cannot turn valid decisions into an overall grade', async () => {
+test('unsafe or missing local comments never reach the student; a valid decision keeps its grade with Glaze\'s rubric rating', async () => {
   const { cfg, result } = run(raw(), (req) => req.schema.properties.comment ? { json: { comment: 'You could write "Gardens improve all schools."' } } : reply(req));
   const out = await result;
-  assert.equal(out.output.grade.earned, null);
-  assert.equal(out.output.criteria.length, 0);
+  assert.equal(out.output.grade.reason, null, 'an explanation failure is never reported as unassessed material');
+  assert.equal(out.output.grade.earned, 100);
+  assert.deepEqual(out.output.criteria.map((c) => c.comment), ['Rubric score: 40/40 points.', 'Rubric score: 60/60 points.']);
+  assert.ok(!JSON.stringify(out.output).includes('Gardens improve all schools'));
   assert.equal(cfg.seen.filter((req) => req.schema.properties.comment).length, 4);
 });
 
