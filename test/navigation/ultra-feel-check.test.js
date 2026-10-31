@@ -56,3 +56,20 @@ test('the feel probe waits for transition ready after the update callback resolv
   assert.equal(f.p.done(), true);
   assert.equal(f.p.result().clickToReady.ms, 40);
 });
+
+const measurementOptions = (value) => {
+  const start = source.indexOf('const neo = process.env.PERF_DEVICE'), end = source.indexOf('\nlet checks = ', start);
+  return vm.runInNewContext(`${source.slice(start, end)}\nmeasureReps;`, { process: { env: { FEEL_MEASURE: value } } });
+};
+
+test('feel measurement repetitions reject invalid values before starting any browser work', () => {
+  for (const value of ['-1', '1.5', 'Infinity', 'invalid', '9007199254740992']) {
+    assert.throws(() => measurementOptions(value), /FEEL_MEASURE/, value);
+  }
+});
+
+test('feel measurement repetitions allow zero or an absent option and whole tours', () => {
+  assert.equal(measurementOptions(undefined), 0);
+  assert.equal(measurementOptions('0'), 0);
+  assert.equal(measurementOptions('3'), 3);
+});
