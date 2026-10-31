@@ -554,3 +554,21 @@ test('Forward while the freed item frame is on its way to the outline: that fram
   assert.deepEqual([...p.c.spare.get('_2_1')], [base]);
   assert.equal(p.did.filter(([k]) => k === 'open').length, 2);
 });
+
+test('an item kept for its unsaved work still leaves a renewed outline: the standby is routed there instead', () => {
+  const { p, base, it } = opened();
+  msg(p, it, { gzCtab: 'drawn', hid: 0 });
+  it.dirty = true;
+  const sb = frame('/ultra/profile');
+  sb.el.removeAttribute = () => {};
+  p.api.standby = { el: sb.el, loaded: sb.doc, uid: '_42_1', accountDoc: sb.doc, timer: 0 };
+  p.setKey(1);
+  p.api.onItemPop({ stopImmediatePropagation() {} });
+  assert.equal(p.c.frames.get('_2_1'), base);
+  assert.ok(!it.posted.some((m) => m.gzCtab === 'route'), 'the item, with its work, stays as it is');
+  const spare = [...p.c.spare.get('_2_1')];
+  assert.ok(spare.includes(it), 'kept');
+  const fresh = spare.find((g) => g.el === sb.el);
+  assert.ok(fresh?.fresh, 'the standby renews the outline beside it');
+  assert.deepEqual(sb.posted.at(-1), { gzCtab: 'adopt', cid: '_2_1', url: OUT });
+});
