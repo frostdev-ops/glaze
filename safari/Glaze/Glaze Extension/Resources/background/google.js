@@ -18,12 +18,15 @@
 //           worker during (the app's page, or iOS switching apps) finishes from the next message (nativeGrant). Calendar
 //           sync signs in the same way with a grant of its own (feature 'calendar': background/background.js).
 // API: status(), connect() (from a click), finish() (Safari: the sign-in under way), token({ interactive }), drop(token) (one
-// Google refused), account(), disconnect(), pick(). The Picker (pick): Google's Picker on Glaze's picker page, frostdev.io's, else its GitHub Pages copy, opened with
-// launchWebAuthFlow, the access token and a state in the fragment; the page comes back to the redirect URL with the state and
-// the files picked (picked()). Requests carry no cookies, follow no redirect and skip the cache.
+// Google refused), account(), disconnect(), pick(); Safari's Picker in a tab: picked() (the asking page, again), back(url,
+// tab) (Glaze's return page), closed(tab). The Picker (pick): Google's Picker on Glaze's picker page, frostdev.io's, else
+// its GitHub Pages copy, opened with launchWebAuthFlow, the access token and a state in the fragment; the page comes back to
+// the redirect URL with the state and the files picked (picked()). Safari: the same page in a tab of the worker's, coming
+// back to documents/picked.html. Requests carry no cookies, follow no redirect and skip the cache.
 // env: { config, flow, firefox, identity() (chrome.identity, which exists once the permission is held), permissions, manifest(),
-// storage (storage.local), fetch, native(message), keep() (Calendar sync shares Chrome's cache and identity: Disconnect leaves
-// them), now() }.
+// storage (storage.local), fetch, native(message), tab(url) → its tab id, back() → the return page's address, hold { get,
+// set } (Safari's pick under way: storage.session or memory, never storage.local), keep() (Calendar sync shares Chrome's
+// cache and identity: Disconnect leaves them), now() }.
 // Classic script; module.exports for node.
 var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
   // The build-time switch, on since 4.0.1. Off: the worker refuses every operation, Settings shows no Google Drive row, and
@@ -280,7 +283,7 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
         g = await saved();
       }
       // pending: a sign-in under way in the app, for Settings to finish (the student may be back from it already).
-      return { ok: true, flow, email: g?.email || null, picker: false, pending: h.pending === true };
+      return { ok: true, flow, email: g?.email || null, picker: pickable(c()) && typeof env.tab === 'function', pending: h.pending === true };
     };
     // From Settings' click, once the page holds the identity permission. → { ok, email } or { ok: false, why }
     const connect = () => turn(fails(async () => {
@@ -350,7 +353,7 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       const g = await saved();
       held = null;
       checked.clear();
-      if (env.flow === 'native' || g?.flow === 'native') await drive.disconnect();
+      if (env.flow === 'native' || g?.flow === 'native') { await drive.disconnect(); await env.hold?.set(null); }
       else if (!await Promise.resolve().then(() => env.keep?.()).catch(() => true)) {
         if (g?.flow === 'chrome') await Promise.resolve().then(() => id()?.clearAllCachedAuthTokens()).catch(() => {});
         if (!env.firefox) await Promise.resolve().then(() => env.permissions.remove({ permissions: ['identity'] })).catch(() => {});
@@ -372,9 +375,26 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       if (!pickable(c())) return { ok: false, why: 'setup' };
       const g = await saved();
       if (!g) return { ok: false, why: 'connect' };
-      if (env.flow === 'native') return { ok: false, why: 'browser' };
       // A Connect or Disconnect while this waits: the token isn't handed on, and nothing comes back.
       const at = gen, still = () => { if (gen !== at) throw new Fail('connect'); };
+      if (env.flow === 'native') {
+        // Safari has no launchWebAuthFlow: the picker page opens in a tab of the worker's and comes back to Glaze's own
+        // return page (documents/picked.html, which hands its address to back()), and the page that asked waits on
+        // picked(). The pick waits in env.hold, not this worker's memory: Safari may unload the worker meanwhile.
+        if (typeof env.tab !== 'function') return { ok: false, why: 'browser' };
+        const t = await token({ interactive: true });
+        still();
+        const base = await reach();
+        still();
+        if (!base) return { ok: false, why: 'offline' };
+        const state = O.random();
+        await env.hold.set(null);
+        const tab = await env.tab(pickerUrl(base, { token: t, state, redirect: env.back(), key: c().apiKey, appId: c().appId }));
+        still();
+        if (!Number.isInteger(tab)) return { ok: false, why: 'picker' };
+        await env.hold.set({ state, tab, sub: g.sub, at: now() });
+        return { ok: false, why: 'pending' };
+      }
       const t = await token({ interactive: true });
       still();
       const base = await reach();
@@ -386,9 +406,40 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       return { ok: true, files: picked(url, state) };
     });
 
+    // Safari's return page (documents/picked.html, top-level in its tab): the address the picker page came back to, for the
+    // pick under way in that tab only, its state checked (picked()). → { ok } (the worker then closes the tab)
+    const PICK_FOR = 10 * 60e3;
+    const back = async (url, tab) => {
+      const p = await env.hold.get();
+      if (!p || p.done || p.tab !== tab || typeof url !== 'string' || url.split('#')[0] !== env.back()) return { ok: false, why: 'state' };
+      let files = null, why = '';
+      try { files = picked(url, p.state); } catch (e) { why = e.why || 'picker'; }
+      await env.hold.set({ ...p, done: true, ...(files ? { files } : { why }) });
+      return { ok: true };
+    };
+    // The pick's tab closed: a cancel, unless its page already came back.
+    const closed = async (tab) => {
+      const p = await env.hold.get();
+      if (p && !p.done && p.tab === tab) await env.hold.set({ ...p, done: true, files: [] });
+    };
+    // The page that pressed From Google Drive, asking again while Safari's pick is under way. → { ok: true, files } (none:
+    // cancelled), { ok: false, why: 'pending' } (ask again), or why it stopped: another account connected meanwhile is 'connect'.
+    const pickedNow = fails(async () => {
+      const p = await env.hold.get();
+      if (!p) return { ok: false, why: 'state' };
+      if ((await saved())?.sub !== p.sub) { await env.hold.set(null); return { ok: false, why: 'connect' }; }
+      if (!p.done) {
+        if (now() - p.at < PICK_FOR) return { ok: false, why: 'pending' };
+        await env.hold.set(null);
+        return { ok: false, why: 'cancel' };
+      }
+      await env.hold.set(null);
+      return p.files ? { ok: true, files: p.files } : { ok: false, why: p.why || 'picker' };
+    });
+
     // Status can recover a native account: serialize it with Connect/Disconnect so a late status cannot reconnect one
     // the student just disconnected. Internal calls already hold this turn.
-    return { status: env.flow === 'native' ? () => turn(status) : status, connect, finish, token, drop: forget, account, disconnect, pick };
+    return { status: env.flow === 'native' ? () => turn(status) : status, connect, finish, token, drop: forget, account, disconnect, pick, picked: pickedNow, back, closed };
   };
 
   return { ON, AUTH, USERINFO, DRIVE, APP, Fail, real, ready, pickable, flowOf, authUrl, pickerUrl, grant, picked, nativeGrant, create };
