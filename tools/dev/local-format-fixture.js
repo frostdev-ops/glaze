@@ -123,4 +123,3 @@ const provider = { ...LOCAL, run: (req, cfg, o) => { seen.push(req); return LOCA
   fs.writeFileSync(path.join(OUT, 'vocab.json'), `${JSON.stringify({ made, ...vocab })}\n`);
   console.log(`${cases.length} cases (${[...new Set(cases.map((c) => c.task))].length} tasks), ${Object.keys(tokens).length} tokens, ${vocab.merges.length} merges; Glaze's formatter matches ${same}/${cases.length}`);
 })().catch((e) => { console.error(e); process.exit(1); });
-
