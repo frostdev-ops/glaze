@@ -20,7 +20,7 @@ const pageContext = (site, origin, account, reads) => {
   const core = read('content/content.js');
   const context = core.slice(core.indexOf('globalThis.GZ_CTX = Object.freeze({'), core.indexOf('\n\n  // Independent card/widget stores'));
   const readers = site === 'canvas' ? part.slice(part.indexOf('  let mine = null;'), part.indexOf('  // Who is signed in'))
-    : part.slice(part.indexOf('  let meId = null;'), part.indexOf('  const covered ='));
+    : part.slice(part.indexOf('  let meId = null'), part.indexOf('  const covered ='));
   const api = async (path) => { reads.push(path); return { id: account() }; };
   // Ultra's reader is courses/ultra.js's page store (one /users/me per site), loaded on demand.
   const GZ_ULTRA = { page: { me: async () => (await api('/users/me')).id, alive() {} } };
