@@ -143,7 +143,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     const forget = async () => {
       const keys = (await S.keys()).filter((k) => k.startsWith(DOC) || k.startsWith(FILE) || k === DIRTY || k === WAITING || k === AWAY || k === MOVES);
       if (keys.length) await S.remove(keys);
-      if (stage) { const ks = await stage.keys(''); if (ks.length) await stage.write([], ks); }
+      // The transfers' store unopenable (IndexedDB refused): nothing of the old account's can be read from it either, and the
+      // account's state goes regardless.
+      if (stage) { try { const ks = await stage.keys(''); if (ks.length) await stage.write([], ks); } catch (e) { console.warn('Sync to Google Drive: transfers not cleared', e?.why || e); } }
       await more?.forget();
     };
     const hk = async (key) => (await env.hash(key)).slice(0, 32);
