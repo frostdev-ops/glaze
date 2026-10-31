@@ -406,7 +406,8 @@ Google Drive, including ones described below as on this device only or never syn
   which documents were saved since their last upload (`driveSyncDirty`); for a document whose Drive file was seen ahead
   of its JSON copy, how many times and since when (`driveSyncWaiting`); the ids of a document's duplicate Drive files
   still to be moved into Glaze/Data (`driveSyncAway`); and when each synced setting or record last
-  changed here, Sync on or off (`driveSyncStamps`). Connecting another account deletes all of it.
+  changed here, Sync on or off (`driveSyncStamps`). Connecting another account while Sync is on, or turning Sync on for
+  another account, deletes all of it.
 - **Gradescope in To Do** (off by default), in `chrome.storage.local`, on this device only: which Gradescope account
   it's from (your name on Gradescope, and a SHA-256 hash of your Gradescope email address, never the address itself),
   which Canvas or Blackboard course each of your Gradescope courses goes with (by its Gradescope course id and short name, or "none of
