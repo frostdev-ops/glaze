@@ -966,3 +966,35 @@ test('a note whose text goes missing after it went up is passed over by the next
   assert.deepEqual((await b.local.get('writerWords')).writerWords, ['Beta']);
   noDeletes(drive);
 });
+
+// The worker can stop in the middle of the snapshot's upload: Safari unloads it about 30 s after its last event, and Chrome
+// stops one whose request waits that long for its answer. A zip too large to go up in that time would otherwise be built
+// and sent again on every run, all day, every day. Drive's or the network's failure is still tried again on the next run.
+test('a snapshot cut short by the worker stopping is tried once that day, not built and sent again on every run', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, local = device(drive, { clock }).local;
+  let made = 0;
+  const snapshot = async () => { made++; return { name: `glaze-backup-2026-1${made}.zip`, bytes: new TextEncoder().encode(`PK ${made}`) }; };
+  const folder = drive.seed({ name: 'Glaze', mimeType: drive.FOLDER, appProperties: { glaze: 'root' } }).meta.id;
+  const state = async (p) => { await local.set({ driveSync: { ...(await local.get('driveSync')).driveSync, ...p } }); };
+  // A worker of its own each time, over the same storage. cut: its upload never answers, the worker gone before it does.
+  const worker = async (cut) => {
+    let reached = null;
+    const hung = new Promise((r) => { reached = r; });
+    const client = D.create({ fetch: (u, init) => (cut && String(u).includes('/upload/') ? (reached(), new Promise(() => {})) : drive.fetch(u, init)), token: async () => 'tok-1', interactive: false });
+    const done = ST.create({ area: () => local, store: local, hash: async (s) => sha(s), now: () => clock.t, snapshot }).snapshot({ D: (fn) => fn(client), folder, state });
+    return cut ? Promise.race([hung, done]) : done;
+  };
+  for (let i = 0; i < 3; i++) { await worker(true); clock.t += 60e3; }
+  assert.equal(made, 1, 'built and sent once that day');
+  clock.t += ST.SNAP.every;
+  await worker(false);
+  assert.equal(made, 2, 'tried again the next day');
+  assert.equal([...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'snapshot').length, 1);
+  // The network failing (not the worker stopping) is tried again on the next run.
+  clock.t += ST.SNAP.every + 1;
+  drive.offline((x) => x.path.startsWith('/upload/'));
+  await assert.rejects(worker(false), (e) => e.why === 'network');
+  await worker(false);
+  assert.equal(made, 4);
+  assert.equal([...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'snapshot').length, 2);
+});
