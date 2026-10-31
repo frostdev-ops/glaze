@@ -503,9 +503,14 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       // (larger than one upload, or more than a full Drive has room for) waits for tomorrow, never failing the run or being
       // built again on every run. snapSkip: 'quota' while the day's was skipped for want of room (Settings says so).
       const skip = async (e) => { if (e) console.warn('Sync to Google Drive: no snapshot today', e?.why || e); await ctx.state({ snap: now(), snapSkip: e?.why === 'quota' ? 'quota' : null }); };
+      // The day's try is marked before the zip is built: one cut short by the worker stopping (Safari unloads it about 30 s
+      // after its last event; Chrome stops one whose upload waits that long for its answer) waits for tomorrow as well.
+      // Only a note saved while it was read and Drive's or the network's failure give the mark back for the next run.
+      await ctx.state({ snap: now(), snapSkip: null });
+      const back = () => ctx.state({ snap: st.snap ?? null, snapSkip: st.snapSkip ?? null });
       let made;
       // A note saved while it was read (background/backup.js notesOut 'changed'): the next run tries again.
-      try { made = await env.snapshot(); } catch (e) { if (e?.why === 'changed') return; return skip(e); }
+      try { made = await env.snapshot(); } catch (e) { if (e?.why === 'changed') return back(); return skip(e); }
       if (!made) return skip();
       let r, same, up, backups;
       try {
@@ -514,7 +519,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         // Another device's of the same day (its name is the day's) is replaced, a new revision of the one file: five kept are five days.
         same = r.files.filter((f) => f.name === made.name).sort((a, b) => (a.id < b.id ? -1 : 1))[0];
         up = await ctx.D((c) => c.put({ ...(same && { id: same.id }), meta: { ...(!same && { name: made.name, mimeType: ZIP, parents: [backups] }), appProperties: { glaze: 'snapshot' } }, mime: ZIP, bytes: made.bytes }));
-      } catch (e) { if (['bad', 'size', 'quota'].includes(e?.why)) return skip(e); throw e; }
+      } catch (e) { if (['bad', 'size', 'quota'].includes(e?.why)) return skip(e); await back(); throw e; }
       await ctx.state({ snap: now(), snapSkip: null });
       const all = same ? r.files : [...r.files, { id: up.id, name: made.name }];
       const old = all.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : a.id < b.id ? 1 : -1)).slice(SNAP.keep);
