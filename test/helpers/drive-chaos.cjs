@@ -591,6 +591,14 @@ const KNOWN = {
     skips: () => false,
     repro: [{ t: 'setting', d: 0, k: 'footer', v: false, pick: 0, s: 1 }, { t: 'setting', d: 1, k: 'footer', v: true, pick: 0, s: 2 }, { t: 'run', d: 1, how: 'run', s: 3 }, { t: 'run', d: 1, how: 'run', s: 4 }, { t: 'drive', k: 'trashData', pick: 0, s: 5 }],
   },
+  'carried-time-stop': {
+    fixed: true,
+    about: 'carried-time with the worker stopped between letting its record go for the other device\'s file and its own push landing: the time it held was in memory only, so the next run met the record with none, and the earlier change won',
+    skips: () => false,
+    stops: 'local.get',
+    repro: [{ t: 'setting', d: 0, k: 'footer', v: false, pick: 0, s: 1 }, { t: 'setting', d: 1, k: 'footer', v: true, pick: 0, s: 2 }, { t: 'run', d: 1, how: 'run', s: 3 }, { t: 'run', d: 1, how: 'run', s: 4 },
+      { t: 'drive', k: 'trashData', pick: 0, s: 5 }, { t: 'run', d: 0, how: 'run', s: 6 }, { t: 'run', d: 1, how: 'run', s: 7, kill: 120, apply: false }],
+  },
   'lost-answer-outside': {
     fixed: true,
     about: 'a .docx update Drive took whose answer never came (the worker stopped at it), then the file edited outside Glaze: the next push overwrites it, the record still naming the revision before Glaze\'s own',
