@@ -149,3 +149,16 @@ test('a tab that settles while hidden prefetches once it becomes visible', async
   assert.equal(p.asked.filter((a) => a[0] === 'planned').length, 1);
   p.A.sync(false);
 });
+
+test('returning to a settled tab after time away schedules fresh idle work', async () => {
+  const p = page();
+  let now = NOW;
+  p.c.Date = class extends Date { static now() { return now; } };
+  p.A.sync(true); p.idle.shift()(); await settle();
+  p.c.document.visibilityState = 'hidden'; p.fire('visibilitychange');
+  now += 120001;
+  p.c.document.visibilityState = 'visible'; p.fire('visibilitychange');
+  assert.equal(p.idle.length, 1);
+  p.idle.shift()(); await settle();
+  assert.equal(p.asked.filter((a) => a[0] === 'planned').length, 2);
+});

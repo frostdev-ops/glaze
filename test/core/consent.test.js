@@ -228,13 +228,13 @@ test("an Ultra site's student and memberships: kept in the worker's session for 
   const B = 'https://bb.school.edu';
   const w = worker({ local: { ultra: [B] }, session: {} });
   const top = page(`${B}/ultra/course`), frame = page(`${B}/ultra/courses/_1_1/outline`, { frameId: 4, tab: { id: 7, url: `${B}/ultra/course` } });
-  const mine = { uid: '_900_1', mem: [{ courseId: '_101_1', id: '_301_1' }], complete: true };
+  const mine = { uid: '_900_1', mem: [{ courseId: '_101_1', id: '_301_1' }], complete: true, read: Date.now() };
   assert.equal(await w.send({ type: 'glaze:ultraMine', op: 'get' }, top), null);
-  const t0 = Date.now();
-  await w.send({ type: 'glaze:ultraMine', op: 'put', mine }, top);
+  const { epoch } = await w.send({ type: 'glaze:ultraMine', op: 'begin', fence: '/' }, top);
+  await w.send({ type: 'glaze:ultraMine', op: 'put', epoch, mine }, top);
   const got = await w.send({ type: 'glaze:ultraMine', op: 'get' }, frame);
   assert.deepEqual([got.uid, got.mem, got.complete], [mine.uid, mine.mem, true]);
-  assert.ok(got.read >= t0 && got.at === got.read);
+  assert.ok(got.read === mine.read && got.at >= got.read);
   // Touched by a page confirming the same student: at moves, read stays.
   await new Promise((r) => setTimeout(r, 5));
   await w.send({ type: 'glaze:ultraMine', op: 'touch', uid: '_900_1' }, top);
@@ -246,8 +246,8 @@ test("an Ultra site's student and memberships: kept in the worker's session for 
   assert.equal(await w.send({ type: 'glaze:ultraMine', op: 'get' }, page('https://bb.other.edu/ultra/course')), null);
   assert.equal(await w.send({ type: 'glaze:ultraMine', op: 'get' }, page(`https://evil.test/ultra/course`)), null);
   assert.equal(await w.send({ type: 'glaze:ultraMine', op: 'get' }, editor), null);
-  for (const bad of [{ ...mine, uid: '42' }, { ...mine, mem: 'x' }, null]) await w.send({ type: 'glaze:ultraMine', op: 'put', mine: bad }, top);
-  assert.deepEqual(Object.keys(w.store.session), [`ultraMine:${B}`]);
+  for (const bad of [{ ...mine, uid: '42' }, { ...mine, mem: 'x' }, null]) await w.send({ type: 'glaze:ultraMine', op: 'put', epoch, mine: bad }, top);
+  assert.deepEqual(Object.keys(w.store.session).sort(), ['ultraCopyEpochs', `ultraMine:${B}`].sort());
   assert.equal(w.store.session[`ultraMine:${B}`].uid, '_900_1');
   // Removing the site forgets it.
   assert.deepEqual(await w.send({ type: 'glaze:sites', op: 'remove', origin: B }, editor), { ok: true });
@@ -257,6 +257,7 @@ test("an Ultra site's student and memberships: kept in the worker's session for 
 test('an Ultra identity touch cannot overwrite a newer account saved by another page', async () => {
   const B = 'https://bb.school.edu', key = `ultraMine:${B}`, sender = page(`${B}/ultra/course`);
   const w = worker({ local: { ultra: [B] }, session: { [key]: { uid: '_800_1', mem: [], at: 1, read: 1 } } });
+  const { epoch } = await w.send({ type: 'glaze:ultraMine', op: 'begin', fence: '/' }, sender);
   let release, first = true;
   const get = w.session.get;
   w.session.get = async (k) => {
@@ -266,7 +267,7 @@ test('an Ultra identity touch cannot overwrite a newer account saved by another 
   };
   const touch = w.send({ type: 'glaze:ultraMine', op: 'touch', uid: '_800_1' }, sender);
   await settle();
-  const put = w.send({ type: 'glaze:ultraMine', op: 'put', mine: { uid: '_900_1', mem: [], complete: true } }, sender);
+  const put = w.send({ type: 'glaze:ultraMine', op: 'put', epoch, mine: { uid: '_900_1', mem: [], complete: true, read: Date.now() } }, sender);
   await settle();
   release();
   await Promise.all([touch, put]);
@@ -601,11 +602,11 @@ test('ULT-4: two Ultra schools keep their own course records, each with its own 
 });
 
 // ---- the due list: content.js keeps it per site, the popup shows the right site's ---------------------------------------
-const dueBlock = () => { const src = read('content/content.js'); const at = src.indexOf('  const DUE ='); return src.slice(at, src.indexOf('  }));\n', at) + 6); };
+const dueBlock = () => { const src = read('content/content.js'); const at = src.indexOf('  const DUE ='); return src.slice(at, src.indexOf('  // Where Ultra writes a due date', at)); };
 const dueWeekAt = (origin, stored, items) => {
   const asked = [];
-  const ctx = vm.createContext({ ultra: true, moodle: false, location: { origin }, Date, Promise, Array,
-    chrome: { storage: { local: { get: (k, cb) => cb(Object.fromEntries([k].flat().filter((x) => x in stored).map((x) => [x, structuredClone(stored[x])]))), set: (o) => Object.assign(stored, structuredClone(o)) } } },
+  const ctx = vm.createContext({ ultra: true, moodle: false, location: { origin }, Date, Promise, Array, setTimeout: () => 0,
+    chrome: { runtime: { sendMessage: (m) => { stored[`dueWeek:${origin}`] = { at: m.at, list: m.list }; return Promise.resolve(); } }, storage: { local: { get: (k, cb) => cb(Object.fromEntries([k].flat().filter((x) => x in stored).map((x) => [x, structuredClone(stored[x])]))), set: (o) => Object.assign(stored, structuredClone(o)) } } },
     api: (p) => { asked.push(p); return Promise.resolve({ items }); }, GZ_DUE_WEEK: (j) => j.items, capi() {}, moodleIn() {} });
   ctx.stored = (k, cb) => ctx.chrome.storage.local.get(k, cb); // content.js's startup read, here storage itself
   vm.runInContext(`let dueSoon = null; ${dueBlock()} this.dueWeek = dueWeek;`, ctx);

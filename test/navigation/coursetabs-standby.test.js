@@ -420,3 +420,10 @@ test('only a course drawn after the adoption counts as routed: the light page\'s
   assert.deepEqual(p.did.filter(([k]) => k === 'load'), [['load', '_2_1', '/ultra/courses/_2_1/outline']], 'the page it had, still there: not routed');
   assert.match(part('  const watch = ', '  const open = '), /&& !f\.adopting/, 'watch waits for the route to be confirmed');
 });
+
+test('an old standby cannot carry an hours-old account assertion into a course', () => {
+  const p = run(), { s, el } = standbyOf({ at: Date.now() - 120001 });
+  p.api.standby = s;
+  assert.equal(p.api.adopt('_2_1', '/ultra/courses/_2_1/outline', { cid: '_2_1' }), null);
+  assert.ok(el.removed, 'the next course boots with a fresh account check');
+});

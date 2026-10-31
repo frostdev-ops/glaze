@@ -64,7 +64,7 @@ const ITEMS = [item('_603_1', '_101_1', 'Lab report', NOW + 5 * H), item('_604_1
 const page = ({ path = '/ultra/course', course = '', complete = true, prefs = {}, items = ITEMS, stored = {}, hold = [], enhance = { todo: true, cardTasks: true, remind: true } } = {}) => {
   const store = JSON.parse(JSON.stringify(stored));
   const held = [];
-  const calls = [], due = [], sent = [];
+  const calls = [], due = [], sent = [], changes = [], events = {};
   const panel = new E('div'); panel.className = 'todo-panel';
   const bb = new E('bb-todo'); panel.append(bb);
   const aside = new E('aside'); aside.className = 'outline-actions';
@@ -96,7 +96,7 @@ const page = ({ path = '/ultra/course', course = '', complete = true, prefs = {}
     navigator: { userActivation: { isActive: true } },
     document: {
       activeElement: null, documentElement: new E('html'), visibilityState: 'visible', cookie: '',
-      createElement: (tag) => new E(tag), createElementNS: (ns, tag) => new E(tag), addEventListener() {}, removeEventListener() {},
+      createElement: (tag) => new E(tag), createElementNS: (ns, tag) => new E(tag), addEventListener: (t, f) => (events[t] ||= []).push(f), removeEventListener() {},
       querySelector: (sel) => ({ 'div.todo-panel > bb-todo': bb, 'aside.outline-actions > .js-details-and-actions': details })[sel] || null,
       querySelectorAll: (sel) => (sel === 'article[id^="course-list-course-"]' ? [card] : []),
       getElementById: (id) => (id === 'gz-todo' ? [panel, aside].flatMap((p) => p.children).find((x) => x.attrs.id === 'gz-todo' || x.id === 'gz-todo') || null : null),
@@ -116,13 +116,13 @@ const page = ({ path = '/ultra/course', course = '', complete = true, prefs = {}
       storage: {
         local: { get: (k, cb) => cb(local(Object.fromEntries([k].flat().filter((x) => x in store).map((x) => [x, store[x]])))), set: (v, cb) => { Object.assign(store, local(v)); cb?.(); } },
         sync: { get: (k, cb) => cb({ todo: { ...prefs }, remind: {} }) },
-        onChanged: { addListener() {}, removeListener() {} },
+        onChanged: { addListener: (f) => changes.push(f), removeListener() {} },
       },
     },
   };
   c.globalThis = c;
   vm.createContext(c);
-  return { c, store, calls, due, sent, panel, bb, aside, details, card, release: () => { for (const f of held.splice(0)) f(); } };
+  return { c, store, calls, due, sent, panel, bb, aside, details, card, change: (ch, area) => changes.forEach((f) => f(ch, area)), fire: (type, detail) => events[type]?.forEach((f) => f({ detail })), release: () => { for (const f of held.splice(0)) f(); } };
 };
 const probe = (src, fields) => src.replace(/( {2}return \{\s*sync,)/, `$1 probe: { ${fields} },`).replace(/var (GZ_\w+) = globalThis\.\1 \|\|/, 'var $1 =');
 
@@ -478,4 +478,32 @@ test('the cached Ultra To Do preview leaves the previous account draft stored un
   await settle();
   assert.deepEqual(p.store[draftKey], draft);
   assert.equal(p.c.GZ_TODO_UI.probe.get().form, null);
+});
+
+test('a reused Ultra range is published with its original timestamp by both planner readers', async () => {
+  for (const [file, name] of [['planner/page/todo.js', 'GZ_TODO_UI'], ['courses/page/cardtasks.js', 'GZ_CARD_TASKS']]) {
+    const p = page(), at = NOW - 90000;
+    p.c.GZ_ULTRA.page.due = async () => ({ at, items: structuredClone(ITEMS), complete: true });
+    vm.runInContext(read(file), p.c);
+    p.c[name].sync(true); await settle();
+    assert.equal(p.sent.find((m) => m.cache)?.cache.at, at, file);
+  }
+});
+
+
+test('a mounted Ultra To Do accepts a newer worker answer from another tab', async () => {
+  const p = page();
+  vm.runInContext(probe(read('planner/page/todo.js'), 'get: () => ({ cache })'), p.c);
+  const ui = p.c.GZ_TODO_UI; ui.sync(true); await settle();
+  const cache = { ...ui.probe.get().cache, at: Date.now() + 1, items: [{ ...ITEMS[0], title: 'New title' }] };
+  p.change({ todoCache: { newValue: cache } }, 'local');
+  assert.equal(ui.probe.get().cache.items[0].title, 'New title');
+});
+
+test('Ultra To Do revalidates a fresh saved copy at startup', async () => {
+  const range = T.fetchRange(D.GZ_SANITIZE({}).todo, Date.now(), 'America/New_York');
+  const p = page({ stored: { todoCache: { key: KEY, at: Date.now(), ...range, teach: true, progress: true, items: [] } } });
+  vm.runInContext(read('planner/page/todo.js'), p.c);
+  p.c.GZ_TODO_UI.sync(true); await settle();
+  assert.equal(p.due.length, 1);
 });

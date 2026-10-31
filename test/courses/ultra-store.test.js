@@ -431,3 +431,84 @@ test('a frame cannot treat a snapshot refreshed by another tab as its current ac
   assert.equal((await s.page.mine()).mem.length, 4);
   assert.equal(count(s.asked, /users\/me$/), 1);
 });
+
+test('an open page renews identity and memberships after ten minutes', async () => {
+  const s = site({ answers: ANSWERS() });
+  await s.page.mine();
+  s.clock.t += 600001;
+  await s.page.mine();
+  assert.deepEqual([count(s.asked, /users\/me$/), count(s.asked, /memberships/)], [2, 2]);
+});
+
+test('new course content is checked again within one minute', async () => {
+  const s = site({ answers: { '/learn/api/public/v1/courses/_101_1/contents': load('contents') } });
+  await s.page.outline('_101_1');
+  s.clock.t += 60001;
+  assert.equal(s.page.outlineNow('_101_1'), null);
+  await s.page.outline('_101_1');
+  assert.equal(s.asked.length, 2);
+});
+
+test('a cached To Do paint still revalidates and publishes the original read time', async () => {
+  const s = site({ answers: ANSWERS(), prefs: PREFS });
+  const { start, end } = T.fetchRange(PREFS, LATER, TZ);
+  const cache = { key: `todo:${O}/_900_1`, at: LATER, start, end, teach: PREFS.teacher, progress: PREFS.progress, items: [{ id: '_1_1' }] };
+  const a = await s.page.planned(LATER, LATER + 3600000, cache, '_900_1');
+  assert.deepEqual(a.items, cache.items, 'the saved answer paints first');
+  await new Promise((r) => setTimeout(r, 20));
+  await settle();
+  assert.ok(count(s.asked, /studentItems$/) > 0, 'the site is asked behind the saved paint');
+  assert.ok(s.sent.some((m) => m.type === 'glaze:todo' && m.cache.at === LATER));
+});
+
+test('invalidation prevents old gradebook and outline responses from refilling memory or storage', async () => {
+  const s = site({ answers: { ...ANSWERS(), '/learn/api/public/v1/courses/_101_1/contents': load('contents') }, hold: () => true });
+  const a = s.page.book('_101_1', '_900_1'), b = s.page.outline('_101_1');
+  const rejected = [assert.rejects(a, new RegExp(U.STALE)), assert.rejects(b, new RegExp(U.STALE))];
+  await settle();
+  s.page.invalidate();
+  s.release();
+  await Promise.all(rejected);
+  assert.equal(s.page.outlineNow('_101_1'), null);
+  assert.equal(await s.page.saved('_101_1', '_900_1'), null);
+  assert.equal(s.store[`ultraBooks:${O}/_900_1`], undefined);
+});
+
+test('saved gradebooks and known courses follow storage changes and purges', async () => {
+  const key = `ultraBooks:${O}/_900_1`, me = `ultraMe:${O}`;
+  const s = site({ local: { [key]: { _101_1: { at: LATER, rows: [], complete: true } }, [me]: { uid: '_900_1', courses: [] } } });
+  await s.page.saved('_101_1', '_900_1'); await s.page.known();
+  s.store[key]._101_1.rows = [{ columnId: '_99_1' }];
+  s.store[me].courses = [{ id: '_101_1', name: 'Renamed' }];
+  s.page.changed({ [key]: { newValue: s.store[key] }, [me]: { newValue: s.store[me] } }, 'local');
+  assert.equal((await s.page.saved('_101_1', '_900_1')).rows[0].columnId, '_99_1');
+  assert.equal((await s.page.known()).courses[0].name, 'Renamed');
+  delete s.store[key]; delete s.store[me];
+  s.page.changed({ ultraCopyFence: { newValue: { epoch: 'reset', retire: true } } }, 'local');
+  assert.equal(await s.page.saved('_101_1', '_900_1'), null);
+  assert.equal(await s.page.known(), null);
+  await assert.rejects(s.page.book('_101_1', '_900_1'), new RegExp(U.STALE));
+});
+
+
+test('an abandoned old gradebook does not hold up saving the replacement generation', async () => {
+  let hold = true;
+  const s = site({ answers: ANSWERS(), hold: (u) => hold && u.pathname.includes('/_101_1/') });
+  const old = s.page.book('_101_1', '_900_1').catch(() => null);
+  await settle(); s.page.invalidate(); hold = false;
+  await s.page.book('_102_1', '_900_1'); await settle();
+  assert.ok(s.store[`ultraBooks:${O}/_900_1`]?._102_1, 'new reads flush without waiting for an abandoned generation');
+  s.release(); await old;
+});
+
+test('a newer stored gradebook wins over an older request still in flight', async () => {
+  const s = site({ answers: ANSWERS(), hold: () => true }), key = `ultraBooks:${O}/_900_1`;
+  const old = s.page.book('_101_1', '_900_1'); await settle();
+  const rows = [{ columnId: '_99_1', status: 'Graded' }];
+  s.store[key] = { _101_1: { at: LATER + 1, rows, complete: true } };
+  s.page.changed({ [key]: { newValue: s.store[key] } }, 'local');
+  assert.deepEqual((await s.page.saved('_101_1', '_900_1')).rows, rows);
+  s.release();
+  assert.deepEqual(await old, rows);
+  assert.deepEqual(s.store[key]._101_1.rows, rows);
+});

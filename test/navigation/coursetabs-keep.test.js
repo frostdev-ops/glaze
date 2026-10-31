@@ -17,7 +17,7 @@ const stored = () => {
   let saves = 0;
   const frame = (cid, dirty) => ({ el: { remove: () => removed.push(cid) }, dirty, ready: true });
   const frames = new Map([['_7_1', frame('_7_1', true)], ['_8_1', frame('_8_1', false)], ['_6_1', frame('_6_1', false)]]);
-  const c = vm.createContext({ L, ctx: { site: 'ultra', courseId: () => '_1_1', courseList: () => ({ _7_1: { name: 'Biology 101' } }) }, preview: false, who: '_42_1',
+  const c = vm.createContext({ location: { origin: 'https://bb.test' }, L, ctx: { site: 'ultra', courseId: () => '_1_1', courseList: () => ({ _7_1: { name: 'Biology 101' } }) }, preview: false, who: '_42_1',
     key: () => 'ctabs:https://bb.test:_42_1', frames, items: new Map(), spare: new Map(), next: new Map(), PAGE: 'page', requestAnimationFrame() {}, nudge() {}, closedCourse: '', showing: '_7_1', waiting: '',
     tabs: [{ cid: '_1_1', at: 1 }, { cid: '_6_1', at: 2 }, { cid: '_7_1', name: 'Biology', code: 'BIO101', pin: false, at: 3, path: '/ultra/courses/_7_1/grades', top: 40 }, { cid: '_8_1', at: 4 }],
     drawerFrom: null, drawerOff() {}, showTurn: 0, wait() {}, show: (x) => { c.showing = x; }, dropNext() {}, readPrefs: () => Promise.resolve(), pass() {}, route() {},
@@ -170,7 +170,7 @@ test('while a frame covers the page, the page\'s own strip is inert: out of the 
   for (const site of ['ultra', 'canvas']) {
     const frames = new Map([['_2_1', { at: 0, ready: true, el: { style: {}, focus() {}, contentWindow: { postMessage() {} } } }]]);
     const strip = { inert: false, contains: () => false };
-    const c = vm.createContext({ PAGE: 'page', requestAnimationFrame() {}, nudge() {}, keepPage() {}, spare: new Map(), next: new Map(), popping: false, showTurn: 0, showing: '', shownFrom: '', shooting: null, on: true, framed: '', frames, LIVE: 4,
+    const c = vm.createContext({ PAGE: 'page', requestAnimationFrame() {}, nudge() {}, keepPage() {}, spare: new Map(), next: new Map(), popping: false, STALE: 120000, pageAway: 0, staleCheck() {}, showTurn: 0, showing: '', shownFrom: '', shooting: null, on: true, framed: '', frames, LIVE: 4,
       host: { toggleAttribute() {} }, strip, list: null, wait() {}, document: { activeElement: null }, location: { pathname: '/ultra/courses/_1_1/outline', search: '' }, ctx: { site, scene() {} },
       html: { toggleAttribute() {} }, sessionStorage: { setItem() {}, removeItem() {} }, hostIn() {}, lay() {}, clearSlow() {}, unpicture() {}, draw() {}, later() {}, Date,
     });

@@ -597,7 +597,7 @@ test('the worker drops a site\'s copies on its sign-out, all of them with the sw
   await w.send({ type: 'glaze:ultraCopy', op: 'drop' }, from(`${ORIGIN}/ultra/course`));
   await w.settle();
   assert.deepEqual(Object.keys(w.store.local).filter((k) => k.startsWith('ultraCopy:')), [L.key(other, '_9_1', 'courses')], 'this site\'s, every student\'s');
-  assert.ok(`ultraMe:${ORIGIN}` in w.store.local);
+  assert.equal(w.store.local[`ultraMe:${ORIGIN}`], undefined, "sign-out clears the last identity too");
   await w.context.chrome.storage.sync.set({ enhance: { instant: false } });
   await w.settle();
   assert.deepEqual(Object.keys(w.store.local).filter((k) => k.startsWith('ultraCopy:')), [], 'the switch off: every copy');
@@ -643,4 +643,16 @@ test('painting with the real identity store does not wait for the worker members
   assert.equal(!!p.copy(), true, 'neither the membership cache nor the save lease can hold up painting');
   release(null);
   await settle();
+});
+
+test('a delayed pagehide copy keeps its visit time rather than claiming to be newer', async () => {
+  const p = site();
+  let now = Date.now();
+  p.c.Date = class extends Date { static now() { return now; } };
+  const start = now;
+  p.sync(); p.answer('_900_1'); await settle();
+  p.fill('ultra-instant-grades.html'); await p.frame1();
+  now += 600000;
+  for (const f of p.events.get('pagehide') || []) f();
+  assert.equal(p.sent.filter((m) => m.op === 'put').at(-1).record.at, start);
 });

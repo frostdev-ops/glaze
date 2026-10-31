@@ -72,8 +72,8 @@ const boot = async ({ pathname = '/ultra/stream', localGet } = {}) => {
       sendMessage: (m) => { if (m?.type === 'glaze:load') { loads.push(m.files); return Promise.resolve({ ok: false, error: 'not loadable' }); } return Promise.resolve({ ok: false }); } },
       storage: { sync: { get: (k, cb) => { syncGets.push(k); cb({}); } }, local, onChanged: { addListener: (f) => changed.push(f) } } } });
   c.window = c; c.top = c; c.globalThis = c;
-  for (const f of ['core/color.js', 'core/i18n.js', 'core/page.js', 'planner/grades.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'navigation/nav.js', 'content/content-ultra.js']) vm.runInContext(read(f), c, { filename: f });
-  vm.runInContext(read('content/content.js'), c, { filename: 'content/content.js' });
+  for (const f of ['core/color.js', 'core/i18n.js', 'core/page.js', 'planner/grades.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'navigation/nav.js', 'content/content-ultra.js']) vm.runInContext(read(f).replace('  const shown = new Map();', '  globalThis.__seen = () => ({ seen, seenItems }); globalThis.__loadSeen = () => loadSeen();\n  const shown = new Map();'), c, { filename: f });
+  vm.runInContext(read('content/content.js').replace('  const courseSlots = {};', '  const courseSlots = {}; globalThis.__slots = courseSlots;').replace('  let lookX;', '  let lookX; globalThis.__look = () => lookX;'), c, { filename: 'content/content.js' });
   await settle();
   const wait = async (ms) => {
     const end = now + ms;
@@ -230,4 +230,46 @@ test('a settings change is applied from its new values, and a new course list al
   p.change({ seenCourses: { newValue: { _1_1: { name: 'Biology', slot: 3 } } } }, 'local');
   await p.wait(500);
   assert.equal(p.radiusReads.length, painted, 'the course list alone leaves the palette');
+});
+
+
+test('startup consumers follow due-list and course-slot changes, including removal', async () => {
+  const p = await boot();
+  await p.c.GZ_CTX.dueWeek();
+  const key = 'dueWeek:https://school.test', list = [{ title: 'New work', cid: '_1_1' }];
+  p.change({ [key]: { newValue: { at: Date.now(), list } }, courseSlots: { newValue: { _1_1: 7 } } }, 'local');
+  assert.deepEqual(JSON.parse(JSON.stringify(await p.c.GZ_CTX.dueWeek())), list);
+  assert.equal(p.c.__slots._1_1, 7);
+  p.change({ [key]: {}, courseSlots: {} }, 'local');
+  assert.deepEqual(JSON.parse(JSON.stringify(await p.c.GZ_CTX.dueWeek())), []);
+  assert.deepEqual(Object.keys(p.c.__slots), []);
+});
+
+test('seen grades and content follow another tab after their startup read', async () => {
+  const p = await boot();
+  await p.c.__loadSeen();
+  const seenGrades = { _1_1: { _9_1: 'A' } }, seenContent = { _1_1: ['_9_1', '+'] };
+  p.change({ seenGrades: { newValue: seenGrades }, seenContent: { newValue: seenContent } }, 'local');
+  assert.deepEqual(JSON.parse(JSON.stringify(p.c.__seen())), { seen: seenGrades, seenItems: seenContent });
+  p.change({ seenGrades: {}, seenContent: {} }, 'local');
+  assert.deepEqual(JSON.parse(JSON.stringify(p.c.__seen())), { seen: {}, seenItems: {} });
+});
+
+
+test('a Look parts change is retained when a later settings patch is applied', async () => {
+  const p = await boot(), lookX = { bg: { kind: 'color' } };
+  p.change({ lookX: { newValue: lookX } }, 'sync'); await p.wait(100);
+  p.change({ motion: { newValue: { level: 'off' } } }, 'sync'); await p.wait(100);
+  assert.deepEqual(JSON.parse(JSON.stringify(p.c.__look())), lookX);
+});
+
+test('the due-list memo expires in an open document', async () => {
+  const p = await boot();
+  let now = Date.now(), calls = 0;
+  p.c.Date = class extends Date { static now() { return now; } };
+  p.c.fetch = async () => { calls++; throw Error('offline'); };
+  await p.c.GZ_CTX.dueWeek();
+  const n = calls; now += 120001;
+  await p.c.GZ_CTX.dueWeek();
+  assert.ok(calls > n, 'a failed or cached answer does not live forever');
 });

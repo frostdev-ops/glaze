@@ -37,7 +37,7 @@ const run = (over = {}) => {
     frames: new Map(), spare: new Map(), waiting: '', showTurn: 0, PAGE: 'page', LIVE: 4, KEEP: 3, KEPT: 8, showing: '', pic: null, drag: null, standby: undefined,
     location: { origin, pathname: '/ultra/course', search: '' }, Date, URL, URLSearchParams, structuredClone, Element: class {},
     performance: { now: () => now }, setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout() {},
-    document: { visibilityState: 'visible', body: {}, activeElement: null, addEventListener() {}, removeEventListener() {} },
+    document: { createElement: () => { const f = frame(OUT); f.el.addEventListener = () => {}; return f.el; }, visibilityState: 'visible', body: {}, activeElement: null, addEventListener() {}, removeEventListener() {} },
     MutationObserver: class { observe() {} disconnect() {} },
     host: { prepend() {} }, hostIn() {}, loading: () => false, shown: (e) => !!e, acts: () => false, room: () => true, guardFrame() {}, watch() {}, load() {},
     anchorOf: (e) => e.anchor, pathOf: (f) => f.el.contentDocument.location.pathname + f.el.contentDocument.location.search,
@@ -48,7 +48,7 @@ const run = (over = {}) => {
     ...over,
   });
   const api = vm.runInContext(part('  const frameEl = ', '  // The stand-in over a frame') + `
-;({ onItemClick, openItem, closeItem, onItemPop, onAhead, freshen, finishFresh, routeHere, demoteHere, onItemNav, standbyLater, staleCheck,
+;({ onItemClick, openItem, closeItem, onItemPop, onAhead, stopKeeping, freshen, finishFresh, routeHere, demoteHere, onItemNav, standbyLater, staleCheck,
   get items() { return items; }, get standby() { return standby; }, set standby(v) { standby = v; }, get itemMode() { return itemMode; }, set itemMode(v) { itemMode = v; } })`, c);
   return { c, api, did, timers, tick: (ms) => { now += ms; }, step: () => timers.shift()?.fn(), key: () => `k${key}`, setKey: (k) => { key = k; } };
 };
@@ -571,4 +571,58 @@ test('an item kept for its unsaved work still leaves a renewed outline: the stan
   const fresh = spare.find((g) => g.el === sb.el);
   assert.ok(fresh?.fresh, 'the standby renews the outline beside it');
   assert.deepEqual(sb.posted.at(-1), { gzCtab: 'adopt', cid: '_2_1', url: OUT });
+});
+
+test('a stale outline is renewed even when ahead is off and no standby exists', () => {
+  const p = run({ showing: '_2_1', prefs: { keep: true, ahead: false } }), base = frame(OUT), made = [];
+  p.c.frames.set('_2_1', base);
+  p.c.document.createElement = () => {
+    const f = frame(OUT, { ready: false });
+    f.el.addEventListener = (type, fn) => { if (type === 'load') f.loaded = fn; };
+    made.push(f); return f.el;
+  };
+  p.api.staleCheck('_2_1', base);
+  assert.equal(made.length, 1, 'a cold replacement is allowed when no standby can answer');
+  assert.equal(p.c.frames.get('_2_1'), base, 'the current outline and scroll stay visible');
+  made[0].loaded();
+  assert.ok(p.c.spare.get('_2_1')[0].fresh, 'the replacement uses the guarded quiet swap');
+});
+
+test('stale gradebook frames renew at the same URL without replacing unsaved work', () => {
+  const p = run({ showing: '_2_1' }), base = frame(`${C}/grades`), made = [];
+  p.c.frames.set('_2_1', base);
+  p.c.document.createElement = () => { const f = frame(`${C}/grades`); f.el.addEventListener = (t, fn) => { if (t === 'load') f.loaded = fn; }; made.push(f); return f.el; };
+  p.api.staleCheck('_2_1', base);
+  assert.equal(made.length, 1);
+  assert.equal(made[0].el.src, origin + C + '/grades');
+  made[0].loaded();
+  assert.equal(p.c.spare.get('_2_1')[0].fresh.url, `${C}/grades`);
+  const q = run({ showing: '_2_1' }), dirty = frame(`${C}/grades`, { dirty: true });
+  q.c.frames.set('_2_1', dirty); q.c.document.createElement = () => { throw Error('unsaved work must stay'); };
+  q.api.staleCheck('_2_1', dirty);
+  assert.equal(q.c.frames.get('_2_1'), dirty);
+});
+
+test('an item kept for its work also renews the top page outline beneath it', () => {
+  const p = run({ ctx: { site: 'ultra', courseId: () => '_2_1' }, location: { origin, pathname: OUT, search: '' } }), made = [];
+  p.c.document.querySelector = () => null;
+  p.c.document.createElement = () => { const f = frame(OUT); f.el.addEventListener = (t, fn) => { if (t === 'load') f.loaded = fn; }; made.push(f); return f.el; };
+  p.api.openItem('_2_1', DOC);
+  const it = p.c.frames.get('_2_1'); it.dirty = true;
+  p.api.closeItem('_2_1', 'back');
+  assert.equal(made.length, 1, 'the page outline gets a replacement while the item is retained');
+  assert.equal(p.c.frames.get('_2_1'), it);
+  made[0].loaded();
+  assert.ok(p.c.spare.get('_2_1')[0].fresh);
+});
+
+
+test('turning Keep Course Content off releases hidden refresh copies', () => {
+  const { p, base, it } = opened();
+  p.setKey(1); p.api.onItemPop({ stopImmediatePropagation() {} });
+  assert.ok(it.fresh);
+  p.c.prefs.keep = false; p.api.stopKeeping();
+  assert.equal(it.el.isConnected, false);
+  assert.equal(p.c.frames.get('_2_1'), base);
+  assert.equal(p.c.spare.get('_2_1')?.includes(it), false);
 });

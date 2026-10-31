@@ -325,3 +325,18 @@ test('a timer options read cannot overwrite a setting changed while it loads', a
   assert.equal(node.options.work, 60);
   assert.equal(node.time.textContent, '60:00');
 });
+
+
+test('a local To Do tick refreshes the next-due item immediately', async () => {
+  const { w, ctx, changes } = harness({ site: 'ultra', need: async (f, c) => {
+    c.GZ_ULTRA = { page: { planned: async () => ({ key: 'todo:https://school.test/_1_1', items: [{ type: 'assignment', id: '_2_1', title: 'Essay', at: Date.now() + 864e5, url: '/ultra/work' }] }) } };
+    c.GZ_TODO = { clean: (v) => v || { items: {} }, isDone: (i, mode, done) => !!done };
+  }, local: { items: {} } });
+  const next = w.set(['next']).get('next');
+  await settle(); await settle();
+  assert.equal(next.detail.textContent, 'Essay');
+  ctx.chrome.storage.local.get = (k, cb) => cb({ [k]: { items: { 'assignment:_2_1': { done: true } } } });
+  changes[0]({ 'todo:https://school.test/_1_1': { newValue: {} } }, 'local');
+  await settle(); await settle();
+  assert.equal(next.box.getAttribute('aria-disabled'), 'true');
+});

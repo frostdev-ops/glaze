@@ -80,29 +80,29 @@ function setup({ path = '/ultra/course', store = new Map(), account = () => Prom
   };
   route(document.location.pathname);
   const settings = G.GZ_SANITIZE({ navbar: { on: true, ...navbar }, enhance: { tabs: false, dashboard: true } });
-  const observers = [], animation = new Map(), events = {}, changes = [];
+  const observers = [], animation = new Map(), events = {}, changes = [], storageEvents = [], timeouts = [];
   let serial = 0, builds = 0;
   class MO { constructor(fn) { this.fn = fn; observers.push(this); } observe() { this.on = true; } disconnect() { this.on = false; } }
   const window = {}; window.top = window;
   const sessionStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
   const context = vm.createContext({ document, location: document.location, window, URL, sessionStorage, innerWidth: 1440, innerHeight: 900,
-    GZ_NAVBAR: { ...M, build: (...a) => (builds++, M.build(...a)) }, GZ_NAV_LAYOUT: L, GZ_NAV_ITEMS: N, GZ_NAV: NAV,
+    GZ_NAVBAR: { ...M, build: (...a) => (builds++, M.build(...a)) }, GZ_NAV_LAYOUT: L, GZ_NAV_ITEMS: N, GZ_NAV: { ...NAV, drop: () => document.querySelector('#gz-navbar[data-first]')?.remove() },
     NodeFilter: { SHOW_TEXT: 4, FILTER_ACCEPT: 1, FILTER_REJECT: 2 }, MutationObserver: MO, CSS: { escape: (s) => s }, getComputedStyle: () => ({}),
     matchMedia: (q) => ({ matches: q === '(min-width: 900px)' ? context.innerWidth >= 900 : true }),
     requestAnimationFrame: (fn) => { animation.set(++serial, fn); return serial; }, cancelAnimationFrame: (id) => animation.delete(id),
-    setTimeout: () => ++serial, clearTimeout() {}, addEventListener: (name, fn) => { events[name] = fn; },
+    setTimeout: (fn, ms) => { timeouts.push({ fn, ms }); return ++serial; }, clearTimeout() {}, addEventListener: (name, fn) => { events[name] = fn; },
     chrome: { runtime: { id: 'glaze', getURL: (s) => `chrome-extension://glaze/${s}` },
-      storage: { sync: { get: (_, cb) => cb({ navbarItems: { glaze: [] } }) }, local: { get: (_, cb) => cb({}), set() {} }, onChanged: { addListener() {} } } },
+      storage: { sync: { get: (_, cb) => cb({ navbarItems: { glaze: [] } }) }, local: { get: (_, cb) => cb({}), set() {} }, onChanged: { addListener: (fn) => storageEvents.push(fn) } } },
     GZ_CTX: { site: 'ultra', t: (s) => s, settings: () => settings, on: () => true, parts: () => null, locale: () => 'en', account,
       setVar: (k, v) => document.documentElement.style.setProperty(k, v), need: () => Promise.reject(new Error('lazy')) } });
   before?.(document, context);
-  vm.runInContext(read('navigation/page/navbar.js') + '\nglobalThis.GZ_NAVBAR_UI = GZ_NAVBAR_UI;', context);
+  vm.runInContext(read('navigation/page/navbar.js').replace('    // Whether the bar is drawn:', '    keep,\n    // Whether the bar is drawn:') + '\nglobalThis.GZ_NAVBAR_UI = GZ_NAVBAR_UI;', context);
   const ui = context.GZ_NAVBAR_UI;
   ui.on('change', (v) => changes.push(v));
   ui.sync();
   const host = document.getElementById('gz-navbar'), root = host?.shadowRoot;
   root?.querySelector('link').dispatchEvent({ type: 'load' });
-  return { ui, document, host, root, settings, store, events, changes, route, nav, context,
+  return { ui, document, host, root, settings, store, events, changes, route, nav, context, timeouts, storeChange: (c, area) => storageEvents.forEach((f) => f(c, area)),
     builds: () => builds, frame: () => { for (const [id, fn] of [...animation]) { animation.delete(id); fn(); } },
     mutate: () => { for (const o of observers) if (o.on) o.fn([]); },
     item: (id) => root.querySelector(`.rail .list [data-id="${id}"]`) };
@@ -409,4 +409,29 @@ test('a first-paint copy goes when the bar turns out to be off', () => {
   } });
   assert.equal(h.host, null);
   assert.equal(copy.isConnected, false);
+});
+
+
+test('a first-paint bar retires on a purge before a pending identity can reveal its badges', async () => {
+  let resolve;
+  const h = firstPage(() => new Promise((r) => { resolve = r; }));
+  await tick(); h.load();
+  h.storeChange({ [`ultraCopyFence:${origin}`]: { newValue: { epoch: 'out', retire: true } } }, 'local');
+  resolve('_42_1'); await tick();
+  assert.equal(h.host.isConnected, false);
+});
+
+test('a first-paint bar cannot remain forever if its renderer fails to arrive', () => {
+  const h = firstPage(() => new Promise(() => {})); h.load();
+  const cap = h.timeouts.find((t) => t.ms === 20000);
+  assert.ok(cap, 'a bounded first-paint copy'); cap.fn();
+  assert.equal(h.host.isConnected, false);
+});
+
+test('an open bar forgets its session copy on sign-out in another tab', async () => {
+  const h = setup(); await tick();
+  h.ui.keep(); assert.ok(h.store.has('gz-navbar'));
+  h.storeChange({ [`ultraCopyFence:${origin}`]: { newValue: { epoch: 'out', retire: true } } }, 'local');
+  h.ui.keep();
+  assert.equal(h.store.has('gz-navbar'), false);
 });
