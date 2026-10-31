@@ -20,7 +20,7 @@
   /* A course outline's column Ultra has just drawn, until the sidebar takes it a pass later (navigation/page/sidebar.js
      settled): not shown in Ultra's place first, so it never moves to the window's edge in view. */
   html[data-gz-sb-ultra]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap aside.outline-actions:not([data-gz-sidebar-host]) { visibility: hidden; }
-  html[data-gz-sb-unsized] #site-wrap aside.outline-actions > :is(#gz-nt-block, #gz-sb-widgets) { visibility: hidden; }
+  html[data-gz-sb-unsized] #site-wrap aside.outline-actions > #gz-nt-block, html[data-gz-sb-unsized] #site-wrap aside.outline-actions > #gz-sb-widgets { visibility: hidden; }
   html[data-gz-sb-notes][data-gz-sidebar="expanded"] #site-wrap aside.outline-actions[data-gz-sidebar-host] > #gz-sb-widgets { visibility: hidden; }
   [data-gz-sidebar-host] > #right-side { width: auto !important; }
   html:not([data-gz-sidebar]) #gz-sidebar, html[data-gz-sidebar="none"] #gz-sidebar { display: none !important; }
@@ -165,7 +165,7 @@
   }
   html[data-gz-sb-notitle] .gz-sb-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   /* One row: Jump to widgets showing later takes room from the title, never a second row that moves the column under it. */
-  .gz-sb-head > :is(.gz-sb-btn, .gz-sb-icon) { flex: none; white-space: nowrap; }
+  .gz-sb-head > .gz-sb-btn, .gz-sb-head > .gz-sb-icon { flex: none; white-space: nowrap; }
   html[data-gz-sb-notitle] .gz-sb-head { justify-content: flex-end; }
   .gz-sb-title { flex: 1 1 6rem; min-width: 0; margin: 0; padding: 0; border: 0; font: 600 0.95rem/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: none; letter-spacing: 0; }
   :is(.gz-sb-head, #gz-sb-widgets, .gz-sb-own, .gz-sb-menu) .gz-sb-btn, .gz-sb-btn, .gz-sb-icon {
