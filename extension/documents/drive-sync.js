@@ -600,6 +600,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         return;
       }
 
+      // A file let go as edited outside Glaze (below) whose mark didn't land, the run stopping between: marked now.
+      if (d.keep) d = await tagKept(h, d);
       // Deleted for good in Drive, either file: into Trash here, the other file into Drive's trash.
       if (R?.removed || E?.removed) {
         if (l && !lt) await env.papers.trash(key);
@@ -668,9 +670,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         }
         // A .docx or .xlsx edited outside Glaze stays as it is; the document gets a file of its own again.
         // Detach durably before any more Drive writes: a failed upload or stopped worker must never reuse this id.
-        await putDoc(h, { ...d, file: null, fh: null, fsum: null }, d);
-        await D((c) => c.patch(d.file, { appProperties: { glaze: 'kept', sum: null } }));
-        Object.assign(d, { file: null, fh: null, fsum: null });
+        d = await tagKept(h, await putDoc(h, { ...d, file: null, fh: null, fsum: null, keep: d.file }, d));
         force = true;
       } else if (E && !E.removed && E.id === d.file && E.appProperties?.glaze !== 'file') {
         // One another device kept so (or anything else no longer Glaze's file): never written again.
@@ -702,6 +702,12 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         return;
       }
       if (ldirty || force) await push(key, h, l, d, folder);
+    };
+    // A file let go as edited outside Glaze, recorded on the document (keep) until Glaze's properties on it say so: never the
+    // document's file again, nor counted as one. → the document's record
+    const tagKept = async (h, d) => {
+      try { await D((c) => c.patch(d.keep, { appProperties: { glaze: 'kept', sum: null } })); } catch (e) { if (e?.why !== 'missing') throw e; }
+      return putDoc(h, { ...d, keep: null }, d);
     };
     // Drive's copy of a linked document, unless the file it names is in Drive's trash: that file's own change (later in the
     // changes, or a full pass) moves the document into Trash or back; till then nothing is taken. → the copy, or null
