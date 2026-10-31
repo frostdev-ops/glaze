@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.0 (Portuguese (Brazil))
+# Chrome Web Store listing — Glaze 4.0.1 (Portuguese (Brazil))
 
 ## Short summary (132 character maximum)
 
@@ -73,16 +73,16 @@ Canvas é uma marca da Instructure, Inc. Blackboard é uma marca da Anthology In
 
 ## Release notes
 
-NOVO NA 4.0.0
+NOVO NA 4.0.1
 
-• Blackboard Ultra: o Glaze Writer substitui o editor em discussões, diários, mensagens, trabalhos e provas; o editor do Blackboard continua no menu ⋯. Discussões e mensagens ganham uma barra de ferramentas para o texto selecionado, as metas do enunciado e Ctrl/⌘+Enter para publicar.
-• Os trabalhos escrevem na caixa do Blackboard para o próprio botão de entrega dele, ou viram páginas reais com o Writer completo: MLA 9, APA 7, Chicago 17, Em branco ou seu próprio formato, com verificação do formato, notas de rodapé, versões e importação, exportação e entrega em .docx.
-• Documentos reúne trabalhos, planilhas, PDFs e apresentações do PowerPoint. As planilhas têm mais de 380 funções do Excel, mostram e criam gráficos e importam .xlsx, .csv e .tsv. PDFs têm zoom, busca e formulários preenchíveis; apresentações abrem no visualizador com Apresentar. As prévias de arquivos do Blackboard Ultra abrem no visualizador de PDF do Glaze. Arquivos excluídos ficam 30 dias na Lixeira.
-• Comece um trabalho como Documento ou Planilha. PDFs, apresentações e planilhas enviados abrem no visualizador para entrega; planilhas são entregues como .xlsx. Em Configurações › Writer › Trabalhos há controles para Planilhas, PDFs e Slides; os arquivos salvos continuam disponíveis.
-• Ortografia, gramática e correção automática funcionam no seu dispositivo, e Citar busca um DOI, um ISBN ou um endereço da web só quando você clica. As provas têm apenas revisão, sem IA nem preenchimento de texto.
-• Configurações › IA conecta provedores pelo nome com suas chaves ou um modelo neste dispositivo, com um modelo para tudo ou um por recurso. A IA fica desligada até você configurá-la. Completar com Tab só termina a frase atual, e o painel Comentários avalia seu trabalho pela rubrica e pelas instruções e explica as notas estimadas ou por que não há pontuação. O Glaze nunca redige por você.
-• Firefox: com Agentes, conecte apps de IA do seu computador aos seus cursos, pendências e notas. Cada app e cada alteração precisam da sua autorização.
-• “Fazer backup…” e “Restaurar…” incluem trabalhos, planilhas, PDFs, apresentações, versões, seu dicionário e fontes salvas.
-• As páginas do Writer seguem um estilo escuro, e Página clara as mantém brancas. Os estilos que você salva ou usa da galeria com “Usar este tema” aparecem onde quer que você escolha um estilo.
-• Blackboard: a rubrica aparece na página de um rascunho salvo, os avisos de prazo ficam certos na mudança de horário e a busca segue os links do próprio Blackboard.
-• Aparência › Movimento começa em Expressivo. A atualização muda Sutil para Expressivo uma vez; Desligado continua desligado.
+• Blackboard Ultra: as abas de cursos abrem a partir de uma página já carregada e começam a carregar quando você pressiona ou passa o cursor sobre uma aba (Configurações › Abas de cursos › Abrir as abas de cursos com antecedência).
+• Manter o conteúdo do curso pronto: um item abre sobre o conteúdo do curso, e voltar é instantâneo, no mesmo lugar.
+• Abrir Notas, Cursos e Atividade na hora, a partir da sua última visita. A barra do Glaze aparece desde o primeiro desenho, e A fazer, as notas e a barra lateral aparecem a partir de dados salvos assim que o Blackboard confirma quem está conectado.
+• Carregar os dados do curso com antecedência, menos solicitações ao Blackboard e menos trabalho em notebooks mais lentos.
+• PDFs: realce, caneta, texto, imagens, formas e assinaturas, e um painel de páginas para mover, girar, excluir e adicionar páginas. Um PDF guarda uma só cópia, sua última versão com marcações.
+• Anexar de Documentos adiciona seus documentos à entrega de uma tarefa do Blackboard Ultra. Pastas de trabalho de .xlsm são exportadas e entregues como .xlsm.
+• Canvas: Abrir no Glaze em arquivos PDF, de slides e de planilhas. Os slides ganham Imprimir com anotações…, e os cartões de Documentos mostram os gráficos de uma planilha.
+• Os comentários do Writer continuam em alemão, espanhol, francês, holandês e português.
+• Firefox: o Google Drive (Configurações › Writer › Trabalhos) abre, salva, anexa e sincroniza seus documentos. Desativado até você se conectar.
+• Firefox: um site do qual você retirou o acesso não é mais tentado de novo.
+• Chrome: Sincronização com o Google Agenda (Configurações › Compartilhamento) mantém em dia uma agenda chamada Glaze na sua conta do Google, e o Google Drive (Configurações › Writer › Trabalhos) abre, salva, anexa e sincroniza seus documentos. Os dois ficam desativados até você se conectar.
