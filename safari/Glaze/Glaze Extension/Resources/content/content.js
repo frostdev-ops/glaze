@@ -94,6 +94,33 @@
     if (!isCanvas()) return;
   }
 
+  // Share startup reads, with changes applied before any waiting consumer runs. Later reads go to storage.
+  const topFrame = window.top === window;
+  const FIRST = ['freshDefaults', 'courseSlots', 'seenCourses', ...solo ? ['mods'] : [], ...topFrame ? [`dueWeek:${location.origin}`] : [],
+    ...ultra && topFrame ? [`seenCoursesAt ${location.origin}`, 'widgetLayout'] : [], ...ultra && solo ? ['seenGrades', 'seenContent'] : []];
+  let first = null;
+  const firstTaken = new Set(), firstChanged = new Set(), firstValues = {};
+  if (!isPreview) try {
+    first = new Promise((res) => chrome.storage.local.get(FIRST, (r) => {
+      if (chrome.runtime?.lastError) return res(null);
+      for (const k of FIRST) if (!firstChanged.has(k) && r && k in r) firstValues[k] = r[k];
+      res(firstValues);
+    })).catch(() => null);
+    chrome.storage.onChanged.addListener((ch, area) => {
+      if (area === 'local') for (const k of FIRST) if (ch[k]) {
+        firstChanged.add(k);
+        if ('newValue' in ch[k]) firstValues[k] = ch[k].newValue; else delete firstValues[k];
+      }
+    });
+  } catch { first = null; }
+  const stored = (keys, cb) => {
+    const ks = [].concat(keys);
+    const direct = () => { try { chrome.storage.local.get(ks, cb); } catch { cb({}); } };
+    if (!first || ks.some((k) => !FIRST.includes(k) || firstTaken.has(k))) return direct();
+    for (const k of ks) firstTaken.add(k);
+    first.then((r) => (r ? cb(Object.fromEntries(ks.filter((k) => k in r).map((k) => [k, r[k]]))) : direct()));
+  };
+
   // ---- long tail -------------------------------------------------------------------------------
   // Read everything first, write after: setting an attribute mid-loop invalidates layout and the
   // next getBoundingClientRect would force a reflow, once per element.
@@ -233,9 +260,10 @@
     sweepEls(all.slice(0, MAX_FULL));
     if (all.length > MAX_FULL) setTimeout(() => { if (run !== fullRun || !observer) return; if (hid()) full = true; else sweepAll(all.slice(MAX_FULL), run); }, 150);
   };
-  const sweepRoots = (roots) => {
-    const els = [];
+  const sweepRoots = (roots, alone = []) => {
+    const els = alone.slice(0, MAX_FULL);
     for (const r of roots) {
+      if (els.length >= MAX_FULL) break;
       els.push(r);
       for (const d of r.querySelectorAll('*')) {
         if (els.length >= MAX_FULL) break;
@@ -251,6 +279,22 @@
     for (let p = r.parentElement; p; p = p.parentElement) if (set.has(p)) return false;
     return true;
   });
+  // A class or style change restyles its element; its subtree was swept when added. A small subtree goes with it (a button
+  // turning Mui-disabled greys its label); a big container's (body's with-right-side) would be thousands of style reads.
+  const SMALL = 64;
+  const attributeRoots = (set, roots) => {
+    const els = new Set();
+    for (const e of set) {
+      if (!e.isConnected || roots.has(e)) continue;
+      let p = e.parentElement;
+      while (p && !roots.has(p)) p = p.parentElement;
+      if (p) continue;
+      els.add(e);
+      const below = e.getElementsByTagName('*');
+      if (!below[SMALL]) for (const d of below) els.add(d);
+    }
+    return [...els];
+  };
 
   // ---- moments and the completion burst --------------------------------------------------------
   // 'glaze:moment' on the document: something happened that a Look's effect (looks/page/motionx.js) or a mod may answer,
@@ -323,7 +367,7 @@
   let dueSoon = null;
   const DUE = `dueWeek:${location.origin}`;
   const dueWeek = () => (dueSoon ||= new Promise((res) => {
-    try { chrome.storage.local.get(DUE, (r) => res(r?.[DUE])); } catch { res(); }
+    stored(DUE, (r) => res(r?.[DUE]));
   }).then((r) => {
     const now = Date.now();
     const kept = Array.isArray(r?.list) ? r.list : [];
@@ -351,31 +395,35 @@
   // What only some pages need isn't in the first content script: it runs in this frame the first time it's needed,
   // put there by background/background.js ('glaze:load', its LOADABLE list). The options preview has it as <script> tags.
   // `ready` says whether what the file defines is here: before asking (the preview), and after the worker says it ran.
-  // One request per file at a time. A failed one is asked again by itself (1 s, 2 s, 4 s… 30 s apart, about four minutes)
-  // and the page syncs once it is in (recover); a refusal that won't change, by a sync after a minute.
+  // One worker request per feature group, in order, skipping verified files. Failures retry after 1 s, 2 s, 4 s… 30 s
+  // (about four minutes), then recover the page; permanent refusals are cleared after a minute.
   // docId names this document to the worker where the browser can't (no sender.documentId): it checks the frame still
   // holds this document before injecting.
   const docId = crypto.randomUUID();
   globalThis.__gzDoc = docId;
-  const loading = new Map(); // file -> promise
-  const need = (file, ready, retry = true, n = 0) => {
+  const loading = new Map(); // file, or a group's files joined by spaces -> promise
+  const need = (group, ready, retry = true, n = 0) => {
+    const file = [].concat(group).join(' ');
     if (n || !loading.has(file)) {
       const p = ready() ? Promise.resolve() : isPreview ? Promise.reject(new Error('not in the preview'))
         : Promise.resolve().then(() => {
           if (!chrome.runtime?.id) throw new Error('reloaded');
-          return chrome.runtime.sendMessage({ type: 'glaze:load', files: [file], doc: docId });
-        }).then((r) => {
-          if (!r?.ok) throw new Error(r?.error || 'not loaded');
-          if (!ready()) throw new Error('ran, but not ready');
+          const files = [].concat(group), ask = files.length > 1 ? files.filter((f, i) => i === files.length - 1 || !ran.has(f)) : files;
+          return Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:load', files: ask, doc: docId })).then((r) => {
+            if (!r?.ok) throw new Error(r?.error || 'not loaded');
+            if (!ready()) throw new Error('ran, but not ready');
+            for (const f of ask) ran.add(f);
+          });
         });
       if (retry) p.then(() => { if (n) recover(); }, (e) => {
         const again = n < 11 && !/^(not loadable|sender|not in the preview)$/.test(e.message);
-        if (chrome.runtime?.id) setTimeout(() => { if (loading.get(file) === p) { if (again) need(file, ready, true, n + 1).catch(() => {}); else loading.delete(file); } }, again ? Math.min(1000 << n, 30000) : 60000);
+        if (chrome.runtime?.id) setTimeout(() => { if (loading.get(file) === p) { if (again) need(group, ready, true, n + 1).catch(() => {}); else loading.delete(file); } }, again ? Math.min(1000 << n, 30000) : 60000);
       });
       loading.set(file, p);
     }
     return loading.get(file);
   };
+  const ran = new Set(); // files the worker said ran in this document (need's groups)
   // Moodle's extras, on first use: its data read (courses/moodle.js), then asked of the page's own Moodle.
   const moodleIn = () => need('courses/moodle.js', () => globalThis.GZ_MOODLE).then(() => need('courses/page/moodle.js', () => globalThis.GZ_MOODLE_PAGE)).then(() => GZ_MOODLE_PAGE);
   // Load the page's catalogue once. Text extras wait for it; the theme doesn't. A failure keeps English for this page.
@@ -441,6 +489,9 @@
   };
 
   let dirty = new Set();
+  let touched = new Set(); // elements with only a class or style change since the last pass
+  let reshaped = false; // nodes added or removed, or a review circle changed, since the last pass
+  let passPath = ''; // location.pathname at the last pass
   let full = false;
   const hid = () => tabFrame && html.hasAttribute('data-gz-ctab-framed');
   // The Look's LMS rules (looks/page/rules.js), once it has any: each pass puts them back on what the page redrew.
@@ -450,13 +501,19 @@
   const routes = () => need('content/routes.js', () => globalThis.GZ_ROUTES).then(() => GZ_ROUTES.sync(), no);
   const flush = () => {
     timer = 0;
-    if (hid()) { dirty.clear(); full = true; return; }
-    const roots = outermost(dirty);
+    // A hidden tab draws nothing anyone sees: one full pass when it is shown (visibilitychange, below).
+    if (hid() || document.hidden) { dirty.clear(); touched.clear(); full = true; return; }
+    const roots = full ? [] : outermost(dirty), alone = full ? [] : attributeRoots(touched, dirty);
     dirty.clear();
+    touched.clear();
     const said = words();
     const all = full || (said && wordsLate);
-    if (full) { full = false; if (ultra) X.gate(document.body); sweepAll(); } else sweepRoots(roots);
-    if (said) { tagExtras(all ? [document.body] : roots); wordsLate = false; } else wordsLate = true;
+    // Syncs that add or drop Glaze's parts by what a page holds: nothing added or removed on the same page, nothing new.
+    const routed = all || reshaped || location.pathname !== passPath;
+    reshaped = false;
+    passPath = location.pathname;
+    if (full) { full = false; if (ultra) X.gate(document.body); sweepAll(); } else sweepRoots(roots, alone);
+    if (said) { tagExtras(all ? [document.body] : [...roots, ...alone]); wordsLate = false; } else wordsLate = true;
     // Every site runs the same list; what a site doesn't do is a default that does nothing (X).
     if (tip && ultraTipShown()) hideTip();
     X.paintCourses();
@@ -469,19 +526,18 @@
     if (all) X.syncNav();
     X.renderProgress();
     X.renderNew();
-    keepPlace();
+    if (routed) keepPlace();
     X.renderCalc();
     watchDrafts();
     syncDownloads();
     syncDocTools();
-    syncCourseMenu();
+    if (routed) syncCourseMenu();
     globalThis.GZ_MODS?.pass();
-    X.syncTodo();
-    X.syncCardTasks();
+    if (routed) { X.syncTodo(); X.syncCardTasks(); }
     X.syncWidgets();
-    X.syncRemind();
+    if (routed) X.syncRemind();
     X.syncSyl();
-    X.syncInsights();
+    X.syncInsights(); // course tabs ride on it (content-ultra.js)
   };
   // Throttle, not debounce: Ultra never stops mutating (ripples, popper repositioning), and a
   // debounce that restarts on every record would put the sweep off indefinitely.
@@ -489,7 +545,7 @@
     // Cut off by a reload of Glaze: stop watching, and every GZ_CTX.on() feature stops too.
     if (!chrome.runtime?.id) { observer?.disconnect(); observer = null; return; }
     // A course tab's hidden frame: no sweep until it is shown (GZ_CTX scene), then one full pass.
-    if (hid()) { dirty.clear(); full = true; return; }
+    if (hid()) { dirty.clear(); touched.clear(); full = true; return; }
     // Keep native-parent removals for remount/teardown; ignore owned UI internals.
     records = records.filter((r) => !globalThis.GZ_LIGHT?.owns(r) && !r.target.closest?.('.gz-game,.gz-game-dialog,.gz-game-world') && !(ultra && r.target.closest?.('[id^="gz-"]')));
     if (!records.length) return;
@@ -500,9 +556,11 @@
         // A circle that changes changes its item's due-date chip.
         const item = r.target.closest('.content-list-item');
         if (item) dirty.add(item);
+        reshaped = true;
         continue;
       }
-      if (r.type === 'attributes') { dirty.add(r.target); continue; }
+      if (r.type === 'attributes') { touched.add(r.target); continue; }
+      reshaped = true;
       for (const n of r.addedNodes) {
         if (n.nodeType !== 1) continue;
         dirty.add(n);
@@ -510,7 +568,7 @@
       }
     }
     // Too many separate subtrees to be worth tracking: one full pass is cheaper.
-    if (dirty.size > 500) { dirty.clear(); full = true; }
+    if (dirty.size + touched.size > 500) { dirty.clear(); touched.clear(); full = true; }
     if (!timer) timer = setTimeout(flush, 150);
   };
   const startSweep = () => {
@@ -539,6 +597,7 @@
     clearTimeout(timer);
     timer = 0;
     dirty.clear();
+    touched.clear();
     full = false;
     X.stop();
     globalThis.GZ_MOODLE_PAGE?.paint();
@@ -546,6 +605,9 @@
     liftable.clear();
     if (!ultra) for (const e of document.querySelectorAll('[style*="--gz-course-raw"]')) { e.style.removeProperty('--gz-course-raw'); if (!e.style.length) e.removeAttribute('style'); } // Canvas's course colors
   };
+
+  // The pass a hidden tab put off (flush), as it is shown.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && observer && full && !timer && !hid()) timer = setTimeout(flush); });
 
   // ---- hover fills ------------------------------------------------------------------------------
   // Ultra hard-codes some hover and focus fills (#fff, #f0f0f0, #e5e5e5) that exist only while
@@ -1177,13 +1239,17 @@
   const surfaceCourse = () => chrome.runtime?.id ? GZ_COURSE_COLOR(settings, courseList, ultra ? courseId() : canvasCourseKey()) : '';
   let cc = []; // worked out once per list and picks
   const courseColors = () => { const p = settings.courses.colors; if (cc[0] !== courseList || cc[1] !== p) cc = [courseList, p, GZ_COURSE_COLORS(courseList, p)]; return cc[2]; };
-  try {
-    chrome.storage.local.get(['courseSlots', 'seenCourses'], (r) => {
-      Object.assign(courseSlots, r?.courseSlots);
-      courseList = r?.seenCourses || {};
-      reapply();
-    });
-  } catch { /* extension reloaded under the tab */ }
+  // Ultra: a slot's own course's pick, by slot.
+  const ownPicks = () => {
+    const own = {};
+    for (const [id, c] of Object.entries(courseColors())) if (c.own && c.picked) own[courseList[id].slot] = c.color;
+    return own;
+  };
+  stored(['courseSlots', 'seenCourses'], (r) => {
+    Object.assign(courseSlots, r?.courseSlots);
+    courseList = r?.seenCourses || {};
+    reapply();
+  });
   // Each course's color on the page's own elements of it is the site part's: Ultra's slots, Canvas's breadcrumb and
   // tabs (X.paintCourses).
   const varText = (v) => Object.entries(v).map(([k, x]) => `${k}:${x}`).join(';');
@@ -1323,8 +1389,7 @@
     let colors = base;
     if (ultra) {
       // A slot's own course's pick colors the slot, so what Glaze can't tell apart (the calendar) agrees.
-      const own = {};
-      for (const [id, c] of Object.entries(courseColors())) if (c.own && c.picked) own[courseList[id].slot] = c.color;
+      const own = ownPicks();
       for (let n = 1; n <= 10; n++) {
         const c = own[n] || s.courses.colors[n];
         if (c) setVar(`--gz-pick-${n}`, c);
@@ -1428,6 +1493,19 @@
     if (said) syncDocTools();
     syncScene();
     armFlip();
+    coursesSig = courseSig();
+  };
+  // A new course list (another tab's, or this one's ten-minute read) changes the palette only where this page's course
+  // color, tint or a slot's own pick moves; otherwise what names or colors courses is redrawn, and a pass runs the rest.
+  let coursesSig = '';
+  const courseSig = () => JSON.stringify([surfaceCourse(), tintOf(), ultra && ownPicks()]);
+  const coursesIn = () => {
+    if (!settings.enabled || !links.length) return;
+    if (courseSig() !== coursesSig) return applySettings();
+    X.paintCourses();
+    X.syncNav();
+    reshaped = true;
+    if (observer && !timer && !hid()) timer = setTimeout(flush, 150);
   };
   // Scheduled dark's clock loads while a schedule is worn.
   const onSchedule = () => (links.length && worn.auto.on && worn.auto.mode === 'schedule' ? worn.auto : null);
@@ -1538,7 +1616,7 @@
   // its own over X. A page that hasn't it (its host was registered for Moodle) asks for it, and the theme doesn't wait:
   // only the sweep and the extras do (enable). Without it, the theme stays on.
   const I = { C, html, isPreview, solo, tabFrame, need, t, locale, api, capi, canvasCourseKey, canvasCourseId, courseId, celebrate, markDue, drawProgress, cardBadge, KIND,
-    cardsInView, inView, tagCards, tagExtras, courseSlots, courseColors, varText, CARD, dueLabelled, setVar, setAttr,
+    cardsInView, inView, tagCards, tagExtras, courseSlots, courseColors, varText, CARD, dueLabelled, setVar, setAttr, stored,
     setCourseList: (all) => { courseList = all; X.paintCourses(); syncCourseMenu(); reapply(); },
     get settings() { return settings; }, get ready() { return ready; }, get observer() { return observer; }, get links() { return links; }, get timer() { return timer; },
     get courseList() { return courseList; }, get worn() { return worn; } };
@@ -1585,21 +1663,31 @@
   // Independent card/widget stores aren't theme settings; don't transfer them on every page load.
   let lookX;
   let settingsRead = 0, settingsPending;
-  const load = () => {
+  // What storage held at the last read: a change is applied from its new values, not by reading every key again.
+  let held = null; // [raw, fresh]
+  const SETTING_KEYS = [...Object.keys(GZ_DEFAULTS), 'lookX'];
+  const patch = ([raw, fresh], changes, area) => {
+    const next = { ...raw };
+    if (area === 'sync') for (const k of SETTING_KEYS) if (changes[k]) { if ('newValue' in changes[k]) next[k] = changes[k].newValue; else delete next[k]; }
+    return [next, area === 'local' && changes.freshDefaults ? changes.freshDefaults.newValue?.fresh === true : fresh];
+  };
+  const load = (changes, area) => {
     const n = ++settingsRead;
-    return (settingsPending = Promise.all([new Promise((res) => {
-      try { chrome.storage.sync.get([...Object.keys(GZ_DEFAULTS), 'lookX'], (raw) => res(chrome.runtime.lastError ? {} : raw)); }
+    if (held && changes) held = patch(held, changes, area);
+    return (settingsPending = (held && changes ? Promise.resolve(held) : Promise.all([new Promise((res) => {
+      try { chrome.storage.sync.get(SETTING_KEYS, (raw) => res(chrome.runtime.lastError ? {} : raw)); }
       catch { res({}); }
     }), new Promise((res) => {
-      try { chrome.storage.local.get('freshDefaults', (r) => res(r?.freshDefaults?.fresh === true)); } catch { res(false); }
-    })]).then(([raw, fresh]) => {
+      try { stored('freshDefaults', (r) => res(r?.freshDefaults?.fresh === true)); } catch { res(false); }
+    })])).then(([raw, fresh]) => {
       if (n !== settingsRead) return settingsPending;
+      held = [raw || {}, fresh];
       lookX = raw?.lookX;
       const s = GZ_SANITIZE(raw, fresh);
       try { sessionStorage.setItem(KEPT, JSON.stringify(firstPaint(s))); } catch { /* blocked or full */ }
       // A course wearing a saved or gallery Look needs the catalogue (looks/looks.js), read only then.
       if (![...Object.values(s.courses.looks), ...Object.values(s.courseLooks)].some((v) => v.startsWith('c:'))) { looks = []; return s; }
-      return new Promise((res) => { try { chrome.storage.local.get('lookCatalog', (r) => res(r?.lookCatalog?.looks)); } catch { res(); } })
+      return new Promise((res) => { if (area === 'local' && changes.lookCatalog) res(changes.lookCatalog.newValue?.looks); else try { chrome.storage.local.get('lookCatalog', (r) => res(r?.lookCatalog?.looks)); } catch { res(); } })
         .then((l) => (n !== settingsRead ? settingsPending : (looks = Array.isArray(l) ? l.filter((e) => e?.colors && e.look && e.bg) : [], s)));
     }));
   };
@@ -1633,14 +1721,14 @@
   };
   // Mods start only in the top frame; parts also reach live course tabs.
   const modsIn = (parts = false) => {
-    if (solo && !isPreview && on(settings)) local((l) => l.get('mods', (r) => {
+    if (solo && !isPreview && on(settings)) stored('mods', (r) => {
       if (parts) partsIn(r?.mods?.length);
       if (!r?.mods?.length || window.top !== window || (globalThis.GZ_MODS && globalThis.GZ_MODWIDGETS)) return;
       chrome.runtime.sendMessage({ type: 'glaze:modpage', op: 'list' }).then((a) => {
         if (a?.mods?.length && !globalThis.GZ_MODS && chrome.runtime.getManifest().sandbox) need('mods/page/mods.js', () => globalThis.GZ_MODS).then(() => GZ_MODS.start());
         if (a?.plain?.length && !globalThis.GZ_MODWIDGETS) need('mods/page/modwidgets.js', () => globalThis.GZ_MODWIDGETS).then(() => GZ_MODWIDGETS.start());
       }, no);
-    }));
+    });
   };
   ready.then(() => modsIn(true));
   // The preview is fed the editor's state directly, before it is saved, and ignores storage so a
@@ -1662,15 +1750,18 @@
     else if (changes.lookX && (area !== 'sync' || !changes.enabled)) partsIn();
     if (area === 'local' && changes.seenCourses) {
       courseList = changes.seenCourses.newValue || {};
-      reapply();
+      coursesIn();
     }
     if (isPreview || !(area === 'local' && (changes.freshDefaults || changes.lookCatalog)) && (area !== 'sync' || !Object.keys(changes).some((k) => k in settings || k in GZ_SPEC))) return;
-    load().then((s) => {
+    const looksBefore = JSON.stringify(looks);
+    load(changes, area).then((s) => {
       const was = settings.enabled && links.length > 0;
-      settings = s;
+      // A write that leaves the settings as they were (this tab's own save, coming back) repaints nothing.
+      const same = settingsKnown && JSON.stringify(s) === JSON.stringify(settings) && JSON.stringify(looks) === looksBefore;
+      if (!same) settings = s;
       if (on(s) && !was) enable();
       else if (!on(s) && was) disable();
-      else if (on(s)) swap(applySettings);
+      else if (on(s) && !same) swap(applySettings);
       if (changes.enabled) modsIn(true);
     });
   });

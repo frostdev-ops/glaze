@@ -182,7 +182,7 @@
       on: () => settings.enabled,
       partsOn: () => settings.enabled && context.page !== 'quiz',
       parts: () => (settings.enabled && context.page !== 'quiz' && globalThis.GZ_XPARTS_PAGE?.now()) || null,
-      need: (file, ready) => ready() ? Promise.resolve() : load(file),
+      need: (file, ready) => ready() ? Promise.resolve() : [].concat(file).reduce((p, f) => p.then(() => load(f)), Promise.resolve()),
       moment: (name) => document.dispatchEvent(new CustomEvent('glaze:moment', { detail: { name } })),
     });
     // The Look's page tweaks, motion and pointer on the mock, through the page's own code (each reads GZ_CTX as it loads).

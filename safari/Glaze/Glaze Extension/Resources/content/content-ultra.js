@@ -3,6 +3,8 @@
 // state (I) and puts what it returns over its defaults (X). A second copy keeps the first; it ends on its value (loadable).
 var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const { C, html, isPreview, solo, tabFrame, need, t, locale, api, courseId, markDue, drawProgress, cardBadge, cardsInView, inView, tagCards, tagExtras, courseSlots, courseColors, varText, CARD, dueLabelled } = I;
+  // The first read of a key content.js reads as it starts comes from that one get.
+  const stored = (keys, cb) => (I.stored ? I.stored(keys, cb) : chrome.storage.local.get(keys, cb));
 
   // ---- the student's courses -------------------------------------------------------------------
   // Every course and the color slot Ultra gives it, for the editor's course list and the tint on
@@ -12,7 +14,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const record = () => {
     const at = `seenCoursesAt ${location.origin}`;
     try {
-      chrome.storage.local.get(at, (r) => {
+      stored(at, (r) => {
         if (Date.now() - (r?.[at] || 0) < 600000) return;
         myCourses().then((ms) => {
           const seen = GZ_COURSES(ms);
@@ -44,7 +46,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     return (meId ||= api('/users/me').then((m) => m.id).catch((e) => { meFailed = failed(e, at); throw e; }));
   };
   // Gradebooks and contents, fanned out over course cards: courses/ultra.js's reader through the site's queue (courses/lmsq.js).
-  const reader = () => need('courses/lmsq.js', () => globalThis.GZ_LMSQ).then(() => need('courses/ultra.js', () => globalThis.GZ_ULTRA))
+  const reader = () => need(['courses/lmsq.js', 'courses/ultra.js'], () => globalThis.GZ_LMSQ && globalThis.GZ_ULTRA)
     .then(() => { const live = () => I.settings.enabled && !!I.links.length; return GZ_ULTRA.read({ origin: location.origin, live, f: (u, o) => GZ_LMSQ.fetch(u, o, 0, live) }); });
   const covered = (rows, complete) => Object.defineProperty(rows, 'complete', { value: complete });
   // One page of memberships, shared by names and due-date exceptions.
@@ -64,9 +66,10 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // otherwise its legacy places stay in use, including while the sidebar cannot start.
   const sidebarHere = () => !!top()?.sidebar && I.settings.sidebar?.ultra !== false && /^\/ultra(\/|$)/.test(location.pathname);
   const sidebarOn = () => sidebarHere() && (globalThis.GZ_SIDEBAR_UI?.enabled?.() ?? !I.settings.sidebar?.off?.length);
-  const syncSidebar = () => load(sidebarHere, 'navigation/page/sidebar.js', 'GZ_SIDEBAR_UI');
+  // The sidebar and To Do come with the files they ask for as they start: one load each.
+  const syncSidebar = () => load(sidebarHere, ['core/widgets.js', 'navigation/sidebar.js', 'navigation/page/sidebar.js'], 'GZ_SIDEBAR_UI');
   const syncStream = () => load(() => I.links.length && (isPreview ? globalThis.GZ_STREAM_UI && html.dataset.previewPage === 'stream' : solo && /^\/ultra\/stream(?:\/|$)/.test(location.pathname)), 'courses/page/stream.js', 'GZ_STREAM_UI');
-  const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|institution-page\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname) && !(sidebarOn() && !globalThis.GZ_SIDEBAR_UI?.failed()), 'planner/page/todo.js', 'GZ_TODO_UI');
+  const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|institution-page\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname) && !(sidebarOn() && !globalThis.GZ_SIDEBAR_UI?.failed()), ['courses/ultra.js', 'planner/todo.js', 'planner/page/todo.js'], 'GZ_TODO_UI');
   const syncCardTasks = () => load(() => top()?.cardTasks && /^\/ultra\/course\/?$/.test(location.pathname) && document.querySelector(CARD), 'courses/page/cardtasks.js', 'GZ_CARD_TASKS');
   // Reminders and floating widgets are the page's, once: never again in a course tab's frame over it.
   const syncRemind = () => load(() => !tabFrame && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => top()?.[k]), 'planner/page/reminders.js', 'GZ_REMIND_UI');
@@ -209,7 +212,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // "N of M completed" (in any language: core/page.js) plus each top-level item's review circle. Redrawn
   // only when the numbers move. The Content page only: other course tabs (Discussions) list items too.
   const renderProgress = () => {
-    if (top()?.hideFolders && /^\/ultra\/courses\/_\d+_\d+\/outline(?:\/|$)/.test(location.pathname)) need('courses/folders.js', () => globalThis.GZ_FOLDERS).then(() => need('courses/page/folders.js', () => globalThis.GZ_FOLDER_UI)).then(() => GZ_FOLDER_UI.sync(!!top()?.hideFolders, meId), () => {});
+    if (top()?.hideFolders && /^\/ultra\/courses\/_\d+_\d+\/outline(?:\/|$)/.test(location.pathname)) need(['courses/folders.js', 'courses/page/folders.js'], () => globalThis.GZ_FOLDERS && globalThis.GZ_FOLDER_UI).then(() => GZ_FOLDER_UI.sync(!!top()?.hideFolders, meId), () => {});
     else globalThis.GZ_FOLDER_UI?.sync(false, meId);
     const old = document.getElementById('gz-progress');
     if (!I.settings.enhance.progress || !/^\/ultra\/courses\/_\d+_\d+\/outline(\/|$)/.test(location.pathname)) return old?.remove();
@@ -238,7 +241,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const shown = new Map(); // cid → column ids badged on this page
   const loadSeen = () => {
     seenLoad ||= new Promise((res) => {
-      try { chrome.storage.local.get(['seenGrades', 'seenContent'], (r) => res(r || {})); } catch { res({}); }
+      try { stored(['seenGrades', 'seenContent'], (r) => res(r || {})); } catch { res({}); }
     }).then((r) => { seen = r.seenGrades || {}; seenItems = r.seenContent || {}; renderNew(); });
   };
   // One course at a time, over what's stored: another tab may have recorded other courses since.
@@ -412,13 +415,14 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   if (window.top === window) try {
     const epoch = floatEpoch;
     // Not on a fresh tab's defaults: Glaze may be off.
-    chrome.storage.local.get('widgetLayout', (r) => { const go = () => epoch === floatEpoch && floatsIn(r?.widgetLayout); if (!chrome.runtime.lastError) Promise.resolve().then(() => I.ready).then(go, go); });
+    stored('widgetLayout', (r) => { const go = () => epoch === floatEpoch && floatsIn(r?.widgetLayout); if (!chrome.runtime.lastError) Promise.resolve().then(() => I.ready).then(go, go); });
     chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.widgetLayout) { const epoch = ++floatEpoch; Promise.resolve().then(() => I.ready).then(() => { if (epoch === floatEpoch) floatsIn(ch.widgetLayout.newValue); }, () => {}); } });
   } catch { /* extension reloaded */ }
 
-  // Course tabs load on demand; extras.css first reserves their cached place and size.
+  // Course tabs load on demand (the worker puts navigation/coursetabs.js in with the page); extras.css first reserves
+  // their cached place and size.
   const tabsOn = () => !!I.links.length && (isPreview || solo) && I.settings.enhance.tabs && !globalThis.GZ_CTABS?.revoked?.();
-  const syncTabs = () => (tabsOn() ? need('navigation/coursetabs.js', () => globalThis.GZ_CTABS_LIB).then(() => need('navigation/page/coursetabs.js', () => globalThis.GZ_CTABS))
+  const syncTabs = () => (tabsOn() ? need('navigation/page/coursetabs.js', () => globalThis.GZ_CTABS_LIB && globalThis.GZ_CTABS)
     .then(() => GZ_CTABS.sync(tabsOn()), () => {}) : globalThis.GZ_CTABS?.sync(false));
 
   // ---- page changes ---------------------------------------------------------------------------
@@ -429,16 +433,16 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // frame too), and only while entrances are on. Route containers themselves stay visible as Ultra builds them.
   if (solo && document.startViewTransition) {
     const PAGE_LINKS = '#base_tools a, .bb-ui-navigation-list-horizontal a';
+    // Waits on the page, not a poll: each change restarts the 120 ms; once it is still, the address is watched a frame at a time.
     const settled = (from) => new Promise((done) => {
-      const t0 = performance.now();
-      let still = t0;
-      const mo = new MutationObserver(() => { still = performance.now(); });
+      let quiet = 0, frame = 0;
+      const end = () => { mo.disconnect(); clearTimeout(quiet); clearTimeout(cap); cancelAnimationFrame(frame); done(); };
+      const moved = () => { if (location.href !== from) end(); else frame = requestAnimationFrame(moved); };
+      const still = () => { clearTimeout(quiet); cancelAnimationFrame(frame); quiet = setTimeout(moved, 120); };
+      const mo = new MutationObserver(still);
       mo.observe(document.body, { childList: true, subtree: true });
-      const check = () => {
-        const now = performance.now();
-        if ((location.href !== from && now - still > 120) || now - t0 > 500) { mo.disconnect(); done(); } else setTimeout(check, 25);
-      };
-      setTimeout(check, 25);
+      const cap = setTimeout(end, 500);
+      still();
     });
     let replaying = false;
     document.addEventListener('click', (e) => {
