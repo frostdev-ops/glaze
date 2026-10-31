@@ -1409,3 +1409,25 @@ test('a Word file edited outside Glaze is still marked kept when the run letting
   assert.equal(drive.files.get(first).meta.appProperties.glaze, 'kept');
   assert.equal(drive.files.get(first).bytes.toString(), 'PK edited in Word');
 });
+
+test('a document restored from Drive\'s trash whose file was deleted there for good comes back with a new file of its own', async () => {
+  const drive = standin(), a = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000a17';
+  await a.papers.save(key, { doc: doc('Kept'), title: 'Essay', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  await a.papers.trash(key);
+  await a.sync.touched(key); await a.fire();
+  const gone = exportOf(drive, key).meta.id;
+  drive.remove(gone);
+  drive.trash(sidecarOf(drive, key).meta.id, false);
+  assert.ok((await a.sync.run()).ok);
+  assert.ok((await a.sync.run()).ok);
+  assert.ok(!P.trashed(await a.papers.get(key)), 'restored here');
+  const own = exportOf(drive, key);
+  assert.ok(own && own.meta.id !== gone && !drive.view(own.meta.id).trashed, 'a new file of its own');
+  assert.equal(sidecarJson(drive, key).file, own.meta.id);
+  await a.papers.save(key, { doc: doc('Edited after') });
+  await a.sync.touched(key); await a.fire();
+  assert.ok(!P.trashed(await a.papers.get(key)), 'an edit afterwards leaves it out of Trash');
+  noDeletes(drive);
+});
