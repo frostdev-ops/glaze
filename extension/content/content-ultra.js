@@ -75,11 +75,11 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // Reminders and floating widgets are the page's, once: never again in a course tab's frame over it.
   const syncRemind = () => load(() => !tabFrame && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => top()?.[k]), 'planner/page/reminders.js', 'GZ_REMIND_UI');
   const syncAhead = () => load(() => !tabFrame && top()?.prefetch, 'courses/page/ahead.js', 'GZ_AHEAD');
-  // Grades, Courses and Activity from the student's last visit (enhance.instant), from first paint: courses/page/instant.js.
+  // Grades, Courses and Activity from the student's last visit (enhance.instant), once the settings are known: courses/page/instant.js.
   // Signing out (Ultra's main menu's "#" link, which Glaze's bar clicks too) forgets this site's copies and keeps no more.
   let copySignedOut = false;
-  const syncInstant = () => window.top === window && !isPreview && (globalThis.GZ_INSTANT || (!copySignedOut && top()?.instant && /^\/ultra\/(grades|course|stream)\/?$/.test(location.pathname)))
-    && need(['courses/instant.js', 'courses/page/instant.js'], () => globalThis.GZ_INSTANT).then(() => copySignedOut ? GZ_INSTANT.signout() : GZ_INSTANT.sync(!!top()?.instant, me, Promise.resolve().then(() => I.ready)), () => {});
+  const syncInstant = () => window.top === window && !isPreview && I.ready.then(() => I.settings.enabled && (globalThis.GZ_INSTANT || (!copySignedOut && top()?.instant && /^\/ultra\/(grades|course|stream)\/?$/.test(location.pathname)))
+    && need(['courses/instant.js', 'courses/page/instant.js'], () => globalThis.GZ_INSTANT).then(() => copySignedOut ? GZ_INSTANT.signout() : GZ_INSTANT.sync(!!top()?.instant, me, I.ready))).catch(() => {});
   if (window.top === window) document.addEventListener('click', (e) => {
     const a = e.target?.closest?.('.MuiDrawer-paper a[href], #base_tools a[href]'), h = a?.getAttribute('href') || '';
     if (a && (h === '#' || /logout/i.test(h))) {
