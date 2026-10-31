@@ -20,7 +20,7 @@ const ENHANCE = {
   'study/pet': ['pet'],
   'study/reminders': ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'],
   'study/imports': ['syllabus', 'insights'],
-  'navigation/tabs': ['tabs', 'prefetch'], 'pages/dashboard': ['dashboard', 'instant'], 'pages/declutter': ['hideFolders'],
+  'navigation/tabs': ['tabs', 'prefetch'], 'pages/dashboard': ['dashboard', 'instant', 'feedback'], 'pages/declutter': ['hideFolders'],
 };
 const OVERRIDE = {
   enabled: 'header', footer: 'pages/declutter', preset: 'look/palette', presets: 'look/palette',
