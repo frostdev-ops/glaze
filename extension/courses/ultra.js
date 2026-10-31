@@ -540,9 +540,10 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
       });
     };
     const me = () => (meP ||= (async () => {
-      const [c, uid] = await Promise.all([kept(), reader().me()]);
+      const cache = kept(), uid = await reader().me();
       remember(uid);
-      if (c?.uid === uid) send({ type: 'glaze:ultraMine', op: 'touch', uid });
+      // The site's answer confirms identity. The worker's membership copy is optional and must not hold up a paint.
+      cache.then((c) => { if (c?.uid === uid) send({ type: 'glaze:ultraMine', op: 'touch', uid }); });
       return uid;
     })().catch((e) => { meP = null; copy = null; throw e; }));
     const mine = () => (mineP ||= (async () => {

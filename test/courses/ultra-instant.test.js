@@ -622,3 +622,25 @@ test('the copy paints without waiting for the worker\'s save lease; the save wai
   const put = p.sent.find((m) => m.op === 'put');
   assert.ok(put && put.epoch === 'e1' && put.record.uid === '_900_1' && put.record.kind === 'grades', 'saved under the lease once it answers');
 });
+
+test('painting with the real identity store does not wait for the worker membership cache', async () => {
+  const U = require('../../extension/courses/ultra.js');
+  const local = stored('_900_1', 'grades', 'ultra-instant-grades.html'), sent = [], asked = [];
+  let release;
+  const worker = new Promise((resolve) => { release = resolve; });
+  const p = site({ local, send: () => worker });
+  const shared = U.makePage({
+    origin: () => ORIGIN, now: () => Date.now(), live: () => true,
+    local: { get: async (k) => ({ [k]: local[k] }), set: async (v) => Object.assign(local, v) },
+    send: (m) => { sent.push(m); return worker; },
+    fetch: async (url) => { asked.push(url); return { ok: true, text: async () => JSON.stringify({ id: '_900_1' }) }; },
+  });
+  p.c.GZ_ULTRA.page = shared;
+  p.c.GZ_INSTANT.sync(true, shared.me, Promise.resolve());
+  await settle();
+  assert.ok(asked.some((url) => url.endsWith('/users/me')), 'the site confirmed the student');
+  assert.ok(sent.some((m) => m.type === 'glaze:ultraMine' && m.op === 'get'), 'the worker cache is still pending');
+  assert.equal(!!p.copy(), true, 'neither the membership cache nor the save lease can hold up painting');
+  release(null);
+  await settle();
+});
