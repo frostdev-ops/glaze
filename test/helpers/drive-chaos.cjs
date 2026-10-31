@@ -793,6 +793,14 @@ const KNOWN = {
     skips: () => false,
     repro: [{ t: 'pdf', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2 }, { t: 'drive', k: 'outsidePdf', pick: 0, s: 3 }],
   },
+  'copy-stop': {
+    fixed: false,
+    join: [0],
+    about: 'a document restored from Trash whose file was deleted for good in Drive gets a new file, the worker stopping before its JSON copy names it: the link records the new file and both sides read as agreed, so the copy keeps naming the deleted file and no other device ever gets the document (seed 9700878, 2026-10-31)',
+    skips: () => false,
+    stops: 'local.get',
+    repro: [{ t: 'paper', k: 'new', d: 0, pick: 0.7293021462392062, pick2: 0.13267629174515605, s: 1511422056 }, { t: 'run', d: 0, how: 'startup', s: 1904310916, after: 'notesIdx:' }, { t: 'paper', k: 'trash', d: 0, pick: 0.391776867210865, pick2: 0.8033320291433483, s: 685288494 }, { t: 'faults', d: 0, p: 0.15, quota: false, refuse: 0 }, { t: 'run', d: 0, how: 'poke', s: 698363760 }, { t: 'paper', k: 'untrash', d: 0, pick: 0.9719573664478958, pick2: 0.019606253132224083, s: 1783675233 }, { t: 'drive', k: 'removeDoc', pick: 0.3167869916651398, s: 100762301 }, { t: 'run', d: 0, how: 'timers', s: 1428463383, kill: 120, apply: false }],
+  },
   // Open, found 2026-10-31 by tiny transfers, not yet diagnosed: a worker stopped at certain awaits of a staged first push
   // (570, 644, 842 here, the write not applied) leaves a second visible file or JSON copy for the document.
   'staged-kill-duplicate': {
