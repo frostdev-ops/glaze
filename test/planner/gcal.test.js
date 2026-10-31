@@ -446,7 +446,7 @@ const worker = (mock, { on = true, drive = false, local = {}, sync = { enabled: 
     importScripts: (...files) => {
       for (const f of files) {
         let src = f === '../planner/gcal.js' ? switched(read(`background/${f}`), on) : f === 'google.js' ? switched(read(`background/${f}`), drive) : read(`background/${f}`);
-        if (f === 'google-config.js') { assert.match(src, /\n {2}native: false,\n/); src = src.replace(/\n {2}native: false,\n/, `\n  native: ${native},\n`); }
+        if (f === 'google-config.js') { assert.match(src, /\n {2}native: (?:true|false),\n/); src = src.replace(/\n {2}native: (?:true|false),\n/, `\n  native: ${native},\n`); }
         vm.runInContext(src, context);
       }
     },
