@@ -2,8 +2,8 @@
 # A dev copy of the extension for trying Google Drive with Glaze's real clients (background/google-config.js). Chrome's sign-in
 # (getAuthToken with the "Chrome extension" client) and the Web client's redirect (https://<id>.chromiumapp.org/) both need
 # the Chrome Web Store item's ID, which Chrome gives an unpacked copy only when its manifest carries the store's public key
-# ("key"). So: the store package (package.sh), unzipped into a folder, with Drive's build-time switch turned on
-# (background/google.js ON), the manifest's oauth2 client with Drive's scopes and the optional identity permission
+# ("key"). So: the store package (package.sh), unzipped into a folder, with Drive's build-time switch on (background/google.js
+# ON, turned on here if a branch has it off), the manifest's oauth2 client with Drive's scopes and the optional identity permission
 # (tools/build/oauth-manifest.js), and the key added, in that copy only. Never in the repo or the package (test/platform/google.test.js).
 #
 #   tools/dev/dev-drive.sh <file holding the store's public key, one base64 line> [folder, default dist/glaze-dev-drive]
@@ -27,8 +27,8 @@ const key = fs.readFileSync(keyFile, 'utf8').trim();
 const der = Buffer.from(key, 'base64');
 if (!der.length || der.toString('base64') !== key) throw new Error(`${keyFile}: not one line of base64`); // a public key, nothing else
 const file = path.join(out, 'background/google.js'), src = fs.readFileSync(file, 'utf8');
-if (!src.includes('\n  const ON = false;\n')) throw new Error('background/google.js: no ON switch');
-fs.writeFileSync(file, src.replace('\n  const ON = false;\n', '\n  const ON = true;\n'));
+if (src.includes('\n  const ON = false;\n')) fs.writeFileSync(file, src.replace('\n  const ON = false;\n', '\n  const ON = true;\n'));
+else if (!src.includes('\n  const ON = true;\n')) throw new Error('background/google.js: no ON switch');
 const { oauth } = require(path.resolve('tools/build/oauth-manifest.js'));
 const at = path.join(out, 'manifest.json');
 const manifest = oauth(JSON.parse(fs.readFileSync(at, 'utf8')), {

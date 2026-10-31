@@ -25,11 +25,6 @@ const ext = env.staged(process.env.EXT || path.join(__dirname, '../../extension'
   m.optional_permissions = m.optional_permissions.filter((p) => p !== 'identity');
   m.oauth2 = { client_id: CHROME_CLIENT, scopes: require('../../extension/background/google-config.js').scopes };
   fs.writeFileSync(file, JSON.stringify(m, null, 2));
-  // Drive's build-time switch on in this copy only, as tools/dev/dev-drive.sh does (the staged file is a link: replaced, not edited).
-  const g = path.join(ext, 'background/google.js'), src = fs.readFileSync(g, 'utf8');
-  if (!src.includes('\n  const ON = false;\n')) throw new Error('background/google.js: no ON switch');
-  fs.rmSync(g);
-  fs.writeFileSync(g, src.replace('\n  const ON = false;\n', '\n  const ON = true;\n'));
 }
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const REDIRECT = `https://${id}.chromiumapp.org/`;

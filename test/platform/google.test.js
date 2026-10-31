@@ -845,26 +845,37 @@ test('packages: switched on, the shipped config gives Chrome Calendar\'s client 
   assert.deepEqual(firefox.optional_permissions, repo.optional_permissions.filter((p) => p !== 'identity'));
 });
 
-// ---- the build-time switch (background/google.js ON): off on this branch, as Calendar's is, until the release that ships Drive ----
-test('Drive is switched off: the worker refuses, Settings has no row, and the packages carry neither oauth2 nor identity', async () => {
-  assert.equal(G.ON, false);
-  const h = harness({ on: G.ON }); // the shipped switch
-  assert.deepEqual(await h.g.status(), { ok: false, why: 'off' });
-  assert.deepEqual(await h.g.connect(), { ok: false, why: 'off' });
-  assert.deepEqual(await h.g.pick(), { ok: false, why: 'off' });
-  await assert.rejects(h.g.token(), (e) => e.why === 'off');
-  assert.deepEqual([h.log.auth, h.log.launch, h.log.fetch, h.local], [[], [], [], {}]);
-  for (const target of ['chrome', 'firefox']) {
-    const m = oauth(repo, { target, calendar: false, drive: G.ON, config: C });
-    assert.equal(m.oauth2, undefined, target);
-    assert.ok(![...(m.optional_permissions || []), ...m.permissions].includes('identity'), target);
+// ---- the build-time switch (background/google.js ON): on since 4.0.1, everywhere but Safari (background/google-config.js native) ----
+test('Drive is switched on: the shipped worker offers Chrome, Edge, Brave and Firefox their sign-in, and Safari nothing yet', async () => {
+  assert.equal(G.ON, true);
+  assert.equal(C.native, false, 'Safari waits for its app sign-in');
+  for (const [flow, firefox] of [['chrome', false], ['web', false], ['web', true]]) {
+    const h = harness({ on: G.ON, config: C, flow, firefox, client: C.chrome });
+    assert.deepEqual(await h.g.status(), { ok: true, flow, email: null, picker: true }, `${flow}${firefox ? ' (Firefox)' : ''}`);
   }
+  const safari = harness({ on: G.ON, config: C, flow: 'native' });
+  assert.deepEqual(await safari.g.status(), { ok: false, why: 'browser' });
+  assert.deepEqual(await safari.g.connect(), { ok: false, why: 'browser' });
+  assert.deepEqual([safari.log.native, safari.log.fetch, safari.local], [[], [], {}]);
   const src = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
   const at = src.indexOf("m?.type !== 'glaze:google'");
-  assert.match(src.slice(at, src.indexOf('return true;', at)), /if \(!GZ_GOOGLE\.ON\) \{ reply\(\{ ok: false, why: 'off' \}\); return; \}/, 'the worker refuses every operation');
+  assert.match(src.slice(at, src.indexOf('return true;', at)), /if \(!GZ_GOOGLE\.ON\) \{ reply\(\{ ok: false, why: 'off' \}\); return; \}/, 'a build with the switch off still refuses every operation');
 });
 
-test('scripts/dev-drive.sh: a dev copy with Drive on, Glaze\'s client and scopes, identity and the store key; the package and repo stay off', () => {
+const CAL = 'https://www.googleapis.com/auth/calendar.app.created';
+test('packages: Chrome\'s (Edge and Brave install its store item) has Calendar\'s and Drive\'s scopes and optional identity; Firefox\'s holds identity and no oauth2', () => {
+  assert.equal(require('../../extension/planner/gcal.js').ON, true);
+  const chrome = oauth(repo, { target: 'chrome', calendar: true, drive: G.ON, config: C });
+  assert.deepEqual(chrome.oauth2, { client_id: C.chrome, scopes: [CAL, DRIVE, 'openid', 'email'] });
+  assert.deepEqual(chrome.permissions, repo.permissions);
+  assert.deepEqual(chrome.optional_permissions, ['identity', 'nativeMessaging']);
+  const firefox = oauth(repo, { target: 'firefox', calendar: false, drive: G.ON, config: C });
+  assert.equal(firefox.oauth2, undefined);
+  assert.deepEqual(firefox.permissions, [...repo.permissions, 'identity']);
+  assert.deepEqual(firefox.optional_permissions, ['nativeMessaging']);
+});
+
+test('tools/dev/dev-drive.sh: the store package as shipped (Drive on, no key), Safari\'s staging without oauth2 or identity, and the key in the dev copy only', () => {
   const { execFileSync } = require('node:child_process');
   const os = require('node:os');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-drive-pkg-'));
@@ -875,17 +886,25 @@ test('scripts/dev-drive.sh: a dev copy with Drive on, Glaze\'s client and scopes
     assert.match(out, /extension ID [a-p]{32}/);
     const zip = path.join(dir, 'dist', `glaze-v${repo.version}.zip`);
     const packed = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json']));
-    // The store package: Calendar's scope alone (planner/gcal.js ON), nothing of Drive's.
-    const CAL = 'https://www.googleapis.com/auth/calendar.app.created', calendar = require('../../extension/planner/gcal.js').ON === true;
-    assert.deepEqual(packed.oauth2?.scopes, calendar ? [CAL] : undefined, 'the store package: no Drive scope');
-    assert.equal((packed.optional_permissions || []).includes('identity'), calendar);
-    assert.match(execFileSync('unzip', ['-p', zip, 'background/google.js']).toString(), /\n {2}const ON = false;\n/);
+    const scopes = [CAL, DRIVE, 'openid', 'email'];
+    assert.deepEqual(packed.oauth2, { client_id: C.chrome, scopes });
+    assert.deepEqual(packed.permissions, repo.permissions);
+    assert.deepEqual(packed.optional_permissions, ['identity', 'nativeMessaging']);
+    assert.ok(!('key' in packed), 'the store package has no key');
+    assert.match(execFileSync('unzip', ['-p', zip, 'background/google.js']).toString(), /\n {2}const ON = true;\n/);
+    // Safari's staging starts from the store package (tools/build/sync-safari-resources.sh) and drops Google's keys.
+    const safari = path.join(dir, 'safari-manifest.json');
+    fs.writeFileSync(safari, JSON.stringify(packed));
+    execFileSync('sh', [path.join(__dirname, '../../tools/build/safari-manifest.sh'), safari]);
+    const s = JSON.parse(fs.readFileSync(safari, 'utf8'));
+    assert.equal(s.oauth2, undefined);
+    assert.ok(![...s.permissions, ...(s.optional_permissions || [])].includes('identity'));
+    assert.ok(!('key' in s));
     const dev = JSON.parse(fs.readFileSync(path.join(dir, 'dev/manifest.json')));
-    assert.deepEqual(dev.oauth2, { client_id: C.chrome, scopes: [...(calendar ? [CAL] : []), ...C.scopes] }, 'the dev copy: Calendar\'s scope while it is on, and Drive\'s');
+    assert.deepEqual(dev.oauth2, { client_id: C.chrome, scopes });
     assert.deepEqual(dev.optional_permissions, repo.optional_permissions);
     assert.equal(dev.key, fs.readFileSync(keyFile, 'utf8'));
     assert.match(fs.readFileSync(path.join(dir, 'dev/background/google.js'), 'utf8'), /\n {2}const ON = true;\n/);
-    assert.equal(G.ON, false, "the repo's switch is untouched");
     assert.ok(!('key' in repo));
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

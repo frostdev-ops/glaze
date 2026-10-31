@@ -95,7 +95,7 @@ const SITES = {
   // Drive's sign-in (behind background/google-config.js's placeholders until its clients are real): Google's userinfo, and the
   // HEAD that finds the picker page that loads.
   // Drive's files (behind background/google.js's ON): the Drive v3 API and its upload address, both on www.googleapis.com.
-  'documents/drive.js': [{ at: 'const send = (url, init) => env.fetch(url', kind: 'open', host: 'https://www.googleapis.com', why: 'Drive v3 (files and uploads) answers every origin (CORS); behind GZ_GOOGLE.ON (off)' }],
+  'documents/drive.js': [{ at: 'const send = (url, init) => env.fetch(url', kind: 'open', host: 'https://www.googleapis.com', why: 'Drive v3 (files and uploads) answers every origin (CORS); behind GZ_GOOGLE.ON' }],
   'background/google.js': [{ at: 'const send = (url, init = {}) => env.fetch(url', kind: 'open', why: 'openidconnect.googleapis.com answers every origin (CORS); of the picker pages, frostdev.io is a required host and its GitHub Pages copy answers every origin' }],
   'looks/fonts.js': [{ at: 'const get = (url, as) => fetch(url', kind: 'open', host: 'https://fonts.googleapis.com', hosts: ['https://fonts.googleapis.com', 'https://fonts.gstatic.com', 'https://cdn.jsdelivr.net'], why: 'Google Fonts CSS, fonts.gstatic.com and the jsDelivr catalog files answer every origin' }],
   'settings/options.js': [{ at: 'fetch(GZ_FONTS.cssUrl(name, false)', kind: 'open', host: 'https://fonts.googleapis.com', why: 'whether a typed Google font exists' }],

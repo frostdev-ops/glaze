@@ -4,6 +4,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const read = (file) => fs.readFileSync(path.join(__dirname, '../../extension', file), 'utf8');
 const policy = read('../PRIVACY.md');
+// Google Drive's bullets under What Glaze stores and Network requests; Safari offers Drive once its app sign-in is on
+// (background/google-config.js native).
+const SAFARI = require('../../extension/background/google-config.js').native === true;
+const OFFERED = SAFARI ? 'Chrome, Edge, Brave, Firefox and Safari, off until you connect' : 'Chrome, Edge, Brave and Firefox, off until you connect; Safari doesn\'t offer it';
+const STORED = `- **Google Drive** (${OFFERED}):`, NETWORK = `- **Google Drive** (${OFFERED}). The requests`;
+const storedDrive = () => { const at = policy.indexOf(STORED); assert.ok(at > 0, STORED); return policy.slice(at, policy.indexOf('- **Gradescope in To Do**', at)); };
 
 test('media policy bounds container cleanup and preserves the local-only legacy exception', () => {
   assert.match(policy, /removed from the file’s container/);
@@ -54,22 +60,26 @@ test('optional Google Drive is disclosed in both privacy texts, with its scope, 
     assert.match(text, /`(?:https:\/\/www\.googleapis\.com\/auth\/)?drive\.file`/, file);
     assert.match(text, /frostdev\.io\/glaze\/drive-picker\//, file);
     assert.match(text, /frostdev-ops\.github\.io\/glaze-drive-picker\//, file);
-    assert.match(text, /Google Drive[^.]*unavailable in (?:this|the current) build/, file);
+    assert.ok(text.replaceAll('**', '').includes(`Google Drive (${OFFERED})`), `${file}: where Drive is offered`);
+    assert.doesNotMatch(text, /Google Drive[^.]*unavailable in (?:this|the current) build|(?:future|later) build that enables/, file);
     assert.match(limited, /Drive/, file);
     assert.match(limited, /\[Google API Services User Data Policy\]\(https:\/\/developers\.google\.com\/terms\/api-services-user-data-policy\), including\s+the Limited Use requirements/, file);
   }
   const google = policy.slice(policy.indexOf('## Google user data'), policy.indexOf('## Hosting'));
-  assert.match(google, /Google Drive is unavailable in this build/);
+  assert.match(google, /Google Drive \(Chrome, Edge, Brave and Firefox, off until you\s+connect\)/);
+  assert.doesNotMatch(google, /Google Drive[^.]*unavailable/);
   assert.doesNotMatch(google, /Google Calendar sync[^.]*unavailable/);
   assert.match(google, /Google Drive access \(`drive\.file`/);
 });
 
-test('Google Drive storage disclosures include the account id and Safari refresh token', () => {
-  const stored = policy.slice(policy.indexOf('- **Google Drive**'), policy.indexOf('- **Gradescope in To Do**'));
+// Safari's refresh token in the Keychain is disclosed only while Safari offers Drive.
+test('Google Drive storage disclosures include the account id, and Safari\'s refresh token while Safari offers Drive', () => {
+  const stored = storedDrive();
   assert.match(stored, /\{ email, sub, flow, at \}/);
   for (const text of [stored, read('../docs/privacy.md')]) {
-    assert.match(text, /refresh token[^.]*Keychain/i);
-    assert.match(text, /access tokens?[^.]*memory/i);
+    if (SAFARI) assert.match(text, /refresh token[^.]*Keychain/i);
+    else assert.doesNotMatch(text, /Keychain|refresh token/i);
+    assert.match(text, /access\s+tokens?[^.]*memory/i);
   }
   assert.match(read('../docs/privacy.md'), /Google account id/);
   assert.doesNotMatch(policy, /Safari will (?:keep it|use[^.]*keep it)\s+in the Keychain/);
@@ -119,8 +129,9 @@ test('Disconnect, for Calendar and Drive, is disclosed as this device only, neve
   assert.doesNotMatch(bye + read('planner/gcal.js') + read('background/google.js'), /GZ_GCAL\.revoke|REVOKE|oauth2\.googleapis\.com\/revoke/, 'the code: nothing revokes');
   assert.match(bye, /if \(!driveOn\) await Promise\.resolve\(\)\.then\(releaseIdentity\)/, 'the code: identity goes once Drive isn\'t connected either');
   const network = policy.slice(policy.indexOf('## Network requests'));
-  const calendar = network.slice(network.indexOf('- **Google Calendar sync**'), network.indexOf('- **Google Drive** (off until you connect)'));
-  const drive = network.slice(network.indexOf('- **Google Drive** (off until you connect)'), network.indexOf('- **Tasks on course cards**'));
+  assert.ok(network.includes(NETWORK), NETWORK);
+  const calendar = network.slice(network.indexOf('- **Google Calendar sync**'), network.indexOf(NETWORK));
+  const drive = network.slice(network.indexOf(NETWORK), network.indexOf('- **Tasks on course cards**'));
   for (const [name, part] of [['Calendar', calendar], ['Drive', drive]]) {
     assert.doesNotMatch(part, /revocation|to revoke|asks Google to revoke/, name);
     const d = part.slice(part.indexOf('**Disconnect**'));
@@ -130,19 +141,20 @@ test('Disconnect, for Calendar and Drive, is disclosed as this device only, neve
   }
   assert.match(calendar.slice(calendar.indexOf('**Disconnect**')), /`identity`[^.]*unless Google Drive\s+is\s+connected\s+on\s+this\s+device/);
   assert.match(drive.slice(drive.indexOf('**Disconnect**')), /`identity`[^.]*unless Google Calendar sync\s+is\s+connected\s+on\s+this\s+device/);
-  const identity = policy.slice(policy.indexOf('- `identity` (Chrome only, optional)'), policy.indexOf('- `unlimitedStorage`'));
-  assert.match(identity, /removed on\s+Disconnect[^.;]*unless Google Drive/);
-  assert.match(identity, /removed on Disconnect, unless Google Calendar sync/);
+  const identity = policy.slice(policy.indexOf('- `identity` (Chrome, Edge and Brave, optional; Firefox, from install)'), policy.indexOf('- `unlimitedStorage`'));
+  assert.match(identity, /Calendar's Disconnect removes it unless Google\s+Drive is connected on this device, and Drive's unless Google Calendar sync is\./);
+  assert.match(identity, /Firefox has no optional `identity`, so\s+its package holds it from install/);
   const docs = read('../docs/privacy.md');
   assert.doesNotMatch(docs, /revokes? access|to revoke/i);
   assert.match(docs, /\*\*Disconnect\*\* deletes them on this device only[^.]*unless Google Drive/);
   assert.match(docs, /Disconnect forgets the sign-in on this device only[^.]*myaccount\.google\.com\/connections/);
 });
 
-test('Safari\'s nativeMessaging and the storage permission name what Google Drive uses them for', () => {
+test('Safari\'s nativeMessaging names Google Drive while Safari offers it, and the storage permission names Sync to Google Drive', () => {
   assert.match(read('background/background.js'), /native: \(message\) => chrome\.runtime\.sendNativeMessage\(GZ_GOOGLE\.APP, message\)/, 'the code: Safari signs in through the handler');
   const native = policy.slice(policy.indexOf('- `nativeMessaging`'), policy.indexOf('- `activeTab`'));
-  assert.match(native, /Google Drive/);
+  if (SAFARI) assert.match(native, /Google Drive/);
+  else assert.doesNotMatch(native, /Google Drive/);
   const storage = policy.slice(policy.indexOf('- `storage`'), policy.indexOf('- No permission for reading PDFs'));
   assert.match(storage, /Sync to Google Drive/);
 });
@@ -181,20 +193,24 @@ test('Sync to Google Drive\'s storage disclosure names every key it keeps, and t
   assert.ok(keys.has('driveSyncWaiting') && keys.has('driveSyncStamps'), [...keys].join());
   assert.match(read('background/background.js'), /if \(!\(on \|\| typeof st\?\.account === 'string'\) \|\| !googleLib\(\)\.ON\) return;/, 'the code: stamped while off but bound');
   assert.match(read('documents/drive-sync.js'), /if \(!on\) \{ stopped\+\+; await setState\(\{ on: false, off: true, busy: 0 \}\);/, 'the code: turning it off keeps its state');
-  const stored = policy.slice(policy.indexOf('- **Google Drive** (off until you connect), unavailable'), policy.indexOf('- **Gradescope in To Do**'));
+  const stored = storedDrive();
   for (const k of keys) assert.ok(stored.includes(`\`${k}${k.endsWith(':') ? '…' : ''}\``), `PRIVACY.md names ${k}`);
   assert.doesNotMatch(stored, /While \*\*Sync to Google Drive\*\* is on, `chrome\.storage\.local` also holds/);
   assert.match(stored, /Sync to Google Drive\*\* is on, `chrome\.storage\.local` also holds its state[^:]*turned off/);
 });
 
 // Safari signs in with the authorization code flow in its handler (safari/…/GlazeGoogle.swift): the code is exchanged and
-// access tokens renewed at oauth2.googleapis.com/token.
-test('Safari\'s token requests to oauth2.googleapis.com are disclosed in both privacy texts', () => {
+// access tokens renewed at oauth2.googleapis.com/token. Both privacy texts name that host while Safari offers Drive, and only then.
+test('Safari\'s token requests to oauth2.googleapis.com are disclosed in both privacy texts while Safari offers Drive', () => {
   const swift = fs.readFileSync(path.join(__dirname, '../../safari/Glaze/Glaze Extension/GlazeGoogle.swift'), 'utf8');
   assert.match(swift, /static let tokenURL = URL\(string: "https:\/\/oauth2\.googleapis\.com\/token"\)!/);
   assert.match(swift, /"grant_type": "refresh_token"/);
-  const at = policy.indexOf('- **Google Drive** (off until you connect). Unavailable'), network = policy.slice(at, policy.indexOf('  - **Connect**', at));
+  const at = policy.indexOf(NETWORK), network = policy.slice(at, policy.indexOf('  - **Connect**', at));
   assert.ok(at > 0 && network.length > 0);
+  if (!SAFARI) {
+    for (const text of [network, read('../docs/privacy.md')]) assert.doesNotMatch(text, /oauth2\.googleapis\.com/);
+    return;
+  }
   assert.match(network, /`https:\/\/oauth2\.googleapis\.com`[^.]*Safari[^.]*access tokens/);
   assert.match(read('../docs/privacy.md'), /`oauth2\.googleapis\.com`[^)]*Safari[^)]*access tokens/);
 });
@@ -207,7 +223,7 @@ test('Sync to Google Drive\'s storage disclosure says when another account delet
   assert.match(bg, /if \(!googleLib\(\)\.ON \|\| st\?\.off === true\) return;\n\s*\/\/ Reconnecting a different account/, 'the code: Sync off, another account\'s Connect leaves its state');
   assert.match(sync, /if \(st\.account && st\.account !== who\) \{\s*await forget\(\);/, 'the code: a run under another account forgets it');
   assert.match(sync, /changed = st\.account && st\.account !== who;\s*if \(changed\) await forget\(\);/, 'the code: turning it on for another account forgets it');
-  const stored = policy.slice(policy.indexOf('- **Google Drive** (off until you connect), unavailable'), policy.indexOf('- **Gradescope in To Do**'));
+  const stored = storedDrive();
   assert.doesNotMatch(stored, /Connecting another account deletes all of it/);
   assert.match(stored, /Connecting another account while Sync is on, or turning Sync on for\s+another account, deletes all of it\./);
 });
@@ -230,7 +246,7 @@ test('Sync to Google Drive\'s storage disclosure names the retry bookkeeping and
   assert.match(read('documents/drive-sync.js'), /await setState\(\{ problem: why, busy: 0, fails, wait: now\(\) \+ Math\.min\(WAIT\.most, WAIT\.run \* 2 \*\* \(fails - 1\)\) \}\);/, 'the code: a failed run');
   assert.match(read('documents/drive-sync.js'), /await setState\(\{ busy: now\(\) \}\);/, 'the code: a run under way');
   assert.match(read('background/drive-store.js'), /await ctx\.state\(\{ snap: now\(\), snapSkip: null \}\);/, 'the code: the day\'s try');
-  const stored = policy.slice(policy.indexOf('- **Google Drive** (off until you connect), unavailable'), policy.indexOf('- **Gradescope in To Do**'));
+  const stored = storedDrive();
   const state = stored.slice(stored.indexOf('also holds its state'), stored.indexOf('(`driveSync`)'));
   for (const k of ['fails', 'wait', 'busy', 'snap', 'snapSkip']) assert.ok(state.includes(`\`${k}\``), `driveSync's ${k} named`);
 });
@@ -241,7 +257,7 @@ test('Sync to Google Drive\'s storage disclosure names the retry bookkeeping and
 test('Sync to Google Drive discloses the transfer state it keeps: session addresses, offsets and staged bytes', () => {
   assert.match(read('background/background.js'), /GZ_DOC_FILES\.idb\(globalThis\.indexedDB, 'glaze-drive'\)/, 'the code: the stage');
   assert.match(read('documents/drive-sync.js'), /session: null, file: null \}\);/, 'the code: an upload\'s session on its record');
-  const stored = policy.slice(policy.indexOf('- **Google Drive** (off until you connect), unavailable'), policy.indexOf('- **Gradescope in To Do**'));
+  const stored = storedDrive();
   const moves = stored.slice(stored.indexOf('larger than one request'), stored.indexOf('`glaze-drive`') + 40);
   assert.ok(stored.includes('larger than one request') && stored.includes('`glaze-drive`'), 'PRIVACY.md: the transfers');
   assert.match(moves, /resumable[- ]session address/);

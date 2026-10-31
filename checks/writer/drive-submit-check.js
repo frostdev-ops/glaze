@@ -1,5 +1,4 @@
-// The submit sheet's From Google Drive (writer/frame/writer-submit.js) in the real unpacked extension, Drive's switch on in a staged copy
-// (as tools/dev/dev-drive.sh turns it on), on the synthetic Ultra attempt (test/fixtures/ultra-writer-attempt.html with
+// The submit sheet's From Google Drive (writer/frame/writer-submit.js) in the real unpacked extension (a staged copy), on the synthetic Ultra attempt (test/fixtures/ultra-writer-attempt.html with
 // checks/mocks/ultra-attempt-harness.js, as checks/writer/writer-submit-check.js runs it). Sign-in is Chrome's getAuthToken stood in
 // for, the Picker the worker's pick stood in for with the files it would hand back, and Drive v3 a local HTTPS server the
 // googleapis hosts resolve to (test/fixtures/drive/v3.js's shapes); every other host is refused.
@@ -76,11 +75,6 @@ const answer = (req, res, body) => {
       mf.optional_permissions = mf.optional_permissions.filter((p) => p !== 'identity');
       mf.oauth2 = { client_id: CONFIG.chrome, scopes: CONFIG.scopes };
       fs.writeFileSync(file, JSON.stringify(mf, null, 2));
-      // Drive's build-time switch on in this copy only (the staged file is a link: replaced, not edited).
-      const g = path.join(ext, 'background/google.js'), src = fs.readFileSync(g, 'utf8');
-      if (!src.includes('\n  const ON = false;\n')) throw new Error('background/google.js: no ON switch');
-      fs.rmSync(g);
-      fs.writeFileSync(g, src.replace('\n  const ON = false;\n', '\n  const ON = true;\n'));
     }
     const { execFileSync } = require('node:child_process');
     execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', path.join(tmp, 'key.pem'), '-out', path.join(tmp, 'cert.pem'), '-days', '1', '-subj', '/CN=glaze-drive-submit-check'], { stdio: 'ignore' });

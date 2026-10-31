@@ -23,10 +23,9 @@
 // them), now() }.
 // Classic script; module.exports for node.
 var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
-  // The build-time switch, off until the release that ships Drive (and its privacy policy). Off: the worker refuses every
-  // operation, Settings shows no Google Drive row, and the packages carry no oauth2 key or identity for Drive
-  // (scripts/oauth-manifest.js). scripts/dev-drive.sh turns it on in its copy.
-  const ON = false;
+  // The build-time switch, on since 4.0.1. Off: the worker refuses every operation, Settings shows no Google Drive row, and
+  // the packages carry no oauth2 key or identity for Drive (tools/build/oauth-manifest.js).
+  const ON = true;
   const O = typeof GZ_OAUTH !== 'undefined' ? GZ_OAUTH : require('./oauth.js');
   const AUTH = 'https://accounts.google.com/o/oauth2/v2/auth';
   const USERINFO = 'https://openidconnect.googleapis.com/v1/userinfo';

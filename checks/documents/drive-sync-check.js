@@ -1,5 +1,4 @@
-// Sync to Google Drive (extension/documents/drive-sync.js, extension/background/drive-store.js) in the real extension, headless: a staged copy with Drive's switch on (as
-// tools/dev/dev-drive.sh turns it on) and its real worker, against a stand-in Drive that keeps its state across requests
+// Sync to Google Drive (extension/documents/drive-sync.js, extension/background/drive-store.js) in the real extension, headless: a staged copy and its real worker, against a stand-in Drive that keeps its state across requests
 // (test/helpers/drive-standin.cjs, Drive v3's shapes from test/fixtures/drive/v3.js, not seen live), served through
 // Playwright's route() and, for what route() can't see, a local HTTPS server www.googleapis.com resolves to; every other
 // host is refused. Sign-in is Chrome's getAuthToken, stood in for.
@@ -28,10 +27,6 @@ const ext = env.staged(process.env.EXT || path.join(__dirname, '../../extension'
   m.optional_permissions = m.optional_permissions.filter((p) => p !== 'identity');
   m.oauth2 = { client_id: CONFIG.chrome, scopes: CONFIG.scopes };
   fs.writeFileSync(file, JSON.stringify(m, null, 2));
-  const g = path.join(ext, 'background/google.js'), src = fs.readFileSync(g, 'utf8');
-  if (!src.includes('\n  const ON = false;\n')) throw new Error('background/google.js: no ON switch');
-  fs.rmSync(g);
-  fs.writeFileSync(g, src.replace('\n  const ON = false;\n', '\n  const ON = true;\n'));
 }
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const TOKEN = 'ya29.check-drive-token';
