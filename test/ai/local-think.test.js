@@ -213,6 +213,22 @@ test('think mode holds the forced close inside the engine\'s room before any pre
   assert.equal(s.eng.log.decodes.filter((d) => d.phase === 'think').length, 256);
 });
 
+test('a host think run without an optional trained window keeps reasoning inside the engine room', async () => {
+  const F = require('../../extension/ai/local/format.js'), R = require('../../extension/ai/request.js');
+  const formatted = F.format(R.clean(request(REVIEW, { text: 'x' })), { think: true });
+  const context = 1024, input = TOK.encodeWith(formatted.parts).length;
+  const close = TOK.encodeWith(formatted.think.close).length;
+  for (const spare of [0, 64]) {
+    const maxTokens = context - input - close - spare, s = setup({ context, reply: 'a'.repeat(2000) });
+    const out = await s.env.link.call('run', { model: 'glaze-q4', ...formatted,
+      think: { ...formatted.think, budget: 256 }, maxTokens });
+    assert.equal(out.finish, 'length');
+    assert.equal(out.text.length, maxTokens, 'without a trained window the requested answer budget stays intact');
+    assert.equal(out.usage.thought, spare, 'reasoning gets only the room beside the reserved answer and close');
+    assert.equal(s.eng.log.prefills.flat().length + s.eng.log.decodes.length, context, 'the physical engine limit holds');
+  }
+});
+
 test('the speed gate keeps measured versus estimated rates across worker restarts', async () => {
   // A measured rate is smoothed with the next measurement, even after the worker restarts.
   let ms = 10;
