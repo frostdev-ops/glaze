@@ -32,6 +32,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
   const FOLDER = 'application/vnd.google-apps.folder', JSON_TYPE = 'application/json', ZIP = 'application/zip';
   const HASH = /^[0-9a-f]{32}$/, SUM = /^[0-9a-f]{64}$/;
   const SNAP = { every: 864e5, keep: 5 };
+  const UNTIMED = 1; // the time of a record whose change time isn't known here: older than any change made with one
   const MAX = 32 << 20; // a 20 MB attachment as base64, with room
   const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
   const ACCT = 'notesIdx:https?:\\/\\/[a-z\\d.-]+(?::\\d+)?\\/(?:\\d{1,20}|_\\d{1,20}_\\d{1,20})';
@@ -481,7 +482,9 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         if (was && R && !R.removed) return;
       }
       if (!was) {
-        if (!R || R.removed) { if (value !== undefined) await push(ctx, h, area, key, cat, null, at || now()); return; }
+        // Here only. With no time of its own (it was here before Sync was bound to this account): older than any change made
+        // with one, so a later change another device hasn't pushed yet still wins over it.
+        if (!R || R.removed) { if (value !== undefined) await push(ctx, h, area, key, cat, null, at || UNTIMED); return; }
         const got = await fetchRec(ctx, R, h, owner);
         if (got.sum === lsum) return put(h, { area, key, cat, id: R.id, lsum, rsum: got.sum, at: got.at, seen: Math.max(at, got.at) }, null);
         if (value === undefined) { if (got.value !== undefined) await take(h, got, R, null, value); else await put(h, { area, key, cat, id: R.id, lsum, rsum: got.sum, at: got.at, seen: got.at }, null); return; }
