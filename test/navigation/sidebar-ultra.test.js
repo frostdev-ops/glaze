@@ -1214,7 +1214,21 @@ test('covering a first visit preserves its reveal wait and never restarts an exp
   }
 });
 
-test("a layout batches its reads before writes, with at most one re-measure after geometry changes on a course open", async () => {
+test("a course not seen yet on a site with a saved height elsewhere is held at the least of them, with Course notes and the dock shown", async () => {
+  const HELD = `detailsHeight:${O}`;
+  const p = page({ at: 'courses', stored: { ...record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }), [HELD]: { _102_1: 260, _103_1: 200 } } });
+  await p.pass();
+  const inner = p.$('#main-content-inner');
+  inner.querySelector('.base-courses-container').remove();
+  p.c.location.pathname = '/ultra/courses/_101_1/outline';
+  const { aside, content } = routedOutline(p);
+  inner.append(p.el('div', 'course-content-container', p.el('div', 'panel-wrap', p.el('div', 'bb-course-navigation', 'Course'), p.el('div', 'course-outline-grid', content, aside))));
+  await p.pass();
+  assert.equal(heldRoom(p), 200);
+  assert.equal(p.doc.root.dataset.gzSbUnsized, undefined, 'only a site with no saved height at all holds them back');
+});
+
+test("on a course open a layout reads everything it measures before it writes <html>'s attributes and styles, and reads nothing after", async () => {
   const { El } = require('../stand-in-dom.js');
   const p = page({ at: 'courses', stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
   await p.pass();
@@ -1243,7 +1257,7 @@ test("a layout batches its reads before writes, with at most one re-measure afte
     const first = f.findIndex((x) => x.startsWith('w '));
     assert.ok(first > 0 && f[0].startsWith('r '), 'the first measurement precedes writes');
     const batches = f.map((x) => x[0]).filter((x, i, a) => !i || x !== a[i - 1]).join('');
-    assert.match(batches, /^rw(rw?)?$/, `only one batched re-measure: ${f.join(', ')}`);
+    assert.match(batches, /^r+w+$|^rw$/, `no read after a write: ${f.join(', ')}`);
   }
 });
 
