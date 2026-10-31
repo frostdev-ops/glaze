@@ -276,6 +276,9 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
     estimate: 'Your author-page citations and {heading} miss required APA style; no rubric level descriptions are supplied, so Glaze estimates {level}, the lowest band ({value}/{points}; {deduction} points deducted).',
     brief: 'Your author-page citations and {heading} miss required APA style; with no level descriptions, Glaze estimates the lowest band ({value}/{points}; {deduction} points deducted).',
     fallback: 'Your author-page citations and {heading} heading conflict with required APA style; rubric rating: {level} ({earned}/{total} points).',
+    // A complete, verified decision whose explanation no model comment passed keeps its grade with these.
+    rating: 'Rubric rating: {level} ({earned}/{total} points).',
+    score: 'Rubric score: {earned}/{total} points.',
   };
   // An assessment speaks to the student or about the draft; a bare sentence with neither is wording for the paper.
   const ABOUT = /\b(?:you|your|yours|draft|paper|essay|post|reply|paragraph|sentence|thesis|claim|argument|evidence|sources?|citations?|quotes?|quotation|introduction|conclusion|section|analysis|requirement|rubric|criterion|instructions|prompt|words?|length|organization|structure|transition)\b/i;
@@ -298,6 +301,17 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
     // A terminal guard catches cut-off fragments without pretending periods in citations such as "et al." are a
     // language parser. The prompt controls sentence count; ordinary closing quotes and Unicode punctuation survive.
     return !!s && /[.!?。！？]["”'’)\]»」』】]*$/u.test(s);
+  };
+  // A comment the JSON grammar closed at the schema's cap keeps its last full sentence within limit ('' when none does).
+  const lastSentence = (value, limit) => {
+    const s = value.trim(), plain = s.replace(ABBREVIATIONS, (m) => m.replace(/\./g, ' ')).replace(CONTINUATIONS, (m, at, text) =>
+      m.replace(/^\s*[\p{Ll}\d,;]/u.test(text.slice(at + m.length)) ? /\./g : /\.(?!$)/g, ' '));
+    let end = 0;
+    for (const m of plain.matchAll(/[.!?。！？]["”'’)\]»」』】]*(?=\s|$)/gu)) {
+      const next = m.index + m[0].length;
+      if ([...s.slice(0, next)].length <= limit) end = next;
+    }
+    return s.slice(0, end);
   };
   const wholeComments = (comments, limit) => {
     const kept = []; let length = 0;
@@ -697,7 +711,9 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
       : a.pictures.length && !inp.visualProcessed ? { key: GRADE_REASONS.images } : null;
     const materialReason = inp.unreadFiles.length ? { key: GRADE_REASONS.files, vars: { files: inp.unreadFiles.join(', ') } }
       : imageReason || (inp.incomplete ? { key: GRADE_REASONS.coverage } : null);
-    if (!inp.grade) return { criteria: ordered, ...(materialReason && { reason: materialReason }) };
+    // A row dropped only because no explanation passed is not unassessed material (orchestrate sets inp.unexplained).
+    const unexplained = inp.unexplained ? { key: GRADE_REASONS.explanation } : null;
+    if (!inp.grade) return { criteria: ordered, ...((materialReason || unexplained) && { reason: materialReason || unexplained }) };
     // The total comes from every rubric row, never from a number invented by the model. Partial or unscored rubrics
     // still get the qualitative assessment, with no misleading partial total.
     const complete = order.length > 0 && order.every((id) => ordered.find((c) => c.id === id)?.score);
@@ -723,6 +739,7 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
     else if (inp.incomplete) reason = { key: GRADE_REASONS.coverage };
     else if (!order.length || order.some((id) => !Number.isFinite(rows.get(id).points))) reason = { key: GRADE_REASONS.scale };
     else if (invalidScore) reason = { key: GRADE_REASONS.limits };
+    else if (unexplained) reason = unexplained;
     else if (!complete) reason = { key: GRADE_REASONS.incomplete };
     else if (!(total > 0)) reason = { key: GRADE_REASONS.zero };
     else if (!summary || ordered.some((c) => !c.comment)) reason = { key: GRADE_REASONS.explanation };
@@ -961,6 +978,7 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
         // Too much relevant evidence cannot be silently discarded, or safely replaced by an optimistic score.
         if (!room(request, plan.schema)) { inp.incomplete = true; continue; }
       }
+      const layout = inp.paper && /\b(?:font|spacing|margins?|headers?|layout|docx|word document|file format)\b/i.test(plan.row.rubric);
       const resolve = (wire) => {
         const byId = new Map(plan.candidates.map((p) => [p.id, p]));
         if (new Set(wire.quotes).size !== wire.quotes.length) return null;
@@ -973,14 +991,25 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
         const checked = check({ criteria: [row] }, inp, { caps, estimates: false });
         const hit = checked?.criteria.find((c) => c.id === plan.row.id);
         if (!hit?.comment || (row.level != null && !hit.level) || (row.status === 'missing' ? 0 : row.quotes.length) !== hit.quotes.length) return null;
-        const layout = inp.paper && /\b(?:font|spacing|margins?|headers?|layout|docx|word document|file format)\b/i.test(plan.row.rubric);
         if ((local || material) && row.status !== 'missing' && !layout && !hit.quotes.length) return null;
         if (inp.grade && Number.isFinite(plan.row.points) && !hit.score) return null;
         return row;
       };
       const note = { stage: 'criterion', part: i + 1, parts: plans.length };
       const validate = (out) => S.validate(out, plan.schema).length ? null : resolve(out.criteria[0]);
-      let row;
+      // A complete decision that passes every check but its explanation: Glaze's own rubric rating from the checked
+      // level and points stands in for the comment when grading; with no verified score the row stays unexplained.
+      const verifiedWithout = (wire) => wire.status !== 'missing' && !layout && !wire.quotes.length ? null
+        : resolve({ ...wire, criterion: plan.row.id, comment: 'Your draft has been assessed.' });
+      const rating = (wire) => {
+        const verified = inp.grade && verifiedWithout(wire), assessed = verified && check({ criteria: [verified] }, inp, { caps, estimates: false })?.criteria[0];
+        const score = assessed?.score;
+        if (!score || !Number.isFinite(score.earned) || !Number.isFinite(score.total)) return null;
+        const vars = { earned: figure(score.earned, inp.lang), total: figure(score.total, inp.lang) };
+        const comment = assessed.level ? words(inp.lang, COMMENTS.rating, { ...vars, level: assessed.level.label }) : words(inp.lang, COMMENTS.score, vars);
+        return comment.length <= prose(inp.lang) ? resolve({ ...wire, criterion: plan.row.id, comment }) : null;
+      };
+      let row, unexplained = false;
       if (local) {
         const validateDecision = (out) => {
           if (S.validate(out, plan.schema).length || new Set(out.facts).size !== out.facts.length) return null;
@@ -1007,10 +1036,12 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
           // Missing requirements expose no public draft quote, but verified counterevidence still grounds the comment.
           const selectedQuotes = decision.quotes.map((id) => quotesById.get(id)), selectedFacts = decision.facts.map((id) => factsById.get(id));
           const comment = commentRequest(plan.row, checkedDecision, selectedQuotes, selectedFacts);
-          if (!room(comment, COMMENT)) { inp.incomplete = true; break; }
+          if (!room(comment, COMMENT)) { row = rating(checkedDecision); unexplained = !row; break; }
           const grounded = [plan.row.rubric, ...context.map((b) => b.text), ...selectedQuotes.map((p) => p.text), ...selectedFacts.map((p) => p.text), ...(citationsFor(plan.row)?.witnesses || []).map((p) => p.text)].map((s) => text.source(s));
           let commentFailure = '';
-          const explained = await attempt(comment, COMMENT, (out) => {
+          const explained = await attempt(comment, COMMENT, (answer) => {
+            // A comment reaching the cap the schema sent was likely closed there mid-sentence; keep its last full sentence.
+            const out = typeof answer?.comment === 'string' && [...answer.comment].length >= LOCAL_PROSE ? { ...answer, comment: lastSentence(answer.comment, prose(inp.lang)) || answer.comment } : answer;
             if (S.validate(out, commentOutput).length || !completeSentence(out.comment) || !assesses(out.comment, grounded)) return null;
             if (citationsFor(plan.row) && !citationNamed(out.comment, headingOf(citationsFor(plan.row)))) return null;
             return contradictoryStyle(out.comment, requiredStyle(plan.row, inp.lang), checkedDecision.status) ? RECONSIDER : resolve({ ...checkedDecision, criterion: plan.row.id, comment: out.comment });
@@ -1023,17 +1054,33 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
             if (fallback.length <= prose(inp.lang)) row = resolve({ ...checkedDecision, criterion: plan.row.id, comment: fallback });
             if (row) break;
           }
-          if (explained !== RECONSIDER) { row = explained; break; }
+          if (explained !== RECONSIDER) { row = explained || rating(checkedDecision); unexplained = !row; break; }
           // A known contradiction needs a new decision, not prose defending a frozen score. Reserve both calls before
           // starting; the pair has no further repairs and consumes two of the same four globally planned repairs.
-          if (pass || decisionReconsidered || repairs + 2 > 4 || used + 2 > limits.calls) { inp.incomplete = true; break; }
+          // With no re-check left, the decision stands and only its explanation failed: the rubric rating carries a verified one.
+          if (pass || decisionReconsidered || repairs + 2 > 4 || used + 2 > limits.calls) { row = rating(checkedDecision); unexplained = !row; break; }
           const reconsider = amended(request, '\nReconsider the criterion decision: its previous status and explanation contradicted each other. Re-evaluate status, level and score from the original supplied evidence. A readable missing requirement or verified mismatch is complete coverage and can be scored using the actual supplied rubric level; a preset name alone proves no compliance or mismatch. Do not invent a zero score or omit evidence. Return only the original compact decision JSON.');
-          if (!room(reconsider, plan.schema)) { inp.incomplete = true; break; }
+          if (!room(reconsider, plan.schema)) { row = rating(checkedDecision); unexplained = !row; break; }
           decisionReconsidered = true; repairs += 2;
           decision = await attempt(reconsider, plan.schema, validateDecision, note, false);
         }
-      } else row = await attempt(request, plan.schema, validate, note);
-      if (row) criteria.push(row); else inp.incomplete = true;
+      } else {
+        // Inspect explanation-only schema failures without changing the schema sent to the model. Every decision
+        // field still has to pass the original schema and resolver before it can supply a fallback rating.
+        const decisionOutput = lean(plan.schema), item = decisionOutput.properties.criteria.items;
+        item.properties.comment = {};
+        item.required = item.required.filter((key) => key !== 'comment');
+        accepts.set(plan.schema, decisionOutput);
+        let decided = null;
+        row = await attempt(request, plan.schema, (out) => {
+          const valid = validate(out);
+          const wire = out.criteria[0], decision = { ...wire, comment: 'Your draft has been assessed.' };
+          if (!valid && !S.validate({ ...out, criteria: [decision] }, plan.schema).length && verifiedWithout(wire)) decided = wire;
+          return valid;
+        }, note);
+        if (!row && decided) { row = rating(decided); unexplained = !row; }
+      }
+      if (row) criteria.push(row); else if (unexplained) inp.unexplained = true; else inp.incomplete = true;
     }
     const sourcesForSummary = [inp.text, a.instructions, a.description, a.rubric, ...a.files.map((f) => f.text), ...inp.visualRequirements, ...inp.visualReadings.map((r) => r.text)].map((s) => text.source(s));
     let summary = '';

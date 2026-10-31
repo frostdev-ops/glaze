@@ -3725,6 +3725,8 @@
   "Your author-page citations and {heading} miss required APA style; no rubric level descriptions are supplied, so Glaze estimates {level}, the lowest band ({value}/{points}; {deduction} points deducted).": "Je bronvermeldingen met auteur en pagina en de lijst {heading} volgen de vereiste APA-stijl niet; het beoordelingsschema beschrijft geen niveaus, dus Glaze schat {level}, het laagste niveau ({value}/{points} punten; −{deduction}).",
   "Your author-page citations and {heading} miss required APA style; with no level descriptions, Glaze estimates the lowest band ({value}/{points}; {deduction} points deducted).": "Je bronvermeldingen met auteur en pagina en de lijst {heading} volgen de vereiste APA-stijl niet; zonder beschrijving van de niveaus schat Glaze het laagste niveau ({value}/{points} punten; −{deduction}).",
   "Your author-page citations and {heading} heading conflict with required APA style; rubric rating: {level} ({earned}/{total} points).": "Je bronvermeldingen met auteur en pagina en de kop {heading} botsen met de vereiste APA-stijl; beoordeling volgens het beoordelingsschema: {level} ({earned}/{total} punten).",
+  "Rubric rating: {level} ({earned}/{total} points).": "Beoordeling voor dit criterium: {level} ({earned}/{total} punten).",
+  "Rubric score: {earned}/{total} points.": "Score voor dit criterium: {earned}/{total} punten.",
   "The model could not produce grounded feedback for every criterion.": "Het model kon niet voor elk criterium onderbouwde feedback geven.",
   "Checking criterion {n} of {total}…": "Criterium {n} van {total} controleren…",
   "Reading assignment material…": "Opdrachtmateriaal lezen…",
