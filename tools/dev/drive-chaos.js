@@ -12,7 +12,7 @@ const arg = (name, d) => { const i = process.argv.indexOf(`--${name}`); return i
 const flag = (name) => process.argv.includes(`--${name}`);
 const o = { ops: Number(arg('ops', process.env.ITER || 40)), devices: Number(arg('devices', 3)) };
 const masks = arg('masks', '');
-o.masks = masks === 'all' ? Object.keys(C.KNOWN) : masks.split(',').filter(Boolean);
+o.masks = masks === 'all' ? Object.keys(C.KNOWN).filter((k) => !C.KNOWN[k].fixed) : masks.split(',').filter(Boolean);
 const from = Number(arg('from', 1)), count = Number(arg('count', 200)), minutes = Number(arg('minutes', 0));
 
 const report = (r) => {
