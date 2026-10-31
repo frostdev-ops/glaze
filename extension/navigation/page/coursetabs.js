@@ -1203,7 +1203,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         d.addEventListener('scroll', scrolled, { capture: true, passive: true });
       }
       const built = doc && doc === d && doc !== f.stale && (cid === PAGE ? !/^\/courses\/\d+/.test(doc.location.pathname) : L.owns(doc.location.pathname, cid)) && (ctx.site === 'canvas' ? canvasContent(doc) : [doc.querySelector('.bb-course-navigation'), doc.querySelector('.routed-page')].some(shown))
-        && !loading(doc.body) && !doc.documentElement.matches('[data-gz-placing]');
+        && !loading(doc.body) && !doc.documentElement.matches('[data-gz-placing]') && !f.adopting;
       if (built && now - changed > 300) {
         clean();
         f.slow = false;
@@ -1336,7 +1336,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     try { el.contentWindow.name = el.name; } catch { /* gone */ }
     el.title = x?.name || t('Course');
     el.removeAttribute('data-ready');
-    const f = { el, at: Date.now(), ready: false, url, dirty: false, uid: s.uid, accountDoc: doc, adopting: { doc, at: performance.now(), ok: false, failed: false } };
+    // What its own page already drew (before) never counts as the course routed.
+    const f = { el, at: Date.now(), ready: false, url, dirty: false, uid: s.uid, accountDoc: doc,
+      adopting: { doc, at: performance.now(), ok: false, failed: false, before: [...doc.querySelectorAll('.bb-course-navigation, .routed-page')] } };
     frames.set(cid, f);
     guardFrame(cid, f);
     watch(cid, f);
@@ -1353,7 +1355,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (frames.get(cid) !== f || f.adopting !== a) return;
       let d = null; try { d = f.el.contentDocument; } catch { /* another site */ }
       if (d !== a.doc || f.ready) { f.adopting = null; return; }
-      const routed = a.ok && L.owns(d.location.pathname, cid) && [d.querySelector('.bb-course-navigation'), d.querySelector('.routed-page')].some(shown);
+      const routed = a.ok && L.owns(d.location.pathname, cid) && [d.querySelector('.bb-course-navigation'), d.querySelector('.routed-page')].some((e) => shown(e) && !a.before.includes(e));
       const late = a.failed || performance.now() - a.at > (a.ok ? ADOPT_ROUTE : ADOPT_ACK);
       if (!routed && !late) { setTimeout(step, 50); return; }
       f.adopting = null;
