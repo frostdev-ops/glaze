@@ -18,7 +18,7 @@ const stored = () => {
   const frame = (cid, dirty) => ({ el: { remove: () => removed.push(cid) }, dirty, ready: true });
   const frames = new Map([['_7_1', frame('_7_1', true)], ['_8_1', frame('_8_1', false)], ['_6_1', frame('_6_1', false)]]);
   const c = vm.createContext({ L, ctx: { site: 'ultra', courseId: () => '_1_1', courseList: () => ({ _7_1: { name: 'Biology 101' } }) }, preview: false, who: '_42_1',
-    key: () => 'ctabs:https://bb.test:_42_1', frames, spare: new Map(), next: new Map(), PAGE: 'page', requestAnimationFrame() {}, nudge() {}, closedCourse: '', showing: '_7_1', waiting: '',
+    key: () => 'ctabs:https://bb.test:_42_1', frames, items: new Map(), spare: new Map(), next: new Map(), PAGE: 'page', requestAnimationFrame() {}, nudge() {}, closedCourse: '', showing: '_7_1', waiting: '',
     tabs: [{ cid: '_1_1', at: 1 }, { cid: '_6_1', at: 2 }, { cid: '_7_1', name: 'Biology', code: 'BIO101', pin: false, at: 3, path: '/ultra/courses/_7_1/grades', top: 40 }, { cid: '_8_1', at: 4 }],
     drawerFrom: null, drawerOff() {}, showTurn: 0, wait() {}, show: (x) => { c.showing = x; }, dropNext() {}, readPrefs: () => Promise.resolve(), pass() {}, route() {},
     save: () => saves++, say: (m) => notes.push(m), t: fill, labelFor: (cid, name) => name, Date, JSON,
@@ -104,7 +104,7 @@ test('picking the page\'s own course shows its frame while that frame holds unsa
   for (const dirty of [false, true]) {
     const shown = [];
     const c = vm.createContext({ PAGE: 'page', requestAnimationFrame() {}, nudge() {}, spare: new Map(), next: new Map(), framed: '', preview: false, tabs: [{ cid: '_7_1' }], save() {}, Date,
-      frames: new Map([['_7_1', { ready: true, dirty }]]), showing: '', drop() {}, reveal: (cid) => shown.push(cid), ctx: { site: 'ultra', courseId: () => '_7_1' },
+      frames: new Map([['_7_1', { ready: true, dirty }]]), showing: '', itemAt: () => undefined, drop() {}, reveal: (cid) => shown.push(cid), ctx: { site: 'ultra', courseId: () => '_7_1' },
     });
     vm.runInContext(part('  const visit = (cid) => {', "  if (!framed && !preview) addEventListener('message'") + "\nvisit('_7_1');", c);
     assert.deepEqual(shown, [dirty ? '_7_1' : ''], dirty ? 'the frame with the work, not the page\'s fresh copy' : 'the page itself');

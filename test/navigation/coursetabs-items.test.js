@@ -34,21 +34,21 @@ const run = (over = {}) => {
   const c = vm.createContext({
     ctx: { site: 'ultra', courseId: () => '', scene() {} }, on: true, preview: false, signedOut: false, framed: '', who: '_42_1', loaded: true,
     prefs: { ahead: true, keep: true }, P: () => c.prefs, L, t: (s) => s, tabs: [{ cid: '_2_1', name: 'Two' }, { cid: '_3_1', name: 'Three' }],
-    frames: new Map(), spare: new Map(), waiting: '', PAGE: 'page', LIVE: 4, showing: '', pic: null, drag: null, standby: undefined,
+    frames: new Map(), spare: new Map(), waiting: '', showTurn: 0, PAGE: 'page', LIVE: 4, KEEP: 3, KEPT: 8, showing: '', pic: null, drag: null, standby: undefined,
     location: { origin, pathname: '/ultra/course', search: '' }, Date, URL, URLSearchParams, structuredClone, Element: class {},
     performance: { now: () => now }, setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout() {},
     document: { visibilityState: 'visible', body: {}, activeElement: null, addEventListener() {}, removeEventListener() {} },
     MutationObserver: class { observe() {} disconnect() {} },
-    host: { prepend() {} }, hostIn() {}, loading: () => false, shown: (e) => !!e, room: () => true, guardFrame() {}, watch() {}, load() {},
+    host: { prepend() {} }, hostIn() {}, loading: () => false, shown: (e) => !!e, acts: () => false, room: () => true, guardFrame() {}, watch() {}, load() {},
     anchorOf: (e) => e.anchor, pathOf: (f) => f.el.contentDocument.location.pathname + f.el.contentDocument.location.search,
     entry: () => `k${key}`, history: { pushState: () => { key++; did.push(['push']); }, back: () => did.push(['back']) },
     wait: (cid) => { c.waiting = cid; }, show: (cid) => { did.push(['show', cid]); c.showing = cid; },
     open: (cid, url) => { const f = frame(url, { ready: false }); c.frames.set(cid, f); did.push(['open', cid, url]); return f; },
-    toTop: (op, m) => did.push(['toTop', op, structuredClone(m)]), send: () => Promise.resolve(null), revoke() {},
+    toTop: (op, m) => did.push(['toTop', op, structuredClone(m)]), send: () => Promise.resolve(null), revoke() {}, say() {},
     ...over,
   });
   const api = vm.runInContext(part('  const frameEl = ', '  // The stand-in over a frame') + `
-;({ onItemClick, openItem, closeItem, onItemPop, onAhead, freshen, finishFresh, routeHere, demoteHere, onItemNav,
+;({ onItemClick, openItem, closeItem, onItemPop, onAhead, freshen, finishFresh, routeHere, demoteHere, onItemNav, standbyLater, staleCheck,
   get items() { return items; }, get standby() { return standby; }, set standby(v) { standby = v; }, get itemMode() { return itemMode; }, set itemMode(v) { itemMode = v; } })`, c);
   return { c, api, did, timers, tick: (ms) => { now += ms; }, step: () => timers.shift()?.fn(), key: () => `k${key}`, setKey: (k) => { key = k; } };
 };
@@ -115,6 +115,39 @@ const opened = (over = {}) => {
   msg(p, base, { gzCtab: 'item', url: DOC });
   return { p, base, it: p.c.frames.get('_2_1') };
 };
+
+test('turning ahead off preserves the open item and its Back entry', () => {
+  const { p, base } = opened();
+  p.c.prefs.ahead = false;
+  p.api.standbyLater(); // sync calls this even while ahead is off
+  assert.equal(p.api.items.get('_2_1')?.open, true);
+  p.setKey(1);
+  const pop = { stopImmediatePropagation() { this.stopped = true; } };
+  p.api.onItemPop(pop);
+  assert.equal(pop.stopped, true);
+  assert.equal(p.c.frames.get('_2_1'), base);
+  const fresh = p.c.spare.get('_2_1')[0].fresh;
+  p.api.standbyLater();
+  assert.equal(p.c.spare.get('_2_1')[0].fresh, fresh, 'freshening does not depend on ahead either');
+});
+
+test('an item over a framed outline accepts input when it is drawn', () => {
+  // frameEl starts both cold and standby frames inert; watch reveals the content without changing inert.
+  const p = run({ showing: '_2_1' });
+  p.c.open = (cid, url) => {
+    const f = frame(url, { ready: false });
+    f.el.inert = true;
+    p.c.frames.set(cid, f);
+    return f;
+  };
+  p.c.frames.set('_2_1', frame(OUT));
+  msg(p, p.c.frames.get('_2_1'), { gzCtab: 'item', url: DOC });
+  const it = p.c.frames.get('_2_1');
+  it.ready = true;
+  it.el.style.visibility = ''; // watch's on-screen reveal
+  msg(p, it, { gzCtab: 'drawn', hid: 0 });
+  assert.equal(it.el.inert, false, 'the document and its close link must be usable');
+});
 
 test('an item from a tab\'s outline opens in an item frame over it, with an entry of its own; the outline hides once the item is drawn', () => {
   const { p, base, it } = opened();
@@ -249,6 +282,154 @@ test('moved on before it is drawn (another tab shown): the fresh outline goes', 
   assert.equal(p.c.frames.get('_2_1'), base);
 });
 
+for (const changed of ['tab', 'base', 'document']) test(`a fresh outline reply after changing ${changed} cannot swap into view`, () => {
+  const { p, base, it } = opened();
+  p.setKey(1);
+  p.api.onItemPop({ stopImmediatePropagation() {} });
+  it.doc.location.pathname = OUT;
+  it.fresh.asked = 1000;
+  p.api.standby = { el: {} }; // discard the stale copy instead of recycling it
+  const replacement = frame(OUT);
+  if (changed === 'tab') p.c.showing = '_3_1';
+  if (changed === 'base') p.c.frames.set('_2_1', replacement);
+  if (changed === 'document') it.el.contentDocument = frame(OUT).doc;
+  msg(p, it, { gzCtab: 'drawn', hid: 0 });
+  assert.equal(p.c.frames.get('_2_1'), changed === 'base' ? replacement : base);
+  assert.equal(it.el.style.visibility, 'hidden');
+  assert.equal(it.el.isConnected, false);
+  assert.equal(base.el.isConnected, true, 'the kept outline remains available');
+});
+
+for (const edited of ['base', 'fresh']) test(`a fresh swap preserves unsaved work in the ${edited} frame`, () => {
+  const { p, base, it } = opened();
+  p.setKey(1);
+  p.api.onItemPop({ stopImmediatePropagation() {} });
+  it.doc.location.pathname = OUT;
+  it.fresh.asked = 1000;
+  (edited === 'base' ? base : it).dirty = true;
+  msg(p, it, { gzCtab: 'drawn', hid: 0 });
+  assert.equal(p.c.frames.get('_2_1'), base);
+  assert.equal(base.el.isConnected, true);
+  if (edited === 'fresh') assert.equal(it.el.isConnected, true);
+});
+
+test('editing the page outline prevents its replacement even after the student goes still', () => {
+  const listeners = new Map();
+  const p = run({ ctx: { site: 'ultra', courseId: () => '_2_1', scene() {} }, location: { origin, pathname: OUT, search: '' } });
+  Object.assign(p.c.document, { location: p.c.location, scrollingElement: frame(OUT).scroller,
+    querySelector: () => null, addEventListener: (ev, fn) => listeners.set(ev, fn) });
+  p.api.openItem('_2_1', DOC);
+  const it = p.c.frames.get('_2_1');
+  p.setKey(1);
+  p.api.onItemPop({ stopImmediatePropagation() {} });
+  it.doc.location.pathname = OUT;
+  it.fresh.asked = 1000;
+  listeners.get('input')?.({ isTrusted: true });
+  p.tick(2000);
+  msg(p, it, { gzCtab: 'drawn', hid: 0 });
+  assert.equal(p.c.showing, '', 'an edited native outline must stay on screen');
+  assert.equal(it.fresh, null, 'the unsafe replacement stops');
+});
+
+test('a renewed stale outline keeps the frame navigation guard and completes its adoption', () => {
+  const guarded = [];
+  const p = run({ showing: '_2_1', guardFrame: (cid, f) => guarded.push(f) });
+  const base = frame(OUT), s = frame('/ultra/profile');
+  s.el.removeAttribute = () => {};
+  p.c.frames.set('_2_1', base);
+  p.api.standby = { el: s.el, loaded: s.doc, accountDoc: s.doc, uid: '_42_1', timer: 0 };
+  p.api.staleCheck('_2_1', base);
+  const fresh = p.c.spare.get('_2_1')[0];
+  s.doc.location.pathname = OUT;
+  fresh.fresh.asked = 1000;
+  msg(p, fresh, { gzCtab: 'drawn', hid: 0 });
+  assert.equal(p.c.frames.get('_2_1'), fresh);
+  assert.equal(guarded.includes(fresh), true, 'later cross-origin loads get the normal frame guard');
+  assert.equal(fresh.adopting, null, 'a later native load must not wait forever for the old adoption');
+});
+
+test('an intercepted Ultra close waits for new outline content after its route changes', () => {
+  const { p, it } = opened();
+  const old = {};
+  it.doc.querySelectorAll = (q) => q === 'iframe' ? [] : [old];
+  msg(p, it, { gzCtab: 'itemback' }); // the close was intercepted before Ultra routed
+  it.doc.location.pathname = OUT; // route changes before the outgoing DOM is replaced
+  const asks = () => it.posted.filter((m) => m.gzCtab === 'visible' && m.on).length;
+  for (let i = 0; i < 5; i++) { p.tick(100); p.step(); }
+  assert.equal(asks(), 0, 'the item DOM cannot pass as the fresh outline');
+  it.doc.querySelectorAll = (q) => q === 'iframe' ? [] : [{}];
+  p.tick(100); p.step();
+  assert.equal(asks(), 1, 'new outline nodes can be readied');
+});
+
+test('a fresh outline carries keyboard focus out of the retired frame', () => {
+  const { p, base, it } = opened();
+  p.setKey(1);
+  p.api.onItemPop({ stopImmediatePropagation() {} });
+  p.c.document.activeElement = base.el;
+  let focused = false;
+  it.el.focus = () => { focused = true; };
+  it.doc.location.pathname = OUT;
+  it.fresh.asked = 1000;
+  msg(p, it, { gzCtab: 'drawn', hid: 0 });
+  assert.equal(focused, true, 'keyboard focus follows the visible outline');
+});
+
+test('Back preserves an item with an embedded editor whose input cannot bubble to its document', () => {
+  const { p, it } = opened();
+  it.doc.querySelectorAll = (q) => q === 'iframe' ? [{}] : [];
+  p.setKey(1);
+  p.api.onItemPop({ stopImmediatePropagation() {} });
+  assert.equal(it.posted.some((m) => m.gzCtab === 'route'), false, 'never route away from unobservable embedded work');
+  assert.equal(it.dirty, true, 'the normal eviction guards protect that work too');
+  p.setKey(2);
+  p.api.onItemPop({ stopImmediatePropagation() {} });
+  assert.equal(p.c.frames.get('_2_1'), it);
+});
+
+test('edited item frames cannot grow past the per-course or overall retention bounds', () => {
+  const { p } = opened();
+  for (let i = 0; i < 3; i++) {
+    if (i) assert.equal(p.api.openItem('_2_1', `${C}/document/_${20 + i}_1`), true);
+    p.c.frames.get('_2_1').dirty = true;
+    p.api.closeItem('_2_1', 'back');
+  }
+  assert.equal(p.api.openItem('_2_1', `${C}/document/_30_1`), null, 'a fourth edited item cannot be retained');
+  const q = run({ showing: '_2_1' });
+  q.c.frames.set('_2_1', frame(OUT));
+  q.c.spare.set('_3_1', Array.from({ length: 8 }, () => frame(DOC, { dirty: true })));
+  assert.equal(q.api.openItem('_2_1', DOC), null, 'eight edited earlier pages also exhaust the overall bound');
+});
+
+test('a full item cache consumes the click without routing away from the kept outline', () => {
+  const p = run({ showing: '_2_1' }), base = frame(OUT, { dirty: true });
+  p.c.frames.set('_2_1', base);
+  p.c.spare.set('_2_1', Array.from({ length: 3 }, () => frame(DOC, { dirty: true })));
+  msg(p, base, { gzCtab: 'item', url: `${C}/document/_30_1` });
+  assert.equal(base.posted.some((m) => m.gzCtab === 'route'), false, 'the refusal must not destroy unsaved outline work');
+  assert.equal(p.c.frames.get('_2_1'), base);
+});
+
+test('clean closed items do not accumulate when an edited outline cannot be replaced', () => {
+  const p = run({ showing: '_2_1' }), base = frame(OUT, { dirty: true });
+  p.c.frames.set('_2_1', base);
+  for (let i = 0; i < 5; i++) {
+    p.api.openItem('_2_1', `${C}/document/_${20 + i}_1`);
+    p.api.closeItem('_2_1', 'back');
+  }
+  assert.equal(p.c.spare.get('_2_1').length, 1, 'only the most recent clean item needs to remain');
+});
+
+for (const closed of [false, true]) test(`dropping a course releases its ${closed ? 'closed' : 'open'} item state and refresh listeners`, () => {
+  const { p, it } = opened();
+  if (closed) p.api.closeItem('_2_1', 'back');
+  Object.assign(p.c, { dropNext() {}, nudge() {}, drawerFrom: null });
+  const drop = vm.runInContext(part('  const drop = ', '  const dropNext = ') + '\ndrop;', p.c);
+  drop('_2_1');
+  assert.equal(p.api.items.has('_2_1'), false, 'no map entry retains the detached outline document');
+  assert.equal(it.fresh || null, null, 'refresh listeners end with the dropped frames');
+});
+
 test('on this page\'s own Course Content, an item shows as the course\'s frame over the page; Back shows the page again', () => {
   const p = run({ ctx: { site: 'ultra', courseId: () => '_2_1', scene() {} }, location: { origin, pathname: OUT, search: '' } });
   const e = click(DOC);
@@ -265,6 +446,48 @@ test('on this page\'s own Course Content, an item shows as the course\'s frame o
   assert.equal(p.c.frames.get('_2_1'), it, 'kept, hidden, until it is the fresh outline');
   assert.deepEqual(it.posted.at(-1), { gzCtab: 'route', url: OUT });
   assert.match(part('  const pass = ', '  const sync = '), /frames\.has\(cid\) && waiting !== cid && !frames\.get\(cid\)\.item\)/, 'this page doesn\'t let go of its own course\'s item frame');
+});
+
+test('Back before a page item is ready cancels its pending reveal', () => {
+  const p = run({ ctx: { site: 'ultra', courseId: () => '_2_1', scene() {} }, location: { origin, pathname: OUT, search: '' } });
+  p.api.openItem('_2_1', DOC);
+  assert.equal(p.c.waiting, '_2_1');
+  p.setKey(1);
+  p.api.onItemPop({ stopImmediatePropagation() {} });
+  assert.equal(p.c.waiting, '', 'watch must not show the closed item as it finishes loading');
+  assert.equal(p.c.showing, '');
+});
+
+test('returning to the page course tab keeps its open item visible', () => {
+  const p = run({ ctx: { site: 'ultra', courseId: () => '_2_1', scene() {} }, location: { origin, pathname: OUT, search: '' },
+    save() {}, next: new Map(), reveal: (cid) => p.did.push(['reveal', cid]) });
+  p.api.openItem('_2_1', DOC);
+  p.c.showing = '_3_1';
+  const visit = vm.runInContext(part('  const visit = (cid) => {', "  if (!framed && !preview) addEventListener('message'") + '\nvisit;', p.c);
+  visit('_2_1');
+  assert.deepEqual(p.did.at(-1), ['reveal', '_2_1'], 'select the open item, with the outline still underneath');
+});
+
+test('item Back, Forward and Ultra close work without Navigation API entry keys', () => {
+  const h = { state: { native: 'kept' }, entries: [], backs: 0,
+    replaceState(s) { this.state = structuredClone(s); },
+    pushState(s) { this.entries.push(this.state); this.state = structuredClone(s); },
+    back() { this.backs++; } };
+  const { p, base } = opened({ entry: () => '', history: h });
+  const itemState = structuredClone(h.state), baseState = h.entries[0];
+  assert.equal(baseState.native, 'kept');
+  h.state = baseState;
+  const back = { state: baseState, stopImmediatePropagation() { this.stopped = true; } };
+  p.api.onItemPop(back);
+  assert.equal(back.stopped, true, 'Ultra must not rebuild the kept outline');
+  assert.equal(p.c.frames.get('_2_1'), base);
+  h.state = itemState;
+  const forward = { state: itemState, stopImmediatePropagation() { this.stopped = true; } };
+  p.api.onItemPop(forward);
+  assert.equal(forward.stopped, true);
+  assert.equal(p.api.items.get('_2_1').open, true);
+  msg(p, p.c.frames.get('_2_1'), { gzCtab: 'itemback' });
+  assert.equal(h.backs, 1, 'Ultra close traverses the item entry too');
 });
 
 test('switched off, nothing is taken: Ultra opens items as it always has', () => {
