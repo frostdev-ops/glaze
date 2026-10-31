@@ -45,16 +45,18 @@ var GZ_AI_TASK_WRITER_IMAGE = globalThis.GZ_AI_TASK_WRITER_IMAGE || (() => {
       'Return only the object with exactly these fields: description (brief image observations), requirements (exact visible requirement strings), complete (boolean), reason (a short concrete limitation, empty when complete), relevance (relevant, irrelevant, or uncertain). Describe the image itself, not reading instructions or output formatting.',
       'Keep the complete/reason pair consistent: if complete is true, reason must be "". If complete is false, reason must identify actual unreadable, uncertain, or omitted visual material. A positive confirmation that the image is readable or all observations are included is not a limitation and must never appear in reason.',
       'The brief task context may be incomplete. Uncertain relevance alone does not make readable visual facts incomplete and never justifies discarding them.',
-      // A model on this computer (the stock picture model) copied the file name and the context line into requirements.
-      ...(caps.local === true ? ['The attached picture line gives only its file name, which is not in the picture: never put the file name, or any line of the brief assignment context, in requirements. With no requirement text visible in the picture, requirements is [].'] : []),
+      // A model on this computer (the stock picture model) copied the file name into requirements; told to keep context
+      // lines out too and that requirements could be [], it left out every real one (c9c, D4).
+      ...(caps.local === true ? ['The attached picture line is only the picture\'s file name, not text in the picture: never put it in requirements. Copy every requirement the picture shows into requirements, even when the brief assignment context says something like it.'] : []),
       ...(repair ? ['The prior response did not satisfy the bounded reading contract and was discarded. Regenerate once from the original image and context. Correct the complete/reason pair without hiding any genuine limitation. Shorten descriptions and reasons, never exact requirements. If every relevant fact and exact requirement cannot fit in a brief reading, use complete false and explain the omission briefly. Never claim complete coverage after dropping facts.'] : []),
     ].join('\n'),
     context: [{ label: 'brief assignment context', text: scope(inp) }],
     data: [{ label: 'attached picture', text: inp.name }], images: [{ type: 'image', mime: inp.image.mime, data: inp.image.data }], maxTokens: LIMIT.tokens, temperature: 0,
   });
-  // A requirement that is the picture's file name (its extension or not) or a whole line of the context block, the header's
-  // included: neither is text in the picture.
-  const flat = (v) => String(v).toLowerCase().replace(/\s+/g, ' ').trim().replace(/^["'“‘]+|["'”’.!?:;,]+$/g, '').trim();
+  // A requirement that is an exact copy of the picture's file name (its extension or not) or of a whole line of the context
+  // block, the header's included: neither is text in the picture. Only spacing, wrapping quotes and a final period may
+  // differ; similar wording is a requirement the picture shows.
+  const flat = (v) => String(v).replace(/\s+/g, ' ').trim().replace(/^["“‘']+|["”’']+$/g, '').trim().replace(/\.$/, '').trim();
   const borrowed = (inp) => {
     if (!inp) return () => false;
     const name = flat(inp.name), lines = scope(inp).split('\n'), [head, ...rest] = lines;
