@@ -669,6 +669,21 @@ const KNOWN = {
     repro: [{ t: 'setting', k: 'colors', d: 1, pick: 0.58, pick2: 0.28, s: 525175327 }, { t: 'run', d: 1, how: 'run', s: 1121166915 },
       { t: 'run', d: 0, how: 'poke', s: 867526412, inject: { at: 74, op: { t: 'setting', k: 'colors', d: 0, pick: 0.29, pick2: 0.5, s: 42 } } }],
   },
+  'purge-revived': {
+    fixed: true,
+    about: 'a note deleted for good here (its time stamped) after Glaze/Data went into Drive\'s trash: met with another device\'s copy in the new Data as one this device never had, it comes back with older text',
+    skips: () => false,
+    repro: [{ t: 'note', k: 'new', d: 1, pick: 0, pick2: 0.9, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2 }, { t: 'run', d: 0, how: 'poke', s: 3 }, { t: 'drive', k: 'trashData', pick: 0, s: 4 },
+      { t: 'note', k: 'edit', d: 1, pick: 0, pick2: 0, s: 5 }, { t: 'note', k: 'trash', d: 1, pick: 0, pick2: 0, s: 6 }, { t: 'note', k: 'purge', d: 1, pick: 0, pick2: 0, s: 7 }],
+  },
+  'resent-unheld': {
+    fixed: true,
+    about: 'a document this device never took (linked to wait for its file in Drive\'s trash) whose copy is deleted for good while another device sends it up again: the page names the deletion and the new copy together, the deletion is kept, and this device never gets the document',
+    skips: () => false,
+    devices: 3,
+    repro: [{ t: 'slides', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2 }, { t: 'run', d: 2, how: 'run', s: 3 }, { t: 'drive', k: 'trashDoc', pick: 0, s: 4 },
+      { t: 'run', d: 0, how: 'poke', s: 5 }, { t: 'run', d: 2, how: 'poke', s: 6 }, { t: 'account', d: 1, to: 'B', s: 7 }, { t: 'drive', k: 'removeDoc', pick: 0.9, s: 8 }],
+  },
   // Open, accepted by the owner: Settings written straight to storage.sync between the worker's compare and its write (a few
   // milliseconds) are written over by Drive's value. Found 2026-10-31 (seed 300933, 80 operations, 3 devices).
   'settings-cas': {
