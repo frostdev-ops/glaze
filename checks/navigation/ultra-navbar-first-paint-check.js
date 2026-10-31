@@ -1,14 +1,15 @@
 // Glaze's bar on Ultra at first paint (perf step 1b), with the real extension on the synthetic Ultra (test/fixtures/ultra-course.html)
-// under a made-up school's address. A first load has no bar drawn before navigation/page/navbar.js is in; the second load in the
+// under a made-up school's address on blackboard.com, where Glaze arms its sheets before the page's body as on every school's
+// Ultra (a host Glaze learns later is themed once its head says Ultra, after the first paint). A first load has no bar drawn before navigation/page/navbar.js is in; the second load in the
 // tab draws what the first kept at first paint, without the account's own parts (their room held) until the account is
 // confirmed, and the bar takes that copy over: one host, nothing moved, no layout shift. A route change in the app moves the marks on the same item nodes.
 // EXT=<checkout>/extension NODE_PATH=<playwright> nice node checks/navigation/ultra-navbar-first-paint-check.js <out dir>
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const env = require('../../tools/dev/check-env.js');
-const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
+const ext = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
 const G = require(path.join(ext, 'content/defaults.js'));
-const site = 'https://bb.school.test', uid = '_42_1';
+const site = 'https://school.blackboard.com', uid = '_42_1';
 const out = path.resolve(process.argv[2] || 'ultra-navbar-first-paint-evidence');
 const fixture = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-course.html'), 'utf8');
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
@@ -30,7 +31,7 @@ const watch = () => {
   window.__shifts = [];
   new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__shifts.push({ value: e.value, recent: e.hadRecentInput, sources: (e.sources || []).map((s) => s.node?.nodeName || '') }); }).observe({ type: 'layout-shift', buffered: true });
   window.__hosts = 0;
-  new MutationObserver(() => { window.__hosts = Math.max(window.__hosts, document.querySelectorAll('#gz-navbar').length); }).observe(document, { childList: true, subtree: true });
+  new MutationObserver(() => { window.__hosts = Math.max(window.__hosts, document.querySelectorAll('#gz-navbar').length); if (!window.__copy && document.querySelector('#gz-navbar[data-first]')) window.__copy = { at: performance.now(), framed: !!window.__first }; }).observe(document, { childList: true, subtree: true });
   requestAnimationFrame(() => {
     const h = bar(), items = rail(h);
     window.__firstHost = h;
@@ -101,11 +102,14 @@ const now = () => {
     accountGate = new Promise((resolve) => { releaseAccount = resolve; });
     await page.goto(`${site}/ultra/calendar`);
     const at = await until(page, () => window.__first, null, 'the first frame of the second load');
-    check(at.copy && at.shown, 'second load: the bar is drawn and shown at first paint, before the bar is in', at);
-    check(at.own === 0 && at.held > 0, "second load: none of the account's own parts before it is confirmed, their room held", { own: at.own, held: at.held });
+    // The first frame shows the copy, or the bar itself where it was in that fast (the copy, drawn first, taken over by then).
+    const copy = await page.evaluate(() => window.__copy);
+    check(copy && !copy.framed, 'second load: the copy was drawn before the first paint', copy);
+    check(at.shown && JSON.stringify(at.room) === '["272px","0px"]', 'second load: the bar is shown at first paint, in its room', at);
+    check(!at.copy || at.own === 0 && at.held > 0, "second load: as the copy, none of the account's own parts before it is confirmed, their room held", { copy: at.copy, own: at.own, held: at.held });
     check(at.items.length >= 5 && ['institution-page', 'stream', 'course', 'calendar', 'grades'].every((i) => at.items.includes(i)), 'second load: it has Ultra\'s items at first paint', at.items);
     check(JSON.stringify(at.current) === '["calendar"]', 'second load: where the student is now is marked, not where they were', at.current);
-    check(at.inert, 'second load: the copy takes no focus or clicks');
+    check(!at.copy || at.inert, 'second load: the copy takes no focus or clicks');
     await page.screenshot({ path: path.join(out, 'second-load.png') });
     releaseAccount(); accountGate = null;
     await until(page, live, null, 'the bar taking over');

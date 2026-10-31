@@ -97,6 +97,8 @@ const SITES = {
     { at: 'const nearby = async (site, { f = fetch', kind: 'open', why: 'no-cors existence checks whose answer is never read; the homepage read only when held' },
   ],
   'settings/editor-xbg.js': [{ at: 'fetch(`assets/shaders/', kind: 'extension' }],
+  // Ultra's bar keeps its own sheet's text for the next page's first paint (navigation/nav.js first).
+  'navigation/page/navbar.js': [{ at: "fetch(chrome.runtime.getURL('navigation/page/navbar.css'))", kind: 'extension' }],
   // A deck's card picture carries the bundled faces its slide 1 uses (vendor/fonts), read from the extension itself.
   'documents/slides/slides-kind.js': [{ at: 'fetch(chrome.runtime.getURL(`vendor/fonts/', kind: 'extension' }],
   'planner/ocr.js': [{ at: 'fetch(here(', kind: 'extension' }],
