@@ -301,6 +301,15 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
           const [slot, t] = Object.entries(await moves()).filter(([k]) => (tries.get(k) || 0) < 3).sort(([, a], [, b]) => (a.since || 0) - (b.since || 0))[0] || [];
           if (!slot) return;
           tries.set(slot, (tries.get(slot) || 0) + 1);
+          if (t.dir === 'up' && t.owner?.doc) {
+            const key = t.owner.key || (await docOf(t.owner.doc))?.key, l = key ? await local(key) : null;
+            // A first upload has no document link yet: a later Trash or Delete must still cancel it.
+            if (!l || P().trashed(l.rec)) {
+              if (t.file?.id) await trashTo(t.file.id, true);
+              await dropMove(slot);
+              continue;
+            }
+          }
           try {
             if (!t.file && !t.done) await (t.dir === 'up' ? sendMove(slot, t) : bringMove(slot, t));
           } catch (e) {
