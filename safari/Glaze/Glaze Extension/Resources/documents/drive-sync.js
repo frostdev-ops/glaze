@@ -245,7 +245,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       const m = await make();
       if (!m) return null;
       if (!stage || m.bytes.length <= BIG) return { file: await send(m, m.bytes), info: m.info ?? null };
-      await setMove(slot, { dir: 'up', tag, aim: target === undefined ? m.id ?? null : target ?? null, size: m.bytes.length, id: m.id ?? null, meta: m.meta, create: m.create, mime: m.mime,
+      await setMove(slot, { dir: 'up', tag, aim: target === undefined ? m.id ?? null : target ?? null, size: m.bytes.length, id: m.id ?? null, rev: m.rev ?? null, meta: m.meta, create: m.create, mime: m.mime,
         info: m.info ?? null, owner, since: now(), session: null, file: null });
       await staged(slot, m.bytes);
       throw new Fail('pending');
@@ -335,6 +335,21 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
               await dropMove(slot);
               await replay(t.owner, folder);
               continue;
+            }
+            if (t.dir === 'up' && t.owner?.doc && t.id && !t.file) {
+              // A staged upload can wait across runs. Reconcile a target changed since staging before sending any bytes;
+              // an outside edit or another device's revision must not be overwritten by that old decision to update it.
+              // The revision it was aimed at when staged (rev), else what the document's link says now.
+              const d = await docOf(t.owner.doc), F = await meta(t.id), file = slot === `u:${t.owner.doc}:file`;
+              const same = t.rev ? F.headRevisionId === t.rev : t.id === d?.[file ? 'file' : 'json'] && F.headRevisionId === d?.[file ? 'fh' : 'jh'];
+              // The upload itself may have landed before its reply was lost. Its exact bytes are safe to resume.
+              const landed = file && F.appProperties?.b === t.meta?.appProperties?.b && unchanged(F);
+              if (!F.removed && (!same && !landed || F.trashed || !(F.parents || []).includes(folder)
+                || F.appProperties?.glaze !== (file ? 'file' : 'doc') || F.appProperties?.key !== t.owner.doc)) {
+                await dropMove(slot);
+                await replay(t.owner, folder);
+                continue;
+              }
             }
             if (!t.file && !t.done) await (t.dir === 'up' ? sendMove(slot, t) : bringMove(slot, t));
           } catch (e) {
@@ -498,6 +513,24 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (!ex && !onWay && d?.json && d.rsum === sum && d.lsum === sum) return d;
       const base = ((onWay ? onWay.info?.name : ex?.name) || `${safe(l.rec.title) || 'Untitled'}${EXT[kind]}`).replace(/\.[^.]+$/, '');
       let file = d?.file || null, fh = d?.fh || null;
+      if ((ex || onWay) && file && d?.json) {
+        // Exporting may take time. An outside edit or move since sync checked the file must be reconciled before this
+        // upload, even when it fits in one request. A staged upload checks again just before its bytes are sent.
+        const F = await meta(file);
+        if (F.removed || F.trashed || F.appProperties?.glaze !== 'file' || F.appProperties?.key !== h || (Array.isArray(F.parents) && !F.parents.includes(folder))) return sync(key, h, { E: F, folder });
+        if (F.headRevisionId && F.headRevisionId !== fh) {
+          if (F.appProperties?.sum === d.fsum || rewritten(F)) return sync(key, h, { E: F, folder });
+          if (!(F.appProperties?.sum === sum && unchanged(F))) {
+            // Another Glaze's file reached Drive before its JSON. Give that copy time to arrive, then preserve the raw
+            // export in Data if its worker never finishes. Detach durably before writing a file of our own.
+            if (!await waited(h)) throw new Fail('stale');
+            await mark(key); await away([file], h);
+            const next = await tagKept(h, await putDoc(h, { ...d, file: null, fh: null, fsum: null, keep: file }, d));
+            await unwait(h);
+            return push(key, h, l, next, folder);
+          }
+        }
+      }
       // No copy yet, or no file of its own: the file a push left before it stopped (recorded below, or found by its tag when
       // Drive's answer never came), written into only while it is as Glaze wrote it: its head revision the one recorded, or,
       // found by its tag, its bytes' SHA-256 the one Glaze wrote on it (b). One edited outside Glaze since, or in Drive's
@@ -505,11 +538,12 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       // Found by its tag in Drive's trash too: one as Glaze wrote it is put away (the student restoring it later finds it in
       // Glaze/Data, never a second file beside the document's), one edited outside Glaze kept as it is.
       if ((ex || onWay) && (!file || !d?.json)) {
-        const found = file ? [await meta(file)] : (await D((c) => c.find(`'${folder}' in parents and appProperties has { key='key' and value='${h}' } and appProperties has { key='glaze' and value='file' }`, { pageSize: 10 })))
+        const known = file || onWay?.file?.id;
+        const found = known ? [await meta(known)] : (await D((c) => c.find(`'${folder}' in parents and appProperties has { key='key' and value='${h}' } and appProperties has { key='glaze' and value='file' }`, { pageSize: 10 })))
           .files.filter((f) => f.appProperties?.key === h && f.appProperties?.glaze === 'file').sort(byId);
         file = null; fh = null;
         for (const F of found) {
-          if (F.removed || F.appProperties?.glaze !== 'file' || F.appProperties?.key !== h) continue;
+          if (F.removed || F.appProperties?.glaze !== 'file' || F.appProperties?.key !== h || (Array.isArray(F.parents) && !F.parents.includes(folder))) continue;
           const glazes = F.id === d?.file ? !!F.headRevisionId && F.headRevisionId === d.fh : unchanged(F), same = F.trashed === false && glazes;
           if (same && !file) { file = F.id; fh = F.headRevisionId || null; }
           else if (glazes) await putAway(F.id, folder);
@@ -523,12 +557,14 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         if (went) { const st = await state(); if (!st.again || st.again > now() + WAIT.again) await setState({ again: now() + WAIT.again }); }
       }
       if (ex || onWay) {
+        // A completed upload's cached answer cannot undo the ownership check above (edited or moved before replay).
+        if (onWay?.file && file !== onWay.file.id) await dropMove(`u:${h}:file`);
         if (!file) await uploading(h);
         const r = await up(`u:${h}:file`, sum, d?.file || d?.json ? file : undefined, async () => {
           ex ||= await env.exportOf(key, l.rec, l.parts);
           if (!ex) return null;
           const meta = { name: ex.name, appProperties: { glaze: 'file', key: h, sum, b: await bytesSum(ex.bytes) } };
-          return { bytes: ex.bytes, id: file, meta, create: { ...meta, mimeType: ex.mime, parents: [folder] }, mime: ex.mime, info: { name: ex.name } };
+          return { bytes: ex.bytes, id: file, rev: fh, meta, create: { ...meta, mimeType: ex.mime, parents: [folder] }, mime: ex.mime, info: { name: ex.name } };
         }, owner);
         if (r) {
           file = r.file.id; fh = r.file.headRevisionId || null;
@@ -542,7 +578,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       const text = JSON.stringify({ glaze: 'document', v: 1, ...b, file, fileRev: fh, updated: Number.isFinite(l.rec.updated) ? l.rec.updated : 0 });
       const copy = { name: `${base}.glaze.json`, appProperties: { glaze: 'doc', key: h, sum, rev: String(l.rec.revision || 0) } };
       const r = await up(`u:${h}:json`, await env.hash(text), d?.json || null,
-        async () => ({ bytes: new TextEncoder().encode(text), id: d?.json || null, meta: copy, create: { ...copy, mimeType: JSON_TYPE, parents: [folder] }, mime: JSON_TYPE }), owner);
+        async () => ({ bytes: new TextEncoder().encode(text), id: d?.json || null, rev: d?.jh ?? null, meta: copy, create: { ...copy, mimeType: JSON_TYPE, parents: [folder] }, mime: JSON_TYPE }), owner);
       return putDoc(h, { key, h, kind, json: r.file.id, jh: r.file.headRevisionId || null, file, fh, fsum: sum, rsum: sum, lsum: sum, rev: l.rec.revision || 0, trashed: false }, d);
     };
     // Drive's side kept here, recorded before this device's goes up: what follows (and a retry after a push that failed) meets
@@ -646,6 +682,11 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         }
         const got = await finish(j, h, owner, ft ? { ...F, trashed: false } : F, lost);
         if (lost) got.external = true; // sent up again below, with a file of its own
+        // A first meeting must also give the document a file in Glaze when its copy still names a file moved elsewhere
+        // (or one another device let go). Its bytes can be read above, but that id must never be adopted or written again.
+        if (F && !lost && (F.appProperties?.glaze !== 'file' || F.appProperties?.key !== h || (Array.isArray(F.parents) && !F.parents.includes(folder)))) {
+          got.file = null; got.fileRev = null; got.external = true;
+        }
         if (gone?.file) { if (gone.file !== got.file) await putAway(gone.file, folder); await away([gone.file], null); }
         const source = { ...restore, json: R.id, file: got.file, fh: got.fileRev, fsum: got.sum };
         // Marked before it is written: a worker stopped before its link lands meets it again on the next run, never leaving a
@@ -713,8 +754,11 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       else if (lt !== was) to = lt;
       else if (there !== undefined) to = there;
       // Out of Trash here because Drive's side came back (restored wins): its content is weighed as at a first meeting below.
-      const revived = lt && !to;
+      const revived = !!d.revived || (lt && !to);
       if (to !== was || (rt !== null && rt !== to) || (et !== null && et !== to)) {
+        // Keep the first-meeting comparison across a stopped restore or a staged download, before untrash changes the
+        // local record. Only agreed/push clears this marker once the content has been reconciled.
+        if (lt && !to && !d.revived) d = await putDoc(h, { ...d, revived: true }, d);
         if (to !== lt) await (to ? env.papers.trash(key) : env.papers.untrash(key));
         // Into Drive's trash the copy first, out of it the file first: a device meeting the document between the two moves
         // never finds its copy out of the trash with its file still in it.
@@ -733,7 +777,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       let force = !d.file;
       if (d.file && !E && ldirty) E = await meta(d.file);
       if (E?.removed) { await env.papers.trash(key); await trashTo(d.json, true); await putDoc(h, { ...d, file: null, fh: null, trashed: true }, d); return; }
-      if (E && E.headRevisionId && E.headRevisionId !== d.fh && (E.appProperties?.sum === d.fsum || rewritten(E)) && E.appProperties?.glaze === 'file') {
+      if (E && E.headRevisionId && E.headRevisionId !== d.fh && (E.appProperties?.sum === d.fsum || rewritten(E)) && E.appProperties?.glaze === 'file'
+        && E.appProperties?.key === h && (!Array.isArray(E.parents) || E.parents.includes(folder))) {
         if (FILES.includes(d.kind || kindOf(l.rec))) {
           // A PDF or deck replaced in Drive: its new bytes are Drive's side.
           const copy = rdirty ? await linkedCopy(R, h, key, owner) : null;
@@ -752,7 +797,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         await mark(key);
         d = await tagKept(h, await putDoc(h, { ...d, file: null, fh: null, fsum: null, keep: d.file }, d));
         force = true;
-      } else if (E && !E.removed && E.id === d.file && (E.appProperties?.glaze !== 'file' || (Array.isArray(E.parents) && !E.parents.includes(folder)))) {
+      } else if (E && !E.removed && E.id === d.file && (E.appProperties?.glaze !== 'file' || E.appProperties?.key !== h || (Array.isArray(E.parents) && !E.parents.includes(folder)))) {
         // One another device kept so (or anything else no longer Glaze's file): never written again.
         await putDoc(h, { ...d, file: null, fh: null, fsum: null }, d);
         Object.assign(d, { file: null, fh: null, fsum: null });
