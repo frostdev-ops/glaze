@@ -177,7 +177,7 @@ emit(["old": oldResult, "refresh": saved?.refresh ?? "", "tokenResult": token, "
     assert.equal(r.old, 'signin');
     assert.equal(r.refresh, 'refresh-new');
     assert.equal(r.tokenResult, 'ok');
-    assert.deepEqual(r.status, { ok: true, sub: 'student', email: 'student@example.edu' });
+    assert.deepEqual(r.status, { ok: true, sub: 'student', email: 'student@example.edu', pending: false });
   });
 }
 

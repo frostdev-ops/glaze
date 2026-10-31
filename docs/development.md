@@ -127,6 +127,10 @@ tools/dev/dev-gcal.sh <key file>
 
 Then load `dist/glaze-dev-gcal` unpacked, in a Chrome profile without the store's Glaze. The key never goes in `manifest.json` or the package.
 
+### Google in Safari
+
+Safari has no identity API, so Drive and Calendar sync sign in through the Glaze app: the extension's handler (`safari/Glaze/Glaze Extension/GlazeGoogle.swift`) starts an authorization-code sign-in with PKCE for Google's "iOS" client, the app (`GlazeGoogleSignIn.swift`) shows Google's page and leaves the redirect in the app group's container, and the handler exchanges the code and keeps the refresh token in the extension's own Keychain items. Drive and Calendar are separate grants (`feature: 'drive' | 'calendar'` in each `google.*` message), each with its own Connect, refresh token and Disconnect, which forgets only that grant on this device. The handler holds a sign-in under way, so one finishes after Safari unloads the worker (Settings asks `finish` until it has). The worker keeps access tokens in memory only, until their last minute. A Calendar run in Safari stops starting writes after 20 s and resumes on the page's next request, and large Drive transfers resume across workers from the session saved in storage, so neither needs a background helper. The Picker stays off in Safari because the picker page only returns to Chromium's or Firefox's redirect. The app group is `group.io.frostdev.Glaze` on iOS and `22AAZFMTV8.io.frostdev.Glaze` on the Mac (both Mac builds; Team ID-prefixed groups need no provisioning profile on macOS). The whole path is off until `native: true` in `background/google-config.js`. `test/safari/google-native.test.js` runs the handler in Swift's interpreter (Mac only), and `test/platform/google.test.js` and `test/planner/gcal.test.js` cover the worker and Settings.
+
 ## Safari
 
 Safari loads Glaze from this Mac app. The Xcode project is in `safari/`; to build the app yourself

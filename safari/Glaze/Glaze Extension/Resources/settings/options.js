@@ -1067,14 +1067,15 @@ GZ_UI.load().then((s) => {
   $('#gs-ask').addEventListener('click', () => gsOp({ op: 'hide', hide: false }));
   $('#gs-forget').addEventListener('click', () => gsOp({ op: 'bind', key: null }));
 
-  // ---- Google Calendar sync (planner/gcal.js, through the worker: 'glaze:gcal'), Chrome only ----
+  // ---- Google Calendar sync (planner/gcal.js, through the worker: 'glaze:gcal'), Chrome and Safari ----
   // Behind the build-time switch (planner/gcal.js ON): off, the section stays hidden and nothing here runs.
   if (GZ_GCAL.ON) {
     $('#gcal').hidden = false; $('#sharing-calendar').hidden = false; for (const link of $$('[data-gcal-link]')) link.hidden = false;
     // Offered where chrome.identity.getAuthToken signs in with the browser's own Google account: Google Chrome (and plain
-    // Chromium). Edge doesn't support it, Brave has no Google sign-in, Safari and Firefox have no getAuthToken (S3 §1, §4):
-    // those get a note pointing to the .ics export.
-    const gcalHere = location.protocol === 'chrome-extension:' && !('brave' in navigator) && !!navigator.userAgentData?.brands?.length
+    // Chromium), and in Safari through the Glaze app once the worker says it can (op here). Edge doesn't support it, Brave
+    // has no Google sign-in, Firefox has no getAuthToken (S3 §1, §4): those get a note pointing to the .ics export.
+    const gcalSafari = location.protocol === 'safari-web-extension:';
+    let gcalHere = location.protocol === 'chrome-extension:' && !('brave' in navigator) && !!navigator.userAgentData?.brands?.length
       && navigator.userAgentData.brands.every((b) => /^(Google Chrome|Chromium|HeadlessChrome)$|Not.?A.?Brand/i.test(b.brand));
     const gcalOp = (op) => new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:gcal', ...op }, (r) => res(chrome.runtime.lastError ? { ok: false, error: 'network' } : r || { ok: false })));
     const gcalRender = (g) => {
@@ -1093,10 +1094,39 @@ GZ_UI.load().then((s) => {
       $('#gcal-id').value = g.cal;
     };
     const gcalLoad = () => new Promise((res) => chrome.storage.local.get('gcal', (r) => res(gcalRender(r?.gcal))));
-    gcalLoad();
+    // Safari: the sign-in under way in the Glaze app, waited on while the worker says pending. → '' once Calendar's grant is
+    // in the handler, else why not.
+    const gcalWait = async (r) => {
+      for (let n = 0; r.error === 'pending' && n < 40; n++) r = await gcalOp({ op: 'finish' });
+      if (r.ok) return '';
+      return r.error === 'scope' ? t("Glaze needs the calendar access on Google's screen. Connect again and leave it ticked.") : t("Google didn't connect. Export calendar (.ics) works without signing in.");
+    };
+    // Safari: whether Calendar's grant is already in the handler (a sign-in finished, its calendar not yet made).
+    let gcalSigned = false;
+    if (gcalSafari) {
+      // Shown once the worker answers, so the export note never flashes first. A sign-in still under way in the app (the
+      // student came back to a new Settings) is finished quietly; Connect then makes the calendar without another.
+      gcalOp({ op: 'here' }).then(async (r) => {
+        gcalHere = r.ok === true;
+        gcalSigned = r.signed === true;
+        gcalLoad();
+        if (r.pending && !gcalBusy) {
+          gcalBusy = true;
+          try { gcalSigned = !await gcalWait(await gcalOp({ op: 'finish' })) || gcalSigned; } finally { gcalBusy = false; }
+        }
+      });
+    } else gcalLoad();
     // The sign-in, inside the student's own click: Chrome's identity permission (optional; Chrome shows no warning for
-    // it), then Google's consent in Chrome's own window. → '' once Chrome holds a token with the calendar scope, else why not.
-    const gcalSignIn = async () => {
+    // it), then Google's consent in Chrome's own window; Safari's, through the Glaze app. → '' once Chrome holds a token
+    // with the calendar scope, or Safari's handler a grant, else why not.
+    // fresh: a new sign-in even where Safari holds Calendar's grant (Reconnect, after Google refused it).
+    const gcalSignIn = async (fresh) => {
+      if (gcalSafari) {
+        if (gcalSigned && !fresh) return '';
+        const no = await gcalWait(await gcalOp({ op: 'signin' }));
+        gcalSigned = !no;
+        return no;
+      }
       try {
         if (!await chrome.permissions.request({ permissions: ['identity'] })) return t("Glaze can't connect without Chrome's sign-in permission.");
         // Calendar's scope alone: the client is shared with Google Drive, whose scopes the manifest may list too.
@@ -1130,7 +1160,7 @@ GZ_UI.load().then((s) => {
     gcalClick('#gcal-connect', () => gcalJoin({ op: 'connect', tz: Intl.DateTimeFormat().resolvedOptions().timeZone }));
     gcalClick('#gcal-link', () => ($('#gcal-code').value.trim() ? gcalJoin({ op: 'connect', code: $('#gcal-code').value }) : $('#gcal-code').focus()));
     gcalClick('#gcal-reconnect', async () => {
-      const no = await gcalSignIn();
+      const no = await gcalSignIn(true);
       if (no) return hint(no, true);
       await gcalOp({ op: 'retry' });
       hint(t('Connected.'));
@@ -1150,7 +1180,8 @@ GZ_UI.load().then((s) => {
       if ($('#gcal-bye').returnValue !== 'ok') return $('#gcal-disconnect').focus();
       const r = await gcalOp({ op: 'disconnect', drop: $('#gcal-drop').checked });
       if (!r.ok) return hint(t("Couldn't delete the Glaze calendar, so nothing changed. Try again, or disconnect without deleting it."), true);
-      // The worker released identity in its grant queue unless Drive still holds it.
+      // The worker released identity in its grant queue unless Drive still holds it (Safari: Calendar's grant only).
+      gcalSigned = false;
       gcalRender(null);
       $('#gcal-connect').focus();
       hint(t('Disconnected.'));
@@ -1171,9 +1202,20 @@ GZ_UI.load().then((s) => {
       $('#gdrive-disconnect').hidden = !s?.email;
       if (s?.email) gsRender();
     };
-    const gdLoad = () => gdOp('status').then(gdRender);
-    gdLoad();
+    const gdLoad = () => gdOp('status').then((s) => { gdRender(s); return s; });
+    // Safari: a sign-in still under way in the Glaze app (the student came back to a new Settings, or Safari unloaded the
+    // worker meanwhile) finishes here, without another click; nothing is said unless it connects.
+    const gdResume = async (s) => {
+      if (!s?.pending || gdBusy) return;
+      gdBusy = true;
+      try {
+        let r = await gdOp('finish');
+        for (let n = 0; r.why === 'pending' && n < 40; n++) r = await gdOp('finish');
+        if (r.ok) { await gdLoad(); hint(t('Connected.')); }
+      } finally { gdBusy = false; }
+    };
     let gdBusy = false;
+    gdLoad().then(gdResume);
     // Inside the student's click: the browser's identity permission first (optional; nothing is asked before this), then
     // Google's own screen, from the worker. Safari signs in through the Glaze app and has no identity permission: Connect
     // answers 'pending' until the app is done (each answer waits a while), and Settings asks again.
@@ -1192,7 +1234,7 @@ GZ_UI.load().then((s) => {
         }
         const again = !!$('#gdrive-who').textContent;
         let r = await gdOp('connect');
-        for (let n = 0; native && r.why === 'pending' && n < 40; n++) r = await gdOp('connect');
+        for (let n = 0; native && r.why === 'pending' && n < 40; n++) r = await gdOp('finish');
         if (r.ok) {
           // Connected again, as Sync asked, to the account it is bound to: Sync starts afresh now, not after its wait. A first
           // Connect is the worker's to turn Sync on, and another account its binding check's.
@@ -1202,7 +1244,7 @@ GZ_UI.load().then((s) => {
           $('#gdrive-disconnect').focus();
           return hint(t('Connected.'));
         }
-        hint(r.why === 'scope' ? t('Connect again and allow Google Drive access.') : r.why === 'signin' ? t('Sign in to the browser with your Google account, then connect again.')
+        hint(r.why === 'scope' ? t('Connect again and allow Google Drive access.') : r.why === 'signin' && !native ? t('Sign in to the browser with your Google account, then connect again.')
           : r.why === 'cancel' ? '' : t("Google Drive didn't connect. Try again in a moment."), r.why !== 'cancel');
       } finally { gdBusy = false; }
     });

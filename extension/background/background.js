@@ -3319,17 +3319,37 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // last run per Canvas account, the last error) and gcalSync (planner/gcal.js fresh()), both for one connection (gen): a run
 // keeps what it learned only while that connection stands. Plans moved in Google reach Better To Do's data through the
 // broker's queue, each only while the plan there is what Glaze last wrote (planner/gcal.js still).
+// Safari signs in through the Glaze app instead (Settings' Connect: ops signin and finish), with a grant of Calendar's own in
+// the extension's handler, beside Drive's and apart from it (background/google.js nativeGrant, feature 'calendar'): on with
+// Drive's Safari sign-in (background/google-config.js native). Its token is held in this worker's memory only.
+let gcalNative = null;
+const gcalSafari = () => SAFARI && googleLib() && GZ_GOOGLE_CONFIG.native === true;
+const gcalGrant = () => (gcalNative ||= googleLib().nativeGrant({
+  native: (m) => chrome.runtime.sendNativeMessage(GZ_GOOGLE.APP, m),
+  // iOS: the sign-in tab the student taps (the worker opens it, never a framed page).
+  open: (url) => chrome.tabs.create({ url }),
+}, 'calendar'));
+// Safari unloads the worker about 30 s after the page's message: a run there stops writing after this long and says more
+// (planner/gcal.js sync until), so it ends, its progress saved, before Safari ends it.
+const GCAL_SAFARI_RUN = 20e3;
 const gcalEnv = {
   fetch: (url, init) => fetch(url, init),
   sleep: (ms) => new Promise((res) => setTimeout(res, ms)),
   // Chrome's cached token, never a prompt (the editor's click asks); none without the calendar scope. Calendar's scope
-  // alone: the client is shared with Google Drive, whose scopes the manifest may list too.
+  // alone: the client is shared with Google Drive, whose scopes the manifest may list too. Safari: the handler's, minted
+  // from Calendar's own refresh token (Google unreachable is busy, anything else signing in again).
   token: async () => {
+    if (SAFARI) {
+      if (!gcalSafari()) throw new GZ_GCAL.Fail('auth');
+      const r = await gcalGrant().mint();
+      if (r?.ok === true && typeof r.token === 'string' && r.token) return r.token;
+      throw new GZ_GCAL.Fail(!r || r.why === 'network' ? 'busy' : 'auth');
+    }
     const r = await GZ_GCAL_AUTH.token({ interactive: false, scopes: [GZ_GCAL.SCOPE] });
     if (Array.isArray(r?.grantedScopes) && !r.grantedScopes.includes(GZ_GCAL.SCOPE)) throw new GZ_GCAL.Fail('auth');
     return typeof r === 'string' ? r : r?.token;
   },
-  drop: (token) => Promise.resolve().then(() => GZ_GCAL_AUTH.drop(token)).catch(() => {}),
+  drop: (token) => Promise.resolve().then(() => (SAFARI ? gcalGrant().drop(token) : GZ_GCAL_AUTH.drop(token))).catch(() => {}),
 };
 // gcalEpoch: Disconnect moves it on as it arrives, so every sync already running or waiting in the queue stops at its
 // next step.
@@ -3370,6 +3390,15 @@ const gcalOps = {
   disconnect: async (m) => {
     const g = await gcalState();
     if (m.drop === true && g?.cal) await GZ_GCAL.remove(gcalEnv, g.cal);
+    if (SAFARI) {
+      // Calendar's own grant forgotten in the handler; Drive's stays, and Safari has no identity permission.
+      // Cleanup still reaches the handler when new native sign-ins are switched off. Keep the connection here on a
+      // failed native reply, so Settings offers a retry instead of claiming that the Keychain grant was forgotten.
+      await gcalGrant().disconnect();
+      await chrome.storage.local.remove(['gcal', 'gcalSync']);
+      serial(ensure);
+      return { ok: true };
+    }
     const drive = (await chrome.storage.local.get('google')).google;
     const driveOn = typeof drive?.email === 'string' && googleLib().ON;
     if (!(driveOn && drive.flow === 'chrome')) await Promise.resolve().then(() => GZ_GCAL_AUTH.clear()).catch(() => {});
@@ -3431,7 +3460,7 @@ const gcalOps = {
       const mine = async () => GZ_TODO.clean((await chrome.storage.local.get(key))[key]);
       let out;
       try {
-        const r = await GZ_GCAL.sync({ ...gcalEnv, act }, g.cal, st, m, { signal: ctl.signal, plans, mine, save: () => keep(() => ({ gcalSync: { gen: g.gen, ...st } })) });
+        const r = await GZ_GCAL.sync({ ...gcalEnv, act }, g.cal, st, m, { signal: ctl.signal, plans, mine, save: () => keep(() => ({ gcalSync: { gen: g.gen, ...st } })), until: SAFARI ? Date.now() + GCAL_SAFARI_RUN : 0 });
         out = { ok: true, wrote: r.wrote, more: r.more };
       } catch (e) { out = { ok: false, error: e?.code || 'network' }; }
       if (gcalStop === ctl) gcalStop = null;
@@ -3442,6 +3471,33 @@ const gcalOps = {
     } finally { gcalRuns.delete(run); }
   },
 };
+// Safari's sign-in, from Settings' click (op signin: the app's page opened, then a wait for its answer; finish: the wait
+// again, while it says pending), and whether Safari offers Calendar here (here: the app group reachable; pending: a sign-in
+// under way in the app, which Settings finishes; signed: Calendar's grant is in the handler). Off their own queue: a wait mustn't hold up a page's run. → { ok } or
+// { ok: false, error }
+const gcalSign = {
+  here: async () => {
+    if (!gcalSafari()) return { ok: false, error: 'browser' };
+    const r = await gcalGrant().status();
+    return r?.ok === true ? { ok: true, pending: r.pending === true, signed: typeof r.sub === 'string' } : { ok: false, error: 'setup' };
+  },
+  signin: async () => {
+    if (!gcalSafari()) return { ok: false, error: 'browser' };
+    try { await gcalGrant().start(); } catch (e) { return { ok: false, error: e?.why || 'auth' }; }
+    return gcalSign.finish();
+  },
+  finish: async () => {
+    if (!gcalSafari()) return { ok: false, error: 'browser' };
+    try { await gcalGrant().finish(); return { ok: true }; } catch (e) { return { ok: false, error: e?.why || 'auth' }; }
+  },
+};
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:gcal' || typeof m.op !== 'string' || !Object.hasOwn(gcalSign, m.op)) return;
+  if (!fromEditor(s)) { reply({ ok: false, error: 'sender' }); return; }
+  if (!GZ_GCAL.ON) { reply({ ok: false, error: 'off' }); return; }
+  gcalSign[m.op]().then(reply, () => reply({ ok: false, error: 'network' }));
+  return true;
+});
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:gcal' || typeof m.op !== 'string' || !Object.hasOwn(gcalOps, m.op)) return;
   const epoch = gcalEpoch;
@@ -3489,12 +3545,12 @@ const openGoogle = () => {
 };
 const googlePage = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && ['options.html', 'papers.html', 'writer.html'].some((p) => s.url.split(/[?#]/)[0] === chrome.runtime.getURL(p));
 chrome.runtime.onMessage.addListener((m, s, reply) => {
-  if (m?.type !== 'glaze:google' || !['status', 'connect', 'disconnect', 'pick'].includes(m.op)) return;
+  if (m?.type !== 'glaze:google' || !['status', 'connect', 'finish', 'disconnect', 'pick'].includes(m.op)) return;
   if (!(m.op === 'pick' ? googlePage(s) : fromEditor(s))) { reply({ ok: false, why: 'sender' }); return; }
   googleLib();
   if (!GZ_GOOGLE.ON) { reply({ ok: false, why: 'off' }); return; } // the build-time switch (background/google.js)
   const run = () => openGoogle()[m.op]();
-  Promise.resolve().then(() => (m.op === 'connect' || m.op === 'disconnect' ? grantTurn(run) : run())).then(reply, () => reply({ ok: false, why: 'network' }));
+  Promise.resolve().then(() => (['connect', 'finish', 'disconnect'].includes(m.op) ? grantTurn(run) : run())).then(reply, () => reply({ ok: false, why: 'network' }));
   return true;
 });
 // Google Drive's files (documents/drive.js): From Google Drive and Save to Google Drive on Documents and Writer, with the token

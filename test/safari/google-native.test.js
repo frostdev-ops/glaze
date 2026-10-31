@@ -184,6 +184,48 @@ google.during = { _ = await engine.disconnect(profile: p.uuidString) }
 out["lateToken"] = await ask(["type": "google.token"])
 out["lateTokenAfter"] = await ask(["type": "google.token"])
 out["revokes"] = google.sent.filter { $0["url"]?.hasSuffix("/revoke") == true }.count
+// Calendar sync: a grant of its own beside Drive's, its own sign-in, scope, refresh token and Disconnect.
+let calSignIn = G.SignIn(state: s43, challenge: c43, hint: nil, feature: .calendar)
+out["calURL"] = G.signInURL(calSignIn).absoluteString
+out["calRoundTrip"] = G.signIn(from: G.signInURL(calSignIn)) == calSignIn
+out["calRefused"] = ["drive", "other", ""].map { G.signIn(from: URL(string: "io.frostdev.glaze-google://signin?state=\(s43)&challenge=\(c43)&for=\($0)")!) == nil }
+out["calScope"] = URLComponents(url: G.authURL(calSignIn), resolvingAgainstBaseURL: false)!.queryItems!.first { $0.name == "scope" }?.value ?? ""
+let vault2 = Memory(), engine2 = G.Engine(vault: vault2, slot: slot, transport: google, now: { clock.t })
+func ask2(_ m: [String: Any]) async -> [String: Any] { await G.reply(to: G.Request(m, profile: p)!, engine: engine2) { _ in true } }
+let calGood = good.merging(["scope": "openid \(G.calendar) email", "refresh_token": "1//cal", "access_token": "ya29.cal",
+                            "id_token": jwt(claims.merging(["exp": clock.t.timeIntervalSince1970 + 3600]) { _, b in b })]) { _, b in b }
+let driveGood = good.merging(["id_token": jwt(claims.merging(["exp": clock.t.timeIntervalSince1970 + 3600]) { _, b in b })]) { _, b in b }
+func signInWith(_ feature: String, _ answer: [String: Any]) async -> [String: Any] {
+    let opened = await ask2(["type": "google.connect", "feature": feature])
+    let s = G.signIn(from: URL(string: opened["open"] as! String)!)!
+    _ = slot.put(s.state, try! JSONSerialization.data(withJSONObject: ["url": G.redirect + "?state=\(s.state)&code=4/\(feature)"]))
+    google.answers = [(200, answer)]
+    return await ask2(["type": "google.finish", "feature": feature])
+}
+out["calDrive"] = await signInWith("drive", driveGood)
+let calOpened = await ask2(["type": "google.connect", "feature": "calendar"])
+out["calOpen"] = (calOpened["open"] as! String).hasSuffix("&for=calendar")
+out["calPending"] = [await ask2(["type": "google.status", "feature": "calendar"]), await ask2(["type": "google.status"])]
+let calStarted = G.signIn(from: URL(string: calOpened["open"] as! String)!)!
+_ = slot.put(calStarted.state, try! JSONSerialization.data(withJSONObject: ["url": G.redirect + "?state=\(calStarted.state)&code=4/c"]))
+google.answers = [(200, driveGood)] // Drive's scope only: no Calendar access granted
+out["calNoScope"] = await ask2(["type": "google.finish", "feature": "calendar"])
+out["calFinish"] = await signInWith("calendar", calGood)
+out["calKeys"] = vault2.items.keys.sorted().map { $0.replacingOccurrences(of: p.uuidString, with: "P") }
+out["calTokens"] = [(await ask2(["type": "google.token", "feature": "calendar"]))["token"] ?? "", (await ask2(["type": "google.token"]))["token"] ?? ""]
+clock.t = clock.t.addingTimeInterval(3600)
+google.answers = [(200, ["access_token": "ya29.cal2", "token_type": "Bearer", "expires_in": 3599, "scope": G.calendar])]
+out["calRefresh"] = (await ask2(["type": "google.token", "feature": "calendar"]))["token"] ?? ""
+out["calRefreshForm"] = google.sent.last!["refresh_token"] ?? ""
+out["calDisconnect"] = await ask2(["type": "google.disconnect", "feature": "calendar"])
+out["calAfter"] = [await ask2(["type": "google.status", "feature": "calendar"]), await ask2(["type": "google.status"])]
+out["calKeysAfter"] = vault2.items.keys.sorted().map { $0.replacingOccurrences(of: p.uuidString, with: "P") }
+out["calBadFeature"] = [await ask2(["type": "google.status", "feature": "gmail"]), await ask2(["type": "google.token", "feature": 3])]
+_ = await signInWith("calendar", calGood)
+out["driveDisconnect"] = await ask2(["type": "google.disconnect"])
+out["calKeysDrive"] = vault2.items.keys.sorted().map { $0.replacingOccurrences(of: p.uuidString, with: "P") }
+out["calRevokes"] = google.sent.filter { $0["url"]?.hasSuffix("/revoke") == true }.count
+
 out["unknown"] = await ask(["type": "google.nope"])
 out["notOurs"] = G.Request(["type": "ai.status"], profile: nil) == nil
 let noGroup = G.Engine(vault: Memory(), slot: nil, transport: google)
@@ -239,7 +281,7 @@ test("the token endpoint's answers: Drive's scope, a bearer token, invalid_grant
   assert.equal(result.accountArray, '1234567890');
 });
 test('a sign-in: the verifier stays in the extension, the code is exchanged with it, the refresh token kept', { skip }, () => {
-  assert.deepEqual(result.status0, { ok: true, email: null, sub: null });
+  assert.deepEqual(result.status0, { ok: true, email: null, sub: null, pending: false });
   assert.deepEqual(result.token0, { ok: false, why: 'signin' });
   assert.deepEqual(result.connect, { ok: true, pending: true, opened: true });
   assert.equal(result.challengeIsVerifiers, true);
@@ -255,7 +297,7 @@ test('a sign-in: the verifier stays in the extension, the code is exchanged with
   assert.equal(result.slotLeft, 0);
   assert.equal(result.pendingLeft, false);
   assert.deepEqual(result.finishAgain, { ok: false, why: 'signin' });
-  assert.deepEqual(result.status1, { ok: true, email: 'student@example.edu', sub: '1234567890' });
+  assert.deepEqual(result.status1, { ok: true, email: 'student@example.edu', sub: '1234567890', pending: false });
 });
 test('tokens: per Safari profile, held until a minute before expiry, bound to the connected account', { skip }, () => {
   assert.deepEqual(result.otherProfile, { ok: false, why: 'signin' });
@@ -291,9 +333,32 @@ test('disconnect forgets everything on this device and sends Google nothing', { 
 test('a Disconnect while Google answers wins: the late grant is dropped, the late token too', { skip }, () => {
   assert.deepEqual(result.lateFinish, { ok: false, why: 'signin' });
   assert.equal(result.lateVault, 0, 'the late refresh token is never kept');
-  assert.deepEqual(result.lateStatus, { ok: true, email: null, sub: null });
+  assert.deepEqual(result.lateStatus, { ok: true, email: null, sub: null, pending: false });
   assert.deepEqual(result.lateToken, { ok: false, why: 'signin' });
   assert.deepEqual(result.lateTokenAfter, { ok: false, why: 'signin' });
+});
+test('Calendar sync is a grant of its own: its sign-in URL says for=calendar, its scope alone, its own Keychain items and Disconnect', { skip }, () => {
+  assert.equal(result.calURL, `io.frostdev.glaze-google://signin?state=${'s'.repeat(43)}&challenge=${'c'.repeat(43)}&for=calendar`);
+  assert.equal(result.calRoundTrip, true);
+  assert.deepEqual(result.calRefused, [true, true, true]);
+  assert.equal(result.calScope, 'https://www.googleapis.com/auth/calendar.app.created openid email');
+  assert.deepEqual(result.calDrive, { ok: true, email: 'student@example.edu', sub: '1234567890' });
+  assert.equal(result.calOpen, true);
+  assert.deepEqual(result.calPending, [{ ok: true, email: null, sub: null, pending: true }, { ok: true, email: 'student@example.edu', sub: '1234567890', pending: false }],
+    'a Calendar sign-in under way shows only on Calendar');
+  assert.deepEqual(result.calNoScope, { ok: false, why: 'scope' }, 'a grant without Calendar\'s scope connects nothing');
+  assert.deepEqual(result.calFinish, { ok: true, email: 'student@example.edu', sub: '1234567890' });
+  assert.deepEqual(result.calKeys, ['calendar.refresh.P', 'refresh.P']);
+  assert.deepEqual(result.calTokens, ['ya29.cal', 'ya29.a'], 'each feature its own access token');
+  assert.equal(result.calRefresh, 'ya29.cal2');
+  assert.equal(result.calRefreshForm, '1//cal', 'Calendar renews with its own refresh token');
+  assert.deepEqual(result.calDisconnect, { ok: true, had: true });
+  assert.deepEqual(result.calAfter, [{ ok: true, email: null, sub: null, pending: false }, { ok: true, email: 'student@example.edu', sub: '1234567890', pending: false }]);
+  assert.deepEqual(result.calKeysAfter, ['refresh.P'], 'Calendar\'s Disconnect leaves Drive connected');
+  assert.deepEqual(result.calBadFeature, [{ ok: false, why: 'request' }, { ok: false, why: 'request' }]);
+  assert.deepEqual(result.driveDisconnect, { ok: true, had: true });
+  assert.deepEqual(result.calKeysDrive, ['calendar.refresh.P'], 'Drive\'s Disconnect leaves Calendar connected');
+  assert.equal(result.calRevokes, 0);
 });
 test('fixed reasons; a build without the app group answers setup', { skip }, () => {
   assert.deepEqual(result.unknown, { ok: false, why: 'request' });
@@ -322,15 +387,18 @@ test('the project compiles the Google code into both apps and both extensions, t
   const group = (r) => Object.values(o).find((g) => g.isa === 'PBXGroup' && g.children?.includes(r)).path;
   assert.deepEqual([group(google), group(signIn)], ['Glaze Extension', 'Glaze']);
 });
-test('entitlements: iOS shares group.io.frostdev.Glaze; the Mac extension reaches the network; the Mac files gain no group', mac, () => {
+// The Mac's app group is Team ID-prefixed: macOS doesn't gate it on a provisioning profile, and the Mac App Store accepts
+// it, so both Mac builds reach Google's sign-in through it without a change to the developer account.
+test('entitlements: iOS shares group.io.frostdev.Glaze; the Mac app and extension share 22AAZFMTV8.io.frostdev.Glaze, the extension reaches the network', mac, () => {
   const p = plist(path.join(safari, 'Glaze.xcodeproj/project.pbxproj'));
   for (const [target, file] of [['Glaze iOS', 'Glaze iOS/Glaze iOS.entitlements'], ['Glaze iOS Extension', 'Glaze iOS/Glaze iOS Extension.entitlements']]) {
     const t = Object.values(p.objects).find((x) => x.isa === 'PBXNativeTarget' && x.name === target);
     for (const c of p.objects[t.buildConfigurationList].buildConfigurations) assert.equal(p.objects[c].buildSettings.CODE_SIGN_ENTITLEMENTS, file, target);
     assert.deepEqual(plist(path.join(safari, file)), { 'com.apple.security.application-groups': ['group.io.frostdev.Glaze'] });
   }
-  assert.deepEqual(plist(path.join(safari, 'Glaze Extension/Release.entitlements')), { 'com.apple.security.app-sandbox': true, 'com.apple.security.network.client': true });
-  assert.equal(plist(path.join(safari, 'Glaze/Release.entitlements'))['com.apple.security.application-groups'], undefined);
+  const group = ['22AAZFMTV8.io.frostdev.Glaze'];
+  assert.deepEqual(plist(path.join(safari, 'Glaze Extension/Release.entitlements')), { 'com.apple.security.application-groups': group, 'com.apple.security.app-sandbox': true, 'com.apple.security.network.client': true });
+  assert.deepEqual(plist(path.join(safari, 'Glaze/Release.entitlements')), { 'com.apple.security.application-groups': group, 'com.apple.security.app-sandbox': true, 'com.apple.security.network.client': true });
   const schemes = plist(path.join(safari, 'Glaze/Info.plist')).CFBundleURLTypes.flatMap((t) => t.CFBundleURLSchemes);
   assert.ok(schemes.includes('io.frostdev.glaze-google'));
   assert.match(read('Glaze Extension/GlazeGoogle.swift'), /static let appScheme = "io\.frostdev\.glaze-google"/);

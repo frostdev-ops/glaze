@@ -65,7 +65,8 @@ const fresh = () => {
   return { D: require('../../extension/documents/drive.js'), S: require('../../extension/documents/drive-sync.js'), ST: require('../../extension/background/drive-store.js') };
 };
 const EXT = { paper: '.docx', pdf: '.pdf' };
-const worker = (drive, dk, { fetch = drive.fetch, account = 'student@school.edu', snapshot = null, records = false, staged = true } = {}) => {
+// google: background/google.js's worker side (its token, account and drop) in place of a fixed token.
+const worker = (drive, dk, { fetch = drive.fetch, account = 'student@school.edu', snapshot = null, records = false, staged = true, google = null } = {}) => {
   const { D, S, ST } = fresh();
   const now = () => dk.clock.t;
   const papers = P.open(dk.store, now, { versions: () => 40, files: { own: dk.files.own } });
@@ -73,8 +74,9 @@ const worker = (drive, dk, { fetch = drive.fetch, account = 'student@school.edu'
   const settings = memory();
   const more = snapshot || records ? ST.create({ area: (n) => (n === 'notes' ? null : n === 'sync' ? settings : dk.store), store: dk.store, hash: async (s) => sha(s), now, snapshot }) : null;
   const env = {
-    drive: () => D.create({ fetch, token: async () => 'tok-1', account: async () => account, interactive: false }),
-    account: async () => account, store: dk.store,
+    drive: () => (google ? D.create({ fetch, token: (o) => google.token(o), account: () => google.account(), drop: (t) => google.drop(t), interactive: false })
+      : D.create({ fetch, token: async () => 'tok-1', account: async () => account, interactive: false })),
+    account: google ? () => google.account() : async () => account, store: dk.store,
     papers: { get: papers.get, list: papers.list, save: papers.save, trash: papers.trash, untrash: papers.untrash, keep: papers.keep },
     parts: async () => ({}),
     files: { has: async (h) => !!(await dk.files.stat(h)), put: dk.files.put },
@@ -720,4 +722,42 @@ for (const mode of ['small', 'unavailable', 'restaged', 'aimed']) test({
   assert.ok((await b.sync.run()).ok);
   assert.deepEqual((await db.store.get(key))[key], latest, 'the other device receives the later edit');
   assert.deepEqual(await moves(da), {});
+});
+
+// Safari: the token comes from the extension's handler (safari/…/GlazeGoogle.swift), which keeps the refresh token in the
+// Keychain; a worker Safari loaded again holds none, so it asks the handler, and Google's session goes on where it stood.
+test('Safari: a chunked upload Safari unloaded the worker during goes on in the next worker, with a token the handler mints and no sign-in', async () => {
+  const G = require('../../extension/background/google.js'), C = require('../../extension/background/google-config.js');
+  const valid = new Set(['tok-1']), sent = [];
+  let n = 0;
+  const handler = async (m) => {
+    sent.push(m.type);
+    if (m.type === 'google.status') return { ok: true, email: 'student@school.edu', sub: 'S1', pending: false };
+    if (m.type === 'google.token') { const token = `tok-${++n}`; valid.add(token); return { ok: true, token, expiresAt: dk.clock.t + 3599e3 }; }
+    if (m.type === 'google.drop') return { ok: true };
+    throw new Error(`no sign-in expected: ${m.type}`);
+  };
+  const drive = standin({ tokens: valid }), dk = disk(), key = 'doc:00000000-0000-4000-8000-00000000a020';
+  await dk.store.set({ google: { email: 'student@school.edu', sub: 'S1', flow: 'native', at: dk.clock.t } });
+  const google = () => G.create({ on: true, config: { ...C, native: true }, flow: 'native', storage: dk.store, native: handler, now: () => dk.clock.t,
+    fetch: async (u) => { throw new Error(`unexpected request: ${u}`); }, open: async () => {}, manifest: () => ({}), identity: () => undefined,
+    permissions: { contains: async () => false, remove: async () => true }, keep: async () => false });
+  const bytes = bytesOf(12 * MiB, 59), a = worker(drive, dk, { google: google() });
+  await pdfOn(a, dk, key, bytes, 'Field notes');
+  await stopped(a.sync.set(true), drive.cut(MiB, (e) => e.chunk && !e.chunk.status && e.chunk.from > 0));
+  assert.equal(n, 1, 'the first worker\'s requests shared one token');
+  const left = Object.values(await moves(dk));
+  assert.equal(left.length, 1, 'the upload waits, its session kept');
+  // Safari unloaded the worker; meanwhile the held token expired at Google.
+  valid.delete('tok-1');
+  dk.clock.t += 3600e3;
+  const at = drive.log.length, b = worker(drive, dk, { google: google() });
+  assert.ok((await b.sync.run()).ok);
+  assert.equal(n, 2, 'the next worker asked the handler once');
+  assert.ok(!sent.includes('google.connect') && !sent.includes('google.finish'), 'never a sign-in');
+  const sessions = drive.log.slice(at).filter((e) => e.query?.uploadType === 'resumable' && e.method !== 'PUT');
+  assert.equal(sessions.length, 0, 'the same session, not a new one');
+  assert.ok(chunks(drive, at).some((e) => e.chunk.from > 0), 'it went on from the bytes Drive kept');
+  assert.equal(sha(fileOf(drive, key, 'file').bytes), sha(bytes));
+  assert.deepEqual(await moves(dk), {});
 });
