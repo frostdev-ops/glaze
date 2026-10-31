@@ -1146,6 +1146,26 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     .then(reply, () => reply({ first: false }));
   return true;
 });
+// An Ultra site's student and memberships (courses/ultra.js page), as a page there last read them: kept in this worker's
+// session storage (gone when the browser closes, never the page's) for the site's other pages and course-tab frames.
+// get, put (a fresh read: read and at now) and touch (the student confirmed again by a top page: at now).
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:ultraMine') return;
+  (async () => {
+    const origin = ultraPage(s) && chrome.storage.session && await fromUltra(s);
+    if (!origin) return null;
+    const k = `ultraMine:${origin}`, now = Date.now();
+    const had = (await chrome.storage.session.get(k))[k] || null;
+    if (m.op === 'get') return had;
+    const id = /^_\d+_\d+$/;
+    if (m.op === 'touch') { if (had && had.uid === m.uid) await chrome.storage.session.set({ [k]: { ...had, at: now } }); return null; }
+    const v = m.op === 'put' && m.mine;
+    if (!v || !id.test(v.uid) || !Array.isArray(v.mem) || v.mem.length > 2000 || JSON.stringify(v.mem).length > 4e6) return null;
+    await chrome.storage.session.set({ [k]: { uid: v.uid, mem: v.mem, complete: v.complete !== false, read: now, at: now } });
+    return null;
+  })().then(reply, () => reply(null));
+  return true;
+});
 chrome.tabs?.onRemoved?.addListener((id) => {
   chrome.storage.session?.remove([`landed:${id}`, ...Object.keys(FRAMED).map((what) => frameKey(what, id))]).catch(() => {});
   for (const frames of Object.values(FRAMED)) frames.delete(id);
@@ -1805,10 +1825,12 @@ const forget = async (origin) => {
     patch.courseSlots = slots;
   }
   const keys = chrome.storage.local.getKeys ? await chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null));
-  const drop = keys.filter((k) => k === `dueWeek:${origin}` || k === `seenCoursesAt ${origin}` || k.startsWith(`seenCoursesAt moodle:${origin}/`));
+  const drop = keys.filter((k) => k === `dueWeek:${origin}` || k === `seenCoursesAt ${origin}` || k.startsWith(`seenCoursesAt moodle:${origin}/`)
+    || k === `ultraMe:${origin}` || k.startsWith(`ultraBooks:${origin}/`));
   if (typeof got.todoCache?.key === 'string' && got.todoCache.key.startsWith(`todo:${origin}/`)) drop.push('todoCache');
   if (Object.keys(patch).length) await chrome.storage.local.set(patch);
   if (drop.length) await chrome.storage.local.remove(drop);
+  await Promise.resolve(chrome.storage.session?.remove(`ultraMine:${origin}`)).catch(() => {});
   await ensure();
   return true;
 };
@@ -1821,8 +1843,8 @@ const forgetAll = async () => {
   for (const [k, c] of Object.entries(all.seenCourses || {})) {
     try { origins.add(new URL(c?.site || k.replace(/^(canvas|moodle):/, '')).origin); } catch { /* unscoped legacy entry */ }
   }
-  for (const k of Object.keys(all)) if (k.startsWith('dueWeek:')) {
-    try { origins.add(new URL(k.slice(8)).origin); } catch { /* invalid entry */ }
+  for (const k of Object.keys(all)) if (k.startsWith('dueWeek:') || k.startsWith('ultraMe:') || k.startsWith('ultraBooks:')) {
+    try { origins.add(new URL(k.slice(k.indexOf(':') + 1)).origin); } catch { /* invalid entry */ }
   }
   for (const origin of origins) await forget(origin);
   await chrome.storage.local.remove([...LMS, 'askLater']);
