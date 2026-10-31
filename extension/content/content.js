@@ -94,22 +94,28 @@
     if (!isCanvas()) return;
   }
 
-  // The storage.local keys this frame reads as it starts, in one get: each one's first read comes from it (kept current
-  // by change events), later ones from storage.
+  // Share startup reads, with changes applied before any waiting consumer runs. Later reads go to storage.
   const topFrame = window.top === window;
   const FIRST = ['freshDefaults', 'courseSlots', 'seenCourses', ...solo ? ['mods'] : [], ...topFrame ? [`dueWeek:${location.origin}`] : [],
     ...ultra && topFrame ? [`seenCoursesAt ${location.origin}`, 'widgetLayout'] : [], ...ultra && solo ? ['seenGrades', 'seenContent'] : []];
   let first = null;
-  const firstTaken = new Set();
+  const firstTaken = new Set(), firstChanged = new Set(), firstValues = {};
   if (!isPreview) try {
-    first = new Promise((res) => chrome.storage.local.get(FIRST, (r) => res(chrome.runtime?.lastError ? null : r || {})));
+    first = new Promise((res) => chrome.storage.local.get(FIRST, (r) => {
+      if (chrome.runtime?.lastError) return res(null);
+      for (const k of FIRST) if (!firstChanged.has(k) && r && k in r) firstValues[k] = r[k];
+      res(firstValues);
+    })).catch(() => null);
     chrome.storage.onChanged.addListener((ch, area) => {
-      if (area === 'local') first?.then((r) => { if (r) for (const k of FIRST) if (ch[k]) { if ('newValue' in ch[k]) r[k] = ch[k].newValue; else delete r[k]; } });
+      if (area === 'local') for (const k of FIRST) if (ch[k]) {
+        firstChanged.add(k);
+        if ('newValue' in ch[k]) firstValues[k] = ch[k].newValue; else delete firstValues[k];
+      }
     });
   } catch { first = null; }
   const stored = (keys, cb) => {
     const ks = [].concat(keys);
-    const direct = () => { try { chrome.storage.local.get(ks, cb); } catch { /* extension reloaded under the tab */ } };
+    const direct = () => { try { chrome.storage.local.get(ks, cb); } catch { cb({}); } };
     if (!first || ks.some((k) => !FIRST.includes(k) || firstTaken.has(k))) return direct();
     for (const k of ks) firstTaken.add(k);
     first.then((r) => (r ? cb(Object.fromEntries(ks.filter((k) => k in r).map((k) => [k, r[k]]))) : direct()));
@@ -389,9 +395,8 @@
   // What only some pages need isn't in the first content script: it runs in this frame the first time it's needed,
   // put there by background/background.js ('glaze:load', its LOADABLE list). The options preview has it as <script> tags.
   // `ready` says whether what the file defines is here: before asking (the preview), and after the worker says it ran.
-  // One request per file, or per group a feature needs together (in load order, one worker round trip; files that already
-  // ran here are left out), at a time. A failed one is asked again by itself (1 s, 2 s, 4 s… 30 s apart, about four minutes)
-  // and the page syncs once it is in (recover); a refusal that won't change, by a sync after a minute.
+  // One worker request per feature group, in order, skipping verified files. Failures retry after 1 s, 2 s, 4 s… 30 s
+  // (about four minutes), then recover the page; permanent refusals are cleared after a minute.
   // docId names this document to the worker where the browser can't (no sender.documentId): it checks the frame still
   // holds this document before injecting.
   const docId = crypto.randomUUID();
@@ -404,10 +409,11 @@
         : Promise.resolve().then(() => {
           if (!chrome.runtime?.id) throw new Error('reloaded');
           const files = [].concat(group), ask = files.length > 1 ? files.filter((f, i) => i === files.length - 1 || !ran.has(f)) : files;
-          return Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:load', files: ask, doc: docId })).then((r) => { if (r?.ok) for (const f of ask) ran.add(f); return r; });
-        }).then((r) => {
-          if (!r?.ok) throw new Error(r?.error || 'not loaded');
-          if (!ready()) throw new Error('ran, but not ready');
+          return Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:load', files: ask, doc: docId })).then((r) => {
+            if (!r?.ok) throw new Error(r?.error || 'not loaded');
+            if (!ready()) throw new Error('ran, but not ready');
+            for (const f of ask) ran.add(f);
+          });
         });
       if (retry) p.then(() => { if (n) recover(); }, (e) => {
         const again = n < 11 && !/^(not loadable|sender|not in the preview)$/.test(e.message);
@@ -562,7 +568,7 @@
       }
     }
     // Too many separate subtrees to be worth tracking: one full pass is cheaper.
-    if (dirty.size > 500) { dirty.clear(); touched.clear(); full = true; }
+    if (dirty.size + touched.size > 500) { dirty.clear(); touched.clear(); full = true; }
     if (!timer) timer = setTimeout(flush, 150);
   };
   const startSweep = () => {

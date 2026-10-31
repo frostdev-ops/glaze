@@ -281,9 +281,9 @@ const CANVAS_OPEN = 162;
 // Glaze's own work on Ultra pages (plan step C, 2026-10-30; a named raise under the 2026-10-19 approval): need() groups a
 // feature's files into one worker round trip, a class or style change sweeps its element rather than its subtree, a hidden
 // tab's passes wait until it is shown, the startup storage.local reads go in one get, and settings and course-list changes
-// apply from their new values. All of it is the passes and loader in the shared content.js (5,555 bytes on every site) and
+// apply from their new values. All of it is the passes and loader in the shared content.js (5,545 bytes on every site) and
 // Ultra's groups and startup reads in content-ultra.js (521). Measured against a6fa9919.
-const ULTRA_PASSES = { ultra: 5555 + 521, canvas: 5555, moodle: 5555 };
+const ULTRA_PASSES = { ultra: 5545 + 521, canvas: 5545, moodle: 5545 };
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what background/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;

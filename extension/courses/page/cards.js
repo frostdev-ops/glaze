@@ -23,14 +23,21 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
   let data = null; // { card, cards, links, imgs }
   let reading = null;
   // The stored styles are asked for while the reader loads.
-  const read = () => (reading ||= Promise.all([need('courses/cards.js', () => globalThis.GZ_CARDS), get('sync', ['card', cardsKey, linksKey, 'cards'])]).then(async ([, r]) => {
-    K = globalThis.GZ_CARDS;
-    const cards = K.styles(r[cardsKey]);
-    if (ultra && r.cards?.['*']) cards['*'] = K.styles({ '*': r.cards['*'] })['*'];
-    const ids = Object.values(cards).flat().map((s) => s?.i).filter(Boolean);
-    const imgs = ids.length ? await get('local', ids.map((i) => `${imageKey}${i}`)) : {};
-    return (data = { card: K.settings(r.card), cards, links: K.links(r[linksKey]), imgs });
-  }).catch((e) => { reading = null; throw e; }));
+  const read = () => {
+    if (!reading) {
+      const pending = Promise.all([need('courses/cards.js', () => globalThis.GZ_CARDS), get('sync', ['card', cardsKey, linksKey, 'cards'])]).then(async ([, r]) => {
+        K = globalThis.GZ_CARDS;
+        const cards = K.styles(r[cardsKey]);
+        if (ultra && r.cards?.['*']) cards['*'] = K.styles({ '*': r.cards['*'] })['*'];
+        const ids = Object.values(cards).flat().map((s) => s?.i).filter(Boolean);
+        const imgs = ids.length ? await get('local', ids.map((i) => `${imageKey}${i}`)) : {};
+        if (reading !== pending) return read();
+        return (data = { card: K.settings(r.card), cards, links: K.links(r[linksKey]), imgs });
+      }).catch((e) => { if (reading === pending) reading = null; throw e; });
+      reading = pending;
+    }
+    return reading;
+  };
   chrome.storage.onChanged.addListener((ch, area) => {
     if (area === 'sync' ? !(ch.card || ch[cardsKey] || ch[linksKey] || (ultra && ch.cards)) : !Object.keys(ch).some((k) => k.startsWith(imageKey))) return;
     reading = null;

@@ -8,7 +8,22 @@ const assert = require('node:assert/strict');
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async (n = 10) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 
-const boot = async ({ pathname = '/ultra/stream' } = {}) => {
+test('a failed startup read still completes consumers when the direct fallback throws', async () => {
+  const source = read('content/content.js');
+  let gets = 0, answered = false;
+  const c = vm.createContext({ window: {}, solo: true, ultra: true, isPreview: false, location: { origin: 'https://school.test' },
+    chrome: { runtime: {}, storage: { local: { get: (_, cb) => {
+      if (++gets > 1) throw new Error('Extension context invalidated');
+      c.chrome.runtime.lastError = { message: 'read failed' }; cb({}); delete c.chrome.runtime.lastError;
+    } }, onChanged: { addListener() {} } } } });
+  c.window.top = c.window;
+  const stored = vm.runInContext(`${source.slice(source.indexOf('  const topFrame ='), source.indexOf('  // ---- long tail'))}\nstored;`, c);
+  stored('freshDefaults', () => { answered = true; });
+  await settle();
+  assert.equal(answered, true, 'settings readiness must settle even after extension reload');
+});
+
+const boot = async ({ pathname = '/ultra/stream', localGet } = {}) => {
   let now = 0;
   const timers = [], styleReads = [], radiusReads = [], loads = [], localGets = [], syncGets = [], changed = [], listeners = {}, observers = [];
   class El {
@@ -40,7 +55,7 @@ const boot = async ({ pathname = '/ultra/stream' } = {}) => {
     createElement: (t) => new El(t), createElementNS: (_, t) => new El(t), createTextNode: () => new El('#text'),
     createTreeWalker: () => ({ nextNode: () => null }), createRange: () => ({ selectNodeContents() {}, getBoundingClientRect: () => ({}) }),
     addEventListener: (type, f) => (listeners[type] ||= []).push(f), removeEventListener() {}, fonts: { load: () => Promise.resolve([]), add() {} } };
-  const local = { get: (k, cb) => { localGets.push(k); const r = k === 'ultra' || (Array.isArray(k) && k.includes('ultra')) ? { ultra: ['https://school.test'] } : {}; return cb ? cb(r) : Promise.resolve(r); },
+  const local = { get: (k, cb) => { localGets.push(k); if (localGet?.(k, cb)) return; const r = k === 'ultra' || (Array.isArray(k) && k.includes('ultra')) ? { ultra: ['https://school.test'] } : {}; return cb ? cb(r) : Promise.resolve(r); },
     set: (o, cb) => { cb?.(); return Promise.resolve(); }, remove: (k, cb) => { cb?.(); return Promise.resolve(); } };
   const location = { protocol: 'https:', origin: 'https://school.test', pathname, href: `https://school.test${pathname}`, search: '', hash: '' };
   const c = vm.createContext({ document, console, Intl, URL, URLSearchParams, TextEncoder, structuredClone, crypto: require('node:crypto').webcrypto, location,
@@ -92,6 +107,22 @@ test('a group of files a feature needs goes to the worker in one glaze:load, and
   assert.equal(sent.length, 1, 'a file of the group is already here');
   await p.c.GZ_CTX.need(['x/lib.js', 'x/page/more.js'], has('x/lib.js', 'x/page/more.js'));
   assert.deepEqual(JSON.parse(JSON.stringify(sent[1])), ['x/page/more.js'], 'what already ran is not sent again');
+});
+
+test('a group retries its missing dependency when the worker succeeds but readiness fails', async () => {
+  const p = await boot();
+  const sent = [];
+  p.c.chrome.runtime.sendMessage = (m) => {
+    sent.push([...m.files]);
+    // Injection can finish its last file even if an earlier library threw.
+    if (sent.length > 1 && m.files.includes('x/lib.js')) p.c.library = {};
+    p.c.page = {};
+    return Promise.resolve({ ok: true });
+  };
+  await assert.rejects(p.c.GZ_CTX.need(['x/lib.js', 'x/page.js'], () => p.c.library && p.c.page), /not ready/);
+  await p.wait(1100);
+  assert.ok(p.c.library, 'the automatic retry loads the failed library again');
+  assert.deepEqual(sent[1], ['x/lib.js', 'x/page.js']);
 });
 
 test('course tabs ask once, without a separate trip for their library, and the sidebar brings its libraries in its load', async () => {
@@ -146,6 +177,20 @@ test('a hidden tab puts its passes off, and sweeps everything once when it is sh
   assert.equal(p.styleReads.length, n, 'and only one');
 });
 
+test('a burst of attribute changes cannot crowd newly added content out of the pass', async () => {
+  const p = await boot();
+  const changed = p.tree(20001), added = p.tree(0);
+  p.body.append(changed, added);
+  p.styleReads.length = 0;
+  p.mutate([
+    ...changed.kids.map((target) => ({ type: 'attributes', attributeName: 'class', target, oldValue: '' })),
+    { type: 'childList', target: p.body, addedNodes: [added], removedNodes: [] },
+  ]);
+  await p.wait(500);
+  assert.ok(p.styleReads.includes(added), 'new content is swept even when attribute changes fill a pass');
+  assert.ok(changed.kids.every((el) => p.styleReads.includes(el)), 'the overflow is eventually swept too');
+});
+
 test('the first storage.local reads go in one get', async () => {
   const p = await boot();
   const gets = JSON.parse(JSON.stringify(p.localGets)).map((k) => [].concat(k));
@@ -155,6 +200,20 @@ test('the first storage.local reads go in one get', async () => {
     assert.ok(first.includes(k), `${k} in the one get (${JSON.stringify(gets)})`);
   for (const k of ['freshDefaults', 'courseSlots', 'seenCourses', 'mods', 'dueWeek:https://school.test', 'widgetLayout'])
     assert.equal(gets.filter((g) => g.includes(k)).length, 1, `${k} read once (${JSON.stringify(gets)})`);
+});
+
+test('a startup snapshot cannot overwrite a course-list change that arrived while it was pending', async () => {
+  let answer;
+  const p = await boot({ localGet: (keys, cb) => {
+    if (!Array.isArray(keys) || !keys.includes('courseSlots')) return false;
+    answer = cb;
+    return true;
+  } });
+  const seenCourses = { _1_1: { name: 'Biology', slot: 3 } };
+  p.change({ seenCourses: { newValue: seenCourses } }, 'local');
+  answer({ seenCourses: {} });
+  await p.wait(200);
+  assert.deepEqual(JSON.parse(JSON.stringify(p.c.GZ_CTX.courseList())), seenCourses);
 });
 
 test('a settings change is applied from its new values, and a new course list alone does not repaint the palette', async () => {

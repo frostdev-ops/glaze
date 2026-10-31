@@ -105,6 +105,27 @@ const tab = (env, site = 'canvas') => {
 };
 const load = () => { const env = computer(); return { env, store: env.store, ...tab(env) }; };
 
+test('a style read started while the library loads cannot repaint over a newer storage change', async () => {
+  const source = read('courses/page/cards.js'), changes = [];
+  let loaded, image;
+  const library = new Promise((res) => { loaded = res; });
+  let stored = { cards: { [A]: { k: 'image', i: 'abcdef123456' } } };
+  const c = vm.createContext({ need: () => library, globalThis: { GZ_CARDS: K }, ultra: false, cardsKey: 'cards', linksKey: 'links', imageKey: 'cardImg:',
+    get: (area) => area === 'sync' ? Promise.resolve(structuredClone(stored)) : new Promise((res) => { image = res; }),
+    chrome: { storage: { onChanged: { addListener: (f) => changes.push(f) } } }, paint() {} });
+  const api = vm.runInContext(`${source.slice(source.indexOf('  let data ='), source.indexOf('  // Glaze turned on'))}\n({ read, state: () => data });`, c);
+  const older = api.read();
+  stored = { cards: { [A]: { k: 'solid', c: '#123456' } } };
+  changes[0]({ cards: { newValue: stored.cards } }, 'sync');
+  const newer = api.read();
+  loaded();
+  await newer;
+  image({ 'cardImg:abcdef123456': 'data:image/png;base64,AAAA' });
+  const late = await older;
+  assert.equal(api.state().cards[A].k, 'solid', 'the newest cached style survives');
+  assert.equal(late.cards[A].k, 'solid', 'the earlier caller paints the newest style too');
+});
+
 test('closing after a failed save keeps the editor and the draft, and says so', async () => {
   const { env, store, ui, dialog, find } = load();
   store.sync.cards = { [A]: { k: 'solid', c: '#111111' } };

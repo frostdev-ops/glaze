@@ -16,6 +16,7 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
   const live = () => !!chrome.runtime?.id && ids.length > 0;
 
   const readLocal = () => {
+    localKnown = false; // A resumed read may contain changes missed while the widgets were off.
     const token = rev, read = ++reads;
     get('local', isPreview ? ['todoCache'] : ['widgetTimer', 'todoCache']).then((r) => {
       if (!live() || token !== rev || read !== reads) return;

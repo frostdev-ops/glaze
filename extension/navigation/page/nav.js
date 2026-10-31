@@ -284,6 +284,7 @@ function GZ_ULTRA_RAIL(X) {
     });
   };
   const readLocal = () => {
+    localKnown = false; // A resumed read may contain changes missed while the rail was off.
     const token = rev, read = ++reads;
     get('local', isPreview ? ['todoCache'] : ['widgetTimer', 'todoCache']).then(async (r) => {
       if (!active || token !== rev || read !== reads) return;
