@@ -662,6 +662,22 @@ const KNOWN = {
     skips: () => false,
     repro: [{ t: 'faults', d: 1, p: 0.3, quota: false, refuse: 2 }, { t: 'run', d: 1, how: 'poke', s: 1059538193 }, { t: 'sheet', k: 'new', d: 1, pick: 0.4254337348975241, pick2: 0.710770957171917, s: 1655149833 }, { t: 'drive', k: 'trashData', pick: 0.695207278477028, s: 206590386 }, { t: 'paper', k: 'new', d: 1, pick: 0.7763760664965957, pick2: 0.5383014006074518, s: 263146629 }, { t: 'note', k: 'new', d: 1, pick: 0.8037255362141877, pick2: 0.8429688038304448, s: 472602691 }, { t: 'lag', n: 2 }, { t: 'run', d: 1, how: 'timers', s: 1477004821 }, { t: 'run', d: 1, how: 'poke', s: 1295093123 }],
   },
+  'stale-stamp': {
+    fixed: true,
+    about: 'a Settings change made while a run read that key (after its time, before its value) was weighed with no time against Drive\'s earlier change, which was written over it, its stamp set to Drive\'s time',
+    skips: () => false,
+    repro: [{ t: 'setting', k: 'colors', d: 1, pick: 0.58, pick2: 0.28, s: 525175327 }, { t: 'run', d: 1, how: 'run', s: 1121166915 },
+      { t: 'run', d: 0, how: 'poke', s: 867526412, inject: { at: 74, op: { t: 'setting', k: 'colors', d: 0, pick: 0.29, pick2: 0.5, s: 42 } } }],
+  },
+  // Open, accepted by the owner: Settings written straight to storage.sync between the worker's compare and its write (a few
+  // milliseconds) are written over by Drive's value. Found 2026-10-31 (seed 300933, 80 operations, 3 devices).
+  'settings-cas': {
+    fixed: false,
+    about: 'a Settings change landing between the worker\'s read of the key and its write of Drive\'s value (the compare-and-write race, milliseconds, accepted) is written over',
+    skips: (op) => op.t === 'run' && op.inject?.op?.t === 'setting',
+    repro: [{ t: 'setting', k: 'colors', d: 1, pick: 0.58, pick2: 0.28, s: 525175327 }, { t: 'run', d: 1, how: 'run', s: 1121166915 },
+      { t: 'run', d: 0, how: 'poke', s: 867526412, inject: { at: 78, op: { t: 'setting', k: 'colors', d: 0, pick: 0.29, pick2: 0.5, s: 42 } } }],
+  },
   // Open: within the accepted limit that switching accounts A→B→A brings older data back. Found 2026-10-31 (seed 60348,
   // 140 operations, 2 devices).
   'stale-restore': {
