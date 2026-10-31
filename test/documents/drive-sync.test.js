@@ -1972,3 +1972,41 @@ test('another device\'s file-only update during export survives even if its JSON
   assert.ok(!drive.files.get(file).meta.parents.includes((await state(a)).folder), 'the unpaired export is preserved in Data');
   noDeletes(drive);
 });
+
+test('an interrupted PDF restoration finishes its JSON copy even if its local bytes are missing on retry', async () => {
+  const drive = standin(), a = device(drive), b = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000c08';
+  const bytes = enc('%PDF kept in Drive'), ref = await a.files.put(bytes, MIME.pdf);
+  await a.papers.save(key, { kind: 'pdf', file: ref, size: ref.size, title: 'Reading', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  const gone = exportOf(drive, key).meta.id;
+  await a.papers.trash(key); await a.sync.touched(key);
+  assert.ok((await a.sync.run({ push: true })).ok);
+  drive.remove(gone);
+  await a.papers.untrash(key); await a.sync.touched(key);
+  const put = a.store.set;
+  a.store.set = async (o) => {
+    await put(o);
+    if (o[S.DOC + sha(key).slice(0, 32)]?.unsent) {
+      a.store.set = put;
+      throw Object.assign(new Error('stopped before the JSON copy'), { why: 'network' });
+    }
+  };
+  assert.equal((await a.sync.run({ push: true })).why, 'network');
+  const replacement = exportOf(drive, key).meta.id, revision = drive.view(replacement).headRevisionId;
+  assert.notEqual(replacement, gone, 'the replacement was recorded before the stop');
+  assert.equal(sidecarJson(drive, key).file, gone, 'the JSON copy still names the deleted file');
+  // A file-store read can return no bytes after a restart; Drive still holds the uploaded replacement.
+  a.files.f.delete(ref.hash);
+  a.sync = S.create(a.env);
+  a.clock.t = (await state(a)).wait + 1;
+  assert.ok((await a.sync.run()).ok);
+  assert.equal(sidecarJson(drive, key).file, replacement, 'the recorded file must reach the JSON copy');
+  assert.equal(drive.view(replacement).headRevisionId, revision, 'the available Drive file is reused');
+  assert.ok((await b.sync.set(true)).ok);
+  assert.equal(dec(await b.files.read((await b.papers.get(key)).file.hash)), dec(bytes), 'another device gets the PDF');
+  const n = drive.log.filter((x) => x.upload).length;
+  assert.ok((await a.sync.run()).ok); assert.ok((await b.sync.run()).ok);
+  assert.equal(drive.log.filter((x) => x.upload).length, n, 'the recovery settles');
+  noDeletes(drive);
+});
