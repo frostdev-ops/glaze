@@ -342,10 +342,13 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // Drive's answer to a staged upload, written where its owner's push writes it: a document's link (its file, then its
     // copy), or a record's (background/drive-store.js commit); then the transfer is let go. Written again (a worker stopped
     // between the two), it says the same.
+    // Its revision is Glaze's only while the file holds these very bytes: an answer asked again later (the worker stopped
+    // before writing it) names the file as it is then, perhaps edited outside Glaze since, which is then no revision of
+    // Glaze's (none recorded: the next meeting tells the edit as one).
     const commit = async (slot, t, file) => {
-      const c = t.commit;
+      const c = t.commit, sum = String(file.sha256Checksum || '').toLowerCase(), rev = !sum || !t.b || sum === t.b ? file.headRevisionId || null : null;
       if (c.doc) {
-        await putDoc(c.doc, { ...c.link, ...(c.set === 'file' ? { file: file.id, fh: file.headRevisionId || null } : { json: file.id, jh: file.headRevisionId || null }) }, await docOf(c.doc));
+        await putDoc(c.doc, { ...c.link, ...(c.set === 'file' ? { file: file.id, fh: rev } : { json: file.id, jh: rev }) }, await docOf(c.doc));
         if (c.set === 'file') await unwait(`up:${c.doc}`);
       } else if (c.rec) await more.commit(c.rec, c.link, file);
       await dropMove(slot);
@@ -365,11 +368,14 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // very bytes: this upload's, its answer lost, or the same content); or 'gone' (in Drive's trash, moved out, no longer
     // Glaze's for its owner, or changed since it was staged: by another device, or outside Glaze).
     const aimed = async (t, folder) => {
-      if (!t.id) return { as: 'send' };
+      // The folder it belongs in as it is now: the Glaze folder for a document's, Glaze/Data for a record's (replaced since
+      // it was staged, Drive's trash say: a new file goes into the new one, an update only into a file there).
+      const home = t.owner?.doc ? folder : t.owner?.rec ? (await state()).data || null : null;
+      if (!t.id) return { as: home && t.create?.parents?.[0] !== home ? 'gone' : 'send' };
       const F = await meta(t.id);
       if (F.removed) return { as: 'send' }; // send's own answer: a new file, or 'missing' for a document's
       const file = t.owner?.doc ? (t.meta?.appProperties?.glaze === 'file' ? 'file' : 'doc') : null;
-      const ours = F.trashed === false && (t.owner?.doc ? (F.parents || []).includes(folder) && F.appProperties?.glaze === file && F.appProperties?.key === t.owner.doc
+      const ours = F.trashed === false && (!home || (F.parents || []).includes(home)) && (t.owner?.doc ? F.appProperties?.glaze === file && F.appProperties?.key === t.owner.doc
         : t.owner?.rec ? F.appProperties?.glaze === 'rec' && F.appProperties?.key === t.owner.rec : true);
       // Landed: its bytes and what it sets on the file (name, Glaze's properties) are Drive's now.
       const set = t.meta || {}, props = Object.entries(set.appProperties || {});
