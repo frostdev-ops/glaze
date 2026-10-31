@@ -270,6 +270,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       const r = await up(d?.json || null, { name: `${base}.glaze.json`, appProperties: { glaze: 'doc', key: h, sum, rev: String(l.rec.revision || 0) } }, JSON_TYPE, json);
       return putDoc(h, { key, h, kind, json: r.id, file, fh, fsum: sum, rsum: sum, lsum: sum, rev: l.rec.revision || 0, trashed: false }, d);
     };
+    // Drive's side kept here before this device's goes up: a push that fails and is tried again meets only this device's
+    // change, never keeping Drive's side a second time. R: the copy whose side was kept (its sum now agreed), or null.
+    const kept = (h, d, R) => putDoc(h, { ...d, ...(R && { rsum: R.appProperties?.sum }) }, null);
     const agreed = async (key, h, R, got, l, d) => putDoc(h, { key, h, kind: got.kind, json: R.id, file: got.file, fh: got.fileRev, fsum: got.sum, rsum: got.sum,
       lsum: await sumOf(key, l), rev: l.rec.revision || 0, trashed: false }, d);
 
@@ -311,7 +314,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
             await agreed(key, h, R, got, now2, null);
             return;
           }
-          await keepOther(key, l, got); return push(key, h, await local(key), source, folder);
+          await keepOther(key, l, got);
+          return push(key, h, await local(key), await kept(h, { key, h, kind: kindOf(l.rec), ...source, lsum: null, rev: -1, trashed: false }, R), folder);
         }
         if (got.external) return push(key, h, l, source, folder);
         await agreed(key, h, R, got, l, null);
@@ -369,7 +373,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
           const got = { kind: kindOf(l.rec), record: { ...base, kind: kindOf(l.rec), file: { hash: ref.hash, size: ref.size, type: ref.type }, size: ref.size }, parts: null, file: d.file, fileRev: E.headRevisionId, sum: null };
           if (ldirty) await keepOther(key, l, got);
           else l = await take(key, l, got);
-          return push(key, h, l, { ...d, fh: E.headRevisionId }, folder);
+          return push(key, h, l, await kept(h, { ...d, fh: E.headRevisionId }, rdirty ? R : null), folder);
         }
         // A .docx or .xlsx edited outside Glaze stays as it is; the document gets a file of its own again.
         // Detach durably before any more Drive writes: a failed upload or stopped worker must never reuse this id.
@@ -382,7 +386,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         const got = await fetchCopy(R, h, key);
         // Both changed to the same thing (another device took what this one pushed only halfway): nothing to keep apart.
         if (ldirty && (await sumOf(key, l)) === got.sum) { await agreed(key, h, R, got, l, d); return; }
-        if (ldirty) { await keepOther(key, l, got); return push(key, h, await local(key), d, folder); }
+        if (ldirty) { await keepOther(key, l, got); return push(key, h, await local(key), await kept(h, d, R), folder); }
         const now2 = await take(key, l, got);
         if (force || got.external) return push(key, h, now2, { ...d, json: R.id }, folder);
         await agreed(key, h, R, got, now2, d);
