@@ -1783,3 +1783,192 @@ test('an interrupted first-meeting restoration with unavailable remote deck byte
   assert.equal((await b.papers.get(key)).file.hash, mine.hash, 'the other device receives the restored file');
   noDeletes(drive);
 });
+
+test('an interrupted restore keeps the newer local PDF when the older Drive copy is fetched on retry', async () => {
+  const drive = standin(), a = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000c01';
+  const old = await a.files.put(enc('%PDF older'), MIME.pdf);
+  await a.papers.save(key, { kind: 'pdf', file: old, size: old.size, title: 'Reading', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  const previous = sidecarJson(drive, key), sum = sidecarOf(drive, key).meta.appProperties.sum;
+  a.clock.t += 1000;
+  const newer = await a.files.put(enc('%PDF newer'), MIME.pdf);
+  await a.papers.save(key, { file: newer, size: newer.size });
+  await a.sync.touched(key);
+  assert.ok((await a.sync.run()).ok);
+  await a.papers.trash(key); await a.sync.touched(key);
+  assert.ok((await a.sync.run()).ok);
+  // Another Glaze restores its older copy, with matching file and JSON metadata.
+  const c = a.env.drive(), file = previous.file, json = sidecarOf(drive, key).meta.id;
+  const F = await c.put({ id: file, bytes: enc('%PDF older'), mime: MIME.pdf, meta: { appProperties: { sum, b: old.hash } } });
+  await c.put({ id: json, bytes: enc(JSON.stringify({ ...previous, fileRev: F.headRevisionId })), mime: 'application/json', meta: { appProperties: { sum } } });
+  await c.patch(file, { trashed: false }); await c.patch(json, { trashed: false });
+  drive.offline((x) => x.path === `/drive/v3/files/${json}` && x.query.alt === 'media');
+  assert.equal((await a.sync.run()).why, 'network', 'the restore stops after taking the local PDF out of Trash');
+  assert.ok(!P.trashed(await a.papers.get(key)));
+  assert.equal((await a.papers.get(key)).file.hash, newer.hash);
+  a.clock.t = (await state(a)).wait + 1;
+  a.sync = S.create(a.env); // a new worker must recover the comparison from disk
+  assert.ok((await a.sync.run()).ok);
+  assert.equal((await a.papers.get(key)).file.hash, newer.hash, 'the newer PDF stays current after retry');
+  const copies = await Promise.all((await a.papers.list()).filter((p) => p.key !== key).map((p) => a.papers.get(p.key)));
+  assert.ok(copies.some((p) => p.file?.hash === old.hash), 'the older PDF is kept as a separate document');
+  noDeletes(drive);
+});
+
+for (const kind of ['paper', 'pdf', 'slides']) test(`a first meeting repairs a ${kind} whose file was moved out of Glaze`, async () => {
+  const drive = standin(), a = device(drive), b = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000c02';
+  if (kind === 'paper') await a.papers.save(key, { doc: doc('Moved file'), title: 'Moved', named: true });
+  else {
+    const ref = await a.files.put(enc(`${kind} moved file`), TYPE[kind]);
+    await a.papers.save(key, { kind, file: ref, size: ref.size, title: 'Moved', named: true });
+  }
+  assert.ok((await a.sync.set(true)).ok);
+  const folder = (await state(a)).folder, moved = exportOf(drive, key), bytes = Buffer.from(moved.bytes);
+  const c = a.env.drive(), elsewhere = await c.folder({ name: 'Elsewhere', mimeType: drive.FOLDER });
+  await c.patch(moved.meta.id, {}, undefined, { add: elsewhere.id, remove: [folder] });
+  assert.ok((await b.sync.set(true)).ok);
+  const visible = [...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'file' && f.meta.appProperties.key === sha(key).slice(0, 32)
+    && f.meta.parents.includes(folder) && !drive.view(f.meta.id).trashed);
+  assert.equal(visible.length, 1, 'the joining device gives the document a file in Glaze');
+  assert.equal(sidecarJson(drive, key).file, visible[0].meta.id);
+  assert.deepEqual(moved.bytes, bytes, 'the moved file is left intact');
+  assert.deepEqual(moved.meta.parents, [elsewhere.id]);
+  noDeletes(drive);
+});
+
+test('a staged upload rechecks its target after a Word edit arrives outside Glaze', async () => {
+  const drive = standin(), a = device(drive), chunks = new Map();
+  const key = 'doc:00000000-0000-4000-8000-000000000c03';
+  await a.papers.save(key, { doc: doc('Before'), title: 'Essay', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  const file = exportOf(drive, key).meta.id;
+  let edited = false;
+  const stage = {
+    keys: async (prefix) => [...chunks.keys()].filter((k) => k.startsWith(prefix)).sort(),
+    entries: async (prefix) => [...chunks].filter(([k]) => k.startsWith(prefix)).sort(([a], [b]) => a.localeCompare(b)),
+    write: async (puts = [], drops = []) => {
+      for (const k of drops) chunks.delete(k);
+      for (const [k, v] of puts) chunks.set(k, structuredClone(v));
+      if (!edited && puts.length) { edited = true; drive.edit(file, enc('Edited in Word while staged')); }
+    },
+  };
+  a.sync = S.create({ ...a.env, stage, exportOf: async () => ({ name: 'Essay.docx', mime: MIME.docx, bytes: new Uint8Array(S.BIG + 1).fill(65) }) });
+  await a.papers.save(key, { doc: doc('Local edit') }); await a.sync.touched(key);
+  assert.ok((await a.sync.run({ push: true })).ok);
+  assert.equal(sha(drive.files.get(file).bytes), sha('Edited in Word while staged'), 'the staged upload never overwrites the outside edit');
+  assert.notEqual(sidecarJson(drive, key).file, file, 'the local edit gets a new file');
+  assert.equal(textOf(sidecarJson(drive, key).record.doc), 'Local edit');
+  assert.equal(Object.keys((await a.store.get(S.MOVES))[S.MOVES] || {}).length, 0, 'the replacement finishes');
+  noDeletes(drive);
+});
+
+test('a Word edit arriving during export is preserved before the upload starts', async () => {
+  const drive = standin(), a = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000c04';
+  await a.papers.save(key, { doc: doc('Before'), title: 'Essay', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  const file = exportOf(drive, key).meta.id, exportLocal = a.env.exportOf;
+  let edited = false;
+  a.env.exportOf = async (...args) => {
+    const result = await exportLocal(...args);
+    if (!edited) { edited = true; drive.edit(file, enc('Edited in Word during export')); }
+    return result;
+  };
+  await a.papers.save(key, { doc: doc('Local edit') }); await a.sync.touched(key);
+  assert.ok((await a.sync.run({ push: true })).ok);
+  assert.equal(dec(drive.files.get(file).bytes), 'Edited in Word during export');
+  assert.notEqual(sidecarJson(drive, key).file, file);
+  noDeletes(drive);
+});
+
+test('a first push interrupted before its JSON copy leaves a moved export intact on retry', async () => {
+  const drive = standin(), a = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000c05';
+  await a.papers.save(key, { doc: doc('First'), title: 'Essay', named: true });
+  // Stop after the file is linked locally, before its JSON upload is sent.
+  const put = a.store.set;
+  let stopped = false;
+  a.store.set = async (o) => {
+    await put(o);
+    if (!stopped && Object.values(o).some((v) => v?.file && v.json === null)) { stopped = true; throw Object.assign(new Error('stopped'), { why: 'network' }); }
+  };
+  assert.equal((await a.sync.set(true)).why, 'network');
+  const moved = exportOf(drive, key), folder = (await state(a)).folder;
+  const c = a.env.drive(), elsewhere = await c.folder({ name: 'Elsewhere', mimeType: drive.FOLDER });
+  await c.patch(moved.meta.id, {}, undefined, { add: elsewhere.id, remove: [folder] });
+  a.clock.t = (await state(a)).wait + 1;
+  assert.ok((await a.sync.run()).ok);
+  assert.notEqual(sidecarJson(drive, key).file, moved.meta.id, 'a new file is made in Glaze');
+  assert.deepEqual(moved.meta.parents, [elsewhere.id]);
+  noDeletes(drive);
+});
+
+test('a completed staged export edited before replay is detached instead of relinked from its cached answer', async () => {
+  const drive = standin(), a = device(drive), chunks = new Map();
+  const key = 'doc:00000000-0000-4000-8000-000000000c06';
+  assert.ok((await a.sync.set(true)).ok);
+  const stage = {
+    keys: async (prefix) => [...chunks.keys()].filter((k) => k.startsWith(prefix)).sort(),
+    entries: async (prefix) => [...chunks].filter(([k]) => k.startsWith(prefix)).sort(([a], [b]) => a.localeCompare(b)),
+    write: async (puts = [], drops = []) => { for (const k of drops) chunks.delete(k); for (const [k, v] of puts) chunks.set(k, structuredClone(v)); },
+  };
+  const put = a.store.set;
+  let edited;
+  a.store.set = async (o) => {
+    await put(o);
+    const done = Object.values(o[S.MOVES] || {}).find((t) => t.file);
+    if (!edited && done) { edited = done.file.id; drive.edit(edited, enc('Edited in Word before replay')); }
+  };
+  a.sync = S.create({ ...a.env, stage, exportOf: async () => ({ name: 'Essay.docx', mime: MIME.docx, bytes: new Uint8Array(S.BIG + 1).fill(65) }) });
+  await a.papers.save(key, { doc: doc('First'), title: 'Essay', named: true }); await a.sync.touched(key);
+  assert.ok((await a.sync.run({ push: true })).ok);
+  assert.equal(dec(drive.files.get(edited).bytes), 'Edited in Word before replay');
+  assert.notEqual(sidecarJson(drive, key).file, edited, 'the cached answer cannot reattach the kept file');
+  const folder = (await state(a)).folder;
+  const visible = [...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'file' && f.meta.parents.includes(folder) && !drive.view(f.meta.id).trashed);
+  assert.equal(visible.length, 1, 'the document has one file of its own');
+  assert.equal(visible[0].meta.id, sidecarJson(drive, key).file);
+  noDeletes(drive);
+});
+
+test('the chaos network keeps search lag independent for files with the same id in different accounts', async () => {
+  const C = require('../helpers/drive-chaos.cjs'), net = C.network();
+  const dev = { name: 'A', fault: () => null, stats: { faults: 0 } };
+  const client = (account) => D.create({ fetch: async (u, i) => net.handle(dev, u, i), token: async () => C.TOKENS[account], interactive: false });
+  const a = client(C.ACCOUNTS.A), b = client(C.ACCOUNTS.B);
+  net.lag = 3;
+  const mimeType = net.drives[C.ACCOUNTS.A].FOLDER;
+  const fa = await a.folder({ name: 'A', mimeType }), fb = await b.folder({ name: 'B', mimeType });
+  assert.equal(fa.id, fb.id, 'each stand-in allocates ids independently');
+  for (let i = 0; i < 3; i++) await a.find('');
+  assert.deepEqual((await b.find('')).files, [], 'searches on A must not make B visible early');
+  for (let i = 0; i < 2; i++) await b.find('');
+  assert.deepEqual((await b.find('')).files.map((f) => f.id), [fb.id]);
+});
+
+test('another device\'s file-only update during export survives even if its JSON copy never arrives', async () => {
+  const drive = standin(), a = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000c07';
+  await a.papers.save(key, { doc: doc('Before'), title: 'Essay', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  const file = exportOf(drive, key).meta.id, exportLocal = a.env.exportOf;
+  const orphan = enc(JSON.stringify(doc('Remote orphan'))), remote = { ...(await a.papers.get(key)), doc: doc('Remote orphan') };
+  let written = false;
+  a.env.exportOf = async (...args) => {
+    const result = await exportLocal(...args);
+    if (!written) {
+      written = true;
+      await a.env.drive().put({ id: file, bytes: orphan, mime: MIME.docx, meta: { appProperties: { sum: sha(S.canon(S.body(key, remote, null))), b: sha(orphan) } } });
+    }
+    return result;
+  };
+  await a.papers.save(key, { doc: doc('Local edit') }); await a.sync.touched(key);
+  for (let i = 0; i < 5; i++) { a.clock.t += 60e3; assert.ok((await a.sync.run({ push: true })).ok); }
+  assert.equal(sha(drive.files.get(file).bytes), sha(orphan), 'the unpaired remote export is never overwritten');
+  assert.notEqual(sidecarJson(drive, key).file, file, 'the local edit gets a file of its own after bounded waiting');
+  assert.equal(textOf(sidecarJson(drive, key).record.doc), 'Local edit');
+  assert.ok(!drive.files.get(file).meta.parents.includes((await state(a)).folder), 'the unpaired export is preserved in Data');
+  noDeletes(drive);
+});

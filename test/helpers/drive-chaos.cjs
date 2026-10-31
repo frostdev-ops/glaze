@@ -2,8 +2,8 @@
 // Each device is a worker of its own: a vm context running background.js's own library list and its Drive section, so the
 // real drive.js, drive-sync.js, drive-store.js, writer-papers.js, notes.js and doc-files.js, against chrome.storage.local and
 // sync, the Notes database and the documents' file store, all kept on a host-side disk that outlives the context. Killing a
-// device stops it at its K-th await on that disk or the network (the write applied or not, the reply lost) and boots a new
-// context over the same disk, as the browser restarts a stopped worker. Every device talks to stand-in Drives
+// device stops it at its K-th await on that disk or the network, or a named upload (the write applied or not, the reply lost),
+// and boots a new context over the same disk, as the browser restarts a stopped worker. Every device talks to stand-in Drives
 // (test/helpers/drive-standin.cjs, one per Google account) through a layer that adds Drive's failures and its search lag.
 // A seed makes a list of operations (edits, deletes, Settings, tasks, Notes, Looks, Gradescope, outside edits and trash in
 // Drive, Sync off and on, an account change, offline, runs, kills); then a quiet phase (no faults, every device on and online,
@@ -216,7 +216,7 @@ const network = () => {
   const drives = { [ACCOUNTS.A]: standin({ tokens: new Set([TOKENS[ACCOUNTS.A]]), owner: ACCOUNTS.A }), [ACCOUNTS.B]: standin({ tokens: new Set([TOKENS[ACCOUNTS.B]]), owner: ACCOUNTS.B }) };
   const byToken = Object.fromEntries(Object.entries(TOKENS).map(([acct, tok]) => [tok, drives[acct]]));
   // Search lag: a file Drive made shows in files.list only after this many lists (each Drive its own count).
-  const lag = new Map(), known = new Map(Object.values(drives).map((d) => [d, new Set()]));
+  const lag = new Map(Object.values(drives).map((d) => [d, new Map()])), known = new Map(Object.values(drives).map((d) => [d, new Set()]));
   const net = { drives, lag: 0, writes: 0 };
   const bytesOf = (body) => (body == null ? Buffer.alloc(0) : typeof body === 'string' ? Buffer.from(body) : ArrayBuffer.isView(body) ? Buffer.from(body.buffer, body.byteOffset, body.byteLength)
     : body instanceof ArrayBuffer ? Buffer.from(body) : typeof body?._bytes !== 'undefined' ? Buffer.from(body._bytes) : Buffer.from(String(body)));
@@ -238,20 +238,20 @@ const network = () => {
     }
     if (write) net.writes++;
     // New files: hidden from search for the lag's count of lists.
-    const seen = known.get(drive);
-    for (const id of drive.files.keys()) if (!seen.has(id)) { seen.add(id); if (net.lag > 0) lag.set(id, net.lag); }
+    const seen = known.get(drive), delayed = lag.get(drive);
+    for (const id of drive.files.keys()) if (!seen.has(id)) { seen.add(id); if (net.lag > 0) delayed.set(id, net.lag); }
     if (f === 'lost') { dev.stats.faults++; return null; } // Drive did it; the answer never came
     if (!a) return null;
     let body = a.body;
-    if (method === 'GET' && new URL(url).pathname === '/drive/v3/files' && a.status === 200 && lag.size) {
+    if (method === 'GET' && new URL(url).pathname === '/drive/v3/files' && a.status === 200 && delayed.size) {
       const j = JSON.parse(body.toString('utf8'));
-      if (Array.isArray(j.files)) j.files = j.files.filter((x) => !(lag.get(x.id) > 0));
-      for (const [id, n] of lag) { if (n <= 1) lag.delete(id); else lag.set(id, n - 1); }
+      if (Array.isArray(j.files)) j.files = j.files.filter((x) => !(delayed.get(x.id) > 0));
+      for (const [id, n] of delayed) { if (n <= 1) delayed.delete(id); else delayed.set(id, n - 1); }
       body = Buffer.from(JSON.stringify(j));
     }
     return new Response(a.status === 204 || a.status === 304 ? null : body, { status: a.status, headers: a.headers });
   };
-  net.calm = () => { net.lag = 0; lag.clear(); };
+  net.calm = () => { net.lag = 0; for (const delayed of lag.values()) delayed.clear(); };
   return net;
 };
 
@@ -312,11 +312,22 @@ class Device {
         }
         return later(fn);
       },
-      fetch: (url, init) => host.io('net', (init?.method || 'GET'), () => {
-        const res = world.net.handle(dev, url, init);
-        if (!res) throw new TypeError('Failed to fetch');
-        return res;
-      }),
+      fetch: (url, init) => {
+        // Known interrupted uploads name the request, rather than an await count that shifts with unrelated reads.
+        const stop = dev.armed?.upload, method = init?.method || 'GET';
+        if (stop && method === stop.method && new URL(url).pathname.startsWith('/upload/')) {
+          const b = init.body, text = typeof b === 'string' ? b : ArrayBuffer.isView(b) ? Buffer.from(b.buffer, b.byteOffset, b.byteLength).toString('utf8') : '';
+          const metadata = text.startsWith('--') ? text.slice(text.indexOf('\r\n\r\n') + 4).split('\r\n--')[0] : text;
+          let role;
+          try { role = JSON.parse(metadata).appProperties?.glaze; } catch { /* a media chunk, not upload metadata */ }
+          if (role === stop.glaze) dev.armed.kill = dev.ios + 1;
+        }
+        return host.io('net', method, () => {
+          const res = world.net.handle(dev, url, init);
+          if (!res) throw new TypeError('Failed to fetch');
+          return res;
+        });
+      },
       token: (email) => TOKENS[email] || 'tok-none',
       emit: (name, c) => {
         if (!Object.keys(c).length) return;
@@ -481,7 +492,7 @@ const generate = (seed, { ops = 40, devices = 2 } = {}) => {
 };
 const describe = (op) => {
   const d = op.d === undefined ? '' : `${'ABC'[op.d]} `;
-  if (op.t === 'run') return `${d}run.${op.how}${op.kill ? ` kill@${op.kill}${op.apply ? '+applied' : ''}` : ''}${op.after ? ` killed right after writing "${op.after}"` : ''}${op.inject ? ` inject@${op.inject.at}(${describe({ ...op.inject.op, d: undefined })})` : ''}`;
+  if (op.t === 'run') return `${d}run.${op.how}${op.kill || op.upload ? ` kill@${op.upload ? `${op.upload.method}:${op.upload.glaze}` : op.kill}${op.apply ? '+applied' : ''}` : ''}${op.after ? ` killed right after writing "${op.after}"` : ''}${op.inject ? ` inject@${op.inject.at}(${describe({ ...op.inject.op, d: undefined })})` : ''}`;
   if (USER.includes(op.t)) return `${d}${op.t}.${op.k} pick=${op.pick.toFixed(2)}`;
   if (op.t === 'drive') return `drive.${op.k} pick=${op.pick.toFixed(2)}`;
   const kill = op.kill ? ` kill@${op.kill}${op.apply ? '+applied' : ''}` : '';
@@ -604,14 +615,14 @@ const KNOWN = {
     about: 'a .docx update Drive took whose answer never came (the worker stopped at it), then the file edited outside Glaze: the next push overwrites it, the record still naming the revision before Glaze\'s own',
     skips: () => false,
     stops: 'net.PATCH', // where its kill must land (an upload), or the repro shows nothing
-    repro: [{ t: 'paper', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2 }, { t: 'paper', k: 'edit', d: 1, pick: 0, pick2: 0, s: 3 }, { t: 'run', d: 1, how: 'run', s: 4, kill: 58, apply: true }, { t: 'drive', k: 'outsideDocx', pick: 0, s: 5 }],
+    repro: [{ t: 'paper', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2 }, { t: 'paper', k: 'edit', d: 1, pick: 0, pick2: 0, s: 3 }, { t: 'run', d: 1, how: 'run', s: 4, upload: { method: 'PATCH', glaze: 'file' }, apply: true }, { t: 'drive', k: 'outsideDocx', pick: 0, s: 5 }],
   },
   'kept-relink': {
     fixed: true,
     about: 'a JSON copy\'s update Drive took whose answer never came, then the .docx edited outside Glaze: the next run lets the file go as kept, then links the paper to it again as both sides agreeing, so the paper has no file of its own in Glaze/',
     skips: () => false,
     stops: 'net.PATCH',
-    repro: [{ t: 'paper', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2 }, { t: 'paper', k: 'edit', d: 1, pick: 0, pick2: 0, s: 3 }, { t: 'run', d: 1, how: 'run', s: 4, kill: 73, apply: true }, { t: 'drive', k: 'outsideDocx', pick: 0, s: 5 }],
+    repro: [{ t: 'paper', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2 }, { t: 'paper', k: 'edit', d: 1, pick: 0, pick2: 0, s: 3 }, { t: 'run', d: 1, how: 'run', s: 4, upload: { method: 'PATCH', glaze: 'doc' }, apply: true }, { t: 'drive', k: 'outsideDocx', pick: 0, s: 5 }],
   },
   'restored-folder': {
     fixed: true,
@@ -1061,9 +1072,9 @@ class World {
     if (op.t === 'restart') { this.trace(`#${this.step} ${dev.name} worker restarts (idle)`); dev.dead = true; dev.boot(); return; }
     // Masked off-edits: the run turning Sync on finishes (no faults, online, never cut short).
     let held = null;
-    if (op.t === 'sync' && op.on && (this.o.masks || []).includes('off-edits')) { held = { faults: dev.faults, offline: dev.offline, cut: dev.cut }; Object.assign(dev, { faults: null, offline: false, cut: null }); op = (({ kill, apply, ...x }) => x)(op); }
+    if (op.t === 'sync' && op.on && (this.o.masks || []).includes('off-edits')) { held = { faults: dev.faults, offline: dev.offline, cut: dev.cut }; Object.assign(dev, { faults: null, offline: false, cut: null }); op = (({ kill, upload, apply, ...x }) => x)(op); }
     // What may start a run: armed for a kill or an edit at its K-th await.
-    const armed = op.kill || op.inject || op.after ? { kill: op.kill, apply: op.apply, after: op.after || null, inject: op.inject ? { ...op.inject } : null } : null;
+    const armed = op.kill || op.upload || op.inject || op.after ? { kill: op.kill, upload: op.upload, apply: op.apply, after: op.after || null, inject: op.inject ? { ...op.inject } : null } : null;
     dev.armed = armed; dev.ios = 0;
     const killed = new Promise((res) => { dev.killed = res; });
     let started;
@@ -1322,7 +1333,7 @@ const shrink = async (seed, ops, inv, o = {}, budget = 200) => {
   for (let i = 0; i < list.length && budget > 0; i++) {
     const op = list[i];
     const plainer = [];
-    if (op.kill) plainer.push((({ kill, apply, ...x }) => x)(op));
+    if (op.kill || op.upload) plainer.push((({ kill, upload, apply, ...x }) => x)(op));
     if (op.inject) plainer.push((({ inject, ...x }) => x)(op));
     for (const p of plainer) { const next = [...list]; next[i] = p; if (await fails(next)) { list = next; break; } }
   }
