@@ -585,6 +585,26 @@ const KNOWN = {
     })(),
     repro: [{ t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2 }, { t: 'run', d: 1, how: 'run', s: 3 }, { t: 'account', d: 1, to: 'B', s: 4 }, { t: 'paper', k: 'trash', d: 1, pick: 0, pick2: 0, s: 5 }],
   },
+  'carried-time': {
+    fixed: true,
+    about: 'a record file put in Drive\'s trash with Glaze/Data, another device\'s met in the new Data as a first meeting with no time of this device\'s own (its change sent and settled): an earlier Settings change from the other device wins over a later one',
+    skips: () => false,
+    repro: [{ t: 'setting', d: 0, k: 'footer', v: false, pick: 0, s: 1 }, { t: 'setting', d: 1, k: 'footer', v: true, pick: 0, s: 2 }, { t: 'run', d: 1, how: 'run', s: 3 }, { t: 'run', d: 1, how: 'run', s: 4 }, { t: 'drive', k: 'trashData', pick: 0, s: 5 }],
+  },
+  'lost-answer-outside': {
+    fixed: true,
+    about: 'a .docx update Drive took whose answer never came (the worker stopped at it), then the file edited outside Glaze: the next push overwrites it, the record still naming the revision before Glaze\'s own',
+    skips: () => false,
+    stops: 'net.PATCH', // where its kill must land (an upload), or the repro shows nothing
+    repro: [{ t: 'paper', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2 }, { t: 'paper', k: 'edit', d: 1, pick: 0, pick2: 0, s: 3 }, { t: 'run', d: 1, how: 'run', s: 4, kill: 58, apply: true }, { t: 'drive', k: 'outsideDocx', pick: 0, s: 5 }],
+  },
+  'kept-relink': {
+    fixed: true,
+    about: 'a JSON copy\'s update Drive took whose answer never came, then the .docx edited outside Glaze: the next run lets the file go as kept, then links the paper to it again as both sides agreeing, so the paper has no file of its own in Glaze/',
+    skips: () => false,
+    stops: 'net.PATCH',
+    repro: [{ t: 'paper', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2 }, { t: 'paper', k: 'edit', d: 1, pick: 0, pick2: 0, s: 3 }, { t: 'run', d: 1, how: 'run', s: 4, kill: 72, apply: true }, { t: 'drive', k: 'outsideDocx', pick: 0, s: 5 }],
+  },
 };
 
 // ---- a run of one list of operations

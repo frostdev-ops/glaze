@@ -1223,6 +1223,22 @@ test('Glaze/Data put in Drive\'s trash: records that don\'t change after go into
   noDeletes(drive);
 });
 
+// carried-time: a device whose record file went into Drive's trash with Glaze/Data met another device's file in the new Data
+// as a first meeting with no time of its own (its change, sent and settled, no longer stamped): an earlier change won.
+test('Glaze/Data put in Drive\'s trash: a later Settings change already sent and settled still wins over an earlier one another device sends into the new Data', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  clock.t += 1000; await a.settings.set({ footer: false }); // A's change, not sent yet
+  clock.t += 1000; await b.settings.set({ footer: true }); // B's later one, sent and settled
+  assert.ok((await b.run()).ok); clock.t += 1000; assert.ok((await b.run()).ok);
+  drive.trash((await b.local.get(S.STATE))[S.STATE].data);
+  clock.t += 60e3;
+  assert.ok((await a.run()).ok); // A puts its earlier change into a new Data
+  assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
+  for (const d of [a, b]) assert.equal((await d.settings.get('footer')).footer, true, 'the later change on both');
+  noDeletes(drive);
+});
+
 // join-stamp: a first meeting's join went up stamped with the meeting's time, so it outranked a later change another device
 // hadn't pushed yet.
 test('a first meeting\'s joined record carries the time of the latest change it holds: a later change another device hadn\'t pushed still wins', async () => {

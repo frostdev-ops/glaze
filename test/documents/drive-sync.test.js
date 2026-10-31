@@ -1324,6 +1324,41 @@ test('a Word file whose first push stopped before its JSON copy, then edited out
   noDeletes(drive);
 });
 
+// lost-answer-outside, kept-relink: a later push's update that Drive took but whose answer never came, then the Word file
+// edited outside Glaze. 'file': the file's own update (the record still names its revision before), 'doc': the JSON copy's.
+test('a Word file whose later update Drive took but whose answer never came, then edited outside Glaze, is never overwritten, and the paper gets a file of its own', async () => {
+  const text = (x) => (typeof x === 'string' ? x : Buffer.from(x || []).toString('latin1'));
+  for (const role of ['file', 'doc']) {
+    const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+    let dying = null;
+    const cut = { ...drive, fetch: async (u, i = {}) => {
+      if (dying && u.includes('/upload/') && text(i.body).includes(`"glaze":"${dying}"`)) { dying = null; await drive.fetch(u, i); throw new TypeError('Failed to fetch'); }
+      return drive.fetch(u, i);
+    } };
+    const a = device(cut, { clock });
+    assert.ok((await a.sync.set(true)).ok);
+    const key = 'doc:00000000-0000-4000-8000-000000000a1a';
+    await a.papers.save(key, { doc: doc('First draft'), title: 'Essay', named: true });
+    await a.sync.touched(key);
+    assert.ok((await a.sync.run({ push: true })).ok);
+    const word = exportOf(drive, key).meta.id;
+    await a.papers.save(key, { doc: doc('Second draft') });
+    await a.sync.touched(key);
+    dying = role;
+    assert.equal((await a.sync.run({ push: true })).ok, false);
+    drive.edit(word, `PK edited in Word (${role})`);
+    clock.t = (await state(a)).wait + 1;
+    assert.ok((await a.sync.run({ push: true })).ok);
+    assert.ok((await a.sync.run()).ok);
+    assert.equal(text(drive.files.get(word).bytes), `PK edited in Word (${role})`, `${role}: the edited file kept as it is`);
+    const own = sidecarJson(drive, key).file;
+    assert.notEqual(own, word, `${role}: the paper names a file of its own beside it`);
+    assert.equal(drive.files.get(own)?.meta.appProperties.glaze, 'file', `${role}: Glaze's file`);
+    assert.equal(text(drive.files.get(own).bytes), JSON.stringify(doc('Second draft')), `${role}: holding the paper as it is`);
+    noDeletes(drive);
+  }
+});
+
 test('a file whose upload Drive took but whose answer never came is reused by the next push while it is as Glaze wrote it', async () => {
   const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
   let dying = false;
