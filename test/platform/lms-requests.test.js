@@ -142,6 +142,35 @@ test('ULT-5: eight courses never have more than three requests open at once, and
 
 // D: one gradebook store per site (courses/ultra.js page.book) behind the card badges, the planner, the GPA, Insights, the
 // rubric and agent apps; and the copy kept from the last visit drawing before the network answers.
+test('Ultra Grades badges read each direct-child course tile from the live fixture', async () => {
+  const { El } = require('../stand-in-dom.js');
+  const { parse } = require('../fixture-dom.js');
+  const doc = {};
+  doc.root = new El('#root', doc);
+  const body = parse(fs.readFileSync(path.join(__dirname, '../fixtures/ultra-instant-grades.html'), 'utf8'), doc);
+  const ids = ['_101_1', '_102_1'];
+  const u = ultra({ pathname: '/ultra/grades', enhance: { newgrades: true, newcontent: true },
+    local: { seenContent: Object.fromEntries(ids.map((id) => [id, ['_1_1', '+']])) },
+    answer: (r) => /users\/me$/.test(r.pathname) ? ME : /gradebook\/grades/.test(r.pathname)
+      ? [200, { results: [{ columnId: '_5_1', status: 'GRADED', hasBeenViewedByStudent: false, displayGrade: { text: 'A' }, column: { calculationType: 'NON_CALCULATED', contentId: '_1_1' } }] }]
+      : [200, { results: [{ id: '_1_1' }, { id: '_2_1' }] }],
+  });
+  u.ctx.document.querySelectorAll = (sel) => body.querySelectorAll(sel);
+  const observed = new Set();
+  u.I.cardsInView.observe = (e) => observed.add(e);
+  for (const e of body.querySelectorAll('.grades-header a.bb-click-target')) u.I.inView.add(e);
+  u.X.renderNew();
+  await settle(20);
+  u.X.renderNew();
+  await settle(20);
+  assert.equal(observed.size, 2, 'each course title is observed');
+  assert.deepEqual(u.s.asked.filter((p) => /gradebook\/grades/.test(p)).map((p) => p.split('/')[5]).sort(), ids);
+  for (const id of ids) {
+    assert.ok(u.badges.some(([cid, n, kind]) => cid === id && n === 1 && kind === 'grades'), `${id}: new grade`);
+    assert.ok(u.badges.some(([cid, n, kind]) => cid === id && n === 1 && kind === 'items'), `${id}: new content`);
+  }
+});
+
 test('D: the badges and another feature asking for one course\'s gradebook at once send one request', async () => {
   const held = [];
   const u = ultra({ answer: (r) => (/users\/me$/.test(r.pathname) ? ME : new Promise((done) => held.push(() => done([200, { results: [{ columnId: '_5_1' }] }])))) });
