@@ -361,7 +361,7 @@
   };
   // What's left to do in the next seven days (GZ_DUE_WEEK), from Ultra's own To Do list, or on Canvas from
   // its planner (GZ_CANVAS_DUE_WEEK), for the command palette and the popup (which can't ask the site, so it
-  // reads what's kept here). Asked once a page load and at most every ten minutes, like the course list, which
+  // reads what's kept here). Reused for at most ten minutes (two on Ultra), like the course list, which
   // names each Ultra item's course (a Canvas item brings its own, and its address, which Ultra's never do).
   // Kept per site (`dueWeek:<origin>`): another site's items (Blackboard and Canvas, or two schools) open nothing here.
   let dueSoon = null;
@@ -371,7 +371,7 @@
   let dueAt = 0, dueRead = 0, dueGone = false;
   const dueWeek = (force = false) => {
     if (dueGone) return Promise.resolve([]);
-    if (dueSoon && (!ultra || Date.now() - dueAt < DUE_TTL) && !force) return dueSoon;
+    if (dueSoon && Date.now() - dueAt < DUE_TTL && !force) return dueSoon;
     const n = ++dueRead, now = dueAt = Date.now();
     return (dueSoon = new Promise((res) => stored(DUE, (r) => res(r?.[DUE]))).then((r) => {
       const kept = Array.isArray(r?.list) ? r.list : [];

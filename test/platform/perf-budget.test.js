@@ -310,8 +310,8 @@ const INSTANT_COPIES = { ultra: 1197 + 54 + 41, canvas: 54, moodle: 54 };
 // Ultra staleness review: keep startup consumers current, expire the due-list memo, preserve Look parts patches,
 // and retire the first-paint bar on purge/timeout. Storage and frame lifecycle work remains on demand.
 // Measured against b3e26392; shared content.js bytes also apply to Canvas and Moodle.
-// Keeping Canvas's and Moodle's due list as before (ten minutes, once a page): 123 more on every site, against 737a67d0.
-const ULTRA_STALENESS = { ultra: 2278 + 123, canvas: 1127 + 123, moodle: 1127 + 123 };
+// Canvas's and Moodle's ten-minute due-list cache: 104 more on every site, against 737a67d0.
+const ULTRA_STALENESS = { ultra: 2278 + 104, canvas: 1127 + 104, moodle: 1127 + 104 };
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what background/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;
