@@ -153,11 +153,11 @@ test('copies are keyed by site, student and page, and only the right student\'s 
 
 // ---- the page script ----
 // The top page on Ultra, with the stand-in DOM: me() answers when told (who.answer), Ultra's view is put in by fill().
-const site = ({ path = '/ultra/grades', local = {}, last = '_900_1', instant = true, enabled = true, frame = false } = {}) => {
+const site = ({ path = '/ultra/grades', local = {}, last = '_900_1', instant = true, enabled = true, frame = false, send } = {}) => {
   const doc = makeDoc(), html = new El('html', doc), body = new El('body', doc);
   doc.root.append(html); html.append(body);
   const main = new El('main', doc); main.className = 'bb-offcanvas-container'; body.append(main);
-  const frames = [], observers = [], idle = [], sent = [], timers = [];
+  const frames = [], observers = [], idle = [], sent = [], timers = [], events = new Map();
   let answer, fail;
   const who = new Promise((res, rej) => { answer = res; fail = rej; });
   const settings = { enabled, enhance: { ...D.GZ_SANITIZE({}).enhance, instant } };
@@ -171,8 +171,13 @@ const site = ({ path = '/ultra/grades', local = {}, last = '_900_1', instant = t
     requestIdleCallback: (f) => idle.push(f),
     setTimeout: (f, ms) => timers.push({ f, ms }), clearTimeout() {},
     getComputedStyle: () => ({ paddingLeft: '0px', paddingRight: '0px', paddingTop: '0px' }),
-    addEventListener() {}, removeEventListener() {},
-    chrome: { runtime: { sendMessage: (m) => { sent.push(m); return Promise.resolve(); } }, storage: { local: { get: (k, cb) => cb(structuredClone({ [k]: local[k] })), set: (o) => Object.assign(local, structuredClone(o)) } } },
+    addEventListener: (type, fn) => events.set(type, [...events.get(type) || [], fn]), removeEventListener() {},
+    chrome: { runtime: { sendMessage: (m) => {
+      sent.push(m);
+      if (send) return send(m);
+      if (m.op === 'put') local[L.key(ORIGIN, m.record.uid, m.record.kind)] = structuredClone(m.record);
+      return Promise.resolve(m.op === 'begin' ? { epoch: 'test' } : { ok: true });
+    } }, storage: { local: { get: (k, cb) => cb(structuredClone({ [k]: local[k] })), set: (o) => Object.assign(local, structuredClone(o)) } } },
     GZ_CTX: { settings: () => settings, need: async () => {} },
     GZ_ULTRA: { page: { known: async () => (last ? { id: last } : null) } },
   });
@@ -183,8 +188,8 @@ const site = ({ path = '/ultra/grades', local = {}, last = '_900_1', instant = t
   const fill = (f) => { const p = parse(fixture(f), doc); main.replaceChildren(...p.querySelector('main').children); };
   const frame1 = async () => { for (const o of observers.filter((x) => x.on)) o.f([]); for (const f of frames.splice(0)) f(); await settle(); for (const f of frames.splice(0)) f(); await settle(); };
   const copy = () => main.querySelector('#gz-instant');
-  return { c, doc, html, main, local, settings, location, sent, idle, timers, answer, fail, fill, frame1, copy,
-    sync: (on = instant) => c.GZ_INSTANT.sync(on, () => who, Promise.resolve()) };
+  return { c, doc, html, main, local, settings, location, sent, idle, timers, answer, fail, fill, frame1, copy, events,
+    sync: (on = instant, ready = Promise.resolve()) => c.GZ_INSTANT.sync(on, () => who, ready) };
 };
 const stored = (uid, kind, f, at = Date.now() - 60000) => {
   const { main } = page(f);
@@ -297,7 +302,66 @@ test('signed out (/users/me answers 401): this site\'s copies are dropped', asyn
   p.fail(new Error('HTTP 401'));
   await settle();
   assert.equal(p.copy(), null);
-  assert.deepEqual(JSON.parse(JSON.stringify(p.sent)), [{ type: 'glaze:ultraCopy', op: 'drop' }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(p.sent.filter((m) => m.op === 'drop'))), [{ type: 'glaze:ultraCopy', op: 'drop' }]);
+});
+
+test('late identity or settings cannot paint after the last-resort timeout', async (t) => {
+  for (const slow of ['identity', 'settings']) await t.test(slow, async () => {
+    const p = site({ local: stored('_900_1', 'grades', 'ultra-instant-grades.html') });
+    let resolve;
+    const ready = new Promise((res) => { resolve = res; });
+    p.sync(true, slow === 'settings' ? ready : Promise.resolve());
+    if (slow === 'settings') p.answer('_900_1');
+    await settle();
+    p.timers.find((timer) => timer.ms === 20000).f();
+    p.answer('_900_1');
+    resolve();
+    await settle();
+    assert.equal(!!p.copy(), false, 'expired work must leave Ultra visible');
+    assert.equal(p.html.dataset.gzInstant, undefined);
+    assert.ok(!p.idle.length, 'no save scheduled by expired work');
+  });
+});
+
+test('a route change or switch off removes a copy that is still fading', async (t) => {
+  for (const action of ['route', 'off']) await t.test(action, async () => {
+    const p = site({ local: stored('_900_1', 'grades', 'ultra-instant-grades.html') });
+    p.sync();
+    p.answer('_900_1');
+    await settle();
+    const box = p.copy();
+    let finish;
+    const finished = new Promise((res) => { finish = res; });
+    box.getAnimations = () => [{ finished }];
+    p.fill('ultra-instant-grades.html');
+    p.main.append(box);
+    await p.frame1();
+    assert.equal(box.hasAttribute('data-out'), true, 'fade started');
+    assert.equal(!!p.copy(), true, 'the fade is still visible');
+    if (action === 'route') p.location.pathname = '/ultra/calendar';
+    else p.settings.enhance.instant = false;
+    p.sync(action !== 'off');
+    assert.equal(!!p.copy(), false, 'the old visit must disappear immediately');
+    finish();
+    await settle();
+  });
+});
+
+test('a late copy never covers a new route or an existing error', async (t) => {
+  for (const state of ['route', 'error']) await t.test(state, async () => {
+    const p = site({ local: stored('_900_1', 'grades', 'ultra-instant-grades.html') });
+    p.sync();
+    await settle();
+    if (state === 'route') p.location.pathname = '/ultra/calendar';
+    else {
+      const alert = new El('div', p.doc);
+      alert.setAttribute('role', 'alert'); alert.append('Grades could not be loaded'); p.main.append(alert);
+    }
+    p.answer('_900_1');
+    await settle();
+    assert.equal(!!p.copy(), false, 'the pending frame must not reveal an obsolete copy');
+    assert.equal(p.html.dataset.gzInstant, undefined);
+  });
 });
 
 // ---- content-ultra.js's hooks ----
@@ -367,6 +431,78 @@ test('signing out through Ultra\'s menu (or Glaze\'s bar, which clicks it) drops
   assert.deepEqual(JSON.parse(JSON.stringify(u.sent.filter((m) => m.type === 'glaze:ultraCopy'))), [{ type: 'glaze:ultraCopy', op: 'drop' }]);
 });
 
+test('sign-out retires pending paints and saves before pagehide or another sync', async (t) => {
+  for (const phase of ['pending', 'ready']) await t.test(phase, async () => {
+    const p = site({ local: stored('_900_1', 'grades', 'ultra-instant-grades.html') });
+    p.sync();
+    await settle();
+    if (phase === 'ready') {
+      p.answer('_900_1');
+      await settle();
+      p.fill('ultra-instant-grades.html');
+      await p.frame1();
+    }
+    const u = ultraPart({ instantUI: () => p.c.GZ_INSTANT });
+    const anchor = { getAttribute: () => '#' };
+    for (const l of u.listeners.filter((x) => x.t === 'click' && x.cap)) l.f({ target: { closest: (s) => /MuiDrawer-paper a\[href\]|base_tools a\[href\]/.test(s) ? anchor : null } });
+    for (const key of Object.keys(p.local)) if (key.startsWith('ultraCopy:')) delete p.local[key];
+    p.answer('_900_1');
+    u.X.syncWidgets();
+    await settle();
+    for (const f of p.events.get('pagehide') || []) f();
+    for (const f of p.idle.splice(0)) f();
+    await settle();
+    assert.equal(!!p.copy(), false, 'no paint after sign-out');
+    assert.deepEqual(Object.keys(p.local).filter((key) => key.startsWith('ultraCopy:')), [], 'no save after the purge');
+  });
+});
+
+test('a purge cannot be undone by a delayed save in another tab, even after a worker restart', async (t) => {
+  for (const reason of ['sign-out', 'switch', 'reset', 'empty-reset']) await t.test(reason, async () => {
+    const local = { ultra: [], ...(reason === 'empty-reset' ? {} : stored('_900_1', 'grades', 'ultra-instant-grades.html')) };
+    let w = workerEnv({ store: { sync: { version: 2, enabled: true, enhance: { instant: true } }, local, session: {} } });
+    const from = { id: 'glaze', tab: { id: 3, url: `${ORIGIN}/ultra/grades` }, frameId: 0, url: `${ORIGIN}/ultra/grades` };
+    const otherTab = { ...from, tab: { ...from.tab, id: 4 } };
+    const p = site({ local, send: (m) => w.send(m, otherTab) });
+    p.sync(); p.answer('_900_1'); await settle();
+    p.fill('ultra-instant-grades.html'); await p.frame1();
+    if (reason === 'sign-out') await w.send({ type: 'glaze:ultraCopy', op: 'drop' }, from);
+    else if (reason === 'switch') {
+      await w.context.chrome.storage.sync.set({ enhance: { instant: false } }); await w.settle();
+      await w.context.chrome.storage.sync.set({ enhance: { instant: true } }); await w.settle();
+    } else await w.send({ type: 'glaze:sites', op: 'reset' }, { id: 'glaze', tab: { id: 5, url: 'chrome-extension://x/options.html' }, frameId: 0, url: 'chrome-extension://x/options.html' });
+    w = workerEnv({ store: w.store });
+    for (const f of p.events.get('pagehide') || []) f();
+    for (const f of p.idle.splice(0)) f();
+    await w.settle();
+    assert.equal(local[L.key(ORIGIN, '_900_1', 'grades')] !== undefined, false, 'the old tab must not recreate purged grades');
+    const fresh = site({ local, send: (m) => w.send(m, from) });
+    fresh.sync(); fresh.answer('_900_1'); await settle();
+    fresh.fill('ultra-instant-grades.html'); await fresh.frame1();
+    for (const f of fresh.idle.splice(0)) f();
+    await w.settle();
+    assert.ok(local[L.key(ORIGIN, '_900_1', 'grades')], 'a fresh visit can save again');
+  });
+});
+
+test('snapshot saves require a trusted top page, current visit and bounded record', async () => {
+  const w = workerEnv();
+  const from = { id: 'glaze', tab: { id: 3, url: `${ORIGIN}/ultra/grades` }, frameId: 0, url: `${ORIGIN}/ultra/grades` };
+  const record = Object.values(stored('_900_1', 'grades', 'ultra-instant-grades.html'))[0];
+  const { epoch } = await w.send({ type: 'glaze:ultraCopy', op: 'begin' }, from);
+  const message = { type: 'glaze:ultraCopy', op: 'put', epoch, record };
+  for (const sender of [{ ...from, url: 'https://evil.test/ultra/grades' }, { ...from, frameId: 2 }, { ...from, id: 'another-extension' }]) {
+    assert.equal(await w.send(message, sender), null);
+  }
+  for (const bad of [{ ...message, epoch: 'stale' }, { ...message, record: { ...record, uid: '../_900_1' } },
+    { ...message, record: { ...record, nodes: ['x'.repeat(201025)] } }]) {
+    assert.equal((await w.send(bad, from)).ok, false);
+  }
+  assert.equal(Object.keys(w.store.local).some((key) => key.startsWith('ultraCopy:')), false);
+  assert.equal((await w.send(message, from)).ok, true);
+  assert.deepEqual(w.store.local[L.key(ORIGIN, record.uid, record.kind)], record);
+});
+
 // ---- the worker ----
 test('the worker drops a site\'s copies on its sign-out, all of them with the switch off, and only for Ultra\'s own pages', async () => {
   const other = 'https://other.blackboard.com';
@@ -384,4 +520,24 @@ test('the worker drops a site\'s copies on its sign-out, all of them with the sw
   await w.context.chrome.storage.sync.set({ enhance: { instant: false } });
   await w.settle();
   assert.deepEqual(Object.keys(w.store.local).filter((k) => k.startsWith('ultraCopy:')), [], 'the switch off: every copy');
+});
+
+test('the copy paints without waiting for the worker\'s save lease; the save waits for it', async () => {
+  let lease;
+  const leased = new Promise((res) => { lease = res; });
+  const p = site({ local: stored('_900_1', 'grades', 'ultra-instant-grades.html'),
+    send: (m) => (m.op === 'begin' ? leased : Promise.resolve(m.op === 'put' ? { ok: true } : null)) });
+  p.sync();
+  p.answer('_900_1');
+  await settle();
+  assert.ok(p.copy(), 'painted while the worker is still waking');
+  p.fill('ultra-instant-grades.html');
+  await p.frame1();
+  for (const f of p.idle.splice(0)) f();
+  assert.ok(!p.sent.some((m) => m.op === 'put'), 'no save without a lease');
+  lease({ epoch: 'e1' });
+  await settle();
+  for (const f of p.idle.splice(0)) f();
+  const put = p.sent.find((m) => m.op === 'put');
+  assert.ok(put && put.epoch === 'e1' && put.record.uid === '_900_1' && put.record.kind === 'grades', 'saved under the lease once it answers');
 });

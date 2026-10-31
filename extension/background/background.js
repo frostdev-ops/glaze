@@ -1170,19 +1170,47 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // a site's go when its student signs out (its top page says so: 'glaze:ultraCopy' drop), every one with the switch off.
 const copyKeys = async (origin) => (chrome.storage.local.getKeys ? await chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null)))
   .filter((k) => k.startsWith(origin ? `ultraCopy:${origin}/` : 'ultraCopy:'));
+// Saves and purges share the broker queue. A visit holds a generation, invalidated on sign-out or switch-off, so a
+// delayed idle/pagehide save in another tab cannot recreate grades after a purge, even after the worker restarts.
+let copyEpochs = null;
+const copyState = async () => {
+  copyEpochs ||= { all: crypto.randomUUID(), sites: {} };
+  if (!chrome.storage.session) return copyEpochs;
+  const { ultraCopyEpochs: saved } = await chrome.storage.session.get('ultraCopyEpochs');
+  if (saved?.all && saved.sites) return saved;
+  await chrome.storage.session.set({ ultraCopyEpochs: copyEpochs });
+  return copyEpochs;
+};
+const purgeCopies = async (origin) => {
+  const state = await copyState();
+  if (origin) state.sites[origin] = crypto.randomUUID();
+  else { state.all = crypto.randomUUID(); state.sites = {}; }
+  copyEpochs = state;
+  if (chrome.storage.session) await chrome.storage.session.set({ ultraCopyEpochs: state });
+  const drop = await copyKeys(origin);
+  if (drop.length) await chrome.storage.local.remove(drop);
+};
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:ultraCopy') return;
-  (async () => {
-    const origin = s.frameId === 0 && m.op === 'drop' && await fromUltra(s);
+  (brokerTurn ||= GZ_CARDS.queue())(async () => {
+    const origin = s.frameId === 0 && await fromUltra(s);
     if (!origin) return null;
-    const drop = await copyKeys(origin);
-    if (drop.length) await chrome.storage.local.remove(drop);
+    if (m.op === 'drop') { await purgeCopies(origin); return { ok: true }; }
+    if (!['begin', 'put'].includes(m.op)) return null;
+    const settings = await chrome.storage.sync.get(['enabled', 'enhance']);
+    if (settings.enabled === false || settings.enhance?.instant === false) return { ok: false };
+    const state = await copyState(), epoch = `${state.all}/${state.sites[origin] || ''}`;
+    if (m.op === 'begin') return { epoch };
+    const r = m.record;
+    if (m.epoch !== epoch || r?.v !== 1 || typeof r.uid !== 'string' || !/^_\d+_\d+$/.test(r.uid) || !['grades', 'courses', 'stream'].includes(r.kind)
+      || !Number.isFinite(r.at) || !Array.isArray(r.nodes) || JSON.stringify(r).length > 201024) return { ok: false };
+    await chrome.storage.local.set({ [`ultraCopy:${origin}/${r.uid}/${r.kind}`]: { v: 1, uid: r.uid, kind: r.kind, at: r.at, full: !!r.full, nodes: r.nodes } });
     return { ok: true };
-  })().then(reply, () => reply(null));
+  }).then(reply, () => reply(null));
   return true;
 });
 chrome.storage.onChanged.addListener((c, area) => {
-  if (area === 'sync' && c.enhance?.newValue?.instant === false) copyKeys().then((drop) => drop.length && chrome.storage.local.remove(drop)).catch(() => {});
+  if (area === 'sync' && c.enhance?.newValue?.instant === false) (brokerTurn ||= GZ_CARDS.queue())(() => purgeCopies()).catch(() => {});
 });
 chrome.tabs?.onRemoved?.addListener((id) => {
   chrome.storage.session?.remove([`landed:${id}`, ...Object.keys(FRAMED).map((what) => frameKey(what, id))]).catch(() => {});
@@ -1848,6 +1876,7 @@ const forget = async (origin) => {
   if (typeof got.todoCache?.key === 'string' && got.todoCache.key.startsWith(`todo:${origin}/`)) drop.push('todoCache');
   if (Object.keys(patch).length) await chrome.storage.local.set(patch);
   if (drop.length) await chrome.storage.local.remove(drop);
+  await (brokerTurn ||= GZ_CARDS.queue())(() => purgeCopies(origin));
   await Promise.resolve(chrome.storage.session?.remove(`ultraMine:${origin}`)).catch(() => {});
   await ensure();
   return true;
@@ -1865,6 +1894,7 @@ const forgetAll = async () => {
     try { origins.add(new URL(k.slice(k.indexOf(':') + 1)).origin); } catch { /* invalid entry */ }
   }
   for (const origin of origins) await forget(origin);
+  await (brokerTurn ||= GZ_CARDS.queue())(() => purgeCopies());
   await chrome.storage.local.remove([...LMS, 'askLater']);
   await ensure();
   return true;

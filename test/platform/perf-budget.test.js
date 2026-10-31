@@ -299,9 +299,9 @@ const CTAB_STANDBY = 16;
 const NAV_FIRST_PAINT = { ultra: 4450, canvas: 0, moodle: 0 };
 // Instant copies of Ultra's Grades, Courses and Activity (perf step S; a named raise under the owner's 2026-10-19 approval):
 // content-ultra.js asks for courses/page/instant.js at first paint on those pages and drops the site's copies on sign-out,
-// 1,011 bytes on Ultra; defaults.js's enhance.instant, 54 on every site. The copy itself loads on demand. Measured against
-// 3298f6f9.
-const INSTANT_COPIES = { ultra: 1011 + 54, canvas: 54, moodle: 54 };
+// keeping no more in that page, 1,197 bytes on Ultra; defaults.js's enhance.instant, 54 on every site. The copy itself
+// loads on demand. Measured against 3298f6f9.
+const INSTANT_COPIES = { ultra: 1197 + 54, canvas: 54, moodle: 54 };
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what background/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;

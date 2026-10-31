@@ -10,9 +10,9 @@ var GZ_INSTANT = globalThis.GZ_INSTANT || (() => {
   if (!ctx) return null; // landed before its document's bootstrap: asked for again
   const L = globalThis.GZ_INSTANT_LIB, html = document.documentElement;
   const MAIN = 'main.bb-offcanvas-container', LAST = 20000;
-  let me = () => Promise.reject(new Error('no account')), settled = null, wanted = false, v = null; // v: this route's visit
+  let me = () => Promise.reject(new Error('no account')), settled = null, wanted = false, out = false, v = null; // v: this route's visit
 
-  const on = () => { const s = ctx.settings(); return wanted && !!s?.enabled && !!s.enhance?.instant; };
+  const on = () => { const s = ctx.settings(); return !out && wanted && !!s?.enabled && !!s.enhance?.instant; };
   const main = () => document.querySelector(MAIN);
   // Ultra's <base href> is its CDN: course banners may come from there.
   const where = () => {
@@ -21,7 +21,8 @@ var GZ_INSTANT = globalThis.GZ_INSTANT || (() => {
     return { origin: location.origin, cdn, base: document.baseURI };
   };
   const read = (k) => new Promise((res) => { try { chrome.storage.local.get(k, (r) => res(chrome.runtime.lastError ? null : r?.[k] ?? null)); } catch { res(null); } });
-  const drop = () => { try { chrome.runtime.sendMessage({ type: 'glaze:ultraCopy', op: 'drop' })?.catch?.(() => {}); } catch { /* reloaded */ } };
+  const send = (m) => { try { return Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:ultraCopy', ...m })).catch(() => null); } catch { return Promise.resolve(null); } };
+  const drop = () => { signout(); send({ op: 'drop' }); };
   const signedOut = (e) => e === 401 || /HTTP 401/.test(e?.message || '');
 
   // ---- painting ----
@@ -39,9 +40,11 @@ var GZ_INSTANT = globalThis.GZ_INSTANT || (() => {
   };
   const follow = (x) => { if (!x.moving) x.moving = requestAnimationFrame(() => { x.moving = 0; place(x); }); };
   const paint = (x) => {
+    if (v !== x || x.expired || !on() || location.pathname !== x.path) return;
     const m = main();
     if (!m) { x.waiting = true; return; } // Ultra's main area isn't in yet: check() paints once it is
     x.waiting = false;
+    if (L.failed(m)) return;
     const box = document.createElement('div');
     box.id = 'gz-instant';
     box.setAttribute('aria-hidden', 'true');
@@ -76,24 +79,24 @@ var GZ_INSTANT = globalThis.GZ_INSTANT || (() => {
     if (!box) return;
     requestAnimationFrame(() => {
       if (x.copy !== box) return;
-      x.copy = null;
       unhook(x);
       html.removeAttribute('data-gz-instant');
       box.setAttribute('data-out', '');
       const fades = box.getAnimations?.() || [];
-      if (!fades.length) box.remove();
-      else Promise.all(fades.map((a) => a.finished)).then(() => box.remove(), () => box.remove());
+      const remove = () => { box.remove(); if (x.copy === box) x.copy = null; };
+      if (!fades.length) remove();
+      else Promise.all(fades.map((a) => a.finished)).then(remove, remove);
     });
   };
 
   // ---- keeping ----
   const keep = (x) => {
-    if (!x.uid || !on() || v !== x || location.pathname !== x.path) return;
+    if (!x.uid || !x.epoch || !on() || v !== x || location.pathname !== x.path) return;
     const m = main();
     if (!L.ready(x.kind, m)) return;
     const c = L.capture(m, where());
     if (!c) return;
-    try { chrome.storage.local.set({ [L.key(location.origin, x.uid, x.kind)]: { v: L.VERSION, uid: x.uid, kind: x.kind, at: Date.now(), full: c.full, nodes: c.nodes } }); } catch { /* reloaded */ }
+    send({ op: 'put', epoch: x.epoch, record: { v: L.VERSION, uid: x.uid, kind: x.kind, at: Date.now(), full: c.full, nodes: c.nodes } });
   };
   const keepIdle = (x) => (globalThis.requestIdleCallback ? requestIdleCallback(() => keep(x), { timeout: 2000 }) : setTimeout(() => keep(x), 200));
   addEventListener('pagehide', () => { if (v) keep(v); });
@@ -102,7 +105,7 @@ var GZ_INSTANT = globalThis.GZ_INSTANT || (() => {
   // Waits on the page: every change to it is looked at once a frame until Ultra's view is ready.
   const check = (x) => {
     x.frame = 0;
-    if (v !== x) return;
+    if (v !== x || x.expired) return;
     if (location.pathname !== x.path) { sync(wanted); return; }
     const m = main();
     if (L.ready(x.kind, m)) {
@@ -122,17 +125,20 @@ var GZ_INSTANT = globalThis.GZ_INSTANT || (() => {
     v = x;
     x.mo = new MutationObserver(() => { if (!x.frame) x.frame = requestAnimationFrame(() => check(x)); });
     x.mo.observe(document.body || html, { childList: true, subtree: true });
-    x.timer = setTimeout(() => { if (v !== x) return; unpaint(x); stop(x); }, LAST);
+    x.timer = setTimeout(() => { if (v !== x) return; x.expired = true; unpaint(x); stop(x); }, LAST);
+    const lease = send({ op: 'begin' }).then((r) => { x.epoch = r?.epoch || ''; });
     // The last student's copy is read while the one signed in is confirmed; only that student's paints.
     const copies = new Map();
     const copyOf = (uid) => (L.ID.test(uid) ? (copies.has(uid) || copies.set(uid, read(L.key(location.origin, uid, kind))), copies.get(uid)) : Promise.resolve(null));
     ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page.known()).then((k) => k && copyOf(k.id), () => {});
     Promise.resolve().then(() => me()).then(async (uid) => {
-      if (v !== x) return;
+      if (v !== x || x.expired) return;
       x.uid = L.ID.test(uid) ? uid : '';
-      if (x.ready) { keepIdle(x); return; }
+      // Saves wait for the worker's lease; painting doesn't (a cold worker can take longer than Ultra's own first paint).
+      lease.then(() => { if (x.ready) keepIdle(x); });
+      if (x.ready) return;
       const [rec] = await Promise.all([copyOf(x.uid), settled]);
-      if (v !== x || x.ready || x.copy || !on() || !L.usable(rec, x.uid, kind)) return;
+      if (v !== x || x.expired || x.ready || x.copy || !on() || !L.usable(rec, x.uid, kind)) return;
       x.rec = rec;
       if (L.ready(kind, main())) return;
       paint(x);
@@ -140,6 +146,7 @@ var GZ_INSTANT = globalThis.GZ_INSTANT || (() => {
     check(x);
   };
   const end = (x) => { stop(x); unpaint(x); if (v === x) v = null; };
+  const signout = () => { out = true; if (v) end(v); };
 
   // on: the switch and Glaze on this page. me: content-ultra.js's confirmed student. settled: the stored settings are in.
   const sync = (want, who, ready) => {
@@ -150,5 +157,5 @@ var GZ_INSTANT = globalThis.GZ_INSTANT || (() => {
     if (v && (!kind || v.path !== location.pathname)) end(v);
     if (kind && !v) start(kind);
   };
-  return { sync, now: () => (v ? { kind: v.kind, painted: !!v.copy, ready: v.ready } : null) };
+  return { sync, signout, now: () => (v ? { kind: v.kind, painted: !!v.copy, ready: v.ready } : null) };
 })();

@@ -218,7 +218,7 @@ test('review: Reset clears scoped records and planner cache while retaining note
   assert.deepEqual(await w.send({ type: 'glaze:sites', op: 'reset' }, editor), { ok: true });
   for (const key of [`dueWeek:${A}`, `seenCoursesAt ${A}`, 'todoCache', `ultraMe:${A}`, `ultraBooks:${A}/_1_1`, 'ultraMe:https://x.blackboard.com', 'ultraBooks:https://x.blackboard.com/_2_1',
     `ultraCopy:${A}/_1_1/grades`, 'ultraCopy:https://x.blackboard.com/_2_1/stream']) assert.equal(w.store.local[key], undefined, key);
-  assert.deepEqual(w.store.session, {});
+  assert.deepEqual(Object.keys(w.store.session), ['ultraCopyEpochs'], 'only the fence against stale snapshot saves remains');
   assert.deepEqual(w.store.local.seenCourses, {});
   assert.deepEqual(w.store.local[`todo:${A}/_1_1`], task);
   assert.deepEqual(w.store.local[`notes:${A}/_1_1`], note);
@@ -251,7 +251,7 @@ test("an Ultra site's student and memberships: kept in the worker's session for 
   assert.equal(w.store.session[`ultraMine:${B}`].uid, '_900_1');
   // Removing the site forgets it.
   assert.deepEqual(await w.send({ type: 'glaze:sites', op: 'remove', origin: B }, editor), { ok: true });
-  assert.deepEqual(w.store.session, {});
+  assert.deepEqual(Object.keys(w.store.session), ['ultraCopyEpochs'], 'its memberships go; only the fence for instant copies stays');
 });
 
 test('an Ultra identity touch cannot overwrite a newer account saved by another page', async () => {

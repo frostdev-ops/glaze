@@ -75,12 +75,17 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const syncRemind = () => load(() => !tabFrame && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => top()?.[k]), 'planner/page/reminders.js', 'GZ_REMIND_UI');
   const syncAhead = () => load(() => !tabFrame && top()?.prefetch, 'courses/page/ahead.js', 'GZ_AHEAD');
   // Grades, Courses and Activity from the student's last visit (enhance.instant), from first paint: courses/page/instant.js.
-  const syncInstant = () => window.top === window && !isPreview && (globalThis.GZ_INSTANT || (top()?.instant && /^\/ultra\/(grades|course|stream)\/?$/.test(location.pathname)))
-    && need(['courses/instant.js', 'courses/page/instant.js'], () => globalThis.GZ_INSTANT).then(() => GZ_INSTANT.sync(!!top()?.instant, me, Promise.resolve().then(() => I.ready)), () => {});
-  // Signing out (Ultra's main menu's "#" link, which Glaze's bar clicks too) forgets this site's copies.
+  // Signing out (Ultra's main menu's "#" link, which Glaze's bar clicks too) forgets this site's copies and keeps no more.
+  let copySignedOut = false;
+  const syncInstant = () => window.top === window && !isPreview && (globalThis.GZ_INSTANT || (!copySignedOut && top()?.instant && /^\/ultra\/(grades|course|stream)\/?$/.test(location.pathname)))
+    && need(['courses/instant.js', 'courses/page/instant.js'], () => globalThis.GZ_INSTANT).then(() => copySignedOut ? GZ_INSTANT.signout() : GZ_INSTANT.sync(!!top()?.instant, me, Promise.resolve().then(() => I.ready)), () => {});
   if (window.top === window) document.addEventListener('click', (e) => {
     const a = e.target?.closest?.('.MuiDrawer-paper a[href], #base_tools a[href]'), h = a?.getAttribute('href') || '';
-    if (a && (h === '#' || /logout/i.test(h))) try { chrome.runtime.sendMessage({ type: 'glaze:ultraCopy', op: 'drop' })?.catch?.(() => {}); } catch { /* reloaded */ }
+    if (a && (h === '#' || /logout/i.test(h))) {
+      copySignedOut = true;
+      globalThis.GZ_INSTANT?.signout();
+      try { chrome.runtime.sendMessage({ type: 'glaze:ultraCopy', op: 'drop' })?.catch?.(() => {}); } catch { /* reloaded */ }
+    }
   }, true);
 
   // Only submitted attempts have a hand-in date. A newer draft leaves earlier submission timing unknown.
