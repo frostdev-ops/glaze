@@ -74,6 +74,14 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // Reminders and floating widgets are the page's, once: never again in a course tab's frame over it.
   const syncRemind = () => load(() => !tabFrame && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => top()?.[k]), 'planner/page/reminders.js', 'GZ_REMIND_UI');
   const syncAhead = () => load(() => !tabFrame && top()?.prefetch, 'courses/page/ahead.js', 'GZ_AHEAD');
+  // Grades, Courses and Activity from the student's last visit (enhance.instant), from first paint: courses/page/instant.js.
+  const syncInstant = () => window.top === window && !isPreview && (globalThis.GZ_INSTANT || (top()?.instant && /^\/ultra\/(grades|course|stream)\/?$/.test(location.pathname)))
+    && need(['courses/instant.js', 'courses/page/instant.js'], () => globalThis.GZ_INSTANT).then(() => GZ_INSTANT.sync(!!top()?.instant, me, Promise.resolve().then(() => I.ready)), () => {});
+  // Signing out (Ultra's main menu's "#" link, which Glaze's bar clicks too) forgets this site's copies.
+  if (window.top === window) document.addEventListener('click', (e) => {
+    const a = e.target?.closest?.('.MuiDrawer-paper a[href], #base_tools a[href]'), h = a?.getAttribute('href') || '';
+    if (a && (h === '#' || /logout/i.test(h))) try { chrome.runtime.sendMessage({ type: 'glaze:ultraCopy', op: 'drop' })?.catch?.(() => {}); } catch { /* reloaded */ }
+  }, true);
 
   // Only submitted attempts have a hand-in date. A newer draft leaves earlier submission timing unknown.
   // Course and item due-date exceptions suppress lateness.
@@ -413,6 +421,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const syncWidgets = () => {
     syncSidebar();
     syncStream();
+    syncInstant();
     const on = widgetsHere();
     if (!dash()) html.removeAttribute('data-gz-dash'); else if (!html.hasAttribute('data-gz-dash')) html.setAttribute('data-gz-dash', '');
     if (on) need('core/page/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => { if (dash()) html.setAttribute('data-gz-dash', 'ip'); }); else globalThis.GZ_WIDGETS_UI?.sync(false);
@@ -735,6 +744,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     const b = I.settings.navbar, c = /^\/ultra\/courses\//.test(location.pathname) ? b?.course : 'same';
     if (!globalThis.GZ_NAVBAR_UI?.live()) I.setAttr('data-gz-navbar', !!b?.on && `${c === 'same' ? `${b.place} ${b.rail}` : c === 'icons' ? 'rail icons' : c === 'hide' ? 'none' : 'top'} ${b.style}${c !== 'hide' && b.tabs && I.settings.enhance.tabs ? ' tabs' : ''}`);
     if (!isPreview && !globalThis.GZ_NAVBAR_UI?.live()) GZ_NAV.first(I.settings, html.getAttribute('data-gz-navbar'), me);
+    syncInstant();
     I.setAttr('data-gz-nav-detailed', n.detailed);
     for (const [k, v] of Object.entries(GZ_NAV.dimensions(n))) I.setVar(`--gz-nav-${k}`, `${v}px`);
     const src = n.i ? picture : n.u;

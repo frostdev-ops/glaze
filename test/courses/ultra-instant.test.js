@@ -72,7 +72,7 @@ test('the rebuild strips handlers, ids, scripts, styles with addresses, forms, f
       el('svg', { viewBox: '0 0 24 24', onload: 'x()' }, el('path', { d: 'M0 0h24v24H0z', fill: 'url(#evil)' }), el('use', { href: '#sprite' })),
       'Plain <img src=x onerror=alert(1)> text'));
   const c = L.capture(main, CTX), s = flat(c.nodes);
-  for (const gone of ['onclick', 'steal', 'onmouseover', 'card-1', 'url(', 'evil.test', 'javascript', 'alert(1)"', 'secret', 'Form text', 'Press', 'not-a-banner', 'data:', 'Glaze panel', 'Glaze date', 'Peek text', '#sprite', 'onload', 'onerror', '"id"']) assert.ok(!s.includes(gone), gone);
+  for (const gone of ['onclick', 'steal', 'onmouseover', 'card-1', 'url(', 'evil.test', 'javascript', 'alert(1)"', 'secret', 'Form text', 'Press', 'not-a-banner', 'data:', 'Glaze panel', 'Glaze date', 'Peek text', '#sprite', '"onload"', '"onerror"', '"id"']) assert.ok(!s.includes(gone), gone);
   for (const kept of ['background-color: #123456', '"/ultra/courses/_1_1/outline"', `"${CDN}/images/site-banner.png"`, '"M0 0h24v24H0z"', 'Plain <img src=x onerror=alert(1)> text']) assert.ok(s.includes(kept), kept);
   assert.deepEqual([...tags(c.nodes)].sort(), ['a', 'div', 'img', 'path', 'svg']);
 
@@ -297,17 +297,17 @@ test('signed out (/users/me answers 401): this site\'s copies are dropped', asyn
   p.fail(new Error('HTTP 401'));
   await settle();
   assert.equal(p.copy(), null);
-  assert.deepEqual(p.sent, [{ type: 'glaze:ultraCopy', op: 'drop' }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(p.sent)), [{ type: 'glaze:ultraCopy', op: 'drop' }]);
 });
 
 // ---- content-ultra.js's hooks ----
-const ultraPart = ({ path = '/ultra/grades', instant = true, top = true, instantUI = null } = {}) => {
+const ultraPart = ({ path: route = '/ultra/grades', instant = true, top = true, instantUI = null } = {}) => {
   const listeners = [], asked = [], sent = [], calls = [];
   const El0 = class { constructor() { this.attrs = new Map(); this.dataset = {}; } setAttribute(k, v) { this.attrs.set(k, String(v)); } getAttribute(k) { return this.attrs.get(k) ?? null; } hasAttribute(k) { return this.attrs.has(k); } removeAttribute(k) { this.attrs.delete(k); } querySelector() { return null; } querySelectorAll() { return []; } addEventListener() {} append() {} };
   const html = new El0();
   const document = { documentElement: html, body: new El0(), contentType: 'text/html', querySelector: () => null, querySelectorAll: () => [], getElementById: () => null,
     addEventListener: (t, f, cap) => listeners.push({ t, f, cap }), createTreeWalker: () => ({ nextNode: () => null }), createElement: () => new El0() };
-  const location = { origin: ORIGIN, protocol: 'https:', hostname: 'school.blackboard.com', port: '', pathname: path, href: ORIGIN + path };
+  const location = { origin: ORIGIN, protocol: 'https:', hostname: 'school.blackboard.com', port: '', pathname: route, href: ORIGIN + route };
   const ctx = vm.createContext({
     document, location, console, Promise, Date, setTimeout, clearTimeout() {}, queueMicrotask, JSON, Map, Set, Object, Array, String, Number, RegExp, Math, Intl, URL, structuredClone,
     IntersectionObserver: class { observe() {} unobserve() {} disconnect() {} }, MutationObserver: class { observe() {} disconnect() {} },
@@ -358,13 +358,13 @@ test('content-ultra.js loads the copy\'s page script on the three pages with the
 
 test('signing out through Ultra\'s menu (or Glaze\'s bar, which clicks it) drops this site\'s copies', () => {
   const u = ultraPart({ path: '/ultra/course' });
-  const link = (href, inMenu = true) => ({ getAttribute: (k) => (k === 'href' ? href : null), closest: (s) => (inMenu && /MuiDrawer-paper|base_tools/.test(s) ? link(href, inMenu) : null) });
-  const click = (target) => { for (const l of u.listeners.filter((x) => x.t === 'click' && x.cap)) l.f({ type: 'click', target: { closest: (s) => target.closest(s) }, isTrusted: false }); };
+  const link = (href, inMenu = true) => ({ getAttribute: (k) => (k === 'href' ? href : null), closest: (s) => (inMenu && /MuiDrawer-paper a\[href\]|base_tools a\[href\]/.test(s) ? link(href, inMenu) : null) });
+  const click = (target) => { for (const l of u.listeners.filter((x) => x.t === 'click' && x.cap)) l.f({ type: 'click', target: { closest: (s) => target.closest(s) }, isTrusted: false, button: 0, preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {} }); };
   click(link('/ultra/course'));
   click(link('#', false));
   assert.deepEqual(u.sent.filter((m) => m.type === 'glaze:ultraCopy'), [], 'other links');
   click(link('#'));
-  assert.deepEqual(u.sent.filter((m) => m.type === 'glaze:ultraCopy'), [{ type: 'glaze:ultraCopy', op: 'drop' }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(u.sent.filter((m) => m.type === 'glaze:ultraCopy'))), [{ type: 'glaze:ultraCopy', op: 'drop' }]);
 });
 
 // ---- the worker ----
