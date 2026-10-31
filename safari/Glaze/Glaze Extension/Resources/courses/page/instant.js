@@ -96,7 +96,7 @@ var GZ_INSTANT = globalThis.GZ_INSTANT || (() => {
     if (!L.ready(x.kind, m)) return;
     const c = L.capture(m, where());
     if (!c) return;
-    send({ op: 'put', epoch: x.epoch, record: { v: L.VERSION, uid: x.uid, kind: x.kind, at: Date.now(), full: c.full, nodes: c.nodes } });
+    send({ op: 'put', epoch: x.epoch, record: { v: L.VERSION, uid: x.uid, kind: x.kind, at: x.at, full: c.full, nodes: c.nodes } });
   };
   const keepIdle = (x) => (globalThis.requestIdleCallback ? requestIdleCallback(() => keep(x), { timeout: 2000 }) : setTimeout(() => keep(x), 200));
   addEventListener('pagehide', () => { if (v) keep(v); });
@@ -121,7 +121,7 @@ var GZ_INSTANT = globalThis.GZ_INSTANT || (() => {
   };
   const stop = (x) => { x.mo?.disconnect(); x.mo = null; clearTimeout(x.timer); cancelAnimationFrame(x.frame); x.frame = 0; };
   const start = (kind) => {
-    const x = { kind, path: location.pathname, uid: '', rec: null, copy: null, ready: false, waiting: false, frame: 0, moving: 0 };
+    const x = { kind, at: Date.now(), path: location.pathname, uid: '', rec: null, copy: null, ready: false, waiting: false, frame: 0, moving: 0 };
     v = x;
     x.mo = new MutationObserver(() => { if (!x.frame) x.frame = requestAnimationFrame(() => check(x)); });
     x.mo.observe(document.body || html, { childList: true, subtree: true });

@@ -366,20 +366,27 @@
   // Kept per site (`dueWeek:<origin>`): another site's items (Blackboard and Canvas, or two schools) open nothing here.
   let dueSoon = null;
   const DUE = `dueWeek:${location.origin}`;
-  const dueWeek = () => (dueSoon ||= new Promise((res) => {
-    stored(DUE, (r) => res(r?.[DUE]));
-  }).then((r) => {
-    const now = Date.now();
-    const kept = Array.isArray(r?.list) ? r.list : [];
-    if (now - (r?.at || 0) < 600000) return kept;
-    const at = (days) => new Date(now + days * 864e5).toISOString();
-    const ask = ultra ? api(`/calendars/todo/studentItems?since=${at(0)}&until=${at(7)}`).then((j) => GZ_DUE_WEEK(j, now))
-      : moodle ? moodleIn().then((m) => m.due(now)) : capi(`/planner/items?start_date=${at(0)}&end_date=${at(7)}&per_page=100`).then((j) => GZ_CANVAS_DUE_WEEK(j, now));
-    return ask.then((list) => {
-      try { chrome.storage.local.set({ [DUE]: { at: Date.now(), list } }); } catch { /* reloaded */ }
-      return list;
-    }, () => kept);
-  }));
+  let dueAt = 0, dueRead = 0, dueGone = false;
+  const dueWeek = (force = false) => {
+    if (dueGone) return Promise.resolve([]);
+    if (dueSoon && Date.now() - dueAt < 120000 && !force) return dueSoon;
+    const n = ++dueRead, now = dueAt = Date.now();
+    return (dueSoon = new Promise((res) => stored(DUE, (r) => res(r?.[DUE]))).then((r) => {
+      const kept = Array.isArray(r?.list) ? r.list : [];
+      if (!force && now - (r?.at || 0) < 120000) {
+        setTimeout(() => { if (n === dueRead) dueWeek(true); }, 0);
+        return kept;
+      }
+      const at = (days) => new Date(now + days * 864e5).toISOString();
+      const ask = ultra ? api(`/calendars/todo/studentItems?since=${at(0)}&until=${at(7)}`).then((j) => GZ_DUE_WEEK(j, now))
+        : moodle ? moodleIn().then((m) => m.due(now)) : capi(`/planner/items?start_date=${at(0)}&end_date=${at(7)}&per_page=100`).then((j) => GZ_CANVAS_DUE_WEEK(j, now));
+      return ask.then((list) => {
+        if (n !== dueRead || dueGone) return dueSoon || [];
+        try { if (ultra) chrome.runtime.sendMessage({ type: 'glaze:ultraMine', op: 'week', at: now, list: list.slice(0, 200) })?.catch?.(() => {}); else chrome.storage.local.set({ [DUE]: { at: now, list } }); } catch { /* reloaded */ }
+        return list;
+      }, () => kept);
+    }));
+  };
 
   // Where Ultra writes a due date, in any language: a course item's grade line and an assignment's own
   // page (its .due-date-container). Its English details lists put the label one element up:
@@ -1746,11 +1753,19 @@
     if (changes.lookX && area === 'sync') lookX = changes.lookX.newValue;
     if (area === 'local' && Object.keys(changes).some((k) => /^mod(s$|:|Dev$|Order$|sBlocklist$|NavLayout:)/.test(k))) modsIn(true);
     else if (changes.lookX && (area !== 'sync' || !changes.enabled)) partsIn();
+    const fence = area === 'local' && ultra && (changes.ultraCopyFence || changes[`ultraCopyFence:${location.origin}`]);
+    if (fence) { dueRead++; dueSoon = null; dueAt = 0; dueGone ||= fence.newValue?.retire !== false; }
+    if (area === 'local' && changes[DUE]) { dueRead++; dueAt = changes[DUE].newValue?.at || Date.now(); dueSoon = Promise.resolve(changes[DUE].newValue?.list || []); }
+    if (area === 'local' && changes.courseSlots) {
+      for (const k of Object.keys(courseSlots)) delete courseSlots[k];
+      Object.assign(courseSlots, changes.courseSlots.newValue);
+      reapply();
+    }
     if (area === 'local' && changes.seenCourses) {
       courseList = changes.seenCourses.newValue || {};
       coursesIn();
     }
-    if (isPreview || !(area === 'local' && (changes.freshDefaults || changes.lookCatalog)) && (area !== 'sync' || !Object.keys(changes).some((k) => k in settings || k in GZ_SPEC))) return;
+    if (isPreview || !(area === 'local' && (changes.freshDefaults || changes.lookCatalog)) && (area !== 'sync' || !Object.keys(changes).some((k) => SETTING_KEYS.includes(k) || k in GZ_SPEC))) return;
     const looksBefore = JSON.stringify(looks);
     load(changes, area).then((s) => {
       const was = settings.enabled && links.length > 0;

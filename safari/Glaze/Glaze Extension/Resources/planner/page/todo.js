@@ -113,7 +113,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       if (g !== gen || !box) throw new Error('stale');
       const r = await GZ_ULTRA.page.due(Date.parse(start), Date.parse(end));
       // complete: false, the calendar couldn't be read whole: the list says some work may be missing.
-      return [{ key, at: now, start, end, teach: o().teacher, progress: o().progress, items: r.items, complete: r.complete, grading: [], sums: {} }, undefined];
+      return [{ key, at: r.at ?? now, epoch: r.epoch, start, end, teach: o().teacher, progress: o().progress, items: r.items, complete: r.complete, grading: [], sums: {} }, undefined];
     }
     const own = reuse && cache?.teach === null && covers({ ...cache, teach: o().teacher, progress: o().progress }, now) ? cache : null;
     const { start, end } = own || L.fetchRange(o(), now, who.tz);
@@ -151,6 +151,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (!cache) setBusy(true);
     return done(load(!force).then(([c, due]) => {
       if (g !== gen) return;
+      if (cache?.key === c.key && cache.at > c.at) return;
       cache = c;
       return keep(c, due);
     }, () => {
@@ -603,10 +604,20 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     const k = e.target.dataset?.kind;
     if (k) { if (e.target.open) shut.delete(k); else shut.add(k); }
   };
+  document.addEventListener('glaze:ultra-refresh', (e) => {
+    if (!ultra) return;
+    if (e.detail?.retire) { dead = true; off(); }
+    else { ++gen; fetching = null; if (box) refresh(true); }
+  });
   const onShow = () => { if (document.visibilityState === 'visible' && !asleep) { render(); refresh(); } };
   const onStore = (changes, area) => {
     if (!L || !who) return;
     if (area === 'sync' && changes.todo) readPrefs().then(() => { render(true); refresh(); });
+    if (area === 'local' && changes[CACHE]) {
+      const c = changes[CACHE].newValue;
+      if (!c || c.key === key && !(cache?.at > c.at)) cache = c || null;
+      render(true);
+    }
     if (area === 'local' && changes[key]) { data = L.clean(changes[key].newValue); render(true); }
     if (area === 'local' && !asleep && changes[draftKey()]) { takeDraft(changes[draftKey()].newValue); render(true); }
   };
@@ -651,7 +662,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
         render(true);
         ctx.canvasCourses().then((l) => { if (g === gen) { coursesIn(l); render(true); } }, () => {});
       }
-      await refresh();
+      await refresh(ultra);
     } catch {
       if (g === gen) fail();
     }

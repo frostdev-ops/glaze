@@ -1031,6 +1031,12 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   };
   const queue = () => { if (!queued && !sleeping) queued = requestAnimationFrame(() => { queued = 0; sync(); }); };
   chrome.storage.onChanged.addListener((c, area) => {
+    const fence = area === 'local' && (c.ultraCopyFence || c[`ultraCopyFence:${location.origin}`]);
+    if (X.site === 'ultra' && fence) {
+      GZ_NAV.drop();
+      try { sessionStorage.removeItem(KEEP); } catch { /* blocked */ }
+      if (fence.newValue?.retire !== false) { forget(); me = ''; }
+    }
     if ((area === 'local' && c.freshDefaults) || (area === 'sync' && (c.navbarItems || c.navItems))) readItems();
     if (area === 'local' && logo.id && c[`navLogo:${logo.id}`]) { clearLogo(); sig = seen = ''; if (host) sync(); }
     if (area !== 'sync' || !chrome.runtime?.id) return;

@@ -1,7 +1,7 @@
 // Course data ahead of time (enhance.prefetch, on by default), on Blackboard Ultra's top page. Once the page has settled,
 // at low priority in the site's queue and only where what's kept is stale: the To Do copy (Better To Do's own range, kept
 // as its copy, courses/ultra.js page.planned), then the gradebook of each course with work still due. And a course's
-// content once its card, course tab or link has been pointed at for a moment, kept five minutes for the new-content
+// content once its card, course tab or link has been pointed at for a moment, kept a minute for the new-content
 // badges, the palette and search (page.outline). Classic script, loaded on demand (content-ultra.js syncAhead); a second
 // injection keeps the first. sync(on).
 var GZ_AHEAD = globalThis.GZ_AHEAD || (() => {
@@ -9,7 +9,7 @@ var GZ_AHEAD = globalThis.GZ_AHEAD || (() => {
   if (!ctx) return null; // landed before its document's bootstrap: asked for again
   const LOW = 1, INTENT = 150, KEPT = 6e5; // a gradebook kept for less than ten minutes isn't asked for again here
   const ID = /^_\d+_\d+$/;
-  let on = false, ran = false, idle = 0, pointing = '', timer = 0;
+  let on = false, ran = false, ranAt = 0, idle = 0, pointing = '', timer = 0;
   const stores = () => ctx.need('courses/lmsq.js', () => globalThis.GZ_LMSQ).then(() => ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA)).then(() => GZ_ULTRA.page);
   const still = () => on && document.visibilityState !== 'hidden';
   const kept = () => new Promise((res) => { try { chrome.storage.local.get('todoCache', (r) => res(chrome.runtime.lastError ? null : r?.todoCache)); } catch { res(null); } });
@@ -38,7 +38,7 @@ var GZ_AHEAD = globalThis.GZ_AHEAD || (() => {
   };
   const later = () => {
     if (ran || idle) return;
-    const go = () => { idle = 0; if (!still()) return; ran = true; settle().catch(() => {}); };
+    const go = () => { idle = 0; if (!still()) return; ran = true; ranAt = Date.now(); settle().catch(() => {}); };
     const wait = () => { idle = globalThis.requestIdleCallback ? requestIdleCallback(go, { timeout: 5000 }) : setTimeout(go, 2000); };
     if (document.readyState === 'complete') wait(); else addEventListener('load', wait, { once: true });
     idle ||= -1;
@@ -58,7 +58,7 @@ var GZ_AHEAD = globalThis.GZ_AHEAD || (() => {
     if (cid) timer = setTimeout(() => { if (still() && pointing === cid) stores().then((p) => { if (still() && pointing === cid) return p.outline(cid, { prio: LOW, body: true }); }).catch(() => {}); }, INTENT);
   };
   const onOut = (e) => { if (!courseAt(e.relatedTarget)) { clearTimeout(timer); pointing = ''; } };
-  const onShow = () => { if (still()) later(); };
+  const onShow = () => { if (still()) { if (Date.now() - ranAt >= 60000) ran = false; later(); } };
 
   const sync = (want) => {
     if (!!want === on) return;

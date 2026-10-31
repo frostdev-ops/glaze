@@ -1319,7 +1319,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   const bootStandby = () => {
     hostIn();
-    const s = { el: frameEl(STANDBY, STANDBY_AT, ''), loaded: null, uid: '', accountDoc: null, timer: 0 };
+    const s = { at: Date.now(), el: frameEl(STANDBY, STANDBY_AT, ''), loaded: null, uid: '', accountDoc: null, timer: 0 };
     s.el.addEventListener('load', () => {
       let ultra = false; try { const w = s.el.contentWindow.location; ultra = w.origin === location.origin && w.pathname.startsWith('/ultra/'); } catch { /* another site */ }
       if (standby === s && !ultra) { unStandby(true); standbyLater(); }
@@ -1332,7 +1332,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const usable = (s) => {
     try {
       const d = s.el.contentDocument;
-      return !!d?.body && s.el.isConnected && s.loaded === d && s.accountDoc === d && !!who && s.uid === who && d.location.origin === location.origin
+      return (!s.at || Date.now() - s.at < STALE) && !!d?.body && s.el.isConnected && s.loaded === d && s.accountDoc === d && !!who && s.uid === who && d.location.origin === location.origin
         && d.location.pathname.startsWith('/ultra/') && !L.courseOf(d.location.pathname, d.location.search);
     } catch { return false; }
   };
@@ -1464,13 +1464,18 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     // Ultra's own way back in the item (its close, its link to Course Content), or its route there seen late.
     else if (d.gzCtab === 'itemback' && live && f.item && it?.open) closeItem(cid, 'ultra');
     else if (d.gzCtab === 'moved' && live && f.item && it?.open && L.outlineOf(pathOf(f).split('?')[0]) === cid) closeItem(cid, 'ultra');
+    else if (d.gzCtab === 'account' && f.cold && L.validId(d.uid, ctx.site)) {
+      if (d.uid !== who) { send({ op: 'drop', signout: true }); revoke(); return; }
+      f.uid = d.uid; f.accountDoc = f.el.contentDocument;
+    }
     else if (d.gzCtab === 'drawn') {
       if (f.fresh?.asked) finishFresh(cid, f);
       else if (live && f.item && it?.open) {
         // The item drawn over its outline: the outline hides under it.
         if (it.base && frames.get(cid) !== it.base) { showEl(it.base, false); post(it.base, { gzCtab: 'visible', on: false }); }
         if (waiting === cid) wait('');
-      } else if (live && cid === showing && d.hid > STALE) staleCheck(cid, f);
+        if (d.hid > STALE || f.stale) staleCheck(cid, f);
+      } else if (live && cid === showing && (d.hid > STALE || f.stale)) staleCheck(cid, f);
     }
   };
   // ---- Course Content kept (Ultra) ----------------------------------------------------------------------------------
@@ -1485,10 +1490,16 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const STALE = 120000, QUIET = 1000, OUTLINE = '.js-content-outline, .course-outline-content, .bb-course-navigation';
   const items = new Map(); // cid → { url, base (the outline's frame; null: this page), open, from, key (history entries), back }
   const itemPrefix = Math.random().toString(36).slice(2);
-  let itemN = 0;
+  let itemN = 0, pageAway = 0, tabAway = 0, frameEpoch = 0;
   const itemEntry = (state = history.state) => entry() || (typeof state?.gzItemKey === 'string' ? state.gzItemKey : '');
   const stopKeeping = () => {
-    for (const g of [...frames.values(), ...[...spare.values()].flat()]) g.fresh?.off();
+    for (const [cid, g] of [...frames, ...[...spare].flatMap(([k, a]) => a.map((g) => [k, g]))]) if (g.fresh || g.cold) {
+      g.fresh?.off(); clearTimeout(g.coldTimer);
+      if (g.dirty) continue;
+      if (frames.get(cid) === g) { if (showing === cid) show(''); frames.delete(cid); }
+      else spare.set(cid, (spare.get(cid) || []).filter((f) => f !== g));
+      g.el.remove();
+    }
     items.clear();
   };
   let itemMode = false; // (in an item frame) its way back to the outline closes it
@@ -1527,7 +1538,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const base = showing === cid && mine && !mine.item ? mine : !showing && cid === ctx.courseId() && (!mine || mine.item) ? null : undefined;
     if (!x || base === undefined || (base && !base.ready)) return false;
     // A freed item frame on its way to the outline is that outline by now: let go of (the standby the item can take).
-    for (const g of base ? spare.get(cid) || [] : []) if (g.fresh) { g.fresh.off(); spare.set(cid, spare.get(cid).filter((y) => y !== g)); retire(g); }
+    for (const g of base ? spare.get(cid) || [] : []) if (g.fresh || g.cold) { g.fresh?.off(); spare.set(cid, spare.get(cid).filter((y) => y !== g)); retire(g); }
     if (mine?.fresh) { mine.fresh.off(); mine.item = null; }
     // An item frame kept for its unsaved work, at this address: shown again as it was.
     const kept = (base ? spare.get(cid) || [] : mine ? [mine] : []).find((g) => g.item === cid && g.url === url);
@@ -1587,7 +1598,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (how === 'ultra' && s.key && itemEntry() === s.key) { s.back = true; try { history.back(); } catch { /* not allowed here */ } }
     // The item kept for its work: the standby renews the outline instead.
     if (!it.dirty) freshen(cid, it, base, L.outlineOf(pathOf(it).split('?')[0]) === cid);
-    else if (base) staleCheck(cid, base);
+    else staleCheck(cid, base);
   };
   const onItemPop = (e) => {
     if (framed || !on) return;
@@ -1608,18 +1619,20 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   // `g` (hidden) routed to course `cid`'s outline, to take the place of `base`'s (null: this page's) once drawn, at its scroll,
   // with the student still. `built`: it already is that outline, built by Ultra itself (its own way back).
-  const freshen = (cid, g, base, built = false) => {
+  const freshen = (cid, g, base, built = false, url = `/ultra/courses/${cid}/outline`) => {
     let d = null; try { d = g.el.contentDocument; } catch { /* another site */ }
-    if (!d?.body || !keeping() || base?.dirty || g.dirty) return;
+    const outline = L.outlineOf(url.split('?')[0]) === cid, allowed = () => outline ? keeping() : ctx.site === 'ultra' && on && !signedOut;
+    if (!d?.body || !allowed() || base?.dirty || g.dirty) return;
     const t0 = performance.now();
-    const fr = g.fresh = { cid, base, url: `/ultra/courses/${cid}/outline`, doc: d, before: built ? [] : [...d.querySelectorAll(OUTLINE)], acted: -Infinity, changed: t0, asked: 0, timer: 0 };
+    const matches = (doc) => outline ? L.outlineOf(doc?.location.pathname) === cid : (doc?.location.pathname + (doc?.location.search || '')) === url;
+    const fr = g.fresh = { cid, base, url, outline, matches, epoch: frameEpoch, doc: d, before: built ? [] : [...d.querySelectorAll(OUTLINE)], acted: -Infinity, changed: t0, asked: 0, timer: 0 };
     // Checked again on the asynchronous drawn reply: a timer's last check cannot authorize a later swap.
     fr.current = () => {
       try {
         const bd = base ? base.el.contentDocument : document;
-        const here = base ? frames.get(cid) === base && showing === cid : !showing && ctx.courseId() === cid && frames.get(cid) === g;
-        return keeping() && !base?.dirty && !g.dirty && !fr.edited && performance.now() - t0 <= 20000 && g.el.isConnected && g.el.contentDocument === fr.doc
-          && here && !items.get(cid)?.open && L.outlineOf(bd?.location.pathname) === cid;
+        const here = base ? frames.get(cid) === base && showing === cid : !showing && ctx.courseId() === cid && (frames.get(cid) === g || (spare.get(cid) || []).includes(g));
+        return fr.epoch === frameEpoch && allowed() && !base?.dirty && !g.dirty && !fr.edited && performance.now() - t0 <= 20000 && g.el.isConnected && g.el.contentDocument === fr.doc
+          && here && (base?.item || !items.get(cid)?.open) && matches(bd);
       } catch { return false; }
     };
     const docs = [document];
@@ -1640,7 +1653,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       }
       if (g.fresh === fr) g.fresh = null;
     };
-    if (!g.adopting) post(g, { gzCtab: 'route', url: fr.url }); // (a standby taken is routed by its adoption)
+    if (!built && !g.adopting) post(g, { gzCtab: 'route', url: fr.url }); // (a standby taken is routed by its adoption)
     const step = () => {
       if (g.fresh !== fr) return;
       const now = performance.now();
@@ -1649,8 +1662,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (!fr.current()) return dropFresh(cid, g);
       if (fr.asked && now - fr.asked > 3000) fr.asked = 0;
       // Drawn anew and settled, the student still: its Glaze readies itself as shown (visible), then says so (finishFresh).
-      if (!fr.asked && now - fr.acted > QUIET && now - fr.changed > 300 && L.outlineOf(gd.location.pathname) === cid && !loading(gd.body)
-        && [...gd.querySelectorAll(OUTLINE)].some((e) => shown(e) && !fr.before.includes(e))) { fr.asked = now; post(g, { gzCtab: 'visible', on: true }); }
+      if (!fr.asked && now - fr.acted > QUIET && now - fr.changed > 300 && matches(gd) && !loading(gd.body) && (!g.cold || g.uid === who && g.accountDoc === gd)
+        && [...gd.querySelectorAll(outline ? OUTLINE : '.routed-page, .bb-course-navigation')].some((e) => shown(e) && !fr.before.includes(e))) { fr.asked = now; post(g, { gzCtab: 'visible', on: true }); }
       fr.timer = setTimeout(step, 100);
     };
     fr.timer = setTimeout(step, 100);
@@ -1658,13 +1671,13 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // At the same scroll, still unmoved: in its place in one frame. Else hidden again, for the next still moment.
   const finishFresh = (cid, g) => {
     const fr = g.fresh, base = fr.base;
-    if (!fr.current() || L.outlineOf(pathOf(g).split('?')[0]) !== cid) return dropFresh(cid, g);
+    if (!fr.current() || !fr.matches(g.el.contentDocument) || g.cold && (g.uid !== who || g.accountDoc !== g.el.contentDocument)) return dropFresh(cid, g);
     let from = null, to = null; try { from = outlineScroller(base ? base.el.contentDocument : document); to = outlineScroller(g.el.contentDocument); } catch { /* gone */ }
     const top = from ? from.scrollTop : 0;
     if (to) to.scrollTop = top;
     if (performance.now() - fr.acted < QUIET || !to || Math.abs(to.scrollTop - top) > 1) { fr.asked = 0; post(g, { gzCtab: 'visible', on: false }); return; }
     fr.off();
-    Object.assign(g, { item: null, adopting: null, ready: true, url: fr.url, at: Date.now() });
+    Object.assign(g, { item: base?.item || null, cold: false, adopting: null, ready: true, url: fr.url, at: Date.now() });
     if (base) {
       const focused = document.activeElement === base.el;
       spare.set(cid, (spare.get(cid) || []).filter((x) => x !== g && x !== base));
@@ -1674,7 +1687,13 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       post(base, { gzCtab: 'visible', on: false });
       retire(base);
       if (focused) g.el.focus({ preventScroll: true });
-    } else show(cid);
+    } else {
+      const old = frames.get(cid);
+      spare.set(cid, (spare.get(cid) || []).filter((f) => f !== g));
+      if (old && old !== g) spare.set(cid, [...(spare.get(cid) || []), old]);
+      frames.set(cid, g);
+      show(cid);
+    }
   };
   const dropFresh = (cid, g) => {
     g.fresh?.off();
@@ -1685,6 +1704,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   // A frame no longer needed: the next standby if there is none (its Glaze goes back to waiting), else gone.
   const retire = (f) => {
+    clearTimeout(f.coldTimer);
     f.el.style.zIndex = '';
     showEl(f, false);
     let doc = null; try { doc = f.el.contentDocument; } catch { /* another site */ }
@@ -1692,19 +1712,35 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     f.el.name = `gz-ctab:${STANDBY}`;
     try { f.el.contentWindow.name = f.el.name; } catch { /* gone */ }
     post(f, { gzCtab: 'demote' });
-    const s = { el: f.el, loaded: doc, uid: f.uid, accountDoc: f.accountDoc, timer: 0 };
+    const s = { at: Date.now(), el: f.el, loaded: doc, uid: f.uid, accountDoc: f.accountDoc, timer: 0 };
     s.timer = setTimeout(() => { if (standby === s && !usable(s)) { unStandby(true); standbyLater(); } }, 30000);
     standby = s;
   };
   // A tab's outline shown again after STALE hidden: renewed beside it by the standby, as after an item.
   const staleCheck = (cid, f) => {
-    if (!keeping() || f.dirty || f.item || items.get(cid)?.open || L.outlineOf(pathOf(f).split('?')[0]) !== cid || (spare.get(cid) || []).some((g) => g.fresh)) return;
-    const url = `/ultra/courses/${cid}/outline`, g = take(cid, url, tabs.find((x) => x.cid === cid));
-    if (!g) return;
+    const url = f ? pathOf(f) : location.pathname + (location.search || '');
+    if (!L.validId(cid, ctx.site) || ctx.site !== 'ultra' || !on || signedOut || f?.dirty || !url || acts(url) || (spare.get(cid) || []).some((g) => g.fresh || g.cold)) return;
+    try { if ((f ? f.el.contentDocument : document)?.querySelector?.('iframe') || !f && ctx.holding?.()) return; } catch { return; }
+    const outline = L.outlineOf(url.split('?')[0]) === cid;
+    if (outline && (!keeping() || items.get(cid)?.open)) return;
+    let g = take(cid, url, tabs.find((x) => x.cid === cid));
+    const cold = !g;
+    if (!g) {
+      if ([...spare.values()].flat().length >= KEPT) return;
+      g = { el: frameEl(cid, url, f?.el.title || t('Course')), at: Date.now(), url, dirty: false, ready: false, cold: true, epoch: frameEpoch };
+      g.coldTimer = setTimeout(() => { if (g.cold && !g.fresh && (spare.get(cid) || []).includes(g)) dropFresh(cid, g); }, 20000);
+      g.el.addEventListener('load', () => {
+        clearTimeout(g.coldTimer);
+        if (!(spare.get(cid) || []).includes(g)) return;
+        if (g.epoch !== frameEpoch) return dropFresh(cid, g);
+        freshen(cid, g, f, true, url);
+        if (!g.fresh) dropFresh(cid, g);
+      }, { once: true });
+    }
     guardFrame(cid, g);
     spare.set(cid, [...(spare.get(cid) || []), g]);
-    post(g, { gzCtab: 'adopt', cid, url });
-    freshen(cid, g, f);
+    if (cold) host.prepend(g.el);
+    else { post(g, { gzCtab: 'adopt', cid, url }); freshen(cid, g, f, false, url); }
   };
   // (In a tab's frame) to an address of its own course in place, from the page around it.
   const routeHere = (url, push) => {
@@ -1790,7 +1826,12 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     drawerOff();
     globalThis.GZ_DOCREVIEW?.restoreChrome();
     nudge();
+    const previous = showing;
     showing = cid;
+    if (ctx.site === 'ultra') {
+      if (cid && !previous) pageAway = Date.now();
+      if (!cid && previous && Date.now() - pageAway > STALE) staleCheck(ctx.courseId(), null);
+    }
     shownFrom = location.pathname + location.search;
     for (const [k, g] of [...frames]) if (g.away && k !== cid) drop(k, true);
     for (const [k, g] of frames) {
@@ -2161,6 +2202,12 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
 
   // ---- the passes -----------------------------------------------------------------------------------------------
   const onStore = (c, area) => {
+    const fence = ctx.site === 'ultra' && area === 'local' && (c.ultraCopyFence || c[`ultraCopyFence:${location.origin}`]);
+    if (ctx.site === 'ultra' && fence) {
+      if (fence.newValue?.retire !== false) return revoke();
+      frameEpoch++; unStandby();
+      for (const f of frames.values()) f.stale = true;
+    }
     if (area === 'sync' && c.tabs) readPrefs().then(pass);
     // Another of this browser's tabs changed the list: taken, with this page's own course as this page knows it.
     if (area === 'local' && who && c[key()] && !preview) {
@@ -2205,7 +2252,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // A frame's page going (another page of the frame, or the frame let go of): its watch on the page around ends with it, or
   // that page would keep this whole page alive. Restored from the back/forward cache, it watches again.
   const onHide = () => { if (on) { saveNow(); keepPage(); } navWatch?.disconnect(); navWatch = null; };
-  const onShow = (e) => { if (e.persisted && on && framed) { listen(false); listen(true); } };
+  const onShow = (e) => { if (e.persisted && on) { if (framed) { listen(false); listen(true); } else onVisibility(); } };
   const onResize = () => {
     if (on) flag();
     if (ctx.site !== 'canvas') place();
@@ -2235,7 +2282,15 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (html.style.getPropertyValue(k) !== v) { if (v) html.style.setProperty(k, v); else html.style.removeProperty(k); }
     }
   };
-  const onVisibility = () => { if (document.visibilityState !== 'visible') nudge(); else { const f = frames.get(showing); if (f?.ready) nudge(f); } };
+  const onVisibility = () => {
+    const f = frames.get(showing), yes = document.visibilityState === 'visible';
+    if (ctx.site === 'ultra') {
+      if (!yes) tabAway = Date.now();
+      else if (!showing && Date.now() - tabAway > STALE) staleCheck(ctx.courseId(), null);
+      if (f?.ready) post(f, { gzCtab: 'visible', on: yes });
+    }
+    if (!yes) nudge(); else if (f?.ready) nudge(f);
+  };
   const listen = (yes) => {
     const f = yes ? 'addEventListener' : 'removeEventListener';
     document[f]('visibilitychange', onVisibility);

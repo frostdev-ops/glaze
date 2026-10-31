@@ -310,7 +310,11 @@ const BROKER = {
   todo: {
     allow: async (m, s) => (fromEditor(s) ? !!m.restore && m.key === undefined && s.frameId === 0
       : !m.restore && typeof m.key === 'string' && GZ_TODO.STORE_KEY.test(m.key) && m.key.startsWith(`todo:${(await fromCanvas(s)) || (await fromUltra(s))}/`)),
-    run: async (m, area) => {
+    run: async (m, area, sender) => {
+      if (m.cache && ultraAt(sender)) {
+        const origin = await fromUltra(sender), state = await copyState();
+        if (!origin || m.cache.epoch !== `${state.all}/${state.sites[origin] || ''}` || (await chrome.storage.sync.get('enabled')).enabled === false) return { ok: false, error: 'stale' };
+      }
       // A Canvas planner answer brings its site's due list (planner/todo.js publishIn): kept per site, as content.js keeps it.
       let target = { ...area, local: { ...area.local, set: (patch) => area.local.set(dueBySite(patch)) } };
       const pets = m.restore?.pets === undefined ? {} : GZ_PET.backup(m.restore.pets);
@@ -1148,20 +1152,58 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 });
 // An Ultra site's student and memberships (courses/ultra.js page), as a page there last read them: kept in this worker's
 // session storage (gone when the browser closes, never the page's) for the site's other pages and course-tab frames.
-// get, put (a fresh read: read and at now) and touch (the student confirmed again by a top page: at now).
+// get, put (a fresh read, dated when requested), touch, and serialized local saves under the page's purge lease.
+const ultraStoreAt = new Map();
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:ultraMine') return;
   (brokerTurn ||= GZ_CARDS.queue())(async () => {
-    const origin = ultraPage(s) && chrome.storage.session && await fromUltra(s);
+    const origin = ultraPage(s) && await fromUltra(s);
     if (!origin) return null;
     const k = `ultraMine:${origin}`, now = Date.now();
-    const had = (await chrome.storage.session.get(k))[k] || null;
+    const had = chrome.storage.session ? (await chrome.storage.session.get(k))[k] || null : null;
     if (m.op === 'get') return had;
+    const state = await copyState(), epoch = `${state.all}/${state.sites[origin] || ''}`;
+    if (m.op === 'begin') {
+      const keys = ['ultraCopyFence', `ultraCopyFence:${origin}`], fences = await chrome.storage.local.get(keys);
+      return m.fence === keys.map((key) => fences[key]?.epoch || '').join('/') ? { epoch } : null;
+    }
+    if (m.op === 'invalidate') { await purgeUltra(origin, false); return { ok: true }; }
+    const settings = await chrome.storage.sync.get('enabled');
+    if (settings.enabled === false) return null;
     const id = /^_\d+_\d+$/;
     if (m.op === 'touch') { if (had && had.uid === m.uid) await chrome.storage.session.set({ [k]: { ...had, at: now } }); return null; }
+    if (m.op === 'week') {
+      const keys = [`dueWeek:${origin}`, 'ultraCopyFence', `ultraCopyFence:${origin}`], saved = await chrome.storage.local.get(keys);
+      const floor = Math.max(saved.ultraCopyFence?.at || 0, saved[`ultraCopyFence:${origin}`]?.at || 0);
+      if (!Number.isFinite(m.at) || m.at <= floor || m.at > now + 60000 || !Array.isArray(m.list) || m.list.length > 200 || JSON.stringify(m.list).length > 1e5 || saved[keys[0]]?.at > m.at) return null;
+      await chrome.storage.local.set({ [keys[0]]: { at: m.at, list: m.list } });
+      return null;
+    }
+    if (m.epoch !== epoch) return null;
+    if (m.op === 'save') {
+      if (!Number.isFinite(m.at) || m.at > now + 60000 || !m.value || typeof m.value !== 'object') return null;
+      const key = m.key, v = m.value;
+      if (key === `ultraMe:${origin}`) {
+        if (!id.test(v.uid) || v.courses && (!Array.isArray(v.courses) || JSON.stringify(v.courses).length > 1e6)) return null;
+        const clock = `ultraStoreAt:${origin}`, prev = chrome.storage.session ? (await chrome.storage.session.get(clock))[clock] || 0 : ultraStoreAt.get(origin) || 0;
+        if (prev > m.at) return null;
+        const was = (await chrome.storage.local.get(key))[key];
+        await chrome.storage.local.set({ [key]: { ...v, ...(was?.uid === v.uid && !v.courses && { courses: was.courses }) } });
+        if (chrome.storage.session) await chrome.storage.session.set({ [clock]: m.at }); else ultraStoreAt.set(origin, m.at);
+      } else if (typeof key === 'string' && key.startsWith(`ultraBooks:${origin}/`) && id.test(key.slice(key.lastIndexOf('/') + 1))) {
+        const all = { ...(await chrome.storage.local.get(key))[key] };
+        for (const [cid, book] of Object.entries(v)) if (id.test(cid) && Array.isArray(book?.rows) && Number.isFinite(book.at) && book.at <= now + 60000 && !(all[cid]?.at > book.at)) all[cid] = book;
+        const rows = Object.entries(all).filter(([, book]) => now - book.at < 30 * 864e5).sort((a, b) => b[1].at - a[1].at).slice(0, 30);
+        while (rows.length && JSON.stringify(rows).length > 2e6) rows.pop();
+        await chrome.storage.local.set({ [key]: Object.fromEntries(rows) });
+      }
+      return null;
+    }
+    if (!chrome.storage.session) return null;
     const v = m.op === 'put' && m.mine;
-    if (!v || !id.test(v.uid) || !Array.isArray(v.mem) || v.mem.length > 2000 || JSON.stringify(v.mem).length > 4e6) return null;
-    await chrome.storage.session.set({ [k]: { uid: v.uid, mem: v.mem, complete: v.complete !== false, read: now, at: now } });
+    if (!v || !id.test(v.uid) || !Array.isArray(v.mem) || v.mem.length > 2000 || JSON.stringify(v.mem).length > 4e6
+      || !Number.isFinite(v.read) || v.read > now + 60000 || had?.read > v.read) return null;
+    await chrome.storage.session.set({ [k]: { uid: v.uid, mem: v.mem, complete: v.complete !== false, read: v.read, at: now } });
     return null;
   }).then(reply, () => reply(null));
   return true;
@@ -1191,14 +1233,27 @@ const purgeCopies = async (origin, retire = true) => {
   if (drop.length) await chrome.storage.local.remove(drop);
   // Content scripts cannot read session storage. Notify every open visit, even if no copy was saved yet, so an old
   // read cannot paint after a purge. Sign-out/Reset retire the document; the switch can be turned on again there.
-  await chrome.storage.local.set({ [origin ? `ultraCopyFence:${origin}` : 'ultraCopyFence']: { epoch: origin ? state.sites[origin] : state.all, retire } });
+  await chrome.storage.local.set({ [origin ? `ultraCopyFence:${origin}` : 'ultraCopyFence']: { epoch: origin ? state.sites[origin] : state.all, retire, at: Date.now() } });
+};
+const purgeUltra = async (origin, retire = true) => {
+  await purgeCopies(origin, retire);
+  if (origin) ultraStoreAt.delete(origin); else ultraStoreAt.clear();
+  const all = await chrome.storage.local.get(null);
+  const belongs = (key, prefix, end = '') => (origin ? end ? key.startsWith(`${prefix}${origin}${end}`) : key === `${prefix}${origin}` : key.startsWith(prefix));
+  const drop = Object.keys(all).filter((key) => belongs(key, 'ultraMe:') || belongs(key, 'ultraBooks:', '/') || belongs(key, 'dueWeek:'));
+  if (typeof all.todoCache?.key === 'string' && belongs(all.todoCache.key, 'todo:', '/')) drop.push('todoCache');
+  if (drop.length) await chrome.storage.local.remove(drop);
+  if (chrome.storage.session) {
+    const session = await chrome.storage.session.get(null);
+    await chrome.storage.session.remove(Object.keys(session).filter((key) => belongs(key, 'ultraMine:') || belongs(key, 'ultraStoreAt:')));
+  }
 };
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:ultraCopy') return;
   (brokerTurn ||= GZ_CARDS.queue())(async () => {
     const origin = s.frameId === 0 && await fromUltra(s);
     if (!origin) return null;
-    if (m.op === 'drop') { await purgeCopies(origin); return { ok: true }; }
+    if (m.op === 'drop') { await purgeUltra(origin); return { ok: true }; }
     if (!['begin', 'put'].includes(m.op)) return null;
     const settings = await chrome.storage.sync.get(['enabled', 'enhance']);
     if (settings.enabled === false || settings.enhance?.instant === false) return { ok: false };
@@ -1211,13 +1266,16 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     const r = m.record;
     if (m.epoch !== epoch || r?.v !== 1 || typeof r.uid !== 'string' || !/^_\d+_\d+$/.test(r.uid) || !['grades', 'courses', 'stream'].includes(r.kind)
       || !Number.isFinite(r.at) || !Array.isArray(r.nodes) || JSON.stringify(r).length > 201024) return { ok: false };
-    await chrome.storage.local.set({ [`ultraCopy:${origin}/${r.uid}/${r.kind}`]: { v: 1, uid: r.uid, kind: r.kind, at: r.at, full: !!r.full, nodes: r.nodes } });
+    const key = `ultraCopy:${origin}/${r.uid}/${r.kind}`, was = (await chrome.storage.local.get(key))[key];
+    if (was?.at > r.at) return { ok: true, kept: false };
+    await chrome.storage.local.set({ [key]: { v: 1, uid: r.uid, kind: r.kind, at: r.at, full: !!r.full, nodes: r.nodes } });
     return { ok: true };
   }).then(reply, () => reply(null));
   return true;
 });
 chrome.storage.onChanged.addListener((c, area) => {
-  if (area === 'sync' && c.enhance?.newValue?.instant === false) (brokerTurn ||= GZ_CARDS.queue())(() => purgeCopies(null, false)).catch(() => {});
+  if (area === 'sync' && c.enabled?.newValue === false) (brokerTurn ||= GZ_CARDS.queue())(() => purgeUltra(null, false)).catch(() => {});
+  else if (area === 'sync' && c.enhance?.newValue?.instant === false) (brokerTurn ||= GZ_CARDS.queue())(() => purgeCopies(null, false)).catch(() => {});
 });
 chrome.tabs?.onRemoved?.addListener((id) => {
   chrome.storage.session?.remove([`landed:${id}`, ...Object.keys(FRAMED).map((what) => frameKey(what, id))]).catch(() => {});
@@ -1883,7 +1941,7 @@ const forget = async (origin) => {
   if (typeof got.todoCache?.key === 'string' && got.todoCache.key.startsWith(`todo:${origin}/`)) drop.push('todoCache');
   if (Object.keys(patch).length) await chrome.storage.local.set(patch);
   if (drop.length) await chrome.storage.local.remove(drop);
-  await (brokerTurn ||= GZ_CARDS.queue())(() => purgeCopies(origin));
+  await (brokerTurn ||= GZ_CARDS.queue())(() => purgeUltra(origin));
   await Promise.resolve(chrome.storage.session?.remove(`ultraMine:${origin}`)).catch(() => {});
   await ensure();
   return true;
@@ -1901,7 +1959,7 @@ const forgetAll = async () => {
     try { origins.add(new URL(k.slice(k.indexOf(':') + 1)).origin); } catch { /* invalid entry */ }
   }
   for (const origin of origins) await forget(origin);
-  await (brokerTurn ||= GZ_CARDS.queue())(() => purgeCopies());
+  await (brokerTurn ||= GZ_CARDS.queue())(() => purgeUltra());
   await chrome.storage.local.remove([...LMS, 'askLater']);
   await ensure();
   return true;

@@ -64,7 +64,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
       await ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA);
       if (!on) throw new Error('off');
       const r = await GZ_ULTRA.page.due(Date.parse(start), Date.parse(end));
-      c = { key, at: now, start, end, teach: o.teacher, progress: o.progress, items: r.items, complete: r.complete, grading: [], sums: {} };
+      c = { key, at: r.at ?? now, epoch: r.epoch, start, end, teach: o.teacher, progress: o.progress, items: r.items, complete: r.complete, grading: [], sums: {} };
     } else {
       const [raw, list] = await Promise.all([pages(`/api/v1/planner/items?start_date=${start}&end_date=${end}&per_page=100`), ctx.canvasCourses()]);
       const teaches = list.some((c) => (c.enrollments || []).some((e) => /^(teacher|ta)/i.test(e.type || '')));
@@ -72,14 +72,15 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
       due = GZ_CANVAS_DUE_WEEK(raw, now);
     }
     const best = (await new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:todo', key, cache: c, due }, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } }))?.cache || c;
+    if (!on) return;
     if (!(cache?.key === key && cache.at > best.at)) cache = best;
     paint();
   };
   // When the cards start, the page is shown again and the list's settings change, and from content.js's passes while
   // the cards have nothing or the list that was to ask has gone (it failed). Not while the list is on the page, and not
   // within a minute of a failed ask.
-  const refresh = () => {
-    if (!on || !L || !mine || asking || Date.now() - failed < 60000 || fresh(cache, Date.now()) || document.getElementById('gz-todo')) return;
+  const refresh = (force = false) => {
+    if (!on || !L || !mine || asking || Date.now() - failed < 60000 || (!force && fresh(cache, Date.now())) || document.getElementById('gz-todo')) return;
     asking = load().catch(() => { failed = Date.now(); }).finally(() => { asking = null; });
   };
 
@@ -150,11 +151,18 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   const onStore = (ch, area) => {
     if (area === 'sync' && ch.todo) return void readPrefs().then(() => { paint(); refresh(); });
     if (area !== 'local' || !(ch[CACHE] || ch[key])) return;
+    if (ch[CACHE] && !ch[CACHE].newValue) cache = null;
     const c = ch[CACHE]?.newValue;
     if (c?.key === key && !(cache?.key === key && cache.at > c.at)) cache = c;
     if (ch[key]) data = L.clean(ch[key].newValue);
     paint();
   };
+  document.addEventListener('glaze:ultra-refresh', (e) => {
+    if (!ultra) return;
+    cache = null;
+    if (e.detail?.retire) { sync(false); mine = false; }
+    else if (on) refresh(true);
+  });
   const onShow = () => { if (document.visibilityState === 'visible') refresh(); };
   // Who's signed in (their id names their data and the cache; their Canvas time zone counts the days), what's kept. On
   // Ultra the student last confirmed on this site answers first (courses/ultra.js page.known), so what's kept is read while
@@ -189,7 +197,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     // Started: whether the list is here now counts as seen, so its going later is noticed whenever it goes.
     if (!starting) starting = start().then(() => { listed = !!document.getElementById('gz-todo'); paint(); return sure(); }).then((ok) => {
       mine = ok;
-      if (ok) { paint(); return refresh(); }
+      if (ok) { paint(); if (ultra && fresh(cache, Date.now())) setTimeout(() => { if (on) refresh(true); }, 0); else return refresh(); }
       for (const e of document.querySelectorAll('.gz-ct')) e.remove();
       cache = data = null;
       starting = null;

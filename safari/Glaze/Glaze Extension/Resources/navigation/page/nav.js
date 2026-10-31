@@ -560,8 +560,9 @@ function GZ_ULTRA_RAIL(X) {
     if (area === 'sync' && changes.navItems) { stored = N.clean(changes.navItems.newValue); if (active) sync(true); }
     if (area === 'local') {
       if (logoId && changes[`navLogo:${logoId}`]) { logoId = ''; if (active) loadLogo(); }
-      if (active && Object.keys(changes).some((k) => (!isPreview && k === 'widgetTimer') || k === 'todoCache' || k.startsWith('todo:') || k.startsWith('pet:'))) { if (changes.todoCache) nextAt = 0; takeLocal(changes); }
+      if (active && Object.keys(changes).some((k) => (!isPreview && k === 'widgetTimer') || k === 'todoCache' || k.startsWith('todo:') || k.startsWith('pet:'))) { if (changes.todoCache || changes.todo || Object.keys(changes).some((k) => k.startsWith(`todo:${location.origin}/`))) nextAt = 0; takeLocal(changes); }
     }
+    if (area === 'sync' && changes.todo && active) { reads++; nextAt = 0; drawWidgets(); }
     if (area === 'sync' && changes.widgets && active) { signature = ''; sync(true); }
   });
   addEventListener('pagehide', () => { active = false; rev++; restore(); });

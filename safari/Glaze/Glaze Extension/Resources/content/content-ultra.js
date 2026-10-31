@@ -35,7 +35,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // ---- the gradebook --------------------------------------------------------------------------
   // Who's signed in, their courses, gradebooks and content: courses/ultra.js's stores, through the site's queue. A failure
   // (this, a gradebook) is asked again after a minute, a 401 (signed out) once the page changes.
-  let meId = null;
+  let meId = null, meAt = 0;
   let meFailed = null;
   const route = () => location.pathname + (location.search || '');
   const failed = (e, at = route()) => ({ at: Date.now(), out: (e === 401 || /HTTP 401/.test(e?.message)) && at });
@@ -43,6 +43,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const stores = () => need(['courses/lmsq.js', 'courses/ultra.js'], () => globalThis.GZ_LMSQ && globalThis.GZ_ULTRA)
     .then(() => { GZ_ULTRA.page.alive(() => I.settings.enabled && !!I.links.length); return GZ_ULTRA.page; });
   const me = () => {
+    if (Date.now() - meAt >= 600000) { meId = meFailed = null; meAt = Date.now(); }
     if (meFailed && askAgain(meFailed)) meId = meFailed = null;
     const at = route();
     // At once, outside the queue (fetch below); courses/ultra.js's page.me takes it (GZ_CTX.me).
@@ -50,9 +51,10 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   };
   const covered = (rows, complete) => Object.defineProperty(rows, 'complete', { value: complete });
   // Shared by names and due-date exceptions.
-  let memberships = null;
+  let memberships = null, membershipsAt = 0;
   let membershipsFailed = null;
   const myCourses = () => {
+    if (Date.now() - membershipsAt >= 600000) { memberships = membershipsFailed = null; membershipsAt = Date.now(); }
     if (membershipsFailed && askAgain(membershipsFailed)) memberships = membershipsFailed = null;
     const at = route();
     return (memberships ||= stores().then((s) => s.mine()).then((m) => m.mem).catch((e) => { membershipsFailed = failed(e, at); return covered([], false); }));
@@ -120,9 +122,10 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       b = { key: '', ...b, at: Date.now(), route: route(), pending: true, fail: null };
       books.set(cid, b);
       const asked = me();
-      if (first) asked.then((id) => keptRows(cid, id)).then((k) => { if (k && b.pending && !b.results) { b.saved = true; take(b, k.rows); } }, () => {});
+      if (first) asked.then((id) => keptRows(cid, id)).then((k) => { if (k && books.get(cid) === b && b.pending && !b.results) { b.saved = true; take(b, k.rows); } }, () => {});
       asked.then((id) => rowsOf(cid, id))
         .then((rows) => (late || b.late ? lateIn(cid, rows) : Promise.resolve(undefined)).then((lateCols) => {
+          if (books.get(cid) !== b) return;
           b.pending = false;
           b.saved = false;
           b.late = lateCols;
@@ -265,6 +268,12 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       try { stored(['seenGrades', 'seenContent'], (r) => res(r || {})); } catch { res({}); }
     }).then((r) => { seen = r.seenGrades || {}; seenItems = r.seenContent || {}; renderNew(); });
   };
+  chrome.storage.onChanged.addListener((c, area) => {
+    if (area !== 'local') return;
+    if (c.seenGrades) seen = c.seenGrades.newValue || {};
+    if (c.seenContent) seenItems = c.seenContent.newValue || {};
+    if (c.seenGrades || c.seenContent) renderNew();
+  });
   // One course at a time, over what's stored: another tab may have recorded other courses since.
   const keepSeen = (key, cid, v) => {
     try { chrome.storage.local.get(key, (r) => chrome.storage.local.set({ [key]: { ...r?.[key], [cid]: v } })); } catch { /* extension reloaded under the tab */ }
@@ -343,14 +352,14 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // what's in a folder only once it's unfolded. Kept on this device (storage.local, seenContent).
   // ponytail: "on the page", not on screen; a long outline's last rows count as seen unscrolled.
   // The course's items come from one paged read (ten pages of 200 at most), shared with the command palette and
-  // asked again after five minutes at most, with only the fields used.
+  // asked again after a minute at most, with only the fields used.
   const contents = new Map(); // cid → { at, p, items }
   const courseItems = (cid, prio = 0) => {
     let c = contents.get(cid);
-    if (!c || Date.now() - c.at > 300000) {
+    if (!c || Date.now() - c.at > 60000) {
       c = { at: Date.now(), items: c?.items };
       c.p = stores().then((s) => s.outline(cid, { prio }))
-        .then((j) => { c.items = covered(j.items.filter((i) => i.availability?.available !== 'No'), j.complete); renderNew(); return c.items; }, () => c.items || []);
+        .then((j) => { if (contents.get(cid) !== c) return []; c.items = covered(j.items.filter((i) => i.availability?.available !== 'No'), j.complete); renderNew(); return c.items; }, () => c.items || []);
       contents.set(cid, c);
     }
     return c;
@@ -399,6 +408,12 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       if (t.getAttribute('aria-expanded') === 'false' && !jump.opened.has(f)) { jump.opened.add(f); t.click(); return; }
     }
   };
+
+  document.addEventListener('glaze:ultra-refresh', (e) => {
+    books.clear(); contents.clear();
+    if (e.detail?.identity) { meId = meFailed = memberships = membershipsFailed = null; }
+    if (!e.detail?.retire) { tagCards(); tagExtras([document.body]); }
+  });
 
   // ---- grades (Extras): planner/page/grades.js (what-if, GPA), syllabus.js (outline), insights.js (Courses) ----
   const loadIf = (want, f, name, run) => (globalThis[name] || (I.observer && want)) && need(`planner/page/${f}.js`, () => globalThis[name]).then(() => run(globalThis[name]), () => {});

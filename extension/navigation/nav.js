@@ -68,6 +68,10 @@ var GZ_NAV = globalThis.GZ_NAV || (() => {
     root.append(l, parse(k.m));
     (document.body || document.documentElement).prepend(host);
     const gone = () => live() && host.remove();
+    setTimeout(gone, 20000);
+    chrome.storage.onChanged.addListener((c, area) => {
+      if (area === 'local' && (c.ultraCopyFence || c[`ultraCopyFence:${location.origin}`]) || area === 'sync' && (c.enabled?.newValue === false || c.navbar?.newValue?.on === false)) gone();
+    });
     Promise.resolve().then(() => account?.()).then((id) => {
       if (!live()) return;
       if (!id || String(id) !== k.u) return gone();

@@ -189,7 +189,8 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
   const stop = () => set([]);
   chrome.storage.onChanged.addListener((changes, area) => {
     if (!live()) return;
-    if (area === 'local' && Object.keys(changes).some((k) => (!isPreview && k === 'widgetTimer') || k === 'todoCache' || k.startsWith('todo:') || k.startsWith('pet:'))) { if (changes.todoCache) nextAt = 0; takeLocal(changes); }
+    if (area === 'local' && Object.keys(changes).some((k) => (!isPreview && k === 'widgetTimer') || k === 'todoCache' || k.startsWith('todo:') || k.startsWith('pet:'))) { if (changes.todoCache || changes.todo || Object.keys(changes).some((k) => k.startsWith(`todo:${location.origin}/`))) nextAt = 0; takeLocal(changes); }
+    if (area === 'sync' && changes.todo) { reads++; nextAt = 0; draw(); }
     if (area === 'sync' && changes.widgets && nodes.get('timer')) { const node = nodes.get('timer'); node.options = GZ_SANITIZE({ widgets: changes.widgets.newValue }).widgets; draw(); }
   });
   document.addEventListener('visibilitychange', () => { if (live()) draw(); });

@@ -1,5 +1,5 @@
 // The boards' course cards: Glaze DOM over already-loaded metadata, gradebooks (or the ones kept from the last visit) and the
-// stored planner. No reader is started.
+// stored planner. Ultra grades are revalidated through its shared store.
 // Ultra's on its Courses page and Dashboard; Canvas's on its Dashboard, where a card is drawn as Canvas's own
 // (.ic-DashboardCard), so everything Glaze does to Canvas's cards (grades, new items, tasks, bookmarks, styles, the course
 // menu) is done to it too, from the course list Canvas's page has already asked for.
@@ -8,9 +8,10 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
   const ultra = ctx.site === 'ultra';
   const ID = ultra ? /^_\d+_\d+$/ : /^\d{1,20}$/;
   const cards = new Map(), nativeCards = new Map(), canvasEdits = new Map(), mounted = new Set(), watched = new WeakSet();
+  let retired = false;
   let identity = null, notify = () => {}, uid = '', data = {}, prefs = {}, cache = null, L = null, gs = null, gen = 0;
   const get = (area, keys) => new Promise((resolve) => { try { chrome.storage[area].get(keys, (r) => resolve(chrome.runtime.lastError ? null : r)); } catch { resolve(null); } });
-  const live = () => { try { return !!chrome.runtime.id && ctx.on(); } catch { return false; } };
+  const live = () => { try { return !retired && !!chrome.runtime.id && ctx.on(); } catch { return false; } };
   const make = (tag, props = {}, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children.filter(Boolean)); return e; };
   const title = (key) => { const c = W.course(key); return c && (ctx.nickOf(c.id) || cards.get(c.id)?.name) || ctx.t('Course card'); };
   const list = () => {
@@ -31,19 +32,31 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
   const render = () => { if (live()) { for (const x of mounted) x(); if (pick) syncPicker(); } };
   // Ultra: a course's overall grade from its gradebook as kept from the last visit (courses/ultra.js page.saved, once
   // something on the page has loaded it: storage only), for the student confirmed here, until this page's own read is in.
-  const keptGrades = new Map(); // `${uid} ${id}` → overall | null
+  const keptGrades = new Map(); // `${uid} ${id}` → { at, grade, fresh }
   const keptGrade = (id) => {
     const k = `${uid} ${id}`;
-    if (!keptGrades.has(k) && globalThis.GZ_ULTRA?.page?.saved) {
-      keptGrades.set(k, null);
-      GZ_ULTRA.page.saved(id, uid).then((x) => {
-        if (!x || !keptGrades.has(k)) return;
-        keptGrades.set(k, GZ_PAGE.overall(x.rows, ctx.locale()));
-        render();
+    let x = keptGrades.get(k);
+    if ((!x || Date.now() - x.at >= 60000) && globalThis.GZ_ULTRA?.page?.saved) {
+      x = { at: Date.now(), grade: x?.grade || null, fresh: false };
+      keptGrades.set(k, x);
+      GZ_ULTRA.page.saved(id, uid).then((v) => {
+        if (!v || keptGrades.get(k) !== x || x.fresh) return;
+        x.grade = GZ_PAGE.overall(v.rows, ctx.locale()); render();
+      }, () => {});
+      GZ_ULTRA.page.book(id, uid).then((rows) => {
+        if (keptGrades.get(k) !== x) return;
+        x.fresh = true; x.grade = GZ_PAGE.overall(rows, ctx.locale()); render();
       }, () => {});
     }
-    return keptGrades.get(k) ?? null;
+    return x?.grade || null;
   };
+  const clearGrades = (retire = false) => {
+    keptGrades.clear();
+    if (retire) uid = '';
+    render();
+    retired ||= retire;
+  };
+  document.addEventListener?.('glaze:ultra-refresh', (e) => { if (ultra) clearGrades(!!e.detail?.retire); });
   // The color a card wears from its course (Ultra's slot, or a pick): its class and variables, on the board and in the
   // Course cards dialog. Only what differs is written.
   const tone = (card, id) => {
@@ -283,6 +296,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     return { update, wake: update, stop: () => { alive = false; mounted.delete(update); } };
   };
   chrome.storage.onChanged.addListener((ch, area) => {
+    if (ultra && area === 'local' && ch[`ultraBooks:${location.origin}/${uid}`]) clearGrades();
     // A style saved elsewhere (the card editor, another tab): the open looks follow, once the card painter has let go
     // of what it read before (its own listener, which may run after this one).
     if (pick && live() && area === 'sync' && ch.ucards) setTimeout(() => { if (pick) for (const it of pick.items.values()) it.look?.show(); });
