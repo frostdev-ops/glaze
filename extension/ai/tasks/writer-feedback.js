@@ -304,9 +304,13 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
   };
   // A comment the JSON grammar closed at the schema's cap keeps its last full sentence within limit ('' when none does).
   const lastSentence = (value, limit) => {
-    const s = value.trim(), plain = s.replace(ABBREVIATIONS, (m) => m.replace(/\./g, ' ')).replace(CONTINUATIONS, (m) => m.replace(/\./g, ' '));
+    const s = value.trim(), plain = s.replace(ABBREVIATIONS, (m) => m.replace(/\./g, ' ')).replace(CONTINUATIONS, (m, at, text) =>
+      m.replace(/^\s*[\p{Ll}\d,;]/u.test(text.slice(at + m.length)) ? /\./g : /\.(?!$)/g, ' '));
     let end = 0;
-    for (const m of plain.matchAll(/[.!?。！？]["”'’)\]»」』】]*(?=\s|$)/gu)) if (m.index + m[0].length <= limit) end = m.index + m[0].length;
+    for (const m of plain.matchAll(/[.!?。！？]["”'’)\]»」』】]*(?=\s|$)/gu)) {
+      const next = m.index + m[0].length;
+      if ([...s.slice(0, next)].length <= limit) end = next;
+    }
     return s.slice(0, end);
   };
   const wholeComments = (comments, limit) => {
@@ -974,6 +978,7 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
         // Too much relevant evidence cannot be silently discarded, or safely replaced by an optimistic score.
         if (!room(request, plan.schema)) { inp.incomplete = true; continue; }
       }
+      const layout = inp.paper && /\b(?:font|spacing|margins?|headers?|layout|docx|word document|file format)\b/i.test(plan.row.rubric);
       const resolve = (wire) => {
         const byId = new Map(plan.candidates.map((p) => [p.id, p]));
         if (new Set(wire.quotes).size !== wire.quotes.length) return null;
@@ -986,7 +991,6 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
         const checked = check({ criteria: [row] }, inp, { caps, estimates: false });
         const hit = checked?.criteria.find((c) => c.id === plan.row.id);
         if (!hit?.comment || (row.level != null && !hit.level) || (row.status === 'missing' ? 0 : row.quotes.length) !== hit.quotes.length) return null;
-        const layout = inp.paper && /\b(?:font|spacing|margins?|headers?|layout|docx|word document|file format)\b/i.test(plan.row.rubric);
         if ((local || material) && row.status !== 'missing' && !layout && !hit.quotes.length) return null;
         if (inp.grade && Number.isFinite(plan.row.points) && !hit.score) return null;
         return row;
@@ -995,7 +999,8 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
       const validate = (out) => S.validate(out, plan.schema).length ? null : resolve(out.criteria[0]);
       // A complete decision that passes every check but its explanation: Glaze's own rubric rating from the checked
       // level and points stands in for the comment when grading; with no verified score the row stays unexplained.
-      const verifiedWithout = (wire) => resolve({ ...wire, criterion: plan.row.id, comment: 'Your draft has been assessed.' });
+      const verifiedWithout = (wire) => wire.status !== 'missing' && !layout && !wire.quotes.length ? null
+        : resolve({ ...wire, criterion: plan.row.id, comment: 'Your draft has been assessed.' });
       const rating = (wire) => {
         const verified = inp.grade && verifiedWithout(wire), assessed = verified && check({ criteria: [verified] }, inp, { caps, estimates: false })?.criteria[0];
         const score = assessed?.score;
@@ -1036,7 +1041,7 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
           let commentFailure = '';
           const explained = await attempt(comment, COMMENT, (answer) => {
             // A comment reaching the cap the schema sent was likely closed there mid-sentence; keep its last full sentence.
-            const out = typeof answer?.comment === 'string' && answer.comment.trim().length >= LOCAL_PROSE ? { ...answer, comment: lastSentence(answer.comment, prose(inp.lang)) || answer.comment } : answer;
+            const out = typeof answer?.comment === 'string' && [...answer.comment].length >= LOCAL_PROSE ? { ...answer, comment: lastSentence(answer.comment, prose(inp.lang)) || answer.comment } : answer;
             if (S.validate(out, commentOutput).length || !completeSentence(out.comment) || !assesses(out.comment, grounded)) return null;
             if (citationsFor(plan.row) && !citationNamed(out.comment, headingOf(citationsFor(plan.row)))) return null;
             return contradictoryStyle(out.comment, requiredStyle(plan.row, inp.lang), checkedDecision.status) ? RECONSIDER : resolve({ ...checkedDecision, criterion: plan.row.id, comment: out.comment });
@@ -1059,10 +1064,17 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
           decision = await attempt(reconsider, plan.schema, validateDecision, note, false);
         }
       } else {
+        // Inspect explanation-only schema failures without changing the schema sent to the model. Every decision
+        // field still has to pass the original schema and resolver before it can supply a fallback rating.
+        const decisionOutput = lean(plan.schema), item = decisionOutput.properties.criteria.items;
+        item.properties.comment = {};
+        item.required = item.required.filter((key) => key !== 'comment');
+        accepts.set(plan.schema, decisionOutput);
         let decided = null;
         row = await attempt(request, plan.schema, (out) => {
           const valid = validate(out);
-          if (!valid && !S.validate(out, plan.schema).length && verifiedWithout(out.criteria[0])) decided = out.criteria[0];
+          const wire = out.criteria[0], decision = { ...wire, comment: 'Your draft has been assessed.' };
+          if (!valid && !S.validate({ ...out, criteria: [decision] }, plan.schema).length && verifiedWithout(wire)) decided = wire;
           return valid;
         }, note);
         if (!row && decided) { row = rating(decided); unexplained = !row; }

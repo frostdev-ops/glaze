@@ -114,3 +114,124 @@ test('an incomplete decision still withholds the grade as unassessed material', 
   const out = (await run(raw(), replies, LOCAL).result).output;
   assert.equal(out.grade.earned, null); assert.equal(out.grade.reason.key, COVERAGE);
 });
+
+test('staged fallback never grades met or partly decisions without draft evidence', async () => {
+  for (const caps of [LOCAL, CLOUD_8K]) for (const status of ['met', 'partly']) {
+    const out = (await run(raw(), (req) => {
+      const r = reply(SUBJECT)(req), wire = r.json.criteria?.[0] || r.json;
+      if ('quotes' in wire) Object.assign(wire, { status, quotes: [] });
+      return r;
+    }, caps).result).output;
+    assert.equal(out.grade.earned, null, `${caps.local ? 'local' : 'cloud'} ${status}`);
+    assert.equal(out.grade.reason.key, COVERAGE);
+    assert.deepEqual(out.criteria, []);
+  }
+});
+
+test('cloud: explanation-only schema failures keep verified decisions and the correct withheld reason', async () => {
+  for (const comment of [undefined, null, 'x'.repeat(F.LIMIT.size + 1)]) for (const grade of [true, false]) {
+    const { cfg, result } = run(raw({ grade }), (req) => {
+      const r = reply(SUBJECT)(req);
+      if (r.json.criteria) {
+        if (comment === undefined) delete r.json.criteria[0].comment;
+        else r.json.criteria[0].comment = comment;
+      }
+      return r;
+    }, CLOUD_8K);
+    const out = (await result).output;
+    if (grade) {
+      assert.equal(out.grade.earned, 100, `comment type: ${typeof comment}`);
+      assert.equal(out.grade.reason, null);
+      assert.equal(out.criteria[0].comment, 'Rubric score: 40/40 points.');
+    } else {
+      assert.equal(out.reason?.key, EXPLANATION, `comment type: ${typeof comment}`);
+      assert.deepEqual(out.criteria, []);
+    }
+    assert.ok(cfg.seen.filter((r) => r.schema.properties.criteria).every((r) => {
+      const item = r.schema.properties.criteria.items;
+      return item.required.includes('comment') && item.properties.comment.maxLength === F.LIMIT.size;
+    }), 'the request schema sent to the model stays unchanged');
+  }
+});
+
+test('local: trimming preserves a sentence ending in a continuation abbreviation in every locale', async () => {
+  const sentences = { en: 'Your draft lists observations, measurements, etc.', de: 'Ihr Entwurf nennt Beobachtungen, Messungen usw.',
+    es: 'Su borrador incluye observaciones, mediciones, etc.', fr: 'Votre brouillon cite des observations, des mesures, etc.',
+    nl: 'Je tekst noemt observaties, metingen enz.', 'pt-BR': 'Seu rascunho inclui observações, medições, etc.' };
+  for (const [lang, sentence] of Object.entries(sentences)) {
+    const { cfg, result } = run(raw({ lang }), reply(cut(sentence + ' The weekly records')), LOCAL);
+    const out = (await result).output;
+    assert.equal(out.criteria[0]?.comment, sentence, lang);
+    assert.equal(out.grade.earned, 100, lang);
+    assert.equal(explains(cfg), 2, 'no explanation repair');
+  }
+});
+
+test('local: trailing whitespace still counts toward the schema cap when trimming a cut comment', async () => {
+  const sentence = 'Your draft states a benefit and gives concrete examples.';
+  const comment = cut(sentence).slice(0, 235) + ' '.repeat(5);
+  assert.equal(comment.length, 240);
+  const { cfg, result } = run(raw(), reply(comment), LOCAL);
+  assert.deepEqual((await result).output.criteria.map((c) => c.comment), [sentence, sentence]);
+  assert.equal(explains(cfg), 2, 'one explain call per row');
+});
+
+test('local: sentence trimming counts Unicode characters as the schema does', async () => {
+  const comment = 'Your draft identifies the school garden benefit. Your evidence connects the class’s 🪴 observations to the main claim, explains weekly growth measurements, and shows how sharing the harvest supports full collective learning in the classroom.';
+  assert.equal([...comment].length, 240);
+  assert.equal(comment.length, 241);
+  const { cfg, result } = run(raw(), reply(comment), LOCAL);
+  assert.deepEqual((await result).output.criteria.map((c) => c.comment), [comment, comment]);
+  assert.equal(explains(cfg), 2);
+});
+
+test('cloud: accepting explanation failures still rejects invalid decisions and uses successful repairs', async () => {
+  for (const invalid of [{ criterion: 'invented' }, { quotes: ['invented-id'] }, { score: -1 }, { score: null }, { status: 'unknown' }]) {
+    const out = (await run(raw(), (req) => {
+      const r = reply(SUBJECT)(req);
+      if (r.json.criteria) { Object.assign(r.json.criteria[0], invalid); delete r.json.criteria[0].comment; }
+      return r;
+    }, CLOUD_8K).result).output;
+    assert.equal(out.grade.earned, null, JSON.stringify(invalid));
+    assert.equal(out.grade.reason.key, COVERAGE);
+  }
+  const comment = 'Your draft states a benefit and gives concrete examples.';
+  let rows = 0;
+  const repaired = (await run(raw(), (req) => {
+    const r = reply(comment)(req);
+    if (r.json.criteria && ++rows % 2) delete r.json.criteria[0].comment;
+    return r;
+  }, CLOUD_8K).result).output;
+  assert.equal(repaired.grade.earned, 100);
+  assert.deepEqual(repaired.criteria.map((c) => c.comment), [comment, comment]);
+});
+
+test('staged fallback keeps scorable missing work and verified physical hand-in decisions', async () => {
+  for (const caps of [LOCAL, CLOUD_8K]) for (const layout of [false, true]) {
+    const input = raw();
+    if (layout) {
+      input.mode = 'paper'; input.paper = { format: 'MLA 9', font: 'Times New Roman', size: 12, line: 2, margin: 1, header: 'name-page' };
+      input.context.assignment.rubric.criteria.forEach((row) => { row.detail = 'Submit a Word document.'; });
+    }
+    const out = (await run(input, (req) => {
+      const r = reply(SUBJECT)(req), wire = r.json.criteria?.[0] || r.json;
+      if ('quotes' in wire) Object.assign(wire, { status: layout ? 'met' : 'missing', quotes: [] });
+      return r;
+    }, caps).result).output;
+    assert.equal(out.grade.earned, 100);
+    assert.equal(out.grade.reason, null);
+  }
+});
+
+test('a fitting cloud assessment keeps its single-request grading and explanation checks', async () => {
+  for (const comment of ['Your draft states a benefit and gives concrete examples.', SUBJECT]) {
+    const { cfg, result } = run(raw(), () => ({ json: {
+      criteria: ['claim', 'examples'].map((criterion) => ({ criterion, status: 'met', comment, level: null, score: criterion === 'claim' ? 40 : 60,
+        quotes: [{ quote: 'School gardens help students learn together.', before: '', after: '' }] })), grade: { summary: SUMMARY },
+    } }), { context: 128000, images: false });
+    const out = (await result).output;
+    assert.equal(cfg.seen.length, 1);
+    assert.equal(out.grade.earned, comment === SUBJECT ? null : 100);
+    assert.equal(out.grade.reason?.key || null, comment === SUBJECT ? EXPLANATION : null);
+  }
+});
