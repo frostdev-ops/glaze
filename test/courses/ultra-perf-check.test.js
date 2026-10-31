@@ -94,3 +94,17 @@ test('the still-aside requirement rejects a run where the widget dock never appe
     { t: 500, host: 'native', details: 231, [notes]: 421 },
   ]), /My widgets showed/, 'an absent dock has no movements, but does not prove that both blocks stayed put');
 });
+
+test('the still-aside requirement compares each block across temporarily hidden frames', () => {
+  const notes = 'aside.outline-actions > #gz-nt-block', dock = 'aside.outline-actions > #gz-sb-widgets';
+  assert.throws(() => requireStillAside([
+    { t: 200, host: 'native', details: 66, [notes]: 206, [dock]: 400 },
+    { t: 300, host: 'native', details: 66 },
+    { t: 500, host: 'native', details: 231, [notes]: 371, [dock]: 565 },
+  ]), /blocks moved/, 'a missing intermediate rectangle must not discard the previous visible position');
+  assert.doesNotThrow(() => requireStillAside([
+    { t: 200, host: 'native', details: 231, [notes]: 421, [dock]: 600 },
+    { t: 300, host: 'native', details: 231 },
+    { t: 500, host: 'native', details: 231, [notes]: 421, [dock]: 600 },
+  ]), 'a block returning to the same position has not moved');
+});
