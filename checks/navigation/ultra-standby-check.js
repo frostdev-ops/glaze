@@ -74,7 +74,12 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
       await until(() => page.evaluate((cid) => { const f = document.querySelector(`iframe[name="gz-ctab:${cid}"]`); return !!f && !f.inert && getComputedStyle(f).visibility === 'visible' && !document.querySelector('.gz-ctabs-pic'); }, cid), 15000, `${cid} on screen`);
       const f = await frameOf(`gz-ctab:${cid}`);
       await until(() => f.evaluate((cid) => !document.querySelector('.spinner, [data-gz-placing]') && !document.documentElement.hasAttribute('data-gz-ctab-framed')
-        && [...document.querySelectorAll('div.bb-course-navigation a[href]')].some((a) => a.getAttribute('href').startsWith(`/ultra/courses/${cid}/`))), 15000, `${cid} drawn`);
+        && [...document.querySelectorAll('div.bb-course-navigation a[href]')].some((a) => a.getAttribute('href').startsWith(`/ultra/courses/${cid}/`)), cid), 15000, `${cid} drawn`)
+        .catch(async (e) => {
+          console.error('frame state', JSON.stringify(await f.evaluate(() => ({ path: location.pathname, name: window.name, spinner: !!document.querySelector('.spinner'), placing: document.documentElement.hasAttribute('data-gz-placing'),
+            framed: document.documentElement.hasAttribute('data-gz-ctab-framed'), placingEl: document.querySelector('[data-gz-placing]')?.outerHTML.slice(0, 120) || '', spinners: document.querySelectorAll('.spinner').length, bars: [...document.querySelectorAll('div.bb-course-navigation a[href]')].slice(0, 2).map((a) => a.getAttribute('href')), body: document.body.innerText.slice(0, 200) })).catch((x) => String(x))));
+          throw e;
+        });
       return f;
     };
     // Timed on the page's clock: from the press on a tab (in the strip of `where`, the page or a frame) to that course's
@@ -146,16 +151,18 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
 
     // ---- a standby whose route never comes: the cold load ----
     await ready();
-    const stuck = await frameOf('gz-ctab:standby');
-    // Its router no longer hears popstate, as an Ultra that didn't take the route.
-    await stuck.evaluate(() => addEventListener('popstate', (e) => e.stopImmediatePropagation(), true));
+    const stuck = await (await page.$('iframe[name="gz-ctab:standby"][data-ready]')).contentFrame();
+    // Its router no longer takes a route (the fixture's __b8bStuck), as an Ultra that didn't.
+    await stuck.evaluate(() => { window.__b8bStuck = true; });
     mark = docs.length;
     f = await frameOf('gz-ctab:_104_1');
-    await page.evaluate(() => { window.gzOrigin = document.querySelector('iframe[name="gz-ctab:standby"]').contentWindow.performance.timeOrigin; });
+    await page.evaluate(() => { window.gzOrigin = document.querySelector('iframe[name="gz-ctab:standby"][data-ready]').contentWindow.performance.timeOrigin; });
+    const t103 = Date.now();
     await f.click('#gz-ctabs [data-course-id="_103_1"]');
     f = await drawn('_103_1');
+    console.log('fallback drawn after', Date.now() - t103, 'ms; frames', await page.evaluate(() => [...document.querySelectorAll('#gz-ctabs-frames > iframe')].map((x) => `${x.name}@${Math.round(x.contentWindow.performance.timeOrigin)}`).join(', ')));
     const fell = await page.evaluate(() => ({ doc: document.querySelector('iframe[name="gz-ctab:_103_1"]').contentWindow.performance.timeOrigin !== window.gzOrigin }));
-    check(fell.doc && coldLoads('_103_1', mark).length === 1, `with no route in time, the course loads cold in that frame (${JSON.stringify({ ...fell, loads: coldLoads('_103_1', mark) })})`);
+    check(fell.doc && coldLoads('_103_1', mark).length === 1, `with no route in time, the course loads cold in that frame (${JSON.stringify({ ...fell, loads: coldLoads('_103_1', mark), docs: docs.slice(mark) })})`);
     const cold = await f.evaluate(() => ({ name: window.name, strip: [...document.querySelectorAll('#gz-ctabs [aria-selected="true"]')].map((e) => e.dataset.courseId) }));
     check(cold.name === 'gz-ctab:_103_1' && cold.strip.join() === '_103_1', `and boots as that course's frame (${JSON.stringify(cold)})`);
     await shot('fallback');
