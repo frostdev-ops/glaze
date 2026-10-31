@@ -485,8 +485,9 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         const [area, key] = split(id);
         if (!catOf(area, key)) { settled[id] = at; continue; }
         const h = await hk(area, key), was = await recOf(h);
-        // Times can tie, or a remote device's clock can be ahead of this one. Only unchanged content is settled.
-        if (was && (was.seen || 0) >= at && await sumOf(area, key, await valueOf(area, key)) === was.lsum) { settled[id] = at; continue; }
+        // Times can tie, or a remote device's clock can be ahead of this one. Only unchanged content is settled. A value that
+        // can't be read here (a note whose text Notes can't find) goes to each, which passes it over or stops the run.
+        if (was && (was.seen || 0) >= at && await sumOf(area, key, await valueOf(area, key).catch(() => null)) === was.lsum) { settled[id] = at; continue; }
         await each(ctx, h, { area, key });
         // Gone here with no record either side (made and removed before it went up): nothing left to settle against.
         if (!await recOf(h) && await valueOf(area, key).catch(() => null) === undefined) settled[id] = at;
