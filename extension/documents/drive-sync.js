@@ -322,14 +322,14 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
               continue;
             }
           }
-          // A download its owner no longer asks for (a picture whose note went, a copy replaced since) is let go before any
-          // of its bytes come: its owner, met again, waits on this transfer ('pending') or no longer does.
-          if (t.dir === 'down' && !t.done) {
-            const result = await replay(t.owner, folder), still = await moveOf(slot);
-            if (still?.tag !== t.tag || still.done) continue;
-            if (result !== 'pending') { await dropMove(slot); continue; }
-          }
           try {
+            // A download its owner no longer asks for (a picture whose note went, a copy replaced since) is let go before any
+            // of its bytes come: its owner, met again, waits on this transfer ('pending') or no longer does.
+            if (t.dir === 'down' && !t.done) {
+              const result = await replay(t.owner, folder), still = await moveOf(slot);
+              if (still?.tag !== t.tag || still.done) continue;
+              if (result !== 'pending') { await dropMove(slot); continue; }
+            }
             if (t.dir === 'up' && t.owner?.rec && more?.current && !await more.current(t.owner, t.tag)) {
               await dropMove(slot);
               await replay(t.owner, folder);
@@ -614,15 +614,19 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
           if (R.trashed) await trashTo(R.id, false);
           R = { ...R, trashed: false, explicitlyTrashed: false };
         } else if (lt) { await env.papers.untrash(key); l = await local(key); lt = false; }
+        let restore = null;
         if (lost) {
+          // Once its replacement lands, a retry must finish this restoration, not follow the copy's deleted file again.
+          restore = { key, h, kind: kindOf(l.rec), json: R.id, jh: R.headRevisionId || null, file: null, fh: null, fsum: null,
+            rsum: j.sum, lsum: null, rev: -1, trashed: false };
           const ref = j.record?.file;
-          if (FILES.includes(j.kind) && !(P().isRef(ref) && await env.files.has(ref.hash))) return push(key, h, l, { json: R.id, file: null }, folder);
+          if (FILES.includes(j.kind) && !(P().isRef(ref) && await env.files.has(ref.hash))) return push(key, h, l, restore, folder);
           j = { ...j, file: null, fileRev: null };
         }
         const got = await finish(j, h, owner, ft ? { ...F, trashed: false } : F, lost);
         if (lost) got.external = true; // sent up again below, with a file of its own
         if (gone?.file) { if (gone.file !== got.file) await putAway(gone.file, folder); await away([gone.file], null); }
-        const source = { json: R.id, file: got.file, fh: got.fileRev, fsum: got.sum };
+        const source = { ...restore, json: R.id, file: got.file, fh: got.fileRev, fsum: got.sum };
         if (!l) { const now2 = await take(got.key, null, got); if (got.external) return push(got.key, h, now2, source, folder); await agreed(got.key, h, R, got, now2, null); return; }
         if ((await sumOf(key, l)) !== got.sum) {
           // Both hold it, as with Restore: the later edited stays current, the other kept beside it (a PDF: both documents).
