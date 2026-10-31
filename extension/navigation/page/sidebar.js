@@ -424,6 +424,29 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (el) hold({ el, page: el }, true);
   };
 
+  // Course notes (planner/page/notes.js) puts its block in a course outline's column above the dock, in the same pass of
+  // the site's as the sidebar takes the column but at times a frame later (its script still loading). Until it is there,
+  // at most a second and once per column, the dock isn't shown (html[data-gz-sb-notes]), so it never moves down for it.
+  let notesFor = null, notesTimer = 0, notesSeen = new WeakSet();
+  const hasNotes = (col) => [...col.children].some((e) => e.id === 'gz-nt-block');
+  const awaitNotes = () => {
+    const h = html(), col = ultra && host && !host.own && has(host.el, 'outline-actions') ? host.el : null;
+    if (col !== notesFor) {
+      notesFor = col;
+      clearTimeout(notesTimer); notesTimer = 0;
+      h.removeAttribute('data-gz-sb-notes');
+      if (col && !notesSeen.has(col)) {
+        notesSeen.add(col);
+        if (ctx.settings().enhance?.notes && !hasNotes(col)) {
+          h.setAttribute('data-gz-sb-notes', '');
+          notesTimer = setTimeout(() => { notesTimer = 0; html()?.removeAttribute('data-gz-sb-notes'); }, 1000);
+          return;
+        }
+      }
+    }
+    if (h.hasAttribute('data-gz-sb-notes') && (!col || !ctx.settings().enhance?.notes || hasNotes(col))) { clearTimeout(notesTimer); notesTimer = 0; h.removeAttribute('data-gz-sb-notes'); }
+  };
+
   // ---- Glaze's parts of the column -----------------------------------------------------------------------------------
   let live0 = null;
   const say = (text) => { if (live) live.textContent = text; else live0 = text; };
@@ -1078,6 +1101,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (!n) return !host.el.isConnected || host.own || !document.querySelector('aside.outline-actions, div.todo-panel');
     const v = viewOf(n);
     if (v.cid && cid && v.cid !== cid) return false;
+    // A course outline's column Ultra has just drawn is the new view, empty or not: taken at once, so Glaze's header and
+    // This page are in it before Ultra fills Details & Actions, and nothing under them moves when it does.
+    if (fam === 'outline' && has(n.el, 'outline-actions') && n.el !== nativeView?.el) return true;
     const body = v.content && !busyView(v.content) && (v.content !== nativeView?.content || v.child !== nativeView?.child);
     return body || (filled(n.page) && (!nativeView || n.el !== nativeView.el || v.text !== nativeView.text || v.nodes.length !== nativeView.nodes.length || v.nodes.some((e, i) => e !== nativeView.nodes[i])));
   };
@@ -1107,6 +1133,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     }
     host.fallback = !n && !!A.standalone?.();
     hold(n);
+    awaitNotes();
     const first = !active;
     active = true;
     if (first) emit('change');
@@ -1395,6 +1422,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     document.removeEventListener('animationend', peekEnd, true);
     clearTimeout(noteTimer);
     clearTimeout(retryTimer);
+    clearTimeout(notesTimer); notesTimer = 0; notesFor = null; notesSeen = new WeakSet();
     nativeView = null; route = '';
     asleep = false;
     bare();
@@ -1409,7 +1437,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     mode = 'none';
   };
   // <html> as before the sidebar: its attributes and variables gone.
-  const SB_ATTRS = ['data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo', 'data-gz-sb-fixed', 'data-gz-sb-ultra', 'data-gz-sb-family', 'data-gz-sb-tool', 'data-gz-sb-layer',
+  const SB_ATTRS = ['data-gz-sb-notes', 'data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo', 'data-gz-sb-fixed', 'data-gz-sb-ultra', 'data-gz-sb-family', 'data-gz-sb-tool', 'data-gz-sb-layer',
     'data-gz-sb-style', 'data-gz-sb-surface', 'data-gz-sb-radius', 'data-gz-sb-density', 'data-gz-sb-order', 'data-gz-sb-notitle', 'data-gz-sb-native-root', 'data-gz-sb-assessment', 'data-gz-sb-peek'];
   const bare = () => {
     const h = html();

@@ -893,6 +893,32 @@ test("Ultra's Details & Actions reservation wins over the theme's native block m
   assert.equal(winner([...theme, ...sidebar], details, 'margin(?:-block(?:-end)?)?')?.[0], '0', "the theme's margin reset stays as it was");
 });
 
+test("a course outline's column Ultra has just drawn isn't shown where Ultra lays it out until the sidebar takes it to the window's edge", () => {
+  const { chain, cssRules, winner } = require('../helpers/css-cascade.cjs');
+  const aside = chain('html', 'body', 'div#site-wrap', 'aside.outline-actions');
+  const root = aside.parent.parent.parent;
+  const rules = [...cssRules('content/theme.css'), ...cssRules('navigation/page/sidebar.css')];
+  for (const mode of ['expanded', 'collapsed']) {
+    root.attrs = { 'data-gz-sb-ultra': '', 'data-gz-sidebar': mode };
+    assert.equal(winner(rules, aside, 'visibility')?.[0], 'hidden', `${mode}: not drawn in Ultra's place first`);
+    aside.attrs = { 'data-gz-sidebar-host': 'native' };
+    assert.equal(winner(rules, aside, 'visibility') ?? null, null, `${mode}: shown once taken`);
+    aside.attrs = {};
+  }
+  for (const attrs of [{ 'data-gz-sb-ultra': '', 'data-gz-sidebar': 'drawer' }, { 'data-gz-sb-ultra': '' }, {}]) {
+    root.attrs = attrs;
+    assert.equal(winner(rules, aside, 'visibility') ?? null, null, `${JSON.stringify(attrs)}: Ultra's own column as it is`);
+  }
+  // The dock while Course notes is on its way (navigation/page/sidebar.js awaitNotes).
+  const dock = chain('html', 'body', 'div#site-wrap', 'aside.outline-actions', 'div#gz-sb-widgets');
+  const top = dock.parent.parent.parent.parent;
+  dock.parent.attrs = { 'data-gz-sidebar-host': 'native' };
+  top.attrs = { 'data-gz-sb-ultra': '', 'data-gz-sidebar': 'expanded', 'data-gz-sb-notes': '' };
+  assert.equal(winner(rules, dock, 'visibility')?.[0], 'hidden');
+  delete top.attrs['data-gz-sb-notes'];
+  assert.equal(winner(rules, dock, 'visibility') ?? null, null);
+});
+
 // Ultra's content in Details & Actions, this tall (0: none yet, or the block hidden), in the box the browser gives it: never
 // shorter than the held height. The sidebar hears of it as it would: its ResizeObserver, and its observer on the column.
 const detailsSize = (p, height) => {
@@ -935,7 +961,7 @@ const fillDetails = (p, details, n) => {
 };
 const heldRoom = (p) => (p.doc.root.dataset.gzSbHeld != null && parseFloat(p.doc.root.style.getPropertyValue('--gz-sb-held'))) || 0;
 
-test("Details & Actions added empty on a route into a course and filled before the page settles is held from when Ultra adds it", async () => {
+test("Details & Actions added empty on a route into a course is held from when Ultra adds it, and filling it releases the hold", async () => {
   const HELD = `detailsHeight:${O}`;
   const p = page({ at: 'courses', stored: { ...record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }), [HELD]: { _101_1: 231 } } });
   await p.pass();
@@ -947,13 +973,12 @@ test("Details & Actions added empty on a route into a course and filled before t
   const { details, aside, content } = routedOutline(p);
   inner.append(p.el('div', 'course-content-container', p.el('div', 'panel-wrap', p.el('div', 'bb-course-navigation', 'Course'), p.el('div', 'course-outline-grid', content, aside))));
   await p.pass();
-  assert.equal(aside.dataset.gzSidebarHost, undefined, 'the page has not settled: the sidebar has not taken the column yet');
+  assert.equal(aside.dataset.gzSidebarHost, 'native', 'the new column is taken while Content still loads');
   assert.equal(heldRoom(p), 231, 'held at the height it took last time from the moment Ultra adds it');
   // Ultra fills it in steps; the first rows settle the page and the sidebar takes the column with the hold kept.
   fillDetails(p, details, 2);
   await p.pass();
-  assert.equal(aside.dataset.gzSidebarHost, 'native', 'settled on its first rows');
-  assert.equal(heldRoom(p), 231, 'taking the column mid-fill keeps the room');
+  assert.equal(heldRoom(p), 231, 'part filled: still held');
   assert.equal(Math.max(details.box.height, heldRoom(p)), 231, 'part filled: as tall, so nothing under it moves');
   assert.deepEqual(p.store[HELD], { _101_1: 231 }, 'a part-filled height is never kept as the course\'s');
   fillDetails(p, details, 7);
@@ -962,7 +987,117 @@ test("Details & Actions added empty on a route into a course and filled before t
   assert.deepEqual(p.store[HELD], { _101_1: 231 });
 });
 
-test("Details & Actions drawn again on a route back into Content in a course tab is held before the page settles", async () => {
+test("the sidebar takes a course outline's column as soon as Ultra draws it, before Ultra fills Details & Actions, so nothing under it moves", async () => {
+  const HELD = `detailsHeight:${O}`;
+  for (const from of ['courses', 'calendar']) {
+    const p = page({ at: from === 'courses' ? 'courses' : 'outline', aside: 'live', stored: { ...record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }), [HELD]: { _101_1: 231 } } });
+    const inner = p.$('#main-content-inner');
+    if (from === 'calendar') {
+      p.$('.js-details-and-actions').box = { left: 1248, top: 140, width: 320, height: 0 };
+      await p.pass();
+      inner.querySelector('.course-content-container').remove();
+      inner.append(p.el('section', 'route-view-container', 'Calendar'));
+      p.c.location.pathname = '/ultra/courses/_101_1/calendar';
+      await p.pass();
+      inner.querySelector('.route-view-container').remove();
+    } else {
+      await p.pass();
+      inner.querySelector('.base-courses-container').remove();
+    }
+    p.c.location.pathname = '/ultra/courses/_101_1/outline';
+    const { details, aside, content } = routedOutline(p);
+    inner.append(p.el('div', 'course-content-container', p.el('div', 'panel-wrap', p.el('div', 'bb-course-navigation', 'Course'), p.el('div', 'course-outline-grid', content, aside))));
+    await p.pass();
+    assert.equal(aside.dataset.gzSidebarHost, 'native', `${from}: the new column is taken while Details & Actions is still empty`);
+    assert.equal(p.side.context().family, 'outline', from);
+    assert.equal(aside.children[1].className, 'gz-sb-head', `${from}: Glaze's header in place first`);
+    assert.equal(p.$('.gz-sb-pagehead').hidden, false, `${from}: This page shows from the start, while held`);
+    assert.equal(heldRoom(p), 231, from);
+    const order = () => [...aside.children].map((e) => e.className || e.id);
+    const before = order();
+    fillDetails(p, details, 7);
+    await p.pass();
+    assert.deepEqual(order(), before, `${from}: filling it puts nothing new above what is under it`);
+    assert.equal(heldRoom(p), 0, from);
+  }
+});
+
+test("the dock in a course outline's column taken before Course notes is drawn waits for it (at most a second), so it never moves down for it", async () => {
+  const HELD = `detailsHeight:${O}`;
+  for (const notes of [true, false]) {
+    const p = page({ at: 'courses', enhance: { notes }, stored: { ...record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }), [HELD]: { _101_1: 231 } } });
+    await p.pass();
+    const tick = heightTimers(p);
+    const inner = p.$('#main-content-inner');
+    inner.querySelector('.base-courses-container').remove();
+    p.c.location.pathname = '/ultra/courses/_101_1/outline';
+    const { aside, content } = routedOutline(p);
+    inner.append(p.el('div', 'course-content-container', p.el('div', 'panel-wrap', p.el('div', 'bb-course-navigation', 'Course'), p.el('div', 'course-outline-grid', content, aside))));
+    await p.pass();
+    assert.equal(aside.dataset.gzSidebarHost, 'native');
+    const waiting = () => p.doc.root.dataset.gzSbNotes != null;
+    assert.equal(waiting(), notes, `notes ${notes}: the dock waits only for a Course notes that is coming`);
+    if (!notes) continue;
+    // Course notes lands above the dock (planner/page/notes.js), a frame later.
+    const block = p.el('div', 'outline-action-block', 'Course notes');
+    block.id = 'gz-nt-block';
+    p.$('#gz-sb-widgets').before(block);
+    p.mutate(aside, { addedNodes: [block] });
+    await settle();
+    assert.equal(waiting(), false, 'shown once Course notes is above it');
+    // A column Course notes never comes to: shown after a second, and not hidden again on the next pass.
+    block.remove();
+    aside.replaceWith(routedOutline(p).aside);
+    await p.pass();
+    const next = p.$('aside.outline-actions');
+    assert.equal(next.dataset.gzSidebarHost, 'native');
+    assert.equal(waiting(), true);
+    tick(1000);
+    assert.equal(waiting(), false, 'at most a second');
+    await p.pass();
+    assert.equal(waiting(), false, 'once per column');
+  }
+});
+
+test('turning Course notes off releases its dock wait, including when Ultra replaces the column', async (t) => {
+  for (const replace of [false, true]) await t.test(`replacement ${replace}`, async () => {
+    const enhance = { notes: true };
+    const p = page({ aside: 'live', enhance, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+    const tick = heightTimers(p);
+    await p.pass();
+    assert.equal(p.doc.root.dataset.gzSbNotes, '', 'waiting for Course notes');
+    const dock = p.$('#gz-sb-widgets');
+    enhance.notes = false;
+    if (replace) p.host().replaceWith(routedOutline(p).aside);
+    await p.pass();
+    assert.equal(p.doc.root.dataset.gzSbNotes, undefined, `replacement ${replace}: no Course notes is coming`);
+    tick(2000);
+    await p.pass();
+    assert.equal(p.doc.root.dataset.gzSbNotes, undefined, 'no wait survives without its timer');
+    assert.equal(p.$('#gz-sb-widgets'), dock, 'the live dock is preserved');
+    assert.equal(p.mode(), 'expanded');
+  });
+});
+
+test('a course outline column waits for Course notes only once when Ultra reuses it', async () => {
+  const p = page({ aside: 'live', stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  const tick = heightTimers(p);
+  await p.pass();
+  const first = p.host();
+  tick(1000);
+  assert.equal(p.doc.root.dataset.gzSbNotes, undefined);
+  const next = routedOutline(p).aside;
+  first.replaceWith(next);
+  await p.pass();
+  assert.equal(p.doc.root.dataset.gzSbNotes, '', 'a new column gets its own wait');
+  tick(1000);
+  next.replaceWith(first);
+  await p.pass();
+  assert.equal(p.host(), first);
+  assert.equal(p.doc.root.dataset.gzSbNotes, undefined, 'the reused column already spent its one second');
+});
+
+test("Details & Actions drawn again on a route back into Content in a course tab is held from when Ultra draws it", async () => {
   const HELD = `detailsHeight:${O}`;
   const p = page({ at: 'outline', aside: 'live', stored: { ...record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }), [HELD]: { _101_1: 231 } } });
   p.c.GZ_CTABS = { visible: () => true };
@@ -985,7 +1120,7 @@ test("Details & Actions drawn again on a route back into Content in a course tab
   const { details, aside, content } = routedOutline(p);
   inner.append(p.el('div', 'course-content-container', p.el('div', 'panel-wrap', p.el('div', 'bb-course-navigation', 'Course'), p.el('div', 'course-outline-grid', content, aside))));
   await p.pass();
-  assert.equal(p.side.context().family, 'other', 'not settled yet');
+  assert.equal(p.side.context().family, 'outline', 'the new column is the new view');
   assert.equal(heldRoom(p), 231, 'held from when Ultra adds it again');
   fillDetails(p, details, 7);
   await p.pass();

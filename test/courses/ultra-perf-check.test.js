@@ -75,16 +75,63 @@ const requireStillAside = (frames) => {
     resultsJson: JSON.stringify([{ rep: 1, instrumented: false, outline: { aside: { frames, shifts: [] } } }]) });
 };
 
+test('the aside sampler records the visible column position before Glaze blocks arrive', () => {
+  let sample, visible = false, now = 200;
+  const column = { checkVisibility: () => visible, getAttribute: () => null,
+    getBoundingClientRect: () => ({ left: 1376, top: 100, width: 330, height: 26 }) };
+  const details = { parentElement: column, getBoundingClientRect: () => ({ height: 26 }) };
+  const start = source.indexOf('function asideWatch()'), end = source.indexOf('\nasync function settle(', start);
+  const stop = vm.runInNewContext(`${source.slice(start, end)}\nasideWatch();`, {
+    document: { querySelector: (s) => s.endsWith('.js-details-and-actions') ? details : null,
+      documentElement: { style: { getPropertyValue: () => '' }, hasAttribute: () => false } },
+    performance: { now: () => now },
+    requestAnimationFrame: (fn) => { sample = fn; return 1; }, cancelAnimationFrame() {},
+    PerformanceObserver: class { observe() {} takeRecords() { return []; } disconnect() {} },
+  });
+  sample();
+  visible = true; now = 300;
+  sample();
+  const frames = JSON.parse(JSON.stringify(stop().frames));
+  assert.equal(frames[0].top, undefined, 'a hidden column has no visible position');
+  assert.equal(frames[1].left, 1376);
+  assert.equal(frames[1].top, 100, 'its vertical position counts before Course notes and the dock exist');
+});
+
 test('the still-aside requirement catches Details growth during sidebar adoption', () => {
   const notes = 'aside.outline-actions > #gz-nt-block', dock = 'aside.outline-actions > #gz-sb-widgets';
   assert.throws(() => requireStillAside([
     { t: 200, host: null, details: 66, [notes]: 206 },
     { t: 500, host: 'native', details: 231, [notes]: 421, [dock]: 600 },
   ]), /blocks moved/, 'adoption must not excuse the native Details growth as well as the new header');
-  assert.doesNotThrow(() => requireStillAside([
+  assert.throws(() => requireStillAside([
     { t: 200, host: null, details: 231, [notes]: 371 },
     { t: 500, host: 'native', details: 231, [notes]: 421, [dock]: 600 },
-  ]), 'inserting only the sidebar header remains an allowed adoption');
+  ]), /blocks moved/, 'the sidebar putting its header in above them is a move too');
+});
+
+test('the still-aside requirement catches the column moving sideways when the sidebar takes it', () => {
+  const notes = 'aside.outline-actions > #gz-nt-block', dock = 'aside.outline-actions > #gz-sb-widgets';
+  assert.throws(() => requireStillAside([
+    { t: 200, host: null, details: 26, left: 1028 },
+    { t: 500, host: 'native', details: 231, [notes]: 421, [dock]: 600, left: 1328 },
+  ]), /moved sideways/);
+  assert.doesNotThrow(() => requireStillAside([
+    { t: 200, host: 'native', details: 231, [notes]: 421, [dock]: 600, left: 1376 },
+    { t: 500, host: 'native', details: 231, [notes]: 421, [dock]: 600, left: 1376 },
+  ]));
+});
+
+test('the still-aside requirement catches the column moving vertically before its blocks appear', () => {
+  const notes = 'aside.outline-actions > #gz-nt-block', dock = 'aside.outline-actions > #gz-sb-widgets';
+  assert.throws(() => requireStillAside([
+    { t: 200, host: null, details: 26, left: 1376, top: 100 },
+    { t: 500, host: 'native', details: 231, left: 1376, top: 150, [notes]: 421, [dock]: 600 },
+  ]), /column moved vertically/, 'the first visible block positions cannot reveal a prior column move');
+  assert.doesNotThrow(() => requireStillAside([
+    { t: 200, host: null, details: 26, left: 1376, top: 100 },
+    { t: 300, host: null, details: 26 },
+    { t: 500, host: 'native', details: 231, left: 1376, top: 100, [notes]: 421, [dock]: 600 },
+  ]), 'a hidden frame does not invent a column move');
 });
 
 test('the still-aside requirement rejects a run where the widget dock never appears', () => {
