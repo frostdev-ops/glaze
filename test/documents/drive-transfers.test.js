@@ -59,13 +59,13 @@ const fresh = () => {
   return { D: require('../../extension/documents/drive.js'), S: require('../../extension/documents/drive-sync.js'), ST: require('../../extension/background/drive-store.js') };
 };
 const EXT = { paper: '.docx', pdf: '.pdf' };
-const worker = (drive, dk, { fetch = drive.fetch, account = 'student@school.edu', snapshot = null } = {}) => {
+const worker = (drive, dk, { fetch = drive.fetch, account = 'student@school.edu', snapshot = null, records = false } = {}) => {
   const { D, S, ST } = fresh();
   const now = () => dk.clock.t;
   const papers = P.open(dk.store, now, { versions: () => 40, files: { own: dk.files.own } });
   const log = { alive: 0, stopped: 0 };
   const settings = memory();
-  const more = snapshot ? ST.create({ area: (n) => (n === 'notes' ? null : n === 'sync' ? settings : dk.store), store: dk.store, hash: async (s) => sha(s), now, snapshot }) : null;
+  const more = snapshot || records ? ST.create({ area: (n) => (n === 'notes' ? null : n === 'sync' ? settings : dk.store), store: dk.store, hash: async (s) => sha(s), now, snapshot }) : null;
   const env = {
     drive: () => D.create({ fetch, token: async () => 'tok-1', account: async () => account, interactive: false }),
     account: async () => account, store: dk.store,
@@ -81,7 +81,7 @@ const worker = (drive, dk, { fetch = drive.fetch, account = 'student@school.edu'
     sleep: async () => {}, random: () => 0, locks: null, timer: () => () => {},
     stage: dk.stage, alive: () => { log.alive++; return () => { log.stopped++; }; }, more,
   };
-  return { sync: S.create(env), papers, log, D, S, ST };
+  return { sync: S.create(env), papers, log, D, S, ST, more };
 };
 // A run that must be stopped at `at` (a cut or a hang reached), never ending first: the worker is gone from then on.
 const stopped = async (run, at) => {
@@ -150,6 +150,34 @@ test('a range interrupted by worker shutdown is retried in smaller pieces before
   const rec = await b.papers.get(key);
   assert.equal(sha(await db.files.read(rec.file.hash)), sha(bytes));
   assert.deepEqual(await moves(db), {});
+});
+
+test('a large record replacing a missing Drive file resumes its new session across workers', async () => {
+  const drive = standin(), dk = disk(), key = 'writer:sources:local|local|papers|reader';
+  const oldValue = { at: dk.clock.t, sources: [{ id: 's1', title: 'First source' }] };
+  await dk.store.set({ [key]: oldValue });
+  const a = worker(drive, dk, { records: true });
+  assert.ok((await a.sync.set(true)).ok);
+  const h = sha(`local\n${key}`).slice(0, 32), old = [...drive.files.values()].find((f) => f.meta.appProperties.key === h).meta.id;
+  dk.clock.t += 1000;
+  const value = { at: dk.clock.t, sources: [{ id: 's1', title: 'New source', text: 'B'.repeat(12 * MiB) }] };
+  await dk.store.set({ [key]: value });
+  await a.more.stamp({ [key]: { oldValue, newValue: value } }, 'local');
+  const fetch = (u, init = {}) => {
+    if (String(u).includes(`/upload/drive/v3/files/${old}?`) && init.method === 'PATCH') drive.remove(old);
+    return drive.fetch(u, init);
+  };
+  await stopped(worker(drive, dk, { records: true, fetch }).sync.run({ push: true }), drive.cut(MiB, (e) => e.chunk && !e.chunk.status && e.chunk.from > 0));
+  const sessions = () => drive.log.filter((e) => e.query.uploadType === 'resumable' && e.method !== 'PUT').length;
+  const before = sessions(), n = drive.log.length;
+  assert.ok((await worker(drive, dk, { records: true }).sync.run()).ok);
+  assert.equal(sessions(), before, 'the next worker keeps the new file\'s session');
+  assert.equal(chunks(drive, n)[0]?.chunk.status, true, 'it asks where that session stands');
+  assert.ok(chunks(drive, n)[1]?.chunk.from > 0, 'and continues from the bytes Drive kept');
+  const landed = [...drive.files.values()].filter((f) => f.meta.appProperties.key === h);
+  assert.equal(landed.length, 1);
+  assert.deepEqual(JSON.parse(landed[0].bytes).value, value);
+  assert.deepEqual(await moves(dk), {});
 });
 
 test('a worker stopped mid-chunk: the next one asks Drive where the session stands and goes on from there', async () => {
