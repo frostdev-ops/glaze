@@ -548,7 +548,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         file = null; fh = null;
         for (const F of found) {
           if (F.removed || F.appProperties?.glaze !== 'file' || F.appProperties?.key !== h || (Array.isArray(F.parents) && !F.parents.includes(folder))) continue;
-          const glazes = F.id === d?.file ? !!F.headRevisionId && F.headRevisionId === d.fh : unchanged(F), same = F.trashed === false && glazes;
+          // This device's own upload, landed (Drive's answer still on its transfer), is as Glaze wrote it too.
+          const landed = going?.dir === 'up' && going.file?.id === F.id && !!F.headRevisionId && going.file.headRevisionId === F.headRevisionId && F.appProperties?.sum === going.tag && unchanged(F);
+          const glazes = landed || (F.id === d?.file ? !!F.headRevisionId && F.headRevisionId === d.fh : unchanged(F)), same = F.trashed === false && glazes;
           if (same && !file) { file = F.id; fh = F.headRevisionId || null; }
           else if (glazes) await putAway(F.id, folder);
           else await D((c) => c.patch(F.id, { appProperties: { glaze: 'kept', sum: null } }));
@@ -629,6 +631,15 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       const named = E;
       if (d && E && E.id !== d.file) E = undefined;
       if (R === undefined) R = d?.json ? await meta(d.json) : d || (!lt && l) ? await lookup(h, folder) : null;
+      // This device's first copy, landed by its own transfer (Drive's answer still on it) beside the file it recorded, though
+      // Drive's search doesn't show it yet: linked as that push sent it, never a second file or copy made beside it.
+      if (d && !d.json && !R && d.file && d.fsum) {
+        const t = await moveOf(`u:${h}:json`), f = t?.dir === 'up' && t.file?.id ? await meta(t.file.id) : null;
+        if (f && !f.removed && f.trashed === false && f.appProperties?.glaze === 'doc' && f.appProperties.key === h && f.appProperties.sum === d.fsum && (f.parents || []).includes(folder)) {
+          d = await putDoc(h, { ...d, json: f.id, jh: f.headRevisionId || null, rsum: d.fsum, lsum: d.fsum, rev: -1 }, d);
+          R = f;
+        }
+      }
       // This device's first push stopped before its copy's answer came (its file recorded): a copy naming that file is its own,
       // as Drive took it, and linked so; another device's is met as a first meeting, this device's file put away as a losing
       // copy's is.
