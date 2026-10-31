@@ -1025,7 +1025,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     // Everything measured below is read before any write: the browser lays the page out once, at its next frame, rather
     // than on each read. Only when a write here can move what was measured (the column's mode, width or kind, Glaze's own
     // column, a course tool, a layer, the edge buttons, This page) is it measured again, once, after all the writes.
-    let g = measure(review, nativeRoot);
+    let g = measure(review, nativeRoot, css);
     const h = html(), seen = (e, k) => e.getAttribute(k);
     const was = [...GEOMETRY.map((k) => seen(h, k)), seen(host.el, 'data-gz-sb-overlay'), h.style.getPropertyValue('--gz-sidebar-w'), edge.hidden, launch.hidden, pageHead.hidden, rare(seen(h, 'data-gz-sb-family'))];
     if (next !== 'drawer' && drawer) closeDrawer(false);
@@ -1045,7 +1045,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     edge.hidden = next !== 'none';
     launch.hidden = next !== 'drawer' || drawer;
     const now = [...GEOMETRY.map((k) => seen(h, k)), seen(host.el, 'data-gz-sb-overlay'), h.style.getPropertyValue('--gz-sidebar-w'), edge.hidden, launch.hidden, pageHead.hidden, rare(seen(h, 'data-gz-sb-family'))];
-    if (now.some((v, i) => v !== was[i])) g = measure(review, nativeRoot);
+    if (now.some((v, i) => v !== was[i])) g = measure(review, nativeRoot, css);
     watchNativeScroll(nativeRoot, g.scroller);
     watchTop(g.headers);
     setVar('--gz-sb-left', `${g.left}px`);
@@ -1086,8 +1086,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const rare = (f) => (['assessment', 'discussion'].includes(f) ? f : '');
   // What a layout measures, all reads: where the content starts, the column's top under the headers, a native root's
   // scroller and edges, Glaze's footer, the page's height in the column, and the bar under the edge buttons.
-  const measure = (review, nativeRoot) => {
-    const css = typeof getComputedStyle === 'function' ? getComputedStyle(html()) : null;
+  // css: <html>'s computed style, live, from the layout.
+  const measure = (review, nativeRoot, css) => {
     const left = A.left();
     const main = document.getElementById('main');
     const navTop = (parseFloat(css?.getPropertyValue('--gz-navbar-top')) || 0) + (parseFloat(css?.getPropertyValue('--gz-ctabs-row')) || 0);
