@@ -434,6 +434,96 @@ test('writer.feedback: a comment says what the draft does, specifically; one off
   for (const [c, ok] of comments) assert.equal(FB.assesses(c, [draft, ASSIGN.assignment.instructions, '[_10_1] Thesis: A clear, arguable thesis.'].map((x) => require('../../extension/ai/text.js').source(x))) === c.trim(), ok, c);
 });
 
+test('writer.feedback: in de, es, fr, nl and pt-BR a comment on the draft or to the student survives; one offering wording is dropped', async () => {
+  const draft = ['Morrison treats memory as a debt every character inherits.', 'Para mim, a memória é uma dívida que todos herdam.',
+    'Selon moi, le fleuve garde la mémoire de la ville.', 'Für mich gilt: die Erinnerung ist eine Schuld, die jeder erbt.'].join('\n');
+  const comments = {
+    'pt-BR': [
+      ['O ensaio apresenta uma tese clara, mas o segundo parágrafo não cita nenhuma fonte.', true],
+      ['Seu ensaio apresenta duas fontes; falta a terceira exigida.', true],
+      ['Você ainda não explica por que a memória pesa sobre a cidade.', true],
+      ['Você poderia escrever "A memória é uma dívida que ninguém escolhe."', false],
+      ['Tente começar com uma pergunta sobre o rio.', false],
+      ['Uma tese como "a memória é um livro-caixa" funcionaria.', false],
+      ['A memória é uma dívida que a cidade inteira herda.', false],
+      ['Os moradores lembram o rio todos os dias.', false],
+      ['Você poderia começar com uma pergunta sobre o rio.', false],
+      ['Tente escrever uma tese sobre a cidade.', false],
+      ['Na introdução, use "a memória é uma dívida que todos herdam".', false],
+      ['Uma tese como a memória pesa sobre a cidade funcionaria.', false],
+    ],
+    es: [
+      ['El borrador plantea una tesis clara, pero la conclusión no retoma las fuentes.', true],
+      ['Tu borrador explica la memoria, pero no responde a la consigna.', true],
+      ['Usted describe el río con cuidado, pero no explica por qué importa.', true],
+      ['Podrías empezar con una pregunta sobre el río.', false],
+      ['Por ejemplo: la memoria es una deuda que todos heredan.', false],
+      ['Prueba algo como "el río guarda lo que el pueblo olvida".', false],
+      ['Los recuerdos te persiguen como el río.', false],
+      ['Podrías empezar el ensayo con una pregunta sobre el río.', false],
+      ['Por ejemplo, tu tesis podría decir que el río guarda la memoria.', false],
+      ['Una tesis como que el río guarda la memoria funcionaría mejor.', false],
+    ],
+    de: [
+      ['Die Einleitung nennt die These, aber im zweiten Absatz fehlen Belege aus den Quellen.', true],
+      ['Die Argumentation bleibt beschreibend, und Gegenargumente fehlen.', true],
+      ['Du erklärst die Erinnerung genau, gehst aber nicht auf die Gegenwart ein.', true],
+      ['Hier beschreiben Sie den Fluss genau, begründen aber nicht, warum er wichtig ist.', true],
+      ['Ihre Hausarbeit erfüllt das Kriterium nur teilweise.', true],
+      ['Sie könnten mit einer Frage über den Fluss beginnen.', false],
+      ['Schreiben Sie zum Beispiel: „Erinnerung ist eine Schuld, die niemand wählt.“', false],
+      ['Eine These wie „Erinnerung ist ein Kontobuch“ würde passen.', false],
+      ['Erinnerung ist eine Schuld, die jede Figur erbt.', false],
+      ['In der Einleitung könntest du mit einer Frage beginnen.', false],
+      ['Versuche, die Einleitung mit einer Frage zu beginnen.', false],
+      ['Eine These wie die Erinnerung als Schuld würde passen.', false],
+    ],
+    fr: [
+      ['L’essai pose une thèse claire, mais la conclusion ne reprend pas les sources.', true],
+      ['Vous expliquez bien le rôle du fleuve, sans le relier à la consigne.', true],
+      ['Tu décris la mémoire avec précision mais sans dire pourquoi elle compte.', true],
+      ['Vous pourriez commencer par une question sur le fleuve.', false],
+      ['Essayez d’écrire « La mémoire est une dette que personne ne choisit. »', false],
+      ['Voici une thèse plus forte que vous pouvez reprendre.', false],
+      ['Je pense que la mémoire est une dette que chacun hérite.', false],
+      ['Le poids du passé pèse sur toute la ville.', false],
+      ['Essayez d’écrire une thèse sur la mémoire de la ville.', false],
+      ['Par exemple, votre thèse pourrait relier le fleuve à la ville.', false],
+      ['Votre conclusion pourrait dire : « le fleuve garde la mémoire »', false],
+    ],
+    nl: [
+      ['De inleiding noemt een duidelijke stelling, maar de tweede alinea mist bronnen.', true],
+      ['Je beschrijft de rivier zorgvuldig, maar legt niet uit waarom die belangrijk is.', true],
+      ['U legt de herinnering goed uit, maar maakt niet duidelijk waarom die telt.', true],
+      ['Je zou kunnen beginnen met een vraag over de rivier.', false],
+      ['Schrijf bijvoorbeeld: "Herinnering is een schuld die niemand kiest."', false],
+      ['Een stelling zoals "herinnering is een kasboek" zou werken.', false],
+      ['Het verleden blijft te dichtbij voor de stad.', false],
+      ['Je zou je inleiding kunnen openen met een vraag over de rivier.', false],
+      ['Probeer in je conclusie iets als een vraag te stellen.', false],
+      ['Een stelling zoals herinnering als schuld zou beter werken.', false],
+    ],
+    mixed: [
+      ['Your thesis, "a memória é uma dívida que todos herdam", is clear but not yet arguable.', true],
+      ['The second paragraph quotes « le fleuve garde la mémoire » without tying it to your claim.', true],
+      ['Your draft cites „die Erinnerung ist eine Schuld“ but never explains it.', true],
+      ['O parágrafo final cita "every character inherits" sem explicar o termo.', true],
+      ['Your draft cites « une phrase qui n’est pas du tout là » without a source.', false],
+      ['Your claim echoes „ein Satz, den es nirgends gibt“ but never explains it.', false],
+      ['These rivers carry what the town forgets.', false],
+      ['Context shapes every memory in the town.', false],
+    ],
+  };
+  const X = require('../../extension/ai/text.js');
+  const sources = [draft, ASSIGN.assignment.instructions].map((x) => X.source(x));
+  for (const [locale, list] of Object.entries(comments)) for (const [c, ok] of list) assert.equal(FB.assesses(c, sources) === c, ok, `${locale}: ${c}`);
+  const { output } = await go(FB.task, { text: draft, context: ASSIGN }, { json: { criteria: [
+    { criterion: '_10_1', status: 'partly', comment: comments['pt-BR'][0][0], quotes: [], level: null },
+    { criterion: '_11_1', status: 'partly', comment: comments['pt-BR'][3][0], quotes: [], level: null },
+  ] } });
+  assert.deepEqual(output.criteria.map((c) => [c.id, c.comment]), [['_10_1', comments['pt-BR'][0][0]], ['_11_1', '']], 'the Portuguese assessment survives the task check; the offer is dropped, its status kept');
+});
+
 // ---- writer.requirements ------------------------------------------------------------------------------------------
 test('writer.requirements: a number stays only when the prompt says it, in digits or words', async () => {
   const prompt = CONTEXT.prompt.text;
