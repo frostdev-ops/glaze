@@ -108,3 +108,30 @@ test('the still-aside requirement compares each block across temporarily hidden 
     { t: 500, host: 'native', details: 231, [notes]: 421, [dock]: 600 },
   ]), 'a block returning to the same position has not moved');
 });
+
+test('profile attribution preserves one-based trace lines and converts zero-based CPU lines', async () => {
+  // Blink SourceLocation::WriteIntoTrace uses V8StackTrace::frames(), whose lines are already one-based.
+  const url = `chrome-extension://${'a'.repeat(32)}/content/content-ultra.js`;
+  const profile = { nodes: [
+    { id: 1, callFrame: { url: '', functionName: '(root)', lineNumber: -1 }, children: [2] },
+    { id: 2, callFrame: { url, functionName: 'gate', lineNumber: 40 }, children: [3] },
+    { id: 3, callFrame: { url: '', functionName: 'querySelectorAll', lineNumber: -1 } },
+  ], samples: [2, 3], timeDeltas: [1000, 2000] };
+  const cdp = new (require('node:events').EventEmitter)();
+  cdp.send = async (method) => {
+    if (method === 'Profiler.stop') return { profile };
+    if (method === 'Tracing.end') cdp.emit('Tracing.tracingComplete');
+    return {};
+  };
+  cdp.detach = async () => {};
+  const start = source.indexOf('const stopProfile = '), end = source.indexOf('\nconst snapshot = ', start);
+  const stop = vm.runInNewContext(`${source.slice(start, end)}\nstopProfile;`);
+  const result = await stop({ cdp, events: [
+    { ph: 'X', name: 'Layout', dur: 2000, args: { beginData: { stackTrace: [{ url, functionName: 'gate', lineNumber: 41 }] } } },
+    { ph: 'X', name: 'UpdateLayoutTree', dur: 1000, args: { data: { stackTrace: [{ url, functionName: 'style', lineNumber: 1 }] } } },
+  ] });
+  assert.equal(result.passes.Layout.forced[0][0], 'ext:content/content-ultra.js gate:41');
+  assert.equal(result.passes.UpdateLayoutTree.forced[0][0], 'ext:content/content-ultra.js style:1');
+  assert.equal(result.extensionMs, 3, 'native selector time stays with its script caller');
+  assert.ok(result.functions.every(([key]) => key.includes('gate:41')), 'CPU call frames are zero-based');
+});

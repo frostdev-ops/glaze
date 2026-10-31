@@ -103,6 +103,25 @@ test('the merged synchronous gate discovers native navigation and preserves the 
   c.GZ_CTABS = undefined; assert.equal(gate(scope), undefined); assert.deepEqual(calls, ['nav', 'docs', 'tabs', 'nav', 'docs']);
 });
 
+test('one mutation batch gates once, with every native node it added', () => {
+  // Per node, each of Glaze's own row buttons re-placed the course-tab strip (navigation/page/coursetabs.js held): ~25 ms of
+  // selector scans per course open on the synthetic outline.
+  const js = source('content/content.js');
+  const chunk = js.slice(js.indexOf('  const schedule = (records) => {'), js.indexOf('  const startSweep = () => {'));
+  const gates = [];
+  const c = vm.createContext({ chrome: { runtime: { id: 'x' } }, observer: {}, hid: () => false, ultra: true, reviewing: new Map(), celebrate() {}, dirty: new Set(), touched: new Set(),
+    reshaped: false, timer: 1, flush() {}, setTimeout, X: { lift() {}, gate: (scope) => { gates.push([].concat(scope)); } } });
+  vm.runInContext(`${chunk}\nglobalThis.schedule = schedule;`, c);
+  const node = () => ({ nodeType: 1 });
+  const row = { closest: () => null }, added = Array.from({ length: 480 }, node);
+  c.schedule(added.map((n) => ({ type: 'childList', target: row, addedNodes: [n, { nodeType: 3 }] })));
+  assert.equal(gates.length, 1);
+  assert.equal(gates[0].length, 480);
+  assert.ok(gates[0].every((n, i) => n === added[i]));
+  c.schedule([{ type: 'attributes', attributeName: 'class', target: row, addedNodes: [] }]);
+  assert.equal(gates.length, 1, 'no native node added: no gate');
+});
+
 test('thirty unrelated widget text updates cause no navigation scans and own writes become idle', () => {
   const f = dashboardFixture(); f.syncDashboard(); const before = f.counts();
   const target = { nodeType: 3, parentElement: { closest: () => null }, inRail: true };
