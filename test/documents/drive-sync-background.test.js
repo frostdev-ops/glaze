@@ -7,7 +7,7 @@ const G = require('../../extension/planner/gpa.js');
 const N = require('../../extension/planner/notes.js');
 
 // Run the actual sync wiring as a restarted classic worker: install handlers have not loaded optional libraries.
-const worker = () => {
+const worker = (extra = {}) => {
   const area = () => {
     const m = new Map();
     return {
@@ -33,7 +33,7 @@ const worker = () => {
     GZ_DRIVE_SYNC: { create: (env) => { documents = env; return {}; } }, brokerTurn: null,
     driveLib: () => {}, googleLib: () => ({ ON: true }), openPapers: () => ({}),
     NOTES_DB: db, brokerArea: () => ({ get: local.get, set: async (o) => { await local.set(o); return true; } }), GZ_NOTES: N,
-    brokerIn: (name) => { assert.equal(name, 'backup'); context.GZ_CLASSES = C; context.GZ_GPA = G; },
+    brokerIn: (name) => { assert.equal(name, 'backup'); context.GZ_CLASSES = C; context.GZ_GPA = G; }, ...extra,
   });
   vm.runInContext(fs.readFileSync(require.resolve('../../extension/background/drive-store.js'), 'utf8'), context);
   const create = context.GZ_DRIVE_STORE.create;
@@ -44,6 +44,25 @@ const worker = () => {
   vm.runInContext('openDriveSync()', context);
   return { context, documents, records, local, changed };
 };
+
+// Chrome stops a worker whose fetch waits 30 s or that hears nothing for 30 s, Firefox one idle for 30 s: while a transfer
+// runs, an extension API call every 25 s keeps it up between chunks. Safari unloads it regardless; it resumes instead.
+test('a long transfer keeps Chrome\'s and Firefox\'s worker up with a cheap call every 25 s; Safari relies on resuming', async () => {
+  for (const safari of [false, true]) {
+    let asked = 0;
+    const timers = [];
+    const { documents, context } = worker({ SAFARI: safari, setInterval: (f, ms) => timers.push({ f, ms, on: true }), clearInterval: (n) => { timers[n - 1].on = false; } });
+    context.chrome.runtime.getPlatformInfo = async () => { asked++; return { os: 'mac' }; };
+    assert.equal(typeof documents.stage?.write, 'function', 'a stage for transfers that outlive the worker');
+    const stop = documents.alive?.();
+    if (safari) { assert.ok(!stop && !timers.length, 'Safari: no keepalive'); continue; }
+    assert.deepEqual(timers.map((t) => t.ms), [25000]);
+    await timers[0].f();
+    assert.equal(asked, 1, 'one cheap extension call');
+    stop();
+    assert.equal(timers[0].on, false, 'let go once the transfers are done');
+  }
+});
 
 test('a restarted worker loads validators before accepting class schedules and GPA records', () => {
   const { context } = worker();

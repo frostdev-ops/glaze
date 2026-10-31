@@ -400,13 +400,19 @@ Google Drive, including ones described below as on this device only or never syn
   Once **Sync to Google Drive** is on, `chrome.storage.local` also holds its state, on this device only, and keeps it
   when Sync is turned off: whether it is
   on, the account it is bound to, the ids of the Glaze folder and its Data and Backups folders, Drive's change-list page
-  token, when it last synced, what last stopped it and whether the day's backup was skipped because Drive was full
-  (`driveSync`); for each document and each synced record, the ids
+  token, when it last synced, what last stopped it, how many runs in a row failed and when it tries again (`fails`,
+  `wait`), when the run under way began (`busy`), when the day's backup was last tried (`snap`) and whether it was skipped
+  because Drive was full (`snapSkip`) (`driveSync`); for each document and each synced record, the ids
   of its Drive files and a SHA-256 of what each side last held (`driveSyncDoc:…`, `driveSyncRec:…`, `driveSyncFile:…`);
   which documents were saved since their last upload (`driveSyncDirty`); for a document whose Drive file was seen ahead
   of its JSON copy, how many times and since when (`driveSyncWaiting`); the ids of a document's duplicate Drive files
-  still to be moved into Glaze/Data (`driveSyncAway`); and when each synced setting or record last
-  changed here, Sync on or off (`driveSyncStamps`). Connecting another account while Sync is on, or turning Sync on for
+  still to be moved into Glaze/Data (`driveSyncAway`); when each synced setting or record last
+  changed here, Sync on or off (`driveSyncStamps`); and, for a file larger than one request still on its way, what it is
+  and how far it got: an upload's target file and Drive metadata, its resumable-session address (a Google upload address
+  that takes only that file's bytes), how far it got, a SHA-256 of its bytes and Drive's answer once it is sent, or a
+  download's file id, revision and how far it got (`driveSyncMoves`), with the bytes themselves in Glaze's own
+  IndexedDB, which only its background worker opens (`glaze-drive`), until it lands (the day's backup zip until it lands
+  or its day ends). Connecting another account while Sync is on, or turning Sync on for
   another account, deletes all of it.
 - **Gradescope in To Do** (off by default), in `chrome.storage.local`, on this device only: which Gradescope account
   it's from (your name on Gradescope, and a SHA-256 hash of your Gradescope email address, never the address itself),
@@ -834,12 +840,15 @@ you import) are bundled. It makes requests in these cases:
       the pet, dashboard notes, class schedules, GPA past terms, widgets, Looks history and favorites, the personal
       dictionary and saved sources, Gradescope's account (your name there and the hash of its email address), course
       placings and your answers about it (not the assignments read from
-      Gradescope, which stay on the device that read them), and Notes: each account's folders, each note (its title,
+      Gradescope, which stay on the device that read them; a device signed in to another Gradescope account keeps its
+      own), and Notes: each account's folders, each note (its title,
       folder, course, times, whether it is in Trash, and its text) and each picture or attachment. Each carries when it last
       changed. When both sides changed one, the later change is kept; when a second device connects, its own records are
       joined with the folder's as Restore joins a backup's (a note keeps the newer text), never replaced.
     - in Glaze/Backups, once a day, a **Back up…** zip of Settings, tasks, records, Notes and documents, the newest five
       kept.
+    - A file larger than one request (over 5 MB: a big PDF, the day's zip) goes in parts, each run sending or fetching the
+      next ones from where the last stopped, so the rest of Sync never waits for it; it is applied only once whole.
     - Never in Drive: share keys (each share's end-to-end keys and your delete tokens: anyone who could read your Drive
       folder could otherwise read or delete your shares; **Back up…** still has them), AI keys and connections, Agents
       pairing, Drive's and Google Calendar's sign-in records, what Glaze read from your school (caches, course names, card

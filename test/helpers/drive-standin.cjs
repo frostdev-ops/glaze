@@ -7,6 +7,12 @@
 // app's properties kept). fail() queues an error answer for the next request that matches. A DELETE (files.delete) deletes
 // a file Glaze made for good, a folder with everything in it, answered 204 as Drive does; each is logged with what it deleted
 // (entry.deleted), so a test can say which came, or that none did.
+// Transfers that span requests, as Drive's upload and download guides describe them: a resumable session's bytes sent in
+// chunks (PUT with Content-Range: bytes a-b/N, each but the last a multiple of 256 KiB; 308 with Range: bytes=0-n until the
+// last, then the file), its status asked with Content-Range: bytes */N (308 with the Range so far, none before any byte; the
+// file once complete; 404 once expired), and alt=media read by Range: bytes=a-b (206 with Content-Range). expire() ends
+// sessions; cut(keep) keeps the first keep bytes of the next chunk and never answers it (a worker stopped mid-request). A
+// request without those headers is answered as before.
 'use strict';
 const { ERRORS } = require('../fixtures/drive/v3.js');
 
@@ -71,6 +77,8 @@ const standin = ({ tokens = null, owner = 'student@school.edu' } = {}) => {
   const log = [];
   const faults = [];
   const uploads = new Map();
+  const cuts = []; // { keep, match, done }: the next chunk that matches keeps keep bytes and hangs
+  const QUANTUM = 256 << 10;
   let seq = 1000, ids = 0, revs = 0, clock = Date.parse('2026-10-30T12:00:00.000Z');
   const valid = tokens || new Set(['tok-1', 'tok-2', 'tok-3', 'ya29.check-drive-token']);
   const time = () => new Date(clock += 1000).toISOString();
@@ -154,6 +162,14 @@ const standin = ({ tokens = null, owner = 'student@school.edu' } = {}) => {
     if ((m = /^\/drive\/v3\/files\/([\w-]+)$/.exec(u.pathname)) && method === 'GET') {
       const f = files.get(m[1]);
       if (!f || !f.app) return json(404, ERRORS[404]);
+      // A range of the bytes: 206 with where they sit in the whole; one past the end, 416.
+      const want = u.searchParams.get('alt') === 'media' && f.bytes && /^bytes=(\d+)-(\d+)$/.exec(h.range || '');
+      if (want) {
+        const from = Number(want[1]), to = Math.min(Number(want[2]), f.bytes.length - 1);
+        entry.range = { from, to: Number(want[2]) };
+        if (from > to) return json(416, { error: { code: 416, message: 'Request range not satisfiable' } }, { 'content-range': `bytes */${f.bytes.length}` });
+        return { status: 206, headers: { 'content-type': f.meta.mimeType, 'content-length': String(to - from + 1), 'content-range': `bytes ${from}-${to}/${f.bytes.length}` }, body: f.bytes.subarray(from, to + 1) };
+      }
       if (u.searchParams.get('alt') === 'media') return f.bytes ? { status: 200, headers: { 'content-type': f.meta.mimeType, 'content-length': String(f.bytes.length) }, body: f.bytes } : bad();
       return json(200, mask(view(f), fields(u)));
     }
@@ -193,11 +209,45 @@ const standin = ({ tokens = null, owner = 'student@school.edu' } = {}) => {
       if (kind === 'resumable' && (method === 'POST' || method === 'PATCH') && !u.searchParams.get('upload_id')) {
         let meta;
         try { meta = body.length ? JSON.parse(body.toString('utf8')) : {}; } catch { return bad(); }
-        const sid = `up${uploads.size + 1}x`;
+        let sid = `up${uploads.size + 1}x`;
+        for (let n = uploads.size + 2; uploads.has(sid); n++) sid = `up${n}x`; // a finished chunked session stays to answer its status
         uploads.set(sid, { id: m[1] || null, meta, type: h['x-upload-content-type'] || meta.mimeType, size: Number(h['x-upload-content-length']), fields: u.searchParams.get('fields') });
         const at = new URL(`https://www.googleapis.com/upload/drive/v3/files${m[1] ? `/${m[1]}` : ''}`);
         at.searchParams.set('uploadType', 'resumable'); at.searchParams.set('upload_id', sid);
         return { status: 200, headers: { location: at.href, 'access-control-expose-headers': 'location', 'content-length': '0' }, body: Buffer.alloc(0) };
+      }
+      // A session's chunk, or its status: Content-Range bytes a-b/N or bytes */N.
+      const range = kind === 'resumable' && method === 'PUT' && /^bytes (?:(\d+)-(\d+)|\*)\/(\d+)$/.exec(h['content-range'] || '');
+      if (range) {
+        const s = uploads.get(u.searchParams.get('upload_id'));
+        if (!s || s.expired) return json(404, ERRORS[404]);
+        s.got ||= [];
+        const have = s.got.reduce((n, b) => n + b.length, 0), total = Number(range[3]);
+        const answer = () => {
+          if (s.done) { const f = files.get(s.done); return f ? json(200, mask(view(f), s.fields ? parseFields(s.fields) : { id: true })) : json(404, ERRORS[404]); }
+          const n = s.got.reduce((m, b) => m + b.length, 0);
+          return { status: 308, headers: { ...(n && { range: `bytes=0-${n - 1}` }), 'content-length': '0' }, body: Buffer.alloc(0) };
+        };
+        if (range[1] === undefined) { entry.chunk = { status: true, total }; return answer(); }
+        const from = Number(range[1]), to = Number(range[2]);
+        entry.chunk = { from, to, total };
+        if (Number.isFinite(s.size) && s.size !== total) return bad('Size mismatch');
+        if (to - from + 1 !== body.length || from > have || to >= total || (to !== total - 1 && body.length % QUANTUM)) return bad('Invalid chunk');
+        if (s.done) return answer();
+        let part = body.subarray(have - from);
+        const c = cuts.findIndex((x) => !x.match || x.match(entry));
+        const cut = c >= 0 ? cuts.splice(c, 1)[0] : null;
+        if (cut) part = part.subarray(0, Math.max(0, cut.keep - (have - from)));
+        if (part.length) s.got.push(Buffer.from(part));
+        if (cut) { entry.cut = part.length; cut.done(); return { hang: true }; }
+        if (have + part.length < total) return answer();
+        const bytes = Buffer.concat(s.got);
+        entry.upload = { meta: s.meta, type: s.type, size: bytes.length, resumable: true, chunked: true };
+        const into = s.id ? files.get(s.id) : null;
+        if (s.id && !into) return json(404, ERRORS[404]);
+        if (into) update(into, s.meta, bytes); else s.done = make({ ...s.meta, mimeType: s.meta.mimeType || s.type }, bytes).meta.id;
+        s.done ||= s.id;
+        return answer();
       }
       if (kind === 'resumable' && method === 'PUT' && uploads.has(u.searchParams.get('upload_id'))) {
         const s = uploads.get(u.searchParams.get('upload_id'));
@@ -219,6 +269,7 @@ const standin = ({ tokens = null, owner = 'student@school.edu' } = {}) => {
     const body = init.body == null ? Buffer.alloc(0) : Buffer.from(typeof init.body === 'string' ? Buffer.from(init.body) : init.body instanceof Uint8Array ? init.body : Buffer.from(String(init.body)));
     const a = handle({ method: init.method || 'GET', url, headers, body });
     if (!a) throw new TypeError('Failed to fetch');
+    if (a.hang) return new Promise(() => {}); // cut(): the worker is gone before Drive answers
     return new Response(a.status === 204 || a.status === 304 ? null : a.body, { status: a.status, headers: a.headers });
   };
 
@@ -235,6 +286,11 @@ const standin = ({ tokens = null, owner = 'student@school.edu' } = {}) => {
     fail: (status, body, match = null, times = 1) => { for (let i = 0; i < times; i++) faults.push({ status, body, match }); },
     offline: (match = null, times = 1) => { for (let i = 0; i < times; i++) faults.push({ status: 0, match }); },
     clearFaults: () => { faults.length = 0; },
+    // Resumable sessions: expire(id) ends one (all without an id), as a week's wait does; cut(keep, match) has the next
+    // chunk that matches keep its first keep bytes and never answer, resolving once it has. sessions: what each holds.
+    expire: (sid = null) => { for (const [k, s] of uploads) if (!sid || k === sid) s.expired = true; },
+    cut: (keep = 0, match = null) => new Promise((done) => { cuts.push({ keep, match, done }); }),
+    sessions: uploads,
     byName: (name) => [...files.values()].filter((f) => f.meta.name === name),
     inFolder: (folder) => [...files.values()].filter((f) => f.meta.parents.includes(folder)),
     view: (id) => (files.has(id) ? view(files.get(id)) : null),

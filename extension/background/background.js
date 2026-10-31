@@ -3476,6 +3476,13 @@ const openDriveSync = () => {
     return out;
   };
   const safeTitle = (s) => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+  // A transfer larger than one request waits between workers in its own IndexedDB, glaze-drive, which only the worker opens:
+  // an upload's bytes and a download's so far (documents/drive-sync.js), opened the first time one needs it.
+  let stageDb = null;
+  const stage = () => {
+    if (!stageDb) { if (!globalThis.GZ_DOC_FILES) importScripts('../documents/doc-files.js'); stageDb = GZ_DOC_FILES.idb(globalThis.indexedDB, 'glaze-drive'); }
+    return stageDb;
+  };
   driveSync = GZ_DRIVE_SYNC.create({
     drive: (active) => GZ_DRIVE.create({ fetch: (u, init) => fetch(u, init), token: (o) => openGoogle().token(o), account: () => openGoogle().account(),
       drop: (token) => openGoogle().drop(token), allowed: async () => { await active(); return googleLib().ON; }, interactive: false }),
@@ -3524,6 +3531,15 @@ const openDriveSync = () => {
     pack: async (rec, parts) => { driveSyncSheets(); return GZ_SHEET_DATA.pack(GZ_SHEET_DATA.join(rec.book, driveSyncRows(parts))); },
     hash: async (text) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))].map((b) => b.toString(16).padStart(2, '0')).join(''),
     more: driveStore,
+    stage: { get: (k) => stage().get(k), keys: (p) => stage().keys(p), entries: (p) => stage().entries(p), write: (puts, dels) => stage().write(puts, dels) },
+    // Chrome stops a worker that waits 30 s for a fetch's answer or hears nothing for 30 s, Firefox one idle for 30 s: while
+    // transfers go, a cheap extension call every 25 s. Safari unloads it regardless; there the next run goes on instead.
+    alive: () => {
+      if (SAFARI) return null;
+      const ping = () => { Promise.resolve().then(() => chrome.runtime.getPlatformInfo()).catch(() => {}); };
+      const beat = setInterval(ping, 25000);
+      return () => clearInterval(beat);
+    },
     copyName: (title) => {
       try {
         if (!sessionWords) { if (typeof GZ_I18N === 'undefined') importScripts('../core/i18n.js'); sessionWords = GZ_I18N; }

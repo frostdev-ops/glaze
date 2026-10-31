@@ -382,6 +382,9 @@ const FAST_INTERVALS = [
   // Google Drive's files: a 15 s keep-alive to the service worker only while a page's open or save is under way (a 50 MB
   // upload outlasts the worker's 30 s idle stop); cleared when the request ends or its port closes.
   ['documents/drive.js', 'setInterval(beat, 15000)', 1, /\bclearInterval\s*\(\s*ping\s*\)/],
+  // Sync to Google Drive's transfers: a 25 s extension call (Chrome's and Firefox's idle stop is 30 s) only while the run's
+  // last step sends or brings a file larger than one request; cleared when it ends. Never on Safari.
+  ['background/background.js', 'setInterval(ping, 25000)', 1, /\bclearInterval\s*\(\s*beat\s*\)/],
 ];
 
 test('no setInterval fires faster than once a minute unless it is reviewed, and its clear is still there', () => {
