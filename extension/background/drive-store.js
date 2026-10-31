@@ -316,7 +316,12 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     const sub = async (ctx, tag, name) => {
       const st = (await S.get(STATE))[STATE] || {};
       const id = await L.sync().converge(ctx.D, { parent: ctx.folder, tag, name, mine: st[tag] || null, hide: tag === 'data' ? null : () => sub(ctx, 'data', 'Data') });
-      if (id !== st[tag]) await ctx.state({ [tag]: id });
+      if (id !== st[tag]) {
+        // Another Data than the one this device had (that one in Drive's trash, gone, or merged into another): every record
+        // goes over to it, unchanged ones too, before it is the Data on driveSync, so a run stopped midway does it again.
+        if (tag === 'data' && st.data) { ctx.data = id; await all(ctx); ctx.whole = true; }
+        await ctx.state({ [tag]: id });
+      }
       return id;
     };
 
@@ -450,7 +455,8 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         await (env.join || ((c, k, v) => join(c, k, v, env.area('local'), env.area('notes'))))(cat, key, got.value);
         return push(ctx, h, area, key, cat, { id: R.id }, now());
       }
-      if (!R || R.removed) { if (value !== undefined) await push(ctx, h, area, key, cat, { ...was, id: null }, at || now()); else await S.remove([REC + h, ...(was.id ? [FILE + was.id] : [])]); return; }
+      // Its file gone or in Drive's trash: put back from here, unchanged since it last synced with the time of that change.
+      if (!R || R.removed) { if (value !== undefined) await push(ctx, h, area, key, cat, { ...was, id: null }, at || (lsum === was.lsum && was.at) || now()); else await S.remove([REC + h, ...(was.id ? [FILE + was.id] : [])]); return; }
       const ldirty = lsum !== was.lsum, rdirty = R.appProperties?.sum !== was.rsum;
       if (!ldirty && !rdirty) { if (at > (was.seen || 0)) await put(h, { ...was, seen: at }, was); return; }
       if (rdirty) {
@@ -499,6 +505,11 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     // Everything, both sides.
     const full = async (ctx) => {
       ctx.data = await sub(ctx, 'data', 'Data');
+      if (!ctx.whole) await all(ctx);
+      await snapshot(ctx);
+    };
+    // Every record, both sides, in ctx.data.
+    const all = async (ctx) => {
       const remote = new Map();
       let page = null;
       do {
@@ -516,7 +527,6 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       }
       for (const [h, R] of [...remote].sort(([, a], [, b]) => (ORDER[a.appProperties?.cat] || 0) - (ORDER[b.appProperties?.cat] || 0))) if (!seen.has(h)) { seen.add(h); await each(ctx, h, { R }); }
       for (const k of (await S.keys()).filter((x) => x.startsWith(REC))) if (!seen.has(k.slice(REC.length))) await each(ctx, k.slice(REC.length), {});
-      await snapshot(ctx);
     };
     // A page of Drive's changes: the record files among them.
     const changes = async (list, ctx) => {
