@@ -1070,7 +1070,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   // Pages that do something as they load (a quiz attempt, a tool launched, a submission): never loaded ahead or again
   // unasked.
-  const acts = (path) => /\/(?:quizzes\/\d+\/take|external_tools|lti|sessionless_launch|submissions)(?:[/?#]|$)/.test(path);
+  const acts = (path) => /\/(?:quizzes\/\d+\/take|assessment\/_\d+_\d+\/attempt|external_tools|lti|sessionless_launch|submissions)(?:[/?#]|$)/.test(path);
   // A kept page is quiet as a page left behind: its media paused; embedded documents stay live, since a tool may hold
   // unsaved work we can't observe. After a moment it isn't drawn at all (no style, layout, paint or
   // animation frames, about half of what a hidden Canvas page costs while idle), its scroll noted to put back.
@@ -1287,23 +1287,33 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // (adopting). The next one boots at the next idle. A press on a course's tab, or the pointer resting on it, starts its
   // frame before the click shows it (warmTab).
   const STANDBY = 'standby', STANDBY_AT = '/ultra/profile', ADOPT_ACK = 2000, ADOPT_ROUTE = 5000;
-  let standby = null, standbyTimer = 0, standbyMiss = 0, hoverTimer = 0, hoverCid = '';
+  let standby = null, standbyTimer = 0, standbyIdle = 0, standbyMiss = 0, hoverTimer = 0, hoverCid = '';
   const ahead = () => ctx.site === 'ultra' && on && !preview && !signedOut && P().ahead !== false;
   // A tab with no live frame, other than this page's own course.
   const useful = () => tabs.some((x) => x.cid !== ctx.courseId() && !frames.has(x.cid));
   const unStandby = (miss = false) => { if (!standby) return; clearTimeout(standby.timer); standby.el.remove(); standby = null; if (miss) standbyMiss++; };
+  const stopAhead = () => {
+    clearTimeout(standbyTimer); standbyTimer = 0;
+    (globalThis.cancelIdleCallback || clearTimeout)(standbyIdle); standbyIdle = 0;
+    clearTimeout(hoverTimer); hoverTimer = 0; hoverCid = '';
+    unStandby();
+  };
   // From each sync. Booted once this page and every frame have settled, on screen; a spinner that never goes waits about
   // 20 s. One that went wrong (off Ultra, never ready, never routed) makes the next wait longer; after three, none.
   const standbyLater = (wait = 2500, tries = 0) => {
     if (standby && !standby.el.isConnected) standby = null; // (its host went with the tabs)
-    if (!ahead() || framed || !who) { unStandby(); return; }
-    if (standby || standbyTimer || standbyMiss >= 3 || !loaded || !useful()) return;
-    standbyTimer = setTimeout(() => (globalThis.requestIdleCallback || setTimeout)(() => {
+    if (!ahead()) { stopAhead(); return; }
+    if (framed || !who) { unStandby(); return; }
+    if (standby || standbyTimer || standbyIdle || standbyMiss >= 3 || !loaded || !useful()) return;
+    standbyTimer = setTimeout(() => {
       standbyTimer = 0;
-      if (standby || !ahead() || framed || !who || !useful()) return;
-      if (document.visibilityState !== 'visible' || (tries < 8 && (loading(document.body) || [...frames.values()].some((f) => !f.ready && !f.slow)))) return standbyLater(2500, tries + 1);
-      bootStandby();
-    }, { timeout: 5000 }), wait * 4 ** standbyMiss);
+      standbyIdle = (globalThis.requestIdleCallback || setTimeout)(() => {
+        standbyIdle = 0;
+        if (standby || !ahead() || framed || !who || !useful()) return;
+        if (document.visibilityState !== 'visible' || (tries < 8 && (loading(document.body) || [...frames.values()].some((f) => !f.ready && !f.slow)))) return standbyLater(2500, tries + 1);
+        bootStandby();
+      }, { timeout: 5000 });
+    }, wait * 4 ** standbyMiss);
   };
   const bootStandby = () => {
     hostIn();
@@ -1329,7 +1339,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const s = standby;
     clearTimeout(s.timer);
     standby = null;
-    if (!ahead() || !usable(s) || !L.owns(url.split(/[?#]/)[0], cid)) { s.el.remove(); standbyLater(); return null; }
+    if (!ahead() || !usable(s) || !L.owns(url.split(/[?#]/)[0], cid) || acts(url)) { s.el.remove(); standbyLater(); return null; }
     const el = s.el, doc = el.contentDocument;
     // Its name is what a later load of it boots as (content.js tabFrame).
     el.name = `gz-ctab:${cid}`;
@@ -1383,7 +1393,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (!ahead() || !L.validId(cid, ctx.site)) return;
     if (framed) { if (framed !== STANDBY && cid !== framed) toTop('warm', { cid }); return; }
     // Never past LIVE: only a click makes room.
-    if (!who || !tabs.some((x) => x.cid === cid) || cid === showing || frames.has(cid) || cid === ctx.courseId() || frames.size - frames.has(PAGE) >= LIVE) return;
+    if (!who || cid === showing || frames.has(cid) || cid === ctx.courseId() || frames.size - frames.has(PAGE) >= LIVE) return;
+    const x = tabs.find((x) => x.cid === cid);
+    if (!x || acts(L.target(x, P().place))) return;
     hostIn();
     open(cid);
   };
@@ -2032,7 +2044,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (cid && !preview && loaded && !showing) {
       if (cid !== last || !tabs.some((x) => x.cid === cid)) visitTab(cid);
       notePlace(cid);
-      if (framed && !restored) {
+      if (framed && !restored && atView()) {
         restored = true;
         const x = tabs.find((y) => y.cid === cid);
         if (P().place && x?.top && x.path === location.pathname + location.search) scrollBack(x.top);
@@ -2051,6 +2063,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (gone) return;
     if (signedOut) want = false;
     if (!want) {
+      stopAhead();
       nudge();
       html.removeAttribute('data-gz-ctabs');
       keepClear(null);
@@ -2134,6 +2147,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     try { if (chrome.runtime?.id) { e.preventDefault(); return; } } catch { /* reloaded */ }
     gone = true;
     ++showTurn;
+    stopAhead();
     nudge();
     removeEventListener(TAKE, letGo);
     clearTimeout(saveTimer); clearTimeout(capTimer); clearTimeout(sayTimer);

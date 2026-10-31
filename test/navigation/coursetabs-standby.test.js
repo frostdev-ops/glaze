@@ -44,7 +44,7 @@ const run = (over = {}) => {
     toTop: (op, m) => did.push(['toTop', op, structuredClone(m)]), open: (cid) => did.push(['open', cid]), send: () => Promise.resolve(null), revoke: () => did.push(['revoke']),
     ...over,
   });
-  const api = vm.runInContext(SECTION() + `
+  const api = vm.runInContext(part('  const acts = ', '  // A kept page') + SECTION() + `
 ;({ frameEl, ahead, standbyLater, bootStandby, usable, adopt, adopting, warmTab, pointed, onPoint, onAhead, adoptHere,
   get standby() { return standby; }, set standby(v) { standby = v; }, get miss() { return standbyMiss; } })`, c);
   return { c, api, timers, made, did, tick: (ms) => { now += ms; }, step: () => timers.shift()?.fn() };
@@ -191,6 +191,26 @@ test('in the standby, its Glaze becomes the course\'s frame, then routes there i
   assert.equal(routed.length, 1);
 });
 
+test('adoption restores a remembered scroll only after the destination view arrives', () => {
+  const url = '/ultra/courses/_2_1/document/_8_1', scrolls = [];
+  const p = run({ framed: 'standby', restored: false, under: '', awayFrom: '', lastPath: '/ultra/profile', last: '',
+    location: { origin, pathname: '/ultra/profile', search: '' },
+    tabs: [{ cid: '_2_1', path: url, top: 430 }], prefs: { ahead: true, place: true }, nativeReady: false,
+    here: () => '_2_1', observeView() {}, atView: () => p.c.nativeReady, notePlace() {}, visitTab() {},
+    flag() {}, place() {}, draw() {}, lay() {}, later() {}, moved() {}, scrollBack: (top) => scrolls.push(top),
+    window: {}, history: { replaceState: () => { p.c.location.pathname = url; } }, dispatchEvent() {}, PopStateEvent: class {} });
+  const pass = vm.runInContext(part('  const pass = ', '  let under = ') + '\npass;', p.c);
+  p.api.adoptHere('_2_1', url);
+  assert.equal(p.c.restored, false, 'the profile or an empty destination cannot consume restoration');
+  assert.deepEqual(scrolls, []);
+  p.c.nativeReady = true;
+  pass();
+  assert.equal(p.c.restored, true);
+  assert.deepEqual(scrolls, [430], 'the destination gets its saved scroll once it can hold it');
+  pass();
+  assert.deepEqual(scrolls, [430], 'restoration runs once');
+});
+
 test('the page hears the standby\'s Glaze (loaded, signed in) and the adopted frame\'s answer; nothing from elsewhere', () => {
   const p = run();
   const { el, win, doc, s } = standbyOf({ loaded: null, uid: '', accountDoc: null });
@@ -240,6 +260,33 @@ test('a press or a resting pointer on a course\'s tab starts its frame; never a 
   assert.deepEqual(st.did, [], 'the standby itself has no tabs to warm');
 });
 
+test('warming never opens a remembered assessment attempt or tool launch before a click', () => {
+  for (const tail of ['assessment/_8_1/attempt', 'assessment/_8_1/attempt/create', 'assessment/_8_1/attempt/_9_1',
+    'outline/assessment/_8_1/attempt/create?courseId=_2_1', 'outline/lti/launchFrame/_8_1', 'submissions/_8_1']) {
+    const p = run({ tabs: [{ cid: '_2_1', path: `/ultra/courses/_2_1/${tail}` }] });
+    p.api.warmTab('_2_1');
+    assert.deepEqual(p.did.filter(([k]) => k === 'open'), [], tail);
+  }
+  for (const tail of ['outline', 'document/_8_1', 'assessment/_8_1/overview']) {
+    const p = run({ tabs: [{ cid: '_2_1', path: `/ultra/courses/_2_1/${tail}` }] });
+    p.api.warmTab('_2_1');
+    assert.deepEqual(p.did.filter(([k]) => k === 'open'), [['open', '_2_1']], tail);
+  }
+  const p = run({ prefs: { place: false }, tabs: [{ cid: '_2_1', path: '/ultra/courses/_2_1/assessment/_8_1/attempt/create' }] });
+  p.api.warmTab('_2_1');
+  assert.deepEqual(p.did.filter(([k]) => k === 'open'), [['open', '_2_1']], 'without remembered places the outline can warm');
+});
+
+test('a clicked attempt or tool launch loads cold so adoption cannot replay it on a route timeout', () => {
+  for (const tail of ['assessment/_8_1/attempt/create', 'outline/lti/launchFrame/_8_1', 'submissions/_8_1']) {
+    const url = `/ultra/courses/_2_1/${tail}`, p = run();
+    const { s, el } = standbyOf();
+    p.api.standby = s;
+    assert.equal(p.api.adopt('_2_1', url, { cid: '_2_1' }), null, tail);
+    assert.equal(el.posted.length, 0, 'no in-place action followed by a possible automatic cold retry');
+  }
+});
+
 test('only a course tab\'s own button warms: the strip\'s tab or Glaze\'s bar\'s, never their pin or close', () => {
   class El {
     constructor(cls, data = {}, parent = null) { this.cls = cls; this.dataset = data; this.parent = parent; }
@@ -273,6 +320,9 @@ test('only a course tab\'s own button warms: the strip\'s tab or Glaze\'s bar\'s
   assert.deepEqual(q.did.filter(([k]) => k === 'open'), [], 'a touch (maybe a scroll), a script\'s press, another button');
   q.api.onPoint(ev('pointerdown', name));
   assert.deepEqual(q.did.filter(([k]) => k === 'open'), [['open', '_2_1']]);
+  const r = run({ Element: El, framed: '_1_1' });
+  r.api.onPoint(ev('pointerover', name)); r.api.standbyLater(); r.step();
+  assert.deepEqual(r.did.filter(([k]) => k === 'toTop'), [['toTop', 'warm', { cid: '_2_1' }]], 'a frame sync preserves its hover intent');
 });
 
 test('the standby boots at idle once the page has settled, only while a tab could use it, and goes when switched off', () => {
@@ -307,6 +357,26 @@ test('the standby boots at idle once the page has settled, only while a tab coul
   p.api.standbyLater();
   assert.equal(p.api.standby, null);
   assert.equal(el.removed, 1);
+});
+
+test('disabling course tabs releases the standby document and cancels pending preloads', () => {
+  const cancelled = [];
+  const p = run({
+    requestIdleCallback: () => 77, cancelIdleCallback: (id) => cancelled.push(id), clearTimeout: (id) => cancelled.push(id),
+    nudge() {}, html: { removeAttribute() {} }, keepClear() {}, measureRow() {}, listen() {}, capTimer: 0, sayTimer: 0,
+    saveNow() {}, strip: null, aside: null, sizes: null, sized: [], lastBar: null, unpicture() {}, clearSlow() {},
+    sessionStorage: { removeItem() {} }, snaps: new Map(), ctx: { site: 'ultra', courseId: () => '_1_1', scene() {} },
+    host: { remove() {} }, gone: false,
+  });
+  p.api.standbyLater(); p.step(); // waiting for idle
+  const { s, el } = standbyOf({ timer: 78 });
+  p.api.standby = s;
+  const sync = vm.runInContext(part('  const sync = ', '  const revoke = ') + '\nsync;', p.c);
+  sync(false);
+  assert.equal(p.api.standby, null, 'no reference retains the detached Ultra document');
+  assert.equal(el.removed, 1);
+  assert.ok(cancelled.includes(78), 'the standby timeout is cancelled');
+  assert.ok(cancelled.includes(77), 'the pending idle preload is cancelled');
 });
 
 test('the page hooks: listeners on Ultra only, a sync schedules the standby, and the bar\'s warm reaches Ultra', () => {
