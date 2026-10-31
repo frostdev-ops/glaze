@@ -944,7 +944,7 @@ const KNOWN = {
       { t: 'note', k: 'edit', d: 0, pick: 0.5276434142142534, pick2: 0.32105529750697315, s: 1516532219 }, { t: 'run', d: 0, how: 'timers', s: 614898878, after: 'driveSyncDoc:' }, { t: 'run', d: 0, how: 'run', s: 1595333163 }],
   },
   'staged-take-stop': {
-    fixed: false,
+    fixed: true,
     tiny: true,
     staged: true,
     devices: 3,
@@ -954,7 +954,7 @@ const KNOWN = {
     repro: [{ t: 'pdf', k: 'edit', d: 2, pick: 0.6396182728931308, pick2: 0.7343572643585503, s: 1870759343 }, { t: 'run', d: 2, how: 'timers', s: 963650092 }, { t: 'run', d: 0, how: 'poke', s: 1893922477, after: 'driveSyncDirty' }],
   },
   'staged-replay-lost': {
-    fixed: false,
+    fixed: true,
     tiny: true,
     staged: true,
     devices: 3,

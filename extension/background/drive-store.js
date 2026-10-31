@@ -612,7 +612,6 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     const each = async (ctx, h, x) => {
       try {
         await one(ctx, h, x);
-        await ctx.move?.settle?.(`r:${h}`);
         { const id = await idOf(h, x); if (id) await ctx.large?.(id, false); }
         // A note's pictures and attachments go up with it (each once).
         const r = await recOf(h);
@@ -624,7 +623,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
             const R = ctx.known?.get(fh);
             if (!await recOf(fh) || await valueOf('notes', k) === undefined) {
               // One too large to sync stays here, marked; the note and its other pictures go on.
-              try { await one(ctx, fh, { area: 'notes', key: k, need: r.key, ...(R && { R }) }); await ctx.move?.settle?.(`r:${fh}`); await ctx.large?.(`notes:${k}`, false); } catch (e) {
+              try { await one(ctx, fh, { area: 'notes', key: k, need: r.key, ...(R && { R }) }); await ctx.large?.(`notes:${k}`, false); } catch (e) {
                 if (e?.why !== 'large') throw e;
                 if (await valueOf('notes', k).catch(() => undefined) !== undefined) await ctx.large?.(`notes:${k}`, true);
                 continue;
