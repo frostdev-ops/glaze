@@ -443,12 +443,21 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // the copy goes up though its save's storage event was never heard.
     const keepOther = async (key, l, got) => {
       const apart = async () => {
-        const x = await env.hash(`copy:${await hk(key)}:${canon(body(key, { ...got.record, kind: got.kind }, got.parts))}`);
-        const k = `doc:${x.slice(0, 8)}-${x.slice(8, 12)}-4${x.slice(13, 16)}-${(8 | (parseInt(x[16], 16) & 3)).toString(16)}${x.slice(17, 20)}-${x.slice(20, 32)}`;
         const title = env.copyName(String(got.record.title || l?.rec.title || (got.kind === 'pdf' ? 'PDF' : '')));
-        await mark(k);
-        if (await env.papers.get(k)) return;
-        await env.papers.save(k, { ...got.record, title, named: true }, { reason: 'auto', ...(got.kind === 'sheet' && { parts: got.parts, changed: true }) });
+        const record = { ...got.record, title, named: true }, wanted = canon(body(key, record, got.parts));
+        let seed = `copy:${await hk(key)}:${canon(body(key, { ...got.record, kind: got.kind }, got.parts))}`;
+        for (;;) {
+          const x = await env.hash(seed);
+          const k = `doc:${x.slice(0, 8)}-${x.slice(8, 12)}-4${x.slice(13, 16)}-${(8 | (parseInt(x[16], 16) & 3)).toString(16)}${x.slice(17, 20)}-${x.slice(20, 32)}`;
+          await mark(k);
+          const rec = await env.papers.get(k);
+          if (!rec) { await env.papers.save(k, record, { reason: 'auto', expectedRevision: 0, ...(got.kind === 'sheet' && { parts: got.parts, changed: true }) }); return; }
+          const parts = kindOf(rec) === 'sheet' ? await env.parts(k, rec) : null;
+          if (canon(body(key, rec, parts)) === wanted) { if (P().trashed(rec)) await env.papers.untrash(k); return; }
+          // The student edited the saved copy after the stopped run. Keep those edits, and use another stable key for
+          // Drive's original side; an unchanged retry follows these same keys and never makes a duplicate.
+          seed = `copy:${x}:${canon(body(k, rec, parts))}`;
+        }
       };
       if (got.kind === 'pdf') return apart();
       try {
@@ -614,6 +623,14 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
 
       // A file let go as edited outside Glaze (below) whose mark didn't land, the run stopping between: marked now.
       if (d.keep) d = await tagKept(h, d);
+      // Follow a same-content copy's new file before weighing Trash or deletion: the old kept file is no longer this
+      // document's. Its change must not move the replacement into Trash, nor supply bytes for it.
+      if (R && !R.removed && R.appProperties?.sum === d.rsum && R.headRevisionId && R.headRevisionId !== d.jh) {
+        const j = await readCopy(R, h, key, owner);
+        const moved = !!j.file && (j.file !== d.file || (j.fileRev ?? null) !== (d.fh ?? null));
+        d = await putDoc(h, { ...d, jh: R.headRevisionId, ...(moved && { file: j.file, fh: j.fileRev ?? null, fsum: j.sum }) }, d);
+        if (moved) E = named?.id === d.file ? named : files?.get(d.file) || await meta(d.file);
+      }
       // Deleted for good in Drive, either file: into Trash here, the other file into Drive's trash. Its file deleted for good
       // while its copy came out of Drive's trash (in Trash on both sides before): restored wins, with a file of its own again.
       if (E?.removed && R && !R.removed && R.trashed === false && d.trashed === true) { d = await putDoc(h, { ...d, file: null, fh: null, fsum: null }, d); E = undefined; }
@@ -659,15 +676,6 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
 
       // Content.
       const ldirty = await dirty(key, l, d), rdirty = R.appProperties?.sum !== d.rsum;
-      // Drive's copy written again with the content last agreed (another device sent this document again: into a new file
-      // of its own after keeping one edited outside Glaze, or as a new revision of the same file): the file and revision it
-      // names are the document's now, so neither is taken for an edit outside Glaze, nor left beside a second one.
-      if (!rdirty && R.headRevisionId && R.headRevisionId !== d.jh) {
-        const j = await readCopy(R, h, key, owner);
-        const moved = !!j.file && (j.file !== d.file || (j.fileRev ?? null) !== (d.fh ?? null));
-        d = await putDoc(h, { ...d, jh: R.headRevisionId, ...(moved && { file: j.file, fh: j.fileRev ?? null, fsum: j.sum }) }, d);
-        if (moved && named?.id === d.file) E = named;
-      }
       let force = !d.file;
       if (d.file && !E && ldirty) E = await meta(d.file);
       if (E?.removed) { await env.papers.trash(key); await trashTo(d.json, true); await putDoc(h, { ...d, file: null, fh: null, trashed: true }, d); return; }
@@ -685,6 +693,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         }
         // A .docx or .xlsx edited outside Glaze stays as it is; the document gets a file of its own again.
         // Detach durably before any more Drive writes: a failed upload or stopped worker must never reuse this id.
+        // Once marked kept, its change no longer names a Glaze file. Retain a local retry before detaching so a lost
+        // answer (or stopped worker) cannot leave the document without a file and no change left to repair it.
+        await mark(key);
         d = await tagKept(h, await putDoc(h, { ...d, file: null, fh: null, fsum: null, keep: d.file }, d));
         force = true;
       } else if (E && !E.removed && E.id === d.file && E.appProperties?.glaze !== 'file') {
@@ -822,7 +833,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         for (const f of r.files) own.set(f.id, f);
         page = r.nextPageToken || null;
       } while (page);
-      const E = (d) => (d?.file && own.get(d.file)) || undefined;
+      // A missing list entry may be search lag or a permanent deletion: ask for the linked file before taking a new token.
+      const E = async (d) => d?.file ? own.get(d.file) || await meta(d.file) : undefined;
       const seen = new Set(), waiting = new Set();
       for (const row of await env.papers.list()) {
         if (!syncable(row.key) || !KINDS.includes(row.kind || 'paper')) continue;
@@ -830,11 +842,11 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         seen.add(h);
         const d = await docOf(h);
         const R = remote.get(h) || null;
-        if (await one(row.key, h, { R: R || (d?.json ? undefined : null), E: E(d), folder, files: own }) === 'pending') waiting.add(row.key);
+        if (await one(row.key, h, { R: R || (d?.json ? undefined : null), E: await E(d), folder, files: own }) === 'pending') waiting.add(row.key);
       }
       // One only Drive holds, in its trash and never linked here: nothing to meet (each device's own were met above).
-      for (const [h, R] of remote) if (!seen.has(h)) { seen.add(h); const d = await docOf(h); if (d || !R.trashed) await one(null, h, { R, E: E(d), folder, files: own }); }
-      for (const k of (await S.keys()).filter((x) => x.startsWith(DOC))) if (!seen.has(k.slice(DOC.length))) await one(null, k.slice(DOC.length), { E: E(await docOf(k.slice(DOC.length))), folder, files: own });
+      for (const [h, R] of remote) if (!seen.has(h)) { seen.add(h); const d = await docOf(h); if (d || !R.trashed) await one(null, h, { R, E: await E(d), folder, files: own }); }
+      for (const k of (await S.keys()).filter((x) => x.startsWith(DOC))) if (!seen.has(k.slice(DOC.length))) await one(null, k.slice(DOC.length), { E: await E(await docOf(k.slice(DOC.length))), folder, files: own });
       for (const [k, n] of Object.entries(dirt)) if (!waiting.has(k)) await unmark(k, n);
       if (more) await more.full(hooks(folder));
       await setState({ token, again: now() + WAIT.again });
