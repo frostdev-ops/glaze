@@ -130,7 +130,7 @@ function asideWatch() {
     Object.assign(row, { details: d ? Math.round(d.getBoundingClientRect().height) : null, held: document.documentElement.style.getPropertyValue('--gz-sb-held') && document.documentElement.hasAttribute('data-gz-sb-held') ? document.documentElement.style.getPropertyValue('--gz-sb-held') : null,
       host: d?.parentElement.getAttribute('data-gz-sidebar-host') ?? null });
     const a = d?.parentElement.checkVisibility({ visibilityProperty: true }) && d.parentElement.getBoundingClientRect();
-    if (a && a.width > 0 && a.height > 0) row.left = Math.round(a.left * 10) / 10;
+    if (a && a.width > 0 && a.height > 0) { row.left = Math.round(a.left * 10) / 10; row.top = Math.round(a.top * 10) / 10; }
     const key = JSON.stringify(row);
     if (key !== was && frames.length < 200) { was = key; frames.push({ t, ...row }); }
     frame = requestAnimationFrame(sample);
@@ -660,7 +660,7 @@ if (require.main === module) (async () => {
     }
     // PERF_REQUIRE_STILL_ASIDE (with PERF_WIDTH at least 1560, where the sidebar is the outline's right column, and
     // PERF_REPS at least 2): on a course seen before, Course notes and the dock never move while Ultra fills Details &
-    // Actions or when the sidebar takes the column, the column itself doesn't move sideways once drawn, and none of it
+    // Actions or when the sidebar takes the column, the column itself doesn't move once drawn, and none of it
     // takes part in a layout shift.
     if (stillAside) {
       assert.ok(WIDTH >= 1560 && reps >= 2, 'PERF_REQUIRE_STILL_ASIDE needs PERF_WIDTH >= 1560 and PERF_REPS >= 2');
@@ -682,6 +682,8 @@ if (require.main === module) (async () => {
         assert.deepEqual(moves, [], `rep ${r.rep}: Glaze's blocks moved while Ultra filled Details & Actions or the sidebar took the column`);
         const lefts = frames.map((f) => f.left).filter((x) => x != null);
         assert.ok(lefts.every((x) => x === lefts[0]), `rep ${r.rep}: the column moved sideways: ${JSON.stringify([...new Set(lefts)])}`);
+        const tops = frames.map((f) => f.top).filter((x) => x != null);
+        assert.ok(tops.every((x) => x === tops[0]), `rep ${r.rep}: the column moved vertically: ${JSON.stringify([...new Set(tops)])}`);
         assert.deepEqual(shifts, [], `rep ${r.rep}: Glaze's blocks took part in a layout shift`);
       }
     }

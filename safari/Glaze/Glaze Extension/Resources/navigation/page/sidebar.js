@@ -427,20 +427,24 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // Course notes (planner/page/notes.js) puts its block in a course outline's column above the dock, in the same pass of
   // the site's as the sidebar takes the column but at times a frame later (its script still loading). Until it is there,
   // at most a second and once per column, the dock isn't shown (html[data-gz-sb-notes]), so it never moves down for it.
-  let notesFor = null, notesTimer = 0;
+  let notesFor = null, notesTimer = 0, notesSeen = new WeakSet();
   const hasNotes = (col) => [...col.children].some((e) => e.id === 'gz-nt-block');
   const awaitNotes = () => {
     const h = html(), col = ultra && host && !host.own && has(host.el, 'outline-actions') ? host.el : null;
-    if (col && col !== notesFor) {
+    if (col !== notesFor) {
       notesFor = col;
       clearTimeout(notesTimer); notesTimer = 0;
-      if (ctx.settings().enhance?.notes && !hasNotes(col)) {
-        h.setAttribute('data-gz-sb-notes', '');
-        notesTimer = setTimeout(() => { notesTimer = 0; html()?.removeAttribute('data-gz-sb-notes'); }, 1000);
-        return;
+      h.removeAttribute('data-gz-sb-notes');
+      if (col && !notesSeen.has(col)) {
+        notesSeen.add(col);
+        if (ctx.settings().enhance?.notes && !hasNotes(col)) {
+          h.setAttribute('data-gz-sb-notes', '');
+          notesTimer = setTimeout(() => { notesTimer = 0; html()?.removeAttribute('data-gz-sb-notes'); }, 1000);
+          return;
+        }
       }
     }
-    if (h.hasAttribute('data-gz-sb-notes') && (!col || hasNotes(col))) { clearTimeout(notesTimer); notesTimer = 0; h.removeAttribute('data-gz-sb-notes'); }
+    if (h.hasAttribute('data-gz-sb-notes') && (!col || !ctx.settings().enhance?.notes || hasNotes(col))) { clearTimeout(notesTimer); notesTimer = 0; h.removeAttribute('data-gz-sb-notes'); }
   };
 
   // ---- Glaze's parts of the column -----------------------------------------------------------------------------------
@@ -1418,7 +1422,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     document.removeEventListener('animationend', peekEnd, true);
     clearTimeout(noteTimer);
     clearTimeout(retryTimer);
-    clearTimeout(notesTimer); notesTimer = 0; notesFor = null;
+    clearTimeout(notesTimer); notesTimer = 0; notesFor = null; notesSeen = new WeakSet();
     nativeView = null; route = '';
     asleep = false;
     bare();

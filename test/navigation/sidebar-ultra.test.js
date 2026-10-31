@@ -1059,6 +1059,44 @@ test("the dock in a course outline's column taken before Course notes is drawn w
   }
 });
 
+test('turning Course notes off releases its dock wait, including when Ultra replaces the column', async (t) => {
+  for (const replace of [false, true]) await t.test(`replacement ${replace}`, async () => {
+    const enhance = { notes: true };
+    const p = page({ aside: 'live', enhance, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+    const tick = heightTimers(p);
+    await p.pass();
+    assert.equal(p.doc.root.dataset.gzSbNotes, '', 'waiting for Course notes');
+    const dock = p.$('#gz-sb-widgets');
+    enhance.notes = false;
+    if (replace) p.host().replaceWith(routedOutline(p).aside);
+    await p.pass();
+    assert.equal(p.doc.root.dataset.gzSbNotes, undefined, `replacement ${replace}: no Course notes is coming`);
+    tick(2000);
+    await p.pass();
+    assert.equal(p.doc.root.dataset.gzSbNotes, undefined, 'no wait survives without its timer');
+    assert.equal(p.$('#gz-sb-widgets'), dock, 'the live dock is preserved');
+    assert.equal(p.mode(), 'expanded');
+  });
+});
+
+test('a course outline column waits for Course notes only once when Ultra reuses it', async () => {
+  const p = page({ aside: 'live', stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  const tick = heightTimers(p);
+  await p.pass();
+  const first = p.host();
+  tick(1000);
+  assert.equal(p.doc.root.dataset.gzSbNotes, undefined);
+  const next = routedOutline(p).aside;
+  first.replaceWith(next);
+  await p.pass();
+  assert.equal(p.doc.root.dataset.gzSbNotes, '', 'a new column gets its own wait');
+  tick(1000);
+  next.replaceWith(first);
+  await p.pass();
+  assert.equal(p.host(), first);
+  assert.equal(p.doc.root.dataset.gzSbNotes, undefined, 'the reused column already spent its one second');
+});
+
 test("Details & Actions drawn again on a route back into Content in a course tab is held from when Ultra draws it", async () => {
   const HELD = `detailsHeight:${O}`;
   const p = page({ at: 'outline', aside: 'live', stored: { ...record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }), [HELD]: { _101_1: 231 } } });
