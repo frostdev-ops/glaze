@@ -985,3 +985,50 @@ test('a Word file edited outside Glaze after another device\'s push is never ove
   assert.equal((await b.papers.versions(key)).filter((v) => v.reason === 'conflict').length, 1, 'A\'s side kept once');
   noDeletes(drive);
 });
+
+test('a losing copy whose move into Glaze/Data was cut short is moved on the next run, so the Glaze folder shows the document once', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  let listed;
+  const held = new Promise((r) => { listed = r; });
+  const text = (x) => (typeof x === 'string' ? x : Buffer.from(x || []).toString('latin1'));
+  const gateA = { ...drive, fetch: async (u, i = {}) => { if (u.includes('/upload/') && i.method === 'POST' && /"glaze":"(doc|file)"/.test(text(i.body))) await held; return drive.fetch(u, i); } };
+  const gateB = { ...drive, fetch: async (u, i) => { const r = await drive.fetch(u, i); if (u.includes('/drive/v3/files?') && decodeURIComponent(u).includes("value='doc'")) listed(); return r; } };
+  const a = device(gateA, { clock }), b = device(gateB, { clock });
+  const key = 'school.blackboard.com|_1_1|_2_1|_3_2';
+  await a.papers.save(key, { doc: doc('From A'), title: 'Essay', named: true });
+  clock.t += 1000;
+  await b.papers.save(key, { doc: doc('From B'), title: 'Essay', named: true });
+  const first = a.sync.set(true);
+  await new Promise((r) => setTimeout(r, 20));
+  await Promise.all([first, b.sync.set(true)]);
+  assert.equal([...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'doc').length, 2, 'two copies made');
+  // The first move of a losing copy into Glaze/Data never reaches Drive: that run stops there.
+  drive.offline((x) => x.method === 'PATCH' && !!x.query.addParents);
+  const runs = [];
+  for (let i = 0; i < 3; i++) for (const d of [a, b]) { clock.t = Math.max(clock.t, (await state(d)).wait || 0) + 1; runs.push((await d.sync.run()).why || 'ok'); }
+  assert.ok(runs.includes('network'), 'a run was cut short');
+  assert.equal(runs.at(-1), 'ok'); assert.equal(runs.at(-2), 'ok');
+  const root = glazeFolder(drive).meta.id, inRoot = [...drive.files.values()].filter((f) => f.meta.parents.includes(root) && f.meta.mimeType !== drive.FOLDER);
+  assert.deepEqual(inRoot.map((f) => f.meta.name).sort(), ['Essay.docx', 'Essay.glaze.json'], 'Essay.docx once');
+  assert.ok([...drive.files.values()].every((f) => !f.meta.explicitlyTrashed), 'nothing in Drive\'s trash');
+  noDeletes(drive);
+});
+
+test('an assignment\'s paper written here before its first push meets another device\'s copy of it in Drive\'s changes: both kept, nothing stuck', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  assert.ok((await a.sync.set(true)).ok); assert.ok((await b.sync.set(true)).ok);
+  const key = 'school.blackboard.com|_1_1|_2_1|_3_9';
+  // B writes the assignment's paper (its push not yet run: offline, or within its 5 s); A writes the same assignment's and syncs.
+  await b.papers.save(key, { doc: doc('B started it'), title: 'Essay', named: true });
+  await b.sync.touched(key);
+  clock.t += 1000;
+  await a.papers.save(key, { doc: doc('A started it'), title: 'Essay', named: true });
+  await a.sync.touched(key); await a.fire();
+  assert.ok((await b.sync.run()).ok, 'B\'s run meets A\'s copy among Drive\'s changes');
+  assert.equal(textOf((await b.papers.get(key)).doc), 'A started it', 'the later edited current');
+  const kept = await Promise.all((await b.papers.versions(key)).map((v) => b.papers.version(key, v.id)));
+  assert.ok(kept.some((v) => textOf(v.doc) === 'B started it'), 'B\'s own kept as a version');
+  assert.ok((await a.sync.run()).ok);
+  assert.equal(textOf((await a.papers.get(key)).doc), 'A started it');
+  noDeletes(drive);
+});
