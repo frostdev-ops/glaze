@@ -527,7 +527,8 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     for (const board of ['courses', 'dash', 'pages']) for (const x of base.boards[board]) x.on = false;
     const courseTile = 'section.gz-w[data-tile^="course:"]';
     for (const preset of ['Paper', 'Frost']) for (const width of [1280, 375]) {
-      await store(settingsFor(preset, { enhance: { ...G.GZ_DEFAULTS.enhance, notes: false, widgets: true, todo: false, cardTasks: true, overall: true, coursemenu: true, newgrades: true, newcontent: true } }), { ...notes, widgetLayout: base, ucards: {} });
+      // prefetch off: a card pointed at while it's added reads its course's contents ahead of time (courses/page/ahead.js), which isn't the mount.
+      await store(settingsFor(preset, { enhance: { ...G.GZ_DEFAULTS.enhance, notes: false, widgets: true, todo: false, cardTasks: true, overall: true, coursemenu: true, newgrades: true, newcontent: true, prefetch: false } }), { ...notes, widgetLayout: base, ucards: {} });
       await page.setViewportSize({ width, height: width < 768 ? 2400 : 1400 });
       await page.goto(`${O}/ultra/course`);
       await page.waitForSelector('#gz-toolbar .gz-dash-edit');
