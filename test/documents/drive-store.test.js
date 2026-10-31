@@ -1512,3 +1512,19 @@ test('a later change to the value Drive already holds still wins over an earlier
   await a.run(); await b.run(); await a.run();
   assert.equal(drive.log.filter((x) => x.upload).length, ups, 'settled');
 });
+
+test('a later change back to the synced value wins over an earlier change that reached Drive first', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  await b.settings.set({ enabled: true });
+  assert.ok((await b.on()).ok); assert.ok((await a.on()).ok);
+  clock.t += 1000; await b.settings.set({ enabled: false });
+  clock.t += 1000; await a.settings.set({ enabled: false });
+  clock.t += 1000; await a.settings.set({ enabled: true });
+  assert.ok((await b.run()).ok); // B's earlier change reaches Drive first
+  assert.ok((await a.run()).ok); assert.ok((await b.run()).ok);
+  for (const d of [a, b]) assert.equal((await d.settings.get('enabled')).enabled, true, 'A\'s later change back wins on both');
+  // Without a change of its own here, Drive's value is taken as ever.
+  clock.t += 1000; await b.settings.set({ enabled: false });
+  assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
+  assert.equal((await a.settings.get('enabled')).enabled, false);
+});
