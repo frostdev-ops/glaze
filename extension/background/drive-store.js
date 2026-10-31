@@ -178,8 +178,9 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
   const notesArea = ({ local, db, run, turn = (f) => f() }) => {
     const N = L.notes();
     const scope = (acct) => acct.slice('notesIdx:'.length);
-    // Notes' refusals of what came (too big, not one, more than it keeps, no room here) pass the record over; the rest are tried again.
-    const ok = (r) => { if (!r?.ok) throw new Fail(['big', 'bad', 'type', 'many', 'full'].includes(r?.error) ? 'bad' : 'stale'); return r; };
+    // Notes' refusals of what came (too big, not one, more than it keeps, no room here) and a note whose text this device can't
+    // find (which no retry brings back) pass the record over; the rest are tried again.
+    const ok = (r) => { if (!r?.ok) throw new Fail(['big', 'bad', 'type', 'many', 'full', 'missing'].includes(r?.error) ? 'bad' : 'stale'); return r; };
     const read = async (key) => {
       const m = NREC.exec(key);
       if (!m) return undefined;
