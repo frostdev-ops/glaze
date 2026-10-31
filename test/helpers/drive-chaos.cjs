@@ -611,7 +611,7 @@ const KNOWN = {
     about: 'a JSON copy\'s update Drive took whose answer never came, then the .docx edited outside Glaze: the next run lets the file go as kept, then links the paper to it again as both sides agreeing, so the paper has no file of its own in Glaze/',
     skips: () => false,
     stops: 'net.PATCH',
-    repro: [{ t: 'paper', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2 }, { t: 'paper', k: 'edit', d: 1, pick: 0, pick2: 0, s: 3 }, { t: 'run', d: 1, how: 'run', s: 4, kill: 72, apply: true }, { t: 'drive', k: 'outsideDocx', pick: 0, s: 5 }],
+    repro: [{ t: 'paper', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2 }, { t: 'paper', k: 'edit', d: 1, pick: 0, pick2: 0, s: 3 }, { t: 'run', d: 1, how: 'run', s: 4, kill: 73, apply: true }, { t: 'drive', k: 'outsideDocx', pick: 0, s: 5 }],
   },
   'restored-folder': {
     fixed: true,
@@ -631,7 +631,7 @@ const KNOWN = {
     about: 'a first push whose JSON copy Drive took but whose answer never came: the next run hears of that copy in Drive\'s changes but passes over it as another device\'s (none linked here yet), and while Drive\'s search lags makes a second one: two copies stay, and a device linked to the first never gets this one\'s later edits',
     skips: () => false,
     stops: 'net.POST',
-    repro: [{ t: 'lag', n: 3 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, kill: 126, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }],
+    repro: [{ t: 'lag', n: 3 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, kill: 143, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }],
   },
   'stale-sum': {
     fixed: true,
@@ -646,7 +646,7 @@ const KNOWN = {
     about: 'a first push whose JSON copy Drive took but whose answer never came, the document then taken and edited on another device: the first device links the copy as its own push and, holding its own older text as a change not yet sent, writes it over the other device\'s edit, which no device keeps',
     skips: () => false,
     stops: 'net.POST',
-    repro: [{ t: 'paper', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2, kill: 126, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }, { t: 'paper', k: 'edit', d: 0, pick: 0, pick2: 0, s: 4 }],
+    repro: [{ t: 'paper', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2, kill: 143, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }, { t: 'paper', k: 'edit', d: 0, pick: 0, pick2: 0, s: 4 }],
   },
   'meet-stop': {
     fixed: true,
@@ -711,7 +711,7 @@ const KNOWN = {
     about: 'a first push whose file upload Drive took but whose answer never came, that orphan then put in Drive\'s trash: the next push writes a second file, and the student restoring the first leaves two visible files for the document',
     skips: () => false,
     stops: 'net.POST',
-    repro: [{ t: 'slides', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, kill: 114, apply: true }, { t: 'drive', k: 'trashDoc', pick: 0, s: 3 }, { t: 'run', d: 0, how: 'run', s: 4 },
+    repro: [{ t: 'slides', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, kill: 129, apply: true }, { t: 'drive', k: 'trashDoc', pick: 0, s: 3 }, { t: 'run', d: 0, how: 'run', s: 4 },
       { t: 'drive', k: 'untrashDoc', pick: 0, s: 5 }],
   },
   'lag-duplicate': {
@@ -719,7 +719,7 @@ const KNOWN = {
     about: 'a first push whose file upload Drive took but whose answer never came, while Drive\'s search doesn\'t show it yet: the next push writes a second file, and both stay visible',
     skips: () => false,
     stops: 'net.POST',
-    repro: [{ t: 'lag', n: 6 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, kill: 112, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }],
+    repro: [{ t: 'lag', n: 6 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, kill: 127, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }],
   },
   'old-file-restored': {
     fixed: true,
