@@ -937,3 +937,30 @@ test('a device joining with its own later copy, its push refused, keeps the fold
   assert.equal(textOf(sidecarJson(drive, key).record.doc), 'C wrote this later');
   noDeletes(drive);
 });
+
+test('a Word file another device kept as edited outside Glaze is never overwritten by this one', async () => {
+  for (const late of [false, true]) {
+    const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+    const key = 'doc:00000000-0000-4000-8000-000000000821';
+    await a.papers.save(key, { doc: doc('Glaze text'), title: 'Essay', named: true });
+    assert.ok((await a.sync.set(true)).ok); assert.ok((await b.sync.set(true)).ok);
+    const word = exportOf(drive, key).meta.id;
+    drive.edit(word, enc('Edited in Word'));
+    // A sees the Word edit and keeps that file; late: its own new file and copy haven't gone up yet.
+    clock.t += 1000;
+    await a.papers.save(key, { doc: doc('A edits') });
+    await a.sync.touched(key);
+    if (late) drive.offline((x) => x.path.startsWith('/upload/'));
+    assert.equal((await a.sync.run()).ok, !late);
+    assert.equal(drive.files.get(word).meta.appProperties.glaze, 'kept');
+    // B, still naming that file as its document's, edits and syncs.
+    clock.t += 1000;
+    await b.papers.save(key, { doc: doc('B edits') });
+    await b.sync.touched(key);
+    assert.ok((await b.sync.run()).ok);
+    assert.equal(dec(drive.files.get(word).bytes), 'Edited in Word', `the Word edits stay as they are${late ? ' (A not yet up)' : ''}`);
+    assert.equal(drive.files.get(word).meta.appProperties.glaze, 'kept', 'and the file stays out of Glaze\'s hands');
+    assert.notEqual(sidecarJson(drive, key).file, word, 'the document names another file');
+    noDeletes(drive);
+  }
+});
