@@ -623,6 +623,7 @@ html[data-gz-bg="solid"] #site-wrap button[class*="makeStylesexpandTocButton-"] 
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent);
   backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.4); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
 }
+html[data-gz-bg="solid"] #site-wrap .bb-offcanvas-panel.full .panel-header.simple-header::before { backdrop-filter: none; }
 #site-wrap .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *), #site-wrap .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap { border-inline-start: 0 !important; box-shadow: none !important; }
 #site-wrap .reply-form, #site-wrap .new-comment, #site-wrap .bb-editor-root, #site-wrap .bb-editor-container, #site-wrap .editor-content-container, #site-wrap .ql-editor, #site-wrap .ql-container, #site-wrap .ql-toolbar, #site-wrap bb-message, #site-wrap .message-body, #site-wrap .comments { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; }
 #site-wrap .lti-placement__root { background: transparent !important; }
@@ -1142,7 +1143,6 @@ html[data-gz-bg="solid"] :where(content-page-header > header):is(content-page-he
 html[data-gz-bg="solid"] :is(#site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
 html[data-gz-bg="solid"] :where(#site-wrap .course-groups-header):is(#site-wrap .course-groups-header, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
 html[data-gz-bg="solid"] :where(#site-wrap .routed-page bb-panel-header > .panel-header.persistent-white-header):is(#site-wrap .routed-page bb-panel-header > .panel-header.persistent-white-header, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
-html[data-gz-bg="solid"] :is(#site-wrap .bb-offcanvas-panel.full .panel-header.simple-header::before),
 html[data-gz-bg="solid"] :where(#site-wrap .bbml-editor-parent > .bbml-editor):is(#site-wrap .bbml-editor-parent > .bbml-editor, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
 html[data-gz-bg="solid"] :where(bb-assignment-attempt-authoring-panel .MuiAccordion-root):is(bb-assignment-attempt-authoring-panel .MuiAccordion-root, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
 html[data-gz-bg="solid"] :where(#site-wrap .outline-action-block):is(#site-wrap .outline-action-block, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
