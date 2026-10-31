@@ -238,6 +238,92 @@ test('folders: per course, reorder, rename, and deleting one does what the stude
   assert.deepEqual(await w.run({ op: 'folderDel', id: id(11), notes: 'maybe' }), { ok: false, error: 'bad' });
 });
 
+// Sync to Google Drive merges notes and folders field by field (background/drive-store.js mergeNote, mergeFolders): Trash
+// carries its own time, and a folder deleted for good its tombstone.
+test('Trash has a time of its own: moving to Trash and back, with a folder or alone, each says when', async () => {
+  const w = world();
+  await w.run({ op: 'folder', id: id(10), name: 'Labs' });
+  await w.run({ op: 'save', id: id(1), base: 0, sid: 'a', html: '<p>1</p>', title: 'L1', folder: id(10), copy: id(90) });
+  await w.run({ op: 'save', id: id(2), base: 0, sid: 'b', html: '<p>2</p>', title: 'L2', copy: id(91) });
+  assert.equal(w.idx().notes[id(2)].ft.trash, undefined, 'never in Trash: no time');
+  const t1 = w.tick();
+  await w.run({ op: 'trash', ids: [id(2)] }, t1);
+  assert.equal(w.idx().notes[id(2)].ft.trash, t1);
+  const t2 = w.tick();
+  await w.run({ op: 'restore', ids: [id(2)] }, t2);
+  assert.equal(w.idx().notes[id(2)].ft.trash, t2, 'back from Trash: when');
+  const t3 = w.tick();
+  await w.run({ op: 'folderDel', id: id(10), notes: 'trash' }, t3);
+  assert.equal(w.idx().folders[id(10)].ft.trash, t3, 'a folder to Trash');
+  assert.equal(w.idx().notes[id(1)].ft.trash, t3, 'and its note with it');
+  const t4 = w.tick();
+  await w.run({ op: 'restore', ids: [id(10)] }, t4);
+  assert.equal(w.idx().folders[id(10)].ft.trash, t4);
+  assert.equal(w.idx().notes[id(1)].ft.trash, t4);
+  // A note restored alone while its folder stays in Trash goes to No folder, and says when it moved.
+  await w.run({ op: 'folderDel', id: id(10), notes: 'trash' }, w.tick());
+  const t5 = w.tick();
+  await w.run({ op: 'restore', ids: [id(1)] }, t5);
+  assert.equal(w.idx().notes[id(1)].folder, '');
+  assert.equal(w.idx().notes[id(1)].ft.folder, t5);
+  // An import's newer text bringing a note back from Trash says so too.
+  await w.run({ op: 'trash', ids: [id(2)] }, w.tick());
+  const t6 = w.tick();
+  await w.run({ op: 'import', notes: [{ id: id(2), title: 'L2', html: '<p>newer</p>', at: t6 }] }, t6);
+  assert.equal(w.idx().notes[id(2)].del, undefined);
+  assert.equal(w.idx().notes[id(2)].ft.trash, t6);
+});
+
+test('a folder deleted for good keeps a tombstone 30 days, and Sync\'s folders bring and keep tombstones', async () => {
+  const w = world();
+  await w.run({ op: 'folder', id: id(10), name: 'Labs' });
+  await w.run({ op: 'folder', id: id(11), name: 'Essays' });
+  await w.run({ op: 'folder', id: id(12), name: 'Quizzes' });
+  await w.run({ op: 'folderDel', id: id(10), notes: 'keep' }, w.tick());
+  const t = w.tick();
+  await w.run({ op: 'purge', ids: [id(10)] }, t);
+  assert.deepEqual(w.idx().fgone, { [id(10)]: t }, 'a folder deleted for good');
+  // Another device's folders, as Sync applies them: Essays deleted for good there; Labs' tombstone kept.
+  const fs = w.idx().folders;
+  const t2 = w.tick();
+  assert.ok((await w.run({ op: 'folders', folders: { [id(12)]: fs[id(12)] }, gone: { [id(10)]: t, [id(11)]: t2 } }, t2)).ok);
+  assert.deepEqual(Object.keys(w.idx().folders), [id(12)]);
+  assert.deepEqual(w.idx().fgone, { [id(10)]: t, [id(11)]: t2 });
+  assert.ok(w.idx().gone[id(11)], 'and gone here, so it can\'t be made again');
+  // A folder that comes back from another device is no longer a tombstone.
+  assert.ok((await w.run({ op: 'folders', folders: { [id(12)]: fs[id(12)], [id(11)]: fs[id(11)] }, gone: { [id(10)]: t } }, w.tick())).ok);
+  assert.ok(w.idx().folders[id(11)]);
+  assert.equal(w.idx().gone[id(11)], undefined);
+  assert.deepEqual(w.idx().fgone, { [id(10)]: t });
+  // 30 days on, the tombstone goes, as gone's do.
+  await w.run({ op: 'tidy' }, t + 31 * 864e5);
+  assert.equal(w.idx().fgone, undefined);
+  assert.equal(w.idx().gone[id(10)], undefined);
+  // An import bringing a folder back clears its tombstone.
+  const t3 = w.tick(40 * 864e5);
+  await w.run({ op: 'purge', ids: [id(12)] }, t3);
+  assert.equal(w.idx().fgone, undefined, 'only a folder in Trash is deleted for good');
+  await w.run({ op: 'folderDel', id: id(12), notes: 'keep' }, t3 + 1);
+  await w.run({ op: 'purge', ids: [id(12)] }, t3 + 2);
+  assert.ok(w.idx().fgone[id(12)]);
+  await w.run({ op: 'import', folders: [{ id: id(12), name: 'Quizzes' }], notes: [] }, t3 + 3);
+  assert.ok(w.idx().folders[id(12)]);
+  assert.equal(w.idx().fgone, undefined);
+});
+
+test('a received folder tombstone prevents recreation even when the folder was never here', async () => {
+  const w = world(), deleted = w.now;
+  assert.ok((await w.run({ op: 'folders', folders: {}, gone: { [id(10)]: deleted } })).ok);
+  assert.equal(w.idx().gone[id(10)], undefined, 'there was no local folder for folders to remove');
+  assert.deepEqual(await w.run({ op: 'folder', id: id(10), name: 'Stale rename' }, w.tick()), { ok: false, error: 'gone' });
+  assert.equal(w.idx().folders[id(10)], undefined);
+  assert.equal(w.idx().fgone[id(10)], deleted);
+  // An explicit import can still bring it back and clear the received tombstone.
+  assert.ok((await w.run({ op: 'import', folders: [{ id: id(10), name: 'Restored' }], notes: [] }, w.tick())).ok);
+  assert.equal(w.idx().fgone, undefined);
+  assert.equal(w.idx().folders[id(10)].name, 'Restored');
+});
+
 test('rename and move: each field is set only by a change made after its last one', async () => {
   const w = world();
   await w.run({ op: 'save', id: id(1), base: 0, sid: 'a', html: '<p>1</p>', title: 'First', copy: id(90) }, 100);

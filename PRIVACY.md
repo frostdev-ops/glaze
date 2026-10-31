@@ -450,8 +450,8 @@ Google Drive, including ones described below as on this device only or never syn
   tasks or page content for these cards; the existing badge, course and planner records still apply.
 - **Notes** (Canvas and Blackboard Ultra, the notes app; the Notes switch on for fresh installs unless a saved preference says otherwise, otherwise off by default), on this device only, per site and signed-in user id. The
   library's index is in `chrome.storage.local`: each note's title, folder, course (its id and the name the site showed),
-  when it was made and last changed, its first 140 characters for the list, and when it went to the trash; your folders'
-  names, courses and order. Each note's text and the pictures and attachments you add are in the extension's own
+  when it was made and last changed, its first 140 characters for the list, and when it went to the trash or came back;
+  your folders' names, courses and order, and when each went to the trash or came back. Each note's text and the pictures and attachments you add are in the extension's own
   IndexedDB, which only Glaze's background worker opens. Neither is in the school page's own storage (its
   `localStorage` or IndexedDB), so your school's Canvas pages can't read them. Notes opens, and its buttons, lists and
   menus act, only on your own clicks and key presses; clicks and keys the page's scripts fake are ignored, even on a
@@ -841,10 +841,12 @@ you import) are bundled. It makes requests in these cases:
       dictionary and saved sources, Gradescope's account (your name there and the hash of its email address), course
       placings and your answers about it (not the assignments read from
       Gradescope, which stay on the device that read them; a device signed in to another Gradescope account keeps its
-      own), and Notes: each account's folders, each note (its title,
-      folder, course, times, whether it is in Trash, and its text) and each picture or attachment. Each carries when it last
-      changed. When both sides changed one, the later change is kept; when a second device connects, its own records are
-      joined with the folder's as Restore joins a backup's (a note keeps the newer text), never replaced.
+      own), and Notes: each account's folders (with the ids of those deleted for good in the last 30 days, and when), each
+      note (its title, folder, course, times, whether it is in Trash, and its text) and each picture or attachment. Each
+      carries when it last changed. When both sides changed one, the later change is kept, for a note or Notes' folders
+      field by field (a rename on one device and an edit on another both stay); when a second device connects, its own
+      records are joined with the folder's as Restore joins a backup's (a note keeps the newer of each field), never
+      replaced.
     - in Glaze/Backups, once a day, a **Back up…** zip of Settings, tasks, records, Notes and documents, the newest five
       kept.
     - A file larger than one request (over 5 MB: a big PDF, the day's zip) goes in parts, each run sending or fetching the

@@ -368,6 +368,8 @@ const nid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const PNG = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000', 'hex');
 const noteOf = async (d, id) => { const r = await d.notesOp({ key: ACCT, op: 'load', id }); return r.ok ? r.html : null; };
 const idxOf = async (d) => N.clean((await d.local.get(ACCT))[ACCT]);
+// A note as Sync compares it: without this device's revision, excerpt and save id.
+const canonNote = (idx, id) => { const { rev, ex, sid, ...n } = idx.notes[id]; return ST.canon(n); };
 
 test('Gradescope: the student\'s placings and answers sync; what was read from Gradescope stays on its device', async () => {
   const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
@@ -1177,4 +1179,251 @@ test('two devices signed in to different Gradescope accounts each keep their own
   assert.ok((await a.run()).ok); assert.ok((await c.run()).ok); assert.ok((await b.run()).ok);
   assert.deepEqual(Object.keys((await mine(c)).map).sort(), ['111', '333'], 'the same account\'s placings reach it');
   await check(['111', '333']);
+});
+
+// ---- the chaos test's record findings (glaze-plans/release-4.0.1/drive-chaos-findings.md)
+
+// null-setting: storage.sync holds null for a palette that is the student's own (preset). Taken as "nothing to write",
+// the record stayed dirty: one device pushed a tombstone, the other null again, forever.
+test('a Settings value of null reaches the other device as null, and then nothing goes up on every run', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  clock.t += 1000;
+  await b.settings.set({ preset: null });
+  assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
+  assert.deepEqual(await a.settings.get('preset'), { preset: null }, 'A holds null, not nothing');
+  const n = drive.log.filter((x) => x.upload).length;
+  for (let i = 0; i < 3; i++) { clock.t += 60e3; assert.ok((await a.run()).ok); assert.ok((await b.run()).ok); }
+  assert.equal(drive.log.filter((x) => x.upload).length, n, 'settled: no record goes up again');
+  assert.deepEqual(await b.settings.get('preset'), { preset: null });
+  assert.equal(body(recFile(drive, 'sync', 'preset')).value, null);
+});
+
+// trashed-data: a record that didn't change after Glaze/Data went into Drive's trash never reached the new Data.
+test('Glaze/Data put in Drive\'s trash: records that don\'t change after go into the new Data with their own times, and a device joining later gets them', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock }), c = device(drive, { clock });
+  await a.local.set({ writerWords: ['One'] });
+  await a.settings.set({ colors: accent('#111111') });
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  const at = body(recFile(drive, 'sync', 'colors')).at;
+  drive.trash((await a.local.get(S.STATE))[S.STATE].data);
+  clock.t += 60e3;
+  assert.ok((await a.run()).ok);
+  const data = (await a.local.get(S.STATE))[S.STATE].data;
+  const live = (area, key) => [...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'rec' && f.meta.appProperties.key === sha(`${area}\n${key}`).slice(0, 32) && f.meta.parents.includes(data) && !drive.view(f.meta.id).trashed);
+  assert.equal(live('sync', 'colors').length, 1, 'the setting is in the new Data');
+  assert.equal(live('local', 'writerWords').length, 1, 'and the dictionary');
+  assert.equal(body(live('sync', 'colors')[0]).at, at, 'with the time it changed, not the time it went back');
+  assert.ok((await b.run()).ok);
+  assert.equal((await b.local.get(S.STATE))[S.STATE].data, data, 'B follows into the new Data');
+  assert.equal(live('sync', 'colors').length, 1, 'still one file for the setting');
+  assert.ok((await c.on()).ok);
+  assert.equal((await c.settings.get('colors')).colors['--gz-accent'], '#111111', 'a device joining later gets the setting');
+  assert.deepEqual((await c.local.get('writerWords')).writerWords, ['One'], 'and the dictionary');
+  noDeletes(drive);
+});
+
+// join-stamp: a first meeting's join went up stamped with the meeting's time, so it outranked a later change another device
+// hadn't pushed yet.
+test('a first meeting\'s joined record carries the time of the latest change it holds: a later change another device hadn\'t pushed still wins', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), c = device(drive, { clock });
+  await a.local.set({ [TODO]: todo('A1') });
+  assert.ok((await a.on()).ok);
+  const t0 = body(recFile(drive, 'local', TODO)).at;
+  clock.t += 60e3;
+  await a.local.set({ [TODO]: todo('A1', 'A2') }); // later, not pushed yet
+  const later = clock.t;
+  clock.t += 60e3;
+  await c.local.set({ [TODO]: todo('C1') });
+  assert.ok((await c.on()).ok); // a first meeting: C joins its list with the folder's
+  assert.deepEqual((await c.local.get(TODO))[TODO].tasks.map((t) => t.id).sort(), ['tA1', 'tC1'], 'C joined both');
+  assert.equal(body(recFile(drive, 'local', TODO)).at, t0, 'the join goes up with the latest time it holds, not the meeting\'s');
+  assert.ok(body(recFile(drive, 'local', TODO)).at < later);
+  assert.ok((await a.run()).ok); assert.ok((await c.run()).ok);
+  for (const d of [a, c]) assert.ok((await d.local.get(TODO))[TODO].tasks.some((t) => t.id === 'tA2'), 'A\'s later task is kept on both');
+});
+
+// A first meeting whose join changes nothing of Drive's: linked, not uploaded again under a later time.
+test('a first meeting whose join is Drive\'s own value links to it: nothing goes up', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), c = device(drive, { clock });
+  await a.local.set({ [TODO]: todo('A1', 'A2') });
+  assert.ok((await a.on()).ok);
+  const t0 = body(recFile(drive, 'local', TODO)).at;
+  clock.t += 60e3;
+  await c.local.set({ [TODO]: todo('A1') });
+  const ups = drive.log.filter((x) => x.upload?.meta?.appProperties?.cat === 'tasks').length;
+  assert.ok((await c.on()).ok);
+  assert.deepEqual((await c.local.get(TODO))[TODO].tasks.map((t) => t.id).sort(), ['tA1', 'tA2']);
+  assert.equal(drive.log.filter((x) => x.upload?.meta?.appProperties?.cat === 'tasks').length, ups, 'nothing went up');
+  assert.equal(body(recFile(drive, 'local', TODO)).at, t0);
+});
+
+test('a first meeting whose joined upload fails retains the joined time on retry', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), c = device(drive, { clock });
+  await a.local.set({ [TODO]: todo('A1') });
+  assert.ok((await a.on()).ok);
+  const originalAt = body(recFile(drive, 'local', TODO)).at;
+  clock.t += 60e3;
+  await a.local.set({ [TODO]: todo('A1', 'A2') }); // a later change, still waiting to go up
+  clock.t += 60e3;
+  await c.local.set({ [TODO]: todo('C1') });
+  drive.offline((x) => x.path.startsWith('/upload/'));
+  assert.equal((await c.on()).ok, false);
+  assert.deepEqual((await c.local.get(TODO))[TODO].tasks.map((t) => t.id).sort(), ['tA1', 'tC1'], 'the join landed locally');
+  assert.equal(await timeOf(c, 'local', TODO), originalAt, 'the pending join retains its provenance after the upload failed');
+  clock.t = (await c.local.get(S.STATE))[S.STATE].wait + 1;
+  assert.ok((await c.run()).ok);
+  assert.equal(body(recFile(drive, 'local', TODO)).at, originalAt, 'retry does not date the join at the meeting');
+  assert.ok((await a.run()).ok); assert.ok((await c.run()).ok);
+  for (const d of [a, c]) assert.ok((await d.local.get(TODO))[TODO].tasks.some((t) => t.id === 'tA2'), 'the later edit survives');
+});
+
+// ---- Notes, field by field (the owner's call, 2026-10-31): a note's text, title, folder, course and Trash each keep their
+// own latest change; an account's folders each by name, course, order and Trash, a folder added or deleted on one device
+// beside a rename on the other.
+test('Notes merge field by field: a rename and an edit on two devices both stay, and so do a move and an edit, Trash and a rename', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock }), id = nid(1), f = nid(900);
+  const rev = async (d) => (await idxOf(d)).notes[id].rev;
+  await a.notesOp({ key: ACCT, op: 'folder', id: f, name: 'Biology' });
+  await a.notesOp({ key: ACCT, op: 'save', id, base: 0, sid: 'a1', title: 'Original', html: '<p>Original</p>' });
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  const both = async (check) => { for (const d of [a, b]) await check((await idxOf(d)).notes[id], await noteOf(d, id), d === a ? 'A' : 'B'); };
+  // A renames, B edits the text later; A's goes up first.
+  clock.t += 1000; await a.notesOp({ key: ACCT, op: 'meta', id, title: 'Renamed on A' });
+  clock.t += 1000; await b.notesOp({ key: ACCT, op: 'save', id, base: await rev(b), sid: 'b1', html: '<p>Edited on B</p>' });
+  assert.ok((await a.run()).ok); assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
+  await both((n, html, d) => { assert.equal(n.title, 'Renamed on A', `${d} keeps A's rename`); assert.match(html, /Edited on B/, `${d} keeps B's text`); });
+  // B edits, A moves it later; B's goes up first.
+  clock.t += 1000; await b.notesOp({ key: ACCT, op: 'save', id, base: await rev(b), sid: 'b2', html: '<p>Edited again on B</p>' });
+  clock.t += 1000; await a.notesOp({ key: ACCT, op: 'meta', id, folder: f });
+  assert.ok((await b.run()).ok); assert.ok((await a.run()).ok); assert.ok((await b.run()).ok);
+  await both((n, html, d) => { assert.equal(n.folder, f, `${d} keeps A's move`); assert.match(html, /Edited again on B/, `${d} keeps B's text`); });
+  // A moves it to Trash, B renames it later.
+  clock.t += 1000; await a.notesOp({ key: ACCT, op: 'trash', ids: [id] });
+  clock.t += 1000; await b.notesOp({ key: ACCT, op: 'meta', id, title: 'Renamed on B' });
+  assert.ok((await a.run()).ok); assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
+  await both((n, html, d) => { assert.ok(n.del, `${d} keeps it in Trash`); assert.equal(n.title, 'Renamed on B', `${d} keeps B's rename`); });
+  // B restores it, A renames it later.
+  clock.t += 1000; await b.notesOp({ key: ACCT, op: 'restore', ids: [id] });
+  clock.t += 1000; await a.notesOp({ key: ACCT, op: 'meta', id, title: 'Renamed on A again' });
+  assert.ok((await a.run()).ok); assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
+  await both((n, html, d) => { assert.equal(n.del, undefined, `${d} has it back from Trash`); assert.equal(n.title, 'Renamed on A again', `${d} keeps A's rename`); });
+  // Both change the same field: the later change wins on both.
+  clock.t += 1000; await b.notesOp({ key: ACCT, op: 'meta', id, title: 'B earlier' });
+  clock.t += 1000; await a.notesOp({ key: ACCT, op: 'meta', id, title: 'A later' });
+  assert.ok((await b.run()).ok); assert.ok((await a.run()).ok); assert.ok((await b.run()).ok);
+  await both((n, html, d) => assert.equal(n.title, 'A later', `${d}: the later rename`));
+  // Settled: nothing more goes up.
+  const ups = drive.log.filter((x) => x.upload).length;
+  await a.run(); await b.run(); await a.run();
+  assert.equal(drive.log.filter((x) => x.upload).length, ups, 'no echo');
+  assert.equal(canonNote(await idxOf(a), id), canonNote(await idxOf(b), id), 'the same note on both');
+  noDeletes(drive);
+});
+
+test('Notes\' folders merge folder by folder: a rename on one device and a folder added, deleted or deleted for good on the other all stay', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const [f1, f2, f3, f4] = [nid(901), nid(902), nid(903), nid(904)];
+  for (const [f, name] of [[f1, 'One'], [f2, 'Two'], [f3, 'Three']]) await a.notesOp({ key: ACCT, op: 'folder', id: f, name });
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  const both = async (check) => { for (const d of [a, b]) await check((await idxOf(d)).folders, d === a ? 'A' : 'B'); };
+  // A renames one, B adds one later.
+  clock.t += 1000; await a.notesOp({ key: ACCT, op: 'folder', id: f1, name: 'One renamed' });
+  clock.t += 1000; await b.notesOp({ key: ACCT, op: 'folder', id: f4, name: 'Four' });
+  assert.ok((await a.run()).ok); assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
+  await both((fs, d) => { assert.equal(fs[f1].name, 'One renamed', `${d} keeps A's rename`); assert.equal(fs[f4]?.name, 'Four', `${d} keeps B's new folder`); });
+  // B deletes one (to Trash), A renames another later.
+  clock.t += 1000; await b.notesOp({ key: ACCT, op: 'folderDel', id: f2, notes: 'keep' });
+  clock.t += 1000; await a.notesOp({ key: ACCT, op: 'folder', id: f3, name: 'Three renamed' });
+  assert.ok((await b.run()).ok); assert.ok((await a.run()).ok); assert.ok((await b.run()).ok);
+  await both((fs, d) => { assert.ok(fs[f2].del, `${d} has B's deleted folder in Trash`); assert.equal(fs[f3].name, 'Three renamed', `${d} keeps A's rename`); });
+  // B deletes it for good, A renames another later.
+  clock.t += 1000; await b.notesOp({ key: ACCT, op: 'purge', ids: [f2] });
+  clock.t += 1000; await a.notesOp({ key: ACCT, op: 'folder', id: f1, name: 'One again' });
+  assert.ok((await b.run()).ok); assert.ok((await a.run()).ok); assert.ok((await b.run()).ok);
+  await both((fs, d) => { assert.equal(fs[f2], undefined, `${d}: B's folder deleted for good stays gone`); assert.equal(fs[f1].name, 'One again', `${d} keeps A's rename`); });
+  // A restores nothing it never had: the folder deleted for good can't be made again here.
+  assert.deepEqual(await a.notesOp({ key: ACCT, op: 'folder', id: f2, name: 'Back?' }), { ok: false, error: 'gone' });
+  const ups = drive.log.filter((x) => x.upload).length;
+  await a.run(); await b.run(); await a.run();
+  assert.equal(drive.log.filter((x) => x.upload).length, ups, 'no echo');
+  assert.equal(ST.canon((await idxOf(a)).folders), ST.canon((await idxOf(b)).folders), 'the same folders on both');
+  noDeletes(drive);
+});
+
+// Notes synced before field-by-field merging: a note in Trash with no time of its own for it. Nothing settled flips, and
+// nothing goes up again for it.
+test('Notes synced before field-by-field merging stay as they are: no upload, Trash kept, and later changes still merge', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock }), id = nid(1), f = nid(900);
+  await a.notesOp({ key: ACCT, op: 'folder', id: f, name: 'Biology' });
+  await a.notesOp({ key: ACCT, op: 'save', id, base: 0, sid: 'a1', title: 'Old', html: '<p>Old</p>', folder: f });
+  // As an older Glaze left them: Trash with only its time, no field time for it; a folder in Trash likewise.
+  const raw = (await a.local.get(ACCT))[ACCT];
+  raw.notes[id].del = clock.t; delete raw.notes[id].ft.trash;
+  raw.folders[f].del = clock.t; delete raw.folders[f].ft.trash;
+  await a.local.set({ [ACCT]: raw });
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  const ups = drive.log.filter((x) => x.upload).length;
+  for (let i = 0; i < 2; i++) { clock.t += 60e3; await a.run(); await b.run(); }
+  assert.equal(drive.log.filter((x) => x.upload).length, ups, 'nothing goes up again');
+  assert.equal((await idxOf(b)).notes[id].ft.trash, undefined, 'no field time made up for it');
+  clock.t += 1000; await a.notesOp({ key: ACCT, op: 'meta', id, title: 'Renamed on A' });
+  clock.t += 1000; await b.notesOp({ key: ACCT, op: 'save', id: nid(2), base: 0, sid: 'b0', html: '<p>Other</p>', title: 'Other' });
+  clock.t += 1000; await b.notesOp({ key: ACCT, op: 'meta', id, course: '42' });
+  assert.ok((await a.run()).ok); assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
+  for (const d of [a, b]) {
+    const n = (await idxOf(d)).notes[id];
+    assert.ok(n.del, 'still in Trash');
+    assert.equal(n.title, 'Renamed on A');
+    assert.equal(n.course, '42');
+    assert.ok((await idxOf(d)).folders[f].del, 'the folder still in Trash');
+  }
+});
+
+test('the merge of two notes or two accounts\' folders is the same whichever side it runs on', () => {
+  const note = (o) => ({ note: { title: 'T', folder: '', course: '', cn: '', created: 1, at: 10, ft: { title: 10, folder: 10, course: 10 }, ...o }, html: o.html ?? '<p>x</p>' });
+  const x = note({ title: 'A', at: 30, html: '<p>a</p>', ft: { title: 20, folder: 10, course: 10, trash: 25 }, del: 25 });
+  const y = note({ title: 'B', at: 20, html: '<p>b</p>', ft: { title: 30, folder: 40, course: 10 }, folder: nid(900) });
+  const m = ST.mergeNote(x, y);
+  assert.deepEqual(ST.mergeNote(y, x), m, 'commutative');
+  assert.equal(m.html, '<p>a</p>', 'the later text');
+  assert.equal(m.note.at, 30);
+  assert.equal(m.note.title, 'B', 'the later title');
+  assert.equal(m.note.folder, nid(900), 'the later move');
+  assert.equal(m.note.del, 25, 'Trash, timed later than the other side\'s none');
+  assert.deepEqual(m.note.ft, { title: 30, folder: 40, course: 10, trash: 25 });
+  // Same time, different values: both sides pick the same one.
+  const p = note({ title: 'P', ft: { title: 50, folder: 10, course: 10 } }), q = note({ title: 'Q', ft: { title: 50, folder: 10, course: 10 } });
+  assert.deepEqual(ST.mergeNote(p, q), ST.mergeNote(q, p));
+  // A field neither side timed (older Notes): each side's record time decides it, as whole records did.
+  const r = note({ title: 'R', ft: { title: 0, folder: 0, course: 0 } }), s = note({ title: 'S', ft: { title: 0, folder: 0, course: 0 } });
+  assert.equal(ST.mergeNote(r, s, { here: 5, there: 9 }).note.title, 'S');
+  assert.equal(ST.mergeNote(r, s, { here: 9, there: 5 }).note.title, 'R');
+  // Folders: each by its fields; one deleted for good goes unless changed after; a first meeting never drops a folder.
+  const fo = (o) => ({ name: 'F', course: '', cn: '', order: 0, created: 1, ft: { name: 1, course: 1, order: 1 }, ...o });
+  const [f1, f2, f3, f4] = [nid(901), nid(902), nid(903), nid(904)];
+  const h = { folders: { [f1]: fo({ name: 'One renamed', ft: { name: 20, course: 1, order: 1 } }), [f2]: fo({ name: 'Two' }), [f3]: fo({ name: 'Three', ft: { name: 40, course: 1, order: 1 } }) } };
+  const t = { folders: { [f1]: fo({ name: 'One' }), [f4]: fo({ name: 'Four', created: 30 }) }, gone: { [f2]: 25, [f3]: 30 } };
+  const mf = ST.mergeFolders(h, t);
+  assert.deepEqual(ST.mergeFolders(t, h), mf, 'commutative');
+  assert.deepEqual(Object.keys(mf.folders).sort(), [f1, f3, f4], 'Two deleted for good; Three renamed after its deletion stays; Four added');
+  assert.equal(mf.folders[f1].name, 'One renamed');
+  assert.deepEqual(mf.gone, { [f2]: 25 });
+  assert.deepEqual(Object.keys(ST.mergeFolders(h, t, {}, true).folders).sort(), [f1, f2, f3, f4], 'a first meeting keeps every folder');
+});
+
+test('equal legacy and explicit Trash times merge identically in either direction', () => {
+  const note = { note: { title: 'T', folder: '', course: '', cn: '', created: 1, at: 10, ft: { title: 10, folder: 10, course: 10 }, del: 25 }, html: '<p>T</p>' };
+  const timed = structuredClone(note);
+  timed.note.ft.trash = 25;
+  const merged = ST.mergeNote(note, timed);
+  assert.deepEqual(merged, ST.mergeNote(timed, note));
+  assert.equal(merged.note.ft.trash, 25, 'retain an explicit time already present on either side');
+  assert.deepEqual(ST.mergeNote(merged, merged), merged, 'idempotent');
+  assert.equal(ST.mergeNote(note, note).note.ft.trash, undefined, 'legacy shape stays unchanged');
+
+  const folder = { name: 'F', course: '', cn: '', order: 0, created: 1, ft: { name: 10, course: 10, order: 10 }, del: 25 };
+  const a = { folders: { [nid(900)]: folder } }, b = structuredClone(a);
+  b.folders[nid(900)].ft.trash = 25;
+  assert.deepEqual(ST.mergeFolders(a, b), ST.mergeFolders(b, a));
 });
