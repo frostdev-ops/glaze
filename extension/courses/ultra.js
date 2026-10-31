@@ -809,7 +809,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
   if (typeof globalThis.document?.addEventListener === 'function') {
     let away = 0, shown = true;
     const visibility = () => {
-      const yes = document.visibilityState !== 'hidden' && !document.documentElement.hasAttribute('data-gz-ctab-framed');
+      const yes = document.visibilityState !== 'hidden' && !document.documentElement?.hasAttribute('data-gz-ctab-framed');
       if (!yes && shown) away = Date.now();
       if (yes && !shown && Date.now() - away >= BOOK_TTL) page.invalidate({ identity: true });
       shown = yes;
