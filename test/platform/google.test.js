@@ -182,6 +182,58 @@ test('Chrome with another manifest client (a dev copy) uses the web flow; a brow
   noToken(edge);
 });
 
+// Least privilege (owner, 2026-10-31): without include_granted_scopes a web-flow token carries Drive's scopes alone, so the
+// one that reaches the Picker page can't reach Calendar or anything else Glaze's project was ever granted.
+test('every sign-in asks for Drive\'s three scopes alone, never include_granted_scopes: Connect, silent renewal and the Picker\'s token', async () => {
+  const u = new URL(G.authUrl(REAL, { redirect: REDIRECT, state: 's', prompt: 'none', hint: 'a@b.edu' }));
+  assert.deepEqual([...u.searchParams.keys()].sort(), ['client_id', 'login_hint', 'prompt', 'redirect_uri', 'response_type', 'scope', 'state']);
+  for (const firefox of [false, true]) {
+    const h = harness({ flow: 'web', firefox });
+    await h.g.connect();
+    h.tick(3600 * 1000);
+    await h.g.token();
+    h.tick(3600 * 1000);
+    assert.equal((await h.g.pick()).ok, true);
+    const signins = h.log.launch.filter((d) => new URL(d.url).origin === 'https://accounts.google.com');
+    assert.deepEqual(signins.map((d) => new URL(d.url).searchParams.get('prompt')), ['select_account', 'none', 'none'], `firefox ${firefox}`);
+    for (const d of signins) {
+      const q = new URL(d.url).searchParams;
+      assert.equal(q.get('scope'), `${DRIVE} openid email`);
+      assert.equal(q.has('include_granted_scopes'), false, `firefox ${firefox}: ${d.url}`);
+    }
+  }
+  const c = harness();
+  await c.g.connect();
+  await c.g.token();
+  assert.equal((await c.g.pick()).ok, true);
+  assert.ok(c.log.auth.length >= 3);
+  for (const d of c.log.auth) assert.deepEqual(d.scopes, C.scopes, 'Chrome: getAuthToken for the three scopes, each time');
+});
+
+// A Chromium with no Google account signed in to the browser (or browser sign-in turned off) can't answer getAuthToken.
+test('Chrome without a Google account in the browser: Connect takes the web flow instead, and says why when it can\'t', async () => {
+  for (const fail of ['The user is not signed in.', 'The user turned off browser signin']) {
+    const h = harness();
+    h.identity.fail = fail;
+    assert.deepEqual(await h.g.connect(), { ok: true, email: 'student@school.edu' }, fail);
+    assert.deepEqual([h.log.auth.length, h.log.launch.length, h.local.google.flow], [1, 1, 'web'], fail);
+    assert.equal(new URL(h.log.launch[0].url).searchParams.get('prompt'), 'select_account');
+    assert.equal(await h.g.token(), 'web-tok-1', 'later requests use the web flow');
+    assert.equal(h.log.auth.length, 1);
+    noToken(h);
+  }
+  // The student closing Chrome's own consent is a cancel, never a second sign-in behind it.
+  const no = harness();
+  no.identity.fail = 'The user did not approve access.';
+  assert.deepEqual(await no.g.connect(), { ok: false, why: 'cancel' });
+  assert.equal(no.log.launch.length, 0);
+  // A build with no web client: a reason Settings can say, not silence.
+  const only = harness({ config: { ...REAL, web: 'PLACEHOLDER-web.apps.googleusercontent.com' } });
+  only.identity.fail = 'The user is not signed in.';
+  assert.deepEqual(await only.g.connect(), { ok: false, why: 'signin' });
+  assert.deepEqual(only.local, {});
+});
+
 test('web flow: the implicit flow with the Web client, its state checked, the token only in memory', async () => {
   const h = harness({ flow: 'web' });
   assert.deepEqual(await h.g.connect(), { ok: true, email: 'student@school.edu' });
@@ -192,7 +244,7 @@ test('web flow: the implicit flow with the Web client, its state checked, the to
   const u = new URL(d.url);
   assert.equal(`${u.origin}${u.pathname}`, G.AUTH);
   assert.deepEqual(Object.fromEntries([...u.searchParams].filter(([k]) => k !== 'state')), {
-    client_id: REAL.web, response_type: 'token', redirect_uri: REDIRECT, scope: `${DRIVE} openid email`, include_granted_scopes: 'true', prompt: 'select_account',
+    client_id: REAL.web, response_type: 'token', redirect_uri: REDIRECT, scope: `${DRIVE} openid email`, prompt: 'select_account',
   });
   assert.match(u.searchParams.get('state'), /^[\w-]{43}$/);
   assert.equal(await h.g.token(), 'web-tok-1', 'held in this worker until it expires');
@@ -696,6 +748,15 @@ test('Settings: Disconnect says only that it disconnected, for Drive and Calenda
   const src = fs.readFileSync(path.join(__dirname, '../../extension/settings/options.js'), 'utf8');
   assert.doesNotMatch(src, /myaccount\.google\.com|revoked/);
   assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '../../extension/options.html'), 'utf8'), /asks Google to remove/);
+});
+
+test('Settings: a Connect Chrome could not sign in for says to sign in to the browser; a cancel says nothing', async () => {
+  const s = await settings({ email: null, connect: { ok: false, why: 'signin' } });
+  await s.click('#gdrive-connect');
+  assert.deepEqual(s.hints, [['Sign in to the browser with your Google account, then connect again.', true]]);
+  const c = await settings({ email: null, connect: { ok: false, why: 'cancel' } });
+  await c.click('#gdrive-connect');
+  assert.deepEqual(c.hints, [['', false]]);
 });
 
 test('Settings on Firefox: Connect goes straight to Google, never asking Firefox for identity (the package holds it; Firefox has no optional identity)', async () => {
