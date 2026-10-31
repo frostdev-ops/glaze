@@ -2,11 +2,11 @@
 // Google account, made by Glaze and the only one it touches, kept in step with what Export calendar (.ics) would save
 // (planner/calexport.js, with the same choices). Runs in the background worker (background/background.js 'glaze:gcal'), which gives
 // it Chrome's sign-in; node tests run it against a local mock of the API (scripts/gcal-mock.js).
-// Requests go only to www.googleapis.com (the Calendar API) and oauth2.googleapis.com (revoking the grant), never with
-// cookies, never following a redirect. Classic script; module.exports for node.
+// Requests go only to www.googleapis.com (the Calendar API), never with cookies, never following a redirect. Disconnect
+// never revokes Google's grant, which Google Drive shares (background/background.js). Classic script; module.exports for node.
 //
 // env: { fetch, token() → an access token from Chrome's cache (never a prompt), drop(token): Chrome forgets a token
-// Google refused, sleep(ms), api, revoke: the two addresses (tests point them at the mock), act(send) (optional): the
+// Google refused, sleep(ms), api: the address (tests point it at the mock), act(send) (optional): the
 // guard nearest each request, after the token: it reads what the run rests on, checks it, and only then calls send(),
 // which issues the request with nothing awaited in between (or it throws a Fail, stopped) }.
 var GZ_GCAL = globalThis.GZ_GCAL || (() => {
@@ -16,7 +16,6 @@ var GZ_GCAL = globalThis.GZ_GCAL || (() => {
   // either way: the sync needs Chrome's getAuthToken.
   const ON = true;
   const API = 'https://www.googleapis.com/calendar/v3';
-  const REVOKE = 'https://oauth2.googleapis.com/revoke';
   // The one scope: make secondary calendars, and see, change and delete events on those (S3 §2).
   const SCOPE = 'https://www.googleapis.com/auth/calendar.app.created';
   const CAL = /^[\w.+-]{1,200}@group\.calendar\.google\.com$/;
@@ -244,18 +243,10 @@ var GZ_GCAL = globalThis.GZ_GCAL || (() => {
     const { json } = await client(env)('GET', `/calendars/${encodeURIComponent(cal)}`);
     return { cal, owner: str(json?.dataOwner, 320) };
   };
-  // Disconnect: the calendar deleted if the student chose it (only its owner can), and the grant revoked, which removes
-  // every scope Google gave this project (S3 §5). The token goes in the body, never the address. → whether Google took it.
+  // Disconnect: the calendar deleted if the student chose it (only its owner can).
   const remove = (env, cal) => client(env)('DELETE', `/calendars/${encodeURIComponent(cal)}`, { ok: [404, 410] });
-  const revoke = async (env, token) => {
-    const r = await env.fetch(env.revoke || REVOKE, {
-      method: 'POST', credentials: 'omit', redirect: 'error', cache: 'no-store',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ token }).toString(),
-    }).catch(() => null);
-    return !!r?.ok;
-  };
 
-  return { ON, API, REVOKE, SCOPE, Fail, client, prep, fresh, sync, still, connect, code, link, remove, revoke };
+  return { ON, API, SCOPE, Fail, client, prep, fresh, sync, still, connect, code, link, remove };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_GCAL; else GZ_GCAL;

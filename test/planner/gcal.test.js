@@ -21,7 +21,7 @@ const EVENTS = [
 
 // The worker's env, pointed at the mock: no real waits (each is recorded), and a fetch that refuses anything else.
 const env = (mock, more = {}) => {
-  const e = { waits: [], dropped: [], sent: [], api: mock.api, revoke: mock.revoke, tok: 'tok-1' };
+  const e = { waits: [], dropped: [], sent: [], api: mock.api, tok: 'tok-1' };
   Object.assign(e, {
     fetch: (url, init) => {
       assert.ok(url.startsWith(`http://127.0.0.1:${mock.port}/`), `only the mock: ${url}`);
@@ -314,18 +314,17 @@ withMock('deletion history: discovering another deleted deadline does not evict 
   assert.equal(mock.live(cal).length, 0, 'the full deletion history survives a worker restart');
 });
 
-withMock('disconnect: the calendar deleted if asked, and the grant revoked with the token in the body, not the address', async (mock) => {
+// Disconnect is this device only (owner, 2026-10-31): Google's grant, which Drive shares, is never revoked.
+withMock('disconnect: the calendar deleted if asked; nothing can revoke the grant', async (mock) => {
   const e = env(mock);
   const { cal } = await G.connect(e);
   await run(e, cal, G.fresh());
   await G.remove(e, cal);
   assert.ok(!mock.calendars.has(cal));
   await G.remove(e, cal); // already gone: fine
-  assert.equal(await G.revoke(e, 'tok-1'), true);
-  assert.deepEqual(mock.revoked, ['tok-1']);
-  assert.ok(mock.log.at(-1)[1] === '/revoke', 'no token in the address');
-  assert.deepEqual([e.sent.at(-1).body, e.sent.at(-1).credentials, e.sent.at(-1).redirect], ['token=tok-1', 'omit', 'error']);
-  assert.equal(await G.revoke(e, 'tok-1'), false, 'an answer that is not ok says so');
+  assert.equal(G.revoke, undefined);
+  assert.doesNotMatch(read('planner/gcal.js'), /oauth2\.googleapis\.com\/revoke|REVOKE/);
+  assert.deepEqual(mock.revoked, []);
 });
 
 withMock('a big first fill goes in runs of 150, and says when there is more', async (mock) => {
@@ -350,7 +349,7 @@ test('what a page sends is checked: no uid, no times, an end before the start, o
 
 test('Google only: the addresses, the one scope, and the manifest\'s client asking for exactly it', () => {
   assert.equal(G.API, 'https://www.googleapis.com/calendar/v3');
-  assert.equal(G.REVOKE, 'https://oauth2.googleapis.com/revoke');
+  assert.equal(G.REVOKE, undefined);
   assert.equal(G.SCOPE, 'https://www.googleapis.com/auth/calendar.app.created');
   const m = require('../../extension/manifest.json');
   assert.deepEqual(m.oauth2.scopes, [G.SCOPE]);
@@ -410,8 +409,8 @@ const worker = (mock, { on = true, drive = false, local = {}, sync = { enabled: 
     setTimeout: (f, ms) => setTimeout(f, Math.min(ms, 1)), clearTimeout,
     fetch: (url, init) => {
       asked.push(url);
-      assert.ok(url.startsWith(`${G.API}/`) || url === G.REVOKE, `only Google's two addresses: ${url}`);
-      return fetch(url.replace(G.API, mock.api).replace(G.REVOKE, mock.revoke), init);
+      assert.ok(url.startsWith(`${G.API}/`), `only Google Calendar's address: ${url}`);
+      return fetch(url.replace(G.API, mock.api), init);
     },
     importScripts: (...files) => { for (const f of files) vm.runInContext(f === '../planner/gcal.js' ? switched(read(`background/${f}`), on) : f === 'google.js' ? switched(read(`background/${f}`), drive) : read(`background/${f}`), context); },
     chrome: {
@@ -478,7 +477,7 @@ withMock('worker: only the editor connects; a page syncs only its own site\'s ac
   assert.ok(w.asked.every((u) => u.startsWith('https://www.googleapis.com/') || u.startsWith('https://oauth2.googleapis.com/')));
 });
 
-withMock('worker: disconnect deletes the calendar when asked, revokes the grant, clears Chrome\'s tokens and every trace here; a run under way keeps nothing', async (mock) => {
+withMock('worker: disconnect deletes the calendar when asked, clears Chrome\'s tokens and every trace here, revokes nothing; a run under way keeps nothing', async (mock) => {
   const w = worker(mock);
   await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
   const cal = w.store.local.gcal.cal;
@@ -488,10 +487,10 @@ withMock('worker: disconnect deletes the calendar when asked, revokes the grant,
   while (!mock.log.some(([m, p]) => m === 'GET' && p.includes('/events'))) await settle(1);
   const bye = await w.send({ type: 'glaze:gcal', op: 'disconnect', drop: true }, EDITOR);
   assert.deepEqual(await running, { ok: false, error: 'stopped' });
-  assert.deepEqual(bye, { ok: true, revoked: true, had: true });
+  assert.deepEqual(bye, { ok: true });
   await settle();
   assert.ok(!mock.calendars.has(cal));
-  assert.deepEqual(mock.revoked, ['tok-1']);
+  assert.deepEqual(mock.revoked, []);
   assert.equal(w.identity.cleared, 1);
   assert.ok(!('gcal' in w.store.local) && !('gcalSync' in w.store.local));
   assert.ok(!w.registered().some((s) => s.id === 'gz-gcal'));
@@ -500,39 +499,43 @@ withMock('worker: disconnect deletes the calendar when asked, revokes the grant,
   await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
   mock.fail(5, 500);
   assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'disconnect', drop: true }, EDITOR), { ok: false, error: 'busy' });
-  assert.ok(w.store.local.gcal?.cal && mock.revoked.length === 1);
-  assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'disconnect' }, EDITOR), { ok: true, revoked: true, had: true });
+  assert.ok(w.store.local.gcal?.cal);
+  assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'disconnect' }, EDITOR), { ok: true });
+  assert.deepEqual(mock.revoked, []);
   assert.equal(mock.calendars.size, 1, 'kept, as chosen');
 });
 
-withMock('worker: Calendar\'s disconnect while Drive still holds the shared grant drops only Calendar\'s state: no revoke, Chrome\'s cache and identity stay', async (mock) => {
+withMock('worker: Calendar\'s disconnect while Drive is connected through Chrome drops only Calendar\'s state: Chrome\'s cache and identity stay', async (mock) => {
   const w = worker(mock, { drive: true }); // Drive in this build, connected through Chrome's own client as Calendar is
   await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
   const cal = w.store.local.gcal.cal;
   w.store.local.google = { email: 'student@school.edu', flow: 'chrome', at: NOW }; // Drive connected (background/google.js)
-  assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'disconnect', drop: true }, EDITOR), { ok: true, revoked: false, had: false, shared: true });
+  assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'disconnect', drop: true }, EDITOR), { ok: true });
   assert.ok(!mock.calendars.has(cal), 'the calendar still goes, as chosen');
   assert.deepEqual([mock.revoked, w.identity.cleared, w.identity.removed], [[], 0, []]);
   assert.ok(!('gcal' in w.store.local) && !('gcalSync' in w.store.local));
   assert.deepEqual(w.store.local.google, { email: 'student@school.edu', flow: 'chrome', at: NOW }, 'Drive\'s record stays');
 });
 
-withMock('worker: Calendar\'s and Drive\'s Disconnects at once, in either order: one of them is the last and cleans up, never both "shared"', async (mock) => {
+withMock('worker: Calendar\'s and Drive\'s Disconnects at once, in either order: the last one gives identity back, once', async (mock) => {
   for (const first of ['gcal', 'google']) {
     const w = worker(mock, { drive: true });
     mock.tokens.add('tok-1');
     await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
+    let removed = 0;
+    w.permissions.remove = async () => { removed++; return true; };
     w.store.local.google = { email: 'student@school.edu', sub: '1', flow: 'web', at: NOW }; // Drive connected too
     const cal = () => w.send({ type: 'glaze:gcal', op: 'disconnect' }, EDITOR), drive = () => w.send({ type: 'glaze:google', op: 'disconnect' }, EDITOR);
     const [c, d] = first === 'gcal' ? await Promise.all([cal(), drive()]) : (([x, y]) => [y, x])(await Promise.all([drive(), cal()]));
-    assert.ok(c.ok && d.ok, JSON.stringify([c, d]));
-    assert.ok(!(c.shared === true && d.had === false), `${first} first: one of them cleans up (${JSON.stringify([c, d])})`);
+    assert.deepEqual([c, d], [{ ok: true }, { ok: true }]);
+    assert.equal(removed, 1, `${first} first`);
+    assert.deepEqual(mock.revoked, []);
     assert.ok(!('gcal' in w.store.local) && !('google' in w.store.local));
   }
 });
 
 test('Calendar releases identity before replying so Settings cannot remove a later Drive connection permission', async () => {
-  const w = worker({ api: G.API, revoke: G.REVOKE }, { local: { gcal: { gen: 'g', cal: 'calendar', last: {} } } });
+  const w = worker({ api: G.API }, { local: { gcal: { gen: 'g', cal: 'calendar', last: {} } } });
   w.identity.getAuthToken = async () => { throw new Error('signed out'); };
   let permissionHeld = true, close, removed = 0;
   w.permissions.remove = async () => { removed++; permissionHeld = false; return true; };
@@ -665,7 +668,7 @@ withMock('review: Glaze turned off while the token is awaited: the run stops and
   assert.ok(!w.store.local.gcal.last[SITE_SRC], 'nor its own state');
 });
 
-withMock('review: syncs in flight and queued when Disconnect comes stop before it revokes, and nothing is written after', async (mock) => {
+withMock('review: syncs in flight and queued when Disconnect comes stop, and nothing is written after', async (mock) => {
   const w = worker(mock);
   await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
   const cal = w.store.local.gcal.cal;
@@ -679,7 +682,7 @@ withMock('review: syncs in flight and queued when Disconnect comes stop before i
   const bye = w.send({ type: 'glaze:gcal', op: 'disconnect' }, EDITOR);
   open();
   assert.deepEqual([await a, await b], [{ ok: false, error: 'stopped' }, { ok: false, error: 'stopped' }]);
-  assert.deepEqual(await bye, { ok: true, revoked: true, had: true });
+  assert.deepEqual(await bye, { ok: true });
   assert.deepEqual(eventWrites(mock), []);
   assert.equal(mock.live(cal).length, 0);
   assert.ok(!('gcal' in w.store.local) && !('gcalSync' in w.store.local));
@@ -891,37 +894,35 @@ withMock('review (B2 residual): a batch that doesn\'t say it was read whole dele
   assert.ok(!mock.log.some(([m]) => m === 'DELETE'));
 });
 
-withMock('worker: with Drive switched off in this build, Calendar\'s disconnect revokes its grant, whatever Drive record is left', async (mock) => {
+withMock('worker: with Drive switched off in this build, Calendar\'s disconnect clears Chrome\'s cache and gives identity back, whatever Drive record is left', async (mock) => {
   const w = worker(mock); // Drive's build switch off (background/google.js ON)
   await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
   let removed = 0;
   w.permissions.remove = async () => { removed++; return true; };
   w.store.local.google = { email: 'student@school.edu', sub: '1', flow: 'chrome', at: NOW }; // left by a build with Drive on
-  assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'disconnect' }, EDITOR), { ok: true, revoked: true, had: true });
-  assert.deepEqual([mock.revoked, w.identity.cleared, removed], [['tok-1'], 1, 1]);
+  assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'disconnect' }, EDITOR), { ok: true });
+  assert.deepEqual([mock.revoked, w.identity.cleared, removed], [[], 1, 1]);
 });
 
-withMock('worker: Drive connected through the web client holds a grant of its own: Calendar\'s disconnect revokes Calendar\'s and leaves identity to Drive', async (mock) => {
+withMock('worker: Drive connected through the web client: Calendar\'s disconnect clears Chrome\'s cache, revokes nothing and leaves identity to Drive', async (mock) => {
   const w = worker(mock, { drive: true });
   await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
   let removed = 0;
   w.permissions.remove = async () => { removed++; return true; };
   w.store.local.google = { email: 'student@school.edu', sub: '1', flow: 'web', at: NOW }; // Chrome's rare fallback (background/google.js)
-  const bye = await w.send({ type: 'glaze:gcal', op: 'disconnect' }, EDITOR);
-  assert.deepEqual([bye.ok, bye.revoked, bye.had], [true, true, true]);
-  assert.deepEqual([mock.revoked, w.identity.cleared], [['tok-1'], 1], 'Calendar\'s own grant revoked, Chrome\'s cache cleared');
+  assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'disconnect' }, EDITOR), { ok: true });
+  assert.deepEqual([mock.revoked, w.identity.cleared], [[], 1], 'Chrome\'s cache cleared: Drive\'s web sign-in doesn\'t use it');
   assert.equal(removed, 0, 'identity stays: Drive\'s web sign-in needs it');
   assert.deepEqual(w.store.local.google, { email: 'student@school.edu', sub: '1', flow: 'web', at: NOW }, 'Drive stays connected');
 });
 
-withMock('worker: Drive\'s disconnect through the web client goes through its own grant while Calendar keeps identity', async (mock) => {
+withMock('worker: Drive\'s disconnect through the web client leaves Calendar its identity, Chrome\'s cache and the grant', async (mock) => {
   const w = worker(mock, { drive: true });
   await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
   let removed = 0;
   w.permissions.remove = async () => { removed++; return true; };
   w.store.local.google = { email: 'student@school.edu', sub: '1', flow: 'web', at: NOW };
-  const bye = await w.send({ type: 'glaze:google', op: 'disconnect' }, EDITOR);
-  assert.equal(bye.had, true, 'not Calendar\'s grant: Drive\'s own is let go, not kept');
+  assert.deepEqual(await w.send({ type: 'glaze:google', op: 'disconnect' }, EDITOR), { ok: true });
   assert.equal(removed, 0, 'identity stays while Calendar is connected');
   assert.deepEqual([mock.revoked, w.identity.cleared], [[], 0], 'Calendar\'s grant and Chrome\'s cache untouched');
   assert.ok(!('google' in w.store.local) && w.store.local.gcal?.cal);

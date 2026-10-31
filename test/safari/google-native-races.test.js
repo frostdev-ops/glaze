@@ -21,12 +21,9 @@ final class Memory: GlazeGoogle.Vault, @unchecked Sendable {
 actor Google: GlazeGoogle.Transport {
     var sent: [[String: String]] = []
     var pending: [Int: CheckedContinuation<(Int, Data), Error>] = [:]
-    var holdRevokes = false
-    func suspendRevocation() { holdRevokes = true }
     func post(_ url: URL, form: [String: String]) async throws -> (Int, Data) {
         let index = sent.count
         sent.append(form.merging(["url": url.absoluteString]) { a, _ in a })
-        if url == GlazeGoogle.revokeURL && !holdRevokes { return (200, Data()) }
         return try await withCheckedThrowingContinuation { pending[index] = $0 }
     }
     func waitFor(_ n: Int) async { while sent.count < n { await Task.yield() } }
@@ -90,7 +87,7 @@ _ = try await fresh.value
 await transport.answer(0, grant("old"))
 let oldResult = await old.value
 let token = try await engine.token(profile: "p", sub: nil)
-emit(["old": oldResult, "token": token.token, "revokes": await transport.sent.filter { $0["url"] == G.revokeURL.absoluteString }.count])
+emit(["old": oldResult, "token": token.token, "revokes": await transport.sent.filter { $0["url"]?.hasSuffix("/revoke") == true }.count])
 `);
   assert.deepEqual(r, { old: 'signin', token: 'access-new', revokes: 0 });
 });
@@ -125,36 +122,18 @@ emit(["drop": dropped["ok"] as? Bool == true, "same": same.token, "next": next.t
   assert.deepEqual(r, { drop: true, same: 'access-held', next: 'access-fresh', refresh: 'refresh-new', oldProfile: 'access-old' });
 });
 
-test('Connect waits for an already dispatched revocation before starting a new authorization', { skip }, async () => {
+// Disconnect is this device only (owner, 2026-10-31): the refresh token is forgotten here, Google's grant kept.
+test('Disconnect sends nothing to Google, and a Connect right after it starts at once', { skip }, async () => {
   const r = await run(String.raw`
 _ = vault.write("refresh.p", try! JSONEncoder().encode(G.Engine.Saved(refresh: "refresh-old", sub: "student", email: "student@example.edu")))
-await transport.suspendRevocation()
-let disconnect = Task { await engine.disconnect(profile: "p") }
-await transport.waitFor(1)
-actor Progress {
-    var started = false, connected = false
-    func start() { started = true }
-    func connect() { connected = true }
-}
-let progress = Progress()
-let connect = Task {
-    await progress.start()
-    _ = try await engine.connect(profile: "p", hint: nil)
-    await progress.connect()
-}
-while !(await progress.started) { await Task.yield() }
-// Let the actor process Connect while the revocation response is deliberately held.
-try await Task.sleep(nanoseconds: 20_000_000)
-let before = await progress.connected
-await transport.answer(0, [:])
-_ = await disconnect.value
-try await connect.value
-emit(["beforeRevoked": before, "afterRevoked": await progress.connected])
+let d = await engine.disconnect(profile: "p")
+_ = try await engine.connect(profile: "p", hint: nil)
+emit(["had": d, "sent": await transport.sent.count, "left": vault.read("refresh.p") == nil])
 `);
-  assert.deepEqual(r, { beforeRevoked: false, afterRevoked: true });
+  assert.deepEqual(r, { had: true, sent: 0, left: true });
 });
 
-for (const early of [false, true]) test(`a disconnected profile cannot revoke a newer authorization in another profile: newer Connect ${early ? 'before' : 'after'} the old exchange`, { skip }, async () => {
+for (const early of [false, true]) test(`a disconnected profile's late exchange cannot touch a newer authorization in another profile: newer Connect ${early ? 'before' : 'after'} the old exchange`, { skip }, async () => {
   const r = await run(String.raw`
 let oldSignIn = try await start("old")
 ` + (early ? '_ = try await start("new")\n' : '') + String.raw`
@@ -171,7 +150,7 @@ _ = try await fresh.value
 await transport.answer(0, grant("old"))
 let result = await old.value
 let token = try await engine.token(profile: "new", sub: nil)
-emit(["old": result, "token": token.token, "revokes": await transport.sent.filter { $0["url"] == G.revokeURL.absoluteString }.count])
+emit(["old": result, "token": token.token, "revokes": await transport.sent.filter { $0["url"]?.hasSuffix("/revoke") == true }.count])
 `);
   assert.deepEqual(r, { old: 'signin', token: 'access-new', revokes: 0 });
 });

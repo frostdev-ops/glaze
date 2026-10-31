@@ -163,25 +163,27 @@ out["badHint"] = await ask(["type": "google.connect", "hint": "nope"])
 // Connected again, then disconnected.
 let c5 = G.signIn(from: URL(string: (await ask(["type": "google.connect"]))["open"] as! String)!)!
 _ = slot.put(c5.state, try! JSONSerialization.data(withJSONObject: ["url": G.redirect + "?state=\(c5.state)&code=4/z"]))
-google.answers = [(200, good.merging(["id_token": jwt(claims.merging(["exp": clock.t.timeIntervalSince1970 + 3600]) { _, b in b })]) { _, b in b }), (200, [:])]
+google.answers = [(200, good.merging(["id_token": jwt(claims.merging(["exp": clock.t.timeIntervalSince1970 + 3600]) { _, b in b })]) { _, b in b })]
 out["reconnected"] = await ask(["type": "google.finish"])
+let sentBefore = google.sent.count
 out["disconnect"] = await ask(["type": "google.disconnect"])
-out["revokeForm"] = google.sent.last!
+out["disconnectSent"] = google.sent.count - sentBefore
 out["vaultLeft"] = vault.items.count
 out["disconnectAgain"] = await ask(["type": "google.disconnect"])
-// Disconnect while Google answers: the late grant is dropped and revoked, the late refresh not held.
+// Disconnect while Google answers: the late grant is dropped, the late refresh not held.
 let c6 = G.signIn(from: URL(string: (await ask(["type": "google.connect"]))["open"] as! String)!)!
 _ = slot.put(c6.state, try! JSONSerialization.data(withJSONObject: ["url": G.redirect + "?state=\(c6.state)&code=4/late"]))
-google.answers = [(200, good.merging(["id_token": jwt(claims.merging(["exp": clock.t.timeIntervalSince1970 + 3600]) { _, b in b })]) { _, b in b }), (200, [:]), (200, [:])]
+google.answers = [(200, good.merging(["id_token": jwt(claims.merging(["exp": clock.t.timeIntervalSince1970 + 3600]) { _, b in b })]) { _, b in b })]
 google.during = { _ = await engine.disconnect(profile: p.uuidString) }
 out["lateFinish"] = await ask(["type": "google.finish"])
-out["lateRevoke"] = google.sent.last!
+out["lateVault"] = vault.items.count
 out["lateStatus"] = await ask(["type": "google.status"])
 _ = vault.write("refresh." + p.uuidString, try! JSONEncoder().encode(G.Engine.Saved(refresh: "1//s", sub: "1234567890", email: "student@example.edu")))
-google.answers = [(200, [:]), (200, ["access_token": "ya29.late", "token_type": "Bearer", "expires_in": 3599, "scope": G.drive])] // the revoke inside Disconnect answers first
+google.answers = [(200, ["access_token": "ya29.late", "token_type": "Bearer", "expires_in": 3599, "scope": G.drive])]
 google.during = { _ = await engine.disconnect(profile: p.uuidString) }
 out["lateToken"] = await ask(["type": "google.token"])
 out["lateTokenAfter"] = await ask(["type": "google.token"])
+out["revokes"] = google.sent.filter { $0["url"]?.hasSuffix("/revoke") == true }.count
 out["unknown"] = await ask(["type": "google.nope"])
 out["notOurs"] = G.Request(["type": "ai.status"], profile: nil) == nil
 let noGroup = G.Engine(vault: Memory(), slot: nil, transport: google)
@@ -276,16 +278,19 @@ test('sign-ins that fail: cancelled, another state, no Drive scope, a bad hint',
   assert.deepEqual(result.noDrive, { ok: false, why: 'scope' });
   assert.deepEqual(result.badHint, { ok: false, why: 'request' });
 });
-test('disconnect revokes with the refresh token and forgets everything', { skip }, () => {
+// Disconnect is this device only (owner, 2026-10-31): the refresh token is forgotten here, Google's grant kept.
+test('disconnect forgets everything on this device and sends Google nothing', { skip }, () => {
   assert.deepEqual(result.reconnected, { ok: true, email: 'student@example.edu', sub: '1234567890' });
-  assert.deepEqual(result.disconnect, { ok: true, revoked: true, had: true });
-  assert.deepEqual(result.revokeForm, { url: 'https://oauth2.googleapis.com/revoke', token: '1//r' });
+  assert.deepEqual(result.disconnect, { ok: true, had: true });
+  assert.equal(result.disconnectSent, 0);
   assert.equal(result.vaultLeft, 0);
-  assert.deepEqual(result.disconnectAgain, { ok: true, revoked: false, had: false });
+  assert.deepEqual(result.disconnectAgain, { ok: true, had: false });
+  assert.equal(result.revokes, 0, 'no revocation, ever');
+  assert.doesNotMatch(fs.readFileSync(nativeFile, 'utf8'), /oauth2\.googleapis\.com\/revoke|revokeURL/);
 });
-test('a Disconnect while Google answers wins: the late grant is revoked, the late token dropped', { skip }, () => {
+test('a Disconnect while Google answers wins: the late grant is dropped, the late token too', { skip }, () => {
   assert.deepEqual(result.lateFinish, { ok: false, why: 'signin' });
-  assert.deepEqual(result.lateRevoke, { url: 'https://oauth2.googleapis.com/revoke', token: '1//r' });
+  assert.equal(result.lateVault, 0, 'the late refresh token is never kept');
   assert.deepEqual(result.lateStatus, { ok: true, email: null, sub: null });
   assert.deepEqual(result.lateToken, { ok: false, why: 'signin' });
   assert.deepEqual(result.lateTokenAfter, { ok: false, why: 'signin' });

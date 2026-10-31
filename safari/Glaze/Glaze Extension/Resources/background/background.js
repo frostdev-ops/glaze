@@ -3164,7 +3164,7 @@ const gcalEnv = {
   drop: (token) => Promise.resolve().then(() => GZ_GCAL_AUTH.drop(token)).catch(() => {}),
 };
 // gcalEpoch: Disconnect moves it on as it arrives, so every sync already running or waiting in the queue stops at its
-// next step, before Disconnect revokes anything.
+// next step.
 let gcalQueue = Promise.resolve(), gcalStop = null, gcalEpoch = 0;
 // What a run rests on, by area. A change to any of them heard while a guard reads stops the run, even if the read was
 // served before the change: the guard nearest each side effect then acts on nothing older than what it has heard.
@@ -3174,8 +3174,8 @@ chrome.storage.onChanged.addListener((c, area) => {
   if (GCAL_WATCH[area]?.some((k) => k in c)) for (const run of gcalRuns) run.heard = true;
 });
 const gcalTurn = (f) => { const p = gcalQueue.then(f); gcalQueue = p.catch(() => {}); return p; };
-// Calendar and Drive share one Google grant (one client): their Connects and Disconnects take turns here, so each Disconnect
-// sees whether the other still holds the grant, and the last one revokes it and gives identity back.
+// Calendar and Drive share Google's identity permission: their Connects and Disconnects take turns here, so each Disconnect
+// sees whether the other is still connected, and the last one gives identity back. Neither revokes Google's grant.
 let grantQueue = Promise.resolve();
 const grantTurn = (f) => { const p = grantQueue.then(f); grantQueue = p.catch(() => {}); return p; };
 // The one permission the worker ever gives back: Google's identity API, once neither Calendar nor Drive holds it.
@@ -3195,29 +3195,21 @@ const gcalOps = {
     if (g?.cal) await chrome.storage.local.set({ gcal: { ...g, error: '' } });
     return { ok: !!g?.cal };
   },
-  // drop: also delete the Glaze calendar; if that fails, nothing changes. Then the grant is revoked, Chrome forgets its
-  // tokens and Glaze its state. → revoked: whether Google confirmed (false with no token to revoke: had). While Google Drive
-  // is connected (background/google.js) through Chrome's own client it holds the same grant, and a revocation would end its
-  // access too: only Calendar's state goes, and shared says so. Connected through the web client (Chrome's rare fallback),
-  // Drive's grant is its own: Calendar's is revoked, and identity stays for Drive. A build with Drive off has no Drive.
+  // This device only (owner, 2026-10-31): Google's grant, which Drive shares, is never revoked. drop: also delete the Glaze
+  // calendar; if that fails, nothing changes. Then Chrome forgets its tokens (unless Drive signs in through Chrome's own
+  // client, whose cache it shares), identity goes unless Drive (background/google.js) is connected here, and Glaze forgets
+  // Calendar's state. A build with Drive off has no Drive.
   disconnect: async (m) => {
     const g = await gcalState();
     if (m.drop === true && g?.cal) await GZ_GCAL.remove(gcalEnv, g.cal);
     const drive = (await chrome.storage.local.get('google')).google;
     const driveOn = typeof drive?.email === 'string' && googleLib().ON;
-    if (driveOn && drive.flow === 'chrome') {
-      await chrome.storage.local.remove(['gcal', 'gcalSync']);
-      serial(ensure);
-      return { ok: true, revoked: false, had: false, shared: true };
-    }
-    const token = await gcalEnv.token().catch(() => null);
-    const revoked = !!token && await GZ_GCAL.revoke(gcalEnv, token);
-    await Promise.resolve().then(() => GZ_GCAL_AUTH.clear()).catch(() => {});
+    if (!(driveOn && drive.flow === 'chrome')) await Promise.resolve().then(() => GZ_GCAL_AUTH.clear()).catch(() => {});
     // Release inside grantTurn, before another Connect can acquire identity. A delayed Settings reply owns no grant.
     if (!driveOn) await Promise.resolve().then(releaseIdentity).catch(() => {});
     await chrome.storage.local.remove(['gcal', 'gcalSync']);
     serial(ensure);
-    return { ok: true, revoked, had: !!token };
+    return { ok: true };
   },
   // epoch: gcalEpoch when the page's message arrived. A run goes on only while everything its events were composed under
   // still holds (planner/calexport.js consent: Glaze's switch, the export's choices, the Gradescope switch and this account's
@@ -3320,8 +3312,8 @@ const openGoogle = () => {
       native: (message) => chrome.runtime.sendNativeMessage(GZ_GOOGLE.APP, message),
       // iOS: the sign-in tab the student taps (the worker opens it, never a framed page).
       open: (url) => chrome.tabs.create({ url }),
-      // Calendar sync signs in with Chrome's own client: a Drive connection through it shares Calendar's grant and Chrome's
-      // cache, and while Calendar is connected Disconnect leaves both. One through the web client lets its own grant go.
+      // Calendar sync signs in with Chrome's own client: a Drive connection through it shares Chrome's cache and identity
+      // with Calendar, and while Calendar is connected Disconnect leaves both.
       keep: async () => await calendarOn() && (await chrome.storage.local.get('google')).google?.flow === 'chrome',
     });
   }

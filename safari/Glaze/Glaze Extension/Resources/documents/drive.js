@@ -1,8 +1,9 @@
 // Google Drive's files for Documents and Writer, with drive.file only: Glaze reaches the files it made and the ones the
 // student picks in Google's Picker (background/google.js pick), nothing else. Open from Drive brings a picked file in as its
 // kind's import does (a Google Doc, Sheet or Slides deck exported as .docx, .xlsx or .pptx); Save to Drive puts a
-// document's exported file in My Drive, or a paper as a Google Doc, and remembers it on the record (drive: { id, as }) so a
-// later save updates that file while it is still there, Glaze may edit it and it is still that type, else makes a new one.
+// document's exported file in My Drive, or a paper as a Google Doc, and remembers it on the record (drive: { id, as, rev, mod })
+// so a later save updates that file while it is still there, Glaze may edit it, it is still that type and nobody edited it
+// outside Glaze since, else makes a new one beside it.
 // The Drive v3 client (create) runs in the worker, where the token is (background/google.js token; its drop forgets one Drive refused):
 // requests carry no cookies, follow no redirect, skip the cache, and after a 401 ask once more with a fresh token. A file
 // larger than its kind opens (documents/doc-kinds.js max) is refused before its bytes come, by the metadata's size where Drive gives
@@ -22,7 +23,9 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
   const CHUNK = 384 << 10; // 512 KB as base64, as documents/doc-files.js sends (Safari's message size is the tightest)
   // What Glaze reads of a file (files.get's fields mask), and of one it saved.
   const META = 'id,name,mimeType,size,trashed,capabilities(canEdit,canDownload)';
-  const SAVED = 'id,name,mimeType';
+  const SAVED = 'id,name,mimeType,headRevisionId,modifiedTime';
+  // What Save reads of the file it saved last: META's, and what tells its own last write from an edit made outside Glaze.
+  const CHECK = `${META},headRevisionId,sha256Checksum,appProperties,modifiedTime`;
   // What Sync to Google Drive (documents/drive-sync.js) reads of a file: where it is, whether it is in Trash, Glaze's own properties on it,
   // its revisions (version: every change; headRevisionId: every new content) and its bytes' SHA-256 (sha256Checksum: absent
   // until Drive has one), checked against the one Glaze wrote on a file it may adopt.
@@ -146,9 +149,9 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
         throw new Fail(await reason(r));
       }
     };
-    const meta = async (id, signal = null) => {
+    const meta = async (id, signal = null, fields = META) => {
       if (typeof id !== 'string' || !ID.test(id)) throw new Fail('bad');
-      const m = await (await call(`${API}/${id}?${q({ fields: META, supportsAllDrives: 'true' })}`, { signal })).json().catch(() => null);
+      const m = await (await call(`${API}/${id}?${q({ fields, supportsAllDrives: 'true' })}`, { signal })).json().catch(() => null);
       if (!valid(m, id)) throw new Fail('bad');
       return m;
     };
@@ -210,10 +213,18 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
       const tail = enc.encode(`\r\n--${b}--`);
       return { type: `multipart/related; boundary=${b}`, body: join([head, bytes, tail], head.length + bytes.length + tail.length) };
     };
-    // A document's file into My Drive: as itself, or as a Google Doc (a paper's .docx, Drive converting it). id: the file
-    // saved last time, updated only once it is confirmed there, not in Trash, editable and still that type; one Drive no
-    // longer has or no longer lets Glaze change gives way to a new file (fresh). → { id, fresh }
-    const save = async ({ name, mime, bytes, as = 'file', id = null }) => {
+    // Whether file m, the one Save wrote last (rev: its headRevisionId then; mod: a Google Doc's modifiedTime then), was
+    // edited since outside Glaze. Sync's test (documents/drive-sync.js): another revision is Glaze's own only while Drive's
+    // checksum is the one Glaze tagged the file with (b: an answer that never came). A Google Doc has no revision or
+    // checksum of its own: any change since counts. Nothing recorded to tell counts too.
+    const mark = (v) => (typeof v === 'string' && v && v.length <= 256 ? v : null);
+    const edited = (m, rev, mod) => (m.mimeType === DOC ? !mod || m.modifiedTime !== mod
+      : !(rev && m.headRevisionId === rev) && !(typeof m.appProperties?.b === 'string' && typeof m.sha256Checksum === 'string' && m.sha256Checksum.toLowerCase() === m.appProperties.b));
+    // A document's file into My Drive: as itself (tagged with its bytes' SHA-256, b), or as a Google Doc (a paper's .docx,
+    // Drive converting it). id: the file saved last time, updated only once it is confirmed there, not in Trash, editable,
+    // still that type and not edited outside Glaze since; else a new file beside it (fresh): one edited outside Glaze is
+    // never overwritten. → { id, fresh, rev, mod }: what to remember for the next save's check.
+    const save = async ({ name, mime, bytes, as = 'file', id = null, rev = null, mod = null }) => {
       const K = kinds();
       if (typeof name !== 'string' || !name || name.length > 255 || typeof mime !== 'string' || !MIME.test(mime) || !(bytes instanceof Uint8Array) || !bytes.length
         || bytes.length > K.FILE || !['file', 'doc'].includes(as) || (as === 'doc' && mime !== K.KINDS.paper.mime) || (id != null && (typeof id !== 'string' || !ID.test(id)))) throw new Fail('bad');
@@ -221,14 +232,15 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
       let to = null;
       if (id) {
         try {
-          const m = await meta(id);
-          if (m.trashed !== true && m.capabilities?.canEdit !== false && m.mimeType === target) to = id;
+          const m = await meta(id, null, CHECK);
+          if (m.trashed !== true && m.capabilities?.canEdit !== false && m.mimeType === target && !edited(m, mark(rev), mark(mod))) to = id;
         } catch (e) { if (e.why !== 'missing' && e.why !== 'denied') throw e; }
       }
+      const tag = as === 'doc' ? null : { appProperties: { b: await digest(bytes) } };
       // Sync's upload (put): multipart up to SMALL, else resumable.
-      const j = await put({ id: to, meta: to ? {} : { name: as === 'doc' ? name.replace(/\.docx$/i, '') : name, mimeType: target }, mime, bytes, fields: SAVED, all: !!to });
+      const j = await put({ id: to, meta: { ...(!to && { name: as === 'doc' ? name.replace(/\.docx$/i, '') : name, mimeType: target }), ...tag }, mime, bytes, fields: SAVED, all: !!to });
       if (typeof j?.id !== 'string' || !ID.test(j.id) || (to && j.id !== to)) throw new Fail('bad');
-      return { id: j.id, fresh: !!id && !to };
+      return { id: j.id, fresh: !!id && !to, rev: mark(j.headRevisionId), mod: mark(j.modifiedTime) };
     };
     // ---- Sync to Google Drive's calls (documents/drive-sync.js): each → Drive's JSON answer, or bytes; Drive's errors as reasons (WHY).
     const json = async (r) => { const j = await r.json().catch(() => null); if (!j || typeof j !== 'object' || Array.isArray(j)) throw new Fail('bad'); return j; };
@@ -447,10 +459,10 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
         const current = await record.get(m.key);
         if (!current) throw new Fail('missing');
         await active();
-        const was = current.drive?.as === m.as && typeof current.drive.id === 'string' ? current.drive.id : null;
-        const r = await drive.save({ name: m.name, mime: m.mime, bytes: join(parts, got), as: m.as, id: was });
+        const was = current.drive?.as === m.as && typeof current.drive.id === 'string' ? current.drive : null;
+        const r = await drive.save({ name: m.name, mime: m.mime, bytes: join(parts, got), as: m.as, id: was?.id ?? null, rev: was?.rev ?? null, mod: was?.mod ?? null });
         // Saved even if the record can't take the id (deleted meanwhile): the next save makes a new file.
-        await Promise.resolve().then(() => record.set(m.key, { id: r.id, as: m.as })).catch(() => {});
+        await Promise.resolve().then(() => record.set(m.key, { id: r.id, as: m.as, ...(r.rev && { rev: r.rev }), ...(r.mod && { mod: r.mod }) })).catch(() => {});
         return { type: 'saved', id: r.id, fresh: r.fresh };
       });
     };
