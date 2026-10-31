@@ -118,7 +118,7 @@ var GZ_INSTANT_LIB = globalThis.GZ_INSTANT_LIB || (() => {
 
   // root's children as a copy: { nodes, full } (full: cut short at a bound). ctx: { origin, cdn, base }.
   const capture = (root, ctx) => {
-    let count = 0, bytes = 0, full = false;
+    let count = 0, bytes = 0, full = false, clipped = false;
     const text = (s) => {
       const t = String(s || '').replace(/\s+/g, ' ').slice(0, MAX_TEXT);
       if (!t) return null;
@@ -128,9 +128,12 @@ var GZ_INSTANT_LIB = globalThis.GZ_INSTANT_LIB || (() => {
     };
     const walk = (el, depth, svg, banner) => {
       const local = String(el.localName || el.tagName || '').toLowerCase();
-      if (!local || DROP.has(local) || depth > MAX_DEPTH) return null;
+      if (!local || DROP.has(local)) return null;
       const cls = String(el.getAttribute('class') || '').split(/\s+/).filter(Boolean);
       if (skipped(el, cls)) return null;
+      // Deeper than the bound, what's there is left out, its later siblings still in: cut short all the same. (A text past
+      // MAX_TEXT is clipped, and the page still whole.)
+      if (depth > MAX_DEPTH) { clipped = true; return null; }
       let tag;
       if (svg || local === 'svg') { if (!SVG_TAGS.has(local)) return null; tag = local; }
       else tag = TAGS.has(local) ? local : BLOCK.has(local) ? 'div' : 'span';
@@ -160,7 +163,7 @@ var GZ_INSTANT_LIB = globalThis.GZ_INSTANT_LIB || (() => {
     }
     // The estimate runs ahead of JSON's length; this is the bound.
     if (JSON.stringify(nodes).length > MAX_BYTES) return null;
-    return nodes.length ? { nodes, full } : null;
+    return nodes.length ? { nodes, full: full || clipped } : null;
   };
 
   // A stored copy for this student and page (and course), or null: right shape, this kind, student and course, not older

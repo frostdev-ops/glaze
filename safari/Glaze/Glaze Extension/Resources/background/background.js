@@ -1298,8 +1298,9 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     const old = Object.keys(index).sort((a, b) => (index[b] || 0) - (index[a] || 0)).slice(COURSE_COPIES);
     for (const k of old) delete index[k];
     if (old.length) await chrome.storage.local.remove(old);
-    await chrome.storage.local.set({ [key]: rec, [ik]: index });
-    return { ok: true };
+    const kept = Object.hasOwn(index, key);
+    await chrome.storage.local.set({ ...(kept && { [key]: rec }), [ik]: index });
+    return { ok: true, kept };
   }).then(reply, () => reply(null));
   return true;
 });

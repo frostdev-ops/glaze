@@ -16,7 +16,15 @@ var GZ_INSTANT = globalThis.GZ_INSTANT || (() => {
 
   const on = () => { const s = ctx.settings(); return !out && wanted && !!s?.enabled && !!s.enhance?.instant; };
   // Ultra's main area: on a course's page the course's own (its section is .bb-offcanvas-container, over the base page's).
-  const main = (x = v) => document.querySelector(x && L.COURSE.has(x.kind) ? 'main.course-main-content' : 'main.bb-offcanvas-container');
+  const main = (x = v) => {
+    if (!x || !L.COURSE.has(x.kind)) return document.querySelector('main.bb-offcanvas-container');
+    // The address can change before Ultra replaces the last course's view: its tools' links, when it has them, are this course's.
+    return [...document.querySelectorAll('main.course-main-content')].find((m) => {
+      const ids = [...m.querySelectorAll('.js-course-navigation a[href]')].filter((a) => !a.closest('#gz-instant'))
+        .map((a) => /\/ultra\/courses\/(_\d+_\d+)(?:\/|$)/.exec(a.getAttribute('href') || '')?.[1]).filter(Boolean);
+      return !ids.length || ids.includes(x.course);
+    }) || null;
+  };
   // In a course tab's frame (gz-ctab:<course>, never the standby's): its course's pages, painted only while the page around
   // has it as the frame on screen, still loading (picked). It says whether it has a copy up ('copy' on), as a visit starts
   // and whenever that page shows or hides it ('visible'); with one up, its page shows under the copy until then.

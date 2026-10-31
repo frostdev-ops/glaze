@@ -1392,7 +1392,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (frames.get(cid) !== f || f.adopting !== a) return;
       let d = null; try { d = f.el.contentDocument; } catch { /* another site */ }
       if (d !== a.doc || f.ready) { f.adopting = null; return; }
-      const routed = a.ok && L.owns(d.location.pathname, cid) && [d.querySelector('.bb-course-navigation'), d.querySelector('.routed-page')].some((e) => shown(e) && !a.before.includes(e));
+      // An instant copy hides the new native bar while Ultra fills its tool. That still proves the adoption routed.
+      const copied = f.copied === d && !!d.getElementById('gz-instant');
+      const routed = a.ok && L.owns(d.location.pathname, cid) && [d.querySelector('.bb-course-navigation'), d.querySelector('.routed-page')].some((e) => e && !e.closest?.('#gz-instant') && (shown(e) || copied) && !a.before.includes(e));
       const late = a.failed || performance.now() - a.at > (a.ok ? ADOPT_ROUTE : ADOPT_ACK);
       if (!routed && !late) { setTimeout(step, 50); return; }
       f.adopting = null;
