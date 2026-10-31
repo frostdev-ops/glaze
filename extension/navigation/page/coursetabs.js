@@ -1286,8 +1286,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // 0.4 s on a real site) instead of a fresh boot (about 1.1 s). It is no tab's and doesn't count against LIVE. Picked
   // (open), it becomes that course's frame (adopt): named for it, then routed in place by its own Glaze (adoptHere), in
   // place of its own page in history. With no route in time it loads the course afresh, as a frame made for it does
-  // (adopting). The next one boots at the next idle. Never adopted past STALE, it is renewed then, on screen. A press on
-  // a course's tab, or the pointer resting on it, starts its frame before the click shows it (warmTab).
+  // (adopting). The next one boots at the next idle. Never adopted past its limit (tabs.renew), it is renewed then, on
+  // screen. A press on a course's tab, or the pointer resting on it, starts its frame before the click shows it (warmTab).
   const STANDBY = 'standby', STANDBY_AT = '/ultra/profile', ADOPT_ACK = 2000, ADOPT_ROUTE = 5000;
   let standby = null, standbyTimer = 0, standbyIdle = 0, standbyMiss = 0, hoverTimer = 0, hoverCid = '';
   const ahead = () => ctx.site === 'ultra' && on && !preview && !signedOut && P().ahead !== false;
@@ -1302,13 +1302,14 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   // From each sync. Booted once this page and every frame have settled, on screen (hidden, at its next visibilitychange:
   // onVisibility); a spinner that never goes waits about 20 s. One that went wrong (off Ultra, never ready, never routed)
-  // makes the next wait longer; after three, none. One past STALE goes at once, before the next boots: it would never be
-  // adopted, and two never run at once.
+  // makes the next wait longer; after three, none. One past its limit goes at once, before the next boots: it would never
+  // be adopted, and two never run at once. A limit changed since its renewal was armed arms it again.
   const standbyLater = (wait = 2500, tries = 0) => {
     if (standby && !standby.el.isConnected) standby = null; // (its host went with the tabs)
     if (!ahead()) { stopAhead(); return; }
     if (framed || !who) { unStandby(); return; }
     if (standby && !standbyYoung(standby)) unStandby();
+    else if (standby?.limit && standby.limit !== standbyLimit()) standbyArm(standby);
     if (standby || standbyTimer || standbyIdle || standbyMiss >= 3 || !loaded || !useful()) return;
     standbyTimer = setTimeout(() => {
       standbyTimer = 0;
@@ -1331,22 +1332,24 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     standby = s;
     host.prepend(s.el);
   };
-  // Ready within 30 s, else let go of (a miss); renewed once STALE.
+  // Ready within 30 s, else let go of (a miss); then renewed at its limit (standbyArm).
   const standbyCheck = (s) => {
-    const renew = () => {
-      if (standby !== s) return;
-      standbyLater();
-      // (A clock set back can leave it young here: checked again at its new age.)
-      if (standby === s) s.timer = setTimeout(renew, Math.min(STALE, s.at + STALE - Date.now()));
-    };
     s.timer = setTimeout(() => {
       if (standby !== s) return;
       if (!usable(s)) { unStandby(true); standbyLater(); return; }
-      renew();
+      standbyArm(s);
     }, 30000);
   };
-  // Younger than STALE: an older one's account check is too old to carry into a course.
-  const standbyYoung = (s) => !s.at || Date.now() - s.at < STALE;
+  // Its renewal at the limit as set now (s.limit). A clock set back can leave it young when that comes: checked again at
+  // its new age.
+  const standbyArm = (s) => {
+    clearTimeout(s.timer);
+    s.limit = standbyLimit();
+    s.timer = setTimeout(() => { if (standby !== s) return; standbyLater(); if (standby === s) standbyArm(s); }, Math.min(s.limit, s.at + s.limit - Date.now()));
+  };
+  // How long one waits (tabs.renew, minutes): an older one's account check is too old to carry into a course.
+  const standbyLimit = () => P().renew * 60000;
+  const standbyYoung = (s) => !s.at || Date.now() - s.at < standbyLimit();
   // Ready to take a course: its Glaze in (loaded) and signed in as this page, still on a page of Ultra's outside a course.
   const usable = (s) => {
     try {

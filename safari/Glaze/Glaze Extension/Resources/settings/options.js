@@ -470,6 +470,7 @@ GZ_UI.load().then((s) => {
     for (const el of $$('#ultra-nav-editor input[type="range"][data-key]')) el.value = get(el.dataset.key);
     $('[data-key="auto.on"]').checked = s.auto.on;
     $('[data-key="stream.relative"]').disabled = s.stream.dates === 'posted';
+    $('[data-key="tabs.renew"]').disabled = !s.tabs.ahead;
     $('[data-key="nav.detailed"]').checked = s.nav.detailed;
     $('#auto-times').hidden = s.auto.mode !== 'schedule';
     for (const el of $$('[data-tint]')) el.hidden = !s.courses.tint;
