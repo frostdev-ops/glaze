@@ -883,3 +883,21 @@ test('a note filed in a new folder, the push cut short between them, reaches the
   assert.equal((await idxOf(a)).notes[nid(1)].folder, folder, 'A keeps it in Biology');
   noDeletes(drive);
 });
+
+// The palette a device wears is named in Settings' preset: one of Glaze's, one of the student's own (presets, its own
+// record), or none (null: colours of the student's own). Taken from Drive, the name stays as it was written; checked against
+// the built-in palettes alone it became one of those on the other device.
+test('the palette a device wears keeps its name on the other device, the student\'s own or none', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const mine = accent('#2a6f97');
+  await a.settings.set({ presets: [{ name: 'Mine', colors: mine }], colors: mine, preset: 'Mine' });
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  assert.deepEqual((await b.settings.get('presets')).presets, [{ name: 'Mine', colors: mine }]);
+  assert.equal((await b.settings.get('preset')).preset, 'Mine', 'B wears Mine');
+  clock.t += 1000;
+  await a.settings.set({ colors: accent('#7a2a97'), preset: null });
+  assert.ok((await a.run({ push: true })).ok); assert.ok((await b.run()).ok);
+  assert.equal((await b.settings.get('preset')).preset, null, 'colours of the student\'s own: no palette named');
+  // A name that isn't one is still refused.
+  assert.equal(ST.clean('settings', 'preset', { name: 'Mine' }), undefined);
+});
