@@ -507,24 +507,31 @@ test('a document changed while its large JSON copy uploads is never kept as a co
 });
 
 test('a large first push whose JSON copy Drive\'s search doesn\'t show yet: one file and one copy, nothing let go as edited outside Glaze', async () => {
-  const drive = standin(), dk = disk(), key = 'doc:00000000-0000-4000-8000-00000000a023';
-  const a = worker(drive, dk, { fetch: async (u, init = {}) => {
-    const r = await drive.fetch(u, init), url = new URL(String(u));
-    // Search lags through the first run: no JSON copy shows in a list yet.
-    if (lag && (init.method || 'GET') === 'GET' && url.pathname === '/drive/v3/files' && url.searchParams.get('q')) {
-      const j = await r.json();
-      return new Response(JSON.stringify({ ...j, files: (j.files || []).filter((f) => f.appProperties?.glaze !== 'doc') }), { status: r.status, headers: r.headers });
-    }
-    return r;
-  } });
-  let lag = true;
-  await a.papers.save(key, { doc: doc(`A${'a'.repeat(6 * MiB)}`), title: 'Paper', named: true });
-  assert.ok((await a.sync.set(true)).ok);
-  lag = false;
-  for (let i = 0; i < 3; i++) { dk.clock.t += 2 * 60e3; assert.ok((await a.sync.run()).ok); }
-  const files = [...drive.files.values()].filter((f) => f.meta.appProperties.key === tag(key));
-  assert.deepEqual(files.map((f) => f.meta.appProperties.glaze).sort(), ['doc', 'file'], 'one file and one copy, neither kept nor put away');
-  assert.equal(JSON.parse(fileOf(drive, key, 'doc').bytes).file, fileOf(drive, key, 'file').meta.id);
-  assert.equal(drive.log.filter((x) => x.upload?.size > 5 * MiB && x.upload.type !== 'application/json').length, 1, 'the file\'s bytes sent once');
-  assert.deepEqual(await moves(dk), {});
+  for (const edit of [false, true]) {
+    const drive = standin(), dk = disk(), key = `doc:00000000-0000-4000-8000-00000000a02${edit ? 4 : 3}`;
+    let lag = true, starts = 0;
+    const a = worker(drive, dk, { fetch: async (u, init = {}) => {
+      // And the student types again as the copy's bytes begin to go.
+      if (edit && /^bytes 0-/.test(init.headers?.['content-range'] || '') && ++starts === 2) { await a.papers.save(key, { doc: doc(`C${'c'.repeat(6 * MiB)}`) }); await a.sync.touched(key); }
+      const r = await drive.fetch(u, init), url = new URL(String(u));
+      // Search lags through the first run: no JSON copy shows in a list yet.
+      if (lag && (init.method || 'GET') === 'GET' && url.pathname === '/drive/v3/files' && url.searchParams.get('q')) {
+        const j = await r.json();
+        return new Response(JSON.stringify({ ...j, files: (j.files || []).filter((f) => f.appProperties?.glaze !== 'doc') }), { status: r.status, headers: r.headers });
+      }
+      return r;
+    } });
+    await a.papers.save(key, { doc: doc(`A${'a'.repeat(6 * MiB)}`), title: 'Paper', named: true });
+    assert.ok((await a.sync.set(true)).ok);
+    lag = false;
+    for (let i = 0; i < 3; i++) { dk.clock.t += 2 * 60e3; assert.ok((await a.sync.run()).ok); }
+    const files = [...drive.files.values()].filter((f) => f.meta.appProperties.key === tag(key));
+    assert.deepEqual(files.map((f) => f.meta.appProperties.glaze).sort(), ['doc', 'file'], `${edit ? 'edited' : 'unchanged'}: one file and one copy, neither kept nor put away`);
+    const copy = JSON.parse(fileOf(drive, key, 'doc').bytes);
+    assert.equal(copy.file, fileOf(drive, key, 'file').meta.id);
+    assert.equal(textOf(copy.record.doc)[0], edit ? 'C' : 'A');
+    assert.deepEqual((await a.papers.list()).map((r) => r.key), [key], 'no "(Drive copy)"');
+    if (!edit) assert.equal(drive.log.filter((x) => x.upload?.size > 5 * MiB && x.upload.type !== 'application/json').length, 1, 'the file\'s bytes sent once');
+    assert.deepEqual(await moves(dk), {});
+  }
 });
