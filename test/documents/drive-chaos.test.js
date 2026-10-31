@@ -60,10 +60,11 @@ test('a worker stopped at any await of a first push (its write landed or not) st
   assert.ok(stopped > 8, `stopped ${stopped} times`);
 });
 
-// Each known defect's fewest operations: todo while it stands, a regression test once fixed (fixed: true; drop its TODO seeds).
+// Each known defect's fewest operations (on two devices unless it says): todo while it stands, a regression test once fixed
+// (fixed: true; drop its TODO seeds).
 for (const [name, k] of Object.entries(C.KNOWN)) {
   test(`${k.fixed ? 'fixed' : 'known'} (${name}): ${k.about}`, { todo: k.fixed ? undefined : FINDINGS }, async () => {
-    const r = await C.play(1, { list: k.repro, devices: 2, join: k.join || 'all' });
+    const r = await C.play(1, { list: k.repro, devices: k.devices || 2, join: k.join || 'all' });
     if (k.stops) assert.ok(r.trace.some((l) => l.includes(`killed at ${k.stops}`)), `its kill lands at ${k.stops}\n${r.trace.join('\n')}`);
     assert.ok(r.ok, show(r));
   });

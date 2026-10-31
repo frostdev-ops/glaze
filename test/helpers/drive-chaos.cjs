@@ -496,7 +496,7 @@ const describe = (op) => {
 
 // Known defects, each with what it needs, so a run can leave those operations out (masks) and look for others meanwhile.
 // drive-chaos-findings.md (glaze-plans/release-4.0.1) has each one's repro and diagnosis.
-// repro: the fewest operations that show it (two devices, both signed in at the start). fixed: a regression test now; its
+// repro: the fewest operations that show it (two devices unless devices says, all signed in at the start). fixed: a regression test now; its
 // operations are no longer masked.
 const KNOWN = {
   'null-setting': {
@@ -624,6 +624,14 @@ const KNOWN = {
     skips: () => false,
     stops: 'net.POST',
     repro: [{ t: 'lag', n: 3 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, kill: 126, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }],
+  },
+  'stale-sum': {
+    fixed: true,
+    about: 'a record read by a change page fetched before this device\'s own write to it (Glaze/Data replaced midway, every record met again) takes its sum from that page and its value from the file as it is now: the record is noted as agreeing with a sum it doesn\'t hold, and another device\'s next change to that sum never reaches it',
+    skips: () => false,
+    devices: 3,
+    repro: [{ t: 'words', k: 'add', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'poke', s: 2 }, { t: 'words', k: 'add', d: 1, pick: 0, pick2: 0, s: 3 }, { t: 'run', d: 1, how: 'timers', s: 4 },
+      { t: 'sync', d: 2, on: true, s: 5 }, { t: 'drive', k: 'trashData', pick: 0, s: 6 }, { t: 'run', d: 2, how: 'poke', s: 7 }],
   },
   // Open: within the accepted limit that switching accounts A→B→A brings older data back. Found 2026-10-31 (seed 60348,
   // 140 operations, 2 devices).
