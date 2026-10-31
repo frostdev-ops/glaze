@@ -136,7 +136,8 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       out.ft[f] = t0(src.ft?.[f]);
     }
     const trashAt = (x) => t0(x.ft?.trash) || t0(x.del);
-    const tr = wins([t0(a.del), a.with ?? ''], [t0(b.del), b.with ?? ''], trashAt(a), trashAt(b), rt) ? b : a;
+    // Its own time in the value too: one side timed and the other not (an older index), at the same time, both pick the timed.
+    const tr = wins([t0(a.del), a.with ?? '', t0(a.ft?.trash)], [t0(b.del), b.with ?? '', t0(b.ft?.trash)], trashAt(a), trashAt(b), rt) ? b : a;
     if (t0(tr.del)) { out.del = tr.del; if (tr.with) out.with = tr.with; }
     if (t0(tr.ft?.trash)) out.ft.trash = tr.ft.trash;
     const made = [t0(a.created), t0(b.created)].filter(Boolean);
@@ -159,16 +160,19 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
   const MERGE = { notes: mergeNote, noteFolders: (a, b, rt) => mergeFolders(a, b, rt) };
 
   // Drive's value joined into what is here as Restore joins a backup's (background/backup.js apply); the Looks history and a
-  // record with no such rule keep this device's. local: storage.local. rt: each side's record time (Notes' merge).
-  const join = async (cat, key, value, local, notes, rt) => {
+  // record with no such rule keep this device's. local: storage.local. rt: each side's record time (Notes' merge). own: the
+  // store's (create below), so its write is this layer's own and stamps nothing: set(patch) before a write to storage.local,
+  // change, Notes' onChange.
+  const join = async (cat, key, value, local, notes, rt, own) => {
     // Notes: field by field, every folder either side has; a file is the same file on both.
     if (cat === 'notes' || cat === 'noteFolders') {
       const here = (await notes.get(key))[key];
       const next = !here ? value : cat === 'notes' ? mergeNote(here, value, rt) : mergeFolders(here, value, rt, true);
       if (canon(next) === canon(here)) return;
-      if (!await notes.replace(key, here, next)) throw new Fail('stale');
+      if (!await notes.replace(key, here, next, own?.change)) throw new Fail('stale');
       return;
     }
+    if (own?.set) { const base = local; local = { get: (k) => base.get(k), set: async (o) => { await own.set(o); return base.set(o); } }; }
     if (cat === 'noteFiles') return;
     // Looks history: each Look either side wore, once, at the later time it was worn, newest first.
     if (key === 'lookHistory') {
@@ -303,6 +307,19 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       const m = NREC.exec(key), part = (idx) => m[2] ? { folders: idx.folders, gone: idx.fgone } : idx.notes[m[4]];
       return canon({ before: part(before) ?? null, after: part(after) ?? null });
     };
+    // Notes' onChange for a write of this layer's: the transition it makes, and with an account's folders each note Notes takes
+    // out of a folder no longer there (planner/notes.js 'folders'): a consequence of what came, never a change made here to
+    // outweigh that note's own change from the other device. mine: the ids owned, for the caller to let go on failure.
+    const ownNotes = (key, cat, mine = []) => (old, next) => {
+      owned.set(`notes:${key}`, transition(key, old, next)); mine.push(`notes:${key}`);
+      if (cat !== 'noteFolders') return;
+      const acct = NREC.exec(key)[1];
+      for (const n of new Set([...Object.keys(old.notes), ...Object.keys(next.notes)])) {
+        if (canon(old.notes[n]) === canon(next.notes[n])) continue;
+        const k = `${acct}|${n}`;
+        owned.set(`notes:${k}`, transition(k, old, next)); mine.push(`notes:${k}`);
+      }
+    };
     const put = async (h, r, was) => {
       await S.set({ [REC + h]: r, ...(r.id && { [FILE + r.id]: `r:${h}` }) });
       if (was?.id && was.id !== r.id) await S.remove(FILE + was.id);
@@ -379,19 +396,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         applying.set(id, canon(write));
         const mine = [id];
         try {
-          // Notes: the transition this record makes, and with an account's folders each note Notes takes out of a folder no
-          // longer there (planner/notes.js 'folders'): a consequence of what came, never a change made here to outweigh that
-          // note's own change from the other device.
-          const onChange = got.area === 'notes' && !d?.immutable ? (old, next) => {
-            owned.set(id, transition(got.key, old, next));
-            if (d.cat !== 'noteFolders') return;
-            const acct = NREC.exec(got.key)[1];
-            for (const n of new Set([...Object.keys(old.notes), ...Object.keys(next.notes)])) {
-              if (canon(old.notes[n]) === canon(next.notes[n])) continue;
-              const k = `${acct}|${n}`;
-              owned.set(`notes:${k}`, transition(k, old, next)); mine.push(`notes:${k}`);
-            }
-          } : undefined;
+          const onChange = got.area === 'notes' && !d?.immutable ? ownNotes(got.key, d.cat, mine) : undefined;
           if (!await a.replace(got.key, before, write, onChange)) throw new Fail('stale');
         } catch (e) {
           applying.delete(id); for (const x of mine) owned.delete(x);
@@ -483,13 +488,21 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         if (got.value === undefined) return push(ctx, h, area, key, cat, { id: R.id }, Math.max(at, got.at + 1) || now());
         // First meeting, both hold it: Settings by time; the rest joined as Restore joins.
         if (cat === 'settings') { if (got.at > at) return take(h, got, R, null, value); return push(ctx, h, area, key, cat, { id: R.id }, at || now()); }
-        applying.delete(`${area}:${key}`);
-        await (env.join || ((c, k, v, rt) => join(c, k, v, env.area('local'), env.area('notes'), rt)))(cat, key, got.value, { here: at, there: got.at });
-        // The join goes up with the time of the latest change it holds, never the meeting's, so a later change another device
+        const id = `${area}:${key}`, t = Math.max(at, got.at) || now(), mine = [];
+        applying.delete(id);
+        // The join's write is this layer's own: it stamps nothing, and carries the time of the latest change it holds, never
+        // the meeting's, here (so an upload that fails is sent again with it) and in Drive, so a later change another device
         // hasn't pushed yet still wins over it. One that is Drive's own value is linked to it, not sent again.
+        const own = { change: ownNotes(key, cat, mine), set: async (o) => {
+          if (area === 'local' && Object.hasOwn(o, key) && canon((await env.area('local').get(key))[key]) !== canon(o[key])) applying.set(id, canon(o[key]));
+        } };
+        try {
+          await (env.join || ((c, k, v, rt, w) => join(c, k, v, env.area('local'), env.area('notes'), rt, w)))(cat, key, got.value, { here: at, there: got.at }, own);
+        } catch (e) { applying.delete(id); for (const x of mine) owned.delete(x); throw e; }
         const joined = await sumOf(area, key, await valueOf(area, key));
         if (joined === got.sum) return put(h, { area, key, cat, id: R.id, lsum: joined, rsum: got.sum, at: got.at, seen: Math.max(at, got.at) }, null);
-        return push(ctx, h, area, key, cat, { id: R.id }, Math.max(at, got.at) || now());
+        await restamp({ [id]: t }, { [id]: st[id] });
+        return push(ctx, h, area, key, cat, { id: R.id }, t);
       }
       // Its file gone or in Drive's trash: put back from here, unchanged since it last synced with the time of that change.
       if (!R || R.removed) { if (value !== undefined) await push(ctx, h, area, key, cat, { ...was, id: null }, at || (lsum === was.lsum && was.at) || now()); else await S.remove([REC + h, ...(was.id ? [FILE + was.id] : [])]); return; }
