@@ -544,10 +544,11 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       // As this run met it, should a transfer it needs go on in the run's last step (replay).
       const owner = { doc: h, key: key || null, ...(R?.id && { R: R.id }), ...(E?.id && { E: E.id }) };
       let d = await docOf(h), gone = null, revive = false;
-      // Met before with one of Drive's two files in its trash and nothing here to restore (meet below): met afresh.
+      // Met before with one of Drive's two files in its trash and nothing here to restore (meet below): met afresh. Its link
+      // stays until this meeting writes another, so a run stopped midway meets it again rather than never.
       if (d?.meet) {
         if (!R?.id || R.removed) R = await meta(d.json);
-        await dropDoc(h, d); d = null; E = undefined;
+        d = null; E = undefined;
       }
       key ||= d?.key || null;
       if (key && !syncable(key)) return;
