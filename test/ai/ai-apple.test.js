@@ -423,3 +423,11 @@ test('a warm-up through the broker readies Apple Intelligence for the task\'s in
   assert.throws(() => T.define({ ...warmTask, id: 'example.bad', warm: 'yes' }), /warm/);
 });
 
+
+test('an answer language is the cloud providers\' line: the native message stays the same', async () => {
+  native = async () => ok('{"answer":"42"}');
+  await P.run(A, ask({ schema: SCHEMA }), { model: 'on-device' });
+  await P.run(A, ask({ schema: SCHEMA, reply: { lang: 'de' } }), { model: 'on-device' });
+  const [plain, asked] = sent.map((s) => { const { id, ...m } = s.m; return m; });
+  assert.deepEqual(asked, plain);
+});

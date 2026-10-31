@@ -390,3 +390,31 @@ test('OpenRouter Anthropic routes emit an explicit stable-block cache marker; ot
     }
   }
 });
+
+test('an answer language goes as one line at the end of the system turn, after the schema in words', async () => {
+  const R = require('../../extension/ai/request.js');
+  assert.deepEqual(R.clean(ask({ reply: { lang: 'de' } })).reply, { lang: 'de' });
+  assert.deepEqual(R.clean(ask({ reply: { lang: 'pt-BR' } })).reply, { lang: 'pt-BR' });
+  for (const bad of [{}, { lang: '' }, { lang: 'German' }, { lang: 'de', name: 'x' }, 'de', null]) assert.equal(R.clean(ask({ reply: bad })), null, JSON.stringify(bad));
+  const s = server(done('{"answer":"42"}'), done('{"answer":"42"}'), done('{"answer":"42"}'));
+  await P.run('openai', ask({ schema: SCHEMA, reply: { lang: 'de' } }), cfg(), { fetch: s.fetch });
+  assert.equal(s.calls[0].body.messages[0].content, 'Answer.\n\nWrite your answer\'s prose in German; keep JSON keys, IDs and enum values exactly as given.');
+  assert.equal(s.calls[0].body.messages[1].content, 'Q', 'the student\'s turn is untouched');
+  await P.run('openai', ask({ reply: { lang: 'pt-BR' }, messages: [{ role: 'user', content: 'Q' }] }), cfg(), { fetch: s.fetch });
+  assert.deepEqual(s.calls[1].body.messages, [{ role: 'system', content: 'Write your answer in Brazilian Portuguese.' }, { role: 'user', content: 'Q' }]);
+  await P.run('openai', ask(), cfg(), { fetch: s.fetch });
+  assert.equal(s.calls[2].body.messages[0].content, 'Answer.', 'no field, no line');
+  const words = server(rejection('response_format'), done('{"answer":"42"}'));
+  await P.run('openai', ask({ schema: SCHEMA, reply: { lang: 'fr' } }), cfg(), { fetch: words.fetch });
+  assert.match(words.calls[1].body.messages[0].content, /^Answer\.\n\nAnswer with one JSON object[\s\S]*\n\nWrite your answer's prose in French; keep JSON keys, IDs and enum values exactly as given\.$/);
+});
+
+test('a task may accept a longer answer than the schema it sends', async () => {
+  const LONG = { type: 'object', properties: { answer: { type: 'string', maxLength: 8 } }, required: ['answer'], additionalProperties: false };
+  const s = server(done('{"answer":"0123456789"}'), done('{"answer":"0123456789"}'));
+  await assert.rejects(P.run('openai', ask({ schema: LONG }), cfg(), { fetch: s.fetch }), (e) => e.category === 'invalid-response');
+  const accept = { ...LONG, properties: { answer: { type: 'string', maxLength: 12 } } };
+  const out = await P.run('openai', ask({ schema: LONG }), cfg(), { fetch: s.fetch, accept });
+  assert.deepEqual(out.json, { answer: '0123456789' });
+  assert.deepEqual(s.calls[1].body.response_format.json_schema.schema, LONG, 'the provider is sent the request\'s own schema');
+});
