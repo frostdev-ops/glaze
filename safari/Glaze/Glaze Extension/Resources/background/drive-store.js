@@ -91,6 +91,9 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       if (cat === 'noteFiles') return obj(v) && ['image', 'file'].includes(v.kind) && typeof v.data === 'string' && L.notes().ID.test(v.note || '') ? { kind: v.kind, name: String(v.name || ''), type: String(v.type || ''), note: v.note, data: v.data } : undefined;
       if (cat === 'settings') {
         if (v === undefined || canon(v).length > 1 << 20) return undefined;
+        // The palette's name: checked alone, without the student's own palettes (presets, a record of its own) and colours
+        // beside it, it would become a built-in one. Settings check it against those as they load.
+        if (key === 'preset') return v === null || (typeof v === 'string' && v.length <= 40 && v.trim() === v && !!v) ? v : undefined;
         const d = L.sanitize()({});
         return Object.hasOwn(d, key) ? L.sanitize()({ [key]: v })[key] : v;
       }
@@ -473,17 +476,20 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         await each(ctx, f.appProperties.key, { R: f });
       }
     };
-    // What changed here since it was last seen.
+    // What changed here since it was last seen, in the order a record needs what it points at (a note's folder before it).
     const sweep = async (ctx) => {
       ctx.data = await sub(ctx, 'data', 'Data');
-      const settled = {};
-      for (const [id, at] of Object.entries(await stamps())) {
-        const cut = id.indexOf(':'), area = id.slice(0, cut), key = id.slice(cut + 1);
+      const settled = {}, split = (id) => [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)];
+      const rank = (id) => ORDER[catOf(...split(id))] || 0;
+      for (const [id, at] of Object.entries(await stamps()).sort(([a], [b]) => rank(a) - rank(b))) {
+        const [area, key] = split(id);
         if (!catOf(area, key)) { settled[id] = at; continue; }
         const h = await hk(area, key), was = await recOf(h);
         // Times can tie, or a remote device's clock can be ahead of this one. Only unchanged content is settled.
         if (was && (was.seen || 0) >= at && await sumOf(area, key, await valueOf(area, key)) === was.lsum) { settled[id] = at; continue; }
         await each(ctx, h, { area, key });
+        // Gone here with no record either side (made and removed before it went up): nothing left to settle against.
+        if (!await recOf(h) && await valueOf(area, key).catch(() => null) === undefined) settled[id] = at;
       }
       if (Object.keys(settled).length) await unstamp(settled);
       await snapshot(ctx);
