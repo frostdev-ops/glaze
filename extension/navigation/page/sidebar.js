@@ -246,6 +246,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     });
   };
   const onStore = (ch, a) => {
+    if (a === 'local' && ultra && ch[HELD]) heights = cleanHeights(ch[HELD].newValue);
     if (a !== 'local' || !key) return;
     if (ch[key]) { reads++; if (!flying && rec) adopt(ch[key].newValue); }
     // Registration and the localhost copy's clear/install can finish after the first request. Retry from stored state.
@@ -269,8 +270,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     const k = S.key(LMS, location.origin, uid);
     if (g !== epoch) return false;
     if (!k) throw new Error('no account');
-    const r = await get(k);
+    const r = await get(ultra ? [k, HELD] : k);
     if (g !== epoch) return false;
+    if (ultra) heights = cleanHeights(r[HELD]);
     let next = S.clean(r[k]);
     // The one-time move into the dock is written first, and only then shown (navigation/sidebar.js migrate).
     if (!next.mig && (await account()) !== uid) { if (g !== epoch) return false; seen = null; return start(); }
@@ -294,6 +296,63 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       retryTimer = setTimeout(() => { if (g === epoch) { starting = null; failed = false; } }, 60000);
       return false;
     }));
+  };
+
+  // ---- Ultra's Details & Actions, held -------------------------------------------------------------------------------
+  // A course outline's column fills its Details & Actions late (1.5–2.3 s on the owner's school): Course notes and the dock
+  // under it moved down by its height as it filled. Until Ultra has drawn it, the room it took on this course last time
+  // (storage.local detailsHeight:<origin>; on a course not seen yet, the least any course here took) stays under it, given
+  // back as it grows, before each frame paints (ResizeObserver). Nothing is guessed without a measurement. As with the
+  // panels absorbed below, Ultra's node keeps its attributes and inline style: sidebar.css adds the room
+  // (html[data-gz-sb-held], --gz-sb-held).
+  const HELD = `detailsHeight:${location.origin}`;
+  const cleanHeights = (v) => Object.fromEntries(Object.entries(v && typeof v === 'object' ? v : {}).filter(([c, h]) => /^_\d+_\d+$/.test(c) && Number.isFinite(h) && h > 0 && h < 4000).slice(-40));
+  let heights = {}, held = null;
+  const letGo = (d) => {
+    if (!d.want) return;
+    d.want = 0;
+    html().removeAttribute('data-gz-sb-held');
+    html().style.removeProperty('--gz-sb-held');
+  };
+  const unhold = () => {
+    const d = held;
+    if (!d) return;
+    held = null;
+    d.ro.disconnect(); clearTimeout(d.timer); clearTimeout(d.quiet);
+    letGo(d);
+    // What it took this visit, for the next (a page left before Ultra finished keeps less: never too much room).
+    const h = Math.round(d.size);
+    if (h > 0 && h !== heights[d.cid]) {
+      const { [d.cid]: _, ...rest } = heights;
+      heights = cleanHeights({ ...rest, [d.cid]: h });
+      try { area('local').set({ [HELD]: heights }); } catch { /* reloaded */ }
+    }
+  };
+  const hold = () => {
+    const el = ultra && host && !host.own && has(host.el, 'outline-actions') ? [...host.el.children].find((x) => has(x, 'js-details-and-actions')) || null : null;
+    const cid = A.courseId();
+    if (held && held.el === el && held.cid === cid) return;
+    unhold();
+    if (!el || !cid || typeof ResizeObserver !== 'function') return;
+    const known = Object.values(heights);
+    const d = held = { el, cid, size: 0, want: heights[cid] || (known.length ? Math.min(...known) : 0), base: 0, timer: 0, quiet: 0 };
+    // Its own margin, kept under the room.
+    if (d.want) try { d.base = parseFloat(getComputedStyle(el).marginBlockEnd) || 0; } catch { /* no styles to ask */ }
+    const fit = (size) => {
+      d.size = size;
+      if (!d.want) return;
+      if (size >= d.want - 0.5) return letGo(d);
+      setVar('--gz-sb-held', `${d.base + d.want - size}px`);
+      html().setAttribute('data-gz-sb-held', '');
+      // Drawn smaller than last time: once Ultra has stopped drawing it, the rest of the room goes.
+      clearTimeout(d.quiet);
+      if (size > 0) d.quiet = setTimeout(() => { if (held === d) letGo(d); }, 2000);
+    };
+    d.ro = new ResizeObserver((es) => { if (held === d) fit(es.at(-1)?.borderBoxSize?.[0]?.blockSize ?? el.getBoundingClientRect().height); });
+    d.ro.observe(el);
+    fit(el.getBoundingClientRect().height);
+    // Never drawn at all: not held for ever.
+    if (d.want) d.timer = setTimeout(() => { if (held === d) letGo(d); }, 15000);
   };
 
   // ---- Glaze's parts of the column -----------------------------------------------------------------------------------
@@ -389,6 +448,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // without one (or one Glaze doesn't recognize, left as it is), Glaze's own beside the content.
   const ATTRS = ['role', 'aria-labelledby', 'aria-modal', 'aria-label'];
   const detach = () => {
+    unhold();
     if (!host) return;
     lift(false);
     watchNativeScroll(null);
@@ -976,6 +1036,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       // Ultra's late blocks stay before the dock visually through flex order, without reinserting live media.
     }
     host.fallback = !n && !!A.standalone?.();
+    hold();
     const first = !active;
     active = true;
     if (first) emit('change');

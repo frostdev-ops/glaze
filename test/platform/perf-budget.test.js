@@ -477,6 +477,7 @@ const STYLE_READS = [
   // only while a peek is visible (batched once per frame). No descendant or whole-page style sweep.
   ['navigation/page/sidebar.js', 'getComputedStyle(p)', 4],
   ['navigation/page/sidebar.js', 'getComputedStyle(m)', 1], // Ultra: the page's one content element's start padding (Glaze's bar), when the sidebar is laid out
+  ['navigation/page/sidebar.js', 'getComputedStyle(el)', 1], // Ultra: a course outline's one Details & Actions block, its own margin, once a visit when it is held
   ['navigation/page/sidebar.js', 'getComputedStyle(panel.grid)', 1], // one verified assessment overview grid, to identify Ultra's current native sidebar shell
   ['core/page/widgets.js', 'getComputedStyle(html)', 1], // the root's two room variables for Glaze's bar, when floating tiles are placed
   ['documents/pdf/pdf-kind.js', 'getComputedStyle(pagesEl)', 1], // the PDF viewer's pages box, its top padding: once when Whole page is chosen or its room resizes

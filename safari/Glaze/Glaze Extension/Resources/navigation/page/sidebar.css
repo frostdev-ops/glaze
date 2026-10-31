@@ -14,6 +14,8 @@
      own reading width still holds its prose. */
   html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #wrapper { max-width: none; }
   [data-gz-sidebar-host] { position: relative; box-sizing: border-box; }
+  /* A course outline's Details & Actions while Ultra fills it: the room it took last time (navigation/page/sidebar.js hold). */
+  html[data-gz-sb-held] [data-gz-sidebar-host].outline-actions > .js-details-and-actions { margin-block-end: var(--gz-sb-held) !important; }
   [data-gz-sidebar-host] > #right-side { width: auto !important; }
   html:not([data-gz-sidebar]) #gz-sidebar, html[data-gz-sidebar="none"] #gz-sidebar { display: none !important; }
   html[data-gz-sidebar="none"] :is(.gz-sb-resize, .gz-sb-head, .gz-sb-pagehead, #gz-sb-widgets) { display: none !important; }
