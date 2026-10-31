@@ -313,6 +313,11 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
             }
           }
           try {
+            if (t.dir === 'up' && t.owner?.rec && more?.current && !await more.current(t.owner, t.tag)) {
+              await dropMove(slot);
+              await replay(t.owner, folder);
+              continue;
+            }
             if (!t.file && !t.done) await (t.dir === 'up' ? sendMove(slot, t) : bringMove(slot, t));
           } catch (e) {
             if (e?.why === 'missing') { await dropMove(slot); await replay(t.owner, folder); continue; }
