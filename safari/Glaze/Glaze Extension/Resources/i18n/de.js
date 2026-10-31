@@ -3070,6 +3070,7 @@
   "Blackboard's Institution page becomes Glaze's Dashboard: your widgets and Better To Do, in a layout of its own. Its Institution page tab shows Blackboard's own.": "Die Institutionsseite von Blackboard wird zum Dashboard von Glaze: deine Widgets und Better To Do, in einem eigenen Layout. Ihr Tab „Institutionsseite“ zeigt die von Blackboard.",
   "When Blackboard opens on its start page right after you sign in, go on to Glaze's Dashboard, once. A page you open by its address, a bookmark or a link is left alone.": "Wenn Blackboard direkt nach deiner Anmeldung auf seiner Startseite öffnet, geht es einmalig weiter zum Dashboard von Glaze. Eine Seite, die du über ihre Adresse, ein Lesezeichen oder einen Link öffnest, bleibt unangetastet.",
   "Open Grades, Courses and Activity instantly": "Noten, Kurse und Aktivität sofort öffnen",
+  "Show pages loading at once": "Laden von Seiten sofort zeigen",
   "On Canvas: the pictures on Dashboard cards.": "Auf Canvas: die Bilder auf Dashboard-Karten.",
   "Search your courses from the command palette: titles on Canvas, and on Blackboard released document, announcement and discussion text too.": "Durchsuche deine Kurse über die Befehlspalette: Titel auf Canvas, und auf Blackboard auch den Text freigegebener Dokumente, Ankündigungen und Diskussionen.",
   "Invite only, end-to-end encrypted through your selected relay.": "Nur auf Einladung, Ende-zu-Ende-verschlüsselt über dein ausgewähltes Relay.",
