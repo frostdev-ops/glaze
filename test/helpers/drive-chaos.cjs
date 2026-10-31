@@ -863,7 +863,7 @@ const KNOWN = {
       { t: 'run', d: 1, how: 'poke', s: 1184312654, inject: { at: 76, op: { t: 'note', k: 'new', d: 1, pick: 0.8628405916970223, pick2: 0.5734472328331321, s: 1302672762 } } }, { t: 'drive', k: 'outsideDocx', pick: 0.6395302484743297, s: 1862399872 }],
   },
   'staged-record-aim': {
-    fixed: false,
+    fixed: true,
     tiny: true,
     staged: true,
     devices: 3,
@@ -874,7 +874,7 @@ const KNOWN = {
       { t: 'task', k: 'edit', d: 1, pick: 0.9250958673655987, pick2: 0.4066777254920453, s: 697697893 }, { t: 'run', d: 0, how: 'poke', s: 794821635 }, { t: 'run', d: 1, how: 'timers', s: 27493958 }, { t: 'task', k: 'edit', d: 0, pick: 0.3805331971962005, pick2: 0.768940842943266, s: 311413170 }],
   },
   'staged-merge-aim': {
-    fixed: false,
+    fixed: true,
     tiny: true,
     staged: true,
     about: 'a note edited on both devices, merged field by field: the merge\'s staged upload aims at the note\'s file as last agreed, not as just read, and is handed back every run: the later text never reaches the other device',
@@ -883,7 +883,7 @@ const KNOWN = {
       { t: 'note', k: 'edit', d: 0, pick: 0.1447097782511264, pick2: 0.3049026830121875, s: 1061760165 }, { t: 'note', k: 'edit', d: 1, pick: 0.5914163226261735, pick2: 0.20524716330692172, s: 1544024214 }],
   },
   'staged-slot-lower': {
-    fixed: false,
+    fixed: true,
     tiny: true,
     staged: true,
     devices: 4,
@@ -894,7 +894,7 @@ const KNOWN = {
       { t: 'pet', k: 'habitat', d: 0, pick: 0.8076418626587838, pick2: 0.8519927123561502, s: 1023511117 }, { t: 'run', d: 1, how: 'poke', s: 768704070 }],
   },
   'staged-held-file': {
-    fixed: false,
+    fixed: true,
     tiny: true,
     staged: true,
     join: [0],

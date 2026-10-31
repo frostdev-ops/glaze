@@ -291,6 +291,13 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (!stage || !Number.isSafeInteger(size) || size <= BIG || typeof f.headRevisionId !== 'string') return D((c) => c.media(f.id, max));
       if (size > max) throw new Fail('size');
       const tag = `${f.id}:${f.headRevisionId}:${size}`, t = await moveOf(slot);
+      // A copy's or record's read of another file of the same document or record, at a lower id and out of Drive's trash
+      // (two devices' first uploads that overlapped): every device keeps that one, so its read goes on and its owner is met
+      // with it, as meeting both in turn would end.
+      if (t?.dir === 'down' && t.id !== f.id && t.id < f.id && (slot.startsWith('r:') || slot.endsWith(':json'))) {
+        const Z = await meta(t.id);
+        if (!Z.removed && Z.trashed === false) throw new Fail('pending');
+      }
       if (t?.dir === 'down' && t.tag === tag) {
         if (!t.done) throw new Fail('pending');
         const bytes = await unstaged(slot, size);
@@ -592,7 +599,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       // Drive's copy already this one: nothing new to send unless the recorded file still needs its JSON copy.
       if (!ex && d?.json && d.rsum === sum && d.lsum === sum && !d.unsent) return d;
       const base = (ex?.name || `${safe(l.rec.title) || 'Untitled'}${EXT[kind]}`).replace(/\.[^.]+$/, '');
-      let file = d?.file || null, fh = d?.fh || null;
+      let file = d?.file || null, fh = d?.fh || null, already = false;
       if ((ex || d?.unsent) && file && d?.json) {
         // Exporting may take time. An outside edit or move since sync checked the file must be reconciled before this
         // upload, even when it fits in one request. A staged upload checks again just before its bytes are sent.
@@ -600,7 +607,10 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         if (F.removed || F.trashed || F.appProperties?.glaze !== 'file' || F.appProperties?.key !== h || (Array.isArray(F.parents) && !F.parents.includes(folder))) return sync(key, h, { E: F, folder });
         if (F.headRevisionId && F.headRevisionId !== fh) {
           if (F.appProperties?.sum === d.fsum || rewritten(F)) return sync(key, h, { E: F, folder });
-          if (!(F.appProperties?.sum === sum && unchanged(F))) {
+          // Already this content as Glaze wrote it (an upload of this device's whose answer never came): not sent again,
+          // and its copy names the revision Drive holds.
+          if (F.appProperties?.sum === sum && unchanged(F)) { fh = F.headRevisionId; already = true; }
+          else {
             // Another Glaze's file reached Drive before its JSON. Give that copy time to arrive, then preserve the raw
             // export in Data if its worker never finishes. Detach durably before writing a file of our own.
             if (!await waited(h)) throw new Fail('stale');
@@ -638,7 +648,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       }
       // Its file already holds this content as Glaze wrote it, recorded by a push that stopped before its copy went (unsent):
       // not sent again, only the copy.
-      const have = !!d?.unsent && !!file && file === d.file && !!fh && fh === d.fh && d.fsum === sum;
+      const have = already || (!!d?.unsent && !!file && file === d.file && !!fh && fh === d.fh && d.fsum === sum);
       if (ex && !have) {
         if (!file) await uploading(h);
         // Recorded before the copy goes: a push that stops between the two meets this file's revision next time, so an edit
