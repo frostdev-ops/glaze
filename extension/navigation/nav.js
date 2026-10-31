@@ -67,6 +67,8 @@ var GZ_NAV = globalThis.GZ_NAV || (() => {
     l.onload = () => { if (live()) { host.hidden = false; glide(); } };
     root.append(l, parse(k.m));
     (document.body || document.documentElement).prepend(host);
+    // Styled at once from its kept sheet where it can be, so it is in the first paint.
+    try { if (typeof k.c == 'string' && k.c) { const c = new CSSStyleSheet(); c.replaceSync(k.c); root.adoptedStyleSheets = [c]; host.hidden = false; glide(); } } catch { /* the sheet's load shows it */ }
     const gone = () => live() && host.remove();
     setTimeout(gone, 20000);
     chrome.storage.onChanged.addListener((c, area) => {
