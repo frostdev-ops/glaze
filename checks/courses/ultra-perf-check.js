@@ -659,13 +659,14 @@ if (require.main === module) (async () => {
       assert.equal(result[stage].stillHeld, false, `${stage}: no lingering SPA hold`);
     }
     // PERF_REQUIRE_STILL_ASIDE (with PERF_WIDTH at least 1560, where the sidebar is the outline's right column, and
-    // PERF_REPS at least 2): on a course seen before, Course notes and the dock never move while Ultra fills Details &
+    // PERF_REPS at least 2): on a course's first visit (rep 0) and on returning ones, Course notes and the dock never move while Ultra fills Details &
     // Actions or when the sidebar takes the column, the column itself doesn't move once drawn, and none of it
     // takes part in a layout shift.
     if (stillAside) {
       assert.ok(WIDTH >= 1560 && reps >= 2, 'PERF_REQUIRE_STILL_ASIDE needs PERF_WIDTH >= 1560 and PERF_REPS >= 2');
-      const returning = results.filter((r) => r.rep > 0 && r.glaze !== 'off');
-      assert.ok(returning.length, 'a returning visit was measured');
+      const visits = results.filter((r) => r.glaze !== 'off');
+      assert.ok(visits.some((r) => r.rep > 0), 'a returning visit was measured');
+      const returning = visits;
       for (const r of returning) {
         const { frames, shifts } = r.outline.aside, moves = [], seen = new Map();
         for (const frame of frames) for (const block of ['aside.outline-actions > #gz-nt-block', 'aside.outline-actions > #gz-sb-widgets']) {
