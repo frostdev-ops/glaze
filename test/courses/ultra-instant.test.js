@@ -1,8 +1,9 @@
-// Instant copies of Ultra's Grades, Courses list and Activity (S, courses/instant.js, courses/page/instant.js,
-// enhance.instant): the allowlist rebuild and its bounds against the real pages' shapes (test/fixtures/ultra-instant-*.html,
-// synthetic text) on the stand-in DOM, each page's ready markers, the page script in a VM (painted only for the confirmed
-// student, gone when Ultra's view is ready, kept again then, nothing with the switch off), content-ultra.js's hooks, and
-// the worker's purges (sign-out, the switch off).
+// Instant copies of Ultra's Grades, Courses list and Activity, and of a course's Course Content, Announcements and
+// Gradebook (courses/instant.js, courses/page/instant.js, enhance.instant): the allowlist rebuild and its bounds against the
+// real pages' shapes (test/fixtures/ultra-instant-*.html, synthetic text) on the stand-in DOM, each page's ready markers,
+// the page script in a VM (painted only for the confirmed student, gone when Ultra's view is ready, kept again then,
+// nothing with the switch off; in a course tab's frame only while it is the one on screen), content-ultra.js's hooks, and
+// the worker's saves and purges (sign-out, the switch off).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -72,9 +73,9 @@ test('the rebuild strips handlers, ids, scripts, styles with addresses, forms, f
       el('svg', { viewBox: '0 0 24 24', onload: 'x()' }, el('path', { d: 'M0 0h24v24H0z', fill: 'url(#evil)' }), el('use', { href: '#sprite' })),
       'Plain <img src=x onerror=alert(1)> text'));
   const c = L.capture(main, CTX), s = flat(c.nodes);
-  for (const gone of ['onclick', 'steal', 'onmouseover', 'card-1', 'url(', 'evil.test', 'javascript', 'alert(1)"', 'secret', 'Form text', 'Press', 'not-a-banner', 'data:', 'Glaze panel', 'Glaze date', 'Peek text', '#sprite', '"onload"', '"onerror"', '"id"']) assert.ok(!s.includes(gone), gone);
-  for (const kept of ['background-color: #123456', '"/ultra/courses/_1_1/outline"', `"${CDN}/images/site-banner.png"`, '"M0 0h24v24H0z"', 'Plain <img src=x onerror=alert(1)> text']) assert.ok(s.includes(kept), kept);
-  assert.deepEqual([...tags(c.nodes)].sort(), ['a', 'div', 'img', 'path', 'svg']);
+  for (const gone of ['onclick', 'steal', 'onmouseover', 'card-1', 'url(', 'evil.test', 'javascript', 'alert(1)"', 'secret', 'Form text', 'not-a-banner', 'data:', 'Glaze panel', 'Glaze date', 'Peek text', '#sprite', '"onload"', '"onerror"', '"id"', '"type"']) assert.ok(!s.includes(gone), gone);
+  for (const kept of ['background-color: #123456', '"/ultra/courses/_1_1/outline"', `"${CDN}/images/site-banner.png"`, '"M0 0h24v24H0z"', 'Plain <img src=x onerror=alert(1)> text', '"Press"']) assert.ok(s.includes(kept), kept);
+  assert.deepEqual([...tags(c.nodes)].sort(), ['a', 'div', 'img', 'path', 'span', 'svg'], 'a button is its label, as text');
 
   // Built back: text stays text, and the stored record is checked again, so a changed one adds nothing either.
   const box = new El('div', doc);
@@ -137,7 +138,7 @@ test('each page\'s ready markers: every grades tile filled, a course card, a str
   assert.equal(L.kindOf('/ultra/grades'), 'grades');
   assert.equal(L.kindOf('/ultra/course'), 'courses');
   assert.equal(L.kindOf('/ultra/stream'), 'stream');
-  assert.equal(L.kindOf('/ultra/courses/_1_1/outline'), '');
+  assert.equal(L.kindOf('/ultra/calendar'), '');
 });
 
 test('Grades tiles keep their Looks part and theme surfaces in the live shape and the instant copy', () => {
@@ -176,10 +177,19 @@ test('copies are keyed by site, student and page, and only the right student\'s 
 
 // ---- the page script ----
 // The top page on Ultra, with the stand-in DOM: me() answers when told (who.answer), Ultra's view is put in by fill().
+// In a frame (frame: its window.name), the page around it is `around`: what the page script posts it lands in toTop, and
+// tell() posts the page script a message from it.
 const site = ({ path = '/ultra/grades', local = {}, last = '_900_1', instant = true, enabled = true, frame = false, send, get } = {}) => {
   const doc = makeDoc(), html = new El('html', doc), body = new El('body', doc);
   doc.root.append(html); html.append(body);
-  const main = new El('main', doc); main.className = 'bb-offcanvas-container'; body.append(main);
+  // A course page's main area is the course's, in the section that is .bb-offcanvas-container, over the base page's.
+  const base = new El('main', doc); base.className = 'bb-offcanvas-container'; body.append(base);
+  let main = base;
+  if (/^\/ultra\/courses\//.test(path)) {
+    const section = new El('section', doc); section.className = 'course bb-offcanvas-container route-view-container'; body.append(section);
+    main = new El('main', doc); main.className = 'course-main-content'; section.append(main);
+  }
+  const toTop = [], around = { postMessage: (m, o) => { assert.equal(o, ORIGIN); toTop.push(structuredClone(m)); } };
   const frames = [], observers = [], idle = [], sent = [], timers = [], events = new Map(), changes = [];
   let answer, fail;
   const who = new Promise((res, rej) => { answer = res; fail = rej; });
@@ -205,15 +215,16 @@ const site = ({ path = '/ultra/grades', local = {}, last = '_900_1', instant = t
     GZ_CTX: { settings: () => settings, need: async () => {} },
     GZ_ULTRA: { page: { known: async () => (last ? { id: last } : null) } },
   });
-  c.globalThis = c; c.window = c; c.top = frame ? {} : c;
+  c.globalThis = c; c.window = c; c.top = frame ? around : c; c.name = typeof frame === 'string' ? frame : '';
   vm.runInContext(read('courses/instant.js'), c);
   vm.runInContext(read('courses/page/instant.js'), c);
   // Ultra's view goes in, and the page looks at it in its next frame.
   const fill = (f) => { const p = parse(fixture(f), doc); main.replaceChildren(...p.querySelector('main').children); };
   const frame1 = async () => { for (const o of observers.filter((x) => x.on)) o.f([]); for (const f of frames.splice(0)) f(); await settle(); for (const f of frames.splice(0)) f(); await settle(); };
   const copy = () => main.querySelector('#gz-instant');
-  return { c, doc, html, main, local, settings, location, sent, idle, timers, answer, fail, fill, frame1, copy, events,
+  return { c, doc, html, main, base, local, settings, location, sent, idle, timers, answer, fail, fill, frame1, copy, events, toTop, around,
     changed: (ch, area) => { for (const f of changes) f(ch, area); },
+    tell: (data, source = around) => { for (const f of events.get('message') || []) f({ source, origin: ORIGIN, data }); },
     sync: (on = instant, ready = Promise.resolve()) => c.GZ_INSTANT.sync(on, () => who, ready) };
 };
 const stored = (uid, kind, f, at = Date.now() - 60000) => {
@@ -390,7 +401,7 @@ test('a late copy never covers a new route or an existing error', async (t) => {
 });
 
 // ---- content-ultra.js's hooks ----
-const ultraPart = ({ path: route = '/ultra/grades', instant = true, top = true, instantUI = null } = {}) => {
+const ultraPart = ({ path: route = '/ultra/grades', instant = true, top = true, tabFrame = '', instantUI = null } = {}) => {
   const listeners = [], asked = [], sent = [], calls = [];
   const El0 = class { constructor() { this.attrs = new Map(); this.dataset = {}; } setAttribute(k, v) { this.attrs.set(k, String(v)); } getAttribute(k) { return this.attrs.get(k) ?? null; } hasAttribute(k) { return this.attrs.has(k); } removeAttribute(k) { this.attrs.delete(k); } querySelector() { return null; } querySelectorAll() { return []; } addEventListener() {} append() {} };
   const html = new El0();
@@ -408,7 +419,7 @@ const ultraPart = ({ path: route = '/ultra/grades', instant = true, top = true, 
   ctx.globalThis = ctx; ctx.window = ctx; ctx.top = top ? ctx : {};
   vm.runInContext(read('content/content-ultra.js'), ctx);
   const need = (files, ready) => { asked.push([].concat(files)); if (!ctx.GZ_INSTANT && [].concat(files).includes('courses/page/instant.js')) ctx.GZ_INSTANT = { sync: (...a) => calls.push(a) }; return ready() ? Promise.resolve() : Promise.reject(new Error('not ready')); };
-  const I = { C: {}, html, isPreview: false, solo: true, tabFrame: '', need, t: (x) => x, locale: () => 'en', api: async () => ({}),
+  const I = { C: {}, html, isPreview: false, solo: top || !!tabFrame, tabFrame, need, t: (x) => x, locale: () => 'en', api: async () => ({}),
     courseId: () => null, markDue() {}, drawProgress() {}, cardBadge() {}, cardsInView: { observe() {}, unobserve() {} }, inView: new Set(), tagCards() {}, tagExtras() {}, courseSlots: {},
     courseColors: () => ({}), varText: () => '', CARD: 'article', dueLabelled: () => false, links: [1], ready: Promise.resolve(),
     settings: { enabled: true, enhance: { ...D.GZ_SANITIZE({}).enhance, instant }, nav: { brand: 'x' }, courses: { names: {}, tint: false, tinted: [] }, sidebar: {}, navbar: {} },
@@ -417,9 +428,9 @@ const ultraPart = ({ path: route = '/ultra/grades', instant = true, top = true, 
   return { X, I, asked, sent, calls, listeners, location };
 };
 
-test('content-ultra.js loads the copy\'s page script on the three pages with the switch on, and tells it when it turns off', async () => {
+test('content-ultra.js loads the copy\'s page script on its pages with the switch on, and tells it when it turns off', async () => {
   const want = ['courses/instant.js', 'courses/page/instant.js'];
-  for (const p of ['/ultra/grades', '/ultra/course', '/ultra/stream']) {
+  for (const p of ['/ultra/grades', '/ultra/course', '/ultra/stream', '/ultra/courses/_1_1/outline', '/ultra/courses/_1_1/announcements', '/ultra/courses/_1_1/grades']) {
     const u = ultraPart({ path: p });
     u.X.syncWidgets();
     await settle();
@@ -431,14 +442,20 @@ test('content-ultra.js loads the copy\'s page script on the three pages with the
   off.X.syncWidgets();
   await settle();
   assert.ok(!off.asked.some((a) => a.includes('courses/page/instant.js')), 'off: nothing loaded');
-  const elsewhere = ultraPart({ path: '/ultra/courses/_1_1/outline' });
-  elsewhere.X.syncWidgets();
-  await settle();
-  assert.ok(!elsewhere.asked.some((a) => a.includes('courses/page/instant.js')), 'another page');
+  for (const p of ['/ultra/calendar', '/ultra/courses/_1_1/discussions', '/ultra/courses/_1_1/outline/edit/document/_9_1']) {
+    const elsewhere = ultraPart({ path: p });
+    elsewhere.X.syncWidgets();
+    await settle();
+    assert.ok(!elsewhere.asked.some((a) => a.includes('courses/page/instant.js')), `another page: ${p}`);
+  }
   const framed = ultraPart({ top: false });
   framed.X.syncWidgets();
   await settle();
-  assert.ok(!framed.asked.some((a) => a.includes('courses/page/instant.js')), 'a frame');
+  assert.ok(!framed.asked.some((a) => a.includes('courses/page/instant.js')), 'a frame that isn\'t a course tab\'s');
+  const tab = ultraPart({ top: false, tabFrame: '_1_1', path: '/ultra/courses/_1_1/outline' });
+  tab.X.syncWidgets();
+  await settle();
+  assert.ok(tab.asked.some((a) => JSON.stringify(a) === JSON.stringify(want)), 'a course tab\'s frame on its course page');
   const loaded = ultraPart({ instant: false, instantUI: (calls) => ({ sync: (...a) => calls.push(a) }) });
   loaded.X.syncWidgets();
   await settle();
@@ -728,4 +745,281 @@ test('a delayed pagehide copy keeps its visit time rather than claiming to be ne
   now += 600000;
   for (const f of p.events.get('pagehide') || []) f();
   assert.equal(p.sent.filter((m) => m.op === 'put').at(-1).record.at, start);
+});
+
+// ---- a course's pages: Course Content, Announcements and the Gradebook, kept per course ----
+const COURSE = { outline: ['/ultra/courses/_101_1/outline', 'ultra-instant-outline.html'], announcements: ['/ultra/courses/_101_1/announcements', 'ultra-instant-announcements.html'], gradebook: ['/ultra/courses/_101_1/grades', 'ultra-instant-gradebook.html'] };
+const coursePage = (f) => { const doc = makeDoc(); const body = parse(fixture(f), doc); doc.root.append(body); return { doc, body, main: body.querySelector('main.course-main-content') }; };
+const courseStored = (uid, kind, course, at = Date.now() - 60000) => {
+  const { main } = coursePage(COURSE[kind][1]);
+  return { [L.key(ORIGIN, uid, kind, course)]: { v: L.VERSION, uid, kind, course, at, full: false, nodes: L.capture(main, CTX).nodes } };
+};
+
+test('a course\'s Course Content, Announcements and Gradebook are kinds of their own, by address; Calendar and other tools aren\'t', () => {
+  for (const [kind, [route]] of Object.entries(COURSE)) {
+    assert.equal(L.kindOf(route), kind, route);
+    assert.equal(L.kindOf(`${route}/`), kind, `${route}/`);
+    assert.equal(L.courseOf(route), '_101_1', route);
+  }
+  for (const p of ['/ultra/grades', '/ultra/course', '/ultra/stream']) assert.equal(L.courseOf(p), '', `${p} is no course's`);
+  for (const p of ['/ultra/calendar', '/ultra/courses/_101_1/calendar', '/ultra/courses/_101_1/discussions', '/ultra/courses/_101_1/outline/edit/document/_9_1',
+    '/ultra/courses/_101_1/document/_8_1', '/ultra/courses/_101_1/outline/roster', '/ultra/courses/101/outline', '/ultra/courses/_101_1/gradebook']) {
+    assert.equal(L.kindOf(p), '', p);
+    assert.equal(L.courseOf(p), '', p);
+  }
+});
+
+test('each course page\'s ready markers, from the live shapes; a copy of a ready course page never counts as ready', () => {
+  const all = [...Object.keys(COURSE), 'grades', 'courses', 'stream'];
+  for (const [kind, [, f]] of Object.entries(COURSE)) {
+    const { doc, main } = coursePage(f);
+    assert.equal(L.ready(kind, main), true, `${kind} ready`);
+    for (const other of all.filter((k) => k !== kind)) assert.equal(L.ready(other, main), false, `${kind} is not ${other}`);
+    const fresh = new El('main', doc), box = new El('div', doc);
+    fresh.className = 'course-main-content';
+    box.id = 'gz-instant';
+    fresh.append(box);
+    doc.root.append(fresh);
+    L.build(doc, box, L.capture(main, CTX).nodes, CTX);
+    assert.ok(box.all().length > 20, kind);
+    assert.equal(L.ready(kind, fresh), false, `${kind}: the copy alone isn't Ultra's view`);
+  }
+  for (const f of ['ultra-instant-grades.html', 'ultra-instant-courses.html', 'ultra-instant-stream.html']) {
+    const { main } = page(f);
+    for (const kind of Object.keys(COURSE)) assert.equal(L.ready(kind, main), false, `${f} is not ${kind}`);
+  }
+  // Still loading: the outline with no items yet, the announcements' table with no rows, the gradebook's head row alone.
+  const outline = coursePage(COURSE.outline[1]).main;
+  for (const item of outline.querySelectorAll('div.root.content-list-item')) item.remove();
+  assert.equal(L.ready('outline', outline), false, 'an outline with no items');
+  const news = coursePage(COURSE.announcements[1]).main;
+  for (const row of news.querySelectorAll('tr.announcement-item-row')) row.remove();
+  assert.equal(L.ready('announcements', news), false, 'no rows yet');
+  const book = coursePage(COURSE.gradebook[1]).main;
+  for (const row of book.querySelectorAll('tbody tr')) row.remove();
+  assert.equal(L.ready('gradebook', book), false, 'the head row alone');
+});
+
+test('a course page\'s copy keeps its items, titles, links and tables, and leaves out ids, Glaze\'s own parts and controls\' state', () => {
+  const o = flat(L.capture(coursePage(COURSE.outline[1]).main, CTX).nodes);
+  for (const want of ['content-list-item', 'itemContainer', 'click-to-invoke-container', 'Week 1 folder', 'Notes 1', 'Reading 2', 'Practice check 4',
+    '"/ultra/courses/_101_1/document/_8202_1?view=content&state=view"', '"/ultra/courses/_101_1/outline/roster"', 'course-outline-content', 'bb-course-navigation']) assert.ok(o.includes(want), `outline: ${want}`);
+  for (const gone of ['data-content-id', 'folder-title-', '"aria-expanded"', '"role"', '"type"', '"id"']) assert.ok(!o.includes(gone), `outline: ${gone}`);
+  const a = L.capture(coursePage(COURSE.announcements[1]).main, CTX);
+  for (const t of ['table', 'thead', 'tbody', 'tr', 'td', 'th']) assert.ok(tags(a.nodes).has(t), `announcements: a ${t} stays one`);
+  const as = flat(a.nodes);
+  for (const want of ['announcement-item-row', 'list-item-title', 'Week 6 update', '"/ultra/stream/announcement-detail?courseId=_101_1&announcementId=_7100_1"']) assert.ok(as.includes(want), `announcements: ${want}`);
+  for (const gone of ['list-item-title-_', 'aria-checked', 'data-analytics-id', '"role"']) assert.ok(!as.includes(gone), `announcements: ${gone}`);
+  const g = L.capture(coursePage(COURSE.gradebook[1]).main, CTX), gs = flat(g.nodes);
+  assert.equal((gs.match(/MuiTableRow-root/g) || []).length, 26, 'the head row and 25 rows');
+  for (const gone of ['gz-calc', 'What if', 'course-student-grades-item-name-', 'student-tab-panel-grades', 'course-student-grades-sortable-table']) assert.ok(!gs.includes(gone), `gradebook: ${gone}`);
+  assert.ok(gs.includes('Practice item 25') && gs.includes('MuiTableCell-body'));
+  // Built back: a table's parts stay a table's; a button is its label, never a control.
+  const doc = makeDoc(), box = new El('div', doc);
+  L.build(doc, box, a.nodes, CTX);
+  const all = box.all();
+  assert.equal(all.filter((e) => e.tagName === 'TR' && e.className.includes('announcement-item-row')).length, 6);
+  assert.ok(all.every((e) => !['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'FORM'].includes(e.tagName)));
+  const bad = new El('div', doc);
+  L.build(doc, bad, [['button', 'x', { type: 'submit', onclick: 'x()' }, 'Press'], ['table', '', 0, ['tr', '', { onclick: 'x()' }, ['td', '', { colspan: '2' }, 'cell']]]], CTX);
+  assert.ok(bad.all().every((e) => !['BUTTON'].includes(e.tagName) && !Object.keys(e.attrs).length), 'a stored button or table carries nothing else');
+});
+
+test('copies of a course\'s pages are keyed by site, student, page and course', () => {
+  assert.equal(L.key(ORIGIN, '_900_1', 'outline', '_101_1'), `ultraCopy:${ORIGIN}/_900_1/outline/_101_1`);
+  assert.equal(L.key(ORIGIN, '_900_1', 'grades'), `ultraCopy:${ORIGIN}/_900_1/grades`, 'the global pages\' keys are as they were');
+  const rec = { v: L.VERSION, uid: '_900_1', kind: 'outline', course: '_101_1', at: Date.now() - 1000, nodes: [] };
+  assert.equal(L.usable(rec, '_900_1', 'outline', '_101_1'), true);
+  assert.equal(L.usable(rec, '_900_1', 'outline', '_102_1'), false, 'another course');
+  assert.equal(L.usable(rec, '_900_1', 'outline'), false, 'no course');
+  assert.equal(L.usable(rec, '_900_1', 'gradebook', '_101_1'), false, 'another page of the course');
+  assert.equal(L.usable({ ...rec, course: '../_101_1' }, '_900_1', 'outline', '../_101_1'), false, 'not a course id');
+  assert.equal(L.usable({ v: L.VERSION, uid: '_900_1', kind: 'grades', course: '_101_1', at: Date.now(), nodes: [] }, '_900_1', 'grades'), false, 'a global page names no course');
+});
+
+test('on a course page the copy paints over the course\'s main area, not the base page beneath, goes when Ultra\'s view is ready and is kept for that course', async () => {
+  for (const [kind, [route, f]] of Object.entries(COURSE)) {
+    const p = site({ path: route, local: courseStored('_900_1', kind, '_101_1') });
+    const before = p.local[L.key(ORIGIN, '_900_1', kind, '_101_1')].at;
+    p.sync();
+    await settle();
+    assert.equal(p.copy(), null, `${kind}: nothing before the student is confirmed`);
+    p.answer('_900_1');
+    await settle();
+    const box = p.copy();
+    assert.ok(box, `${kind}: painted`);
+    assert.equal(box.parentElement, p.main, `${kind}: in main.course-main-content`);
+    assert.equal(p.base.querySelector('#gz-instant'), null, `${kind}: not in the base page's main`);
+    assert.equal(box.attrs['aria-hidden'], 'true');
+    assert.equal(box.inert, true);
+    assert.equal(p.html.dataset.gzInstant, kind);
+    p.fill(f);
+    await p.frame1();
+    assert.equal(p.copy(), null, `${kind}: gone once Ultra's view is ready`);
+    assert.equal(p.idle.length, 1);
+    p.idle.shift()();
+    const kept = p.local[L.key(ORIGIN, '_900_1', kind, '_101_1')];
+    assert.ok(kept.at > before && kept.course === '_101_1' && kept.kind === kind && kept.uid === '_900_1', `${kind}: kept again for its course`);
+    assert.ok(!flat(kept.nodes).includes('gz-instant'));
+  }
+  // Another course's page never shows it.
+  const q = site({ path: '/ultra/courses/_102_1/outline', local: courseStored('_900_1', 'outline', '_101_1') });
+  q.sync(); q.answer('_900_1'); await settle();
+  assert.equal(q.copy(), null, 'another course');
+});
+
+test('a course page too large for a copy\'s bounds is not kept cut short', async () => {
+  const p = site({ path: COURSE.outline[0] });
+  p.sync(); p.answer('_900_1'); await settle();
+  p.fill(COURSE.outline[1]);
+  const list = p.main.querySelectorAll('div.root.content-list-item')[0].parentElement;
+  for (let i = 0; i < 4500; i++) { const d = new El('div', p.doc); d.className = 'root content-list-item'; d.append(`Item ${i}`); list.append(d); }
+  await p.frame1();
+  for (const f of p.idle.splice(0)) f();
+  for (const f of p.events.get('pagehide') || []) f();
+  assert.ok(!p.sent.some((m) => m.op === 'put'), 'within the bounds or not at all');
+  const q = site({ path: COURSE.outline[0] });
+  q.sync(); q.answer('_900_1'); await settle();
+  q.fill(COURSE.outline[1]); await q.frame1();
+  q.idle.shift()();
+  assert.ok(q.sent.some((m) => m.op === 'put' && m.record.full === false), 'a real outline fits');
+});
+
+test('in a course tab\'s frame a copy paints only while that frame is on screen loading; never in the standby or another course\'s frame', async () => {
+  const [route, f] = COURSE.outline, key = L.key(ORIGIN, '_900_1', 'outline', '_101_1');
+  for (const [why, name] of [['the standby', 'gz-ctab:standby'], ['another course\'s frame', 'gz-ctab:_102_1'], ['Canvas\'s page frame', 'gz-ctab:page'], ['an unnamed frame', '']]) {
+    const s = site({ path: route, frame: name, local: courseStored('_900_1', 'outline', '_101_1') });
+    s.sync(); s.answer('_900_1'); await settle();
+    s.tell({ gzCtab: 'copy', picked: true }); await settle();
+    assert.equal(s.copy(), null, why);
+    assert.equal(s.c.GZ_INSTANT.now(), null, `${why}: no visit`);
+    assert.deepEqual(s.toTop, [], `${why}: nothing asked`);
+  }
+  // A frame kept hidden (warming ahead, a fresh outline under Keep Course Content): it asks, is told no, paints nothing,
+  // and still keeps Ultra's view once ready.
+  const h = site({ path: route, frame: 'gz-ctab:_101_1', local: courseStored('_900_1', 'outline', '_101_1') });
+  const before = h.local[key].at;
+  h.sync(); h.answer('_900_1'); await settle();
+  assert.deepEqual(h.toTop, [{ gzCtab: 'copy', on: false }], 'asks the page around whether it is on screen');
+  h.tell({ gzCtab: 'copy', picked: false }); await settle();
+  assert.equal(h.copy(), null, 'hidden: nothing painted');
+  h.tell({ gzCtab: 'visible', on: true }); await settle();
+  assert.equal(h.copy(), null, 'the page around readying it (Keep Course Content\'s fresh outline) paints nothing');
+  h.fill(f); await h.frame1();
+  h.idle.shift()();
+  assert.ok(h.local[key].at > before, 'kept from a frame too');
+  // The frame on screen as it loads: told so, it paints, says so, and shows its page under the copy until Ultra's is ready.
+  const p = site({ path: route, frame: 'gz-ctab:_101_1', local: courseStored('_900_1', 'outline', '_101_1') });
+  p.tell({ gzCtab: 'copy', picked: true }, {}); // not from the page around
+  p.sync(); p.answer('_900_1'); await settle();
+  assert.equal(p.copy(), null, 'not before the page around says it is the one on screen');
+  p.tell({ gzCtab: 'copy', picked: true }); await settle();
+  const box = p.copy();
+  assert.ok(box && box.inert === true && box.attrs['aria-hidden'] === 'true', 'painted, inert');
+  assert.deepEqual(p.toTop.at(-1), { gzCtab: 'copy', on: true }, 'says it has a copy up');
+  assert.ok('gzInstantFrame' in p.html.dataset, 'its page shows under the copy, even while the page around has it as hidden');
+  p.tell({ gzCtab: 'visible', on: false });
+  assert.deepEqual(p.toTop.at(-1), { gzCtab: 'copy', on: true }, 'hidden or shown again, it says what it has');
+  assert.ok(!('gzInstantFrame' in p.html.dataset), 'hidden: its page hides again as the page around has it');
+  p.tell({ gzCtab: 'copy', picked: true }); await settle();
+  assert.ok('gzInstantFrame' in p.html.dataset);
+  // Drawn, as the page around has it: shown as Ultra's, and the copy goes.
+  p.tell({ gzCtab: 'visible', on: true }); await p.frame1();
+  assert.equal(p.copy(), null, 'drawn: the copy goes');
+  assert.deepEqual(p.toTop.at(-1), { gzCtab: 'copy', on: false });
+  assert.ok(!('gzInstantFrame' in p.html.dataset));
+  // Told first, the copy read after: it paints as the read lands.
+  let deliver;
+  const q = site({ path: route, frame: 'gz-ctab:_101_1', local: courseStored('_900_1', 'outline', '_101_1'), get: (k, cb) => {
+    const r = structuredClone(Object.fromEntries([].concat(k).map((x) => [x, q.local[x]])));
+    if (typeof k === 'string' && k.startsWith('ultraCopy:')) deliver = () => cb(r); else cb(r);
+  } });
+  q.sync(); q.answer('_900_1'); await settle();
+  q.tell({ gzCtab: 'copy', picked: true }); await settle();
+  assert.equal(q.copy(), null);
+  deliver(); await settle();
+  assert.ok(q.copy(), 'painted once its copy is read');
+});
+
+test('a standby adopted for a course is that course\'s frame from then on', async () => {
+  const [route] = COURSE.gradebook;
+  const p = site({ path: '/ultra/profile', frame: 'gz-ctab:standby', local: courseStored('_900_1', 'gradebook', '_101_1') });
+  p.sync(); await settle();
+  assert.equal(p.c.GZ_INSTANT.now(), null);
+  p.c.name = 'gz-ctab:_101_1'; p.location.pathname = route;
+  p.sync(); p.answer('_900_1'); await settle();
+  assert.deepEqual(p.toTop, [{ gzCtab: 'copy', on: false }]);
+  p.tell({ gzCtab: 'copy', picked: true }); await settle();
+  assert.ok(p.copy(), 'the adopted frame on screen paints its course\'s copy');
+});
+
+test('a frame\'s copy goes with the switch off, on a route change and on sign-out, and says so', async (t) => {
+  for (const how of ['off', 'route', 'signout']) await t.test(how, async () => {
+    const p = site({ path: COURSE.outline[0], frame: 'gz-ctab:_101_1', local: courseStored('_900_1', 'outline', '_101_1') });
+    p.sync(); p.answer('_900_1'); await settle();
+    p.tell({ gzCtab: 'copy', picked: true }); await settle();
+    assert.ok(p.copy());
+    if (how === 'off') { p.settings.enhance.instant = false; p.sync(false); }
+    else if (how === 'route') { p.location.pathname = '/ultra/courses/_101_1/outline/edit/document/_9_1'; await p.frame1(); }
+    else p.c.GZ_INSTANT.signout();
+    assert.equal(p.copy(), null);
+    assert.deepEqual(p.toTop.at(-1), { gzCtab: 'copy', on: false });
+    assert.equal(p.html.dataset.gzInstant, undefined);
+  });
+});
+
+test('the worker keeps a course page\'s copy from the top page or a course tab\'s frame, per course and bounded', async () => {
+  const w = workerEnv();
+  const top = { id: 'glaze', tab: { id: 3, url: `${ORIGIN}/ultra/courses/_101_1/outline` }, frameId: 0, url: `${ORIGIN}/ultra/courses/_101_1/outline` };
+  const frame = { id: 'glaze', tab: { id: 3, url: `${ORIGIN}/ultra/course` }, frameId: 7, url: `${ORIGIN}/ultra/courses/_102_1/announcements` };
+  const record = (kind, course, at = Date.now() - 1000) => ({ ...Object.values(courseStored('_900_1', kind, course, at))[0] });
+  const put = async (sender, rec) => { const { epoch } = await w.send({ type: 'glaze:ultraCopy', op: 'begin' }, sender) || {}; return w.send({ type: 'glaze:ultraCopy', op: 'put', epoch, record: rec }, sender); };
+  assert.equal((await put(top, record('outline', '_101_1'))).ok, true);
+  assert.equal((await put(frame, record('announcements', '_102_1'))).ok, true, 'from a course tab\'s frame');
+  assert.deepEqual(w.store.local[L.key(ORIGIN, '_900_1', 'outline', '_101_1')], record('outline', '_101_1', w.store.local[L.key(ORIGIN, '_900_1', 'outline', '_101_1')].at));
+  assert.ok(w.store.local[L.key(ORIGIN, '_900_1', 'announcements', '_102_1')]);
+  // Not from a frame of another site's tab, and never a global page from a frame.
+  const foreign = { ...frame, tab: { id: 4, url: 'https://other.blackboard.com/ultra/course' } };
+  assert.equal(await put(foreign, record('outline', '_103_1')), null);
+  assert.equal(await put({ ...frame, url: `${ORIGIN}/ultra/grades` }, Object.values(stored('_900_1', 'grades', 'ultra-instant-grades.html'))[0]), null, 'a global page only from the top page');
+  for (const bad of [{ course: undefined }, { course: '../_101_1' }, { course: '_101_1/x' }]) assert.equal((await put(top, { ...record('gradebook', '_101_1'), ...bad })).ok, false, JSON.stringify(bad));
+  assert.equal((await put(top, { ...Object.values(stored('_900_1', 'grades', 'ultra-instant-grades.html'))[0], course: '_101_1' })).ok, false, 'a global page names no course');
+  assert.equal(w.store.local[L.key(ORIGIN, '_900_1', 'gradebook', '_101_1')], undefined);
+  // Bounded: the newest course copies a student has on a site stay; the oldest go.
+  const now = Date.now();
+  for (let i = 0; i < 60; i++) assert.equal((await put(top, { v: 1, uid: '_900_1', kind: 'outline', course: `_${200 + i}_1`, at: now - 600000 + i * 1000, full: false, nodes: [['div', 'x', 0, `Course ${i}`]] })).ok, true);
+  const kept = Object.keys(w.store.local).filter((k) => k.startsWith(`ultraCopy:${ORIGIN}/_900_1/`) && !k.endsWith('/index'));
+  assert.ok(kept.length <= 48 && kept.length >= 40, `${kept.length} course copies kept`);
+  assert.ok(kept.includes(L.key(ORIGIN, '_900_1', 'outline', '_259_1')), 'the newest stays');
+  assert.ok(!kept.includes(L.key(ORIGIN, '_900_1', 'outline', '_200_1')), 'the oldest goes');
+});
+
+test('purges cover the course pages\' copies: sign-out, the switch off, Reset and the site removed', async (t) => {
+  for (const reason of ['sign-out', 'switch', 'reset', 'remove']) await t.test(reason, async () => {
+    const local = { ultra: [], ...courseStored('_900_1', 'outline', '_101_1'), ...courseStored('_800_1', 'gradebook', '_102_1'), [`ultraCopy:${ORIGIN}/_900_1/index`]: { [L.key(ORIGIN, '_900_1', 'outline', '_101_1')]: 1 } };
+    const w = workerEnv({ store: { sync: { version: 2, enabled: true, enhance: { instant: true } }, local, session: {} } });
+    const from = { id: 'glaze', tab: { id: 3, url: `${ORIGIN}/ultra/courses/_101_1/outline` }, frameId: 0, url: `${ORIGIN}/ultra/courses/_101_1/outline` };
+    if (reason === 'sign-out') await w.send({ type: 'glaze:ultraCopy', op: 'drop' }, from);
+    else if (reason === 'switch') await w.context.chrome.storage.sync.set({ enhance: { instant: false } });
+    else await w.send({ type: 'glaze:sites', op: reason, origin: ORIGIN }, { id: 'glaze', tab: { id: 5 }, frameId: 0, url: 'chrome-extension://x/options.html' });
+    await w.settle();
+    assert.deepEqual(Object.keys(w.store.local).filter((k) => k.startsWith('ultraCopy:')), [], 'every course copy and its index');
+  });
+});
+
+test('the copy\'s styles cover a course page\'s main area, and a frame\'s page shows under its copy', () => {
+  const css = read('content/extras.css');
+  assert.match(css, /html\[data-gz-instant\] :is\(main\.bb-offcanvas-container, main\.course-main-content\) > :not\(\[id\^="gz-"\]\) \{ visibility: hidden !important; \}/);
+  assert.match(css, /html\[data-gz-instant-frame\] #site-wrap \{ visibility: visible !important; \}/);
+});
+
+test('one switch for every copy: "Open pages instantly", said in every language', () => {
+  const html = read('options.html');
+  assert.match(html, /<input type="checkbox" data-key="enhance\.instant"><span>Open pages instantly<\/span>/);
+  assert.doesNotMatch(html, /Open Grades, Courses and Activity instantly/);
+  for (const f of fs.readdirSync(path.join(root, 'i18n'))) {
+    assert.match(read(`i18n/${f}`), /"Open pages instantly": "[^"]+"/, f);
+    assert.doesNotMatch(read(`i18n/${f}`), /Open Grades, Courses and Activity instantly/, f);
+  }
+  assert.equal(D.GZ_SANITIZE({}).enhance.instant, true, 'the same key, on by default');
 });
