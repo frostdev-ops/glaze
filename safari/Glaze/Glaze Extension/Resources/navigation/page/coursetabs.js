@@ -1457,10 +1457,11 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const [cid, f] = [...frames, ...[...spare].flatMap(([k, a]) => a.map((g) => [k, g]))].find(([, g]) => g.el.contentWindow === e.source) || [];
     if (!f) return;
     const live = frames.get(cid) === f, it = items.get(cid);
+    // An item frame's Glaze told what it is: at its first word, and again once it listens (a cold frame's first word comes earlier).
+    if ((d.gzCtab === 'loaded' || d.gzCtab === 'account') && live && f.item) post(f, { gzCtab: 'item', on: !!it?.open });
     if (d.gzCtab === 'adopted' && f.adopting && d.cid === cid) { if (d.ok === true) f.adopting.ok = true; else f.adopting.failed = true; }
     else if (d.gzCtab === 'warm' && live && cid === showing && typeof d.cid === 'string') warmTab(d.cid);
     else if (d.gzCtab === 'item' && live && cid === showing && typeof d.url === 'string' && d.url.length < 1300) itemFrom(cid, f, d.url);
-    else if (d.gzCtab === 'loaded' && live && f.item) post(f, { gzCtab: 'item', on: !!it?.open });
     // Ultra's own way back in the item (its close, its link to Course Content), or its route there seen late.
     else if (d.gzCtab === 'itemback' && live && f.item && it?.open) closeItem(cid, 'ultra');
     else if (d.gzCtab === 'moved' && live && f.item && it?.open && L.outlineOf(pathOf(f).split('?')[0]) === cid) closeItem(cid, 'ultra');
