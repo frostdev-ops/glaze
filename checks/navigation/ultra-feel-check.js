@@ -67,7 +67,7 @@ function probe() {
     return ok && !run.item.hasAttribute('data-gz-press');
   };
   P.base = () => { run.base = look(run.item); return run.base; };
-  // A view transition holds what's painted until its update is done: a frame then shows the old page, whatever the DOM says.
+  // A view transition holds the old painting until its new state is captured and ready to animate, whatever the DOM says.
   const vts = new WeakMap();
   const vtHeld = () => {
     const vt = document.activeViewTransition;
