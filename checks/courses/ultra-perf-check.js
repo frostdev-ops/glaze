@@ -21,7 +21,6 @@ const neo = process.env.PERF_DEVICE === 'neo';
 const NEO_CHROME_SPEEDOMETER = 41.4;
 const NEO_CHROME_SOURCE = 'HotHardware, "Apple MacBook Neo Long-Term Review", hothardware.com/reviews/apple-macbook-neo-review?page=2 (read 2026-10-30)';
 // The runner's Speedometer 3.1 score (checks/courses/neo-calibrate.js, headless Chromium, 6 cores) ÷ NEO_CHROME_SPEEDOMETER.
-// null until calibrated: PERF_CPU_RATE stands in.
 // Measured 2026-10-31 on the runner (Ryzen 7 7800X3D, headless Chromium 153, pinned to cores 0-5, 10 iterations): 34, under the
 // Neo's 41.4, so the runner is already a little slower than a Neo and is not slowed further.
 const RUNNER_SPEEDOMETER = 34;
