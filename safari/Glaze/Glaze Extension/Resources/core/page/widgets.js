@@ -1798,6 +1798,19 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       }
     }
   };
+  // From content-ultra.js's mutation callback, before that frame paints: the Courses page's panel goes in with the page Ultra
+  // has just drawn. At the next pass it pushed the course list down. One look per batch of changes.
+  let holding = false;
+  const held = () => {
+    if (holding || !on || !W || !lay) return;
+    holding = true;
+    Promise.resolve().then(() => {
+      holding = false;
+      if (!on || !(atTop || ctx.tabFrame === 'page') || boardOf() !== 'courses' || !document.querySelector('div.courses-panel')) return;
+      const h = board === 'courses' && home();
+      if (!h || !panel || !placed(h)) sync(true);
+    });
+  };
   // The hub can open with the widgets off: it needs only this file and core/widgets.js.
   const open = () => !validContext() ? Promise.resolve() : ctx.need('core/widgets.js', () => globalThis.GZ_WIDGETS).then(() => { W ||= globalThis.GZ_WIDGETS; hub(); });
 
@@ -1844,7 +1857,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const at = placement();
     return [...new Set([...W.TILES, ...Object.keys(MORE)])].filter((id) => dockable(id) && allowed(id)).map((id) => ({ id, name: t(nameOf(id)), where: at.get(id)?.where || 'off' }));
   };
-  return { sync, cover, hub: open, register, declare, who: account, avatar, catalog };
+  return { sync, held, cover, hub: open, register, declare, who: account, avatar, catalog };
 })();
 
 GZ_WIDGETS_UI;

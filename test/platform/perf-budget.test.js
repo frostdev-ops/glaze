@@ -314,9 +314,10 @@ const INSTANT_COPIES = { ultra: 1197 + 54 + 41, canvas: 54, moodle: 54 };
 // Canvas's and Moodle's ten-minute due-list cache: 104 more on every site, against 737a67d0.
 const ULTRA_STALENESS = { ultra: 2278 + 104, canvas: 1127 + 104, moodle: 1127 + 104 };
 // Layout shifts on a slow laptop (perf neo-shift, 2026-10-31; a named raise under the owner's 2026-10-19 approval): Glaze's
-// footer waits for the site's sheet before it joins the page, 350 bytes in the shared content.js (every site).
+// footer waits for the site's sheet before it joins the page, 350 bytes in the shared content.js (every site); content-ultra.js's
+// mutation callback hands the Courses page's panel its place before the frame paints, 36 on Ultra (the placing is on demand).
 // Measured against 6300f5fb.
-const NO_SHIFT = 350;
+const NO_SHIFT = { ultra: 350 + 36, canvas: 350, moodle: 350 };
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what background/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;
@@ -325,7 +326,7 @@ const FIRST_SCRIPT = { ultra: entry((c) => c.js.includes('content/content-ultra.
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + (site === 'ultra' ? ULTRA_EARLY_ME : 0) + UI_SWAP + ULTRA_VT_ABORT[site] + VT_GUARD[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS + SYLLABUS_DOCS + WRITER + WRITER_SETTINGS + CTAB_PALETTE[site] + LOOK_CATALOG + COURSE_LOOKS_SYNC + BB_PREVIEWS + CANVAS_OPEN + AREA_PATHS[site] + ULTRA_PASSES[site] + CTAB_STANDBY + NAV_FIRST_PAINT[site] + INSTANT_COPIES[site] + ULTRA_STALENESS[site] + NO_SHIFT;
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + (site === 'ultra' ? ULTRA_EARLY_ME : 0) + UI_SWAP + ULTRA_VT_ABORT[site] + VT_GUARD[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS + SYLLABUS_DOCS + WRITER + WRITER_SETTINGS + CTAB_PALETTE[site] + LOOK_CATALOG + COURSE_LOOKS_SYNC + BB_PREVIEWS + CANVAS_OPEN + AREA_PATHS[site] + ULTRA_PASSES[site] + CTAB_STANDBY + NAV_FIRST_PAINT[site] + INSTANT_COPIES[site] + ULTRA_STALENESS[site] + NO_SHIFT[site];
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }

@@ -89,7 +89,7 @@ const page = ({ local = {}, sync = {}, replies = [], clock = { t: Date.now() }, 
     vm.runInContext(read('courses/ultra.js'), c);
   }
   // The widgets themselves, reached as todo-ui.test.js reaches the list's insides: through the source's return.
-  const src = read('core/page/widgets.js').replace('  return { sync, cover, hub: open, register, declare, who: account, avatar, catalog };', '  return { sync, cover, hub: open, register, declare, who: account, avatar, catalog, probe: { WIDGETS, tileEl, added, tiles, draw, onShow, seatAfter: typeof seatAfter === "function" ? seatAfter : null, layout: (x) => { lay = x; }, set: (w, s, m) => { W = w; o = s; me = m; }, hubFrom: (b) => { hubButton = b; }, state: (x) => { on = x.on; lay = x.lay; board = drawn = null; floats = x.floats; ro = x.ro; } } };');
+  const src = read('core/page/widgets.js').replace('  return { sync, held, cover, hub: open, register, declare, who: account, avatar, catalog };', '  return { sync, held, cover, hub: open, register, declare, who: account, avatar, catalog, probe: { WIDGETS, tileEl, added, tiles, draw, onShow, seatAfter: typeof seatAfter === "function" ? seatAfter : null, layout: (x) => { lay = x; }, set: (w, s, m) => { W = w; o = s; me = m; }, hubFrom: (b) => { hubButton = b; }, state: (x) => { on = x.on; lay = x.lay; board = drawn = null; floats = x.floats; ro = x.ro; } } };');
   assert.notEqual(src, read('core/page/widgets.js'));
   const ui = vm.runInContext(src, c);
   ui.probe.set(W, D.GZ_SANITIZE({}).widgets, { uid: ultra ? '_5_1' : '3', tz: ultra ? undefined : 'UTC' });
