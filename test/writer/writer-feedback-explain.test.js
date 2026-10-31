@@ -36,7 +36,8 @@ const reply = (comment, { levels = false } = {}) => (req) => {
     const id = row?.criterion?.enum[0] || /\[(claim|examples)\]/.exec(blocks(req).find((b) => b.label === 'criterion').text)[1];
     const level = levels ? 'Proficient' : null, score = levels ? 30 : id === 'claim' ? 40 : 60;
     if (row) return { json: { criteria: [{ criterion: id, status: 'met', comment, quotes: row.quotes.items.enum.slice(0, 1), level, score }] } };
-    return { json: { status: 'met', quotes: catalog(req, true).slice(0, 1).map((p) => p.id), facts: catalog(req, false).slice(0, 2).map((p) => p.id), level, score, complete: true } };
+    const ungraded = req.schema.properties.score?.type === 'null';
+    return { json: { status: 'met', quotes: catalog(req, true).slice(0, 1).map((p) => p.id), facts: catalog(req, false).slice(0, 2).map((p) => p.id), level, score: ungraded ? null : score, complete: true } };
   }
   if (req.schema.properties.comment) return { json: { comment } };
   if (req.schema.properties.summary) return { json: { summary: SUMMARY } };
@@ -97,12 +98,14 @@ test('local: an abbreviation is no sentence end when a cut comment is trimmed', 
 });
 
 test('the fallback is written in the draft\'s language in all six locales and keeps the grade', async () => {
-  const want = { en: 'Rubric score: 40/40 points.', de: 'Punkte laut Bewertungsraster: 40/40.', es: 'Puntuación según la rúbrica: 40/40 puntos.',
-    fr: 'Note selon la grille : 40/40 points.', nl: 'Score volgens het beoordelingsschema: 40/40 punten.', 'pt-BR': 'Pontuação pela rubrica: 40/40 pontos.' };
+  const want = { en: 'Rubric score: 40/40 points.', de: 'Punkte für dieses Kriterium: 40/40.', es: 'Puntuación según la rúbrica: 40/40 puntos.',
+    fr: 'Note pour ce critère : 40/40 points.', nl: 'Score voor dit criterium: 40/40 punten.', 'pt-BR': 'Pontuação pela rubrica: 40/40 pontos.' };
   for (const lang of Object.keys(DRAFTS)) {
     const out = (await run(raw({ lang }), reply(SUBJECT), LOCAL).result).output;
     assert.equal(out.grade.earned, 100, lang); assert.equal(out.grade.reason, null, lang);
     assert.equal(out.criteria[0]?.comment, want[lang], lang);
+    const named = (await run(raw({ lang, levels: true }), reply(SUBJECT, { levels: true }), LOCAL).result).output;
+    assert.equal(named.grade.earned, 60, lang); assert.match(named.criteria[0]?.comment || '', /Proficient \(30\/40 /, lang);
   }
 });
 

@@ -3725,6 +3725,8 @@
   "Your author-page citations and {heading} miss required APA style; no rubric level descriptions are supplied, so Glaze estimates {level}, the lowest band ({value}/{points}; {deduction} points deducted).": "Vos citations auteur-page et la liste {heading} ne respectent pas le style APA exigé ; la grille ne décrit pas ses niveaux, donc Glaze estime {level}, le niveau le plus bas ({value}/{points} points ; −{deduction}).",
   "Your author-page citations and {heading} miss required APA style; with no level descriptions, Glaze estimates the lowest band ({value}/{points}; {deduction} points deducted).": "Vos citations auteur-page et la liste {heading} ne respectent pas le style APA exigé ; sans description des niveaux, Glaze estime le niveau le plus bas ({value}/{points} points ; −{deduction}).",
   "Your author-page citations and {heading} heading conflict with required APA style; rubric rating: {level} ({earned}/{total} points).": "Vos citations auteur-page et le titre {heading} contredisent le style APA exigé ; niveau selon la grille : {level} ({earned}/{total} points).",
+  "Rubric rating: {level} ({earned}/{total} points).": "Niveau pour ce critère : {level} ({earned}/{total} points).",
+  "Rubric score: {earned}/{total} points.": "Note pour ce critère : {earned}/{total} points.",
   "The model could not produce grounded feedback for every criterion.": "Le modèle n’a pas pu produire de retour étayé pour chaque critère.",
   "Checking criterion {n} of {total}…": "Vérification du critère {n} sur {total}…",
   "Reading assignment material…": "Lecture des documents du devoir…",

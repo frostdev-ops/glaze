@@ -158,7 +158,9 @@ test('the local comment allowance is scaled for the draft\'s language; the schem
   const english = 'Your draft explains the garden benefit clearly and supports it with weekly class observations, but the two concrete examples stay brief and barely connect to the thesis, so the rating stays lower despite a clear and well organized structure throughout.';
   assert.ok(english.length > 240);
   const en = run(raw(ENGLISH), reply(english));
-  assert.equal((await en.result).output.criteria.length, 0, 'English keeps its 240 characters');
+  const enOut = (await en.result).output;
+  assert.ok(enOut.criteria.every((c) => c.comment !== english), 'English keeps its 240 characters');
+  assert.equal(enOut.criteria[0]?.comment, 'Rubric score: 40/40 points.', 'Glaze\'s rubric rating stands in for the rejected comment');
 });
 
 test('the sentence counter skips each locale\'s common abbreviations', () => {
