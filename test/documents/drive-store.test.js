@@ -998,3 +998,34 @@ test('a snapshot cut short by the worker stopping is tried once that day, not bu
   assert.equal(made, 4);
   assert.equal([...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'snapshot').length, 2);
 });
+
+// The student can put Glaze/Data in Drive's trash. Each device then puts a record back as it next sends it, into a new
+// Data, and the other device must hear of it: a device following its own record file, now in the trash, passed over every
+// newer file for that record and made one more of its own when it next sent it, the two devices never hearing each other
+// again (until Sync was turned off and on).
+test('Glaze/Data put in Drive\'s trash: records go back into a new Data, one file each, and both devices still hear each other', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  await a.local.set({ writerWords: ['One'] });
+  await a.settings.set({ colors: accent('#111111') });
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  assert.deepEqual((await b.local.get('writerWords')).writerWords, ['One']);
+  drive.trash((await a.local.get(S.STATE))[S.STATE].data);
+  clock.t += 1000;
+  await a.local.set({ writerWords: ['One', 'Two'] });
+  assert.ok((await a.run()).ok); assert.ok((await b.run()).ok);
+  assert.deepEqual((await b.local.get('writerWords')).writerWords, ['One', 'Two'], 'A\'s change reached B');
+  clock.t += 1000;
+  await b.settings.set({ colors: accent('#222222') });
+  assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
+  assert.equal((await a.settings.get('colors')).colors['--gz-accent'], '#222222', 'B\'s change reached A');
+  clock.t += 1000;
+  await a.settings.set({ colors: accent('#333333') });
+  assert.ok((await a.run()).ok); assert.ok((await b.run()).ok);
+  assert.equal((await b.settings.get('colors')).colors['--gz-accent'], '#333333', 'and A\'s later one reached B');
+  const data = (await a.local.get(S.STATE))[S.STATE].data;
+  assert.equal((await b.local.get(S.STATE))[S.STATE].data, data, 'one Data');
+  const live = (area, key) => [...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'rec' && f.meta.appProperties.key === sha(`${area}\n${key}`).slice(0, 32) && f.meta.parents.includes(data));
+  assert.equal(live('sync', 'colors').length, 1, 'one file for the setting in it');
+  assert.equal(live('local', 'writerWords').length, 1, 'and one for the dictionary');
+  noDeletes(drive);
+});
