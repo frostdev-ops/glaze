@@ -338,7 +338,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     heightWrites = heightWrites.then(() => globalThis.navigator?.locks?.request ? navigator.locks.request(`glaze:${HELD}`, write) : write()).catch(() => {});
   };
   const flushHeight = () => { if (held) rememberHeight(held); };
-  // A course with no height of its own kept (a first visit) can't be held as tall as it will be: Glaze's blocks under it
+  // On a site with no height kept for any course yet, nothing can be held: Glaze's blocks under it
   // (Course notes, the dock) aren't shown (html[data-gz-sb-unsized]) until Ultra has drawn it and it has stopped growing
   // for 300 ms, at most 2 s, so they appear where they stay.
   const show = (d) => {
@@ -383,7 +383,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     unhold();
     if (!el || !cid || typeof ResizeObserver !== 'function') return;
     const known = Object.values(heights);
-    const d = held = { el, cid, size: 0, want: heights[cid] || (known.length ? Math.min(...known) : 0), edge: 0, timer: 0, quiet: 0, unsized: !heights[cid], hidden: false, reveal: 0, cap: 0 };
+    const d = held = { el, cid, size: 0, want: heights[cid] || (known.length ? Math.min(...known) : 0), edge: 0, timer: 0, quiet: 0, unsized: !known.length, hidden: false, reveal: 0, cap: 0 };
     // Its padding and border under the content: with the box held, the content's own height is read from its last block.
     if (d.want) try { const c = getComputedStyle(el); d.edge = (parseFloat(c.paddingBlockEnd) || 0) + (parseFloat(c.borderBlockEndWidth) || 0); } catch { /* no styles to ask */ }
     const own = (box) => {

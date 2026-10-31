@@ -1165,27 +1165,14 @@ test("a first visit to a course: This page shows from when the sidebar takes the
   tick(1);
   assert.equal(unsized(), false, 'drawn and still: they appear where they stay');
   assert.equal(p.$('.gz-sb-pagehead').hidden, false);
-  // A block Ultra never fills: they appear after 2 s at most.
-  aside.replaceWith(routedOutline(p).aside);
-  p.c.location.pathname = '/ultra/courses/_102_1/outline';
-  await p.pass();
-  assert.equal(unsized(), true);
-  tick(2000);
-  assert.equal(unsized(), false, 'at most 2 s');
-});
-
-test("a first visit releases another course's taller reservation before revealing the blocks under Details", async () => {
-  for (const filled of [true, false]) {
-    const p = page({ aside: 'live', stored: { ...record(), [`detailsHeight:${O}`]: { _102_1: 231 } } });
-    const tick = heightTimers(p);
-    detailsSize(p, 0);
-    await p.pass();
-    assert.equal(heldRoom(p), 231);
-    if (filled) fillDetails(p, p.$('.js-details-and-actions'), 2);
-    tick(filled ? 300 : 2000);
-    assert.equal(p.doc.root.hasAttribute('data-gz-sb-unsized'), false);
-    assert.equal(heldRoom(p), 0, `${filled ? 'settled' : 'expired'}: no reserved room can shrink under visible blocks later`);
-  }
+  // A block Ultra never fills, on a site still without a saved height: they appear after 2 s at most.
+  const q = page({ at: 'outline', aside: 'live', stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  const qtick = heightTimers(q);
+  q.$('.js-details-and-actions').box = { left: 1248, top: 140, width: 320, height: 0 };
+  await q.pass();
+  assert.equal(q.doc.root.dataset.gzSbUnsized, '');
+  qtick(2000);
+  assert.equal(q.doc.root.dataset.gzSbUnsized, undefined, 'at most 2 s');
 });
 
 test('covering a first visit preserves its reveal wait and never restarts an expired reveal', async () => {
