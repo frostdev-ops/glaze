@@ -222,6 +222,30 @@ test('deleting a new record while its first upload is pending never restores the
   assert.deepEqual([...dk.stage.m.keys()], []);
 });
 
+test('a worker stopped between transfer bookkeeping and stage writes never leaves untracked document bytes', async () => {
+  for (const when of ['staging', 'cleanup']) {
+    const drive = standin(), dk = disk(), key = 'doc:00000000-0000-4000-8000-00000000a014', a = worker(drive, dk);
+    await pdfOn(a, dk, key, bytesOf(6 * MiB, 59), 'Reader');
+    const write = dk.stage.write;
+    let hang;
+    const reached = new Promise((r) => { hang = r; });
+    dk.stage.write = async (puts = [], dels = []) => {
+      if (when === 'staging' && puts.length) { await write(puts, dels); hang(); return new Promise(() => {}); }
+      if (when === 'cleanup' && dels.length) { hang(); return new Promise(() => {}); }
+      return write(puts, dels);
+    };
+    await stopped(a.sync.set(true), reached);
+    assert.ok(dk.stage.m.size, 'document bytes are still staged when the worker stops');
+    dk.stage.write = write;
+    await a.papers.remove(key);
+    assert.ok((await worker(drive, dk).sync.run()).ok);
+    assert.deepEqual(await moves(dk), {});
+    assert.deepEqual([...dk.stage.m.keys()], [], `${when}: a deleted document leaves no staged bytes behind`);
+    const file = fileOf(drive, key, 'file');
+    assert.ok(!file || drive.view(file.meta.id).trashed, 'a file that already landed is put in Drive trash');
+  }
+});
+
 test('a worker stopped mid-chunk: the next one asks Drive where the session stands and goes on from there', async () => {
   const drive = standin(), dk = disk(), key = 'doc:00000000-0000-4000-8000-00000000a001', big = bytesOf(20 * MiB, 7);
   const a = worker(drive, dk);
