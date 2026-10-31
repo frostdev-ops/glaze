@@ -67,7 +67,7 @@ const measure = (p) => p.evaluate(() => {
     const errors = []; page.on('pageerror', (e) => errors.push(String(e)));
     const setup = async (look, at = 'above', sidebar = false) => {
       const base = { ...G.GZ_DEFAULTS, navbar: { ...G.GZ_DEFAULTS.navbar, on: true, tabs: false, rail: 'icons' },
-        enhance: Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, ['tabs', 'place', ...(sidebar ? ['sidebar', 'notes', 'widgets'] : [])].includes(k)])) };
+        enhance: Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, ['tabs', 'place', 'fold', ...(sidebar ? ['sidebar', 'notes', 'widgets'] : [])].includes(k)])) };
       const settings = { ...base, ...G.GZ_LOOK_APPLY(base, look), motion: { ...base.motion, level: 'off' }, tabs: { ...G.GZ_SANITIZE({}).tabs, at, ahead: false, keep: false } }; // frames load cold and items open in place here (ultra-standby-check.js, ultra-keep-content-check.js cover those)
       await opts.evaluate(async ({ settings, key, site }) => {
         await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.session.clear();
@@ -75,6 +75,7 @@ const measure = (p) => p.evaluate(() => {
           // A docked widget, so the sidebar has something to show.
           [`sidebar:ultra:${site}/_42_1`]: { v: 1, rev: 1, mig: 1, dock: [{ id: 'notes' }], dest: { notes: 'dock' } } });
       }, { settings, key, site });
+      await require('../../tools/dev/check-env.js').ultraReady(opts);
       await page.goto(`${site}/ultra/courses/_101_1/outline`);
       await page.locator('#gz-ctabs [data-course-id="_102_1"]').waitFor();
       await until(() => page.evaluate(() => !document.querySelector('.spinner') && !!document.querySelector('#gz-navbar')));
@@ -97,7 +98,8 @@ const measure = (p) => p.evaluate(() => {
     const look = G.GZ_LOOKS.find((l) => l.name === 'Aurora Night');
     await setup(look);
     check((await measure(page)).veil[1] === '0', 'scroll timeline leaves the background visible at the top');
-    await page.locator('.course-content-container > .panel-wrap').evaluate((e) => { e.scrollTop = 200; }); await pause(200);
+    await page.locator('.course-content-container > .panel-wrap').evaluate((e) => { e.scrollTop = 200; });
+    await until(() => page.evaluate(() => document.querySelector('div.bb-course-navigation')?.hasAttribute('data-gz-stuck'))).catch(() => {});
     // Scrolled, the bar folds to its tools with no veil (navigation/page/sticky-fold.js); shown whole under keyboard focus, the veil
     // is behind it again.
     check((await measure(page)).veil[2] === 'none', 'scrolled, the folded bar has no veil');
