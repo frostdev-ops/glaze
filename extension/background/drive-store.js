@@ -452,8 +452,12 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         // First meeting, both hold it: Settings by time; the rest joined as Restore joins.
         if (cat === 'settings') { if (got.at > at) return take(h, got, R, null, value); return push(ctx, h, area, key, cat, { id: R.id }, at || now()); }
         applying.delete(`${area}:${key}`);
-        await (env.join || ((c, k, v) => join(c, k, v, env.area('local'), env.area('notes'))))(cat, key, got.value);
-        return push(ctx, h, area, key, cat, { id: R.id }, now());
+        await (env.join || ((c, k, v, rt) => join(c, k, v, env.area('local'), env.area('notes'), rt)))(cat, key, got.value, { here: at, there: got.at });
+        // The join goes up with the time of the latest change it holds, never the meeting's, so a later change another device
+        // hasn't pushed yet still wins over it. One that is Drive's own value is linked to it, not sent again.
+        const joined = await sumOf(area, key, await valueOf(area, key));
+        if (joined === got.sum) return put(h, { area, key, cat, id: R.id, lsum: joined, rsum: got.sum, at: got.at, seen: Math.max(at, got.at) }, null);
+        return push(ctx, h, area, key, cat, { id: R.id }, Math.max(at, got.at) || now());
       }
       // Its file gone or in Drive's trash: put back from here, unchanged since it last synced with the time of that change.
       if (!R || R.removed) { if (value !== undefined) await push(ctx, h, area, key, cat, { ...was, id: null }, at || (lsum === was.lsum && was.at) || now()); else await S.remove([REC + h, ...(was.id ? [FILE + was.id] : [])]); return; }
