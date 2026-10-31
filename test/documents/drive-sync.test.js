@@ -1482,3 +1482,32 @@ test('a new file whose upload Drive took but whose answer never came, after a Wo
   assert.equal(sidecarJson(drive, key).file, own[0].meta.id);
   assert.equal(drive.files.get(first).bytes.toString(), 'PK edited in Word');
 });
+
+test('a JSON copy whose upload Drive took but whose answer never came is this device\'s own: a trash here follows it into Drive\'s trash', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  let dying = false;
+  const text = (x) => (typeof x === 'string' ? x : Buffer.from(x || []).toString('latin1'));
+  const cut = { ...drive, fetch: async (u, i = {}) => {
+    if (dying && u.includes('/upload/') && text(i.body).includes('"glaze":"doc"')) { dying = false; await drive.fetch(u, i); throw new TypeError('Failed to fetch'); }
+    return drive.fetch(u, i);
+  } };
+  const a = device(cut, { clock });
+  const key = 'doc:00000000-0000-4000-8000-000000000a20';
+  assert.ok((await a.sync.set(true)).ok);
+  await a.papers.save(key, { doc: doc('Soon trashed'), title: 'Essay', named: true });
+  await a.sync.touched(key);
+  dying = true;
+  assert.equal((await a.sync.run({ push: true })).ok, false);
+  await a.papers.trash(key);
+  await a.sync.touched(key);
+  clock.t = (await state(a)).wait + 1;
+  assert.ok((await a.sync.run()).ok);
+  const copies = [...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'doc' && f.meta.appProperties.key === sha(key).slice(0, 32));
+  assert.equal(copies.length, 1);
+  assert.ok(drive.view(copies[0].meta.id).trashed && drive.view(exportOf(drive, key).meta.id).trashed, 'both files in Drive\'s trash');
+  const b = device(drive, { clock });
+  assert.ok((await b.sync.set(true)).ok);
+  assert.ok(!(await b.papers.get(key)) || P.trashed(await b.papers.get(key)), 'not live on a device joining');
+  assert.ok(P.trashed(await a.papers.get(key)), 'still in Trash here');
+  noDeletes(drive);
+});
