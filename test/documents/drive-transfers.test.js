@@ -612,3 +612,112 @@ test('a completed download still settles when the next worker cannot open its st
   assert.deepEqual(await moves(db), {});
   db.stage.keys = keys;
 });
+
+test('an owed replay whose saved file is denied is discarded without blocking later transfers', async () => {
+  const drive = standin(), da = disk(), db = disk(da.clock), key = 'writer:sources:local|local|papers|reader';
+  const a = worker(drive, da, { records: true });
+  await da.store.set({ [key]: { at: da.clock.t, sources: [{ id: 's1', title: 'Local', text: 'A'.repeat(6 * MiB) }] } });
+  await stopped(a.sync.set(true), drive.cut(0, (e) => e.chunk && !e.chunk.status));
+  await db.store.set({ [key]: { at: db.clock.t, sources: [{ id: 's1', title: 'Other device' }] } });
+  assert.ok((await worker(drive, db, { records: true }).sync.set(true)).ok);
+  const h = sha(`local\n${key}`).slice(0, 32), other = [...drive.files.values()].find((f) => f.meta.appProperties.key === h).meta.id;
+  const set = da.store.set;
+  let hang;
+  const reached = new Promise((r) => { hang = r; });
+  da.store.set = async (o) => {
+    await set(o);
+    if (Object.values(o.driveSyncMoves || {}).some((t) => t.due)) { hang(); return new Promise(() => {}); }
+  };
+  await stopped(worker(drive, da, { records: true }).sync.run(), reached);
+  da.store.set = set;
+  assert.equal((await moves(da))[`R:${h}`]?.owner.R, other, 'the owed replay retains the other device\'s file');
+  drive.fail(403, ERRORS.insufficientFilePermissions, (x) => x.path === `/drive/v3/files/${other}` && !x.query.alt, 10);
+  const b = worker(drive, da, { records: true }), pdf = 'doc:00000000-0000-4000-8000-00000000a033';
+  await pdfOn(b, da, pdf, bytesOf(6 * MiB, 71), 'Later reader');
+  await b.sync.touched(pdf);
+  const result = await b.sync.run({ push: true });
+  assert.ok(result.ok, JSON.stringify(result));
+  assert.ok(fileOf(drive, pdf, 'file') && fileOf(drive, pdf, 'doc'), 'the later transfer finishes despite the refused replay');
+  assert.deepEqual(await moves(da), {});
+  assert.deepEqual([...da.stage.m.keys()], []);
+});
+
+for (const mode of ['small', 'unavailable', 'restaged', 'aimed']) test({
+  small: 'a small edit after a staged commit retains the owed meeting with another device\'s file',
+  unavailable: 'an owed replay survives a failed retry while the stage cannot open',
+  restaged: 'an owed meeting survives worker shutdown while a new staged upload replaces it',
+  aimed: 'a staged create check retains a lower file already named while Drive search still hides it',
+}[mode], async () => {
+  const drive = standin(), da = disk(), db = disk(da.clock), key = 'writer:sources:local|local|papers|reader';
+  const h = sha(`local\n${key}`).slice(0, 32), b = worker(drive, db, { records: true });
+  const original = { at: db.clock.t, sources: [{ id: 's1', title: 'Original' }] };
+  await db.store.set({ [key]: original });
+  assert.ok((await b.sync.set(true)).ok);
+  const other = [...drive.files.values()].find((f) => f.meta.appProperties.key === h).meta.id;
+  // Drive's search still hides B's first upload, while its changes feed can name it.
+  const lagged = async (u, init = {}) => {
+    const r = await drive.fetch(u, init), url = new URL(String(u));
+    if ((init.method || 'GET') === 'GET' && url.pathname === '/drive/v3/files' && url.searchParams.get('q')) {
+      const j = await r.json();
+      return new Response(JSON.stringify({ ...j, files: (j.files || []).filter((f) => f.id !== other) }), { status: r.status, headers: r.headers });
+    }
+    return r;
+  };
+  const large = { at: da.clock.t, sources: [{ id: 's1', title: 'Local', text: 'A'.repeat(6 * MiB) }] };
+  await da.store.set({ [key]: large });
+  await stopped(worker(drive, da, { records: true, fetch: lagged }).sync.set(true), drive.cut(0, (e) => e.chunk && !e.chunk.status));
+  db.clock.t += 1000;
+  const remote = mode === 'aimed' ? large : { at: db.clock.t, sources: [{ id: 's1', title: 'Other device' }] };
+  await db.store.set({ [key]: remote });
+  await b.more.stamp({ [key]: { oldValue: original, newValue: remote } }, 'local');
+  assert.ok((await b.sync.run({ push: true })).ok);
+  const set = da.store.set;
+  let hang;
+  const reached = new Promise((r) => { hang = r; });
+  da.store.set = async (o) => {
+    await set(o);
+    const stop = mode === 'aimed' ? !!o[`driveSyncRec:${h}`]?.id : Object.values(o.driveSyncMoves || {}).some((t) => t.due);
+    if (stop) { hang(); return new Promise(() => {}); }
+  };
+  await stopped(worker(drive, da, { records: true, fetch: lagged }).sync.run(), reached);
+  da.store.set = set;
+  assert.equal((await moves(da))[`R:${h}`]?.owner.R, other);
+  assert.notEqual((await da.store.get(`driveSyncRec:${h}`))[`driveSyncRec:${h}`]?.id, other, 'the stopped upload committed a second file');
+  da.clock.t += 1000;
+  let latest = mode === 'aimed' ? large : { at: da.clock.t, sources: [{ id: 's1', title: 'Latest local edit', ...(mode === 'restaged' && { text: 'B'.repeat(6 * MiB) }) }] };
+  if (mode !== 'aimed') await da.store.set({ [key]: latest });
+  const a = worker(drive, da, { records: true, ...(mode === 'aimed' && { fetch: lagged }) });
+  if (mode !== 'aimed') await a.more.stamp({ [key]: { oldValue: large, newValue: latest } }, 'local');
+  if (mode === 'restaged') {
+    let stop;
+    const replaced = new Promise((r) => { stop = r; });
+    da.store.set = async (o) => {
+      await set(o);
+      if (o.driveSyncMoves && !o.driveSyncMoves[`R:${h}`]?.due) { stop(); return new Promise(() => {}); }
+    };
+    await stopped(a.sync.run({ push: true }), replaced);
+    da.store.set = set;
+    assert.equal((await moves(da))[`R:${h}`]?.owner.R, other, 'the saved meeting is never absent during replacement');
+    assert.ok((await worker(drive, da, { records: true }).sync.run({ push: true })).ok);
+  } else if (mode === 'unavailable') {
+    const keys = da.stage.keys;
+    da.stage.keys = () => { throw Object.assign(new Error('refused'), { why: 'unavailable' }); };
+    drive.offline((x) => x.path === `/drive/v3/files/${other}` && !x.query.alt);
+    assert.equal((await a.sync.run({ push: true })).why, 'network');
+    assert.equal((await moves(da))[`R:${h}`]?.owner.R, other, 'a failed replay retains its obligation even without IndexedDB');
+    da.stage.keys = keys;
+    da.clock.t = (await da.store.get('driveSync')).driveSync.wait + 1;
+    assert.ok((await worker(drive, da, { records: true }).sync.run({ push: true })).ok);
+  } else assert.ok((await a.sync.run({ push: true })).ok);
+  if (mode === 'aimed') {
+    da.clock.t += 1000;
+    latest = { at: da.clock.t, sources: [{ id: 's1', title: 'Edit after resuming the landed upload' }] };
+    await da.store.set({ [key]: latest });
+    await a.more.stamp({ [key]: { oldValue: large, newValue: latest } }, 'local');
+    assert.ok((await a.sync.run({ push: true })).ok);
+  }
+  assert.equal((await da.store.get(`driveSyncRec:${h}`))[`driveSyncRec:${h}`]?.id, other, 'the owed meeting follows the shared lower id');
+  assert.ok((await b.sync.run()).ok);
+  assert.deepEqual((await db.store.get(key))[key], latest, 'the other device receives the later edit');
+  assert.deepEqual(await moves(da), {});
+});
