@@ -456,6 +456,10 @@ test('content-ultra.js loads the copy\'s page script on its pages with the switc
   tab.X.syncWidgets();
   await settle();
   assert.ok(tab.asked.some((a) => JSON.stringify(a) === JSON.stringify(want)), 'a course tab\'s frame on its course page');
+  const standby = ultraPart({ top: false, tabFrame: 'standby', path: '/ultra/profile' });
+  standby.X.syncWidgets();
+  await settle();
+  assert.ok(standby.asked.some((a) => JSON.stringify(a) === JSON.stringify(want)), 'the standby, ahead of the route it is adopted with');
   const loaded = ultraPart({ instant: false, instantUI: (calls) => ({ sync: (...a) => calls.push(a) }) });
   loaded.X.syncWidgets();
   await settle();
@@ -941,13 +945,15 @@ test('in a course tab\'s frame a copy paints only while that frame is on screen 
   assert.ok(q.copy(), 'painted once its copy is read');
 });
 
-test('a standby adopted for a course is that course\'s frame from then on', async () => {
+test('a standby adopted for a course is that course\'s frame from then on, its route in place seen with no page pass', async () => {
   const [route] = COURSE.gradebook;
   const p = site({ path: '/ultra/profile', frame: 'gz-ctab:standby', local: courseStored('_900_1', 'gradebook', '_101_1') });
   p.sync(); await settle();
   assert.equal(p.c.GZ_INSTANT.now(), null);
+  // Adopted (coursetabs.js adoptHere): named for the course, routed in place, popstate; told hidden, no page pass follows.
   p.c.name = 'gz-ctab:_101_1'; p.location.pathname = route;
-  p.sync(); p.answer('_900_1'); await settle();
+  for (const f of p.events.get('popstate') || []) f({});
+  p.answer('_900_1'); await settle();
   assert.deepEqual(p.toTop, [{ gzCtab: 'copy', on: false }]);
   p.tell({ gzCtab: 'copy', picked: true }); await settle();
   // Ultra routed in place puts the course's main area in.

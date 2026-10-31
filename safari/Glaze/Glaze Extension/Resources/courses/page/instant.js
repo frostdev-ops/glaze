@@ -189,6 +189,9 @@ var GZ_INSTANT = globalThis.GZ_INSTANT || (() => {
       else toTop(!!v.copy);
     }
   });
+  // A frame told it is hidden runs no page passes (content.js), so its routes in place are seen here: the standby's, as it
+  // is adopted for a course (navigation/page/coursetabs.js adoptHere), above all.
+  addEventListener('popstate', () => { if (framed()) sync(wanted); });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     const fences = [changes.ultraCopyFence, changes[`ultraCopyFence:${location.origin}`]].filter(Boolean);
