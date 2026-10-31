@@ -427,3 +427,7 @@ test('an old standby cannot carry an hours-old account assertion into a course',
   assert.equal(p.api.adopt('_2_1', '/ultra/courses/_2_1/outline', { cid: '_2_1' }), null);
   assert.ok(el.removed, 'the next course boots with a fresh account check');
 });
+
+test('the course tab settings changed (ahead of time switched off) reach the standby at once, without waiting for a page pass', () => {
+  assert.match(part('  const onStore = ', '  // Where the page frame is'), /if \(area === 'sync' && c\.tabs\) readPrefs\(\)\.then\(\(\) => \{ pass\(\); standbyLater\(\); \}\);/);
+});

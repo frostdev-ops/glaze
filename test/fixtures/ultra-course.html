@@ -36,6 +36,7 @@
   The page has a <base> on another origin, so history.pushState needs ABSOLUTE urls (location.origin + path): a bare
   "/ultra/..." resolves against the base and throws a SecurityError. Route from outside with
     history.pushState(null, '', location.origin + '/ultra/courses/_102_1/grades'); dispatchEvent(new PopStateEvent('popstate'))
+  Set window.__b8bStuck to have the router ignore popstate, as an Ultra that doesn't take an in-place route.
   Page flags: window.__renders (render() calls), __attempts (Start attempt clicks), __assessmentViews (assessment
   panels built), __signedOut (Sign Out clicked).
 -->
@@ -381,7 +382,7 @@
     history.pushState(null, '', location.origin + href); // not a bare path: the <base> is on another origin
     render();
   });
-  window.addEventListener('popstate', render);
+  window.addEventListener('popstate', () => { if (!window.__b8bStuck) render(); });
   render();
 })();
 </script>

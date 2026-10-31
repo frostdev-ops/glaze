@@ -1457,10 +1457,11 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const [cid, f] = [...frames, ...[...spare].flatMap(([k, a]) => a.map((g) => [k, g]))].find(([, g]) => g.el.contentWindow === e.source) || [];
     if (!f) return;
     const live = frames.get(cid) === f, it = items.get(cid);
+    // An item frame's Glaze told what it is: at its first word, and again once it listens (a cold frame's first word comes earlier).
+    if ((d.gzCtab === 'loaded' || d.gzCtab === 'account') && live && f.item) post(f, { gzCtab: 'item', on: !!it?.open });
     if (d.gzCtab === 'adopted' && f.adopting && d.cid === cid) { if (d.ok === true) f.adopting.ok = true; else f.adopting.failed = true; }
     else if (d.gzCtab === 'warm' && live && cid === showing && typeof d.cid === 'string') warmTab(d.cid);
     else if (d.gzCtab === 'item' && live && cid === showing && typeof d.url === 'string' && d.url.length < 1300) itemFrom(cid, f, d.url);
-    else if (d.gzCtab === 'loaded' && live && f.item) post(f, { gzCtab: 'item', on: !!it?.open });
     // Ultra's own way back in the item (its close, its link to Course Content), or its route there seen late.
     else if (d.gzCtab === 'itemback' && live && f.item && it?.open) closeItem(cid, 'ultra');
     else if (d.gzCtab === 'moved' && live && f.item && it?.open && L.outlineOf(pathOf(f).split('?')[0]) === cid) closeItem(cid, 'ultra');
@@ -1646,7 +1647,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const mo = new MutationObserver(() => { fr.changed = performance.now(); });
     mo.observe(d.body, { subtree: true, childList: true });
     fr.off = () => {
-      clearTimeout(fr.timer); mo.disconnect();
+      clearTimeout(fr.timer); clearTimeout(fr.settle); mo.disconnect();
       for (const doc of docs) {
         for (const ev of EVENTS) doc.removeEventListener(ev, act, { capture: true });
         for (const ev of EDITS) doc.removeEventListener(ev, edit, true);
@@ -1672,6 +1673,13 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const finishFresh = (cid, g) => {
     const fr = g.fresh, base = fr.base;
     if (!fr.current() || !fr.matches(g.el.contentDocument) || g.cold && (g.uid !== who || g.accountDoc !== g.el.contentDocument)) return dropFresh(cid, g);
+    // Told it shows, its Glaze marks it up again: swapped once that is done (300 ms quiet, 2 s at most), never shifting on screen.
+    const now = performance.now();
+    if (fr.asked && now - Math.max(fr.changed, fr.asked) < 300 && now - fr.asked < 2000) {
+      clearTimeout(fr.settle);
+      fr.settle = setTimeout(() => { if (g.fresh === fr && fr.asked) finishFresh(cid, g); }, 100);
+      return;
+    }
     let from = null, to = null; try { from = outlineScroller(base ? base.el.contentDocument : document); to = outlineScroller(g.el.contentDocument); } catch { /* gone */ }
     const top = from ? from.scrollTop : 0;
     if (to) to.scrollTop = top;
@@ -2208,7 +2216,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       frameEpoch++; unStandby();
       for (const f of frames.values()) f.stale = true;
     }
-    if (area === 'sync' && c.tabs) readPrefs().then(pass);
+    if (area === 'sync' && c.tabs) readPrefs().then(() => { pass(); standbyLater(); });
     // Another of this browser's tabs changed the list: taken, with this page's own course as this page knows it.
     if (area === 'local' && who && c[key()] && !preview) {
       const got = L.clean(c[key()].newValue?.tabs, ctx.site);

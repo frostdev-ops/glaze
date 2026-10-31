@@ -246,6 +246,7 @@ test('the fresh outline takes the kept one\'s place only with the student still 
   assert.equal(asks(), 1, 'still: asked to ready itself as shown');
   // Not at the same place (its content shorter): hidden again, not swapped.
   it.scroller.max = 100;
+  p.tick(400); // quiet since it was told it shows
   msg(p, it, { gzCtab: 'drawn', hid: 0 });
   assert.equal(p.c.frames.get('_2_1'), base);
   assert.deepEqual(it.posted.at(-1), { gzCtab: 'visible', on: false });
@@ -342,6 +343,7 @@ test('a renewed stale outline keeps the frame navigation guard and completes its
   const fresh = p.c.spare.get('_2_1')[0];
   s.doc.location.pathname = OUT;
   fresh.fresh.asked = 1000;
+  p.tick(400); // quiet since it was told it shows
   msg(p, fresh, { gzCtab: 'drawn', hid: 0 });
   assert.equal(p.c.frames.get('_2_1'), fresh);
   assert.equal(guarded.includes(fresh), true, 'later cross-origin loads get the normal frame guard');
@@ -371,6 +373,7 @@ test('a fresh outline carries keyboard focus out of the retired frame', () => {
   it.el.focus = () => { focused = true; };
   it.doc.location.pathname = OUT;
   it.fresh.asked = 1000;
+  p.tick(400); // quiet since it was told it shows
   msg(p, it, { gzCtab: 'drawn', hid: 0 });
   assert.equal(focused, true, 'keyboard focus follows the visible outline');
 });
@@ -625,4 +628,29 @@ test('turning Keep Course Content off releases hidden refresh copies', () => {
   assert.equal(it.el.isConnected, false);
   assert.equal(p.c.frames.get('_2_1'), base);
   assert.equal(p.c.spare.get('_2_1')?.includes(it), false);
+});
+
+test('the fresh outline swaps in only once its own page has stopped changing since it was told it shows (Glaze\'s marks on it in)', () => {
+  const { p, base, it } = opened();
+  msg(p, it, { gzCtab: 'drawn', hid: 0 });
+  p.setKey(1);
+  p.api.onItemPop({ stopImmediatePropagation() {} });
+  const fr = it.fresh;
+  it.doc.location.pathname = OUT;
+  p.api.standby = null;
+  fr.asked = 2000; p.tick(1050); // asked at 2000; now 2050
+  fr.changed = 2040; // its page changed just after being told
+  msg(p, it, { gzCtab: 'drawn', hid: 0 });
+  assert.equal(p.c.frames.get('_2_1'), base, 'not while it changes');
+  assert.ok(p.timers.length, 'tried again shortly');
+  p.tick(400);
+  while (p.timers.length && p.c.frames.get('_2_1') === base) p.step();
+  assert.equal(p.c.frames.get('_2_1'), it, 'swapped once quiet');
+});
+
+test('a cold item frame hears that it is an item once its Glaze listens (its account), not only at its first word (loaded)', () => {
+  const { p, it } = opened();
+  it.posted.length = 0;
+  msg(p, it, { gzCtab: 'account', uid: '_42_1' });
+  assert.deepEqual(it.posted.filter((m) => m.gzCtab === 'item'), [{ gzCtab: 'item', on: true }]);
 });
