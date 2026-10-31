@@ -113,23 +113,27 @@ test('a remote note compares after an earlier queued rename before replacing or 
   }
 });
 
-test('a daily snapshot whose files are past one upload is no snapshot, its files never read into the worker', async () => {
+test('a daily snapshot leaves out documents\' files, each synced on its own: none read, their records in', async () => {
   const { context, records, local } = worker();
+  const B = require('../../extension/background/backup.js');
   Object.assign(context, {
-    GZ_BACKUP: require('../../extension/background/backup.js'), GZ_TODO: require('../../extension/planner/todo.js'), GZ_PET: require('../../extension/pet/pet.js'),
+    GZ_BACKUP: B, GZ_TODO: require('../../extension/planner/todo.js'), GZ_PET: require('../../extension/pet/pet.js'),
     GZ_SANITIZE: require('../../extension/content/defaults.js').GZ_SANITIZE, GZ_HISTORY: require('../../extension/looks/history.js'), GZ_ZIP: require('../../extension/core/zip.js'),
-    GZ_DOC_KINDS: require('../../extension/documents/doc-kinds.js'), GZ_FOLDERS: require('../../extension/courses/folders.js'), Blob,
+    GZ_DOC_KINDS: require('../../extension/documents/doc-kinds.js'), GZ_FOLDERS: require('../../extension/courses/folders.js'), Blob, URL,
   });
   context.chrome.runtime.getManifest = () => ({ version: '4.0.1' });
   let read = 0;
   context.openDocFiles = () => ({ read: async (hash, each) => { read++; each(new Uint8Array(8)); } });
-  // Five PDFs of 45 MB: one backup could hold them (background/backup.js LIMIT.zip), one upload can't (documents/drive.js put).
-  const pdf = (n) => ({ key: `doc:00000000-0000-4000-8000-00000000000${n}`, kind: 'pdf', title: `Reader ${n}`, file: { hash: String(n).repeat(64), size: 45e6, type: 'application/pdf' }, revision: 1 });
+  const pdf = (n) => ({ key: `doc:00000000-0000-4000-8000-00000000000${n}`, kind: 'pdf', title: `Reader ${n}`, file: { hash: String(n).repeat(64), size: 45e6, type: 'application/pdf' }, revision: 1, updated: 1 });
   for (let n = 1; n <= 5; n++) await local.set({ [`writerPaper:${pdf(n).key}`]: pdf(n) });
   const get = local.get;
   local.get = async (k) => (k === null ? Object.fromEntries(await Promise.all((await local.getKeys()).map(async (x) => [x, (await get(x))[x]]))) : get(k));
-  assert.equal(await records.snapshot(), null);
-  assert.ok(read <= 4, `read ${read} of the files`);
+  const made = await records.snapshot();
+  assert.ok(made?.bytes?.length > 0 && made.bytes.length < 64 << 10, `a small zip (${made?.bytes?.length} bytes)`);
+  assert.equal(read, 0, 'no file read');
+  const r = await B.read(Object.assign(new Blob([made.bytes]), { name: made.name }));
+  assert.ok(!r.zip.names.some((n) => /\.bin$/.test(n)), 'no file in it');
+  assert.equal(Object.keys(r.cats.papers || {}).length, 5, 'every document\'s record');
 });
 
 test('while Sync is off for its account, each record\'s time of change is still kept for when it is turned on again', async () => {

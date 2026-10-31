@@ -251,21 +251,21 @@ test('Sync to Google Drive\'s storage disclosure names the retry bookkeeping and
   for (const k of ['fails', 'wait', 'busy', 'snap', 'snapSkip']) assert.ok(state.includes(`\`${k}\``), `driveSync's ${k} named`);
 });
 
-// A file larger than one request is staged between workers (documents/drive-sync.js transfers): what it is and how far it
-// got in storage.local driveSyncMoves (an upload's resumable-session address), its bytes in the worker's own IndexedDB
-// glaze-drive (background/background.js). Both privacy texts say so, and when they go.
-test('Sync to Google Drive discloses the transfer state it keeps: session addresses, offsets and staged bytes', () => {
-  assert.match(read('background/background.js'), /GZ_DOC_FILES\.idb\(globalThis\.indexedDB, 'glaze-drive'\)/, 'the code: the stage');
-  assert.match(read('documents/drive-sync.js'), /session: null, file: null \}\);/, 'the code: an upload\'s session on its record');
+// In 4.0.1 Sync stages nothing (documents/drive-sync.js env.staged, which background/background.js never sets): anything
+// larger than one request (over 5 MB) stays on the device, marked (driveSyncLarge), and the day's zip leaves documents' files
+// out. Both privacy texts say so, and that the stage (driveSyncMoves, glaze-drive) keeps nothing.
+test('Sync to Google Drive\'s privacy texts say items over 5 MB stay on the device and nothing is staged', () => {
+  assert.match(read('documents/drive-sync.js'), /const staging = env\.staged === true;/, 'the code: staging only when asked for');
+  assert.doesNotMatch(read('background/background.js'), /\bstaged:/, 'the code: the worker never asks for it');
+  assert.match(read('background/background.js'), /GZ_BACKUP\.pack\(\{ settings, tasks: \{ tasks, pets \}, local: all, notes, version: chrome\.runtime\.getManifest\(\)\.version \}\)/, 'the code: no files in the zip');
   const stored = storedDrive();
-  const moves = stored.slice(stored.indexOf('larger than one request'), stored.indexOf('`glaze-drive`') + 40);
-  assert.ok(stored.includes('larger than one request') && stored.includes('`glaze-drive`'), 'PRIVACY.md: the transfers');
-  assert.match(moves, /resumable[- ]session address/);
-  assert.match(moves, /how far it got/);
-  assert.match(moves, /SHA-256/);
-  assert.match(moves, /`driveSyncMoves`/);
-  assert.match(moves, /until it lands/);
+  assert.match(stored, /`driveSyncMoves`, with Glaze's own IndexedDB `glaze-drive`[^.]*which this version doesn't sync: it keeps nothing there/);
+  assert.doesNotMatch(stored, /resumable[- ]session address/);
   const sync = policy.slice(policy.indexOf('  - **Sync to Google Drive**'), policy.indexOf('  - **Submit from Drive**'));
-  assert.match(sync, /larger than one request[^.]*in parts/);
-  assert.match(read('../docs/privacy.md'), /larger than one request[^)]*`glaze-drive`/);
+  assert.doesNotMatch(sync, /in parts/);
+  assert.match(sync, /Anything over 5 MB[^.]*doesn't sync yet: it stays on this device/);
+  assert.match(sync, /without their\s+files/);
+  const short = read('../docs/privacy.md');
+  assert.doesNotMatch(short, /goes in parts/);
+  assert.match(short, /anything over 5 MB doesn't sync yet and stays on this device/);
 });

@@ -186,6 +186,7 @@ const standin = ({ tokens = null, owner = 'student@school.edu', quantum = 256 <<
       if (!f || !f.app) return json(404, ERRORS[404]);
       let meta;
       try { meta = JSON.parse(body.toString('utf8')); } catch { return bad(); }
+      entry.patch = meta;
       // A move: addParents and removeParents (comma-separated ids), as files.update takes them.
       const add = u.searchParams.get('addParents'), remove = u.searchParams.get('removeParents');
       if (add || remove) {
