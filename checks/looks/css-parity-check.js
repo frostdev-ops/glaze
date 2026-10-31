@@ -96,34 +96,32 @@ function inPage() {
         });
         Object.assign(row, { elements: matchDiffs.elements, pairs: matchDiffs.pairs, rewritten: matchDiffs.rewritten });
         for (const d of matchDiffs.diffs) report.failures.push(`${fixture} (${variant}) match: ${d}`);
-        // Computed styles and pixels, the defaults only (the matches above cover the other attributes).
-        if (variant === 'defaults') {
-          const styles = async (set) => {
-            await page.evaluate((x) => window.__parity.use(x), set);
-            return page.evaluate(() => [document.documentElement, ...document.documentElement.querySelectorAll('*')].map((el) => {
-              const P = window.__parity, own = P.style(el, null), pseudo = ['::before', '::after'].map((pe) => { const c = getComputedStyle(el, pe).content; return c && c !== 'none' && c !== 'normal' ? P.style(el, pe) : ''; });
-              return [own, ...pseudo];
-            }));
-          };
-          const s1 = await styles('base'), shot1 = await page.screenshot({ fullPage: true, animations: 'disabled', caret: 'hide' });
-          const s2 = await styles('head'), shot2 = await page.screenshot({ fullPage: true, animations: 'disabled', caret: 'hide' });
-          row.styles = s1.length;
-          const firstDiff = s1.findIndex((x, i) => x.join('|') !== s2[i]?.join('|'));
-          if (s1.length !== s2.length || firstDiff >= 0) {
-            const at = firstDiff >= 0 ? firstDiff : Math.min(s1.length, s2.length);
-            const props = (t) => Object.fromEntries((t || '').split(';').filter(Boolean).map((d) => [d.slice(0, d.indexOf(':')), d.slice(d.indexOf(':') + 1)]));
-            const k = [0, 1, 2].find((j) => s1[at]?.[j] !== s2[at]?.[j]), p1 = props(s1[at]?.[k]), p2 = props(s2[at]?.[k]);
-            const changed = Object.keys({ ...p1, ...p2 }).filter((p) => p1[p] !== p2[p]).slice(0, 5).map((p) => `${p}: ${p1[p]} → ${p2[p]}`);
-            report.failures.push(`${fixture} style: element ${at}${['', '::before', '::after'][k] ?? ''} ${changed.join('; ')}`);
-          }
-          // A page that draws differently twice with the same sheets (a blurred edge's anti-aliasing) proves nothing by pixels:
-          // it is listed, and its computed styles above stand.
-          if (!shot1.equals(shot2)) {
-            await styles('base');
-            const again = await page.screenshot({ fullPage: true, animations: 'disabled', caret: 'hide' });
-            if (again.equals(shot1)) { report.failures.push(`${fixture} pixels differ`); fs.writeFileSync(path.join(out, `${fixture}-base.png`), shot1); fs.writeFileSync(path.join(out, `${fixture}-head.png`), shot2); }
-            else if (!again.equals(shot2)) (report.unstable ||= []).push(fixture);
-          }
+        // Matches alone cannot prove cascade specificity: compare styles and pixels in both attribute modes.
+        const styles = async (set) => {
+          await page.evaluate((x) => window.__parity.use(x), set);
+          return page.evaluate(() => [document.documentElement, ...document.documentElement.querySelectorAll('*')].map((el) => {
+            const P = window.__parity, own = P.style(el, null), pseudo = ['::before', '::after'].map((pe) => { const c = getComputedStyle(el, pe).content; return c && c !== 'none' && c !== 'normal' ? P.style(el, pe) : ''; });
+            return [own, ...pseudo];
+          }));
+        };
+        const s1 = await styles('base'), shot1 = await page.screenshot({ fullPage: true, animations: 'disabled', caret: 'hide' });
+        const s2 = await styles('head'), shot2 = await page.screenshot({ fullPage: true, animations: 'disabled', caret: 'hide' });
+        row.styles = s1.length;
+        const firstDiff = s1.findIndex((x, i) => x.join('|') !== s2[i]?.join('|'));
+        if (s1.length !== s2.length || firstDiff >= 0) {
+          const at = firstDiff >= 0 ? firstDiff : Math.min(s1.length, s2.length);
+          const props = (t) => Object.fromEntries((t || '').split(';').filter(Boolean).map((d) => [d.slice(0, d.indexOf(':')), d.slice(d.indexOf(':') + 1)]));
+          const k = [0, 1, 2].find((j) => s1[at]?.[j] !== s2[at]?.[j]), p1 = props(s1[at]?.[k]), p2 = props(s2[at]?.[k]);
+          const changed = Object.keys({ ...p1, ...p2 }).filter((p) => p1[p] !== p2[p]).slice(0, 5).map((p) => `${p}: ${p1[p]} → ${p2[p]}`);
+          report.failures.push(`${fixture} (${variant}) style: element ${at}${['', '::before', '::after'][k] ?? ''} ${changed.join('; ')}`);
+        }
+        // A page that draws differently twice with the same sheets (a blurred edge's anti-aliasing) proves nothing by pixels:
+        // it is listed, and its computed styles above stand.
+        if (!shot1.equals(shot2)) {
+          await styles('base');
+          const again = await page.screenshot({ fullPage: true, animations: 'disabled', caret: 'hide' });
+          if (again.equals(shot1)) { report.failures.push(`${fixture} (${variant}) pixels differ`); fs.writeFileSync(path.join(out, `${fixture}-${variant}-base.png`), shot1); fs.writeFileSync(path.join(out, `${fixture}-${variant}-head.png`), shot2); }
+          else if (!again.equals(shot2)) (report.unstable ||= []).push(fixture);
         }
         report.fixtures.push(row);
       }
