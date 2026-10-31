@@ -55,3 +55,56 @@ test('title paint measures the load from navigation and routes from insertion, i
   assert.equal(titlePaint.course, 40, 'synchronous insertion and observer delivery time belong to the route');
   assert.equal(titlePaint.outline, 40, 'the measurement survives a capped attribution log');
 });
+
+test('title paint keeps navigation as the load origin when settle records its later sampling start', () => {
+  const stages = { initial: { window: [0, 900], inserted: 700 }, courses: { window: [1000, 1900], inserted: 1000 },
+    outline: { window: [2000, 2900], inserted: 2140 } };
+  const probe = { lcp: [], fonts: [], titles: [{ text: 'stream', renderTime: 80 }, { text: 'course', renderTime: 1040 },
+    { text: 'outline', renderTime: 2180 }] };
+  const start = source.indexOf('          const stageOf = '), end = source.indexOf('          speedResult = ', start);
+  const titlePaint = vm.runInNewContext(`${source.slice(start, end)}; titlePaint;`, { probe, stages, courses: stages.courses });
+  assert.equal(titlePaint.stream, 80, 'initial settle starts after paint; its timestamp is not the navigation origin');
+  assert.equal(titlePaint.course, 40);
+  assert.equal(titlePaint.outline, 40, 'a delayed route still measures from its actual insertion');
+});
+
+const requireStillAside = (frames) => {
+  const start = source.indexOf('    if (stillAside) {'), end = source.indexOf('    if (process.env.PERF_REQUIRE_QUIET_OWN)', start);
+  vm.runInNewContext(`const results = JSON.parse(resultsJson);\n${source.slice(start, end)}`, {
+    stillAside: true, WIDTH: 1600, reps: 2, assert, console: { log() {} },
+    resultsJson: JSON.stringify([{ rep: 1, instrumented: false, outline: { aside: { frames, shifts: [] } } }]) });
+};
+
+test('the still-aside requirement catches Details growth during sidebar adoption', () => {
+  const notes = 'aside.outline-actions > #gz-nt-block', dock = 'aside.outline-actions > #gz-sb-widgets';
+  assert.throws(() => requireStillAside([
+    { t: 200, host: null, details: 66, [notes]: 206 },
+    { t: 500, host: 'native', details: 231, [notes]: 421, [dock]: 600 },
+  ]), /blocks moved/, 'adoption must not excuse the native Details growth as well as the new header');
+  assert.doesNotThrow(() => requireStillAside([
+    { t: 200, host: null, details: 231, [notes]: 371 },
+    { t: 500, host: 'native', details: 231, [notes]: 421, [dock]: 600 },
+  ]), 'inserting only the sidebar header remains an allowed adoption');
+});
+
+test('the still-aside requirement rejects a run where the widget dock never appears', () => {
+  const notes = 'aside.outline-actions > #gz-nt-block';
+  assert.throws(() => requireStillAside([
+    { t: 200, host: 'native', details: 231, [notes]: 421 },
+    { t: 500, host: 'native', details: 231, [notes]: 421 },
+  ]), /My widgets showed/, 'an absent dock has no movements, but does not prove that both blocks stayed put');
+});
+
+test('the still-aside requirement compares each block across temporarily hidden frames', () => {
+  const notes = 'aside.outline-actions > #gz-nt-block', dock = 'aside.outline-actions > #gz-sb-widgets';
+  assert.throws(() => requireStillAside([
+    { t: 200, host: 'native', details: 66, [notes]: 206, [dock]: 400 },
+    { t: 300, host: 'native', details: 66 },
+    { t: 500, host: 'native', details: 231, [notes]: 371, [dock]: 565 },
+  ]), /blocks moved/, 'a missing intermediate rectangle must not discard the previous visible position');
+  assert.doesNotThrow(() => requireStillAside([
+    { t: 200, host: 'native', details: 231, [notes]: 421, [dock]: 600 },
+    { t: 300, host: 'native', details: 231 },
+    { t: 500, host: 'native', details: 231, [notes]: 421, [dock]: 600 },
+  ]), 'a block returning to the same position has not moved');
+});

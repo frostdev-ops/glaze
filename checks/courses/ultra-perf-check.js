@@ -32,6 +32,7 @@ const NEO_VIEWPORT = { width: 1280, height: 800 }, NEO_SCALE = 2;
 // PERF_WIDTH: a wider window than the device's, in CSS pixels. At 1280 Glaze's sidebar is a closed drawer beside the synthetic
 // outline (its page starts at 472 px); from about 1560 it is the outline's right column, as on the owner's Mac.
 const WIDTH = Number(process.env.PERF_WIDTH) || 0;
+const stillAside = !!process.env.PERF_REQUIRE_STILL_ASIDE;
 // Pins this process to 6 cores, so the browsers it launches inherit them; null where taskset is missing (macOS).
 const pinCores = () => { try { execFileSync('taskset', ['-a', '-cp', '0-5', String(process.pid)], { stdio: 'ignore' }); return '0-5'; } catch { return null; } };
 module.exports = { NEO_CHROME_SPEEDOMETER, NEO_CHROME_SOURCE, pinCores, stageSpeed: (...a) => stageSpeed(...a), summarize: (...a) => summarize(...a) };
@@ -95,24 +96,61 @@ const rows = (kind, n) => Array.from({ length: n }, (_, i) => kind === 'outline'
 // the schedule hidden and empty, Details & Actions there but empty until Ultra fills it (DETAILS_FILL).
 const ASIDE = '<aside class="js-course-info-skip-link-target outline-actions"><bb-course-instructors class="outline-action-block block-display top-block" style="display:none"></bb-course-instructors>'
   + '<div class="js-details-and-actions outline-action-block"></div><bb-course-schedule class="conditional-block react-container" style="display:none"></bb-course-schedule></aside>';
-// Ms after the outline is drawn, and how many of Details & Actions' seven 33 px rows (231 px, as live) are in by then.
-const DETAILS_FILL = [[300, 2], [500, 7]];
+// A route into Content as live (2026-10-31, Courses → course and Calendar → Content): ms after the click Ultra draws the
+// course with Details & Actions empty and Content still loading (OUTLINE_AT), fills Details & Actions with its seven 33 px
+// rows (231 px) about 330 ms later, and Content's list comes after that, so the page settles for Glaze with the fill.
+const OUTLINE_AT = 140, DETAILS_FILL = [[OUTLINE_AT + 250, 2], [OUTLINE_AT + 330, 7]], OUTLINE_ROWS_AT = OUTLINE_AT + 460;
+const outlineRows = () => `<div class="outline-column">${rows('outline', 240)}</div>`;
 const routeBody = (kind) => `<section class="route-view-container ${kind === 'outline' ? 'course' : ''}"><h1 elementtiming="title">${kind}</h1>${kind === 'course'
   ? `<div class="courses-panel"><div class="course-org-list">${Array.from({ length: 24 }, (_, i) => `<article class="element-card course-element-card" data-course-id="_${101 + i}_1"><div class="course-banner"></div><div class="element-details"><h4 class="course-title"><span class="js-course-title-element">Course ${i}</span></h4><div class="course-status">Open</div></div></article>`).join('')}</div></div>`
-  : kind === 'outline' ? `<div class="course-content-container"><div class="course-outline-grid"><section class="course-outline-content"><div class="outline-column">${rows(kind, 240)}</div></section>${ASIDE}</div></div>` : rows(kind, 30)}</section>`;
+  : kind === 'outline' ? `<div class="course-content-container"><div class="course-outline-grid"><section class="course-outline-content"><div class="spinner" aria-busy="true"></div></section>${ASIDE}</div></div>` : rows(kind, 30)}</section>`;
 const fixture = `<!doctype html><html lang="en"><head><base href="//ultra-cdn.invalid/ultra/uiv4001.0.0-rel/"><meta charset="utf-8"><title>Ultra performance fixture</title><style>body{margin:0;font:14px sans-serif}nav{position:fixed;width:200px}main{margin-left:200px}.native-row,.content-list-item{padding:4px;border-bottom:1px solid #ddd}.course-outline-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;align-items:start}.outline-actions{display:flex;flex-direction:column}</style></head><body><div id="site-wrap"><nav id="base_tools"><a href="/ultra/institution-page"><span>Institution Page</span></a><a href="/ultra/course">Courses</a></nav><main id="main-content"><div id="main-content-inner">${routeBody('stream')}</div></main></div><aside id="gz-perf-own"></aside></body></html>`;
 
+// Glaze's blocks in the outline's right column, from the route on: each one's top while shown, and the layout shift they
+// take part in (aside, below).
+function asideWatch() {
+  const blocks = ['aside.outline-actions > #gz-nt-block', 'aside.outline-actions > #gz-sb-widgets'], tops = Object.fromEntries(blocks.map((b) => [b, []])), shifts = [], frames = [];
+  const from = performance.now();
+  let frame, was = '';
+  // Each frame that differs from the last: the column's state (Details & Actions' height, the hold, the sidebar's host) and the blocks' tops.
+  const sample = () => {
+    const t = Math.round(performance.now() - from), row = {};
+    for (const b of blocks) {
+      const e = document.querySelector(b), r = e?.getBoundingClientRect();
+      if (r && r.height > 0 && r.width > 0) { const top = Math.round(r.top * 10) / 10, list = tops[b]; row[b] = top; if (list.at(-1)?.top !== top) list.push({ t, top }); }
+    }
+    const d = document.querySelector('aside.outline-actions > .js-details-and-actions');
+    Object.assign(row, { details: d ? Math.round(d.getBoundingClientRect().height) : null, held: document.documentElement.style.getPropertyValue('--gz-sb-held') && document.documentElement.hasAttribute('data-gz-sb-held') ? document.documentElement.style.getPropertyValue('--gz-sb-held') : null,
+      host: d?.parentElement.getAttribute('data-gz-sidebar-host') ?? null });
+    const key = JSON.stringify(row);
+    if (key !== was && frames.length < 200) { was = key; frames.push({ t, ...row }); }
+    frame = requestAnimationFrame(sample);
+  };
+  frame = requestAnimationFrame(sample);
+  const ours = (n) => { const e = n?.nodeType === 1 ? n : n?.parentElement; return blocks.find((b) => e?.closest(b)) || null; };
+  const take = (list) => { for (const e of list) if (!e.hadRecentInput) for (const x of e.sources || []) { const b = ours(x.node); if (b) shifts.push({ t: Math.round(e.startTime - from), value: e.value, block: b, prev: x.previousRect.top, cur: x.currentRect.top }); } };
+  let po = null;
+  try { po = new PerformanceObserver((l) => take(l.getEntries())); po.observe({ type: 'layout-shift' }); } catch { /* no layout-shift entries here */ }
+  return () => { cancelAnimationFrame(frame); if (po) { take(po.takeRecords()); po.disconnect(); } return { tops, shifts, frames }; };
+}
+
 async function settle(page, change) {
-  return page.evaluate(async ({ change, body, fill }) => {
+  return page.evaluate(async ({ change, body, fill, outlineAt, rowsAt, rowsHtml, watch }) => {
     const start = performance.now();
-    let last = start, changes = 0, held = 0;
+    let last = start, changes = 0, held = 0, inserted = start, aside = null;
     const mo = new MutationObserver((rs) => { last = performance.now(); changes += rs.length; });
     mo.observe(document.body, { childList: true, subtree: true, attributes: true });
     if (['outline', 'grades', 'course'].includes(change)) {
       history.pushState({}, '', location.origin + (change === 'course' ? '/ultra/course' : `/ultra/courses/_101_1/${change}`));
-      document.getElementById('main-content-inner').innerHTML = body;
-      // Ultra fills the outline's Details & Actions late, in steps.
-      if (change === 'outline') for (const [ms, n] of fill) setTimeout(() => { const d = document.querySelector('.js-details-and-actions'); if (d) d.innerHTML = Array.from({ length: n }, (_, i) => `<div style="height:33px;box-sizing:border-box">Action ${i + 1}</div>`).join(''); }, ms);
+      if (change === 'outline') {
+        // The address first; Ultra's course view after OUTLINE_AT, Details & Actions filled in steps, then Content's list.
+        aside = (0, eval)(`(${watch})`)();
+        await new Promise((r) => setTimeout(r, outlineAt));
+        inserted = performance.now();
+        document.getElementById('main-content-inner').innerHTML = body;
+        for (const [ms, n] of fill) setTimeout(() => { const d = document.querySelector('.js-details-and-actions'); if (d) d.innerHTML = Array.from({ length: n }, (_, i) => `<div style="height:33px;box-sizing:border-box">Action ${i + 1}</div>`).join(''); }, ms - outlineAt);
+        setTimeout(() => { const c = document.querySelector('.course-outline-content'); if (c) c.innerHTML = rowsHtml; }, rowsAt - outlineAt);
+      } else document.getElementById('main-content-inner').innerHTML = body;
     } else if (change === 'own') {
       const own = document.getElementById('gz-perf-own');
       for (let i = 0; i < 30; i++) { own.textContent = `Widget ${i}`; await new Promise((r) => setTimeout(r, 20)); }
@@ -123,10 +161,11 @@ async function settle(page, change) {
       if (performance.now() - start >= 500 && performance.now() - last >= 300) break;
     }
     mo.disconnect();
-    return { elapsed: performance.now() - start, lastMutation: last - start, changes, held, stillHeld: !!document.querySelector('[data-gz-loading]'), longTasks: window.perfLongTasks, nodes: document.body.querySelectorAll('*').length, rows: document.querySelectorAll('.native-row, .content-list-item, .course-element-card').length,
+    if (aside) aside = aside();
+    return { elapsed: performance.now() - start, ...(aside && { aside }), lastMutation: last - start, changes, held, stillHeld: !!document.querySelector('[data-gz-loading]'), longTasks: window.perfLongTasks, nodes: document.body.querySelectorAll('*').length, rows: document.querySelectorAll('.native-row, .content-list-item, .course-element-card').length,
       ...(window.perfSpeed && { sample: document.querySelector('.content-list-item, .course-element-card, .native-row')?.outerHTML.slice(0, 1200), sidebar: document.documentElement.getAttribute('data-gz-sidebar') }),
-      ...(window.perfSpeed && { window: [change ? start : 0, performance.now()] }) };
-  }, { change, body: routeBody(change), fill: DETAILS_FILL });
+      ...(window.perfSpeed && { window: [change ? start : 0, performance.now()], inserted }) };
+  }, { change, body: routeBody(change), fill: DETAILS_FILL, outlineAt: OUTLINE_AT, rowsAt: OUTLINE_ROWS_AT, rowsHtml: outlineRows(), watch: asideWatch.toString() });
 }
 
 // PERF_SPEED: what the page observes in its own world from its first script: when Glaze's look lands on <html>
@@ -386,10 +425,12 @@ if (require.main === module) (async () => {
       const opts = await context.newPage(); await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
       // What Glaze measured of the course's layout (detailsHeight:<origin>, navigation/page/sidebar.js) stays from one rep to
       // the next: rep 0 opens the course for the first time, the later reps as a student who has opened it before.
+      // PERF_REQUIRE_STILL_ASIDE: Course notes on, as the owner has it, so its block is in the outline's column.
+      const base = stillAside ? { ...D.GZ_DEFAULTS, enhance: { ...D.GZ_DEFAULTS.enhance, notes: true } } : D.GZ_DEFAULTS;
       const reset = () => opts.evaluate(async (defaults) => {
         const seen = Object.fromEntries(Object.entries(await chrome.storage.local.get(null)).filter(([k]) => k.startsWith('detailsHeight:')));
         await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(defaults); await chrome.storage.local.set({ ultra: ['https://ultra.fixture.test'], ...seen });
-      }, glaze === 'off' ? { ...D.GZ_DEFAULTS, enabled: false } : D.GZ_DEFAULTS);
+      }, { ...base, ...(glaze === 'off' && { enabled: false }) });
       // PERF_DEVICE=neo: the Neo's CPU speed on the page and on every frame in a process of its own.
       const prepare = async (page) => {
         if (!cpuRate) return;
@@ -465,7 +506,7 @@ if (require.main === module) (async () => {
           // Observer delivery is later than insertion and its diagnostic log is capped; use the stage's actual start.
           const titlePaint = Object.fromEntries(probe.titles.map((x) => {
             const stage = x.text === 'stream' ? 'initial' : x.text === 'course' ? 'courses' : x.text;
-            return [x.text, x.renderTime - (stages[stage]?.window[0] ?? 0)];
+            return [x.text, x.renderTime - (stage === 'initial' ? 0 : stages[stage]?.inserted ?? stages[stage]?.window[0] ?? 0)];
           }));
           speedResult = { styledAt: probe.styledAt, fcp: probe.fcp, lcp: loaded?.ms ?? null, lcpElement: loaded?.el ?? null, lcpAll: last?.ms ?? null, lcpEntry, lcpEntries: probe.lcp.map((e) => ({ ...e, stage: stageOf(e.ms) })), titlePaint,
             headings: probe.h1, fonts: probe.fonts, glazeNodes: probe.glaze, titles: probe.titles,
@@ -549,6 +590,31 @@ if (require.main === module) (async () => {
     if (process.env.PERF_REQUIRE_NO_HOLD) for (const result of results) for (const stage of ['courses', 'outline', 'grades']) {
       assert.equal(result[stage].held, 0, `${stage}: SPA content must remain visible`);
       assert.equal(result[stage].stillHeld, false, `${stage}: no lingering SPA hold`);
+    }
+    // PERF_REQUIRE_STILL_ASIDE (with PERF_WIDTH at least 1560, where the sidebar is the outline's right column, and
+    // PERF_REPS at least 2): on a course seen before, Course notes and the dock never move while Ultra fills Details &
+    // Actions, and take part in no layout shift. A move in the frame the sidebar takes the column (its header put in above
+    // them, with Details & Actions unchanged) is the sidebar's own and is listed, not asserted.
+    if (stillAside) {
+      assert.ok(WIDTH >= 1560 && reps >= 2, 'PERF_REQUIRE_STILL_ASIDE needs PERF_WIDTH >= 1560 and PERF_REPS >= 2');
+      const returning = results.filter((r) => r.rep > 0 && r.glaze !== 'off');
+      assert.ok(returning.length, 'a returning visit was measured');
+      for (const r of returning) {
+        const { frames, shifts } = r.outline.aside, moves = [], seen = new Map();
+        for (const frame of frames) for (const block of ['aside.outline-actions > #gz-nt-block', 'aside.outline-actions > #gz-sb-widgets']) {
+          const previous = seen.get(block), was = previous?.[block], now = frame[block];
+          if (now == null) continue;
+          if (was != null && was !== now) moves.push({ t: frame.t, block, from: was, to: now,
+            adopt: !previous.host && !!frame.host && previous.details === frame.details });
+          seen.set(block, frame);
+        }
+        r.outline.aside.moves = moves;
+        console.log(JSON.stringify({ rep: r.rep, instrumented: r.instrumented, asideMoves: moves, asideShifts: shifts }));
+        assert.ok(frames.some((f) => f['aside.outline-actions > #gz-nt-block'] != null), `rep ${r.rep}: Course notes showed in the outline's column`);
+        assert.ok(frames.some((f) => f['aside.outline-actions > #gz-sb-widgets'] != null), `rep ${r.rep}: My widgets showed in the outline's column`);
+        assert.deepEqual(moves.filter((m) => !m.adopt), [], `rep ${r.rep}: Glaze's blocks moved while Ultra filled Details & Actions`);
+        assert.deepEqual(shifts, [], `rep ${r.rep}: Glaze's blocks took part in a layout shift`);
+      }
     }
     if (process.env.PERF_REQUIRE_QUIET_OWN) for (const result of results.filter((r) => r.instrumented)) {
       const key = 'document:[class*="course-color-"]';
