@@ -1,7 +1,7 @@
 // Glaze's bar on Ultra at first paint (perf step 1b), with the real extension on the synthetic Ultra (test/fixtures/ultra-course.html)
 // under a made-up school's address. A first load has no bar drawn before navigation/page/navbar.js is in; the second load in the
-// tab draws it at first paint from what the first kept, with where the student is now, and the bar takes that copy over: one
-// host, nothing moved, no layout shift. A route change in the app moves the marks on the same item nodes.
+// tab stages what the first kept, hidden until the current account is verified, and the bar takes that copy over: one
+// host, the same reserved room, no layout shift. A route change in the app moves the marks on the same item nodes.
 // EXT=<checkout>/extension NODE_PATH=<playwright> nice node checks/navigation/ultra-navbar-first-paint-check.js <out dir>
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
@@ -35,6 +35,7 @@ const watch = () => {
     const h = bar(), items = rail(h);
     window.__firstHost = h;
     window.__first = { host: !!h, copy: !!h?.hasAttribute('data-first'), shown: !!h && !h.hidden && getComputedStyle(h).display !== 'none', inert: !!h?.inert,
+      room: ['--gz-navbar-left', '--gz-navbar-top'].map((k) => getComputedStyle(document.documentElement).getPropertyValue(k).trim()),
       items: items.map((e) => e.dataset.id), current: items.filter((e) => e.getAttribute('aria-current') === 'page').map((e) => e.dataset.id),
       tops: Object.fromEntries(items.map((e) => [e.dataset.id, Math.round(e.getBoundingClientRect().top)])) };
   });
@@ -47,6 +48,7 @@ const live = () => {
 const now = () => {
   const h = document.getElementById('gz-navbar'), items = [...h.shadowRoot.querySelectorAll('.rail .list [data-id]')];
   return { same: h === window.__firstHost, inert: h.inert, hosts: document.querySelectorAll('#gz-navbar').length, items: items.map((e) => e.dataset.id),
+    room: ['--gz-navbar-left', '--gz-navbar-top'].map((k) => getComputedStyle(document.documentElement).getPropertyValue(k).trim()),
     current: items.filter((e) => e.getAttribute('aria-current') === 'page').map((e) => e.dataset.id), tops: Object.fromEntries(items.map((e) => [e.dataset.id, Math.round(e.getBoundingClientRect().top)])),
     kept: sessionStorage.getItem('gz-navbar') !== null };
 };
@@ -56,16 +58,16 @@ const now = () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-navbar-first-'));
   fs.mkdirSync(out, { recursive: true });
   const errors = [];
-  let meServed = 0;
+  let meServed = 0, accountGate;
   try {
     await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...env.chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'] });
-    await ctx.route('**/*', (route) => {
+    await ctx.route('**/*', async (route) => {
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:') return route.continue();
       if (u.origin === site && u.pathname.startsWith('/ultra')) return route.fulfill({ contentType: 'text/html', body: fixture });
-      if (u.origin === site && u.pathname.endsWith('/users/me')) { meServed++; return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ id: uid }) }); }
+      if (u.origin === site && u.pathname.endsWith('/users/me')) { await accountGate; meServed++; return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ id: uid }) }); }
       if (u.origin === site && u.pathname.includes('/learn/api/')) return route.fulfill({ contentType: 'application/json', body: '{"results":[]}' });
       if (u.hostname === 'cdn.school.test') return route.fulfill({ contentType: 'text/css', body: '' });
       return route.abort();
@@ -93,20 +95,23 @@ const now = () => {
     check(meServed > 0, 'the account was asked for');
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r())));
 
-    // ---- the second load in the tab: the bar at first paint ----
+    // ---- the second load: no private cached labels before account verification ----
+    let releaseAccount;
+    accountGate = new Promise((resolve) => { releaseAccount = resolve; });
     await page.goto(`${site}/ultra/calendar`);
     const at = await until(page, () => window.__first, null, 'the first frame of the second load');
-    check(at.copy && at.shown, 'second load: the bar is drawn and shown at first paint, before the bar is in', at);
+    check(at.copy && !at.shown, 'second load: the cached bar stays hidden while the account is unknown', at);
     check(at.items.length >= 5 && ['institution-page', 'stream', 'course', 'calendar', 'grades'].every((i) => at.items.includes(i)), 'second load: it has Ultra\'s items at first paint', at.items);
     check(JSON.stringify(at.current) === '["calendar"]', 'second load: where the student is now is marked, not where they were', at.current);
     check(at.inert, 'second load: the copy takes no focus or clicks');
     await page.screenshot({ path: path.join(out, 'second-load.png') });
+    releaseAccount(); accountGate = null;
     await until(page, live, null, 'the bar taking over');
     const taken = await page.evaluate(now);
     check(taken.same && !taken.inert, 'the bar takes over the copy: the same host, in use', { same: taken.same, inert: taken.inert });
     check(taken.hosts === 1 && (await page.evaluate(() => window.__hosts)) <= 1, 'one bar host at all times (no duplicate focus targets)', { now: taken.hosts, max: await page.evaluate(() => window.__hosts) });
     check(JSON.stringify(taken.items) === JSON.stringify(at.items), 'the same items as the copy, in the same order', { copy: at.items, live: taken.items });
-    check(Object.keys(at.tops).every((k) => taken.tops[k] === at.tops[k]), 'nothing moved when the bar took over', { copy: at.tops, live: taken.tops });
+    check(JSON.stringify(taken.room) === JSON.stringify(at.room), 'the reserved room is unchanged at takeover', { copy: at.room, live: taken.room });
     check(!taken.kept, 'what was kept is used once');
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
     const shifts = await page.evaluate(() => window.__shifts);

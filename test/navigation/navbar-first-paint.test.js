@@ -102,6 +102,30 @@ function setup({ path = '/ultra/course', store = new Map(), account = () => Prom
     item: (id) => root.querySelector(`.rail .list [data-id="${id}"]`) };
 }
 
+function firstPage(account) {
+  const h = setup({ navbar: { on: false } }), { document, context, settings, store } = h;
+  const create = document.createElement;
+  document.createElement = (tag) => {
+    const e = create(tag);
+    if (tag === 'template') {
+      e.content = create('div');
+      Object.defineProperty(e, 'innerHTML', { set(markup) {
+        const doc = { ...document, root: new El('html', document) };
+        const body = upgrade(parse(`<body>${markup}</body>`, doc));
+        e.content.append(...body.children);
+      } });
+    }
+    return e;
+  };
+  context.GZ_NAV = undefined;
+  context.GZ_SPEC = G.GZ_SPEC; context.GZ_DEFAULTS = G.GZ_DEFAULTS;
+  vm.runInContext(read('navigation/nav.js'), context);
+  store.set('gz-navbar', JSON.stringify({ u: '_42_1', t: Date.now(), w: 'rail auto float', k: NAV.key(settings), v: '1440x900', a: [], m: '<nav class="rail">Private account and course names</nav>' }));
+  context.GZ_NAV.first(settings, 'rail auto float', account);
+  const host = document.getElementById('gz-navbar');
+  return { ...h, host, load: () => host.shadowRoot.querySelector('link').onload(), drop: () => context.GZ_NAV.drop() };
+}
+
 test('the compared shape leaves out where the student is; a change to the items is still a change', () => {
   const native = (active) => ITEMS.map(([id, label]) => ({ id, label, href: `${origin}/ultra/${id}`, active: id === active }));
   const a = M.build({ native: native('course') }), b = M.build({ native: native('calendar') });
@@ -212,6 +236,65 @@ test('what was kept is drawn only for this tab\'s same settings and window, from
   assert.equal(NAV.kept(null, at), null);
   assert.equal(NAV.kept(JSON.stringify({ ...s, m: 1 }), at), null);
   assert.throws(() => NAV.kept('{', at));
+});
+
+test('cached markup strips handlers regardless of their text and rejects alternate URL attributes', () => {
+  const doc = { location: new URL(`${origin}/ultra/course`) };
+  doc.root = new El('html', doc);
+  const body = upgrade(parse('<body><img src="https://images.test/missing" onerror="https:globalThis.compromised = true"><svg><a xlink:href="javascript:alert(1)">unsafe</a></svg><img srcset="https://tracking.test/pixel 2x"><a href="https://bb.school.test/ultra/course">safe</a></body>', doc));
+  NAV.paint(body, '/ultra/course');
+  assert.equal(body.querySelector('img').getAttribute('onerror'), null, 'https: is a valid JavaScript label, not a safe handler');
+  assert.equal(body.querySelector('svg a').getAttribute('xlink:href'), null);
+  assert.equal(body.querySelectorAll('img')[1].getAttribute('srcset'), null);
+  assert.equal(body.querySelectorAll('a').at(-1).getAttribute('href'), `${origin}/ultra/course`);
+});
+
+test('corrupt or forged first-paint metadata is rejected before it reaches DOM setters', () => {
+  const s = { u: '_42_1', t: 1000, w: 'rail auto float', k: 'settings', v: '1440x900', a: [['dir', 'ltr']], m: '<nav></nav>' };
+  const at = { words: s.w, key: s.k, size: s.v, now: 2000, from: `${origin}/ultra/course`, origin };
+  for (const a of [[null], ['dir'], [['dir']], [['data-', '']], [['data-replaced', '']], [['dir', {}]]]) {
+    assert.equal(NAV.kept(JSON.stringify({ ...s, a }), at), null, `invalid host attributes: ${JSON.stringify(a)}`);
+  }
+  for (const t of [2001, '1000', null]) assert.equal(NAV.kept(JSON.stringify({ ...s, t }), at), null, 'invalid or future timestamp');
+  assert.equal(NAV.kept(JSON.stringify({ ...s, u: '' }), at), null, 'no known account');
+  for (const from of [`${origin}/ultra-login`, `${origin}/ultramarine/`]) assert.equal(NAV.kept(JSON.stringify(s), { ...at, from }), null, 'Ultra path boundary');
+  assert.deepEqual(NAV.kept(JSON.stringify(s), { ...at, from: `${origin}/ultra?landing=1` }), s);
+});
+
+test('a cached bar stays hidden until its account is verified, regardless of stylesheet timing', async () => {
+  for (const loadFirst of [true, false]) {
+    let resolve;
+    const h = firstPage(() => new Promise((r) => { resolve = r; }));
+    await tick();
+    if (loadFirst) h.load();
+    assert.equal(h.host.hidden, true, 'cached private labels stay hidden while identity is unknown');
+    resolve('_42_1'); await tick();
+    assert.equal(h.host.hidden, !loadFirst, 'both identity and stylesheet must be ready');
+    if (!loadFirst) { h.load(); await tick(); }
+    assert.equal(h.host.hidden, false, 'the verified copy can be shown');
+  }
+});
+
+test('a cached bar is discarded for another or unavailable account', async () => {
+  for (const account of [() => '_7_1', () => '', () => Promise.reject(new Error('401')), undefined]) {
+    const h = firstPage(account);
+    h.load(); await tick();
+    assert.equal(h.host.hidden, true);
+    assert.equal(h.host.isConnected, false, 'never show the previous account\'s navigation');
+  }
+});
+
+test('a late account result cannot remove a bar already taken over or resurrect a dropped copy', async () => {
+  for (const adopted of [true, false]) {
+    let resolve;
+    const h = firstPage(() => new Promise((r) => { resolve = r; }));
+    await tick(); h.load();
+    if (adopted) { h.host.removeAttribute('data-first'); h.host.hidden = false; }
+    else h.drop();
+    resolve(adopted ? '_7_1' : '_42_1'); await tick();
+    assert.equal(h.host.isConnected, adopted);
+    assert.equal(h.host.hidden, !adopted);
+  }
 });
 
 test('nothing is kept once the account signs out, for an unknown account, or for another one', async () => {
