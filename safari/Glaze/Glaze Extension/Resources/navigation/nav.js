@@ -64,7 +64,7 @@ var GZ_NAV = globalThis.GZ_NAV || (() => {
     // Shown with its sheet; the account's own parts (kept apart, their room held) once the account is the one they were drawn
     // for, and the copy gone for any other.
     const live = () => host.isConnected && host.hasAttribute('data-first');
-    l.onload = () => { if (live()) { host.hidden = false; glide(); } };
+    l.onload = () => { if (live()) { if (root.adoptedStyleSheets?.length) root.adoptedStyleSheets = []; host.hidden = false; glide(); } };
     root.append(l, parse(k.m));
     (document.body || document.documentElement).prepend(host);
     // Styled at once from its kept sheet where it can be, so it is in the first paint.
