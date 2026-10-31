@@ -431,3 +431,115 @@ test('an old standby cannot carry an hours-old account assertion into a course',
 test('the course tab settings changed (ahead of time switched off) reach the standby at once, without waiting for a page pass', () => {
   assert.match(part('  const onStore = ', '  // Where the page frame is'), /if \(area === 'sync' && c\.tabs\) readPrefs\(\)\.then\(\(\) => \{ pass\(\); standbyLater\(\); \}\);/);
 });
+
+// ---- renewed once STALE ----
+// The section on a clock of its own: its timers run as time passes (pass), in order, cleared as the page clears them. Each
+// iframe made is a standby on Ultra's light page; one made while another standby is still in the page fails the test.
+const STALE = 120000;
+const clocked = (over = {}) => {
+  let now = 1e6, n = 0;
+  const q = new Map(), made = [];
+  const at = (fn, ms) => { q.set(++n, { fn, due: now + Math.max(0, ms || 0) }); return n; };
+  const document = {
+    visibilityState: 'visible', body: {},
+    createElement: () => {
+      assert.equal(made.filter((e) => e.isConnected && e.name === 'gz-ctab:standby').length, 0, 'never two standbys at once');
+      const doc = { body: {}, location: { origin, pathname: '/ultra/profile', search: '' }, querySelector: () => null, querySelectorAll: () => [] };
+      const attrs = new Set();
+      const el = { style: {}, isConnected: false, contentDocument: doc, contentWindow: { postMessage() {} }, booted: now, removed: 0, addEventListener() {},
+        removeAttribute: (k) => attrs.delete(k), toggleAttribute: (k, v) => (v ? attrs.add(k) : attrs.delete(k)), hasAttribute: (k) => attrs.has(k),
+        remove() { this.removed++; this.isConnected = false; } };
+      made.push(el);
+      return el;
+    },
+  };
+  const k = {};
+  // Its Glaze says it is in, then who is signed in there: usable.
+  k.ready = (el) => { for (const data of [{ gzCtab: 'loaded' }, { gzCtab: 'account', uid: '_42_1' }]) k.api.onAhead({ data, source: el.contentWindow, origin }); };
+  Object.assign(k, run({ Date: { now: () => now }, performance: { now: () => now }, setTimeout: at, clearTimeout: (id) => q.delete(id),
+    requestIdleCallback: (fn) => at(fn, 0), cancelIdleCallback: (id) => q.delete(id), document, nudge() {},
+    host: { prepend: (el) => { el.isConnected = true; if (k.auto) k.ready(el); } }, ...over }), { made });
+  k.pass = (ms) => {
+    const end = now + ms;
+    for (let i = 0; ; i++) {
+      assert.ok(i < 10000, 'no loop of timers');
+      const [id, t] = [...q].filter(([, x]) => x.due <= end).sort((a, b) => a[1].due - b[1].due || a[0] - b[0])[0] || [];
+      if (!t) break;
+      q.delete(id); now = t.due; t.fn();
+    }
+    now = end;
+  };
+  k.pending = () => q.size;
+  let onVisibility;
+  k.onVisibility = () => (onVisibility ||= vm.runInContext(part('  const onVisibility = ', '  const listen = ') + '\nonVisibility;', k.c))();
+  return k;
+};
+
+test('a standby past STALE is renewed while the page shows, so a tab picked minutes later adopts instead of loading cold', () => {
+  const p = clocked();
+  p.api.standbyLater(); p.pass(5000);
+  assert.equal(p.made.length, 1, 'booted at idle');
+  p.ready(p.made[0]);
+  p.pass(110000); p.api.standbyLater();
+  assert.equal(p.api.standby?.el, p.made[0], 'kept while it may still be adopted');
+  p.pass(15000);
+  assert.equal(p.made.length, 2, 'renewed at the next idle once STALE');
+  assert.equal(p.made[0].removed, 1, 'the stale one let go of');
+  assert.equal(p.api.standby?.el, p.made[1]);
+  p.ready(p.made[1]);
+  const f = p.api.adopt('_2_1', '/ultra/courses/_2_1/outline', { cid: '_2_1', name: 'Two' });
+  assert.equal(f?.el, p.made[1], 'adopted: routed in place');
+  assert.deepEqual(p.did.filter(([k]) => k === 'load'), [], 'no cold load');
+  assert.equal(p.api.miss, 0, 'a renewal is no miss');
+});
+
+test('never two standbys: a stale one goes before its renewal boots, and syncs meanwhile boot no other', () => {
+  const p = clocked();
+  p.auto = true;
+  p.api.standbyLater();
+  for (let i = 0; i < 600; i++) { p.pass(1000); p.api.standbyLater(); } // ten minutes, a sync each second
+  assert.equal(p.made.length, 5, 'one each STALE, after its 2.5 s wait');
+  assert.deepEqual(p.made.map((e) => e.isConnected), [false, false, false, false, true]);
+  assert.equal(p.api.standby?.el, p.made[4]);
+  assert.equal(p.api.miss, 0);
+});
+
+test('hidden, a stale standby is let go of and renewed on the page\'s next visibilitychange, never on a timer', () => {
+  const p = clocked({ ctx: { site: 'ultra', courseId: () => '' } });
+  p.api.standbyLater(); p.pass(5000); p.ready(p.made[0]);
+  p.pass(60000);
+  p.c.document.visibilityState = 'hidden'; p.onVisibility();
+  p.pass(30 * 60000);
+  p.api.standbyLater(); // a route in the background tab
+  p.pass(60000);
+  assert.equal(p.made.length, 1, 'no boot while hidden');
+  assert.equal(p.made[0].isConnected, false, 'past STALE it would never be adopted');
+  assert.equal(p.pending(), 0, 'nothing waiting on a timer');
+  p.c.document.visibilityState = 'visible'; p.onVisibility();
+  p.pass(5000);
+  assert.equal(p.made.length, 2, 'renewed once on screen');
+  p.ready(p.made[1]);
+  assert.equal(p.api.adopt('_2_1', '/ultra/courses/_2_1/outline', { cid: '_2_1' })?.el, p.made[1]);
+});
+
+test('a page hidden before its first standby boots it on its next visibilitychange, with no timer meanwhile', () => {
+  const p = clocked({ ctx: { site: 'ultra', courseId: () => '' } });
+  p.c.document.visibilityState = 'hidden';
+  p.api.standbyLater(); p.pass(10 * 60000);
+  assert.equal(p.made.length, 0);
+  assert.equal(p.pending(), 0);
+  p.c.document.visibilityState = 'visible'; p.onVisibility(); p.pass(5000);
+  assert.equal(p.made.length, 1);
+});
+
+test('renewal boots that never get ready back off as any boot: a longer wait each time, none after three', () => {
+  const p = clocked();
+  p.api.standbyLater(); p.pass(5000); p.ready(p.made[0]);
+  p.pass(2 * 3600000);
+  assert.equal(p.made.length, 4, 'the renewal and two more tries');
+  const [, b, c, d] = p.made.map((e) => e.booted);
+  assert.deepEqual([c - (b + 30000), d - (c + 30000)], [10000, 40000], 'each let go of after 30 s, the next wait four times longer');
+  assert.equal(p.api.miss, 3);
+  assert.equal(p.api.standby, null);
+  assert.equal(p.pending(), 0, 'no loop');
+});
