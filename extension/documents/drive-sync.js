@@ -40,10 +40,14 @@
 // A file larger than one request (documents/drive.js SMALL) never holds a run up: the run's own pass stages it (an upload's
 // bytes, or a download to come) and goes on to the rest, the change list's token moving past it; the run's last step sends
 // it in chunks, as far as the worker's life allows, and a later run goes on from where Drive says it stands (transfers below).
+// In 4.0.1 a document or record whose file or JSON copy is larger than one request (BIG) is never sent or brought: it stays
+// on the device, marked too large (storage.local driveSyncLarge { docs: { key }, recs: { 'area:key' } }, which Documents and
+// Settings show), and its last copy in Drive, if any, stays as it was; nothing is trashed or deleted for it. Staged transfers
+// (env.staged, below) come back in 4.0.2.
 // Nothing goes anywhere but Google Drive.
 // Classic script for the worker; module.exports for node.
 var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
-  const STATE = 'driveSync', DOC = 'driveSyncDoc:', FILE = 'driveSyncFile:', DIRTY = 'driveSyncDirty', WAITING = 'driveSyncWaiting', AWAY = 'driveSyncAway', MOVES = 'driveSyncMoves';
+  const STATE = 'driveSync', DOC = 'driveSyncDoc:', FILE = 'driveSyncFile:', DIRTY = 'driveSyncDirty', WAITING = 'driveSyncWaiting', AWAY = 'driveSyncAway', MOVES = 'driveSyncMoves', LARGE = 'driveSyncLarge';
   const FOLDER = 'application/vnd.google-apps.folder', JSON_TYPE = 'application/json', NAME = 'Glaze';
   const KINDS = ['paper', 'sheet', 'pdf', 'slides'], FILES = ['pdf', 'slides'];
   const EXT = { paper: '.docx', sheet: '.xlsx', pdf: '.pdf', slides: '.pptx' };
@@ -113,7 +117,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
   // { name, mime, bytes } or null, pack(record, parts) → a spreadsheet version's gz, hash(text) → SHA-256 hex,
   // copyName(title), now, sleep, random, locks (navigator.locks or null), timer(fn, ms) → cancel, stage (transfers' bytes:
   // documents/doc-files.js idb's get, keys, entries, write; none: every transfer in one request), alive() → stop (keeps the
-  // worker up while transfers go; none on Safari) }
+  // worker up while transfers go; none on Safari), staged (true: a transfer past BIG goes through the stage, in the run's last
+  // step; otherwise, as in 4.0.1, it is never made: 'large') }
   const create = (env) => {
     const now = env.now || Date.now, S = env.store;
     const sleep = env.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
@@ -122,6 +127,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     const locks = env.locks === undefined ? globalThis.navigator?.locks || null : env.locks;
     // Everything else Glaze keeps (background/drive-store.js): its hooks run in these same runs, after the documents.
     const more = env.more || null;
+    // Staged transfers, off until 4.0.2: an item past BIG stays on the device ('large'), and any a build that staged left is let go.
+    const staging = env.staged === true;
     const chains = new Map();
     const queued = (name, fn) => {
       const p = (chains.get(name) || Promise.resolve()).then(fn, fn), tail = p.catch(() => {});
@@ -147,7 +154,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     };
     const dropDoc = (h, was) => S.remove([DOC + h, ...[was?.json, was?.file].filter(Boolean).map((id) => FILE + id)]);
     const forget = async () => {
-      const keys = (await S.keys()).filter((k) => k.startsWith(DOC) || k.startsWith(FILE) || k === DIRTY || k === WAITING || k === AWAY || k === MOVES);
+      const keys = (await S.keys()).filter((k) => k.startsWith(DOC) || k.startsWith(FILE) || k === DIRTY || k === WAITING || k === AWAY || k === MOVES || k === LARGE);
       if (keys.length) await S.remove(keys);
       // The transfers' store unopenable (IndexedDB refused): nothing of the old account's can be read from it either, and the
       // account's state goes regardless.
@@ -159,6 +166,13 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // The documents saved since they were last pushed: key → a count, so a save during a push keeps its mark.
     const mark = (key) => held('dirty', async () => { const m = (await S.get(DIRTY))[DIRTY] || {}; m[key] = (m[key] || 0) + 1; await S.set({ [DIRTY]: m }); });
     const unmark = (key, n) => held('dirty', async () => { const m = (await S.get(DIRTY))[DIRTY] || {}; if (m[key] === n) { delete m[key]; await S.set({ [DIRTY]: m }); } });
+    // An item too large to sync (kind 'docs': a document's key; 'recs': a record's 'area:key'), marked or no longer.
+    const tooLarge = (kind, id, on) => held('large', async () => {
+      const m = (await S.get(LARGE))[LARGE] || {}, set = { ...(m[kind] || {}) };
+      if (!!set[id] === on) return;
+      if (on) set[id] = true; else delete set[id];
+      await S.set({ [LARGE]: { ...m, [kind]: set } });
+    });
 
     // ---- Drive, through this run's client: busy answers waited out and asked again, up to WAIT.retry's tries.
     let client = null, stopped = 0, runStop = 0, runAccount = null;
@@ -236,6 +250,12 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // Large: staged, 'pending' until sent; one on its way to another file than the one aimed at now starts again. Once sent,
     // taken whichever file it landed in (a new one when its own was gone). → { file (Drive's answer), info } or null
     const up = async (slot, tag, target, make, owner) => {
+      if (!staging) {
+        const m = await make();
+        if (!m) return null;
+        if (m.bytes.length > BIG) throw new Fail('large');
+        return { file: await send(m, m.bytes), info: m.info ?? null };
+      }
       const t = await moveOf(slot);
       if (t?.dir === 'up' && t.tag === tag && (t.file || target === undefined || (t.aim ?? null) === (target ?? null))) {
         if (t.file) { await dropMove(slot); return { file: t.file, info: t.info ?? null }; }
@@ -255,6 +275,10 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // revision and size: one replaced meanwhile starts over. → Uint8Array
     const down = async (slot, f, max, owner) => {
       const size = Number(f?.size);
+      if (!staging) {
+        if (Number.isSafeInteger(size) && size > BIG) throw new Fail('large');
+        return D((c) => c.media(f.id, Math.min(max, BIG))).catch((e) => { throw e?.why === 'size' ? new Fail('large') : e; });
+      }
       if (!stage || !Number.isSafeInteger(size) || size <= BIG || typeof f.headRevisionId !== 'string') return D((c) => c.media(f.id, max));
       if (size > max) throw new Fail('size');
       const tag = `${f.id}:${f.headRevisionId}:${size}`, t = await moveOf(slot);
@@ -307,7 +331,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // gone, or replaced, goes back to its owner to ask anew; one Drive refuses as it stands is passed over (a snapshot's
     // day skipped). env.alive keeps the worker up meanwhile where it can (not Safari: there the next run goes on).
     const transfers = async (folder) => {
-      if (!stage || !Object.keys(await moves()).length) return;
+      if (!staging || !stage || !Object.keys(await moves()).length) return;
       const stop = env.alive?.() || null, tries = new Map();
       try {
         for (;;) {
@@ -505,9 +529,14 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // Either one larger than a request goes in the run's last step (up: 'pending'), the copy only once the file is there.
     const push = async (key, h, l, d, folder) => {
       const kind = kindOf(l.rec), b = body(key, l.rec, l.parts), sum = await env.hash(canon(b)), owner = { doc: h, key };
+      // Its file or JSON copy past one request: it stays here, its last copy in Drive as it was. Told before anything is
+      // exported or written (the copy as its push would write it, with room for the ids it names).
+      if (!staging && ((FILES.includes(kind) && Number(l.rec.file?.size ?? l.rec.size) > BIG)
+        || new TextEncoder().encode(JSON.stringify({ glaze: 'document', v: 1, ...b, file: 'x'.repeat(64), fileRev: 'x'.repeat(64), updated: 1e13 })).length > BIG)) throw new Fail('large');
       // This content's file staged already (on its way, or sent): not exported again.
       const going = await moveOf(`u:${h}:file`), onWay = going?.dir === 'up' && going.tag === sum ? going : null;
       let ex = onWay ? null : await env.exportOf(key, l.rec, l.parts);
+      if (!staging && ex?.bytes?.length > BIG) throw new Fail('large');
       // No file to make here (a PDF's bytes still in its record from before the file store, or gone from this device) and
       // Drive's copy already this one: nothing new to send.
       if (!ex && !onWay && d?.json && d.rsum === sum && d.lsum === sum) return d;
@@ -914,7 +943,13 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // A document Drive's copy of can't be read is passed over; one that met a write here or a file still moving
     // (stale, or the paper store's refusal) is marked to be tried again next run. Drive's own trouble stops the run.
     // → 'pending' for one whose file waits for the run's last step.
-    const one = (key, h, hint) => held(`doc:${h}`, () => sync(key, h, hint)).catch(async (e) => {
+    const one = (key, h, hint) => held(`doc:${h}`, () => sync(key, h, hint)).then(async (r) => {
+      const k = key || (await docOf(h))?.key;
+      if (k && r !== 'pending') await tooLarge('docs', k, false);
+      return r;
+    }, async (e) => {
+      // Too large to sync: passed over, marked while this device holds it.
+      if (e?.why === 'large') { const k = key || (await docOf(h))?.key; if (k && await env.papers.get(k)) await tooLarge('docs', k, true); return; }
       if (e?.why === 'pending') return 'pending';
       if (SKIP.has(e?.why)) { console.warn('Sync to Google Drive: passed over', h, e.why); return; }
       if (e instanceof Fail ? e.why !== 'stale' : typeof e?.why === 'string') throw e;
@@ -1071,7 +1106,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       }
     };
 
-    const hooks = (folder) => ({ D, folder, state: setState, up, down, move: { get: moveOf, drop: dropMove } });
+    const hooks = (folder) => ({ D, folder, state: setState, up, down, move: { get: moveOf, drop: dropMove }, large: (id, on) => tooLarge('recs', id, on) });
     // ---- runs. o.full: everything (turning it on); o.push: only what was saved here.
     const runNow = async (o = {}) => {
       runStop = stopped;
@@ -1092,6 +1127,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       client = env.drive(active);
       await setState({ busy: now() });
       try {
+        if (!staging) for (const slot of Object.keys(await moves())) await dropMove(slot);
         if (o.full || !st.folder || !st.token) await full(st);
         else {
           const folder = await folderOf(st);

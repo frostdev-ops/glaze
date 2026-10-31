@@ -2,7 +2,8 @@
 // drive-sync.js, extension/background/drive-store.js): Safari unloads the worker about 30 s after its last event and Chrome
 // stops one whose fetch waits 30 s, so a large upload goes in chunks through a resumable session whose address, offset and
 // content hash stay in storage, a large download comes by ranges into a stage that outlives the worker, and neither holds
-// back the rest of a run. Each "worker" here is a fresh load of the modules over the same storage and stage; a stopped
+// back the rest of a run. Off in 4.0.1 (test/documents/drive-large.test.js): these run with the stage on (env.staged), as
+// 4.0.2 will. Each "worker" here is a fresh load of the modules over the same storage and stage; a stopped
 // one is a request that never answers (test/helpers/drive-standin.cjs cut, or a fetch that hangs).
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -64,7 +65,7 @@ const fresh = () => {
   return { D: require('../../extension/documents/drive.js'), S: require('../../extension/documents/drive-sync.js'), ST: require('../../extension/background/drive-store.js') };
 };
 const EXT = { paper: '.docx', pdf: '.pdf' };
-const worker = (drive, dk, { fetch = drive.fetch, account = 'student@school.edu', snapshot = null, records = false } = {}) => {
+const worker = (drive, dk, { fetch = drive.fetch, account = 'student@school.edu', snapshot = null, records = false, staged = true } = {}) => {
   const { D, S, ST } = fresh();
   const now = () => dk.clock.t;
   const papers = P.open(dk.store, now, { versions: () => 40, files: { own: dk.files.own } });
@@ -84,7 +85,7 @@ const worker = (drive, dk, { fetch = drive.fetch, account = 'student@school.edu'
     },
     pack: async () => '', hash: async (s) => sha(s), copyName: (t) => `${t} (Drive copy)`, now,
     sleep: async () => {}, random: () => 0, locks: null, timer: () => () => {},
-    stage: dk.stage, alive: () => { log.alive++; return () => { log.stopped++; }; }, more,
+    stage: dk.stage, staged, alive: () => { log.alive++; return () => { log.stopped++; }; }, more,
   };
   return { sync: S.create(env), papers, log, D, S, ST, more };
 };

@@ -1854,7 +1854,7 @@ test('a staged upload rechecks its target after a Word edit arrives outside Glaz
       if (!edited && puts.length) { edited = true; drive.edit(file, enc('Edited in Word while staged')); }
     },
   };
-  a.sync = S.create({ ...a.env, stage, exportOf: async () => ({ name: 'Essay.docx', mime: MIME.docx, bytes: new Uint8Array(S.BIG + 1).fill(65) }) });
+  a.sync = S.create({ ...a.env, stage, staged: true, exportOf: async () => ({ name: 'Essay.docx', mime: MIME.docx, bytes: new Uint8Array(S.BIG + 1).fill(65) }) });
   await a.papers.save(key, { doc: doc('Local edit') }); await a.sync.touched(key);
   assert.ok((await a.sync.run({ push: true })).ok);
   assert.equal(sha(drive.files.get(file).bytes), sha('Edited in Word while staged'), 'the staged upload never overwrites the outside edit');
@@ -1921,7 +1921,7 @@ test('a completed staged export edited before replay is detached instead of reli
     const done = Object.values(o[S.MOVES] || {}).find((t) => t.file);
     if (!edited && done) { edited = done.file.id; drive.edit(edited, enc('Edited in Word before replay')); }
   };
-  a.sync = S.create({ ...a.env, stage, exportOf: async () => ({ name: 'Essay.docx', mime: MIME.docx, bytes: new Uint8Array(S.BIG + 1).fill(65) }) });
+  a.sync = S.create({ ...a.env, stage, staged: true, exportOf: async () => ({ name: 'Essay.docx', mime: MIME.docx, bytes: new Uint8Array(S.BIG + 1).fill(65) }) });
   await a.papers.save(key, { doc: doc('First'), title: 'Essay', named: true }); await a.sync.touched(key);
   assert.ok((await a.sync.run({ push: true })).ok);
   assert.equal(dec(drive.files.get(edited).bytes), 'Edited in Word before replay');

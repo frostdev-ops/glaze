@@ -47,7 +47,7 @@ const notesDb = () => {
   };
 };
 // refuse(patch): storage.sync's refusal of a write, as Chrome's message, or null (its limits: test 'a Settings value storage.sync refuses').
-const device = (drive, { account = 'student@school.edu', clock = { t: Date.parse('2026-10-30T12:00:00Z') }, snapshots = false, refuse = null, stage = null } = {}) => {
+const device = (drive, { account = 'student@school.edu', clock = { t: Date.parse('2026-10-30T12:00:00Z') }, snapshots = false, refuse = null, stage = null, staged = !!stage } = {}) => {
   const heard = [], local = area('local', heard), sync = area('sync', heard), now = () => clock.t, who = { account };
   if (refuse) { const set = sync.set; sync.set = async (o) => { const no = refuse(o); if (no) throw new Error(no); return set(o); }; }
   const papers = P.open(local, now, { versions: () => 40, files: { own: async () => ({ missing: [] }) } });
@@ -74,7 +74,7 @@ const device = (drive, { account = 'student@school.edu', clock = { t: Date.parse
     parts: async () => ({}), files: { has: async () => false, put: async () => { throw new Error('no files here'); } },
     exportOf: async (key, rec) => ({ name: `${rec.title || 'Untitled'}.docx`, mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', bytes: new TextEncoder().encode(JSON.stringify(rec.doc)) }),
     pack: async () => '', hash: async (s) => sha(s), copyName: (t) => `${t} (Drive copy)`, now, sleep: async (ms) => { log.sleep.push(ms); }, random: () => 0, locks: null,
-    timer: () => () => {}, more: store, stage,
+    timer: () => () => {}, more: store, stage, staged,
   });
   const settle = () => new Promise((r) => setTimeout(r, 5));
   const on = async () => { who.on = true; await settle(); const r = await sync2.set(true); await settle(); return r; };
@@ -1592,7 +1592,7 @@ test('a wanted picture still arrives for a conflict copy after its original note
 });
 
 test('a staged wanted-picture replay does not import bytes for a note deleted for good', async () => {
-  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), chunks = new Map();
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock, staged: true }), chunks = new Map();
   const stage = {
     keys: async (prefix) => [...chunks.keys()].filter((k) => k.startsWith(prefix)).sort(),
     entries: async (prefix) => [...chunks].filter(([k]) => k.startsWith(prefix)).sort(([a], [b]) => a.localeCompare(b)),
@@ -1630,7 +1630,7 @@ test('a full pass uses its listing for a wanted picture that has never arrived',
 });
 
 test('a staged picture download whose note is deleted for good is let go before any of its bytes are fetched', async () => {
-  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), chunks = new Map();
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock, staged: true }), chunks = new Map();
   const stage = {
     keys: async (prefix) => [...chunks.keys()].filter((k) => k.startsWith(prefix)).sort(),
     entries: async (prefix) => [...chunks].filter(([k]) => k.startsWith(prefix)).sort(([a], [b]) => a.localeCompare(b)),
