@@ -1085,3 +1085,19 @@ test('a device without a file of its own takes the .docx Drive\'s copy names, ne
   assert.equal(sidecarJson(drive, key).file, mine[0].meta.id);
   noDeletes(drive);
 });
+
+test('a document saved while Sync was off goes up even when the run turning Sync on doesn\'t finish', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock });
+  assert.ok((await a.sync.set(true)).ok);
+  await a.sync.set(false);
+  const key = 'doc:00000000-0000-4000-8000-000000000a01';
+  await a.papers.save(key, { doc: doc('Written while off'), title: 'Off', named: true });
+  await a.sync.touched(key);
+  drive.offline(null, 50);
+  assert.deepEqual(await a.sync.set(true), { ok: false, why: 'network' });
+  drive.clearFaults();
+  clock.t = (await state(a)).wait + 1;
+  assert.ok((await a.sync.run()).ok);
+  assert.equal(textOf(sidecarJson(drive, key).record.doc), 'Written while off');
+  assert.ok(exportOf(drive, key), 'and its file');
+});
