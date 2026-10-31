@@ -433,6 +433,10 @@ test('the course tab settings changed (ahead of time switched off) reach the sta
 });
 
 // ---- renewed once STALE ----
+test('the whole page script parses: the sections run here alone share one scope there', () => {
+  assert.doesNotThrow(() => new vm.Script(source, { filename: 'navigation/page/coursetabs.js' }));
+});
+
 // The section on a clock of its own: its timers run as time passes (pass), in order, cleared as the page clears them. Each
 // iframe made is a standby on Ultra's light page; one made while another standby is still in the page fails the test.
 const STALE = 120000;
