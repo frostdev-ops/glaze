@@ -531,16 +531,21 @@ const ultraPart = ({ origin, local, courses }) => {
     chrome: { runtime: { id: ID, sendMessage: (m) => { sent.push(m); return Promise.resolve(); } },
       storage: { local: { get: (k, cb) => cb(structuredClone(local)), set: (o) => { Object.assign(local, structuredClone(o)); calls.push(['set', Object.keys(o)]); } }, sync: { get: (k, cb) => cb({}) }, onChanged: { addListener() {} } } },
     GZ_NAV: { native: () => null }, GZ_GRADES: require('../../extension/planner/grades.js'), GZ_PAGE: require('../../extension/core/page.js'), GZ_COURSES: require('../../extension/content/defaults.js').GZ_COURSES,
+    URL, URLSearchParams, Response,
   });
   ctx.globalThis = ctx; ctx.window = ctx; ctx.top = ctx; ctx.self = ctx;
   vm.runInContext(read('content/content-ultra.js'), ctx, { filename: 'content/content-ultra.js' });
-  const api = (p) => {
+  // The student and their courses: courses/ultra.js's page store (loaded on demand, as the worker puts it in), over the site.
+  const answer = (p) => {
     calls.push(['api', p]);
-    if (/users\/me$/.test(p)) return Promise.resolve({ id: '_9_1' });
-    if (/memberships/.test(p)) return Promise.resolve({ results: courses.map(([courseId, name], i) => ({ courseId, courseCardColorIndex: i, course: { name, displayId: name.slice(0, 3) } })), paging: {} });
-    return Promise.reject(404);
+    if (/users\/me$/.test(p)) return { id: '_9_1' };
+    if (/memberships/.test(p)) return { results: courses.map(([courseId, name], i) => ({ courseId, courseCardColorIndex: i, course: { name, displayId: name.slice(0, 3) } })), paging: {} };
+    return null;
   };
-  const I = { C: {}, html: new El(), isPreview: false, solo: true, tabFrame: '', need: () => Promise.reject(new Error('no')), t: (s) => s, locale: () => 'en', api,
+  const api = (p) => { const j = answer(p); return j ? Promise.resolve(j) : Promise.reject(404); };
+  ctx.fetch = async (url) => { const u = new URL(url), j = answer(u.pathname.replace('/learn/api/v1', '') + u.search); return new Response(JSON.stringify(j ?? {}), { status: j ? 200 : 404 }); };
+  const need = (file, ready) => { if (!ready()) vm.runInContext(read(file), ctx, { filename: file }); return ready() ? Promise.resolve() : Promise.reject(new Error('not ready')); };
+  const I = { C: {}, html: new El(), isPreview: false, solo: true, tabFrame: '', need, t: (s) => s, locale: () => 'en', api,
     courseId: () => null, markDue() {}, drawProgress() {}, cardBadge() {}, cardsInView: { observe() {}, unobserve() {} }, inView: new Set(),
     tagCards() {}, tagExtras() {}, courseSlots: {}, courseColors: () => ({}), varText: () => '', CARD: 'article', dueLabelled: () => false,
     links: [1], settings: { enabled: true, enhance: {}, nav: { brand: 'x' }, courses: { names: {}, tint: false, tinted: [] }, sidebar: {} },

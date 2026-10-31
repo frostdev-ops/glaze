@@ -171,6 +171,28 @@ test('D: the badges draw the copy kept from the last visit while the gradebook i
   assert.deepEqual([b.saved, b.pending, [...b.results].map((r) => r.displayGrade.text)], [false, false, ['B']]);
 });
 
+test("D: content.js's api asks Ultra through the site part's queue, so a 429 there holds it too; Canvas keeps plain fetch", async () => {
+  const u = ultra({ answer: (r) => (/users\/me$/.test(r.pathname) ? ME : /_1_1/.test(r.pathname) ? [429, {}, { 'Retry-After': '30' }] : [200, { results: [] }]) });
+  u.X.ctx.bookFor('_1_1'); await settle();
+  const late = u.X.fetch(`${ORIGIN}/learn/api/v1/calendars/calendarItems?since=x`, { credentials: 'same-origin', redirect: 'error', headers: { accept: 'application/json' } });
+  await settle();
+  assert.equal(u.s.count(/calendarItems/), 0, 'held while the school asked for 30 s');
+  await u.c.tick(30000);
+  assert.equal((await late).status, 200);
+  assert.equal(u.s.count(/calendarItems/), 1);
+  // content.js's api: the site part's fetch where it has one (Ultra's), else the browser's.
+  const core = read('content/content.js'), start = core.indexOf('  const api = '), end = core.indexOf('  // The Canvas course', start);
+  const defaults = vm.runInNewContext(`${core.match(/^ {2}const no = .*\n {2}const X = \{[\s\S]*?\};$/m)[0]} X`, { fetch: async () => { used.push('fetch'); return new Response('{"ok":1}'); } });
+  let used;
+  for (const [X, via] of [[{ ...defaults, fetch: async () => { used.push('part'); return new Response('{"ok":1}'); } }, 'part'], [defaults, 'fetch']]) {
+    used = [];
+    const g = vm.createContext({ location: { origin: ORIGIN }, Promise, JSON, X });
+    const { api } = vm.runInContext(`${core.slice(start, end)} ({ api })`, g);
+    assert.deepEqual(await api('/users/me'), { ok: 1 });
+    assert.deepEqual(used, [via]);
+  }
+});
+
 // courses/lmsq.js alone: its queue's order and its holds.
 const lmsq = (answer) => {
   const c = clock(), s = school(answer);

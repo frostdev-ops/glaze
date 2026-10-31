@@ -37,7 +37,7 @@ test('Download all closes an invalidated port and rejects pending bytes without 
 test('the shared JSON reader stays on origin and rejects auth redirects', async () => {
   const source = read('content/content.js'), start = source.indexOf('  const api = '), end = source.indexOf('  // The Canvas course', start);
   const requests = [];
-  const c = vm.createContext({ location: { origin: 'https://ultra.fixture.test' }, fetch: async (url, init) => {
+  const c = vm.createContext({ X: { fetch: (...a) => c.fetch(...a) }, location: { origin: 'https://ultra.fixture.test' }, fetch: async (url, init) => {
     requests.push({ url, init });
     if (url.endsWith('/users/me')) {
       if (init.redirect === 'error') throw new TypeError('auth redirect refused');

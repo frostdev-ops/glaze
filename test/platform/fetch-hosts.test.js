@@ -104,7 +104,9 @@ const SITES = {
   // The page stores' reads (who's signed in, gradebooks, outlines, what's due): the page's own site, through its queue.
   'courses/ultra.js': [{ at: 'f = (...a) => fetch(...a)', kind: 'page' }, { at: 'f: (u, init) => env.fetch(u, init, o.prio', kind: 'page' },
     { at: 'fetch: (u, init, prio, still) => lmsq()', kind: 'page', n: 2 }],
-  'content/content.js': [{ at: 'fetch(`${location.origin}${base}${path}`', kind: 'page' }],
+  // The page's own site; Ultra's through its queue (content-ultra.js's fetch, courses/lmsq.js).
+  'content/content.js': [{ at: 'X.fetch(`${location.origin}${base}${path}`', kind: 'page' }, { at: 'fetch: (u, o) => fetch(u, o), ctx: {} };', kind: 'page' }],
+  'content/content-ultra.js': [{ at: 'GZ_LMSQ.fetch(u, o), () => fetch(u, o)),', kind: 'page', n: 2 }],
   'content/content-canvas.js': [{ at: 'fetch(`${location.origin}/courses/${cid}/grades`', kind: 'page' }],
   // An announcement from the page's own site, and Canvas's read mark, through the site's queue (courses/lmsq.js).
   'courses/page/announce.js': [{ at: 'const q = (url, init) => GZ_LMSQ.fetch(url', kind: 'page' }, { at: 'f: (u, i) => GZ_LMSQ.fetch(u, i, prio)', kind: 'page' }, { at: 'GZ_LMSQ.fetch(m.url,', kind: 'page' }],
@@ -120,14 +122,15 @@ const SITES = {
   'courses/page/cardtasks.js': [{ at: 'await fetch(url,', kind: 'page' }],
   'planner/page/classes.js': [{ at: 'await fetch(u.href,', kind: 'page' }],
   'navigation/page/coursemenu.js': [{ at: 'fetch(`${location.origin}/api/v1/users/self/', kind: 'page' }],
-  'courses/page/docs.js': [{ at: 'await fetch(url,', kind: 'page' }],
+  'courses/page/docs.js': [{ at: 'GZ_LMSQ.fetch(url, { credentials:', kind: 'page' }],
   // A Blackboard preview (the worker's courses/bb-preview.js answers with the address): its converted PDF, read from the Ultra
   // page's own origin.
   'courses/page/bbpreview.js': [{ at: "await fetch(url, { mode: 'cors', credentials: 'omit'", kind: 'open', host: 'https://annotate-doc-viewer-prod-filesbucket.s3-fips.us-east-1.amazonaws.com',
     why: "a presigned S3 converted.pdf, without cookies: the bucket's CORS lets the Ultra page's origin read it (live probe, 2026-10-30)" }],
   // The worker: the preview's own address on the asking Ultra page's site, then basic-doc-viewer under *.blackboard.com.
   'courses/bb-preview.js': [{ at: '{ fetch: get = fetch, now = Date.now', kind: 'asked', flow: 'an Ultra site Glaze runs on (its built-in or granted host), from that site\'s page only; Blackboard\'s document viewer is a required host', in: 'background/background.js', guard: /const origin = ultraPage\(s\) \? await fromUltra\(s\) : null;/ }],
-  'courses/page/download.js': [{ at: 'await fetch(f.url,', kind: 'page' }],
+  'courses/page/download.js': [{ at: 'await fetch(f.url,', kind: 'page' }, { at: 'signal: ctl.signal, f: (u, o) => GZ_LMSQ.fetch(u, o)', kind: 'page' }],
+  'courses/page/previews.js': [{ at: 'GZ_ULTRA.read({ origin: location.origin, f: (u, o) => GZ_LMSQ.fetch(u, o) })', kind: 'page' }],
   'planner/page/grades.js': [{ at: 'await fetch(url,', kind: 'page' }, { at: "const queued = (u, o) => X.need('courses/lmsq.js'", kind: 'page' }],
   'planner/page/gradescope.js': [{ at: "fetch('/account/edit'", kind: 'page' }, { at: 'fetch(`/courses/${gid}`', kind: 'page' }],
   'planner/page/insights.js': [{ at: 'await fetch(url,', kind: 'page' }, { at: "f: (u, o) => ctx.need('courses/lmsq.js'", kind: 'page' }],

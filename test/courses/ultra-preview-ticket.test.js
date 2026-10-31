@@ -36,7 +36,9 @@ const page = ({ src, asks = [ASK], answer }) => {
   });
   ctx.globalThis = ctx;
   ctx.GZ_ASKS = asks;
-  ctx.GZ_CTX = { site: 'ultra', solo: true, t: (w) => w, on: () => true, darkTheme: () => false, settings: () => ({ enhance: { toggles: true, docPages: 'plain' } }), PREVIEWS: 'iframe', DOC: '.doc' };
+  // The site's queue (courses/lmsq.js) loads on demand and passes the request on.
+  ctx.GZ_CTX = { site: 'ultra', solo: true, t: (w) => w, on: () => true, darkTheme: () => false, settings: () => ({ enhance: { toggles: true, docPages: 'plain' } }), PREVIEWS: 'iframe', DOC: '.doc',
+    need: async (file, ready) => { if (file === 'courses/lmsq.js' && !ready()) ctx.GZ_LMSQ = { fetch: (url, init) => { fetched.queued = (fetched.queued || 0) + 1; return ctx.fetch(url, init); } }; } };
   vm.runInContext(fs.readFileSync(path.join(root, 'courses/page/docs.js'), 'utf8'), ctx);
   return { iframe, fetched, timers, sync: () => ctx.GZ_DOCS.sync() };
 };
@@ -50,6 +52,7 @@ test('an expanded preview whose ticket ran out gets the same document\'s fresh a
   p.sync();
   await settle();
   assert.deepEqual(p.fetched.map((f) => f.url), [ASK], 'once, and only this site\'s own Learn API');
+  assert.equal(p.fetched.queued, 1, 'in the site\'s queue, so its backoff holds the poll too');
   assert.equal(p.fetched[0].init.credentials, 'same-origin');
   assert.equal(p.iframe.src, fresh);
   assert.equal(p.timers.length, 0, 'done: nothing more to ask');

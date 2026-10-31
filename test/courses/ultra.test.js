@@ -25,12 +25,12 @@ test('private content is asked for without contentDetail, by both callers', () =
   }
 });
 
-test('metadata reads refuse redirects: previews and Download all ask through the reader; only file bytes may follow one', async () => {
-  // The only fetch left in either is Download all's file bytes, which Blackboard hands to its file CDN by a redirect.
-  assert.doesNotMatch(src('courses/page/previews.js'), /\bfetch\(/);
-  assert.deepEqual(src('courses/page/download.js').match(/\bfetch\([^,]+/g), ['fetch(f.url']);
-  assert.match(src('courses/page/previews.js'), /GZ_ULTRA\.read\(\{ origin: location\.origin \}\)\.get\(`\/learn\/api\/v1\/courses\/\$\{cid\}\/contents\/\$\{fid\}\/children\?fields=/);
-  assert.match(src('courses/page/download.js'), /const get = \(path\) => GZ_ULTRA\.read\(\{ origin: location\.origin, signal: ctl\.signal \}\)\.get\(/);
+test('metadata reads refuse redirects: previews and Download all ask through the reader, in the site\'s queue; only file bytes may follow one', async () => {
+  // The only plain fetch left in either is Download all's file bytes, which Blackboard hands to its file CDN by a redirect.
+  assert.doesNotMatch(src('courses/page/previews.js'), /(?<![.\w])fetch\(/);
+  assert.deepEqual(src('courses/page/download.js').match(/(?<![.\w])fetch\([^,]+/g), ['fetch(f.url']);
+  assert.match(src('courses/page/previews.js'), /GZ_ULTRA\.read\(\{ origin: location\.origin, f: \(u, o\) => GZ_LMSQ\.fetch\(u, o\) \}\)\.get\(`\/learn\/api\/v1\/courses\/\$\{cid\}\/contents\/\$\{fid\}\/children\?fields=/);
+  assert.match(src('courses/page/download.js'), /const get = \(path\) => need\('courses\/lmsq\.js', \(\) => globalThis\.GZ_LMSQ\)\.then\(\(\) => GZ_ULTRA\.read\(\{ origin: location\.origin, signal: ctl\.signal, f: \(u, o\) => GZ_LMSQ\.fetch\(u, o\) \}\)\.get\(/);
   // A signed-out answer (a redirect, which fetch then refuses) fails the read, recoverably, with nothing else asked.
   const asked = [];
   const f = async (url, init) => { asked.push([url, init.redirect]); throw new TypeError('Failed to fetch'); };
