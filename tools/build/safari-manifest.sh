@@ -4,12 +4,15 @@
 # carries other companies' trademarks, so Safari keeps the plain name Glaze. Safari has no
 # identity API, so Google Calendar sync's oauth2 key and optional identity permission go (S3 §4). Safari requires
 # nativeMessaging (the Mac app's updates), so agent access's optional copy goes too.
-# Code mods need Chrome: the sandbox page, its CSP and its files (mods/host.*, mods/boot.js, mods/page/mods.js) go too;
-# content.js starts code mods only where the manifest has the sandbox. Declarative widgets stay (mods/page/modwidgets.js,
-# drawn by mods/page/modui.js).
+# Code mods need Chrome: the sandbox page, its CSP and its files go too; content.js starts code mods only where the manifest
+# has the sandbox. Declarative widgets stay (mods/page/modwidgets.js, drawn by mods/page/modui.js). The files go from a
+# staged copy, never the checkout: tools/build/safari-drop.txt lists them (code mods', and Glaze's own model's engine and host).
 set -eu
 dir=$(CDPATH= cd -- "$(dirname "$1")" && pwd)
-[ "$dir" = "$(CDPATH= cd -- "$(dirname "$0")/../../extension" && pwd)" ] || rm -rf "$dir/mods/boot.js" "$dir/mods/host.html" "$dir/mods/host.js" "$dir/mods/page/mods.js" # a staged copy, never the checkout
+here=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+if [ "$dir" != "$(CDPATH= cd -- "$here/../../extension" && pwd)" ]; then
+  grep -v '^#' "$here/safari-drop.txt" | while IFS= read -r f; do [ -z "$f" ] || rm -rf "$dir/$f"; done
+fi
 python3 - "$1" <<'PY'
 import json, sys
 path = sys.argv[1]
