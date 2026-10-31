@@ -302,7 +302,8 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         }
         if (!catOf(area, key)) continue;
         const id = `${area}:${key}`;
-        if (applying.has(id) && applying.get(id) === canon(c.newValue ?? null)) { applying.delete(id); continue; }
+        // canon(undefined) is undefined: a removal is told from a write of null.
+        if (applying.has(id) && applying.get(id) === canon(c.newValue)) { applying.delete(id); continue; }
         mine[id] = at;
       }
       if (!Object.keys(mine).length) return;
@@ -343,9 +344,10 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         before = raw; write = got.value === undefined ? undefined : d.merge(raw, got.value);
       }
       // Already the value here: nothing written. Storage tells no one of an equal write, which would leave applying waiting
-      // to pass over the student's own later change back to this value.
-      if (canon(write ?? null) !== canon(before ?? null)) {
-        applying.set(id, canon(write ?? null));
+      // to pass over the student's own later change back to this value. A value of null is a value (a palette of the
+      // student's own), not the key gone.
+      if (write === undefined ? before !== undefined : before === undefined || canon(write) !== canon(before)) {
+        applying.set(id, canon(write));
         const mine = [id];
         try {
           // Notes: the transition this record makes, and with an account's folders each note Notes takes out of a folder no
