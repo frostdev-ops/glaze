@@ -71,7 +71,8 @@ test('menu items in a portal are clear at rest, and hover, keyboard focus and th
   const clear = theme.findLastIndex(([s, b]) => /background:\s*transparent/.test(b) && parts(s).some((p) => /^\.MuiModal-root .*\.MuiMenuItem-root/.test(p)));
   assert.ok(clear >= 0, 'the rest state is still cleared');
   for (const scope of ['MuiModal-root', 'MuiPopper-root']) {
-    const item = `^\\.${scope} :is\\(\\.MuiMenuItem-root, \\.MuiListItem-root[^)]*\\)`;
+    // The kinds of item as a list, or one selector each where nothing else names a class to file the rule under.
+    const item = `^\\.${scope} (:is\\(\\.MuiMenuItem-root, \\.MuiListItem-root[^)]*\\)|\\.MuiMenuItem-root)`;
     assert.ok(after(clear, new RegExp(`${item}:is\\(:hover, \\.Mui-focusVisible\\)$`), /background: var\(--gz-hover-fill\) !important/) > clear, `${scope}: a hover and keyboard fill after the clear`);
     assert.ok(after(clear, new RegExp(`${item}\\.Mui-focusVisible$`), /outline: 2px solid var\(--gz-accent\) !important/) > clear, `${scope}: an outline where the keyboard is`);
     const chosen = after(clear, new RegExp(`${item}\\.Mui-selected$`), /background: var\(--gz-accent-soft\) !important/);
@@ -128,8 +129,8 @@ test('a field\'s edge is a control\'s outline: faint ink at rest, muted ink hove
   assert.match(theme[rule('input, textarea, select, .MuiInputBase-root', /color:/)][1], edge('ink-faint'), 'fields anywhere');
   assert.match(theme[rule('.MuiOutlinedInput-notchedOutline {', border)][1], edge('ink-faint'), 'MUI\'s outline');
   // The page's and the portals' catch-all lines come later and are stronger; the fields' own rule outranks them.
-  const rest = rule('#site-wrap :where(input, textarea, select, .MuiOutlinedInput-notchedOutline), .MuiModal-root :where', edge('ink-faint'));
-  for (const scope of ['#site-wrap', '.MuiModal-root', '.MuiPopper-root']) assert.ok(parts(theme[rest][0]).includes(`${scope} :where(input, textarea, select, .MuiOutlinedInput-notchedOutline)`), scope);
+  const rest = rule('#site-wrap :where(input),', edge('ink-faint'));
+  for (const scope of ['#site-wrap', '.MuiModal-root', '.MuiPopper-root']) for (const field of ['input', 'textarea', 'select', '.MuiOutlinedInput-notchedOutline']) assert.ok(parts(theme[rest][0]).includes(`${scope} :where(${field})`), `${scope} ${field}`);
   const page = (p) => p.startsWith('#site-wrap'), portal = (p) => !page(p);
   assert.ok(beats(rest, rule('#site-wrap * {', border), page), 'fields keep their edge over the page\'s lines');
   assert.ok(beats(rest, rule('.MuiModal-root *, .MuiPopper-root * {', border), portal), 'and over the portals\'');
@@ -143,7 +144,7 @@ test('words are never in the faint ink, and words on the accent tint are in the 
   const muted = /(^|[;{\s])color: var\(--gz-ink-muted\) !important/;
   for (const start of ['#site-wrap .peek .panel-sub-title', '#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .ql-editor.ql-blank::before',
     '#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .status-bar {',
-    '#site-wrap :is(.js-empty-state, [class*="empty-state"])', '#gz-footer {', '#gz-footer a {']) assert.ok(rule(start, muted) >= 0, `${start} in muted ink`);
+    '#site-wrap .js-empty-state,\n#site-wrap [class*="empty-state"] {', '#gz-footer {', '#gz-footer a {']) assert.ok(rule(start, muted) >= 0, `${start} in muted ink`);
   // The accent on its own tint is 4.24:1 on Paper; the tonal controls whose colour wins on the page.
   const hi = /(^|[;{\s])color: var\(--gz-accent-hi\) !important/;
   for (const start of ['#site-wrap a.button, #site-wrap a.button *, #site-wrap button.button, #site-wrap button.button * {', '#site-wrap button.button.small.active-switch, #site-wrap button.button.small.active-switch * {',
@@ -155,15 +156,17 @@ test('words are never in the faint ink, and words on the accent tint are in the 
 });
 
 test('on a dark palette, words in an instructor\'s highlight are dark, and nothing else in the document is', () => {
-  const i = theme.findIndex(([s, b]) => s.startsWith('html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml-content) :is(mark,') && /(^|[;{\s])color: var\(--gz-surface-2\) !important/.test(b));
+  const scope = 'html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml-content) ';
+  const i = theme.findIndex(([s, b]) => s.startsWith(`${scope}:where(mark):is(mark,`) && /(^|[;{\s])color: var\(--gz-surface-2\) !important/.test(b));
   assert.ok(i >= 0, 'a highlight rule for Ultra\'s read-only content');
-  const [first, link] = parts(theme[i][0]);
-  assert.match(first, /:is\(mark, :is\(span, font, strong, b, em, i, u\)\[style\*="background"\]/, 'inline text with an authored background, and <mark>');
-  assert.match(first, /:not\(\[style\*="transparent" i\], \[data-gz-light\]\)/, 'not a see-through background, nor a light one the sweep repaints');
-  assert.ok(!/\b(td|th|p|div|table)\b/.test(first.split(':is(mark')[1]), 'no blocks or cells: their dark fills keep the light ink');
-  assert.equal(link, `${first} a`, 'a link in a highlight too');
+  const [mark, inline, link] = parts(theme[i][0]), text = inline.slice(scope.length);
+  assert.match(text, /^:is\(span, font, strong, b, em, i, u\)\[style\*="background"\]/, 'inline text with an authored background');
+  assert.match(text, /:not\(\[style\*="transparent" i\], \[data-gz-light\]\)/, 'not a see-through background, nor a light one the sweep repaints');
+  assert.ok(!/\b(td|th|p|div|table)\b/.test(text), 'no blocks or cells: their dark fills keep the light ink');
+  assert.equal(mark, `${scope}:where(mark):is(mark, ${text})`, 'and <mark>');
+  assert.equal(link, `${scope}:is(mark, ${text}) a`, 'a link in a highlight too');
   // It outranks the page's inherited ink and link colour.
-  for (const j of [rule('#site-wrap :where(*:not(a', COLOR), rule('#site-wrap :where(a, .MuiLink-root) {', COLOR)]) assert.ok(beats(i, j), `beats ${theme[j][0].slice(0, 60)}`);
+  for (const j of [rule('#site-wrap :where(*:not(a', COLOR), rule('#site-wrap :where(a),\n#site-wrap :where(.MuiLink-root) {', COLOR)]) assert.ok(beats(i, j), `beats ${theme[j][0].slice(0, 60)}`);
 });
 
 test('the chosen day in a date picker is an accent disc with its number on it', () => {

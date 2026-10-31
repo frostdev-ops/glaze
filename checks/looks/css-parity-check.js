@@ -46,6 +46,7 @@ function inPage() {
 (async () => {
   fs.mkdirSync(out, { recursive: true });
   const report = { base, fixtures: [], failures: [] };
+  await require('../../tools/dev/wait-for-browser.js')();
   const browser = await chromium.launch({ ...chromeLaunch, headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' });

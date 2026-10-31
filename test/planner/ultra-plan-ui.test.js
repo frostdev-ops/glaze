@@ -147,7 +147,7 @@ test('Better To Do on Ultra\'s Courses page: right before Ultra\'s own To Do (hi
   // The kept answer has no due list of Canvas's (the popup's is content.js's own on Ultra), and the CSS hides Ultra's list
   // only while Glaze's is right before it.
   assert.equal(p.sent.find((m) => m.cache).due, undefined);
-  assert.match(read('core/page/apps.css'), /#gz-todo ~ :is\([^)]*\bbb-todo\b[^)]*\) \{ display: none !important; \}/);
+  assert.match(read('core/page/apps.css'), /#gz-todo ~ :where\(bb-todo\):is\(bb-todo, ul\.to-do-list\) \{ display: none !important; \}/);
   // Turned off: it goes, and Ultra's own list is all that's left.
   L.sync(false);
   assert.deepEqual(p.panel.children.map((x) => x.tagName), ['BB-TODO']);
