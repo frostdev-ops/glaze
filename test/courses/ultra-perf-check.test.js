@@ -67,3 +67,22 @@ test('title paint keeps navigation as the load origin when settle records its la
   assert.equal(titlePaint.course, 40);
   assert.equal(titlePaint.outline, 40, 'a delayed route still measures from its actual insertion');
 });
+
+const requireStillAside = (frames) => {
+  const start = source.indexOf('    if (stillAside) {'), end = source.indexOf('    if (process.env.PERF_REQUIRE_QUIET_OWN)', start);
+  vm.runInNewContext(`const results = JSON.parse(resultsJson);\n${source.slice(start, end)}`, {
+    stillAside: true, WIDTH: 1600, reps: 2, assert, console: { log() {} },
+    resultsJson: JSON.stringify([{ rep: 1, instrumented: false, outline: { aside: { frames, shifts: [] } } }]) });
+};
+
+test('the still-aside requirement catches Details growth during sidebar adoption', () => {
+  const notes = 'aside.outline-actions > #gz-nt-block', dock = 'aside.outline-actions > #gz-sb-widgets';
+  assert.throws(() => requireStillAside([
+    { t: 200, host: null, details: 66, [notes]: 206 },
+    { t: 500, host: 'native', details: 231, [notes]: 421, [dock]: 600 },
+  ]), /blocks moved/, 'adoption must not excuse the native Details growth as well as the new header');
+  assert.doesNotThrow(() => requireStillAside([
+    { t: 200, host: null, details: 231, [notes]: 371 },
+    { t: 500, host: 'native', details: 231, [notes]: 421, [dock]: 600 },
+  ]), 'inserting only the sidebar header remains an allowed adoption');
+});
