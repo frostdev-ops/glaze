@@ -1289,3 +1289,56 @@ test('a Word file edited outside Glaze, kept by one device and kept again by ano
   assert.equal(drive.files.get(first).bytes.toString(), 'PK edited in Word', 'the edited file kept as it is');
   assert.equal(textOf(sidecarJson(drive, key).record.doc), 'A edits');
 });
+
+test('a Word file whose first push stopped before its JSON copy, then edited outside Glaze, is never overwritten by the next push', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  const text = (x) => (typeof x === 'string' ? x : Buffer.from(x || []).toString('latin1'));
+  // how: 'copy' fails the JSON copy's upload; 'reply' lets Drive take the file's upload and loses its answer.
+  for (const how of ['copy', 'reply']) {
+    let dying = false;
+    const cut = { ...drive, fetch: async (u, i = {}) => {
+      if (dying && u.includes('/upload/') && how === 'copy' && text(i.body).includes('"glaze":"doc"')) throw new TypeError('Failed to fetch');
+      if (dying && u.includes('/upload/') && how === 'reply' && text(i.body).includes('"glaze":"file"')) { dying = false; await drive.fetch(u, i); throw new TypeError('Failed to fetch'); }
+      return drive.fetch(u, i);
+    } };
+    const a = device(cut, { clock });
+    assert.ok((await a.sync.set(true)).ok);
+    const key = how === 'copy' ? 'doc:00000000-0000-4000-8000-000000000a11' : 'doc:00000000-0000-4000-8000-000000000a12';
+    await a.papers.save(key, { doc: doc('New essay'), title: 'Essay', named: true });
+    await a.sync.touched(key);
+    dying = true;
+    assert.equal((await a.sync.run({ push: true })).ok, false);
+    dying = false;
+    const edited = exportOf(drive, key).meta.id;
+    drive.edit(edited, `PK edited in Word (${how})`);
+    clock.t = (await state(a)).wait + 1;
+    assert.ok((await a.sync.run({ push: true })).ok);
+    assert.equal(drive.files.get(edited).bytes.toString(), `PK edited in Word (${how})`, `${how}: the edited file kept as it is`);
+    assert.notEqual(sidecarJson(drive, key).file, edited, `${how}: the document has a file of its own beside it`);
+    assert.ok((await a.sync.run()).ok);
+    assert.equal(drive.files.get(edited).bytes.toString(), `PK edited in Word (${how})`);
+  }
+  noDeletes(drive);
+});
+
+test('a file whose upload Drive took but whose answer never came is reused by the next push while it is as Glaze wrote it', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  let dying = false;
+  const text = (x) => (typeof x === 'string' ? x : Buffer.from(x || []).toString('latin1'));
+  const cut = { ...drive, fetch: async (u, i = {}) => {
+    if (dying && u.includes('/upload/') && text(i.body).includes('"glaze":"file"')) { dying = false; await drive.fetch(u, i); throw new TypeError('Failed to fetch'); }
+    return drive.fetch(u, i);
+  } };
+  const a = device(cut, { clock });
+  assert.ok((await a.sync.set(true)).ok);
+  const key = 'doc:00000000-0000-4000-8000-000000000a13';
+  await a.papers.save(key, { doc: doc('New essay'), title: 'Essay', named: true });
+  await a.sync.touched(key);
+  dying = true;
+  assert.equal((await a.sync.run({ push: true })).ok, false);
+  clock.t = (await state(a)).wait + 1;
+  assert.ok((await a.sync.run({ push: true })).ok);
+  const files = [...drive.files.values()].filter((f) => f.meta.appProperties.key === sha(key).slice(0, 32) && f.meta.appProperties.glaze !== 'doc');
+  assert.deepEqual(files.map((f) => f.meta.appProperties.glaze), ['file'], 'one Essay.docx in Drive');
+  assert.equal(sidecarJson(drive, key).file, files[0].meta.id);
+});
