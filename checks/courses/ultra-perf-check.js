@@ -107,7 +107,7 @@ const coursePanel = () => '<section class="course bb-offcanvas-container route-v
   + '<main class="course-main-content"><div class="course-tool-content"><section class="course-outline-content route-view-container js-course-skip-link-target"><div class="course-outline"><div class="course-outline-grid">'
   + `<div class="outline-column"><div class="spinner" aria-busy="true"></div></div>${ASIDE}</div></div></section></div></main></div></div></section>`;
 const routeBody = (kind) => kind === 'outline' ? coursePanel() : `<section class="route-view-container"><h1 elementtiming="title">${kind}</h1>${kind === 'course'
-  ? `<div class="courses-panel"><div class="course-org-list">${Array.from({ length: 24 }, (_, i) => `<article class="element-card course-element-card" data-course-id="_${101 + i}_1"><div class="course-banner"></div><div class="element-details"><h4 class="course-title"><span class="js-course-title-element">Course ${i}</span></h4><div class="course-status">Open</div></div></article>`).join('')}</div></div>`
+  ? `<div class="courses-panel"><div class="course-org-list">${Array.from({ length: 24 }, (_, i) => `<article class="element-card course-element-card" data-course-id="_${101 + i}_1"><div class="course-banner"></div><div class="element-details"><h4 class="course-title"><span class="js-course-title-element">Course ${i}</span></h4><div class="course-status">Open</div></div></article>`).join('')}</div></div><div class="todo-panel js-todo-panel-skip-link-target"><bb-todo class="react-container">Due soon</bb-todo></div>`
   : rows(kind, 30)}</section>`;
 const fixture = `<!doctype html><html lang="en"><head><base href="//ultra-cdn.invalid/ultra/uiv4001.0.0-rel/"><meta charset="utf-8"><title>Ultra performance fixture</title><style>body{margin:0;font:14px sans-serif}nav{position:fixed;width:200px}main{margin-left:200px}.native-row,.content-list-item{padding:4px;border-bottom:1px solid #ddd}.course.bb-offcanvas-container{position:fixed;inset:0;overflow:auto;background:#fff;z-index:10}.course-outline-grid{display:grid;grid-template-columns:minmax(0,1fr) 330px;align-items:start}.outline-actions{display:flex;flex-direction:column}</style></head><body><div id="site-wrap"><nav id="base_tools"><a href="/ultra/institution-page"><span>Institution Page</span></a><a href="/ultra/course">Courses</a></nav><main id="main-content"><div id="main-content-inner">${routeBody('stream')}</div></main></div><aside id="gz-perf-own"></aside></body></html>`;
 
@@ -121,13 +121,13 @@ function asideWatch() {
   const sample = () => {
     const t = Math.round(performance.now() - from), row = {};
     for (const b of blocks) {
-      const e = document.querySelector(b), r = e?.getBoundingClientRect();
+      const e = document.querySelector(b), r = e?.checkVisibility({ visibilityProperty: true }) && e.getBoundingClientRect();
       if (r && r.height > 0 && r.width > 0) { const top = Math.round(r.top * 10) / 10, list = tops[b]; row[b] = top; if (list.at(-1)?.top !== top) list.push({ t, top }); }
     }
     const d = document.querySelector('aside.outline-actions > .js-details-and-actions');
     Object.assign(row, { details: d ? Math.round(d.getBoundingClientRect().height) : null, held: document.documentElement.style.getPropertyValue('--gz-sb-held') && document.documentElement.hasAttribute('data-gz-sb-held') ? document.documentElement.style.getPropertyValue('--gz-sb-held') : null,
       host: d?.parentElement.getAttribute('data-gz-sidebar-host') ?? null });
-    const a = d?.parentElement.getBoundingClientRect();
+    const a = d?.parentElement.checkVisibility({ visibilityProperty: true }) && d.parentElement.getBoundingClientRect();
     if (a && a.width > 0 && a.height > 0) row.left = Math.round(a.left * 10) / 10;
     const key = JSON.stringify(row);
     if (key !== was && frames.length < 200) { was = key; frames.push({ t, ...row }); }
