@@ -1152,7 +1152,7 @@ GZ_UI.load().then((s) => {
       // The worker released identity in its grant queue unless Drive still holds it.
       gcalRender(null);
       $('#gcal-connect').focus();
-      hint(r.had && !r.revoked ? t("Disconnected on this device. Google didn't confirm it removed Glaze's access: you can remove it at myaccount.google.com/connections.") : t('Disconnected.'), r.had && !r.revoked);
+      hint(t('Disconnected.'));
     });
     chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.gcal) gcalRender(changes.gcal.newValue); });
   }
@@ -1201,7 +1201,8 @@ GZ_UI.load().then((s) => {
           $('#gdrive-disconnect').focus();
           return hint(t('Connected.'));
         }
-        hint(r.why === 'scope' ? t('Connect again and allow Google Drive access.') : r.why === 'cancel' ? '' : t("Google Drive didn't connect. Try again in a moment."), r.why !== 'cancel');
+        hint(r.why === 'scope' ? t('Connect again and allow Google Drive access.') : r.why === 'signin' ? t('Sign in to the browser with your Google account, then connect again.')
+          : r.why === 'cancel' ? '' : t("Google Drive didn't connect. Try again in a moment."), r.why !== 'cancel');
       } finally { gdBusy = false; }
     });
     $('#gdrive-disconnect').addEventListener('click', async (e) => {
@@ -1212,7 +1213,7 @@ GZ_UI.load().then((s) => {
         if (!r.ok) return hint(t("Couldn't disconnect. Try again in a moment."), true);
         await gdLoad();
         $('#gdrive-connect').focus();
-        hint(r.had && !r.revoked ? t("Disconnected on this device. Google didn't confirm it removed Glaze's access: you can remove it at myaccount.google.com/connections.") : t('Disconnected.'), !!r.had && !r.revoked);
+        hint(t('Disconnected.'));
       } finally { gdBusy = false; }
     });
     chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.google) gdLoad(); });
