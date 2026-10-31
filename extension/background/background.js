@@ -3537,13 +3537,15 @@ const openGoogle = () => {
       // iOS: the sign-in tab the student taps (the worker opens it, never a framed page).
       open: (url) => chrome.tabs.create({ url }),
       // Safari's Picker: the picker page in a tab of the worker's, back to Glaze's return page; the pick under way kept in
-      // storage.session (memory, gone with the browser), else this worker's memory.
+      // storage.session (memory, gone with the browser). Without it, Picker stays unavailable across worker unloads.
       ...(SAFARI && {
-        tab: async (url) => (await chrome.tabs.create({ url, active: true }))?.id,
+        tab: async () => (await chrome.tabs.create({ url: 'about:blank', active: true }))?.id,
+        show: (tab, url) => chrome.tabs.update(tab, { url }),
+        shut: (tab) => chrome.tabs.remove(tab),
         back: () => chrome.runtime.getURL(PICKED_PAGE),
         hold: chrome.storage.session
           ? { get: async () => (await chrome.storage.session.get('googlePick')).googlePick || null, set: (v) => (v ? chrome.storage.session.set({ googlePick: v }) : chrome.storage.session.remove('googlePick')) }
-          : { get: async () => pickHeld, set: async (v) => { pickHeld = v || null; } },
+          : undefined,
       }),
       // Calendar sync signs in with Chrome's own client: a Drive connection through it shares Chrome's cache and identity
       // with Calendar, and while Calendar is connected Disconnect leaves both.
@@ -3554,14 +3556,13 @@ const openGoogle = () => {
 };
 // Safari's Picker comes back here (documents/picked.html, web-accessible to the picker pages only: tools/build/safari-manifest.sh).
 const PICKED_PAGE = 'documents/picked.html';
-let pickHeld = null;
 const googlePage = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && ['options.html', 'papers.html', 'writer.html'].some((p) => s.url.split(/[?#]/)[0] === chrome.runtime.getURL(p));
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:google' || !['status', 'connect', 'finish', 'disconnect', 'pick', 'picked'].includes(m.op)) return;
   if (!(m.op === 'pick' || m.op === 'picked' ? googlePage(s) : fromEditor(s))) { reply({ ok: false, why: 'sender' }); return; }
   googleLib();
   if (!GZ_GOOGLE.ON) { reply({ ok: false, why: 'off' }); return; } // the build-time switch (background/google.js)
-  const run = () => openGoogle()[m.op]();
+  const run = () => m.op === 'picked' ? openGoogle().picked(m.state) : openGoogle()[m.op]();
   Promise.resolve().then(() => (['connect', 'finish', 'disconnect'].includes(m.op) ? grantTurn(run) : run())).then(reply, () => reply({ ok: false, why: 'network' }));
   return true;
 });
@@ -3579,9 +3580,10 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   return true;
 });
 if (SAFARI) {
+  // Only a pick under way in that tab loads anything: nothing runs for someone who never picks.
   chrome.tabs?.onRemoved?.addListener((tab) => {
-    Promise.resolve(chrome.storage.session ? chrome.storage.session.get('googlePick').then((r) => r.googlePick) : pickHeld)
-      .then((p) => { if (p?.tab === tab) { googleLib(); return openGoogle().closed(tab); } }).catch(() => {});
+    if (!chrome.storage.session) return;
+    chrome.storage.session.get('googlePick').then((r) => { if (r.googlePick?.tab === tab) return openGoogle().closed(tab); }).catch(() => {});
   });
 }
 // Google Drive's files (documents/drive.js): From Google Drive and Save to Google Drive on Documents and Writer, with the token

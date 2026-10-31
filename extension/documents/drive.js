@@ -563,9 +563,10 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
     // the answer, ten minutes at most (each ask keeps Safari's worker loaded).
     const pick = async () => {
       let r = await chrome.runtime.sendMessage({ type: 'glaze:google', op: 'pick' }).catch(() => null);
+      const state = r?.state;
       for (let n = 0; r?.why === 'pending' && n < 600; n++) {
         await new Promise((ok) => { setTimeout(ok, 1000); });
-        r = await chrome.runtime.sendMessage({ type: 'glaze:google', op: 'picked' }).catch(() => null);
+        r = await chrome.runtime.sendMessage({ type: 'glaze:google', op: 'picked', state }).catch(() => null);
       }
       if (!r?.ok || !Array.isArray(r.files)) throw new Fail(WHY.includes(r?.why) ? r.why : 'network');
       return r.files;
