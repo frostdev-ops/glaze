@@ -1388,3 +1388,24 @@ test('a device joining while Drive\'s search doesn\'t show a just-made document 
   assert.ok((await b.sync.run()).ok);
   assert.ok(drive.log.length - n <= 4, 'then runs read only the changes again');
 });
+
+test('a Word file edited outside Glaze is still marked kept when the run letting it go stops before that mark lands', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-000000000a16';
+  await a.papers.save(key, { doc: doc('Draft'), title: 'Essay', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  const first = exportOf(drive, key).meta.id;
+  drive.edit(first, 'PK edited in Word');
+  // The mark (Glaze's properties set to kept) never reaches Drive: the worker stopped right after letting the file go.
+  drive.offline((x) => x.method === 'PATCH' && x.path === `/drive/v3/files/${first}`);
+  assert.equal((await a.sync.run()).ok, false);
+  clock.t = (await state(a)).wait + 1;
+  assert.ok((await a.sync.run()).ok);
+  assert.ok((await a.sync.run()).ok);
+  const folder = glazeFolder(drive).meta.id;
+  const own = [...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'file' && f.meta.appProperties.key === sha(key).slice(0, 32) && f.meta.parents.includes(folder) && !drive.view(f.meta.id).trashed);
+  assert.equal(own.length, 1, 'one file of its own in Glaze/');
+  assert.notEqual(own[0].meta.id, first);
+  assert.equal(drive.files.get(first).meta.appProperties.glaze, 'kept');
+  assert.equal(drive.files.get(first).bytes.toString(), 'PK edited in Word');
+});
