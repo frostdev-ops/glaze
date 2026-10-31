@@ -157,10 +157,8 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
     mark = docs.length;
     f = await frameOf('gz-ctab:_104_1');
     await page.evaluate(() => { window.gzOrigin = document.querySelector('iframe[name="gz-ctab:standby"][data-ready]').contentWindow.performance.timeOrigin; });
-    const t103 = Date.now();
     await f.click('#gz-ctabs [data-course-id="_103_1"]');
     f = await drawn('_103_1');
-    console.log('fallback drawn after', Date.now() - t103, 'ms; frames', await page.evaluate(() => [...document.querySelectorAll('#gz-ctabs-frames > iframe')].map((x) => `${x.name}@${Math.round(x.contentWindow.performance.timeOrigin)}`).join(', ')));
     const fell = await page.evaluate(() => ({ doc: document.querySelector('iframe[name="gz-ctab:_103_1"]').contentWindow.performance.timeOrigin !== window.gzOrigin }));
     check(fell.doc && coldLoads('_103_1', mark).length === 1, `with no route in time, the course loads cold in that frame (${JSON.stringify({ ...fell, loads: coldLoads('_103_1', mark), docs: docs.slice(mark) })})`);
     const cold = await f.evaluate(() => ({ name: window.name, strip: [...document.querySelectorAll('#gz-ctabs [aria-selected="true"]')].map((e) => e.dataset.courseId) }));

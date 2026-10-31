@@ -81,20 +81,36 @@ const OUTLINE = () => {
     }, 15000, `${title} drawn`);
     // An item link in the outline row in view: a click there scrolls nothing (Playwright brings a link out of view into it).
     const linkInView = (w, href) => w.evaluate((href) => {
-      const row = document.elementFromPoint(700, 430)?.closest('.content-list-item');
+      const rows = [...document.querySelectorAll('.content-list-item')], r = (e) => e.getBoundingClientRect();
+      const row = document.elementFromPoint(700, 430)?.closest('.content-list-item') || rows.find((e) => r(e).top > 150 && r(e).bottom < innerHeight - 100);
       document.getElementById('gz-in-view')?.remove();
       row.querySelector('h3').append(Object.assign(document.createElement('a'), { id: 'gz-in-view', href, textContent: ' (open)' }));
     }, href);
+    // A pointer click at the link itself: nothing scrolled first (Playwright's click may scroll to reach its target).
+    const press = async (w) => {
+      const b = await (await w.$('#gz-in-view')).boundingBox();
+      await page.mouse.click(b.x + Math.min(b.width / 2, 20), b.y + b.height / 2);
+    };
+    // Laid out for good: fonts in, and the outline's rows still over a few samples.
+    const settled = async (w) => {
+      let last = '', same = 0;
+      await until(async () => {
+        const now = await w.evaluate(async () => { await document.fonts.ready; return document.fonts.status + [...document.querySelectorAll('.content-list-item')].slice(0, 30).map((e) => Math.round(e.getBoundingClientRect().top)).join(','); });
+        same = now === last ? same + 1 : 0; last = now;
+        return same >= 3;
+      }, 15000, 'a settled layout');
+    };
     const cls = (w) => w.evaluate(() => { window.gzCLS = 0; new PerformanceObserver((l) => { for (const e of l.getEntries()) if (!e.hadRecentInput) window.gzCLS += e.value; }).observe({ type: 'layout-shift' }); });
 
     // ---- this page's own course ----
     await page.goto(`${site}/ultra/courses/_101_1/outline`);
     await outlineDrawn(page);
     await page.evaluate(`(() => { const x = (${OUTLINE})(); window.gzOutline = x.o; x.sc.scrollTop = 900; })()`);
-    const before = await page.evaluate(`(${OUTLINE})().at`);
     let mark = docs.length;
     await linkInView(page, '/ultra/courses/_101_1/document/_8110_1?view=content&state=view');
-    await page.click('#gz-in-view');
+    await settled(page);
+    const before = await page.evaluate(`(${OUTLINE})().at`);
+    await press(page);
     let item = await itemDrawn('_101_1', 'Routed reading');
     await shot('page-item');
     const kept = await page.evaluate(() => ({ same: window.gzOutline.isConnected, path: location.pathname, top: document.querySelector('.course-content-container > .panel-wrap')?.scrollTop }));
@@ -127,8 +143,9 @@ const OUTLINE = () => {
     let base = await until(() => onScreen('_102_1'), 15000, '_102_1 on screen');
     await outlineDrawn(base);
     await base.evaluate(() => { window.gzOutline = document.querySelector('.course-outline-content'); document.querySelector('.course-content-container > .panel-wrap').scrollTop = 700; });
+    await settled(base);
     await linkInView(base, '/ultra/courses/_102_1/assessment/_8120_1/overview?courseId=_102_1');
-    await base.click('#gz-in-view');
+    await press(base);
     item = await itemDrawn('_102_1', 'Writing overview');
     const under = await base.evaluate(() => ({ same: window.gzOutline.isConnected, top: document.querySelector('.course-content-container > .panel-wrap').scrollTop, path: location.pathname }));
     check(under.same && under.top === 700 && under.path.endsWith('/outline') && await named('_102_1') === 2, `in a tab's frame, the item opens in an item frame over its kept outline (${JSON.stringify(under)})`);
