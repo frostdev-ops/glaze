@@ -397,12 +397,14 @@ Google Drive, including ones described below as on this device only or never syn
   token is stored there: Chrome keeps it in its own sign-in cache; Edge, Brave and Firefox hold it only in the memory
   of Glaze's background worker. Safari's access tokens stay only in native extension memory; its refresh token stays
   in the extension's own Keychain, on this device only. **Disconnect** deletes the record and Safari's Keychain grant.
-  While **Sync to Google Drive** is on, `chrome.storage.local` also holds its state, on this device only: whether it is
+  Once **Sync to Google Drive** is on, `chrome.storage.local` also holds its state, on this device only, and keeps it
+  when Sync is turned off: whether it is
   on, the account it is bound to, the ids of the Glaze folder and its Data and Backups folders, Drive's change-list page
   token, when it last synced and what last stopped it (`driveSync`); for each document and each synced record, the ids
   of its Drive files and a SHA-256 of what each side last held (`driveSyncDoc:…`, `driveSyncRec:…`, `driveSyncFile:…`);
-  which documents were saved since their last upload (`driveSyncDirty`); and when each synced setting or record last
-  changed here (`driveSyncStamps`). Connecting another account deletes all of it.
+  which documents were saved since their last upload (`driveSyncDirty`); for a document whose Drive file was seen ahead
+  of its JSON copy, how many times and since when (`driveSyncWaiting`); and when each synced setting or record last
+  changed here, Sync on or off (`driveSyncStamps`). Connecting another account deletes all of it.
 - **Gradescope in To Do** (off by default), in `chrome.storage.local`, on this device only: which Gradescope account
   it's from (your name on Gradescope, and a SHA-256 hash of your Gradescope email address, never the address itself),
   which Canvas or Blackboard course each of your Gradescope courses goes with (by its Gradescope course id and short name, or "none of
@@ -797,8 +799,8 @@ you import) are bundled. It makes requests in these cases:
   - Edge, Brave, Safari and Firefox don't offer it; Export calendar (.ics) works everywhere.
 - **Google Drive** (off until you connect). Unavailable in this build, and this build can't make any of these requests. In a future build that enables it, the requests go directly between your
   browser and Google: `https://accounts.google.com` to sign in, `https://openidconnect.googleapis.com` for your
-  account's email address, `https://www.googleapis.com` for Drive and `https://oauth2.googleapis.com` to revoke access.
-  To pick a file, Glaze also opens a static picker page (below). There is no Glaze server, and nothing goes to Frostdev.
+  account's email address, `https://www.googleapis.com` for Drive and `https://oauth2.googleapis.com` to revoke access
+  (and, in Safari, to exchange the sign-in for access tokens and renew them). To pick a file, Glaze also opens a static picker page (below). There is no Glaze server, and nothing goes to Frostdev.
   - **Connect** (your click in Glaze's settings): the browser asks for the `identity` permission and Google shows its own
     sign-in and consent for three scopes: `https://www.googleapis.com/auth/drive.file`, `openid` and `email`. With
     `drive.file` Glaze can reach only the Drive files it creates and the files you pick in Google's Picker; it can't
@@ -833,8 +835,8 @@ you import) are bundled. It makes requests in these cases:
       folder, course, times, whether it is in Trash, and its text) and each picture or attachment. Each carries when it last
       changed. When both sides changed one, the later change is kept; when a second device connects, its own records are
       joined with the folder's as Restore joins a backup's (a note keeps the newer text), never replaced.
-    - in Glaze/Backups, once a day, a **Back up…** zip of Settings, tasks, records and documents (Notes are in Glaze/Data),
-      the newest five kept.
+    - in Glaze/Backups, once a day, a **Back up…** zip of Settings, tasks, records, Notes and documents, the newest five
+      kept.
     - Never in Drive: share keys (each share's end-to-end keys and your delete tokens: anyone who could read your Drive
       folder could otherwise read or delete your shares; **Back up…** still has them), AI keys and connections, Agents
       pairing, Drive's and Google Calendar's sign-in records, what Glaze read from your school (caches, course names, card
