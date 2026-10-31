@@ -6,7 +6,7 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const env = require('../../tools/dev/check-env.js');
-const ext = env.staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
 const G = require(path.join(ext, 'content/defaults.js'));
 const site = 'https://bb.school.test', uid = '_42_1';
 const out = path.resolve(process.argv[2] || 'ultra-navbar-first-paint-evidence');
@@ -62,7 +62,7 @@ const now = () => {
   let meServed = 0, accountGate;
   try {
     await require('../../tools/dev/wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...env.chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce',
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'] });
     await ctx.route('**/*', async (route) => {
       const u = new URL(route.request().url());
