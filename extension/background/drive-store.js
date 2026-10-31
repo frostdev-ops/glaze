@@ -329,7 +329,13 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         try {
           const onChange = got.area === 'notes' && !d?.immutable ? (old, next) => owned.set(id, transition(got.key, old, next)) : undefined;
           if (!await a.replace(got.key, before, write, onChange)) throw new Fail('stale');
-        } catch (e) { applying.delete(id); owned.delete(id); throw e; }
+        } catch (e) {
+          applying.delete(id); owned.delete(id);
+          // storage.sync refusing this value (past its 8 KB an item, its total or its count of items): passed over as too big.
+          // Its writes-a-minute and -an-hour limits pass, so those are tried again.
+          if (got.area === 'sync' && !(e instanceof Fail) && !/MAX_WRITE_OPERATIONS/.test(String(e?.message))) throw new Fail('bad');
+          throw e;
+        }
       }
       await restamp({ [id]: got.at }, { [id]: stampBefore });
       // A later local write is still dirty even if it lands before the sync bookkeeping finishes.
