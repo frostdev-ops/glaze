@@ -1342,3 +1342,16 @@ test('a file whose upload Drive took but whose answer never came is reused by th
   assert.deepEqual(files.map((f) => f.meta.appProperties.glaze), ['file'], 'one Essay.docx in Drive');
   assert.equal(sidecarJson(drive, key).file, files[0].meta.id);
 });
+
+test('another account connected stops Sync even when the transfers\' store can\'t be opened', async () => {
+  const drive = standin(), a = device(drive);
+  const fail = async () => { throw Object.assign(new Error('file unavailable'), { why: 'unavailable' }); };
+  const sync = S.create({ ...a.env, stage: { get: fail, keys: fail, entries: fail, write: fail } });
+  await a.papers.save('doc:00000000-0000-4000-8000-000000000a14', { doc: doc('One'), title: 'One', named: true });
+  assert.ok((await sync.set(true)).ok);
+  a.who.account = 'other@school.edu';
+  assert.deepEqual(await sync.run(), { ok: false, why: 'account' });
+  const st = await state(a);
+  assert.ok(!st.on && st.problem === 'account', JSON.stringify(st));
+  assert.equal((await a.store.keys()).filter((k) => k.startsWith(S.DOC)).length, 0, 'the old account\'s links forgotten');
+});
