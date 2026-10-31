@@ -472,17 +472,19 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (!ex && !onWay && d?.json && d.rsum === sum && d.lsum === sum) return d;
       const base = ((onWay ? onWay.info?.name : ex?.name) || `${safe(l.rec.title) || 'Untitled'}${EXT[kind]}`).replace(/\.[^.]+$/, '');
       let file = d?.file || null, fh = d?.fh || null;
-      // No copy yet: the file its last push left before it stopped (recorded below, or found by its tag when Drive's answer
-      // never came), written into only while it is as Glaze wrote it: its head revision the one recorded, or, found by its
-      // tag, its bytes' SHA-256 the one Glaze wrote on it (b). One edited outside Glaze since, or in Drive's trash, is kept
-      // as it is, and a new file goes beside it.
-      if (!d?.json && (ex || onWay)) {
-        const F = file ? await meta(file) : (await D((c) => c.find(`'${folder}' in parents and appProperties has { key='key' and value='${h}' } and appProperties has { key='glaze' and value='file' } and trashed=false`, { pageSize: 10 })))
-          .files.filter((f) => f.appProperties?.key === h && f.appProperties?.glaze === 'file').sort(byId)[0] || null;
+      // No copy yet, or no file of its own: the file a push left before it stopped (recorded below, or found by its tag when
+      // Drive's answer never came), written into only while it is as Glaze wrote it: its head revision the one recorded, or,
+      // found by its tag, its bytes' SHA-256 the one Glaze wrote on it (b). One edited outside Glaze since, or in Drive's
+      // trash, is kept as it is, and a new file goes beside it; a second one as Glaze wrote it is put away as a losing copy's.
+      if ((ex || onWay) && (!file || !d?.json)) {
+        const found = file ? [await meta(file)] : (await D((c) => c.find(`'${folder}' in parents and appProperties has { key='key' and value='${h}' } and appProperties has { key='glaze' and value='file' } and trashed=false`, { pageSize: 10 })))
+          .files.filter((f) => f.appProperties?.key === h && f.appProperties?.glaze === 'file').sort(byId);
         file = null; fh = null;
-        if (F && !F.removed && F.appProperties?.glaze === 'file' && F.appProperties?.key === h) {
-          const same = F.id === d?.file ? !!F.headRevisionId && F.headRevisionId === d.fh : !!F.appProperties.b && String(F.sha256Checksum || '').toLowerCase() === F.appProperties.b;
-          if (same && F.trashed === false) { file = F.id; fh = F.headRevisionId || null; }
+        for (const F of found) {
+          if (F.removed || F.appProperties?.glaze !== 'file' || F.appProperties?.key !== h) continue;
+          const same = F.trashed === false && (F.id === d?.file ? !!F.headRevisionId && F.headRevisionId === d.fh : !!F.appProperties.b && String(F.sha256Checksum || '').toLowerCase() === F.appProperties.b);
+          if (same && !file) { file = F.id; fh = F.headRevisionId || null; }
+          else if (same) await putAway(F.id, folder);
           else await D((c) => c.patch(F.id, { appProperties: { glaze: 'kept', sum: null } }));
         }
       }
