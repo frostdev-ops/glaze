@@ -194,6 +194,24 @@ test('each local Feedback request names its kind on its task info: scan, decide,
   assert.deepEqual(cfg.seen.map((req) => req.messages[0].content[0].text.split(' ').slice(0, 2).join(' ')), ['Read this', 'Decide only', 'Explain only', 'Summarize only']);
 });
 
+test('visual Feedback scans and their bounded regeneration retain the scan call kind', async () => {
+  for (const regenerate of [false, true]) {
+    const input = raw();
+    input.context.assignment.files.push({ name: 'Prompt.png', image: { mime: 'image/png', data: 'iVBORw0KGgo=' } });
+    let readings = 0;
+    const { cfg, result } = run(input, (req) => {
+      const out = answer(req);
+      if (req.schema.properties.description && ++readings === 1 && regenerate) out.json.reason = 'All visible requirements are readable.';
+      return out;
+    }, { local: true, context: 8192, images: true });
+    assert.equal((await result).output.grade.earned, 100);
+    assert.equal(readings, regenerate ? 2 : 1);
+    assert.deepEqual(cfg.seen.map((req) => req.task), [
+      'scan', ...(regenerate ? ['scan'] : []), 'decide', 'explain', 'decide', 'explain', 'summary',
+    ].map((call) => ({ id: 'writer.feedback', version: F.task.version, call })));
+  }
+});
+
 test('a visual rubric request reads the image once before text-only criterion assessments', async () => {
   const input = raw(); input.context.assignment.files.push({ name: 'Diagram.png', image: { mime: 'image/png', data: 'iVBORw0KGgo=' } });
   const { cfg, result } = run(input, answer, { local: true, context: 8192, images: true });

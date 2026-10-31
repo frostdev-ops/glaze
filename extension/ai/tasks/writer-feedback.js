@@ -411,7 +411,7 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
 
   // Local models receive one decision at a time. Every oversized source is read in complete chunks before its
   // criterion is judged. Exact extracted text is checked in code; omissions or an exhausted bounded plan prevent a grade.
-  // Each request names its kind on its task info (ask's call): scan (an evidence chunk), decide (a criterion's status,
+  // Each request names its kind on its task info (ask's call): scan (text or image evidence), decide (a criterion's status,
   // evidence, level and score, its reconsideration too), explain (a decision's comment), summary.
   const lean = (v) => Array.isArray(v) ? v.map(lean) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'description').map(([k, x]) => [k, lean(x)])) : v;
   const ROW_OUTPUT = lean(OUTPUT);
@@ -430,7 +430,8 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
     let repairs = 0, used = 0, responseRegenerated = false, decisionReconsidered = false;
     inp.visualRequirements = []; inp.visualReadings = []; inp.imageLimitations = [];
     if (a.pictures.length) {
-      const visual = await I.prepare(a.pictures, { context: inp.visualContext, paper: inp.paper, caps, ask, fits, signal, cache: imageCache, onCall: () => used++ });
+      const visual = await I.prepare(a.pictures, { context: inp.visualContext, paper: inp.paper, caps,
+        ask: (request, options) => ask(request, { ...options, call: 'scan' }), fits, signal, cache: imageCache, onCall: () => used++ });
       inp.visualProcessed = visual.processed;
       inp.imageLimitations = visual.limitations;
       inp.incomplete ||= visual.limitations.length > 0;
