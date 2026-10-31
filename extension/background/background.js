@@ -3310,16 +3310,17 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 const gcalEnv = {
   fetch: (url, init) => fetch(url, init),
   sleep: (ms) => new Promise((res) => setTimeout(res, ms)),
-  // Chrome's cached token, never a prompt (the editor's click asks); none without the calendar scope.
+  // Chrome's cached token, never a prompt (the editor's click asks); none without the calendar scope. Calendar's scope
+  // alone: the client is shared with Google Drive, whose scopes the manifest may list too.
   token: async () => {
-    const r = await GZ_GCAL_AUTH.token({ interactive: false });
+    const r = await GZ_GCAL_AUTH.token({ interactive: false, scopes: [GZ_GCAL.SCOPE] });
     if (Array.isArray(r?.grantedScopes) && !r.grantedScopes.includes(GZ_GCAL.SCOPE)) throw new GZ_GCAL.Fail('auth');
     return typeof r === 'string' ? r : r?.token;
   },
   drop: (token) => Promise.resolve().then(() => GZ_GCAL_AUTH.drop(token)).catch(() => {}),
 };
 // gcalEpoch: Disconnect moves it on as it arrives, so every sync already running or waiting in the queue stops at its
-// next step, before Disconnect revokes anything.
+// next step.
 let gcalQueue = Promise.resolve(), gcalStop = null, gcalEpoch = 0;
 // What a run rests on, by area. A change to any of them heard while a guard reads stops the run, even if the read was
 // served before the change: the guard nearest each side effect then acts on nothing older than what it has heard.
@@ -3329,6 +3330,12 @@ chrome.storage.onChanged.addListener((c, area) => {
   if (GCAL_WATCH[area]?.some((k) => k in c)) for (const run of gcalRuns) run.heard = true;
 });
 const gcalTurn = (f) => { const p = gcalQueue.then(f); gcalQueue = p.catch(() => {}); return p; };
+// Calendar and Drive share Google's identity permission: their Connects and Disconnects take turns here, so each Disconnect
+// sees whether the other is still connected, and the last one gives identity back. Neither revokes Google's grant.
+let grantQueue = Promise.resolve();
+const grantTurn = (f) => { const p = grantQueue.then(f); grantQueue = p.catch(() => {}); return p; };
+// The one permission the worker ever gives back: Google's identity API, once neither Calendar nor Drive holds it.
+const releaseIdentity = () => chrome.permissions.remove({ permissions: ['identity'] });
 const gcalState = async () => (await chrome.storage.local.get('gcal')).gcal;
 const gcalOps = {
   connect: async (m) => {
@@ -3344,17 +3351,21 @@ const gcalOps = {
     if (g?.cal) await chrome.storage.local.set({ gcal: { ...g, error: '' } });
     return { ok: !!g?.cal };
   },
-  // drop: also delete the Glaze calendar; if that fails, nothing changes. Then the grant is revoked, Chrome forgets its
-  // tokens and Glaze its state. → revoked: whether Google confirmed (false with no token to revoke: had).
+  // This device only (owner, 2026-10-31): Google's grant, which Drive shares, is never revoked. drop: also delete the Glaze
+  // calendar; if that fails, nothing changes. Then Chrome forgets its tokens (unless Drive signs in through Chrome's own
+  // client, whose cache it shares), identity goes unless Drive (background/google.js) is connected here, and Glaze forgets
+  // Calendar's state. A build with Drive off has no Drive.
   disconnect: async (m) => {
     const g = await gcalState();
     if (m.drop === true && g?.cal) await GZ_GCAL.remove(gcalEnv, g.cal);
-    const token = await gcalEnv.token().catch(() => null);
-    const revoked = !!token && await GZ_GCAL.revoke(gcalEnv, token);
-    await Promise.resolve().then(() => GZ_GCAL_AUTH.clear()).catch(() => {});
+    const drive = (await chrome.storage.local.get('google')).google;
+    const driveOn = typeof drive?.email === 'string' && googleLib().ON;
+    if (!(driveOn && drive.flow === 'chrome')) await Promise.resolve().then(() => GZ_GCAL_AUTH.clear()).catch(() => {});
+    // Release inside grantTurn, before another Connect can acquire identity. A delayed Settings reply owns no grant.
+    if (!driveOn) await Promise.resolve().then(releaseIdentity).catch(() => {});
     await chrome.storage.local.remove(['gcal', 'gcalSync']);
     serial(ensure);
-    return { ok: true, revoked, had: !!token };
+    return { ok: true };
   },
   // epoch: gcalEpoch when the page's message arrived. A run goes on only while everything its events were composed under
   // still holds (planner/calexport.js consent: Glaze's switch, the export's choices, the Gradescope switch and this account's
@@ -3433,9 +3444,296 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
         || typeof m.consent !== 'string' || m.consent.length > 4000 || typeof m.whole !== 'boolean') return { ok: false, error: 'sender' };
     } else if (!fromEditor(s)) return { ok: false, error: 'sender' };
     else if (m.op === 'disconnect') { gcalEpoch++; gcalStop?.abort(); }
-    return gcalTurn(() => gcalOps[m.op](m, epoch));
+    return m.op === 'connect' || m.op === 'disconnect' ? grantTurn(() => gcalTurn(() => gcalOps[m.op](m, epoch))) : gcalTurn(() => gcalOps[m.op](m, epoch));
   })().then(reply, (e) => reply({ ok: false, error: e?.code || 'network' }));
   return true;
+});
+
+// Google sign-in for Drive (background/google.js): Settings' Connect, its account and Disconnect, and the Picker for Glaze's own
+// pages. Loaded the first time one asks; nothing runs for someone who never connects. The token stays here.
+globalThis.addEventListener?.('install', () => importScripts('oauth.js', 'google-config.js', 'google.js'));
+let google = null;
+const calendarOn = async () => GZ_GCAL.ON && !!(await chrome.storage.local.get('gcal')).gcal?.cal;
+const googleLib = () => { if (!globalThis.GZ_GOOGLE) importScripts('oauth.js', 'google-config.js', 'google.js'); return GZ_GOOGLE; };
+const openGoogle = () => {
+  if (!google) {
+    googleLib();
+    const protocol = new URL(chrome.runtime.getURL('')).protocol;
+    google = GZ_GOOGLE.create({
+      config: GZ_GOOGLE_CONFIG, flow: GZ_GOOGLE.flowOf({ protocol, brands: navigator.userAgentData?.brands }), firefox: protocol === 'moz-extension:',
+      // While Calendar sync is connected it signs in with identity too: Drive's Disconnect leaves the permission to it.
+      identity: () => chrome.identity, manifest: () => chrome.runtime.getManifest(), storage: chrome.storage.local,
+      permissions: { contains: (p) => chrome.permissions.contains(p), remove: async () => (await calendarOn() ? false : releaseIdentity()) },
+      fetch: (u, init) => fetch(u, init),
+      native: (message) => chrome.runtime.sendNativeMessage(GZ_GOOGLE.APP, message),
+      // iOS: the sign-in tab the student taps (the worker opens it, never a framed page).
+      open: (url) => chrome.tabs.create({ url }),
+      // Calendar sync signs in with Chrome's own client: a Drive connection through it shares Chrome's cache and identity
+      // with Calendar, and while Calendar is connected Disconnect leaves both.
+      keep: async () => await calendarOn() && (await chrome.storage.local.get('google')).google?.flow === 'chrome',
+    });
+  }
+  return google;
+};
+const googlePage = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && ['options.html', 'papers.html', 'writer.html'].some((p) => s.url.split(/[?#]/)[0] === chrome.runtime.getURL(p));
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:google' || !['status', 'connect', 'disconnect', 'pick'].includes(m.op)) return;
+  if (!(m.op === 'pick' ? googlePage(s) : fromEditor(s))) { reply({ ok: false, why: 'sender' }); return; }
+  googleLib();
+  if (!GZ_GOOGLE.ON) { reply({ ok: false, why: 'off' }); return; } // the build-time switch (background/google.js)
+  const run = () => openGoogle()[m.op]();
+  Promise.resolve().then(() => (m.op === 'connect' || m.op === 'disconnect' ? grantTurn(run) : run())).then(reply, () => reply({ ok: false, why: 'network' }));
+  return true;
+});
+// Google Drive's files (documents/drive.js): From Google Drive and Save to Google Drive on Documents and Writer, with the token
+// above. The pages the paper store answers ask (glaze:writerPapers): writer.html, and papers.html, framed once its document
+// claimed its pass. A document's Drive file is written on its record in the papers' turn, only while the record is there.
+globalThis.addEventListener?.('install', () => importScripts('../documents/doc-kinds.js', '../documents/drive.js'));
+const driveLib = () => { if (!globalThis.GZ_DRIVE) importScripts('../documents/doc-kinds.js', '../documents/drive.js'); return GZ_DRIVE; };
+const drivePage = async (s) => {
+  const page = typeof s.url === 'string' ? s.url.split(/[?#]/)[0] : '';
+  if (!googlePage(s) || page === chrome.runtime.getURL('options.html')) return false;
+  if (page === chrome.runtime.getURL('papers.html') && s.frameId !== 0) { await settingsFramesLoaded; return trustedFrame(s, 'papers'); }
+  return true;
+};
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:drive' || m.op !== 'status') return;
+  drivePage(s).then(async (ok) => {
+    if (!ok) return { ok: false, why: 'sender' };
+    if (!googleLib().ON) return { ok: true, connected: false, picker: false };
+    const g = await openGoogle().status();
+    // picker: From Google Drive works here (background/google.js status); Save to Drive needs only the connection.
+    return { ok: true, connected: g.ok === true && !!g.email, picker: g.ok === true && !!g.email && g.picker === true };
+  }).then(reply, () => reply({ ok: false, why: 'network' }));
+  return true;
+});
+chrome.runtime.onConnect.addListener((p) => {
+  if (p.name !== 'glaze:drive') return;
+  const s = p.sender || {}, D = driveLib(), P = () => (openPapers(), GZ_WRITER_PAPERS);
+  let live = true;
+  p.onDisconnect.addListener(() => { live = false; });
+  const allowed = async () => googleLib().ON && await drivePage(s) && live;
+  D.serve(p, {
+    allowed,
+    drive: D.create({ fetch: (u, init) => fetch(u, init), token: (o) => openGoogle().token(o), account: () => openGoogle().account(),
+      drop: (token) => openGoogle().drop(token), allowed }),
+    record: {
+      get: async (k) => {
+        if (!P().valid(k)) return null;
+        const r = (await chrome.storage.local.get(P().KEYS.PAPER + k))[P().KEYS.PAPER + k];
+        return r && !P().trashed(r) ? { drive: r.drive || null } : null;
+      },
+      set: (k, drive) => (brokerTurn ||= GZ_CARDS.queue())(async () => {
+        if (!(await chrome.storage.local.get(P().KEYS.PAPER + k))[P().KEYS.PAPER + k]) return false;
+        await openPapers().save(k, { drive }, { changed: false, touch: false });
+        return true;
+      }),
+    },
+  });
+});
+
+// Sync to Google Drive (documents/drive-sync.js, background/drive-store.js): Settings' switch (Settings → Writer → Papers, only while Drive is connected), and the
+// runs: when it is turned on, when the browser starts or comes back online, when Documents or Writer asks whether Drive is
+// connected (at most every 30 s), and 5 s after the last of a run of saves. Its requests use the token above without ever
+// asking the student to sign in. A document's file is built here: a paper's .docx (writer/writer-docx.js), a spreadsheet's
+// .xlsx (documents/sheets/sheet-xlsx.js), a PDF's or deck's own bytes from the file store; each loaded the first time a push needs it.
+globalThis.addEventListener?.('install', () => importScripts('../documents/drive-sync.js', 'drive-store.js', '../writer/writer-color.js', '../core/zip.js', '../core/doctext.js', '../writer/writer-docx.js', '../writer/writer-objects-docx.js', '../writer/writer-format.js', '../writer/writer-submit.js',
+  '../documents/sheets/sheet-model.js', '../documents/sheets/sheet-numfmt.js', '../documents/sheets/sheet-formula.js', '../documents/sheets/sheet-xlsx.js', '../documents/sheets/sheet-data.js'));
+let driveSync = null, driveStore = null;
+const driveSyncDocx = () => { if (!globalThis.GZ_WRITER_DOCX) importScripts('../writer/writer-styles.js', '../vendor/pm.js', '../writer/writer-schema.js', '../writer/writer-color.js', '../core/zip.js', '../core/doctext.js', '../writer/writer-docx.js', '../writer/writer-objects-docx.js', '../writer/writer-format.js', '../writer/writer-submit.js'); };
+const driveSyncSheets = () => { if (!globalThis.GZ_SHEET_XLSX) importScripts('../documents/sheets/sheet-model.js', '../documents/sheets/sheet-numfmt.js', '../documents/sheets/sheet-formula.js', '../core/doctext.js', '../core/zip.js', '../documents/sheets/sheet-xlsx.js', '../documents/sheets/sheet-data.js'); };
+const driveSyncRows = (parts) => new Map(Object.entries(parts || {}).map(([n, p]) => [n, p.rows]));
+const openDriveSync = () => {
+  if (driveSync) return driveSync;
+  driveLib();
+  if (!globalThis.GZ_DRIVE_SYNC) importScripts('../documents/drive-sync.js');
+  if (!globalThis.GZ_DRIVE_STORE) importScripts('drive-store.js');
+  brokerIn('backup'); // A restarted worker needs every record's validator before its first download, not after it.
+  openPapers(); // and the paper store's library, which documents/drive-sync.js reads before any paper is asked for
+  const turn = (f) => (brokerTurn ||= GZ_CARDS.queue())(f);
+  // Everything else Glaze keeps (background/drive-store.js): its writes in the broker's queue, as every other store's are.
+  const keysOf = async (a) => (typeof chrome.storage[a].getKeys === 'function' ? chrome.storage[a].getKeys() : Object.keys(await chrome.storage[a].get(null)));
+  const areaOf = (a) => ({ get: (k) => chrome.storage[a].get(k), keys: () => keysOf(a),
+    set: (o) => turn(() => chrome.storage[a].set(o)), remove: (k) => turn(() => chrome.storage[a].remove(k)),
+    replace: (key, expected, value) => turn(async () => {
+      const here = (await chrome.storage[a].get(key))[key];
+      if (GZ_DRIVE_STORE.canon(here) !== GZ_DRIVE_STORE.canon(expected)) return false;
+      if (value === undefined) await chrome.storage[a].remove(key); else await chrome.storage[a].set({ [key]: value });
+      return true;
+    }) });
+  // Notes through their own queue's run, as the Notes app's changes go (BROKER.notesapp).
+  const notesArea = GZ_DRIVE_STORE.notesArea({ local: { get: (k) => chrome.storage.local.get(k), keys: () => keysOf('local') }, db: NOTES_DB, turn,
+    run: (m, onChange) => GZ_NOTES.run(m, { local: brokerArea('local'), onChange }, NOTES_DB).catch(() => ({ ok: false, error: 'db' })) });
+  driveStore = GZ_DRIVE_STORE.create({
+    area: (a) => (a === 'notes' ? notesArea : areaOf(a)), store: { get: (k) => chrome.storage.local.get(k), set: (o) => chrome.storage.local.set(o), remove: (k) => chrome.storage.local.remove(k), keys: () => keysOf('local') },
+    hash: async (text) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))].map((b) => b.toString(16).padStart(2, '0')).join(''),
+    join: (cat, key, value, rt, own) => {
+      brokerIn('backup');
+      const local = { get: (k) => chrome.storage.local.get(k), set: (o) => chrome.storage.local.set(o) };
+      // Notes' joins write through their own queue's run; the rest in one turn of the broker's.
+      return ['notes', 'noteFolders', 'noteFiles'].includes(cat) ? GZ_DRIVE_STORE.join(cat, key, value, local, notesArea, rt, own) : turn(() => GZ_DRIVE_STORE.join(cat, key, value, local, notesArea, rt, own));
+    },
+    // The daily snapshot: Back up…'s zip as Settings makes it (background/backup.js pack), its Settings with the hidden course
+    // folders, tasks, pet, records, every Notes account and documents without their files (each syncs on its own, so the zip
+    // stays small; one past one request is skipped for the day: background/drive-store.js snapshot). Never share keys (the
+    // owner's call: they stay out of Drive; Settings' own Back up… carries them behind its warning).
+    snapshot: async () => {
+      brokerIn('backup');
+      // The zip (and Notes' export, which builds on it) is loaded only by a document's export: a restarted worker may have none.
+      if (!globalThis.GZ_ZIP) importScripts('../core/zip.js');
+      const all = await chrome.storage.local.get(null), raw = await chrome.storage.sync.get(null);
+      const tasks = Object.fromEntries(Object.entries(all).filter(([k]) => GZ_TODO.STORE_KEY.test(k)));
+      const pets = GZ_PET.backup(Object.fromEntries(Object.entries(all).filter(([k]) => GZ_PET.KEY.test(k)))) || {};
+      const s0 = GZ_SANITIZE(raw);
+      const settings = { ...s0, nav: { ...s0.nav, i: '', li: '', ...(s0.nav?.li && { brand: 'glaze' }), ...(s0.nav?.i && { k: 'default', u: '' }) }, navbar: { ...s0.navbar, ...(s0.navbar?.brand === 'custom' && { brand: 'glaze' }) },
+        ...Object.fromEntries(['cards', 'links', 'ucards', 'ulinks', 'navItems', 'navbarItems'].filter((k) => raw[k] !== undefined).map((k) => [k, raw[k]])),
+        folders: GZ_FOLDERS.backup(all), favorites: GZ_HISTORY.favorites(all.lookFavorites) };
+      // Each Notes account read as Back up… reads it (background/backup.js notesOut), here through Notes' own run in the broker's
+      // queue rather than the sessions handler, which would bring its share keys along.
+      const notesSend = (op, m) => turn(async () => {
+        if (op === 'backupNotes') {
+          const idx = GZ_NOTES.clean((await chrome.storage.local.get(m.key))[m.key]);
+          return { ok: true, data: { site: new URL(m.key.slice(9)).origin, folders: GZ_NOTES.folderList(idx).map(([id, f]) => ({ id, ...f })), notes: GZ_NOTES.list(idx).map(([id, n]) => ({ id, ...n })), files: [] } };
+        }
+        const r = await GZ_NOTES.run({ key: m.key, op: op === 'notesRead' ? 'load' : 'getFile', id: m.id }, { local: brokerArea('local') }, NOTES_DB);
+        // Gone since it was listed: read again on the next run. A body Notes can't find: no snapshot today.
+        if (!r?.ok) throw Object.assign(new Error(r?.error || 'notes'), { why: r?.error === 'gone' ? 'changed' : r?.error === 'big' ? 'big' : 'bad' });
+        return r;
+      });
+      const notes = [];
+      for (const account of Object.keys(all).filter((k) => GZ_BACKUP.ACCOUNT.test(k))) notes.push({ account, entries: await GZ_BACKUP.notesOut(account, notesSend) });
+      // Documents' files are never read for it: their records go in, as Back up… keeps a record whose file isn't there.
+      try {
+        const entries = GZ_BACKUP.pack({ settings, tasks: { tasks, pets }, local: all, notes, version: chrome.runtime.getManifest().version });
+        return { name: GZ_BACKUP.fileName(), bytes: new Uint8Array(await new Blob(GZ_ZIP.zip(entries)).arrayBuffer()) };
+      } catch (e) { if (e?.why === 'big') return null; throw e; }
+    },
+  });
+  const P = () => (openPapers(), GZ_WRITER_PAPERS), PAPER = () => P().KEYS.PAPER;
+  const fileBytes = async (ref) => {
+    const parts = [];
+    let n = 0;
+    try { await openDocFiles().read(ref.hash, (c) => { parts.push(c); n += c.length; }); } catch { return null; }
+    const out = new Uint8Array(n);
+    let at = 0;
+    for (const p of parts) { out.set(p, at); at += p.length; }
+    return out;
+  };
+  const safeTitle = (s) => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+  // A transfer larger than one request waits between workers in its own IndexedDB, glaze-drive, which only the worker opens:
+  // an upload's bytes and a download's so far (documents/drive-sync.js), opened the first time one needs it.
+  let stageDb = null;
+  const stage = () => {
+    if (!stageDb) { if (!globalThis.GZ_DOC_FILES) importScripts('../documents/doc-files.js'); stageDb = GZ_DOC_FILES.idb(globalThis.indexedDB, 'glaze-drive'); }
+    return stageDb;
+  };
+  driveSync = GZ_DRIVE_SYNC.create({
+    drive: (active) => GZ_DRIVE.create({ fetch: (u, init) => fetch(u, init), token: (o) => openGoogle().token(o), account: () => openGoogle().account(),
+      drop: (token) => openGoogle().drop(token), allowed: async () => { await active(); return googleLib().ON; }, interactive: false }),
+    account: async () => (googleLib().ON ? openGoogle().account() : null),
+    store: { get: (k) => chrome.storage.local.get(k), set: (o) => chrome.storage.local.set(o), remove: (k) => chrome.storage.local.remove(k),
+      keys: async () => (typeof chrome.storage.local.getKeys === 'function' ? chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null))) },
+    papers: {
+      get: async (k) => (await chrome.storage.local.get(PAPER() + k))[PAPER() + k] || null,
+      list: () => openPapers().list(),
+      save: (k, patch, o) => turn(() => openPapers().save(k, patch, o)),
+      trash: (k) => turn(() => openPapers().trash(k)),
+      untrash: (k) => turn(() => openPapers().untrash(k)),
+      keep: (k, v) => turn(() => openPapers().keep(k, v)),
+    },
+    // A spreadsheet's parts as its record names them, each written by that revision; else a save landed between the reads.
+    parts: async (k, rec) => {
+      const names = Object.keys(rec.parts || {}), keys = names.map((n) => `${P().KEYS.PART}${k}:${n}`), got = names.length ? await chrome.storage.local.get(keys) : {};
+      return Object.fromEntries(names.map((n, i) => {
+        const part = got[keys[i]];
+        if (!part || part.rev !== rec.parts[n]) throw new GZ_DRIVE_SYNC.Fail('stale');
+        const { rev, ...rest } = part;
+        return [n, rest];
+      }));
+    },
+    files: { has: async (h) => !!(await openDocFiles().stat(h)), put: (bytes, type) => openDocFiles().put(bytes, type) },
+    exportOf: async (k, rec, parts) => {
+      const kind = rec.kind || 'paper', K = driveLib() && GZ_DOC_KINDS.KINDS;
+      if (kind === 'paper') {
+        if (!rec.doc) return null;
+        driveSyncDocx();
+        const f = GZ_WRITER_STYLES.get(rec.format), surname = GZ_WRITER_FORMAT.surname(rec.doc, f), out = GZ_WRITER_DOCX.exportDocx(rec.doc, { format: f, surname, title: rec.title });
+        return { name: GZ_WRITER_SUBMIT_LIB.fileName({ surname, title: rec.title, fallback: 'Paper' }), mime: out.type, bytes: out.bytes };
+      }
+      if (kind === 'sheet') {
+        if (!rec.book) return null;
+        driveSyncSheets();
+        const wb = GZ_SHEET_DATA.join(rec.book, driveSyncRows(parts)), xlsm = GZ_SHEET_XLSX.extension?.(wb) === 'xlsm';
+        return { name: `${safeTitle(rec.title) || 'Spreadsheet'}${xlsm ? '.xlsm' : '.xlsx'}`, mime: xlsm ? 'application/vnd.ms-excel.sheet.macroEnabled.12' : K.sheet.mime, bytes: await GZ_SHEET_XLSX.write(wb) };
+      }
+      if (!P().isRef(rec.file)) return null;
+      const bytes = await fileBytes(rec.file);
+      if (!bytes) return null;
+      const ext = kind === 'slides' ? (rec.ext === '.ppsx' ? '.ppsx' : '.pptx') : '.pdf';
+      return { name: `${safeTitle(rec.title) || (kind === 'pdf' ? 'PDF' : 'Slides')}${ext}`, mime: rec.file.type || K[kind].mime, bytes };
+    },
+    pack: async (rec, parts) => { driveSyncSheets(); return GZ_SHEET_DATA.pack(GZ_SHEET_DATA.join(rec.book, driveSyncRows(parts))); },
+    hash: async (text) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))].map((b) => b.toString(16).padStart(2, '0')).join(''),
+    more: driveStore,
+    stage: { get: (k) => stage().get(k), keys: (p) => stage().keys(p), entries: (p) => stage().entries(p), write: (puts, dels) => stage().write(puts, dels) },
+    // Chrome stops a worker that waits 30 s for a fetch's answer or hears nothing for 30 s, Firefox one idle for 30 s: while
+    // transfers go, a cheap extension call every 25 s. Safari unloads it regardless; there the next run goes on instead.
+    alive: () => {
+      if (SAFARI) return null;
+      const ping = () => { Promise.resolve().then(() => chrome.runtime.getPlatformInfo()).catch(() => {}); };
+      const beat = setInterval(ping, 25000);
+      return () => clearInterval(beat);
+    },
+    copyName: (title) => {
+      try {
+        if (!sessionWords) { if (typeof GZ_I18N === 'undefined') importScripts('../core/i18n.js'); sessionWords = GZ_I18N; }
+        const lang = chrome.i18n.getUILanguage(), file = sessionWords.file(lang);
+        if (file && /^i18n\/(de|es|fr|nl|pt-BR)\.js$/.test(file) && !globalThis.GZ_LANGS?.[file.slice(5, -3)]) importScripts(`../${file}`);
+        return sessionWords.t('{title} (Drive copy)', { title }, lang);
+      } catch { return `${title} (Drive copy)`; }
+    },
+  });
+  return driveSync;
+};
+// Whether Sync is on, read as each trigger fires: nothing of it loads for someone who never turned it on.
+const driveSyncOn = async () => (await chrome.storage.local.get('driveSync')).driveSync?.on === true && googleLib().ON;
+const driveSyncPoke = () => { driveSyncOn().then((on) => on && openDriveSync().poke()).catch((e) => console.warn('Sync to Google Drive:', e)); };
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:driveSync' || m.op !== 'set' || typeof m.on !== 'boolean') return;
+  if (!fromEditor(s)) { reply({ ok: false, why: 'sender' }); return; }
+  if (!googleLib().ON) { reply({ ok: false, why: 'off' }); return; }
+  openDriveSync().set(m.on).then(reply, () => reply({ ok: false, why: 'network' }));
+  return true;
+});
+chrome.runtime.onMessage.addListener((m, s) => { if (m?.type === 'glaze:drive' && m.op === 'status' && googlePage(s)) driveSyncPoke(); });
+chrome.runtime.onStartup.addListener(driveSyncPoke);
+globalThis.addEventListener?.('online', driveSyncPoke);
+chrome.storage.onChanged.addListener((c, area) => {
+  if (area !== 'local' && area !== 'sync') return;
+  const keys = area === 'local' ? Object.keys(c).filter((k) => k.startsWith('writerPaper:')) : [];
+  const other = Object.keys(c).some((k) => !k.startsWith('writerPaper:') && !k.startsWith('writerSheet:') && !k.startsWith('writerVersions:') && !k.startsWith('driveSync'));
+  if (!keys.length && !other) return;
+  // Off but still bound to its account, each record's time of change is kept too: turned on again, a change made meanwhile
+  // is weighed by when it was made, not lost to an earlier one from another device.
+  chrome.storage.local.get('driveSync').then(async ({ driveSync: st }) => {
+    const on = st?.on === true;
+    if (!(on || typeof st?.account === 'string') || !googleLib().ON) return; // nothing loads for someone never connected
+    const sync = openDriveSync();
+    if (on) for (const k of keys) await sync.touched(k.slice(12));
+    // Everything else: each key's time of change, and a push once saving pauses.
+    if (other && Object.keys(c).some((k) => driveStore.watches(area, k))) { await driveStore.stamp(c, area); if (on) await sync.nudge(); }
+  }).catch((e) => console.warn('Sync to Google Drive:', e));
+});
+// Connecting Drive turns Sync on, unless the student turned it off: it makes the Glaze folder and fills it, or restores
+// from it on a second device.
+chrome.storage.onChanged.addListener((c, area) => {
+  if (area !== 'local' || !c.google || typeof c.google.newValue?.email !== 'string' || c.google.oldValue?.email === c.google.newValue.email) return;
+  chrome.storage.local.get('driveSync').then(({ driveSync: st }) => {
+    if (!googleLib().ON || st?.off === true) return;
+    // Reconnecting a different account must go through the existing binding check, never the explicit enable action.
+    return st?.account && st.account !== c.google.newValue.email ? openDriveSync().run() : openDriveSync().set(true);
+  })
+    .catch((e) => console.warn('Sync to Google Drive:', e));
 });
 
 // A Download all wait owns a private ticket, sent over its byte port and the frame's MessageChannel, never a URL.

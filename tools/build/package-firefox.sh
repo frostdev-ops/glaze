@@ -2,7 +2,8 @@
 # Package Glaze for Firefox (addons.mozilla.org) from the Chrome package: dist/glaze-v<version>-firefox.zip.
 # Firefox has no extension service worker: the background runs as an event page from every script the worker
 # imports, listed in order, and importScripts becomes a no-op. Google Calendar sync needs Chrome's identity API,
-# so its oauth2 key and permission go, as in Safari. DIST: the folder the zips go in (default dist).
+# so its oauth2 key goes, as in Safari; identity stays only for Drive's web sign-in, once its client is real
+# (tools/build/oauth-manifest.js). DIST: the folder the zips go in (default dist).
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
@@ -56,9 +57,10 @@ const imports = [...fs.readFileSync(background, 'utf8').matchAll(/importScripts\
   .flatMap(([, args]) => [...args.matchAll(/'([^']+)'/g)].map(([, f]) => path.posix.join('background', f)));
 m.background = { scripts: ['background/firefox-background.js', ...new Set(imports), 'background/background.js'] };
 delete m.minimum_chrome_version;
-delete m.oauth2;
-m.optional_permissions = (m.optional_permissions || []).filter((p) => p !== 'identity');
-if (!m.optional_permissions.length) delete m.optional_permissions;
+// Google (tools/build/oauth-manifest.js): no oauth2 key, which is getAuthToken's; identity only for Drive, switched on (background/google.js ON)
+// with its Web client real, and held from install (Firefox has no optional identity).
+const google = require(path.join(process.cwd(), 'tools/build/oauth-manifest.js')).oauth(m, { target: 'firefox', calendar: false, drive: require(path.join(process.cwd(), 'extension/background/google.js')).ON === true, config: require(path.join(process.cwd(), 'extension/background/google-config.js')) });
+for (const k of ['oauth2', 'optional_permissions', 'permissions']) if (k in google) m[k] = google[k]; else delete m[k];
 for (const entry of m.web_accessible_resources || []) delete entry.use_dynamic_url;
 // Firefox has no declarativeContent (Chrome's lit button) and no addHostAccessRequest; AMO's linter flags both, the second
 // even behind popup.js's check, so the Firefox popup goes without that line. The button starts on the toolbar for new

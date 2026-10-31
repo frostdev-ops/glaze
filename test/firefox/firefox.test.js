@@ -28,7 +28,8 @@ test('package-firefox.sh builds a Firefox manifest whose background scripts all 
     // Nothing without consent; agent access sends the student's course data to an app on this computer, outside the browser.
     assert.deepEqual(m.browser_specific_settings.gecko.data_collection_permissions, { required: ['none'], optional: ['websiteContent'] });
     assert.equal(m.oauth2, undefined);
-    assert.deepEqual(m.optional_permissions, ['nativeMessaging'], 'no identity; agent access asks for native messaging');
+    assert.deepEqual(m.optional_permissions, ['nativeMessaging'], 'agent access asks for native messaging');
+    assert.ok(m.permissions.includes('identity'), 'Drive\'s web sign-in: held from install, as Firefox has no optional identity');
     assert.ok(m.web_accessible_resources.every((e) => !('use_dynamic_url' in e)));
     // Code mods need Chrome: no sandbox page, CSP or files, so content.js never starts them.
     assert.equal(m.sandbox, undefined);
@@ -63,7 +64,7 @@ test('package-firefox.sh: no declarativeContent or addHostAccessRequest, the but
     const chrome = require('../../extension/manifest.json');
     const zip = path.join(dist, `glaze-v${chrome.version}-firefox.zip`);
     const m = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json'], { encoding: 'utf8' }));
-    assert.deepEqual(m.permissions, chrome.permissions.filter((p) => p !== 'declarativeContent'));
+    assert.deepEqual(m.permissions, [...chrome.permissions.filter((p) => p !== 'declarativeContent'), 'identity']);
     assert.ok(m.permissions.includes('activeTab'));
     assert.equal(m.action.default_area, 'navbar');
     assert.equal(chrome.action.default_area, undefined, "Chrome's manifest has no Firefox-only key");

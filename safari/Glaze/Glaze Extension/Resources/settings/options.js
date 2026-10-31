@@ -1098,8 +1098,9 @@ GZ_UI.load().then((s) => {
     const gcalSignIn = async () => {
       try {
         if (!await chrome.permissions.request({ permissions: ['identity'] })) return t("Glaze can't connect without Chrome's sign-in permission.");
-        const r = await GZ_GCAL_AUTH.token({ interactive: true });
-        const scope = chrome.runtime.getManifest().oauth2.scopes[0];
+        // Calendar's scope alone: the client is shared with Google Drive, whose scopes the manifest may list too.
+        const r = await GZ_GCAL_AUTH.token({ interactive: true, scopes: [GZ_GCAL.SCOPE] });
+        const scope = GZ_GCAL.SCOPE;
         if (Array.isArray(r?.grantedScopes) && !r.grantedScopes.includes(scope)) {
           // Chrome would hand the same token back: forgotten, so the next Connect asks Google again.
           await GZ_GCAL_AUTH.drop(r.token).catch(() => {});
@@ -1148,13 +1149,110 @@ GZ_UI.load().then((s) => {
       if ($('#gcal-bye').returnValue !== 'ok') return $('#gcal-disconnect').focus();
       const r = await gcalOp({ op: 'disconnect', drop: $('#gcal-drop').checked });
       if (!r.ok) return hint(t("Couldn't delete the Glaze calendar, so nothing changed. Try again, or disconnect without deleting it."), true);
-      // Nothing stays behind: the permission goes too, until the next Connect asks again.
-      await chrome.permissions.remove({ permissions: ['identity'] }).catch(() => {});
+      // The worker released identity in its grant queue unless Drive still holds it.
       gcalRender(null);
       $('#gcal-connect').focus();
-      hint(r.had && !r.revoked ? t("Disconnected on this device. Google didn't confirm it removed Glaze's access: you can remove it at myaccount.google.com/connections.") : t('Disconnected.'), r.had && !r.revoked);
+      hint(t('Disconnected.'));
     });
     chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.gcal) gcalRender(changes.gcal.newValue); });
+  }
+
+  // ---- Google Drive (background/google.js, through the worker: 'glaze:google'): Connect, the account, Disconnect ----
+  // Hidden until Google's clients are set up for this browser (the worker says why: 'setup' or 'browser').
+  {
+    const gdOp = (op) => new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:google', op }, (r) => res(chrome.runtime.lastError ? { ok: false, why: 'network' } : r || { ok: false })));
+    let gdFlow = '';
+    const gdRender = (s) => {
+      gdFlow = s?.flow || '';
+      $('#gdrive').hidden = !s?.ok;
+      $('#gdrive-who').textContent = s?.email || '';
+      $('#gdrive-connect').hidden = !!s?.email;
+      $('#gdrive-disconnect').hidden = !s?.email;
+      if (s?.email) gsRender();
+    };
+    const gdLoad = () => gdOp('status').then(gdRender);
+    gdLoad();
+    let gdBusy = false;
+    // Inside the student's click: the browser's identity permission first (optional; nothing is asked before this), then
+    // Google's own screen, from the worker. Safari signs in through the Glaze app and has no identity permission: Connect
+    // answers 'pending' until the app is done (each answer waits a while), and Settings asks again.
+    $('#gdrive-connect').addEventListener('click', async (e) => {
+      if (!e.isTrusted || gdBusy) return;
+      // Firefox has no optional identity: its package holds it from install (tools/build/oauth-manifest.js), so nothing is asked.
+      const held = gdFlow === 'native' || /^moz-extension:/i.test(chrome.runtime.getURL(''));
+      const native = gdFlow === 'native';
+      // Settings framed in a school's page may have no permissions API: its own tab asks, at this section.
+      if (!held && typeof chrome.permissions?.request !== 'function') return GZ_SITE.elsewhere ? GZ_SITE.elsewhere(e.currentTarget) : hint(t("Glaze needs the browser's sign-in permission to connect."), true);
+      gdBusy = true;
+      try {
+        if (!held) {
+          const asked = chrome.permissions.request({ permissions: ['identity'] });
+          if (!await Promise.resolve(asked).catch(() => false)) return hint(t("Glaze needs the browser's sign-in permission to connect."), true);
+        }
+        const again = !!$('#gdrive-who').textContent;
+        let r = await gdOp('connect');
+        for (let n = 0; native && r.why === 'pending' && n < 40; n++) r = await gdOp('connect');
+        if (r.ok) {
+          // Connected again, as Sync asked, to the account it is bound to: Sync starts afresh now, not after its wait. A first
+          // Connect is the worker's to turn Sync on, and another account its binding check's.
+          const st = again && (await chrome.storage.local.get('driveSync')).driveSync;
+          if (st?.on === true && st.account === r.email) chrome.runtime.sendMessage({ type: 'glaze:driveSync', op: 'set', on: true }, () => void chrome.runtime.lastError);
+          await gdLoad();
+          $('#gdrive-disconnect').focus();
+          return hint(t('Connected.'));
+        }
+        hint(r.why === 'scope' ? t('Connect again and allow Google Drive access.') : r.why === 'signin' ? t('Sign in to the browser with your Google account, then connect again.')
+          : r.why === 'cancel' ? '' : t("Google Drive didn't connect. Try again in a moment."), r.why !== 'cancel');
+      } finally { gdBusy = false; }
+    });
+    $('#gdrive-disconnect').addEventListener('click', async (e) => {
+      if (!e.isTrusted || gdBusy) return;
+      gdBusy = true;
+      try {
+        const r = await gdOp('disconnect');
+        if (!r.ok) return hint(t("Couldn't disconnect. Try again in a moment."), true);
+        await gdLoad();
+        $('#gdrive-connect').focus();
+        hint(t('Disconnected.'));
+      } finally { gdBusy = false; }
+    });
+    chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.google) gdLoad(); });
+
+    // Sync to Google Drive (documents/drive-sync.js and background/drive-store.js, through the worker: 'glaze:driveSync'): shown
+    // while Drive is connected, on once it connects (the worker turns it on) unless turned off here, with one line of how it
+    // stands (storage.local driveSync): syncing, when it last synced, or what stopped it and the fix.
+    const SYNC_SAYS = { auth: 'Connect Google Drive again to keep syncing.', connect: 'Connect Google Drive again to keep syncing.', account: 'Connect Google Drive again to keep syncing.',
+      scope: 'Connect Google Drive again to keep syncing.', permission: 'Connect Google Drive again to keep syncing.', quota: 'Your Google Drive is full. Free up space to keep syncing.',
+      folder: "The Glaze folder is in Google Drive's trash. Restore it to keep syncing.", busy: 'Google Drive is busy. Glaze will try again soon.',
+      network: "Couldn't reach Google Drive. Glaze will try again soon.", offline: "Couldn't reach Google Drive. Glaze will try again soon." };
+    const SNAP_SAYS = { quota: "Today's backup was skipped: your Google Drive is full.", large: "Today's backup was too large." };
+    const gsWhen = (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium', timeStyle: 'short' }).format(at);
+    const gsRender = async () => {
+      const connected = !$('#gdrive').hidden && !!$('#gdrive-who').textContent;
+      $('#gdrive-sync').hidden = !connected;
+      if (!connected) return;
+      const got = await chrome.storage.local.get(['driveSync', 'driveSyncLarge']), st = got.driveSync || {};
+      const large = Object.keys(got.driveSyncLarge?.docs || {}).length + Object.keys(got.driveSyncLarge?.recs || {}).length;
+      $('#gdrive-sync-on').checked = st.on === true;
+      $('#gdrive-sync-said').textContent = st.on !== true ? '' : st.busy && Date.now() - st.busy < 120e3 ? t('Syncing…')
+        : st.problem ? t(SYNC_SAYS[st.problem] || "Couldn't sync. Glaze will try again soon.") : st.last ? t('Last synced {when}.', { when: gsWhen(st.last) })
+          // The day's backup skipped for want of room or past one request (background/drive-store.js snapshot), for the day it
+          // covers; then what stays on this device as too large to sync (documents/drive-sync.js driveSyncLarge), if anything.
+          + (Date.now() - (st.snap || 0) < 864e5 && SNAP_SAYS[st.snapSkip] ? ` ${t(SNAP_SAYS[st.snapSkip])}` : '')
+          + (large ? ` ${t('Too large to sync: {n}.', { n: large })}` : '') : '';
+      // Connect stays beside Disconnect while that line asks for it.
+      $('#gdrive-connect').hidden = $('#gdrive-sync-said').textContent !== t(SYNC_SAYS.auth);
+    };
+    new MutationObserver(() => { gsRender(); }).observe($('#gdrive-who'), { childList: true, characterData: true, subtree: true });
+    new MutationObserver(() => { gsRender(); }).observe($('#gdrive'), { attributes: true, attributeFilter: ['hidden'] });
+    gsRender();
+    $('#gdrive-sync-on').addEventListener('change', async (e) => {
+      const on = e.currentTarget.checked;
+      const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:driveSync', op: 'set', on }, (x) => res(chrome.runtime.lastError ? { ok: false, why: 'network' } : x || { ok: false })));
+      if (!r.ok && on && !(await chrome.storage.local.get('driveSync')).driveSync?.on) $('#gdrive-sync-on').checked = false;
+      gsRender();
+    });
+    chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && (changes.driveSync || changes.driveSyncLarge)) gsRender(); });
   }
 
   // Another surface changed something: read after our queued saves, and never apply a read older than an edit.

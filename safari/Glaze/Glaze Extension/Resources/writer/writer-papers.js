@@ -117,7 +117,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
           return r.value;
         } finally { clearTimeout(timer); }
       };
-      const { submitted: _, merge: __, reown: ___, ...reads } = local; // submit dispatch, backup replay and owners are worker-only
+      const { submitted: _, merge: __, reown: ___, keep: ____, ...reads } = local; // submit dispatch, backup replay, owners and sync's versions are worker-only
       return { ...reads, get: async (k) => { const p = await local.get(k); seen.set(k, p?.revision || 0); return p; },
         save: (k, patch, options = {}) => turn(k, () => send('save', [k, patch, { ...options, base: options.base ?? seen.get(k) }])),
         restore: (k, id) => turn(k, () => send('restore', [k, id])), remove: (k) => turn(k, () => send('remove', [k])),
@@ -184,19 +184,21 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
     // the full writer left it, before the compact box writes it into Blackboard's), 'edit' (a deck's file before the one this
     // save brings). A PDF file is never kept in a version of a PDF record; earlier papers and decks keep theirs. attached: on a 'sending' save, the files the
     // submit attaches beside it ({ name, size, mime }), kept on its version. hold: a PDF's pages Done, its file before held
-    // (UNDO) in place of any held before; any other save that replaces a PDF's file lets that go. → { paper, version, held }.
-    const save = (k, patch = {}, { reason = 'auto', base = seen.get(k), rename = false, expectedKind, expectedFile, parts = null, drop = null, changed: own, version: packed = null, attached = null, hold = false } = {}) => serial(k, async () => {
+    // (UNDO) in place of any held before; any other save that replaces a PDF's file lets that go. touch: false keeps Last
+    // edited (updated): a field recorded about the document, not a change to it (documents/drive.js drive). → { paper, version, held }.
+    const save = (k, patch = {}, { reason = 'auto', base = seen.get(k), rename = false, expectedKind, expectedFile, expectedRevision, parts = null, drop = null, changed: own, version: packed = null, attached = null, hold = false, touch = true } = {}) => serial(k, async () => {
       if (typeof k !== 'string' || !k) throw new Error('no paper key');
       const written = Object.keys(parts || {}), dropped = [...(drop || [])];
       if ([...written, ...dropped].some((n) => typeof n !== 'string' || !PART_NAME.test(n)) || (packed && typeof packed.gz !== 'string')) throw new Error('no such part');
       const prev = (await get(PAPER + k)) || null, t = now();
+      if (expectedRevision !== undefined && (prev?.revision || 0) !== expectedRevision) throw new Error('document changed in another tab');
       if (expectedKind && (prev?.kind || 'paper') !== expectedKind) throw new Error('document kind changed');
       if (expectedFile !== undefined && !sameFile(prev?.file, expectedFile)) throw new Error('document changed in another tab');
       // A save queued in another editor may arrive after Open in Glaze. Only an explicit import or restore can change
       // the kind; the editor's session copy still holds its unsaved document or workbook.
       if (prev && patch.kind && patch.kind !== (prev.kind || 'paper') && !['import', 'restore'].includes(reason)) throw new Error('document kind changed');
       const cleared = patch.kind && patch.kind !== (prev?.kind || 'paper') ? Object.fromEntries([...FILE_FIELDS, ...(prev?.kind === 'sheet' ? ['book', 'grid', 'cells', 'sheets'] : [])].map((f) => [f, null])) : {};
-      const paper = { ...(prev || { key: k, created: t }), ...cleared, ...patch, key: k, updated: t, revision: (prev?.revision || 0) + 1 };
+      const paper = { ...(prev || { key: k, created: t }), ...cleared, ...patch, key: k, updated: touch === false && prev ? prev.updated : t, revision: (prev?.revision || 0) + 1 };
       // An autosave carries the name it last read. Only an explicit title edit can replace a later rename.
       if (patch.doc && prev && base != null && base < (prev.titled ?? prev.revision ?? 0) && !rename) {
         paper.title = prev.title; paper.named = prev.named;
@@ -393,6 +395,25 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
     });
     // The store told again what paper k holds (after a restore committed its records).
     const reown = (k) => serial(k, () => owned(k, null, null));
+    // Another copy of paper k kept as one of its versions, the paper itself unchanged (lib/drive-sync.js: Drive's side of a
+    // conflict). value: a record (its file already in the store), or a spreadsheet's packed { kind: 'sheet', gz, cells }.
+    // → the version's metadata, or null when there is no paper k.
+    const keep = (k, value, reason = 'conflict') => serial(k, async () => {
+      const paper = await get(PAPER + k);
+      if (!paper) return null;
+      const t = now(), sheet = value?.kind === 'sheet';
+      if (sheet && typeof value.gz !== 'string') throw new Error('no such version');
+      const v = sheet ? { id: `${t.toString(36)}-${Math.random().toString(36).slice(2, 8)}`, at: t, reason, kind: 'sheet', cells: Number.isSafeInteger(value.cells) ? value.cells : 0, bytes: value.gz.length, gz: value.gz }
+        : snapshot(value, reason, t);
+      const limit = sheet || paper.kind === 'sheet' ? CAP.packed : CAP.bytes;
+      if (v.bytes > limit) throw new RangeError('version size limit');
+      const list = await cap([v, ...(await versionsOf(k))], limit);
+      await claim(k, [v]);
+      await store.set({ [VERSIONS + k]: list });
+      await owned(k, null, list);
+      const { doc, file, thumb, gz, ...meta } = v;
+      return meta;
+    });
 
     // A student's presets (writer/writer-styles.js custom), kept valid.
     const presets = async (scope) => ((scope && (await get(PRESETS + scope))) || []).filter((x) => globalThis.GZ_WRITER_STYLES?.custom ? GZ_WRITER_STYLES.custom(x) : true);
@@ -458,7 +479,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       }
     };
     const api = { get: (k) => get(PAPER + k).then((p) => { seen.set(k, p?.revision || 0); return p || null; }), save, submitted, versions, version, restore, list, remove, presets, savePreset, removePreset, merge,
-      trash: (k) => mark(k, true), untrash: (k, options) => mark(k, false, options), purge, migrate, reown };
+      trash: (k) => mark(k, true), untrash: (k, options) => mark(k, false, options), purge, migrate, reown, keep };
     if (!store) throw new Error('paper storage unavailable');
     return api;
   };

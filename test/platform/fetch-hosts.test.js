@@ -51,6 +51,9 @@ const SITES = {
     { at: 'reach: reachable, fetch: (u, i) => fetch(u, i), task:', kind: 'via', to: 'ai/broker.js' },
     { at: 'const channelEnv = () => ({', kind: 'asked', flow: 'a mod channel\'s relay: share.frostdev.io, or one the editor asked for (settings/editor-mods.js Read code)', guard: /reachable\(u\)/, near: 0 },
     { at: 'fetch: (url, init) => fetch(url, init),', kind: 'via', to: 'planner/gcal.js', exact: true },
+    { at: 'fetch: (u, init) => fetch(u, init),', kind: 'via', to: 'background/google.js', exact: true },
+    { at: 'drive: D.create({ fetch: (u, init) => fetch(u, init),', kind: 'via', to: 'documents/drive.js' },
+    { at: 'drive: (active) => GZ_DRIVE.create({ fetch: (u, init) => fetch(u, init),', kind: 'via', to: 'documents/drive.js' },
     { at: 'fetch(chrome.runtime.getURL(`icons/icon', kind: 'extension' },
     { at: "credentials: 'include', redirect: 'error'", kind: 'asked', flow: 'Gradescope: the Settings switch asks for www.gradescope.com', guard: /reachable\(GZ_GRADESCOPE\.HOST\)/ },
     { at: "redirect: wide ? 'follow' : 'manual', cache: 'no-store', signal: ctl.signal", kind: 'asked', flow: 'Canvas Download all: the page\'s Allow frame (courses/allow.html) for the file server', guard: /if \(!await reachable\(url\)\)/ },
@@ -88,8 +91,12 @@ const SITES = {
   ],
   'planner/gcal.js': [
     { at: 'env.fetch(`${env.api || API}', kind: 'open', host: 'https://www.googleapis.com', why: 'Google Calendar API, CORS for any origin; behind GZ_GCAL.ON (on; Chrome only)' },
-    { at: 'env.fetch(env.revoke || REVOKE', kind: 'open', host: 'https://oauth2.googleapis.com', why: 'token revocation, CORS for any origin; behind GZ_GCAL.ON (on; Chrome only)' },
   ],
+  // Drive's sign-in (behind background/google-config.js's placeholders until its clients are real): Google's userinfo, and the
+  // HEAD that finds the picker page that loads.
+  // Drive's files (behind background/google.js's ON): the Drive v3 API and its upload address, both on www.googleapis.com.
+  'documents/drive.js': [{ at: 'const send = (url, init) => env.fetch(url', kind: 'open', host: 'https://www.googleapis.com', why: 'Drive v3 (files and uploads) answers every origin (CORS); behind GZ_GOOGLE.ON' }],
+  'background/google.js': [{ at: 'const send = (url, init = {}) => env.fetch(url', kind: 'open', why: 'openidconnect.googleapis.com answers every origin (CORS); of the picker pages, frostdev.io is a required host and its GitHub Pages copy answers every origin' }],
   'looks/fonts.js': [{ at: 'const get = (url, as) => fetch(url', kind: 'open', host: 'https://fonts.googleapis.com', hosts: ['https://fonts.googleapis.com', 'https://fonts.gstatic.com', 'https://cdn.jsdelivr.net'], why: 'Google Fonts CSS, fonts.gstatic.com and the jsDelivr catalog files answer every origin' }],
   'settings/options.js': [{ at: 'fetch(GZ_FONTS.cssUrl(name, false)', kind: 'open', host: 'https://fonts.googleapis.com', why: 'whether a typed Google font exists' }],
   'core/site.js': [

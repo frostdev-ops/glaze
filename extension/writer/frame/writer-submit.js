@@ -118,6 +118,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     if (!sheet) return;
     const s = sheet;
     sheet = null;
+    s.stop?.();
     s.layer.remove();
     for (const [el, was] of s.inert) el.inert = was;
     if (s.back?.isConnected) s.back.focus();
@@ -165,6 +166,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     const review = issues ? h('button', { type: 'button', class: 'gs-review', text: t('Review') }) : null;
     const atts = h('ul', { class: 'gs-atts' });
     const attachB = typeof P()?.pick === 'function' ? h('button', { type: 'button', class: 'gs-attach', text: t('Attach from Documents') }) : null;
+    const driveB = globalThis.GZ_DRIVE?.page?.picker?.() === true ? h('button', { type: 'button', class: 'gs-attach gs-drive', text: t('From Google Drive') }) : null;
     const layer = h('div', { class: 'gs-layer' },
       h('div', { class: 'gs-dim' }),
       h('div', { class: `gs-sheet${file || other || only ? ' gs-asis' : ''}${only ? ' gs-only' : ''}`, role: 'dialog', tabindex: '-1', 'aria-modal': 'true', 'aria-labelledby': 'gs-title' },
@@ -176,7 +178,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
           h('div', { class: 'gs-body' },
           h('div', { class: 'gs-field' }, h('label', { for: 'gs-note', text: instructor ? t('Note to {name}', { name: instructor }) : t('Note to your instructor') }), note),
           file || other || only ? null : h('label', { class: 'gs-toggle', for: 'gs-paste' }, h('span', { text: t('Also paste the text in the text box') }), sw),
-          atts, attachB,
+          atts, attachB, driveB,
           review ? h('div', { class: 'gs-open' }, h('span', { class: 'gs-dot' }), h('span', { class: 'gs-grow', text: t('{n} checks open', { n: issues }) }), review) : null,
           err, native),
           h('div', { class: 'gs-foot' }, cancel, submit))));
@@ -227,7 +229,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
 
     // ---- the attached files: metadata and a file-store ref once ready; making ones hold Submit
     const list = [];
-    let making = 0, jobs = Promise.resolve();
+    let making = 0, jobs = Promise.resolve(), picking = false;
     const alive = (a) => !a.gone && sheet === mine && !mine.cancelled;
     const unchanged = async (a) => { if (a.doc && stamp(await record(a.doc.key)) !== a.stamp) throw { error: 'changed', file: a.name || a.title }; };
     const validate = async () => { for (const a of list) await unchanged(a); };
@@ -241,7 +243,10 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
       if (!alive(a)) return;
       a.ref = ref; take(a, f);
     };
-    const ready = () => { submit.disabled = mine.busy || making > 0 || (only && !list.some((a) => a.ref)); if (attachB) attachB.disabled = mine.busy || list.length >= L().MAX_ATTACH; };
+    const ready = () => {
+      submit.disabled = mine.busy || picking || making > 0 || (only && !list.some((a) => a.ref));
+      for (const b of [attachB, driveB]) if (b) b.disabled = mine.busy || list.length >= L().MAX_ATTACH || (b === driveB && picking);
+    };
     const row = (label, tagText, kindTag) => {
       const nameEl = h('span', { class: 'gs-name', text: label }), sizeEl = h('small', {});
       const x = h('button', { type: 'button', class: 'gs-att-x', 'aria-label': t('Remove {name}', { name: label }), title: t('Remove') }, '×');
@@ -252,7 +257,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     const drop = (a, focus) => {
       const i = list.indexOf(a);
       if (i < 0 || mine.busy) return;
-      list.splice(i, 1); a.gone = true; a.ui.el.remove();
+      list.splice(i, 1); a.gone = true; a.stop?.(); a.ui.el.remove();
       if (focus) (list[Math.min(i, list.length - 1)]?.ui.x || attachB || note).focus();
       ready();
     };
@@ -320,6 +325,63 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
       const doc = await P().pick({ back: attachB });
       if (doc && sheet === mine) mine.addDoc(doc);
     });
+    // From Google Drive (shown while Drive is connected and Google's Picker works here): the files picked in Google's Picker (the worker opens it), each
+    // read as it is through the worker's Drive port (documents/drive.js raw: any type up to 50 MB, a Google Doc, Sheet or
+    // deck exported as Open from Drive exports it), one at a time in the attachments' queue, its row saying Reading… until
+    // it's staged. Remove, Cancel or the sheet closing aborts its read, a stalled one included. A file that can't come names
+    // itself and leaves the list.
+    const SIGN_IN = ['off', 'connect', 'setup', 'account', 'auth', 'permission', 'scope', 'browser', 'unsupported', 'state'];
+    const driveWhy = (why) => (why === 'cancel' ? '' : why === 'missing' || why === 'denied' ? t("Glaze can't reach this file in Google Drive.")
+      : why === 'busy' ? t('Google Drive is busy. Try again in a moment.') : why === 'export' ? t('That file is too large.') : why === 'type' || why === 'bad' ? t('That file could not be read.')
+      : SIGN_IN.includes(why) ? t('Connect Google Drive again in Settings.') : t("Couldn't reach Google Drive. Try again in a moment."));
+    const tell = (why) => { if (why) err.textContent = err.textContent ? `${err.textContent} ${why}` : why; };
+    const fromDrive = (f) => {
+      const name = String(f.name), a = { title: name.replace(/\.[^.]+$/, '') };
+      a.ui = row(name, L().tag(name), L().tag(name).toLowerCase());
+      a.ui.x.addEventListener('click', () => drop(a, true));
+      list.push(a);
+      making++; ready();
+      jobs = jobs.then(async () => {
+        if (!alive(a)) return;
+        const quit = new AbortController();
+        a.stop = () => quit.abort();
+        const report = GZ_DOC_KINDS.progress((p) => { if (p.end || p.failed || !alive(a)) return; const w = GZ_DOC_KINDS.said(p, 'paper'); if (w) a.ui.sizeEl.textContent = t(...w); }, ['read']);
+        let file;
+        try {
+          file = await GZ_DRIVE.client().raw(f.id, (p) => report({ stage: 'read', ...p }), quit.signal);
+        } catch (e) { throw { why: e?.why || 'network' }; } finally { report.end(); a.stop = null; }
+        if (!alive(a)) return;
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        if (!alive(a)) return;
+        // Drive adds the export extension to Google titles, which can themselves contain dots.
+        a.title = file.name.replace(/\.[^.]+$/, '');
+        await stage(a, { name: file.name, mime: file.type, bytes });
+      }).catch((e) => {
+        if (!alive(a)) return;
+        drop(a, false);
+        tell(e?.why === 'size' || e?.error === 'large' ? t('{name} is larger than 50 MB.', { name }) : `${name}: ${(e?.why && driveWhy(e.why)) || t('That file could not be read.')}`);
+      }).finally(() => { making--; if (sheet === mine) ready(); });
+    };
+    driveB?.addEventListener('click', async () => {
+      if (mine.busy || picking || !room()) return;
+      picking = true; err.textContent = ''; ready();
+      let r = null;
+      try { r = await chrome.runtime.sendMessage({ type: 'glaze:google', op: 'pick' }); } catch { r = null; }
+      try {
+        if (sheet !== mine || mine.busy || mine.cancelled) return;
+        if (!r?.ok || !Array.isArray(r.files)) { tell(driveWhy(r?.why || 'network')); return; }
+        if (!r.files.length) return; // the Picker closed
+        await P().need(['documents/doc-kinds.js']);
+        if (sheet !== mine || mine.busy || mine.cancelled) return;
+        for (const f of r.files) {
+          if (list.length >= L().MAX_ATTACH) { tell(t('Attach up to {n} documents.', { n: L().MAX_ATTACH })); break; }
+          fromDrive(f);
+        }
+      } catch {
+        if (sheet === mine && !mine.cancelled) tell(t('That file could not be read.'));
+      } finally { picking = false; if (sheet === mine) ready(); }
+    });
+    mine.stop = () => { for (const a of list) a.stop?.(); };
     // What goes with the run: the files, the note naming them, and what the version keeps.
     const extras = () => {
       const ok = list.filter((a) => a.ref), names = ok.map((a) => a.name);
@@ -365,7 +427,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     const lock = (on) => {
       mine.busy = on;
       for (const x of [note, sw, keep, submit, review, ...atts.querySelectorAll('button')]) if (x) x.disabled = on;
-      if (!on) ready(); else if (attachB) attachB.disabled = true;
+      if (!on) ready(); else for (const b of [attachB, driveB]) if (b) b.disabled = true;
       layer.querySelector('.gs-sheet').setAttribute('aria-busy', String(on));
       submit.textContent = on ? t('Submitting…') : t('Submit');
       if (on) cancel.focus();
@@ -391,7 +453,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
       frame.say({ type: 'submit:go', run, ...m, stream: true, until: Date.now() + 80000 + more }, m.bytes ? [m.bytes] : []);
     }).finally(() => { if (waiting?.run === run) waiting = null; });
     submit.addEventListener('click', async (e) => {
-      if (!e.isTrusted || mine.busy || mine.cancelled || making > 0) return;
+      if (!e.isTrusted || mine.busy || mine.cancelled || picking || making > 0) return;
       const x = extras();
       if (only && !x.files.length) return;
       lock(true);

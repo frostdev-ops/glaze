@@ -85,12 +85,17 @@ const firefoxFixture = (branch, check) => {
     fs.mkdirSync(path.join(seed, 'planner')); fs.writeFileSync(path.join(seed, 'planner/gcal-auth.js'), '// offline fixture\n');
     fs.writeFileSync(path.join(dir, 'extension/manifest.json'), JSON.stringify(manifest));
     fs.copyFileSync(path.join(__dirname, '../../tools/build/package-firefox.sh'), path.join(scripts, 'package-firefox.sh'));
+    // What its Google step reads (tools/build/oauth-manifest.js and the Drive config it judges).
+    for (const f of ['../tools/build/oauth-manifest.js', 'background/google.js', 'background/google-config.js', 'background/oauth.js']) {
+      const to = path.join(dir, f.startsWith('../') ? f.slice(3) : `extension/${f}`);
+      fs.mkdirSync(path.dirname(to), { recursive: true }); fs.copyFileSync(path.join(root, f), to);
+    }
     const zip = path.join(dir, 'input.zip'), marker = path.join(dir, 'packager-called');
     execFileSync('zip', ['-qr', zip, '.'], { cwd: seed });
     fs.writeFileSync(path.join(dir, 'tools/build/package.sh'), '#!/bin/sh\nset -eu\nmkdir -p "$DIST"\nprintf called > "$GZ_AUDIT_PACKAGER_MARKER"\ncp "$GZ_AUDIT_CHROME_ZIP" "$DIST/glaze-v' + manifest.version + '.zip"\n', { mode: 0o755 });
     const git = (...args) => execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', ...args], { cwd: dir, stdio: 'pipe' });
     git('init', '--initial-branch=' + branch);
-    git('add', 'extension/manifest.json', 'tools/build/package.sh', 'tools/build/package-firefox.sh');
+    git('add', 'extension', 'tools/build');
     git('-c', 'user.name=Glaze fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'Create offline packaging fixture');
     const dist = path.join(dir, 'dist');
     const result = spawnSync('sh', ['tools/build/package-firefox.sh'], { cwd: dir, encoding: 'utf8',

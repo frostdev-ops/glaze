@@ -7,7 +7,7 @@
 
 import SafariServices
 import os.log
-#if os(macOS) && GLAZE_DMG
+#if os(macOS)
 import AppKit
 #endif
 
@@ -59,6 +59,28 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
             return
         }
         #endif
+
+        // Google sign-in for Drive (GlazeGoogle.swift). On macOS the sign-in URL goes to this extension's own app.
+        if let google = GlazeGoogle.Request(message, profile: profile) {
+            Task {
+                let answer = await GlazeGoogle.reply(to: google) { url in
+                    #if os(macOS)
+                    let app = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+                    let configuration = NSWorkspace.OpenConfiguration()
+                    configuration.activates = true
+                    return await withCheckedContinuation { done in
+                        NSWorkspace.shared.open([url], withApplicationAt: app, configuration: configuration) { _, error in done.resume(returning: error == nil) }
+                    }
+                    #else
+                    return false
+                    #endif
+                }
+                let response = NSExtensionItem()
+                response.userInfo = [SFExtensionMessageKey: answer]
+                context.completeRequest(returningItems: [response], completionHandler: nil)
+            }
+            return
+        }
 
         // The AI harness's apple provider (GlazeAI.swift). Never log native message bodies.
         if let command = message as? [String: Any], (command["type"] as? String)?.hasPrefix("ai.") == true {

@@ -14,10 +14,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NS
     private var updateStatus = ""
     private var agents: GlazeAgentHost?
     private var preparedUpdate = false
+    private var signingIn = 0
 
     func application(_ application: NSApplication, open urls: [URL]) {
         // URL parameters never select a feed, file, action or installation target.
         if urls.contains(where: { $0.absoluteString == GlazeAgentBridge.start }) { startAgents() }
+        // Drive's sign-in (GlazeGoogleSignIn.swift): a hidden launch stays up until it ends.
+        for url in urls {
+            signingIn += 1
+            if !GlazeGoogleSignIn.shared.open(url, done: { [weak self] in
+                guard let self else { return }
+                self.signingIn -= 1
+                self.finishHidden("google sign-in ended")
+            }) { signingIn -= 1 }
+        }
         guard urls.contains(where: { $0.absoluteString == "io.frostdev.glaze-update://check" }) else { return }
         NSLog("Glaze update: private URL received, launched=%d", launched)
         pendingCheck = true
@@ -192,10 +202,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NS
     /// force: even while agents keep the app up.
     private func finishHidden(_ reason: String, force: Bool = false, forUpdate: Bool = false) {
         NSLog("Glaze update: %@, user=%d", reason, userSession)
-        guard !userSession, force || agents == nil || forUpdate && agents?.canInstallUpdate == true else { return }
+        guard !userSession, force || signingIn == 0 && (agents == nil || forUpdate && agents?.canInstallUpdate == true) else { return }
         DispatchQueue.main.async { [weak self] in
             // A normal launch can open the guide before this queued termination runs.
-            guard let self, !self.userSession, force || self.agents == nil || forUpdate && self.agents?.canInstallUpdate == true else { return }
+            guard let self, !self.userSession,
+                  force || self.signingIn == 0 && (self.agents == nil || forUpdate && self.agents?.canInstallUpdate == true) else { return }
             NSApp.terminate(nil)
         }
     }

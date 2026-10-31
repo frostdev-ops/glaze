@@ -1349,6 +1349,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
           btn({ role: 'menuitem', onclick: () => { close(); exportFile(); } }, t('Export .docx')),
           ...(globalThis.GZ_WRITER_PRINT?.items() || []).map((it) => btn({ role: 'menuitem', onclick: () => { close(); it.run(); } }, it.label)),
           btn({ role: 'menuitem', onclick: () => { close(); file.click(); } }, host.standalone ? t('Import .docx…') : t('Import…')),
+          ...(globalThis.GZ_DRIVE?.page?.items(api, bring) || []).map((it) => btn({ role: 'menuitem', onclick: () => { close(); it.run(); } }, it.label)),
           own ? null : btn({ role: 'menuitem', onclick: () => { close(); fromDocsSheet(); } }, t('Open from Documents')),
           host.standalone ? null : btn({ role: 'menuitem', onclick: () => { close(); open2('papers.html'); } }, t('Documents'))]));
       el.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); close(true); } });
