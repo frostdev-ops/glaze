@@ -52,7 +52,7 @@ var GZ_NAV = globalThis.GZ_NAV || (() => {
     const l = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: chrome.runtime.getURL('navigation/page/navbar.css') });
     for (const [n, v] of k.a) host.setAttribute(n, v);
     host.dataset.first = '';
-    const path = location.pathname.replace(/\/$/, ''), parse = (m) => { const t = document.createElement('template'); t.innerHTML = m; paint(t.content, path); return t.content; };
+    const path = location.pathname.replace(/\/$/, ''), parse = (m) => { const b = new DOMParser().parseFromString(m, 'text/html').body; paint(b, path); return b.childNodes; };
     // Its markers on the current item, as the bar's layout() puts them.
     const glide = () => {
       for (const i of root.querySelectorAll('.ind, .tind')) {
@@ -65,7 +65,7 @@ var GZ_NAV = globalThis.GZ_NAV || (() => {
     // for, and the copy gone for any other.
     const live = () => host.isConnected && host.hasAttribute('data-first');
     l.onload = () => { if (live()) { if (root.adoptedStyleSheets?.length) root.adoptedStyleSheets = []; host.hidden = false; glide(); } };
-    root.append(l, parse(k.m));
+    root.append(l, ...parse(k.m));
     (document.body || document.documentElement).prepend(host);
     // Styled at once from its kept sheet where it can be, so it is in the first paint.
     try { if (typeof k.c == 'string' && k.c) { const c = new CSSStyleSheet(); c.replaceSync(k.c); root.adoptedStyleSheets = [c]; host.hidden = false; glide(); } } catch { /* the sheet's load shows it */ }
@@ -77,7 +77,7 @@ var GZ_NAV = globalThis.GZ_NAV || (() => {
     Promise.resolve().then(() => account?.()).then((id) => {
       if (!live()) return;
       if (!id || String(id) !== k.u) return gone();
-      for (const e of root.querySelectorAll('[data-p]')) e.replaceWith(parse(k.p[e.dataset.p] || ''));
+      for (const e of root.querySelectorAll('[data-p]')) e.replaceWith(...parse(k.p[e.dataset.p] || ''));
       if (!host.hidden) glide();
     }, gone);
   };

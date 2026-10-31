@@ -110,18 +110,11 @@ function setup({ path = '/ultra/course', store = new Map(), account = () => Prom
 
 function firstPage(account, css) {
   const h = setup({ navbar: { on: false } }), { document, context, settings, store } = h;
-  const create = document.createElement;
-  document.createElement = (tag) => {
-    const e = create(tag);
-    if (tag === 'template') {
-      e.content = create('div');
-      Object.defineProperty(e, 'innerHTML', { set(markup) {
-        const doc = { ...document, root: new El('html', document) };
-        const body = upgrade(parse(`<body>${markup}</body>`, doc));
-        e.content.append(...body.children);
-      } });
+  context.DOMParser = class {
+    parseFromString(markup, type) {
+      assert.equal(type, 'text/html');
+      return { body: upgrade(parse(`<body>${markup}</body>`, { ...document, root: new El('html', document) })) };
     }
-    return e;
   };
   context.GZ_NAV = undefined;
   context.CSSStyleSheet = class { replaceSync(t) { this.text = t; } };
@@ -289,6 +282,10 @@ test('private badge counts are absent from the generic copy, including tooltip m
   const s = JSON.parse(h.store.get('gz-navbar'));
   assert.ok(s.p.some((part) => part.includes('7319')), 'the count is held for account confirmation');
   assert.ok(!s.m.includes('7319'), 'the unconfirmed copy contains no count in its text or attributes');
+});
+
+test('the kept bar is parsed without innerHTML, which Firefox\'s add-on linter refuses for markup it can\'t see', () => {
+  assert.doesNotMatch(read('navigation/nav.js'), /\.(?:inner|outer)HTML\s*\+?=|insertAdjacentHTML|createContextualFragment/);
 });
 
 test('cached markup strips handlers regardless of their text and rejects alternate URL attributes', () => {
