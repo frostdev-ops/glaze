@@ -962,6 +962,41 @@ test("Details & Actions added empty on a route into a course and filled before t
   assert.deepEqual(p.store[HELD], { _101_1: 231 });
 });
 
+test("the sidebar takes a course outline's column as soon as Ultra draws it, before Ultra fills Details & Actions, so nothing under it moves", async () => {
+  const HELD = `detailsHeight:${O}`;
+  for (const from of ['courses', 'calendar']) {
+    const p = page({ at: from === 'courses' ? 'courses' : 'outline', aside: 'live', stored: { ...record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }), [HELD]: { _101_1: 231 } } });
+    const inner = p.$('#main-content-inner');
+    if (from === 'calendar') {
+      p.$('.js-details-and-actions').box = { left: 1248, top: 140, width: 320, height: 0 };
+      await p.pass();
+      inner.querySelector('.course-content-container').remove();
+      inner.append(p.el('section', 'route-view-container', 'Calendar'));
+      p.c.location.pathname = '/ultra/courses/_101_1/calendar';
+      await p.pass();
+      inner.querySelector('.route-view-container').remove();
+    } else {
+      await p.pass();
+      inner.querySelector('.base-courses-container').remove();
+    }
+    p.c.location.pathname = '/ultra/courses/_101_1/outline';
+    const { details, aside, content } = routedOutline(p);
+    inner.append(p.el('div', 'course-content-container', p.el('div', 'panel-wrap', p.el('div', 'bb-course-navigation', 'Course'), p.el('div', 'course-outline-grid', content, aside))));
+    await p.pass();
+    assert.equal(aside.dataset.gzSidebarHost, 'native', `${from}: the new column is taken while Details & Actions is still empty`);
+    assert.equal(p.side.context().family, 'outline', from);
+    assert.equal(aside.children[1].className, 'gz-sb-head', `${from}: Glaze's header in place first`);
+    assert.equal(p.$('.gz-sb-pagehead').hidden, false, `${from}: This page shows from the start, while held`);
+    assert.equal(heldRoom(p), 231, from);
+    const order = () => [...aside.children].map((e) => e.className || e.id);
+    const before = order();
+    fillDetails(p, details, 7);
+    await p.pass();
+    assert.deepEqual(order(), before, `${from}: filling it puts nothing new above what is under it`);
+    assert.equal(heldRoom(p), 0, from);
+  }
+});
+
 test("Details & Actions drawn again on a route back into Content in a course tab is held before the page settles", async () => {
   const HELD = `detailsHeight:${O}`;
   const p = page({ at: 'outline', aside: 'live', stored: { ...record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }), [HELD]: { _101_1: 231 } } });
