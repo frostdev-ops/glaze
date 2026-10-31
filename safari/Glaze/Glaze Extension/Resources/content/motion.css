@@ -91,9 +91,8 @@ html[data-gz-ctab-framed] { --gz-ambient: paused; }
 .route-view-container, .panel-wrap { animation: var(--gz-enter-page); }
 #site-wrap :is(.bb-offcanvas-panel, .peek-panel__content-wrapper) :is(.route-view-container, .panel-wrap) { animation: none; }
 #site-wrap .peek-panel__content-wrapper, #site-wrap .bb-offcanvas-panel, .ms-Panel-main { animation: var(--gz-enter-panel); }
-/* Page changes: content.js holds the old page while Ultra builds the next, then the two crossfade. */
+/* Page changes that crossfade (canvas.css, moodle.css: Page transitions). */
 ::view-transition-group(root) { animation-duration: var(--gz-t-page); animation-timing-function: var(--gz-ease); }
-[data-gz-held] { animation: none !important; }
 /* A change Glaze crossfades in place (core/motion.js swap: a palette, the sidebar): a plain crossfade at the transitions'
    pace, whatever a page change would do (Expressive's settle, canvas.css). Named parts (the rail) still glide. */
 html[data-gz-swap]::view-transition-group(root) { animation-duration: var(--gz-t); }

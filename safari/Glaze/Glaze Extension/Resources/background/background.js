@@ -2158,7 +2158,7 @@ const lightUp = async () => {
   await new Promise((done) => dc.onPageChanged.addRules(LIT.map((c) => ({ conditions: [new dc.PageStateMatcher(c)], actions: [new dc.SetIcon({ imageData })] })), done));
 };
 const ownIcon = () => Object.fromEntries(Object.entries(chrome.runtime.getManifest().action.default_icon).map(([k, v]) => [k, `/${v}`]));
-// Glaze's crossfades (core/motion.js swap, content-ultra.js's page links) start in its content scripts' world, but Chrome
+// Glaze's crossfades (core/motion.js swap) start in its content scripts' world, but Chrome
 // rejects a skipped or timed-out one's ready in the page's own world as well, where only the page's code can handle it and
 // a school's error tracker would collect it. This, in each frame Glaze runs in, answers their glaze:transition event: it
 // cancels a presence probe (the guard is here) and, on the separate handoff, marks the transition started's ready handled.

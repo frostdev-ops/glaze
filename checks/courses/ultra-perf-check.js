@@ -15,6 +15,8 @@ const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest(
 // PERF_SPEED=1: what a student waits for, Glaze off (enabled: false) against on: styled-at, paints, long tasks, long
 // animation frames and layout shift per stage, an idle window, glaze:load round trips and a cold course-tab open.
 // PERF_DEVICE=neo: a MacBook Neo (A18 Pro, 2P+4E cores, 8 GB): 6 cores, the CPU throttled to its Chrome speed, its screen.
+// PERF_PROFILE=1: the course open's CPU profile (self time by script and function, built-ins charged to their caller) and its
+// style and layout passes with the scripts that forced them, in outline.profile; =selectors adds Chrome's selector stats.
 const speed = process.env.PERF_SPEED === '1';
 const neo = process.env.PERF_DEVICE === 'neo';
 // Speedometer 3.1 in Chrome on the MacBook Neo, from HotHardware's review (Safari: 50.4).
@@ -345,6 +347,61 @@ async function courseTabOpen(context, editor, prepare) {
   } finally { await page.close(); }
 }
 
+// Self time by script and by function, from a CPU profile: where a stage's main-thread time went, the content scripts'
+// (chrome-extension://) among the page's.
+const startProfile = async (page) => {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Profiler.enable');
+  await cdp.send('Profiler.setSamplingInterval', { interval: 100 });
+  await cdp.send('Profiler.start');
+  const events = [];
+  cdp.on('Tracing.dataCollected', ({ value }) => events.push(...value));
+  await cdp.send('Tracing.start', { categories: `devtools.timeline,disabled-by-default-devtools.timeline.stack${process.env.PERF_PROFILE === 'selectors' ? ',disabled-by-default-blink.debug' : ''}`, transferMode: 'ReportEvents' });
+  return { cdp, events };
+};
+const stopProfile = async ({ cdp, events }) => {
+  const { profile } = await cdp.send('Profiler.stop');
+  const ended = new Promise((r) => cdp.once('Tracing.tracingComplete', r));
+  await cdp.send('Tracing.end');
+  await ended;
+  await cdp.detach();
+  // Style and layout passes: how many, how long, and the script that forced each one that didn't wait for a frame.
+  const passes = {};
+  for (const e of events) {
+    if (e.ph !== 'X' || !['Layout', 'UpdateLayoutTree'].includes(e.name)) continue;
+    const row = passes[e.name] ||= { count: 0, ms: 0, forced: {} };
+    row.count++; row.ms += e.dur / 1000;
+    const top = (e.args?.beginData?.stackTrace || e.args?.data?.stackTrace)?.[0];
+    // Trace stack lines are already one-based; the CPU profile's call frames below are zero-based.
+    if (top) { const k = `${top.url.replace(/^chrome-extension:\/\/[a-p]{32}\//, 'ext:') || '(page)'} ${top.functionName}:${top.lineNumber}`; const f = row.forced[k] ||= { count: 0, ms: 0 }; f.count++; f.ms += e.dur / 1000; }
+  }
+  // PERF_PROFILE=selectors: the style passes' costliest selectors (Chrome's selector stats).
+  const selectors = {};
+  for (const e of events) for (const t of e.args?.selector_stats?.selector_timings || []) {
+    const row = selectors[t.selector] ||= { us: 0, attempts: 0, matches: 0 };
+    row.us += t['elapsed (us)'] || 0; row.attempts += t.match_attempts || 0; row.matches += t.match_count || 0;
+  }
+  if (Object.keys(selectors).length) passes.selectors = Object.entries(selectors).sort((a, b) => b[1].us - a[1].us).slice(0, 30).map(([k, v]) => [k.slice(0, 160), +(v.us / 1000).toFixed(2), v.attempts, v.matches]);
+  for (const row of Object.values(passes).filter((r) => !Array.isArray(r))) { row.ms = +row.ms.toFixed(1); row.forced = Object.entries(row.forced).sort((a, b) => b[1].ms - a[1].ms).slice(0, 15).map(([k, v]) => [k, v.count, +v.ms.toFixed(1)]); }
+  const self = new Map(), parent = new Map(), node = new Map(profile.nodes.map((n) => [n.id, n]));
+  profile.samples.forEach((id, i) => self.set(id, (self.get(id) || 0) + (profile.timeDeltas[i] || 0) / 1000));
+  for (const n of profile.nodes) for (const c of n.children || []) parent.set(c, n.id);
+  // A built-in (getBoundingClientRect, querySelectorAll) has no script of its own: its time is its nearest caller's.
+  const caller = (n) => { let x = n; while (x && !x.callFrame.url) x = node.get(parent.get(x.id)); return x; };
+  const byFile = {}, byFn = {};
+  for (const n of profile.nodes) {
+    const ms = self.get(n.id) || 0;
+    if (!ms) continue;
+    const c = caller(n) || n, { url, functionName, lineNumber } = c.callFrame;
+    const file = url.replace(/^chrome-extension:\/\/[a-p]{32}\//, 'ext:') || `(${functionName || 'anonymous'})`;
+    byFile[file] = (byFile[file] || 0) + ms;
+    const fn = `${file} ${functionName || '(anonymous)'}:${lineNumber + 1}${c === n ? '' : ` > ${n.callFrame.functionName}`}`;
+    byFn[fn] = (byFn[fn] || 0) + ms;
+  }
+  const top = (o, n) => Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, ms]) => [k, +ms.toFixed(1)]);
+  const total = (f) => +Object.entries(byFile).filter(([k]) => f(k)).reduce((n, [, ms]) => n + ms, 0).toFixed(1);
+  return { passes, extensionMs: total((k) => k.startsWith('ext:')), pageMs: total((k) => !k.startsWith('ext:') && !k.startsWith('(')), files: top(byFile, 25), functions: top(byFn, 40) };
+};
 const snapshot = (page, on) => on ? page.evaluate(() => { document.dispatchEvent(new Event('gz-perf-read')); return JSON.parse(document.documentElement.getAttribute('data-gz-perf')); }) : null;
 const listeners = async (cdp) => {
   const counts = {};
@@ -471,7 +528,9 @@ if (require.main === module) (async () => {
         initial.snapshot = await snapshot(page, instrumented);
         const courses = await settle(page, 'course');
         courses.snapshot = await snapshot(page, instrumented);
+        const profiler = process.env.PERF_PROFILE && !instrumented && await startProfile(page);
         const outline = await settle(page, 'outline');
+        if (profiler) outline.profile = await stopProfile(profiler);
         outline.snapshot = await snapshot(page, instrumented);
         let lateProbe = null;
         if (process.env.PERF_LATE_PASSES) {

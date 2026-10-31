@@ -363,7 +363,7 @@ test("Ultra's grades load where they're used: the what-if on a course's Grades, 
     ['Insights', '/ultra/course', 'insights', 'syncInsights', 'planner/page/insights.js', 'GZ_INSIGHTS_UI', 'sync'],
     ['Insights, on a course', '/ultra/courses/_1_1/outline', 'insights', 'syncInsights', null],
     ['Glaze off', '/ultra/grades', 'gpa', 'renderCalc', null, 'off']]) {
-    const h = hooks('  // ---- grades (Extras)', '  // ---- page changes', { src: ultraPart, ultra: true, location: { pathname: path }, api: 'renderCalc, syncSyl, syncInsights' });
+    const h = hooks('  // ---- grades (Extras)', '  // ---- course colors and tint', { src: ultraPart, ultra: true, location: { pathname: path }, api: 'renderCalc, syncSyl, syncInsights' });
     if (on) h.ctx.settings.enhance[on] = true;
     if (name === 'off') h.ctx.observer = null;
     h.ctx.api[hook]();
