@@ -200,3 +200,9 @@ test('the shared wording rules: "for example," and its five locale forms are the
     assert.equal(WD.offers(s, { examples: false }), false, s);
   }
 });
+
+test('quoting the student\'s own equation back is no step: only a new result or equation is', () => {
+  const m = inp({ question: 'Solve for x: 3x + 5 = 20', attempt: '3x = 25' });
+  assert.equal(why(m, 'check-my-step', 'Look at how the 5 moved: in your 3x = 25 it was added to 20. What do you get when you take 5 away from both sides of 3x + 5 = 20?', 'mistake'), '');
+  assert.equal(why(m, 'hint', 'So 3x + 5 - 5 = 20 - 5 = 15.'), 'solves');
+});

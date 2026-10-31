@@ -168,7 +168,8 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
       const mine = numbers(inp.attempt);
       for (const m of all.matchAll(RESULT)) {
         const r = value(m[1]), left = all.slice(0, m.index).split(/[.!?;\n=≈→⇒]/).pop();
-        if (mine.some((k) => same(k, r)) || (isKnown(r) && !OPS.test(left)) || !isStep(r, decimals(m[1]))) continue;
+        const quoted = (`${left}${m[0]}`.match(EQUATION) || []).pop();
+        if (mine.some((k) => same(k, r)) || (quoted && own.includes(squash(quoted))) || (isKnown(r) && !OPS.test(left)) || !isStep(r, decimals(m[1]))) continue;
         if (numbers(left).some((n) => !isKnown(n)) || letters(left).some((v) => !vars.has(v) && variables(left).has(v))) continue;
         return 'solves';
       }
