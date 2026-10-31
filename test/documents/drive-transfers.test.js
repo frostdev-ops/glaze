@@ -561,3 +561,54 @@ test('a worker whose stage won\'t open (IndexedDB refused) still syncs: small it
   assert.equal(JSON.parse(fileOf(drive, key, 'doc').bytes).file, fileOf(drive, key, 'file').meta.id);
   assert.deepEqual(await moves(dk), {});
 });
+
+test('a staged record update cannot overwrite a later change back to the original value on another device', async () => {
+  const drive = standin(), da = disk(), db = disk(da.clock), key = 'writer:sources:local|local|papers|reader';
+  const original = { at: da.clock.t, sources: [{ id: 's1', title: 'Original source' }] };
+  await da.store.set({ [key]: original });
+  const a = worker(drive, da, { records: true }), b = worker(drive, db, { records: true });
+  assert.ok((await a.sync.set(true)).ok);
+  assert.ok((await b.sync.set(true)).ok);
+  const h = sha(`local\n${key}`).slice(0, 32), id = [...drive.files.values()].find((f) => f.meta.appProperties.key === h).meta.id;
+  da.clock.t += 1000;
+  const changed = { at: da.clock.t, sources: [{ id: 's1', title: 'Earlier change', text: 'E'.repeat(6 * MiB) }] };
+  await da.store.set({ [key]: changed });
+  await a.more.stamp({ [key]: { oldValue: original, newValue: changed } }, 'local');
+  await stopped(a.sync.run({ push: true }), drive.cut(0, (e) => e.chunk && !e.chunk.status));
+  // B edits and then returns to the original content, later than A's pending change.
+  db.clock.t += 1000;
+  const temporary = { at: db.clock.t, sources: [] };
+  await db.store.set({ [key]: temporary });
+  await b.more.stamp({ [key]: { oldValue: original, newValue: temporary } }, 'local');
+  await db.store.set({ [key]: original });
+  await b.more.stamp({ [key]: { oldValue: temporary, newValue: original } }, 'local');
+  assert.ok((await b.sync.run({ push: true })).ok);
+  assert.equal(Number(drive.view(id).appProperties.at), db.clock.t, 'Drive records the later return to this value');
+  assert.ok((await worker(drive, da, { records: true }).sync.run()).ok);
+  assert.equal(JSON.parse(drive.files.get(id).bytes).value.sources[0].title, 'Original source', 'the later change wins even though its sum matches the staged aim');
+  assert.deepEqual((await da.store.get(key))[key], original);
+  assert.deepEqual(await moves(da), {});
+});
+
+test('a completed download still settles when the next worker cannot open its stage', async () => {
+  const drive = standin(), da = disk(), db = disk(da.clock), key = 'doc:00000000-0000-4000-8000-00000000a032';
+  const a = worker(drive, da), bytes = bytesOf(6 * MiB, 67);
+  await pdfOn(a, da, key, bytes, 'Reader');
+  assert.ok((await a.sync.set(true)).ok);
+  const set = db.store.set;
+  let hang;
+  const reached = new Promise((r) => { hang = r; });
+  db.store.set = async (o) => {
+    await set(o);
+    if (Object.values(o.driveSyncMoves || {}).some((t) => t.dir === 'down' && t.done)) { hang(); return new Promise(() => {}); }
+  };
+  await stopped(worker(drive, db).sync.set(true), reached);
+  db.store.set = set;
+  const keys = db.stage.keys;
+  db.stage.keys = db.stage.entries = db.stage.get = () => { throw Object.assign(new Error('refused'), { why: 'unavailable' }); };
+  const b = worker(drive, db), result = await b.sync.set(true);
+  assert.ok(result.ok, JSON.stringify(result));
+  assert.equal(sha(await db.files.read((await b.papers.get(key)).file.hash)), sha(bytes));
+  assert.deepEqual(await moves(db), {});
+  db.stage.keys = keys;
+});
