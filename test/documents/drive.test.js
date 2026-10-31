@@ -11,6 +11,11 @@ const { MIME, FILES, SAVED, ERRORS } = require('../fixtures/drive/v3.js');
 const API = 'https://www.googleapis.com/drive/v3/files';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 const META = 'id%2Cname%2CmimeType%2Csize%2Ctrashed%2Ccapabilities%28canEdit%2CcanDownload%29';
+// What Save reads of the file it saved last (META's, and what tells its own last write from an edit made outside Glaze),
+// and of the one it writes.
+const CHECK = `${META}%2CheadRevisionId%2Csha256Checksum%2CappProperties%2CmodifiedTime`;
+const WROTE = 'id%2Cname%2CmimeType%2CheadRevisionId%2CmodifiedTime';
+const sha = (bytes) => require('node:crypto').createHash('sha256').update(bytes).digest('hex');
 const ALL = ['paper', 'sheet', 'pdf', 'slides'];
 const json = (status, body, headers = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=UTF-8', ...headers } });
 // A body that streams n bytes in pieces, counting how much was read and whether it was cancelled.
@@ -138,45 +143,66 @@ test('save: a multipart create into My Drive, as the file or as a Google Doc', a
   const bytes = new Uint8Array([80, 75, 3, 4, 0, 255, 13, 10]);
   let h = harness([json(200, SAVED.file)]);
   let r = await h.drive.save({ name: 'Essay.docx', mime: MIME.docx, bytes, as: 'file' });
-  assert.deepEqual(r, { id: SAVED.file.id, fresh: false });
+  assert.deepEqual(r, { id: SAVED.file.id, fresh: false, rev: null, mod: null });
   const c = h.log.fetch[0];
-  assert.equal(c.url, `${UPLOAD}?uploadType=multipart&fields=id%2Cname%2CmimeType`);
+  assert.equal(c.url, `${UPLOAD}?uploadType=multipart&fields=${WROTE}`);
   assert.equal(c.init.method, 'POST');
   assert.deepEqual(c.init.headers, { authorization: 'Bearer tok-1', 'content-type': 'multipart/related; boundary=glaze-B0und4ry' });
   assert.deepEqual(plain(c.init), SAFE);
-  assert.equal(decode(c.init.body), multipart({ name: 'Essay.docx', mimeType: MIME.docx }, MIME.docx, bytes));
+  assert.equal(decode(c.init.body), multipart({ name: 'Essay.docx', mimeType: MIME.docx, appProperties: { b: sha(bytes) } }, MIME.docx, bytes), 'its bytes\' SHA-256 on it, as Sync tags its files');
   // A Google Doc: the target type on create, the name without .docx; the media is the .docx Drive converts.
   h = harness([json(200, SAVED.doc)]);
   r = await h.drive.save({ name: 'Essay.docx', mime: MIME.docx, bytes, as: 'doc' });
-  assert.deepEqual(r, { id: SAVED.doc.id, fresh: false });
-  assert.equal(decode(h.log.fetch[0].init.body), multipart({ name: 'Essay', mimeType: MIME.doc }, MIME.docx, bytes));
+  assert.deepEqual(r, { id: SAVED.doc.id, fresh: false, rev: null, mod: null });
+  assert.equal(decode(h.log.fetch[0].init.body), multipart({ name: 'Essay', mimeType: MIME.doc }, MIME.docx, bytes), 'a Google Doc has no bytes of its own to hash');
   await fails(harness().drive.save({ name: 'Talk.pptx', mime: MIME.pptx, bytes, as: 'doc' }), 'bad');
   await fails(harness().drive.save({ name: 'x.pdf', mime: MIME.pdf, bytes: new Uint8Array(0), as: 'file' }), 'bad');
   await fails(harness([json(200, { name: 'no id' })]).drive.save({ name: 'x.pdf', mime: MIME.pdf, bytes, as: 'file' }), 'bad');
 });
 
-test('save again: the same Drive file is updated once it is confirmed there, editable and still the same type', async () => {
+test('save again: the same Drive file is updated once it is confirmed there, editable, still the same type and not edited since', async () => {
   const bytes = new Uint8Array([1, 2, 3]);
-  let h = harness([json(200, FILES.docx), json(200, { ...SAVED.file, id: FILES.docx.id })]);
-  let r = await h.drive.save({ name: 'Essay.docx', mime: MIME.docx, bytes, as: 'file', id: FILES.docx.id });
-  assert.deepEqual(r, { id: FILES.docx.id, fresh: false });
-  assert.equal(h.log.fetch[0].url, `${API}/${FILES.docx.id}?fields=${META}&supportsAllDrives=true`);
+  let h = harness([json(200, { ...FILES.docx, headRevisionId: '0Brev1' }), json(200, { ...SAVED.file, id: FILES.docx.id, headRevisionId: '0Brev2', modifiedTime: '2026-10-31T10:00:00.000Z' })]);
+  let r = await h.drive.save({ name: 'Essay.docx', mime: MIME.docx, bytes, as: 'file', id: FILES.docx.id, rev: '0Brev1' });
+  assert.deepEqual(r, { id: FILES.docx.id, fresh: false, rev: '0Brev2', mod: '2026-10-31T10:00:00.000Z' });
+  assert.equal(h.log.fetch[0].url, `${API}/${FILES.docx.id}?fields=${CHECK}&supportsAllDrives=true`);
   const u = h.log.fetch[1];
-  assert.equal(u.url, `${UPLOAD}/${FILES.docx.id}?uploadType=multipart&fields=id%2Cname%2CmimeType&supportsAllDrives=true`);
+  assert.equal(u.url, `${UPLOAD}/${FILES.docx.id}?uploadType=multipart&fields=${WROTE}&supportsAllDrives=true`);
   assert.equal(u.init.method, 'PATCH');
   assert.deepEqual(plain(u.init), SAFE);
-  assert.equal(decode(u.init.body), multipart({}, MIME.docx, bytes), 'the content only: a name given in Drive stays');
-  h = harness([json(200, { ...FILES.doc, id: SAVED.doc.id }), json(200, SAVED.doc)]);
-  r = await h.drive.save({ name: 'Essay.docx', mime: MIME.docx, bytes, as: 'doc', id: SAVED.doc.id });
-  assert.deepEqual(r, { id: SAVED.doc.id, fresh: false });
+  assert.equal(decode(u.init.body), multipart({ appProperties: { b: sha(bytes) } }, MIME.docx, bytes), 'the content and its tag only: a name given in Drive stays');
+  // Glaze's own last write whose answer never came: a newer revision, but Drive's checksum is the one Glaze tagged it with.
+  h = harness([json(200, { ...FILES.docx, headRevisionId: '0Brev3', sha256Checksum: 'AB12', appProperties: { b: 'ab12' } }), json(200, { ...SAVED.file, id: FILES.docx.id })]);
+  r = await h.drive.save({ name: 'Essay.docx', mime: MIME.docx, bytes, as: 'file', id: FILES.docx.id, rev: '0Brev1' });
   assert.equal(h.log.fetch[1].init.method, 'PATCH');
+  assert.equal(r.fresh, false);
+  // A Google Doc has no revision or checksum of its own: its last change time is what Glaze recorded.
+  h = harness([json(200, { ...FILES.doc, id: SAVED.doc.id, modifiedTime: '2026-10-31T10:00:00.000Z' }), json(200, SAVED.doc)]);
+  r = await h.drive.save({ name: 'Essay.docx', mime: MIME.docx, bytes, as: 'doc', id: SAVED.doc.id, mod: '2026-10-31T10:00:00.000Z' });
+  assert.deepEqual(r, { id: SAVED.doc.id, fresh: false, rev: null, mod: null });
+  assert.equal(h.log.fetch[1].init.method, 'PATCH');
+  assert.equal(decode(h.log.fetch[1].init.body), multipart({}, MIME.docx, bytes));
+  // Edited outside Glaze since (another revision, its checksum not Glaze's; a Doc changed since), or nothing recorded to
+  // tell: a new file beside it, said as fresh. The edited one is never written.
+  for (const [label, first, mark, as = 'file'] of [
+    ['a new revision', json(200, { ...FILES.docx, headRevisionId: '0Brev9', sha256Checksum: 'ff00', appProperties: { b: 'ab12' } }), { rev: '0Brev1' }],
+    ['a new revision, no tag', json(200, { ...FILES.docx, headRevisionId: '0Brev9', sha256Checksum: 'ff00' }), { rev: '0Brev1' }],
+    ['nothing recorded', json(200, { ...FILES.docx, headRevisionId: '0Brev1' }), {}],
+    ['a Doc changed since', json(200, { ...FILES.doc, id: SAVED.doc.id, modifiedTime: '2026-10-31T11:00:00.000Z' }), { mod: '2026-10-31T10:00:00.000Z' }, 'doc'],
+  ]) {
+    h = harness([first, json(200, as === 'doc' ? SAVED.doc : SAVED.file)]);
+    r = await h.drive.save({ name: 'Essay.docx', mime: MIME.docx, bytes, as, id: as === 'doc' ? SAVED.doc.id : FILES.docx.id, ...mark });
+    assert.equal(r.fresh, true, label);
+    assert.equal(h.log.fetch[1].init.method, 'POST', label);
+    assert.equal(h.log.fetch[1].url.startsWith(`${UPLOAD}?`), true, label);
+  }
   // Not there any more, or not Glaze's to change: a new file, said as fresh.
   for (const [label, first] of [['deleted', json(404, ERRORS[404])], ['trashed', json(200, FILES.trashed)], ['read-only', json(200, FILES.readOnly)],
     ['no permission', json(403, ERRORS.insufficientFilePermissions)], ['not granted to Glaze', json(403, ERRORS.appNotAuthorizedToFile)],
     ['now a Google Doc', json(200, { ...FILES.docx, mimeType: MIME.doc })]]) {
     h = harness([first, json(200, SAVED.file)]);
     r = await h.drive.save({ name: 'Essay.docx', mime: MIME.docx, bytes, as: 'file', id: FILES.docx.id });
-    assert.deepEqual(r, { id: SAVED.file.id, fresh: true }, label);
+    assert.deepEqual(r, { id: SAVED.file.id, fresh: true, rev: null, mod: null }, label);
     assert.equal(h.log.fetch[1].init.method, 'POST', label);
   }
   // Drive busy or the network down while checking: no copy made behind the student's back.
@@ -301,27 +327,27 @@ test('the port: a page saves a document, the worker remembers its Drive file and
   const records = new Map([['doc:1', null]]);
   const record = { get: async (k) => (records.has(k) ? { drive: records.get(k) } : null), set: async (k, d) => { records.set(k, d); return true; } };
   let uploaded = null;
-  let h = harness([async (url, init) => { uploaded = init.body; return json(200, SAVED.file); }]);
+  let h = harness([async (url, init) => { uploaded = init.body; return json(200, { ...SAVED.file, headRevisionId: '0Brev1', modifiedTime: '2026-10-31T10:00:00.000Z' }); }]);
   let [page, worker] = ports();
   D.serve(worker, { drive: h.drive, record, allowed: async () => true });
   const r = await D.client(() => page).save({ key: 'doc:1', name: 'Essay.docx', mime: MIME.docx, bytes, as: 'file' });
   assert.deepEqual(r, { type: 'saved', id: SAVED.file.id, fresh: false });
   assert.ok(decode(uploaded).includes(decode(bytes)), 'every chunk arrived, in order');
-  assert.deepEqual(records.get('doc:1'), { id: SAVED.file.id, as: 'file' });
+  assert.deepEqual(records.get('doc:1'), { id: SAVED.file.id, as: 'file', rev: '0Brev1', mod: '2026-10-31T10:00:00.000Z' }, 'the file, and the revision Glaze wrote');
   // Next time: the check, then the update of that file.
-  h = harness([json(200, { ...FILES.docx, id: SAVED.file.id }), json(200, SAVED.file)]);
+  h = harness([json(200, { ...FILES.docx, id: SAVED.file.id, headRevisionId: '0Brev1' }), json(200, SAVED.file)]);
   [page, worker] = ports();
   D.serve(worker, { drive: h.drive, record, allowed: async () => true });
   await D.client(() => page).save({ key: 'doc:1', name: 'Essay.docx', mime: MIME.docx, bytes, as: 'file' });
   assert.equal(h.log.fetch[1].init.method, 'PATCH');
   assert.ok(h.log.fetch[1].url.startsWith(`${UPLOAD}/${SAVED.file.id}?`));
   // Saved as a Google Doc instead: a new one, remembered in its place.
-  h = harness([json(200, SAVED.doc)]);
+  h = harness([json(200, { ...SAVED.doc, modifiedTime: '2026-10-31T10:00:00.000Z' })]);
   [page, worker] = ports();
   D.serve(worker, { drive: h.drive, record, allowed: async () => true });
   await D.client(() => page).save({ key: 'doc:1', name: 'Essay.docx', mime: MIME.docx, bytes, as: 'doc' });
   assert.equal(h.log.fetch[0].init.method, 'POST');
-  assert.deepEqual(records.get('doc:1'), { id: SAVED.doc.id, as: 'doc' });
+  assert.deepEqual(records.get('doc:1'), { id: SAVED.doc.id, as: 'doc', mod: '2026-10-31T10:00:00.000Z' });
   // No such document: nothing uploaded.
   h = harness([]);
   [page, worker] = ports();
@@ -542,8 +568,8 @@ test('save: a 6 MB PDF goes resumable, through the same Location check Sync\'s u
   assert.equal(sd.log[0].type, 'application/json; charset=UTF-8');
 
   sd.log.length = 0;
-  const again = await drive.save({ name: 'Reading.pdf', mime: MIME.pdf, bytes: pdf, id: made.id });
-  assert.deepEqual(again, { id: made.id, fresh: false }, 'the same file updated');
+  const again = await drive.save({ name: 'Reading.pdf', mime: MIME.pdf, bytes: pdf, id: made.id, rev: made.rev });
+  assert.deepEqual([again.id, again.fresh], [made.id, false], 'the same file updated');
   assert.deepEqual(asked(), [`GET /drive/v3/files/${made.id} all`, `PATCH /upload/drive/v3/files/${made.id} resumable all`, `PUT /upload/drive/v3/files/${made.id} resumable`], 'the session\'s own address takes the bytes');
   assert.equal(sd.files.get(made.id).meta.version, '2', 'one new revision');
 
@@ -556,6 +582,38 @@ test('save: a 6 MB PDF goes resumable, through the same Location check Sync\'s u
   await fails(drive.save({ name: 'Reading.pdf', mime: MIME.pdf, bytes: pdf }), 'bad');
   assert.deepEqual(asked(), ['POST /upload/drive/v3/files resumable']);
   assert.deepEqual(elsewhere, []);
+});
+
+// Owner, 2026-10-31: Save to Drive never overwrites an edit made outside Glaze. The file it saved last, changed since (another
+// revision whose checksum isn't the one Glaze tagged it with; a Google Doc changed since), stays as it is, and Save writes a
+// new file beside it, remembered in its place.
+test('Save to Drive never overwrites a file edited outside Glaze: both files stay, and the new one is saved to next', async () => {
+  const { standin } = require('../helpers/drive-standin.cjs');
+  const enc = (t) => new TextEncoder().encode(t);
+  for (const as of ['file', 'doc']) {
+    const sd = standin();
+    const drive = D.create({ fetch: sd.fetch, token: async () => 'tok-1', boundary: () => 'B0und4ry' });
+    const records = new Map([['doc:1', null]]);
+    const record = { get: async (k) => (records.has(k) ? { drive: records.get(k) } : null), set: async (k, d) => { records.set(k, d); return true; } };
+    const save = (text) => {
+      const [page, worker] = ports();
+      D.serve(worker, { drive, record, allowed: async () => true });
+      return D.client(() => page).save({ key: 'doc:1', name: 'Essay.docx', mime: MIME.docx, bytes: enc(text), as });
+    };
+    const first = await save('draft one');
+    const second = await save('draft two');
+    assert.deepEqual([second.id, second.fresh, sd.files.size], [first.id, false, 1], `${as}: nothing changed outside, so the same file is updated`);
+    sd.edit(first.id, enc('edited in Drive'));
+    const third = await save('draft three');
+    assert.notEqual(third.id, first.id, `${as}: a new file`);
+    assert.equal(third.fresh, true);
+    assert.equal(sd.files.size, 2, `${as}: both files exist`);
+    assert.equal(Buffer.from(sd.files.get(first.id).bytes).toString(), 'edited in Drive', `${as}: the outside edit stays as it is`);
+    assert.equal(Buffer.from(sd.files.get(third.id).bytes).toString(), 'draft three');
+    assert.equal(records.get('doc:1').id, third.id, `${as}: the new one is remembered`);
+    const fourth = await save('draft four');
+    assert.deepEqual([fourth.id, fourth.fresh, sd.files.size], [third.id, false, 2], `${as}: and updated next time`);
+  }
 });
 
 // Google's Picker doesn't work everywhere Drive connects (Safari's app sign-in; a build without the Picker's key): the worker
