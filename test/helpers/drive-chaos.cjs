@@ -782,7 +782,7 @@ const KNOWN = {
     repro: [{ t: 'paper', k: 'new', d: 2, pick: 0.6620774620678276, pick2: 0.5868986349087209, s: 400112753 }, { t: 'sync', d: 2, on: true, s: 1985057254 }, { t: 'drive', k: 'outsideDocx', pick: 0.9624791145324707, s: 621458078 }, { t: 'faults', d: 2, p: 0.3, quota: false, refuse: 3 }, { t: 'run', d: 2, how: 'run', s: 2090746289 }, { t: 'account', d: 2, to: 'B', s: 1047616833 }],
   },
   'staged-first-meeting': {
-    fixed: false,
+    fixed: true,
     tiny: true,
     join: [0],
     about: 'a device joining meets a PDF replaced outside Glaze and sends it up again; its JSON copy staged (larger than one request), the document\'s link waits without its key, so the next change page meets it as deleted for good here and puts both of its files in Drive\'s trash: every other device moves it to Trash',
