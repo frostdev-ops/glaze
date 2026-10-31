@@ -167,7 +167,10 @@ in the system message, page and document text only inside the fence. `context` i
 the next (an assignment's prompt, a thread), `data` what changes (the text around the caret); leave out `fence` so the
 context keeps its tag (below). Beside them a request may carry `temperature`, `maxTokens`, `timeoutMs` and `effort`
 (`none`, `minimal`, `low`, `medium` or `high`: how long a reasoning model thinks before it answers; only an endpoint sends
-it, the models on this device ignore it). The student's effort and Advanced tuning win over the task's (Settings → AI above). Ground every extracted value in `check` with
+it, the models on this device ignore it) and `reply: { lang }` (the answer's language, a BCP 47 tag such as `de` or `pt-BR`:
+an endpoint adds one line saying it at the end of the system turn; the models on this device are not told, so their prompts
+stay what they were tuned on). An orchestrating task's `ask(request, { output, accept })` may check the answer against
+`accept`, a looser schema, while the provider still gets `output` (Feedback's comment bound per language). The student's effort and Advanced tuning win over the task's (Settings → AI above). Ground every extracted value in `check` with
 `text.source(input.text).has(quote)`, and anchor an issue to the student's text with `text.anchor(text, quote, { before, after })` → `[start, end]` (UTF-16 offsets
 in the original, the same folding as `has`) or `null` when it isn't there or is there more than once and the words around
 it don't say which. Raise `version` when the output changes.

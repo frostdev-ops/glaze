@@ -90,7 +90,7 @@ test('the lowest-band citation estimate is written in the draft\'s language', as
   assert.deepEqual(out.criteria[0]?.score, { earned: 6.25, total: 25 });
   const comment = out.criteria[0]?.comment;
   assert.doesNotMatch(comment, /Your author-page|lowest band|deducted/);
-  assert.match(comment, /Ihre .*Works Cited.*APA.*Glaze.*Poor.*6,25\/25/);
+  assert.match(comment, /Deine .*Works Cited.*APA.*Glaze.*Poor.*6,25\/25/);
   assert.ok(comment.length <= 312);
 });
 
@@ -102,7 +102,7 @@ test('the citation fallback comment is written in the draft\'s language', async 
   const out = (await result).output;
   assert.equal(out.grade.earned, 18.75);
   assert.doesNotMatch(out.criteria[0]?.comment, /Your author-page|conflict with required/);
-  assert.match(out.criteria[0]?.comment, /Ihre .*Works Cited.*APA.*Satisfactory.*18,75\/25/);
+  assert.match(out.criteria[0]?.comment, /Deine .*Works Cited.*APA.*Satisfactory.*18,75\/25/);
   assert.equal(cfg.seen.length, 4);
 });
 
@@ -166,4 +166,19 @@ test('the sentence counter skips each locale\'s common abbreviations', () => {
   }
   assert.equal(F.assesses('Ihr Entwurf nennt Belege. Die These fehlt. Der Schluss fehlt auch.', []), '', 'three real sentences stay too many');
   assert.equal(F.assesses('Your draft cites sources. The thesis is missing. The conclusion is missing too.', []), '');
+});
+
+test('Glaze\'s own Feedback comments pass its comment check and fit the allowance in every locale', () => {
+  const I = require('../../extension/core/i18n.js');
+  const keys = [['Your author-page citations and Works Cited miss required APA style; no rubric level descriptions are supplied, so Glaze estimates {level}, the lowest band ({value}/{points}; {deduction} points deducted).', { level: 'Unsatisfactory', value: '12,5', points: '25', deduction: '12,5' }],
+    ['Your author-page citations and Works Cited miss required APA style; with no level descriptions, Glaze estimates the lowest band ({value}/{points}; {deduction} points deducted).', { value: '12,5', points: '25', deduction: '12,5' }],
+    ['Your author-page citations and Works Cited heading conflict with required APA style; rubric rating: {level} ({earned}/{total} points).', { level: 'Unsatisfactory', earned: '12,5', total: '25' }]];
+  for (const [lang, limit] of [['de', 312], ['es', 288], ['fr', 288], ['nl', 288], ['pt-BR', 288]]) {
+    for (const [key, vars] of keys) {
+      const said = I.t(key, vars, lang);
+      assert.notEqual(said, I.t(key, vars, 'en'), `${lang} has its own words`);
+      assert.equal(F.assesses(said, []), said, `${lang}: ${said}`);
+      assert.ok(said.length <= limit, `${lang}: ${said.length}`);
+    }
+  }
 });
