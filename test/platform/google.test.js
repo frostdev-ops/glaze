@@ -699,7 +699,7 @@ const settings = async ({ email = 'student@school.edu', sync = {}, connect = { o
   chrome.runtime.getURL = (p = '') => `${firefox ? 'moz-extension://6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b' : 'chrome-extension://abcdefghijklmnopabcdefghijklmnop'}/${p}`;
   if (email) local.google = { email };
   vm.runInNewContext(block, {
-    $: (s) => els[s], chrome, t: (s) => s, hint: (text, bad = false) => hints.push([text, bad]), GZ_SITE: {}, GZ_I18N: { locale: () => 'en', ui: () => 'en' }, Intl, Date,
+    $: (s) => els[s], chrome, t: (s, v = {}) => s.replace(/\{(\w+)\}/g, (m, k) => (k in v ? String(v[k]) : m)), hint: (text, bad = false) => hints.push([text, bad]), GZ_SITE: {}, GZ_I18N: { locale: () => 'en', ui: () => 'en' }, Intl, Date,
     MutationObserver: class { constructor(f) { this.f = f; } observe(e) { e.observers.push(this.f); } },
   });
   const settle = () => new Promise((r) => setTimeout(r, 20));
