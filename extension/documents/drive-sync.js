@@ -703,7 +703,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
           got.file = null; got.fileRev = null; got.external = true;
         }
         if (gone?.file) { if (gone.file !== got.file) await putAway(gone.file, folder); await away([gone.file], null); }
-        const source = { ...restore, json: R.id, file: got.file, fh: got.fileRev, fsum: got.sum };
+        // A whole link, should this device's own push of it wait for the run's last step: its key, and Drive's copy as met.
+        const source = { key: key || got.key, h, kind: l ? kindOf(l.rec) : got.kind, jh: R.headRevisionId || null, rsum: j.sum, lsum: null, rev: -1, trashed: false, ...restore, json: R.id, file: got.file, fh: got.fileRev, fsum: got.sum };
         // Marked before it is written: a worker stopped before its link lands meets it again on the next run, never leaving a
         // document here that no run goes back to.
         if (!l) { await mark(got.key); const now2 = await take(got.key, null, got); if (got.external) return push(got.key, h, now2, source, folder); await agreed(got.key, h, R, got, now2, null); return; }
