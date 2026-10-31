@@ -22,7 +22,10 @@ const ORIGIN = 'https://school.blackboard.com', CDN = 'https://cdn.ultra.test';
 Object.defineProperties(El.prototype, {
   matches: { value(s) { return matches(this, s); }, configurable: true },
   getRootNode: { value() { let n = this; while (n.parentNode) n = n.parentNode; return n; }, configurable: true },
-  getClientRects: { value() { return this.hidden ? [] : [this.getBoundingClientRect()]; }, configurable: true },
+  getClientRects: { value() {
+    for (let n = this; n; n = n.parentNode || n.host) if (n.hidden) return [];
+    return [this.getBoundingClientRect()];
+  }, configurable: true },
   isConnected: { get() { let n = this; for (;;) { if (n.parentNode) n = n.parentNode; else if (n.host) n = n.host; else break; } return n === this.doc.root; }, configurable: true },
 });
 
@@ -205,6 +208,18 @@ test('Glaze\'s bar\'s links and course tabs, the strip\'s tabs and course cards 
   }
 });
 
+test('links opening another window or downloading do not cover the current page', () => {
+  for (const kind of ['course', 'bar', 'card']) for (const attrs of [{ target: '_blank' }, { target: '_BLANK' }, { target: 'other-window' }, { download: '' }]) {
+    const s = site({ at: kind === 'course' ? `/ultra/courses/${COURSE}/outline` : '/ultra/course' });
+    const a = kind === 'course' ? s.course.links.announcement : kind === 'bar' ? s.bar.grades : s.baseMain.querySelector('a.course-title');
+    for (const [key, value] of Object.entries(attrs)) a.setAttribute(key, value);
+    s.sync();
+    s.tap(a.firstElementChild || a);
+    assert.ok(!s.skel(), `${kind} ${JSON.stringify(attrs)} leaves this page visible`);
+    assert.ok(!s.pressed(kind === 'card' ? a.closest('article') : a));
+  }
+});
+
 test('a click on a course\'s tab shows a skeleton in its tool area from the click until the page\'s view is ready', () => {
   const s = site();
   s.sync();
@@ -277,6 +292,97 @@ test('on a page without its own markers it goes once Ultra\'s spinners have gone
   assert.equal(q.skel(), null, 'a new view a moment on');
 });
 
+test('readiness deadlines run without another DOM mutation, including a route-only change', () => {
+  const s = site();
+  s.sync();
+  s.tap(s.course.links.discussion);
+  s.go(`/ultra/courses/${COURSE}/engagement`);
+  s.course.tools.replaceChildren(s.VIEW.discussion());
+  s.flush();
+  assert.ok(s.skel());
+  s.tick(200);
+  s.frame();
+  assert.equal(s.skel(), null, 'the new view settles without a second mutation');
+
+  const q = site();
+  q.sync();
+  q.tap(q.course.links.calendar);
+  q.go(`/ultra/courses/${COURSE}/calendar`);
+  q.tick(100);
+  q.frame();
+  q.tick(1100);
+  q.frame();
+  assert.equal(q.skel(), null, 'a URL-only transition also reaches its readiness deadline');
+  q.tick(20000);
+  q.frame();
+  assert.equal(q.html.dataset.gzSkel, undefined, 'expired callbacks do not restore the skeleton');
+});
+
+test('spinners from the source page cannot declare the destination ready', () => {
+  for (const routeFirst of [false, true]) {
+    const s = site();
+    const oldSpinners = s.spinners();
+    s.course.tools.append(...oldSpinners);
+    s.sync();
+    s.tap(s.course.links.discussion);
+    if (routeFirst) s.go(`/ultra/courses/${COURSE}/engagement`);
+    s.flush();
+    if (!routeFirst) s.go(`/ultra/courses/${COURSE}/engagement`);
+    oldSpinners.forEach((e) => e.remove());
+    s.flush();
+    assert.ok(s.skel(), `the old view remains after its old spinners disappear (route first: ${routeFirst})`);
+    s.course.tools.replaceChildren(...s.spinners());
+    s.flush();
+    s.course.tools.replaceChildren(s.VIEW.discussion());
+    s.flush();
+    assert.equal(s.skel(), null, 'the destination\'s own loading cycle completes');
+  }
+});
+
+test('hidden destination views cannot declare readiness', () => {
+  const s = site();
+  s.sync();
+  s.tap(s.course.links.announcement);
+  s.go(`/ultra/courses/${COURSE}/announcements`);
+  const view = s.VIEW.announcement();
+  view.hidden = true;
+  s.course.tools.replaceChildren(view);
+  s.flush();
+  assert.ok(s.skel(), 'a hidden ready marker is not a rendered destination');
+  s.tick(1100);
+  s.frame();
+  assert.ok(s.skel(), 'hidden text cannot satisfy the fallback either');
+  view.hidden = false;
+  s.tick(100);
+  s.frame();
+  assert.equal(s.skel(), null, 'the displayed view takes over');
+});
+
+test('hidden spinners do not hold a ready destination under the skeleton', () => {
+  const s = site();
+  s.sync();
+  s.tap(s.course.links.discussion);
+  s.go(`/ultra/courses/${COURSE}/engagement`);
+  const hidden = s.el('div', {}, ...s.spinners());
+  hidden.hidden = true;
+  s.course.tools.replaceChildren(s.VIEW.discussion(), hidden);
+  s.flush();
+  s.tick(200);
+  s.frame();
+  assert.equal(s.skel(), null, 'only rendered spinners count as loading');
+});
+
+test('the skeleton chooses a displayed base main instead of an earlier hidden one', () => {
+  const s = site({ at: '/ultra/course' });
+  s.baseMain.hidden = true;
+  const main = s.el('main', { class: 'bb-offcanvas-container' }, s.el('section', {}, 'Visible page'));
+  s.body.append(main);
+  s.sync();
+  s.tap(s.bar.grades);
+  assert.ok(s.skel()?.parentNode === main, 'the loading indication belongs in the visible main');
+  assert.ok(!s.baseMain.hasAttribute('data-gz-skel-host'));
+});
+
 test('it gives way at once to an instant copy, but not to one that was already there', () => {
   const s = site({ at: '/ultra/course' });
   s.sync();
@@ -293,6 +399,21 @@ test('it gives way at once to an instant copy, but not to one that was already t
   s.mutated();
   assert.equal(s.skel(), null, 'gone in the observer\'s callback, before the next frame');
   assert.equal(s.html.dataset.gzSkel, undefined);
+});
+
+test('a late instant copy of the source page cannot end the destination skeleton', () => {
+  const s = site({ at: '/ultra/course' });
+  s.sync();
+  s.tap(s.bar.grades);
+  const sourceCopy = s.el('div', { id: 'gz-instant' });
+  s.baseMain.append(sourceCopy);
+  s.mutated();
+  assert.ok(s.skel(), 'the source page\'s pending cache read is unrelated to the clicked destination');
+  sourceCopy.remove();
+  s.go('/ultra/grades');
+  s.baseMain.append(s.el('div', { id: 'gz-instant' }));
+  s.mutated();
+  assert.equal(s.skel(), null, 'the destination copy still takes over immediately');
 });
 
 test('Ultra\'s spinners are hidden while it shows, and what was there waits hidden, keeping its layout', () => {
@@ -381,6 +502,17 @@ test('another page opened meanwhile takes it away, and a page with no spinners w
   q.tick(200);
   q.flush();
   assert.equal(q.skel(), null, 'no spinners and the area filled a second after the address changed');
+});
+
+test('an unrelated route arriving before the first check cannot adopt a pending skeleton', () => {
+  const s = site();
+  s.sync();
+  s.tap(s.course.links.announcement);
+  s.go(`/ultra/courses/${COURSE}/calendar`);
+  s.flush();
+  assert.equal(s.skel(), null, 'only the clicked destination owns this skeleton');
+  assert.ok(!s.course.tools.hasAttribute('data-gz-skel-host'));
+  assert.ok(!s.pressed(s.course.links.announcement));
 });
 
 test('each page\'s skeleton has its shape: rows, tiles, else generic', () => {
@@ -514,4 +646,21 @@ test('still under reduced motion', () => {
   const css = read('content/extras.css');
   assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{ #gz-skel > \* \{ animation: none; \} \}/);
   assert.match(css, /html\[data-gz-motion="off"\] #gz-skel > \* \{ animation: none; \}/);
+});
+
+test('pressed indicators remain visible when forced colors remove fills and shadows', () => {
+  const node = (tag, cls = [], attrs = {}, parent = null, id = '') => ({ tag, cls, attrs, parent, id });
+  const pressed = { 'data-gz-press': '' };
+  const item = node('a', ['item'], pressed);
+  assert.equal(winner(cssRules('navigation/page/navbar.css'), item, 'outline')?.[0], '2px solid Highlight');
+  const tab = node('div', ['gz-ctab'], pressed, node('div', [], {}, null, 'gz-ctabs'));
+  const rules = cssRules('navigation/page/coursetabs.css');
+  assert.equal(winner(rules, tab, 'outline')?.[0], '2px solid Highlight');
+  const after = (rules) => rules.filter(([sel]) => sel.endsWith('::after')).map(([sel, body]) => [sel.replace(/::after/g, ''), body]);
+  assert.equal(winner(after(rules), tab, 'forced-color-adjust')?.[0], 'none');
+  assert.equal(winner(after(rules), tab, 'background')?.[0], 'Highlight');
+  const link = node('a', [], pressed, node('div', ['js-course-navigation'], {}, node('div', [], {}, null, 'site-wrap')));
+  const native = after(cssRules('content/extras.css'));
+  assert.equal(winner(native, link, 'forced-color-adjust')?.[0], 'none');
+  assert.equal(winner(native, link, 'background')?.[0], 'Highlight');
 });
