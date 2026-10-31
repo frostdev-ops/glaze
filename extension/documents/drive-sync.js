@@ -624,8 +624,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       // A file let go as edited outside Glaze (below) whose mark didn't land, the run stopping between: marked now.
       if (d.keep) d = await tagKept(h, d);
       // Follow a same-content copy's new file before weighing Trash or deletion: the old kept file is no longer this
-      // document's. Its change must not move the replacement into Trash, nor supply bytes for it.
-      if (R && !R.removed && R.appProperties?.sum === d.rsum && R.headRevisionId && R.headRevisionId !== d.jh) {
+      // document's. Its change must not move the replacement into Trash, nor supply bytes for it. So too for a copy with new
+      // content beside the file this device knew deleted for good (another device kept it and wrote a file of its own).
+      if (R && !R.removed && (R.appProperties?.sum === d.rsum || E?.removed) && R.headRevisionId && R.headRevisionId !== d.jh) {
         const j = await readCopy(R, h, key, owner);
         const moved = !!j.file && (j.file !== d.file || (j.fileRev ?? null) !== (d.fh ?? null));
         d = await putDoc(h, { ...d, jh: R.headRevisionId, ...(moved && { file: j.file, fh: j.fileRev ?? null, fsum: j.sum }) }, d);
