@@ -154,6 +154,11 @@ test('every loadable file ends on a value, which is how the worker knows it ran'
   }
 });
 
+test('Ultra\'s stream lib ends on its value in a page, not only on module.exports', () => {
+  const context = vm.createContext({ GZ_PAGE: require('../../extension/core/page.js'), Intl, Date });
+  assert.ok(vm.runInContext(read('courses/stream.js'), context), 'courses/stream.js: no last value');
+});
+
 // Each site's first content script, from the manifest: Ultra's, Canvas's and MoodleCloud's (Canvas's without its part, as
 // background/background.js registers it for other Moodle hosts). A site's part is loadable too, for a page whose list lacks it, and only there.
 const firstScripts = () => {
