@@ -894,25 +894,29 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   const KEEP = 'gz-navbar';
   let me = '', leaving = false;
   const esc = (v) => String(v).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
-  const markup = (n) => {
+  // The account's own parts (its name and picture, its course tabs, its counts) are kept apart, their room an empty box of
+  // their size, drawn only once the next page knows it is the same account (navigation/nav.js first).
+  const markup = (n, own = null) => {
     if (!n.tagName) return esc(n.data ?? n.textContent ?? '');
-    const box = /(^| )(widgets|twidgets|dock)( |$)/.test(n.getAttribute('class') || '');
+    const cls = n.getAttribute('class') || '', box = /(^| )(widgets|twidgets|dock)( |$)/.test(cls), mine = own && /(^| )(foot|tacc|ttabs|courses|badge)( |$)/.test(cls);
     let out = `<${n.localName}`;
     for (const k of n.getAttributeNames()) {
       const v = n.getAttribute(k);
-      if (n === el.rail && /^data-(open|peek)$/.test(k) || box && k === 'style' || /^(src|href)$/.test(k) && !/^https:/.test(v)) continue;
+      if (n === el.rail && /^data-(open|peek)$/.test(k) || (box || mine) && k === 'style' || mine && !/^(class|part|hidden)$/.test(k) || /^(src|href)$/.test(k) && !/^https:/.test(v)) continue;
       out += ` ${k}="${esc(v)}"`;
     }
     if (n === el.rail && lay.open) out += ' data-open=""';
+    if (mine) { own.push(markup(n)); return `${out} data-p="${own.length - 1}" style="box-sizing:border-box;visibility:hidden;width:${n.offsetWidth}px;height:${n.offsetHeight}px"></${n.localName}>`; }
     if (box) out += ` style="box-sizing:border-box;width:${n.offsetWidth}px;height:${n.offsetHeight}px"`;
-    return n.localName === 'img' ? `${out}>` : `${out}>${box ? '' : [...n.childNodes].map(markup).join('')}</${n.localName}>`;
+    return n.localName === 'img' ? `${out}>` : `${out}>${box ? '' : [...n.childNodes].map((c) => markup(c, own)).join('')}</${n.localName}>`;
   };
   const keep = () => {
     if (X.site !== 'ultra' || isPreview) return;
     try {
       if (!host?.isConnected || host.hidden || host.hasAttribute('data-replaced') || !me || leaving || !wide() || !lay) { sessionStorage.removeItem(KEEP); return; }
+      const p = [], m = markup(el.rail, p) + markup(el.topbar, p);
       sessionStorage.setItem(KEEP, JSON.stringify({ u: me, t: Date.now(), w: words, k: GZ_NAV.key(X.settings()), v: `${innerWidth}x${innerHeight}`,
-        a: ['dir', 'data-place', 'data-style', 'data-footer', 'data-motion'].filter((k) => host.hasAttribute(k)).map((k) => [k, host.getAttribute(k)]), m: markup(el.rail) + markup(el.topbar) }));
+        a: ['dir', 'data-place', 'data-style', 'data-footer', 'data-motion'].filter((k) => host.hasAttribute(k)).map((k) => [k, host.getAttribute(k)]), m, p }));
     } catch { /* blocked or full */ }
   };
   const forget = () => { leaving = true; try { sessionStorage.removeItem(KEEP); } catch { /* blocked */ } };

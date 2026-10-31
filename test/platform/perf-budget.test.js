@@ -280,10 +280,11 @@ const AREA_PATHS = { ultra: 573, canvas: 514, moodle: 395 };
 const CANVAS_OPEN = 162;
 // Glaze's bar on Ultra at first paint (perf step 1b; a named raise under the owner's 2026-10-19 approval): navigation/nav.js
 // draws the bar as this tab last drew it, inert in its room until navigation/page/navbar.js takes it over, after checking
-// it is this tab's, recent, from Ultra and for the same settings, window and account, with only the bar's own elements;
-// content-ultra.js asks for it at first paint and drops it with the bar. 4,047 bytes on Ultra only; keeping it loads on demand
-// with the bar. Measured against a6fa9919.
-const NAV_FIRST_PAINT = { ultra: 4047, canvas: 0, moodle: 0 };
+// it is this tab's, recent, from Ultra and for the same settings and window, with only the bar's own elements, and fills in
+// the account's own parts (its name, course tabs, counts) in their kept room once the account is confirmed; content-ultra.js
+// asks for it at first paint and drops it with the bar. 4,449 bytes on Ultra only; keeping it loads on demand with the bar.
+// Measured against a6fa9919.
+const NAV_FIRST_PAINT = { ultra: 4449, canvas: 0, moodle: 0 };
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what background/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;
