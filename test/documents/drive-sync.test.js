@@ -1032,3 +1032,25 @@ test('an assignment\'s paper written here before its first push meets another de
   assert.equal(textOf((await a.papers.get(key)).doc), 'A started it');
   noDeletes(drive);
 });
+
+// A document Glaze can't make a file of here (a PDF saved before the file store, its bytes still base64 in the record, or one
+// whose bytes this device no longer has) goes up as its JSON copy alone. Having no file is no change: its copy is not sent
+// again on every run, and another device is not made to read it again each time.
+test('a document with no file to make here goes up once, not again on every run', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-00000000c001';
+  await a.papers.save(key, { kind: 'pdf', file: Buffer.from('%PDF-1.4 saved before the file store').toString('base64'), title: 'Old reading', named: true });
+  assert.ok((await a.sync.set(true)).ok); assert.ok((await b.sync.set(true)).ok);
+  assert.ok(sidecarOf(drive, key), 'its copy went up');
+  const sent = () => drive.log.filter((x) => x.upload).length, read = () => drive.log.filter((x) => x.query.alt === 'media').length;
+  const ups = sent(), reads = read();
+  for (let i = 0; i < 3; i++) { clock.t += 60e3; assert.ok((await a.sync.run({ poke: true })).ok); assert.ok((await b.sync.run({ poke: true })).ok); }
+  assert.equal(sent(), ups, 'nothing sent again');
+  assert.equal(read(), reads, 'nothing read again');
+  // A change to it still goes up.
+  clock.t += 1000;
+  await a.papers.save(key, { title: 'Old reading, renamed' });
+  await a.sync.touched(key); await a.fire();
+  assert.equal(sidecarJson(drive, key).record.title, 'Old reading, renamed');
+  noDeletes(drive);
+});
