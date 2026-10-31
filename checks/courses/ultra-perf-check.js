@@ -123,7 +123,8 @@ function speedProbe() {
   const s = window.perfSpeed = { styledAt: null, lcp: [], shifts: [], loafs: [], drawn: [] };
   const styled = () => { if (s.styledAt == null && document.documentElement?.hasAttribute('data-gz-font')) s.styledAt = performance.now(); };
   styled();
-  new MutationObserver(styled).observe(document.documentElement, { attributes: true, attributeFilter: ['data-gz-font'] });
+  // The document, not <html>: this runs before the parser has made <html>.
+  new MutationObserver(styled).observe(document, { attributes: true, subtree: true, attributeFilter: ['data-gz-font'] });
   const watch = (type, fn) => { try { new PerformanceObserver((list) => list.getEntries().forEach(fn)).observe({ type, buffered: true }); } catch { s[`no-${type}`] = true; } };
   watch('largest-contentful-paint', (e) => s.lcp.push({ ms: e.startTime, size: e.size, el: e.element?.tagName || null }));
   watch('layout-shift', (e) => { if (!e.hadRecentInput) s.shifts.push({ start: e.startTime, value: e.value }); });
