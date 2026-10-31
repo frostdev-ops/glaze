@@ -111,8 +111,13 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (first) { host.removeAttribute('data-first'); host.inert = false; for (const n of [...root.childNodes]) if (n !== sheet) n.remove(); }
     // Unstyled, the bar would flash as a list: it shows once its sheet is in.
     const mounted = host;
-    if (first && (sheet.sheet || root.adoptedStyleSheets?.length)) host.hidden = false;
-    else sheet.addEventListener('load', () => { if (host === mounted && on()) { host.hidden = false; placed = false; layout(); } }, { once: true });
+    // Adopted sheets follow linked sheets in the cascade: retire the copy's rules when the current bundle is ready.
+    const styled = () => { if (first && root.adoptedStyleSheets?.length) root.adoptedStyleSheets = []; host.hidden = false; };
+    if (first && sheet.sheet) styled();
+    else {
+      if (first && root.adoptedStyleSheets?.length) host.hidden = false;
+      sheet.addEventListener('load', () => { if (host === mounted && on()) { styled(); placed = false; layout(); } }, { once: true });
+    }
     el.skip = part(make('a', { className: 'skip', href: '#', textContent: t('Skip to content') }), 'skip');
     // The rail.
     el.brand = part(make('a', { className: 'brand' }), 'brand');

@@ -298,10 +298,10 @@ const CTAB_STANDBY = 16;
 // draws the bar as this tab last drew it, inert in its room until navigation/page/navbar.js takes it over, after checking
 // it is this tab's, recent, from Ultra and for the same settings and window, with only the bar's own elements, and fills in
 // the account's own parts (its name, course tabs, counts) in their kept room once the account is confirmed; content-ultra.js
-// asks for it at first paint and drops it with the bar; styled at once from its kept sheet, it is in the first paint. 4,743
+// asks for it at first paint and drops it with the bar; styled at once from its kept sheet, it is in the first paint. 4,810
 // bytes on Ultra only; keeping it loads on demand with the bar.
 // Measured against a6fa9919.
-const NAV_FIRST_PAINT = { ultra: 4743, canvas: 0, moodle: 0 };
+const NAV_FIRST_PAINT = { ultra: 4810, canvas: 0, moodle: 0 };
 // Instant copies of Ultra's Grades, Courses and Activity (perf step S; a named raise under the owner's 2026-10-19 approval):
 // content-ultra.js asks for courses/page/instant.js at first paint on those pages and drops the site's copies on sign-out,
 // keeping no more in that page, 1,197 bytes on Ultra; defaults.js's enhance.instant, 54 on every site. The copy itself
