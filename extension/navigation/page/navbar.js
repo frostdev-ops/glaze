@@ -48,7 +48,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       try { chrome.storage.local.get('freshDefaults', (r) => res(r?.freshDefaults?.fresh === true)); } catch { res(false); }
     })]).then(([r, fresh]) => {
       if (n !== itemRead) return;
-      prefs = M.initial(r.navbarItems, r.navItems, fresh); legacy = r.navItems ? N.clean(r.navItems) : null; sig = ''; sync();
+      prefs = M.initial(r.navbarItems, r.navItems, fresh); legacy = r.navItems ? N.clean(r.navItems) : null; sig = seen = ''; sync();
     });
   };
   const send = (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } });
@@ -56,10 +56,11 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   const wide = () => matchMedia('(min-width: 900px)').matches;
   const rtl = () => host?.getAttribute('dir') === 'rtl';
 
-  let host = null, root, el = {}, sizes = null, model = null, rows = [], sig = '', prefs = M.clean(), legacy = null, read = false, lay = null, words = '';
+  let host = null, root, el = {}, sizes = null, model = null, rows = [], sig = '', seen = '', spot = '', prefs = M.clean(), legacy = null, read = false, lay = null, words = '';
   let rail = null, applied = null, peek = false, shown = false, sheetOpen = false, menu = '', enter = 0, leave = 0, queued = 0, placed = false, frame = 0, sleeping = false, measured = '';
   let cmenu = null, panel = '', panelFrom = null, panelFromId = '', panelTurn = 0; // panelFromId: the item it came from by id, for when the bar is drawn again
   let wx = null, docked = false; // Glaze's widgets (navigation/page/navbar-widgets.js), once any is on; the dock open over the page
+  let moving = 0, reveal = false; // where the student is moved (remark): its frame, and the list to keep it in view
   const skipMain = new Set(); // Elements given a temporary focus target by Skip to content.
   const mainAt = () => { try { return site.main(tabsApi()?.doc?.() || document); } catch { return site.main(); } };
   const panels = new Map(); // id -> { at, data }: a panel's rows, kept a minute
@@ -101,12 +102,17 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   // ---- drawing --------------------------------------------------------------------------------------------------------
   const sep = () => part(make('div', { className: 'divider', role: 'separator' }), 'divider');
   const mount = () => {
-    host = make('div', { id: 'gz-navbar', hidden: true });
-    root = host.attachShadow({ mode: 'open' });
-    const sheet = make('link', { rel: 'stylesheet', href: chrome.runtime.getURL('navigation/page/navbar.css') });
+    // The bar this tab drew last, drawn at first paint (navigation/nav.js first): its host and its sheet, already in, are this
+    // one's, its copy goes as this draws (in the same task, so nothing flashes) and it is in use again.
+    const first = document.querySelector('#gz-navbar[data-first]');
+    host = first || make('div', { id: 'gz-navbar', hidden: true });
+    root = first?.shadowRoot || host.attachShadow({ mode: 'open' });
+    const sheet = first && root.querySelector('link') || make('link', { rel: 'stylesheet', href: chrome.runtime.getURL('navigation/page/navbar.css') });
+    if (first) { host.removeAttribute('data-first'); host.inert = false; for (const n of [...root.childNodes]) if (n !== sheet) n.remove(); }
     // Unstyled, the bar would flash as a list: it shows once its sheet is in.
     const mounted = host;
-    sheet.addEventListener('load', () => { if (host === mounted && on()) { host.hidden = false; placed = false; layout(); } }, { once: true });
+    if (first && sheet.sheet) host.hidden = false;
+    else sheet.addEventListener('load', () => { if (host === mounted && on()) { host.hidden = false; placed = false; layout(); } }, { once: true });
     el.skip = part(make('a', { className: 'skip', href: '#', textContent: t('Skip to content') }), 'skip');
     // The rail.
     el.brand = part(make('a', { className: 'brand' }), 'brand');
@@ -161,7 +167,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     el.sheet.setAttribute('aria-modal', 'true');
     for (const n of [el.rail, el.topbar, el.tabs]) n.setAttribute('aria-label', t('Glaze navigation'));
     el.sheet.setAttribute('aria-label', t('More navigation'));
-    root.append(sheet, el.skip, el.rail, el.topbar, el.tsub, el.menu, el.panel, el.tip, el.tabs, el.sheet);
+    root.append(...(first ? [] : [sheet]), el.skip, el.rail, el.topbar, el.tsub, el.menu, el.panel, el.tip, el.tabs, el.sheet);
     root.addEventListener('click', click);
     root.addEventListener('auxclick', click);
     root.addEventListener('keydown', key);
@@ -181,7 +187,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     });
     // First in the page, as the site's own navigation it stands in for: keyboard and screen-reader order meet it, and its
     // Skip to content, before the page (it's fixed, so nothing moves on screen).
-    (document.body || html).prepend(host);
+    if (!first) (document.body || html).prepend(host);
     if (typeof ResizeObserver === 'function') {
       sizes = new ResizeObserver(() => { if (host === mounted) { measured = ''; queue(); } });
       for (const box of [el.tbrand, el.titems, el.ttabs, el.twidgets]) sizes.observe(box);
@@ -261,7 +267,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
           const [type, bytes] = src.split(',');
           logo.url = URL.createObjectURL(new Blob([Uint8Array.from(atob(bytes), (c) => c.charCodeAt(0))], { type: type.slice(5, type.indexOf(';')) }));
         } catch { return; } // malformed bytes leave the Glaze logo in place
-        sig = ''; if (host) sync();
+        sig = seen = ''; if (host) sync();
       });
     } catch { /* reloaded */ }
     return '';
@@ -392,6 +398,19 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     const target = restore || nearby || (active?.isConnected ? active : sheetOpen ? el.sheet.querySelector('a[href], button:not([disabled])') : wasMenu ? el.menu.querySelector('a, button') || (wasMenu === 'more' ? el.tmore : el.tacc) : null);
     if (target?.getClientRects().length) target.focus({ preventScroll: true });
   };
+  // Only where the student is changed (a route, a course tab shown): the same nodes, their marks moved as node() and
+  // courseTab() set them, and the markers glide there, measured in the next frame with the page's own layout.
+  const marked = (e, on) => {
+    if (e.hasAttribute('aria-current') !== on) { if (on) e.setAttribute('aria-current', 'page'); else e.removeAttribute('aria-current'); }
+    const was = e.getAttribute('part') || '', names = was.split(' ').filter((p) => p && p !== 'active'), now = (on ? [...names, 'active'] : names).join(' ');
+    if (now !== was) e.setAttribute('part', now);
+  };
+  const remark = () => {
+    for (const e of root.querySelectorAll('[data-id]:not(.brand):not(.out)')) marked(e, !!byId(e.dataset.id)?.active);
+    for (const e of root.querySelectorAll('.ctab-go')) marked(e, !!rows.find((r) => r.cid === e.dataset.cid)?.cur);
+    cancelAnimationFrame(moving);
+    moving = requestAnimationFrame(() => { moving = 0; if (host) { reveal = true; layout(); } });
+  };
   let logos = 0;
   const glazeLogo = () => {
     const id = `gz-nb-drop-${++logos}`;
@@ -415,32 +434,35 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     tabsApi()?.place(); // 'auto' follows top/rail changes too, even if both hold tabs
   };
   const geometry = () => JSON.stringify([innerWidth, innerHeight, host?.dir, host?.hasAttribute('data-footer'), X.settings().look]);
+  // Written only when it changes: any write marks the bar for style and layout again, which the next read then forces.
+  const attr = (e, k, v) => { if (e.getAttribute(k) !== v) e.setAttribute(k, v); };
+  const hide = (e, v) => { if (e.hidden !== v) e.hidden = v; };
   const layout = () => {
     if (!host) return;
-    host.dataset.place = lay.place;
-    host.dataset.style = lay.style;
+    attr(host, 'data-place', lay.place);
+    attr(host, 'data-style', lay.style);
     const pin = lay.open, open = pin || (peek && lay.place === 'rail');
     el.rail.toggleAttribute('data-open', open);
     el.rail.toggleAttribute('data-peek', peek && !pin);
-    el.toggle.setAttribute('aria-expanded', String(open));
-    el.toggle.setAttribute('aria-label', t(open ? 'Collapse navigation' : 'Expand navigation'));
-    el.toggle.dataset.tip = el.toggle.getAttribute('aria-label');
+    attr(el.toggle, 'aria-expanded', String(open));
+    attr(el.toggle, 'aria-label', t(open ? 'Collapse navigation' : 'Expand navigation'));
+    attr(el.toggle, 'data-tip', el.toggle.getAttribute('aria-label'));
     // Inside a course set to icons, the rail can't be pinned open there: the setting decides.
-    el.pin.hidden = inCourse() && settings().course === 'icons';
-    el.toggle.hidden = el.pin.hidden;
+    hide(el.pin, inCourse() && settings().course === 'icons');
+    hide(el.toggle, el.pin.hidden);
     // One name, pressed or not: a screen reader says "Pin open, pressed" once it's pinned, not a new name and the state.
-    el.pin.setAttribute('aria-pressed', String(pin));
-    el.pin.lastElementChild.textContent = t('Pin open');
-    el.tsub.hidden = !(lay.menu && cmenu && lay.place === 'top' && wide());
+    attr(el.pin, 'aria-pressed', String(pin));
+    if (el.pin.lastElementChild.textContent !== t('Pin open')) el.pin.lastElementChild.textContent = t('Pin open');
+    hide(el.tsub, !(lay.menu && cmenu && lay.place === 'top' && wide()));
     room();
     if (panel) placePanel();
     if (docked) { if (lay.place === 'rail' && wide() || lay.place === 'none' || !el.dock.childElementCount) dockTo(false, false); else placeDock(); }
     if (open !== shown) { shown = open; emit(open ? 'expand' : 'collapse', {}); if (open) tip(null); }
     if (host.hidden) return;
-    const moved = measured !== geometry();
-    measured = geometry();
-    if (lay.place === 'top' && wide()) { fit(); if (!placed) tabsReveal(); }
-    if (lay.place === 'rail' && wide()) { if (!placed || moved) listReveal(); listScroll(); }
+    const moved = measured !== geometry(), shift = reveal;
+    measured = geometry(); reveal = false;
+    if (lay.place === 'top' && wide()) { fit(); if (!placed || shift) tabsReveal(); }
+    if (lay.place === 'rail' && wide()) { if (!placed || moved || shift) listReveal(); listScroll(); }
     // The markers glide; the first placement after a redraw doesn't (it would slide in from the top).
     const still = !placed;
     const glide = (ind, target, horizontal) => {
@@ -755,7 +777,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     // Canvas: a page's address goes through the course tabs while their frames run, so none of them reloads.
     if (X.site === 'canvas' && globalThis.GZ_CTABS?.frames?.() && /^https?:[^#]*$/.test(item.href || '') && api?.open?.(item.href)) return;
     api?.leave();
-    if (id === 'logout') api?.signout?.();
+    if (id === 'logout') { api?.signout?.(); forget(); }
     if (!site.go(id)) location.assign(item.href);
   };
   const tabAct = (act, cid, e) => {
@@ -781,7 +803,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     // A panel's row: a page of this site opens here (through the course tabs where they run), another site's in a new tab.
     const prow = el.panel && path.includes(el.panel) && path.find((n) => n.classList?.contains('row') && n.parentElement && !n.dataset.act);
     if (prow && e.type === 'click') {
-      if (prow.dataset.run !== undefined && prow.tagName === 'BUTTON') { e.preventDefault(); const what = prow.dataset.run; panelTo('', null, false); if (what === 'logout') tabsApi()?.signout?.(); site.run?.(what); return; }
+      if (prow.dataset.run !== undefined && prow.tagName === 'BUTTON') { e.preventDefault(); const what = prow.dataset.run; panelTo('', null, false); if (what === 'logout') { tabsApi()?.signout?.(); forget(); } site.run?.(what); return; }
       if (prow.href && prow.target !== '_blank' && sameSite(prow.href) && plain(e)) { e.preventDefault(); const href = prow.href; panelTo('', null, false); openHere(href); return; }
       if (prow.href) { panelTo('', null, false); return; }
     }
@@ -866,6 +888,48 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     items[e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : (at + along[e.key] + items.length) % items.length].focus();
   };
 
+  // ---- the next page's first paint (Ultra) ----------------------------------------------------------------------------
+  // The bar as drawn, kept in this tab for its next page (navigation/nav.js first draws it from this): never a widget's or
+  // a mod's insides (their room only), an open peek or a picture made here; not once the account signs out or unknown.
+  const KEEP = 'gz-navbar';
+  let me = '', leaving = false;
+  const esc = (v) => String(v).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+  // The account's own parts (its name and picture, its course tabs, its counts) are kept apart, their room an empty box of
+  // their size, drawn only once the next page knows it is the same account (navigation/nav.js first).
+  const markup = (n, own = null) => {
+    if (!n.tagName) return esc(n.data ?? n.textContent ?? '');
+    const cls = n.getAttribute('class') || '', box = /(^| )(widgets|twidgets|dock)( |$)/.test(cls), mine = own && /(^| )(foot|tacc|ttabs|courses|badge)( |$)/.test(cls);
+    let out = `<${n.localName}`;
+    for (const k of n.getAttributeNames()) {
+      const v = n.getAttribute(k);
+      if (k === 'data-tip' || n === el.rail && /^data-(open|peek)$/.test(k) || (box || mine) && k === 'style' || mine && !/^(class|part|hidden)$/.test(k) || /^(src|href)$/.test(k) && !/^https:/.test(v)) continue;
+      out += ` ${k}="${esc(v)}"`;
+    }
+    if (n === el.rail && lay.open) out += ' data-open=""';
+    if (mine) { own.push(markup(n)); return `${out} data-p="${own.length - 1}" style="box-sizing:border-box;visibility:hidden;width:${n.offsetWidth}px;height:${n.offsetHeight}px"></${n.localName}>`; }
+    if (box) out += `${n.offsetHeight ? ' data-room=""' : ''} style="box-sizing:border-box;width:${n.offsetWidth}px;height:${n.offsetHeight}px"`;
+    return n.localName === 'img' ? `${out}>` : `${out}>${box ? '' : [...n.childNodes].map((c) => markup(c, own)).join('')}</${n.localName}>`;
+  };
+  const keep = () => {
+    if (X.site !== 'ultra' || isPreview) return;
+    try {
+      if (!host?.isConnected || host.hidden || host.hasAttribute('data-replaced') || !me || leaving || !wide() || !lay) { sessionStorage.removeItem(KEEP); return; }
+      const p = [], m = markup(el.rail, p) + markup(el.topbar, p);
+      sessionStorage.setItem(KEEP, JSON.stringify({ u: me, t: Date.now(), w: words, k: GZ_NAV.key(X.settings()), v: `${innerWidth}x${innerHeight}`,
+        a: ['dir', 'data-place', 'data-style', 'data-footer', 'data-motion'].filter((k) => host.hasAttribute(k)).map((k) => [k, host.getAttribute(k)]), m, p }));
+    } catch { /* blocked or full */ }
+  };
+  const forget = () => { leaving = true; try { sessionStorage.removeItem(KEEP); } catch { /* blocked */ } };
+  // Who is signed in: what was kept for anyone else goes.
+  const whom = () => {
+    if (X.site !== 'ultra' || isPreview || me) return;
+    Promise.resolve(X.account?.()).then((id) => {
+      if (!id) return;
+      me = String(id);
+      try { if (JSON.parse(sessionStorage.getItem(KEEP))?.u !== me) sessionStorage.removeItem(KEEP); } catch { /* none */ }
+    }, () => {});
+  };
+
   // ---- the loop -------------------------------------------------------------------------------------------------------
   const stop = () => {
     clearTimeout(enter); clearTimeout(leave); enter = leave = 0;
@@ -873,7 +937,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     cancelAnimationFrame(queued); queued = 0;
     clearLogo();
     document.removeEventListener('keydown', escapeTip, true);
-    if (!host) return;
+    // Off before it took over: its first-paint copy goes too.
+    if (!host) { document.querySelector?.('#gz-navbar[data-first]')?.remove(); return; }
     if (sheetOpen) sheetTo(false);
     dockTo(false, false);
     wx?.stop();
@@ -886,7 +951,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     // Closing a dialog or removing a focused bar can schedule focusout's delayed peek close.
     host.remove();
     clearTimeout(enter); clearTimeout(leave); enter = leave = 0;
-    host = null; root = null; el = {}; sig = ''; measured = ''; model = null; rows = []; lay = null; cmenu = null; panels.clear(); peek = false; shown = false; sheetOpen = false; rail = null;
+    host = null; root = null; el = {}; sig = seen = spot = ''; measured = ''; model = null; rows = []; lay = null; cmenu = null; panels.clear(); peek = false; shown = false; sheetOpen = false; rail = null;
     const hadTabs = words.split(' ').includes('tabs');
     words = '';
     html.removeAttribute('data-gz-navbar');
@@ -902,15 +967,15 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (applied !== settings()) { rail = null; peekTo(false); applied = settings(); }
     if (rail && rail === settings().rail) rail = null;
     if (host && !host.isConnected) stop();
-    if (!host) mount();
+    if (!host) { mount(); whom(); }
     // A mod's nav stands in for the bar (mods/page/mods.js): the bar hides, and still keeps the page's room.
     const stands = !!globalThis.GZ_MODS?.navStands?.();
     if (stands !== host.hasAttribute('data-replaced')) {
       host.toggleAttribute('data-replaced', stands);
       if (stands) { menuTo('', false); sheetTo(false); dockTo(false, false); tip(null); }
     }
-    host.setAttribute('dir', (html.dir || document.body?.dir) === 'rtl' ? 'rtl' : 'ltr');
-    host.dataset.motion = html.getAttribute('data-gz-motion') || '';
+    attr(host, 'dir', (html.dir || document.body?.dir) === 'rtl' ? 'rtl' : 'ltr');
+    attr(host, 'data-motion', html.getAttribute('data-gz-motion') || '');
     // The bar stands on Glaze's footer where it runs under the bar: fixed on Ultra, last in Moodle's page. Canvas's is in its
     // body, above the room kept under the page for the bar: raised, the bar went over it and over Canvas's Previous and Next.
     host.toggleAttribute('data-footer', X.site !== 'canvas' && html.hasAttribute('data-gz-footer'));
@@ -932,11 +997,18 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     // Glaze's settings or Documents open as the page: nothing else is where you are.
     const glazePage = globalThis.GZ_SETTINGS_PAGE?.showing?.() || '';
     const native = site.read().map((n) => (glazePage ? { ...n, active: false } : framed ? { ...n, active: n.id === 'course' } : n));
-    const look = X.parts()?.nav ? L.clean(X.parts().nav) : null;
+    const docks = [...(globalThis.GZ_MODS?.rail() || []), ...(globalThis.GZ_MODWIDGETS?.rail() || [])];
+    for (const d of docks) if (d.el.parentNode !== el.dock) el.dock.append(d.el);
+    // Nothing the bar is drawn from changed (most of the sweep's flushes): no model to build, nothing to compare or draw.
+    const parts = X.parts()?.nav || null, mine = [...mods.values()].flatMap((m) => [...m.values()]);
+    const from = JSON.stringify([native, parts, prefs, legacy, mine, rows, lay, cmenu, glazePage, settings(), site.brand(), site.avatar?.(), X.locale(), X.settings().nav?.li, logo.url, by, !!wx, docks.map((d) => d.key), wide()]);
+    if (from === seen) { if (measured !== geometry()) layout(); return; }
+    seen = from;
+    const look = parts ? L.clean(parts) : null;
     // What the site has no shared name for (link:<id>, see the adapter contract) the model takes as links of the student's own,
     // so they hide, rename and move like any; what a link lacks (a menu, a switch's state, the page it is) is set on them after.
     const sited = native.filter((n) => /^link:[a-z0-9]{12}$/.test(n.id));
-    model = M.build({ native: sited.length ? native.filter((n) => !sited.includes(n)) : native, look, legacy, mods: [...mods.values()].flatMap((m) => [...m.values()]),
+    model = M.build({ native: sited.length ? native.filter((n) => !sited.includes(n)) : native, look, legacy, mods: mine,
       prefs: sited.length ? { ...prefs, links: [...prefs.links.filter((l) => !sited.some((n) => n.id === 'link:' + l.id)), ...sited.map((n) => ({ id: n.id.slice(5), n: n.label, u: n.href, i: n.icon || 'link' }))] } : prefs,
       names: { notes: t('Notes'), documents: t('Documents'), todo: t('To Do'), search: t('Search'), settings: t('Glaze settings') }, origin: location.origin });
     for (const n of sited) {
@@ -948,24 +1020,25 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     const wants = model.widgets.map((w) => w.id);
     if (wants.length && !wx) {
       if (globalThis.GZ_NAVBAR_WIDGETS) wx = GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview });
-      else X.need('navigation/page/navbar-widgets.js', () => globalThis.GZ_NAVBAR_WIDGETS).then(() => { sig = ''; queue(); }, () => {});
+      else X.need('navigation/page/navbar-widgets.js', () => globalThis.GZ_NAVBAR_WIDGETS).then(() => { sig = seen = ''; queue(); }, () => {});
     }
     wx?.set(wants);
-    const docks = [...(globalThis.GZ_MODS?.rail() || []), ...(globalThis.GZ_MODWIDGETS?.rail() || [])];
-    for (const d of docks) if (d.el.parentNode !== el.dock) el.dock.append(d.el);
-    const next = JSON.stringify([model, rows, lay, cmenu, settings(), site.brand(), site.avatar?.(), X.locale(), X.settings().nav?.li, logo.url, by, !!wx, docks.map((d) => d.key), wide()]);
-    if (next !== sig) { sig = next; render(); emit('change', view()); } else if (measured !== geometry()) layout();
+    // The items themselves changed: drawn again. Only where the student is: the same nodes, their marks moved.
+    const next = M.shape([model, rows, lay, cmenu, settings(), site.brand(), site.avatar?.(), X.locale(), X.settings().nav?.li, logo.url, by, !!wx, docks.map((d) => d.key), wide()]), now = M.marks(model, rows, cmenu);
+    if (next !== sig) { sig = next; spot = now; render(); emit('change', view()); }
+    else if (now !== spot) { spot = now; remark(); emit('change', view()); }
+    else if (measured !== geometry()) layout();
   };
   const queue = () => { if (!queued && !sleeping) queued = requestAnimationFrame(() => { queued = 0; sync(); }); };
   chrome.storage.onChanged.addListener((c, area) => {
     if ((area === 'local' && c.freshDefaults) || (area === 'sync' && (c.navbarItems || c.navItems))) readItems();
-    if (area === 'local' && logo.id && c[`navLogo:${logo.id}`]) { clearLogo(); sig = ''; if (host) sync(); }
+    if (area === 'local' && logo.id && c[`navLogo:${logo.id}`]) { clearLogo(); sig = seen = ''; if (host) sync(); }
     if (area !== 'sync' || !chrome.runtime?.id) return;
   });
   addEventListener('resize', () => { if (!host) return; measured = ''; tip(null); menuTo('', false); placePanel(); if (!wide()) peekTo(false); else sheetTo(false); sync(); });
   addEventListener('popstate', () => { if (host) { panelTo('', null, false); queue(); } });
   document.addEventListener('visibilitychange', () => { if (host && document.visibilityState === 'visible') queue(); });
-  addEventListener('pagehide', () => { sleeping = true; stop(); });
+  addEventListener('pagehide', () => { keep(); sleeping = true; stop(); });
   addEventListener('pageshow', (e) => { sleeping = false; if (e.persisted) queue(); });
   // The editor's preview has this file as a <script> after content.js, whose first ask came before it was in: it starts
   // itself, and follows the editor's edits there.
@@ -1049,7 +1122,7 @@ function GZ_NAVBAR_ULTRA(X) {
   const ROOT = '[data-gz-nav-root], nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]';
   const SEEN = `navbarSeen:${location.origin}`;
   const USUAL = [['institution-page', 'Institution page'], ['stream', 'Activity'], ['course', 'Courses'], ['organization', 'Organizations'], ['calendar', 'Calendar'], ['messages', 'Messages'], ['grades', 'Grades'], ['tools', 'Tools'], ['profile', 'Profile']];
-  let mo = null, swap = null, watched = null, notify = null, seen = null, saved = '';
+  let mo = null, swap = null, watched = null, notify = null, seen = null, saved = '', last = null, lastAt = '', stale = true;
   const rootOf = () => document.querySelector(ROOT);
   const anchors = () => { const root = rootOf(); return [...(root?.querySelectorAll('a[href]') || []), ...(root?.closest('.MuiDrawer-paper')?.querySelectorAll('footer a[href], [class*="makeStylesfooter"] a[href]') || [])]; };
   const idOf = (a) => GZ_NAV.native(a.getAttribute('href'));
@@ -1070,8 +1143,8 @@ function GZ_NAVBAR_ULTRA(X) {
     const root = rootOf();
     const scope = root?.closest('.MuiDrawer-paper') || root;
     if (scope === watched || !notify) return;
-    mo?.disconnect(); swap?.disconnect(); watched = scope;
-    if (scope) mo.observe(scope, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class', 'aria-current', 'href', 'src'] });
+    mo?.disconnect(); swap?.disconnect(); watched = scope; stale = true;
+    if (scope) mo.observe(scope, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class', 'aria-current', 'aria-label', 'href', 'src'] });
     // Ultra redraws the drawer whole: its parent sees the new one come in.
     if (scope?.parentElement) swap.observe(scope.parentElement, { childList: true });
   };
@@ -1087,15 +1160,19 @@ function GZ_NAVBAR_ULTRA(X) {
   return {
     read: () => {
       watch();
+      // The drawer as last read while its observers heard nothing and the page is the same: the same list, unread.
+      if (last && !stale && notify && watched?.isConnected && lastAt === location.href) return last;
+      stale = false; lastAt = location.href; last = null;
       const ids = new Set();
       const live = anchors().map((a) => {
         const id = idOf(a);
         if (!id || ids.has(id)) return null;
         ids.add(id);
         const b = a.querySelector('.MuiBadge-badge:not(.MuiBadge-invisible)');
-        return { id, label: labelOf(a), href: a.href, active: current(a, id), badge: b?.textContent.trim() || '' };
+        // Sign Out's '#' is no page: one address on every page, so a route doesn't change the item.
+        return { id, label: labelOf(a), href: a.getAttribute('href') === '#' ? `${location.origin}/ultra/#` : a.href, active: current(a, id), badge: b?.textContent.trim() || '' };
       }).filter(Boolean);
-      if (live.length) { keep(live); return live; }
+      if (live.length) { keep(live); return (last = live); }
       const list = seen?.length ? seen : USUAL.map(([id, label]) => ({ id, label: X.t(label), path: `/ultra/${id}` }));
       return list.filter((i) => GZ_NAV.NATIVE.includes(i.id) && /^\/ultra\/[\w-]+$/.test(i.path)).map((i) => ({ id: i.id, label: i.label, href: location.origin + i.path, active: here(i.path, i.id), badge: '' }));
     },
@@ -1107,8 +1184,8 @@ function GZ_NAVBAR_ULTRA(X) {
     // The page's, or the course tab's frame on screen (same origin), which the covered page is not.
     main: (doc = document) => doc.getElementById('main-content') || doc.querySelector('main'),
     inCourse: () => /^\/ultra\/courses\//.test(location.pathname),
-    observe: (fn) => { notify = fn; mo = new MutationObserver(() => notify?.()); swap = new MutationObserver(() => notify?.()); watched = null; watch(); },
-    unobserve: () => { mo?.disconnect(); swap?.disconnect(); mo = swap = null; watched = null; notify = null; },
+    observe: (fn) => { notify = fn; mo = new MutationObserver(() => { stale = true; notify?.(); }); swap = new MutationObserver(() => { stale = true; notify?.(); }); watched = null; watch(); },
+    unobserve: () => { mo?.disconnect(); swap?.disconnect(); mo = swap = null; watched = null; notify = null; stale = true; },
   };
 }
 

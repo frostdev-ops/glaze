@@ -318,7 +318,9 @@ test('re-rendering the top course menu preserves its focused link', async () => 
   const h = await setup({ shown: '12', frameDoc: course(), navbar: { place: 'top' } });
   const old = h.root.querySelector('.tsub [data-id="cm:1"]'); old.focus();
   assert.equal(h.root.activeElement, old);
-  h.state.frameDoc = course('/courses/12/grades'); h.ui.sync();
+  // A change to the menu's items (a page renamed), not only to where the student is, draws it again.
+  const next = course('/courses/12/grades'); next.querySelector('.modules').textContent = 'Units';
+  h.state.frameDoc = next; h.ui.sync();
   const current = h.root.querySelector('.tsub [data-id="cm:1"]');
   assert.notEqual(current, old, 'the menu actually re-rendered'); assert.equal(current.isConnected, true);
   assert.ok(h.root.activeElement === current, 'keyboard focus must survive the frame menu update');
