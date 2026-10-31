@@ -1223,12 +1223,20 @@ const copyState = async () => {
   await chrome.storage.session.set({ ultraCopyEpochs: copyEpochs });
   return copyEpochs;
 };
-// Whether Ultra was used here: a visit's lease this session, a fence or Ultra's own data kept. A student who never used Ultra
+// Whether Ultra was used here: a visit's lease this session, a fence, Ultra's own data kept or an open approved page.
+// An open page may still be waking the worker for its first lease when Settings purges it. A student who never used Ultra
 // gets no fence from a site removal, Reset or the switch, so those add nothing to storage.
 const ultraUsed = async (origin) => {
   if (!chrome.storage.session || (await chrome.storage.session.get('ultraCopyEpochs')).ultraCopyEpochs) return true;
   const keys = chrome.storage.local.getKeys ? await chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null));
-  return keys.some((k) => k === 'ultraCopyFence' || ['ultraCopyFence:', 'ultraCopy:', 'ultraMe:', 'ultraBooks:'].some((p) => k.startsWith(origin ? `${p}${origin}` : p)));
+  if (keys.some((k) => k === 'ultraCopyFence' || ['ultraCopyFence:', 'ultraCopy:', 'ultraMe:', 'ultraBooks:'].some((p) => k.startsWith(origin ? `${p}${origin}` : p)))) return true;
+  try {
+    for (const tab of await chrome.tabs.query({})) {
+      const site = await fromUltra({ id: chrome.runtime.id, tab, frameId: 0, url: tab.url });
+      if (site && (!origin || site === origin)) return true;
+    }
+    return false;
+  } catch { return true; } // Unknown open visits still need a fence.
 };
 // seen: the caller knows Ultra was used (a page of the site asked, or it checked before dropping Ultra's data itself).
 const purgeCopies = async (origin, retire = true, seen = false) => {
