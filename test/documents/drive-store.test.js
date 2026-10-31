@@ -796,3 +796,35 @@ test('a Settings value storage.sync refuses here (past its 8 KB an item) is pass
   assert.equal((await b.settings.get('glazeShort')).glazeShort, 'A');
   noDeletes(drive);
 });
+
+test('a snapshot Drive has no room for is skipped for the day: the run goes on, the zip isn\'t built again until tomorrow, and the state says why', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock, snapshots: true });
+  // Drive has room for records, not for the day's zip.
+  const fetch = drive.fetch;
+  let full = true, tries = 0;
+  drive.fetch = async (url, init = {}) => {
+    if (init.body instanceof Uint8Array && Buffer.from(init.body).includes('PK snapshot')) {
+      tries++;
+      if (full) return new Response(JSON.stringify(ERRORS.storageQuotaExceeded), { status: 403, headers: { 'content-type': 'application/json' } });
+    }
+    return fetch(url, init);
+  };
+  await a.local.set({ writerWords: ['Alpha'] });
+  assert.ok((await a.on()).ok, 'the run succeeds');
+  assert.equal(tries, 1);
+  const st = (await a.local.get('driveSync')).driveSync;
+  assert.equal(st.problem, null);
+  assert.equal(st.snapSkip, 'quota', 'skipped because Drive is full');
+  clock.t += 1000;
+  await a.local.set({ writerWords: ['Alpha', 'Beta'] });
+  assert.ok((await a.run({ push: true })).ok);
+  assert.deepEqual(body(recFile(drive, 'local', 'writerWords')).value, ['Alpha', 'Beta'], 'records still go up');
+  assert.equal(tries, 1, 'no zip built again the same day');
+  // Tomorrow, with room: made, and the note let go.
+  clock.t += ST.SNAP.every + 1; full = false;
+  assert.ok((await a.run()).ok);
+  assert.equal(tries, 2);
+  assert.equal([...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'snapshot').length, 1);
+  assert.equal((await a.local.get('driveSync')).driveSync.snapSkip, null);
+  noDeletes(drive);
+});

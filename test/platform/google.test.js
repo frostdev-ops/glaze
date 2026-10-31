@@ -676,6 +676,17 @@ test('Settings: while Sync asks to connect Google Drive again, Connect is there 
   assert.deepEqual(n.sent.filter((m) => m.type === 'glaze:driveSync'), [], 'a first Connect: the worker turns Sync on itself');
 });
 
+test('Settings: a day whose backup Drive had no room for says so beside when Sync last ran', async () => {
+  const A = 'student@school.edu', now = Date.now();
+  const s = await settings({ sync: { on: true, account: A, last: now, snap: now - 3600e3, snapSkip: 'quota', problem: null } });
+  const said = s.els['#gdrive-sync-said'].textContent;
+  assert.match(said, /^Last synced .+\. Today's backup was skipped: your Google Drive is full\.$/);
+  const older = await settings({ sync: { on: true, account: A, last: now, snap: now - 2 * 864e5, snapSkip: 'quota' } });
+  assert.doesNotMatch(older.els['#gdrive-sync-said'].textContent, /backup/, 'only for the day it covers');
+  const made = await settings({ sync: { on: true, account: A, last: now, snap: now, snapSkip: null } });
+  assert.doesNotMatch(made.els['#gdrive-sync-said'].textContent, /backup/);
+});
+
 test('the worker gives background/google.js a way to open the sign-in tab the student taps (iOS), from the worker', () => {
   const src = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
   const env = src.slice(src.indexOf('google = GZ_GOOGLE.create({'), src.indexOf('});', src.indexOf('google = GZ_GOOGLE.create({')));
