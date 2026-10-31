@@ -22,7 +22,8 @@
 // Two files for one record (first syncs that overlapped): every device keeps the lowest id, met as a first meeting. A
 // deleted key is a tombstone that deletes it on the other side; a tombstone never deletes a record met for the first time.
 // State: driveSyncRec:<h> { area, key, cat, id, lsum, rsum, at, seen } and driveSyncFile:<id> 'r:<h>'; the folders and the
-// last snapshot on driveSync (data, backups, snap).
+// last snapshot on driveSync (data, backups, snap); a record file or the day's zip larger than one request on its way in
+// documents/drive-sync.js's transfers (driveSyncMoves 'R:<h>', 'r:<h>', 'snap').
 // Classic script for the worker; module.exports for node.
 var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
   const REC = 'driveSyncRec:', FILE = 'driveSyncFile:', STAMPS = 'driveSyncStamps', STATE = 'driveSync';

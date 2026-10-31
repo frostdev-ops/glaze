@@ -220,7 +220,7 @@ test('Sync to Google Drive discloses the transfer state it keeps: session addres
   assert.match(read('background/background.js'), /GZ_DOC_FILES\.idb\(globalThis\.indexedDB, 'glaze-drive'\)/, 'the code: the stage');
   assert.match(read('documents/drive-sync.js'), /session: null, file: null \}\);/, 'the code: an upload\'s session on its record');
   const stored = policy.slice(policy.indexOf('- **Google Drive** (off until you connect), unavailable'), policy.indexOf('- **Gradescope in To Do**'));
-  const moves = stored.slice(stored.indexOf('larger than one request'), stored.indexOf('`glaze-drive`') + 20);
+  const moves = stored.slice(stored.indexOf('larger than one request'), stored.indexOf('`glaze-drive`') + 40);
   assert.ok(stored.includes('larger than one request') && stored.includes('`glaze-drive`'), 'PRIVACY.md: the transfers');
   assert.match(moves, /resumable[- ]session address/);
   assert.match(moves, /how far it got/);
