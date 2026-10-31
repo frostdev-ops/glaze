@@ -1,7 +1,7 @@
 // Glaze's bar on Ultra at first paint (perf step 1b), with the real extension on the synthetic Ultra (test/fixtures/ultra-course.html)
 // under a made-up school's address. A first load has no bar drawn before navigation/page/navbar.js is in; the second load in the
-// tab stages what the first kept, hidden until the current account is verified, and the bar takes that copy over: one
-// host, the same reserved room, no layout shift. A route change in the app moves the marks on the same item nodes.
+// tab draws what the first kept at first paint, without the account's own parts (their room held) until the account is
+// confirmed, and the bar takes that copy over: one host, nothing moved, no layout shift. A route change in the app moves the marks on the same item nodes.
 // EXT=<checkout>/extension NODE_PATH=<playwright> nice node checks/navigation/ultra-navbar-first-paint-check.js <out dir>
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
@@ -36,6 +36,7 @@ const watch = () => {
     window.__firstHost = h;
     window.__first = { host: !!h, copy: !!h?.hasAttribute('data-first'), shown: !!h && !h.hidden && getComputedStyle(h).display !== 'none', inert: !!h?.inert,
       room: ['--gz-navbar-left', '--gz-navbar-top'].map((k) => getComputedStyle(document.documentElement).getPropertyValue(k).trim()),
+      own: h?.shadowRoot?.querySelectorAll('.foot .account, .ctab-go, .badge').length || 0, held: h?.shadowRoot?.querySelectorAll('[data-p]').length || 0,
       items: items.map((e) => e.dataset.id), current: items.filter((e) => e.getAttribute('aria-current') === 'page').map((e) => e.dataset.id),
       tops: Object.fromEntries(items.map((e) => [e.dataset.id, Math.round(e.getBoundingClientRect().top)])) };
   });
@@ -95,12 +96,13 @@ const now = () => {
     check(meServed > 0, 'the account was asked for');
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r())));
 
-    // ---- the second load: no private cached labels before account verification ----
+    // ---- the second load: the bar at first paint, the account's own parts once it is confirmed ----
     let releaseAccount;
     accountGate = new Promise((resolve) => { releaseAccount = resolve; });
     await page.goto(`${site}/ultra/calendar`);
     const at = await until(page, () => window.__first, null, 'the first frame of the second load');
-    check(at.copy && !at.shown, 'second load: the cached bar stays hidden while the account is unknown', at);
+    check(at.copy && at.shown, 'second load: the bar is drawn and shown at first paint, before the bar is in', at);
+    check(at.own === 0 && at.held > 0, "second load: none of the account's own parts before it is confirmed, their room held", { own: at.own, held: at.held });
     check(at.items.length >= 5 && ['institution-page', 'stream', 'course', 'calendar', 'grades'].every((i) => at.items.includes(i)), 'second load: it has Ultra\'s items at first paint', at.items);
     check(JSON.stringify(at.current) === '["calendar"]', 'second load: where the student is now is marked, not where they were', at.current);
     check(at.inert, 'second load: the copy takes no focus or clicks');
@@ -112,6 +114,7 @@ const now = () => {
     check(taken.hosts === 1 && (await page.evaluate(() => window.__hosts)) <= 1, 'one bar host at all times (no duplicate focus targets)', { now: taken.hosts, max: await page.evaluate(() => window.__hosts) });
     check(JSON.stringify(taken.items) === JSON.stringify(at.items), 'the same items as the copy, in the same order', { copy: at.items, live: taken.items });
     check(JSON.stringify(taken.room) === JSON.stringify(at.room), 'the reserved room is unchanged at takeover', { copy: at.room, live: taken.room });
+    check(Object.keys(at.tops).every((k) => taken.tops[k] === at.tops[k]), 'nothing moved when the bar took over', { copy: at.tops, live: taken.tops });
     check(!taken.kept, 'what was kept is used once');
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
     const shifts = await page.evaluate(() => window.__shifts);

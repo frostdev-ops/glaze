@@ -66,7 +66,7 @@ function setup({ path = '/ultra/course', store = new Map(), account = () => Prom
   document.createTreeWalker = (el) => { let next = true; return { nextNode: () => (next ? (next = false, { data: el.textContent }) : null) }; };
   const paper = document.createElement('div'); paper.className = 'MuiPaper-root MuiDrawer-paper';
   const nav = document.createElement('nav'); nav.className = 'makeStylesnavigation-0-2-5';
-  for (const [id, label] of [...ITEMS, ['#', 'Sign Out']]) { const a = document.createElement('a'); a.href = id === '#' ? '#' : `/ultra/${id}`; a.textContent = label; nav.append(a); }
+  for (const [id, label] of [...ITEMS, ['profile', 'Alex Example'], ['#', 'Sign Out']]) { const a = document.createElement('a'); a.href = id === '#' ? '#' : `/ultra/${id}`; a.textContent = label; nav.append(a); }
   paper.append(nav); document.body.append(paper);
   const route = (to) => {
     document.location.pathname = to;
@@ -120,7 +120,7 @@ function firstPage(account) {
   context.GZ_NAV = undefined;
   context.GZ_SPEC = G.GZ_SPEC; context.GZ_DEFAULTS = G.GZ_DEFAULTS;
   vm.runInContext(read('navigation/nav.js'), context);
-  store.set('gz-navbar', JSON.stringify({ u: '_42_1', t: Date.now(), w: 'rail auto float', k: NAV.key(settings), v: '1440x900', a: [], m: '<nav class="rail">Private account and course names</nav>' }));
+  store.set('gz-navbar', JSON.stringify({ u: '_42_1', t: Date.now(), w: 'rail auto float', k: NAV.key(settings), v: '1440x900', a: [], m: '<nav class="rail"><div class="list"><a class="item" data-id="course" href="https://bb.school.test/ultra/course">Courses</a></div><div class="foot" data-p="0"></div></nav>', p: ['<div class="foot"><a class="item account" data-id="profile">Alex Private</a></div>'] }));
   context.GZ_NAV.first(settings, 'rail auto float', account);
   const host = document.getElementById('gz-navbar');
   return { ...h, host, load: () => host.shadowRoot.querySelector('link').onload(), drop: () => context.GZ_NAV.drop() };
@@ -188,6 +188,7 @@ test('a flush with nothing changed reads the drawer from its last read and build
 test('the bar as drawn is kept for the next page, and that page draws it with where the student is now', async () => {
   const h = setup();
   await tick();
+  h.root.querySelector('.rail .foot').box = { left: 0, top: 800, width: 224, height: 52 };
   h.events.pagehide();
   const raw = h.store.get('gz-navbar');
   assert.ok(raw, 'kept');
@@ -200,6 +201,9 @@ test('the bar as drawn is kept for the next page, and that page draws it with wh
   const at = { words: 'rail auto float', key: NAV.key(h.settings), size: '1440x900', now: s.t + 1000, from: '', origin };
   assert.deepEqual(NAV.kept(raw, at), s, 'the next page takes it');
   assert.ok(/^<nav [^>]*data-open=""/.test(s.m), 'the rail as pinned, never as peeked');
+  assert.ok(!s.m.includes('Alex') && s.p.some((x) => x.includes('Alex Example')), "the account's name is kept apart");
+  assert.match(s.m, /<div class="foot" data-p="(\d+)" style="box-sizing:border-box;visibility:hidden;width:224px;height:52px"><\/div>/, 'its room, at its size');
+  assert.ok(s.p[Number(s.m.match(/class="foot" data-p="(\d+)"/)[1])].startsWith('<div class="foot">'));
   assert.ok(!/data-peek/.test(s.m));
   // Parsed and painted on the next page, at Grades, with what a page's own script might have slipped in.
   const doc = { location: new URL(`${origin}/ultra/grades`) };
@@ -224,7 +228,7 @@ test('the bar as drawn is kept for the next page, and that page draws it with wh
 });
 
 test('what was kept is drawn only for this tab\'s same settings and window, from Ultra, for ten minutes', () => {
-  const s = { u: '_42_1', t: 1000, w: 'rail auto float', k: NAV.key(G.GZ_SANITIZE({})), v: '1440x900', a: [], m: '<nav class="rail"></nav>' };
+  const s = { u: '_42_1', t: 1000, w: 'rail auto float', k: NAV.key(G.GZ_SANITIZE({})), v: '1440x900', a: [], m: '<nav class="rail"></nav>', p: [] };
   const at = { words: s.w, key: s.k, size: s.v, now: 2000, from: `${origin}/ultra/course`, origin };
   const raw = JSON.stringify(s);
   assert.deepEqual(NAV.kept(raw, at), s);
@@ -250,7 +254,7 @@ test('cached markup strips handlers regardless of their text and rejects alterna
 });
 
 test('corrupt or forged first-paint metadata is rejected before it reaches DOM setters', () => {
-  const s = { u: '_42_1', t: 1000, w: 'rail auto float', k: 'settings', v: '1440x900', a: [['dir', 'ltr']], m: '<nav></nav>' };
+  const s = { u: '_42_1', t: 1000, w: 'rail auto float', k: 'settings', v: '1440x900', a: [['dir', 'ltr']], m: '<nav></nav>', p: [] };
   const at = { words: s.w, key: s.k, size: s.v, now: 2000, from: `${origin}/ultra/course`, origin };
   for (const a of [[null], ['dir'], [['dir']], [['data-', '']], [['data-replaced', '']], [['dir', {}]]]) {
     assert.equal(NAV.kept(JSON.stringify({ ...s, a }), at), null, `invalid host attributes: ${JSON.stringify(a)}`);
@@ -261,17 +265,23 @@ test('corrupt or forged first-paint metadata is rejected before it reaches DOM s
   assert.deepEqual(NAV.kept(JSON.stringify(s), { ...at, from: `${origin}/ultra?landing=1` }), s);
 });
 
-test('a cached bar stays hidden until its account is verified, regardless of stylesheet timing', async () => {
+test('at first paint the copy has none of the account\'s own parts; confirmed, they fill their kept room', async () => {
   for (const loadFirst of [true, false]) {
     let resolve;
     const h = firstPage(() => new Promise((r) => { resolve = r; }));
-    await tick();
+    const root = h.host.shadowRoot;
     if (loadFirst) h.load();
-    assert.equal(h.host.hidden, true, 'cached private labels stay hidden while identity is unknown');
+    await tick();
+    assert.equal(h.host.hidden, !loadFirst, 'shown with its sheet, before the account is known');
+    assert.equal(root.querySelector('[data-id="course"]').textContent, 'Courses', "what every student of the site has, at once");
+    assert.equal(root.querySelector('.account'), null, "no account's name before it is confirmed");
+    assert.ok(!root.textContent.includes('Alex'));
+    assert.equal(root.querySelector('.foot[data-p]') !== null, true, 'its room held');
     resolve('_42_1'); await tick();
-    assert.equal(h.host.hidden, !loadFirst, 'both identity and stylesheet must be ready');
-    if (!loadFirst) { h.load(); await tick(); }
-    assert.equal(h.host.hidden, false, 'the verified copy can be shown');
+    if (!loadFirst) h.load();
+    assert.equal(root.querySelector('.foot .account').textContent, 'Alex Private', 'confirmed, filled in');
+    assert.equal(root.querySelector('[data-p]'), null);
+    assert.equal(h.host.hidden, false);
   }
 });
 
@@ -279,7 +289,6 @@ test('a cached bar is discarded for another or unavailable account', async () =>
   for (const account of [() => '_7_1', () => '', () => Promise.reject(new Error('401')), undefined]) {
     const h = firstPage(account);
     h.load(); await tick();
-    assert.equal(h.host.hidden, true);
     assert.equal(h.host.isConnected, false, 'never show the previous account\'s navigation');
   }
 });
@@ -293,7 +302,6 @@ test('a late account result cannot remove a bar already taken over or resurrect 
     else h.drop();
     resolve(adopted ? '_7_1' : '_42_1'); await tick();
     assert.equal(h.host.isConnected, adopted);
-    assert.equal(h.host.hidden, !adopted);
   }
 });
 
