@@ -112,7 +112,8 @@ test('BLD-5: the permission text matches the manifest and the packaging scripts'
   assert.ok(chrome.optional_permissions.includes('identity'));
   const firefox = oauth(manifest, { target: 'firefox', calendar: false, drive: ON, config: drive });
   assert.equal(firefox.oauth2, undefined);
-  assert.equal((firefox.optional_permissions || []).includes('identity'), offered.firefox, 'Firefox: identity only while Drive is offered');
+  assert.equal(firefox.permissions.includes('identity'), offered.firefox, 'Firefox: identity only while Drive is offered, held from install (Firefox has no optional identity)');
+  assert.ok(!(firefox.optional_permissions || []).includes('identity'));
   if (offered.chrome || offered.firefox) assert.doesNotMatch(policy, /Google Drive[^.]*unavailable in (?:this|the current) build/, 'a build that offers Drive must not call it unavailable');
   assert.match(code('../tools/build/safari-manifest.sh'), /manifest\.pop\('oauth2', None\)\noptional = \[p for p in manifest\.get\('optional_permissions', \[\]\) if p != 'identity'/, 'Safari always leaves them out');
   assert.match(policy, /`identity` \(Chrome only, optional\) — asked for only when you press Connect/);

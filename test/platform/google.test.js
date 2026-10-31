@@ -71,7 +71,11 @@ const harness = ({ on = true, flow = 'chrome', config = REAL, granted = true, fi
   const g = G.create({
     on, config, flow, firefox,
     identity: () => (granted ? identity : undefined),
-    permissions: { contains: async ({ permissions }) => granted && permissions.join() === 'identity', remove: async (p) => { log.permRemoved.push(p); return true; } },
+    // Firefox lists identity only as a permission held from install (its identity schema extends PermissionNoPrompt), and its
+    // permissions API takes only optional ones: asked about identity, it throws.
+    permissions: firefox
+      ? { contains: () => { throw new TypeError('Type error for parameter permissions (Error processing permissions.0: Value "identity" must either: be one of ...)'); }, remove: (p) => { log.permRemoved.push(p); throw new TypeError('Type error for parameter permissions'); } }
+      : { contains: async ({ permissions }) => granted && permissions.join() === 'identity', remove: async (p) => { log.permRemoved.push(p); return true; } },
     manifest: () => ({ oauth2: { client_id: client } }),
     storage: area(local),
     fetch,
@@ -228,6 +232,8 @@ test('Firefox: the loopback redirect Google accepts, in the url only, and only t
   assert.equal(h.log.launch[1].interactive, false);
   assert.equal((await h.g.pick()).ok, true);
   assert.deepEqual(Object.keys(h.log.launch.at(-1)).sort(), ['interactive', 'url'], 'the picker too');
+  assert.deepEqual(await h.g.disconnect(), { ok: true, revoked: true, had: true });
+  assert.deepEqual(h.log.permRemoved, [], 'identity is the package\'s own on Firefox: nothing to give back');
 });
 
 test('without the Picker key, signing in, the token and Disconnect work, and only Pick says setup', async () => {
@@ -607,11 +613,11 @@ test('pick: frostdev.io first, its GitHub Pages copy when it doesn\'t load, the 
 });
 
 // ---- Settings' Google Drive rows (settings/options.js), run in a VM with the worker and storage stubbed ----
-const settings = async ({ email = 'student@school.edu', sync = {}, connect = { ok: true, email } } = {}) => {
+const settings = async ({ email = 'student@school.edu', sync = {}, connect = { ok: true, email }, firefox = false } = {}) => {
   const vm = require('node:vm');
   const src = fs.readFileSync(path.join(__dirname, '../../extension/settings/options.js'), 'utf8');
   const block = src.slice(src.indexOf('  // ---- Google Drive (background/google.js'), src.indexOf('  // Another surface changed something'));
-  const els = {}, sent = [], heard = [], local = { driveSync: sync };
+  const els = {}, sent = [], heard = [], asked = [], local = { driveSync: sync };
   const el = (id, hidden = false) => {
     const e = { id, observers: [], listeners: {}, checked: false, _hidden: hidden, _text: '', focus() {},
       addEventListener(type, f) { (this.listeners[type] ||= []).push(f); },
@@ -625,14 +631,16 @@ const settings = async ({ email = 'student@school.edu', sync = {}, connect = { o
       lastError: undefined,
       sendMessage: (m, reply) => {
         sent.push(structuredClone(m));
-        const r = m.type === 'glaze:google' ? (m.op === 'status' ? { ok: true, flow: 'chrome', email: local.google?.email || null } : m.op === 'connect' ? connect : { ok: true }) : { ok: true };
+        const r = m.type === 'glaze:google' ? (m.op === 'status' ? { ok: true, flow: firefox ? 'web' : 'chrome', email: local.google?.email || null } : m.op === 'connect' ? connect : { ok: true }) : { ok: true };
         if (m.type === 'glaze:google' && m.op === 'connect' && r.ok) local.google = { email: r.email };
         setTimeout(() => reply(r), 0);
       },
     },
-    permissions: { request: async () => true },
+    // Firefox's permissions API takes only optional permissions, and identity isn't one there: asked for it, it throws.
+    permissions: { request: async (p) => { asked.push(p); if (firefox) throw new TypeError('Type error for parameter permissions'); return true; } },
     storage: { local: { get: async (k) => ({ [k]: structuredClone(local[k]) }) }, onChanged: { addListener: (f) => heard.push(f) } },
   };
+  chrome.runtime.getURL = (p = '') => `${firefox ? 'moz-extension://6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b' : 'chrome-extension://abcdefghijklmnopabcdefghijklmnop'}/${p}`;
   if (email) local.google = { email };
   vm.runInNewContext(block, {
     $: (s) => els[s], chrome, t: (s) => s, hint() {}, GZ_SITE: {}, GZ_I18N: { locale: () => 'en', ui: () => 'en' }, Intl, Date,
@@ -641,7 +649,7 @@ const settings = async ({ email = 'student@school.edu', sync = {}, connect = { o
   const settle = () => new Promise((r) => setTimeout(r, 20));
   await settle();
   return {
-    els, sent, settle,
+    els, sent, settle, asked,
     click: async (id) => { for (const f of els[id].listeners.click) await f({ isTrusted: true, currentTarget: els[id] }); await settle(); },
     syncChange: async (next) => { local.driveSync = next; for (const f of heard) f({ driveSync: { newValue: next } }, 'local'); await settle(); },
   };
@@ -674,6 +682,17 @@ test('Settings: while Sync asks to connect Google Drive again, Connect is there 
   assert.deepEqual([n.els['#gdrive'].hidden, n.els['#gdrive-connect'].hidden, n.els['#gdrive-disconnect'].hidden, n.els['#gdrive-sync'].hidden], [false, false, true, true]);
   await n.click('#gdrive-connect');
   assert.deepEqual(n.sent.filter((m) => m.type === 'glaze:driveSync'), [], 'a first Connect: the worker turns Sync on itself');
+});
+
+test('Settings on Firefox: Connect goes straight to Google, never asking Firefox for identity (the package holds it; Firefox has no optional identity)', async () => {
+  const s = await settings({ email: null, firefox: true });
+  await s.click('#gdrive-connect');
+  assert.deepEqual(s.asked, [], 'no permissions.request');
+  assert.deepEqual(s.sent.filter((m) => m.type === 'glaze:google').map((m) => m.op), ['status', 'connect', 'status']);
+  assert.equal(s.els['#gdrive-who'].textContent, 'student@school.edu');
+  const c = await settings({ email: null });
+  await c.click('#gdrive-connect');
+  assert.deepEqual(c.asked, [{ permissions: ['identity'] }], 'Chrome, Edge and Brave still ask, inside the click');
 });
 
 test('Settings: a day whose backup Drive had no room for says so beside when Sync last ran', async () => {
@@ -713,7 +732,7 @@ test('packages: placeholders leave Drive out, so a build asks for no identity an
   assert.ok(!(chrome.optional_permissions || []).includes('identity'));
   const firefox = oauth(repo, { target: 'firefox', calendar: false, drive: true, config: BLANK });
   assert.equal(firefox.oauth2, undefined);
-  assert.ok(!(firefox.optional_permissions || []).includes('identity'));
+  assert.ok(![...(firefox.optional_permissions || []), ...firefox.permissions].includes('identity'));
   const { oauth2, optional_permissions: optional, ...rest } = repo;
   assert.deepEqual(chrome, { ...rest, optional_permissions: optional.filter((p) => p !== 'identity') }, 'nothing else changes');
 });
@@ -732,7 +751,8 @@ test('packages: real ids give Chrome the Drive client and its three scopes, with
   assert.ok(web.optional_permissions.includes('identity'));
   const firefox = oauth(repo, { target: 'firefox', calendar: false, drive: true, config: REAL });
   assert.equal(firefox.oauth2, undefined);
-  assert.ok(firefox.optional_permissions.includes('identity'), 'Firefox signs in with the Web client');
+  assert.ok(firefox.permissions.includes('identity'), 'Firefox signs in with the Web client, holding identity from install (it has no optional identity, and asks nothing for it)');
+  assert.ok(!(firefox.optional_permissions || []).includes('identity'));
 });
 
 test('packages: switched on, the shipped config gives Chrome Calendar\'s client with Drive\'s three scopes, and Firefox identity', () => {
@@ -741,7 +761,8 @@ test('packages: switched on, the shipped config gives Chrome Calendar\'s client 
   assert.deepEqual(chrome.optional_permissions, repo.optional_permissions);
   const firefox = oauth(repo, { target: 'firefox', calendar: false, drive: true, config: C });
   assert.equal(firefox.oauth2, undefined);
-  assert.deepEqual(firefox.optional_permissions, repo.optional_permissions);
+  assert.deepEqual(firefox.permissions, [...repo.permissions, 'identity']);
+  assert.deepEqual(firefox.optional_permissions, repo.optional_permissions.filter((p) => p !== 'identity'));
 });
 
 // ---- the build-time switch (background/google.js ON): off on this branch, as Calendar's is, until the release that ships Drive ----
@@ -756,7 +777,7 @@ test('Drive is switched off: the worker refuses, Settings has no row, and the pa
   for (const target of ['chrome', 'firefox']) {
     const m = oauth(repo, { target, calendar: false, drive: G.ON, config: C });
     assert.equal(m.oauth2, undefined, target);
-    assert.ok(!(m.optional_permissions || []).includes('identity'), target);
+    assert.ok(![...(m.optional_permissions || []), ...m.permissions].includes('identity'), target);
   }
   const src = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
   const at = src.indexOf("m?.type !== 'glaze:google'");
