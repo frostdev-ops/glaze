@@ -263,7 +263,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       const bytes = await unstaged(slot, t.size);
       if (!bytes) throw new Fail('missing');
       const keep = { get: async () => (await moveOf(slot))?.session || null, set: (session) => patchMove(slot, { session }), drop: () => patchMove(slot, { session: null }) };
-      const file = await send(t, bytes, keep, t.owner?.doc ? null : () => patchMove(slot, { id: null }));
+      const file = await send(t, bytes, keep, t.owner?.doc ? null : () => patchMove(slot, { id: null, aim: null }));
       await patchMove(slot, { file, session: null });
     };
     // One download brought in by ranges, each piece kept as it comes; a file whose revision or size moved meanwhile, or that
