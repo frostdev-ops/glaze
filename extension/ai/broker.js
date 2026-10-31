@@ -154,7 +154,10 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     const t = F().deadline(LIMIT.catalog), s = F().anySignal([signal, t.signal]);
     let list;
     try { list = await F().wait(() => use.p.catalog(use.cfg, { fetch: pinned(env, use), cache: cache(env), signal: s.signal }), s.signal); } catch { list = null; } finally { t.done(); s.done(); }
-    if (!signal?.aborted) { kept.set(k, { at: now, list }); if (kept.size > 16) kept.delete(kept.keys().next().value); }
+    // No selected local text model yet: a download or a recovered store read must be discovered on the next run.
+    if (!signal?.aborted && (use.p.id !== 'local' || list?.models.some((m) => typeof m.weights === 'string'))) {
+      kept.set(k, { at: now, list }); if (kept.size > 16) kept.delete(kept.keys().next().value);
+    } else if (use.p.id === 'local') kept.delete(k);
     return list;
   };
 
@@ -328,6 +331,9 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         // Glaze's own model: the window of the text model its catalog chose, which then runs the text requests (weights); a
         // task that only reads pictures plans for the picture model's.
         const known = list?.models.find((x) => x.id === chosen.model), planned = (task.caps.images === true && known?.pictures?.context?.inputLimit) || chosen.caps.context;
+        if (use.p.id === 'local' && (task.caps.images === true ? !known?.pictures?.context?.inputLimit : typeof known?.weights !== 'string')) {
+          throw F().modelFailure({ category: 'provider-unavailable', reason: task.caps.images === true ? 'pictures' : 'assets' });
+        }
         const cfg = { ...use.cfg, ...(planned && !use.cfg.context && { context: planned }), ...(chosen.caps.images !== undefined && use.cfg.images === undefined && { images: chosen.caps.images }),
           ...(typeof known?.weights === 'string' && { weights: known.weights }) };
         if (rate ? often(`${env.who}|${m.feature}|${m.task}`, now(), rate.perMinute || LIMIT.perMinute, '|rated') : often(key, now())) throw R().error('often');

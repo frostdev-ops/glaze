@@ -53,9 +53,9 @@ const env = () => {
     reach: async () => false, fetch: async () => { throw new Error('nothing goes over the network'); }, task: async (id) => T.get(id), say() {} };
 };
 // One run through the broker → its end or error message.
-const run = async (feature, task, input) => {
+const run = async (feature, task, input, e = env()) => {
   const posted = [], on = [];
-  B.connect({ postMessage: (m) => posted.push(JSON.parse(JSON.stringify(m))), disconnect() {}, onMessage: { addListener: (f) => on.push(f) }, onDisconnect: { addListener() {} } }, env());
+  B.connect({ postMessage: (m) => posted.push(JSON.parse(JSON.stringify(m))), disconnect() {}, onMessage: { addListener: (f) => on.push(f) }, onDisconnect: { addListener() {} } }, e);
   for (const f of on) f({ id: 1, op: 'run', feature, task, input });
   for (let i = 0; i < 50 && !posted.some((m) => ['end', 'error'].includes(m.type)); i++) await settle();
   return posted.find((m) => ['end', 'error'].includes(m.type));
@@ -149,5 +149,35 @@ test('a request runs on the model it was sized for, even when the store would no
     assert.equal((await run('writing', 'writer.review', W.review.input))?.type, 'end');
     assert.deepEqual(s.runs.map((r) => r.model), [stock().id]);
     assert.ok(s.seen.every((x) => x.context === STOCK.input));
+  } finally { s.done(); }
+});
+
+test('a failed catalog read cannot send a stock-sized request to a tuned model; the next run rediscovers it', async () => {
+  let reads = 0;
+  const s = setup(() => { if (reads++ === 0) throw new Error('store temporarily unavailable'); return [tuned()]; }, W.review.parts.map((p) => p.answer));
+  const e = env();
+  try {
+    const end = await run('writing', 'writer.review', W.review.input, e);
+    assert.equal(end?.error, 'provider-unavailable', JSON.stringify(end));
+    assert.equal(end.reason, 'assets');
+    assert.equal(s.runs.length, 0, 'no request without a discovered text model');
+    assert.equal((await run('writing', 'writer.review', W.review.input, e))?.type, 'end');
+    assert.deepEqual(s.runs.map((r) => r.model), W.review.parts.map(() => tuned().id));
+    assert.ok(s.seen.length && s.seen.every((x) => x.context === 4096));
+  } finally { s.done(); }
+});
+
+test('a catalog with no selected text model is not reused after a download becomes ready', async () => {
+  let ready = false;
+  const s = setup(() => [tuned({ state: ready ? 'ready' : 'missing' })], W.review.parts.map((p) => p.answer));
+  const e = env();
+  try {
+    assert.equal((await run('writing', 'writer.review', W.review.input, e))?.error, 'provider-unavailable');
+    assert.equal(s.runs.length, 0);
+    s.seen.length = 0;
+    ready = true;
+    assert.equal((await run('writing', 'writer.review', W.review.input, e))?.type, 'end');
+    assert.deepEqual(s.runs.map((r) => r.model), W.review.parts.map(() => tuned().id));
+    assert.ok(s.seen.length && s.seen.every((x) => x.context === 4096), JSON.stringify(s.seen));
   } finally { s.done(); }
 });

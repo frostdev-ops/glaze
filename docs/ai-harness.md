@@ -462,8 +462,9 @@ training data was made at caps.context 4096), 14,400 (16,000 less a tenth) for a
 `catalog` says the window of the text model the connection runs (its tier's, else the one here) and that model's store id
 (`weights`), and, while pictures are here, `pictures.context`; the broker sets `cfg.context` from the first (from the
 second for a task that only reads pictures, `writer.image`) and `cfg.weights`, and a text request runs on that model
-only (missing or not ready: `provider-unavailable`, `assets`), so a request is never planned for one model and read by
-another. A picture request goes to the picture model whatever the window: its own is the larger. In Advanced a feature's
+only (undiscovered, missing or not ready: `provider-unavailable`, `assets`), so a request is never planned for one model and read by
+another. A catalog without a selected text model is not cached; the next run discovers a completed download or a recovered
+store read. A picture request goes to the picture model whatever the window: its own is the larger. In Advanced a feature's
 context still replaces the window. `test/ai/local-window.test.js` holds `writer.review` and `syllabus.read` through the
 broker to lfm-tune's training examples (fixture: `tools/dev/local-window-fixture.js`). The system turn is the prefix kept
 warm: up to three per loaded model, as snapshots. Sampling: the request's temperature, else LFM3's GGUF defaults
