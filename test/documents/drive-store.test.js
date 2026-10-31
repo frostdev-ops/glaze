@@ -828,3 +828,58 @@ test('a snapshot Drive has no room for is skipped for the day: the run goes on, 
   assert.equal((await a.local.get('driveSync')).driveSync.snapSkip, null);
   noDeletes(drive);
 });
+
+// A change is stamped as it is made; the sweep lets a stamp go once the record agrees. One for a key made and gone again
+// before it ever went up has no record to agree with: let go once Drive has none either, never looked up on every run.
+test('a key made and removed again before it synced is let go: no lookup for it on every later run', async () => {
+  const drive = standin(), a = device(drive);
+  await a.local.set({ writerWords: ['Alpha'] });
+  assert.ok((await a.on()).ok);
+  await a.local.set({ [NOTE]: { text: 'Brief', at: 1 } });
+  await a.local.remove(NOTE);
+  assert.ok((await a.run({ push: true })).ok);
+  const from = drive.log.length;
+  for (let i = 0; i < 3; i++) assert.ok((await a.run({ push: true })).ok);
+  const lookups = drive.log.slice(from).filter((x) => x.method === 'GET' && x.path === '/drive/v3/files' && /key='key'/.test(x.query.q || ''));
+  assert.equal(lookups.length, 0, 'nothing asked of Drive for it again');
+  assert.equal(((await a.local.get(ST.STAMPS))[ST.STAMPS] || {})[`local:${NOTE}`], undefined, 'its stamp let go');
+  assert.equal(recFile(drive, 'local', NOTE), undefined, 'and no record made for it');
+  // Made again later: it goes up.
+  a.clock.t += 1000;
+  await a.local.set({ [NOTE]: { text: 'Back', at: 2 } });
+  assert.ok((await a.run({ push: true })).ok);
+  assert.equal(body(recFile(drive, 'local', NOTE)).value.text, 'Back');
+});
+
+// A note's folder lives in its account's folders record, which a device takes before the notes in one page of changes. A
+// note filed in a new folder must not go up before that folder: a run cut short between the two (the network, or Safari
+// unloading the worker) would leave the other device taking the note into No folder, where it stays, and that device's
+// next edit would carry No folder back to every device.
+test('a note filed in a new folder, the push cut short between them, reaches the other device in that folder', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  assert.ok((await a.notesOp({ key: ACCT, op: 'save', id: nid(1), base: 0, sid: 's1', html: '<p>Cells</p>', title: 'Cells' })).ok);
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  // Typed in, then filed in a folder made for it, before the push.
+  clock.t += 1000;
+  const folder = nid(900);
+  assert.ok((await a.notesOp({ key: ACCT, op: 'save', id: nid(1), base: (await idxOf(a)).notes[nid(1)].rev, sid: 's2', html: '<p>Cells and more</p>' })).ok);
+  assert.ok((await a.notesOp({ key: ACCT, op: 'folder', id: folder, name: 'Biology' })).ok);
+  assert.ok((await a.notesOp({ key: ACCT, op: 'meta', id: nid(1), folder })).ok);
+  // The push stops after its first record.
+  let ups = 0;
+  drive.offline((x) => x.path.startsWith('/upload/') && ++ups === 2);
+  assert.equal((await a.run({ push: true })).ok, false);
+  assert.ok((await b.run()).ok);
+  clock.t = (await a.local.get(S.STATE))[S.STATE].wait + 1;
+  assert.ok((await a.run()).ok);
+  assert.ok((await b.run()).ok);
+  assert.equal((await idxOf(b)).folders[folder]?.name, 'Biology');
+  assert.equal((await idxOf(b)).notes[nid(1)].folder, folder, 'B files it in Biology');
+  // B's next edit keeps it there on both.
+  clock.t += 1000;
+  assert.ok((await b.notesOp({ key: ACCT, op: 'save', id: nid(1), base: (await idxOf(b)).notes[nid(1)].rev, sid: 's3', html: '<p>Cells, by B</p>' })).ok);
+  assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
+  assert.match(await noteOf(a, nid(1)), /by B/);
+  assert.equal((await idxOf(a)).notes[nid(1)].folder, folder, 'A keeps it in Biology');
+  noDeletes(drive);
+});
