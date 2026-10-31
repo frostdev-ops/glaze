@@ -547,3 +547,17 @@ test('with the stage on, a document past what a transfer carries stays here, mar
   assert.deepEqual((await dk.store.get('driveSyncLarge')).driveSyncLarge?.docs, { [key]: true });
   assert.deepEqual(await moves(dk), {});
 });
+
+test('a worker whose stage won\'t open (IndexedDB refused) still syncs: small items as ever, a large one in one go', async () => {
+  const drive = standin(), dk = disk(), key = 'doc:00000000-0000-4000-8000-00000000a031';
+  const refused = () => { throw Object.assign(new Error('refused'), { why: 'unavailable' }); };
+  const write = dk.stage.write;
+  dk.stage.keys = dk.stage.entries = dk.stage.get = refused;
+  dk.stage.write = async (puts, dels) => (puts?.length ? refused() : write(puts, dels));
+  const a = worker(drive, dk), bytes = bytesOf(6 * MiB, 61);
+  await pdfOn(a, dk, key, bytes, 'Reader');
+  assert.ok((await a.sync.set(true)).ok);
+  assert.ok(fileOf(drive, key, 'file')?.bytes.equals(Buffer.from(bytes)), 'the 6 MB PDF in Drive, whole');
+  assert.equal(JSON.parse(fileOf(drive, key, 'doc').bytes).file, fileOf(drive, key, 'file').meta.id);
+  assert.deepEqual(await moves(dk), {});
+});
