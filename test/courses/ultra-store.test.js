@@ -155,6 +155,19 @@ test("planned (agenda, rail): a day inside Better To Do's range reads that range
   await s.page.planned(Date.parse(end) + DAY, Date.parse(end) + 2 * DAY, null);
   assert.equal(count(s.asked, /\/studentItems$/), 2);
   assert.equal(s.sent.filter((m) => m.type === 'glaze:todo').length, 1);
+  // Asked ahead of time (courses/page/ahead.js): every read it starts at the queue's low priority.
+  const low = site({ answers: ANSWERS(), prefs: PREFS });
+  await low.page.planned(+day, +day + DAY, null, '_900_1', 1);
+  assert.ok(low.asked.filter((a) => !/users\/(me|_900_1\/memberships)/.test(a.path)).every((a) => a.prio === 1));
+  assert.ok(low.asked.some((a) => /gradebook\/grades$/.test(a.path)), 'the gradebooks too');
+});
+
+test("planned answers from the To Do copy for the student it's drawn for without waiting on who is signed in", async () => {
+  const s = site({ answers: ANSWERS(), hold: (u) => u.pathname.endsWith('/users/me') });
+  const cache = { key: `todo:${O}/_900_1`, at: LATER, start: new Date(LATER - DAY).toISOString(), end: new Date(LATER + DAY).toISOString(), items: [{ id: '_1_1' }] };
+  const r = await s.page.planned(LATER, LATER + 36e5, cache, '_900_1');
+  assert.deepEqual([r.key, r.items], [cache.key, cache.items]);
+  assert.equal(s.asked.length, 0);
 });
 
 // ---- who's signed in ---------------------------------------------------------------------------------------------
@@ -326,7 +339,7 @@ test("every reader of a course's gradebook on a page asks the store, never its o
   assert.match(insights, /GZ_ULTRA\.page\.book\(c\.id, uid, \{ signal: go\.signal, live: go \}\)/);
   assert.doesNotMatch(insights, /\.grades\(/);
   // The planner's per-course reads, on a page: the store's.
-  assert.match(src('courses/ultra.js'), /grades: \(cid, uid\) => book\(cid, uid\)/);
+  assert.match(src('courses/ultra.js'), /grades: \(cid, uid\) => book\(cid, uid, \{ prio \}\)/);
 });
 
 test("search takes a course's documents from a fresh read with their bodies (a hover's prefetch) instead of asking", async () => {
