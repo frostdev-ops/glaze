@@ -1145,3 +1145,105 @@ test('a document\'s own file put in Drive\'s trash while Sync was off puts the d
   assert.ok(sidecarOf(drive, key).meta.explicitlyTrashed, 'its JSON copy follows into Drive\'s trash');
   noDeletes(drive);
 });
+
+test('a deck met while its JSON copy is out of Drive\'s trash and its file still in it reaches the device once the file comes back', async () => {
+  const drive = standin(), a = device(drive), b = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000a04';
+  const ref = await b.files.put(enc('PK deck one'), MIME.pptx);
+  await b.papers.save(key, { kind: 'slides', file: ref, size: ref.size, title: 'Talk', named: true, ext: '.pptx' });
+  assert.ok((await b.sync.set(true)).ok);
+  // The student trashes the JSON copy: B moves the deck into Trash and its file into Drive's trash; then restores the copy alone.
+  drive.trash(sidecarOf(drive, key).meta.id);
+  assert.ok((await b.sync.run()).ok);
+  assert.ok(P.trashed(await b.papers.get(key)) && exportOf(drive, key).meta.explicitlyTrashed);
+  drive.trash(sidecarOf(drive, key).meta.id, false);
+  // A joins before B has seen that: the deck isn't passed over for good.
+  assert.ok((await a.sync.set(true)).ok);
+  assert.equal(await a.papers.get(key), null, 'not taken while its file is in Drive\'s trash');
+  assert.ok((await b.sync.run()).ok);
+  assert.ok(!P.trashed(await b.papers.get(key)) && !exportOf(drive, key).meta.explicitlyTrashed, 'B restores it, its file too');
+  assert.ok((await a.sync.run()).ok);
+  assert.equal((await a.papers.get(key))?.file?.hash, ref.hash, 'A gets it');
+  noDeletes(drive);
+});
+
+test('Glaze restoring a document takes its file out of Drive\'s trash before its JSON copy, and trashes the copy first', async () => {
+  const drive = standin(), a = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000a05';
+  await a.papers.save(key, { doc: doc('Order'), title: 'Order', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  const j = sidecarOf(drive, key).meta.id, f = exportOf(drive, key).meta.id;
+  const moves = () => drive.log.filter((x) => x.method === 'PATCH' && x.path.startsWith('/drive/v3/files/')).map((x) => x.path.split('/').pop());
+  await a.papers.trash(key);
+  await a.sync.touched(key); await a.fire();
+  let n = drive.log.length;
+  assert.deepEqual(moves(), [j, f], 'into the trash: the copy, then the file');
+  await a.papers.untrash(key);
+  await a.sync.touched(key); await a.fire();
+  assert.deepEqual(drive.log.slice(n).filter((x) => x.method === 'PATCH').map((x) => x.path.split('/').pop()), [f, j], 'out of it: the file, then the copy');
+  noDeletes(drive);
+});
+
+test('a device meeting a document again with it in its Trash while Drive\'s is live takes it back out (restored wins)', async () => {
+  const drive = standin(), a = device(drive), b = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000a06';
+  await a.papers.save(key, { doc: doc('Shared'), title: 'Shared', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  assert.ok((await b.sync.set(true)).ok);
+  // B switches to another account (its links forgotten), trashes the paper there, then comes back.
+  b.who.account = 'other@school.edu';
+  assert.equal((await b.sync.run()).why, 'account');
+  await b.papers.trash(key);
+  b.who.account = 'student@school.edu';
+  assert.ok((await b.sync.set(true)).ok);
+  assert.ok(!P.trashed(await b.papers.get(key)), 'back out of Trash on B');
+  assert.ok((await a.sync.run()).ok);
+  assert.ok(!P.trashed(await a.papers.get(key)), 'still live on A');
+  noDeletes(drive);
+});
+
+test('a device meeting a document again with it live while Drive\'s copy is in the trash restores that copy, never a second one', async () => {
+  const drive = standin(), a = device(drive), b = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000a07';
+  await a.papers.save(key, { doc: doc('Shared'), title: 'Shared', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  assert.ok((await b.sync.set(true)).ok);
+  b.who.account = 'other@school.edu';
+  assert.equal((await b.sync.run()).why, 'account');
+  await a.papers.trash(key);
+  await a.sync.touched(key); await a.fire();
+  assert.ok(sidecarOf(drive, key).meta.explicitlyTrashed);
+  b.who.account = 'student@school.edu';
+  assert.ok((await b.sync.set(true)).ok);
+  const copies = [...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'doc' && f.meta.appProperties.key === sha(key).slice(0, 32));
+  assert.equal(copies.length, 1, 'one JSON copy in Drive');
+  assert.ok(!copies[0].meta.explicitlyTrashed && !exportOf(drive, key).meta.explicitlyTrashed, 'out of Drive\'s trash, its file too');
+  assert.ok((await a.sync.run()).ok);
+  assert.ok(!P.trashed(await a.papers.get(key)), 'restored on A too');
+  noDeletes(drive);
+});
+
+test('a document sent up again beside a copy in Drive\'s trash brings the devices that hold that copy back to it', async () => {
+  const drive = standin(), a = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000a08';
+  await a.papers.save(key, { doc: doc('Shared'), title: 'Shared', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  await a.papers.trash(key);
+  await a.sync.touched(key); await a.fire();
+  const first = sidecarOf(drive, key).meta.id;
+  // Another device that never saw the first copy (Drive's search lag, say) sends the document up as new.
+  const search = { ...drive, fetch: async (u, i) => { const r = await drive.fetch(u, i); if (!u.includes('/drive/v3/files?') || i?.method) return r; const j = await r.json(); j.files = (j.files || []).filter((f) => f.id !== first); return new Response(JSON.stringify(j), { status: 200, headers: { 'content-type': 'application/json' } }); } };
+  const b2 = device(search);
+  await b2.papers.save(key, { doc: doc('Shared'), title: 'Shared', named: true });
+  assert.ok((await b2.sync.set(true)).ok);
+  const second = [...drive.files.values()].find((f) => f.meta.appProperties.glaze === 'doc' && f.meta.id !== first && f.meta.appProperties.key === sha(key).slice(0, 32));
+  assert.ok(second && !second.meta.explicitlyTrashed, 'a second copy, live');
+  assert.ok((await a.sync.run()).ok);
+  assert.ok(!P.trashed(await a.papers.get(key)), 'A takes the document out of Trash');
+  assert.ok(!drive.view(first).trashed, 'and its copy out of Drive\'s trash');
+  assert.ok((await b2.sync.run()).ok);
+  assert.ok((await a.sync.run()).ok);
+  const visible = [...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'doc' && f.meta.appProperties.key === sha(key).slice(0, 32) && !drive.view(f.meta.id).trashed && f.meta.parents.includes(glazeFolder(drive).meta.id));
+  assert.deepEqual(visible.map((f) => f.meta.id), [first], 'the folder shows the lowest copy once');
+  noDeletes(drive);
+});
