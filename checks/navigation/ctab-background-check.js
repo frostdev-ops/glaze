@@ -137,7 +137,7 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
     await page.locator('.b8b-document').click();
     await page.waitForSelector('.routed-scroll main');
     await page.locator('#gz-ctabs [data-course-id="_102_1"]').click();
-    await until(() => page.evaluate(() => document.documentElement.hasAttribute('data-gz-ctab-framed')) && frame.evaluate(() => document.documentElement.hasAttribute('data-gz-through')));
+    await until(async () => await page.evaluate(() => document.documentElement.hasAttribute('data-gz-ctab-framed')) && frame.evaluate(() => document.documentElement.hasAttribute('data-gz-through')));
     const routed = await page.locator('body > .routed-page.bb-offcanvas-container').evaluate((e) => getComputedStyle(e).visibility);
     check(routed === 'hidden', `the covered routed page outside site-wrap stays hidden (${routed})`);
     // A later item creates a fresh CSS animation. Its inherited delay alone cannot put it at the page's moment.
