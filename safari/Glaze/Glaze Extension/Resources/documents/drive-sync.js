@@ -323,6 +323,13 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
             }
           }
           try {
+            // A download its owner no longer asks for (a picture whose note went, a copy replaced since) is let go before any
+            // of its bytes come: its owner, met again, waits on this transfer ('pending') or no longer does.
+            if (t.dir === 'down' && !t.done) {
+              const result = await replay(t.owner, folder), still = await moveOf(slot);
+              if (still?.tag !== t.tag || still.done) continue;
+              if (result !== 'pending') { await dropMove(slot); continue; }
+            }
             if (t.dir === 'up' && t.owner?.rec && more?.current && !await more.current(t.owner, t.tag)) {
               await dropMove(slot);
               await replay(t.owner, folder);
@@ -390,9 +397,10 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (j.kind === 'sheet' && (!j.parts || typeof j.parts !== 'object' || !Object.keys(j.parts).every((n) => PART.test(n) && Array.isArray(j.parts[n]?.rows)))) throw new Fail('bad');
       return { ...j, sum, file: typeof j.file === 'string' ? j.file : null };
     };
-    const finish = async (j, h, owner, F) => {
+    // lost: its file deleted for good, a PDF's or deck's bytes already here (the caller checked): nothing to bring.
+    const finish = async (j, h, owner, F, lost = false) => {
       const record = { ...strip(j.record), kind: j.kind };
-      const replacement = FILES.includes(j.kind) ? await bring(record.file, j.file, j.sum, j.fileRev, h, owner, F) : null;
+      const replacement = FILES.includes(j.kind) && !lost ? await bring(record.file, j.file, j.sum, j.fileRev, h, owner, F) : null;
       if (replacement) Object.assign(record, { file: replacement.ref, size: replacement.ref.size });
       return { key: j.key, kind: j.kind, record, parts: j.kind === 'sheet' ? j.parts : null, file: j.file, updated: Number.isFinite(j.updated) ? j.updated : 0,
         fileRev: replacement?.rev || (typeof j.fileRev === 'string' ? j.fileRev : null), external: !!replacement,
@@ -584,7 +592,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         // In Drive's trash and in Trash here, or never here: nothing to meet. Met by its tag alone, its copy says whether this
         // device holds it (a download stopped before its link was kept, say).
         if (R.trashed && (lt || (!l && key))) return;
-        const j = await readCopy(R, h, key, owner);
+        let j = await readCopy(R, h, key, owner);
         // Met by its tag alone (Drive's changes) while this device holds that document too, unlinked (written before its first
         // push, or its link let go): a first meeting with this device's own, never a download over it.
         if (!key && await env.papers.get(j.key)) return sync(j.key, h, { R, folder, files });
@@ -592,16 +600,33 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         // device's restores it, the file first (a device meeting it between finds both out). One in Trash here comes out when
         // Drive's is live. With nothing here to restore, a copy out of the trash beside a file still in it waits, linked
         // (meet) so that either file's next change meets it again.
-        const F = j.file ? (files?.get(j.file) || await meta(j.file)) : null, ft = !!F && !F.removed && F.trashed === true;
-        if (R.trashed || ft) {
-          if (!l || lt) { if (!R.trashed) await putDoc(h, { key: j.key, h, kind: j.kind, json: R.id, file: j.file, meet: true }, null); return; }
+        // Its file deleted for good in Drive (lost) weighs as Drive's side in Trash, as it does for a linked document: one
+        // live here is restored, its own file going up again (a PDF's or deck's other side only from bytes this device
+        // holds); one in Trash here has its copy follow into Drive's trash; with nothing here, nothing is taken.
+        const F = j.file ? (files?.get(j.file) || await meta(j.file)) : null, ft = !!F && !F.removed && F.trashed === true, lost = !!F?.removed;
+        if (R.trashed || ft || lost) {
+          if (!l || lt) {
+            if (ft && !R.trashed) await putDoc(h, { key: j.key, h, kind: j.kind, json: R.id, file: j.file, meet: true }, null);
+            else if (lost && lt && !R.trashed) await trashTo(R.id, true);
+            return;
+          }
           if (ft) await trashTo(j.file, false);
           if (R.trashed) await trashTo(R.id, false);
           R = { ...R, trashed: false, explicitlyTrashed: false };
         } else if (lt) { await env.papers.untrash(key); l = await local(key); lt = false; }
-        const got = await finish(j, h, owner, ft ? { ...F, trashed: false } : F);
+        let restore = null;
+        if (lost) {
+          // Once its replacement lands, a retry must finish this restoration, not follow the copy's deleted file again.
+          restore = { key, h, kind: kindOf(l.rec), json: R.id, jh: R.headRevisionId || null, file: null, fh: null, fsum: null,
+            rsum: j.sum, lsum: null, rev: -1, trashed: false };
+          const ref = j.record?.file;
+          if (FILES.includes(j.kind) && !(P().isRef(ref) && await env.files.has(ref.hash))) return push(key, h, l, restore, folder);
+          j = { ...j, file: null, fileRev: null };
+        }
+        const got = await finish(j, h, owner, ft ? { ...F, trashed: false } : F, lost);
+        if (lost) got.external = true; // sent up again below, with a file of its own
         if (gone?.file) { if (gone.file !== got.file) await putAway(gone.file, folder); await away([gone.file], null); }
-        const source = { json: R.id, file: got.file, fh: got.fileRev, fsum: got.sum };
+        const source = { ...restore, json: R.id, file: got.file, fh: got.fileRev, fsum: got.sum };
         if (!l) { const now2 = await take(got.key, null, got); if (got.external) return push(got.key, h, now2, source, folder); await agreed(got.key, h, R, got, now2, null); return; }
         if ((await sumOf(key, l)) !== got.sum) {
           // Both hold it, as with Restore: the later edited stays current, the other kept beside it (a PDF: both documents).
