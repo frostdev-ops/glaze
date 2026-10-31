@@ -622,13 +622,15 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     };
     // One Drive refused as it stands: the day's snapshot skipped (snapSkip 'quota' while for want of room).
     const failed = async (owner, why, ctx) => { if (owner.snap) await ctx.state({ snapSkip: why === 'quota' ? 'quota' : null }); };
+    // A staged upload may outlive a local edit or deletion before the first record link exists.
+    const current = async (owner, tag) => tag === await sumOf(owner.area, owner.key, await valueOf(owner.area, owner.key));
     const forget = async () => {
       const keys = (await S.keys()).filter((k) => k.startsWith(REC) || k === STAMPS);
       if (keys.length) await S.remove(keys);
     };
     // Whether a change to this key is one this layer listens for.
     const watches = (area, key) => !!catOf(area, key) || (area === 'local' && NOTES_KEY.test(key));
-    return { stamp, full, changes, sweep, snapshot, replay, failed, forget, catOf, watches };
+    return { stamp, full, changes, sweep, snapshot, replay, failed, current, forget, catOf, watches };
   };
 
   return { REC, FILE, STAMPS, CATS, SNAP, catOf, canon, clean, join, notesArea, create };
