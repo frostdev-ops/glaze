@@ -355,7 +355,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (!held) return;
     held.paused = true;
     held.ro.disconnect(); clearTimeout(held.timer); clearTimeout(held.quiet); clearTimeout(held.reveal); clearTimeout(held.cap);
-    held.quiet = 0;
+    held.quiet = 0; held.deadline = 0;
   };
   const unhold = () => {
     const d = held;
@@ -380,10 +380,12 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       if (held?.el === el && held.cid !== cid && of !== cid) return;
       if ((of && of !== cid) || (filled(el) && el.getBoundingClientRect().height > 0)) return;
     }
+    // A native redraw in the same course keeps the first visit's deadline and an already completed reveal.
+    const visit = held?.cid === cid ? { unsized: held.unsized, deadline: held.deadline } : null;
     unhold();
     if (!el || !cid || typeof ResizeObserver !== 'function') return;
     const known = Object.values(heights);
-    const d = held = { el, cid, size: 0, want: heights[cid] || (known.length ? Math.min(...known) : 0), edge: 0, timer: 0, quiet: 0, unsized: !known.length, hidden: false, reveal: 0, cap: 0 };
+    const d = held = { el, cid, size: 0, want: heights[cid] || (known.length ? Math.min(...known) : 0), edge: 0, timer: 0, quiet: 0, unsized: !known.length && visit?.unsized !== false, hidden: false, reveal: 0, cap: 0, deadline: visit?.deadline || 0 };
     // Its padding and border under the content: with the box held, the content's own height is read from its last block.
     if (d.want) try { const c = getComputedStyle(el); d.edge = (parseFloat(c.paddingBlockEnd) || 0) + (parseFloat(c.borderBlockEndWidth) || 0); } catch { /* no styles to ask */ }
     const own = (box) => {
@@ -396,7 +398,11 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     d.check = () => {
       const children = [...el.children];
       if (children.length !== d.children.length || children.some((k, i) => k !== d.children[i])) observe();
-      if (!filled(el)) return;
+      if (!filled(el) || (d.hidden && busyView(el))) {
+        // A loading placeholder (or actions removed while reloading) cannot finish a first visit's quiet period.
+        if (d.hidden) { clearTimeout(d.reveal); clearTimeout(d.quiet); d.quiet = 0; }
+        return;
+      }
       const box = el.getBoundingClientRect();
       if (!(box.width > 0 && box.height > 0)) return;
       const size = d.want ? own(box) : box.height;
@@ -425,7 +431,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       if (d.want) { setVar('--gz-sb-held', `${d.want}px`); html().setAttribute('data-gz-sb-held', ''); }
       if (d.unsized) {
         if (!d.hidden) { d.hidden = true; html().setAttribute('data-gz-sb-unsized', ''); }
-        d.cap = setTimeout(() => { if (held === d && !d.paused) show(d); }, 2000);
+        d.deadline ||= Date.now() + 2000;
+        d.cap = setTimeout(() => { if (held === d && !d.paused) show(d); }, Math.max(0, d.deadline - Date.now()));
       } else show(d);
       observe();
       d.check();
@@ -1039,7 +1046,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     // The column's end as the offsets put it (sidebar.css --gz-sb-end), before they are written.
     const bottom = parseFloat(css?.getPropertyValue('--gz-sb-bottom')) || 0, end = (foot) => Math.max(bottom, foot);
     const end0 = end(parseFloat(h.style.getPropertyValue('--gz-sb-foot')) || 0), top0 = parseFloat(h.style.getPropertyValue('--gz-sb-top')) || 0;
-    if (next !== 'drawer' && drawer) closeDrawer(false);
+    if (next !== 'drawer' && drawer) closeDrawer(false, false);
     // Glaze's own column fixed at the edge (A.own) keeps the page's content clear of it, below the adapter's top.
     setAttr(h, 'data-gz-sb-fixed', host.own && A.own ? '' : false);
     setAttr(h, 'data-gz-sb-ultra', ultra ? '' : false);
@@ -1358,7 +1365,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (framed) globalThis.GZ_CTABS?.drawer?.(true);
     toggle.focus();
   };
-  const closeDrawer = (restore = true) => {
+  const closeDrawer = (restore = true, relayout = true) => {
     const was = drawer;
     drawer = false;
     lift(false);
@@ -1375,7 +1382,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (framed) globalThis.GZ_CTABS?.drawer?.(false);
     closeMenu();
     if (adding && !adding.hidden) openAdd(false, false);
-    layout();
+    if (relayout) layout();
     if (restore && opener?.isConnected) opener.focus();
     opener = null;
   };

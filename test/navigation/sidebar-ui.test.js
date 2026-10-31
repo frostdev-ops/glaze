@@ -290,6 +290,21 @@ test('teardown cancels an unfinished width drag without changing the saved width
   assert.equal(p.doc.root.style.getPropertyValue('--gz-sidebar-w'), '352px');
 });
 
+test('widening an open drawer measures only once before and once after its mode changes', async () => {
+  const p = page({ width: 1000, left: 84, stored: record() });
+  await p.pass();
+  p.fire(p.$('#gz-sb-launch'), 'click'); await settle();
+  assert.equal(p.host().getAttribute('role'), 'dialog');
+  let reads = 0;
+  Object.defineProperty(p.$('#right-side'), 'offsetHeight', { get: () => { reads++; return 300; } });
+  await p.resize(1600);
+  assert.equal(p.mode(), 'expanded');
+  assert.equal(p.doc.root.hasAttribute('data-gz-sidebar-open'), false);
+  assert.equal(p.host().getAttribute('role'), 'complementary');
+  assert.equal(p.$('#content-wrapper').inert, false);
+  assert.equal(reads, 2, 'closing the drawer inside layout must not run a nested layout');
+});
+
 test('the drawer is a dialog: the page behind it inert, Escape closes it, the focus comes back', async () => {
   const p = page({ width: 1000, left: 84 });
   await p.pass();

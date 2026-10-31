@@ -978,6 +978,8 @@ const detailsSize = (p, height) => {
 const heightTimers = (p) => {
   let now = 0, id = 0;
   const pending = new Map();
+  const NativeDate = p.c.Date;
+  p.c.Date = class extends NativeDate { static now() { return now; } };
   p.c.setTimeout = (f, ms) => { pending.set(++id, { f, at: now + ms }); return id; };
   p.c.clearTimeout = (i) => pending.delete(i);
   return (ms) => {
@@ -1173,6 +1175,49 @@ test("a first visit to a course: This page shows from when the sidebar takes the
   assert.equal(q.doc.root.dataset.gzSbUnsized, '');
   qtick(2000);
   assert.equal(q.doc.root.dataset.gzSbUnsized, undefined, 'at most 2 s');
+});
+
+test('a first-visit loading placeholder cannot settle the Details reveal', async (t) => {
+  for (const partial of [false, true]) await t.test(`partial actions ${partial}`, async () => {
+    const p = page({ aside: 'live', stored: record() });
+    const tick = heightTimers(p), details = p.$('.js-details-and-actions');
+    detailsSize(p, 0);
+    await p.pass();
+    if (partial) { fillDetails(p, details, 2); tick(100); }
+    details.replaceChildren(p.el('div', 'spinner', 'Loading'));
+    details.box = { left: 1248, top: 140, width: 320, height: 33 };
+    for (const ro of p.sizes.filter((r) => r.targets.includes(details))) ro.f([{ target: details }]);
+    tick(300);
+    assert.equal(p.doc.root.hasAttribute('data-gz-sb-unsized'), true, 'loading is not a settled set of actions');
+    // Even an unchanged final height needs its own quiet period after loading.
+    fillDetails(p, details, partial ? 2 : 1);
+    tick(299);
+    assert.equal(p.doc.root.hasAttribute('data-gz-sb-unsized'), true);
+    tick(1);
+    assert.equal(p.doc.root.hasAttribute('data-gz-sb-unsized'), false, 'drawn actions settle for 300 ms');
+  });
+});
+
+test('replacing an empty Details block cannot restart the first-visit reveal deadline', async () => {
+  const p = page({ aside: 'live', stored: record() });
+  const tick = heightTimers(p);
+  detailsSize(p, 0);
+  await p.pass();
+  const replace = () => {
+    const old = p.$('.js-details-and-actions');
+    const next = p.el('div', 'js-details-and-actions outline-action-block');
+    next.box = { left: 1248, top: 140, width: 320, height: 0 };
+    old.before(next); old.remove();
+    p.mutate(p.host(), { addedNodes: [next], removedNodes: [old] });
+  };
+  tick(1500);
+  replace(); await settle();
+  tick(499);
+  assert.equal(p.doc.root.hasAttribute('data-gz-sb-unsized'), true);
+  tick(1);
+  assert.equal(p.doc.root.hasAttribute('data-gz-sb-unsized'), false, 'two seconds from the first block, including its replacement');
+  replace(); await settle();
+  assert.equal(p.doc.root.hasAttribute('data-gz-sb-unsized'), false, 'a later native redraw cannot hide already revealed blocks');
 });
 
 test('covering a first visit preserves its reveal wait and never restarts an expired reveal', async () => {
