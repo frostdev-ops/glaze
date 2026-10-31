@@ -73,14 +73,14 @@ const query = (q) => {
   return terms;
 };
 
-const standin = ({ tokens = null, owner = 'student@school.edu' } = {}) => {
+const standin = ({ tokens = null, owner = 'student@school.edu', quantum = 256 << 10 } = {}) => {
   const files = new Map(); // id → { meta, bytes, app: whether Glaze made it (drive.file sees only those) }
   const feed = []; // { n, fileId, time }
   const log = [];
   const faults = [];
   const uploads = new Map();
   const cuts = []; // { keep, match, done }: the next chunk that matches keeps keep bytes and hangs
-  const QUANTUM = 256 << 10;
+  const QUANTUM = quantum; // Drive's 256 KiB; smaller for the chaos test's tiny transfers
   let seq = 1000, ids = 0, revs = 0, clock = Date.parse('2026-10-30T12:00:00.000Z');
   const valid = tokens || new Set(['tok-1', 'tok-2', 'tok-3', 'ya29.check-drive-token']);
   const time = () => new Date(clock += 1000).toISOString();

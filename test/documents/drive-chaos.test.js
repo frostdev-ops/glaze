@@ -60,11 +60,34 @@ test('a worker stopped at any await of a first push (its write landed or not) st
   assert.ok(stopped > 8, `stopped ${stopped} times`);
 });
 
+// Tiny transfers (C.TINY): past a few hundred bytes a transfer goes large, so most documents, JSON copies, records and
+// snapshots are staged and sent in chunks across runs and workers, and come in by range; a kill applied at a chunk leaves
+// Drive part of it.
+for (const seed of [1, 2, 3, 4, 5]) {
+  test(`tiny transfers, seed ${seed}: ${ITER} operations on ${DEVICES} devices converge with nothing lost`, async () => {
+    const r = await C.play(seed, { ops: ITER, devices: DEVICES, tiny: true });
+    assert.ok(r.ok, show(r));
+  });
+}
+
+test('tiny transfers: a worker stopped at any await of a first push, mid-chunk too, still converges', async () => {
+  const base = [{ t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'pdf', k: 'new', d: 0, pick: 0, pick2: 0, s: 2 }, { t: 'setting', d: 0, k: 'colors', pick: 0, s: 3 }, { t: 'note', k: 'new', d: 0, pick: 0, pick2: 0.9, s: 4 }];
+  let stopped = 0, cut = 0;
+  for (let kill = 1; ; kill += 29) {
+    const r = await C.play(1, { list: [...base, { t: 'run', d: 0, how: 'run', s: 5, kill, apply: kill % 2 === 1 }], devices: 2, join: 'all', tiny: true });
+    if (!r.trace.some((l) => /killed/.test(l))) break;
+    stopped++;
+    if (r.trace.some((l) => /killed at net\.PUT/.test(l))) cut++;
+    assert.ok(r.ok, show(r));
+  }
+  assert.ok(stopped > 8 && cut > 2, `stopped ${stopped} times, ${cut} at a chunk`);
+});
+
 // Each known defect's fewest operations (on two devices unless it says): todo while it stands, a regression test once fixed
 // (fixed: true; drop its TODO seeds).
 for (const [name, k] of Object.entries(C.KNOWN)) {
   test(`${k.fixed ? 'fixed' : 'known'} (${name}): ${k.about}`, { todo: k.fixed ? undefined : FINDINGS }, async () => {
-    const r = await C.play(1, { list: k.repro, devices: k.devices || 2, join: k.join || 'all' });
+    const r = await C.play(1, { list: k.repro, devices: k.devices || 2, join: k.join || 'all', tiny: !!k.tiny });
     if (k.stops) assert.ok(r.trace.some((l) => l.includes(`killed at ${k.stops}`)), `its kill lands at ${k.stops}\n${r.trace.join('\n')}`);
     assert.ok(r.ok, show(r));
   });
