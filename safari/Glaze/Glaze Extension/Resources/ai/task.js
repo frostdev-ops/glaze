@@ -20,6 +20,9 @@
 //   orchestrate?(input, { caps, text, ask, fits, signal, limits }) → a raw output, or undefined for the ordinary run.
 //     Trusted task code only. ask(request, { output?, check? }) uses this run's provider, deadline and accounting; it
 //     never retries. Calls are sequential and bounded by limits.calls (at most LIMIT.calls). fits reserves output room.
+//     ask's call: the orchestration's own kind of request (CALL, e.g. writer.feedback's decide, explain, summary, scan),
+//     on the request's task info beside id and version, which no provider sends; Glaze's own model reads it
+//     (ai/providers/local.js THINK).
 // A run emits ai/loop.js's events (thinking, text_delta, says, step_start, step, pending, usage, reply) and a note
 // { part, parts } as each part starts. A tool that waits for the student ends the run with `pending` and no output.
 // Classic script for the worker; module.exports for node.
@@ -34,6 +37,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
   // parts: most requests one run makes; context: tokens assumed when a provider doesn't say; ms: a whole run's default.
   const LIMIT = { parts: 20, calls: 64, context: 16000, ms: 180000 };
   const fn = (v) => typeof v === 'function';
+  const CALL = /^[a-z]{1,16}$/;
   const KEYS = ['id', 'version', 'caps', 'input', 'build', 'output', 'check', 'tools', 'limits', 'stream', 'disclose', 'rate', 'split', 'merge', 'warm', 'orchestrate'];
   // rate.perMinute at most: a supersede task's runs are short and replace each other.
   const RATE = 120;
@@ -95,8 +99,8 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
     const outputs = [], steps = [], usage = { input: 0, output: 0 };
     let rounds = 0, finish = 'stop', pending, orchestrated, calls = 0, inFlight = false, active = true, releaseImages;
     const checkFailure = () => Object.assign(Q.error('check'), ['writer.outline', 'writer.feedback'].includes(task.id) ? { reason: task.id.slice(7) } : {});
-    const requestOf = (built, output = task.output, maxTokensCap) => {
-      const request = mine({ ...built, ...(output !== 'text' && { schema: output }), ...(task.limits.maxTokens && built.maxTokens === undefined && { maxTokens: task.limits.maxTokens }), task: own(task) }, over);
+    const requestOf = (built, output = task.output, maxTokensCap, call) => {
+      const request = mine({ ...built, ...(output !== 'text' && { schema: output }), ...(task.limits.maxTokens && built.maxTokens === undefined && { maxTokens: task.limits.maxTokens }), task: { ...own(task), ...(call && { call }) } }, over);
       if (Number.isSafeInteger(maxTokensCap) && maxTokensCap > 0 && maxTokensCap <= Q.LIMIT.maxTokens) request.maxTokens = Math.min(request.maxTokens || maxTokensCap, maxTokensCap);
       return request;
     };
@@ -105,8 +109,9 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
       const pictures = (request.messages || []).flatMap((m) => Array.isArray(m.content) ? m.content : []).filter((c) => c.type === 'image').length;
       return X().estimateTokens(request) + (request.maxTokens || 1024) + pictures * 1024 + Math.max(128, Math.ceil(context * 0.08)) <= context;
     };
-    const ask = async (built, { output = task.output, check, note, maxTokensCap } = {}) => {
+    const ask = async (built, { output = task.output, check, note, maxTokensCap, call } = {}) => {
       if (!active) throw Q.error('limit', 'finished');
+      if (call !== undefined && !(typeof call === 'string' && CALL.test(call))) throw Q.error('input', 'call');
       if (both.signal.aborted) throw both.signal.reason;
       if (inFlight || calls >= (task.limits.calls || LIMIT.parts)) throw Q.error('limit', 'calls');
       if (!Q.isObj(built) || (output !== 'text' && S().clean(output)?.type !== 'object')) throw Q.error('input', 'build');
@@ -114,7 +119,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
       inFlight = true; calls++;
       emit({ type: 'note', part: calls, parts: task.limits.calls || LIMIT.parts, ...(Q.isObj(note) && ['evidence', 'criterion', 'summary'].includes(note.stage) && Number.isSafeInteger(note.part) && Number.isSafeInteger(note.parts) && note.part > 0 && note.part <= note.parts ? { stage: note.stage, part: note.part, parts: note.parts } : {}) });
       try {
-        const request = requestOf(built, output, maxTokensCap);
+        const request = requestOf(built, output, maxTokensCap, call);
         const res = await L().run({ request, tools: [], call: (r, o) => P().run(p, r, c, { ...o, fetch }), policy, rounds: task.limits.steps, limits, headless, stream: false, signal: both.signal, emit, ctx, confirms });
         steps.push(...res.steps); rounds += res.rounds;
         usage.input += res.usage?.input || 0; usage.output += res.usage?.output || 0;

@@ -411,6 +411,8 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
 
   // Local models receive one decision at a time. Every oversized source is read in complete chunks before its
   // criterion is judged. Exact extracted text is checked in code; omissions or an exhausted bounded plan prevent a grade.
+  // Each request names its kind on its task info (ask's call): scan (an evidence chunk), decide (a criterion's status,
+  // evidence, level and score, its reconsideration too), explain (a decision's comment), summary.
   const lean = (v) => Array.isArray(v) ? v.map(lean) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'description').map(([k, x]) => [k, lean(x)])) : v;
   const ROW_OUTPUT = lean(OUTPUT);
   delete ROW_OUTPUT.properties.grade;
@@ -501,7 +503,7 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
           code: 'request-rejected', category: 'request-rejected', reason: 'response-limit', phase: 'response', actual: new TextEncoder().encode(JSON.stringify(out)).length, limit: r.maxTokens * 4,
         });
         return validate(out);
-      }, note, ...outputLimit(request) }); };
+      }, note, call: note?.call, ...outputLimit(request) }); };
       try { return await call(request); } catch (e) {
         const cutoff = local && knownResponseLimit(e, request.maxTokens);
         if (!cutoff && !knownInvalid(e)) throw e;
@@ -549,7 +551,7 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
       if (used + discovery.length + 6 > limits.calls) throw sizeError('feedback-calls', used + discovery.length + 6, limits.calls);
       const requirements = new Set(inp.visualRequirements);
       for (const [i, source] of discovery.entries()) {
-        const out = await attempt(scanRequest(source, '', true), scanSchema(source), scanCheck(source), { stage: 'evidence', part: i + 1, parts: discovery.length });
+        const out = await attempt(scanRequest(source, '', true), scanSchema(source), scanCheck(source), { stage: 'evidence', part: i + 1, parts: discovery.length, call: 'scan' });
         if (!out?.complete) inp.incomplete = true;
         for (const quote of out?.quotes || []) {
           requirements.add(quote.text);
@@ -622,7 +624,7 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
         material = [];
         let complete = true;
         for (const [j, source] of plan.chunks.entries()) {
-          const out = await attempt(scanRequest(source, plan.row.rubric), scanSchema(source), scanCheck(source), { stage: 'evidence', part: j + 1, parts: plan.chunks.length });
+          const out = await attempt(scanRequest(source, plan.row.rubric), scanSchema(source), scanCheck(source), { stage: 'evidence', part: j + 1, parts: plan.chunks.length, call: 'scan' });
           if (!out?.complete) complete = false;
           if (out?.quotes.length) material.push({ ...source, text: out.quotes.map((p) => p.text).join('\n'), selected: out.quotes });
         }
@@ -651,7 +653,7 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
         if (inp.grade && Number.isFinite(plan.row.points) && !hit.score) return null;
         return row;
       };
-      const note = { stage: 'criterion', part: i + 1, parts: plans.length };
+      const note = { stage: 'criterion', part: i + 1, parts: plans.length, call: 'decide' };
       const validate = (out) => S.validate(out, plan.schema).length ? null : resolve(out.criteria[0]);
       let row;
       if (local) {
@@ -687,7 +689,7 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
             if (S.validate(out, COMMENT).length || !completeSentence(out.comment) || !assesses(out.comment, grounded)) return null;
             if (citationsFor(plan.row) && !/\bworks cited\b|\bauthor[-\s]page\b|\b(?:missing|lack\w*|omit\w*|without|no)\b[^.!?]{0,60}\byears?\b|\byears?\b[^.!?]{0,60}\b(?:missing|lack\w*|omit\w*)\b/i.test(out.comment)) return null;
             return contradictoryStyle(out.comment, requiredStyle(plan.row), checkedDecision.status) ? RECONSIDER : resolve({ ...checkedDecision, criterion: plan.row.id, comment: out.comment });
-          }, note, pass === 0, (reason) => { commentFailure = reason; });
+          }, { ...note, call: 'explain' }, pass === 0, (reason) => { commentFailure = reason; });
           if (explained === null && commentFailure && inp.grade && assessed.level && Number.isFinite(assessed.level.value) && assessed.score && Number.isFinite(assessed.score.earned) && Number.isFinite(assessed.score.total)
             && ['partly', 'missing'].includes(checkedDecision.status) && citationsFor(plan.row)?.witnesses.every((p) => inp.text.slice(p.start, p.end) === p.text)) {
             // A known unusable explanation cannot erase a complete, grounded rubric decision. This sentence states
@@ -719,7 +721,7 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
         data: [{ label: 'checked assessments', text: JSON.stringify(criteria.map((c) => { const checked = check({ criteria: [c] }, inp, { caps, estimates: false }).criteria[0]; return { criterion: c.criterion, status: c.status, comment: c.comment, ...(checked?.score && { score: checked.score }), ...(checked?.level && { level: checked.level.label }) }; })) },
           ...(inp.incomplete ? [{ label: 'assessment limitation', text: inp.imageLimitations.join('\n') || GRADE_REASONS.coverage }] : [])], maxTokens: 256, temperature: 0 });
       if (room(request, summaryOutput)) {
-        const out = await attempt(request, summaryOutput, (out) => S.validate(out, summaryOutput).length || (local && !completeSentence(out.summary)) || unsupportedEdition(out.summary, inp) ? null : (assesses(out.summary, sourcesForSummary) ? out : null), { stage: 'summary', part: 1, parts: 1 });
+        const out = await attempt(request, summaryOutput, (out) => S.validate(out, summaryOutput).length || (local && !completeSentence(out.summary)) || unsupportedEdition(out.summary, inp) ? null : (assesses(out.summary, sourcesForSummary) ? out : null), { stage: 'summary', part: 1, parts: 1, call: 'summary' });
         summary = out?.summary || '';
       }
     }
