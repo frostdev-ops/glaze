@@ -358,6 +358,31 @@ test('a click that doesn\'t change the page, a page that never gets ready, or th
   assert.ok(!s.pressed(cur), 'already current');
 });
 
+test('another page opened meanwhile takes it away, and a page with no spinners where Glaze looks is taken as ready a second on', () => {
+  const s = site();
+  s.sync();
+  s.tap(s.course.links.announcement);
+  s.go(`/ultra/courses/${COURSE}/announcements`);
+  s.flush();
+  assert.ok(s.skel());
+  s.go('/ultra/course');
+  s.flush();
+  assert.equal(s.skel(), null, 'not the click\'s page any more');
+  assert.ok(!s.baseMain.hasAttribute('data-gz-skel-host') && !s.course.tools.hasAttribute('data-gz-skel-host'));
+
+  const q = site();
+  q.sync();
+  q.tap(q.course.links.calendar);
+  q.go(`/ultra/courses/${COURSE}/calendar`);
+  q.flush();
+  q.tick(900);
+  q.flush();
+  assert.ok(q.skel(), 'Ultra may still be on its way');
+  q.tick(200);
+  q.flush();
+  assert.equal(q.skel(), null, 'no spinners and the area filled a second after the address changed');
+});
+
 test('each page\'s skeleton has its shape: rows, tiles, else generic', () => {
   for (const [at, target, shape] of [
     [`/ultra/courses/${COURSE}/announcements`, (s) => s.course.links.outline, 'rows'],
