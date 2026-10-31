@@ -88,7 +88,7 @@ function instrument(timed) {
 const rows = (kind, n) => Array.from({ length: n }, (_, i) => kind === 'outline'
   ? `<div class="content-list-item" data-content-id="_${1000 + i}_1"><h3><button id="folder-title-_${1000 + i}_1" aria-expanded="false">Folder ${i}</button></h3><span>Due: October 20, 2026</span></div>`
   : `<div class="native-row"><span>Sample ${i}</span><button>Open</button><div>Course information</div></div>`).join('');
-const routeBody = (kind) => `<section class="route-view-container ${kind === 'outline' ? 'course' : ''}"><h1>${kind}</h1>${kind === 'course'
+const routeBody = (kind) => `<section class="route-view-container ${kind === 'outline' ? 'course' : ''}"><h1 elementtiming="title">${kind}</h1>${kind === 'course'
   ? `<div class="courses-panel"><div class="course-org-list">${Array.from({ length: 24 }, (_, i) => `<article class="element-card course-element-card" data-course-id="_${101 + i}_1"><div class="course-banner"></div><div class="element-details"><h4 class="course-title"><span class="js-course-title-element">Course ${i}</span></h4><div class="course-status">Open</div></div></article>`).join('')}</div></div>`
   : rows(kind, kind === 'outline' ? 240 : 30)}</section>`;
 const fixture = `<!doctype html><html lang="en"><head><base href="//ultra-cdn.invalid/ultra/uiv4001.0.0-rel/"><meta charset="utf-8"><title>Ultra performance fixture</title><style>body{margin:0;font:14px sans-serif}nav{position:fixed;width:200px}main{margin-left:200px}.native-row,.content-list-item{padding:4px;border-bottom:1px solid #ddd}</style></head><body><div id="site-wrap"><nav id="base_tools"><a href="/ultra/institution-page"><span>Institution Page</span></a><a href="/ultra/course">Courses</a></nav><main id="main-content"><div id="main-content-inner">${routeBody('stream')}</div></main></div><aside id="gz-perf-own"></aside></body></html>`;
@@ -113,6 +113,7 @@ async function settle(page, change) {
     }
     mo.disconnect();
     return { elapsed: performance.now() - start, lastMutation: last - start, changes, held, stillHeld: !!document.querySelector('[data-gz-loading]'), longTasks: window.perfLongTasks, nodes: document.body.querySelectorAll('*').length, rows: document.querySelectorAll('.native-row, .content-list-item, .course-element-card').length,
+      ...(window.perfSpeed && { sample: document.querySelector('.content-list-item, .course-element-card, .native-row')?.outerHTML.slice(0, 1200) }),
       ...(window.perfSpeed && { window: [change ? start : 0, performance.now()] }) };
   }, { change, body: routeBody(change) });
 }
@@ -120,14 +121,60 @@ async function settle(page, change) {
 // PERF_SPEED: what the page observes in its own world from its first script: when Glaze's look lands on <html>
 // (content/content.js applySettings sets data-gz-font), paints, layout shifts and long animation frames with their scripts.
 function speedProbe() {
-  const s = window.perfSpeed = { styledAt: null, lcp: [], shifts: [], loafs: [], drawn: [] };
+  const s = window.perfSpeed = { styledAt: null, lcp: [], shifts: [], loafs: [], drawn: [], h1: [], fonts: [], glaze: [], titles: [] };
   const styled = () => { if (s.styledAt == null && document.documentElement?.hasAttribute('data-gz-font')) s.styledAt = performance.now(); };
   styled();
   // The document, not <html>: this runs before the parser has made <html>.
   new MutationObserver(styled).observe(document, { attributes: true, subtree: true, attributeFilter: ['data-gz-font'] });
+  // Attribution: a short selector per shifted node, and what happened to the page's headings (re-inserts, attribute
+  // changes on them or their ancestors, font loads, computed-look changes per frame) to line up with the LCP entry.
+  const sel = (n) => {
+    const e = n?.nodeType === 1 ? n : n?.parentElement;
+    if (!e) return null;
+    const part = (x) => x.tagName.toLowerCase() + (x.id ? `#${x.id}` : '') + [...x.classList].slice(0, 2).map((c) => `.${c}`).join('');
+    const out = [];
+    for (let x = e; x && x !== document.documentElement && out.length < 3; x = x.parentElement) out.unshift(part(x));
+    return out.join(' > ') + (n.nodeType === 3 ? ' #text' : '');
+  };
+  const rect = (r) => r && [r.x, r.y, r.width, r.height].map(Math.round);
+  const log = (row) => { if (s.h1.length < 400) s.h1.push({ t: performance.now(), ...row }); };
+  const headings = (n) => n?.nodeType !== 1 ? [] : n.tagName === 'H1' ? [n] : [...n.querySelectorAll('h1')];
+  new MutationObserver((records) => {
+    for (const r of records) {
+      if (r.type === 'childList') {
+        for (const n of r.addedNodes) for (const h of headings(n)) log({ kind: 'insert', el: sel(h), text: h.textContent.trim().slice(0, 40), into: sel(r.target) });
+        // Glaze's own nodes as they land: what a shift's moved nodes were pushed by.
+        for (const n of r.addedNodes) if (n.nodeType === 1 && (/^gz-/.test(n.id) || /(^|\s)gz-/.test(n.className?.baseVal ?? n.className))) s.glaze.length < 200 && s.glaze.push({ t: performance.now(), el: sel(n), into: sel(r.target), next: sel(n.nextElementSibling) });
+        for (const n of r.removedNodes) for (const h of headings(n)) log({ kind: 'remove', text: h.textContent.trim().slice(0, 40), from: sel(r.target) });
+      } else if (r.target.nodeType === 1 && r.target !== document.documentElement && (r.target.tagName === 'H1' || r.target.querySelector('h1'))) {
+        log({ kind: 'attr', el: sel(r.target), attr: r.attributeName, value: r.target.getAttribute(r.attributeName)?.slice(0, 120) ?? null });
+      }
+    }
+  }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'hidden', 'inert', 'data-gz-loading', 'data-gz-placing', 'data-gz-on', 'data-gz-font'] });
+  const fontsReady = () => {
+    if (!document.fonts) return;
+    for (const type of ['loading', 'loadingdone', 'loadingerror']) document.fonts.addEventListener(type, (e) => s.fonts.length < 100 && s.fonts.push({ t: performance.now(), type, families: e.fontfaces.map((f) => `${f.family} ${f.weight}`) }));
+  };
+  fontsReady();
+  const looks = new WeakMap();
+  let frameId;
+  const frame = () => {
+    for (const h of document.querySelectorAll('h1')) {
+      const c = getComputedStyle(h), r = h.getBoundingClientRect();
+      const now = { visibility: c.visibility, opacity: c.opacity, display: c.display, font: `${c.fontWeight} ${c.fontSize} ${c.fontFamily.slice(0, 60)}`, rect: rect(r), contentVisibility: c.contentVisibility };
+      const was = looks.get(h), key = JSON.stringify(now);
+      if (was !== key) { looks.set(h, key); log({ kind: 'look', el: sel(h), ...now }); }
+    }
+    frameId = requestAnimationFrame(frame);
+  };
+  frameId = requestAnimationFrame(frame);
+  window.perfSpeedStopSampling = () => cancelAnimationFrame(frameId);
   const watch = (type, fn) => { try { new PerformanceObserver((list) => list.getEntries().forEach(fn)).observe({ type, buffered: true }); } catch { s[`no-${type}`] = true; } };
-  watch('largest-contentful-paint', (e) => s.lcp.push({ ms: e.startTime, size: e.size, el: e.element?.tagName || null }));
-  watch('layout-shift', (e) => { if (!e.hadRecentInput) s.shifts.push({ start: e.startTime, value: e.value }); });
+  // The fixture's headings carry elementtiming: each one's paint, whatever its size, on every route.
+  watch('element', (e) => e.identifier === 'title' && s.titles.push({ text: e.element?.textContent.trim().slice(0, 40) ?? null, renderTime: e.renderTime, loadTime: e.loadTime, size: e.intersectionRect.width * e.intersectionRect.height }));
+  watch('largest-contentful-paint', (e) => s.lcp.push({ ms: e.startTime, size: e.size, el: e.element?.tagName || null, sel: sel(e.element), text: e.element?.textContent.trim().slice(0, 40) ?? null,
+    renderTime: e.renderTime, loadTime: e.loadTime, url: e.url || null, connected: e.element?.isConnected ?? null }));
+  watch('layout-shift', (e) => { if (!e.hadRecentInput) s.shifts.push({ start: e.startTime, value: e.value, sources: (e.sources || []).map((x) => ({ node: sel(x.node), prev: rect(x.previousRect), cur: rect(x.currentRect) })) }); });
   watch('long-animation-frame', (e) => s.loafs.push({ start: e.startTime, ms: e.duration, blocking: e.blockingDuration, render: e.renderStart ? e.startTime + e.duration - e.renderStart : 0,
     scripts: e.scripts.map((x) => ({ src: x.sourceURL, fn: x.sourceFunctionName, invoker: x.invoker, type: x.invokerType, ms: x.duration, layout: x.forcedStyleAndLayoutDuration })) }));
 }
@@ -145,7 +192,9 @@ function stageSpeed(page, [from, to]) {
     scripts.set(key, row);
   }
   const rows = [...scripts.values()].sort((a, b) => b.ms - a.ms);
-  return { from, to, longTaskMs: sum(longTasks, (e) => e.ms), longTasks: longTasks.length, cls: sum(page.shifts.filter(within), (e) => e.value),
+  const shifts = page.shifts.filter(within);
+  return { from, to, longTaskMs: sum(longTasks, (e) => e.ms), longTasks: longTasks.length, cls: sum(shifts, (e) => e.value),
+    shifts: shifts.slice(0, 12).map((e) => ({ at: e.start - from, value: e.value, sources: e.sources })),
     loaf: { count: loafs.length, ms: sum(loafs, (e) => e.ms), blockingMs: sum(loafs, (e) => e.blocking), extensionScriptMs: sum(rows.filter((r) => r.from === 'extension'), (r) => r.ms),
       pageScriptMs: sum(rows.filter((r) => r.from === 'page'), (r) => r.ms), top: rows.slice(0, 8) } };
 }
@@ -261,7 +310,8 @@ function summarize(results) {
     const loads = s.flatMap((x) => x.loads || []), byList = {};
     for (const l of loads) (byList[l.files.join('+')] ||= []).push(l.ms);
     const tabs = list.map((r) => r.courseTab).filter((t) => t && 'visibleMs' in t);
-    out[name] = { reps: list.length, styledAt: m((x) => x.styledAt), fcp: m((x) => x.fcp), lcp: m((x) => x.lcp), cls: m((x) => x.cls), stages,
+    out[name] = { reps: list.length, styledAt: m((x) => x.styledAt), fcp: m((x) => x.fcp), lcp: m((x) => x.lcp), lcpAll: m((x) => x.lcpAll), lcpTargets: s.map((x) => x.lcpEntry && `${x.lcpEntry.sel} (${x.lcpEntry.stage})`),
+      titlePaint: Object.fromEntries(Object.keys(s[0].titlePaint || {}).map((k) => [k, m((x) => x.titlePaint?.[k])])), cls: m((x) => x.cls), stages,
       idle: { taskMs: m((x) => x.idle.taskMs), scriptMs: m((x) => x.idle.scriptMs), recalcStyleMs: m((x) => x.idle.recalcStyleMs), layoutMs: m((x) => x.idle.layoutMs),
         heapUsedMB: m((x) => x.idle.heapUsedMB), rssTotalMB: m((x) => x.idle.rss?.totalMB), rssRendererMB: m((x) => x.idle.rss?.rendererMB) },
       glazeLoad: loads.length ? { count: loads.length, median: median(loads.map((l) => l.ms)), p90: quantile(loads.map((l) => l.ms), 0.9), failed: loads.filter((l) => !l.ok).length,
@@ -375,6 +425,8 @@ if (require.main === module) (async () => {
         let speedResult;
         if (speed) {
           // Idle: 5 s with nothing happening, after the last stage settled. The fixed window is the measurement.
+          // Heading attribution reads computed styles and geometry every frame; keep its work out of idle totals.
+          await page.evaluate(() => window.perfSpeedStopSampling());
           const cdp = await context.newCDPSession(page);
           await cdp.send('Performance.enable');
           const value = (list, name) => list.find((m) => m.name === name)?.value || 0;
@@ -387,7 +439,20 @@ if (require.main === module) (async () => {
           await cdp.detach();
           const probe = await page.evaluate(() => ({ ...window.perfSpeed, longTasks: window.perfLongTasks, fcp: performance.getEntriesByName('first-contentful-paint')[0]?.startTime ?? null }));
           const stages = { initial, courses, outline, grades, own };
-          speedResult = { styledAt: probe.styledAt, fcp: probe.fcp, lcp: probe.lcp.at(-1)?.ms ?? null, lcpElement: probe.lcp.at(-1)?.el ?? null,
+          const stageOf = (t) => Object.entries(stages).find(([, v]) => t >= v.window[0] && t < v.window[1])?.[0] ?? null;
+          // LCP is the load's: a browser stops it at the first click, and each later stage stands in for a click's route.
+          // Kept going (lcpAll), it took the largest route title, painted as soon as it was drawn, whatever its size.
+          const loaded = probe.lcp.filter((e) => e.ms < courses.window[0]).at(-1), last = probe.lcp.at(-1);
+          // The load's LCP entry with what happened to the headings and fonts in the 300 ms before its paint.
+          const lcpEntry = loaded && { ...loaded, stage: stageOf(loaded.ms), near: probe.h1.filter((x) => x.t >= loaded.ms - 300 && x.t <= loaded.ms + 20), fonts: probe.fonts.filter((x) => x.t <= loaded.ms + 20) };
+          // Each route's title: ms from the stage's insert to its first paint (Element Timing), the load's from navigation.
+          // Observer delivery is later than insertion and its diagnostic log is capped; use the stage's actual start.
+          const titlePaint = Object.fromEntries(probe.titles.map((x) => {
+            const stage = x.text === 'stream' ? 'initial' : x.text === 'course' ? 'courses' : x.text;
+            return [x.text, x.renderTime - (stages[stage]?.window[0] ?? 0)];
+          }));
+          speedResult = { styledAt: probe.styledAt, fcp: probe.fcp, lcp: loaded?.ms ?? null, lcpElement: loaded?.el ?? null, lcpAll: last?.ms ?? null, lcpEntry, lcpEntries: probe.lcp.map((e) => ({ ...e, stage: stageOf(e.ms) })), titlePaint,
+            headings: probe.h1, fonts: probe.fonts, glazeNodes: probe.glaze, titles: probe.titles,
             stages: Object.fromEntries([...Object.entries(stages).map(([k, v]) => [k, stageSpeed(probe, v.window)]), ['idle', stageSpeed(probe, [idleFrom, idleTo])]]),
             cls: Object.values(stages).reduce((n, v) => n + stageSpeed(probe, v.window).cls, 0) + stageSpeed(probe, [idleFrom, idleTo]).cls,
             idle, loads: instrumented ? own.snapshot.loadMs : null, unsupported: Object.keys(probe).filter((k) => k.startsWith('no-')) };

@@ -63,7 +63,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   let W = null; // core/widgets.js
   let o = null; // the widgets settings (storage.sync widgets)
   let lay = null; // the layout (storage.local widgetLayout)
-  let on = false, starting = null, editing = false, petResumeReady = false;
+  let on = false, starting = null, initialized = false, editing = false, petResumeReady = false;
   let me = null; // { uid, tz }
   // bar: a board's buttons (Edit layout, Reminders, Insights, What Glaze can do; on the Courses page, Hide widgets too),
   // in the Courses page's header (#gz-toolbar) or atop the Dashboard's grid. hidden: Hide widgets, on this device.
@@ -115,6 +115,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const home = () => (ultra ? board === 'courses' ? (!boardless() && document.querySelector('div.todo-panel')) || document.querySelector('div.courses-panel')
     : board === 'dash' && (document.querySelector('institution-page-home')?.parentElement || document.querySelector('section.institution-page-container'))
     : location.pathname === '/' && document.getElementById('dashboard_header_container'));
+  const toolsHome = () => document.querySelector('div.base-courses-header-container div.base-header-tools');
   // The Courses page's layer: first in the page's own container, no height of its own, so the tiles in it are placed
   // from the page's top left, scroll with it and never go under Ultra's nav.
   const roomHost = (h) => h.closest('.route-view-container') || h.parentElement;
@@ -124,7 +125,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const off = !globalThis.GZ_REMIND_UI?.cmds().length;
     if (rm && rm.hidden !== off) rm.hidden = off;
   };
-  const placed = (h) => (board === 'courses' ? h.firstElementChild === panel && panel.contains(grid) && roomHost(h).firstElementChild === room
+  const placed = (h) => (board === 'courses' ? h.firstElementChild === panel && panel.contains(grid) && roomHost(h).firstElementChild === room && bar?.parentNode === (toolsHome() || grid)
     : board === 'dash' ? grid.parentNode === h && (!grid.nextElementSibling || grid.nextElementSibling.tagName === 'INSTITUTION-PAGE-HOME') : h.nextElementSibling === grid);
   // Better To Do's tile: on either site's boards, with its own switch and one copy of the list.
   // The Dashboard is its own switch: its widgets need no other, but the notes and the pet keep theirs.
@@ -1296,7 +1297,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       if (grid.parentNode !== body) body.append(grid);
       if (h.firstElementChild !== panel) h.prepend(panel);
       // The toolbar: in the page's header, where Ultra keeps its own (empty) header tools; else atop the grid.
-      const tools = document.querySelector('div.base-courses-header-container div.base-header-tools');
+      const tools = toolsHome();
       if (tools ? bar.parentNode !== tools : bar.parentNode !== grid) { if (tools) tools.prepend(bar); else grid.prepend(bar); }
       if (!room) { room = make('div', { id: 'gz-room' }); room.addEventListener('keydown', escape); }
       if (roomHost(h).firstElementChild !== room) roomHost(h).prepend(room);
@@ -1776,11 +1777,11 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       GZ_SIDEBAR_UI.on('change', again);
       GZ_SIDEBAR_UI.on('context', contextChanged);
     }
-    if (!starting) starting = start().then(() => { draw(); fillCourses(); }, () => {
+    if (!starting) starting = start().then(() => { initialized = true; draw(); fillCourses(); }, () => {
       if (on && board === 'dash') document.documentElement.setAttribute('data-gz-dash', 'ip');
       setTimeout(() => { starting = null; }, 60000);
     });
-    else if (W && lay) {
+    else if (initialized) {
       if (board) { globalThis.GZ_COURSE_CARDS?.sync(coursesChanged); fillCourses(); }
       // A pass: draw only when something changed (a switch let a tile in or out, Canvas redrew the Dashboard), so the
       // page's observer isn't fed changes of Glaze's own.
@@ -1797,6 +1798,20 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         if (board === 'dash') globalThis.GZ_DASH_UI?.tabs(grid);
       }
     }
+  };
+  // From content-ultra.js's mutation callback, before that frame paints: the Courses page's panel goes in with the page Ultra
+  // has just drawn. At the next pass it pushed the course list down. One look per batch of changes.
+  let holding = false;
+  const held = () => {
+    // W and lay are ready before start() finishes reading the sidebar's saved destinations.
+    if (holding || !on || !initialized) return;
+    holding = true;
+    Promise.resolve().then(() => {
+      holding = false;
+      if (!on || !(atTop || ctx.tabFrame === 'page') || boardOf() !== 'courses' || !document.querySelector('div.courses-panel')) return;
+      const h = board === 'courses' && home();
+      if (!h || !panel || !placed(h)) sync(true);
+    });
   };
   // The hub can open with the widgets off: it needs only this file and core/widgets.js.
   const open = () => !validContext() ? Promise.resolve() : ctx.need('core/widgets.js', () => globalThis.GZ_WIDGETS).then(() => { W ||= globalThis.GZ_WIDGETS; hub(); });
@@ -1844,7 +1859,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const at = placement();
     return [...new Set([...W.TILES, ...Object.keys(MORE)])].filter((id) => dockable(id) && allowed(id)).map((id) => ({ id, name: t(nameOf(id)), where: at.get(id)?.where || 'off' }));
   };
-  return { sync, cover, hub: open, register, declare, who: account, avatar, catalog };
+  return { sync, held, cover, hub: open, register, declare, who: account, avatar, catalog };
 })();
 
 GZ_WIDGETS_UI;

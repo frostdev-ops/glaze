@@ -1081,10 +1081,15 @@
   // ---- footer ---------------------------------------------------------------------------------
   // Full-width, top frame only, last in the page. theme.css shrinks the app by --gz-footer-h: the bar sits
   // below everything, not over it.
+  // Not before the site's sheet: unstyled, it sat after the page, then jumped into view.
+  let footerWait = null;
   const syncFooter = () => {
     const want = links.length && settings.footer && window.top === window && observer;
     const have = document.getElementById('gz-footer');
-    if (want && !have) {
+    if (want && !have && !links[0].sheet) {
+      const l = links[0];
+      if (footerWait !== l) { footerWait = l; l.addEventListener('load', () => { if (footerWait === l) footerWait = null; syncFooter(); }, { once: true }); }
+    } else if (want && !have) {
       const f = document.createElement('footer');
       f.id = 'gz-footer';
       const a = document.createElement('a');
