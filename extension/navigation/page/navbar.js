@@ -902,12 +902,12 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     let out = `<${n.localName}`;
     for (const k of n.getAttributeNames()) {
       const v = n.getAttribute(k);
-      if (n === el.rail && /^data-(open|peek)$/.test(k) || (box || mine) && k === 'style' || mine && !/^(class|part|hidden)$/.test(k) || /^(src|href)$/.test(k) && !/^https:/.test(v)) continue;
+      if (k === 'data-tip' || n === el.rail && /^data-(open|peek)$/.test(k) || (box || mine) && k === 'style' || mine && !/^(class|part|hidden)$/.test(k) || /^(src|href)$/.test(k) && !/^https:/.test(v)) continue;
       out += ` ${k}="${esc(v)}"`;
     }
     if (n === el.rail && lay.open) out += ' data-open=""';
     if (mine) { own.push(markup(n)); return `${out} data-p="${own.length - 1}" style="box-sizing:border-box;visibility:hidden;width:${n.offsetWidth}px;height:${n.offsetHeight}px"></${n.localName}>`; }
-    if (box) out += ` style="box-sizing:border-box;width:${n.offsetWidth}px;height:${n.offsetHeight}px"`;
+    if (box) out += `${n.offsetHeight ? ' data-room=""' : ''} style="box-sizing:border-box;width:${n.offsetWidth}px;height:${n.offsetHeight}px"`;
     return n.localName === 'img' ? `${out}>` : `${out}>${box ? '' : [...n.childNodes].map((c) => markup(c, own)).join('')}</${n.localName}>`;
   };
   const keep = () => {

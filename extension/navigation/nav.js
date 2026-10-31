@@ -63,12 +63,13 @@ var GZ_NAV = globalThis.GZ_NAV || (() => {
     };
     // Shown with its sheet; the account's own parts (kept apart, their room held) once the account is the one they were drawn
     // for, and the copy gone for any other.
-    l.onload = () => { if (host.hasAttribute('data-first')) { host.hidden = false; glide(); } };
+    const live = () => host.isConnected && host.hasAttribute('data-first');
+    l.onload = () => { if (live()) { host.hidden = false; glide(); } };
     root.append(l, parse(k.m));
     (document.body || document.documentElement).prepend(host);
-    const gone = () => host.hasAttribute('data-first') && host.remove();
+    const gone = () => live() && host.remove();
     Promise.resolve().then(() => account?.()).then((id) => {
-      if (!host.hasAttribute('data-first')) return;
+      if (!live()) return;
       if (!id || String(id) !== k.u) return gone();
       for (const e of root.querySelectorAll('[data-p]')) e.replaceWith(parse(k.p[e.dataset.p] || ''));
       if (!host.hidden) glide();
