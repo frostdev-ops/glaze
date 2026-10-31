@@ -207,6 +207,28 @@ const storage = () => {
 };
 const persistent = (store, context = raw().context) => V.create({ store, context, scope: { school: 'https://school.example', account: 'student-1', assignment: 'assignment-1' }, crypto: webcrypto, locks: null });
 
+test('the corrected picture reader rereads v1 cached omissions for prefetch and Feedback', async () => {
+  for (const route of ['prefetch', 'feedback']) {
+    const store = storage(), input = raw(), inp = I.input(input);
+    const legacy = V.create({ store, context: input.context, version: 'writer-image-v1',
+      scope: { school: 'https://school.example', account: 'student-1', assignment: 'assignment-1' }, crypto: webcrypto, locks: null });
+    assert.equal(await legacy.set(inp, { ...reading(), requirements: [] }), true);
+    const cache = persistent(store);
+    const cfg = { caps: { context: 8192, images: true, local: true }, replies: [{ json: reading() }], seen: [] };
+    let result;
+    if (route === 'prefetch') result = (await T.run(I.task, input, { provider: 'mock', cfg, imageCache: cache })).output;
+    else {
+      const out = await I.prepare([picture()], { context: input.context, caps: cfg.caps, cache, fits: () => true,
+        ask: async (req, { check }) => { cfg.seen.push(req); return check(reading()); } });
+      assert.deepEqual(out.limitations, []);
+      result = out.readings[0];
+    }
+    assert.equal(cfg.seen.length, 1, `${route}: the old reading must not suppress inference`);
+    assert.deepEqual(result.requirements, reading().requirements, route);
+    assert.deepEqual((await persistent(store).get(inp)).requirements, reading().requirements, 'the corrected reading is reusable');
+  }
+});
+
 test('separate standalone image runs reuse persistent readings and miss when image or assignment context changes', async () => {
   let sets = 0;
   const store = storage(), cfg = { caps: { context: 8192, images: true }, replies: () => ({ json: reading() }), seen: [] };
