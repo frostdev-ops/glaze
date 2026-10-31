@@ -322,6 +322,13 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
               continue;
             }
           }
+          // A download its owner no longer asks for (a picture whose note went, a copy replaced since) is let go before any
+          // of its bytes come: its owner, met again, waits on this transfer ('pending') or no longer does.
+          if (t.dir === 'down' && !t.done) {
+            const result = await replay(t.owner, folder), still = await moveOf(slot);
+            if (still?.tag !== t.tag || still.done) continue;
+            if (result !== 'pending') { await dropMove(slot); continue; }
+          }
           try {
             if (t.dir === 'up' && t.owner?.rec && more?.current && !await more.current(t.owner, t.tag)) {
               await dropMove(slot);
