@@ -524,6 +524,76 @@ test('writer.feedback: in de, es, fr, nl and pt-BR a comment on the draft or to 
   assert.deepEqual(output.criteria.map((c) => [c.id, c.comment]), [['_10_1', comments['pt-BR'][0][0]], ['_11_1', '']], 'the Portuguese assessment survives the task check; the offer is dropped, its status kept');
 });
 
+test('writer.feedback: locale vocabulary preserves English admission decisions from main', () => {
+  const comments = [
+    'The Text remains unreadable.',
+    'Several Passages describe the river.',
+    'His son phrases his memories carefully.',
+    'Memories die fragment by fragment.',
+    'The value of u remains undefined.',
+    'The TA arrived late.',
+    'The narrator’s travail remains unresolved.',
+    'The shell invokes dir without checking its result.',
+    'The note ti rings clearly.',
+  ];
+  assert.deepEqual(comments.map((c) => [c, FB.assesses(c, [])]), comments.map((c) => [c, '']));
+  for (const c of ['Der Text bleibt zu allgemein.', 'Die Passage bleibt unklar.', 'Son analyse reste descriptive.',
+    'Die passage blijft onduidelijk.', 'U legt de relatie nog niet uit.', 'Ta lecture reste descriptive.',
+    'Le travail reste descriptif.', 'Dir fehlt noch der Bezug zum Thema.', 'Das gelingt dir noch nicht.',
+    'La relación entre las ideas sigue confusa para ti.']) assert.equal(FB.assesses(c, []), c, c);
+});
+
+test('writer.feedback: quoted English words are not locale wording commands', () => {
+  for (const c of ['Your sentence ends with "sag" to signal exhaustion.', 'Your sentence quotes "dis" as slang.',
+    'Your sentence uses \'di\' as a musical note.']) assert.equal(FB.assesses(c, []), c, c);
+  const c = 'Dein Text nennt "sag"; schreib "memory is a debt".';
+  assert.equal(FB.assesses(c, [require('../../extension/ai/text.js').source('memory is a debt')]), '', 'a later offer still counts');
+});
+
+test('writer.feedback: mixed German and English quote styles are grounded independently', () => {
+  const sources = [require('../../extension/ai/text.js').source('die Erinnerung ist eine Schuld. memory is a debt.')];
+  for (const [open, close] of [['"', '"'], ['“', '”'], ["'", "'"], ['‘', '’'], ['„', '“'], ['«', '»'], ['»', '«']]) {
+    const grounded = `Dein Text zitiert „die Erinnerung ist eine Schuld“ und ${open}memory is a debt${close}.`;
+    const invented = `Dein Text zitiert „die Erinnerung ist eine Schuld“ und ${open}words never supplied here${close}.`;
+    assert.equal(FB.assesses(grounded, sources), grounded, `grounded: ${open}${close}`);
+    assert.equal(FB.assesses(invented, sources), '', `invented: ${open}${close}`);
+  }
+});
+
+test('writer.feedback: German single quotes and single guillemets require grounding', () => {
+  const sources = [require('../../extension/ai/text.js').source('die Erinnerung ist eine Schuld')];
+  for (const [open, close] of [['‚', '‘'], ['‹', '›'], ['›', '‹']]) {
+    const grounded = `Dein Text zitiert ${open}die Erinnerung ist eine Schuld${close} ohne Erklärung.`;
+    const invented = `Dein Text zitiert ${open}words never supplied here${close} ohne Erklärung.`;
+    assert.equal(FB.assesses(grounded, sources), grounded, `grounded: ${open}${close}`);
+    assert.equal(FB.assesses(invented, sources), '', `invented: ${open}${close}`);
+    assert.equal(FB.assesses(`Dein Text beginnt mit: ${open}die Erinnerung ist eine Schuld${close}.`, sources), '', 'grounded wording is still an offer');
+  }
+  const c = 'Dein Text zitiert ‚l’auteur décrit la ville‘ ohne Erklärung.';
+  assert.equal(FB.assesses(c, []), '', 'an apostrophe inside a low single quote does not hide it');
+  assert.equal(FB.assesses(c, [require('../../extension/ai/text.js').source('l’auteur décrit la ville')]), c);
+});
+
+test('writer.feedback: localized writing nouns include the Dutch singular and French rubric', () => {
+  for (const c of ['De tekst blijft te algemeen.', 'La rubrique reste incomplète.', 'Die Entwürfe bleiben unklar.',
+    'Die Aufsätze bleiben beschreibend.', 'Die Beiträge bleiben oberflächlich.']) assert.equal(FB.assesses(c, []), c, c);
+});
+
+test('writer.feedback: French and German infinitive offers are dropped without needing invented quotations', () => {
+  const comments = [
+    'Essayez de terminer votre conclusion par une question.',
+    'Essayez de finir votre conclusion par une question.',
+    'Essayez de conclure votre texte par une question.',
+    'Pourriez-vous écrire une phrase dans votre conclusion ?',
+    'Peux-tu écrire une phrase dans ta conclusion ?',
+    'Versuche in deiner Einleitung mit einer Frage anzufangen.',
+    'Versuchen Sie in Ihrer Einleitung einen Satz hinzuzufügen.',
+    'Überlege in deiner Einleitung einen Satz einzufügen.',
+    'Probiere deinen Text mit einer Frage abzuschließen.',
+  ];
+  assert.deepEqual(comments.map((c) => [c, FB.assesses(c, [])]), comments.map((c) => [c, '']));
+});
+
 // ---- writer.requirements ------------------------------------------------------------------------------------------
 test('writer.requirements: a number stays only when the prompt says it, in digits or words', async () => {
   const prompt = CONTEXT.prompt.text;
