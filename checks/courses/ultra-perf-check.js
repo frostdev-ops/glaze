@@ -609,6 +609,7 @@ if (require.main === module) (async () => {
         r.outline.aside.moves = moves;
         console.log(JSON.stringify({ rep: r.rep, instrumented: r.instrumented, asideMoves: moves, asideShifts: shifts }));
         assert.ok(frames.some((f) => f['aside.outline-actions > #gz-nt-block'] != null), `rep ${r.rep}: Course notes showed in the outline's column`);
+        assert.ok(frames.some((f) => f['aside.outline-actions > #gz-sb-widgets'] != null), `rep ${r.rep}: My widgets showed in the outline's column`);
         assert.deepEqual(moves.filter((m) => !m.adopt), [], `rep ${r.rep}: Glaze's blocks moved while Ultra filled Details & Actions`);
         assert.deepEqual(shifts, [], `rep ${r.rep}: Glaze's blocks took part in a layout shift`);
       }
