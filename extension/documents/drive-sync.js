@@ -600,7 +600,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         if (request !== switching) return { ok: false, why: 'off' };
         const st = await state(), changed = st.account && st.account !== who;
         if (changed) await forget();
-        await setState({ ...(changed && { folder: null, token: null, data: null, backups: null, snap: null, last: null }),
+        await setState({ ...(changed && { folder: null, token: null, data: null, backups: null, snap: null, snapSkip: null, last: null }),
           on: true, off: false, account: who, problem: null, wait: 0, fails: 0 }, () => request === switching);
         if (request !== switching) return { ok: false, why: 'off' };
         return runNow({ full: true });
