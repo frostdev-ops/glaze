@@ -632,7 +632,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         if (lost) got.external = true; // sent up again below, with a file of its own
         if (gone?.file) { if (gone.file !== got.file) await putAway(gone.file, folder); await away([gone.file], null); }
         const source = { ...restore, json: R.id, file: got.file, fh: got.fileRev, fsum: got.sum };
-        if (!l) { const now2 = await take(got.key, null, got); if (got.external) return push(got.key, h, now2, source, folder); await agreed(got.key, h, R, got, now2, null); return; }
+        // Marked before it is written: a worker stopped before its link lands meets it again on the next run, never leaving a
+        // document here that no run goes back to.
+        if (!l) { await mark(got.key); const now2 = await take(got.key, null, got); if (got.external) return push(got.key, h, now2, source, folder); await agreed(got.key, h, R, got, now2, null); return; }
         if ((await sumOf(key, l)) !== got.sum) {
           // Both hold it, as with Restore: the later edited stays current, the other kept beside it (a PDF: both documents).
           if (got.kind !== 'pdf' && got.kind === kindOf(l.rec) && got.updated > (l.rec.updated || 0)
@@ -694,6 +696,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (lt !== was && there !== undefined) to = lt && there;
       else if (lt !== was) to = lt;
       else if (there !== undefined) to = there;
+      // Out of Trash here because Drive's side came back (restored wins): its content is weighed as at a first meeting below.
+      const revived = lt && !to;
       if (to !== was || (rt !== null && rt !== to) || (et !== null && et !== to)) {
         if (to !== lt) await (to ? env.papers.trash(key) : env.papers.untrash(key));
         // Into Drive's trash the copy first, out of it the file first: a device meeting the document between the two moves
@@ -751,6 +755,14 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         // Then this device's goes up as a change of its own, into the file Drive's copy names (another device may have left
         // the one this device knew) and as that file stands (edited outside Glaze since: kept as it is).
         if (ldirty) { await keepOther(key, l, got); await kept(h, { ...d, ...(got.file && { file: got.file, fh: got.fileRev, fsum: got.sum }) }, R); return sync(key, h, { folder }); }
+        // Brought back from Trash here by Drive's side, which holds an older edit than this device's (another device back on its
+        // account sending its own older copy up, say): never taken over this one. Both kept, this device's current and sent
+        // up, Drive's beside it, as at a first meeting.
+        if (revived && got.updated < (l.rec.updated || 0) && (await sumOf(key, l)) !== got.sum) {
+          await keepOther(key, l, got);
+          await kept(h, { ...d, ...(got.file && { file: got.file, fh: got.fileRev, fsum: got.sum }), lsum: null, rev: -1 }, R);
+          return sync(key, h, { folder });
+        }
         const now2 = await take(key, l, got);
         if (force && got.file && !got.external && await adopt(got, h)) { await agreed(key, h, R, got, now2, d); return; }
         if (force || got.external) return push(key, h, now2, { ...d, json: R.id }, folder);
@@ -1014,7 +1026,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         if (changed) await forget();
         // No page token until this full pass completes: what was saved here while off (never marked) goes up on a later full
         // pass if this one stops short, never left behind by a run reading only the changes since a token from before.
-        await setState({ ...(changed && { folder: null, data: null, backups: null, snap: null, snapSkip: null, last: null }),
+        await setState({ ...(changed && { folder: null, data: null, moving: null, backups: null, snap: null, snapSkip: null, last: null }),
           token: null, again: 0, on: true, off: false, account: who, problem: null, wait: 0, fails: 0 }, () => request === switching);
         if (request !== switching) return { ok: false, why: 'off' };
         return runNow({ full: true });
