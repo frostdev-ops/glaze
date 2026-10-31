@@ -89,18 +89,23 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         let model;
         try { model = await E.load(g, { context: LIMIT.context, signal: job.control.signal }); }
         catch (e) { if (job.control.signal.aborted) throw e; throw fail('provider-unavailable', ENGINE[e?.reason] || 'engine'); }
-        if (job.control.signal.aborted) { try { model.release(); } catch { /* gone */ } throw aborted(job.control.signal); }
-        if (projector) {
-          try {
+        try {
+          if (job.control.signal.aborted) throw aborted(job.control.signal);
+          if (projector) {
             let pg;
             try { pg = await env.gguf.open(pfile); } catch { throw fail('provider-unavailable', 'pictures'); }
             try { job.vision = await V.load(pg, { device: model.device, signal: job.control.signal, ...(env.kernels && { kernels: env.kernels }) }); }
             catch (e) { if (job.control.signal.aborted) throw e; throw fail('provider-unavailable', e?.reason === 'model' ? 'pictures' : ENGINE[e?.reason] || 'engine'); }
-            if (job.control.signal.aborted) { try { job.vision.release(); } catch { /* gone */ } throw aborted(job.control.signal); }
-          } catch (e) { try { model.release(); } catch { /* gone */ } throw e; }
+            if (job.control.signal.aborted) throw aborted(job.control.signal);
+          }
+          Object.assign(job, { model, tok, eos: tok.eos ?? tok.id('<|im_end|>'), base: await model.snapshot() });
+          return job;
+        } catch (e) {
+          // A failed initialization never becomes loaded: unload() cannot recover its allocations later.
+          try { job.vision?.release(); } catch { /* gone */ }
+          try { model.release(); } catch { /* gone */ }
+          throw e;
         }
-        Object.assign(job, { model, tok, eos: tok.eos ?? tok.id('<|im_end|>'), base: await model.snapshot() });
-        return job;
       })();
       job.ready.catch(() => { if (loaded === job) loaded = null; });
       loaded = job;
@@ -333,19 +338,24 @@ if (typeof module !== 'undefined') module.exports = GZ_AI_LOCAL_HOST;
 else if (typeof WorkerGlobalScope !== 'undefined' && globalThis instanceof WorkerGlobalScope) {
   // In its Worker: the store, the GGUF reader and the tokenizer, then what the engine needs and the engine, grammar and
   // ladder, each optional until it ships.
-  importScripts('store.js', 'gguf.js', 'tokenizer.js');
+  importScripts('../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js');
   for (const f of ['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'grammar.js', 'ladder.js']) { try { importScripts(f); } catch { /* not shipped yet */ } }
   const g = (name) => (typeof globalThis[name] !== 'undefined' ? globalThis[name] : null);
-  // A picture's pixels: decoded by the browser (createImageBitmap; a GIF's first frame, a JPEG turned upright), drawn on
-  // an OffscreenCanvas at most MAX pixels (the encoder resizes to at most 4,096 tokens, 4.2 MP, anyway) and read back.
-  const MAX = 4096 * 4096;
+  // Bound decompression from the header before calling the browser, as the document reader does. A compressed-byte
+  // limit alone does not bound pixels. Then draw at most MAX pixels, with a side limit even for very thin pictures.
+  // createImageBitmap reads a GIF's first frame and turns a JPEG upright; the encoder resizes again for its own window.
+  const MAX = 4096 * 4096, SIDE = 16384;
+  const bounded = (w, h) => Number.isSafeInteger(w) && Number.isSafeInteger(h) && w > 0 && h > 0 && w * h <= GZ_DOCTEXT.READ.pixels;
   const decode = async ({ mime, data }) => {
     const bin = atob(data), bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const size = GZ_DOCTEXT.imageSize(bytes);
+    if (!size || !bounded(size.w, size.h)) throw new Error('unsupported picture dimensions');
     const bmp = await createImageBitmap(new Blob([bytes], { type: mime }));
     try {
-      const k = Math.min(1, Math.sqrt(MAX / (bmp.width * bmp.height)));
-      const width = Math.max(1, Math.round(bmp.width * k)), height = Math.max(1, Math.round(bmp.height * k));
+      if (!bounded(bmp.width, bmp.height)) throw new Error('unsupported picture dimensions');
+      const k = Math.min(1, Math.sqrt(MAX / (bmp.width * bmp.height)), SIDE / bmp.width, SIDE / bmp.height);
+      const width = Math.max(1, Math.floor(bmp.width * k)), height = Math.max(1, Math.floor(bmp.height * k));
       const ctx = new OffscreenCanvas(width, height).getContext('2d', { willReadFrequently: true });
       ctx.drawImage(bmp, 0, 0, width, height);
       return { width, height, data: ctx.getImageData(0, 0, width, height).data, channels: 4 };

@@ -410,7 +410,8 @@ ladder's. Settings' ops take `part: 'pictures'` (`prepare` and `delete`; progres
 picture reading) run on Glaze's model. A request with pictures goes to LFM3-VL in its own chat template (`chatml`, it is
 stock), each picture after its line as `<|vision_start|>`, its embeddings, `<|vision_end|>`; the host releases the text
 model first (one model is loaded at a time), loads LFM3-VL and its projector on the engine's device, decodes each picture
-in the Worker (`createImageBitmap`, an `OffscreenCanvas` of at most 16.8 MP), sizes it (`prepare`; a prompt over the window
+in the Worker (the header checked before `createImageBitmap`, unknown dimensions or over 60 MP refused as in the document
+reader; an `OffscreenCanvas` of at most 16.8 MP and 16,384 pixels per side), sizes it (`prepare`; a prompt over the window
 is refused before encoding), encodes it and feeds it as prefill `embeds`, then decodes with the JSON grammar as for text.
 A cancel ends it at the next encoder stage, prefill chunk or token. A projector that isn't there, or isn't one: reason
 `pictures` (Writer: "Picture reading isn’t downloaded."). The text model's next run brings it back.

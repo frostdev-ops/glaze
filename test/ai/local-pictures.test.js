@@ -316,3 +316,114 @@ test('format: the stock chat template places each picture after its line between
   moved.messages[1].content.unshift(moved.messages[1].content.pop());
   assert.throws(() => F.format(moved, { dialect: 'chatml', images: true }), (e) => e.code === 'request');
 });
+
+test('a picture download completing after the Settings deadline refreshes the broker capability', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const s = setup({ here: { 'lfm3-q4': 'ready' } }), e = env({ task: async (id) => id === TEXT.id ? TEXT : T.get(id) });
+  let finish;
+  const download = s.st.download;
+  s.st.download = async (id, options) => {
+    if (id === 'mmproj') await new Promise((resolve) => { finish = resolve; });
+    return download(id, options);
+  };
+  const preparing = B.config({ op: 'prepare', provider: 'local', part: 'pictures' }, e);
+  try {
+    await settle();
+    assert.equal(typeof finish, 'function');
+    t.mock.timers.tick(LOCAL.LIMIT.prepare);
+    assert.deepEqual(await preparing, { ok: true, state: 'downloading' });
+    // Text still works while pictures download, caching the then-current catalog.
+    const p = port(e);
+    p.say({ id: 1, op: 'run', feature: 'writing', task: TEXT.id, input: { text: 'x' } });
+    await settle(200);
+    assert.ok(p.posted.some((m) => m.id === 1 && m.type === 'end'), JSON.stringify(p.posted));
+    finish(); await settle();
+    assert.equal((await B.status({ feature: 'writing' }, e)).caps.images, true);
+    p.say({ id: 2, op: 'run', feature: 'writing', task: 'writer.image', input: { name: 'chart.png', image: { mime: 'image/png', data: PNG }, context: 'Lab 3' } });
+    await settle(200);
+    assert.deepEqual(p.posted.find((m) => m.id === 2 && m.type === 'end')?.output, READING, JSON.stringify(p.posted.filter((m) => m.id === 2)));
+    // The gray text, which never carries pictures, keeps the catalog it has: its run reads the store once, for its model.
+    const list = s.st.list;
+    let reads = 0;
+    s.st.list = async () => { reads++; return list(); };
+    try {
+      p.say({ id: 3, op: 'run', feature: 'writing', task: TEXT.id, input: { text: 'y' } });
+      await settle(200);
+      assert.ok(p.posted.some((m) => m.id === 3 && m.type === 'end'), JSON.stringify(p.posted.filter((m) => m.id === 3)));
+      assert.equal(reads, 1);
+    } finally { s.st.list = list; }
+  } finally { finish?.(); await preparing; }
+});
+
+test('a failed initial snapshot frees the picture model and projector before another model loads', async () => {
+  const s = setup({ here: { 'lfm3-q4': 'ready', 'vl-q4': 'ready', mmproj: 'ready' } });
+  const load = s.eng.E.load;
+  s.eng.E.load = async (...args) => {
+    const model = await load(...args);
+    if (args[0].id === 'vl-q4') model.snapshot = async () => { throw Object.assign(new Error('out of memory for snapshot'), { reason: 'memory' }); };
+    return model;
+  };
+  await assert.rejects(P.run('local', pictureRequest(), LOCAL.config({ images: true })));
+  assert.deepEqual(s.eng.log.released, ['vl-q4'], 'the failed job no longer owns its language model');
+  assert.equal(s.enc.log.released, 1, 'the failed job no longer owns its projector');
+  await P.run('local', textRequest(), LOCAL.config({}));
+  assert.deepEqual(s.eng.log.loads, ['vl-q4', 'lfm3-q4']);
+});
+
+// Run the shipped Worker bootstrap and capture its browser decoder, without decoding or allocating any real pixels.
+const workerDecoder = ({ width = 2, height = 3, drawFails = false } = {}) => {
+  const fs = require('node:fs'), vm = require('node:vm');
+  const log = { bitmaps: 0, closed: 0, canvases: [] };
+  let decode;
+  const scope = {
+    WorkerGlobalScope: class { static [Symbol.hasInstance]() { return true; } },
+    GZ_AI_LOCAL_HOST: { create: (env) => { decode = env.decode; return { handle() {} }; } },
+    GZ_AI_STORE: {}, GZ_AI_GGUF: {}, GZ_AI_TOKENIZER: {},
+    importScripts(...files) { if (files.includes('../../core/doctext.js')) scope.GZ_DOCTEXT = require('../../extension/core/doctext.js'); },
+    postMessage() {}, addEventListener() {}, URL, location: { href: 'moz-extension://x/ai/local/host.js' }, atob, Blob,
+    createImageBitmap: async () => { log.bitmaps++; return { width, height, close: () => { log.closed++; } }; },
+    OffscreenCanvas: class {
+      constructor(w, h) { log.canvases.push([w, h]); }
+      getContext() { return { drawImage() { if (drawFails) throw new Error('draw failed'); }, getImageData: () => ({ data: new Uint8ClampedArray(4) }) }; }
+    },
+  };
+  vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/ai/local/host.js'), 'utf8'), scope);
+  return { decode, log };
+};
+const pictureHeader = (mime, width, height) => {
+  let bytes;
+  if (mime === 'image/png') { bytes = Buffer.from(PNG, 'base64'); bytes.writeUInt32BE(width, 16); bytes.writeUInt32BE(height, 20); }
+  if (mime === 'image/gif') { bytes = Buffer.alloc(10); bytes.write('GIF89a'); bytes.writeUInt16LE(width, 6); bytes.writeUInt16LE(height, 8); }
+  if (mime === 'image/jpeg') { bytes = Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0, 11, 8, 0, 0, 0, 0, 1, 1, 0x11, 0]); bytes.writeUInt16BE(height, 7); bytes.writeUInt16BE(width, 9); }
+  if (mime === 'image/webp') { bytes = Buffer.alloc(30); bytes.write('RIFF'); bytes.write('WEBPVP8X', 8); bytes.writeUIntLE(width - 1, 24, 3); bytes.writeUIntLE(height - 1, 27, 3); }
+  return { mime, data: bytes.toString('base64') };
+};
+
+test('the Worker refuses compressed image bombs and unreadable dimensions before browser decoding', async () => {
+  for (const mime of ['image/png', 'image/gif', 'image/jpeg', 'image/webp']) {
+    const d = workerDecoder();
+    await assert.rejects(d.decode(pictureHeader(mime, 30000, 30000)), undefined, mime);
+    assert.equal(d.log.bitmaps, 0, `${mime}: dimensions checked before decompression`);
+    const small = workerDecoder();
+    await small.decode(pictureHeader(mime, 2, 3));
+    assert.deepEqual(small.log.canvases, [[2, 3]], `${mime}: ordinary images still decode`);
+    assert.equal(small.log.closed, 1);
+  }
+  const d = workerDecoder();
+  await assert.rejects(d.decode({ mime: 'image/png', data: 'iVBORw==' }));
+  assert.equal(d.log.bitmaps, 0, 'an unreadable header is never decoded to discover its size');
+});
+
+test('the Worker bounds actual bitmap dimensions and canvas dimensions, closing bitmaps on every path', async () => {
+  const mismatch = workerDecoder({ width: 100000, height: 100000 });
+  await assert.rejects(mismatch.decode({ mime: 'image/png', data: PNG }));
+  assert.deepEqual([mismatch.log.closed, mismatch.log.canvases.length], [1, 0]);
+  const skinny = workerDecoder({ width: 1, height: 50000000 });
+  await skinny.decode(pictureHeader('image/png', 1, 50000000));
+  const [w, h] = skinny.log.canvases[0];
+  assert.ok(w * h <= 4096 * 4096 && Math.max(w, h) <= 16384, `bounded canvas: ${w} x ${h}`);
+  assert.equal(skinny.log.closed, 1);
+  const broken = workerDecoder({ drawFails: true });
+  await assert.rejects(broken.decode({ mime: 'image/png', data: PNG }));
+  assert.equal(broken.log.closed, 1, 'a failed canvas operation closes the bitmap');
+});

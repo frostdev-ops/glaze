@@ -169,7 +169,7 @@ test('Firefox\'s event page loads every file of the harness the worker would imp
   const hs = fs.readFileSync(path.join(__dirname, '../../extension/ai/local/host.js'), 'utf8');
   const imported = [...hs.matchAll(/importScripts\(([^)]*)\)/g)].flatMap(([, a]) => [...a.matchAll(/'([^']+)'/g)].map(([, f]) => f));
   const optional = [...hs.matchAll(/for \(const f of \[([^\]]*)\]\) \{ try \{ importScripts\(f\)/g)].flatMap(([, a]) => [...a.matchAll(/'([^']+)'/g)].map(([, f]) => f));
-  assert.deepEqual(imported, ['store.js', 'gguf.js', 'tokenizer.js']);
+  assert.deepEqual(imported, ['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js']);
   assert.deepEqual(optional, ['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'grammar.js', 'ladder.js']);
   for (const f of imported) assert.ok(fs.existsSync(path.join(__dirname, '../../extension/ai/local', f)), f);
   assert.match(fs.readFileSync(path.join(__dirname, '../../extension/ai/local/host.html'), 'utf8'), /<script src="offscreen\.js"><\/script>/);

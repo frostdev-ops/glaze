@@ -145,11 +145,12 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   // worker's one) and connection generation for LIMIT.listed, so a run asks for it once an hour, not every time.
   const listed = new WeakMap(); // env.vault → Map(`${id}|${generation}` → { at, list })
   const unlist = (env, id) => { for (const k of listed.get(env.vault)?.keys() || []) if (k.startsWith(`${id}|`)) listed.get(env.vault).delete(k); };
-  const catalog = async (env, use, signal, now = Date.now()) => {
+  // fresh: read it again whatever is kept (Glaze's own model for a task that may carry pictures, below).
+  const catalog = async (env, use, signal, now = Date.now(), fresh = false) => {
     if (!use.p.catalog) return null;
     if (!listed.has(env.vault)) listed.set(env.vault, new Map());
     const kept = listed.get(env.vault), k = `${use.id}|${use.generation || ''}`, was = kept.get(k);
-    if (was && now - was.at < LIMIT.listed) return was.list;
+    if (!fresh && was && now - was.at < LIMIT.listed) return was.list;
     const t = F().deadline(LIMIT.catalog), s = F().anySignal([signal, t.signal]);
     let list;
     try { list = await F().wait(() => use.p.catalog(use.cfg, { fetch: pinned(env, use), cache: cache(env), signal: s.signal }), s.signal); } catch { list = null; } finally { t.done(); s.done(); }
@@ -319,7 +320,9 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         if (typeof use.p.prepare === 'function') stopKeepAlive = keepAlive(m.id, control.signal);
         row.provider = shown(use);
         if (use.p.id === 'openai') row.model = use.cfg.model;
-        const list = await catalog(env, use, control.signal, now());
+        // Glaze's own picture download may finish in its host after Settings' prepare answered (four minutes), with no
+        // connection change: a task that may carry pictures reads its catalog again; others (the gray text) keep theirs.
+        const list = await catalog(env, use, control.signal, now(), use.p.id === 'local' && (task.caps.images === true || task.id === 'writer.feedback'));
         const chosen = M().select(use.cfg.model, list, { tools: !!task.tools, images: !!task.caps.images });
         const takes = use.p.id === 'openai' ? M().efforts(use.cfg.base, use.cfg.model, list?.models.find((x) => x.id === use.cfg.model)) : [];
         const cfg = { ...use.cfg, ...(chosen.caps.context && !use.cfg.context && { context: chosen.caps.context }), ...(chosen.caps.images !== undefined && use.cfg.images === undefined && { images: chosen.caps.images }) };
