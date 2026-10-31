@@ -441,7 +441,7 @@ test('the whole page script parses: the sections run here alone share one scope 
 // iframe made is a standby on Ultra's light page; one made while another standby is still in the page fails the test.
 const STALE = 120000;
 const clocked = (over = {}) => {
-  let now = 1e6, n = 0;
+  let now = 1e6, wallOffset = 0, n = 0;
   const q = new Map(), made = [];
   const at = (fn, ms) => { q.set(++n, { fn, due: now + Math.max(0, ms || 0) }); return n; };
   const document = {
@@ -460,7 +460,7 @@ const clocked = (over = {}) => {
   const k = {};
   // Its Glaze says it is in, then who is signed in there: usable.
   k.ready = (el) => { for (const data of [{ gzCtab: 'loaded' }, { gzCtab: 'account', uid: '_42_1' }]) k.api.onAhead({ data, source: el.contentWindow, origin }); };
-  Object.assign(k, run({ Date: { now: () => now }, performance: { now: () => now }, setTimeout: at, clearTimeout: (id) => q.delete(id),
+  Object.assign(k, run({ Date: { now: () => now + wallOffset }, performance: { now: () => now }, setTimeout: at, clearTimeout: (id) => q.delete(id),
     requestIdleCallback: (fn) => at(fn, 0), cancelIdleCallback: (id) => q.delete(id), document, nudge() {},
     host: { prepend: (el) => { el.isConnected = true; if (k.auto) k.ready(el); } }, ...over }), { made });
   k.pass = (ms) => {
@@ -474,6 +474,7 @@ const clocked = (over = {}) => {
     now = end;
   };
   k.pending = () => q.size;
+  k.adjustClock = (ms) => { wallOffset += ms; };
   let onVisibility;
   k.onVisibility = () => (onVisibility ||= vm.runInContext(part('  const onVisibility = ', '  const listen = ') + '\nonVisibility;', k.c))();
   return k;
@@ -506,6 +507,22 @@ test('never two standbys: a stale one goes before its renewal boots, and syncs m
   assert.deepEqual(p.made.map((e) => e.isConnected), [false, false, false, false, true]);
   assert.equal(p.api.standby?.el, p.made[4]);
   assert.equal(p.api.miss, 0);
+});
+
+test('a clock correction cannot disarm standby renewal when its expiry timer fires before STALE', () => {
+  const p = clocked();
+  p.auto = true;
+  p.api.standbyLater(); p.pass(35000);
+  p.adjustClock(-60000);
+  p.pass(90000);
+  assert.equal(p.api.standby?.el, p.made[0], 'kept until its wall-clock age reaches STALE');
+  p.pass(60000);
+  assert.equal(p.made.length, 2, 'the remaining lifetime is checked again without another page sync');
+  assert.equal(p.made[0].removed, 1);
+  assert.equal(p.api.standby?.el, p.made[1]);
+  assert.equal(p.api.miss, 0, 'a clock correction is no failed boot');
+  p.pass(125000);
+  assert.equal(p.made.length, 3, 'later renewals stay armed');
 });
 
 test('hidden, a stale standby is let go of and renewed on the page\'s next visibilitychange, never on a timer', () => {
