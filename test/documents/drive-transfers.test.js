@@ -113,6 +113,22 @@ test('an upload queued before its document was trashed or deleted is discarded b
   }
 });
 
+test('a PDF with a large JSON copy and large file downloads without cycling between the two', async () => {
+  const drive = standin(), da = disk(), db = disk(da.clock), key = 'doc:00000000-0000-4000-8000-00000000a011';
+  const a = worker(drive, da), bytes = bytesOf(12 * MiB, 47), text = 'A'.repeat(6 * MiB);
+  await pdfOn(a, da, key, bytes, 'Searchable reader');
+  await a.papers.save(key, { text });
+  assert.ok((await a.sync.set(true)).ok);
+  const b = worker(drive, db);
+  assert.ok((await b.sync.set(true)).ok);
+  const rec = await b.papers.get(key);
+  assert.ok(rec, 'the receiving device finished the document');
+  assert.equal(rec.text, text);
+  assert.equal(sha(await db.files.read(rec.file.hash)), sha(bytes));
+  assert.deepEqual(await moves(db), {});
+  assert.deepEqual([...db.stage.m.keys()], []);
+});
+
 test('a worker stopped mid-chunk: the next one asks Drive where the session stands and goes on from there', async () => {
   const drive = standin(), dk = disk(), key = 'doc:00000000-0000-4000-8000-00000000a001', big = bytesOf(20 * MiB, 7);
   const a = worker(drive, dk);
