@@ -12,8 +12,10 @@ const path = require('path');
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const exists = (f) => fs.existsSync(path.join(root, f)) && fs.statSync(path.join(root, f)).isFile();
-const pages = () => JSON.parse(read('manifest.json')).web_accessible_resources
-  .flatMap((w) => w.resources).filter((r) => r.endsWith('.html'));
+// Chrome's manifest's, and Safari's (its staged copy in the Xcode project: tools/build/safari-manifest.sh adds pages of its own).
+const SAFARI_MANIFEST = path.join(__dirname, '../../safari/Glaze/Glaze Extension/Resources/manifest.json');
+const pages = () => [...new Set([read('manifest.json'), fs.readFileSync(SAFARI_MANIFEST, 'utf8')].flatMap((m) => JSON.parse(m).web_accessible_resources)
+  .flatMap((w) => w.resources).filter((r) => r.endsWith('.html')))];
 const from = (dir, src) => (src.startsWith('/') ? src.slice(1) : path.posix.normalize(path.posix.join(dir, src)));
 const tags = (page) => [...read(page).matchAll(/<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/g)].map((m) => from(path.posix.dirname(page), m[1]));
 // Package scripts and modules a file names in a string, any query or hash aside: './x.js' from its own folder, 'lib/x.mjs'
@@ -40,7 +42,7 @@ const reached = (page) => {
 
 test('no page a site can frame reaches tabs or windows itself', () => {
   const list = pages();
-  for (const p of ['options.html', 'writer.html', 'sharing/quick.html', 'papers.html']) assert.ok(list.includes(p), p);
+  for (const p of ['options.html', 'writer.html', 'sharing/quick.html', 'papers.html', 'documents/picked.html']) assert.ok(list.includes(p), p);
   const found = [];
   for (const page of list) {
     const r = reached(page);

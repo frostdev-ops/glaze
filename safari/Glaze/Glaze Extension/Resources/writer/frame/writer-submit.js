@@ -367,6 +367,13 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
       picking = true; err.textContent = ''; ready();
       let r = null;
       try { r = await chrome.runtime.sendMessage({ type: 'glaze:google', op: 'pick' }); } catch { r = null; }
+      const state = r?.state;
+      // Safari: the Picker is in a tab of the worker's; asked again every second until it answers (documents/drive.js pick).
+      for (let n = 0; r?.why === 'pending' && n < 600 && sheet === mine && !mine.cancelled; n++) {
+        await new Promise((ok) => { setTimeout(ok, 1000); });
+        if (sheet !== mine || mine.cancelled) break;
+        try { r = await chrome.runtime.sendMessage({ type: 'glaze:google', op: 'picked', state }); } catch { r = null; }
+      }
       try {
         if (sheet !== mine || mine.busy || mine.cancelled) return;
         if (!r?.ok || !Array.isArray(r.files)) { tell(driveWhy(r?.why || 'network')); return; }

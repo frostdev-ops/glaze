@@ -208,6 +208,15 @@
       "matches": [
         "https://*/*"
       ]
+    },
+    {
+      "resources": [
+        "documents/picked.html"
+      ],
+      "matches": [
+        "https://frostdev.io/*",
+        "https://frostdev-ops.github.io/*"
+      ]
     }
   ]
 }

@@ -3536,6 +3536,17 @@ const openGoogle = () => {
       native: (message) => chrome.runtime.sendNativeMessage(GZ_GOOGLE.APP, message),
       // iOS: the sign-in tab the student taps (the worker opens it, never a framed page).
       open: (url) => chrome.tabs.create({ url }),
+      // Safari's Picker: the picker page in a tab of the worker's, back to Glaze's return page; the pick under way kept in
+      // storage.session (memory, gone with the browser). Without it, Picker stays unavailable across worker unloads.
+      ...(SAFARI && {
+        tab: async () => (await chrome.tabs.create({ url: 'about:blank', active: true }))?.id,
+        show: (tab, url) => chrome.tabs.update(tab, { url }),
+        shut: (tab) => chrome.tabs.remove(tab),
+        back: () => chrome.runtime.getURL(PICKED_PAGE),
+        hold: chrome.storage.session
+          ? { get: async () => (await chrome.storage.session.get('googlePick')).googlePick || null, set: (v) => (v ? chrome.storage.session.set({ googlePick: v }) : chrome.storage.session.remove('googlePick')) }
+          : undefined,
+      }),
       // Calendar sync signs in with Chrome's own client: a Drive connection through it shares Chrome's cache and identity
       // with Calendar, and while Calendar is connected Disconnect leaves both.
       keep: async () => await calendarOn() && (await chrome.storage.local.get('google')).google?.flow === 'chrome',
@@ -3543,16 +3554,38 @@ const openGoogle = () => {
   }
   return google;
 };
+// Safari's Picker comes back here (documents/picked.html, web-accessible to the picker pages only: tools/build/safari-manifest.sh).
+const PICKED_PAGE = 'documents/picked.html';
 const googlePage = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && ['options.html', 'papers.html', 'writer.html'].some((p) => s.url.split(/[?#]/)[0] === chrome.runtime.getURL(p));
 chrome.runtime.onMessage.addListener((m, s, reply) => {
-  if (m?.type !== 'glaze:google' || !['status', 'connect', 'finish', 'disconnect', 'pick'].includes(m.op)) return;
-  if (!(m.op === 'pick' ? googlePage(s) : fromEditor(s))) { reply({ ok: false, why: 'sender' }); return; }
+  if (m?.type !== 'glaze:google' || !['status', 'connect', 'finish', 'disconnect', 'pick', 'picked'].includes(m.op)) return;
+  if (!(m.op === 'pick' || m.op === 'picked' ? googlePage(s) : fromEditor(s))) { reply({ ok: false, why: 'sender' }); return; }
   googleLib();
   if (!GZ_GOOGLE.ON) { reply({ ok: false, why: 'off' }); return; } // the build-time switch (background/google.js)
-  const run = () => openGoogle()[m.op]();
+  const run = () => m.op === 'picked' ? openGoogle().picked(m.state) : openGoogle()[m.op]();
   Promise.resolve().then(() => (['connect', 'finish', 'disconnect'].includes(m.op) ? grantTurn(run) : run())).then(reply, () => reply({ ok: false, why: 'network' }));
   return true;
 });
+// Safari's Picker: its return page, top-level in the tab the worker opened, hands over the address the picker page came back
+// to; the worker closes that tab. A tab closed first is a cancel.
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:google' || m.op !== 'back') return;
+  const tab = s.tab?.id;
+  if (!SAFARI || s.id !== chrome.runtime.id || s.frameId !== 0 || !Number.isInteger(tab) || typeof s.url !== 'string' || s.url.split(/[?#]/)[0] !== chrome.runtime.getURL(PICKED_PAGE)) { reply({ ok: false, why: 'sender' }); return; }
+  googleLib();
+  openGoogle().back(m.url, tab).then(async (r) => {
+    if (r.ok) await Promise.resolve().then(() => chrome.tabs.remove(tab)).catch(() => {});
+    return r;
+  }).then(reply, () => reply({ ok: false, why: 'network' }));
+  return true;
+});
+if (SAFARI) {
+  // Only a pick under way in that tab loads anything: nothing runs for someone who never picks.
+  chrome.tabs?.onRemoved?.addListener((tab) => {
+    if (!chrome.storage.session) return;
+    chrome.storage.session.get('googlePick').then((r) => { if (r.googlePick?.tab === tab) return openGoogle().closed(tab); }).catch(() => {});
+  });
+}
 // Google Drive's files (documents/drive.js): From Google Drive and Save to Google Drive on Documents and Writer, with the token
 // above. The pages the paper store answers ask (glaze:writerPapers): writer.html, and papers.html, framed once its document
 // claimed its pass. A document's Drive file is written on its record in the papers' turn, only while the record is there.

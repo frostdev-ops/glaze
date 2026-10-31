@@ -13,7 +13,7 @@
 // the browser's tab or window APIs (test/frame-tabs.test.js): writer.html and Documents run framed in a school's page.
 // The pages' part (page): From Google Drive beside Documents' Import and in the paper's ⋯ menu, Save to Google Drive in a
 // Documents card's ⋯ menu, each only while Drive is connected, From Google Drive only where Google's Picker works (the
-// worker's status picker: not Safari's app sign-in yet).
+// worker's status picker; in Safari, a tab of the worker's and a wait on picked).
 // Classic script for the worker and the pages; module.exports for node.
 var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
   const API = 'https://www.googleapis.com/drive/v3/files';
@@ -545,7 +545,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
         asking = null;
         if (again) { again = false; ask(); return; }
         if (r?.why === 'sender' && n < 5) setTimeout(() => ask(n + 1), 500 * 2 ** n);
-        const on = r?.connected === true, can = on && r?.picker === true; // picker: Google's Picker works here (not Safari yet)
+        const on = r?.connected === true, can = on && r?.picker === true; // picker: Google's Picker works here
         if (on !== connected || can !== picker) { connected = on; picker = can; for (const f of shown) try { f(); } catch (e) { console.error(e); } }
       });
       return asking;
@@ -559,8 +559,15 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
     const SAYS = { missing: "Glaze can't reach this file in Google Drive.", denied: "Glaze can't reach this file in Google Drive.", busy: 'Google Drive is busy. Try again in a moment.',
       quota: 'Your Google Drive is full.', type: 'That file could not be read.', size: 'That file is too large.', export: 'That file is too large.' };
     const says = (why) => (why === 'cancel' ? '' : SAYS[why] || (SIGN_IN.has(why) ? 'Connect Google Drive again in Settings.' : "Couldn't reach Google Drive. Try again in a moment."));
+    // Safari: the Picker opens in a tab of the worker's and pick says pending; picked is asked every second until it has
+    // the answer, ten minutes at most (each ask keeps Safari's worker loaded).
     const pick = async () => {
-      const r = await chrome.runtime.sendMessage({ type: 'glaze:google', op: 'pick' }).catch(() => null);
+      let r = await chrome.runtime.sendMessage({ type: 'glaze:google', op: 'pick' }).catch(() => null);
+      const state = r?.state;
+      for (let n = 0; r?.why === 'pending' && n < 600; n++) {
+        await new Promise((ok) => { setTimeout(ok, 1000); });
+        r = await chrome.runtime.sendMessage({ type: 'glaze:google', op: 'picked', state }).catch(() => null);
+      }
       if (!r?.ok || !Array.isArray(r.files)) throw new Fail(WHY.includes(r?.why) ? r.why : 'network');
       return r.files;
     };

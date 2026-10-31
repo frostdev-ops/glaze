@@ -631,6 +631,237 @@ test('Safari: native tokens with an expired or unknown expiry are never cached b
   }
 });
 
+// Safari's Picker: the picker page in a tab of the worker's, coming back to documents/picked.html (background/background.js),
+// the pick under way held outside the worker's memory (env.hold: storage.session), so a worker Safari loaded again ends it.
+const BACK = 'safari-web-extension://6F1C2A3B-4D5E-4F60-8A7B-9C0D1E2F3A4B/documents/picked.html';
+const pickWorker = (h, local, held, { tabs = [], fetch, ...extra } = {}) => G.create({
+  on: true, config: { ...REAL, native: true }, flow: 'native', now: () => h.clock,
+  storage: { get: async (k) => structuredClone(Object.fromEntries([].concat(k).filter((x) => x in local).map((x) => [x, local[x]]))), set: async (v) => Object.assign(local, structuredClone(v)), remove: async (k) => { for (const x of [].concat(k)) delete local[x]; } },
+  fetch: fetch || (async (url, init) => { if (REAL.picker.includes(url) && init.method === 'HEAD') return new Response('', { status: 200 }); throw new Error(`unexpected request: ${url}`); }),
+  native: h.native, open: async () => {}, manifest: () => ({}), identity: () => undefined, permissions: { contains: async () => false, remove: async () => true }, keep: async () => false,
+  tab: async (url) => { tabs.push(url); return 40 + tabs.length; }, back: () => BACK,
+  show: async (tab, url) => { tabs[tab - 41] = url; }, shut: async () => {},
+  hold: { get: async () => structuredClone(held.v ?? null), set: async (v) => { held.v = v ? structuredClone(v) : null; } },
+  ...extra,
+});
+const answer = (state, more) => `${BACK}#${new URLSearchParams({ state, ...more })}`;
+const FILE = { id: '1AbC_d-EfGh', name: 'Essay draft.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+
+const picking = async (extra = {}) => {
+  const h = handler(), local = {}, held = {}, tabs = [];
+  const w = pickWorker(h, local, held, { tabs, ...extra });
+  await w.connect(); h.answered = true; await w.finish();
+  return { h, local, held, tabs, w };
+};
+
+test('Safari Picker rejects a wrong state without consuming or closing the real choice', async () => {
+  const { w, held } = await picking();
+  await w.pick();
+  const { state, tab } = held.v;
+  assert.deepEqual(await w.back(answer('wrong', { action: 'cancel' }), tab), { ok: false, why: 'state' });
+  assert.equal(held.v.done, undefined);
+  assert.deepEqual(await w.back(answer(state, { action: 'picked', files: JSON.stringify([FILE]) }), tab), { ok: true });
+  assert.deepEqual(await w.picked(state), { ok: true, files: [FILE] });
+});
+
+test('Safari Picker polls belong to one invocation, including after a worker restart', async () => {
+  const { w, h, local, held } = await picking();
+  const first = await w.pick();
+  const second = await w.pick();
+  assert.equal(typeof second.state, 'string');
+  assert.notEqual(first.state, second.state);
+  const b = pickWorker(h, local, held);
+  await b.back(answer(second.state, { action: 'picked', files: JSON.stringify([FILE]) }), held.v.tab);
+  for (const state of [undefined, first.state]) assert.deepEqual(await b.picked(state), { ok: false, why: 'state' });
+  assert.deepEqual(await b.picked(second.state), { ok: true, files: [FILE] });
+});
+
+test('Safari Picker saves its tab and state before navigation can return or close', async () => {
+  let w, returned;
+  const s = await picking({
+    tab: async (url) => {
+      assert.equal(url, undefined, 'create a blank tab before handing out the token');
+      return 41;
+    },
+    show: async (tab, url) => {
+      const state = new URLSearchParams(new URL(url).hash.slice(1)).get('state');
+      returned = w.back(answer(state, { action: 'cancel' }), tab);
+    },
+  });
+  w = s.w;
+  const r = await w.pick();
+  assert.equal(r.why, 'pending');
+  assert.deepEqual(await returned, { ok: true });
+  assert.deepEqual(await w.picked(r.state), { ok: true, files: [] });
+});
+
+test('Safari Picker serializes a return and tab closure instead of overwriting the files with cancel', async () => {
+  const { w, held } = await picking();
+  const r = await w.pick(), { state, tab } = held.v;
+  const [back] = await Promise.all([
+    w.back(answer(state, { action: 'picked', files: JSON.stringify([FILE]) }), tab), w.closed(tab),
+  ]);
+  assert.equal(back.ok, true);
+  assert.deepEqual(await w.picked(r.state), { ok: true, files: [FILE] });
+});
+
+test('Safari Picker reconnecting the same account invalidates a choice across workers', async () => {
+  const { w, h, local, held } = await picking();
+  const r = await w.pick(), { state, tab } = held.v;
+  const b = pickWorker(h, local, held);
+  assert.equal((await b.connect()).why, 'pending');
+  assert.deepEqual(await b.back(answer(state, { action: 'picked', files: JSON.stringify([FILE]) }), tab), { ok: false, why: 'state' });
+  assert.deepEqual(await b.picked(r.state), { ok: false, why: 'state' });
+});
+
+test('Safari Picker rejects an expired return even if no page has polled it', async () => {
+  const { w, h, held } = await picking();
+  await w.pick();
+  const { state, tab } = held.v;
+  h.clock += 10 * 60e3;
+  assert.deepEqual(await w.back(answer(state, { action: 'picked', files: JSON.stringify([FILE]) }), tab), { ok: false, why: 'state' });
+});
+
+test('Safari Picker cannot rely on worker memory when session storage is unavailable', async () => {
+  const { w } = await picking({ hold: undefined });
+  assert.equal((await w.status()).picker, false);
+  assert.deepEqual(await w.pick(), { ok: false, why: 'browser' });
+  const src = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
+  assert.doesNotMatch(src, /pickHeld/, 'no fallback lost on Safari worker unload');
+});
+
+test('Safari Picker refuses returns from an account replaced while its worker was unloaded', async () => {
+  const { w, h, local, held } = await picking();
+  await w.pick();
+  const { state, tab } = held.v;
+  local.google = { ...local.google, sub: 'OTHER' };
+  assert.deepEqual(await pickWorker(h, local, held).back(answer(state, { action: 'cancel' }), tab), { ok: false, why: 'connect' });
+});
+
+test('Safari Picker a return racing Disconnect cannot resurrect a cleared choice', async () => {
+  const { w, h, local, held } = await picking();
+  const r = await w.pick(), { state, tab } = held.v;
+  let entered, release, first = true;
+  const reading = new Promise((r) => { entered = r; });
+  const b = pickWorker(h, local, held, { hold: {
+    get: async () => {
+      const p = structuredClone(held.v);
+      if (first) { first = false; entered(); await new Promise((r) => { release = r; }); }
+      return p;
+    },
+    set: async (p) => { held.v = structuredClone(p); },
+  } });
+  const back = b.back(answer(state, { action: 'cancel' }), tab);
+  await reading;
+  const disconnect = b.disconnect();
+  await new Promise(setImmediate);
+  release();
+  await Promise.all([back, disconnect]);
+  assert.equal(held.v, null);
+  assert.deepEqual(await b.picked(r.state), { ok: false, why: 'state' });
+});
+
+test('Safari Picker return messages require the own top-level page and polls forward their state', async () => {
+  const calls = [], removed = [], base = 'safari-web-extension://x/';
+  const w = require('../helpers/worker-env.cjs')({ base, globals: {
+    GZ_GOOGLE_CONFIG: {}, GZ_GOOGLE: { ON: true, flowOf: () => 'native', create: () => ({
+      back: async (...a) => { calls.push(a); return { ok: true }; },
+      picked: async (state) => ({ ok: true, state }),
+    }) },
+  } });
+  w.context.chrome.tabs.remove = async (tab) => { removed.push(tab); };
+  const sender = { id: 'glaze', url: `${base}documents/picked.html`, frameId: 0, tab: { id: 41 } };
+  const message = { type: 'glaze:google', op: 'back', url: answer('s', { action: 'cancel' }) };
+  for (const bad of [{ id: 'other' }, { url: `${base}writer.html` }, { url: 'https://frostdev.io/documents/picked.html' }, { frameId: 1 }, { frameId: undefined }, { tab: {} }]) {
+    assert.deepEqual(await w.send(message, { ...sender, ...bad }), { ok: false, why: 'sender' });
+  }
+  assert.equal(calls.length, 0);
+  assert.deepEqual(removed, []);
+  assert.deepEqual(await w.send(message, sender), { ok: true });
+  assert.equal(calls[0][1], 41);
+  assert.deepEqual(removed, [41]);
+  assert.deepEqual(await w.send({ type: 'glaze:google', op: 'picked', state: 'own-choice' }, { ...sender, url: `${base}writer.html` }), { ok: true, state: 'own-choice' });
+});
+
+test('Safari\'s Picker: the picker page opens in a tab with the token and state in its fragment, and comes back to Glaze\'s return page, even after Safari unloads the worker', async () => {
+  const h = handler(), local = {}, held = {}, tabs = [];
+  const a = pickWorker(h, local, held, { tabs });
+  await a.connect(); h.answered = true; await a.finish();
+  assert.equal((await a.status()).picker, true, 'From Google Drive is offered in Safari');
+  assert.deepEqual(await a.pick(), { ok: false, why: 'pending', state: held.v.state });
+  const u = new URL(tabs[0]), f = new URLSearchParams(u.hash.slice(1));
+  assert.equal(`${u.origin}${u.pathname}`, REAL.picker[0]);
+  assert.deepEqual([...f.keys()].sort(), ['access_token', 'app_id', 'key', 'redirect_uri', 'state']);
+  assert.deepEqual([f.get('access_token'), f.get('redirect_uri'), f.get('key'), f.get('app_id')], ['native-1', BACK, REAL.apiKey, REAL.appId]);
+  assert.equal(u.search, '', 'nothing in the query: the token never reaches a server');
+  const state = f.get('state');
+  assert.match(state, /^[\w-]{43}$/);
+  assert.deepEqual(Object.keys(held.v).sort(), ['at', 'state', 'sub', 'tab'], 'the hold keeps no token');
+  assert.ok(!JSON.stringify(local).includes(state), 'nothing of the pick in storage.local');
+  assert.deepEqual(await a.picked(state), { ok: false, why: 'pending' });
+  // Safari unloads the worker while the student picks; the return page and the waiting page reach a new one.
+  const b = pickWorker(h, local, held);
+  assert.deepEqual(await b.back(answer(state, { action: 'picked', files: JSON.stringify([FILE]) }), 42), { ok: false, why: 'state' }, 'only the tab the pick opened');
+  assert.deepEqual(await b.back(answer(state, { action: 'picked', files: JSON.stringify([FILE]) }).replace('picked.html', 'other.html'), 41), { ok: false, why: 'state' }, 'only Glaze\'s return page');
+  assert.deepEqual(await b.back(answer(state, { action: 'picked', files: JSON.stringify([FILE]) }), 41), { ok: true });
+  assert.deepEqual(await b.back(answer(state, { action: 'cancel' }), 41), { ok: false, why: 'state' }, 'answered once');
+  assert.deepEqual(await b.picked(state), { ok: true, files: [FILE] });
+  assert.equal(held.v, null);
+  assert.deepEqual(await b.picked(state), { ok: false, why: 'state' }, 'nothing under way');
+});
+
+test('Safari\'s Picker: another state is refused, a closed tab is a cancel, an old pick ends, and Disconnect or another account ends one under way', async () => {
+  const h = handler(), local = {}, held = {}, tabs = [];
+  const w = pickWorker(h, local, held, { tabs });
+  await w.connect(); h.answered = true; await w.finish();
+  const start = async () => { await w.pick(); return new URLSearchParams(new URL(tabs.at(-1)).hash.slice(1)).get('state'); };
+  await start();
+  assert.deepEqual(await w.back(answer('x'.repeat(43), { action: 'picked', files: JSON.stringify([FILE]) }), held.v.tab), { ok: false, why: 'state' });
+  assert.deepEqual(await w.picked(held.v?.state), { ok: false, why: 'pending' }, 'another state leaves the real choice pending');
+  await start();
+  await w.closed(99);
+  assert.deepEqual(await w.picked(held.v?.state), { ok: false, why: 'pending' }, 'another tab closing changes nothing');
+  await w.closed(held.v.tab);
+  assert.deepEqual(await w.picked(held.v?.state), { ok: true, files: [] }, 'the picker tab closed: a cancel');
+  const s3 = await start();
+  assert.deepEqual(await w.back(answer(s3, { action: 'cancel' }), held.v.tab), { ok: true });
+  assert.deepEqual(await w.picked(held.v?.state), { ok: true, files: [] });
+  await start();
+  h.clock += 10 * 60e3;
+  assert.deepEqual(await w.picked(held.v?.state), { ok: false, why: 'cancel' }, 'ten minutes: over');
+  await start();
+  local.google = { ...local.google, sub: 'OTHER' };
+  assert.deepEqual(await w.picked(held.v?.state), { ok: false, why: 'connect' }, 'another account connected meanwhile');
+  local.google = { ...local.google, sub: 'S1' };
+  await start();
+  assert.deepEqual(await w.disconnect(), { ok: true });
+  assert.equal(held.v, null, 'Disconnect ends a pick under way');
+  const old = harness({ flow: 'native', config: { ...REAL, native: true }, native: async (m) => (m.type === 'google.status' ? { ok: true } : null) });
+  old.local.google = { email: 'student@icloud.com', sub: '9', flow: 'native', at: 1 };
+  assert.deepEqual(await old.g.pick(), { ok: false, why: 'browser' }, 'a worker with no tab of its own to open says so');
+});
+
+test('Safari\'s Picker in the worker: its tab opened by the worker, its return page heard only top-level in that tab, and Documents and Writer wait on picked', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
+  assert.match(src, /const PICKED_PAGE = 'documents\/picked\.html';/);
+  assert.match(src, /tab: async \(\) => \(await chrome\.tabs\.create\(\{ url: 'about:blank', active: true \}\)\)\?\.id,/);
+  assert.match(src, /hold: chrome\.storage\.session\n/, 'held in storage.session, never storage.local');
+  const at = src.indexOf("m?.type !== 'glaze:google' || m.op !== 'back'"), body = src.slice(at, src.indexOf('return true;', at));
+  assert.match(body, /!SAFARI \|\| s\.id !== chrome\.runtime\.id \|\| s\.frameId !== 0 \|\| !Number\.isInteger\(tab\) \|\| typeof s\.url !== 'string' \|\| s\.url\.split\(\/\[\?#\]\/\)\[0\] !== chrome\.runtime\.getURL\(PICKED_PAGE\)/);
+  assert.match(body, /chrome\.tabs\.remove\(tab\)/, 'the worker closes the tab');
+  assert.match(src, /chrome\.tabs\?\.onRemoved\?\.addListener\(\(tab\) => \{\n\s+if \(!chrome\.storage\.session\) return;\n\s+chrome\.storage\.session\.get\('googlePick'\)\.then\(\(r\) => \{ if \(r\.googlePick\?\.tab === tab\) return openGoogle\(\)\.closed\(tab\); \}\)/,
+    'a tab closing loads Drive\'s code only for the pick under way in it');
+  const page = fs.readFileSync(path.join(__dirname, '../../extension/documents/picked.js'), 'utf8');
+  assert.match(page, /history\.replaceState\(null, '', location\.pathname\);\n {2}chrome\.runtime\.sendMessage\(\{ type: 'glaze:google', op: 'back', url \}\)/, 'the fragment leaves the address bar first');
+  for (const f of ['documents/drive.js', 'writer/frame/writer-submit.js']) {
+    assert.match(fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8'), /r\?\.why === 'pending' && n < 600[^]*op: 'picked'/, f);
+  }
+  const safari = require('../../safari/Glaze/Glaze Extension/Resources/manifest.json');
+  const war = safari.web_accessible_resources.find((w) => w.resources.includes('documents/picked.html'));
+  assert.deepEqual(war, { resources: ['documents/picked.html'], matches: ['https://frostdev.io/*', 'https://frostdev-ops.github.io/*'] }, 'reachable from the picker pages only');
+  assert.ok(!repo.web_accessible_resources.some((w) => w.resources.includes('documents/picked.html')), 'Chrome\'s and Firefox\'s packages don\'t expose it');
+});
+
 test('a stale native revoked response cannot erase a newer connection', async () => {
   let release, entered, account = { sub: 'A', email: 'a@school.edu' };
   const waiting = new Promise((r) => { entered = r; });
@@ -944,7 +1175,7 @@ test('the worker answers glaze:google from Settings only (pick from Glaze\'s own
   const at = src.indexOf("m?.type !== 'glaze:google'");
   assert.ok(at > 0);
   const body = src.slice(at, src.indexOf('return true;', at));
-  assert.match(body, /m\.op === 'pick' \? googlePage\(s\) : fromEditor\(s\)/);
+  assert.match(body, /m\.op === 'pick' || m\.op === 'picked' \? googlePage\(s\) : fromEditor\(s\)/);
   // Nothing about Google in any site's first script.
   const m = require('../../extension/manifest.json');
   for (const c of m.content_scripts) for (const f of c.js) assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8'), /GZ_GOOGLE|glaze:google|GZ_OAUTH|google-config/, f);

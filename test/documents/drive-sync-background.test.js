@@ -163,7 +163,7 @@ const googleWorker = (status) => {
     chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, onMessage: { addListener: (f) => listeners.push(f) }, onConnect: { addListener() {} } },
       storage: { local: { get: async () => ({}) } }, permissions: {}, identity: {}, tabs: {} },
     GZ_GOOGLE: { ON: true, APP: 'app', flowOf: () => 'chrome', create: () => ({ status: async () => status }) }, GZ_GOOGLE_CONFIG: {}, GZ_GCAL: { ON: false },
-    fromEditor: () => false, trustedFrame: () => true, settingsFramesLoaded: Promise.resolve(), grantTurn: (f) => f(),
+    fromEditor: () => false, trustedFrame: () => true, settingsFramesLoaded: Promise.resolve(), grantTurn: (f) => f(), SAFARI: false,
   });
   const source = fs.readFileSync(require.resolve('../../extension/background/background.js'), 'utf8');
   const from = source.indexOf('// Google sign-in for Drive (background/google.js)');
