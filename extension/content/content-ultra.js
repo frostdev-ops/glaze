@@ -78,7 +78,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // Grades, Courses and Activity from the student's last visit (enhance.instant), once the settings are known: courses/page/instant.js.
   // Signing out (Ultra's main menu's "#" link, which Glaze's bar clicks too) forgets this site's copies and keeps no more.
   let copySignedOut = false;
-  const syncInstant = () => window.top === window && !isPreview && I.ready.then(() => I.settings.enabled && (globalThis.GZ_INSTANT || (!copySignedOut && top()?.instant && /^\/ultra\/(grades|course|stream)\/?$/.test(location.pathname)))
+  const syncInstant = () => window.top === window && !isPreview && Promise.resolve(I.ready).then(() => I.settings.enabled && (globalThis.GZ_INSTANT || (!copySignedOut && top()?.instant && /^\/ultra\/(grades|course|stream)\/?$/.test(location.pathname)))
     && need(['courses/instant.js', 'courses/page/instant.js'], () => globalThis.GZ_INSTANT).then(() => copySignedOut ? GZ_INSTANT.signout() : GZ_INSTANT.sync(!!top()?.instant, me, I.ready))).catch(() => {});
   if (window.top === window) document.addEventListener('click', (e) => {
     const a = e.target?.closest?.('.MuiDrawer-paper a[href], #base_tools a[href]'), h = a?.getAttribute('href') || '';
