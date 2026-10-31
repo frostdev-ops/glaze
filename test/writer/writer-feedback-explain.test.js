@@ -235,3 +235,26 @@ test('a fitting cloud assessment keeps its single-request grading and explanatio
     assert.equal(out.grade.reason?.key || null, comment === SUBJECT ? EXPLANATION : null);
   }
 });
+
+// A met APA row its explanation keeps justifying by MLA: the decision is re-checked once, then no re-check is left.
+const contradiction = ({ grade = true } = {}) => {
+  const input = raw({ grade }); input.mode = 'paper'; input.paper = { format: 'MLA 9', font: 'Times New Roman', size: 12, line: 2, margin: 1, header: 'name-page' };
+  input.context.assignment.rubric.criteria = [{ id: 'style', label: 'APA style', detail: 'APA style', points: 20 }];
+  return run(input, (req) => {
+    if (req.schema.properties.status) return { json: { status: 'met', quotes: catalog(req, true).slice(0, 1).map((p) => p.id), facts: catalog(req, false).slice(0, 2).map((p) => p.id), level: null,
+      score: req.schema.properties.score?.type === 'null' ? null : 20, complete: true } };
+    if (req.schema.properties.comment) return { json: { comment: 'Your draft meets APA style because it adheres to MLA 9 formatting.' } };
+    return { json: { summary: SUMMARY } };
+  }, LOCAL);
+};
+test('local: a contradiction with no re-check left keeps a verified decision\'s grade with Glaze\'s rubric rating', async () => {
+  const { cfg, result } = contradiction();
+  const out = (await result).output;
+  assert.equal(out.grade.reason, null); assert.equal(out.grade.earned, 20);
+  assert.equal(out.criteria[0]?.comment, 'Rubric score: 20/20 points.');
+  assert.equal(explains(cfg), 2, 'one explanation, one re-check, one explanation of the re-checked decision');
+});
+test('local: without grading, a contradiction with no re-check left is an explanation failure, never unassessed material', async () => {
+  const out = (await contradiction({ grade: false }).result).output;
+  assert.equal(out.reason?.key, EXPLANATION);
+});

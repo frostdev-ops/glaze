@@ -138,8 +138,8 @@ test('a met APA row justified by another style is a contradiction in every local
     'Votre brouillon respecte le style APA car il suit la mise en forme MLA 9.', 'Su borrador cumple el estilo APA porque sigue el formato MLA 9.',
     'Seu rascunho cumpre o estilo APA porque segue a formatação MLA 9.', 'Je tekst voldoet aan de APA-stijl omdat hij de MLA 9-opmaak volgt.']) {
     const out = (await styleRun(comment).result).output;
-    assert.equal(out.grade.earned, null, comment);
-    assert.equal(out.criteria.length, 0, comment);
+    assert.ok(out.criteria.every((c) => c.comment !== comment), comment);
+    assert.notEqual(out.grade.reason?.key, 'Some assignment material could not be assessed completely.', comment);
   }
   for (const comment of ['Ihr Entwurf folgt dem APA-Stil und nicht der MLA-Formatierung.', 'Votre brouillon suit le style APA plutôt que la mise en forme MLA.']) {
     const out = (await styleRun(comment).result).output;

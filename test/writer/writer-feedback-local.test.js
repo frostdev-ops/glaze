@@ -195,8 +195,11 @@ const styleRun = (label, comment, status = 'met', detail = label) => {
 test('APA met cannot be justified by affirmative MLA compliance, but comparisons and alternatives stay valid', async () => {
   const conflict = styleRun('APA style', 'Your draft meets APA style because it adheres to MLA 9 formatting.');
   const out = await conflict.result;
-  assert.equal(out.output.grade.earned, null);
-  assert.equal(out.output.criteria.length, 0);
+  // The contradicting explanation never reaches the student; the re-checked, verified decision keeps its points with
+  // Glaze's rubric rating, and nothing is reported as unassessed material.
+  assert.ok(!JSON.stringify(out.output).includes('adheres to MLA 9'));
+  assert.equal(out.output.criteria[0]?.comment, 'Rubric score: 20/20 points.');
+  assert.equal(out.output.grade.reason, null); assert.equal(out.output.grade.earned, 20);
   assert.equal(conflict.cfg.seen.filter((req) => req.schema.properties.comment).length, 2);
   const comparison = await styleRun('APA style', 'Your draft uses an MLA 9 preset, which does not establish the required APA style.', 'partly').result;
   assert.equal(comparison.output.criteria[0]?.status, 'partly');
