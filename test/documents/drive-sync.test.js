@@ -882,3 +882,35 @@ test('a device whose JSON copy was moved out of the Glaze folder puts the docume
   assert.equal(textOf((await a.papers.get(key)).doc), 'Edited on B', 'and A follows it');
   noDeletes(drive);
 });
+
+test('a conflict whose push Drive keeps refusing keeps Drive\'s side once, however often the run is tried again', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-0000000000f1', pdf = 'doc:00000000-0000-4000-8000-0000000000f2';
+  await a.papers.save(key, { doc: doc('Draft one'), title: 'Essay', named: true });
+  const r1 = await a.files.put(enc('%PDF one'), MIME.pdf);
+  await a.papers.save(pdf, { kind: 'pdf', file: r1, size: r1.size, title: 'Reading', named: true });
+  assert.ok((await a.sync.set(true)).ok); assert.ok((await b.sync.set(true)).ok);
+  // Both edit both documents; A's reach Drive first.
+  clock.t += 60e3;
+  await a.papers.save(key, { doc: doc('A wrote this') });
+  const ra = await a.files.put(enc('%PDF A marked'), MIME.pdf);
+  await a.papers.save(pdf, { file: ra, size: ra.size }, { reason: 'edit' });
+  await a.sync.touched(key); await a.sync.touched(pdf); await a.fire();
+  await b.papers.save(key, { doc: doc('B wrote that') });
+  const rb = await b.files.put(enc('%PDF B marked'), MIME.pdf);
+  await b.papers.save(pdf, { file: rb, size: rb.size }, { reason: 'edit' });
+  await b.sync.touched(key); await b.sync.touched(pdf);
+  // B's Drive is full: each run keeps Drive's side, then its push is refused.
+  drive.fail(403, ERRORS.storageQuotaExceeded, (x) => x.path.startsWith('/upload/'), 50);
+  for (let i = 0; i < 3; i++) {
+    assert.deepEqual(await b.sync.run(), { ok: false, why: 'quota' });
+    clock.t = (await state(b)).wait + 1;
+  }
+  drive.clearFaults();
+  assert.ok((await b.sync.run()).ok);
+  assert.equal((await b.papers.versions(key)).filter((v) => v.reason === 'conflict').length, 1, 'Drive\'s side of the paper is one version');
+  assert.equal((await b.papers.list()).filter((x) => x.title === 'Reading (Drive copy)').length, 1, 'Drive\'s PDF is one document of its own');
+  assert.equal(textOf(sidecarJson(drive, key).record.doc), 'B wrote that', 'B\'s went up once Drive had room');
+  assert.equal(sidecarJson(drive, pdf).record.file.hash, rb.hash);
+  noDeletes(drive);
+});
