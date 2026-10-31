@@ -31,7 +31,7 @@ const watch = () => {
   window.__shifts = [];
   new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__shifts.push({ value: e.value, recent: e.hadRecentInput, sources: (e.sources || []).map((s) => s.node?.nodeName || '') }); }).observe({ type: 'layout-shift', buffered: true });
   window.__hosts = 0;
-  new MutationObserver(() => { window.__hosts = Math.max(window.__hosts, document.querySelectorAll('#gz-navbar').length); if (document.querySelector('#gz-navbar[data-first]')) window.__copy = { at: performance.now(), framed: !!window.__first }; }).observe(document, { childList: true, subtree: true });
+  new MutationObserver(() => { window.__hosts = Math.max(window.__hosts, document.querySelectorAll('#gz-navbar').length); if (!window.__copy && document.querySelector('#gz-navbar[data-first]')) window.__copy = { at: performance.now(), framed: !!window.__first }; }).observe(document, { childList: true, subtree: true });
   requestAnimationFrame(() => {
     const h = bar(), items = rail(h);
     window.__firstHost = h;

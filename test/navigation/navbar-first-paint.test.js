@@ -130,7 +130,11 @@ function firstPage(account, css) {
   store.set('gz-navbar', JSON.stringify({ u: '_42_1', t: Date.now(), w: 'rail auto float', k: NAV.key(settings), v: '1440x900', a: [], m: '<nav class="rail"><div class="list"><a class="item" data-id="course" href="https://bb.school.test/ultra/course">Courses</a></div><div class="foot" data-p="0"></div></nav>', p: ['<div class="foot"><a class="item account" data-id="profile">Alex Private</a></div>'], ...(css && { c: css }) }));
   context.GZ_NAV.first(settings, 'rail auto float', account);
   const host = document.getElementById('gz-navbar');
-  return { ...h, host, load: () => host.shadowRoot.querySelector('link').onload(), drop: () => context.GZ_NAV.drop() };
+  return { ...h, host, load: () => {
+    const link = host.shadowRoot.querySelector('link');
+    link.sheet = {};
+    link.onload(); link.dispatchEvent({ type: 'load' });
+  }, drop: () => context.GZ_NAV.drop() };
 }
 
 test('the compared shape leaves out where the student is; a change to the items is still a change', () => {
@@ -338,6 +342,26 @@ test('styled from its kept sheet, the copy is shown at once, before any sheet lo
   assert.equal(plain.host.hidden, true);
   plain.load();
   assert.equal(plain.host.hidden, false);
+});
+
+test('the bundled sheet retires the cached sheet before or after the live bar takes over', () => {
+  for (const loadAt of ['copy', 'before takeover', 'ready before takeover', 'after takeover']) {
+    const h = firstPage(() => new Promise(() => {}), '.rail { display: none; }');
+    const root = h.host.shadowRoot;
+    assert.equal(root.adoptedStyleSheets.length, 1, 'the copy uses its cached sheet until the bundle loads');
+    if (loadAt === 'ready before takeover') root.querySelector('link').sheet = {};
+    else if (loadAt !== 'after takeover') h.load();
+    if (loadAt !== 'copy') {
+      h.settings.navbar.on = true; h.ui.sync();
+      assert.equal(h.host.hasAttribute('data-first'), false, 'the live bar took over');
+      if (loadAt === 'after takeover') {
+        assert.equal(root.adoptedStyleSheets.length, 1, 'the live bar stays styled while the bundle is pending');
+        h.load();
+      }
+    }
+    assert.equal(root.adoptedStyleSheets.length, 0, `${loadAt}: stale cached rules cannot override the current bundle`);
+    assert.equal(h.host.hidden, false);
+  }
 });
 
 test('a cached bar is discarded for another or unavailable account', async () => {
