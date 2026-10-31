@@ -167,7 +167,7 @@ function browserCores(profile) {
   } catch { return null; }
 }
 
-// PERF_SPEED, Glaze on: a cold course-tab open on the synthetic Ultra course (test/fixtures/ultra-course.html), set up as
+// PERF_SPEED, Glaze on: a cold course-tab open (tabs.ahead off: no standby frame; checks/navigation/ultra-standby-check.js times an adoption) on the synthetic Ultra course (test/fixtures/ultra-course.html), set up as
 // checks/navigation/ultra-tabs-check.js does: two courses opened natively, then the other course's tab in Glaze's strip
 // (navigation/page/coursetabs.js) pressed while it has no frame yet. → ms from the press to the frame's 'drawn' message
 // and to the frame being on screen (visible, not inert, the stand-in gone).
@@ -186,7 +186,7 @@ function tabsRoute(r, u) {
 }
 async function courseTabOpen(context, opts, prepare) {
   await opts.evaluate(async (s) => { await chrome.storage.session.clear(); await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); await chrome.storage.local.set({ ultra: ['https://bb.school.test'] }); },
-    { ...D.GZ_DEFAULTS, navbar: { ...D.GZ_DEFAULTS.navbar, on: false }, enhance: { ...D.GZ_DEFAULTS.enhance, sidebar: false }, tabs: D.GZ_SANITIZE({}).tabs });
+    { ...D.GZ_DEFAULTS, navbar: { ...D.GZ_DEFAULTS.navbar, on: false }, enhance: { ...D.GZ_DEFAULTS.enhance, sidebar: false }, tabs: { ...D.GZ_SANITIZE({}).tabs, ahead: false } });
   await require('../../tools/dev/check-env.js').ultraReady(opts);
   const page = await context.newPage(); const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
