@@ -637,15 +637,15 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     // ---- what's due ----
     // One read per range of whole days, kept two minutes from when it was asked: a range inside a fresh one is answered
     // by it, so Better To Do, the cards, the reminders, the agenda and the rail share one read. Its links made whole
-    // (Ultra's <base href> is its CDN); at: when it was asked.
+    // (Ultra's <base href> is its CDN); at: when it was asked. prio: the queue's, for the reads it starts.
     const reads = []; // { from, to, at, done, p }
-    const due = (from, to) => {
+    const due = (from, to, prio = 0) => {
       const a = dayStart(from), b = dayEnd(to), now = env.now();
       for (let i = reads.length; i--;) if (reads[i].done && now - reads[i].at >= PLAN_TTL) reads.splice(i, 1);
       const hit = reads.find((x) => x.from <= a && x.to >= b);
       if (hit) return hit.p;
       const x = { from: a, to: b, at: now, done: false };
-      const r = { ...reader(), me, memberships: () => mine().then((m) => m.mem), grades: (cid, uid) => book(cid, uid) };
+      const r = { ...reader({ prio }), me, memberships: () => mine().then((m) => m.mem), grades: (cid, uid) => book(cid, uid, { prio }) };
       x.p = planner(r, { from: a, to: b, now }).then((p) => ({ ...p, at: now, items: p.items.map((i) => ({ ...i, url: at() + i.url })) }));
       x.p.then(() => { x.done = true; }, () => { const i = reads.indexOf(x); if (i !== -1) reads.splice(i, 1); });
       reads.push(x);
@@ -667,18 +667,18 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
       me, mine,
       // Canvas's course list's shape (list above).
       courses: () => mine().then((m) => list(m.mem, { origin: at() })),
-      due: (from, to) => due(from, to),
+      due: (from, to, prio) => due(from, to, prio),
       // Agenda/rail: this account's covered To Do copy for ten minutes (for the student it's drawn for, uid, without
       // waiting on who is signed in); else, inside Better To Do's own range, that range's read, kept as the To Do copy
       // through the worker as Better To Do keeps it ('glaze:todo', newest wins); else this range's.
-      planned: async (from, to, cache, uid) => {
+      planned: async (from, to, cache, uid, prio = 0) => {
         const covers = (key) => cache?.key === key && env.now() - cache.at < 600000 && Date.parse(cache.start) <= from && Date.parse(cache.end) >= to;
         if (ID.test(uid) && covers(`todo:${at()}/${uid}`)) return { key: cache.key, items: cache.items || [] };
         const { id } = await page.profile(), key = `todo:${at()}/${id}`, now = env.now();
         if (covers(key)) return { key, items: cache.items || [] };
         const w = await own(now);
-        if (!w || Date.parse(w.start) > from || Date.parse(w.end) < to) return { key, ...await page.due(from, to) };
-        const r = await page.due(Date.parse(w.start), Date.parse(w.end));
+        if (!w || Date.parse(w.start) > from || Date.parse(w.end) < to) return { key, ...await page.due(from, to, prio) };
+        const r = await page.due(Date.parse(w.start), Date.parse(w.end), prio);
         if (!published.has(r)) {
           published.add(r);
           send({ type: 'glaze:todo', key, cache: { key, at: r.at, start: w.start, end: w.end, teach: w.teach, progress: w.progress, items: r.items, complete: r.complete, grading: [], sums: {} } });

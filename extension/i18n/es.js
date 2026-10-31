@@ -1592,6 +1592,8 @@
   "Most tabs": "Máximo de pestañas",
   "With more, the tab you used longest ago closes, and the strip says which. Pinned tabs never close on their own.": "Si hay más, se cierra la pestaña que usaste hace más tiempo, y la barra dice cuál. Las pestañas fijadas nunca se cierran solas.",
   "Go back to where you were": "Volver a donde estabas",
+  "Load course data ahead of time": "Cargar los datos del curso por adelantado",
+  "On Blackboard, your To Do and grades are read while the page is idle, and a course's content when you point at it, so they open at once.": "En Blackboard, tus tareas y calificaciones se leen mientras la página está inactiva, y el contenido de un curso cuando lo señalas, para que se abran al instante.",
   "Tab buttons": "Botones de pestaña",
   "Shape": "Forma",
   "Tab": "Pestaña",
