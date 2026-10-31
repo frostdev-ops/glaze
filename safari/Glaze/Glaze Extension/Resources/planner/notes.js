@@ -493,7 +493,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
       }
       case 'folder': {
         if (!isId(m.id)) return { ok: false, error: 'bad' };
-        if (idx.gone[m.id]) return finish({ ok: false, error: 'gone' });
+        if (idx.gone[m.id] || idx.fgone?.[m.id]) return finish({ ok: false, error: 'gone' });
         let f = idx.folders[m.id];
         if (!f) {
           if (Object.keys(idx.folders).length >= LIMIT.folders) return finish({ ok: false, error: 'many' });

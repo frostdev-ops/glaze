@@ -3419,11 +3419,11 @@ const openDriveSync = () => {
   driveStore = GZ_DRIVE_STORE.create({
     area: (a) => (a === 'notes' ? notesArea : areaOf(a)), store: { get: (k) => chrome.storage.local.get(k), set: (o) => chrome.storage.local.set(o), remove: (k) => chrome.storage.local.remove(k), keys: () => keysOf('local') },
     hash: async (text) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))].map((b) => b.toString(16).padStart(2, '0')).join(''),
-    join: (cat, key, value, rt) => {
+    join: (cat, key, value, rt, own) => {
       brokerIn('backup');
       const local = { get: (k) => chrome.storage.local.get(k), set: (o) => chrome.storage.local.set(o) };
       // Notes' joins write through their own queue's run; the rest in one turn of the broker's.
-      return ['notes', 'noteFolders', 'noteFiles'].includes(cat) ? GZ_DRIVE_STORE.join(cat, key, value, local, notesArea, rt) : turn(() => GZ_DRIVE_STORE.join(cat, key, value, local, notesArea, rt));
+      return ['notes', 'noteFolders', 'noteFiles'].includes(cat) ? GZ_DRIVE_STORE.join(cat, key, value, local, notesArea, rt, own) : turn(() => GZ_DRIVE_STORE.join(cat, key, value, local, notesArea, rt, own));
     },
     // The daily snapshot: Back up…'s zip as Settings makes it (background/backup.js pack), its Settings with the hidden course
     // folders, tasks, pet, records, every Notes account and documents with their files. Never share keys (the owner's call:
