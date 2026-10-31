@@ -213,7 +213,8 @@ test('APA met cannot be justified by affirmative MLA compliance, but comparisons
     assert.equal(compatible.output.criteria[0]?.status, 'met', metadata);
   }
   const causal = await styleRun('APA style', 'Your draft meets APA style because it uses an MLA 9 preset.').result;
-  assert.equal(causal.output.grade.earned, null, 'a preset label cannot be causal proof of a different required style');
+  assert.ok(!JSON.stringify(causal.output).includes('because it uses an MLA 9 preset'), 'a preset label cannot be causal proof of a different required style');
+  assert.equal(causal.output.criteria[0]?.comment, 'Rubric score: 20/20 points.');
   const permitted = await styleRun('APA style', 'Your draft follows MLA style with matching citations and a Works Cited list.', 'met', 'Either APA or MLA formatting is accepted for this assignment.').result;
   assert.equal(permitted.output.criteria[0]?.status, 'met', 'explicit alternatives in row detail override an abbreviated label');
 });
