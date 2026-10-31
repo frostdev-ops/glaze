@@ -244,3 +244,37 @@ test('a daily snapshot too big for one worker lands over three runs, built once'
   assert.deepEqual(await moves(dk), {});
   assert.deepEqual([...dk.stage.m.keys()], [], 'the stage emptied');
 });
+
+test('an upload whose Drive file is gone: a snapshot goes on into a new file in the next worker; a document goes to Trash, no stray file', async () => {
+  // The day's zip was to replace another device's of the same day, which is gone by the time it is sent.
+  const drive = standin(), dk = disk(), zip = bytesOf(20 * MiB, 41);
+  const folder = drive.seed({ name: 'Glaze', mimeType: drive.FOLDER, appProperties: { glaze: 'root' } });
+  const backups = drive.seed({ name: 'Backups', mimeType: drive.FOLDER, parents: [folder.meta.id], appProperties: { glaze: 'backups' } });
+  const theirs = drive.seed({ name: 'glaze-backup-2026-10-30.zip', mimeType: 'application/zip', parents: [backups.meta.id], appProperties: { glaze: 'snapshot' } }, 'PK theirs').meta.id;
+  const snapshot = async () => ({ name: 'glaze-backup-2026-10-30.zip', bytes: zip });
+  const gone = (u, init = {}) => { if (String(u).includes(`/upload/drive/v3/files/${theirs}?`) && init.method === 'PATCH') drive.files.delete(theirs); return drive.fetch(u, init); };
+  await stopped(worker(drive, dk, { snapshot, fetch: gone }).sync.set(true), drive.cut(MiB, (e) => e.chunk && !e.chunk.status && e.chunk.from > 0));
+  const sessions = () => drive.log.filter((x) => x.query.uploadType === 'resumable' && x.method !== 'PUT').length, n = drive.log.length, s0 = sessions();
+  assert.ok((await worker(drive, dk, { snapshot }).sync.run()).ok);
+  assert.equal(sessions(), s0, 'the new file\'s session goes on: none begun again');
+  assert.equal(chunks(drive, n)[0].chunk.status, true);
+  assert.ok(chunks(drive, n)[1].chunk.from > 0, 'from where Drive says it stands');
+  const zips = [...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'snapshot');
+  assert.equal(zips.length, 1);
+  assert.equal(sha(zips[0].bytes), sha(zip), 'the zip whole, in a new file');
+  // A PDF's new bytes, its file deleted for good in Drive as they begin to go: the document goes to Trash, as one whose file
+  // was deleted for good in Drive does, and no new file is left in the folder.
+  const drive2 = standin(), dk2 = disk(), key = 'doc:00000000-0000-4000-8000-00000000a008';
+  const a = worker(drive2, dk2);
+  await pdfOn(a, dk2, key, bytesOf(6 * MiB, 31), 'Reader');
+  assert.ok((await a.sync.set(true)).ok);
+  const old = fileOf(drive2, key, 'file').meta.id, ref = await dk2.files.put(bytesOf(20 * MiB, 37), MIME.pdf);
+  await a.papers.save(key, { file: ref, size: ref.size });
+  await a.sync.touched(key);
+  const fetch = (u, init = {}) => { if (String(u).includes(`/upload/drive/v3/files/${old}?`) && init.method === 'PATCH') drive2.files.delete(old); return drive2.fetch(u, init); };
+  const b = worker(drive2, dk2, { fetch });
+  assert.ok((await b.sync.run({ push: true })).ok);
+  assert.ok(P.trashed(await b.papers.get(key)), 'the document in Trash here');
+  assert.ok(![...drive2.files.values()].some((f) => f.meta.appProperties.glaze === 'file' && f.meta.appProperties.key === tag(key)), 'no stray file in its place');
+  assert.deepEqual(await moves(dk2), {});
+});
