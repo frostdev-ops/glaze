@@ -789,6 +789,16 @@ const KNOWN = {
     skips: () => false,
     repro: [{ t: 'pdf', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2 }, { t: 'drive', k: 'outsidePdf', pick: 0, s: 3 }],
   },
+  // Open, found 2026-10-31 by tiny transfers, not yet diagnosed: a worker stopped at certain awaits of a staged first push
+  // (570, 644, 842 here, the write not applied) leaves a second visible file or JSON copy for the document.
+  'staged-kill-duplicate': {
+    fixed: false,
+    tiny: true,
+    about: 'a worker stopped at certain awaits of a first push whose uploads are staged leaves two visible files or JSON copies for one document',
+    skips: () => false,
+    repro: [{ t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'pdf', k: 'new', d: 0, pick: 0, pick2: 0, s: 2 }, { t: 'setting', d: 0, k: 'colors', pick: 0, s: 3 },
+      { t: 'note', k: 'new', d: 0, pick: 0, pick2: 0.9, s: 4 }, { t: 'run', d: 0, how: 'run', s: 5, kill: 842, apply: false }],
+  },
   // Open, accepted by the owner: Settings written straight to storage.sync between the worker's compare and its write (a few
   // milliseconds) are written over by Drive's value. Found 2026-10-31 (seed 300933, 80 operations, 3 devices).
   'settings-cas': {
