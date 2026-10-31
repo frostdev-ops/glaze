@@ -3072,7 +3072,7 @@
   "A quiz you are taking, and tools such as New Quizzes, show without Glaze.": "Een quiz die je maakt, en tools zoals New Quizzes, worden zonder Glaze getoond.",
   "Blackboard's Institution page becomes Glaze's Dashboard: your widgets and Better To Do, in a layout of its own. Its Institution page tab shows Blackboard's own.": "De Instellingspagina van Blackboard wordt het Dashboard van Glaze: je widgets en Better To Do, in een eigen indeling. Het tabblad Instellingspagina toont die van Blackboard zelf.",
   "When Blackboard opens on its start page right after you sign in, go on to Glaze's Dashboard, once. A page you open by its address, a bookmark or a link is left alone.": "Als Blackboard direct na het aanmelden op de startpagina opent, ga je één keer door naar het Dashboard van Glaze. Een pagina die je opent via het adres, een bladwijzer of een link blijft ongemoeid.",
-  "Open Grades, Courses and Activity instantly": "Cijfers, Cursussen en Activiteit meteen openen",
+  "Open pages instantly": "Pagina's meteen openen",
   "Show pages loading at once": "Laden van pagina’s meteen tonen",
   "On Canvas: the pictures on Dashboard cards.": "Op Canvas: de afbeeldingen op dashboardkaarten.",
   "Search your courses from the command palette: titles on Canvas, and on Blackboard released document, announcement and discussion text too.": "Zoek in je cursussen vanuit het opdrachtpalet: titels op Canvas, en op Blackboard ook de tekst van vrijgegeven documenten, aankondigingen en discussies.",

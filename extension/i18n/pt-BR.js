@@ -3067,7 +3067,7 @@
   "Keeps your Canvas Modules position on this device. Blackboard course tabs retain their live pages; folders are left to Blackboard.": "Guarda sua posição nos módulos do Canvas neste dispositivo. As abas de cursos do Blackboard mantêm suas páginas abertas; o Blackboard controla as pastas.",
   "Blackboard's Institution page becomes Glaze's Dashboard: your widgets and Better To Do, in a layout of its own. Its Institution page tab shows Blackboard's own.": "A página da instituição do Blackboard vira o Painel do Glaze: seus widgets e o Better To Do, em um layout próprio. A aba Página da instituição dele mostra a do próprio Blackboard.",
   "When Blackboard opens on its start page right after you sign in, go on to Glaze's Dashboard, once. A page you open by its address, a bookmark or a link is left alone.": "Quando o Blackboard abre na página inicial logo depois de você fazer login, vai para o Painel do Glaze, uma vez. Uma página que você abre pelo endereço, por um favorito ou por um link não é alterada.",
-  "Open Grades, Courses and Activity instantly": "Abrir Notas, Cursos e Atividade na hora",
+  "Open pages instantly": "Abrir páginas na hora",
   "Show pages loading at once": "Mostrar na hora que a página está carregando",
   "On Canvas: the pictures on Dashboard cards.": "No Canvas: as imagens dos cartões do Painel.",
   "How PDFs and file previews look with a dark palette. Dimmed keeps pictures true; Inverted turns white paper dark. The moon button beside a document cycles Off, Dimmed and Inverted.": "Como PDFs e prévias de arquivos ficam com uma paleta escura. Esmaecido mantém as imagens fiéis; Invertido escurece o papel branco. O botão de lua ao lado de um documento alterna entre Desligado, Esmaecido e Invertido.",
