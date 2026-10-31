@@ -316,3 +316,18 @@ test('another tab shown before the item is drawn hides the kept outline too; a t
   q.p.api.onItemPop(pop);
   assert.equal(pop.stopped, false);
 });
+
+test('Forward while the freed item frame is on its way to the outline: that frame is let go (the next standby) and the item opens afresh', () => {
+  const { p, base, it } = opened();
+  p.setKey(1);
+  p.api.onItemPop({ stopImmediatePropagation() {} });
+  assert.ok(it.fresh);
+  p.api.standby = null;
+  p.setKey(2);
+  p.api.onItemPop({ stopImmediatePropagation() {} });
+  assert.equal(it.fresh, null, 'its fresh outline given up');
+  assert.notEqual(p.c.frames.get('_2_1'), it, 'never shown as the item: it is the outline by now');
+  assert.equal(p.api.standby?.el, it.el, 'it waits as the standby');
+  assert.deepEqual([...p.c.spare.get('_2_1')], [base]);
+  assert.equal(p.did.filter(([k]) => k === 'open').length, 2);
+});
