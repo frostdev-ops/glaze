@@ -78,7 +78,8 @@ const page = ({ site, preload, answer, raw = {}, local: own = {}, pathname }) =>
     // Timers are left unrun: the boot is what is checked, not the throttled passes after it.
     setTimeout: () => 1, clearTimeout() {}, setInterval: () => 1, clearInterval() {}, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
     performance: { now: () => 0 }, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} }, innerHeight: 900, innerWidth: 1400,
-    fetch: () => Promise.resolve({ ok: true, url: 'https://school.test/', text: () => Promise.resolve('[]'), json: () => Promise.resolve([]), headers: { get: () => null } }),
+    // Ultra's /users/me (asked once storage has answered) answers a student; anything else, nothing.
+    fetch: (u) => Promise.resolve(/\/users\/me$/.test(u) ? new Response('{"id":"_900_1"}') : { ok: true, url: 'https://school.test/', text: () => Promise.resolve('[]'), json: () => Promise.resolve([]), headers: { get: () => null } }),
     chrome: {
       runtime: {
         id: 'glaze', getURL: (p) => `chrome-extension://glaze/${p}`, lastError: undefined,
@@ -234,5 +235,5 @@ test('an existing Ultra grade request refreshes mounted course cards when it fin
   assert.equal(book.pending, false);
   assert.equal(updates, 1, 'the existing grade reader wakes cached board cards');
   assert.equal(observed, '87%', 'the cache is ready before the callback');
-  assert.equal(requests, 2, 'only the existing profile and grade requests');
+  assert.equal(requests, 1, 'only the grade: who is signed in was asked once storage answered, before (D)');
 });

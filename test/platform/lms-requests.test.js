@@ -207,7 +207,7 @@ test('D: who is signed in is asked at once, before any library loads, and the st
   answer();
   assert.deepEqual([await first, await store], ['_9_1', '_9_1']);
   assert.equal(u.s.count(/users\/me$/), 1, 'one request between them');
-  assert.match(read('content/content-ultra.js'), /const paintNav = \(n, picture\) => \{\n {4}if \(!isPreview && I\.links\.length\) me\(\)\.catch\(\(\) => \{\}\);/, 'started at first paint, in frames too');
+  assert.match(read('content/content-ultra.js'), /const paintNav = \(n, picture\) => \{\n(?: {4}\/\/[^\n]*\n)? {4}if \(!isPreview && I\.links\.length\) Promise\.resolve\(\)\.then\(\(\) => I\.ready\)\.then\(\(\) => I\.settings\.enabled && me\(\)\)/, 'started at first paint once storage has answered, in frames too');
 });
 
 // courses/lmsq.js alone: its queue's order and its holds.

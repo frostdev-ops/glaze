@@ -564,7 +564,7 @@ const ultraPart = ({ origin, local, courses }) => {
   };
   const api = (p) => { const j = answer(p); return j ? Promise.resolve(j) : Promise.reject(404); };
   ctx.fetch = async (url) => { const u = new URL(url), j = answer(u.pathname.replace('/learn/api/v1', '') + u.search); return new Response(JSON.stringify(j ?? {}), { status: j ? 200 : 404 }); };
-  const need = (file, ready) => { if (!ready()) vm.runInContext(read(file), ctx, { filename: file }); return ready() ? Promise.resolve() : Promise.reject(new Error('not ready')); };
+  const need = (files, ready) => { if (!ready()) for (const f of [files].flat()) vm.runInContext(read(f), ctx, { filename: f }); return ready() ? Promise.resolve() : Promise.reject(new Error('not ready')); };
   const I = { C: {}, html: new El(), isPreview: false, solo: true, tabFrame: '', need, t: (s) => s, locale: () => 'en', api,
     courseId: () => null, markDue() {}, drawProgress() {}, cardBadge() {}, cardsInView: { observe() {}, unobserve() {} }, inView: new Set(),
     tagCards() {}, tagExtras() {}, courseSlots: {}, courseColors: () => ({}), varText: () => '', CARD: 'article', dueLabelled: () => false,
