@@ -13,6 +13,7 @@ const X = require('../../extension/ai/text.js');
 const R = require('../../extension/ai/request.js');
 const K = require('../../extension/ai/local/tokenizer.js');
 const H = require('../../extension/ai/local/host.js');
+const G = require('../../extension/ai/local/grammar.js');
 const L = require('../../extension/ai/local/link.js');
 const LOCAL = require('../../extension/ai/providers/local.js');
 const IMAGE = require('../../extension/ai/tasks/writer-image.js');
@@ -118,7 +119,7 @@ const setup = ({ here, lost, reply, gate, vision = true, visionFail, decode } = 
   class FakeWorker {
     constructor() {
       this.host = H.create({ store: st, gguf: { open: async (file) => ({ id: file.id, kv: VOCAB }) }, tokenizer: K, engine: () => eng.E, vision: () => (vision ? enc.V : null),
-        grammar: () => null, ladder: () => null, gpu: () => ({ requestAdapter: async () => ({}) }), kernels: 'moz-extension://x/ai/local/kernels/', setTimeout: unref,
+        grammar: () => G, ladder: () => null, gpu: () => ({ requestAdapter: async () => ({}) }), kernels: 'moz-extension://x/ai/local/kernels/', setTimeout: unref,
         decode: decode || (async (img) => { decoded.push(img.mime); return { width: 3, height: 2, data: new Uint8ClampedArray(24), channels: 4 }; }),
         post: (m) => setImmediate(() => this.onmessage?.({ data: structuredClone(m) })) });
     }
@@ -377,7 +378,7 @@ const workerDecoder = ({ width = 2, height = 3, drawFails = false } = {}) => {
   let decode;
   const scope = {
     WorkerGlobalScope: class { static [Symbol.hasInstance]() { return true; } },
-    GZ_AI_LOCAL_HOST: { create: (env) => { decode = env.decode; return { handle() {} }; } },
+    GZ_AI_LOCAL_HOST: { IMPORTS: H.IMPORTS, create: (env) => { decode = env.decode; return { handle() {} }; } },
     GZ_AI_STORE: {}, GZ_AI_GGUF: {}, GZ_AI_TOKENIZER: {},
     importScripts(...files) { if (files.includes('../../core/doctext.js')) scope.GZ_DOCTEXT = require('../../extension/core/doctext.js'); },
     postMessage() {}, addEventListener() {}, URL, location: { href: 'moz-extension://x/ai/local/host.js' }, atob, Blob,

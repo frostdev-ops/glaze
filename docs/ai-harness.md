@@ -510,11 +510,13 @@ model.release()                                 // frees every GPU resource; the
 ```
 
 `ai/local/grammar.js` (`GZ_AI_GRAMMAR`): per model `vocab(tokenizer.byteStrings(), { eos: [id] })`, per schema
-`compile(schema, vocab)` (a refusal: the schema in words only), per run `matcher()` with `mask()`, `advance(id)`, `complete`,
+`compile(schema, vocab)` (a refusal: `request-rejected`, reason `unsupported`), per run `matcher()` with `mask()`, `advance(id)`, `complete`,
 `done`; the mask allows the end token only once the JSON is whole, so a run stops at the end token. `ai/local/ladder.js`
 (`GZ_AI_LADDER`): `pick({ adapter, models }) → { id } | { reason }`, `adapter` the Worker's `requestAdapter()` (null without
-one), `models` the store's list. Each is optional in the host until it ships: no engine is `unavailable`, reason `engine`; no
-grammar, words only; no ladder, the smallest stock model where there is an adapter.
+one), `models` the store's list. The grammar and `ai/schema.js`, which it reads as it loads, are the host's required imports
+(`IMPORTS` in `host.js`; `test/ai/local-host-worker.test.js` runs them as the Worker does): a run with a schema and no grammar
+is `provider-unavailable`, reason `engine`, never a run in words only. The others are optional until they ship: no engine is
+`unavailable`, reason `engine`; no ladder, the smallest stock model where there is an adapter.
 
 The host's messages (`host.js` header): `prepare { tier?, part? }`, `run { model, parts, stable, schema?, sampler, maxTokens,
 projector?, images?, think?: { budget, close, after }, window? }`, `warm { model, parts }`, `remove { part? }`, `release`, `cancel`; it answers `progress`, `delta`, `done` or `error`, `tick` every 20 s

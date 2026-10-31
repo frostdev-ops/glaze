@@ -23,12 +23,17 @@
 //       while anything is in flight: Chrome's worker hears it and stays)  { type: 'idle' } (LIMIT.idle with nothing in
 //       flight: the engine is released and the host may go)
 // parts come from ai/local/format.js and are tokenized here with encodeWith, never by reading specials out of text.
-// The engine, the JSON grammar and the tier ladder are their own files (engine.js, grammar.js, ladder.js); a missing one
-// is reported (engine, vision: 'engine') or done without (grammar: the schema in words only; ladder: the smallest stock model).
+// The engine, the JSON grammar and the tier ladder are their own files (engine.js, grammar.js, ladder.js). The grammar and
+// the schema it compiles (ai/schema.js) are IMPORTS.required: a run with a schema and no grammar, or a schema it refuses, is
+// an error (provider-unavailable 'engine'; request-rejected 'unsupported'), never a run in words only. A missing engine or
+// encoder is reported ('engine'); no ladder, the smallest stock model.
 // The grammar's mask allows the end token only once the JSON is whole, so a run stops at the end token as any other.
 // Classic script; node exports (create), and in a Worker it starts itself.
 var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
   const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, rate: 16 };
+  // What the Worker loads, in order, beside this file: required ones throw at its start; optional ones until they ship.
+  const IMPORTS = Object.freeze({ required: Object.freeze(['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', 'grammar.js']),
+    optional: Object.freeze(['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'ladder.js']) });
   // LFM3's GGUF sampling defaults (general.sampling.*: top_k 50, temp 0.1) where a request names none.
   const SAMPLER = Object.freeze({ temperature: 0.1, topK: 50 });
   const fail = (category, reason, extra = {}) => Object.assign(new Error(`${category}: ${reason}`), { category, reason, ...extra });
@@ -140,16 +145,16 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       while (job.warm.length > LIMIT.warm) { try { job.warm.shift().snap.drop?.(); } catch { /* gone */ } }
     };
     // The JSON grammar's matcher for a schema (grammar.js): its vocabulary once per model, each schema compiled once. No
-    // grammar, or a schema it refuses: none, and the schema is said in words only (ai/local/format.js).
+    // grammar, or no vocabulary: provider-unavailable 'engine'; a schema it refuses: request-rejected 'unsupported'.
     const matcher = (job, schema) => {
       const G = env.grammar();
-      if (!G) return null;
-      try {
-        job.vocab ||= G.vocab(job.tok.byteStrings(), { eos: [job.eos] });
-        const key = JSON.stringify(schema);
-        if (!job.schemas.has(key)) { let g = null; try { g = G.compile(schema, job.vocab); } catch { /* words only */ } job.schemas.set(key, g); if (job.schemas.size > 32) job.schemas.delete(job.schemas.keys().next().value); }
-        return job.schemas.get(key)?.matcher() || null;
-      } catch { return null; }
+      if (typeof G?.vocab !== 'function' || typeof G.compile !== 'function') throw fail('provider-unavailable', 'engine');
+      try { job.vocab ||= G.vocab(job.tok.byteStrings(), { eos: [job.eos] }); } catch { throw fail('provider-unavailable', 'engine'); }
+      const key = JSON.stringify(schema);
+      if (!job.schemas.has(key)) { let g = null; try { g = G.compile(schema, job.vocab); } catch { /* refused */ } job.schemas.set(key, g); if (job.schemas.size > 32) job.schemas.delete(job.schemas.keys().next().value); }
+      const g = job.schemas.get(key);
+      if (!g) throw fail('request-rejected', 'unsupported');
+      return g.matcher();
     };
     // The think phase's mask: every token with text, and </think>; never the end token or another control token.
     const reasoning = (job, end) => {
@@ -280,6 +285,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
           if (input + m.maxTokens + close.length > room) throw fail('request-rejected', 'context', { tokens: input + close.length, context: room });
           think = { end, close, after, budget: Math.max(0, Math.min(m.think.budget, window - input - m.maxTokens - close.length)) };
         }
+        const grammar = m.schema ? matcher(job, m.schema) : null;
         await prefix(job, head, signal);
         // Each picture encoded on the engine's device, fed in place of its placeholders, and its buffer freed at once.
         const encoded = [];
@@ -315,7 +321,6 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
           if (fed.length) await model.prefill(fed, { signal });
           if (signal.aborted) throw aborted(signal);
         }
-        const grammar = m.schema ? matcher(job, m.schema) : null;
         const dec = tok.decoder();
         let text = '', n = 0, finish = 'length';
         while (n < m.maxTokens) {
@@ -381,14 +386,12 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
     return { handle, release, get loaded() { return loaded?.id || null; } };
   };
 
-  return { LIMIT, SAMPLER, create };
+  return { LIMIT, SAMPLER, IMPORTS, create };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_LOCAL_HOST;
 else if (typeof WorkerGlobalScope !== 'undefined' && globalThis instanceof WorkerGlobalScope) {
-  // In its Worker: the store, the GGUF reader and the tokenizer, then what the engine needs and the engine, grammar and
-  // ladder, each optional until it ships.
-  importScripts('../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js');
-  for (const f of ['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'grammar.js', 'ladder.js']) { try { importScripts(f); } catch { /* not shipped yet */ } }
+  importScripts(...GZ_AI_LOCAL_HOST.IMPORTS.required);
+  for (const f of GZ_AI_LOCAL_HOST.IMPORTS.optional) { try { importScripts(f); } catch { /* not shipped yet */ } }
   const g = (name) => (typeof globalThis[name] !== 'undefined' ? globalThis[name] : null);
   // Bound decompression from the header before calling the browser, as the document reader does. A compressed-byte
   // limit alone does not bound pixels. Then draw at most MAX pixels, with a side limit even for very thin pictures.

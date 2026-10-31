@@ -10,6 +10,7 @@ const T = require('../../extension/ai/task.js');
 const S = require('../../extension/ai/schema.js');
 const K = require('../../extension/ai/local/tokenizer.js');
 const H = require('../../extension/ai/local/host.js');
+const G = require('../../extension/ai/local/grammar.js');
 const L = require('../../extension/ai/local/link.js');
 const LOCAL = require('../../extension/ai/providers/local.js');
 
@@ -82,7 +83,7 @@ const MODELS = [
 ];
 const unref = (f, ms) => { const t = setTimeout(f, ms); t.unref?.(); return t; };
 // ms: what the host's clock moves each time it is read, so each decode takes ms: 10 ms reads as 100 tokens a second.
-const setup = ({ here = { 'glaze-q4': 'ready', 'glaze-q8': 'ready', 'lfm3-q4': 'ready' }, rates, reply = '{"text":"hello there"}', closes, gate, grammar = null, ms = 10, ladder = null, context } = {}) => {
+const setup = ({ here = { 'glaze-q4': 'ready', 'glaze-q8': 'ready', 'lfm3-q4': 'ready' }, rates, reply = '{"text":"hello there"}', closes, gate, grammar = G, ms = 10, ladder = null, context } = {}) => {
   const eng = engine({ reply, closes, gate, context }), posted = [], runs = [], saved = [];
   let clock = 0;
   const st = {

@@ -13,6 +13,7 @@ const S = require('../../extension/ai/schema.js');
 const A = require('../../extension/ai/settings.js');
 const K = require('../../extension/ai/local/tokenizer.js');
 const H = require('../../extension/ai/local/host.js');
+const G = require('../../extension/ai/local/grammar.js');
 const L = require('../../extension/ai/local/link.js');
 const FMT = require('../../extension/ai/local/format.js');
 const LOCAL = require('../../extension/ai/providers/local.js');
@@ -102,7 +103,7 @@ const store = (here = {}, { hold } = {}) => {
 // ---- the host in a stand-in Worker, the real link and provider ---------------------------------------------------------------
 const settle = async (n = 40) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const unref = (f, ms) => { const t = setTimeout(f, ms); t.unref?.(); return t; };
-const setup = ({ here, hold, reply, fail, gate, grammar = null, ladder = null, gpu = { requestAdapter: async () => ({}) }, noEngine = false, context } = {}) => {
+const setup = ({ here, hold, reply, fail, gate, grammar = G, ladder = null, gpu = { requestAdapter: async () => ({}) }, noEngine = false, context } = {}) => {
   const st = store(here, { hold }), eng = engine({ reply, fail, gate, context }), workers = [], posted = [];
   class FakeWorker {
     constructor(url) {
@@ -294,10 +295,21 @@ test('a JSON run: the schema said in words and held by the grammar\'s masks, its
   assert.ok(text.includes(`\n\n${FMT.SAY_JSON(SCHEMA)}<|im_end|>`), 'the schema in words, as the fine-tune read it');
   await P.run('local', request(TASK, { text: 'hi' }), LOCAL.config({}));
   assert.equal(compiled.length, 1, 'a schema compiles once per model');
-  // A grammar that refuses the schema: words only, and the answer still checked.
-  const t = setup({ here: { 'glaze-q4': 'ready' }, reply: '{"text":"ok"}', grammar: { vocab: () => ({}), compile: () => { throw new TypeError('grammar: pattern'); } } });
-  assert.deepEqual((await P.run('local', request(TASK, { text: 'ok' }), LOCAL.config({}))).json, { text: 'ok' });
-  assert.equal(t.eng.log.masks, 0);
+});
+
+// D4 (glaze-plans/lfm-tune/reports/d4-r1.md): the host's Worker never loaded the grammar, and every run went in words only.
+test('a schema is never run in words only: no grammar, or one that refuses the schema, is an error before the model reads anything', async () => {
+  const refuses = { vocab: () => ({}), compile: () => { throw new TypeError('grammar: pattern'); } };
+  for (const [grammar, code, reason] of [[null, 'provider-unavailable', 'engine'], [{}, 'provider-unavailable', 'engine'],
+    [{ vocab: () => { throw new Error('no bytes'); }, compile: () => ({}) }, 'provider-unavailable', 'engine'], [refuses, 'request-rejected', 'unsupported']]) {
+    const t = setup({ here: { 'glaze-q4': 'ready' }, reply: '{"text":"ok"}', grammar });
+    await assert.rejects(P.run('local', request(TASK, { text: 'ok' }), LOCAL.config({})), (e) => e.code === code && e.reason === reason);
+    assert.deepEqual([t.eng.log.prefills.length, t.eng.log.decodes], [0, 0], `${code} ${reason}: the model untouched`);
+  }
+  // A run without a schema needs no grammar.
+  const u = setup({ here: { 'glaze-q4': 'ready' }, reply: 'Hello.', grammar: null });
+  assert.equal((await P.run('local', request(TEXT, { text: 'x' }), LOCAL.config({}))).text, 'Hello.');
+  assert.ok(u.eng.log.decodes > 0);
 });
 
 test('a cancel tells the host, which stops decoding; nothing late comes through, and the next run goes', async () => {
@@ -555,7 +567,6 @@ test('the broker\'s keepalive covers a local run, and stops with it', async (t) 
 });
 
 test('with the real grammar (grammar.js): its vocabulary built once per model, each token masked and advanced, the JSON whole', async () => {
-  const G = require('../../extension/ai/local/grammar.js');
   let vocabs = 0;
   const grammar = { ...G, vocab: (...a) => { vocabs++; return G.vocab(...a); } };
   const s = setup({ here: { 'glaze-q4': 'ready' }, reply: '{"text":"hi"}', grammar });
