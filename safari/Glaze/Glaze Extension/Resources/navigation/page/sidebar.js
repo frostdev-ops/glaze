@@ -1037,7 +1037,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     const offsetsNow = () => GEOMETRY_VARS.map((k) => h.style.getPropertyValue(k));
     const was = geometry(), wasOffsets = offsetsNow();
     // The column's end as the offsets put it (sidebar.css --gz-sb-end), before they are written.
-    const end = (foot) => Math.max(parseFloat(css?.getPropertyValue('--gz-sb-bottom')) || 0, foot);
+    const bottom = parseFloat(css?.getPropertyValue('--gz-sb-bottom')) || 0, end = (foot) => Math.max(bottom, foot);
     const end0 = end(parseFloat(h.style.getPropertyValue('--gz-sb-foot')) || 0), top0 = parseFloat(h.style.getPropertyValue('--gz-sb-top')) || 0;
     if (next !== 'drawer' && drawer) closeDrawer(false);
     // Glaze's own column fixed at the edge (A.own) keeps the page's content clear of it, below the adapter's top.
