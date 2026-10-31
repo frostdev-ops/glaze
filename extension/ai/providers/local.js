@@ -37,7 +37,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   // thinks at every tier, with room for a busier GPU; a computer near the ladder's floor (MIN_TPS 15) would wait 17 s.
   const THINK_TPS = 40;
   // RATES: storage.session's { [model id]: tokens a second }, kept across the worker's restarts until the browser closes.
-  const RATES = 'aiLocalRates';
+  const RATES = 'aiLocalRates', MEASURED = 'aiLocalMeasured';
   const fail = (category, reason, extra = {}) => Object.assign(new Error(`local: ${reason || category}`), { category, ...(reason && { reason }), ...extra });
   const refuse = (code, message) => Object.assign(new Error(message), { code });
   const safari = () => { try { return new URL((typeof globalThis.browser?.runtime?.getURL === 'function' ? globalThis.browser.runtime : globalThis.chrome?.runtime).getURL('')).protocol === 'safari-web-extension:'; } catch { return false; } };
@@ -71,9 +71,10 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const known = async () => {
     if (rates) return rates;
     let saved = {};
-    try { saved = (await own().session?.get(RATES))?.[RATES] || {}; } catch { /* none */ }
+    try { saved = await own().session?.get([RATES, MEASURED]) || {}; } catch { /* none */ }
     if (rates) return rates;
-    rates = new Map(Object.entries(R.isObj(saved) ? saved : {}).filter(([id, v]) => ID.test(id) && Number.isFinite(v) && v > 0));
+    rates = new Map(Object.entries(R.isObj(saved[RATES]) ? saved[RATES] : {}).filter(([id, v]) => ID.test(id) && Number.isFinite(v) && v > 0));
+    for (const id of Array.isArray(saved[MEASURED]) ? saved[MEASURED] : []) if (rates.has(id)) measured.add(id);
     return rates;
   };
   // A measured rate replaces an estimate, and averages with an earlier measure; an estimate never replaces anything.
@@ -84,7 +85,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     if (estimate && r.has(id)) return;
     r.set(id, !estimate && measured.has(id) ? (r.get(id) + rate) / 2 : rate);
     if (!estimate) measured.add(id);
-    try { await own().session?.set({ [RATES]: Object.fromEntries(r) }); } catch { /* kept in memory */ }
+    try { await own().session?.set({ [RATES]: Object.fromEntries(r), [MEASURED]: [...measured] }); } catch { /* kept in memory */ }
   };
   // The tokens this request reasons in on model m: its task's budget, for a Glaze-tuned model this computer runs fast enough.
   const budget = async (req, m) => {

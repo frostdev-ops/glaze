@@ -34,7 +34,7 @@ const allowed = (mask, id) => !!(mask[id >>> 5] & (1 << (id & 31)));
 
 // ---- the stub engine: after a prompt ending in <think>\n it reasons (REASON, over and over), then </think> once `closes`
 // tokens are out (never, without it); after </think> (its own or fed) or any other prompt, `reply`, then the end token. ----
-const engine = ({ reply, closes = null, gate } = {}) => {
+const engine = ({ reply, closes = null, gate, context = 16000 } = {}) => {
   const log = { prefills: [], decodes: [], loads: 0 };
   const E = {
     load: async (g) => {
@@ -42,7 +42,7 @@ const engine = ({ reply, closes = null, gate } = {}) => {
       const tok = K.load(g.kv), thoughts = [...tok.encode(REASON)], answer = [...tok.encode(reply)];
       let seq = [], phase = 'answer', i = 0;
       return {
-        context: 16000,
+        context,
         prefill: async (ids, { snapshot, signal } = {}) => {
           if (signal?.aborted) throw signal.reason;
           log.prefills.push([...ids]); seq.push(...ids);
@@ -82,8 +82,8 @@ const MODELS = [
 ];
 const unref = (f, ms) => { const t = setTimeout(f, ms); t.unref?.(); return t; };
 // ms: what the host's clock moves each time it is read, so each decode takes ms: 10 ms reads as 100 tokens a second.
-const setup = ({ here = { 'glaze-q4': 'ready', 'glaze-q8': 'ready', 'lfm3-q4': 'ready' }, rates, reply = '{"text":"hello there"}', closes, gate, grammar = null, ms = 10, ladder = null } = {}) => {
-  const eng = engine({ reply, closes, gate }), posted = [], runs = [], saved = [];
+const setup = ({ here = { 'glaze-q4': 'ready', 'glaze-q8': 'ready', 'lfm3-q4': 'ready' }, rates, reply = '{"text":"hello there"}', closes, gate, grammar = null, ms = 10, ladder = null, context } = {}) => {
+  const eng = engine({ reply, closes, gate, context }), posted = [], runs = [], saved = [];
   let clock = 0;
   const st = {
     list: async () => MODELS.map((m) => ({ ...m, state: here[m.id] || 'missing' })),
@@ -95,16 +95,19 @@ const setup = ({ here = { 'glaze-q4': 'ready', 'glaze-q8': 'ready', 'lfm3-q4': '
   class FakeWorker {
     constructor() {
       this.host = H.create({ store: st, gguf: { open: async () => ({ kv: VOCAB }) }, tokenizer: K, engine: () => eng.E, grammar: () => grammar,
-        ladder: () => ladder, gpu: () => ({ requestAdapter: async () => ({}) }), setTimeout: unref, now: () => (clock += ms),
+        ladder: () => ladder, gpu: () => ({ requestAdapter: async () => ({}) }), setTimeout: unref, now: () => (clock += typeof ms === 'function' ? ms() : ms),
         post: (m) => { posted.push(structuredClone(m)); setImmediate(() => this.onmessage?.({ data: structuredClone(m) })); } });
     }
     postMessage(m) { const d = structuredClone(m); if (d.op === 'run') runs.push(d); setImmediate(() => this.host.handle(d)); }
     terminate() {}
   }
   const link = L.create({ runtime: { getURL: (f) => `moz-extension://x/${f}` }, Worker: FakeWorker, keep: () => {}, setTimeout: unref });
-  const session = { get: async (k) => (rates ? { [k]: rates } : {}), set: async (o) => { saved.push(structuredClone(o)); } };
-  LOCAL._env({ store: st, link, gpu: () => ({}), session });
-  return { eng, posted, runs, saved };
+  const stored = rates ? { aiLocalRates: structuredClone(rates) } : {};
+  const session = { get: async (keys) => Object.fromEntries([keys].flat().map((k) => [k, stored[k]])),
+    set: async (o) => { Object.assign(stored, structuredClone(o)); saved.push(structuredClone(o)); } };
+  const env = { store: st, link, gpu: () => ({}), session };
+  LOCAL._env(env);
+  return { eng, posted, runs, saved, env };
 };
 const SCHEMA = S.obj({ text: S.str('The text.') }, ['text']);
 const task = (id) => T.define({ id, version: 1, input: (raw) => raw, check: (o) => o, output: SCHEMA,
@@ -146,6 +149,59 @@ test('at the budget the host writes \\n</think> itself and the model answers aft
   const input = t.eng.log.prefills[0].length + t.eng.log.prefills[1].length, left = LOCAL.TUNED - input - 3400 - (ID.nl.length + 1);
   assert.ok(left > 0 && left < 256, `${left}`);
   assert.equal(t.eng.log.decodes.filter((d) => d.phase === 'think').length, left);
+});
+
+test('think mode holds the forced close inside the engine\'s room before any prefill; the trained window only cuts the budget', async () => {
+  const req = request(REVIEW, { text: 'x' });
+  const F = require('../../extension/ai/local/format.js');
+  const clean = require('../../extension/ai/request.js').clean(req);
+  const prompt = TOK.encodeWith(F.format(clean, { think: true }).parts).length;
+  const close = ID.nl.length + 1;
+  // An engine room smaller than the trained window: a close that would pass it is refused, the model untouched.
+  for (const maxTokens of [1024 - prompt + 1, 1024 - prompt - close + 1]) {
+    const s = setup({ rates: FAST, context: 1024 });
+    await assert.rejects(P.run('local', { ...req, maxTokens }, LOCAL.config({})),
+      (e) => e.code === 'request-rejected' && e.reason === 'context' && e.context === 1024);
+    assert.equal(s.eng.log.prefills.length, 0, 'an oversized run never mutates the model');
+    assert.equal(s.eng.log.decodes.length, 0);
+  }
+  // Exactly enough room for the close: no sampled reasoning, and the answer keeps its whole maxTokens.
+  for (const context of [16000, 1024]) {
+    const window = Math.min(context, LOCAL.TUNED), s = setup({ rates: FAST, context }), maxTokens = window - prompt - close;
+    assert.deepEqual((await P.run('local', { ...req, maxTokens }, LOCAL.config({}))).json, { text: 'hello there' });
+    assert.equal(s.eng.log.decodes.filter((d) => d.phase === 'think').length, 0);
+    assert.deepEqual(s.eng.log.prefills.at(-1), [...ID.nl, ID.thought]);
+    assert.equal(s.eng.log.prefills.flat().length + maxTokens, window);
+  }
+  // A request planned up to the trained window still runs in think mode, as it would directly: no reasoning, the close
+  // past the window by its two tokens, well inside the engine's room.
+  const s = setup({ rates: FAST });
+  assert.deepEqual((await P.run('local', { ...req, maxTokens: LOCAL.TUNED - prompt }, LOCAL.config({}))).json, { text: 'hello there' });
+  assert.equal(s.eng.log.decodes.filter((d) => d.phase === 'think').length, 0);
+});
+
+test('the speed gate keeps measured versus estimated rates across worker restarts', async () => {
+  // A measured rate is smoothed with the next measurement, even after the worker restarts.
+  let ms = 10;
+  const s = setup({ rates: null, ms: () => ms });
+  await P.run('local', request(REQS, { text: 'x' }), LOCAL.config({}));
+  assert.equal(s.saved.at(-1).aiLocalRates['glaze-q4'], 100);
+  LOCAL._env(s.env);
+  ms = 50;
+  await P.run('local', request(REQS, { text: 'x' }), LOCAL.config({}));
+  assert.equal(s.saved.at(-1).aiLocalRates['glaze-q4'], 60, 'the saved measurement still participates in smoothing');
+  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({}));
+  assert.ok(s.runs.at(-1).think, 'one slow sample does not discard the earlier measured speed');
+
+  // A saved ladder estimate is replaced outright by the first real measurement after a restart.
+  const t = setup({ here: {}, rates: null, ladder: { probe: async () => ({ adapter: {} }),
+    pick: ({ models }) => ({ id: models[0].id, quants: [{ id: models[0].id, tps: 120 }] }) }, ms: 50 });
+  await LOCAL.prepare(LOCAL.config({}));
+  LOCAL._env(t.env);
+  await P.run('local', request(REQS, { text: 'x' }), LOCAL.config({}));
+  assert.equal(t.saved.at(-1).aiLocalRates['glaze-q4'], 20, 'a ladder estimate is not an earlier measurement');
+  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({}));
+  assert.equal(t.runs.at(-1).think, undefined);
 });
 
 test('the grammar masks the answer only: the reasoning is free text and </think>, never the end token or another control token', async () => {

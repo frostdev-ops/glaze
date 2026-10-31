@@ -464,13 +464,13 @@ gives a budget (256 tokens each: writer.feedback, grading included, writer.revie
 0), once this computer decodes that model at `THINK_TPS` (40 tokens a second) or faster; any other run answers directly.
 The rate is the host's measure of the model's decoding over a run of at least 16 tokens (a run's `rate`, averaged with the
 last), else the ladder's estimate for the model it picked at Download (`tps`); none yet: direct. It is kept per model id in
-`storage.session` `aiLocalRates`, so it outlives the worker until the browser closes. 40: a full budget then costs at most
-6.4 s, and every machine the ladder measured (79 to 133 tokens a second, Q8_0 to Q4_K_M) thinks at every tier. The host
+`storage.session` `aiLocalRates`, and which of them were measured in `aiLocalMeasured`, so they outlive the worker until the
+browser closes. 40: a full budget then costs at most 6.4 s, and every machine the ladder measured (79 to 133 tokens a second, Q8_0 to Q4_K_M) thinks at every tier. The host
 decodes the reasoning unconstrained but for its own mask (text tokens and `</think>`: never the end token or another
 control token) until the model writes `</think>` or the budget is spent, where it feeds `\n</think>` itself; then the
 answer, with the JSON grammar as any run. The reasoning is never decoded to text, posted or returned; `maxTokens` counts the
-answer only, and the budget is cut to what the model's trained window leaves beside the prompt, the answer and the close.
-`usage.output` counts both. `test/ai/local-think.test.js` holds it with a stub engine.
+answer only, and the budget is cut to what the model's trained window leaves beside the prompt, the answer and the close
+(a request whose close the engine's room can't hold is refused before prefill); `usage.output` counts both. `test/ai/local-think.test.js` holds it with a stub engine.
 The window a run plans for is its model's: 4,096 tokens for a model without `stock` (FORMAT.md's inference window; the
 training data was made at caps.context 4096), 14,400 (16,000 less a tenth) for a stock one, the picture model included.
 `catalog` says the window of the text model the connection runs (its tier's, else the one here) and that model's store id

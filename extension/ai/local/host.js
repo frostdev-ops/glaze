@@ -275,6 +275,9 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
           if (end === undefined || !Number.isSafeInteger(m.think.budget) || m.think.budget < 0 || images.length) throw fail('request-rejected', 'unsupported');
           const window = Number.isSafeInteger(m.window) && m.window > 0 ? Math.min(m.window, room) : room;
           const close = Uint32Array.from(encode(job, m.think.close)), after = Uint32Array.from(encode(job, m.think.after));
+          // Even no reasoning feeds the close: the engine must hold it, refused before the sequence is touched as any prompt
+          // over the room. The trained window only cuts the budget, as far as nothing, so a request planned for it runs.
+          if (input + m.maxTokens + close.length > room) throw fail('request-rejected', 'context', { tokens: input + close.length, context: room });
           think = { end, close, after, budget: Math.max(0, Math.min(m.think.budget, window - input - m.maxTokens - close.length)) };
         }
         await prefix(job, head, signal);
