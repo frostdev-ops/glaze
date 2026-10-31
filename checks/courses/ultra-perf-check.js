@@ -88,13 +88,19 @@ function instrument(timed) {
 const rows = (kind, n) => Array.from({ length: n }, (_, i) => kind === 'outline'
   ? `<div class="content-list-item" data-content-id="_${1000 + i}_1"><h3><button id="folder-title-_${1000 + i}_1" aria-expanded="false">Folder ${i}</button></h3><span>Due: October 20, 2026</span></div>`
   : `<div class="native-row"><span>Sample ${i}</span><button>Open</button><div>Course information</div></div>`).join('');
+// The outline's right column as the owner's Course Content had it (2026-10-31, structure only, synthetic text): Faculty and
+// the schedule hidden and empty, Details & Actions there but empty until Ultra fills it (DETAILS_FILL).
+const ASIDE = '<aside class="js-course-info-skip-link-target outline-actions"><bb-course-instructors class="outline-action-block block-display top-block" style="display:none"></bb-course-instructors>'
+  + '<div class="js-details-and-actions outline-action-block"></div><bb-course-schedule class="conditional-block react-container" style="display:none"></bb-course-schedule></aside>';
+// Ms after the outline is drawn, and how many of Details & Actions' seven 33 px rows (231 px, as live) are in by then.
+const DETAILS_FILL = [[300, 2], [500, 7]];
 const routeBody = (kind) => `<section class="route-view-container ${kind === 'outline' ? 'course' : ''}"><h1 elementtiming="title">${kind}</h1>${kind === 'course'
   ? `<div class="courses-panel"><div class="course-org-list">${Array.from({ length: 24 }, (_, i) => `<article class="element-card course-element-card" data-course-id="_${101 + i}_1"><div class="course-banner"></div><div class="element-details"><h4 class="course-title"><span class="js-course-title-element">Course ${i}</span></h4><div class="course-status">Open</div></div></article>`).join('')}</div></div>`
-  : rows(kind, kind === 'outline' ? 240 : 30)}</section>`;
-const fixture = `<!doctype html><html lang="en"><head><base href="//ultra-cdn.invalid/ultra/uiv4001.0.0-rel/"><meta charset="utf-8"><title>Ultra performance fixture</title><style>body{margin:0;font:14px sans-serif}nav{position:fixed;width:200px}main{margin-left:200px}.native-row,.content-list-item{padding:4px;border-bottom:1px solid #ddd}</style></head><body><div id="site-wrap"><nav id="base_tools"><a href="/ultra/institution-page"><span>Institution Page</span></a><a href="/ultra/course">Courses</a></nav><main id="main-content"><div id="main-content-inner">${routeBody('stream')}</div></main></div><aside id="gz-perf-own"></aside></body></html>`;
+  : kind === 'outline' ? `<div class="course-outline-grid"><div class="outline-column">${rows(kind, 240)}</div>${ASIDE}</div>` : rows(kind, 30)}</section>`;
+const fixture = `<!doctype html><html lang="en"><head><base href="//ultra-cdn.invalid/ultra/uiv4001.0.0-rel/"><meta charset="utf-8"><title>Ultra performance fixture</title><style>body{margin:0;font:14px sans-serif}nav{position:fixed;width:200px}main{margin-left:200px}.native-row,.content-list-item{padding:4px;border-bottom:1px solid #ddd}.course-outline-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;align-items:start}.outline-actions{display:flex;flex-direction:column}</style></head><body><div id="site-wrap"><nav id="base_tools"><a href="/ultra/institution-page"><span>Institution Page</span></a><a href="/ultra/course">Courses</a></nav><main id="main-content"><div id="main-content-inner">${routeBody('stream')}</div></main></div><aside id="gz-perf-own"></aside></body></html>`;
 
 async function settle(page, change) {
-  return page.evaluate(async ({ change, body }) => {
+  return page.evaluate(async ({ change, body, fill }) => {
     const start = performance.now();
     let last = start, changes = 0, held = 0;
     const mo = new MutationObserver((rs) => { last = performance.now(); changes += rs.length; });
@@ -102,6 +108,8 @@ async function settle(page, change) {
     if (['outline', 'grades', 'course'].includes(change)) {
       history.pushState({}, '', location.origin + (change === 'course' ? '/ultra/course' : `/ultra/courses/_101_1/${change}`));
       document.getElementById('main-content-inner').innerHTML = body;
+      // Ultra fills the outline's Details & Actions late, in steps.
+      if (change === 'outline') for (const [ms, n] of fill) setTimeout(() => { const d = document.querySelector('.js-details-and-actions'); if (d) d.innerHTML = Array.from({ length: n }, (_, i) => `<div style="height:33px;box-sizing:border-box">Action ${i + 1}</div>`).join(''); }, ms);
     } else if (change === 'own') {
       const own = document.getElementById('gz-perf-own');
       for (let i = 0; i < 30; i++) { own.textContent = `Widget ${i}`; await new Promise((r) => setTimeout(r, 20)); }
@@ -115,7 +123,7 @@ async function settle(page, change) {
     return { elapsed: performance.now() - start, lastMutation: last - start, changes, held, stillHeld: !!document.querySelector('[data-gz-loading]'), longTasks: window.perfLongTasks, nodes: document.body.querySelectorAll('*').length, rows: document.querySelectorAll('.native-row, .content-list-item, .course-element-card').length,
       ...(window.perfSpeed && { sample: document.querySelector('.content-list-item, .course-element-card, .native-row')?.outerHTML.slice(0, 1200) }),
       ...(window.perfSpeed && { window: [change ? start : 0, performance.now()] }) };
-  }, { change, body: routeBody(change) });
+  }, { change, body: routeBody(change), fill: DETAILS_FILL });
 }
 
 // PERF_SPEED: what the page observes in its own world from its first script: when Glaze's look lands on <html>
@@ -373,7 +381,12 @@ if (require.main === module) (async () => {
         blocked.push(u.href); return r.abort();
       });
       const opts = await context.newPage(); await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
-      const reset = () => opts.evaluate(async (defaults) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(defaults); await chrome.storage.local.set({ ultra: ['https://ultra.fixture.test'] }); }, glaze === 'off' ? { ...D.GZ_DEFAULTS, enabled: false } : D.GZ_DEFAULTS);
+      // What Glaze measured of the course's layout (detailsHeight:<origin>, navigation/page/sidebar.js) stays from one rep to
+      // the next: rep 0 opens the course for the first time, the later reps as a student who has opened it before.
+      const reset = () => opts.evaluate(async (defaults) => {
+        const seen = Object.fromEntries(Object.entries(await chrome.storage.local.get(null)).filter(([k]) => k.startsWith('detailsHeight:')));
+        await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(defaults); await chrome.storage.local.set({ ultra: ['https://ultra.fixture.test'], ...seen });
+      }, glaze === 'off' ? { ...D.GZ_DEFAULTS, enabled: false } : D.GZ_DEFAULTS);
       // PERF_DEVICE=neo: the Neo's CPU speed on the page and on every frame in a process of its own.
       const prepare = async (page) => {
         if (!cpuRate) return;
