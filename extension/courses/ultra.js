@@ -540,8 +540,8 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
       });
     };
     const me = () => (meP ||= (async () => {
-      // The page's own request when it has one (content-ultra.js asks at first paint), else this reader's.
-      const [c, uid] = await Promise.all([kept(), Promise.resolve().then(() => env.me?.()).catch(() => null).then((id) => (ID.test(id) ? id : reader().me()))]);
+      // Share the page's request and its failure gate; use this reader only when no page identity is available.
+      const [c, uid] = await Promise.all([kept(), Promise.resolve().then(() => env.me?.()).then((id) => (ID.test(id) ? id : reader().me()))]);
       remember(uid);
       if (c?.uid === uid) send({ type: 'glaze:ultraMine', op: 'touch', uid });
       return uid;
