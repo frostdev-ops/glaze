@@ -110,6 +110,8 @@ const GZ_SPEC = {
     // Syllabus import on a course's home and Syllabus page (planner/page/syllabus.js).
     syllabus: [false, 'bool'],
     fold: [true, 'bool'], titleScroll: [true, 'bool'],
+    // feedback: Ultra's clicks pressed at once, pages loading drawn (navigation/page/feedback.js).
+    feedback: [true, 'bool'],
   },
   docreview: { compact: [true, 'bool'], fullscreen: [true, 'bool'], focus: [true, 'bool'], hideBars: [true, 'bool'], remember: [false, 'bool'] },
   stream: { dates: ['smart', ['smart', 'posted', 'both']], relative: [false, 'bool'], compact: [false, 'bool'], encouragement: [true, 'bool'] },

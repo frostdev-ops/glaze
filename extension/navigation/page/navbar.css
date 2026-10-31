@@ -390,6 +390,12 @@ a.widget[aria-disabled="true"] { cursor: default; }
   .tab svg { width: 20px; height: 20px; }
 }
 
+/* ---- pressed (navigation/page/feedback.js): the item or course tab a click is going to looks current from the press, and
+   the bar's own marker steps back until the page has changed and it has glided there ---- */
+:is(.item, .chip, .row, .tab)[data-gz-press] { color: var(--gz-ink, #e8eef8); background: var(--nb-active); box-shadow: inset 0 0 0 1px var(--nb-active-edge); }
+:host([data-gz-pressing]) :is(.ind, .tind):not([hidden]) { opacity: .35; }
+:host([data-gz-pressing]) :is(.chip, .row, .tsub .item)[aria-current="page"]:not([data-gz-press]) { background: none; box-shadow: none; }
+
 /* ---- forced colours (Windows High Contrast): fills and shadows are dropped, so where you are and what is pressed are
    drawn in the system's Highlight ---- */
 @media screen and (forced-colors: active) {

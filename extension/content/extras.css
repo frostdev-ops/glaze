@@ -562,6 +562,28 @@ html[data-gz-hide-tab-achievements] .bb-ui-navigation-list-horizontal li:has(> a
 
 #gz-ce svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
+/* ---- a click answering at once (navigation/page/feedback.js) ----
+   What a click is on looks current from the press: a course's tab gets the current tab's bar, which steps back meanwhile, and
+   a course card its edge. The page it opens shows a skeleton in the Look's surfaces over the main area, laid over it by
+   transform as the instant copies are, so nothing moves; Ultra's view and its spinners wait hidden under it, keeping their
+   layout, until the view is ready. Still under reduced motion. */
+#site-wrap .js-course-navigation a[data-gz-press] { position: relative; }
+#site-wrap .js-course-navigation a[data-gz-press]::after { content: ""; position: absolute; left: 10%; right: 10%; bottom: 0; height: 3px; border-radius: min(3px, var(--gz-radius)) min(3px, var(--gz-radius)) 0 0; background: var(--gz-accent); }
+#site-wrap .js-course-navigation[data-gz-pressing] a[aria-current="page"]:not([data-gz-press])::after { opacity: 0; }
+#site-wrap article.course-element-card[data-gz-press] { outline: 2px solid var(--gz-accent) !important; outline-offset: 2px; }
+#gz-skel { position: absolute; top: 0; left: 0; z-index: 1; display: flex; flex-direction: column; gap: 12px; box-sizing: border-box; overflow: hidden; pointer-events: none; }
+#gz-skel > * { flex: none; height: 64px; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); animation: gz-skel 1.2s ease-in-out infinite alternate; }
+#gz-skel > .h { width: min(40%, 320px); height: 32px; }
+#gz-skel[data-shape="tiles"] { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); grid-template-rows: 32px; grid-auto-rows: 180px; align-content: start; }
+#gz-skel[data-shape="tiles"] > * { height: auto; }
+#gz-skel[data-shape="tiles"] > .h { grid-column: 1 / -1; }
+#gz-skel[data-shape="generic"] > :not(.h) { height: 140px; }
+@keyframes gz-skel { to { opacity: .55; } }
+html[data-gz-motion="off"] #gz-skel > * { animation: none; }
+@media (prefers-reduced-motion: reduce) { #gz-skel > * { animation: none; } }
+[data-gz-skel-host] > :not(#gz-skel, div.bb-course-navigation) { visibility: hidden !important; }
+html[data-gz-skel] main div.spinner.bb-secondary-color-2 { visibility: hidden !important; }
+
 /* ---- course tabs (navigation/page/coursetabs.js) ----
    One tab per course opened, in the course's sticky top bar (above its two rows, between them or below them), at the
    header of an item opened over the course, or above a page outside a course. Until the file is in, data-gz-ctabs
