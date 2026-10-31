@@ -38,7 +38,12 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
   // What syncs, by category: the store's keys (background/backup.js STORES, planner/todo.js STORE_KEY, pet/pet.js KEY,
   // writer/writer-sources.js's keys) in their area.
   const CATS = [
-    { cat: 'tasks', area: 'local', test: (k) => /^(?:todo|pet):https?:\/\/[a-z\d.-]+(?::\d+)?\/(?:\d+|_\d+_\d+)$/i.test(k) },
+    { cat: 'tasks', area: 'local', test: (k) => /^todo:https?:\/\/[a-z\d.-]+(?::\d+)?\/(?:\d+|_\d+_\d+)$/i.test(k) },
+    // The pet: what its widget reads into it from this device alone each time it shows (the focus timer's state here, the
+    // character this device chose or drew) stays here, beside what came; each device writing its own over the other's
+    // would send the record back and forth on every pull.
+    { cat: 'tasks', area: 'local', test: (k) => /^pet:https?:\/\/[a-z\d.-]+(?::\d+)?\/(?:\d+|_\d+_\d+)$/i.test(k), view: (v) => petView(v),
+      merge: (here, v) => (obj(v) ? { ...v, ...Object.fromEntries(PET_HERE.filter((f) => obj(here) && here[f] !== undefined).map((f) => [f, here[f]])) } : v) },
     { cat: 'dashNotes', area: 'local', test: (k) => /^notes:https?:\/\/[a-z\d.-]+(?::\d+)?\/(\d+|_\d+_\d+)$/i.test(k) },
     { cat: 'classes', area: 'local', test: (k) => /^classes:https?:\/\/[a-z\d.-]+(?::\d+)?\/(?:\d+|_\d+_\d+)$/i.test(k) },
     { cat: 'gpa', area: 'local', test: (k) => /^gpaTerms:https?:\/\/[a-z\d.-]+(?::\d+)?:\w{1,40}$/i.test(k) },
@@ -74,10 +79,12 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     sync: () => (typeof GZ_DRIVE_SYNC !== 'undefined' ? GZ_DRIVE_SYNC : require('../documents/drive-sync.js')),
   };
   const obj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+  const PET_HERE = ['timerSignal', 'sprite'];
+  const petView = (v) => (obj(v) ? Object.fromEntries(Object.entries(v).filter(([f]) => !PET_HERE.includes(f))) : v);
   // A value from Drive as its store keeps it (each store's own cleaner), or undefined when it isn't one.
   const clean = (cat, key, v) => {
     try {
-      if (cat === 'tasks') return key.startsWith('todo:') ? (obj(v) ? L.todo().clean(v) : undefined) : L.pet().backup({ [key]: v })?.[key];
+      if (cat === 'tasks') return key.startsWith('todo:') ? (obj(v) ? L.todo().clean(v) : undefined) : petView(L.pet().backup({ [key]: v })?.[key]);
       if (cat === 'dashNotes') return obj(v) ? L.widgets().cleanNote(v) : undefined;
       if (cat === 'classes') return obj(v) ? L.classes().clean(v) : undefined;
       if (cat === 'gpa') return obj(v) ? L.gpa().clean(v) : undefined;
@@ -159,6 +166,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       const T = L.todo(), here = T.clean((await local.get(key))[key]), ids = new Set(here.tasks.map((t) => t.id));
       value = T.clean({ tasks: [...here.tasks, ...value.tasks.filter((t) => !ids.has(t.id))], items: { ...value.items, ...here.items } });
     }
+    if (cat === 'tasks' && !key.startsWith('todo:')) value = defOf('local', key).merge((await local.get(key))[key], value);
     const r = cat === 'tasks' ? { tasks: key.startsWith('todo:') ? { tasks: { [key]: value } } : { tasks: {}, pets: { [key]: value } } }
       : ['dashNotes', 'classes', 'gpa'].includes(cat) ? { [cat]: { [key]: value } } : cat === 'widgets' ? { widgets: value }
         : key === 'lookFavorites' ? { favorites: value } : cat === 'writerWords' ? { writerWords: value } : null;
@@ -329,11 +337,24 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       // to pass over the student's own later change back to this value.
       if (canon(write ?? null) !== canon(before ?? null)) {
         applying.set(id, canon(write ?? null));
+        const mine = [id];
         try {
-          const onChange = got.area === 'notes' && !d?.immutable ? (old, next) => owned.set(id, transition(got.key, old, next)) : undefined;
+          // Notes: the transition this record makes, and with an account's folders each note Notes takes out of a folder no
+          // longer there (planner/notes.js 'folders'): a consequence of what came, never a change made here to outweigh that
+          // note's own change from the other device.
+          const onChange = got.area === 'notes' && !d?.immutable ? (old, next) => {
+            owned.set(id, transition(got.key, old, next));
+            if (d.cat !== 'noteFolders') return;
+            const acct = NREC.exec(got.key)[1];
+            for (const n of new Set([...Object.keys(old.notes), ...Object.keys(next.notes)])) {
+              if (canon(old.notes[n]) === canon(next.notes[n])) continue;
+              const k = `${acct}|${n}`;
+              owned.set(`notes:${k}`, transition(k, old, next)); mine.push(`notes:${k}`);
+            }
+          } : undefined;
           if (!await a.replace(got.key, before, write, onChange)) throw new Fail('stale');
         } catch (e) {
-          applying.delete(id); owned.delete(id);
+          applying.delete(id); for (const x of mine) owned.delete(x);
           // storage.sync refusing this value (past its 8 KB an item, its total or its count of items): passed over as too big.
           // Its writes-a-minute and -an-hour limits pass, so those are tried again.
           if (got.area === 'sync' && !(e instanceof Fail) && !/MAX_WRITE_OPERATIONS/.test(String(e?.message))) throw new Fail('bad');
@@ -366,6 +387,9 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       area ||= was?.area; key ||= was?.key;
       if (R === undefined) R = was?.id ? await ctx.D((c) => c.file(was.id)).catch((e) => { if (e.why === 'missing') return { removed: true }; throw e; }) : await lookup(ctx, h);
       if (R && !R.removed && R.trashed) R = { removed: true }; // a record file moved to Drive's trash: put back from here
+      // Unless another device put it back first (Glaze/Data trashed with it, say): that one is met as a first meeting, never
+      // a second file made beside it.
+      if (was?.id && R?.removed) { const other = await lookup(ctx, h); if (other && other.id !== was.id) { await S.remove([REC + h, FILE + was.id]); was = null; R = other; } }
       const st = await stamps();
       if (!key) { // a record only Drive has, met for the first time
         if (!R || R.removed) return;
@@ -471,8 +495,10 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
           continue;
         }
         if (f.appProperties?.glaze !== 'rec' || !HASH.test(f.appProperties.key || '') || !(f.parents || []).includes(ctx.data)) continue;
+        // Another file for a record this device follows: one asks after the file it follows (gone or in the trash, this one
+        // takes its place); one in the trash is none.
         const was = await recOf(f.appProperties.key);
-        if (was?.id && was.id !== f.id && (f.id > was.id || f.trashed)) continue;
+        if (was?.id && was.id !== f.id && f.trashed) continue;
         await each(ctx, f.appProperties.key, { R: f });
       }
     };
@@ -485,8 +511,9 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         const [area, key] = split(id);
         if (!catOf(area, key)) { settled[id] = at; continue; }
         const h = await hk(area, key), was = await recOf(h);
-        // Times can tie, or a remote device's clock can be ahead of this one. Only unchanged content is settled.
-        if (was && (was.seen || 0) >= at && await sumOf(area, key, await valueOf(area, key)) === was.lsum) { settled[id] = at; continue; }
+        // Times can tie, or a remote device's clock can be ahead of this one. Only unchanged content is settled. A value that
+        // can't be read here (a note whose text Notes can't find) goes to each, which passes it over or stops the run.
+        if (was && (was.seen || 0) >= at && await sumOf(area, key, await valueOf(area, key).catch(() => null)) === was.lsum) { settled[id] = at; continue; }
         await each(ctx, h, { area, key });
         // Gone here with no record either side (made and removed before it went up): nothing left to settle against.
         if (!await recOf(h) && await valueOf(area, key).catch(() => null) === undefined) settled[id] = at;
@@ -502,9 +529,14 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       // (larger than one upload, or more than a full Drive has room for) waits for tomorrow, never failing the run or being
       // built again on every run. snapSkip: 'quota' while the day's was skipped for want of room (Settings says so).
       const skip = async (e) => { if (e) console.warn('Sync to Google Drive: no snapshot today', e?.why || e); await ctx.state({ snap: now(), snapSkip: e?.why === 'quota' ? 'quota' : null }); };
+      // The day's try is marked before the zip is built: one cut short by the worker stopping (Safari unloads it about 30 s
+      // after its last event; Chrome stops one whose upload waits that long for its answer) waits for tomorrow as well.
+      // Only a note saved while it was read and Drive's or the network's failure give the mark back for the next run.
+      await ctx.state({ snap: now(), snapSkip: null });
+      const back = () => ctx.state({ snap: st.snap ?? null, snapSkip: st.snapSkip ?? null });
       let made;
       // A note saved while it was read (background/backup.js notesOut 'changed'): the next run tries again.
-      try { made = await env.snapshot(); } catch (e) { if (e?.why === 'changed') return; return skip(e); }
+      try { made = await env.snapshot(); } catch (e) { if (e?.why === 'changed') return back(); return skip(e); }
       if (!made) return skip();
       let r, same, up, backups;
       try {
@@ -513,7 +545,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         // Another device's of the same day (its name is the day's) is replaced, a new revision of the one file: five kept are five days.
         same = r.files.filter((f) => f.name === made.name).sort((a, b) => (a.id < b.id ? -1 : 1))[0];
         up = await ctx.D((c) => c.put({ ...(same && { id: same.id }), meta: { ...(!same && { name: made.name, mimeType: ZIP, parents: [backups] }), appProperties: { glaze: 'snapshot' } }, mime: ZIP, bytes: made.bytes }));
-      } catch (e) { if (['bad', 'size', 'quota'].includes(e?.why)) return skip(e); throw e; }
+      } catch (e) { if (['bad', 'size', 'quota'].includes(e?.why)) return skip(e); await back(); throw e; }
       await ctx.state({ snap: now(), snapSkip: null });
       const all = same ? r.files : [...r.files, { id: up.id, name: made.name }];
       const old = all.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : a.id < b.id ? 1 : -1)).slice(SNAP.keep);
