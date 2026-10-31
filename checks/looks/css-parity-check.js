@@ -121,7 +121,7 @@ function inPage() {
           await styles('base');
           const again = await page.screenshot({ fullPage: true, animations: 'disabled', caret: 'hide' });
           if (again.equals(shot1)) { report.failures.push(`${fixture} (${variant}) pixels differ`); fs.writeFileSync(path.join(out, `${fixture}-${variant}-base.png`), shot1); fs.writeFileSync(path.join(out, `${fixture}-${variant}-head.png`), shot2); }
-          else if (!again.equals(shot2)) (report.unstable ||= []).push(fixture);
+          else (report.unstable ||= []).push(`${fixture} (${variant})`);
         }
         report.fixtures.push(row);
       }
