@@ -1,6 +1,6 @@
 # Privacy summary
 
-_Last updated: 2026-10-30_
+_Last updated: 2026-10-31_
 
 A plain-language summary. The full policy is [PRIVACY.md](../PRIVACY.md).
 

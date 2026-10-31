@@ -1,6 +1,6 @@
 # Privacy Policy — Glaze
 
-_Last updated: 2026-10-30_
+_Last updated: 2026-10-31_
 
 ## User-installed mods
 
