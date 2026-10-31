@@ -1445,3 +1445,41 @@ test('a value from before a device was ever connected goes up older than any tim
   assert.ok((await e.on()).ok);
   assert.equal((await e.settings.get('footer')).footer, false);
 });
+
+// The chaos run's seed 386 (no-loss:note-file): a note reached another device before its picture did (its device's push
+// stopped between the two). The picture's later arrival was passed over as one no note here asked for, and the note, never
+// changing again, never asked again.
+test('a note that arrives before its picture gets the picture once Drive has it', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock }), id = nid(1), pic = nid(500);
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  const big = Buffer.concat([PNG, Buffer.alloc(6000)]);
+  clock.t += 1000;
+  assert.ok((await a.notesOp({ key: ACCT, op: 'file', id: pic, kind: 'image', name: 'cell.png', data: big.toString('base64'), note: id })).ok);
+  assert.ok((await a.notesOp({ key: ACCT, op: 'save', id, base: 0, sid: 'a1', html: `<p>Cells</p><img data-gz-file="${pic}">`, title: 'Cells' })).ok);
+  drive.offline((x) => x.path.startsWith('/upload/') && x.size > 6000);
+  assert.equal((await a.run({ push: true })).ok, false, 'A\'s push stops after the note, before its picture');
+  assert.ok(recFile(drive, 'notes', `${ACCT}|${id}`), 'the note is in Drive');
+  assert.ok((await b.run()).ok);
+  assert.match(await noteOf(b, id), /Cells/, 'B has the note');
+  clock.t = (await a.local.get(S.STATE))[S.STATE].wait + 1;
+  assert.ok((await a.run()).ok);
+  assert.ok(recFile(drive, 'notes', `${ACCT}|file|${pic}`), 'A\'s next run sends the picture');
+  assert.ok((await b.run()).ok);
+  assert.deepEqual(Buffer.from(b.db.stores.blobs.get(`https://school.instructure.com/42/${pic}`) || []), big, 'B then gets the picture');
+  // A picture wanted by a note deleted for good meanwhile is not fetched.
+  const pic2 = nid(501);
+  clock.t += 1000;
+  assert.ok((await a.notesOp({ key: ACCT, op: 'file', id: pic2, kind: 'image', name: 'dot.png', data: big.toString('base64'), note: nid(2) })).ok);
+  assert.ok((await a.notesOp({ key: ACCT, op: 'save', id: nid(2), base: 0, sid: 'a2', html: `<p>Two</p><img data-gz-file="${pic2}">`, title: 'Two' })).ok);
+  drive.offline((x) => x.path.startsWith('/upload/') && x.size > 6000);
+  assert.equal((await a.run({ push: true })).ok, false);
+  assert.ok((await b.run()).ok);
+  await b.notesOp({ key: ACCT, op: 'trash', ids: [nid(2)] });
+  await b.notesOp({ key: ACCT, op: 'purge', ids: [nid(2)] });
+  clock.t = (await a.local.get(S.STATE))[S.STATE].wait + 1;
+  assert.ok((await a.run()).ok);
+  const reads = drive.log.filter((x) => x.query?.alt === 'media').length;
+  assert.ok((await b.run()).ok);
+  assert.equal(b.db.stores.blobs.get(`https://school.instructure.com/42/${pic2}`), undefined, 'a deleted note\'s picture stays in Drive');
+  assert.ok(drive.log.filter((x) => x.query?.alt === 'media').length - reads <= 1, 'at most the deleted note\'s tombstone is read');
+});
