@@ -1612,3 +1612,31 @@ test('a full pass uses its listing for a wanted picture that has never arrived',
   const k = ST.REC + sha(`notes\n${ACCT}|file|${pic}`).slice(0, 32);
   assert.equal((await a.local.get(k))[k]?.want, `${ACCT}|${id}`, 'still wanted while the note uses it');
 });
+
+test('a staged picture download whose note is deleted for good is let go before any of its bytes are fetched', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), chunks = new Map();
+  const stage = {
+    keys: async (prefix) => [...chunks.keys()].filter((k) => k.startsWith(prefix)).sort(),
+    entries: async (prefix) => [...chunks].filter(([k]) => k.startsWith(prefix)).sort(([a], [b]) => a.localeCompare(b)),
+    write: async (puts = [], drops = []) => { for (const k of drops) chunks.delete(k); for (const [k, v] of puts) chunks.set(k, structuredClone(v)); },
+  };
+  const b = device(drive, { clock, stage }), id = nid(1), pic = nid(501), big = Buffer.concat([PNG, Buffer.alloc(4 << 20)]);
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  assert.ok((await a.notesOp({ key: ACCT, op: 'save', id, base: 0, sid: 'waiting', html: `<p>Waiting</p><img data-gz-file="${pic}">` })).ok);
+  assert.ok((await a.run({ push: true })).ok); assert.ok((await b.run()).ok);
+  assert.ok((await a.notesOp({ key: ACCT, op: 'file', id: pic, kind: 'image', name: 'large.png', data: big.toString('base64'), note: id })).ok);
+  assert.ok((await a.run({ full: true })).ok);
+  const f = recFile(drive, 'notes', `${ACCT}|file|${pic}`);
+  drive.offline((x) => x.path === `/drive/v3/files/${f.meta.id}` && x.query.alt === 'media');
+  assert.equal((await b.run({ full: true })).ok, false, 'the download is staged and interrupted');
+  assert.ok(Object.values((await b.local.get(S.MOVES))[S.MOVES] || {}).some((t) => t.dir === 'down'), 'a download waits');
+  assert.ok((await b.notesOp({ key: ACCT, op: 'trash', ids: [id] })).ok);
+  assert.ok((await b.notesOp({ key: ACCT, op: 'purge', ids: [id] })).ok);
+  drive.clearFaults();
+  const n = drive.log.length;
+  clock.t = (await b.local.get(S.STATE))[S.STATE].wait + 1;
+  assert.ok((await b.run({ push: true })).ok);
+  assert.equal(drive.log.slice(n).filter((x) => x.path === `/drive/v3/files/${f.meta.id}` && x.query.alt === 'media').length, 0, 'none of its bytes fetched');
+  assert.equal(Object.keys((await b.local.get(S.MOVES))[S.MOVES] || {}).length, 0, 'the transfer let go');
+  assert.deepEqual([...chunks.keys()], [], 'nothing left staged');
+});
