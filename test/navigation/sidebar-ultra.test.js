@@ -927,6 +927,15 @@ test("a course outline's column Ultra has just drawn isn't shown where Ultra lay
   assert.equal(winner(rules, dock, 'visibility') ?? null, null);
 });
 
+test("the sidebar's header keeps one row when Jump to widgets appears later, so nothing under it moves", () => {
+  const { chain, cssRules, winner } = require('../helpers/css-cascade.cjs');
+  const head = chain('html', 'body', 'div#site-wrap', 'aside.outline-actions', 'div.gz-sb-head');
+  head.parent.attrs = { 'data-gz-sidebar-host': 'native', 'data-gz-sb-self': '' };
+  head.parent.parent.parent.parent.attrs = { 'data-gz-sb-ultra': '', 'data-gz-sidebar': 'expanded' };
+  const rules = [...cssRules('content/theme.css'), ...cssRules('navigation/page/sidebar.css')];
+  assert.equal(winner(rules, head, 'flex-wrap')?.[0], 'nowrap', 'the title gives up room instead of the buttons taking a second row');
+});
+
 // Ultra's content in Details & Actions, this tall (0: none yet, or the block hidden), in the box the browser gives it: never
 // shorter than the held height. The sidebar hears of it as it would: its ResizeObserver, and its observer on the column.
 const detailsSize = (p, height) => {
