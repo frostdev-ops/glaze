@@ -96,6 +96,7 @@ const hiddenCounts = () => page.evaluate(() => globalThis.__gzSbCounts);
       await chrome.storage.local.set({ ultra: [site], [`ctabs:${site}:${uid}`]: { tabs: [1, 2, 3].map((i) => ({ cid: `_${100 + i}_1`, name: `Synthetic course ${i}`, path: `/ultra/courses/_${100 + i}_1/outline`, top: 0, at: i, pin: false })) },
         [recordKey]: { v: 1, rev: 1, mig: 1, dock: [{ id: 'notes' }], dest: { notes: 'dock' } } });
     }, { settings, site, uid, recordKey });
+    await require('../../tools/dev/check-env.js').ultraReady(opts);
     const record = () => opts.evaluate(async (k) => (await chrome.storage.local.get(k))[k], recordKey);
     page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e)));
     const tab = (cid) => ({
