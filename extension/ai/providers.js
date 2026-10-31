@@ -46,14 +46,16 @@ var GZ_AI_PROVIDERS = globalThis.GZ_AI_PROVIDERS || (() => {
     if (!c) return false;
     try { return (await p.warm(req, c, { signal })) === true; } catch { return false; }
   };
-  // run(provider (id or object), request, cfg, { signal, onDelta, onThinking, fetch }) → the result, with json when the
-  // request had a schema. Throws { code } (ai/request.js CODES; a failure also carries category, status?, reference).
-  const run = async (provider, request, cfg, { signal, onDelta, onThinking, fetch } = {}) => {
+  // run(provider (id or object), request, cfg, { signal, onDelta, onThinking, fetch, accept }) → the result, with json when
+  // the request had a schema. accept: a schema the answer is checked against in place of the request's own, which still
+  // goes to the provider (a task's looser bound that must not change the prompt). Throws { code } (ai/request.js CODES; a
+  // failure also carries category, status?, reference).
+  const run = async (provider, request, cfg, { signal, onDelta, onThinking, fetch, accept } = {}) => {
     const Q = R();
     const p = typeof provider === 'string' ? get(provider) : provider;
     if (!p) throw Q.error('setup', 'provider');
-    const req = Q.clean(request);
-    if (!req) throw Q.error('request');
+    const req = Q.clean(request), check = accept === undefined ? req?.schema : S().clean(accept);
+    if (!req || (accept !== undefined && (!req.schema || check?.type !== 'object'))) throw Q.error('request');
     const c = p.config(cfg);
     if (!c) throw Q.error('setup', 'config');
     const can = caps(p, c);
@@ -92,7 +94,7 @@ var GZ_AI_PROVIDERS = globalThis.GZ_AI_PROVIDERS || (() => {
       const json = S().parse(out.text);
       if (json === undefined) throw Object.assign(F().modelFailure({ category: 'invalid-response' }), { detail: 'not a JSON object' });
       try { E().guard(json, c.key); } catch (e) { throw F().modelFailure(e); }
-      const errors = S().validate(json, req.schema);
+      const errors = S().validate(json, check);
       if (errors.length) throw Object.assign(F().modelFailure({ category: 'invalid-response' }), { detail: errors });
       out.json = json;
     }

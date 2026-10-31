@@ -2,7 +2,9 @@
 //   { messages: [{ role: 'system' | 'user' | 'assistant' | 'tool', content: [{ type: 'text', text, cache?: true } | { type: 'image', mime,
 //     data (base64) }], toolCalls?: [{ id, name, args }] (assistant), toolCallId? (tool) }],
 //     schema? (ai/schema.js, an object at the root), tools?: [{ name, description, parameters }], temperature?,
-//     maxTokens?, timeoutMs?, effort? (how much a reasoning model thinks first: EFFORTS) }
+//     maxTokens?, timeoutMs?, effort? (how much a reasoning model thinks first: EFFORTS), reply?: { lang } (the language the
+//     answer's prose is written in, a BCP 47 tag: a cloud provider says it in one line at the end of the system turn; a model
+//     on this computer is not told, so its prompts stay exactly what it was tuned on) }
 // A message's content may be given as a string (one text part) and an image's data as bytes (Uint8Array or ArrayBuffer):
 // clean() turns them into the form above, which is plain JSON, so it crosses a runtime port and goes into an eval's log as
 // it is. A result: { text, json?, toolCalls?, usage?: { input, cached?, cacheWrite?, output? } (Rimeward's names), provider,
@@ -96,7 +98,8 @@ var GZ_AI_REQUEST = globalThis.GZ_AI_REQUEST || (() => {
   };
   const EFFORTS = ['none', 'minimal', 'low', 'medium', 'high'];
   const OPTS = { temperature: (v) => (Number.isFinite(v) && v >= 0 && v <= 2 ? v : null), maxTokens: (v) => (Number.isSafeInteger(v) && v >= 1 && v <= LIMIT.maxTokens ? v : null),
-    timeoutMs: (v) => (Number.isSafeInteger(v) && v >= LIMIT.timeout[0] && v <= LIMIT.timeout[1] ? v : null), effort: (v) => (EFFORTS.includes(v) ? v : null) };
+    timeoutMs: (v) => (Number.isSafeInteger(v) && v >= LIMIT.timeout[0] && v <= LIMIT.timeout[1] ? v : null), effort: (v) => (EFFORTS.includes(v) ? v : null),
+    reply: (v) => (isObj(v) && Object.keys(v).length === 1 && typeof v.lang === 'string' && /^[a-z]{2,3}(?:-[A-Z]{2})?$/.test(v.lang) ? { lang: v.lang } : null) };
   // → the request in its one form, or null.
   const clean = (raw) => {
     if (!isObj(raw) || Object.keys(raw).some((k) => !['messages', 'schema', 'tools', ...Object.keys(OPTS)].includes(k))) return null;
