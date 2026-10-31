@@ -893,6 +893,24 @@ test("Ultra's Details & Actions reservation wins over the theme's native block m
   assert.equal(winner([...theme, ...sidebar], details, 'margin(?:-block(?:-end)?)?')?.[0], '0', "the theme's margin reset stays as it was");
 });
 
+test("a course outline's column Ultra has just drawn isn't shown where Ultra lays it out until the sidebar takes it to the window's edge", () => {
+  const { chain, cssRules, winner } = require('../helpers/css-cascade.cjs');
+  const aside = chain('html', 'body', 'div#site-wrap', 'aside.outline-actions');
+  const root = aside.parent.parent.parent;
+  const rules = [...cssRules('content/theme.css'), ...cssRules('navigation/page/sidebar.css')];
+  for (const mode of ['expanded', 'collapsed']) {
+    root.attrs = { 'data-gz-sb-ultra': '', 'data-gz-sidebar': mode };
+    assert.equal(winner(rules, aside, 'visibility')?.[0], 'hidden', `${mode}: not drawn in Ultra's place first`);
+    aside.attrs = { 'data-gz-sidebar-host': 'native' };
+    assert.equal(winner(rules, aside, 'visibility') ?? null, null, `${mode}: shown once taken`);
+    aside.attrs = {};
+  }
+  for (const attrs of [{ 'data-gz-sb-ultra': '', 'data-gz-sidebar': 'drawer' }, { 'data-gz-sb-ultra': '' }, {}]) {
+    root.attrs = attrs;
+    assert.equal(winner(rules, aside, 'visibility') ?? null, null, `${JSON.stringify(attrs)}: Ultra's own column as it is`);
+  }
+});
+
 // Ultra's content in Details & Actions, this tall (0: none yet, or the block hidden), in the box the browser gives it: never
 // shorter than the held height. The sidebar hears of it as it would: its ResizeObserver, and its observer on the column.
 const detailsSize = (p, height) => {
