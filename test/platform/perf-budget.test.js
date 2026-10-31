@@ -152,8 +152,8 @@ const ULTRA_SIGNOUT = { ultra: 243, canvas: 0, moodle: 0 };
 const LMS_REQUESTS = { ultra: 1769, canvas: 201, moodle: 0 };
 // Ultra's /users/me at first paint (D, coordinator-approved 2026-10-30, measured against 3298f6f9): content-ultra.js asks it
 // straight away, before the stores' files load, so personal panels can show their kept copy the moment it confirms who's
-// signed in; courses/ultra.js takes the same request. 297 bytes on Ultra.
-const ULTRA_EARLY_ME = 297;
+// signed in; courses/ultra.js takes the same request (and content.js's api keeps working on its own). 376 bytes on Ultra.
+const ULTRA_EARLY_ME = 376;
 // Shortcut roles and IME (WP-N2; the owner's audit-fix allowance): content.js's keyOn skips menus, menubars, lists, grids, trees and
 // comboboxes across composed event paths, preserves queued IME flags and ignores Safari keyCode 229: 365 bytes/site. Canvas's
 // frame word also distinguishes course Hide from a disabled menu (+8 bytes). Measured against immutable WP-N2 base f8dc85a.
