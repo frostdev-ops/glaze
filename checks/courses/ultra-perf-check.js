@@ -157,6 +157,7 @@ function speedProbe() {
   };
   fontsReady();
   const looks = new WeakMap();
+  let frameId;
   const frame = () => {
     for (const h of document.querySelectorAll('h1')) {
       const c = getComputedStyle(h), r = h.getBoundingClientRect();
@@ -164,9 +165,10 @@ function speedProbe() {
       const was = looks.get(h), key = JSON.stringify(now);
       if (was !== key) { looks.set(h, key); log({ kind: 'look', el: sel(h), ...now }); }
     }
-    if (performance.now() < 15000) requestAnimationFrame(frame);
+    frameId = requestAnimationFrame(frame);
   };
-  requestAnimationFrame(frame);
+  frameId = requestAnimationFrame(frame);
+  window.perfSpeedStopSampling = () => cancelAnimationFrame(frameId);
   const watch = (type, fn) => { try { new PerformanceObserver((list) => list.getEntries().forEach(fn)).observe({ type, buffered: true }); } catch { s[`no-${type}`] = true; } };
   // The fixture's headings carry elementtiming: each one's paint, whatever its size, on every route.
   watch('element', (e) => e.identifier === 'title' && s.titles.push({ text: e.element?.textContent.trim().slice(0, 40) ?? null, renderTime: e.renderTime, loadTime: e.loadTime, size: e.intersectionRect.width * e.intersectionRect.height }));
@@ -423,6 +425,8 @@ if (require.main === module) (async () => {
         let speedResult;
         if (speed) {
           // Idle: 5 s with nothing happening, after the last stage settled. The fixed window is the measurement.
+          // Heading attribution reads computed styles and geometry every frame; keep its work out of idle totals.
+          await page.evaluate(() => window.perfSpeedStopSampling());
           const cdp = await context.newCDPSession(page);
           await cdp.send('Performance.enable');
           const value = (list, name) => list.find((m) => m.name === name)?.value || 0;
@@ -442,7 +446,11 @@ if (require.main === module) (async () => {
           // The load's LCP entry with what happened to the headings and fonts in the 300 ms before its paint.
           const lcpEntry = loaded && { ...loaded, stage: stageOf(loaded.ms), near: probe.h1.filter((x) => x.t >= loaded.ms - 300 && x.t <= loaded.ms + 20), fonts: probe.fonts.filter((x) => x.t <= loaded.ms + 20) };
           // Each route's title: ms from the stage's insert to its first paint (Element Timing), the load's from navigation.
-          const titlePaint = Object.fromEntries(probe.titles.map((x) => [x.text, x.renderTime - (probe.h1.find((h) => h.kind === 'insert' && h.text === x.text && /main-content-inner$/.test(h.into || ''))?.t ?? 0)]));
+          // Observer delivery is later than insertion and its diagnostic log is capped; use the stage's actual start.
+          const titlePaint = Object.fromEntries(probe.titles.map((x) => {
+            const stage = x.text === 'stream' ? 'initial' : x.text === 'course' ? 'courses' : x.text;
+            return [x.text, x.renderTime - (stages[stage]?.window[0] ?? 0)];
+          }));
           speedResult = { styledAt: probe.styledAt, fcp: probe.fcp, lcp: loaded?.ms ?? null, lcpElement: loaded?.el ?? null, lcpAll: last?.ms ?? null, lcpEntry, lcpEntries: probe.lcp.map((e) => ({ ...e, stage: stageOf(e.ms) })), titlePaint,
             headings: probe.h1, fonts: probe.fonts, glazeNodes: probe.glaze, titles: probe.titles,
             stages: Object.fromEntries([...Object.entries(stages).map(([k, v]) => [k, stageSpeed(probe, v.window)]), ['idle', stageSpeed(probe, [idleFrom, idleTo])]]),
