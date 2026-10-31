@@ -56,8 +56,8 @@ var GZ_AI_TASK_WRITER_IMAGE = globalThis.GZ_AI_TASK_WRITER_IMAGE || (() => {
   // A requirement that is an exact copy of the picture's file name (its extension or not) or of a whole line of the context
   // block, the header's included: neither is text in the picture. Only spacing, wrapping quotes and a final period may
   // differ; similar wording is a requirement the picture shows.
-  const flat = (v) => String(v).replace(/\s+/g, ' ').trim().replace(/\.$/, '').trim()
-    .replace(/^["“‘']+|["”’']+$/g, '').trim().replace(/\.$/, '').trim();
+  const flat = (v) => String(v).replace(/\s+/g, ' ').trim()
+    .replace(/^["“‘']+|["”’']+(?:\s*\.)?$/g, '').trim().replace(/\.$/, '').trim();
   const borrowed = (inp) => {
     if (!inp) return () => false;
     const name = flat(inp.name), lines = scope(inp).split('\n'), [head, ...rest] = lines;
