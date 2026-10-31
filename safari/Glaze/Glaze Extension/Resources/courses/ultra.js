@@ -799,13 +799,14 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     begin: () => { if (typeof location === 'undefined') return null; const keys = ['ultraCopyFence', `ultraCopyFence:${location.origin}`]; return area('local').get(keys).then((r) => pageSend({ type: 'glaze:ultraMine', op: 'begin', fence: keys.map((k) => r[k]?.epoch || '').join('/') })).then((r) => r?.epoch); },
     commit: (key, value, at, epoch) => pageSend({ type: 'glaze:ultraMine', op: 'save', key, value, at, epoch }),
     listen: (f) => { try { chrome.storage.onChanged.addListener(f); } catch { /* no storage */ } },
-    refresh: (detail) => { if (typeof document !== 'undefined') document.dispatchEvent(new CustomEvent('glaze:ultra-refresh', { detail })); },
+    refresh: (detail) => { if (globalThis.document?.dispatchEvent && typeof CustomEvent === 'function') document.dispatchEvent(new CustomEvent('glaze:ultra-refresh', { detail })); },
     me: () => (globalThis.GZ_CTX?.site === 'ultra' ? GZ_CTX.me?.() : null),
     send: pageSend,
     todo: () => (globalThis.GZ_TODO ? GZ_TODO : globalThis.GZ_CTX?.need ? GZ_CTX.need('planner/todo.js', () => globalThis.GZ_TODO).then(() => globalThis.GZ_TODO || null) : null),
     todoPrefs: () => (typeof GZ_SANITIZE === 'undefined' ? null : area('sync').get('todo').then((r) => GZ_SANITIZE({ todo: r?.todo }).todo)),
   });
-  if (typeof document !== 'undefined') {
+  // Only on a page: node has no events to watch.
+  if (typeof globalThis.document?.addEventListener === 'function') {
     let away = 0, shown = true;
     const visibility = () => {
       const yes = document.visibilityState !== 'hidden' && !document.documentElement.hasAttribute('data-gz-ctab-framed');
@@ -814,8 +815,8 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
       shown = yes;
     };
     document.addEventListener('visibilitychange', visibility);
-    addEventListener('pageshow', (e) => { if (e.persisted) page.invalidate({ identity: true }); });
-    new MutationObserver(visibility).observe(document.documentElement, { attributes: true, attributeFilter: ['data-gz-ctab-framed'] });
+    globalThis.addEventListener?.('pageshow', (e) => { if (e.persisted) page.invalidate({ identity: true }); });
+    if (typeof MutationObserver === 'function') new MutationObserver(visibility).observe(document.documentElement, { attributes: true, attributeFilter: ['data-gz-ctab-framed'] });
     visibility();
     let writing = 0, writeCap = 0, writeWatch = null;
     const native = (node) => {
