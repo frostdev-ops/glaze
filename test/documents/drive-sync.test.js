@@ -1042,6 +1042,9 @@ test('a document with no file to make here goes up once, not again on every run'
   await a.papers.save(key, { kind: 'pdf', file: Buffer.from('%PDF-1.4 saved before the file store').toString('base64'), title: 'Old reading', named: true });
   assert.ok((await a.sync.set(true)).ok); assert.ok((await b.sync.set(true)).ok);
   assert.ok(sidecarOf(drive, key), 'its copy went up');
+  // The one listing again a minute after each device's full pass (WAIT.again) comes first.
+  clock.t += S.WAIT.again;
+  assert.ok((await a.sync.run({ poke: true })).ok); assert.ok((await b.sync.run({ poke: true })).ok);
   const sent = () => drive.log.filter((x) => x.upload).length, read = () => drive.log.filter((x) => x.query.alt === 'media').length;
   const ups = sent(), reads = read();
   for (let i = 0; i < 3; i++) { clock.t += 60e3; assert.ok((await a.sync.run({ poke: true })).ok); assert.ok((await b.sync.run({ poke: true })).ok); }
@@ -1354,4 +1357,34 @@ test('another account connected stops Sync even when the transfers\' store can\'
   const st = await state(a);
   assert.ok(!st.on && st.problem === 'account', JSON.stringify(st));
   assert.equal((await a.store.keys()).filter((k) => k.startsWith(S.DOC)).length, 0, 'the old account\'s links forgotten');
+});
+
+test('a device joining while Drive\'s search doesn\'t show a just-made document yet gets it a minute later', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-000000000a15';
+  assert.ok((await a.sync.set(true)).ok);
+  await a.papers.save(key, { doc: doc('Just made'), title: 'New', named: true });
+  await a.sync.touched(key); await a.fire();
+  // Drive's search lags: the new document's two files are missing from every list for a while.
+  const fresh = new Set([sidecarOf(drive, key).meta.id, exportOf(drive, key).meta.id]);
+  let lag = true;
+  const lagging = { ...drive, fetch: async (u, i) => {
+    const r = await drive.fetch(u, i);
+    if (!lag || i?.method || !new URL(u).pathname.endsWith('/drive/v3/files')) return r;
+    const j = await r.json(); j.files = (j.files || []).filter((f) => !fresh.has(f.id));
+    return new Response(JSON.stringify(j), { status: 200, headers: { 'content-type': 'application/json' } });
+  } };
+  const b = device(lagging, { clock });
+  assert.ok((await b.sync.set(true)).ok);
+  assert.equal(await b.papers.get(key), null, 'not seen yet');
+  lag = false;
+  clock.t += 30e3;
+  assert.ok((await b.sync.run()).ok);
+  clock.t += 31e3;
+  assert.ok((await b.sync.run()).ok);
+  assert.equal(textOf((await b.papers.get(key))?.doc), 'Just made');
+  const n = drive.log.length;
+  clock.t += 600e3;
+  assert.ok((await b.sync.run()).ok);
+  assert.ok(drive.log.length - n <= 4, 'then runs read only the changes again');
 });
