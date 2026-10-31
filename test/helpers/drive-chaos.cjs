@@ -157,6 +157,9 @@ function prelude(host) {
   });
   g.NOTES_DB = idb('notesdb');
   const docs = idb('docfiles');
+  // Sync's transfer staging (glaze-drive): the worker's IndexedDB, here kept on the device's disk like the doc store.
+  g.__stage = { get: (k) => docs.get('s', k), many: async (ks) => { const out = []; for (const k of ks) out.push(await docs.get('s', k)); return out; }, keys: (p) => docs.keys('s', p), entries: (p) => docs.scan('s', p),
+    write: (puts = [], dels = []) => host.io('docfiles', 'write', () => { for (const [k, v] of puts) host.disk.put('docfiles', `s\u0000${k}`, clone(v)); for (const k of dels) host.disk.drop('docfiles', `s\u0000${k}`); }) };
   const fileDb = {
     get: (k) => docs.get('f', k), many: async (ks) => { const out = []; for (const k of ks) out.push(await docs.get('f', k)); return out; },
     keys: (prefix) => docs.keys('f', prefix), entries: (prefix) => docs.scan('f', prefix),
@@ -337,6 +340,7 @@ class Device {
         if (loaded.has(file)) return;
         loaded.add(file);
         script(file).runInContext(dev.ctx);
+        if (/doc-files\.js$/.test(file)) { const F = dev.ctx.GZ_DOC_FILES, idb = F.idb; F.idb = (f, name, R) => (name === 'glaze-drive' ? dev.ctx.__stage : idb(f, name, R)); }
         if (/drive-sync\.js$/.test(file)) dev.patchSync();
       },
       backupFiles: BACKUP_FILES,
@@ -492,14 +496,17 @@ const describe = (op) => {
 
 // Known defects, each with what it needs, so a run can leave those operations out (masks) and look for others meanwhile.
 // drive-chaos-findings.md (glaze-plans/release-4.0.1) has each one's repro and diagnosis.
-// repro: the fewest operations that show it (two devices, both signed in at the start).
+// repro: the fewest operations that show it (two devices, both signed in at the start). fixed: a regression test now; its
+// operations are no longer masked.
 const KNOWN = {
   'null-setting': {
+    fixed: true,
     about: 'a Settings value of null (preset, once the palette is the student\'s own) goes back and forth between devices forever',
     skips: (op) => op.t === 'setting' && op.k === 'preset',
     repro: [{ t: 'setting', d: 1, k: 'preset', v: null, pick: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2 }, { t: 'run', d: 0, how: 'run', s: 3 }],
   },
   'trashed-data': {
+    fixed: true,
     about: 'records that don\'t change after Glaze/Data goes into Drive\'s trash are never put in the new Data: other devices never get them',
     skips: (op) => op.t === 'drive' && op.k === 'trashData',
     repro: [{ t: 'setting', d: 0, k: 'footer', v: false, pick: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2 }, { t: 'drive', k: 'trashData', pick: 0, s: 3 }, { t: 'run', d: 0, how: 'run', s: 4 }],
@@ -553,6 +560,7 @@ const KNOWN = {
     repro: [{ t: 'lag', n: 3 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2 }, { t: 'account', d: 1, to: 'A', s: 3 }],
   },
   'join-stamp': {
+    fixed: true,
     about: 'a first meeting\'s joined record goes up stamped with the time of the meeting, not of the latest change it holds, so it beats a later change another device hadn\'t pushed yet: a note\'s newer text lost to a rename, a task lost when a second device connects',
     skips: () => false,
     ignore: (f, w) => ['no-loss:note', 'lww:settings'].includes(f.inv) && w.met,

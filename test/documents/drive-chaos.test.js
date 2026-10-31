@@ -9,8 +9,8 @@ const C = require('../helpers/drive-chaos.cjs');
 
 const ITER = Number(process.env.ITER || 30), DEVICES = Number(process.env.DEVICES || 3);
 // Seeds that hit a known defect (C.KNOWN; glaze-plans/release-4.0.1/drive-chaos-findings.md), todo until it is fixed.
-const TODO = { 16: 'null-setting', 22: 'null-setting', 27: 'trashed-data', 32: 'missed-file-trash' };
-const SEEDS = process.env.SEED ? [Number(process.env.SEED)] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ...Object.keys(TODO).map(Number)];
+const TODO = { 32: 'missed-file-trash' };
+const SEEDS = process.env.SEED ? [Number(process.env.SEED)] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16, 22, 27, ...Object.keys(TODO).map(Number)];
 const FINDINGS = 'glaze-plans/release-4.0.1/drive-chaos-findings.md';
 
 const show = (r) => [`seed ${r.seed}:`, ...r.failures.map((f) => `  ${f.inv}: ${f.msg}`), '', ...r.trace, '',
@@ -60,9 +60,9 @@ test('a worker stopped at any await of a first push (its write landed or not) st
   assert.ok(stopped > 8, `stopped ${stopped} times`);
 });
 
-// Each known defect's fewest operations: todo while it stands, passing once it is fixed (then drop its mask and TODO seeds).
+// Each known defect's fewest operations: todo while it stands, a regression test once fixed (fixed: true; drop its TODO seeds).
 for (const [name, k] of Object.entries(C.KNOWN)) {
-  test(`known (${name}): ${k.about}`, { todo: FINDINGS }, async () => {
+  test(`${k.fixed ? 'fixed' : 'known'} (${name}): ${k.about}`, { todo: k.fixed ? undefined : FINDINGS }, async () => {
     const r = await C.play(1, { list: k.repro, devices: 2, join: k.join || 'all' });
     assert.ok(r.ok, show(r));
   });
