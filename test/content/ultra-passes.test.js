@@ -285,3 +285,30 @@ test("Glaze's footer waits for its stylesheet: in before it, it sat after the pa
   await p.wait(200);
   assert.equal(footers().length, 1, 'the footer once its sheet is in');
 });
+
+test('after a quiet spell the pass runs at the next frame, before it paints, and still at most once per 150 ms', async () => {
+  const frames = [];
+  const p = await boot({ frames });
+  const frame = async () => { for (const f of frames.splice(0)) f(0); await settle(); };
+  await frame();
+  p.styleReads.length = 0;
+  const added = p.tree(2);
+  p.body.append(added);
+  p.mutate([{ type: 'childList', target: p.body, addedNodes: [added], removedNodes: [] }]);
+  await frame();
+  assert.ok([added, ...added.kids].every((e) => p.styleReads.includes(e)), 'what the page drew is swept in the frame that first shows it');
+  p.styleReads.length = 0;
+  const next = p.tree(1);
+  p.body.append(next);
+  p.mutate([{ type: 'childList', target: p.body, addedNodes: [next], removedNodes: [] }]);
+  await frame();
+  assert.ok(!p.styleReads.includes(next), 'a change right after waits for the throttle');
+  await p.wait(200);
+  assert.ok(p.styleReads.includes(next), 'which sweeps it');
+  await p.wait(1000);
+  p.styleReads.length = 0;
+  p.mutate([{ type: 'attributes', attributeName: 'class', target: p.small, oldValue: '' }]);
+  p.c.document.hidden = true;
+  await frame();
+  assert.equal(p.styleReads.length, 0, 'a hidden page still sweeps nothing');
+});
