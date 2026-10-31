@@ -76,10 +76,15 @@ fn main(@builtin(local_invocation_index) li: u32, @builtin(workgroup_id) wg: vec
   var hw = vec4<u32>();
   var qa = vec4<u32>();
   var qb = vec4<u32>();
-  if (wok) { hw = hd(rb, j0 >> 1u); qa = qw(rb, j0 >> 1u, 2u * h); qb = qw(rb, j0 >> 1u, 2u * h + 1u); }
+  var x0 = vec4<f32>(0.0);
+  var x1 = vec4<f32>(0.0);
+  // Ceil-sized runs can leave trailing splits empty. They still write zero sums, but must not read past K.
+  if (j0 < j1) {
+    if (wok) { hw = hd(rb, j0 >> 1u); qa = qw(rb, j0 >> 1u, 2u * h); qb = qw(rb, j0 >> 1u, 2u * h + 1u); }
+    x0 = ldX(t0 + lt, j0, lw);
+    x1 = ldX(t0 + lt + 64u, j0, lw);
+  }
   var ks = sc(hw, rb, j0 >> 1u);
-  var x0 = ldX(t0 + lt, j0, lw);
-  var x1 = ldX(t0 + lt + 64u, j0, lw);
   Ws[at(0u, lr, 2u * h)] = vec4<S>(select(vec4<f32>(0.0), v4(qa, ks, rb, j0 >> 1u, 2u * h), wok));
   Ws[at(0u, lr, 2u * h + 1u)] = vec4<S>(select(vec4<f32>(0.0), v4(qb, ks, rb, j0 >> 1u, 2u * h + 1u), wok));
   Xs[at(0u, lt, lw)] = vec4<S>(x0); Xs[at(0u, lt + 64u, lw)] = vec4<S>(x1);

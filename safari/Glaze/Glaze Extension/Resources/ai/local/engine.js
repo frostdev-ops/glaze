@@ -194,6 +194,9 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     const bigTile = device.limits.maxComputeWorkgroupStorageSize >= 2 * 1024 * (f16 && !tf32 ? 8 : 16) && opts.gemm !== 'small';
     // Without the split, matrices of under 1024 rows take the 64 × 64 tiles, for more workgroups.
     const bigRows = opts.gemm === 'big' || split ? 1 : 1024;
+    // BLOCK attention keeps f32 queries, H keys/values and scalar scores in workgroup memory. Smaller devices use
+    // the original one-query workgroups, which fit wherever the small GEMM does.
+    const blockAttention = device.limits.maxComputeWorkgroupStorageSize >= 528 * 16 + 2 * 528 * (f16 ? 8 : 16) + (256 + 16) * 4;
     let lost = null;
     device.lost.then((info) => { lost = info; });
     try {
@@ -485,7 +488,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
               const tiles = (pos) => Math.ceil((swa ? Math.min(c.window, pos + 1) : pos + 1) / 128);
               await op(list, 'attention', { SPLIT: true }, { 0: B.q, 1: s.K, 2: s.V, 6: B.apart }, (T, pos) => att(T, pos, tiles(pos)), (T, pos) => [H, 1, tiles(pos)]);
               await op(list, 'attention', { COMBINE: true }, { 3: B.g, 4: B.y, 6: B.apart }, (T, pos) => att(T, pos, tiles(pos)), () => [H, 1]);
-            } else await op(list, 'attention', { BLOCK: true }, { 0: B.q, 1: s.K, 2: s.V, 3: B.g, 4: B.y }, (T, pos) => att(T, pos, 1), (T) => [H, Math.ceil(T / 16)]);
+            } else await op(list, 'attention', { BLOCK: blockAttention }, { 0: B.q, 1: s.K, 2: s.V, 3: B.g, 4: B.y }, (T, pos) => att(T, pos, 1), (T) => [H, blockAttention ? Math.ceil(T / 16) : T]);
             await mm(list, blk(i, 'attn_output'), zero, B.y, B.a, 0, at(E));
           }
           const post = byName.has(blk(i, 'post_attention_norm'));

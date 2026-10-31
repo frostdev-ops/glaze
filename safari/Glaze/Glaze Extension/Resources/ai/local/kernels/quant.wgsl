@@ -46,7 +46,14 @@ fn deq32(rb: u32, s: u32) -> array<vec4<f32>, 8> {
 fn grp(rb: u32, c: u32) -> G { return G(deq32(rb, c), c * 32u, c * 32u + 16u); }
 fn hd(rb: u32, s: u32) -> vec4<u32> { return vec4<u32>(W[(rb + s * 34u) >> 2u], 0u, 0u, 0u); }
 fn sc(h: vec4<u32>, rb: u32, s: u32) -> vec2<f32> { return vec2<f32>(h2f((h.x >> (((rb + s * 34u) & 2u) * 8u)) & 65535u), 0.0); }
-fn qw(rb: u32, s: u32, w: u32) -> vec4<u32> { let i = (rb + s * 34u + 2u + 4u * w) >> 2u; return vec4<u32>(W[i], W[i + 1u], 0u, 0u); }
+fn qw(rb: u32, s: u32, w: u32) -> vec4<u32> {
+  let b = rb + s * 34u + 2u + 4u * w;
+  let i = b >> 2u;
+  // An aligned final vec4 can end at the binding's end; only unaligned values need the following word.
+  var hi = 0u;
+  if ((b & 2u) != 0u) { hi = W[i + 1u]; }
+  return vec4<u32>(W[i], hi, 0u, 0u);
+}
 fn v4(q: vec4<u32>, k: vec2<f32>, rb: u32, s: u32, w: u32) -> vec4<f32> {
   let x = select((q.x >> 16u) | (q.y << 16u), q.x, ((rb + s * 34u + 2u) & 2u) == 0u);
   let v = vec4<i32>(bitcast<i32>(x << 24u), bitcast<i32>(x << 16u), bitcast<i32>(x << 8u), bitcast<i32>(x)) >> vec4<u32>(24u);
