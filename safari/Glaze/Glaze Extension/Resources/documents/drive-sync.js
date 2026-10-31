@@ -304,9 +304,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
           if (!slot) return;
           tries.set(slot, (tries.get(slot) || 0) + 1);
           if (t.dir === 'up' && t.owner?.doc) {
-            const key = t.owner.key || (await docOf(t.owner.doc))?.key, l = key ? await local(key) : null;
+            const key = t.owner.key || (await docOf(t.owner.doc))?.key, rec = key ? await env.papers.get(key) : null;
             // A first upload has no document link yet: a later Trash or Delete must still cancel it.
-            if (!l || P().trashed(l.rec)) {
+            if (!rec || P().trashed(rec)) {
               if (t.file?.id) await trashTo(t.file.id, true);
               await dropMove(slot);
               continue;
@@ -451,7 +451,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (!file && !d?.json && (ex || onWay)) file = (await D((c) => c.find(`'${folder}' in parents and appProperties has { key='key' and value='${h}' } and appProperties has { key='glaze' and value='file' } and trashed=false`, { pageSize: 10 })))
         .files.filter((f) => f.appProperties?.key === h && f.appProperties?.glaze === 'file').sort((a, b) => (a.id < b.id ? -1 : 1))[0]?.id || null;
       if (ex || onWay) {
-        const r = await up(`u:${h}:file`, sum, d?.file ? file : undefined, async () => {
+        const r = await up(`u:${h}:file`, sum, d?.file || d?.json ? file : undefined, async () => {
           ex ||= await env.exportOf(key, l.rec, l.parts);
           if (!ex) return null;
           const meta = { name: ex.name, appProperties: { glaze: 'file', key: h, sum } };
