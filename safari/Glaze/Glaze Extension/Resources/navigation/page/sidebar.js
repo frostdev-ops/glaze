@@ -314,6 +314,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     d.want = 0;
     html().removeAttribute('data-gz-sb-held');
     html().style.removeProperty('--gz-sb-held');
+    clearTimeout(d.timer);
+    // Timers and ResizeObserver callbacks can release it without a sidebar pass.
+    if (held === d) queueLayout();
   };
   const rememberHeight = (d) => {
     const cid = d.cid, h = Math.round(d.size);
@@ -338,6 +341,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (!held) return;
     held.paused = true;
     held.ro.disconnect(); clearTimeout(held.timer); clearTimeout(held.quiet);
+    held.quiet = 0;
   };
   const unhold = () => {
     const d = held;
@@ -358,11 +362,23 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     const d = held = { el, cid, size: 0, want: heights[cid] || (known.length ? Math.min(...known) : 0), edge: 0, timer: 0, quiet: 0 };
     // Its padding and border under the content: with the box held, the content's own height is read from its last block.
     if (d.want) try { const c = getComputedStyle(el); d.edge = (parseFloat(c.paddingBlockEnd) || 0) + (parseFloat(c.borderBlockEndWidth) || 0); } catch { /* no styles to ask */ }
-    const own = () => { const k = el.lastElementChild; return k ? k.getBoundingClientRect().bottom - el.getBoundingClientRect().top + d.edge : 0; };
+    const own = (box) => {
+      for (let k = el.lastElementChild; k; k = k.previousElementSibling) {
+        const r = k.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) return r.bottom - box.top + d.edge;
+      }
+      return 0;
+    };
     d.check = () => {
+      const children = [...el.children];
+      if (children.length !== d.children.length || children.some((k, i) => k !== d.children[i])) observe();
       if (!filled(el)) return;
-      const size = d.want ? own() : el.getBoundingClientRect().height;
+      const box = el.getBoundingClientRect();
+      if (!(box.width > 0 && box.height > 0)) return;
+      const size = d.want ? own(box) : box.height;
       if (!(size > 0)) return;
+      // Only this block's growth restarts settling; unrelated Angular/sidebar passes do not.
+      if (size === d.size && d.quiet) return;
       d.size = size;
       // Drawn as tall as the room: it goes, and nothing moves.
       if (d.want && size >= d.want - 0.5) letGo(d);
@@ -370,12 +386,19 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       clearTimeout(d.quiet);
       d.quiet = setTimeout(() => { if (held === d && !d.paused) { rememberHeight(d); letGo(d); } }, 2000);
     };
-    // After the hold, growth shows in its box; while held, the column's observer (watch) brings the sidebar back to check.
+    // min-height masks content growth from the block's own ResizeObserver. Its direct content blocks must be watched
+    // too: wrapping, fonts and images can resize them without a childList mutation. Rebind when Ultra swaps them.
     d.ro = new ResizeObserver(() => { if (held === d && !d.paused) d.check(); });
+    const observe = () => {
+      d.ro.disconnect();
+      d.ro.observe(el, { box: 'border-box' });
+      d.children = [...el.children];
+      for (const child of d.children) d.ro.observe(child, { box: 'border-box' });
+    };
     d.resume = () => {
       d.paused = false;
       if (d.want) { setVar('--gz-sb-held', `${d.want}px`); html().setAttribute('data-gz-sb-held', ''); }
-      d.ro.observe(el, { box: 'border-box' });
+      observe();
       d.check();
       // Never drawn at all: not held for ever. Covered documents pause this deadline.
       if (d.want) d.timer = setTimeout(() => { if (held === d && !d.paused) letGo(d); }, 15000);

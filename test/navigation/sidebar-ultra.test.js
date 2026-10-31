@@ -930,6 +930,49 @@ test('Ultra remembers a settled Details height while the course remains open', a
   }
 });
 
+test('unchanged Ultra sidebar passes do not postpone a smaller Details block settling', async () => {
+  const HELD = `detailsHeight:${O}`;
+  const p = page({ aside: 'live', stored: { ...record(), [HELD]: { _101_1: 300 } } });
+  const tick = heightTimers(p);
+  detailsSize(p, 0);
+  await p.pass();
+  detailsSize(p, 180);
+  tick(1000);
+  // Angular and the other column blocks still trigger passes, but Details itself has stopped changing.
+  await p.pass();
+  tick(1000);
+  await settle();
+  assert.equal(p.doc.root.dataset.gzSbHeld, undefined, 'the quiet period belongs to Details, not all sidebar passes');
+  assert.deepEqual(p.store[HELD], { _101_1: 180 }, 'a settled measurement is saved while the page stays busy');
+});
+
+test('Details content resizing inside a held box restarts settling without a DOM mutation', async () => {
+  const HELD = `detailsHeight:${O}`;
+  const p = page({ aside: 'live', stored: { ...record(), [HELD]: { _101_1: 300 } } });
+  const tick = heightTimers(p), details = p.$('.js-details-and-actions');
+  detailsSize(p, 0);
+  await p.pass();
+  detailsSize(p, 120);
+  const child = details.firstElementChild;
+  const grow = (height) => {
+    child.box.height = height;
+    // A font, image or text wrap changes the content's size. min-height keeps the parent's box at 300px,
+    // so only observations of the content can fire; no Angular childList mutation or sidebar pass occurs.
+    for (const ro of p.sizes.filter((r) => r.targets.includes(child))) ro.f([{ target: child }]);
+  };
+  tick(1500);
+  grow(180);
+  tick(500);
+  await settle();
+  assert.equal(p.doc.root.dataset.gzSbHeld, '', 'content growth restarts the quiet period while its parent stays held');
+  assert.deepEqual(p.store[HELD], { _101_1: 300 }, 'the intermediate height has not settled');
+  grow(300);
+  assert.equal(p.doc.root.dataset.gzSbHeld, undefined, 'filling the room releases it immediately');
+  tick(2000);
+  await settle();
+  assert.deepEqual(p.store[HELD], { _101_1: 300 });
+});
+
 test('Ultra flushes a measured Details height on page exit before its quiet timer', async () => {
   const HELD = `detailsHeight:${O}`;
   const p = page({ aside: 'live', stored: record() });
@@ -1007,6 +1050,43 @@ test('hiding Details before its quiet save keeps the last nonzero measurement', 
   assert.deepEqual(p.store[HELD], { _101_1: 231 }, 'a hidden box is not a new course height');
 });
 
+test('a held Details block hidden with its ancestor never records its padding as content', async () => {
+  const HELD = `detailsHeight:${O}`;
+  const p = page({ aside: 'live', stored: { ...record(), [HELD]: { _101_1: 300 } } });
+  const tick = heightTimers(p), css = p.c.getComputedStyle;
+  const details = p.$('.js-details-and-actions');
+  p.c.getComputedStyle = (el) => ({ ...css(el), ...(el === details && { paddingBlockEnd: '12px', borderBlockEndWidth: '1px' }) });
+  detailsSize(p, 0);
+  await p.pass();
+  detailsSize(p, 180);
+  // display:none on the sidebar (collapsed, folded, or a closed drawer): all descendant rectangles are zero.
+  details.box = details.firstElementChild.box = { left: 0, top: 0, width: 0, height: 0 };
+  for (const ro of p.sizes.filter((r) => r.targets.includes(details))) ro.f([{ target: details }]);
+  tick(2000);
+  await settle();
+  assert.deepEqual(p.store[HELD], { _101_1: 193 }, 'keep the visible content plus its end padding and border');
+});
+
+test('a hidden trailing child does not conceal the rendered Details height', async () => {
+  const HELD = `detailsHeight:${O}`;
+  const p = page({ aside: 'live', stored: { ...record(), [HELD]: { _101_1: 231 } } });
+  const tick = heightTimers(p), details = p.$('.js-details-and-actions');
+  detailsSize(p, 0);
+  await p.pass();
+  detailsSize(p, 180);
+  const hidden = p.el('div', '', 'Unavailable action');
+  hidden.hidden = true;
+  hidden.box = { left: 0, top: 0, width: 0, height: 0 };
+  details.append(hidden);
+  // The preceding visible row grows to fill the reservation, while the final native child stays hidden.
+  details.firstElementChild.box.height = 231;
+  p.mutate(p.host(), { addedNodes: [hidden] });
+  assert.equal(p.doc.root.dataset.gzSbHeld, undefined, 'the last rendered child fills the reservation');
+  tick(2000);
+  await settle();
+  assert.deepEqual(p.store[HELD], { _101_1: 231 });
+});
+
 test('an empty Details placeholder with padding keeps its reservation until content arrives or the deadline expires', async () => {
   const HELD = `detailsHeight:${O}`;
   const p = page({ aside: 'live', stored: { ...record(), [HELD]: { _101_1: 231 } } });
@@ -1029,6 +1109,20 @@ test('an empty Details placeholder with padding keeps its reservation until cont
   await empty.pass();
   expire(15000);
   assert.equal(empty.doc.root.dataset.gzSbHeld, undefined, 'an empty course still has a bounded hold');
+});
+
+test('an empty Details hold expires with its This page heading and sidebar room', async () => {
+  const HELD = `detailsHeight:${O}`;
+  const p = page({ aside: 'live', stored: { ...record(), [HELD]: { _101_1: 231 } } });
+  const tick = heightTimers(p);
+  detailsSize(p, 0);
+  await p.pass();
+  assert.equal(p.$('.gz-sb-pagehead').hidden, false);
+  assert.equal(p.mode(), 'expanded');
+  tick(15000);
+  await settle();
+  assert.equal(p.$('.gz-sb-pagehead').hidden, true, 'the hold no longer supplies page content');
+  assert.equal(p.mode(), 'none', 'no page content or widgets means the course gets its room back');
 });
 
 test("the sidebar starts from its record when storage is read one key at a time, Details & Actions' heights read beside it", async () => {
