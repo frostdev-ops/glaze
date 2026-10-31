@@ -151,7 +151,8 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
     await page.setViewportSize({ width: 1600, height: 900 });
     await page.evaluate(() => document.getElementById('main-content').remove());
     await page.waitForFunction(() => document.documentElement.dataset.gzSidebar === 'expanded');
-    check(await page.evaluate(() => { const r = document.getElementById('gz-sidebar').getBoundingClientRect(); return !!document.elementFromPoint(r.left + r.width / 2, r.top + 40)?.closest('#gz-sidebar'); }), 'with the side panel closed, the column is on top again');
+    // The peek's markup going is seen a frame after the column's mode: wait on the state, not the first frame.
+    check(await page.waitForFunction(() => { const r = document.getElementById('gz-sidebar').getBoundingClientRect(); return !!document.elementFromPoint(r.left + r.width / 2, r.top + 40)?.closest('#gz-sidebar'); }, null, { timeout: 5000 }).then(() => true, () => false), 'with the side panel closed, the column is on top again');
     await setup('outline');
     await page.evaluate(() => {
       window.loads = 0;

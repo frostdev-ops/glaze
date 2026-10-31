@@ -182,3 +182,15 @@ test('profile attribution preserves one-based trace lines and converts zero-base
   assert.equal(result.extensionMs, 3, 'native selector time stays with its script caller');
   assert.ok(result.functions.every(([key]) => key.includes('gate:41')), 'CPU call frames are zero-based');
 });
+
+test('the still-aside requirement holds a first visit to it as well as returning ones', () => {
+  const notes = 'aside.outline-actions > #gz-nt-block', dock = 'aside.outline-actions > #gz-sb-widgets';
+  const still = [{ t: 200, host: 'native', details: 231, [notes]: 421, [dock]: 600 }];
+  const moved = [{ t: 200, host: 'native', details: 26, [notes]: 206, [dock]: 400 }, { t: 500, host: 'native', details: 231, [notes]: 421, [dock]: 600 }];
+  const start = source.indexOf('    if (stillAside) {'), end = source.indexOf('    if (process.env.PERF_REQUIRE_QUIET_OWN)', start);
+  const run = (first) => vm.runInNewContext(`const results = JSON.parse(resultsJson);\n${source.slice(start, end)}`, {
+    stillAside: true, WIDTH: 1600, reps: 2, assert, console: { log() {} },
+    resultsJson: JSON.stringify([{ rep: 0, instrumented: false, outline: { aside: { frames: first, shifts: [] } } }, { rep: 1, instrumented: false, outline: { aside: { frames: still, shifts: [] } } }]) });
+  assert.throws(() => run(moved), /rep 0: Glaze's blocks moved/);
+  assert.doesNotThrow(() => run(still));
+});

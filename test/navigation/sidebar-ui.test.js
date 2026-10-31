@@ -290,6 +290,21 @@ test('teardown cancels an unfinished width drag without changing the saved width
   assert.equal(p.doc.root.style.getPropertyValue('--gz-sidebar-w'), '352px');
 });
 
+test('widening an open drawer measures only once before and once after its mode changes', async () => {
+  const p = page({ width: 1000, left: 84, stored: record() });
+  await p.pass();
+  p.fire(p.$('#gz-sb-launch'), 'click'); await settle();
+  assert.equal(p.host().getAttribute('role'), 'dialog');
+  let reads = 0;
+  Object.defineProperty(p.$('#right-side'), 'offsetHeight', { get: () => { reads++; return 300; } });
+  await p.resize(1600);
+  assert.equal(p.mode(), 'expanded');
+  assert.equal(p.doc.root.hasAttribute('data-gz-sidebar-open'), false);
+  assert.equal(p.host().getAttribute('role'), 'complementary');
+  assert.equal(p.$('#content-wrapper').inert, false);
+  assert.equal(reads, 2, 'closing the drawer inside layout must not run a nested layout');
+});
+
 test('the drawer is a dialog: the page behind it inert, Escape closes it, the focus comes back', async () => {
   const p = page({ width: 1000, left: 84 });
   await p.pass();
@@ -334,6 +349,21 @@ test('This page and My widgets fold per kind of page, and Jump to widgets reache
   await q.pass();
   assert.equal(q.host().dataset.gzSbFoldPage, undefined);
   assert.equal(q.$('.gz-sb-dock').hidden, false);
+});
+
+test('unhiding This page restores Jump to widgets in the same layout', async () => {
+  const p = page({ stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  await p.pass();
+  const native = p.$('#right-side'), host = p.host();
+  // sidebar.css hides #right-side with display:none while This page is hidden.
+  Object.defineProperty(native, 'offsetHeight', { get: () => host.hasAttribute('data-gz-sb-page-hidden') ? 0 : 2000 });
+  p.c.sidebarSettings = { page: 'hidden' };
+  await p.resize(1440);
+  assert.equal(p.$('.gz-sb-jump').hidden, true);
+  p.c.sidebarSettings = { page: 'shown' };
+  await p.resize(1440);
+  assert.equal(host.hasAttribute('data-gz-sb-page-hidden'), false);
+  assert.equal(p.$('.gz-sb-jump').hidden, false, 'the height is read after the native content is shown');
 });
 
 test('losing an open drawer host restores the page before using a replacement host', async () => {
@@ -784,6 +814,23 @@ test("the drawer's opener stands above a bar the page fixes along the window's b
   await p.resize(1280);
   p.side.sync(false);
   assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-bar'), '', 'teardown restores the page');
+});
+
+test('a detached drawer opener clears the bottom bar as soon as layout restores it', async () => {
+  const p = page({ width: 1280, left: 276 });
+  const boxOf = p.doc.boxOf;
+  p.doc.boxOf = (e) => e.id === 'gz-sb-launch'
+    ? { left: 1188, top: 848, width: e.isConnected && !e.hidden ? 80 : 0, height: 36 } : boxOf(e);
+  const bar = p.doc.createElement('div');
+  bar.setAttribute('data-gz-fixed-bottom', '');
+  bar.box = { left: 276, top: 836, width: 1004, height: 64 };
+  p.doc.body.append(bar);
+  await p.pass();
+  const launch = p.$('#gz-sb-launch');
+  launch.remove();
+  await p.resize(1280);
+  assert.equal(launch.parentNode, p.doc.body);
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-bar'), '64px', 'the connected button clears the bar immediately');
 });
 
 test('Canvas reserves the footer height before it scrolls into view, without measuring on scroll', async () => {
