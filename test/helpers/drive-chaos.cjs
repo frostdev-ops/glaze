@@ -46,7 +46,9 @@ const rng = (seed) => {
 // Tiny transfers (o.tiny, --tiny): a transfer goes large past TINY.at bytes instead of 5 MB, in chunks and ranges of
 // TINY.step, so most documents, JSON copies, records and snapshots go through staged resumable uploads and ranged downloads.
 // Each device's drive.js and drive-sync.js are rewritten so as they load (the shipped files stay as they are), the stand-ins
-// take chunks of TINY.quantum, and an applied kill on a chunk leaves Drive part of it.
+// take chunks of TINY.quantum, and an applied kill on a chunk leaves Drive part of it. In 4.0.1 Sync stages nothing (o.staged
+// off): there tiny transfers make nearly every document and many records too large to sync, which the checks then hold to
+// staying on their device, marked, with nothing staged; o.staged brings the stage back for 4.0.2's repros.
 const TINY = { at: 256, step: 512, quantum: 256 };
 const SHRUNK = {
   'drive.js': [['const SMALL = 5 << 20;', `const SMALL = ${TINY.at};`], ['const STEP = { min: 256 << 10, max: 8 << 20,', `const STEP = { min: ${TINY.quantum}, max: ${TINY.step},`]],
@@ -412,7 +414,8 @@ class Device {
     const S = this.ctx.GZ_DRIVE_SYNC, create = S.create, dev = this, gen = this.gen;
     if (S.__chaos) return;
     S.__chaos = true;
-    S.create = (env) => create({ ...env,
+    // Staged transfers, off in 4.0.1 (documents/drive-sync.js env.staged): on only for the runs that test them (o.staged).
+    S.create = (env) => create({ ...env, staged: dev.world.o.staged === true,
       sleep: (ms) => new Promise((res) => { dev.world.clock += ms; setImmediate(() => { if (dev.gen === gen && !dev.dead) res(); }); }),
       timer: (fn, ms) => { const id = ++dev.timerSeq; dev.timers.set(id, { fn, ms, gen, push: true }); return () => dev.timers.delete(id); } });
   }
@@ -671,7 +674,7 @@ const KNOWN = {
     about: 'a first push whose JSON copy Drive took but whose answer never came: the next run hears of that copy in Drive\'s changes but passes over it as another device\'s (none linked here yet), and while Drive\'s search lags makes a second one: two copies stay, and a device linked to the first never gets this one\'s later edits',
     skips: () => false,
     stops: 'net.POST',
-    repro: [{ t: 'lag', n: 3 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, kill: 143, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }],
+    repro: [{ t: 'lag', n: 3 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, kill: 142, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }],
   },
   'stale-sum': {
     fixed: true,
@@ -686,7 +689,7 @@ const KNOWN = {
     about: 'a first push whose JSON copy Drive took but whose answer never came, the document then taken and edited on another device: the first device links the copy as its own push and, holding its own older text as a change not yet sent, writes it over the other device\'s edit, which no device keeps',
     skips: () => false,
     stops: 'net.POST',
-    repro: [{ t: 'paper', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2, kill: 143, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }, { t: 'paper', k: 'edit', d: 0, pick: 0, pick2: 0, s: 4 }],
+    repro: [{ t: 'paper', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2, kill: 142, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }, { t: 'paper', k: 'edit', d: 0, pick: 0, pick2: 0, s: 4 }],
   },
   'meet-stop': {
     fixed: true,
@@ -743,7 +746,7 @@ const KNOWN = {
     about: 'a worker stopped between taking a note and noting it as synced, the note then edited, trashed and deleted for good there before a run sent anything: met with Drive\'s copy as one never held here, it comes back',
     skips: () => false,
     stops: 'local.get',
-    repro: [{ t: 'note', k: 'new', d: 1, pick: 0, pick2: 0.9, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2 }, { t: 'run', d: 0, how: 'run', s: 3, kill: 81, apply: false }, { t: 'note', k: 'edit', d: 0, pick: 0, pick2: 0, s: 4 },
+    repro: [{ t: 'note', k: 'new', d: 1, pick: 0, pick2: 0.9, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2 }, { t: 'run', d: 0, how: 'run', s: 3, kill: 82, apply: false }, { t: 'note', k: 'edit', d: 0, pick: 0, pick2: 0, s: 4 },
       { t: 'note', k: 'trash', d: 0, pick: 0, pick2: 0, s: 5 }, { t: 'note', k: 'purge', d: 0, pick: 0, pick2: 0, s: 6 }],
   },
   'orphan-restored': {
@@ -784,6 +787,7 @@ const KNOWN = {
   'staged-first-meeting': {
     fixed: true,
     tiny: true,
+    staged: true,
     join: [0],
     about: 'a device joining meets a PDF replaced outside Glaze and sends it up again; its JSON copy staged (larger than one request), the document\'s link waits without its key, so the next change page meets it as deleted for good here and puts both of its files in Drive\'s trash: every other device moves it to Trash',
     skips: () => false,
@@ -794,6 +798,7 @@ const KNOWN = {
   'staged-kill-duplicate': {
     fixed: false,
     tiny: true,
+    staged: true,
     about: 'a worker stopped at certain awaits of a first push whose uploads are staged leaves two visible files or JSON copies for one document',
     skips: () => false,
     repro: [{ t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'pdf', k: 'new', d: 0, pick: 0, pick2: 0, s: 2 }, { t: 'setting', d: 0, k: 'colors', pick: 0, s: 3 },
@@ -1239,16 +1244,29 @@ class World {
     const fail = [];
     const F = (inv, msg) => fail.push({ inv, msg });
     const views = this.devices.map((d) => this.view(d));
+    // Too large to sync (4.0.1, documents/drive-sync.js driveSyncLarge): what any device marks stays on its device, out of the
+    // comparisons. Nothing is staged, and with tiny transfers every live document is marked (its JSON copy alone is past one
+    // request), on every device Sync is on for.
+    const large = { docs: new Set(), recs: new Set() };
+    for (const d of this.devices) { const m = this.get(d, 'driveSyncLarge') || {}; for (const k of Object.keys(m.docs || {})) large.docs.add(k); for (const k of Object.keys(m.recs || {})) large.recs.add(k); }
+    const noteLarge = (id) => [...large.recs].some((r) => r.startsWith('notes:') && r.endsWith(`|${id}`));
+    if (!this.o.staged) {
+      for (const d of this.devices) if (Object.keys(this.get(d, 'driveSyncMoves') || {}).length) F('large', `${d.name} staged a transfer: ${Object.keys(this.get(d, 'driveSyncMoves')).join(' ')}`);
+      const sent = this.drive.log.filter((x) => x.query?.uploadType === 'resumable' || x.chunk || x.range);
+      if (sent.length) F('large', `${sent.length} staged requests, the first ${sent[0].dev} ${sent[0].method} ${sent[0].path}`);
+      if (this.o.tiny) views.forEach((v, i) => { if ((this.get(this.devices[i], 'driveSync') || {}).on) for (const k of Object.keys(v.docs)) if (!(this.get(this.devices[i], 'driveSyncLarge')?.docs || {})[k]) F('large', `${this.devices[i].name}: ${k} is past one request and not marked too large`); });
+    }
+    const skip = (part, k) => (part === 'docs' ? large.docs.has(k) : part === 'records' ? large.recs.has(k) : noteLarge(k));
     // Convergence.
     const [first, ...rest] = views;
     rest.forEach((v, i) => {
       const other = this.devices[i + 1].name;
       for (const part of ['docs', 'records', 'notes']) {
         for (const k of new Set([...Object.keys(first[part]), ...Object.keys(v[part])])) {
-          if (first[part][k] !== v[part][k]) F(`convergence:${part}`, `${k}: A=${(first[part][k] ?? 'missing').slice(0, 160)} ${other}=${(v[part][k] ?? 'missing').slice(0, 160)}`);
+          if (first[part][k] !== v[part][k] && !skip(part, k)) F(`convergence:${part}`, `${k}: A=${(first[part][k] ?? 'missing').slice(0, 160)} ${other}=${(v[part][k] ?? 'missing').slice(0, 160)}`);
         }
       }
-      if (first.folders !== v.folders) F('convergence:noteFolders', `A=${first.folders.slice(0, 200)} ${other}=${v.folders.slice(0, 200)}`);
+      if (first.folders !== v.folders && !noteLarge('folders')) F('convergence:noteFolders', `A=${first.folders.slice(0, 200)} ${other}=${v.folders.slice(0, 200)}`);
       // Trash isn't compared: a document goes into Trash with each device's own text (its content stops syncing there), and
       // one trashed before it ever went up stays on its device. What it holds is still checked by no loss.
     });
@@ -1273,12 +1291,12 @@ class World {
       const ok = new Set(list.slice(Math.max(0, i0)).map((x) => x.text).filter(Boolean));
       for (const [i, v] of views.entries()) {
         const n = v.notes[id];
-        if (!n) { if (!list.some((x) => x.kind === 'purge')) F('no-loss:note', `note ${id.slice(0, 8)} missing on ${this.devices[i].name} (last written on ${last.dev} at #${last.step})`); continue; }
+        if (!n) { if (!list.some((x) => x.kind === 'purge') && !noteLarge(id)) F('no-loss:note', `note ${id.slice(0, 8)} missing on ${this.devices[i].name} (last written on ${last.dev} at #${last.step})`); continue; }
         const t = tokensIn(JSON.parse(n).html || '')[0] || null;
         // Purged after its last text, then brought back by a device returning to the account (switching accounts A→B→A brings
         // older data back, a known limit; a first meeting never lets a tombstone delete): by design.
         if (lastText && !ok.has(t) && this.accounts && list.slice(i0).some((x) => x.kind === 'purge')) { if (i === 0) this.soft.push(`note ${id.slice(0, 8)}: purged after its last text ${lastText.text}, back with ${t} from a device that switched accounts (a known limit)`); }
-        else if (lastText && !ok.has(t)) F('no-loss:note', `note ${id.slice(0, 8)} on ${this.devices[i].name} holds ${t}, its last text was ${lastText.text} (#${lastText.step} on ${lastText.dev})`);
+        else if (lastText && !ok.has(t) && !noteLarge(id)) F('no-loss:note', `note ${id.slice(0, 8)} on ${this.devices[i].name} holds ${t}, its last text was ${lastText.text} (#${lastText.step} on ${lastText.dev})`);
         else if (lastText && t !== lastText.text && i === 0) this.soft.push(`note ${id.slice(0, 8)}: its last text ${lastText.text} (#${lastText.step} on ${lastText.dev}) gave way to ${t}, from a later rename, move or trash on a device that held it (last writer wins)`);
       }
     }
@@ -1288,13 +1306,13 @@ class World {
     // way to Drive's value, the last change made on a connected device (or an earlier such change, Drive's then).
     for (const [k, x] of this.settings) {
       const got = this.devices[0].disk.sync.get(k);
-      if (got !== x.v && !this.accounts && !(x.before && x.ok.includes(got))) F('lww:settings', `${k} is ${got ?? 'missing'} everywhere, its last change was ${x.v} (#${x.step} on ${x.dev})`);
+      if (got !== x.v && !this.accounts && !(x.before && x.ok.includes(got)) && !large.recs.has(`sync:${k}`)) F('lww:settings', `${k} is ${got ?? 'missing'} everywhere, its last change was ${x.v} (#${x.step} on ${x.dev})`);
     }
     // Every picture a note shows is on each device that holds the note.
     for (const dev of this.devices) {
       for (const [id, n] of Object.entries(this.noteIdx(dev).notes)) {
         for (const fid of N.refs(this.noteHtml(dev, id) || '')) {
-          if (!dev.disk.notesdb.has(`files\u0000${SITE}/${fid}`) || !dev.disk.notesdb.has(`blobs\u0000${SITE}/${fid}`)) F('no-loss:note-file', `${dev.name}: note ${id.slice(0, 8)} shows picture ${fid.slice(0, 8)}, which isn't there${n.del ? ' (note in Trash)' : ''}`);
+          if ((!dev.disk.notesdb.has(`files\u0000${SITE}/${fid}`) || !dev.disk.notesdb.has(`blobs\u0000${SITE}/${fid}`)) && !noteLarge(id) && ![...large.recs].some((r) => r.endsWith(`|file|${fid}`))) F('no-loss:note-file', `${dev.name}: note ${id.slice(0, 8)} shows picture ${fid.slice(0, 8)}, which isn't there${n.del ? ' (note in Trash)' : ''}`);
         }
       }
     }
@@ -1329,6 +1347,7 @@ class World {
     }
     // Every live document has its JSON copy and its own file in Glaze/, out of Drive's trash.
     for (const k of Object.keys(views[0].docs)) {
+      if (large.docs.has(k)) continue;
       const h = sha(k).slice(0, 32);
       for (const role of ['doc', 'file']) if (!per.has(`${role}:${h}`)) F('drive-state', `${k}, live on A, has no visible ${role === 'doc' ? 'JSON copy' : 'file of its own'} in Glaze/`);
     }
