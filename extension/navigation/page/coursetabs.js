@@ -1286,8 +1286,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // 0.4 s on a real site) instead of a fresh boot (about 1.1 s). It is no tab's and doesn't count against LIVE. Picked
   // (open), it becomes that course's frame (adopt): named for it, then routed in place by its own Glaze (adoptHere), in
   // place of its own page in history. With no route in time it loads the course afresh, as a frame made for it does
-  // (adopting). The next one boots at the next idle. A press on a course's tab, or the pointer resting on it, starts its
-  // frame before the click shows it (warmTab).
+  // (adopting). The next one boots at the next idle. Never adopted past STALE, it is renewed then, on screen. A press on
+  // a course's tab, or the pointer resting on it, starts its frame before the click shows it (warmTab).
   const STANDBY = 'standby', STANDBY_AT = '/ultra/profile', ADOPT_ACK = 2000, ADOPT_ROUTE = 5000;
   let standby = null, standbyTimer = 0, standbyIdle = 0, standbyMiss = 0, hoverTimer = 0, hoverCid = '';
   const ahead = () => ctx.site === 'ultra' && on && !preview && !signedOut && P().ahead !== false;
@@ -1300,19 +1300,22 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     clearTimeout(hoverTimer); hoverTimer = 0; hoverCid = '';
     unStandby();
   };
-  // From each sync. Booted once this page and every frame have settled, on screen; a spinner that never goes waits about
-  // 20 s. One that went wrong (off Ultra, never ready, never routed) makes the next wait longer; after three, none.
+  // From each sync. Booted once this page and every frame have settled, on screen (hidden, at its next visibilitychange:
+  // onVisibility); a spinner that never goes waits about 20 s. One that went wrong (off Ultra, never ready, never routed)
+  // makes the next wait longer; after three, none. One past STALE goes at once, before the next boots: it would never be
+  // adopted, and two never run at once.
   const standbyLater = (wait = 2500, tries = 0) => {
     if (standby && !standby.el.isConnected) standby = null; // (its host went with the tabs)
     if (!ahead()) { stopAhead(); return; }
     if (framed || !who) { unStandby(); return; }
+    if (standby && !fresh(standby)) unStandby();
     if (standby || standbyTimer || standbyIdle || standbyMiss >= 3 || !loaded || !useful()) return;
     standbyTimer = setTimeout(() => {
       standbyTimer = 0;
       standbyIdle = (globalThis.requestIdleCallback || setTimeout)(() => {
         standbyIdle = 0;
-        if (standby || !ahead() || framed || !who || !useful()) return;
-        if (document.visibilityState !== 'visible' || (tries < 8 && (loading(document.body) || [...frames.values()].some((f) => !f.ready && !f.slow)))) return standbyLater(2500, tries + 1);
+        if (standby || !ahead() || framed || !who || !useful() || document.visibilityState !== 'visible') return;
+        if (tries < 8 && (loading(document.body) || [...frames.values()].some((f) => !f.ready && !f.slow))) return standbyLater(2500, tries + 1);
         bootStandby();
       }, { timeout: 5000 });
     }, wait * 4 ** standbyMiss);
@@ -1324,15 +1327,25 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       let ultra = false; try { const w = s.el.contentWindow.location; ultra = w.origin === location.origin && w.pathname.startsWith('/ultra/'); } catch { /* another site */ }
       if (standby === s && !ultra) { unStandby(true); standbyLater(); }
     });
-    s.timer = setTimeout(() => { if (standby === s && !usable(s)) { unStandby(true); standbyLater(); } }, 30000);
+    standbyCheck(s);
     standby = s;
     host.prepend(s.el);
   };
+  // Ready within 30 s, else let go of (a miss); renewed once STALE.
+  const standbyCheck = (s) => {
+    s.timer = setTimeout(() => {
+      if (standby !== s) return;
+      if (!usable(s)) { unStandby(true); standbyLater(); return; }
+      s.timer = setTimeout(() => { if (standby === s) standbyLater(); }, s.at + STALE - Date.now());
+    }, 30000);
+  };
+  // Younger than STALE: an older one's account check is too old to carry into a course.
+  const fresh = (s) => !s.at || Date.now() - s.at < STALE;
   // Ready to take a course: its Glaze in (loaded) and signed in as this page, still on a page of Ultra's outside a course.
   const usable = (s) => {
     try {
       const d = s.el.contentDocument;
-      return (!s.at || Date.now() - s.at < STALE) && !!d?.body && s.el.isConnected && s.loaded === d && s.accountDoc === d && !!who && s.uid === who && d.location.origin === location.origin
+      return fresh(s) && !!d?.body && s.el.isConnected && s.loaded === d && s.accountDoc === d && !!who && s.uid === who && d.location.origin === location.origin
         && d.location.pathname.startsWith('/ultra/') && !L.courseOf(d.location.pathname, d.location.search);
     } catch { return false; }
   };
@@ -1721,7 +1734,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     try { f.el.contentWindow.name = f.el.name; } catch { /* gone */ }
     post(f, { gzCtab: 'demote' });
     const s = { at: Date.now(), el: f.el, loaded: doc, uid: f.uid, accountDoc: f.accountDoc, timer: 0 };
-    s.timer = setTimeout(() => { if (standby === s && !usable(s)) { unStandby(true); standbyLater(); } }, 30000);
+    standbyCheck(s);
     standby = s;
   };
   // A tab's outline shown again after STALE hidden: renewed beside it by the standby, as after an item.
@@ -2296,6 +2309,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (!yes) tabAway = Date.now();
       else if (!showing && Date.now() - tabAway > STALE) staleCheck(ctx.courseId(), null);
       if (f?.ready) post(f, { gzCtab: 'visible', on: yes });
+      if (yes) standbyLater();
     }
     if (!yes) nudge(); else if (f?.ready) nudge(f);
   };
