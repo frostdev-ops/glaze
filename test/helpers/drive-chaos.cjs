@@ -684,6 +684,22 @@ const KNOWN = {
     repro: [{ t: 'slides', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2 }, { t: 'run', d: 2, how: 'run', s: 3 }, { t: 'drive', k: 'trashDoc', pick: 0, s: 4 },
       { t: 'run', d: 0, how: 'poke', s: 5 }, { t: 'run', d: 2, how: 'poke', s: 6 }, { t: 'account', d: 1, to: 'B', s: 7 }, { t: 'drive', k: 'removeDoc', pick: 0.9, s: 8 }],
   },
+  // Open, found 2026-10-31 and left for after 4.0.1 (rare: a worker stopped mid-run with Glaze's own folders or files trashed or
+  // deleted for good in Drive). Seeds 500903 and 500827 (100 operations, 3 devices).
+  'data-twice': {
+    fixed: false,
+    devices: 3,
+    about: 'Glaze/Data put in Drive\'s trash, a run stopped midway, the new Data trashed and one put back: a Settings key ends different on one device',
+    skips: (op) => op.t === 'drive' && op.k === 'untrashFolder',
+    repro: [{ t: 'drive', k: 'trashData', pick: 0.19117888156324625, s: 1156524178 }, { t: 'setting', k: 'colors', d: 0, pick: 0.7500670645385981, pick2: 0.9671588835772127, s: 1895708292 }, { t: 'note', k: 'picture', d: 0, pick: 0.23482694174163043, pick2: 0.8804167488124222, s: 2044173913 }, { t: 'run', d: 0, how: 'run', s: 979028695, kill: 158, apply: false }, { t: 'drive', k: 'trashData', pick: 0.839100303594023, s: 61643479 }, { t: 'drive', k: 'untrashFolder', pick: 0.10747946565970778, s: 65859196 }],
+  },
+  'lost-copy-stop': {
+    fixed: false,
+    devices: 3,
+    about: 'a device stopped while first taking a PDF, whose file then goes to Drive\'s trash and its JSON copy is deleted for good: that device keeps the PDF live with no copy or file of its own in Drive',
+    skips: (op) => op.t === 'drive' && op.k === 'removeDoc',
+    repro: [{ t: 'pdf', k: 'edit', d: 1, pick: 0.5500041127670556, pick2: 0.1512873312458396, s: 689046160 }, { t: 'run', d: 1, how: 'run', s: 1175053074 }, { t: 'run', d: 0, how: 'startup', s: 1211240399, after: 'writerPaper:' }, { t: 'drive', k: 'trashDoc', pick: 0.376654107356444, s: 1524059004 }, { t: 'run', d: 1, how: 'poke', s: 1289774999 }, { t: 'drive', k: 'removeDoc', pick: 0.8576193870976567, s: 1086094031 }],
+  },
   // Open, accepted by the owner: Settings written straight to storage.sync between the worker's compare and its write (a few
   // milliseconds) are written over by Drive's value. Found 2026-10-31 (seed 300933, 80 operations, 3 devices).
   'settings-cas': {
