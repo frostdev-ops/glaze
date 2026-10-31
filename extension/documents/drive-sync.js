@@ -1106,6 +1106,11 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       }
     };
 
+    // Marks for documents no longer here (deleted while no run met them, or once their link went) let go: Settings never
+    // counts them.
+    const prune = async () => {
+      for (const k of Object.keys((await S.get(LARGE))[LARGE]?.docs || {})) if (!await env.papers.get(k)) await tooLarge('docs', k, false);
+    };
     const hooks = (folder) => ({ D, folder, state: setState, up, down, move: { get: moveOf, drop: dropMove }, large: (id, on) => tooLarge('recs', id, on) });
     // ---- runs. o.full: everything (turning it on); o.push: only what was saved here.
     const runNow = async (o = {}) => {
@@ -1142,6 +1147,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         await sweep((await state()).folder);
         await tidy((await state()).folder);
         if (more) await more.sweep(hooks((await state()).folder));
+        await prune();
         await transfers((await state()).folder);
         await setState({ last: now(), problem: null, fails: 0, wait: 0, busy: 0 });
         return { ok: true };

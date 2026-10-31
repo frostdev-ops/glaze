@@ -31,7 +31,7 @@
 // (documents/drive-sync.js driveSyncLarge), the day's zip skipped (snapSkip 'large').
 // Classic script for the worker; module.exports for node.
 var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
-  const REC = 'driveSyncRec:', FILE = 'driveSyncFile:', STAMPS = 'driveSyncStamps', STATE = 'driveSync';
+  const REC = 'driveSyncRec:', FILE = 'driveSyncFile:', STAMPS = 'driveSyncStamps', STATE = 'driveSync', LARGE = 'driveSyncLarge';
   const FOLDER = 'application/vnd.google-apps.folder', JSON_TYPE = 'application/json', ZIP = 'application/zip';
   const HASH = /^[0-9a-f]{32}$/, SUM = /^[0-9a-f]{64}$/;
   const SNAP = { every: 864e5, keep: 5 };
@@ -717,6 +717,11 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         if (!await recOf(h) && await valueOf(area, key).catch(() => null) === undefined) settled[id] = at;
       }
       if (Object.keys(settled).length) await unstamp(settled);
+      // A record marked too large that is no longer here (deleted while no run met it): its mark let go.
+      for (const id of Object.keys((await S.get(LARGE))[LARGE]?.recs || {})) {
+        const at = id.indexOf(':');
+        if (await valueOf(id.slice(0, at), id.slice(at + 1)).catch(() => null) === undefined) await ctx.large?.(id, false);
+      }
       // A picture wanted but never come is let go once no note here uses it, looked at after a change to Notes here (a note
       // deleted, or its last use of the picture edited away), in one read, never on every run.
       if (notesChanged) {
