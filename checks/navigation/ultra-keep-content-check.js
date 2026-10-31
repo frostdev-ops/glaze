@@ -78,7 +78,13 @@ const OUTLINE = () => {
           && !document.documentElement.hasAttribute('data-gz-ctab-framed') && !!document.querySelector('.routed-page h1')?.textContent.startsWith(t), title)) return f;
       }
       return null;
-    }, 15000, `${title} drawn`);
+    }, 15000, `${title} drawn`).catch(async (e) => {
+      console.error('frames', JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('#gz-ctabs-frames > iframe')].map((f) => {
+        const d = f.contentDocument;
+        return { name: f.name, vis: getComputedStyle(f).visibility, inert: f.inert, z: f.style.zIndex, path: d?.location.pathname, h1: d?.querySelector('.routed-page h1')?.textContent.slice(0, 30), framed: d?.documentElement.hasAttribute('data-gz-ctab-framed'), spinner: !!d?.querySelector('.spinner') };
+      }))));
+      throw e;
+    });
     // An item link in the outline row in view: a click there scrolls nothing (Playwright brings a link out of view into it).
     const linkInView = (w, href) => w.evaluate((href) => {
       const rows = [...document.querySelectorAll('.content-list-item')], r = (e) => e.getBoundingClientRect();
@@ -149,8 +155,10 @@ const OUTLINE = () => {
     item = await itemDrawn('_102_1', 'Writing overview');
     const under = await base.evaluate(() => ({ same: window.gzOutline.isConnected, top: document.querySelector('.course-content-container > .panel-wrap').scrollTop, path: location.pathname }));
     check(under.same && under.top === 700 && under.path.endsWith('/outline') && await named('_102_1') === 2, `in a tab's frame, the item opens in an item frame over its kept outline (${JSON.stringify(under)})`);
-    // Ultra's link back to Course Content, in the item.
+    // Ultra's link back to Course Content, in the item. Its close goes back over the item's entry (history.back, async).
+    const itemKey = await page.evaluate(() => navigation.currentEntry.key);
     await item.click('.routed-page a[href$="/outline"]');
+    await until(() => page.evaluate((k) => navigation.currentEntry.key !== k, itemKey), 5000, 'the item\'s entry gone back over');
     await until(async () => (await onScreen('_102_1')) === base, 5000, 'the kept outline on screen');
     const linked = await base.evaluate(() => ({ same: window.gzOutline.isConnected && window.gzOutline === document.querySelector('.course-outline-content'), top: document.querySelector('.course-content-container > .panel-wrap').scrollTop }));
     check(linked.same && linked.top === 700, `Ultra's link back to Course Content shows the kept outline at its scroll (${JSON.stringify(linked)})`);
