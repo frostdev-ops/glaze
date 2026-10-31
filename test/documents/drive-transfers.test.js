@@ -444,3 +444,35 @@ test('an upload whose Drive file is gone: a snapshot goes on into a new file in 
   assert.ok(![...drive2.files.values()].some((f) => f.meta.appProperties.glaze === 'file' && f.meta.appProperties.key === tag(key)), 'no stray file in its place');
   assert.deepEqual(await moves(dk2), {});
 });
+
+test('a document changed while its large update uploads keeps that file as its own: nothing let go as edited outside Glaze', async () => {
+  for (const kind of ['pdf', 'paper']) {
+    const drive = standin(), dk = disk(), key = `doc:00000000-0000-4000-8000-00000000a0${kind === 'pdf' ? '20' : '21'}`;
+    let a = worker(drive, dk);
+    if (kind === 'pdf') await pdfOn(a, dk, key, bytesOf(12 * MiB, 47), 'Reader');
+    else await a.papers.save(key, { doc: doc(`A${'a'.repeat(6 * MiB)}`), title: 'Paper', named: true });
+    assert.ok((await a.sync.set(true)).ok);
+    const own = fileOf(drive, key, 'file').meta.id;
+    await a.papers.save(key, kind === 'pdf' ? { title: 'Reader 2' } : { doc: doc(`B${'b'.repeat(6 * MiB)}`) });
+    await a.sync.touched(key);
+    // The student renames or types again while those bytes go.
+    let changed = false;
+    const fetch = async (u, init = {}) => {
+      if (!changed && /^bytes 0-/.test(init.headers?.['content-range'] || '')) {
+        changed = true;
+        await a.papers.save(key, kind === 'pdf' ? { title: 'Reader 3' } : { doc: doc(`C${'c'.repeat(6 * MiB)}`) });
+        await a.sync.touched(key);
+      }
+      return drive.fetch(u, init);
+    };
+    a = worker(drive, dk, { fetch });
+    for (let i = 0; i < 4; i++) { assert.ok((await a.sync.run()).ok); dk.clock.t += 4 * 60e3; }
+    assert.ok(changed);
+    const files = [...drive.files.values()].filter((f) => f.meta.appProperties.key === tag(key) && f.meta.appProperties.glaze !== 'doc');
+    assert.deepEqual(files.map((f) => [f.meta.id, f.meta.appProperties.glaze]), [[own, 'file']], `${kind}: one file, Glaze's own, never kept or put away`);
+    const copy = JSON.parse(fileOf(drive, key, 'doc').bytes);
+    assert.equal(copy.file, own);
+    assert.equal(kind === 'pdf' ? copy.record.title : textOf(copy.record.doc)[0], kind === 'pdf' ? 'Reader 3' : 'C');
+    assert.deepEqual(await moves(dk), {});
+  }
+});
