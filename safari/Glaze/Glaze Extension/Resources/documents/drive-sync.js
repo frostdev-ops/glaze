@@ -538,11 +538,11 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       let ex = onWay ? null : await env.exportOf(key, l.rec, l.parts);
       if (!staging && ex?.bytes?.length > BIG) throw new Fail('large');
       // No file to make here (a PDF's bytes still in its record from before the file store, or gone from this device) and
-      // Drive's copy already this one: nothing new to send.
-      if (!ex && !onWay && d?.json && d.rsum === sum && d.lsum === sum) return d;
+      // Drive's copy already this one: nothing new to send unless the recorded file still needs its JSON copy.
+      if (!ex && !onWay && d?.json && d.rsum === sum && d.lsum === sum && !d.unsent) return d;
       const base = ((onWay ? onWay.info?.name : ex?.name) || `${safe(l.rec.title) || 'Untitled'}${EXT[kind]}`).replace(/\.[^.]+$/, '');
       let file = d?.file || null, fh = d?.fh || null;
-      if ((ex || onWay) && file && d?.json) {
+      if ((ex || onWay || d?.unsent) && file && d?.json) {
         // Exporting may take time. An outside edit or move since sync checked the file must be reconciled before this
         // upload, even when it fits in one request. A staged upload checks again just before its bytes are sent.
         const F = await meta(file);
@@ -570,7 +570,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       // trash, is kept as it is, and a new file goes beside it; a second one as Glaze wrote it is put away as a losing copy's.
       // Found by its tag in Drive's trash too: one as Glaze wrote it is put away (the student restoring it later finds it in
       // Glaze/Data, never a second file beside the document's), one edited outside Glaze kept as it is.
-      if ((ex || onWay) && (!file || !d?.json)) {
+      if ((ex || onWay || d?.unsent) && (!file || !d?.json)) {
         const known = file || onWay?.file?.id;
         const found = known ? [await meta(known)] : (await D((c) => c.find(`'${folder}' in parents and appProperties has { key='key' and value='${h}' } and appProperties has { key='glaze' and value='file' }`, { pageSize: 10 })))
           .files.filter((f) => f.appProperties?.key === h && f.appProperties?.glaze === 'file').sort(byId);
