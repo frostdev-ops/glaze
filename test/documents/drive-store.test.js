@@ -46,8 +46,10 @@ const notesDb = () => {
     estimate: async () => ({ quota: 1e12, usage: 0 }),
   };
 };
-const device = (drive, { account = 'student@school.edu', clock = { t: Date.parse('2026-10-30T12:00:00Z') }, snapshots = false } = {}) => {
+// refuse(patch): storage.sync's refusal of a write, as Chrome's message, or null (its limits: test 'a Settings value storage.sync refuses').
+const device = (drive, { account = 'student@school.edu', clock = { t: Date.parse('2026-10-30T12:00:00Z') }, snapshots = false, refuse = null } = {}) => {
   const heard = [], local = area('local', heard), sync = area('sync', heard), now = () => clock.t, who = { account };
+  if (refuse) { const set = sync.set; sync.set = async (o) => { const no = refuse(o); if (no) throw new Error(no); return set(o); }; }
   const papers = P.open(local, now, { versions: () => 40, files: { own: async () => ({ missing: [] }) } });
   let dropped = 0;
   const log = { sleep: [], drop: [] };
@@ -755,5 +757,42 @@ test('a note whose text this device can no longer find is passed over: the rest 
   assert.ok((await b.run()).ok);
   assert.deepEqual((await b.local.get('writerWords')).writerWords, ['Alpha', 'Beta'], 'A\'s change reached B');
   assert.match(await noteOf(b, nid(1)), /Edited on B/, 'nothing of the lost text went over B\'s');
+  noDeletes(drive);
+});
+
+test('a Settings value storage.sync refuses here (past its 8 KB an item) is passed over; the rest goes on both ways, and a write limit only waits', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock });
+  let busy = 0;
+  // Chrome's storage.sync: 8192 bytes an item (its key and JSON), and a cap on writes a minute.
+  const b = device(drive, { clock, refuse: (o) => (busy && busy-- ? 'MAX_WRITE_OPERATIONS_PER_MINUTE quota exceeded'
+    : Object.entries(o).some(([k, v]) => k.length + JSON.stringify(v).length > 8192) ? 'QUOTA_BYTES_PER_ITEM quota exceeded' : null) });
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  // Another browser's storage.sync held a larger value than this one takes.
+  clock.t += 1000;
+  await a.settings.set({ glazeLong: 'x'.repeat(9000) });
+  await a.local.set({ writerWords: ['Alpha'] });
+  assert.ok((await a.run()).ok);
+  assert.ok((await b.run()).ok, 'B passes the value over');
+  assert.equal((await b.settings.get('glazeLong')).glazeLong, undefined);
+  assert.deepEqual((await b.local.get('writerWords')).writerWords, ['Alpha']);
+  // Nothing stuck: A's later changes arrive, B's own go up.
+  clock.t += 1000;
+  await a.local.set({ writerWords: ['Alpha', 'Beta'] });
+  assert.ok((await a.run()).ok);
+  clock.t += 1000;
+  await b.settings.set({ glazeShort: 'B' });
+  assert.ok((await b.run()).ok);
+  assert.deepEqual((await b.local.get('writerWords')).writerWords, ['Alpha', 'Beta']);
+  assert.ok((await a.run()).ok);
+  assert.equal((await a.settings.get('glazeShort')).glazeShort, 'B');
+  // storage.sync's writes-a-minute limit is no refusal of the value: that run stops, the next takes it.
+  clock.t += 1000;
+  await a.settings.set({ glazeShort: 'A' });
+  assert.ok((await a.run()).ok);
+  busy = 1;
+  assert.equal((await b.run()).ok, false);
+  clock.t = (await b.local.get('driveSync')).driveSync.wait + 1;
+  assert.ok((await b.run()).ok);
+  assert.equal((await b.settings.get('glazeShort')).glazeShort, 'A');
   noDeletes(drive);
 });
