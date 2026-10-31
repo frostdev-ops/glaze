@@ -1905,7 +1905,7 @@ test('a first push interrupted before its JSON copy leaves a moved export intact
   noDeletes(drive);
 });
 
-test('a completed staged export edited before replay is detached instead of relinked from its cached answer', async () => {
+test('a completed staged export edited before its copy goes is kept as it is, never relinked from its answer', async () => {
   const drive = standin(), a = device(drive), chunks = new Map();
   const key = 'doc:00000000-0000-4000-8000-000000000c06';
   assert.ok((await a.sync.set(true)).ok);
@@ -1918,8 +1918,9 @@ test('a completed staged export edited before replay is detached instead of reli
   let edited;
   a.store.set = async (o) => {
     await put(o);
-    const done = Object.values(o[S.MOVES] || {}).find((t) => t.file);
-    if (!edited && done) { edited = done.file.id; drive.edit(edited, enc('Edited in Word before replay')); }
+    // Drive's answer written into the document's link, its copy not yet sent: Word edits the file there.
+    const done = Object.entries(o).find(([k, v]) => k.startsWith(S.DOC) && v?.file && v.unsent)?.[1];
+    if (!edited && done) { edited = done.file; drive.edit(edited, enc('Edited in Word before replay')); }
   };
   a.sync = S.create({ ...a.env, stage, staged: true, exportOf: async () => ({ name: 'Essay.docx', mime: MIME.docx, bytes: new Uint8Array(S.BIG + 1).fill(65) }) });
   await a.papers.save(key, { doc: doc('First'), title: 'Essay', named: true }); await a.sync.touched(key);

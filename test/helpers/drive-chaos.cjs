@@ -801,10 +801,10 @@ const KNOWN = {
     stops: 'local.get',
     repro: [{ t: 'paper', k: 'new', d: 0, pick: 0.7293021462392062, pick2: 0.13267629174515605, s: 1511422056 }, { t: 'run', d: 0, how: 'startup', s: 1904310916, after: 'notesIdx:' }, { t: 'paper', k: 'trash', d: 0, pick: 0.391776867210865, pick2: 0.8033320291433483, s: 685288494 }, { t: 'faults', d: 0, p: 0.15, quota: false, refuse: 0 }, { t: 'run', d: 0, how: 'poke', s: 698363760 }, { t: 'paper', k: 'untrash', d: 0, pick: 0.9719573664478958, pick2: 0.019606253132224083, s: 1783675233 }, { t: 'drive', k: 'removeDoc', pick: 0.3167869916651398, s: 100762301 }, { t: 'run', d: 0, how: 'timers', s: 1428463383, kill: 120, apply: false }],
   },
-  // Open, found 2026-10-31 by tiny transfers, not yet diagnosed: a worker stopped at certain awaits of a staged first push
-  // (570, 644, 842 here, the write not applied) leaves a second visible file or JSON copy for the document.
+  // Found 2026-10-31 by tiny transfers: a worker stopped at certain awaits of a staged first push (570, 644, 842 here, the
+  // write not applied) left a second visible file or JSON copy for the document. Passing at 80be1668.
   'staged-kill-duplicate': {
-    fixed: false,
+    fixed: true,
     tiny: true,
     staged: true,
     about: 'a worker stopped at certain awaits of a first push whose uploads are staged leaves two visible files or JSON copies for one document',
@@ -814,7 +814,7 @@ const KNOWN = {
   },
   // Found 2026-10-31 by tiny staged transfers (--tiny --staged, 12-35% of seeds failing at 80be1668).
   'staged-answer-dropped': {
-    fixed: false,
+    fixed: true,
     tiny: true,
     staged: true,
     join: [0],
@@ -824,7 +824,7 @@ const KNOWN = {
       { t: 'drive', k: 'outsidePdf', pick: 0.8306811631191522, s: 655337973 }],
   },
   'staged-trash-read': {
-    fixed: false,
+    fixed: true,
     tiny: true,
     staged: true,
     join: [0],
@@ -834,7 +834,7 @@ const KNOWN = {
       { t: 'sync', d: 0, on: true, s: 1838228239 }, { t: 'account', d: 0, to: 'B', s: 863251049 }, { t: 'paper', k: 'untrash', d: 0, pick: 0.15078959637321532, pick2: 0.32049439242109656, s: 1160143866 }],
   },
   'staged-stale-aim': {
-    fixed: false,
+    fixed: true,
     tiny: true,
     staged: true,
     about: 'a push right after taking Drive\'s copy of a paper (renamed on the other device, its .docx edited outside Glaze) aims its staged copy update at the copy\'s revision from before the take: the check before sending finds the copy changed and hands it back, every run, each making a new .docx',
@@ -843,7 +843,7 @@ const KNOWN = {
       { t: 'paper', k: 'rename', d: 1, pick: 0.13557938113808632, pick2: 0.5521365036256611, s: 300925911 }, { t: 'run', d: 1, how: 'poke', s: 291668029 }, { t: 'drive', k: 'outsideDocx', pick: 0.19172523193992674, s: 1934268126 }],
   },
   'staged-record-old-data': {
-    fixed: false,
+    fixed: true,
     tiny: true,
     staged: true,
     devices: 3,
@@ -853,7 +853,7 @@ const KNOWN = {
       { t: 'run', d: 1, how: 'timers', s: 1926511635 }, { t: 'drive', k: 'trashData', pick: 0.8542803057935089, s: 1654949931 }],
   },
   'staged-outside-loop': {
-    fixed: false,
+    fixed: true,
     tiny: true,
     staged: true,
     devices: 3,

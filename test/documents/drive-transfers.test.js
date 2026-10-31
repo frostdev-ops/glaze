@@ -536,3 +536,14 @@ test('a large first push whose JSON copy Drive\'s search doesn\'t show yet: one 
     assert.deepEqual(await moves(dk), {});
   }
 });
+
+test('with the stage on, a document past what a transfer carries stays here, marked too large, nothing sent or staged', async () => {
+  const drive = standin(), dk = disk(), key = 'doc:00000000-0000-4000-8000-00000000a030', a = worker(drive, dk);
+  // A PDF past the file store's 50 MB (as another device could never bring it), told by its record's size.
+  const ref = await dk.files.put(enc('%PDF-1.7 huge'), MIME.pdf);
+  await a.papers.save(key, { kind: 'pdf', file: { ...ref, size: 60e6 }, size: 60e6, title: 'Huge', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  assert.ok(!fileOf(drive, key, 'doc') && !fileOf(drive, key, 'file'), 'nothing of it in Drive');
+  assert.deepEqual((await dk.store.get('driveSyncLarge')).driveSyncLarge?.docs, { [key]: true });
+  assert.deepEqual(await moves(dk), {});
+});

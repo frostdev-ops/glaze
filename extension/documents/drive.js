@@ -358,9 +358,9 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
           await save({ at, sending: false });
           continue;
         }
-        const j = await json(r);
-        await keep?.drop();
-        return j;
+        // The session stays kept until the caller has written Drive's answer down (Sync's commit): a worker stopped between
+        // the two asks the session again and is answered with the same file, never making a second one.
+        return json(r);
       }
     };
     // Metadata only: a name, Glaze's properties, in or out of Drive's trash (never deleted for good). move: { add, remove: [ids] },
