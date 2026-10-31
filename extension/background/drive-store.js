@@ -368,7 +368,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       if (R && !R.removed && R.trashed) R = { removed: true }; // a record file moved to Drive's trash: put back from here
       // Unless another device put it back first (Glaze/Data trashed with it, say): that one is met as a first meeting, never
       // a second file made beside it.
-      if (was?.id && R?.removed) { const other = await lookup(ctx, h); if (other) { await S.remove([REC + h, FILE + was.id]); was = null; R = other; } }
+      if (was?.id && R?.removed) { const other = await lookup(ctx, h); if (other && other.id !== was.id) { await S.remove([REC + h, FILE + was.id]); was = null; R = other; } }
       const st = await stamps();
       if (!key) { // a record only Drive has, met for the first time
         if (!R || R.removed) return;
