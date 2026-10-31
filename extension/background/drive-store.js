@@ -448,18 +448,19 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     // One record, both sides. key and area: when known here; R: its file's metadata (undefined: ask Drive when known).
     const one = async (ctx, h, x) => {
       let { area, key, R } = x;
-      let was = await recOf(h);
+      // left: the record this device let go for another device's file (below), so what it held as synced keeps that time.
+      let was = await recOf(h), left = null;
       // Another device's file for the same record, made while this one made its own (first syncs that overlapped): every
       // device keeps the lowest id, met as a first meeting, so neither side's value is lost and each hears the other's after.
       if (was?.id && R?.id && !R.removed && R.id !== was.id) {
-        if (R.id < was.id && !R.trashed) { await S.remove([REC + h, FILE + was.id]); was = null; } else R = undefined;
+        if (R.id < was.id && !R.trashed) { await S.remove([REC + h, FILE + was.id]); left = was; was = null; } else R = undefined;
       }
-      area ||= was?.area; key ||= was?.key;
+      area ||= was?.area || left?.area; key ||= was?.key || left?.key;
       if (R === undefined) R = was?.id ? await ctx.D((c) => c.file(was.id)).catch((e) => { if (e.why === 'missing') return { removed: true }; throw e; }) : ctx.listed ? ctx.known.get(h) || null : await lookup(ctx, h);
       if (R && !R.removed && R.trashed) R = { removed: true }; // a record file moved to Drive's trash: put back from here
       // Unless another device put it back first (Glaze/Data trashed with it, say): that one is met as a first meeting, never
       // a second file made beside it.
-      if (was?.id && R?.removed) { const other = await lookup(ctx, h); if (other && other.id !== was.id) { await S.remove([REC + h, FILE + was.id]); was = null; R = other; } }
+      if (was?.id && R?.removed) { const other = await lookup(ctx, h); if (other && other.id !== was.id) { await S.remove([REC + h, FILE + was.id]); left = was; was = null; R = other; } }
       const st = await stamps();
       if (!key) { // a record only Drive has, met for the first time
         if (!R || R.removed) return;
@@ -472,7 +473,8 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       }
       const def = defOf(area, key), cat = def?.cat, owner = { rec: h, area, key, ...(x.need && { need: x.need }) };
       if (!cat) return;
-      const value = await valueOf(area, key), lsum = await sumOf(area, key, value), at = st[`${area}:${key}`] || 0;
+      // Unchanged here since it synced with the file let go above: the time of that change, not none (which any other wins over).
+      const value = await valueOf(area, key), lsum = await sumOf(area, key, value), at = st[`${area}:${key}`] || (left?.lsum === lsum && left.at) || 0;
       if (def.immutable) {
         // The bytes never change, but Notes may have cleaned up this device's copy since it last used them: fetched again
         // only for a note that uses it again (x.need), never for one deleted with its note.
