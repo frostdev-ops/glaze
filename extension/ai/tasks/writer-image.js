@@ -62,12 +62,14 @@ var GZ_AI_TASK_WRITER_IMAGE = globalThis.GZ_AI_TASK_WRITER_IMAGE || (() => {
     out.delete('');
     return (r) => out.has(flat(r));
   };
-  const normalized = (out, inp) => ({ ...out, requirements: out.requirements.filter((r) => !borrowed(inp)(r)), complete: out.complete && !out.reason.trim(), reason: out.reason.trim() || (out.complete ? '' : 'The image reading was incomplete or uncertain.') });
+  const settled = (out) => ({ ...out, complete: out.complete && !out.reason.trim(), reason: out.reason.trim() || (out.complete ? '' : 'The image reading was incomplete or uncertain.') });
+  const normalized = (out, inp) => { const r = settled(out), keep = borrowed(inp); return { ...r, requirements: r.requirements.filter((x) => !keep(x)) }; };
   const problem = (out, inp) => {
     if (S.validate(out, SCHEMA).length || !out.description.trim() || out.requirements.some((r) => !r.trim()) || new Set(out.requirements).size !== out.requirements.length) return 'The image-reading request did not return a valid completed reading.';
     // Native Chrome and other providers may ignore requested maxTokens. This is an accepted-output estimate, not a
     // claim about provider token accounting; rejected overflow never becomes a silently shortened description.
-    if (X.estimateTokens(normalized(out, inp)) > LIMIT.tokens) return `The image reading exceeded its ${LIMIT.tokens}-token estimated bound.`;
+    // The model's whole answer, before check drops what is not in the picture.
+    if (X.estimateTokens(settled(out)) > LIMIT.tokens) return `The image reading exceeded its ${LIMIT.tokens}-token estimated bound.`;
     return '';
   };
   const check = (out, inp) => problem(out, inp) ? null : normalized(out, inp);
