@@ -160,14 +160,21 @@ test("planned (agenda, rail): a day inside Better To Do's range reads that range
 // ---- who's signed in ---------------------------------------------------------------------------------------------
 
 test('the last student per site is known before anything is asked, and remembered once confirmed', async () => {
-  const s = site({ answers: ANSWERS(), local: { [`ultraMe:${O}`]: { uid: '_800_1' } } });
-  assert.deepEqual(await s.page.known(), { id: '_800_1', time_zone: TZ });
+  const s = site({ answers: ANSWERS(), local: { [`ultraMe:${O}`]: { uid: '_800_1', courses: [{ id: '_1_1', name: 'Old' }] } } });
+  assert.deepEqual(await s.page.known(), { id: '_800_1', time_zone: TZ, courses: [{ id: '_1_1', name: 'Old' }] });
   assert.equal(s.asked.length, 0);
   assert.equal((await s.page.profile()).id, '_900_1');
   await settle();
-  assert.deepEqual(s.store[`ultraMe:${O}`], { uid: '_900_1' }, 'a different student: the record follows');
-  assert.equal((await s.page.known()).id, '_900_1');
+  assert.deepEqual(s.store[`ultraMe:${O}`], { uid: '_900_1' }, 'a different student: the record follows, without the other\'s courses');
+  assert.deepEqual(await s.page.known(), { id: '_900_1', time_zone: TZ, courses: undefined });
   assert.equal(count(s.asked, /memberships/), 0, 'who it is needs no course list');
+  // Their courses once read, in Canvas's list's shape, slim.
+  await s.page.mine();
+  await settle();
+  const kept = s.store[`ultraMe:${O}`].courses;
+  assert.deepEqual(kept.map((c) => c.id), ['_101_1', '_102_1', '_103_1', '_104_1']);
+  assert.deepEqual(Object.keys(kept[0]).sort(), ['access_restricted_by_date', 'course_code', 'id', 'name']);
+  assert.deepEqual((await s.page.known()).courses, kept);
   assert.equal((await site().page.known()), null, 'none yet');
 });
 

@@ -365,3 +365,85 @@ test('NEW-1: Ultra W11 stores its calculation day without changing a stable run'
   assert.deepEqual(r.calls, [], 'no new direct request');
   r.c.GZ_REMIND_UI.sync(false);
 });
+
+// D: what's kept draws before anything is asked. The student last confirmed on this site (courses/ultra.js page.known) names
+// the kept copy; who is signed in (profile) is confirmed after it draws, and only then is Ultra asked or anything kept.
+const known = (p, id = '_900_1') => {
+  let answer;
+  p.c.GZ_ULTRA.page.known = async () => ({ id, time_zone: 'America/New_York', courses: [{ id: '_101_1', name: 'BIO 1100: Biology I' }] });
+  p.c.GZ_CTX.profile = () => new Promise((res) => { answer = (who) => res({ id: who, time_zone: 'America/New_York' }); });
+  return (who) => answer(who);
+};
+const keptFor = (uid, items, at = NOW) => ({ todoCache: { key: T.storeKey(O, uid), at, ...T.fetchRange(D.GZ_SANITIZE({}).todo, NOW, 'America/New_York'), teach: true, progress: true, items, complete: true, grading: [], sums: {} } });
+
+test('D: Better To Do on Ultra draws the kept list while who is signed in is still being asked, then asks Ultra', async () => {
+  // Kept three minutes ago: drawn at once, and asked again once confirmed.
+  const p = page({ stored: keptFor('_900_1', [item('_701_1', '_101_1', 'Kept lab', NOW + 2 * H)], Date.now() - 180000) });
+  const confirm = known(p);
+  vm.runInContext(probe(read('planner/page/todo.js'), 'get: () => ({ box, key })'), p.c);
+  p.c.GZ_TODO_UI.sync(true);
+  await settle();
+  const { box, key } = p.c.GZ_TODO_UI.probe.get();
+  assert.equal(key, KEY);
+  assert.ok(box.text.includes('Kept lab'), 'drawn from what was kept');
+  assert.equal(p.due.length, 0, 'nothing asked of Ultra yet');
+  assert.ok(!p.sent.some((m) => m.cache), 'nothing kept yet');
+  confirm('_900_1');
+  await settle();
+  assert.equal(p.due.length, 1, 'asked once the student is confirmed');
+});
+
+test('D: another student signed in than the one last seen here: their list replaces the kept one, and nothing is kept under the other', async () => {
+  const p = page({ stored: { ...keptFor('_800_1', [item('_701_1', '_101_1', 'Someone else', NOW + 2 * H)]) } });
+  const confirm = known(p, '_800_1');
+  vm.runInContext(probe(read('planner/page/todo.js'), 'get: () => ({ box, key })'), p.c);
+  p.c.GZ_TODO_UI.sync(true);
+  await settle();
+  assert.ok(p.c.GZ_TODO_UI.probe.get().box.text.includes('Someone else'));
+  // page.known now answers the confirmed student, as courses/ultra.js does once /users/me has answered.
+  p.c.GZ_ULTRA.page.known = async () => ({ id: '_900_1', time_zone: 'America/New_York' });
+  confirm('_900_1');
+  await settle();
+  // The new start asks who again: answered at once.
+  p.c.GZ_CTX.profile = async () => ({ id: '_900_1', time_zone: 'America/New_York' });
+  await settle();
+  const { box, key } = p.c.GZ_TODO_UI.probe.get();
+  assert.equal(key, KEY);
+  assert.ok(!box.text.includes('Someone else'));
+  assert.ok(p.sent.filter((m) => m.cache).every((m) => m.key === KEY), 'kept for the student signed in only');
+});
+
+test('D: tasks on Ultra\'s cards draw from what was kept before who is signed in is confirmed, and ask Ultra only after', async () => {
+  const p = page({ stored: keptFor('_900_1', [item('_701_1', '_101_1', 'Kept lab', NOW + 2 * H)]) });
+  const confirm = known(p);
+  vm.runInContext(read('courses/page/cardtasks.js'), p.c);
+  p.c.GZ_ULTRA.page.due = async (from, to) => { p.due.push([from, to]); return { items: [item('_702_1', '_101_1', 'Fresh lab', NOW + 3 * H)], complete: true }; };
+  p.c.GZ_CTX.profile = (() => { const f = p.c.GZ_CTX.profile; return () => f(); })();
+  p.c.GZ_CARD_TASKS.sync(true);
+  await settle();
+  const ct = p.card.children[1];
+  assert.ok(ct?.text.includes('Kept lab'), 'drawn from what was kept');
+  assert.equal(p.due.length, 0);
+  p.c.GZ_CARD_TASKS.sync(true);
+  await settle();
+  assert.equal(p.due.length, 0, 'a pass meanwhile asks nothing either');
+  confirm('_900_1');
+  await settle();
+  assert.equal(p.due.length, 0, 'the kept answer is still fresh');
+});
+
+test('D: cards drawn for another student than the one signed in lose those tasks and start again for theirs', async () => {
+  const p = page({ stored: keptFor('_800_1', [item('_701_1', '_101_1', 'Someone else', NOW + 2 * H)]) });
+  const confirm = known(p, '_800_1');
+  vm.runInContext(read('courses/page/cardtasks.js'), p.c);
+  p.c.GZ_CARD_TASKS.sync(true);
+  await settle();
+  assert.ok(p.card.children[1]?.text.includes('Someone else'));
+  p.c.GZ_ULTRA.page.known = async () => ({ id: '_900_1', time_zone: 'America/New_York' });
+  confirm('_900_1');
+  p.c.GZ_CTX.profile = async () => ({ id: '_900_1', time_zone: 'America/New_York' });
+  await settle();
+  assert.ok(!p.card.children.some((c) => c?.text?.includes('Someone else')));
+  assert.equal(p.due.length, 1, 'the student signed in: theirs asked');
+  assert.equal(p.store.todoCache.key, KEY);
+});

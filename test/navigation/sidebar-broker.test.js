@@ -22,7 +22,9 @@ const pageContext = (site, origin, account, reads) => {
   const readers = site === 'canvas' ? part.slice(part.indexOf('  let mine = null;'), part.indexOf('  // Who is signed in'))
     : part.slice(part.indexOf('  let meId = null;'), part.indexOf('  const covered ='));
   const api = async (path) => { reads.push(path); return { id: account() }; };
-  const page = vm.createContext({ location: { origin }, capi: api, api });
+  // Ultra's reader is courses/ultra.js's page store (one /users/me per site), loaded on demand.
+  const GZ_ULTRA = { page: { me: async () => (await api('/users/me')).id, alive() {} } };
+  const page = vm.createContext({ location: { origin }, capi: api, api, need: async () => {}, I: { settings: {}, links: [] }, GZ_ULTRA, GZ_LMSQ: {} });
   vm.runInContext(`${readers}
     const idle = () => {};
     const scope = new Proxy({ Object, String, globalThis, site: ${JSON.stringify(site)}, X: { ctx: {} }, observer: {}, chrome: { runtime: { id: 'glaze' } },
