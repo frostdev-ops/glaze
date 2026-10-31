@@ -647,3 +647,10 @@ test('the fresh outline swaps in only once its own page has stopped changing sin
   while (p.timers.length && p.c.frames.get('_2_1') === base) p.step();
   assert.equal(p.c.frames.get('_2_1'), it, 'swapped once quiet');
 });
+
+test('a cold item frame hears that it is an item once its Glaze listens (its account), not only at its first word (loaded)', () => {
+  const { p, it } = opened();
+  it.posted.length = 0;
+  msg(p, it, { gzCtab: 'account', uid: '_42_1' });
+  assert.deepEqual(it.posted.filter((m) => m.gzCtab === 'item'), [{ gzCtab: 'item', on: true }]);
+});
