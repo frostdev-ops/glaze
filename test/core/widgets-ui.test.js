@@ -322,13 +322,15 @@ test("Ultra: the agenda reads the day from Ultra's To Do and calendar (courses/u
   assert.ok(find(list, (e) => e.tagName === 'LI' && 'done' in e.dataset), 'handed in: done');
   assert.equal(ultra.asked.length, 1);
   assert.equal(ultra.asked[0].origin, 'https://school.blackboard.test', "this Ultra site's own");
-  assert.equal(ultra.asked[0].to - ultra.asked[0].from, 864e5, 'one day');
-  // The day again within two minutes: not asked again.
+  // The day is inside Better To Do's own range: that range is read (one To Do request, laid back from its end) and
+  // answers the days around it too, within two minutes.
+  const [lo, hi] = ultraDay(p);
+  assert.ok(ultra.asked[0].from <= lo && ultra.asked[0].to >= hi + 7 * 864e5, "Better To Do's range, which holds the day");
   find(body, (e) => e.attrs?.['aria-label'] === 'Next day').fire('click');
   for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
   find(body, (e) => e.attrs?.['aria-label'] === 'Previous day').fire('click');
   for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
-  assert.equal(ultra.asked.length, 2, 'the next day once, today from memory');
+  assert.equal(ultra.asked.length, 1, 'the next day and today from the same read');
 });
 
 const agendaText = (el) => [el.textContent || '', ...(el.children || []).map((c) => (typeof c === 'object' ? agendaText(c) : String(c)))].join(' ');

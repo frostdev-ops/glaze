@@ -453,7 +453,7 @@ test('the reader: GET only, to this site, redirects refused, paged and bounded, 
   assert.equal(none.asked.length, 0);
 });
 
-test('planner: everything due, one request at a time from this site, due-date exceptions honoured', async () => {
+test('planner: everything due from this site, due-date exceptions honoured', async () => {
   const { f, asked } = ultra({
     '/learn/api/v1/users/me': { id: '_900_1' },
     '/learn/api/v1/users/_900_1/memberships': load('memberships'),
@@ -476,9 +476,11 @@ test('planner: everything due, one request at a time from this site, due-date ex
   assert.equal(by._613_1.course, 'ENG 1100: College Writing');
   assert.ok(asked.every(({ url, init }) => url.startsWith(`${o}/learn/api/`) && init.method === 'GET'));
   const paths = asked.map(({ url }) => new URL(url).pathname);
-  assert.equal(paths.filter((p) => p.endsWith('/studentItems')).length, 2, 'four weeks of To Do in two slices');
+  // Two weeks back to two weeks on: To Do for what's left of it, one slice laid back from its end; the calendar has it all.
+  const todo = asked.filter(({ url }) => url.includes('/studentItems')).map(({ url }) => new URL(url).searchParams);
+  assert.deepEqual(todo.map((q) => [Date.parse(q.get('since')), Date.parse(q.get('until'))]), [[LATER, LATER + 14 * 864e5]]);
   assert.equal(asked.find(({ url }) => url.includes('/_302_1/exceptions')).url.split('columnId=')[1], '_613_1');
-  assert.equal(asked.length, 9);
+  assert.equal(asked.length, 8);
 });
 
 test('a due-date exception counts for its own column only, not one whose id starts the same', async () => {
