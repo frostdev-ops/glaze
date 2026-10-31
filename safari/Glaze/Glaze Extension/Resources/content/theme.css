@@ -1142,6 +1142,7 @@ html[data-gz-bg="solid"] :where(content-page-header > header):is(content-page-he
 html[data-gz-bg="solid"] :is(#site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
 html[data-gz-bg="solid"] :where(#site-wrap .course-groups-header):is(#site-wrap .course-groups-header, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
 html[data-gz-bg="solid"] :where(#site-wrap .routed-page bb-panel-header > .panel-header.persistent-white-header):is(#site-wrap .routed-page bb-panel-header > .panel-header.persistent-white-header, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :is(#site-wrap .bb-offcanvas-panel.full .panel-header.simple-header::before),
 html[data-gz-bg="solid"] :where(#site-wrap .bbml-editor-parent > .bbml-editor):is(#site-wrap .bbml-editor-parent > .bbml-editor, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
 html[data-gz-bg="solid"] :where(bb-assignment-attempt-authoring-panel .MuiAccordion-root):is(bb-assignment-attempt-authoring-panel .MuiAccordion-root, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
 html[data-gz-bg="solid"] :where(#site-wrap .outline-action-block):is(#site-wrap .outline-action-block, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),

@@ -77,7 +77,10 @@ test('solid-background panels retain the valid list specificity after splitting'
   assert.equal(rules.length, 1);
   // The original list's strongest valid arm: the discussion header. Its ::before arm was invalid inside :is().
   const expected = specificity('html[data-gz-bg="solid"] #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls');
-  for (const selector of parts(rules[0][0])) assert.equal(specificity(selector), expected, selector);
+  // That arm stays as written, alone in its :is(): it matches nothing, as before the split (ctab-strip-glass.test.js reads it).
+  const live = parts(rules[0][0]).filter((p) => !/::before\)$/.test(p));
+  assert.equal(live.length, parts(rules[0][0]).length - 1);
+  for (const selector of live) assert.equal(specificity(selector), expected, selector);
 });
 // The first rule after `from` with a selector matching `sel` and a body matching `body`: its index, or -1.
 const after = (from, sel, body) => theme.findIndex(([s, b], i) => i > from && parts(s).some((p) => sel.test(p)) && body.test(b));

@@ -14,6 +14,7 @@ const run = async ({ differentStyles = false, shots = [] } = {}) => {
     evaluate: async (fn, arg) => {
       if (arg && typeof arg === 'object') { variant = 'other'; return; }
       if (typeof arg === 'string') { active = arg; return; }
+      if (fn.toString().includes('getAnimations')) return;
       if (fn.toString().includes('P.rules(')) return { diffs: [], pairs: 1, rewritten: 1, elements: 1 };
       if (fn.toString().includes('P.style(')) return [[`color:${differentStyles && variant === 'other' && active === 'head' ? 'blue' : 'red'};`, '', '']];
       throw Error('unexpected page evaluation');

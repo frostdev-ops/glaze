@@ -99,6 +99,9 @@ function inPage() {
         // Matches alone cannot prove cascade specificity: compare styles and pixels in both attribute modes.
         const styles = async (set) => {
           await page.evaluate((x) => window.__parity.use(x), set);
+          // Entrances (expressive motion), loops and the transitions the switch started are taken off, so both sets read the
+          // cascade's own values at any moment; the animation properties themselves are still compared.
+          await page.evaluate(() => { document.body?.offsetHeight; for (const a of document.getAnimations()) a.cancel(); });
           return page.evaluate(() => [document.documentElement, ...document.documentElement.querySelectorAll('*')].map((el) => {
             const P = window.__parity, own = P.style(el, null), pseudo = ['::before', '::after'].map((pe) => { const c = getComputedStyle(el, pe).content; return c && c !== 'none' && c !== 'normal' ? P.style(el, pe) : ''; });
             return [own, ...pseudo];
