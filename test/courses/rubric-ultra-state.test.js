@@ -5,6 +5,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { ultraFor } = require('../helpers/ultra-page.cjs');
 const vm = require('node:vm');
 const { El, matches } = require('../stand-in-dom.js');
 
@@ -80,7 +81,7 @@ const page = (data, width = 706, kind = 'overview') => {
   c.globalThis = c;
   const files = {
     'courses/rubric.js': () => { c.GZ_RUBRIC_LIB = require('../../extension/courses/rubric.js'); },
-    'courses/ultra.js': () => { c.GZ_ULTRA = require('../../extension/courses/ultra.js'); },
+    'courses/ultra.js': () => { c.GZ_ULTRA = ultraFor({ origin: () => ORIGIN, fetch: (url, init) => c.GZ_LMSQ.fetch(url, init) }); },
     'courses/lmsq.js': () => { c.GZ_LMSQ = { fetch: (url) => fetch(url) }; },
     'courses/page/popup.js': () => { c.GZ_POPUP = { ready: Promise.resolve(), safe: (text) => [text], open: (o) => { popups.push(o); return { close() {}, isOpen: () => false }; } }; },
   };

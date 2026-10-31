@@ -101,9 +101,10 @@ const SITES = {
   'documents/slides/slides-kind.js': [{ at: 'fetch(chrome.runtime.getURL(`vendor/fonts/', kind: 'extension' }],
   'planner/ocr.js': [{ at: 'fetch(here(', kind: 'extension' }],
   'courses/lmsq.js': [{ at: 'return fetch(url, init)', kind: 'page' }],
-  'courses/ultra.js': [{ at: 'f = (...a) => fetch(...a)', kind: 'page' }],
+  // The page stores' reads (who's signed in, gradebooks, outlines, what's due): the page's own site, through its queue.
+  'courses/ultra.js': [{ at: 'f = (...a) => fetch(...a)', kind: 'page' }, { at: 'f: (u, init) => env.fetch(u, init, o.prio', kind: 'page' },
+    { at: 'fetch: (u, init, prio, still) => lmsq()', kind: 'page', n: 2 }],
   'content/content.js': [{ at: 'fetch(`${location.origin}${base}${path}`', kind: 'page' }],
-  'content/content-ultra.js': [{ at: 'GZ_LMSQ.fetch(u, o, 0, live)', kind: 'page' }],
   'content/content-canvas.js': [{ at: 'fetch(`${location.origin}/courses/${cid}/grades`', kind: 'page' }],
   // An announcement from the page's own site, and Canvas's read mark, through the site's queue (courses/lmsq.js).
   'courses/page/announce.js': [{ at: 'const q = (url, init) => GZ_LMSQ.fetch(url', kind: 'page' }, { at: 'f: (u, i) => GZ_LMSQ.fetch(u, i, prio)', kind: 'page' }, { at: 'GZ_LMSQ.fetch(m.url,', kind: 'page' }],
@@ -127,9 +128,9 @@ const SITES = {
   // The worker: the preview's own address on the asking Ultra page's site, then basic-doc-viewer under *.blackboard.com.
   'courses/bb-preview.js': [{ at: '{ fetch: get = fetch, now = Date.now', kind: 'asked', flow: 'an Ultra site Glaze runs on (its built-in or granted host), from that site\'s page only; Blackboard\'s document viewer is a required host', in: 'background/background.js', guard: /const origin = ultraPage\(s\) \? await fromUltra\(s\) : null;/ }],
   'courses/page/download.js': [{ at: 'await fetch(f.url,', kind: 'page' }],
-  'planner/page/grades.js': [{ at: 'await fetch(url,', kind: 'page' }],
+  'planner/page/grades.js': [{ at: 'await fetch(url,', kind: 'page' }, { at: "const queued = (u, o) => X.need('courses/lmsq.js'", kind: 'page' }],
   'planner/page/gradescope.js': [{ at: "fetch('/account/edit'", kind: 'page' }, { at: 'fetch(`/courses/${gid}`', kind: 'page' }],
-  'planner/page/insights.js': [{ at: 'await fetch(url,', kind: 'page' }],
+  'planner/page/insights.js': [{ at: 'await fetch(url,', kind: 'page' }, { at: "f: (u, o) => ctx.need('courses/lmsq.js'", kind: 'page' }],
   'courses/page/moodle.js': [{ at: 'fetch(`${s.root}/lib/ajax/service.php', kind: 'page' }, { at: 'fetch(`${s.root}/grade/report/overview', kind: 'page' }],
   'navigation/page/navbar-canvas.js': [{ at: 'await fetch(next,', kind: 'page' }, { at: "fetch('/logout'", kind: 'page' }],
   'navigation/page/navbar-moodle.js': [{ at: 'fetch(`${s.root}/lib/ajax/service.php', kind: 'page' }],

@@ -204,7 +204,7 @@ test('Ultra course cards peek at existing promises and books without starting a 
   const p = page({ site: 'ultra', preload: true, raw: { enabled: false } });
   await p.done;
   let requests = 0;
-  p.c.fetch = async (u) => { requests++; return { ok: true, url: u, text: async () => JSON.stringify(u.endsWith('/users/me') ? { id: '_900_1' } : { results: [] }), headers: { get: () => null } }; };
+  p.c.fetch = async (u) => { requests++; return new Response(JSON.stringify(u.endsWith('/users/me') ? { id: '_900_1' } : { results: [] })); };
   const cold = p.c.GZ_CTX.canvasPeek();
   for (let i = 0; i < 10; i++) { const next = p.c.GZ_CTX.canvasPeek(); assert.equal(next.me, cold.me); assert.equal(next.courses, cold.courses); assert.equal(next.books, cold.books); }
   assert.equal(requests, 0, 'peeking starts nothing, even if the boot already has a pending reader');

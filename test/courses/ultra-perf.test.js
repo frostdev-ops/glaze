@@ -5,16 +5,17 @@ const source = fs.readFileSync(process.env.PERF_ULTRA_SOURCE || require.resolve(
 const settle = () => new Promise(setImmediate);
 const light = vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/looks/page/light.js'), 'utf8'), { document: { addEventListener() {} } });
 const covered = vm.runInNewContext(`(${source.match(/  const covered = ([^\n]+);/)[1]})`);
-// bookFor's failure gate (WP-A1), and its reader: courses/ultra.js's, through the site's queue; here its get() alone.
+// bookFor's failure gate (WP-A1), and its rows: courses/ultra.js's gradebook store (rowsOf), here an answer's results
+// with its coverage; no copy kept from a last visit (keptRows).
 const gate = source.match(/(?:  const route = [^\n]+\n)?  const failed = [^\n]+\n  const askAgain = [^\n]+\n/)[0];
-const reader = (get) => async () => ({ get });
+const reader = (get) => async () => { const j = await get(); return covered(j.results, !j.paging?.nextPage); };
 
 test('GZ-01: the one-page gradebook cache preserves coverage and redraws when only coverage changes', async () => {
-  const start = source.indexOf('  const bookFor = '), end = source.indexOf('  // undefined until', start);
+  const start = source.indexOf('  const take = '), end = source.indexOf('  // undefined until', start);
   let changed = 0, now = 100000, partial = true;
   const bookFor = vm.runInNewContext(`${gate}${source.slice(start, end)} bookFor`, {
     books: new Map(), covered, Date: { now: () => now }, me: async () => '_900_1', location: { pathname: '/ultra/courses/_101_1/outline' },
-    reader: reader(async () => ({ results: [], ...(partial && { paging: { nextPage: '?offset=200' } }) })),
+    keptRows: async () => null, rowsOf: reader(async () => ({ results: [], ...(partial && { paging: { nextPage: '?offset=200' } }) })),
     GZ_PAGE: { gradesByContent: () => new Map(), overall: () => null }, locale: () => 'en', onBook: () => changed++,
   });
   bookFor('_101_1'); await settle();
@@ -26,12 +27,12 @@ test('GZ-01: the one-page gradebook cache preserves coverage and redraws when on
 });
 
 test('an unchanged gradebook remembers a successful empty late-status answer', async () => {
-  const start = source.indexOf('  const bookFor = '), end = source.indexOf('  // undefined until', start);
+  const start = source.indexOf('  const take = '), end = source.indexOf('  // undefined until', start);
   let requests = 0, changed = 0, now = 100000, fail = false;
   const books = new Map();
   const bookFor = vm.runInNewContext(`${gate}${source.slice(start, end)} bookFor`, {
     books, covered, Date: { now: () => now }, me: async () => '_900_1', location: { pathname: '/ultra/courses/_101_1/outline' },
-    reader: reader(async () => { requests++; if (fail) throw new Error('offline'); return { results: [] }; }), lateIn: async () => new Set(),
+    keptRows: async () => null, rowsOf: reader(async () => { requests++; if (fail) throw new Error('offline'); return { results: [] }; }), lateIn: async () => new Set(),
     GZ_PAGE: { gradesByContent: () => new Map(), overall: () => null }, locale: () => 'en', onBook: () => changed++,
   });
   bookFor('_101_1'); await settle();

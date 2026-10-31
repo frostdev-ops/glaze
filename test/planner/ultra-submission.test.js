@@ -2,6 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
+const { ultraFor } = require('../helpers/ultra-page.cjs');
 const P = require('../../extension/core/page.js'), G = require('../../extension/planner/grades.js');
 const source = fs.readFileSync(require.resolve('../../extension/content/content-ultra.js'), 'utf8');
 const settle = () => new Promise(setImmediate);
@@ -47,15 +48,20 @@ test('due-date exceptions and unavailable exception data suppress late chips', a
 });
 
 test('the gradebook requests expanded submission data and redraws for each changed status field or coverage', async () => {
-  const start = source.indexOf('  const bookFor = '), end = source.indexOf('  // undefined until', start);
+  const start = source.indexOf('  const take = '), end = source.indexOf('  // undefined until', start);
   let changed = 0, now = 100000, partial = true;
   const grade = row('_601_1'), asked = [];
   const gate = source.match(/(?:  const route = [^\n]+\n)?  const failed = [^\n]+\n  const askAgain = [^\n]+\n/)[0];
+  // courses/ultra.js's gradebook store (WP-A1, D): what it asks is the request. A partial answer's next page is one the
+  // reader won't follow.
+  const store = ultraFor({ origin: () => 'https://school.test', now: () => now, fetch: async (url) => {
+    asked.push(url);
+    return { ok: true, status: 200, text: async () => JSON.stringify({ results: [structuredClone(grade)], ...(partial && { paging: { nextPage: 'https://elsewhere.test/x' } }) }) };
+  } });
   const bookFor = vm.runInNewContext(`${gate}${source.slice(start, end)} bookFor`, {
     books: new Map(), covered: (rows, complete) => Object.defineProperty(rows, 'complete', { value: complete }),
     Date: { now: () => now }, me: async () => '_900_1', GZ_PAGE: P, locale: () => 'en', onBook: () => changed++, location: { pathname: '/ultra/courses/_101_1/grades' },
-    // courses/ultra.js's reader through the site's queue (WP-A1); its get() is what asks.
-    reader: async () => ({ get: async (path) => { asked.push(path); return { results: [structuredClone(grade)], ...(partial && { paging: { nextPage: '?offset=200' } }) }; } }),
+    rowsOf: (cid, id) => store.page.book(cid, id), keptRows: async () => null,
   });
   bookFor('_101_1'); await settle();
   assert.equal(new URL(asked[0], 'https://school.test').searchParams.get('expand'), 'column,lastAttempt,submissionStatus');

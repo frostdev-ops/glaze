@@ -47,7 +47,7 @@ const site = ({ answers = {}, now = LATER, local = {}, session = null, framed = 
       if (m.op === 'put') box.session = { ...structuredClone(m.mine), read: clock.t, at: clock.t };
       return null;
     },
-    framed: () => framed, later: (f) => f(),
+    framed: () => framed,
     todo: () => (prefs ? T : null), todoPrefs: () => prefs,
   };
   return { page: U.makePage(env), env, asked, sent, store, clock, box, release: () => { for (const r of waiting.splice(0)) r(); } };
@@ -302,7 +302,36 @@ test("on a page, every read here goes through the site's queue (courses/lmsq.js)
   try {
     await U.page.outline('_555_1', { prio: 1 });
     await U.page.book('_555_1', '_900_1').catch(() => {});
-    await new Promise((r) => setTimeout(r, 1100)); // the kept copy's write, while location is still here
     assert.deepEqual(via, [['/learn/api/public/v1/courses/_555_1/contents', 1, 'function'], ['/learn/api/v1/courses/_555_1/gradebook/grades', 0, 'function']]);
   } finally { Object.assign(globalThis, had); if (!had.GZ_LMSQ) delete globalThis.GZ_LMSQ; if (!had.location) delete globalThis.location; }
+});
+
+// ---- the readers -------------------------------------------------------------------------------------------------
+
+test("every reader of a course's gradebook on a page asks the store, never its own reader", () => {
+  const src = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
+  for (const f of ['content/content-ultra.js', 'planner/page/grades.js', 'planner/page/insights.js', 'courses/page/rubric.js']) {
+    assert.doesNotMatch(src(f), /\.grades\(|gradebook\/grades\?/, f);
+    assert.match(src(f), /\.book\(/, f);
+  }
+  // Agent apps' Insights read, as the view's.
+  const tab = src('agents/tab.js'), insights = tab.slice(tab.indexOf('const insights = async'), tab.indexOf('const assignment'));
+  assert.match(insights, /GZ_ULTRA\.page\.book\(c\.id, uid, \{ signal: go\.signal, live: go \}\)/);
+  assert.doesNotMatch(insights, /\.grades\(/);
+  // The planner's per-course reads, on a page: the store's.
+  assert.match(src('courses/ultra.js'), /grades: \(cid, uid\) => book\(cid, uid\)/);
+});
+
+test("search takes a course's documents from a fresh read with their bodies (a hover's prefetch) instead of asking", async () => {
+  const s = site({ answers: { '/learn/api/public/v1/courses/_101_1/contents': load('contents') } });
+  assert.equal(s.page.outlineNow('_101_1', { body: true }), null);
+  await s.page.outline('_101_1');
+  assert.equal(s.page.outlineNow('_101_1', { body: true }), null, 'a read without bodies is no search');
+  const o = await s.page.outline('_101_1', { body: true });
+  assert.equal(s.page.outlineNow('_101_1', { body: true }), o);
+  assert.equal(s.page.outlineNow('_101_1'), o);
+  s.clock.t += 300001;
+  assert.equal(s.page.outlineNow('_101_1', { body: true }), null);
+  const search = fs.readFileSync(path.join(__dirname, '../../extension/navigation/page/search.js'), 'utf8');
+  assert.match(search, /U\.page\?\.outlineNow\?\.\(course\.id, \{ body: true \}\)/);
 });
