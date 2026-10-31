@@ -43,10 +43,28 @@ const rng = (seed) => {
 };
 
 // ---- the worker's scripts, compiled once and run in each device's context
+// Tiny transfers (o.tiny, --tiny): a transfer goes large past TINY.at bytes instead of 5 MB, in chunks and ranges of
+// TINY.step, so most documents, JSON copies, records and snapshots go through staged resumable uploads and ranged downloads.
+// Each device's drive.js and drive-sync.js are rewritten so as they load (the shipped files stay as they are), the stand-ins
+// take chunks of TINY.quantum, and an applied kill on a chunk leaves Drive part of it.
+const TINY = { at: 256, step: 512, quantum: 256 };
+const SHRUNK = {
+  'drive.js': [['const SMALL = 5 << 20;', `const SMALL = ${TINY.at};`], ['const STEP = { min: 256 << 10, max: 8 << 20,', `const STEP = { min: ${TINY.quantum}, max: ${TINY.step},`]],
+  'drive-sync.js': [['const BIG = 5 << 20, PIECE = 8 << 20;', `const BIG = ${TINY.at}, PIECE = ${TINY.step};`], ['Math.max(256 << 10,', `Math.max(${TINY.quantum},`]],
+};
 const scripts = new Map();
-const script = (file) => {
-  let s = scripts.get(file);
-  if (!s) { s = new vm.Script(fs.readFileSync(file, 'utf8'), { filename: path.relative(EXT, file) }); scripts.set(file, s); }
+const script = (file, tiny = false) => {
+  const k = `${tiny ? 'tiny:' : ''}${file}`;
+  let s = scripts.get(k);
+  if (!s) {
+    let src = fs.readFileSync(file, 'utf8');
+    for (const [from, to] of (tiny && SHRUNK[path.basename(file)]) || []) {
+      if (!src.includes(from)) throw new Error(`drive-chaos: ${path.basename(file)} no longer has ${from}`);
+      src = src.replaceAll(from, to);
+    }
+    s = new vm.Script(src, { filename: path.relative(EXT, file) });
+    scripts.set(k, s);
+  }
   return s;
 };
 const BG_SOURCE = fs.readFileSync(path.join(BG, 'background.js'), 'utf8');
@@ -103,6 +121,8 @@ function prelude(host) {
   g.setTimeout = (fn, ms = 0, ...a) => host.timer(() => fn(...a), ms);
   g.clearTimeout = (id) => host.clearTimer(id);
   g.setInterval = () => 0; g.clearInterval = () => {};
+  // background.js's own, outside its Drive section (transfers keep the worker up where it isn't Safari).
+  g.SAFARI = false;
   // Web Locks, as Chrome's worker has them: each name one holder at a time, in the order asked.
   const held = new Map();
   g.navigator = { locks: { request: (name, a, b) => { const fn = typeof a === 'function' ? a : b; const p = (held.get(name) || Promise.resolve()).then(() => fn({ name })); held.set(name, p.catch(() => {})); return p; } }, storage: { estimate: async () => ({ quota: 1e12, usage: 0 }) } };
@@ -212,8 +232,9 @@ const FAULTS = {
   quota: () => ({ status: 403, body: ERRORS.storageQuotaExceeded }),
   401: () => ({ status: 401, body: ERRORS[401] }),
 };
-const network = () => {
-  const drives = { [ACCOUNTS.A]: standin({ tokens: new Set([TOKENS[ACCOUNTS.A]]), owner: ACCOUNTS.A }), [ACCOUNTS.B]: standin({ tokens: new Set([TOKENS[ACCOUNTS.B]]), owner: ACCOUNTS.B }) };
+const network = (tiny = false) => {
+  const quantum = tiny ? TINY.quantum : undefined;
+  const drives = { [ACCOUNTS.A]: standin({ tokens: new Set([TOKENS[ACCOUNTS.A]]), owner: ACCOUNTS.A, quantum }), [ACCOUNTS.B]: standin({ tokens: new Set([TOKENS[ACCOUNTS.B]]), owner: ACCOUNTS.B, quantum }) };
   const byToken = Object.fromEntries(Object.entries(TOKENS).map(([acct, tok]) => [tok, drives[acct]]));
   // Search lag: a file Drive made shows in files.list only after this many lists (each Drive its own count).
   const lag = new Map(Object.values(drives).map((d) => [d, new Map()])), known = new Map(Object.values(drives).map((d) => [d, new Set()]));
@@ -252,6 +273,11 @@ const network = () => {
     return new Response(a.status === 204 || a.status === 304 ? null : body, { status: a.status, headers: a.headers });
   };
   net.calm = () => { net.lag = 0; for (const delayed of lag.values()) delayed.clear(); };
+  // The next chunk this request's Drive takes keeps only keep bytes, its answer never coming (a worker stopped mid-chunk).
+  net.cut = (init, keep) => {
+    const auth = String(init?.headers?.authorization || init?.headers?.Authorization || '').replace(/^Bearer /, '');
+    (byToken[auth] || drives[ACCOUNTS.A]).cut(keep, (e) => !!e.chunk && !e.chunk.status);
+  };
   return net;
 };
 
@@ -322,6 +348,9 @@ class Device {
           try { role = JSON.parse(metadata).appProperties?.glaze; } catch { /* a media chunk, not upload metadata */ }
           if (role === stop.glaze) dev.armed.kill = dev.ios + 1;
         }
+        // Tiny transfers: a kill applied at a chunk leaves Drive part of it, as a worker stopped mid-request does.
+        const range = /^bytes (\d+)-(\d+)\//.exec(init?.headers?.['content-range'] || '');
+        if (world.o.tiny && range && dev.armed?.apply && dev.armed.kill === dev.ios + 1) world.net.cut(init, r.int(Number(range[2]) - Number(range[1]) + 2));
         return host.io('net', method, () => {
           const res = world.net.handle(dev, url, init);
           if (!res) throw new TypeError('Failed to fetch');
@@ -350,7 +379,7 @@ class Device {
         const file = path.resolve(BG, f);
         if (loaded.has(file)) return;
         loaded.add(file);
-        script(file).runInContext(dev.ctx);
+        script(file, !!world.o.tiny).runInContext(dev.ctx);
         if (/doc-files\.js$/.test(file)) { const F = dev.ctx.GZ_DOC_FILES, idb = F.idb; F.idb = (f, name, R) => (name === 'glaze-drive' ? dev.ctx.__stage : idb(f, name, R)); }
         if (/drive-sync\.js$/.test(file)) dev.patchSync();
       },
@@ -752,6 +781,24 @@ const KNOWN = {
     skips: () => false,
     repro: [{ t: 'paper', k: 'new', d: 2, pick: 0.6620774620678276, pick2: 0.5868986349087209, s: 400112753 }, { t: 'sync', d: 2, on: true, s: 1985057254 }, { t: 'drive', k: 'outsideDocx', pick: 0.9624791145324707, s: 621458078 }, { t: 'faults', d: 2, p: 0.3, quota: false, refuse: 3 }, { t: 'run', d: 2, how: 'run', s: 2090746289 }, { t: 'account', d: 2, to: 'B', s: 1047616833 }],
   },
+  'staged-first-meeting': {
+    fixed: true,
+    tiny: true,
+    join: [0],
+    about: 'a device joining meets a PDF replaced outside Glaze and sends it up again; its JSON copy staged (larger than one request), the document\'s link waits without its key, so the next change page meets it as deleted for good here and puts both of its files in Drive\'s trash: every other device moves it to Trash',
+    skips: () => false,
+    repro: [{ t: 'pdf', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2 }, { t: 'drive', k: 'outsidePdf', pick: 0, s: 3 }],
+  },
+  // Open, found 2026-10-31 by tiny transfers, not yet diagnosed: a worker stopped at certain awaits of a staged first push
+  // (570, 644, 842 here, the write not applied) leaves a second visible file or JSON copy for the document.
+  'staged-kill-duplicate': {
+    fixed: false,
+    tiny: true,
+    about: 'a worker stopped at certain awaits of a first push whose uploads are staged leaves two visible files or JSON copies for one document',
+    skips: () => false,
+    repro: [{ t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'pdf', k: 'new', d: 0, pick: 0, pick2: 0, s: 2 }, { t: 'setting', d: 0, k: 'colors', pick: 0, s: 3 },
+      { t: 'note', k: 'new', d: 0, pick: 0, pick2: 0.9, s: 4 }, { t: 'run', d: 0, how: 'run', s: 5, kill: 842, apply: false }],
+  },
   // Open, accepted by the owner: Settings written straight to storage.sync between the worker's compare and its write (a few
   // milliseconds) are written over by Drive's value. Found 2026-10-31 (seed 300933, 80 operations, 3 devices).
   'settings-cas': {
@@ -775,7 +822,7 @@ class World {
   constructor(seed, ops, o = {}) {
     this.seed = seed; this.ops = ops; this.o = { devices: 2, rounds: 8, reads: 24, ...o };
     this.clock = START; this.step = 0; this.errors = []; this.lines = []; this.rejections = []; this.soft = [];
-    this.net = network();
+    this.net = network(!!this.o.tiny);
     this.drive = this.net.drives[ACCOUNTS.A];
     this.devices = [...Array(this.o.devices)].map((_, i) => new Device(this, 'ABC'[i], i));
     // The model: each token a user edit wrote (where and over which), what a delete for good let go, outside edits.
@@ -1353,4 +1400,4 @@ const shrink = async (seed, ops, inv, o = {}, budget = 200) => {
   return list;
 };
 
-module.exports = { rng, canon, sha, network, Device, World, generate, describe, play, shrink, KNOWN, ACCOUNTS, TOKENS, FIRST, prelude, START };
+module.exports = { TINY, rng, canon, sha, network, Device, World, generate, describe, play, shrink, KNOWN, ACCOUNTS, TOKENS, FIRST, prelude, START };

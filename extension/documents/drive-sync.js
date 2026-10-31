@@ -518,6 +518,10 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         // upload, even when it fits in one request. A staged upload checks again just before its bytes are sent.
         const F = await meta(file);
         if (F.removed || F.trashed || F.appProperties?.glaze !== 'file' || F.appProperties?.key !== h || (Array.isArray(F.parents) && !F.parents.includes(folder))) return sync(key, h, { E: F, folder });
+        // This device's own staged upload, landed in this file while the document changed again (Drive's answer still on its
+        // transfer): Glaze's revision, recorded as its link would have been, never an outside edit or another device's.
+        const landed = going?.dir === 'up' && going.file?.id === file && !!F.headRevisionId && going.file.headRevisionId === F.headRevisionId;
+        if (landed && F.appProperties?.sum === going.tag && unchanged(F)) { d = await putDoc(h, { ...d, fh: F.headRevisionId, fsum: going.tag }, d); fh = F.headRevisionId; }
         if (F.headRevisionId && F.headRevisionId !== fh) {
           if (F.appProperties?.sum === d.fsum || rewritten(F)) return sync(key, h, { E: F, folder });
           if (!(F.appProperties?.sum === sum && unchanged(F))) {
@@ -544,7 +548,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         file = null; fh = null;
         for (const F of found) {
           if (F.removed || F.appProperties?.glaze !== 'file' || F.appProperties?.key !== h || (Array.isArray(F.parents) && !F.parents.includes(folder))) continue;
-          const glazes = F.id === d?.file ? !!F.headRevisionId && F.headRevisionId === d.fh : unchanged(F), same = F.trashed === false && glazes;
+          // This device's own upload, landed (Drive's answer still on its transfer), is as Glaze wrote it too.
+          const landed = going?.dir === 'up' && going.file?.id === F.id && !!F.headRevisionId && going.file.headRevisionId === F.headRevisionId && F.appProperties?.sum === going.tag && unchanged(F);
+          const glazes = landed || (F.id === d?.file ? !!F.headRevisionId && F.headRevisionId === d.fh : unchanged(F)), same = F.trashed === false && glazes;
           if (same && !file) { file = F.id; fh = F.headRevisionId || null; }
           else if (glazes) await putAway(F.id, folder);
           else await D((c) => c.patch(F.id, { appProperties: { glaze: 'kept', sum: null } }));
@@ -625,6 +631,15 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       const named = E;
       if (d && E && E.id !== d.file) E = undefined;
       if (R === undefined) R = d?.json ? await meta(d.json) : d || (!lt && l) ? await lookup(h, folder) : null;
+      // This device's first copy, landed by its own transfer (Drive's answer still on it) beside the file it recorded, though
+      // Drive's search doesn't show it yet: linked as that push sent it, never a second file or copy made beside it.
+      if (d && !d.json && !R && d.file && d.fsum) {
+        const t = await moveOf(`u:${h}:json`), f = t?.dir === 'up' && t.file?.id ? await meta(t.file.id) : null;
+        if (f && !f.removed && f.trashed === false && f.appProperties?.glaze === 'doc' && f.appProperties.key === h && f.appProperties.sum === d.fsum && (f.parents || []).includes(folder)) {
+          d = await putDoc(h, { ...d, json: f.id, jh: f.headRevisionId || null, rsum: d.fsum, lsum: d.fsum, rev: -1 }, d);
+          R = f;
+        }
+      }
       // This device's first push stopped before its copy's answer came (its file recorded): a copy naming that file is its own,
       // as Drive took it, and linked so; another device's is met as a first meeting, this device's file put away as a losing
       // copy's is.
@@ -688,7 +703,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
           got.file = null; got.fileRev = null; got.external = true;
         }
         if (gone?.file) { if (gone.file !== got.file) await putAway(gone.file, folder); await away([gone.file], null); }
-        const source = { ...restore, json: R.id, file: got.file, fh: got.fileRev, fsum: got.sum };
+        // A whole link, should this device's own push of it wait for the run's last step: its key, and Drive's copy as met.
+        const source = { key: key || got.key, h, kind: l ? kindOf(l.rec) : got.kind, jh: R.headRevisionId || null, rsum: j.sum, lsum: null, rev: -1, trashed: false, ...restore, json: R.id, file: got.file, fh: got.fileRev, fsum: got.sum };
         // Marked before it is written: a worker stopped before its link lands meets it again on the next run, never leaving a
         // document here that no run goes back to.
         if (!l) { await mark(got.key); const now2 = await take(got.key, null, got); if (got.external) return push(got.key, h, now2, source, folder); await agreed(got.key, h, R, got, now2, null); return; }
@@ -712,6 +728,13 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
 
       // A file let go as edited outside Glaze (below) whose mark didn't land, the run stopping between: marked now.
       if (d.keep) d = await tagKept(h, d);
+      // This device's own staged copy, landed while the document changed again (Drive's answer still on its transfer): what it
+      // sent is what both sides agree on, as its push would have recorded, never Drive's side of a conflict.
+      const sent = R && !R.removed && R.id === d.json ? await moveOf(`u:${h}:json`) : null;
+      if (sent?.dir === 'up' && sent.file?.id === R.id && !!R.headRevisionId && sent.file.headRevisionId === R.headRevisionId && SUM.test(R.appProperties?.sum || '')
+        && R.appProperties.sum !== d.rsum) {
+        d = await putDoc(h, { ...d, jh: R.headRevisionId, rsum: R.appProperties.sum, lsum: R.appProperties.sum, rev: Number(R.appProperties.rev) || 0 }, d);
+      }
       // Follow a same-content copy's new file before weighing Trash or deletion: the old kept file is no longer this
       // document's. Its change must not move the replacement into Trash, nor supply bytes for it. So too for a copy with new
       // content beside the file this device knew deleted for good (another device kept it and wrote a file of its own).

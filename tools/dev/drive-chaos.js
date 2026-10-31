@@ -4,13 +4,14 @@
 //   NODE_PATH=/Users/jame/Projects/gemino/node_modules nice -n 19 taskpolicy -b node tools/dev/drive-chaos.js …
 // Options: --from N --count N (seeds; default 1, 200), --ops N (40), --devices N (3), --minutes N (stop after),
 // --masks a,b (leave out the operations a known defect needs: test/helpers/drive-chaos.cjs KNOWN; 'all' for every one),
-// --shrink (shrink each failing seed), --json FILE (every result), SEED=n replays one seed with its full trace.
+// --shrink (shrink each failing seed), --json FILE (every result), --tiny (transfers go large past 256 bytes: staged resumable
+// uploads and ranged downloads, killed mid-chunk), SEED=n replays one seed with its full trace.
 'use strict';
 const C = require('../../test/helpers/drive-chaos.cjs');
 
 const arg = (name, d) => { const i = process.argv.indexOf(`--${name}`); return i < 0 ? d : process.argv[i + 1]; };
 const flag = (name) => process.argv.includes(`--${name}`);
-const o = { ops: Number(arg('ops', process.env.ITER || 40)), devices: Number(arg('devices', 3)) };
+const o = { ops: Number(arg('ops', process.env.ITER || 40)), devices: Number(arg('devices', 3)), tiny: flag('tiny') || process.env.TINY === '1' };
 const masks = arg('masks', '');
 o.masks = masks === 'all' ? Object.keys(C.KNOWN).filter((k) => !C.KNOWN[k].fixed) : masks.split(',').filter(Boolean);
 const from = Number(arg('from', 1)), count = Number(arg('count', 200)), minutes = Number(arg('minutes', 0));
@@ -54,7 +55,7 @@ const minimal = async (r) => {
     failing.push(seed);
     if (flag('shrink')) await minimal(r);
   }
-  console.log(`\n${n} seeds × ${o.ops} operations × ${o.devices} devices in ${Math.round((Date.now() - t0) / 1000)} s; ${failing.length} failing${failing.length ? `: ${failing.join(' ')}` : ''}`);
+  console.log(`\n${n} seeds × ${o.ops} operations × ${o.devices} devices${o.tiny ? ' (tiny transfers)' : ''} in ${Math.round((Date.now() - t0) / 1000)} s; ${failing.length} failing${failing.length ? `: ${failing.join(' ')}` : ''}`);
   if (Object.keys(tally).length) console.log(`by invariant: ${JSON.stringify(tally)}`);
   // Not failures: what last writer wins does by design that a student might still call a loss.
   if (soft.length) console.log(`by design, ${soft.length} seeds:\n  ${soft.slice(0, 5).join('\n  ')}`);
