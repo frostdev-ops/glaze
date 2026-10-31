@@ -3519,6 +3519,8 @@ const openDriveSync = () => {
     pack: async (rec, parts) => { driveSyncSheets(); return GZ_SHEET_DATA.pack(GZ_SHEET_DATA.join(rec.book, driveSyncRows(parts))); },
     hash: async (text) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))].map((b) => b.toString(16).padStart(2, '0')).join(''),
     more: driveStore,
+    // A file past one request goes in chunks over as many runs as it takes (documents/drive-sync.js transfers).
+    staged: true,
     stage: { get: (k) => stage().get(k), keys: (p) => stage().keys(p), entries: (p) => stage().entries(p), write: (puts, dels) => stage().write(puts, dels) },
     // Chrome stops a worker that waits 30 s for a fetch's answer or hears nothing for 30 s, Firefox one idle for 30 s: while
     // transfers go, a cheap extension call every 25 s. Safari unloads it regardless; there the next run goes on instead.

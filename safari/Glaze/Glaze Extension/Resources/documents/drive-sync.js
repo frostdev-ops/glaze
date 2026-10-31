@@ -40,10 +40,11 @@
 // A file larger than one request (documents/drive.js SMALL) never holds a run up: the run's own pass stages it (an upload's
 // bytes, or a download to come) and goes on to the rest, the change list's token moving past it; the run's last step sends
 // it in chunks, as far as the worker's life allows, and a later run goes on from where Drive says it stands (transfers below).
-// In 4.0.1 a document or record whose file or JSON copy is larger than one request (BIG) is never sent or brought: it stays
-// on the device, marked too large (storage.local driveSyncLarge { docs: { key }, recs: { 'area:key' } }, which Documents and
-// Settings show), and its last copy in Drive, if any, stays as it was; nothing is trashed or deleted for it. Staged transfers
-// (env.staged, below) come back in 4.0.2.
+// A document or record past what a transfer carries (a JSON copy over MAX_JSON, a PDF's or deck's file over FILE_MAX: more
+// than another device could bring) is never sent or brought: it stays on the device, marked too large (storage.local
+// driveSyncLarge { docs: { key }, recs: { 'area:key' } }, which Documents and Settings show), and its last copy in Drive, if
+// any, stays as it was; nothing is trashed or deleted for it. With transfers off (env.staged unset, as 4.0.1's builds ran),
+// the same holds past one request (BIG).
 // Nothing goes anywhere but Google Drive.
 // Classic script for the worker; module.exports for node.
 var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
@@ -62,6 +63,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
   // Larger than this, a transfer waits for the run's last step (documents/drive.js SMALL: an upload past it goes resumable);
   // the stage keeps its bytes in pieces of up to PIECE, each at its offset.
   const BIG = 5 << 20, PIECE = 8 << 20;
+  // The largest file a document's transfer brings (a PDF's or deck's, as the file store keeps it: documents/doc-files.js MAX).
+  const FILE_MAX = 50e6;
   const HASH = /^[0-9a-f]{32}$/, SUM = /^[0-9a-f]{64}$/, PART = /^\d{1,9}:\d{1,5}$/;
   // Why a run stopped that only the student can fix (Settings says how); every other reason is tried again later.
   const STOP = new Set(['auth', 'connect', 'account', 'setup', 'off', 'permission', 'scope', 'browser', 'unsupported', 'quota', 'folder']);
@@ -127,7 +130,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     const locks = env.locks === undefined ? globalThis.navigator?.locks || null : env.locks;
     // Everything else Glaze keeps (background/drive-store.js): its hooks run in these same runs, after the documents.
     const more = env.more || null;
-    // Staged transfers, off until 4.0.2: an item past BIG stays on the device ('large'), and any a build that staged left is let go.
+    // Staged transfers (background/background.js sets env.staged). Off: an item past BIG stays on the device ('large'), and any
+    // a build that staged left is let go.
     const staging = env.staged === true;
     const chains = new Map();
     const queued = (name, fn) => {
@@ -199,12 +203,24 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
 
     // ---- transfers larger than one request. env.stage (IndexedDB glaze-drive in the worker: '<slot>@<offset>' → a piece)
     // keeps an upload's bytes and a download's so far; storage.local driveSyncMoves { slot: { dir, tag, size, owner, since,
-    // … } } what each is: an upload's target and metadata, its resumable session (documents/drive.js put keep: the session's
-    // address, what Drive confirmed, the bytes' SHA-256) and, once sent, Drive's answer (file); a download's file, revision,
-    // what has come (at) and whether it is whole (done). A run's own pass never sends one: up and down stage it and say
-    // 'pending' (that document or record waits; the rest goes on). The run's last step (transfers) sends them, oldest first,
-    // as far as the worker's life allows, then hands each back to its owner, whose next up or down takes the answer.
+    // … } } what each is: an upload's target and metadata, the SHA-256 of its bytes (b), its resumable session (documents/
+    // drive.js put keep: the session's address, what Drive confirmed) and what Drive's answer is written into (commit); a
+    // download's file, revision, what has come (at) and whether it is whole (done). A run's own pass never sends one: up and
+    // down stage it and say 'pending' (that document or record waits; the rest goes on). The run's last step (transfers)
+    // sends them, oldest first, as far as the worker's life allows.
+    // An upload is its owner's push stopped at that request: Drive's answer is written where the push would have written it
+    // (a document's link, a record's) as it comes, in the run's last step, and until then the document or record is held as
+    // the push left it (holds: its sync waits, keeping only what a meeting named for its next step). A download is a read
+    // that its owner, met again, finds whole in the stage, kept until the owner is met without waiting on it.
     const stage = env.stage || null;
+    // Whether the stage opens (IndexedDB can be refused: a private window, no room): asked once a worker, the first time a
+    // transfer would use it; refused, every transfer goes in one go within the worker's life, as with no stage.
+    let opens = null;
+    const usable = async () => {
+      if (!stage) return false;
+      if (opens === null) { try { await stage.keys('\u0001'); opens = true; } catch (e) { console.warn('Sync to Google Drive: no stage for transfers', e?.why || e); opens = false; } }
+      return opens;
+    };
     const moves = async () => (await S.get(MOVES))[MOVES] || {};
     const moveOf = async (slot) => (await moves())[slot] || null;
     const setMove = (slot, t) => held('moves', async () => {
@@ -246,10 +262,11 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       return D((c) => c.put({ meta: o.create, mime: o.mime, bytes, keep }));
     };
     // An upload of this content (tag) to slot, aimed at the file target (undefined: whichever make chooses). make() → { bytes,
-    // id, meta, create, mime, info } or null (nothing to send), called only when it isn't already on its way. Small: sent now.
-    // Large: staged, 'pending' until sent; one on its way to another file than the one aimed at now starts again. Once sent,
-    // taken whichever file it landed in (a new one when its own was gone). → { file (Drive's answer), info } or null
-    const up = async (slot, tag, target, make, owner) => {
+    // id, rev (the revision it is aimed at), sum (the Glaze sum it is aimed at), meta, create, mime, info } or null (nothing
+    // to send). Small: sent now. Large: staged, 'pending'; commit { doc: h, set: 'file' | 'json', link } or { rec: h, link }:
+    // the link its owner writes with Drive's answer (commit below). Without one (the day's snapshot) the answer waits on the
+    // transfer for its owner's next call, which takes it. → { file (Drive's answer), info } or null
+    const up = async (slot, tag, target, make, owner, commit = null) => {
       if (!staging) {
         const m = await make();
         if (!m) return null;
@@ -257,21 +274,21 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         return { file: await send(m, m.bytes), info: m.info ?? null };
       }
       const t = await moveOf(slot);
-      if (t?.dir === 'up' && t.tag === tag && (t.file || target === undefined || (t.aim ?? null) === (target ?? null))) {
+      if (t?.dir === 'up' && !t.commit && t.tag === tag && (t.file || target === undefined || (t.aim ?? null) === (target ?? null))) {
         if (t.file) { await dropMove(slot); return { file: t.file, info: t.info ?? null }; }
         throw new Fail('pending');
       }
       if (t) await dropMove(slot);
       const m = await make();
       if (!m) return null;
-      if (!stage || m.bytes.length <= BIG) return { file: await send(m, m.bytes), info: m.info ?? null };
-      await setMove(slot, { dir: 'up', tag, aim: target === undefined ? m.id ?? null : target ?? null, size: m.bytes.length, id: m.id ?? null, rev: m.rev ?? null, meta: m.meta, create: m.create, mime: m.mime,
-        info: m.info ?? null, owner, since: now(), session: null, file: null });
+      if (m.bytes.length <= BIG || !await usable()) return { file: await send(m, m.bytes), info: m.info ?? null };
+      await setMove(slot, { dir: 'up', tag, aim: target === undefined ? m.id ?? null : target ?? null, size: m.bytes.length, b: await bytesSum(m.bytes), id: m.id ?? null, rev: m.rev ?? null,
+        sum: m.sum ?? null, meta: m.meta, create: m.create, mime: m.mime, info: m.info ?? null, owner, since: now(), session: null, file: null, commit });
       await staged(slot, m.bytes);
       throw new Fail('pending');
     };
     // A download of file f (its metadata: id, size, headRevisionId), at most max bytes. Small, or of no size Drive gives:
-    // read now. Large: 'pending' until brought into the stage by ranges, then taken by the next call. Its tag is the file's id,
+    // read now. Large: 'pending' until brought into the stage by ranges, then read from there. Its tag is the file's id,
     // revision and size: one replaced meanwhile starts over. → Uint8Array
     const down = async (slot, f, max, owner) => {
       const size = Number(f?.size);
@@ -279,9 +296,16 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         if (Number.isSafeInteger(size) && size > BIG) throw new Fail('large');
         return D((c) => c.media(f.id, Math.min(max, BIG))).catch((e) => { throw e?.why === 'size' ? new Fail('large') : e; });
       }
-      if (!stage || !Number.isSafeInteger(size) || size <= BIG || typeof f.headRevisionId !== 'string') return D((c) => c.media(f.id, max));
+      if (!Number.isSafeInteger(size) || size <= BIG || typeof f.headRevisionId !== 'string' || !await usable()) return D((c) => c.media(f.id, max));
       if (size > max) throw new Fail('size');
       const tag = `${f.id}:${f.headRevisionId}:${size}`, t = await moveOf(slot);
+      // A copy's or record's read of another file of the same document or record, at a lower id and out of Drive's trash
+      // (two devices' first uploads that overlapped): every device keeps that one, so its read goes on and its owner is met
+      // with it, as meeting both in turn would end.
+      if (t?.dir === 'down' && t.id !== f.id && t.id < f.id && (slot.startsWith('r:') || slot.endsWith(':json'))) {
+        const Z = await meta(t.id);
+        if (!Z.removed && Z.trashed === false) throw new Fail('pending');
+      }
       if (t?.dir === 'down' && t.tag === tag) {
         if (!t.done) throw new Fail('pending');
         const bytes = await unstaged(slot, size);
@@ -291,20 +315,73 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       await setMove(slot, { dir: 'down', tag, id: f.id, rev: f.headRevisionId, size, max, at: 0, step: PIECE, owner, since: now(), done: false });
       throw new Fail('pending');
     };
-    // One upload sent: its session kept on its record between requests and workers. A document's whose file is gone from
-    // Drive goes back to the document ('missing'), which goes to Trash as a file deleted for good in Drive does; a record's
-    // or the snapshot's goes into a new file.
+    // The whole downloads starting with prefix let go: their owner was met without waiting (it took them, or no longer needs them).
+    const settle = async (prefix) => { for (const [slot, t] of Object.entries(await moves())) if (slot.startsWith(prefix) && t.dir === 'down' && t.done) await dropMove(slot); };
+    // An upload of h's (a document's: its file or JSON copy) on its way: h is held until Drive's answer is written. A
+    // meeting meanwhile leaves the copy it named (another device's, at the lowest id) and its file on the transfer, for the
+    // owner's next step. → whether h is held
+    const holds = async (slots, hint = {}, own = null) => {
+      if (!staging) return false;
+      const m = await moves(), mine = slots.filter((s) => m[s]?.dir === 'up' && m[s].commit);
+      if (!mine.length) return false;
+      const R = hint.R?.id && hint.R.id !== own ? hint.R.id : null, E = hint.E?.id || null;
+      if (R || E) {
+        await held('moves', async () => {
+          const n = await moves();
+          for (const s of mine) {
+            if (!n[s]) continue;
+            const o = n[s].owner || {};
+            n[s] = { ...n[s], owner: { ...o, ...(R && { R: o.R && o.R !== own && o.R < R ? o.R : R }), ...(E && { E }) } };
+          }
+          await S.set({ [MOVES]: n });
+        });
+      }
+      return true;
+    };
+    const docHeld = async (h, hint) => holds([`u:${h}:file`, `u:${h}:json`], hint, (await docOf(h))?.json || null);
+    // Drive's answer to a staged upload, written where its owner's push writes it: a document's link (its file, then its
+    // copy), or a record's (background/drive-store.js commit); then the transfer is let go. Written again (a worker stopped
+    // between the two), it says the same.
+    const commit = async (slot, t, file) => {
+      const c = t.commit;
+      if (c.doc) {
+        await putDoc(c.doc, { ...c.link, ...(c.set === 'file' ? { file: file.id, fh: file.headRevisionId || null } : { json: file.id, jh: file.headRevisionId || null }) }, await docOf(c.doc));
+        if (c.set === 'file') await unwait(`up:${c.doc}`);
+      } else if (c.rec) await more.commit(c.rec, c.link, file);
+      await dropMove(slot);
+    };
+    // One upload sent: its session kept on its record between requests and workers, and Drive's answer written down. A
+    // document's whose file is gone from Drive goes back to the document ('missing'), which goes to Trash as a file deleted
+    // for good in Drive does; a record's or the snapshot's goes into a new file.
     const sendMove = async (slot, t) => {
       const bytes = await unstaged(slot, t.size);
       if (!bytes) throw new Fail('missing');
       const keep = { get: async () => (await moveOf(slot))?.session || null, set: (session) => patchMove(slot, { session }), drop: () => patchMove(slot, { session: null }) };
       const file = await send(t, bytes, keep, t.owner?.doc ? null : () => patchMove(slot, { id: null, aim: null }));
-      await patchMove(slot, { file, session: null });
+      if (t.commit) await commit(slot, t, file);
+      else await patchMove(slot, { file, session: null });
+    };
+    // An upload's target as Drive holds it now, before any of its bytes go in this run. → 'send'; 'landed' (it holds these
+    // very bytes: this upload's, its answer lost, or the same content); or 'gone' (in Drive's trash, moved out, no longer
+    // Glaze's for its owner, or changed since it was staged: by another device, or outside Glaze).
+    const aimed = async (t, folder) => {
+      if (!t.id) return { as: 'send' };
+      const F = await meta(t.id);
+      if (F.removed) return { as: 'send' }; // send's own answer: a new file, or 'missing' for a document's
+      const file = t.owner?.doc ? (t.meta?.appProperties?.glaze === 'file' ? 'file' : 'doc') : null;
+      const ours = F.trashed === false && (t.owner?.doc ? (F.parents || []).includes(folder) && F.appProperties?.glaze === file && F.appProperties?.key === t.owner.doc
+        : t.owner?.rec ? F.appProperties?.glaze === 'rec' && F.appProperties?.key === t.owner.rec : true);
+      // Landed: its bytes and what it sets on the file (name, Glaze's properties) are Drive's now.
+      const set = t.meta || {}, props = Object.entries(set.appProperties || {});
+      if (ours && !!t.b && String(F.sha256Checksum || '').toLowerCase() === t.b && (!set.name || F.name === set.name)
+        && props.every(([k, v]) => (v === null ? F.appProperties?.[k] === undefined : F.appProperties?.[k] === String(v)))) return { as: 'landed', F };
+      if (!ours || (t.rev && F.headRevisionId !== t.rev) || (t.sum && F.appProperties?.sum !== t.sum)) return { as: 'gone' };
+      return { as: 'send' };
     };
     // One download brought in by ranges, each piece kept as it comes; a file whose revision or size moved meanwhile, or that
-    // is gone, is given back to its owner to ask anew ('missing').
+    // is gone, is given back to its owner to ask anew ('missing'). One in Drive's trash still reads (a first meeting weighs it).
     const bringMove = async (slot, t) => {
-      const same = (f) => !f.removed && f.trashed !== true && f.headRevisionId === t.rev && Number(f.size) === t.size;
+      const same = (f) => !f.removed && f.headRevisionId === t.rev && Number(f.size) === t.size;
       if (!same(await meta(t.id))) throw new Fail('missing');
       let at = t.at || 0, step = t.step || PIECE;
       if (t.sending) step = Math.max(256 << 10, Math.floor(step / 2));
@@ -327,55 +404,53 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       await patchMove(slot, { done: true });
     };
     // The run's last step. Each transfer on its way, oldest first: sent or brought in, then handed back to its owner (a
-    // document's next step, a record, the day's snapshot), which takes it. One its owner no longer wants is let go. A file
-    // gone, or replaced, goes back to its owner to ask anew; one Drive refuses as it stands is passed over (a snapshot's
-    // day skipped). env.alive keeps the worker up meanwhile where it can (not Safari: there the next run goes on).
+    // document's next step, a record, the day's snapshot). One its owner no longer wants is let go. An upload whose target
+    // changed since it was staged, a file gone, or one replaced, goes back to its owner to ask anew; one Drive refuses as
+    // it stands is passed over (a snapshot's day skipped). env.alive keeps the worker up meanwhile where it can (not Safari:
+    // there the next run goes on). Staged bytes no transfer names (a worker stopped between the two) are let go first.
     const transfers = async (folder) => {
-      if (!staging || !stage || !Object.keys(await moves()).length) return;
+      if (!staging || !stage) return;
+      const named = new Set(Object.keys(await moves()).map((s) => `${s}@`));
+      if (!named.size) return;
+      // The stage no longer opens (an earlier worker's could): each transfer let go, its owner going again in one go.
+      if (!await usable()) {
+        for (const [slot, t] of Object.entries(await moves())) { await setMove(slot, null); await replay(t.owner, folder); }
+        return;
+      }
+      const loose = (await stage.keys('')).filter((k) => !named.has(k.slice(0, k.lastIndexOf('@') + 1)));
+      if (loose.length) await stage.write([], loose);
       const stop = env.alive?.() || null, tries = new Map();
       try {
         for (;;) {
-          const [slot, t] = Object.entries(await moves()).filter(([k]) => (tries.get(k) || 0) < 3).sort(([, a], [, b]) => (a.since || 0) - (b.since || 0))[0] || [];
+          // Whole downloads last: each owner is met once every piece it waits for has come.
+          const [slot, t] = Object.entries(await moves()).filter(([k]) => (tries.get(k) || 0) < 3)
+            .sort(([, a], [, b]) => (!!a.done - !!b.done) || (a.since || 0) - (b.since || 0))[0] || [];
           if (!slot) return;
           tries.set(slot, (tries.get(slot) || 0) + 1);
           if (t.dir === 'up' && t.owner?.doc) {
             const key = t.owner.key || (await docOf(t.owner.doc))?.key, rec = key ? await env.papers.get(key) : null;
-            // A first upload has no document link yet: a later Trash or Delete must still cancel it.
-            if (!rec || P().trashed(rec)) {
-              if (t.file?.id) await trashTo(t.file.id, true);
-              await dropMove(slot);
-              continue;
-            }
+            // Trashed or deleted here since it was staged: let go, and the document, no longer held, says so in Drive.
+            if (!rec || P().trashed(rec)) { await dropMove(slot); await replay(t.owner, folder); continue; }
           }
           try {
             // A download its owner no longer asks for (a picture whose note went, a copy replaced since) is let go before any
             // of its bytes come: its owner, met again, waits on this transfer ('pending') or no longer does.
             if (t.dir === 'down' && !t.done) {
-              const result = await replay(t.owner, folder), still = await moveOf(slot);
+              const r = await replay(t.owner, folder), still = await moveOf(slot);
               if (still?.tag !== t.tag || still.done) continue;
-              if (result !== 'pending') { await dropMove(slot); continue; }
+              if (r !== 'pending') { await dropMove(slot); continue; }
             }
             if (t.dir === 'up' && t.owner?.rec && more?.current && !await more.current(t.owner, t.tag)) {
               await dropMove(slot);
               await replay(t.owner, folder);
               continue;
             }
-            if (t.dir === 'up' && t.owner?.doc && t.id && !t.file) {
-              // A staged upload can wait across runs. Reconcile a target changed since staging before sending any bytes;
-              // an outside edit or another device's revision must not be overwritten by that old decision to update it.
-              // The revision it was aimed at when staged (rev), else what the document's link says now.
-              const d = await docOf(t.owner.doc), F = await meta(t.id), file = slot === `u:${t.owner.doc}:file`;
-              const same = t.rev ? F.headRevisionId === t.rev : t.id === d?.[file ? 'file' : 'json'] && F.headRevisionId === d?.[file ? 'fh' : 'jh'];
-              // The upload itself may have landed before its reply was lost. Its exact bytes are safe to resume.
-              const landed = file && F.appProperties?.b === t.meta?.appProperties?.b && unchanged(F);
-              if (!F.removed && (!same && !landed || F.trashed || !(F.parents || []).includes(folder)
-                || F.appProperties?.glaze !== (file ? 'file' : 'doc') || F.appProperties?.key !== t.owner.doc)) {
-                await dropMove(slot);
-                await replay(t.owner, folder);
-                continue;
-              }
-            }
-            if (!t.file && !t.done) await (t.dir === 'up' ? sendMove(slot, t) : bringMove(slot, t));
+            if (t.dir === 'up' && !t.file) {
+              const a = await aimed(t, folder);
+              if (a.as === 'gone') { await dropMove(slot); await replay(t.owner, folder); continue; }
+              if (a.as === 'landed' && t.commit) await commit(slot, t, a.F);
+              else await sendMove(slot, t);
+            } else if (t.dir === 'down' && !t.done) await bringMove(slot, t);
           } catch (e) {
             if (e?.why === 'missing') { await dropMove(slot); await replay(t.owner, folder); continue; }
             if (SKIP.has(e?.why) || (t.owner?.snap && e?.why === 'quota')) {
@@ -387,28 +462,24 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
             }
             throw e;
           }
-          const result = await replay(t.owner, folder);
+          await replay(t.owner, folder);
+          // The day's snapshot takes its answer as it is met; one not taken (its day over) is let go.
           const left = await moveOf(slot);
-          if (left?.tag === t.tag && (left.file || (left.done && result !== 'pending'))) await dropMove(slot);
+          if (left?.tag === t.tag && left.file) await dropMove(slot);
         }
       } finally { stop?.(); }
     };
-    // A transfer's owner again, as the run met it: a document (by its tag, with the copy and file a change named), or one of
-    // background/drive-store.js's.
+    // A transfer's owner again: a document (by its tag, with the copy and file a meeting named), or one of background/
+    // drive-store.js's. Met without waiting, its whole downloads are let go.
     const replay = async (owner, folder) => {
       let result;
       if (owner?.doc) {
-        const hint = { folder };
-        if (owner.R) hint.R = await meta(owner.R);
-        if (owner.E) hint.E = await meta(owner.E);
+        const d = await docOf(owner.doc), hint = { folder };
+        if (owner.R) { const R = await meta(owner.R); if (!R.removed || R.id === d?.json) hint.R = R; }
+        if (owner.E) { const E = await meta(owner.E); if (!E.removed || E.id === d?.file) hint.E = E; }
         result = await one(owner.key || null, owner.doc, hint);
       } else if (owner && more?.replay) result = await more.replay(owner, hooks(folder));
-      // A document may need both its JSON and its file: keep each completed download until it has taken both.
-      const same = (t) => owner?.doc ? t.owner?.doc === owner.doc : owner?.rec ? t.owner?.rec === owner.rec : false;
-      const held = Object.entries(await moves()).filter(([, t]) => same(t) && t.dir === 'down');
-      if (result !== 'pending' || !held.some(([, t]) => !t.done)) for (const [slot, t] of held) {
-        if (t.done) await dropMove(slot);
-      }
+      if (result !== 'pending') await settle(owner?.doc ? `d:${owner.doc}:` : owner?.rec ? `r:${owner.rec}` : '\u0000');
       return result;
     };
 
@@ -456,7 +527,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       const external = E.headRevisionId && E.headRevisionId !== rev && E.appProperties?.sum === sum
         && E.appProperties?.glaze === 'file' && E.appProperties?.key === h;
       if (!external && await env.files.has(ref.hash)) return null;
-      const bytes = await down(`d:${h}:file`, E, 50e6, owner);
+      const bytes = await down(`d:${h}:file`, E, FILE_MAX, owner);
       const got = await env.files.put(bytes, (external ? E.mimeType : ref.type) || '');
       // A new device has no earlier mapping or change event for an external replacement. Bring that side in now.
       if (external) return { ref: { hash: got.hash, size: got.size, type: got.type }, rev: E.headRevisionId };
@@ -529,31 +600,30 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // Either one larger than a request goes in the run's last step (up: 'pending'), the copy only once the file is there.
     const push = async (key, h, l, d, folder) => {
       const kind = kindOf(l.rec), b = body(key, l.rec, l.parts), sum = await env.hash(canon(b)), owner = { doc: h, key };
-      // Its file or JSON copy past one request: it stays here, its last copy in Drive as it was. Told before anything is
-      // exported or written (the copy as its push would write it, with room for the ids it names).
-      if (!staging && ((FILES.includes(kind) && Number(l.rec.file?.size ?? l.rec.size) > BIG)
-        || new TextEncoder().encode(JSON.stringify({ glaze: 'document', v: 1, ...b, file: 'x'.repeat(64), fileRev: 'x'.repeat(64), updated: 1e13 })).length > BIG)) throw new Fail('large');
-      // This content's file staged already (on its way, or sent): not exported again.
-      const going = await moveOf(`u:${h}:file`), onWay = going?.dir === 'up' && going.tag === sum ? going : null;
-      let ex = onWay ? null : await env.exportOf(key, l.rec, l.parts);
-      if (!staging && ex?.bytes?.length > BIG) throw new Fail('large');
+      // Its file or JSON copy past what a transfer carries (in 4.0.1, past one request): it stays here, its last copy in Drive
+      // as it was. Told before anything is exported or written (the copy as its push would write it, with room for the ids
+      // it names).
+      const most = staging ? { file: FILE_MAX, copy: MAX_JSON, out: 4 * FILE_MAX } : { file: BIG, copy: BIG, out: BIG };
+      if ((FILES.includes(kind) && Number(l.rec.file?.size ?? l.rec.size) > most.file)
+        || new TextEncoder().encode(JSON.stringify({ glaze: 'document', v: 1, ...b, file: 'x'.repeat(64), fileRev: 'x'.repeat(64), updated: 1e13 })).length > most.copy) throw new Fail('large');
+      let ex = await env.exportOf(key, l.rec, l.parts);
+      if (ex?.bytes?.length > most.out) throw new Fail('large');
       // No file to make here (a PDF's bytes still in its record from before the file store, or gone from this device) and
       // Drive's copy already this one: nothing new to send unless the recorded file still needs its JSON copy.
-      if (!ex && !onWay && d?.json && d.rsum === sum && d.lsum === sum && !d.unsent) return d;
-      const base = ((onWay ? onWay.info?.name : ex?.name) || `${safe(l.rec.title) || 'Untitled'}${EXT[kind]}`).replace(/\.[^.]+$/, '');
-      let file = d?.file || null, fh = d?.fh || null;
-      if ((ex || onWay || d?.unsent) && file && d?.json) {
+      if (!ex && d?.json && d.rsum === sum && d.lsum === sum && !d.unsent) return d;
+      const base = (ex?.name || `${safe(l.rec.title) || 'Untitled'}${EXT[kind]}`).replace(/\.[^.]+$/, '');
+      let file = d?.file || null, fh = d?.fh || null, already = false;
+      if ((ex || d?.unsent) && file && d?.json) {
         // Exporting may take time. An outside edit or move since sync checked the file must be reconciled before this
         // upload, even when it fits in one request. A staged upload checks again just before its bytes are sent.
         const F = await meta(file);
         if (F.removed || F.trashed || F.appProperties?.glaze !== 'file' || F.appProperties?.key !== h || (Array.isArray(F.parents) && !F.parents.includes(folder))) return sync(key, h, { E: F, folder });
-        // This device's own staged upload, landed in this file while the document changed again (Drive's answer still on its
-        // transfer): Glaze's revision, recorded as its link would have been, never an outside edit or another device's.
-        const landed = going?.dir === 'up' && going.file?.id === file && !!F.headRevisionId && going.file.headRevisionId === F.headRevisionId;
-        if (landed && F.appProperties?.sum === going.tag && unchanged(F)) { d = await putDoc(h, { ...d, fh: F.headRevisionId, fsum: going.tag }, d); fh = F.headRevisionId; }
         if (F.headRevisionId && F.headRevisionId !== fh) {
           if (F.appProperties?.sum === d.fsum || rewritten(F)) return sync(key, h, { E: F, folder });
-          if (!(F.appProperties?.sum === sum && unchanged(F))) {
+          // Already this content as Glaze wrote it (an upload of this device's whose answer never came): not sent again,
+          // and its copy names the revision Drive holds.
+          if (F.appProperties?.sum === sum && unchanged(F)) { fh = F.headRevisionId; already = true; }
+          else {
             // Another Glaze's file reached Drive before its JSON. Give that copy time to arrive, then preserve the raw
             // export in Data if its worker never finishes. Detach durably before writing a file of our own.
             if (!await waited(h)) throw new Fail('stale');
@@ -570,16 +640,14 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       // trash, is kept as it is, and a new file goes beside it; a second one as Glaze wrote it is put away as a losing copy's.
       // Found by its tag in Drive's trash too: one as Glaze wrote it is put away (the student restoring it later finds it in
       // Glaze/Data, never a second file beside the document's), one edited outside Glaze kept as it is.
-      if ((ex || onWay || d?.unsent) && (!file || !d?.json)) {
-        const known = file || onWay?.file?.id;
+      if ((ex || d?.unsent) && (!file || !d?.json)) {
+        const known = file;
         const found = known ? [await meta(known)] : (await D((c) => c.find(`'${folder}' in parents and appProperties has { key='key' and value='${h}' } and appProperties has { key='glaze' and value='file' }`, { pageSize: 10 })))
           .files.filter((f) => f.appProperties?.key === h && f.appProperties?.glaze === 'file').sort(byId);
         file = null; fh = null;
         for (const F of found) {
           if (F.removed || F.appProperties?.glaze !== 'file' || F.appProperties?.key !== h || (Array.isArray(F.parents) && !F.parents.includes(folder))) continue;
-          // This device's own upload, landed (Drive's answer still on its transfer), is as Glaze wrote it too.
-          const landed = going?.dir === 'up' && going.file?.id === F.id && !!F.headRevisionId && going.file.headRevisionId === F.headRevisionId && F.appProperties?.sum === going.tag && unchanged(F);
-          const glazes = landed || (F.id === d?.file ? !!F.headRevisionId && F.headRevisionId === d.fh : unchanged(F)), same = F.trashed === false && glazes;
+          const glazes = F.id === d?.file ? !!F.headRevisionId && F.headRevisionId === d.fh : unchanged(F), same = F.trashed === false && glazes;
           if (same && !file) { file = F.id; fh = F.headRevisionId || null; }
           else if (glazes) await putAway(F.id, folder);
           else await D((c) => c.patch(F.id, { appProperties: { glaze: 'kept', sum: null } }));
@@ -593,32 +661,30 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       }
       // Its file already holds this content as Glaze wrote it, recorded by a push that stopped before its copy went (unsent):
       // not sent again, only the copy.
-      const have = !!d?.unsent && !onWay && !!file && file === d.file && !!fh && fh === d.fh && d.fsum === sum;
-      if ((ex || onWay) && !have) {
-        // A completed upload's cached answer cannot undo the ownership check above (edited or moved before replay).
-        if (onWay?.file && file !== onWay.file.id) await dropMove(`u:${h}:file`);
+      const have = already || (!!d?.unsent && !!file && file === d.file && !!fh && fh === d.fh && d.fsum === sum);
+      if (ex && !have) {
         if (!file) await uploading(h);
+        // Recorded before the copy goes: a push that stops between the two meets this file's revision next time, so an edit
+        // made outside Glaze meanwhile is told from Glaze's own, and sends the copy then (unsent), which may still name a file
+        // that is gone, though both sides otherwise read as agreed. A staged upload's answer is written so as it comes.
+        const link = { ...(d || { key, h, kind, json: null, jh: null, rsum: null, lsum: null, rev: -1, trashed: false }), fsum: sum, unsent: true };
         const r = await up(`u:${h}:file`, sum, d?.file || d?.json ? file : undefined, async () => {
-          ex ||= await env.exportOf(key, l.rec, l.parts);
-          if (!ex) return null;
           const meta = { name: ex.name, appProperties: { glaze: 'file', key: h, sum, b: await bytesSum(ex.bytes) } };
           return { bytes: ex.bytes, id: file, rev: fh, meta, create: { ...meta, mimeType: ex.mime, parents: [folder] }, mime: ex.mime, info: { name: ex.name } };
-        }, owner);
+        }, owner, { doc: h, set: 'file', link });
         if (r) {
           file = r.file.id; fh = r.file.headRevisionId || null;
           await unwait(`up:${h}`);
-          // Recorded before the copy goes: a push that stops between the two meets this file's revision next time, so an edit
-          // made outside Glaze meanwhile is told from Glaze's own, and sends the copy then (unsent), which may still name a file
-          // that is gone, though both sides otherwise read as agreed.
-          await putDoc(h, { ...(d || { key, h, kind, json: null, jh: null, rsum: null, lsum: null, rev: -1, trashed: false }), file, fh, fsum: sum, unsent: true }, d);
+          await putDoc(h, { ...link, file, fh }, d);
         }
       }
       // updated: Last edited where it was pushed, for a first meeting's later-edited rule (not in the sum: no change by itself).
       const text = JSON.stringify({ glaze: 'document', v: 1, ...b, file, fileRev: fh, updated: Number.isFinite(l.rec.updated) ? l.rec.updated : 0 });
       const copy = { name: `${base}.glaze.json`, appProperties: { glaze: 'doc', key: h, sum, rev: String(l.rec.revision || 0) } };
+      const link = { key, h, kind, file, fh, fsum: sum, rsum: sum, lsum: sum, rev: l.rec.revision || 0, trashed: false };
       const r = await up(`u:${h}:json`, await env.hash(text), d?.json || null,
-        async () => ({ bytes: new TextEncoder().encode(text), id: d?.json || null, rev: d?.jh ?? null, meta: copy, create: { ...copy, mimeType: JSON_TYPE, parents: [folder] }, mime: JSON_TYPE }), owner);
-      return putDoc(h, { key, h, kind, json: r.file.id, jh: r.file.headRevisionId || null, file, fh, fsum: sum, rsum: sum, lsum: sum, rev: l.rec.revision || 0, trashed: false }, d);
+        async () => ({ bytes: new TextEncoder().encode(text), id: d?.json || null, rev: d?.jh ?? null, meta: copy, create: { ...copy, mimeType: JSON_TYPE, parents: [folder] }, mime: JSON_TYPE }), owner, { doc: h, set: 'json', link });
+      return putDoc(h, { ...link, json: r.file.id, jh: r.file.headRevisionId || null }, d);
     };
     // Drive's side kept here, recorded before this device's goes up: what follows (and a retry after a push that failed) meets
     // only this device's change, never keeping Drive's side a second time. R: the copy whose side was kept, or null.
@@ -664,15 +730,6 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       const named = E;
       if (d && E && E.id !== d.file) E = undefined;
       if (R === undefined) R = d?.json ? await meta(d.json) : d || (!lt && l) ? await lookup(h, folder) : null;
-      // This device's first copy, landed by its own transfer (Drive's answer still on it) beside the file it recorded, though
-      // Drive's search doesn't show it yet: linked as that push sent it, never a second file or copy made beside it.
-      if (d && !d.json && !R && d.file && d.fsum) {
-        const t = await moveOf(`u:${h}:json`), f = t?.dir === 'up' && t.file?.id ? await meta(t.file.id) : null;
-        if (f && !f.removed && f.trashed === false && f.appProperties?.glaze === 'doc' && f.appProperties.key === h && f.appProperties.sum === d.fsum && (f.parents || []).includes(folder)) {
-          d = await putDoc(h, { ...d, json: f.id, jh: f.headRevisionId || null, rsum: d.fsum, lsum: d.fsum, rev: -1 }, d);
-          R = f;
-        }
-      }
       // This device's first push stopped before its copy's answer came (its file recorded): a copy naming that file is its own,
       // as Drive took it, and linked so; another device's is met as a first meeting, this device's file put away as a losing
       // copy's is.
@@ -761,13 +818,6 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
 
       // A file let go as edited outside Glaze (below) whose mark didn't land, the run stopping between: marked now.
       if (d.keep) d = await tagKept(h, d);
-      // This device's own staged copy, landed while the document changed again (Drive's answer still on its transfer): what it
-      // sent is what both sides agree on, as its push would have recorded, never Drive's side of a conflict.
-      const sent = R && !R.removed && R.id === d.json ? await moveOf(`u:${h}:json`) : null;
-      if (sent?.dir === 'up' && sent.file?.id === R.id && !!R.headRevisionId && sent.file.headRevisionId === R.headRevisionId && SUM.test(R.appProperties?.sum || '')
-        && R.appProperties.sum !== d.rsum) {
-        d = await putDoc(h, { ...d, jh: R.headRevisionId, rsum: R.appProperties.sum, lsum: R.appProperties.sum, rev: Number(R.appProperties.rev) || 0, unsent: false }, d);
-      }
       // Follow a same-content copy's new file before weighing Trash or deletion: the old kept file is no longer this
       // document's. Its change must not move the replacement into Trash, nor supply bytes for it. So too for a copy with new
       // content beside the file this device knew deleted for good (another device kept it and wrote a file of its own).
@@ -792,6 +842,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       }
       if (!R) { // a document this device knew whose copy it can no longer find: up again as new
         if (l && !lt) await push(key, h, l, { ...d, json: null }, folder);
+        // Deleted for good here before its copy ever went (a first push stopped between its file and its copy): its file
+        // into Drive's trash, as for one whose copy went.
+        else if (!l) { if (!d.trashed) await trashTo(d.file, true); await dropDoc(h, d); }
         return;
       }
       // Deleted for good here: Drive's files into Drive's trash, never further. One restored in Drive meanwhile comes back.
@@ -839,7 +892,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
           // A PDF or deck replaced in Drive: its new bytes are Drive's side.
           const copy = rdirty ? await linkedCopy(R, h, key, owner) : null;
           if (rdirty && !copy) return;
-          const bytes = await down(`d:${h}:file`, E, 50e6, owner), ref = await env.files.put(bytes, E.mimeType || '');
+          const bytes = await down(`d:${h}:file`, E, FILE_MAX, owner), ref = await env.files.put(bytes, E.mimeType || '');
           const base = rdirty ? copy.record : strip(l.rec);
           const got = { kind: kindOf(l.rec), record: { ...base, kind: kindOf(l.rec), file: { hash: ref.hash, size: ref.size, type: ref.type }, size: ref.size }, parts: null, file: d.file, fileRev: E.headRevisionId, sum: null };
           if (ldirty) await keepOther(key, l, got);
@@ -867,7 +920,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         // Glaze): then a file of its own goes up.
         if (ldirty && (await sumOf(key, l)) === got.sum) {
           if (!force || !got.file || got.external || await adopt(got, h, folder)) { await agreed(key, h, R, got, l, d); return; }
-          return push(key, h, l, { ...d, json: R.id }, folder);
+          return push(key, h, l, { ...d, json: R.id, jh: R.headRevisionId || null }, folder);
         }
         // Then this device's goes up as a change of its own, into the file Drive's copy names (another device may have left
         // the one this device knew) and as that file stands (edited outside Glaze since: kept as it is).
@@ -882,7 +935,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         }
         const now2 = await take(key, l, got);
         if (force && got.file && !got.external && await adopt(got, h, folder)) { await agreed(key, h, R, got, now2, d); return; }
-        if (force || got.external) return push(key, h, now2, { ...d, json: R.id }, folder);
+        if (force || got.external) return push(key, h, now2, { ...d, json: R.id, jh: R.headRevisionId || null }, folder);
         await agreed(key, h, R, got, now2, d);
         return;
       }
@@ -947,9 +1000,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // A document Drive's copy of can't be read is passed over; one that met a write here or a file still moving
     // (stale, or the paper store's refusal) is marked to be tried again next run. Drive's own trouble stops the run.
     // → 'pending' for one whose file waits for the run's last step.
-    const one = (key, h, hint) => held(`doc:${h}`, () => sync(key, h, hint)).then(async (r) => {
+    const one = (key, h, hint) => held(`doc:${h}`, async () => (await docHeld(h, hint) ? 'pending' : sync(key, h, hint))).then(async (r) => {
       const k = key || (await docOf(h))?.key;
-      if (k && r !== 'pending') await tooLarge('docs', k, false);
+      if (r !== 'pending') { if (k) await tooLarge('docs', k, false); await settle(`d:${h}:`); }
       return r;
     }, async (e) => {
       // Too large to sync: passed over, marked while this device holds it.
@@ -1056,6 +1109,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // Glaze wrote it it is put away in Glaze/Data (a losing copy's), and edited outside Glaze it is kept as it is.
     const stray = async (F, folder) => {
       const h = F?.appProperties?.key, d = HASH.test(h || '') ? await docOf(h) : null;
+      // One whose upload is on its way: its answer, once written, may name this very file.
+      if (d && await docHeld(h)) return;
       if (!d?.json || !d.file || F.id === d.file || F.removed || F.trashed !== false || F.appProperties?.glaze !== 'file' || !(F.parents || []).includes(folder)) return;
       const R = await meta(d.json);
       if (R.removed || R.trashed !== false || R.appProperties?.sum !== d.rsum || (d.jh && R.headRevisionId !== d.jh)) return;
@@ -1115,7 +1170,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     const prune = async () => {
       for (const k of Object.keys((await S.get(LARGE))[LARGE]?.docs || {})) if (!await env.papers.get(k)) await tooLarge('docs', k, false);
     };
-    const hooks = (folder) => ({ D, folder, state: setState, up, down, move: { get: moveOf, drop: dropMove }, large: (id, on) => tooLarge('recs', id, on) });
+    const hooks = (folder) => ({ D, folder, state: setState, up, down, large: (id, on) => tooLarge('recs', id, on),
+      move: { get: moveOf, drop: dropMove, hold: (slot, R, own) => holds([slot], { R }, own), settle } });
     // ---- runs. o.full: everything (turning it on); o.push: only what was saved here.
     const runNow = async (o = {}) => {
       runStop = stopped;
