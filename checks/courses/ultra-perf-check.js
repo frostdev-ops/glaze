@@ -325,7 +325,8 @@ const stopProfile = async ({ cdp, events }) => {
     const row = passes[e.name] ||= { count: 0, ms: 0, forced: {} };
     row.count++; row.ms += e.dur / 1000;
     const top = (e.args?.beginData?.stackTrace || e.args?.data?.stackTrace)?.[0];
-    if (top) { const k = `${top.url.replace(/^chrome-extension:\/\/[a-p]{32}\//, 'ext:') || '(page)'} ${top.functionName}:${top.lineNumber + 1}`; const f = row.forced[k] ||= { count: 0, ms: 0 }; f.count++; f.ms += e.dur / 1000; }
+    // Trace stack lines are already one-based; the CPU profile's call frames below are zero-based.
+    if (top) { const k = `${top.url.replace(/^chrome-extension:\/\/[a-p]{32}\//, 'ext:') || '(page)'} ${top.functionName}:${top.lineNumber}`; const f = row.forced[k] ||= { count: 0, ms: 0 }; f.count++; f.ms += e.dur / 1000; }
   }
   // PERF_PROFILE=selectors: the style passes' costliest selectors (Chrome's selector stats).
   const selectors = {};
