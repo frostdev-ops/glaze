@@ -20,6 +20,7 @@
   /* A course outline's column Ultra has just drawn, until the sidebar takes it a pass later (navigation/page/sidebar.js
      settled): not shown in Ultra's place first, so it never moves to the window's edge in view. */
   html[data-gz-sb-ultra]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap aside.outline-actions:not([data-gz-sidebar-host]) { visibility: hidden; }
+  html[data-gz-sb-unsized] #site-wrap aside.outline-actions > :is(#gz-nt-block, #gz-sb-widgets) { visibility: hidden; }
   html[data-gz-sb-notes][data-gz-sidebar="expanded"] #site-wrap aside.outline-actions[data-gz-sidebar-host] > #gz-sb-widgets { visibility: hidden; }
   [data-gz-sidebar-host] > #right-side { width: auto !important; }
   html:not([data-gz-sidebar]) #gz-sidebar, html[data-gz-sidebar="none"] #gz-sidebar { display: none !important; }
