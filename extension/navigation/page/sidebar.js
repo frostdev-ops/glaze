@@ -270,9 +270,10 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     const k = S.key(LMS, location.origin, uid);
     if (g !== epoch) return false;
     if (!k) throw new Error('no account');
-    const r = await get(ultra ? [k, HELD] : k);
+    // Two reads side by side: one key each, as every reader of the record asks for it.
+    const [r, hr] = await Promise.all([get(k), ultra ? get(HELD) : null]);
     if (g !== epoch) return false;
-    if (ultra) heights = cleanHeights(r[HELD]);
+    if (ultra) heights = cleanHeights(hr[HELD]);
     let next = S.clean(r[k]);
     // The one-time move into the dock is written first, and only then shown (navigation/sidebar.js migrate).
     if (!next.mig && (await account()) !== uid) { if (g !== epoch) return false; seen = null; return start(); }
