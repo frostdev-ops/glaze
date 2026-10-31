@@ -935,7 +935,7 @@ const fillDetails = (p, details, n) => {
 };
 const heldRoom = (p) => (p.doc.root.dataset.gzSbHeld != null && parseFloat(p.doc.root.style.getPropertyValue('--gz-sb-held'))) || 0;
 
-test("Details & Actions added empty on a route into a course and filled before the page settles is held from when Ultra adds it", async () => {
+test("Details & Actions added empty on a route into a course is held from when Ultra adds it, and filling it releases the hold", async () => {
   const HELD = `detailsHeight:${O}`;
   const p = page({ at: 'courses', stored: { ...record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }), [HELD]: { _101_1: 231 } } });
   await p.pass();
@@ -947,13 +947,12 @@ test("Details & Actions added empty on a route into a course and filled before t
   const { details, aside, content } = routedOutline(p);
   inner.append(p.el('div', 'course-content-container', p.el('div', 'panel-wrap', p.el('div', 'bb-course-navigation', 'Course'), p.el('div', 'course-outline-grid', content, aside))));
   await p.pass();
-  assert.equal(aside.dataset.gzSidebarHost, undefined, 'the page has not settled: the sidebar has not taken the column yet');
+  assert.equal(aside.dataset.gzSidebarHost, 'native', 'the new column is taken while Content still loads');
   assert.equal(heldRoom(p), 231, 'held at the height it took last time from the moment Ultra adds it');
   // Ultra fills it in steps; the first rows settle the page and the sidebar takes the column with the hold kept.
   fillDetails(p, details, 2);
   await p.pass();
-  assert.equal(aside.dataset.gzSidebarHost, 'native', 'settled on its first rows');
-  assert.equal(heldRoom(p), 231, 'taking the column mid-fill keeps the room');
+  assert.equal(heldRoom(p), 231, 'part filled: still held');
   assert.equal(Math.max(details.box.height, heldRoom(p)), 231, 'part filled: as tall, so nothing under it moves');
   assert.deepEqual(p.store[HELD], { _101_1: 231 }, 'a part-filled height is never kept as the course\'s');
   fillDetails(p, details, 7);
@@ -997,7 +996,7 @@ test("the sidebar takes a course outline's column as soon as Ultra draws it, bef
   }
 });
 
-test("Details & Actions drawn again on a route back into Content in a course tab is held before the page settles", async () => {
+test("Details & Actions drawn again on a route back into Content in a course tab is held from when Ultra draws it", async () => {
   const HELD = `detailsHeight:${O}`;
   const p = page({ at: 'outline', aside: 'live', stored: { ...record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }), [HELD]: { _101_1: 231 } } });
   p.c.GZ_CTABS = { visible: () => true };
@@ -1020,7 +1019,7 @@ test("Details & Actions drawn again on a route back into Content in a course tab
   const { details, aside, content } = routedOutline(p);
   inner.append(p.el('div', 'course-content-container', p.el('div', 'panel-wrap', p.el('div', 'bb-course-navigation', 'Course'), p.el('div', 'course-outline-grid', content, aside))));
   await p.pass();
-  assert.equal(p.side.context().family, 'other', 'not settled yet');
+  assert.equal(p.side.context().family, 'outline', 'the new column is the new view');
   assert.equal(heldRoom(p), 231, 'held from when Ultra adds it again');
   fillDetails(p, details, 7);
   await p.pass();

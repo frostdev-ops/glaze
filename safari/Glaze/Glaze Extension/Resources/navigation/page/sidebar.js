@@ -1078,6 +1078,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (!n) return !host.el.isConnected || host.own || !document.querySelector('aside.outline-actions, div.todo-panel');
     const v = viewOf(n);
     if (v.cid && cid && v.cid !== cid) return false;
+    // A course outline's column Ultra has just drawn is the new view, empty or not: taken at once, so Glaze's header and
+    // This page are in it before Ultra fills Details & Actions, and nothing under them moves when it does.
+    if (fam === 'outline' && has(n.el, 'outline-actions') && n.el !== nativeView?.el) return true;
     const body = v.content && !busyView(v.content) && (v.content !== nativeView?.content || v.child !== nativeView?.child);
     return body || (filled(n.page) && (!nativeView || n.el !== nativeView.el || v.text !== nativeView.text || v.nodes.length !== nativeView.nodes.length || v.nodes.some((e, i) => e !== nativeView.nodes[i])));
   };

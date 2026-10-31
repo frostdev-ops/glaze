@@ -81,10 +81,22 @@ test('the still-aside requirement catches Details growth during sidebar adoption
     { t: 200, host: null, details: 66, [notes]: 206 },
     { t: 500, host: 'native', details: 231, [notes]: 421, [dock]: 600 },
   ]), /blocks moved/, 'adoption must not excuse the native Details growth as well as the new header');
-  assert.doesNotThrow(() => requireStillAside([
+  assert.throws(() => requireStillAside([
     { t: 200, host: null, details: 231, [notes]: 371 },
     { t: 500, host: 'native', details: 231, [notes]: 421, [dock]: 600 },
-  ]), 'inserting only the sidebar header remains an allowed adoption');
+  ]), /blocks moved/, 'the sidebar putting its header in above them is a move too');
+});
+
+test('the still-aside requirement catches the column moving sideways when the sidebar takes it', () => {
+  const notes = 'aside.outline-actions > #gz-nt-block', dock = 'aside.outline-actions > #gz-sb-widgets';
+  assert.throws(() => requireStillAside([
+    { t: 200, host: null, details: 26, left: 1028 },
+    { t: 500, host: 'native', details: 231, [notes]: 421, [dock]: 600, left: 1328 },
+  ]), /moved sideways/);
+  assert.doesNotThrow(() => requireStillAside([
+    { t: 200, host: 'native', details: 231, [notes]: 421, [dock]: 600, left: 1376 },
+    { t: 500, host: 'native', details: 231, [notes]: 421, [dock]: 600, left: 1376 },
+  ]));
 });
 
 test('the still-aside requirement rejects a run where the widget dock never appears', () => {

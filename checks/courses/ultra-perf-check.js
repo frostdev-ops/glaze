@@ -100,11 +100,16 @@ const ASIDE = '<aside class="js-course-info-skip-link-target outline-actions"><b
 // course with Details & Actions empty and Content still loading (OUTLINE_AT), fills Details & Actions with its seven 33 px
 // rows (231 px) about 330 ms later, and Content's list comes after that, so the page settles for Glaze with the fill.
 const OUTLINE_AT = 140, DETAILS_FILL = [[OUTLINE_AT + 250, 2], [OUTLINE_AT + 330, 7]], OUTLINE_ROWS_AT = OUTLINE_AT + 460;
-const outlineRows = () => `<div class="outline-column">${rows('outline', 240)}</div>`;
-const routeBody = (kind) => `<section class="route-view-container ${kind === 'outline' ? 'course' : ''}"><h1 elementtiming="title">${kind}</h1>${kind === 'course'
+const outlineRows = () => rows('outline', 240);
+// A course as live (live-shapes-2026-10-31.md): Ultra's course panel over the page, the window wide, Content's grid with the
+// outline beside its right column, which stock Ultra draws at the window's right edge.
+const coursePanel = () => '<section class="course bb-offcanvas-container route-view-container"><h1 elementtiming="title">outline</h1><div class="course-content-container"><div class="panel-wrap"><div class="bb-course-navigation">Course</div>'
+  + '<main class="course-main-content"><div class="course-tool-content"><section class="course-outline-content route-view-container js-course-skip-link-target"><div class="course-outline"><div class="course-outline-grid">'
+  + `<div class="outline-column"><div class="spinner" aria-busy="true"></div></div>${ASIDE}</div></div></section></div></main></div></div></section>`;
+const routeBody = (kind) => kind === 'outline' ? coursePanel() : `<section class="route-view-container"><h1 elementtiming="title">${kind}</h1>${kind === 'course'
   ? `<div class="courses-panel"><div class="course-org-list">${Array.from({ length: 24 }, (_, i) => `<article class="element-card course-element-card" data-course-id="_${101 + i}_1"><div class="course-banner"></div><div class="element-details"><h4 class="course-title"><span class="js-course-title-element">Course ${i}</span></h4><div class="course-status">Open</div></div></article>`).join('')}</div></div>`
-  : kind === 'outline' ? `<div class="course-content-container"><div class="course-outline-grid"><section class="course-outline-content"><div class="spinner" aria-busy="true"></div></section>${ASIDE}</div></div>` : rows(kind, 30)}</section>`;
-const fixture = `<!doctype html><html lang="en"><head><base href="//ultra-cdn.invalid/ultra/uiv4001.0.0-rel/"><meta charset="utf-8"><title>Ultra performance fixture</title><style>body{margin:0;font:14px sans-serif}nav{position:fixed;width:200px}main{margin-left:200px}.native-row,.content-list-item{padding:4px;border-bottom:1px solid #ddd}.course-outline-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;align-items:start}.outline-actions{display:flex;flex-direction:column}</style></head><body><div id="site-wrap"><nav id="base_tools"><a href="/ultra/institution-page"><span>Institution Page</span></a><a href="/ultra/course">Courses</a></nav><main id="main-content"><div id="main-content-inner">${routeBody('stream')}</div></main></div><aside id="gz-perf-own"></aside></body></html>`;
+  : rows(kind, 30)}</section>`;
+const fixture = `<!doctype html><html lang="en"><head><base href="//ultra-cdn.invalid/ultra/uiv4001.0.0-rel/"><meta charset="utf-8"><title>Ultra performance fixture</title><style>body{margin:0;font:14px sans-serif}nav{position:fixed;width:200px}main{margin-left:200px}.native-row,.content-list-item{padding:4px;border-bottom:1px solid #ddd}.course.bb-offcanvas-container{position:fixed;inset:0;overflow:auto;background:#fff;z-index:10}.course-outline-grid{display:grid;grid-template-columns:minmax(0,1fr) 330px;align-items:start}.outline-actions{display:flex;flex-direction:column}</style></head><body><div id="site-wrap"><nav id="base_tools"><a href="/ultra/institution-page"><span>Institution Page</span></a><a href="/ultra/course">Courses</a></nav><main id="main-content"><div id="main-content-inner">${routeBody('stream')}</div></main></div><aside id="gz-perf-own"></aside></body></html>`;
 
 // Glaze's blocks in the outline's right column, from the route on: each one's top while shown, and the layout shift they
 // take part in (aside, below).
@@ -122,12 +127,15 @@ function asideWatch() {
     const d = document.querySelector('aside.outline-actions > .js-details-and-actions');
     Object.assign(row, { details: d ? Math.round(d.getBoundingClientRect().height) : null, held: document.documentElement.style.getPropertyValue('--gz-sb-held') && document.documentElement.hasAttribute('data-gz-sb-held') ? document.documentElement.style.getPropertyValue('--gz-sb-held') : null,
       host: d?.parentElement.getAttribute('data-gz-sidebar-host') ?? null });
+    const a = d?.parentElement.getBoundingClientRect();
+    if (a && a.width > 0 && a.height > 0) row.left = Math.round(a.left * 10) / 10;
     const key = JSON.stringify(row);
     if (key !== was && frames.length < 200) { was = key; frames.push({ t, ...row }); }
     frame = requestAnimationFrame(sample);
   };
   frame = requestAnimationFrame(sample);
-  const ours = (n) => { const e = n?.nodeType === 1 ? n : n?.parentElement; return blocks.find((b) => e?.closest(b)) || null; };
+  // The column itself counts too: it shifting at all is the sidebar taking it where it wasn't drawn.
+  const ours = (n) => { const e = n?.nodeType === 1 ? n : n?.parentElement; return blocks.find((b) => e?.closest(b)) || (e?.closest('aside.outline-actions') ? 'aside.outline-actions' : null); };
   const take = (list) => { for (const e of list) if (!e.hadRecentInput) for (const x of e.sources || []) { const b = ours(x.node); if (b) shifts.push({ t: Math.round(e.startTime - from), value: e.value, block: b, prev: x.previousRect.top, cur: x.currentRect.top }); } };
   let po = null;
   try { po = new PerformanceObserver((l) => take(l.getEntries())); po.observe({ type: 'layout-shift' }); } catch { /* no layout-shift entries here */ }
@@ -149,7 +157,7 @@ async function settle(page, change) {
         inserted = performance.now();
         document.getElementById('main-content-inner').innerHTML = body;
         for (const [ms, n] of fill) setTimeout(() => { const d = document.querySelector('.js-details-and-actions'); if (d) d.innerHTML = Array.from({ length: n }, (_, i) => `<div style="height:33px;box-sizing:border-box">Action ${i + 1}</div>`).join(''); }, ms - outlineAt);
-        setTimeout(() => { const c = document.querySelector('.course-outline-content'); if (c) c.innerHTML = rowsHtml; }, rowsAt - outlineAt);
+        setTimeout(() => { const c = document.querySelector('.course-outline-content .outline-column'); if (c) c.innerHTML = rowsHtml; }, rowsAt - outlineAt);
       } else document.getElementById('main-content-inner').innerHTML = body;
     } else if (change === 'own') {
       const own = document.getElementById('gz-perf-own');
@@ -593,8 +601,8 @@ if (require.main === module) (async () => {
     }
     // PERF_REQUIRE_STILL_ASIDE (with PERF_WIDTH at least 1560, where the sidebar is the outline's right column, and
     // PERF_REPS at least 2): on a course seen before, Course notes and the dock never move while Ultra fills Details &
-    // Actions, and take part in no layout shift. A move in the frame the sidebar takes the column (its header put in above
-    // them, with Details & Actions unchanged) is the sidebar's own and is listed, not asserted.
+    // Actions or when the sidebar takes the column, the column itself doesn't move sideways once drawn, and none of it
+    // takes part in a layout shift.
     if (stillAside) {
       assert.ok(WIDTH >= 1560 && reps >= 2, 'PERF_REQUIRE_STILL_ASIDE needs PERF_WIDTH >= 1560 and PERF_REPS >= 2');
       const returning = results.filter((r) => r.rep > 0 && r.glaze !== 'off');
@@ -612,7 +620,9 @@ if (require.main === module) (async () => {
         console.log(JSON.stringify({ rep: r.rep, instrumented: r.instrumented, asideMoves: moves, asideShifts: shifts }));
         assert.ok(frames.some((f) => f['aside.outline-actions > #gz-nt-block'] != null), `rep ${r.rep}: Course notes showed in the outline's column`);
         assert.ok(frames.some((f) => f['aside.outline-actions > #gz-sb-widgets'] != null), `rep ${r.rep}: My widgets showed in the outline's column`);
-        assert.deepEqual(moves.filter((m) => !m.adopt), [], `rep ${r.rep}: Glaze's blocks moved while Ultra filled Details & Actions`);
+        assert.deepEqual(moves, [], `rep ${r.rep}: Glaze's blocks moved while Ultra filled Details & Actions or the sidebar took the column`);
+        const lefts = frames.map((f) => f.left).filter((x) => x != null);
+        assert.ok(lefts.every((x) => x === lefts[0]), `rep ${r.rep}: the column moved sideways: ${JSON.stringify([...new Set(lefts)])}`);
         assert.deepEqual(shifts, [], `rep ${r.rep}: Glaze's blocks took part in a layout shift`);
       }
     }
