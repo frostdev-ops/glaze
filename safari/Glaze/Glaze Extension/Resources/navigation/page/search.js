@@ -107,7 +107,11 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
             if (!source) {
               if (Date.now() < (retry.get(key) || 0)) { complete = false; return []; }
               try {
-                const rows = await r.search(course, k, (html) => GZ_DOCTEXT.html(html));
+                // A course's documents read in the last five minutes with their bodies (courses/ultra.js page.outline: a
+                // hover's prefetch) are searched as they are; otherwise this query reads them, within its budget.
+                const kept = k.list === 'contents' && U.page?.outlineNow?.(course.id, { body: true });
+                const rows = kept ? Object.defineProperty(U.searchItems(k, kept.items, course, (html) => GZ_DOCTEXT.html(html), Date.now(), location.origin), 'complete', { value: kept.complete })
+                  : await r.search(course, k, (html) => GZ_DOCTEXT.html(html));
                 source = { complete: rows.complete !== false, rows: rows.map(({ text, ...row }) => ({ ...row, index: S.fold(`${row.title} ${text}`) })) };
                 retry.delete(key);
               } catch (e) {

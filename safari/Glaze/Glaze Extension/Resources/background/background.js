@@ -1146,6 +1146,26 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     .then(reply, () => reply({ first: false }));
   return true;
 });
+// An Ultra site's student and memberships (courses/ultra.js page), as a page there last read them: kept in this worker's
+// session storage (gone when the browser closes, never the page's) for the site's other pages and course-tab frames.
+// get, put (a fresh read: read and at now) and touch (the student confirmed again by a top page: at now).
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:ultraMine') return;
+  (async () => {
+    const origin = ultraPage(s) && chrome.storage.session && await fromUltra(s);
+    if (!origin) return null;
+    const k = `ultraMine:${origin}`, now = Date.now();
+    const had = (await chrome.storage.session.get(k))[k] || null;
+    if (m.op === 'get') return had;
+    const id = /^_\d+_\d+$/;
+    if (m.op === 'touch') { if (had && had.uid === m.uid) await chrome.storage.session.set({ [k]: { ...had, at: now } }); return null; }
+    const v = m.op === 'put' && m.mine;
+    if (!v || !id.test(v.uid) || !Array.isArray(v.mem) || v.mem.length > 2000 || JSON.stringify(v.mem).length > 4e6) return null;
+    await chrome.storage.session.set({ [k]: { uid: v.uid, mem: v.mem, complete: v.complete !== false, read: now, at: now } });
+    return null;
+  })().then(reply, () => reply(null));
+  return true;
+});
 chrome.tabs?.onRemoved?.addListener((id) => {
   chrome.storage.session?.remove([`landed:${id}`, ...Object.keys(FRAMED).map((what) => frameKey(what, id))]).catch(() => {});
   for (const frames of Object.values(FRAMED)) frames.delete(id);
@@ -1805,10 +1825,12 @@ const forget = async (origin) => {
     patch.courseSlots = slots;
   }
   const keys = chrome.storage.local.getKeys ? await chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null));
-  const drop = keys.filter((k) => k === `dueWeek:${origin}` || k === `seenCoursesAt ${origin}` || k.startsWith(`seenCoursesAt moodle:${origin}/`));
+  const drop = keys.filter((k) => k === `dueWeek:${origin}` || k === `seenCoursesAt ${origin}` || k.startsWith(`seenCoursesAt moodle:${origin}/`)
+    || k === `ultraMe:${origin}` || k.startsWith(`ultraBooks:${origin}/`));
   if (typeof got.todoCache?.key === 'string' && got.todoCache.key.startsWith(`todo:${origin}/`)) drop.push('todoCache');
   if (Object.keys(patch).length) await chrome.storage.local.set(patch);
   if (drop.length) await chrome.storage.local.remove(drop);
+  await Promise.resolve(chrome.storage.session?.remove(`ultraMine:${origin}`)).catch(() => {});
   await ensure();
   return true;
 };
@@ -1821,8 +1843,8 @@ const forgetAll = async () => {
   for (const [k, c] of Object.entries(all.seenCourses || {})) {
     try { origins.add(new URL(c?.site || k.replace(/^(canvas|moodle):/, '')).origin); } catch { /* unscoped legacy entry */ }
   }
-  for (const k of Object.keys(all)) if (k.startsWith('dueWeek:')) {
-    try { origins.add(new URL(k.slice(8)).origin); } catch { /* invalid entry */ }
+  for (const k of Object.keys(all)) if (k.startsWith('dueWeek:') || k.startsWith('ultraMe:') || k.startsWith('ultraBooks:')) {
+    try { origins.add(new URL(k.slice(k.indexOf(':') + 1)).origin); } catch { /* invalid entry */ }
   }
   for (const origin of origins) await forget(origin);
   await chrome.storage.local.remove([...LMS, 'askLater']);
@@ -2314,7 +2336,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   task.then(reply, () => reply({ ok: false }));
   return true;
 });
-const LOADABLE = new Set(['core/motion.js', 'looks/scene-host.js', 'navigation/nav.js', 'looks/page/light.js', 'navigation/nav-items.js', 'navigation/navlayout.js', 'content/content-ultra.js', 'content/content-canvas.js', 'navigation/page/nav.js', 'navigation/navbar.js', 'navigation/page/navbar-canvas.js', 'navigation/page/navbar-moodle.js', 'navigation/page/navbar.js', 'navigation/page/navbar-widgets.js', 'settings/page/settingspage.js', 'courses/stream.js', 'courses/page/stream.js', 'courses/folders.js', 'courses/page/folders.js', 'core/zip.js', 'writer/drafts.js', 'planner/gradecalc.js', 'planner/page/grades.js', 'looks/page/schedule.js', 'planner/todo.js', 'planner/page/todo.js', 'i18n/de.js', 'i18n/es.js', 'i18n/fr.js', 'i18n/nl.js', 'i18n/pt-BR.js', 'courses/cards.js', 'courses/page/cards.js', 'courses/page/cardtasks.js', 'courses/moodle.js', 'courses/page/moodle.js', 'navigation/seek.js', 'navigation/page/search.js', 'courses/page/discussion-nav.js', 'planner/remind.js', 'planner/page/reminders.js', 'navigation/page/palette.js', 'navigation/page/keys.js', 'navigation/page/coursemenu.js', 'courses/page/previews.js', 'courses/page/download.js', 'core/widgets.js', 'navigation/sidebar.js', 'navigation/page/sidebar.js', 'core/page/widgets.js', 'courses/page/coursecards.js', 'courses/page/dashboard.js', 'looks/lookx.js', 'looks/lookset.js', 'looks/looks.js', 'looks/page/lookx.js', 'looks/lookparts.js', 'looks/page/lookparts.js', 'looks/motionx.js', 'writer/page/drafts.js', 'courses/page/docs.js', 'courses/page/bbpreview.js', 'courses/page/canvasopen.js', 'courses/page/docreview.js', 'navigation/page/place.js', 'planner/gradescope.js', 'planner/ics.js', 'planner/calexport.js', 'planner/page/calexport.js', 'planner/gpa.js', 'core/doctext.js', 'planner/page/import.js', 'planner/page/gpaterms.js', 'planner/syllabus.js', 'planner/syllabus-ai.js', 'planner/page/syllabus.js', 'planner/classes.js', 'planner/page/classes.js', 'planner/insights.js', 'planner/page/insights.js', 'planner/notes.js', 'planner/page/notes.js', 'courses/ultra.js', 'courses/lmsq.js', 'pet/pet.js', 'pet/petbrain.js', 'pet/petphysics.js', 'pet/page/petworld.js', 'pet/petsprites.js', 'pet/petplayer.js', 'pet/page/pet.js', 'navigation/coursetabs.js', 'navigation/page/coursetabs.js', 'sharing/page/sharing.js', 'looks/parts.js', 'looks/page/rules.js', 'looks/page/motionx.js', 'looks/glsl.js', 'mods/page/mods.js', 'mods/page/modui.js', 'mods/page/modwidgets.js', 'content/routes.js', 'core/popup.js', 'courses/page/popup.js', 'courses/announce.js', 'courses/page/announce.js', 'courses/page/announce-read.js', 'courses/rubric.js', 'courses/page/rubric.js', 'writer/page/editor-menu.js', 'navigation/page/sticky-fold.js', 'writer/writer-ultra.js', 'writer/page/writer.js', 'writer/writer-target.js', 'writer/writer-context-discussion.js', 'writer/page/writer-quote.js', 'writer/writer-context-assignment.js', 'writer/writer-submit.js', 'writer/page/writer-submit.js']);
+const LOADABLE = new Set(['core/motion.js', 'looks/scene-host.js', 'navigation/nav.js', 'looks/page/light.js', 'navigation/nav-items.js', 'navigation/navlayout.js', 'content/content-ultra.js', 'content/content-canvas.js', 'navigation/page/nav.js', 'navigation/navbar.js', 'navigation/page/navbar-canvas.js', 'navigation/page/navbar-moodle.js', 'navigation/page/navbar.js', 'navigation/page/navbar-widgets.js', 'settings/page/settingspage.js', 'courses/stream.js', 'courses/page/stream.js', 'courses/folders.js', 'courses/page/folders.js', 'core/zip.js', 'writer/drafts.js', 'planner/gradecalc.js', 'planner/page/grades.js', 'looks/page/schedule.js', 'planner/todo.js', 'planner/page/todo.js', 'i18n/de.js', 'i18n/es.js', 'i18n/fr.js', 'i18n/nl.js', 'i18n/pt-BR.js', 'courses/cards.js', 'courses/page/cards.js', 'courses/page/cardtasks.js', 'courses/moodle.js', 'courses/page/moodle.js', 'navigation/seek.js', 'navigation/page/search.js', 'courses/page/discussion-nav.js', 'planner/remind.js', 'planner/page/reminders.js', 'navigation/page/palette.js', 'navigation/page/keys.js', 'navigation/page/coursemenu.js', 'courses/page/previews.js', 'courses/page/download.js', 'core/widgets.js', 'navigation/sidebar.js', 'navigation/page/sidebar.js', 'core/page/widgets.js', 'courses/page/coursecards.js', 'courses/page/dashboard.js', 'looks/lookx.js', 'looks/lookset.js', 'looks/looks.js', 'looks/page/lookx.js', 'looks/lookparts.js', 'looks/page/lookparts.js', 'looks/motionx.js', 'writer/page/drafts.js', 'courses/page/docs.js', 'courses/page/bbpreview.js', 'courses/page/canvasopen.js', 'courses/page/docreview.js', 'navigation/page/place.js', 'planner/gradescope.js', 'planner/ics.js', 'planner/calexport.js', 'planner/page/calexport.js', 'planner/gpa.js', 'core/doctext.js', 'planner/page/import.js', 'planner/page/gpaterms.js', 'planner/syllabus.js', 'planner/syllabus-ai.js', 'planner/page/syllabus.js', 'planner/classes.js', 'planner/page/classes.js', 'planner/insights.js', 'planner/page/insights.js', 'planner/notes.js', 'planner/page/notes.js', 'courses/ultra.js', 'courses/lmsq.js', 'courses/page/ahead.js', 'pet/pet.js', 'pet/petbrain.js', 'pet/petphysics.js', 'pet/page/petworld.js', 'pet/petsprites.js', 'pet/petplayer.js', 'pet/page/pet.js', 'navigation/coursetabs.js', 'navigation/page/coursetabs.js', 'sharing/page/sharing.js', 'looks/parts.js', 'looks/page/rules.js', 'looks/page/motionx.js', 'looks/glsl.js', 'mods/page/mods.js', 'mods/page/modui.js', 'mods/page/modwidgets.js', 'content/routes.js', 'core/popup.js', 'courses/page/popup.js', 'courses/announce.js', 'courses/page/announce.js', 'courses/page/announce-read.js', 'courses/rubric.js', 'courses/page/rubric.js', 'writer/page/editor-menu.js', 'navigation/page/sticky-fold.js', 'writer/writer-ultra.js', 'writer/page/writer.js', 'writer/writer-target.js', 'writer/writer-context-discussion.js', 'writer/page/writer-quote.js', 'writer/writer-context-assignment.js', 'writer/writer-submit.js', 'writer/page/writer-submit.js']);
 chrome.runtime.onMessage.addListener((m, sender, reply) => {
   if (m?.type !== 'glaze:load') return;
   const files = Array.isArray(m.files) ? m.files : [];

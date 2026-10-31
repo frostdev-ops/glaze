@@ -79,7 +79,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   // the cards have nothing or the list that was to ask has gone (it failed). Not while the list is on the page, and not
   // within a minute of a failed ask.
   const refresh = () => {
-    if (!on || !L || asking || Date.now() - failed < 60000 || fresh(cache, Date.now()) || document.getElementById('gz-todo')) return;
+    if (!on || !L || !mine || asking || Date.now() - failed < 60000 || fresh(cache, Date.now()) || document.getElementById('gz-todo')) return;
     asking = load().catch(() => { failed = Date.now(); }).finally(() => { asking = null; });
   };
 
@@ -156,29 +156,45 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     paint();
   };
   const onShow = () => { if (document.visibilityState === 'visible') refresh(); };
-  // Who's signed in (their id names their data and the cache; their Canvas time zone counts the days), what's kept.
+  // Who's signed in (their id names their data and the cache; their Canvas time zone counts the days), what's kept. On
+  // Ultra the student last confirmed on this site answers first (courses/ultra.js page.known), so the cards draw what's
+  // kept before anything is asked; sure says whether that's who is signed in now, asked once they're drawn.
+  let heard = false, sure = null, mine = false;
   const start = async () => {
     await ctx.need('planner/todo.js', () => globalThis.GZ_TODO);
     L = globalThis.GZ_TODO;
-    const [p] = await Promise.all([ctx.profile(), readPrefs()]);
+    const known = ultra ? await ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA).then(() => globalThis.GZ_ULTRA?.page?.known?.() || null, () => null) : null;
+    const [p] = known ? [known, await readPrefs()] : await Promise.all([ctx.profile(), readPrefs()]);
     if (!L.ID.test(String(p?.id))) throw new Error('no profile');
     tz = L.zone(p.time_zone);
     uid = String(p.id);
     key = L.storeKey(location.origin, uid);
+    mine = !known;
+    sure = known ? () => ctx.profile().then((x) => String(x?.id) === String(p.id)) : () => true;
     const r = await get([key, CACHE]);
     data = L.clean(r[key]);
     cache = r[CACHE]?.key === key ? r[CACHE] : null;
+    if (heard) return;
+    heard = true;
     try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
     document.addEventListener('visibilitychange', onShow);
     addEventListener('focus', onShow);
   };
-  // If it can't start (no profile), the cards stay as Canvas has them, and it tries again after a minute.
+  // If it can't start (no profile), the cards stay as Canvas has them, and it tries again after a minute. Drawn for
+  // another student than the one signed in: those tasks go, and it starts again.
   const sync = (want) => {
     on = !!want;
     if (!on) { for (const e of document.querySelectorAll('.gz-ct')) e.remove(); asked?.remove(); asked = null; return; }
     const list = !!document.getElementById('gz-todo');
     // Started: whether the list is here now counts as seen, so its going later is noticed whenever it goes.
-    if (!starting) starting = start().then(() => { listed = !!document.getElementById('gz-todo'); paint(); refresh(); }, () => { setTimeout(() => { starting = null; }, 60000); });
+    if (!starting) starting = start().then(() => { listed = !!document.getElementById('gz-todo'); paint(); return sure(); }).then((ok) => {
+      mine = ok;
+      if (ok) return refresh();
+      for (const e of document.querySelectorAll('.gz-ct')) e.remove();
+      cache = data = null;
+      starting = null;
+      sync(on);
+    }, () => { setTimeout(() => { starting = null; }, 60000); });
     else {
       paint();
       if (!cache || (listed && !list)) refresh();

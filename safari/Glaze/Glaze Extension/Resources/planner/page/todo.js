@@ -29,6 +29,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   let dead = false; // it failed for good on this page: Canvas's own list stays
   let gen = 0; // which start is current: off() and each start move it on, and a superseded start's results are dropped
   let who = null; // { uid, tz }
+  let sure = false; // who is the student signed in now, not only the one last seen here (start)
   let key = '';
   let data = { tasks: [], items: {} };
   let cache = null;
@@ -139,7 +140,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   // and an older answer is dropped when it comes.
   const refresh = (force = false) => {
     const g = gen;
-    if (!who || dead || asleep || document.visibilityState === 'hidden') return null;
+    if (!who || !sure || dead || asleep || document.visibilityState === 'hidden') return null;
     if (fetching && fetchGen === g) return fetching;
     const done = (p) => { fetching = p; fetchGen = g; p.finally(() => { if (fetching === p) fetching = null; }); return p; };
     if (!force && covers(cache, Date.now())) {
@@ -607,18 +608,24 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   };
 
   // ---- on the page -------------------------------------------------------------------------------------------------
+  // Ultra: the student last confirmed on this site and their courses (courses/ultra.js page.known), so what's kept for
+  // them draws before anything is asked; null elsewhere, or when there's none.
+  const seen = () => (ultra ? ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA).then(() => globalThis.GZ_ULTRA?.page?.known?.() || null, () => null) : Promise.resolve(null));
   const start = async () => {
     const g = ++gen;
     try {
       await ctx.need('planner/todo.js', () => globalThis.GZ_TODO);
       if (g !== gen) return;
       L = globalThis.GZ_TODO;
-      const [p, list] = await Promise.all([ctx.profile(), ctx.canvasCourses(), readPrefs()]);
+      const known = await seen();
+      if (g !== gen) return;
+      const [p, list] = known ? [known, known.courses || [], await readPrefs()] : await Promise.all([ctx.profile(), ctx.canvasCourses(), readPrefs()]);
       if (g !== gen) return;
       if (!L.ID.test(String(p?.id))) throw new Error('no profile');
       if (formAccount && formAccount !== String(p.id)) form = null;
       formAccount = String(p.id);
       who = { uid: String(p.id), tz: L.zone(p.time_zone) };
+      sure = !known;
       coursesIn(list);
       key = L.storeKey(location.origin, who.uid);
       const r = await new Promise((res) => { try { store().get([key, CACHE, draftKey()], res); } catch { res({}); } });
@@ -629,6 +636,15 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       cache = r?.[CACHE]?.key === key ? r[CACHE] : null;
       if (!box) return;
       render(true);
+      // Drawn for the student last seen here: who it is now is confirmed before anything is asked or kept; another
+      // student's list goes, and theirs is drawn instead.
+      if (known) {
+        const now = await ctx.profile();
+        if (g !== gen) return;
+        if (String(now?.id) !== who.uid) { body?.replaceChildren(); drawn = ''; started = start(); return; }
+        sure = true;
+        ctx.canvasCourses().then((l) => { if (g === gen) { coursesIn(l); render(true); } }, () => {});
+      }
       await refresh();
     } catch {
       if (g === gen) fail();

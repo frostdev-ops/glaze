@@ -406,9 +406,13 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
       me: () => get('/learn/api/v1/users/me').then((m) => (ID.test(m?.id) ? m.id : Promise.reject(new Error('no user')))),
       memberships: (uid) => all(`/learn/api/v1/users/${uid}/memberships?expand=course&limit=200`),
       terms: () => all('/learn/api/v1/terms?limit=200'),
-      todo: async (from, to) => {
+      // With now, the slices are laid back from `to` as far as whole slices still reach now: what's left of the range
+      // is never split for want of the past days ahead of it, which the calendar answers with the rest ([I]: To Do adds
+      // nothing the calendar lacks there). So Better To Do's default range, a week back to a week on, is one request.
+      todo: async (from, to, now) => {
         const out = [];
-        for (const [a, b] of slices(from, to, 14).slice(0, MAX_TODO_SLICES)) out.push(await get(`/learn/api/v1/calendars/todo/studentItems?since=${iso(a)}&until=${iso(b)}`));
+        const start = Number.isFinite(now) && now > from && now < to ? Math.max(from, to - Math.ceil((to - now) / (14 * DAY)) * 14 * DAY) : from;
+        for (const [a, b] of slices(start, to, 14).slice(0, MAX_TODO_SLICES)) out.push(await get(`/learn/api/v1/calendars/todo/studentItems?since=${iso(a)}&until=${iso(b)}`));
         return out;
       },
       // [M] The calendar's nextPage is no "more": it was there with every item already in hand, and led to a wider
@@ -445,25 +449,26 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     };
   };
 
-  // Everything due from `from` to `to` (ms), as due() gives it, read one request at a time: the student, their
-  // courses (names, due-date exception settings), To Do and the calendar, then the gradebook of each course with
-  // something due. A course whose students have due-date exceptions turned on, or whose own exceptions can't be read,
+  // Everything due from `from` to `to` (ms), as due() gives it: the student and their courses (names, due-date exception
+  // settings) beside To Do and the calendar, then the gradebook of each course with something due, three courses at a
+  // time. A course whose students have due-date exceptions turned on, or whose own exceptions can't be read,
   // has no late or missing work ([I], as content.js's due-date chips reckon it); otherwise an item named in the
   // course's exceptions answer has none either. → { items, complete: false when the calendar couldn't be read whole }.
+  const PER_COURSE = 3;
   const planner = async (r, { from, to, now }) => {
-    const uid = await r.me();
-    const mem = await r.memberships(uid);
+    const [[uid, mem], todo, { items: calendar, complete: calendarComplete }] = await Promise.all([
+      r.me().then(async (id) => [id, await r.memberships(id)]), r.todo(from, to, now), r.calendar(from, to)]);
     const names = Object.fromEntries(Object.entries(COURSES(mem)).map(([id, c]) => [id, c.name]));
-    const todo = await r.todo(from, to);
-    const { items: calendar, complete: calendarComplete } = await r.calendar(from, to);
     let complete = calendarComplete && mem.complete !== false;
     const ids = new Set(due({ todo, calendar, now }).map((i) => `${i.cid} ${i.id}`));
-    const rows = {}, exc = {};
-    for (const cid of new Set([...ids].map((k) => k.split(' ')[0]))) {
+    const rows = {}, exc = {}, cids = [...new Set([...ids].map((k) => k.split(' ')[0]))];
+    let next = 0;
+    const one = async (cid) => {
       rows[cid] = await r.grades(cid, uid).catch((e) => { if (e.message === STALE) throw e; complete = false; return []; });
       if (rows[cid].complete === false) complete = false;
       exc[cid] = await excepts(r, mem.find((x) => x?.courseId === cid), cid, rows[cid].filter((g) => ids.has(`${cid} ${g?.columnId}`)), now);
-    }
+    };
+    await Promise.all(Array.from({ length: Math.min(PER_COURSE, cids.length) }, async () => { while (next < cids.length) await one(cids[next++]); }));
     return { items: due({ todo, calendar, rows, names, now, excepted: (cid, col) => exc[cid](col) }), complete };
   };
   // Which of a course's rows can't be called late or missing (the planner's rule above), asked only when one of them
@@ -479,44 +484,233 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
   };
 
   // ---- on an Ultra page: the planning features' reads (planner/page/todo.js, cardtasks.js, reminders.js, calexport.js,
-  // classes.js, gcal.js), through read() like every Ultra request here, on the page's own origin ----
-  // The student and their memberships, asked once a page (asked again after a failure). Ultra keeps no time zone for a
-  // student ([M] /users/me has none): days are the browser's, named, so what's kept with a time zone is kept in one.
-  let mine = null;
-  const pageMine = () => (mine ||= (async () => {
-    const r = read({ origin: location.origin });
-    const uid = await r.me();
-    return { uid, mem: await r.memberships(uid) };
-  })().catch((e) => { mine = null; throw e; }));
-  // What's due from `from` to `to` (ms), as planner() gives it: one read per range at a time, however many features ask,
-  // its links made whole (Ultra's <base href> is its CDN).
-  const reading = new Map();
-  const planned = new Map();
-  const page = {
-    profile: () => pageMine().then((m) => ({ id: m.uid, time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone })),
-    // Canvas's course list's shape (list above).
-    courses: () => pageMine().then((m) => list(m.mem, { origin: location.origin })),
-    due: (from, to) => {
-      const k = `${from} ${to}`;
-      if (!reading.has(k)) {
-        const r = { ...read({ origin: location.origin }), me: () => pageMine().then((m) => m.uid), memberships: () => pageMine().then((m) => m.mem) };
-        reading.set(k, planner(r, { from, to, now: Date.now() }).then((p) => ({ ...p, items: p.items.map((i) => ({ ...i, url: location.origin + i.url })) }))
-          .finally(() => reading.delete(k)));
-      }
-      return reading.get(k);
-    },
-    // Agenda/rail: this account's covered To Do copy for ten minutes, otherwise a two-minute range memo.
-    planned: async (from, to, cache) => {
-      const { id } = await page.profile(), key = `todo:${location.origin}/${id}`, now = Date.now();
-      if (cache?.key === key && now - cache.at < 600000 && Date.parse(cache.start) <= from && Date.parse(cache.end) >= to) return { key, items: cache.items || [] };
-      for (const [range, kept] of planned) if (now - kept.at >= 120000) planned.delete(range);
-      const range = `${key} ${from} ${to}`;
-      if (!planned.has(range)) planned.set(range, { at: now, promise: page.due(from, to).catch((e) => { planned.delete(range); throw e; }) });
-      return { key, ...await planned.get(range).promise };
-    },
-  };
+  // classes.js, gcal.js), the gradebook's and a course's content, through read() like every Ultra request here, on the
+  // page's own origin and through its queue (courses/lmsq.js) ----
+  const MINE_TTL = 6e5, PLAN_TTL = 12e4, BOOK_TTL = 6e4, OUTLINE_TTL = 3e5;
+  const BOOKS_KEEP = 30, BOOKS_BYTES = 2e6, BOOKS_AGE = 30 * DAY;
+  const OUTLINE_FIELDS = 'id,parentId,title,availability,contentHandler.id,contentHandler.isBbPage,links';
+  const zone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // Whole days in the browser's zone (Ultra's for its students): a range's start down to its midnight, its end up to one.
+  const dayStart = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return +d; };
+  const dayEnd = (t) => { const s = dayStart(t); if (s === t) return t; const d = new Date(s); d.setDate(d.getDate() + 1); return +d; };
+  const covered = (rows, complete) => Object.defineProperty(rows, 'complete', { value: complete !== false });
+  // env: { origin(), now(), fetch(url, init, prio, live), live(), local: { get(k), set(v) }, send(m), framed() (the top page's
+  // timeOrigin in a course tab's frame, else null), todo() (planner/todo.js or null), todoPrefs() }.
+  const makePage = (env) => {
+    const at = () => env.origin();
+    // The fan-outs (gradebooks, outlines) stop once the page isn't live; who's signed in and what's due are asked as before.
+    const reader = (o = {}) => read({ origin: at(), f: (u, init) => env.fetch(u, init, o.prio || 0, o.live), ...o });
+    const fanout = (prio) => reader({ prio, live: env.live });
 
-  return { contentLink, SEARCH_KINDS, searchItems, PEEK_FIELDS, peekItem, FILES_FIELDS, attachments, files, courses, ownDates, list, current, standing, due, work, grade, trend, slices, read, planner, excepts, page, STALE };
+    // ---- who's signed in, and their courses: one source per site ----
+    // Asked once a page, and kept by the worker a few minutes (storage.session, 'glaze:ultraMine') for the site's other
+    // pages and course-tab frames. A frame takes the kept pair as it is once its top page confirmed it; any other page
+    // confirms the student (/users/me, light) and keeps the memberships when it's the same one. The last student
+    // confirmed is kept per site too (storage.local ultraMe:<origin>, purged with the site), so what's saved for them
+    // paints before anything answers (known). Ultra keeps no time zone for a student ([M] /users/me has none): days are
+    // the browser's, named, so what's kept with a time zone is kept in one.
+    let copy = null, meP = null, mineP = null, confirmed = '', seen = null;
+    const SEEN = () => `ultraMe:${at()}`;
+    const send = (m) => Promise.resolve().then(() => env.send(m)).catch(() => null);
+    const kept = () => (copy ||= send({ type: 'glaze:ultraMine', op: 'get' }).then((c) => {
+      const now = env.now();
+      return c && ID.test(c.uid) && Array.isArray(c.mem) && now >= c.read && now - c.read < MINE_TTL ? c : null;
+    }));
+    // { uid, courses (Canvas's list's shape, list above: id, name, code, closed) } as kept; courses only once read.
+    const remember = (uid, mem) => {
+      const courses = mem && list(mem, { origin: at() }).map((c) => ({ id: c.id, name: c.name, course_code: c.course_code, access_restricted_by_date: c.access_restricted_by_date }));
+      if (uid === confirmed && !courses) return;
+      confirmed = uid;
+      seen = null;
+      const k = SEEN();
+      Promise.resolve(env.local.get(k)).then((r) => {
+        const was = r?.[k], next = { uid, ...((courses || was?.uid === uid && was.courses) && { courses: courses || was.courses }) };
+        if (JSON.stringify(was) !== JSON.stringify(next)) return env.local.set({ [k]: next });
+      }).catch(() => {});
+    };
+    const me = () => (meP ||= (async () => {
+      const c = await kept(), since = env.framed();
+      const uid = c && since && c.at >= since ? c.uid : await reader().me();
+      remember(uid);
+      // Confirmed here: frames under this page take the kept pair from now on.
+      if (c?.uid === uid && !(since && c.at >= since)) send({ type: 'glaze:ultraMine', op: 'touch', uid });
+      return uid;
+    })().catch((e) => { meP = null; copy = null; throw e; }));
+    const mine = () => (mineP ||= (async () => {
+      const uid = await me(), c = await kept();
+      const mem = c?.uid === uid ? covered([...c.mem], c.complete) : await reader().memberships(uid);
+      if (c?.uid !== uid) send({ type: 'glaze:ultraMine', op: 'put', mine: { uid, mem, complete: mem.complete !== false } });
+      remember(uid, mem);
+      return { uid, mem };
+    })().catch((e) => { mineP = null; throw e; }));
+    // The student last confirmed on this site and their courses as last read, before anything is asked: null when none.
+    const known = () => (seen ||= Promise.resolve().then(() => env.local.get(SEEN())).then((r) => {
+      const x = r?.[SEEN()];
+      if (confirmed && x?.uid !== confirmed) return { uid: confirmed };
+      return ID.test(x?.uid) ? { uid: x.uid, courses: Array.isArray(x.courses) ? x.courses.filter((c) => ID.test(c?.id) && typeof c.name === 'string') : undefined } : null;
+    }, () => (confirmed ? { uid: confirmed } : null)));
+
+    // ---- the gradebook: one store per site, by student and course ----
+    // Every reader of a course's gradebook rows (the card badges and due-date chips, the planner, the GPA, Insights, the
+    // rubric, agent apps) asks here, in the one shape Ultra's own Grades page asks for (read().grades): one request at a
+    // time per course and student, its answer kept a minute, and kept on this device (storage.local
+    // ultraBooks:<origin>/<uid>: the newest 30 courses of the last 30 days, about 2 MB at most, purged with the site), so
+    // a page shows the last one at once while it asks again (saved). maxAge: how old an answer may be.
+    const books = new Map(); // `${uid} ${cid}` → { at, rows, p }
+    const BOOKS = (uid) => `ultraBooks:${at()}/${uid}`;
+    const toKeep = new Map(); // uid → Map(cid → { at, rows, complete })
+    const prune = (all, now) => {
+      const list = Object.entries(all || {}).filter(([cid, b]) => ID.test(cid) && Array.isArray(b?.rows) && Number.isFinite(b.at) && now - b.at < BOOKS_AGE)
+        .sort((x, y) => y[1].at - x[1].at).slice(0, BOOKS_KEEP);
+      const sizes = list.map((e) => JSON.stringify(e).length);
+      let total = sizes.reduce((a, b) => a + b, 0);
+      while (list.length && total > BOOKS_BYTES) { list.pop(); total -= sizes.pop(); }
+      return Object.fromEntries(list);
+    };
+    // Written once the reads in flight have all come back, so a page of courses is one write, not one each.
+    let flying = 0;
+    const flush = () => {
+      for (const [uid, add] of toKeep) {
+        const k = BOOKS(uid);
+        Promise.resolve(env.local.get(k)).then((r) => env.local.set({ [k]: prune({ ...r?.[k], ...Object.fromEntries(add) }, env.now()) })).catch(() => {});
+      }
+      toKeep.clear();
+    };
+    const keep = (uid, cid, rows, t) => {
+      if (!toKeep.has(uid)) toKeep.set(uid, new Map());
+      toKeep.get(uid).set(cid, { at: t, rows: [...rows], complete: rows.complete !== false });
+    };
+    const stale = (signal, live) => { if (signal?.aborted || (live && !live())) throw new Error(STALE); };
+    const book = (cid, uid, { maxAge = BOOK_TTL, prio = 0, signal, live } = {}) => {
+      if (!ID.test(cid) || !ID.test(uid)) return Promise.resolve(covered([], true));
+      const k = `${uid} ${cid}`, b = books.get(k);
+      let p = b?.p;
+      if (!p && b?.rows && env.now() - b.at < maxAge) p = Promise.resolve(b.rows);
+      if (!p) {
+        flying += 1;
+        const landed = () => { if (!--flying) flush(); };
+        p = fanout(prio).grades(cid, uid).then((rows) => {
+          const t = env.now();
+          books.set(k, { at: t, rows });
+          keep(uid, cid, rows, t);
+          landed();
+          return rows;
+        }, (e) => { if (books.get(k)?.p === p) books.set(k, { ...b, p: null }); landed(); throw e; });
+        books.set(k, { ...b, p });
+      }
+      // One caller giving up (its page, its signal) leaves the read for the others.
+      return signal || live ? p.then((rows) => { stale(signal, live); return rows; }, (e) => { stale(signal, live); throw e; }) : p;
+    };
+    // The last answer kept on this device, however old: { at, rows (complete as kept) }, or null.
+    const saved = (cid, uid) => {
+      const b = books.get(`${uid} ${cid}`);
+      if (b?.rows) return Promise.resolve({ at: b.at, rows: b.rows });
+      if (!ID.test(cid) || !ID.test(uid)) return Promise.resolve(null);
+      return Promise.resolve().then(() => env.local.get(BOOKS(uid))).then((r) => {
+        const x = r?.[BOOKS(uid)]?.[cid];
+        return Array.isArray(x?.rows) && Number.isFinite(x.at) ? { at: x.at, rows: covered(x.rows, x.complete) } : null;
+      }, () => null);
+    };
+
+    // ---- a course's content: one store per site, by course ----
+    // Its items from the public contents list (recursive, these fields only: never contentDetail, B0), at most every five
+    // minutes and one read at a time, for the new-content badges, the palette, Download all and a hover's prefetch;
+    // search's documents take a read with their bodies (body), which answers the others too. → { items, complete }.
+    const outlines = new Map(); // cid → { at, body, value, p }
+    const outline = (cid, { prio = 0, maxAge = OUTLINE_TTL, body = false } = {}) => {
+      if (!ID.test(cid)) return Promise.resolve({ items: [], complete: true });
+      const o = outlines.get(cid);
+      if (o?.p && (o.pBody || !body)) return o.p;
+      if (o?.value && (o.body || !body) && env.now() - o.at < maxAge) return Promise.resolve(o.value);
+      const p = fanout(prio).list(`/learn/api/public/v1/courses/${cid}/contents`, `${OUTLINE_FIELDS}${body ? ',body' : ''}`, true).then((value) => {
+        outlines.set(cid, { at: env.now(), body, value });
+        return value;
+      }, (e) => { if (outlines.get(cid)?.p === p) outlines.set(cid, { ...o, p: null }); throw e; });
+      outlines.set(cid, { ...o, p, pBody: body });
+      return p;
+    };
+    // A fresh read already in hand, or null: search takes one with bodies as it is.
+    const outlineNow = (cid, { body = false } = {}) => { const o = outlines.get(cid); return o?.value && (o.body || !body) && env.now() - o.at < OUTLINE_TTL ? o.value : null; };
+    // Fresh enough not to ask again: for the idle prefetch.
+    const fresh = { book: (cid, uid) => { const b = books.get(`${uid} ${cid}`); return !!b?.p || (!!b?.rows && env.now() - b.at < BOOK_TTL); } };
+
+    // ---- what's due ----
+    // One read per range of whole days, kept two minutes from when it was asked: a range inside a fresh one is answered
+    // by it, so Better To Do, the cards, the reminders, the agenda and the rail share one read. Its links made whole
+    // (Ultra's <base href> is its CDN); at: when it was asked. prio: the queue's, for the reads it starts.
+    const reads = []; // { from, to, at, done, p }
+    const due = (from, to, prio = 0) => {
+      const a = dayStart(from), b = dayEnd(to), now = env.now();
+      for (let i = reads.length; i--;) if (reads[i].done && now - reads[i].at >= PLAN_TTL) reads.splice(i, 1);
+      const hit = reads.find((x) => x.from <= a && x.to >= b);
+      if (hit) return hit.p;
+      const x = { from: a, to: b, at: now, done: false };
+      const r = { ...reader({ prio }), me, memberships: () => mine().then((m) => m.mem), grades: (cid, uid) => book(cid, uid, { prio }) };
+      x.p = planner(r, { from: a, to: b, now }).then((p) => ({ ...p, at: now, items: p.items.map((i) => ({ ...i, url: at() + i.url })) }));
+      x.p.then(() => { x.done = true; }, () => { const i = reads.indexOf(x); if (i !== -1) reads.splice(i, 1); });
+      reads.push(x);
+      return x.p;
+    };
+    // Better To Do's own range and switches (planner/todo.js fetchRange), when its library and settings can be had.
+    const own = async (now) => {
+      const L = await Promise.resolve().then(() => env.todo()).catch(() => null);
+      const o = L && await Promise.resolve().then(() => env.todoPrefs()).catch(() => null);
+      return o ? { ...L.fetchRange(o, now, zone()), teach: o.teacher, progress: o.progress } : null;
+    };
+    const published = new WeakSet();
+
+    const page = {
+      // Who to paint for before anything answers: { id, time_zone, courses? } or null. Panels confirm it (profile) before
+      // they ask or keep anything, and start again for a different student.
+      known: () => known().then((k) => (k ? { id: k.uid, time_zone: zone(), courses: k.courses } : null)),
+      profile: () => me().then((id) => ({ id, time_zone: zone() })),
+      me, mine,
+      // Canvas's course list's shape (list above).
+      courses: () => mine().then((m) => list(m.mem, { origin: at() })),
+      due: (from, to, prio) => due(from, to, prio),
+      // Agenda/rail: this account's covered To Do copy for ten minutes (for the student it's drawn for, uid, without
+      // waiting on who is signed in); else, inside Better To Do's own range, that range's read, kept as the To Do copy
+      // through the worker as Better To Do keeps it ('glaze:todo', newest wins); else this range's.
+      planned: async (from, to, cache, uid, prio = 0) => {
+        const covers = (key) => cache?.key === key && env.now() - cache.at < 600000 && Date.parse(cache.start) <= from && Date.parse(cache.end) >= to;
+        if (ID.test(uid) && covers(`todo:${at()}/${uid}`)) return { key: cache.key, items: cache.items || [] };
+        const { id } = await page.profile(), key = `todo:${at()}/${id}`, now = env.now();
+        if (covers(key)) return { key, items: cache.items || [] };
+        const w = await own(now);
+        if (!w || Date.parse(w.start) > from || Date.parse(w.end) < to) return { key, ...await page.due(from, to, prio) };
+        const r = await page.due(Date.parse(w.start), Date.parse(w.end), prio);
+        if (!published.has(r)) {
+          published.add(r);
+          send({ type: 'glaze:todo', key, cache: { key, at: r.at, start: w.start, end: w.end, teach: w.teach, progress: w.progress, items: r.items, complete: r.complete, grading: [], sums: {} } });
+        }
+        return { key, ...r };
+      },
+      book, saved, outline, outlineNow, fresh,
+    };
+    return page;
+  };
+  const lmsq = () => (globalThis.GZ_LMSQ ? Promise.resolve(GZ_LMSQ)
+    : globalThis.GZ_CTX?.need ? GZ_CTX.need('courses/lmsq.js', () => globalThis.GZ_LMSQ).then(() => globalThis.GZ_LMSQ || null, () => null) : Promise.resolve(null));
+  const area = (name) => ({
+    get: (k) => new Promise((res) => { try { chrome.storage[name].get(k, (r) => res(chrome.runtime.lastError ? {} : r || {})); } catch { res({}); } }),
+    set: (v) => new Promise((res) => { try { chrome.storage[name].set(v, () => res(!chrome.runtime.lastError)); } catch { res(false); } }),
+  });
+  // Reads stop once Glaze is turned off, or off this page (the site's part says so: page.alive).
+  let alive = () => true;
+  const live = () => globalThis.GZ_CTX?.settings?.()?.enabled !== false && alive();
+  const page = makePage({
+    origin: () => location.origin, now: () => Date.now(), live,
+    // The site's queue once it's in (one backoff for every read), plain fetch where it can't be (node, the preview).
+    fetch: (u, init, prio, still) => lmsq().then((q) => (q ? q.fetch(u, init, prio, still) : fetch(u, init))),
+    local: area('local'),
+    send: (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, (r) => res(chrome.runtime.lastError ? null : r))?.then?.(res, () => res(null)); } catch { res(null); } }),
+    framed: () => { try { return globalThis.top !== globalThis.window && parent.location.origin === location.origin ? parent.performance.timeOrigin : null; } catch { return null; } },
+    todo: () => (globalThis.GZ_TODO ? GZ_TODO : globalThis.GZ_CTX?.need ? GZ_CTX.need('planner/todo.js', () => globalThis.GZ_TODO).then(() => globalThis.GZ_TODO || null) : null),
+    todoPrefs: () => (typeof GZ_SANITIZE === 'undefined' ? null : area('sync').get('todo').then((r) => GZ_SANITIZE({ todo: r?.todo }).todo)),
+  });
+  page.alive = (f) => { alive = f; };
+
+  return { contentLink, SEARCH_KINDS, searchItems, PEEK_FIELDS, peekItem, FILES_FIELDS, attachments, files, courses, ownDates, list, current, standing, due, work, grade, trend, slices, read, planner, excepts, page, makePage, STALE };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_ULTRA; else GZ_ULTRA;

@@ -1592,6 +1592,8 @@
   "Most tabs": "Maximaal aantal tabbladen",
   "With more, the tab you used longest ago closes, and the strip says which. Pinned tabs never close on their own.": "Bij meer sluit het tabblad dat je het langst geleden gebruikte, en de balk zegt welk. Vastgezette tabbladen sluiten nooit vanzelf.",
   "Go back to where you were": "Terug naar waar je was",
+  "Load course data ahead of time": "Cursusgegevens vooraf laden",
+  "On Blackboard, your To Do and grades are read while the page is idle, and a course's content when you point at it, so they open at once.": "In Blackboard worden je taken en cijfers gelezen terwijl de pagina rust, en de inhoud van een cursus zodra je ernaar wijst, zodat ze meteen openen.",
   "Tab buttons": "Tabbladknoppen",
   "Shape": "Vorm",
   "Tab": "Tabblad",
