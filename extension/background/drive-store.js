@@ -311,8 +311,9 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       return id;
     };
 
-    const fetchRec = async (ctx, R, h) => {
-      const bytes = await ctx.D((c) => c.media(R.id, MAX));
+    // owner: the transfer's, when the file is too large for one request (documents/drive-sync.js down: 'pending').
+    const fetchRec = async (ctx, R, h, owner = { rec: h }) => {
+      const bytes = ctx.down ? await ctx.down(`r:${h}`, R, MAX, { ...owner, R: R.id }) : await ctx.D((c) => c.media(R.id, MAX));
       let j;
       try { j = JSON.parse(new TextDecoder().decode(bytes)); } catch { throw new Fail('bad'); }
       if (j?.glaze !== 'record' || j.v !== 1 || !['local', 'sync', 'notes'].includes(j.area) || catOf(j.area, j.key) !== j.cat || (await hk(j.area, j.key)) !== h
@@ -365,19 +366,32 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       // A later local write is still dirty even if it lands before the sync bookkeeping finishes.
       await put(h, { area: got.area, key: got.key, cat: got.cat, id: R.id, lsum: await sumOf(got.area, got.key, got.value), rsum: got.sum, at: got.at, seen: got.at }, was);
     };
-    // This device's value up, at its time (or a tombstone once it is gone).
+    // A file up as documents/drive-sync.js up sends it (one too large for a request waits for the run's last step: 'pending'),
+    // or, for a caller with no transfers (ctx.up), in one request. m: { bytes, id, meta, create, mime, info }.
+    const send = async (ctx, slot, tag, target, make, owner) => {
+      if (ctx.up) return ctx.up(slot, tag, target, make, owner);
+      const m = await make();
+      let file = null;
+      if (m.id) { try { file = await ctx.D((c) => c.put({ id: m.id, meta: m.meta, mime: m.mime, bytes: m.bytes })); } catch (e) { if (e.why !== 'missing') throw e; } }
+      file ||= await ctx.D((c) => c.put({ meta: m.create, mime: m.mime, bytes: m.bytes }));
+      return { file, info: m.info ?? null };
+    };
+    // This device's value up, at its time (or a tombstone once it is gone). One still on its way since an earlier run keeps
+    // the time it went with.
     const push = async (ctx, h, area, key, cat, was, at) => {
       const value = await valueOf(area, key), sum = await sumOf(area, key, value);
-      const body = new TextEncoder().encode(JSON.stringify({ glaze: 'record', v: 1, cat, area, key, at, ...(value === undefined ? { deleted: true } : { value }) }));
-      const meta = { appProperties: { glaze: 'rec', cat, key: h, sum, at: String(at) } };
-      let r = null;
-      if (was?.id) { try { r = await ctx.D((c) => c.put({ id: was.id, meta, mime: JSON_TYPE, bytes: body })); } catch (e) { if (e.why !== 'missing') throw e; } }
-      r ||= await ctx.D((c) => c.put({ meta: { ...meta, name: `${cat}-${h.slice(0, 12)}.json`, mimeType: JSON_TYPE, parents: [ctx.data] }, mime: JSON_TYPE, bytes: body }));
-      await put(h, { area, key, cat, id: r.id, lsum: sum, rsum: sum, at, seen: at }, was);
+      const r = await send(ctx, `R:${h}`, sum, was?.id ?? null, async () => {
+        const meta = { appProperties: { glaze: 'rec', cat, key: h, sum, at: String(at) } };
+        return { bytes: new TextEncoder().encode(JSON.stringify({ glaze: 'record', v: 1, cat, area, key, at, ...(value === undefined ? { deleted: true } : { value }) })),
+          id: was?.id ?? null, meta, create: { ...meta, name: `${cat}-${h.slice(0, 12)}.json`, mimeType: JSON_TYPE, parents: [ctx.data] }, mime: JSON_TYPE, info: { at } };
+      }, { rec: h, area, key });
+      const t = Number.isFinite(r.info?.at) ? r.info.at : at;
+      await put(h, { area, key, cat, id: r.file.id, lsum: sum, rsum: sum, at: t, seen: t }, was);
     };
 
     // One record, both sides. key and area: when known here; R: its file's metadata (undefined: ask Drive when known).
-    const one = async (ctx, h, { area, key, R }) => {
+    const one = async (ctx, h, x) => {
+      let { area, key, R } = x;
       let was = await recOf(h);
       // Another device's file for the same record, made while this one made its own (first syncs that overlapped): every
       // device keeps the lowest id, met as a first meeting, so neither side's value is lost and each hears the other's after.
@@ -397,20 +411,20 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         if (got.value !== undefined && await valueOf(got.area, got.key) === undefined) return take(h, got, R, null);
         return one(ctx, h, { area: got.area, key: got.key, R });
       }
-      const def = defOf(area, key), cat = def?.cat;
+      const def = defOf(area, key), cat = def?.cat, owner = { rec: h, area, key, ...(x.need && { need: true }) };
       if (!cat) return;
       const value = await valueOf(area, key), lsum = await sumOf(area, key, value), at = st[`${area}:${key}`] || 0;
       if (def.immutable) {
         // The bytes never change, but Notes may have cleaned up this device's copy since it last used them.
         if (value === undefined) {
-          if (R && !R.removed) { const got = await fetchRec(ctx, R, h); if (got.value !== undefined) await take(h, got, R, was, value); }
+          if (R && !R.removed) { const got = await fetchRec(ctx, R, h, owner); if (got.value !== undefined) await take(h, got, R, was, value); }
           return;
         }
         if (was && R && !R.removed) return;
       }
       if (!was) {
         if (!R || R.removed) { if (value !== undefined) await push(ctx, h, area, key, cat, null, at || now()); return; }
-        const got = await fetchRec(ctx, R, h);
+        const got = await fetchRec(ctx, R, h, owner);
         if (got.sum === lsum) return put(h, { area, key, cat, id: R.id, lsum, rsum: got.sum, at: got.at, seen: Math.max(at, got.at) }, null);
         if (value === undefined) { if (got.value !== undefined) await take(h, got, R, null, value); else await put(h, { area, key, cat, id: R.id, lsum, rsum: got.sum, at: got.at, seen: got.at }, null); return; }
         if (got.value === undefined) return push(ctx, h, area, key, cat, { id: R.id }, Math.max(at, got.at + 1) || now());
@@ -424,7 +438,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       const ldirty = lsum !== was.lsum, rdirty = R.appProperties?.sum !== was.rsum;
       if (!ldirty && !rdirty) { if (at > (was.seen || 0)) await put(h, { ...was, seen: at }, was); return; }
       if (rdirty) {
-        const got = await fetchRec(ctx, R, h);
+        const got = await fetchRec(ctx, R, h, owner);
         if (!ldirty || got.at >= (at || 0)) return take(h, got, R, was, value);
       }
       return push(ctx, h, area, key, cat, was, at || now());
@@ -447,6 +461,8 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
           }
         }
       } catch (e) {
+        // On its way in the run's last step (documents/drive-sync.js transfers), which hands it back here (replay).
+        if (e?.why === 'pending') return;
         if (e?.why === 'bad' || e?.why === 'size' || e?.why === 'denied') { console.warn('Sync to Google Drive: passed over a record', h, e.why); return; }
         throw e;
       }
@@ -521,33 +537,52 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       if (Object.keys(settled).length) await unstamp(settled);
       await snapshot(ctx);
     };
-    // The daily snapshot: Back up…'s zip in Backups, the newest SNAP.keep kept, older ones deleted for good.
+    // The daily snapshot: Back up…'s zip in Backups, the newest SNAP.keep kept, older ones deleted for good. One larger than a
+    // request is built once, staged, and sent by the run's last step (documents/drive-sync.js transfers) over as many runs as
+    // it takes, then cleaned up after here (replay); one whose day ends before it lands is let go, the next day's built.
     const snapshot = async (ctx) => {
       const st = (await S.get(STATE))[STATE] || {};
-      if (!env.snapshot || (st.snap && now() - st.snap < SNAP.every)) return;
+      if (!env.snapshot) return;
+      let t = ctx.move ? await ctx.move.get('snap') : null;
+      if (t && now() - (t.since || 0) >= SNAP.every) { await ctx.move.drop('snap'); t = null; }
+      if (t && !t.file) return; // on its way
+      if (!t && st.snap && now() - st.snap < SNAP.every) return;
       // Tried once a day: one too big for a backup (null), one that can't be built, or one Drive refuses as it stands
       // (larger than one upload, or more than a full Drive has room for) waits for tomorrow, never failing the run or being
       // built again on every run. snapSkip: 'quota' while the day's was skipped for want of room (Settings says so).
       const skip = async (e) => { if (e) console.warn('Sync to Google Drive: no snapshot today', e?.why || e); await ctx.state({ snap: now(), snapSkip: e?.why === 'quota' ? 'quota' : null }); };
-      // The day's try is marked before the zip is built: one cut short by the worker stopping (Safari unloads it about 30 s
-      // after its last event; Chrome stops one whose upload waits that long for its answer) waits for tomorrow as well.
-      // Only a note saved while it was read and Drive's or the network's failure give the mark back for the next run.
-      await ctx.state({ snap: now(), snapSkip: null });
       const back = () => ctx.state({ snap: st.snap ?? null, snapSkip: st.snapSkip ?? null });
-      let made;
-      // A note saved while it was read (background/backup.js notesOut 'changed'): the next run tries again.
-      try { made = await env.snapshot(); } catch (e) { if (e?.why === 'changed') return back(); return skip(e); }
-      if (!made) return skip();
-      let r, same, up, backups;
+      let made = null;
+      if (!t) {
+        // The day's try is marked before the zip is built: one cut short by the worker stopping before it was staged waits
+        // for tomorrow as well. Only a note saved while it was read and Drive's or the network's failure give the mark back.
+        await ctx.state({ snap: now(), snapSkip: null });
+        // A note saved while it was read (background/backup.js notesOut 'changed'): the next run tries again.
+        try { made = await env.snapshot(); } catch (e) { if (e?.why === 'changed') return back(); return skip(e); }
+        if (!made) return skip();
+      }
+      let r;
       try {
-        backups = await sub(ctx, 'backups', 'Backups');
-        r = await ctx.D((c) => c.find(`'${backups}' in parents and appProperties has { key='glaze' and value='snapshot' } and trashed=false`, { fields: 'id,name,trashed,appProperties,version', pageSize: 100 }));
-        // Another device's of the same day (its name is the day's) is replaced, a new revision of the one file: five kept are five days.
-        same = r.files.filter((f) => f.name === made.name).sort((a, b) => (a.id < b.id ? -1 : 1))[0];
-        up = await ctx.D((c) => c.put({ ...(same && { id: same.id }), meta: { ...(!same && { name: made.name, mimeType: ZIP, parents: [backups] }), appProperties: { glaze: 'snapshot' } }, mime: ZIP, bytes: made.bytes }));
-      } catch (e) { if (['bad', 'size', 'quota'].includes(e?.why)) return skip(e); await back(); throw e; }
-      await ctx.state({ snap: now(), snapSkip: null });
-      const all = same ? r.files : [...r.files, { id: up.id, name: made.name }];
+        let backups = null, list = null, same = null;
+        if (made) {
+          backups = await sub(ctx, 'backups', 'Backups');
+          list = (await ctx.D((c) => c.find(`'${backups}' in parents and appProperties has { key='glaze' and value='snapshot' } and trashed=false`, { fields: 'id,name,trashed,appProperties,version', pageSize: 100 }))).files;
+          // Another device's of the same day (its name is the day's) is replaced, a new revision of the one file: five kept are five days.
+          same = list.filter((f) => f.name === made.name).sort((x, y) => (x.id < y.id ? -1 : 1))[0] || null;
+        }
+        r = await send(ctx, 'snap', made ? made.name : t.tag, made ? same?.id ?? null : undefined, async () => ({
+          bytes: made.bytes, id: same?.id ?? null, meta: { appProperties: { glaze: 'snapshot' } }, create: { name: made.name, mimeType: ZIP, parents: [backups], appProperties: { glaze: 'snapshot' } }, mime: ZIP,
+          info: { backups, name: made.name, same: !!same, files: list.map((f) => ({ id: f.id, name: f.name })) },
+        }), { snap: made?.name || t.tag });
+      } catch (e) {
+        if (e?.why === 'pending') return; // staged: the run's last step sends it
+        if (['bad', 'size', 'quota'].includes(e?.why)) return skip(e);
+        await back(); throw e;
+      }
+      await ctx.state({ snapSkip: null, ...(made && { snap: now() }) });
+      const { backups, name, same, files } = r.info || {};
+      if (!backups) return;
+      const all = same ? files : [...files, { id: r.file.id, name }];
       const old = all.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : a.id < b.id ? 1 : -1)).slice(SNAP.keep);
       // Copies of what is on the device, never the student's own (the owner's call): deleted for good, not left in Drive's trash
       // counting against their storage. Each only once Drive says it is still a zip Glaze made and tagged as a snapshot, in
@@ -558,13 +593,24 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         await ctx.D((c) => c.remove(f.id)).catch((e) => { if (e.why !== 'missing' && e.why !== 'denied') throw e; });
       }
     };
+    // A transfer of this layer's, back from documents/drive-sync.js's last step: a record (its file sent or brought in), or the
+    // day's snapshot (sent: cleaned up after).
+    const replay = async (owner, ctx) => {
+      ctx.data = await sub(ctx, 'data', 'Data');
+      if (owner.snap) return snapshot(ctx);
+      if (!owner.rec) return;
+      const R = owner.R ? await ctx.D((c) => c.file(owner.R)).catch((e) => { if (e.why === 'missing') return { removed: true }; throw e; }) : undefined;
+      return each(ctx, owner.rec, { area: owner.area, key: owner.key, need: owner.need, ...(R && { R }) });
+    };
+    // One Drive refused as it stands: the day's snapshot skipped (snapSkip 'quota' while for want of room).
+    const failed = async (owner, why, ctx) => { if (owner.snap) await ctx.state({ snapSkip: why === 'quota' ? 'quota' : null }); };
     const forget = async () => {
       const keys = (await S.keys()).filter((k) => k.startsWith(REC) || k === STAMPS);
       if (keys.length) await S.remove(keys);
     };
     // Whether a change to this key is one this layer listens for.
     const watches = (area, key) => !!catOf(area, key) || (area === 'local' && NOTES_KEY.test(key));
-    return { stamp, full, changes, sweep, snapshot, forget, catOf, watches };
+    return { stamp, full, changes, sweep, snapshot, replay, failed, forget, catOf, watches };
   };
 
   return { REC, FILE, STAMPS, CATS, SNAP, catOf, canon, clean, join, notesArea, create };

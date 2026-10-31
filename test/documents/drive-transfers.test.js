@@ -136,15 +136,15 @@ test('a download stopped part way goes on by range in the next worker; a file re
     assert.ok((await a.sync.set(true)).ok);
     const id = fileOf(drive, key, 'file').meta.id;
     // B joins; its worker stops while the second range is on its way.
-    let ranges = 0, hang;
+    let ranges = 0, hang, cut = null;
     const reached = new Promise((r) => { hang = r; });
-    const fetch = (u, init = {}) => (init.headers?.range && ++ranges === 2 ? (hang(), new Promise(() => {})) : drive.fetch(u, init));
+    const fetch = (u, init = {}) => (init.headers?.range && ++ranges === 2 ? (cut = init.headers.range, hang(), new Promise(() => {})) : drive.fetch(u, init));
     await stopped(worker(drive, db, { fetch }).sync.set(true), reached);
     const got = drive.log.filter((x) => x.range);
-    assert.equal(got.length, 2);
+    assert.equal(got.length, 1, 'one range came before the worker stopped');
     assert.equal(got[0].range.from, 0);
-    const at = got[1].range.from;
-    assert.ok(at > 0, 'the first range kept');
+    const at = Number(/^bytes=(\d+)-/.exec(cut)[1]);
+    assert.equal(at, got[0].range.to + 1, 'the first range kept: the next asked from its end');
     const edited = bytesOf(20 * MiB, 13);
     if (replaced) drive.edit(id, edited);
     const n = drive.log.length, b = worker(drive, db);

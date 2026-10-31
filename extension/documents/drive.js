@@ -28,6 +28,12 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
   const SYNC = 'id,name,mimeType,parents,trashed,explicitlyTrashed,appProperties,headRevisionId,version,size';
   // An upload larger than this goes resumable: Drive's guide gives multipart "5 MB or less".
   const SMALL = 5 << 20;
+  // A resumable session's chunks (and Sync's ranged downloads, documents/drive-sync.js): multiples of 256 KiB, as Drive's
+  // guide asks, max at most; halved after one slower than slow ms or cut short by the worker stopping, doubled after one
+  // quicker than fast ms, so each request ends well inside the 30 s a worker may wait for an answer, even on a slow link.
+  const STEP = { min: 256 << 10, max: 8 << 20, fast: 5000, slow: 15000 };
+  const pace = (step, ms) => (ms > STEP.slow ? Math.max(STEP.min, Math.floor(step / 2 / STEP.min) * STEP.min) : ms < STEP.fast ? Math.min(STEP.max, step * 2) : step);
+  const digest = async (bytes) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
   const DOC = 'application/vnd.google-apps.document';
   // Google's own files, exported as the kind that opens them; the extension a kind's file takes.
   const GOOGLE = { [DOC]: 'paper', 'application/vnd.google-apps.spreadsheet': 'sheet', 'application/vnd.google-apps.presentation': 'slides' };
@@ -93,8 +99,10 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
   // env: { fetch, token({ interactive }) (background/google.js token), drop(token) (background/google.js drop: forget one Drive answered 401 to), account() (the
   // connected account, background/google.js account: one client serves one request, which stops as 'connect' if Drive is
   // connected to another account or none before any of its calls), allowed() (the current sender), boundary(),
-  // interactive (default true: a request the student pressed may ask them to sign in; Sync's never does) }
+  // interactive (default true: a request the student pressed may ask them to sign in; Sync's never does), now (the clock a
+  // chunk is timed by) }
   const create = (env) => {
+    const clock = env.now || Date.now;
     const bound = env.account ? Promise.resolve().then(env.account).catch(() => null) : null;
     const still = async () => {
       if (bound) {
@@ -116,8 +124,9 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
       return 'bad';
     };
     // Every request is something the student pressed: the token may ask them to sign in.
-    // init.signal: the caller's cancel, which stops the request where it stands (raw, open).
-    const call = async (url, init = {}) => {
+    // init.signal: the caller's cancel, which stops the request where it stands (raw, open). also: statuses handed back as
+    // they are rather than as a reason (a resumable session's 308, and its 404 once expired).
+    const call = async (url, init = {}, also = null) => {
       const halt = () => { if (init.signal?.aborted) throw new Fail('cancel'); };
       for (let i = 0; ; i++) {
         let t, r;
@@ -127,7 +136,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
         await still(); // a Disconnect while the token came: Calendar's grant may keep it valid
         halt();
         try { r = await send(url, { ...init, headers: { authorization: `Bearer ${t}`, ...init.headers } }); } catch { halt(); throw new Fail('network'); }
-        if (r.ok) return r;
+        if (r.ok || also?.includes(r.status)) return r;
         if (r.status === 401 && i === 0) {
           r.body?.cancel().catch(() => {});
           await Promise.resolve().then(() => env.drop?.(t)).catch(() => {});
@@ -250,9 +259,18 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
       return j;
     };
     // A file's bytes (alt=media), at most max of them. → Uint8Array
-    const media = async (id, max) => {
-      const r = await call(`${API}/${idOf(id)}?${q({ alt: 'media' })}`);
-      if (Number(r.headers.get('content-length')) > max) { r.body?.cancel().catch(() => {}); throw new Fail('size'); }
+    const media = async (id, max) => drain(await call(`${API}/${idOf(id)}?${q({ alt: 'media' })}`), max);
+    // Bytes from..to of a file (alt=media, Range), for a download that comes over several requests and workers (documents/
+    // drive-sync.js). → { bytes, whole }: whole when Drive sent the file entire (200, Range not honoured), at most max.
+    const part = async (id, from, to, max) => {
+      if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from < 0 || to < from || !Number.isSafeInteger(max)) throw new Fail('bad');
+      const r = await call(`${API}/${idOf(id)}?${q({ alt: 'media' })}`, { headers: { range: `bytes=${from}-${to}` } });
+      const whole = r.status !== 206, at = /^bytes (\d+)-\d+\/(?:\d+|\*)$/.exec(r.headers.get('content-range') || '');
+      if (!whole && at && Number(at[1]) !== from) { r.body?.cancel().catch(() => {}); throw new Fail('bad'); }
+      return { bytes: await drain(r, whole ? max : to - from + 1, whole ? 'size' : 'bad'), whole };
+    };
+    const drain = async (r, max, over = 'size') => {
+      if (Number(r.headers.get('content-length')) > max) { r.body?.cancel().catch(() => {}); throw new Fail(over); }
       const reader = r.body?.getReader();
       if (!reader) throw new Fail('bad');
       const parts = [];
@@ -262,7 +280,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
           let x;
           try { x = await reader.read(); } catch { throw new Fail('network'); }
           if (x.done) break;
-          if ((n += x.value.length) > max) throw new Fail('size');
+          if ((n += x.value.length) > max) throw new Fail(over);
           parts.push(x.value);
           await still();
         }
@@ -270,9 +288,12 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
       return join(parts, n);
     };
     // A file's content and metadata: a new file (no id) or a new revision of id. Up to SMALL in one multipart request, else
-    // a resumable session (its address only ever Drive's own upload address) and one PUT of the bytes. all: the file may be
-    // in a shared drive (Save to Drive's update of a file the student moved).
-    const put = async ({ id = null, meta = {}, mime, bytes, fields = SYNC, all = false }) => {
+    // a resumable session (its address only ever Drive's own upload address for that file or a new one), its bytes in
+    // chunks (STEP). all: the file may be in a shared drive (Save to Drive's update of a file the student moved). keep:
+    // { get, set, drop } where the session waits between workers (Sync's, documents/drive-sync.js): { uri, id, size, sum
+    // (the bytes' SHA-256), at (what Drive confirmed), step, sending (a chunk under way) }. A session kept for these same
+    // bytes and file goes on from what Drive says it has (Content-Range bytes */N); one expired (404) starts over.
+    const put = async ({ id = null, meta = {}, mime, bytes, fields = SYNC, all = false, keep = null }) => {
       if ((id !== null && (typeof id !== 'string' || !ID.test(id))) || typeof mime !== 'string' || !MIME.test(mime) || !(bytes instanceof Uint8Array) || bytes.length > kinds().FILE * 4) throw new Fail('bad');
       const more = all ? { supportsAllDrives: 'true' } : {};
       if (bytes.length <= SMALL) {
@@ -280,14 +301,54 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
         return json(await call(id ? `${UPLOAD}/${id}?${q({ uploadType: 'multipart', fields, ...more })}` : `${UPLOAD}?${q({ uploadType: 'multipart', fields, ...more })}`,
           { method: id ? 'PATCH' : 'POST', headers: { 'content-type': type }, body }));
       }
-      const r = await call(id ? `${UPLOAD}/${id}?${q({ uploadType: 'resumable', fields, ...more })}` : `${UPLOAD}?${q({ uploadType: 'resumable', fields, ...more })}`, {
-        method: id ? 'PATCH' : 'POST', headers: { 'content-type': JSON_TYPE, 'x-upload-content-type': mime, 'x-upload-content-length': String(bytes.length) }, body: JSON.stringify(meta),
-      });
-      r.body?.cancel().catch(() => {});
-      let at;
-      try { at = new URL(r.headers.get('location')); } catch { throw new Fail('bad'); }
-      if (`${at.origin}${at.pathname}` !== (id ? `${UPLOAD}/${id}` : UPLOAD) || !at.searchParams.get('upload_id')) throw new Fail('bad');
-      return json(await call(at.href, { method: 'PUT', headers: { 'content-type': mime }, body: bytes }));
+      const home = id ? `${UPLOAD}/${id}` : UPLOAD, size = bytes.length, sum = keep ? await digest(bytes) : null;
+      const ours = (uri) => { try { const at = new URL(uri); return `${at.origin}${at.pathname}` === home && !!at.searchParams.get('upload_id'); } catch { return false; } };
+      let s = keep ? await keep.get() : null;
+      if (s && !(s.sum === sum && s.size === size && (s.id ?? null) === id && ours(s.uri) && Number.isSafeInteger(s.at) && s.at >= 0 && s.at <= size
+        && Number.isSafeInteger(s.step) && s.step >= STEP.min && s.step <= STEP.max)) { s = null; await keep.drop(); }
+      // A session an earlier worker began: where it stands is Drive's to say (it may have kept part of a chunk).
+      let ask = !!s, fresh = 0, idle = 0;
+      const save = async (patch) => { s = { ...s, ...patch }; await keep?.set(s); };
+      for (;;) {
+        if (!s) {
+          if (++fresh > 2) throw new Fail('busy');
+          const r = await call(`${home}?${q({ uploadType: 'resumable', fields, ...more })}`, {
+            method: id ? 'PATCH' : 'POST', headers: { 'content-type': JSON_TYPE, 'x-upload-content-type': mime, 'x-upload-content-length': String(size) }, body: JSON.stringify(meta),
+          });
+          r.body?.cancel().catch(() => {});
+          const uri = r.headers.get('location');
+          if (!ours(uri)) throw new Fail('bad');
+          s = { uri, id, size, sum, at: 0, step: STEP.max, sending: false };
+          await keep?.set(s);
+          ask = false;
+        }
+        let r;
+        if (ask || s.at >= size) {
+          r = await call(s.uri, { method: 'PUT', headers: { 'content-range': `bytes */${size}` } }, [308, 404, 410]);
+          // One cut short mid-chunk (a worker stopped, the link too slow): smaller chunks from here.
+          if (s.sending) s.step = pace(s.step, Infinity);
+          ask = false;
+        } else {
+          const end = Math.min(size, s.at + s.step), began = clock();
+          await save({ sending: true });
+          r = await call(s.uri, { method: 'PUT', headers: { 'content-range': `bytes ${s.at}-${end - 1}/${size}` }, body: bytes.subarray(s.at, end) }, [308, 404, 410]);
+          s.step = pace(s.step, clock() - began);
+        }
+        if (r.status === 404 || r.status === 410) { r.body?.cancel().catch(() => {}); s = null; await keep?.drop(); continue; }
+        if (r.status === 308) {
+          r.body?.cancel().catch(() => {});
+          const got = /^bytes=0-(\d+)$/.exec(r.headers.get('range') || ''), at = got ? Number(got[1]) + 1 : 0;
+          if (at > size) throw new Fail('bad');
+          // Drive answering without moving on, again and again: tried later rather than for ever.
+          if (at <= s.at && ++idle > 3) throw new Fail('busy');
+          if (at > s.at) idle = 0;
+          await save({ at, sending: false });
+          continue;
+        }
+        const j = await json(r);
+        await keep?.drop();
+        return j;
+      }
     };
     // Metadata only: a name, Glaze's properties, in or out of Drive's trash (never deleted for good). move: { add, remove: [ids] },
     // from those folders into that one (Sync's folders converging, documents/drive-sync.js converge).
@@ -302,7 +363,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
       if (typeof j.id !== 'string' || !ID.test(j.id)) throw new Fail('bad');
       return j;
     };
-    return { meta, open, raw, save, file, find, startToken, changes, media, put, patch, remove, folder };
+    return { meta, open, raw, save, file, find, startToken, changes, media, part, put, patch, remove, folder };
   };
 
   // ---- the port, worker side: one request a port. page → { op: 'open', id, takes } then { op: 'more' } after each chunk;
@@ -566,6 +627,6 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
     return { home, items, connected: () => connected, picker: () => picker };
   })();
 
-  return { API, UPLOAD, CHANGES, PORT, CHUNK, META, SYNC, SMALL, DOC, WHY, Fail, b64, unb64, fileName, plan, create, serve, client, page };
+  return { API, UPLOAD, CHANGES, PORT, CHUNK, META, SYNC, SMALL, STEP, DOC, WHY, Fail, b64, unb64, fileName, plan, create, serve, client, page };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_DRIVE;
