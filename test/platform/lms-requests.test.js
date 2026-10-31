@@ -210,6 +210,24 @@ test('D: who is signed in is asked at once, before any library loads, and the st
   assert.match(read('content/content-ultra.js'), /const paintNav = \(n, picture\) => \{\n(?: {4}\/\/[^\n]*\n)? {4}if \(!isPreview && I\.links\.length\) Promise\.resolve\(\)\.then\(\(\) => I\.ready\)\.then\(\(\) => I\.settings\.enabled && me\(\)\)/, 'started at first paint once storage has answered, in frames too');
 });
 
+test('review: the stores share a failed identity request and its retry gate', async () => {
+  for (const status of [401, 500]) {
+    const u = ultra({ answer: () => [status, {}] });
+    u.ctx.GZ_CTX = { site: 'ultra', me: () => u.X.ctx.me(), settings: () => u.I.settings };
+    vm.runInContext(read('courses/lmsq.js'), u.ctx);
+    vm.runInContext(read('courses/ultra.js'), u.ctx);
+    const both = await Promise.allSettled([u.X.ctx.me(), u.ctx.GZ_ULTRA.page.me()]);
+    assert.ok(both.every((r) => r.status === 'rejected'));
+    assert.equal(u.s.count(/users\/me$/), 1, `${status}: no independent fallback after the shared request fails`);
+    await assert.rejects(u.ctx.GZ_ULTRA.page.me());
+    assert.equal(u.s.count(/users\/me$/), 1, `${status}: the page's retry gate also governs the store`);
+    if (status === 401) u.location.pathname += '/grades';
+    else await u.c.tick(60000);
+    await assert.rejects(u.ctx.GZ_ULTRA.page.me());
+    assert.equal(u.s.count(/users\/me$/), 2, `${status}: one shared retry once permitted`);
+  }
+});
+
 // courses/lmsq.js alone: its queue's order and its holds.
 const lmsq = (answer) => {
   const c = clock(), s = school(answer);
