@@ -306,7 +306,10 @@ test('Drive\'s rate limit is waited out record by record; a full Drive stops wit
   assert.deepEqual(await a.run(), { ok: false, why: 'quota' });
 });
 
-test('a daily snapshot of Back up…\'s zip in Glaze/Backups, the newest five kept, the older in Drive\'s trash', async () => {
+// Glaze's own daily zips are copies of what is already on the device, never the student's work: past the newest five they
+// are deleted for good (the owner's call), not left in Drive's trash, where they would count against the student's storage
+// for 30 days. Only a zip Glaze made and tagged as a snapshot, in Backups, as Drive says it is just before; nothing else.
+test('a daily snapshot of Back up…\'s zip in Glaze/Backups, the newest five kept, the older deleted for good and nothing else', async () => {
   const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock, snapshots: true });
   await a.local.set({ [TODO]: todo('x') });
   await a.on();
@@ -316,11 +319,46 @@ test('a daily snapshot of Back up…\'s zip in Glaze/Backups, the newest five ke
   assert.ok(folder && folder.meta.name === 'Backups' && snaps()[0].meta.parents[0] === folder.meta.id && snaps()[0].meta.mimeType === 'application/zip');
   await a.run();
   assert.equal(snaps().length, 1, 'once a day');
-  for (let i = 0; i < 6; i++) { clock.t += ST.SNAP.every + 1; assert.ok((await a.run()).ok); }
-  assert.equal(snaps().length, 7);
-  assert.equal(snaps().filter((f) => !f.meta.explicitlyTrashed).length, 5, 'five kept');
-  assert.deepEqual(snaps().filter((f) => f.meta.explicitlyTrashed).map((f) => f.meta.name).sort(), snaps().map((f) => f.meta.name).sort().slice(0, 2), 'the oldest two in Drive\'s trash');
-  noDeletes(drive);
+  // A folder that says it is a snapshot (named as the oldest), with a file of the student's in it: never deleted.
+  const odd = drive.seed({ name: 'glaze-backup-2000-01-01.zip', mimeType: drive.FOLDER, parents: [folder.meta.id], appProperties: { glaze: 'snapshot' } });
+  const inside = drive.seed({ name: 'Essay.docx', mimeType: 'application/octet-stream', parents: [odd.meta.id] }, 'mine');
+  const seen = new Set(snaps().filter((f) => f.meta.mimeType === 'application/zip').map((f) => f.meta.name));
+  for (let i = 0; i < 6; i++) {
+    clock.t += ST.SNAP.every + 1;
+    assert.ok((await a.run()).ok);
+    for (const f of snaps()) if (f.meta.mimeType === 'application/zip') seen.add(f.meta.name);
+  }
+  const zips = snaps().filter((f) => f.meta.mimeType === 'application/zip');
+  assert.equal(seen.size, 7);
+  assert.equal(zips.length, 5, 'five kept');
+  assert.ok(zips.every((f) => !f.meta.explicitlyTrashed), 'nothing left in Drive\'s trash');
+  const deleted = drive.log.filter((x) => x.method === 'DELETE').map((x) => x.deleted);
+  assert.deepEqual(deleted.map((x) => x.name).sort(), [...seen].sort().slice(0, 2), 'the oldest two deleted for good');
+  assert.ok(deleted.every((x) => x.appProperties.glaze === 'snapshot' && x.mimeType === 'application/zip' && x.parents[0] === folder.meta.id), 'each a zip Glaze tagged as a snapshot, in Backups');
+  assert.ok(drive.files.has(odd.meta.id) && drive.files.has(inside.meta.id), 'the folder and what is in it stay');
+  assert.ok([...drive.files.values()].every((f) => !f.meta.explicitlyTrashed), 'nothing in Drive\'s trash');
+});
+
+// One whose metadata no longer says it is Glaze's snapshot by the time it would go (its tag cleared, moved out of Backups) is
+// left where it is.
+test('an old snapshot that no longer reads as Glaze\'s by the time it would go is left in Drive', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock, snapshots: true });
+  await a.local.set({ [TODO]: todo('x') });
+  await a.on();
+  for (let i = 0; i < 4; i++) { clock.t += ST.SNAP.every + 1; assert.ok((await a.run()).ok); }
+  const zips = () => [...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'snapshot');
+  assert.equal(zips().length, 5);
+  // Between its listing and its turn to go, the oldest is moved out of Backups.
+  const oldest = zips().sort((x, y) => (x.meta.name < y.meta.name ? -1 : 1))[0];
+  const fetch = drive.fetch;
+  drive.fetch = async (url, init = {}) => {
+    if ((init.method || 'GET') === 'GET' && url.includes(`/files/${oldest.meta.id}?`)) oldest.meta.parents = ['0AroOt'];
+    return fetch(url, init);
+  };
+  clock.t += ST.SNAP.every + 1;
+  assert.ok((await a.run()).ok);
+  assert.ok(drive.files.has(oldest.meta.id), 'left in Drive');
+  assert.equal(drive.log.filter((x) => x.method === 'DELETE').length, 0);
 });
 
 // ---- Gradescope and Notes
@@ -629,7 +667,9 @@ test('two devices\' snapshots of one day are one file, so the five kept are five
   const live = [...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'snapshot' && !f.meta.explicitlyTrashed);
   assert.deepEqual(live.map((f) => f.meta.name).sort(), ['2026-11-01', '2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05'].map((d) => `glaze-backup-${d}.zip`));
   assert.ok(live.every((f) => f.bytes.toString().startsWith('PK B')), 'the day\'s later one');
-  noDeletes(drive);
+  const deleted = drive.log.filter((x) => x.method === 'DELETE').map((x) => x.deleted);
+  assert.deepEqual(deleted.map((x) => x.name).sort(), ['2026-10-30', '2026-10-31'].map((d) => `glaze-backup-${d}.zip`), 'the two older days deleted for good');
+  assert.ok(deleted.every((x) => x.appProperties.glaze === 'snapshot'), 'snapshots alone');
 });
 
 test('a push after one note\'s edit reads that note, not every note ever synced', async () => {

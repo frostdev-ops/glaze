@@ -4,8 +4,9 @@
 // (metadata, multipart and resumable), changes.getStartPageToken and changes.list (each file's latest change once, paged).
 // version moves on every change to a file, headRevisionId on every new content; a trashed folder's files read as trashed.
 // The student's own actions in Drive, or another app's: trash, untrash, remove (deleted for good), edit (new content, the
-// app's properties kept). fail() queues an error answer for the next request that matches. Nothing is ever really deleted
-// by a request: a DELETE is answered 403 and logged, so a test can say none came.
+// app's properties kept). fail() queues an error answer for the next request that matches. A DELETE (files.delete) deletes
+// a file Glaze made for good, a folder with everything in it, answered 204 as Drive does; each is logged with what it deleted
+// (entry.deleted), so a test can say which came, or that none did.
 'use strict';
 const { ERRORS } = require('../fixtures/drive/v3.js');
 
@@ -115,7 +116,14 @@ const standin = ({ tokens = null, owner = 'student@school.edu' } = {}) => {
     if (f0 >= 0) { const x = faults.splice(f0, 1)[0]; entry.fault = x.status; if (x.status === 0) return null; return json(x.status, x.body); }
     if (u.origin !== 'https://www.googleapis.com') return null;
     if (!valid.has(String(h.authorization || '').replace(/^Bearer /, ''))) return json(401, ERRORS[401]);
-    if (method === 'DELETE') { entry.refused = true; return json(403, ERRORS.insufficientFilePermissions); }
+    if (method === 'DELETE') {
+      const d = /^\/drive\/v3\/files\/([\w-]+)$/.exec(u.pathname), f = d && files.get(d[1]);
+      if (!f || !f.app) return json(404, ERRORS[404]);
+      const gone = (x) => { files.delete(x.meta.id); changed(x.meta.id); for (const k of [...files.values()].filter((c) => c.meta.parents.includes(x.meta.id))) gone(k); };
+      entry.deleted = { id: f.meta.id, name: f.meta.name, mimeType: f.meta.mimeType, parents: [...f.meta.parents], appProperties: { ...f.meta.appProperties } };
+      gone(f);
+      return { status: 204, headers: {}, body: Buffer.alloc(0) };
+    }
     let m;
     // changes
     if (method === 'GET' && u.pathname === '/drive/v3/changes/startPageToken') return json(200, { kind: 'drive#startPageToken', startPageToken: String(seq + 1) });

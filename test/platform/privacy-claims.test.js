@@ -189,3 +189,15 @@ test('Sync to Google Drive\'s storage disclosure says when another account delet
   assert.doesNotMatch(stored, /Connecting another account deletes all of it/);
   assert.match(stored, /Connecting another account while Sync is on, or turning Sync on for\s+another account, deletes all of it\./);
 });
+
+// Glaze's own daily snapshots past the newest five are deleted for good (background/drive-store.js snapshot, documents/drive.js
+// remove); every other Drive file it removes goes to Drive's trash. Both privacy texts say so.
+test('Sync to Google Drive\'s privacy texts say only Glaze\'s own older daily zips are deleted for good', () => {
+  assert.match(read('background/drive-store.js'), /m\?\.appProperties\?\.glaze !== 'snapshot'[^\n]*\n\s*await ctx\.D\(\(c\) => c\.remove\(f\.id\)\)/, 'the code: a checked snapshot alone');
+  const sync = policy.slice(policy.indexOf('  - **Sync to Google Drive**'), policy.indexOf('  - **Submit from Drive**'));
+  assert.doesNotMatch(sync, /older\s+snapshot goes to Drive's trash/);
+  assert.match(sync, /Glaze deletes no Drive file for good except its own daily zips\s+past the newest\s+five/);
+  const short = read('../docs/privacy.md');
+  assert.doesNotMatch(short, /never deletes a Drive file for good\)/);
+  assert.match(short, /no Drive file is deleted for good except Glaze's own daily zips past the newest five/);
+});
