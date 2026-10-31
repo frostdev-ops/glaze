@@ -20,8 +20,9 @@ const FIXTURE = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-
 
 // In the page's world from its first script: per click, each frame from the press until the page is ready.
 function probe() {
-  const P = window.__feel = { shifts: [] };
+  const P = window.__feel = { shifts: [], longs: [] };
   new PerformanceObserver((l) => { for (const e of l.getEntries()) P.shifts.push({ at: e.startTime, value: e.value }); }).observe({ type: 'layout-shift', buffered: true });
+  new PerformanceObserver((l) => { for (const e of l.getEntries()) P.longs.push({ at: e.startTime, ms: e.duration }); }).observe({ type: 'longtask', buffered: true });
   const shows = (e) => !!e && e.isConnected && e.getClientRects().length > 0 && getComputedStyle(e).visibility === 'visible' && getComputedStyle(e).opacity !== '0';
   const bar = () => document.getElementById('gz-navbar')?.shadowRoot;
   // The element pressed and the one that should look current, by name: a course's tab, Glaze's bar's item, Ultra's own
@@ -112,10 +113,15 @@ function probe() {
       skelAfterIn: firstIn < 0 ? null : Math.max(0, lastSkel - firstIn + 1),
       readyShown: !!last?.dest && !last.skel,
       shift: +P.shifts.filter((s) => s.at >= run.downAt).reduce((n, s) => n + s.value, 0).toFixed(4),
+      longTaskMs: +P.longs.filter((x) => x.at >= run.downAt && x.at <= last.t).reduce((n, x) => n + x.ms, 0).toFixed(1),
     };
   };
 }
 
+// PERF_DEVICE=neo: the MacBook Neo's window as checks/courses/ultra-perf-check.js has it (1280×800 at 2×, 6 cores).
+// FEEL_MEASURE=n: no assertions; the tour n times with Glaze on and off, each click's medians to ultra-feel-measure.json.
+const neo = process.env.PERF_DEVICE === 'neo', measureReps = Number(process.env.FEEL_MEASURE || 0);
+const pinned = neo ? require('../courses/ultra-perf-check.js').pinCores() : null;
 let checks = 0;
 const evidence = { checks: [], clicks: [] };
 const check = (ok, message, data) => { evidence.checks.push({ ok: !!ok, message, data }); if (!ok) throw Error(`${message} ${data ? JSON.stringify(data) : ''}`); checks++; console.log(`ok ${message}`); };
@@ -137,7 +143,7 @@ const frames = (page, n = 2) => page.evaluate((k) => new Promise((r) => { const 
     const ext = env.staged(source, [`${ORIGIN}/*`]);
     await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 860 },
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: neo ? { width: 1280, height: 800 } : { width: 1280, height: 860 }, ...(neo && { deviceScaleFactor: 2 }),
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'],
     });
     context.setDefaultTimeout(20000);
@@ -211,6 +217,23 @@ const frames = (page, n = 2) => page.evaluate((k) => new Promise((r) => { const 
       ];
       return { page, errors, runs };
     };
+
+    if (measureReps) {
+      const runs = { on: [], off: [] };
+      for (let i = 0; i < measureReps; i++) for (const mode of ['on', 'off']) {
+        await set({ enabled: mode === 'on', feedback: true });
+        const t = await tour(mode);
+        runs[mode].push(...t.runs);
+        await t.page.close();
+      }
+      const med = (xs) => { const v = xs.filter((x) => x != null).sort((a, b) => a - b); return v.length ? v.length % 2 ? v[v.length >> 1] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2 : null; };
+      const sumUp = (list) => ({ n: list.length, clickToPaintMs: med(list.map((r) => r.clickToMain?.ms)), clickToReadyMs: med(list.map((r) => r.clickToReady?.ms)), shift: med(list.map((r) => r.shift)), longTaskMs: med(list.map((r) => r.longTaskMs)), heldFrames: med(list.map((r) => r.heldFrames)) });
+      evidence.measure = { device: neo ? { name: 'MacBook Neo', viewport: '1280x800@2', pinned } : null, reps: measureReps, byClick: {}, all: { on: sumUp(runs.on), off: sumUp(runs.off) } };
+      for (const what of new Set(runs.on.map((r) => r.what))) evidence.measure.byClick[what] = { on: sumUp(runs.on.filter((r) => r.what === what)), off: sumUp(runs.off.filter((r) => r.what === what)) };
+      console.log(JSON.stringify(evidence.measure, null, 1));
+      if (out) { fs.mkdirSync(out, { recursive: true }); fs.writeFileSync(path.join(out, 'ultra-feel-measure.json'), JSON.stringify({ ...evidence.measure, clicks: evidence.clicks }, null, 2)); }
+      return;
+    }
 
     // ---- Glaze on ----
     const on = await tour('on');

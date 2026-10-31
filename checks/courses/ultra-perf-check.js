@@ -15,6 +15,8 @@ const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest(
 // PERF_SPEED=1: what a student waits for, Glaze off (enabled: false) against on: styled-at, paints, long tasks, long
 // animation frames and layout shift per stage, an idle window, glaze:load round trips and a cold course-tab open.
 // PERF_DEVICE=neo: a MacBook Neo (A18 Pro, 2P+4E cores, 8 GB): 6 cores, the CPU throttled to its Chrome speed, its screen.
+// PERF_PROFILE=1: the course open's CPU profile (self time by script and function, built-ins charged to their caller) and its
+// style and layout passes with the scripts that forced them, in outline.profile; =selectors adds Chrome's selector stats.
 const speed = process.env.PERF_SPEED === '1';
 const neo = process.env.PERF_DEVICE === 'neo';
 // Speedometer 3.1 in Chrome on the MacBook Neo, from HotHardware's review (Safari: 50.4).
@@ -476,7 +478,6 @@ if (require.main === module) (async () => {
         initial.snapshot = await snapshot(page, instrumented);
         const courses = await settle(page, 'course');
         courses.snapshot = await snapshot(page, instrumented);
-        // PERF_PROFILE=1: the course open sampled by V8's profiler (the content scripts' isolated world included), uninstrumented passes.
         const profiler = process.env.PERF_PROFILE && !instrumented && await startProfile(page);
         const outline = await settle(page, 'outline');
         if (profiler) outline.profile = await stopProfile(profiler);
