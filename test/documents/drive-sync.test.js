@@ -964,3 +964,24 @@ test('a Word file another device kept as edited outside Glaze is never overwritt
     noDeletes(drive);
   }
 });
+
+test('a Word file edited outside Glaze after another device\'s push is never overwritten by a device in conflict', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-000000000831';
+  await a.papers.save(key, { doc: doc('Glaze text'), title: 'Essay', named: true });
+  assert.ok((await a.sync.set(true)).ok); assert.ok((await b.sync.set(true)).ok);
+  const word = exportOf(drive, key).meta.id;
+  clock.t += 1000;
+  await a.papers.save(key, { doc: doc('A edits') });
+  await a.sync.touched(key); await a.fire();
+  drive.edit(word, enc('Edited in Word after A'));
+  clock.t += 1000;
+  await b.papers.save(key, { doc: doc('B edits') });
+  await b.sync.touched(key);
+  assert.ok((await b.sync.run()).ok);
+  assert.equal(dec(drive.files.get(word).bytes), 'Edited in Word after A', 'the Word edits stay as they are');
+  assert.equal(textOf(sidecarJson(drive, key).record.doc), 'B edits');
+  assert.notEqual(sidecarJson(drive, key).file, word);
+  assert.equal((await b.papers.versions(key)).filter((v) => v.reason === 'conflict').length, 1, 'A\'s side kept once');
+  noDeletes(drive);
+});
