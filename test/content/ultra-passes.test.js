@@ -23,7 +23,7 @@ test('a failed startup read still completes consumers when the direct fallback t
   assert.equal(answered, true, 'settings readiness must settle even after extension reload');
 });
 
-const boot = async ({ pathname = '/ultra/stream', localGet, byId = false, frames = null } = {}) => {
+const boot = async ({ pathname = '/ultra/stream', localGet, byId = false } = {}) => {
   let now = 0;
   const timers = [], styleReads = [], radiusReads = [], loads = [], localGets = [], syncGets = [], changed = [], listeners = {}, observers = [];
   class El {
@@ -65,7 +65,7 @@ const boot = async ({ pathname = '/ultra/stream', localGet, byId = false, frames
     MutationObserver: class { constructor(f) { this.f = f; } observe(target, o) { observers.push({ f: this.f, target, o }); } disconnect() {} takeRecords() { return []; } },
     IntersectionObserver: class { observe() {} unobserve() {} disconnect() {} }, PerformanceObserver: class { observe() {} },
     addEventListener() {}, removeEventListener() {}, postMessage() {}, open() {},
-    setTimeout: (f, ms = 0) => { timers.push({ f, at: now + ms }); return timers.length; }, clearTimeout() {}, setInterval: () => 1, clearInterval() {}, requestAnimationFrame: (f) => (frames ? frames.push(f) : 1), cancelAnimationFrame() {},
+    setTimeout: (f, ms = 0) => { timers.push({ f, at: now + ms }); return timers.length; }, clearTimeout() {}, setInterval: () => 1, clearInterval() {}, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
     performance: { now: () => now }, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} }, innerHeight: 900, innerWidth: 1400,
     fetch: () => Promise.reject(new Error('offline')),
     chrome: { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://glaze/${p}`, lastError: undefined, getManifest: () => ({}),
@@ -286,29 +286,12 @@ test("Glaze's footer waits for its stylesheet: in before it, it sat after the pa
   assert.equal(footers().length, 1, 'the footer once its sheet is in');
 });
 
-test('after a quiet spell the pass runs at the next frame, before it paints, and still at most once per 150 ms', async () => {
-  const frames = [];
-  const p = await boot({ frames });
-  const frame = async () => { for (const f of frames.splice(0)) f(0); await settle(); };
-  await frame();
-  p.styleReads.length = 0;
-  const added = p.tree(2);
+test("Ultra's own additions reach the Courses page panel's held() in the mutation callback, before the frame paints", async () => {
+  const p = await boot({ pathname: '/ultra/course' });
+  let held = 0;
+  p.c.GZ_WIDGETS_UI = { held: () => held++, sync() {} };
+  const added = p.tree(1);
   p.body.append(added);
   p.mutate([{ type: 'childList', target: p.body, addedNodes: [added], removedNodes: [] }]);
-  await frame();
-  assert.ok([added, ...added.kids].every((e) => p.styleReads.includes(e)), 'what the page drew is swept in the frame that first shows it');
-  p.styleReads.length = 0;
-  const next = p.tree(1);
-  p.body.append(next);
-  p.mutate([{ type: 'childList', target: p.body, addedNodes: [next], removedNodes: [] }]);
-  await frame();
-  assert.ok(!p.styleReads.includes(next), 'a change right after waits for the throttle');
-  await p.wait(200);
-  assert.ok(p.styleReads.includes(next), 'which sweeps it');
-  await p.wait(1000);
-  p.styleReads.length = 0;
-  p.mutate([{ type: 'attributes', attributeName: 'class', target: p.small, oldValue: '' }]);
-  p.c.document.hidden = true;
-  await frame();
-  assert.equal(p.styleReads.length, 0, 'a hidden page still sweeps nothing');
+  assert.ok(held > 0, 'held at once, not at the next pass');
 });

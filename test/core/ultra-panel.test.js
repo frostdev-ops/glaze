@@ -90,6 +90,23 @@ test("Ultra: the panel goes first in the Courses page's To Do column, and comes 
   assert.equal(col.querySelectorAll('#gz-panel').length, 1, 'once, however often the pass runs');
 });
 
+test("Ultra: the panel goes in with the Courses page Ultra has just drawn (held, before that frame paints), not at the next pass", async () => {
+  const p = page({ todo: false, local: structuredClone(ONLY_PET) });
+  p.c.location.pathname = '/ultra/stream';
+  p.ui.sync(true);
+  await settle();
+  assert.equal(p.panel(), null, 'no panel off the Courses page');
+  // Ultra routes to Courses and draws it: its mutation callback calls held(), with no pass yet.
+  p.c.location.pathname = '/ultra/course';
+  p.ui.held?.();
+  await Promise.resolve();
+  const col = p.doc.querySelector('div.courses-panel');
+  assert.equal(col.firstElementChild, p.panel(), 'placed before the course list is painted');
+  p.ui.held?.(); p.ui.held?.();
+  await Promise.resolve();
+  assert.equal(col.querySelectorAll('#gz-panel').length, 1, 'once, however often Ultra mutates');
+});
+
 test('Ultra: the panel has no heading to fold: the To Do is a widget, and Hide widgets is in the toolbar', async () => {
   const p = page({ local: structuredClone(ONLY_PET) });
   p.ui.sync(true);
