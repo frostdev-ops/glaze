@@ -1519,6 +1519,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     let mine = frames.get(cid);
     const base = showing === cid && mine && !mine.item ? mine : !showing && cid === ctx.courseId() && (!mine || mine.item) ? null : undefined;
     if (!x || base === undefined || (base && !base.ready)) return false;
+    // A freed item frame on its way to the outline is that outline by now: let go of (the standby the item can take).
+    for (const g of base ? spare.get(cid) || [] : []) if (g.fresh) { g.fresh.off(); spare.set(cid, spare.get(cid).filter((y) => y !== g)); retire(g); }
+    if (mine?.fresh) { mine.fresh.off(); mine.item = null; }
     // An item frame kept for its unsaved work, at this address: shown again as it was.
     const kept = (base ? spare.get(cid) || [] : mine ? [mine] : []).find((g) => g.item === cid && g.url === url);
     if (!base && mine && mine !== kept) { if (mine.dirty) return false; frames.delete(cid); retire(mine); mine = null; }
@@ -1626,7 +1629,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   const dropFresh = (cid, g) => {
     g.fresh?.off();
-    if (g.dirty || g.item && items.get(cid)?.open) return;
+    if (g.dirty) return;
     if (frames.get(cid) === g) { if (showing === cid) return; frames.delete(cid); } else spare.set(cid, (spare.get(cid) || []).filter((x) => x !== g));
     retire(g);
   };
