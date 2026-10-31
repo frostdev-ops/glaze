@@ -239,6 +239,17 @@ test('a click on a course\'s tab shows a skeleton in its tool area from the clic
   assert.ok(!s.course.tools.hasAttribute('data-gz-skel-host'));
 });
 
+test('the crossfade\'s replay of the click keeps the skeleton the click started', () => {
+  const s = site();
+  s.sync();
+  const a = s.course.links.announcement;
+  s.tap(a);
+  const box = s.skel();
+  s.fire('click', a);
+  assert.equal(s.skel(), box, 'the same one, not drawn again');
+  assert.ok(s.pressed(a));
+});
+
 test('on a page without its own markers it goes once Ultra\'s spinners have gone with content in, or a moment after a new view', () => {
   const s = site();
   s.sync();
