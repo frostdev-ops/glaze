@@ -717,6 +717,17 @@ test('the rule scan sees what Chrome files', () => {
     ['#site-wrap .a', false], ['#site-wrap :is([class*="a"], [class*="b"])', false], ['#site-wrap :where(:not(a, b))', false], ['.a:is(.b, .c) *', false]]) assert.equal(splittable(sel), can, sel);
 });
 
+test('the CSS ratchet treats quoted delimiters and CSS escapes as selector data', () => {
+  assert.deepEqual(cssRules(String.raw`.a\{b{} [title="/*literal*/"]{} @media (width > 1px){.c{}}`), [String.raw`.a\{b`, '[title="/*literal*/"]', '.c']);
+  assert.equal(splittable(':is([title=")"], .a)'), true, 'a quoted parenthesis cannot close :is()');
+  assert.equal(keyedComp('[class*="]"]'), false, 'a quoted bracket cannot end an attribute');
+  assert.equal(keyedComp(String.raw`[cl\61 ss*="x"]`), false, 'an escaped class attribute is still a class attribute');
+  assert.equal(splittable(String.raw`:is(.a\), .b)`), true, 'an escaped parenthesis is part of the class');
+  assert.deepEqual(compoundsOf(String.raw`.a\31 .b > *`).map((p) => p.text), [String.raw`.a\31 .b`, '*'], 'hex escape terminator whitespace is not a combinator');
+  assert.deepEqual(selectorList(String.raw`:is([title="a,b]"], .a\,b), .c`), [String.raw`:is([title="a,b]"], .a\,b)`, '.c']);
+  assert.equal(splittable(':where(:not(.disabled)):is(.a, .b)'), true, 'an unkeyed :where() cannot hide a list from the ratchet');
+});
+
 test('review: local development policy is loaded by the worker, outside every first content script', () => {
   assert.doesNotMatch(read('content/defaults.js'), /GZ_LOCAL_DEV/, 'local developer policy belongs in the worker');
 });
