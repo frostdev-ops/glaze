@@ -295,6 +295,8 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
           const left = space - (think?.budget || 0);
           if (left >= floor) answer = Math.min(m.maxTokens, left);
         }
+        // A trained window is optional; the physical engine limit still holds beside the reserved answer and close.
+        if (think) think.budget = Math.min(think.budget, room - input - answer - think.close.length);
         const grammar = m.schema ? matcher(job, m.schema) : null;
         await prefix(job, head, signal);
         // Each picture encoded on the engine's device, fed in place of its placeholders, and its buffer freed at once.
