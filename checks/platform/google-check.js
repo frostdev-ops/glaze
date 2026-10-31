@@ -1,5 +1,5 @@
 // Google sign-in for Drive and the Picker hand-off, headless, in the real extension (a staged copy) with its real worker
-// and Settings page. One stand-in answers for Google (accounts.google.com's implicit flow, userinfo, revoke) and for the
+// and Settings page. One stand-in answers for Google (accounts.google.com's implicit flow, userinfo, and revoke, which nothing may ask) and for the
 // picker pages (frostdev.io's and its GitHub Pages copy), through Playwright's route() and, for what route() can't see
 // (Chrome loads launchWebAuthFlow's page in a WebContents of its own), through a local HTTPS server those hosts resolve to;
 // every other host is refused. Each request is logged with which of the two served it. The worker's config is given
@@ -8,7 +8,7 @@
 // permissions.remove is recorded.
 //   web flow: Connect from the click, the real launchWebAuthFlow through the stand-in, the row with the account; a reply
 //     for another state refused; Pick with frostdev.io down goes to the copy, the token and state in the fragment only, the
-//     files back; with frostdev.io up it goes there; Disconnect revokes, gives identity back, the row returns to Connect.
+//     files back; with frostdev.io up it goes there; Disconnect revokes nothing, gives identity back, the row returns to Connect.
 //   chrome flow: getAuthToken (the check's stand-in for Chrome's account) with the three scopes.
 //   No token in storage.local, sync or session at any point.
 //   NODE_PATH=<installed playwright> nice node checks/platform/google-check.js [evidence directory]
@@ -183,6 +183,7 @@ const HOSTS = ['accounts.google.com', 'openidconnect.googleapis.com', 'oauth2.go
     await until(async () => (await page.locator('#gdrive-who').textContent()) === 'student@school.edu', 'connected');
     const q = log.auth.at(-1);
     ok(q.client_id === REAL.web && q.response_type === 'token' && q.redirect_uri === REDIRECT && q.scope === `${DRIVE} openid email` && /^[\w-]{43}$/.test(q.state) && q.prompt === 'select_account', 'Connect: the Web client\'s implicit flow, our redirect, the three scopes, a state');
+    ok(log.auth.every((x) => !('include_granted_scopes' in x)), 'Drive\'s scopes alone: no include_granted_scopes');
     ok(JSON.stringify(await page.evaluate(() => __gz.asked)) === JSON.stringify([[['identity'], true], [['identity'], true]]), 'each Connect asks for identity alone, inside the click');
     ok(log.userinfo.at(-1)[0] === `Bearer ${TOKEN}`, 'the account is read with the token');
     ok(await page.locator('#gdrive-disconnect').isVisible() && await page.locator('#gdrive-connect').isHidden(), 'connected: the account and Disconnect');
@@ -223,7 +224,7 @@ const HOSTS = ['accounts.google.com', 'openidconnect.googleapis.com', 'oauth2.go
     // Disconnect.
     await page.locator('#gdrive-disconnect').click();
     await until(async () => await page.locator('#gdrive-connect').isVisible(), 'disconnected');
-    ok(JSON.stringify(log.revoke.map(([m, b]) => [m, b])) === JSON.stringify([['POST', `token=${encodeURIComponent(TOKEN)}`]]), 'Disconnect revokes the token with Google');
+    ok(log.revoke.length === 0, 'Disconnect is this device only: nothing revoked');
     ok(await sw.evaluate(() => JSON.stringify(__gzRemoved)) === JSON.stringify([{ permissions: ['identity'] }]), 'and gives identity back');
     ok(!await page.evaluate(() => chrome.storage.local.get('google').then((x) => x.google)) && (await page.locator('#gdrive-who').textContent()) === '', 'and forgets the account: Connect again');
     ok((await page.locator('#hint').textContent()) === 'Disconnected.', 'Disconnected.');
@@ -247,7 +248,7 @@ const HOSTS = ['accounts.google.com', 'openidconnect.googleapis.com', 'oauth2.go
     await noToken('chrome flow');
     await page.locator('#gdrive-disconnect').click();
     await until(async () => await page.locator('#gdrive-connect').isVisible(), 'disconnected, chrome flow');
-    ok(log.revoke.at(-1)[1] === 'token=ya29.check-chrome-token', 'Disconnect revokes Chrome\'s token');
+    ok(log.revoke.length === 0, 'Disconnect revokes nothing, chrome flow');
 
     // Settings framed in a school's page with no permissions API (Firefox gives such a frame none): Connect asks nothing
     // there and opens Settings' own tab at Writer → Papers.

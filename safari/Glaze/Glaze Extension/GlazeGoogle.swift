@@ -16,7 +16,7 @@
 //      'state' | 'scope' | 'auth' | 'network' | 'signin' (no sign-in started, or it expired) }; wait: ms to wait, ≤ 20000
 //    { type: 'google.token', sub? } → { ok: true, token, expiresAt (ms since 1970) } | { ok: false, why: 'signin' |
 //      'account' (sub isn't the connected account's) | 'network' | 'revoked' (Google refused the refresh token: forgotten) }
-//    { type: 'google.disconnect' } → { ok: true, revoked, had }: the grant revoked with its refresh token, everything forgotten
+//    { type: 'google.disconnect' } → { ok: true, had }: everything forgotten on this device; Google's grant is never revoked
 //    { type: 'google.drop', token } → { ok: true }: forget this refused access token, retaining the refresh token
 //  Any other failure is { ok: false, why: 'request' | 'setup' }. Nothing here logs; replies carry fixed reasons only.
 //
@@ -34,7 +34,6 @@ nonisolated enum GlazeGoogle {
     static let scopes = [drive, "openid", "email"]
     static let authorize = URL(string: "https://accounts.google.com/o/oauth2/v2/auth")!
     static let tokenURL = URL(string: "https://oauth2.googleapis.com/token")!
-    static let revokeURL = URL(string: "https://oauth2.googleapis.com/revoke")!
     /// The app's sign-in URL: io.frostdev.glaze-google://signin?state=…&challenge=…[&hint=…]
     static let appScheme = "io.frostdev.glaze-google"
     /// A sign-in left unfinished this long is dropped; a held access token is renewed this long before Google's expiry.
@@ -157,7 +156,7 @@ nonisolated enum GlazeGoogle {
 
     // MARK: The engine
 
-    /// The extension's side: sign-ins started and finished, tokens minted, the grant revoked.
+    /// The extension's side: sign-ins started and finished, tokens minted, all of it forgotten on Disconnect.
     actor Engine {
         struct Pending: Codable { let state: String, verifier: String, at: Double }
         struct Saved: Codable, Equatable { let refresh: String, sub: String, email: String }
@@ -166,14 +165,6 @@ nonisolated enum GlazeGoogle {
         private var held: [String: (token: String, expires: Date, sub: String)] = [:]
         /// Bumped by Connect, Disconnect and committing a grant: older answers across an await are dropped.
         private var generation: [String: Int] = [:]
-        /// Only an explicit Disconnect may revoke a late exchange. Google's revocation also invalidates newer grants
-        /// for the same account/client, so a superseding Connect must only discard the old answer.
-        private var disconnected: Set<String> = []
-        // Revocation covers the client across profiles. A late exchange must not revoke an authorization begun later
-        // in another profile, just as it must not revoke a superseding Connect in its own profile.
-        private var authorization: String?
-        private var revoking = 0
-        private var revocationWaiters: [CheckedContinuation<Void, Never>] = []
         private func bump(_ profile: String) { generation[profile, default: 0] += 1 }
 
         init(vault: Vault, slot: Slot?, transport: Transport, now: @escaping @Sendable () -> Date = { Date() }) {
@@ -194,15 +185,6 @@ nonisolated enum GlazeGoogle {
             if let hint, !validEmail(hint) { throw Fail.request }
             guard let state = random(), let verifier = random() else { throw Fail.setup }
             bump(profile)
-            authorization = state
-            disconnected.remove(profile)
-            let started = generation[profile, default: 0]
-            // A revoke already sent to Google cannot be canceled. Do not start another authorization until it ends.
-            // This is global: Google's revocation is account/client-wide, across Safari profiles too.
-            while revoking > 0 {
-                await withCheckedContinuation { revocationWaiters.append($0) }
-                guard generation[profile, default: 0] == started else { throw Fail.signin }
-            }
             if let old = load(Pending.self, "pending." + profile) { slot.remove(old.state) }
             slot.sweep(olderThan: now().addingTimeInterval(-pendingFor))
             guard store(Pending(state: state, verifier: verifier, at: now().timeIntervalSince1970), "pending." + profile) else { throw Fail.setup }
@@ -232,10 +214,7 @@ nonisolated enum GlazeGoogle {
                                                            "grant_type": "authorization_code", "redirect_uri": redirect])
             let g: Grant
             do { g = try grant(status: status, body: body, now: now()) } catch Fail.revoked { throw Fail.auth } // a spent code
-            guard generation[profile, default: 0] == started else {
-                if disconnected.contains(profile), authorization == p.state, let r = g.refresh { _ = await revoke(r) }
-                throw Fail.signin
-            }
+            guard generation[profile, default: 0] == started else { throw Fail.signin }
             guard let refresh = g.refresh, let account = g.account else { throw Fail.auth }
             guard store(Saved(refresh: refresh, sub: account.sub, email: account.email), "refresh." + profile) else { throw Fail.setup }
             // A refresh can start after Connect but before this exchange finishes. It belongs to the previous grant.
@@ -266,30 +245,16 @@ nonisolated enum GlazeGoogle {
             if held[profile]?.token == token { held[profile] = nil }
         }
 
-        func disconnect(profile: String) async -> (revoked: Bool, had: Bool) {
+        /// This device only (owner, 2026-10-31): the refresh token, a sign-in under way and held tokens forgotten here;
+        /// Google's grant stays for the student's other devices. → whether there was a connection
+        func disconnect(profile: String) -> Bool {
             bump(profile)
-            disconnected.insert(profile)
-            let s = load(Saved.self, "refresh." + profile)
+            let had = vault.read("refresh." + profile) != nil
             if let p = load(Pending.self, "pending." + profile) { slot?.remove(p.state) }
             vault.remove("refresh." + profile)
             vault.remove("pending." + profile)
             held[profile] = nil
-            guard let s else { return (false, false) }
-            return (await revoke(s.refresh), true)
-        }
-
-        private func revoke(_ refresh: String) async -> Bool {
-            revoking += 1
-            defer {
-                revoking -= 1
-                if revoking == 0 {
-                    let waiters = revocationWaiters
-                    revocationWaiters.removeAll()
-                    for waiter in waiters { waiter.resume() }
-                }
-            }
-            let r = try? await post(revokeURL, ["token": refresh])
-            return r?.0 == 200
+            return had
         }
 
         private func post(_ url: URL, _ form: [String: String]) async throws -> (Int, Data) {
@@ -458,8 +423,7 @@ nonisolated enum GlazeGoogle {
                 let t = try await engine.token(profile: r.profile, sub: r.sub)
                 return ["ok": true, "token": t.token, "expiresAt": (t.expires.timeIntervalSince1970 * 1000).rounded()]
             case "google.disconnect":
-                let d = await engine.disconnect(profile: r.profile)
-                return ["ok": true, "revoked": d.revoked, "had": d.had]
+                return ["ok": true, "had": await engine.disconnect(profile: r.profile)]
             case "google.drop":
                 guard let token = r.token, !token.isEmpty, token.utf8.count <= 4096 else { return fail(.request) }
                 await engine.drop(profile: r.profile, token: token)

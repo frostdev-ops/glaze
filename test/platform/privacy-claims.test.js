@@ -119,17 +119,17 @@ test('Disconnect, for Calendar and Drive, is disclosed as this device only, neve
   for (const [name, part] of [['Calendar', calendar], ['Drive', drive]]) {
     assert.doesNotMatch(part, /revocation|to revoke|asks Google to revoke/, name);
     const d = part.slice(part.indexOf('**Disconnect**'));
-    assert.match(d, /this device only[^.]*doesn't revoke/, name);
-    assert.match(d, /other devices/, name);
+    assert.match(d, /this device only\s+and\s+doesn't\s+revoke/, name);
+    assert.match(d, /other\s+devices/, name);
     assert.match(d, /https:\/\/myaccount\.google\.com\/connections/, name);
   }
-  assert.match(calendar.slice(calendar.indexOf('**Disconnect**')), /`identity`[^.]*unless Google Drive is connected on this device/);
-  assert.match(drive.slice(drive.indexOf('**Disconnect**')), /`identity`[^.]*unless Google Calendar sync is connected on this device/);
+  assert.match(calendar.slice(calendar.indexOf('**Disconnect**')), /`identity`[^.]*unless Google Drive\s+is\s+connected\s+on\s+this\s+device/);
+  assert.match(drive.slice(drive.indexOf('**Disconnect**')), /`identity`[^.]*unless Google Calendar sync\s+is\s+connected\s+on\s+this\s+device/);
   const identity = policy.slice(policy.indexOf('- `identity` (Chrome only, optional)'), policy.indexOf('- `unlimitedStorage`'));
   assert.match(identity, /removed on\s+Disconnect[^.;]*unless Google Drive/);
   assert.match(identity, /removed on Disconnect, unless Google Calendar sync/);
   const docs = read('../docs/privacy.md');
-  assert.doesNotMatch(docs, /revoke/i);
+  assert.doesNotMatch(docs, /revokes? access|to revoke/i);
   assert.match(docs, /\*\*Disconnect\*\* deletes them on this device only[^.]*unless Google Drive/);
   assert.match(docs, /Disconnect forgets the sign-in on this device only[^.]*myaccount\.google\.com\/connections/);
 });

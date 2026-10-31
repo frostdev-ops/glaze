@@ -4,7 +4,7 @@
 // Chrome's own cache (getAuthToken) or this worker's memory (launchWebAuthFlow). storage.local google holds { email, sub, flow,
 // at }: the account connected, by its email and Google's id for it (userinfo sub). A token is used only once its userinfo
 // names that same account: if the browser's account changes (Chrome's default one, Google's session), Drive refuses
-// (why: 'account') until the student connects again, and never revokes the other account's grant.
+// (why: 'account') until the student connects again. Glaze never revokes a grant: Disconnect is this device only.
 // Flows (flowOf):
 //   chrome  Google Chrome and Chromium: getAuthToken with the browser's Google account and the "Chrome extension" client
 //           (the packaged manifest's oauth2).
@@ -18,7 +18,8 @@
 // launchWebAuthFlow, the access token and a state in the fragment; the page comes back to the redirect URL with the state and
 // the files picked (picked()). Requests carry no cookies, follow no redirect and skip the cache.
 // env: { config, flow, firefox, identity() (chrome.identity, which exists once the permission is held), permissions, manifest(),
-// storage (storage.local), fetch, native(message), keep() (Calendar sync holds identity too: Disconnect leaves it), now() }.
+// storage (storage.local), fetch, native(message), keep() (Calendar sync shares Chrome's cache and identity: Disconnect leaves
+// them), now() }.
 // Classic script; module.exports for node.
 var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
   // The build-time switch, off until the release that ships Drive (and its privacy policy). Off: the worker refuses every
@@ -28,7 +29,6 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
   const O = typeof GZ_OAUTH !== 'undefined' ? GZ_OAUTH : require('./oauth.js');
   const AUTH = 'https://accounts.google.com/o/oauth2/v2/auth';
   const USERINFO = 'https://openidconnect.googleapis.com/v1/userinfo';
-  const REVOKE = 'https://oauth2.googleapis.com/revoke';
   const DRIVE = 'https://www.googleapis.com/auth/drive.file';
   const APP = 'io.frostdev.Glaze'; // Safari's native handler
   const EARLY = 60e3; // a held token is renewed this long before Google's expiry
@@ -273,38 +273,23 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       else if (g?.flow === 'native') await native({ type: 'google.drop', token: t });
       else if (held?.token === t) held = null;
     };
-    // The grant revoked (with a token from the cache or a silent renewal, never a prompt), the browser's cached tokens and
-    // the identity permission dropped, the account forgotten. While Calendar sync holds the grant too (keep), revoking would
-    // end its access as well (a revocation covers every scope the project was granted): only Drive's own state goes.
-    // → { ok, revoked: whether Google confirmed, had: a connection, so Google may still hold its grant unless revoked (no
-    // token for its account: signed out of Google, offline, or the browser's account changed) }
+    // This device only (owner, 2026-10-31): the account, its tokens (Chrome's cache, this worker's memory, Safari's Keychain)
+    // and the identity permission forgotten here, Google's grant kept, so Drive and Calendar on the student's other devices,
+    // and Calendar here, keep working. While Calendar sync shares Chrome's cache and identity (keep), both stay. → { ok }
     const disconnect = () => turn(async () => {
       gen++;
       const g = await saved();
-      if (await Promise.resolve().then(() => env.keep?.()).catch(() => true)) {
-        held = null;
-        checked.clear();
-        await env.storage.remove('google');
-        return { ok: true, revoked: false, had: false };
-      }
-      if (env.flow === 'native' || g?.flow === 'native') {
-        const r = await native({ type: 'google.disconnect' });
-        started = false;
-        await env.storage.remove('google');
-        return { ok: true, revoked: r?.revoked === true, had: !!g || r?.had === true };
-      }
-      const t = g && usable(g.flow) ? await ours(g, false).catch(() => null) : null;
-      const r = t && await send(REVOKE, {
-        method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ token: t }).toString(),
-      }).catch(() => null);
       held = null;
       checked.clear();
-      const i = id();
-      if (t && g.flow === 'chrome') await Promise.resolve().then(() => i?.removeCachedAuthToken({ token: t })).catch(() => {});
-      if (g?.flow === 'chrome') await Promise.resolve().then(() => i?.clearAllCachedAuthTokens()).catch(() => {});
-      if (!env.firefox) await Promise.resolve().then(() => env.permissions.remove({ permissions: ['identity'] })).catch(() => {});
+      if (env.flow === 'native' || g?.flow === 'native') {
+        await native({ type: 'google.disconnect' });
+        started = false;
+      } else if (!await Promise.resolve().then(() => env.keep?.()).catch(() => true)) {
+        if (g?.flow === 'chrome') await Promise.resolve().then(() => id()?.clearAllCachedAuthTokens()).catch(() => {});
+        if (!env.firefox) await Promise.resolve().then(() => env.permissions.remove({ permissions: ['identity'] })).catch(() => {});
+      }
       await env.storage.remove('google');
-      return { ok: true, revoked: !!r?.ok, had: !!g };
+      return { ok: true };
     });
     // The first picker page that answers, else null: frostdev.io's, then its GitHub Pages copy (which answers every origin).
     const reach = async () => {
@@ -337,6 +322,6 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
     return { status, connect, token, drop: forget, account, disconnect, pick };
   };
 
-  return { ON, AUTH, USERINFO, REVOKE, DRIVE, APP, Fail, real, ready, pickable, flowOf, authUrl, pickerUrl, grant, picked, create };
+  return { ON, AUTH, USERINFO, DRIVE, APP, Fail, real, ready, pickable, flowOf, authUrl, pickerUrl, grant, picked, create };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_GOOGLE;
