@@ -259,7 +259,7 @@ test('the standalone visual request stays within 512 tokens despite a larger Adv
 // (glaze-plans/release-4.0.1/c9c omarchy-real-final/pictures.json): requirements hold only text visible in the picture.
 test('a requirement that is the picture\'s file name or copies a context line is dropped; real ones stay', async () => {
   const inp = I.input({ ...raw(), name: 'c9a-table.png', context: 'Read the attached picture for this assignment.' });
-  const got = I.check({ ...reading(), requirements: ['c9a-table.png', 'C9A-TABLE', 'Complete task context: Read the attached picture for this assignment.', 'Read the attached picture for this assignment', 'Submit one PDF.'] }, inp);
+  const got = I.check({ ...reading(), requirements: ['c9a-table.png', 'c9a-table', 'Complete task context: Read the attached picture for this assignment.', 'Read the attached picture for this assignment', 'Submit one PDF.'] }, inp);
   assert.deepEqual(got.requirements, ['Submit one PDF.']);
   assert.equal(got.complete, true);
   const labelled = I.input(raw());
@@ -269,7 +269,31 @@ test('a requirement that is the picture\'s file name or copies a context line is
   assert.deepEqual((await T.run(I.task, raw(), { provider: 'mock', cfg })).output.requirements, ['Explain plant growth.']);
 });
 
-test('on a model on this computer the reader is told the file name and the context are not in the picture', async () => {
+// D4 (glaze-plans/release-4.0.1/c9c/runpod-real-f2c5c199/pictures/pictures.json): told that no line of the context may be
+// a requirement and that requirements is [] without requirement text, LFM3-VL read syn-assignment.png's four requirements
+// into its description and left requirements empty. Its reading before that prompt (c9c/omarchy-real-final) had them.
+const SYN = { name: 'syn-assignment.png', context: 'Read the attached picture for this assignment.' };
+const SYN_REQUIREMENTS = ['Write the catalase experiment from Week 6. Your report must: Be 4–6 pages, double-spaced, in 12-pt Times New Roman.',
+  'Include a graph of reaction rate against substrate concentration.', 'Cite at least 3 peer-reviewed sources in APA format.', 'Be submitted as a single PDF.'];
+test('Glaze\'s picture model is told to keep every requirement the picture shows, and only the file name out', async () => {
+  const local = { caps: { context: 8192, images: true, local: true }, replies: [{ json: { ...reading(), requirements: SYN_REQUIREMENTS } }], seen: [] };
+  const out = await T.run(I.task, { ...raw(), ...SYN }, { provider: 'mock', cfg: local });
+  assert.deepEqual(out.output.requirements, SYN_REQUIREMENTS);
+  const system = local.seen[0].messages[0].content[0].text;
+  assert.doesNotMatch(system, /requirements is \[\]/, 'nothing pushes an empty list');
+  assert.doesNotMatch(system, /any line of the brief assignment context/, 'similar context wording never bars a requirement');
+  assert.match(system, /every requirement the picture shows/i);
+});
+
+test('only exact copies of the file name or a whole context line are dropped; similar wording stays', () => {
+  const inp = I.input({ ...raw(), name: 'Rubric.png', context: 'Read the attached picture for this assignment.\ncite at least 3 peer-reviewed sources in apa format' });
+  const kept = ['Cite at least 3 peer-reviewed sources in APA format.', 'Cite at least 3 peer-reviewed sources in APA format!', 'RUBRIC', 'Read the attached picture'];
+  const copies = ['Rubric.png', 'Rubric', ' Read the attached picture for this assignment. ', '"Read the attached picture for this assignment"',
+    'cite at least 3 peer-reviewed sources in apa format', 'Complete task context: Read the attached picture for this assignment.'];
+  assert.deepEqual(I.check({ ...reading(), requirements: [...copies, ...kept] }, inp).requirements, kept);
+});
+
+test('on a model on this computer the reader is told the file name is not in the picture', async () => {
   const local = { caps: { context: 8192, images: true, local: true }, replies: [{ json: reading() }], seen: [] };
   await T.run(I.task, raw(), { provider: 'mock', cfg: local });
   const system = local.seen[0].messages[0].content[0].text;
