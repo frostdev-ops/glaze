@@ -77,12 +77,12 @@ NOVO NA 4.0.1
 
 • Blackboard Ultra: as abas de cursos abrem a partir de uma página já carregada e começam a carregar quando você pressiona ou passa o cursor sobre uma aba (Configurações › Abas de cursos › Abrir as abas de cursos com antecedência).
 • Manter o conteúdo do curso pronto: um item abre sobre o conteúdo do curso, e voltar é instantâneo, no mesmo lugar.
-• Abrir Notas, Cursos e Atividade na hora, a partir da sua última visita. A barra do Glaze aparece desde o primeiro desenho, e A fazer, as notas e a barra lateral aparecem a partir de dados salvos assim que o Blackboard confirma quem está conectado.
+• Abrir páginas na hora: Notas, Cursos, Atividade e o conteúdo, os avisos e as notas de um curso mostram sua última visita enquanto o Blackboard carrega. Mostrar na hora que a página está carregando: um clique aparece na hora. A barra do Glaze aparece desde o primeiro desenho, o rodapé e os painéis não empurram mais a página, e A fazer, as notas e a barra lateral aparecem a partir de dados salvos assim que o Blackboard confirma quem está conectado.
 • Carregar os dados do curso com antecedência, menos solicitações ao Blackboard e menos trabalho em notebooks mais lentos.
 • PDFs: realce, caneta, texto, imagens, formas e assinaturas, e um painel de páginas para mover, girar, excluir e adicionar páginas. Um PDF guarda uma só cópia, sua última versão com marcações.
 • Anexar de Documentos adiciona seus documentos à entrega de uma tarefa do Blackboard Ultra. Pastas de trabalho de .xlsm são exportadas e entregues como .xlsm.
 • Canvas: Abrir no Glaze em arquivos PDF, de slides e de planilhas. Os slides ganham Imprimir com anotações…, e os cartões de Documentos mostram os gráficos de uma planilha.
-• Os comentários do Writer continuam em alemão, espanhol, francês, holandês e português.
+• Os comentários do Writer respondem no idioma do seu rascunho, e as verificações de citações funcionam nos seis idiomas.
 • Firefox: o Google Drive (Configurações › Writer › Trabalhos) abre, salva, anexa e sincroniza seus documentos. Desativado até você se conectar.
 • Firefox: um site do qual você retirou o acesso não é mais tentado de novo.
 • Chrome: Sincronização com o Google Agenda (Configurações › Compartilhamento) mantém em dia uma agenda chamada Glaze na sua conta do Google, e o Google Drive (Configurações › Writer › Trabalhos) abre, salva, anexa e sincroniza seus documentos. Os dois ficam desativados até você se conectar.

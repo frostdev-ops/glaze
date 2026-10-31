@@ -47,12 +47,12 @@ for (const [lang, expected] of Object.entries(access)) test(`listing ${lang || '
 });
 
 const release401 = {
-  '': ['NEW IN 4.0.1', 'first paint', 'slower laptops', 'Settings › Course tabs › Open course tabs ahead of time', 'Keep Course Content ready', 'Open Grades, Courses and Activity instantly', 'Load course data ahead of time'],
-  de: ['NEU IN 4.0.1', 'ersten Bild', 'langsameren Laptops', 'Einstellungen › Kurs-Tabs › Kurs-Tabs vorab öffnen', 'Kursinhalte bereithalten', 'Noten, Kurse und Aktivität sofort öffnen', 'Kursdaten vorab laden'],
-  es: ['NOVEDADES DE 4.0.1', 'primer dibujado', 'portátiles más lentos', 'Ajustes › Pestañas de cursos › Abrir las pestañas de cursos por adelantado', 'Mantener listo el contenido del curso', 'Abrir Calificaciones, Cursos y Actividad al instante', 'Cargar los datos del curso por adelantado'],
-  fr: ['NOUVEAUTÉS DE LA VERSION 4.0.1', 'premier affichage', 'portables plus lents', 'Réglages › Onglets de cours › Ouvrir les onglets de cours à l’avance', 'Garder le contenu du cours prêt', 'Ouvrir Notes, Cours et Activité instantanément', "Charger les données des cours à l'avance"],
-  nl: ['NIEUW IN 4.0.1', 'eerste beeld', 'tragere laptops', 'Instellingen › Cursustabbladen › Cursustabbladen vooraf openen', 'Cursusinhoud klaarhouden', 'Cijfers, Cursussen en Activiteit meteen openen', 'Cursusgegevens vooraf laden'],
-  'pt-BR': ['NOVO NA 4.0.1', 'primeiro desenho', 'notebooks mais lentos', 'Configurações › Abas de cursos › Abrir as abas de cursos com antecedência', 'Manter o conteúdo do curso pronto', 'Abrir Notas, Cursos e Atividade na hora', 'Carregar os dados do curso com antecedência'],
+  '': ['NEW IN 4.0.1', 'first paint', 'slower laptops', 'Settings › Course tabs › Open course tabs ahead of time', 'Keep Course Content ready', 'Open pages instantly', 'Show pages loading at once', 'Load course data ahead of time'],
+  de: ['NEU IN 4.0.1', 'ersten Bild', 'langsameren Laptops', 'Einstellungen › Kurs-Tabs › Kurs-Tabs vorab öffnen', 'Kursinhalte bereithalten', 'Seiten sofort öffnen', 'Laden von Seiten sofort zeigen', 'Kursdaten vorab laden'],
+  es: ['NOVEDADES DE 4.0.1', 'primer dibujado', 'portátiles más lentos', 'Ajustes › Pestañas de cursos › Abrir las pestañas de cursos por adelantado', 'Mantener listo el contenido del curso', 'Abrir páginas al instante', 'Mostrar al instante que la página carga', 'Cargar los datos del curso por adelantado'],
+  fr: ['NOUVEAUTÉS DE LA VERSION 4.0.1', 'premier affichage', 'portables plus lents', 'Réglages › Onglets de cours › Ouvrir les onglets de cours à l’avance', 'Garder le contenu du cours prêt', 'Ouvrir les pages instantanément', 'Montrer tout de suite le chargement des pages', "Charger les données des cours à l'avance"],
+  nl: ['NIEUW IN 4.0.1', 'eerste beeld', 'tragere laptops', 'Instellingen › Cursustabbladen › Cursustabbladen vooraf openen', 'Cursusinhoud klaarhouden', "Pagina's meteen openen", 'Laden van pagina’s meteen tonen', 'Cursusgegevens vooraf laden'],
+  'pt-BR': ['NOVO NA 4.0.1', 'primeiro desenho', 'notebooks mais lentos', 'Configurações › Abas de cursos › Abrir as abas de cursos com antecedência', 'Manter o conteúdo do curso pronto', 'Abrir páginas na hora', 'Mostrar na hora que a página está carregando', 'Carregar os dados do curso com antecedência'],
 };
 for (const [lang, expected] of Object.entries(release401)) test(`4.0.1 release notes ${lang || 'en'} name Blackboard's speed settings, Documents' new buttons, and Calendar and Drive for Chrome and Firefox only`, () => {
   const text = listing(lang), block = part(text, 'Release notes');

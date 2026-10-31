@@ -10,12 +10,10 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
-- Chrome: **Google Calendar sync** in Settings → Sharing. Connect keeps a calendar named Glaze in step with Export calendar (.ics) and touches nothing else. Off until you connect.
-- **Google Drive** in Settings → Writer → Papers (Chrome, Edge, Brave and Firefox; off until you connect). **From Google Drive** opens a file in Documents or attaches it to a Blackboard submission; **Save to Google Drive** saves a document's file, or a paper as a Google Doc, and writes a new file beside one edited outside Glaze; **Sync to Google Drive** keeps your documents and what Back up… covers in a Glaze folder, across devices; a file or record over 5 MB stays on this device for now, marked **Too large to sync**. Glaze reaches only the files it made or you pick. Disconnect is per device.
-- Blackboard: **Open course tabs ahead of time** (Settings → Course tabs). A course tab opens from an already loaded page, and starts loading when you press or hover it.
-- Blackboard: **Keep Course Content ready** (Settings → Course tabs). An item opens over Course Content, and going back is instant, at the same place.
-- Blackboard: **Open Grades, Courses and Activity instantly** (Settings → Course pages → Blackboard Dashboard), from your last visit.
-- Blackboard: **Load course data ahead of time** (Settings → Course tabs). To Do and grades load once a page settles, and a course's content when you point at it.
+- Chrome: **Google Calendar sync** (Settings → Sharing) keeps a calendar named Glaze in step with Export calendar (.ics) and touches nothing else. Off until you connect.
+- **Google Drive** in Settings → Writer → Papers (Chrome, Edge, Brave and Firefox; off until you connect). **From Google Drive** opens a file in Documents or attaches it to a Blackboard submission; **Save to Google Drive** saves a document's file, or a paper as a Google Doc, and never overwrites one edited outside Glaze; **Sync to Google Drive** keeps your documents and what Back up… covers in a Glaze folder, across devices; a file or record over 5 MB stays on this device for now, marked **Too large to sync**. Glaze reaches only the files it made or you pick. Disconnect is per device.
+- Blackboard, in Settings → Course tabs: **Open course tabs ahead of time** (a tab opens from a page already loaded, renewed after the time you choose), **Keep Course Content ready** (going back from an item is instant, at the same place) and **Load course data ahead of time**.
+- Blackboard: **Open pages instantly** (Settings → Course pages → Blackboard Dashboard) shows your last view of Grades, Courses, Activity and a course's Content, Announcements and Gradebook while Blackboard loads. **Show pages loading at once** answers each click at once.
 - PDFs: Highlight, Pen, Text, Image, Shapes and signatures, and a pages panel to move, turn, delete and add pages, or take another PDF's.
 - Blackboard: **Attach from Documents** adds your documents to an assignment's submission. Workbooks imported from .xlsm export and submit as .xlsm.
 - Canvas: **Open in Glaze** on PDF, slide and spreadsheet files (Settings → Documents → Previews in Glaze). Slides: **Print with notes…**
@@ -23,15 +21,14 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Changed
 
-- Blackboard: Glaze's bar is there at first paint. To Do, grades and the sidebar appear from saved data once Blackboard confirms who's signed in.
-- Blackboard: fewer requests to Blackboard and less work on slower laptops.
+- Blackboard: Glaze's bar is there at first paint, and its footer and panels no longer push the page. To Do, grades and the sidebar appear from saved data once Blackboard confirms who's signed in. Fewer requests to Blackboard, and less work on slower laptops.
 - A PDF keeps one copy, its latest marked-up version.
 - Saved PDF and slide previews offer **Open in Documents**. A spreadsheet opened without saving stays read-only until saved to Documents.
 - Imports show their progress at once and store large files faster.
 
 ### Fixed
 
-- Writer: Feedback keeps its comments in German, Spanish, French, Dutch and Portuguese.
+- Writer: Feedback answers in your draft's language, and its citation comments and checks work in all six languages.
 - Writer: a tab opened while Glaze saves settings gets Glaze; a viewer that fails to open goes back to Blackboard's editor.
 - Canvas's document viewer: pen marks stay put as the page zooms, and Undo takes back Clear page.
 - Agents: an app's pairing and the name in its approval window can be changed only by Glaze's background.

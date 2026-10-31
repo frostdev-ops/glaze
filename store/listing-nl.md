@@ -77,12 +77,12 @@ NIEUW IN 4.0.1
 
 • Blackboard Ultra: cursustabbladen openen vanuit een pagina die al geladen is en beginnen te laden zodra je op een tabblad drukt of eroverheen gaat (Instellingen › Cursustabbladen › Cursustabbladen vooraf openen).
 • Cursusinhoud klaarhouden: een item opent over de cursusinhoud, en teruggaan is meteen, op dezelfde plek.
-• Cijfers, Cursussen en Activiteit meteen openen, vanaf je vorige bezoek. De balk van Glaze staat er vanaf het eerste beeld, en Taken, cijfers en de zijbalk verschijnen uit opgeslagen gegevens zodra Blackboard bevestigt wie er is ingelogd.
+• Pagina's meteen openen: Cijfers, Cursussen, Activiteit en de inhoud, aankondigingen en cijfers van een cursus tonen je vorige bezoek terwijl Blackboard laadt. Laden van pagina’s meteen tonen: een klik is meteen te zien. De balk van Glaze staat er vanaf het eerste beeld, de voettekst en panelen verschuiven de pagina niet meer, en Taken, cijfers en de zijbalk verschijnen uit opgeslagen gegevens zodra Blackboard bevestigt wie er is ingelogd.
 • Cursusgegevens vooraf laden, minder verzoeken aan Blackboard en minder werk op tragere laptops.
 • Pdf's: markeren, pen, tekst, afbeeldingen, vormen en handtekeningen, en een paginapaneel om pagina's te verplaatsen, te draaien, te verwijderen en toe te voegen. Een pdf houdt één kopie, de laatste versie met markeringen.
 • Bijvoegen uit Documenten voegt je documenten toe aan de inlevering van een opdracht in Blackboard Ultra. Werkmappen uit .xlsm worden als .xlsm geëxporteerd en ingeleverd.
 • Canvas: Openen in Glaze bij pdf-, dia- en spreadsheetbestanden. Dia's krijgen Afdrukken met notities…, en kaarten in Documenten tonen de grafieken van een spreadsheet.
-• De feedback van Writer houdt zijn opmerkingen in het Duits, Spaans, Frans, Nederlands en Portugees.
+• De feedback van Writer antwoordt in de taal van je concept, en de opmerkingen en controles bij bronvermeldingen werken in alle zes talen.
 • Firefox: Google Drive (Instellingen › Writer › Werkstukken) opent, bewaart, voegt bij en synchroniseert je documenten. Uit tot je verbinding maakt.
 • Firefox: een site waarvan je de toegang hebt ingetrokken, wordt niet meer opnieuw geprobeerd.
 • Chrome: Synchronisatie met Google Agenda (Instellingen › Delen) houdt een agenda met de naam Glaze in je Google-account bij, en Google Drive (Instellingen › Writer › Werkstukken) opent, bewaart, voegt bij en synchroniseert je documenten. Beide blijven uit tot je verbinding maakt.

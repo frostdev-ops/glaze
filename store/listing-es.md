@@ -77,12 +77,12 @@ NOVEDADES DE 4.0.1
 
 • Blackboard Ultra: las pestañas de cursos se abren desde una página ya cargada y empiezan a cargar cuando pulsas o pasas el puntero sobre una pestaña (Ajustes › Pestañas de cursos › Abrir las pestañas de cursos por adelantado).
 • Mantener listo el contenido del curso: un elemento se abre sobre el contenido del curso, y volver es instantáneo, en el mismo lugar.
-• Abrir Calificaciones, Cursos y Actividad al instante, desde tu última visita. La barra de Glaze está desde el primer dibujado, y Tareas, las calificaciones y la barra lateral aparecen desde datos guardados en cuanto Blackboard confirma quién inició sesión.
+• Abrir páginas al instante: Calificaciones, Cursos, Actividad y el contenido, los anuncios y las calificaciones de un curso muestran tu última visita mientras Blackboard carga. Mostrar al instante que la página carga: un clic se ve al instante. La barra de Glaze está desde el primer dibujado, su pie y sus paneles ya no desplazan la página, y Tareas, las calificaciones y la barra lateral aparecen desde datos guardados en cuanto Blackboard confirma quién inició sesión.
 • Cargar los datos del curso por adelantado, menos solicitudes a Blackboard y menos trabajo en portátiles más lentos.
 • PDF: resaltado, lápiz, texto, imágenes, formas y firmas, y un panel de páginas para mover, girar, eliminar y añadir páginas. Un PDF guarda una sola copia, su última versión con marcas.
 • Adjuntar desde Documentos añade tus documentos a la entrega de una tarea de Blackboard Ultra. Los libros de .xlsm se exportan y entregan como .xlsm.
 • Canvas: Abrir en Glaze en archivos PDF, de diapositivas y de hojas de cálculo. Las diapositivas tienen Imprimir con notas…, y las tarjetas de Documentos muestran los gráficos de una hoja.
-• Los comentarios de Writer se mantienen en alemán, español, francés, neerlandés y portugués.
+• Los comentarios de Writer responden en el idioma de tu borrador, y sus revisiones de citas funcionan en los seis idiomas.
 • Firefox: Google Drive (Ajustes › Writer › Trabajos) abre, guarda, adjunta y sincroniza tus documentos. Desactivado hasta que te conectes.
 • Firefox: un sitio al que retiraste el acceso ya no se vuelve a intentar.
 • Chrome: Sincronización con Google Calendar (Ajustes › Compartir) mantiene al día un calendario llamado Glaze en tu cuenta de Google, y Google Drive (Ajustes › Writer › Trabajos) abre, guarda, adjunta y sincroniza tus documentos. Ambos siguen desactivados hasta que te conectes.

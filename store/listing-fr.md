@@ -77,12 +77,12 @@ NOUVEAUTÉS DE LA VERSION 4.0.1
 
 • Blackboard Ultra : les onglets de cours s’ouvrent depuis une page déjà chargée et commencent à charger dès que vous appuyez sur un onglet ou le survolez (Réglages › Onglets de cours › Ouvrir les onglets de cours à l’avance).
 • Garder le contenu du cours prêt : un élément s’ouvre par-dessus le contenu du cours, et le retour est instantané, au même endroit.
-• Ouvrir Notes, Cours et Activité instantanément, depuis votre dernière visite. La barre de Glaze est là dès le premier affichage, et À faire, les notes et la barre latérale apparaissent à partir des données enregistrées dès que Blackboard confirme qui est connecté.
+• Ouvrir les pages instantanément : Notes, Cours, Activité ainsi que le contenu, les annonces et le carnet de notes d’un cours montrent votre dernière visite pendant que Blackboard charge. Montrer tout de suite le chargement des pages : un clic se voit tout de suite. La barre de Glaze est là dès le premier affichage, son pied de page et ses panneaux ne décalent plus la page, et À faire, les notes et la barre latérale apparaissent à partir des données enregistrées dès que Blackboard confirme qui est connecté.
 • Charger les données des cours à l'avance, moins de requêtes à Blackboard et moins de travail sur les ordinateurs portables plus lents.
 • PDF : surlignage, stylo, texte, images, formes et signatures, et un panneau des pages pour déplacer, faire pivoter, supprimer et ajouter des pages. Un PDF garde une seule copie, sa dernière version annotée.
 • Joindre depuis Documents ajoute vos documents au dépôt d’un devoir Blackboard Ultra. Les classeurs .xlsm s’exportent et se déposent en .xlsm.
 • Canvas : Ouvrir dans Glaze sur les fichiers PDF, de diapositives et de feuilles de calcul. Les diapositives gagnent Imprimer avec les notes…, et les cartes de Documents montrent les graphiques d’une feuille.
-• Les commentaires de Writer restent en allemand, espagnol, français, néerlandais et portugais.
+• Les commentaires de Writer répondent dans la langue de votre brouillon, et ses vérifications de citations fonctionnent dans les six langues.
 • Firefox : Google Drive (Réglages › Writer › Travaux) ouvre, enregistre, joint et synchronise vos documents. Désactivé tant que vous ne vous connectez pas.
 • Firefox : un site dont vous avez retiré l’accès n’est plus sollicité à nouveau.
 • Chrome : Synchronisation avec Google Agenda (Réglages › Partage) tient à jour un agenda nommé Glaze dans votre compte Google, et Google Drive (Réglages › Writer › Travaux) ouvre, enregistre, joint et synchronise vos documents. Les deux restent désactivés tant que vous ne vous connectez pas.
