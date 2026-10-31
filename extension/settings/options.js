@@ -1239,7 +1239,7 @@ GZ_UI.load().then((s) => {
           // The day's backup skipped for want of room or past one request (background/drive-store.js snapshot), for the day it
           // covers; then what stays on this device as too large to sync (documents/drive-sync.js driveSyncLarge), if anything.
           + (Date.now() - (st.snap || 0) < 864e5 && SNAP_SAYS[st.snapSkip] ? ` ${t(SNAP_SAYS[st.snapSkip])}` : '')
-          + (large ? ` ${t('{n} items are too large to sync.', { n: large })}` : '') : '';
+          + (large ? ` ${t('Too large to sync: {n}.', { n: large })}` : '') : '';
       // Connect stays beside Disconnect while that line asks for it.
       $('#gdrive-connect').hidden = $('#gdrive-sync-said').textContent !== t(SYNC_SAYS.auth);
     };

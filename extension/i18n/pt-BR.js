@@ -3778,7 +3778,7 @@
   "Couldn't reach Google Drive. Glaze will try again soon.": "Não foi possível acessar o Google Drive. O Glaze tentará de novo em breve.",
   "Couldn't sync. Glaze will try again soon.": "Não foi possível sincronizar. O Glaze tentará de novo em breve.",
   "Too large to sync": "Grande demais para sincronizar",
-  "{n} items are too large to sync.": {"one": "{n} item é grande demais para sincronizar.", "other": "{n} itens são grandes demais para sincronizar."},
+  "Too large to sync: {n}.": "Grande demais para sincronizar: {n}.",
   "Today's backup was too large.": "O backup de hoje era grande demais.",
   "{title} (Drive copy)": "{title} (cópia do Drive)",
   "Signature": "Assinatura",

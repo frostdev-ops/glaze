@@ -38,7 +38,6 @@ const GZ_I18N = (() => {
     '{n} words': { one: '{n} word', other: '{n} words' },
     '{n} papers': { one: '{n} paper', other: '{n} papers' },
     '{n} documents': { one: '{n} document', other: '{n} documents' },
-    '{n} items are too large to sync.': { one: '{n} item is too large to sync.', other: '{n} items are too large to sync.' },
     '{n} slides': { one: '{n} slide', other: '{n} slides' },
     '{n} papers and documents': { one: '{n} paper or document', other: '{n} papers and documents' },
     "{n} paragraphs aren't double-spaced": { one: "{n} paragraph isn't double-spaced", other: "{n} paragraphs aren't double-spaced" },

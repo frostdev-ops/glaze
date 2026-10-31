@@ -203,7 +203,7 @@ const fileOf = (key, role) => [...drive.files.values()].find((f) => f.meta.appPr
     ok(await home.locator('.gd-large:visible').count() === 1, 'and only it');
     await home.screenshot({ path: path.join(out, 'sync-3-too-large.png') });
     await settings.bringToFront();
-    await until(async () => (await said.textContent()).includes('1 item is too large to sync.'), 'Settings counts it', 15000);
+    await until(async () => (await said.textContent()).includes('Too large to sync: 1.'), 'Settings counts it', 15000);
     await settings.screenshot({ path: path.join(out, 'sync-3-settings.png') });
     const atlas = 'doc:00000000-0000-4000-8000-00000000c005', theirs = crypto.randomBytes(BIG), hash = crypto.createHash('sha256').update(theirs).digest('hex');
     const record = { kind: 'pdf', title: 'Atlas', named: true, pages: 1, size: BIG, file: { hash, size: BIG, type: 'application/pdf' } }, sum = sha(canon({ key: atlas, kind: 'pdf', record }));
