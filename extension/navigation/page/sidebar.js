@@ -301,11 +301,11 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
 
   // ---- Ultra's Details & Actions, held -------------------------------------------------------------------------------
   // A course outline's column fills its Details & Actions late (1.5–2.3 s on the owner's school): Course notes and the dock
-  // under it moved down by its height as it filled. Until Ultra has drawn it, the room it took on this course last time
-  // (storage.local detailsHeight:<origin>; on a course not seen yet, the least any course here took) stays under it, given
-  // back as it grows, before each frame paints (ResizeObserver). Nothing is guessed without a measurement. As with the
-  // panels absorbed below, Ultra's node keeps its attributes and inline style: sidebar.css adds the room
-  // (html[data-gz-sb-held], --gz-sb-held).
+  // under it moved down by its height as it filled. Until Ultra has drawn it, it is held at least as tall as it was on this
+  // course last time (storage.local detailsHeight:<origin>; on a course not seen yet, the least any course here took), and
+  // This page shows from the start. The browser keeps the box (min-height), so nothing waits on a frame; the hold goes once
+  // its own content is as tall. Nothing is guessed without a measurement. As with the panels absorbed below, Ultra's node
+  // keeps its attributes and inline style: sidebar.css holds it (html[data-gz-sb-held], --gz-sb-held).
   const HELD = `detailsHeight:${location.origin}`;
   const cleanHeights = (v) => Object.fromEntries(Object.entries(v && typeof v === 'object' ? v : {}).filter(([c, h]) => /^_\d+_\d+$/.test(c) && Number.isFinite(h) && h > 0 && h < 4000).slice(-40));
   let heights = {}, held = null, heightWrites = Promise.resolve();
@@ -351,32 +351,32 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const hold = () => {
     const el = ultra && host && !host.own && has(host.el, 'outline-actions') ? [...host.el.children].find((x) => has(x, 'js-details-and-actions')) || null : null;
     const cid = A.courseId();
-    if (held && held.el === el && held.cid === cid) { if (held.paused) held.resume(); return; }
+    if (held && held.el === el && held.cid === cid) { if (held.paused) held.resume(); else held.check(); return; }
     unhold();
     if (!el || !cid || typeof ResizeObserver !== 'function') return;
     const known = Object.values(heights);
-    const d = held = { el, cid, size: 0, want: heights[cid] || (known.length ? Math.min(...known) : 0), base: 0, timer: 0, quiet: 0 };
-    // Its own margin, kept under the room.
-    if (d.want) try { d.base = parseFloat(getComputedStyle(el).marginBlockEnd) || 0; } catch { /* no styles to ask */ }
-    const fit = (size) => {
-      // Hidden/folded native blocks report zero; keep their last measurement for the next visit.
-      if (size > 0) d.size = size;
-      // First visits and growth beyond the reservation need saving too, without waiting for a sidebar detach.
-      if (size > 0) {
-        clearTimeout(d.quiet);
-        // If Ultra stopped drawing smaller than last time, also give back the unused room.
-        d.quiet = setTimeout(() => { if (held === d && !d.paused) { rememberHeight(d); if (filled(el)) letGo(d); } }, 2000);
-      }
-      if (!d.want) return;
-      if (size >= d.want - 0.5) return letGo(d);
-      setVar('--gz-sb-held', `${d.base + d.want - size}px`);
-      html().setAttribute('data-gz-sb-held', '');
+    const d = held = { el, cid, size: 0, want: heights[cid] || (known.length ? Math.min(...known) : 0), edge: 0, timer: 0, quiet: 0 };
+    // Its padding and border under the content: with the box held, the content's own height is read from its last block.
+    if (d.want) try { const c = getComputedStyle(el); d.edge = (parseFloat(c.paddingBlockEnd) || 0) + (parseFloat(c.borderBlockEndWidth) || 0); } catch { /* no styles to ask */ }
+    const own = () => { const k = el.lastElementChild; return k ? k.getBoundingClientRect().bottom - el.getBoundingClientRect().top + d.edge : 0; };
+    d.check = () => {
+      if (!filled(el)) return;
+      const size = d.want ? own() : el.getBoundingClientRect().height;
+      if (!(size > 0)) return;
+      d.size = size;
+      // Drawn as tall as the room: it goes, and nothing moves.
+      if (d.want && size >= d.want - 0.5) letGo(d);
+      // Once Ultra stops drawing it: kept for the next visit, and room it doesn't fill (smaller than last time) goes.
+      clearTimeout(d.quiet);
+      d.quiet = setTimeout(() => { if (held === d && !d.paused) { rememberHeight(d); letGo(d); } }, 2000);
     };
-    d.ro = new ResizeObserver((es) => { if (held === d && !d.paused) fit(es.at(-1)?.borderBoxSize?.[0]?.blockSize ?? el.getBoundingClientRect().height); });
+    // After the hold, growth shows in its box; while held, the column's observer (watch) brings the sidebar back to check.
+    d.ro = new ResizeObserver(() => { if (held === d && !d.paused) d.check(); });
     d.resume = () => {
       d.paused = false;
+      if (d.want) { setVar('--gz-sb-held', `${d.want}px`); html().setAttribute('data-gz-sb-held', ''); }
       d.ro.observe(el, { box: 'border-box' });
-      fit(el.getBoundingClientRect().height);
+      d.check();
       // Never drawn at all: not held for ever. Covered documents pause this deadline.
       if (d.want) d.timer = setTimeout(() => { if (held === d && !d.paused) letGo(d); }, 15000);
     };
@@ -923,7 +923,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     safeEnd = styleOf() === 'float' ? parseFloat(css?.getPropertyValue('--gz-sb-safe')) || 0 : 0;
     const hidePage = cfg().page === 'hidden';
     const shownPanels = family === 'assessment' && host.own ? absorbable() : [];
-    const pageEmpty = hidePage || ((!host.page || (ultra && A.overlay()) || !filled(host.page)) && !shownPanels.length);
+    const pageEmpty = hidePage || ((!host.page || (ultra && A.overlay()) || (!filled(host.page) && !held?.want)) && !shownPanels.length);
     const docked = drawnCount ?? (widgetsOn() ? S.docked(rec).length : 0);
     const width = S.shown(rec, cfg()).width;
     const layer = A.layer?.(), review = layer && rubricView();

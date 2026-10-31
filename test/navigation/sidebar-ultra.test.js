@@ -845,6 +845,7 @@ test("Ultra's Details & Actions, filled late, keeps the room it took on this cou
   assert.ok(p.host()?.className.includes('outline-actions'), 'the dock is in Ultra\'s column');
   assert.equal(room(), 231, 'empty, it is held at the height it took last time, before the dock is drawn under it');
   assert.equal(p.$('.gz-sb-pagehead').hidden, false, 'This page shows from the start: Ultra is about to fill the column');
+  unmoved(p, before, 'kept room');
   // Ultra fills it in steps; the sidebar looks again as the column changes (its observer, once a frame).
   const fill = (n) => {
     details.replaceChildren(...Array.from({ length: n }, (_, i) => Object.assign(p.el('div', '', `Action ${i + 1}`), { box: { left: 1248, top: 140 + 33 * i, width: 320, height: 33 } })));
@@ -857,7 +858,6 @@ test("Ultra's Details & Actions, filled late, keeps the room it took on this cou
   assert.equal(room(), 0, 'drawn as tall as the room: the room goes, and nothing moves');
   assert.equal(p.doc.root.dataset.gzSbHeld, undefined);
   assert.deepEqual(Object.keys(details.style).filter((k) => typeof details.style[k] !== 'function'), [], "Ultra's node keeps its inline style");
-  unmoved(p, before, 'kept room');
   // Leaving, what it took is kept for the next visit.
   p.c.location.pathname = '/ultra/courses/_101_1/grades';
   await p.pass();
@@ -885,16 +885,24 @@ test("Ultra's Details & Actions reservation wins over the theme's native block m
   root.attrs = { 'data-gz-sidebar': 'expanded', 'data-gz-sb-held': '' };
   const theme = cssRules('content/theme.css'), sidebar = cssRules('navigation/page/sidebar.css');
   for (const rules of [[...theme, ...sidebar], [...sidebar, ...theme]]) {
-    assert.equal(winner(rules, details, 'margin(?:-block(?:-end)?)?')?.[0], 'var(--gz-sb-held)', 'the held margin survives either stylesheet load order');
+    assert.equal(winner(rules, details, 'min-height')?.[0], 'var(--gz-sb-held)', 'the held height survives either stylesheet load order');
+    assert.equal(winner(rules, details, 'box-sizing')?.[0], 'border-box', 'held as the border box it was measured as');
   }
   delete root.attrs['data-gz-sb-held'];
-  assert.equal(winner([...theme, ...sidebar], details, 'margin(?:-block(?:-end)?)?')?.[0], '0', 'the native margin reset returns after release');
+  assert.equal(winner([...theme, ...sidebar], details, 'min-height') ?? null, null, 'nothing holds it after release');
+  assert.equal(winner([...theme, ...sidebar], details, 'margin(?:-block(?:-end)?)?')?.[0], '0', "the theme's margin reset stays as it was");
 });
 
+// Ultra's content in Details & Actions, this tall (0: none yet, or the block hidden), in the box the browser gives it: never
+// shorter than the held height. The sidebar hears of it as it would: its ResizeObserver, and its observer on the column.
 const detailsSize = (p, height) => {
   const el = p.$('.js-details-and-actions');
-  el.box = { left: 1248, top: 140, width: 320, height };
-  for (const ro of p.sizes.filter((r) => r.targets.includes(el))) ro.f([{ target: el, borderBoxSize: [{ blockSize: height }] }]);
+  const room = (p.doc.root.dataset.gzSbHeld != null && parseFloat(p.doc.root.style.getPropertyValue('--gz-sb-held'))) || 0;
+  if (height > 0) { if (!el.firstElementChild) el.append(p.el('div', '', 'Details & Actions')); el.firstElementChild.box = { left: 1248, top: 140, width: 320, height }; }
+  else if (el.firstElementChild) el.firstElementChild.box = { left: 0, top: 0, width: 0, height: 0 };
+  el.box = { left: 1248, top: 140, width: 320, height: height > 0 ? Math.max(height, room) : 0 };
+  for (const ro of p.sizes.filter((r) => r.targets.includes(el))) ro.f([{ target: el, borderBoxSize: [{ blockSize: el.box.height }] }]);
+  if (p.host()) p.mutate(p.host(), { addedNodes: [] });
 };
 const heightTimers = (p) => {
   let now = 0, id = 0;
@@ -972,7 +980,8 @@ test('Ultra pauses Details observation and hold timers while the course is cover
   ro.f([{ target: details, borderBoxSize: [{ blockSize: 0 }] }]);
   tick(15000);
   await settle();
-  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-held'), '167px', 'late callbacks and hidden timers cannot discard the room');
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-held'), '231px', 'late callbacks and hidden timers cannot discard the room');
+  assert.equal(p.doc.root.dataset.gzSbHeld, '');
   p.doc.visibilityState = 'visible';
   p.side.cover();
   await settle();
@@ -1003,12 +1012,12 @@ test('an empty Details placeholder with padding keeps its reservation until cont
   const p = page({ aside: 'live', stored: { ...record(), [HELD]: { _101_1: 231 } } });
   const tick = heightTimers(p);
   // theme.css gives even the empty outline-action-block padding and a border.
-  detailsSize(p, 26);
+  p.$('.js-details-and-actions').box = { left: 1248, top: 140, width: 320, height: 26 };
   await p.pass();
   tick(2000);
   await settle();
-  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-held'), '205px', 'padding is not evidence that Ultra finished loading');
-  p.$('.js-details-and-actions').append(p.el('div', '', 'Details & Actions'));
+  assert.equal(p.doc.root.dataset.gzSbHeld, '', 'padding is not evidence that Ultra finished loading');
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-held'), '231px');
   detailsSize(p, 180);
   tick(2000);
   await settle();
@@ -1016,7 +1025,7 @@ test('an empty Details placeholder with padding keeps its reservation until cont
 
   const empty = page({ aside: 'live', stored: { ...record(), [HELD]: { _101_1: 231 } } });
   const expire = heightTimers(empty);
-  detailsSize(empty, 26);
+  empty.$('.js-details-and-actions').box = { left: 1248, top: 140, width: 320, height: 26 };
   await empty.pass();
   expire(15000);
   assert.equal(empty.doc.root.dataset.gzSbHeld, undefined, 'an empty course still has a bounded hold');
