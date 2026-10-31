@@ -197,7 +197,7 @@ const site = ({ path = '/ultra/grades', local = {}, last = '_900_1', instant = t
   const location = { origin: ORIGIN, pathname: path, href: ORIGIN + path };
   const c = vm.createContext({
     URL, JSON, Promise, Map, Set, Object, Array, String, Number, RegExp, Math, Date, Error,
-    location, document: { documentElement: html, body, baseURI: CTX.base, querySelector: (s) => html.querySelector(s), createElement: doc.createElement, createElementNS: doc.createElementNS },
+    location, document: { documentElement: html, body, baseURI: CTX.base, querySelector: (s) => html.querySelector(s), querySelectorAll: (s) => html.querySelectorAll(s), createElement: doc.createElement, createElementNS: doc.createElementNS },
     MutationObserver: class { constructor(f) { this.f = f; observers.push(this); } observe() { this.on = true; } disconnect() { this.on = false; } },
     ResizeObserver: class { observe() {} disconnect() {} },
     requestAnimationFrame: (f) => frames.push(f), cancelAnimationFrame() {},
@@ -872,6 +872,25 @@ test('on a course page the copy paints over the course\'s main area, not the bas
   assert.equal(q.copy(), null, 'another course');
 });
 
+test('a route changed ahead of Ultra\'s DOM cannot save the previous course under the new course', async () => {
+  const p = site({ path: COURSE.outline[0] });
+  p.sync(); p.answer('_900_1'); await settle();
+  p.fill(COURSE.outline[1]); await p.frame1();
+  for (const f of p.idle.splice(0)) f();
+  assert.ok(p.local[L.key(ORIGIN, '_900_1', 'outline', '_101_1')]);
+  // Ultra changes the address before its replacement view lands; its old ready outline is still attached.
+  p.location.pathname = '/ultra/courses/_102_1/outline';
+  p.sync(); await settle();
+  for (const f of p.idle.splice(0)) f();
+  const key = L.key(ORIGIN, '_900_1', 'outline', '_102_1');
+  assert.equal(p.local[key], undefined, 'the old course must not be captured for the new address');
+  const next = parse(fixture(COURSE.outline[1]).replaceAll('_101_1', '_102_1').replaceAll('Sample Course One', 'Sample Course Two'), p.doc);
+  p.main.replaceChildren(...next.querySelector('main').children);
+  await p.frame1();
+  for (const f of p.idle.splice(0)) f();
+  assert.ok(flat(p.local[key]?.nodes).includes('Sample Course Two'), 'the new course is saved when its own view arrives');
+});
+
 test('a course page too large for a copy\'s bounds is not kept cut short', async () => {
   const p = site({ path: COURSE.outline[0] });
   p.sync(); p.answer('_900_1'); await settle();
@@ -887,6 +906,31 @@ test('a course page too large for a copy\'s bounds is not kept cut short', async
   q.fill(COURSE.outline[1]); await q.frame1();
   q.idle.shift()();
   assert.ok(q.sent.some((m) => m.op === 'put' && m.record.full === false), 'a real outline fits');
+});
+
+test('a course copy cut short by the depth bound is not saved as a whole page; a long text is clipped and kept', async (t) => {
+  for (const bound of ['text', 'depth']) await t.test(bound, async () => {
+    const p = site({ path: COURSE.outline[0] });
+    p.sync(); p.answer('_900_1'); await settle();
+    p.fill(COURSE.outline[1]);
+    const item = p.main.querySelector('div.root.content-list-item');
+    if (bound === 'text') item.append('x'.repeat(2001));
+    else {
+      let into = item;
+      for (let i = 0; i < 125; i++) { const child = new El('div', p.doc); into.append(child); into = child; }
+      into.append('Deep course content');
+    }
+    p.main.append('After bounded content');
+    const captured = L.capture(p.main, CTX);
+    assert.equal(captured.full, bound === 'depth', 'left out below the depth bound: cut short; a clipped text is still the whole page');
+    assert.ok(flat(captured.nodes).includes('After bounded content'), 'text and depth clipping still allow later siblings in global copies');
+    await p.frame1();
+    for (const f of p.idle.splice(0)) f();
+    for (const f of p.events.get('pagehide') || []) f();
+    const put = p.sent.find((m) => m.op === 'put');
+    if (bound === 'depth') assert.equal(put, undefined, 'no partial course page is saved');
+    else assert.ok(put && flat(put.record.nodes).includes('x'.repeat(2000)) && !flat(put.record.nodes).includes('x'.repeat(2001)), 'kept, its long text clipped');
+  });
 });
 
 test('in a course tab\'s frame a copy paints only while that frame is on screen loading; never in the standby or another course\'s frame', async () => {
@@ -1003,6 +1047,29 @@ test('the worker keeps a course page\'s copy from the top page or a course tab\'
   assert.ok(kept.length <= 48 && kept.length >= 40, `${kept.length} course copies kept`);
   assert.ok(kept.includes(L.key(ORIGIN, '_900_1', 'outline', '_259_1')), 'the newest stays');
   assert.ok(!kept.includes(L.key(ORIGIN, '_900_1', 'outline', '_200_1')), 'the oldest goes');
+});
+
+test('delayed course saves older than the retained copies cannot escape the eviction index', async () => {
+  const at = Date.now(), local = {}, index = {};
+  for (let i = 0; i < 48; i++) {
+    const course = `_${100 + i}_1`, key = L.key(ORIGIN, '_900_1', 'outline', course);
+    local[key] = { v: 1, uid: '_900_1', kind: 'outline', course, at, full: false, nodes: [['div', '', 0, 'Current']] };
+    index[key] = at;
+  }
+  const ik = `ultraCopy:${ORIGIN}/_900_1/index`;
+  local[ik] = index;
+  const w = workerEnv({ store: { sync: { version: 2, enabled: true }, local, session: {} } });
+  const from = { id: 'glaze', frameId: 7, tab: { id: 3, url: `${ORIGIN}/ultra/course` }, url: `${ORIGIN}/ultra/courses/_999_1/outline` };
+  const { epoch } = await w.send({ type: 'glaze:ultraCopy', op: 'begin' }, from);
+  for (let i = 0; i < 3; i++) {
+    const course = `_${900 + i}_1`;
+    await w.send({ type: 'glaze:ultraCopy', op: 'put', epoch,
+      record: { v: 1, uid: '_900_1', kind: 'outline', course, at: at - 60000, full: false, nodes: [['div', '', 0, 'Delayed']] } }, from);
+    assert.equal(local[L.key(ORIGIN, '_900_1', 'outline', course)], undefined, 'an evicted incoming copy must not be written back');
+  }
+  const copies = Object.keys(local).filter((k) => k.startsWith('ultraCopy:') && k !== ik);
+  assert.equal(copies.length, 48);
+  assert.deepEqual(Object.keys(local[ik]).sort(), copies.sort());
 });
 
 test('purges cover the course pages\' copies: sign-out, the switch off, Reset and the site removed', async (t) => {

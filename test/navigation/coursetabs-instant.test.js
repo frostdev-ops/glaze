@@ -90,3 +90,20 @@ test('the strip goes in Ultra\'s own course bar, never a copy\'s', () => {
   assert.equal(courseBar([live, copy])(), live, 'a copy comes after Ultra\'s view in its main area');
   assert.equal(courseBar([copy])(), null, 'only the copy\'s: none yet');
 });
+
+test('an adopted course with an instant copy is routed even while the copy hides its native bar', () => {
+  for (const [why, copied, before, reloaded] of [['a copy over the new course', true, false, 0], ['no copy', false, false, 1], ['only the previous page', true, true, 1]]) {
+    const f = frameOf(), timers = [], loads = [], bar = { closest: () => null };
+    f.doc.querySelector = (sel) => sel === '.bb-course-navigation' ? bar : null;
+    f.doc.getElementById = (id) => copied && id === 'gz-instant' ? {} : null;
+    f.copied = copied ? f.doc : null;
+    f.adopting = { doc: f.doc, at: 0, ok: true, before: before ? [bar] : [] };
+    const c = vm.createContext({ frames: new Map([['_2_1', f]]), performance: { now: () => 6000 }, L, shown: () => false,
+      ADOPT_ROUTE: 5000, ADOPT_ACK: 2000, standbyMiss: 0, showing: '_2_1', pic: null, setTimeout: (fn) => timers.push(fn),
+      load: (...args) => loads.push(args), f });
+    vm.runInContext(`${part('  const adopting = ', '  // In the standby:')}\nadopting('_2_1', f);`, c);
+    timers.shift()();
+    assert.equal(loads.length, reloaded, why);
+    assert.equal(f.adopting, null);
+  }
+});
