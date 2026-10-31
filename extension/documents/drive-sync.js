@@ -3,7 +3,7 @@
 // Glaze keeps rides the same runs (env.more: background/drive-store.js). A setting, offered only while Drive is connected
 // (settings/options.js), turned on when Drive connects unless the student turned it off (off); its state is this device's:
 // storage.local driveSync { on, off, account, folder, token (the Changes API's page token), last, problem, wait, fails, busy }, a record per document
-// (driveSyncDoc:<h>: its key, its two files, what each side held when they last agreed) and each file's document
+// (driveSyncDoc:<h>: its key, its two files and the copy's head revision, what each side held when they last agreed) and each file's document
 // (driveSyncFile:<id>). h: the first 32 hex digits of the key's SHA-256, the tag both files carry (appProperties key).
 // Each document is two files in the folder: its kind's file (.docx, .xlsx, .pdf, .pptx, written by the worker's own export:
 // appProperties { glaze: 'file', key: h, sum }) and a JSON copy of the document and its record ({ glaze: 'document', v: 1,
@@ -483,12 +483,13 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       const meta = { name: `${base}.glaze.json`, appProperties: { glaze: 'doc', key: h, sum, rev: String(l.rec.revision || 0) } };
       const r = await up(`u:${h}:json`, await env.hash(text), d?.json || null,
         async () => ({ bytes: new TextEncoder().encode(text), id: d?.json || null, meta, create: { ...meta, mimeType: JSON_TYPE, parents: [folder] }, mime: JSON_TYPE }), owner);
-      return putDoc(h, { key, h, kind, json: r.file.id, file, fh, fsum: sum, rsum: sum, lsum: sum, rev: l.rec.revision || 0, trashed: false }, d);
+      return putDoc(h, { key, h, kind, json: r.file.id, jh: r.file.headRevisionId || null, file, fh, fsum: sum, rsum: sum, lsum: sum, rev: l.rec.revision || 0, trashed: false }, d);
     };
     // Drive's side kept here, recorded before this device's goes up: what follows (and a retry after a push that failed) meets
     // only this device's change, never keeping Drive's side a second time. R: the copy whose side was kept, or null.
-    const kept = async (h, d, R) => putDoc(h, { ...d, ...(R && { rsum: R.appProperties?.sum }) }, await docOf(h));
-    const agreed = async (key, h, R, got, l, d) => putDoc(h, { key, h, kind: got.kind, json: R.id, file: got.file, fh: got.fileRev, fsum: got.sum, rsum: got.sum,
+    // jh: the copy's head revision as last read or written here (a copy written again with the same sum names its file anew).
+    const kept = async (h, d, R) => putDoc(h, { ...d, ...(R && { rsum: R.appProperties?.sum, jh: R.headRevisionId || null }) }, await docOf(h));
+    const agreed = async (key, h, R, got, l, d) => putDoc(h, { key, h, kind: got.kind, json: R.id, jh: R.headRevisionId || null, file: got.file, fh: got.fileRev, fsum: got.sum, rsum: got.sum,
       lsum: await sumOf(key, l), rev: l.rec.revision || 0, trashed: false }, d);
 
     // One document, both sides. R: its JSON copy's metadata from Drive (undefined: not known yet; null: Drive has none;
@@ -523,6 +524,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
           R = undefined;
         }
       }
+      const named = E;
       if (d && E && E.id !== d.file) E = undefined;
       if (R === undefined) R = d?.json ? await meta(d.json) : d ? null : !lt && l ? await lookup(h, folder) : null;
       // This device's copy moved out of the Glaze folder (put away by the device whose copy it was, as above, or moved by
@@ -616,6 +618,15 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
 
       // Content.
       const ldirty = await dirty(key, l, d), rdirty = R.appProperties?.sum !== d.rsum;
+      // Drive's copy written again with the content last agreed (another device sent this document again: into a new file
+      // of its own after keeping one edited outside Glaze, or as a new revision of the same file): the file and revision it
+      // names are the document's now, so neither is taken for an edit outside Glaze, nor left beside a second one.
+      if (!rdirty && R.headRevisionId && R.headRevisionId !== d.jh) {
+        const j = await readCopy(R, h, key, owner);
+        const moved = !!j.file && (j.file !== d.file || (j.fileRev ?? null) !== (d.fh ?? null));
+        d = await putDoc(h, { ...d, jh: R.headRevisionId, ...(moved && { file: j.file, fh: j.fileRev ?? null, fsum: j.sum }) }, d);
+        if (moved && named?.id === d.file) E = named;
+      }
       let force = !d.file;
       if (d.file && !E && ldirty) E = await meta(d.file);
       if (E?.removed) { await env.papers.trash(key); await trashTo(d.json, true); await putDoc(h, { ...d, file: null, fh: null, trashed: true }, d); return; }
