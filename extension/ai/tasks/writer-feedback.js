@@ -216,8 +216,11 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
   const ABBREVIATIONS = new RegExp(String.raw`${B}(?:(?:${dotted(['e.g.', 'i.e.', 'cf.', 'vs.', 'viz.', 'approx.', 'z. B.', 'd. h.', 'bzw.', 'vgl.', 'ggf.', 'evtl.', 'bspw.', 'inkl.', 'sog.', 'u. U.', 'v. a.', 'ca.', 'Abs.', 'Kap.',
     'p. ex.', 'c.-à-d.', 'env.', 'chap.', 'éd.', 'p. ej.', 'ej.', 'aprox.', 'págs.', 'pág.', 'cap.', 'núm.', 'vol.', 'ed.', 'ex.', 'Sr.', 'Sra.', 'Dr.', 'Dra.', 'Prof.',
     'bijv.', 'bv.', 'b.v.', 'd.w.z.', 'i.p.v.', 't.o.v.', 'm.b.t.', 'o.a.', 'm.a.w.', 'i.v.m.', 'blz.', 'resp.', 'zgn.', 'nl.'])})`
-    + String.raw`|(?:${dotted(['S.', 'p.', 'pp.', 'Nr.', 'n.º', 'no.', 'art.'])})(?=\s*\d)|(?:${dotted(['etc.', 'usw.', 'enz.', 'u. a.', 'et al.', 'o. ä.', 'e.a.'])})(?=\s*[\p{Ll}\d,;]))`, 'giu');
-  const sentenceEnds = (s) => (s.replace(ABBREVIATIONS, (m) => m.replace(/\./g, '')).match(/[.!?](\s|$)/g) || []).length;
+    + String.raw`|(?:${dotted(['S.', 'p.', 'pp.', 'Nr.', 'n.º', 'no.', 'art.'])})(?=\s*\d))`, 'giu');
+  const CONTINUATIONS = new RegExp(String.raw`${B}(?:${dotted(['etc.', 'usw.', 'enz.', 'u. a.', 'et al.', 'o. ä.', 'e.a.'])})`, 'giu');
+  const sentenceEnds = (s) => (s.replace(ABBREVIATIONS, (m) => m.replace(/\./g, '')).replace(CONTINUATIONS, (m, at, text) =>
+    // Keep the final dot before a new sentence; the lowercase test must not inherit the abbreviation regex's i flag.
+    m.replace(/^\s*[\p{Ll}\d,;]/u.test(text.slice(at + m.length)) ? /\./g : /\.(?!$)/g, '')).match(/[.!?](\s|$)/g) || []).length;
   // The draft's language, one of Glaze's six, by its commonest small words outside quotations (a word two languages share
   // counts half for each); null when none leads clearly. Glaze's UI language stands in for it.
   const LANGS = ['en', 'de', 'es', 'fr', 'nl', 'pt-BR'];
@@ -409,7 +412,7 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
       ['autor(?:es)?', 'páginas?', String.raw`sem|nenhum\p{L}*|falt\p{L}*|omit\p{L}*|ausência`, 'anos?', String.raw`obras\s+citadas`],
       ['auteurs?', String.raw`pagina\p{L}*`, String.raw`zonder|geen|ontbr\p{L}*|mist|missen`, String.raw`jaar|jaartal(?:len)?|jaren|publicatiejaar`, String.raw`geciteerde\s+werken|literatuurlijst`],
     ].map(([author, page, missing, year, heading]) => new RegExp(String.raw`${B}(?:${heading})${E}|${B}(?:${author})${E}[-\s/]{0,3}(?:\p{L}{1,3}\s+){0,2}(?:${page})${E}`
-      + String.raw`|${B}(?:${missing})${E}[^.!?]{0,60}${B}(?:${year})${E}|${B}(?:${year})${E}[^.!?]{0,60}${B}(?:${missing})${E}`, 'iu'))];
+      + String.raw`|${B}(?:${missing})(?:${E}|(?<=['’]))[^.!?]{0,60}${B}(?:${year})${E}|${B}(?:${year})${E}[^.!?]{0,60}${B}(?:${missing})(?:${E}|(?<=['’]))`, 'iu'))];
   // The same reading in Glaze's other locales: what calls a style unverified or unmet, what turns a clause (negation,
   // concession, "rather than"), what says a draft follows a style, a causal "because", and what says one style meets
   // another. German and Dutch put the verb last in a "because" clause ("weil er MLA folgt"), so a verb may follow its style.
@@ -440,14 +443,16 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
   const localeWords = (source) => new RegExp(`${B}(?:${source})(?:${E}|(?<=['’]))`, 'iu');
   const STYLE_LOCALES = Object.values(STYLE_WORDS).map((w) => ({ unmet: localeWords(w.unmet), turn: localeWords(w.turn), source: w }));
   const localeContradiction = (comment, family) => STYLE_LOCALES.some(({ unmet, turn, source: w }) => {
-    if (styleFamilies(comment).includes(family) && unmet.test(comment)) return true;
-    return comment.split(/[.!?;]+/).some((clause) => !turn.test(clause) && !ENGLISH_TURN.test(clause) && styleFamilies(clause).filter((v) => v !== family).some((other) => {
-      const style = String.raw`${other}${E}(?![-\s]*(?:\d+[-\s]*)?(?:${PRESET_WORDS})${E})`;
-      const direct = new RegExp(String.raw`${B}(?:${w.follows})\s+(?:[\p{L}\d'’-]+\s+){0,4}?${style}|${B}${style}[^.!?;,]{0,40}?${B}(?:${w.follows})${E}`, 'iu');
-      const causal = new RegExp(String.raw`${B}(?:${w.because})${E}[^.!?;]{0,60}?${B}${other}${E}`, 'iu');
-      const meets = new RegExp(String.raw`${B}${other}${E}[^.!?;]{0,70}${B}(?:${w.meets})${E}[^.!?;]{0,50}${B}${family}${E}`, 'iu');
-      return direct.test(clause) || causal.test(clause) || meets.test(clause);
-    }));
+    return comment.split(/[.!?;,]+/).some((clause) => {
+      if (styleFamilies(clause).includes(family) && unmet.test(clause)) return true;
+      return !turn.test(clause) && !ENGLISH_TURN.test(clause) && styleFamilies(clause).filter((v) => v !== family).some((other) => {
+        const style = String.raw`${other}${E}(?![-\s]*(?:\d+[-\s]*)?(?:${PRESET_WORDS})${E})`;
+        const direct = new RegExp(String.raw`${B}(?:${w.follows})\s+(?:[\p{L}\d'’-]+\s+){0,4}?${style}|${B}${style}[^.!?;,]{0,40}?${B}(?:${w.follows})${E}`, 'iu');
+        const causal = new RegExp(String.raw`${B}(?:${w.because})${E}[^.!?;]{0,60}?${B}${other}${E}`, 'iu');
+        const meets = new RegExp(String.raw`${B}${other}${E}[^.!?;]{0,70}${B}(?:${w.meets})${E}[^.!?;]{0,50}${B}${family}${E}`, 'iu');
+        return direct.test(clause) || causal.test(clause) || meets.test(clause);
+      });
+    });
   });
   const contradictoryStyle = (comment, family, status) => {
     if (!family || status !== 'met') return false;

@@ -409,6 +409,16 @@ test('an answer language goes as one line at the end of the system turn, after t
   assert.match(words.calls[1].body.messages[0].content, /^Answer\.\n\nAnswer with one JSON object[\s\S]*\n\nWrite your answer's prose in French; keep JSON keys, IDs and enum values exactly as given\.$/);
 });
 
+test('an answer language with a trailing line break is rejected before calling the provider', async () => {
+  const R = require('../../extension/ai/request.js');
+  for (const lang of ['de\n', 'de\r', 'de\r\n', 'de\u2028', 'de\u2029']) {
+    assert.equal(R.clean(ask({ reply: { lang } })), null, JSON.stringify(lang));
+    const s = server(done('42'));
+    await assert.rejects(P.run('openai', ask({ reply: { lang } }), cfg(), { fetch: s.fetch }), (e) => e.code === 'request');
+    assert.equal(s.calls.length, 0);
+  }
+});
+
 test('a task may accept a longer answer than the schema it sends', async () => {
   const LONG = { type: 'object', properties: { answer: { type: 'string', maxLength: 8 } }, required: ['answer'], additionalProperties: false };
   const s = server(done('{"answer":"0123456789"}'), done('{"answer":"0123456789"}'));

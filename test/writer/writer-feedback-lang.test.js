@@ -121,6 +121,13 @@ test('a German citation-row comment needs no English words to explain the mismat
   }
 });
 
+test('a French citation comment can name missing years with an elided article', async () => {
+  const comment = 'Vos citations ne comportent pas d’année, contrairement au style APA exigé.';
+  const { cfg, result } = run(citationInput({ described: true }), (req) => req.schema.properties.status ? mismatch(req) : req.schema.properties.comment ? { json: { comment } } : reply()(req));
+  assert.equal((await result).output.criteria[0]?.comment, comment);
+  assert.equal(cfg.seen.filter((req) => req.schema.properties.comment).length, 1, 'accepted without repair');
+});
+
 const styleRun = (comment, status = 'met') => {
   const input = raw(); input.mode = 'paper'; input.paper = { format: 'MLA 9', font: 'Times New Roman', size: 12, line: 2, margin: 1, header: 'name-page' };
   input.context.assignment.rubric.criteria = [{ id: 'style', label: 'APA style', detail: 'APA style', points: 20 }];
@@ -166,6 +173,32 @@ test('the sentence counter skips each locale\'s common abbreviations', () => {
   }
   assert.equal(F.assesses('Ihr Entwurf nennt Belege. Die These fehlt. Der Schluss fehlt auch.', []), '', 'three real sentences stay too many');
   assert.equal(F.assesses('Your draft cites sources. The thesis is missing. The conclusion is missing too.', []), '');
+});
+
+test('a sentence ending in an abbreviation still counts before a capitalized sentence', () => {
+  for (const comment of ['Your draft lists sources etc. The thesis is missing. The conclusion is missing too.',
+    'Ihr Entwurf nennt Quellen usw. Die These fehlt. Der Schluss fehlt auch.',
+    'Votre brouillon cite des sources etc. La thèse manque. La conclusion manque aussi.',
+    'Su borrador cita fuentes etc. La tesis falta. La conclusión falta también.',
+    'Seu rascunho cita fontes etc. A tese falta. A conclusão falta também.',
+    'Je tekst noemt bronnen enz. De these ontbreekt. De conclusie ontbreekt ook.']) {
+    assert.equal(F.sentenceEnds(comment), 3, comment);
+    assert.equal(F.assesses(comment, []), '', comment);
+  }
+});
+
+test('uncertainty about another style does not contradict a met APA assessment', async () => {
+  for (const comment of ['Ihr Entwurf erfüllt den APA-Stil; der MLA-Stil ist unbestätigt.',
+    'Votre brouillon respecte le style APA ; le style MLA reste incertain.',
+    'Su borrador cumple el estilo APA; el estilo MLA es incierto.',
+    'Seu rascunho cumpre o estilo APA; o estilo MLA é incerto.',
+    'Je tekst voldoet aan de APA-stijl; de MLA-stijl blijft onzeker.']) {
+    const { cfg, result } = styleRun(comment);
+    const out = (await result).output;
+    assert.equal(out.criteria[0]?.comment, comment, comment);
+    assert.equal(out.grade.earned, 20, comment);
+    assert.equal(cfg.seen.filter((req) => req.schema.properties.status).length, 1, 'no reconsideration');
+  }
 });
 
 test('Glaze\'s own Feedback comments pass its comment check and fit the allowance in every locale', () => {
