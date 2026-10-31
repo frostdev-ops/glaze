@@ -487,7 +487,11 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       }
       const def = defOf(area, key), cat = def?.cat, owner = { rec: h, area, key, ...(x.need && { need: x.need }) };
       if (!cat) return;
-      const value = await valueOf(area, key), lsum = await sumOf(area, key, value), at = st[`${area}:${key}`] || 0;
+      const value = await valueOf(area, key), lsum = await sumOf(area, key, value);
+      // The time of the change here, read again once Drive's side has come (stamp): one made while this run read it, already
+      // in the value weighed here, is weighed by its own time, never by none.
+      let at = st[`${area}:${key}`] || 0;
+      const stamp = async () => { at = (await stamps())[`${area}:${key}`] || 0; };
       if (def.immutable) {
         // The bytes never change, but Notes may have cleaned up this device's copy since it last used them: fetched again
         // only for a note that uses it again (x.need), never for one deleted with its note.
@@ -510,6 +514,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         // with one, so a later change another device hasn't pushed yet still wins over it.
         if (!R || R.removed) { if (value !== undefined) await push(ctx, h, area, key, cat, null, at || UNTIMED); return; }
         const got = await fetchRec(ctx, R, h, owner);
+        await stamp();
         if (got.sum === lsum) {
           // The same value on both sides, changed here later than Drive's: sent again with this device's time (retold below).
           if (at > got.at && !def.view && !MERGE[cat]) return push(ctx, h, area, key, cat, { id: R.id }, at);
@@ -551,6 +556,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       }
       if (rdirty) {
         const got = await fetchRec(ctx, R, h, owner);
+        await stamp();
         // Unchanged here by content, but changed and back since it synced (where the whole value is the record): weighed by
         // time like any other change made here.
         if (!ldirty) return at > (was.seen || 0) && at > got.at && !def.view && !MERGE[cat] ? push(ctx, h, area, key, cat, was, at) : take(h, got, R, was, value);
