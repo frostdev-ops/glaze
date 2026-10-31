@@ -34,7 +34,7 @@ const run = (over = {}) => {
   let now = 1000;
   const c = vm.createContext({
     ctx: { site: 'ultra', courseId: () => '_1_1' }, on: true, preview: false, signedOut: false, framed: '', who: '_42_1', loaded: true,
-    prefs: { ahead: true }, P: () => c.prefs, L, t: (s) => s, tabs: [{ cid: '_1_1', name: 'One' }, { cid: '_2_1', name: 'Two' }, { cid: '_3_1', name: 'Three' }],
+    prefs: { ahead: true, renew: 10 }, P: () => c.prefs, L, t: (s) => s, tabs: [{ cid: '_1_1', name: 'One' }, { cid: '_2_1', name: 'Two' }, { cid: '_3_1', name: 'Three' }],
     frames: new Map(), spare: new Map(), waiting: '', wait() {}, PAGE: 'page', LIVE: 4, showing: '', pic: null, drag: null, location: { origin }, Date, Element: class {},
     performance: { now: () => now }, setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout() {},
     requestIdleCallback: (fn) => { timers.push({ fn, idle: true }); return timers.length; },
@@ -421,11 +421,13 @@ test('only a course drawn after the adoption counts as routed: the light page\'s
   assert.match(part('  const watch = ', '  const open = '), /&& !f\.adopting/, 'watch waits for the route to be confirmed');
 });
 
-test('an old standby cannot carry an hours-old account assertion into a course', () => {
-  const p = run(), { s, el } = standbyOf({ at: Date.now() - 120001 });
-  p.api.standby = s;
-  assert.equal(p.api.adopt('_2_1', '/ultra/courses/_2_1/outline', { cid: '_2_1' }), null);
-  assert.ok(el.removed, 'the next course boots with a fresh account check');
+test('a standby older than tabs.renew is never adopted: no older account check carries into a course', () => {
+  for (const renew of [2, 10, 120]) for (const [age, ok] of [[renew * 60000 - 1000, true], [renew * 60000 + 1, false]]) {
+    const p = run({ prefs: { ahead: true, renew } }), { s, el } = standbyOf({ at: Date.now() - age });
+    p.api.standby = s;
+    assert.equal(!!p.api.adopt('_2_1', '/ultra/courses/_2_1/outline', { cid: '_2_1' }), ok, `${renew} min, ${age} ms old`);
+    if (!ok) assert.ok(el.removed, 'the next course boots with a fresh account check');
+  }
 });
 
 test('the course tab settings changed (ahead of time switched off) reach the standby at once, without waiting for a page pass', () => {
@@ -461,7 +463,7 @@ const clocked = (over = {}) => {
   // Its Glaze says it is in, then who is signed in there: usable.
   k.ready = (el) => { for (const data of [{ gzCtab: 'loaded' }, { gzCtab: 'account', uid: '_42_1' }]) k.api.onAhead({ data, source: el.contentWindow, origin }); };
   Object.assign(k, run({ Date: { now: () => now + wallOffset }, performance: { now: () => now }, setTimeout: at, clearTimeout: (id) => q.delete(id),
-    requestIdleCallback: (fn) => at(fn, 0), cancelIdleCallback: (id) => q.delete(id), document, nudge() {},
+    requestIdleCallback: (fn) => at(fn, 0), cancelIdleCallback: (id) => q.delete(id), document, nudge() {}, prefs: { ahead: true, renew: 2 },
     host: { prepend: (el) => { el.isConnected = true; if (k.auto) k.ready(el); } }, ...over }), { made });
   k.pass = (ms) => {
     const end = now + ms;
@@ -563,4 +565,63 @@ test('renewal boots that never get ready back off as any boot: a longer wait eac
   assert.equal(p.api.miss, 3);
   assert.equal(p.api.standby, null);
   assert.equal(p.pending(), 0, 'no loop');
+});
+
+// ---- how long a standby is kept (tabs.renew) ----
+test('how long a standby is kept: tabs.renew, 10 minutes by default, 2 to 120, chosen under the switch and off with it', () => {
+  assert.deepEqual(L.SPEC.renew, [10, [2, 120]]);
+  assert.equal(D.GZ_SANITIZE({}).tabs.renew, 10);
+  for (const [v, want] of [[2, 2], [30, 30], [120, 120], [1, 10], [121, 10], [0, 10], ['30', 10], [null, 10], [NaN, 10]]) {
+    assert.equal(D.GZ_SANITIZE({ tabs: { renew: v } }).tabs.renew, want, String(v));
+  }
+  const html = read('options.html');
+  const row = html.match(/<label class="check"><input type="checkbox" data-key="tabs\.ahead">[^\n]*\n([^\n]*)/)?.[1] || '';
+  assert.match(row, /^<label class="field"><span>Renew the waiting page after<\/span><select data-key="tabs\.renew" data-number>/, 'directly under the switch');
+  assert.deepEqual([...row.matchAll(/<option value="(\d+)">([^<]+)<\/option>/g)].map((m) => [+m[1], m[2]]),
+    [[2, '2 minutes'], [5, '5 minutes'], [10, '10 minutes'], [30, '30 minutes'], [60, '1 hour'], [120, '2 hours']]);
+  for (const f of fs.readdirSync(path.join(root, 'i18n'))) for (const k of ['Renew the waiting page after', '2 minutes', '2 hours']) {
+    assert.match(read(`i18n/${f}`), new RegExp(`"${k}": "[^"]+"`), `${f}: ${k}`);
+  }
+  assert.match(read('settings/options.js'), /\$\('\[data-key="tabs\.renew"\]'\)\.disabled = !s\.tabs\.ahead;/, 'off with ahead of time');
+});
+
+test('the standby is renewed at tabs.renew: at 2 minutes after 2, at 60 kept past 2 and renewed after 60', () => {
+  for (const renew of [2, 60]) {
+    const p = clocked({ prefs: { ahead: true, renew } });
+    p.auto = true;
+    p.api.standbyLater(); p.pass(5000); // booted 2.5 s in
+    p.pass(renew * 60000 - 6000);
+    assert.equal(p.made.length, 1, `${renew}: kept until its limit`);
+    assert.equal(p.api.standby?.el, p.made[0]);
+    if (renew === 60) { p.ready(p.made[0]); assert.equal(p.api.adopt('_2_1', '/ultra/courses/_2_1/outline', { cid: '_2_1' })?.el, p.made[0], 'adopted at 59 minutes'); continue; }
+    p.pass(10000);
+    assert.equal(p.made.length, 2, `${renew}: renewed at its limit`);
+  }
+  const p = clocked({ prefs: { ahead: true, renew: 60 } });
+  p.auto = true;
+  p.api.standbyLater(); p.pass(3600000 + 10000);
+  assert.equal(p.made.length, 2, '60: renewed at its limit');
+});
+
+test('a changed tabs.renew reaches the standby at once: shorter renews it if past or re-arms, longer keeps it to the new limit', () => {
+  const at = (renew) => { const p = clocked({ prefs: { ahead: true, renew } }); p.auto = true; p.api.standbyLater(); p.pass(5000); return p; };
+  const change = (p, renew) => { p.c.prefs = { ahead: true, renew }; p.api.standbyLater(); }; // (onStore: readPrefs, then standbyLater)
+  // Shorter, and past it: renewed at the change.
+  let p = at(60); p.pass(180000);
+  assert.equal(p.made.length, 1, 'kept at 3 minutes under 60');
+  change(p, 2); p.pass(5000);
+  assert.equal(p.made.length, 2, 'renewed at once');
+  // Shorter, not yet past it: renewed at the new limit.
+  p = at(60); p.pass(180000);
+  change(p, 5); p.pass(110000);
+  assert.equal(p.made.length, 1, 'still under 5 minutes');
+  p.pass(15000);
+  assert.equal(p.made.length, 2, 'renewed at 5 minutes, not 60');
+  // Longer: kept past the old limit, renewed at the new one.
+  p = at(5); p.pass(55000);
+  change(p, 30); p.pass(25 * 60000);
+  assert.equal(p.made.length, 1, 'kept past the old 5 minutes');
+  p.pass(5 * 60000);
+  assert.equal(p.made.length, 2, 'renewed at 30 minutes');
+  assert.equal(p.api.miss, 0);
 });
