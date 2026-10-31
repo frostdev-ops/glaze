@@ -18,17 +18,21 @@ var GZ_AHEAD = globalThis.GZ_AHEAD || (() => {
   const settle = async () => {
     if (!still()) return;
     const p = await stores();
+    if (!still()) return;
     const { id } = await p.profile();
     if (!still()) return;
     const day = new Date(); day.setHours(0, 0, 0, 0);
     const next = new Date(day); next.setDate(next.getDate() + 1);
     // A fresh To Do copy covering today answers without asking; otherwise Better To Do's range is read and kept.
-    const { items } = await p.planned(+day, +next, await kept(), id, LOW);
+    const cache = await kept();
+    if (!still()) return;
+    const { items } = await p.planned(+day, +next, cache, id, LOW);
     const now = Date.now();
     for (const cid of new Set(items.filter((i) => i?.at >= now && !i.sub?.submitted && ID.test(i.cid)).map((i) => i.cid))) {
       if (!still()) return;
       if (p.fresh.book(cid, id)) continue;
       const k = await p.saved(cid, id);
+      if (!still()) return;
       if (!k || now - k.at >= KEPT) p.book(cid, id, { prio: LOW }).catch(() => {});
     }
   };
@@ -51,9 +55,10 @@ var GZ_AHEAD = globalThis.GZ_AHEAD || (() => {
     if (cid === pointing) return;
     clearTimeout(timer);
     pointing = cid;
-    if (cid) timer = setTimeout(() => { if (still() && pointing === cid) stores().then((p) => p.outline(cid, { prio: LOW, body: true })).catch(() => {}); }, INTENT);
+    if (cid) timer = setTimeout(() => { if (still() && pointing === cid) stores().then((p) => { if (still() && pointing === cid) return p.outline(cid, { prio: LOW, body: true }); }).catch(() => {}); }, INTENT);
   };
   const onOut = (e) => { if (!courseAt(e.relatedTarget)) { clearTimeout(timer); pointing = ''; } };
+  const onShow = () => { if (still()) later(); };
 
   const sync = (want) => {
     if (!!want === on) return;
@@ -61,11 +66,13 @@ var GZ_AHEAD = globalThis.GZ_AHEAD || (() => {
     if (on) {
       document.addEventListener('pointerover', onOver, true);
       document.addEventListener('pointerout', onOut, true);
+      document.addEventListener('visibilitychange', onShow);
       later();
       return;
     }
     document.removeEventListener('pointerover', onOver, true);
     document.removeEventListener('pointerout', onOut, true);
+    document.removeEventListener('visibilitychange', onShow);
     clearTimeout(timer);
     pointing = '';
   };

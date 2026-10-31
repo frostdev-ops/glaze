@@ -226,7 +226,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
   // A change that finishes after the page moved on still counts (what is stored is adopted), but says nothing here.
   const op = (ops) => {
-    if (!active || asleep || !rec || !S?.ops(ops)) return Promise.resolve(false);
+    if (!active || asleep || !rec || !S?.ops(ops) || (ultra && S.key(LMS, location.origin, confirmedAccount) !== key)) return Promise.resolve(false);
     reads++;
     rec = S.apply(rec, ops, { lms: LMS });
     emit('change');
@@ -255,7 +255,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // Who is signed in: the page's account reader (content.js GZ_CTX.account), the uid the worker checks the key against.
   // On Ultra the account last confirmed on this site answers first (courses/ultra.js page.known), so the dock draws before
   // /users/me does; sync confirms it, and for another account starts again. Nothing is written for an unconfirmed one.
-  const account = async () => String((await ctx.account()) ?? '');
+  let confirmedAccount = '';
+  const account = async () => (confirmedAccount = String((await ctx.account()) ?? ''));
   let seen = null;
   const first = async () => (ultra && await (seen ||= ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA).then(() => globalThis.GZ_ULTRA?.page?.known?.(), () => null)
     .then((k) => (/^_\d+_\d+$/.test(String(k?.id)) ? String(k.id) : '')))) || account();
