@@ -180,15 +180,15 @@ test("D: content.js's api asks Ultra through the site part's queue, so a 429 the
   await u.c.tick(30000);
   assert.equal((await late).status, 200);
   assert.equal(u.s.count(/calendarItems/), 1);
-  // content.js's api: the site part's fetch where it has one (Ultra's), else the browser's.
+  // content.js's api: the site part's fetch where it has one (Ultra's, taken with the part), else the browser's.
   const core = read('content/content.js'), start = core.indexOf('  const api = '), end = core.indexOf('  // The Canvas course', start);
-  const defaults = vm.runInNewContext(`${core.match(/^ {2}const no = .*\n {2}const X = \{[\s\S]*?\};$/m)[0]} X`, { fetch: async () => { used.push('fetch'); return new Response('{"ok":1}'); } });
-  let used;
-  for (const [X, via] of [[{ ...defaults, fetch: async () => { used.push('part'); return new Response('{"ok":1}'); } }, 'part'], [defaults, 'fetch']]) {
-    used = [];
-    const g = vm.createContext({ location: { origin: ORIGIN }, Promise, JSON, X });
-    const { api } = vm.runInContext(`${core.slice(start, end)} ({ api })`, g);
-    assert.deepEqual(await api('/users/me'), { ok: 1 });
+  assert.match(core, /Object\.assign\(X, globalThis\[part\]\(I\)\); siteFetch = X\.fetch;/);
+  for (const via of ['part', 'fetch']) {
+    const used = [];
+    const g = vm.createContext({ location: { origin: ORIGIN }, Promise, JSON, fetch: async () => { used.push('fetch'); return new Response('{"ok":1}'); },
+      part: async () => { used.push('part'); return new Response('{"ok":1}'); } });
+    vm.runInContext(`${core.slice(start, end)}; this.api = api;${via === 'part' ? ' siteFetch = part;' : ''}`, g);
+    assert.deepEqual(await g.api('/users/me'), { ok: 1 });
     assert.deepEqual(used, [via]);
   }
 });
