@@ -377,21 +377,24 @@ const known = (p, id = '_900_1') => {
 };
 const keptFor = (uid, items, at = NOW) => ({ todoCache: { key: T.storeKey(O, uid), at, ...T.fetchRange(D.GZ_SANITIZE({}).todo, NOW, 'America/New_York'), teach: true, progress: true, items, complete: true, grading: [], sums: {} } });
 
-test('D: Better To Do on Ultra draws the kept list while who is signed in is still being asked, then asks Ultra', async () => {
-  // Kept three minutes ago: drawn at once, and asked again once confirmed.
+test('D: Better To Do on Ultra draws its frame at once and the kept list the moment the student is confirmed, then asks Ultra', async () => {
+  // Kept three minutes ago: drawn once confirmed, and asked again.
   const p = page({ stored: keptFor('_900_1', [item('_701_1', '_101_1', 'Kept lab', NOW + 2 * H)], Date.now() - 180000) });
   const confirm = known(p);
   vm.runInContext(probe(read('planner/page/todo.js'), 'get: () => ({ box, key })'), p.c);
+  // Ultra's answer stays out, so what shows meanwhile is the kept list.
+  p.c.GZ_ULTRA.page.due = (from, to) => { p.due.push([from, to]); return new Promise(() => {}); };
   p.c.GZ_TODO_UI.sync(true);
   await settle();
   const { box, key } = p.c.GZ_TODO_UI.probe.get();
   assert.equal(key, KEY);
-  assert.ok(box.text.includes('Kept lab'), 'drawn from what was kept');
-  assert.equal(box.inert, true, 'but nothing in it can be used until confirmed');
+  assert.ok(box.isConnected && box.text.includes('To Do'), 'its frame and title are there at once');
+  assert.ok(!box.text.includes('Kept lab'), 'nobody\'s work before the account is confirmed');
   assert.equal(p.due.length, 0, 'nothing asked of Ultra yet');
   assert.ok(!p.sent.some((m) => m.cache), 'nothing kept yet');
   confirm('_900_1');
   await settle();
+  assert.ok(box.text.includes('Kept lab'), 'the kept list, as soon as the account is confirmed');
   assert.equal(p.due.length, 1, 'asked once the student is confirmed');
 });
 
@@ -401,7 +404,7 @@ test('D: another student signed in than the one last seen here: their list repla
   vm.runInContext(probe(read('planner/page/todo.js'), 'get: () => ({ box, key })'), p.c);
   p.c.GZ_TODO_UI.sync(true);
   await settle();
-  assert.ok(p.c.GZ_TODO_UI.probe.get().box.text.includes('Someone else'));
+  assert.ok(!p.c.GZ_TODO_UI.probe.get().box.text.includes('Someone else'), 'another student\'s list never shows');
   // page.known now answers the confirmed student, as courses/ultra.js does once /users/me has answered.
   p.c.GZ_ULTRA.page.known = async () => ({ id: '_900_1', time_zone: 'America/New_York' });
   confirm('_900_1');
@@ -415,7 +418,7 @@ test('D: another student signed in than the one last seen here: their list repla
   assert.ok(p.sent.filter((m) => m.cache).every((m) => m.key === KEY), 'kept for the student signed in only');
 });
 
-test('D: tasks on Ultra\'s cards draw from what was kept before who is signed in is confirmed, and ask Ultra only after', async () => {
+test('D: tasks on Ultra\'s cards draw what was kept once the student is confirmed, and ask Ultra only after', async () => {
   const p = page({ stored: keptFor('_900_1', [item('_701_1', '_101_1', 'Kept lab', NOW + 2 * H)]) });
   const confirm = known(p);
   vm.runInContext(read('courses/page/cardtasks.js'), p.c);
@@ -424,7 +427,7 @@ test('D: tasks on Ultra\'s cards draw from what was kept before who is signed in
   p.c.GZ_CARD_TASKS.sync(true);
   await settle();
   const ct = p.card.children[1];
-  assert.ok(ct?.text.includes('Kept lab'), 'drawn from what was kept');
+  assert.ok(!ct?.text?.includes('Kept lab'), 'nobody\'s tasks before the account is confirmed');
   assert.equal(p.due.length, 0);
   p.c.GZ_CARD_TASKS.sync(true);
   await settle();
@@ -441,7 +444,7 @@ test('D: cards drawn for another student than the one signed in lose those tasks
   vm.runInContext(read('courses/page/cardtasks.js'), p.c);
   p.c.GZ_CARD_TASKS.sync(true);
   await settle();
-  assert.ok(p.card.children[1]?.text.includes('Someone else'));
+  assert.ok(!p.card.children[1]?.text?.includes('Someone else'));
   p.c.GZ_ULTRA.page.known = async () => ({ id: '_900_1', time_zone: 'America/New_York' });
   confirm('_900_1');
   p.c.GZ_CTX.profile = async () => ({ id: '_900_1', time_zone: 'America/New_York' });

@@ -360,18 +360,19 @@ test('Ultra shared planner: an agenda reuses the profile and range already read 
   tile.stop();
 });
 
-test('D: the agenda draws the day kept for the student last seen on this site before /users/me answers', async () => {
+test('D: the agenda draws its frame at once and the kept day the moment /users/me confirms the student', async () => {
   const ultra = { holdMe: true, items: [] }, p = page({ ultra });
   p.ui.probe.set(W, D.GZ_SANITIZE({}).widgets, null); // nobody confirmed on this page yet
   p.local[`ultraMe:${p.c.location.origin}`] = { uid: '_5_1' };
   p.local.todoCache = cachedDay(p);
   const { body, tile } = await loadAgenda(p);
-  assert.match(agendaText(body), /Covered work/, 'drawn from what was kept');
+  assert.ok(!agendaText(body).includes('Covered work'), 'nobody\'s day before the account is confirmed');
+  assert.match(agendaText(body), /Class schedule/, 'its frame is there');
   assert.equal(ultra.asked.length, 0, 'nothing of To Do asked');
   assert.equal(ultra.pending.length, 1, 'who is signed in still on its way');
   ultra.holdMe = false; for (const resolve of ultra.pending.splice(0)) resolve();
   for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
-  assert.match(agendaText(body), /Covered work/, 'the same student: as drawn');
+  assert.match(agendaText(body), /Covered work/, 'the kept day, once confirmed');
   assert.equal((await p.ui.who()).uid, '_5_1');
   tile.stop();
 });
@@ -382,7 +383,7 @@ test('D: the agenda drawn for another student than the one signed in is not kept
   p.local[`ultraMe:${p.c.location.origin}`] = { uid: '_5_1' };
   p.local.todoCache = cachedDay(p);
   const { body } = await loadAgenda(p);
-  assert.match(agendaText(body), /Covered work/);
+  assert.ok(!agendaText(body).includes('Covered work'));
   ultra.holdMe = false; for (const resolve of ultra.pending.splice(0)) resolve();
   for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
   assert.equal((await p.ui.who()).uid, '_6_1', 'the account is the one signed in');

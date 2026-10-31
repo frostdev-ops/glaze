@@ -106,7 +106,7 @@ const SITES = {
     { at: 'fetch: (u, init, prio, still) => lmsq()', kind: 'page', n: 2 }],
   // The page's own site; Ultra's through its queue (content-ultra.js's fetch, courses/lmsq.js).
   'content/content.js': [{ at: '(siteFetch || ((u, o) => fetch(u, o)))(`${location.origin}${base}${path}`', kind: 'page' }],
-  'content/content-ultra.js': [{ at: 'GZ_LMSQ.fetch(u, o), () => fetch(u, o)),', kind: 'page', n: 2 }],
+  'content/content-ultra.js': [{ at: 'GZ_LMSQ.fetch(u, o), () => fetch(u, o)),', kind: 'page', n: 2 }, { at: 'return (meId ||= fetch(`${location.origin}/learn/api/v1/users/me`', kind: 'page' }],
   'content/content-canvas.js': [{ at: 'fetch(`${location.origin}/courses/${cid}/grades`', kind: 'page' }],
   // An announcement from the page's own site, and Canvas's read mark, through the site's queue (courses/lmsq.js).
   'courses/page/announce.js': [{ at: 'const q = (url, init) => GZ_LMSQ.fetch(url', kind: 'page' }, { at: 'f: (u, i) => GZ_LMSQ.fetch(u, i, prio)', kind: 'page' }, { at: 'GZ_LMSQ.fetch(m.url,', kind: 'page' }],

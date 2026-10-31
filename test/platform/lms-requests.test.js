@@ -193,6 +193,23 @@ test("D: content.js's api asks Ultra through the site part's queue, so a 429 the
   }
 });
 
+test('D: who is signed in is asked at once, before any library loads, and the stores take that same request', async () => {
+  let answer;
+  const u = ultra({ answer: (r) => (/users\/me$/.test(r.pathname) ? new Promise((done) => { answer = () => done(ME); }) : [200, { results: [] }]) });
+  const first = u.X.ctx.me();
+  await settle();
+  assert.equal(u.s.count(/users\/me$/), 1, 'asked straight away');
+  assert.equal(u.ctx.GZ_ULTRA, undefined, 'without waiting on courses/ultra.js');
+  // The stores (courses/ultra.js) arrive while it's out: they take the page's request, as GZ_CTX.me hands it over.
+  u.ctx.GZ_CTX = { site: 'ultra', me: () => u.X.ctx.me(), settings: () => u.I.settings };
+  vm.runInContext(read('courses/lmsq.js'), u.ctx); vm.runInContext(read('courses/ultra.js'), u.ctx);
+  const store = u.ctx.GZ_ULTRA.page.me();
+  answer();
+  assert.deepEqual([await first, await store], ['_9_1', '_9_1']);
+  assert.equal(u.s.count(/users\/me$/), 1, 'one request between them');
+  assert.match(read('content/content-ultra.js'), /const paintNav = \(n, picture\) => \{\n {4}if \(!isPreview && I\.links\.length\) me\(\)\.catch\(\(\) => \{\}\);/, 'started at first paint, in frames too');
+});
+
 // courses/lmsq.js alone: its queue's order and its holds.
 const lmsq = (answer) => {
   const c = clock(), s = school(answer);
