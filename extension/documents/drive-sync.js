@@ -302,6 +302,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (!d) {
         if (!R || R.removed || R.trashed || lt) { if (l && !lt && !R) await push(key, h, l, null, folder); return; }
         const got = await fetchCopy(R, h, key);
+        // Met by its tag alone (Drive's changes) while this device holds that document too, unlinked (written before its first
+        // push, or its link let go): a first meeting with this device's own, never a download over it.
+        if (!key && await env.papers.get(got.key)) return sync(got.key, h, { R, folder });
         if (gone?.file && gone.file !== got.file) await putAway(gone.file, folder);
         const source = { json: R.id, file: got.file, fh: got.fileRev, fsum: got.sum };
         if (!l) { const now2 = await take(got.key, null, got); if (got.external) return push(got.key, h, now2, source, folder); await agreed(got.key, h, R, got, now2, null); return; }
