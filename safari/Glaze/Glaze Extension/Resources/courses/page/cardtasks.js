@@ -123,7 +123,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     if (was) was.replaceWith(box); else head.after(box);
   };
   const paint = () => {
-    if (!on || !data) return;
+    if (!on || !data || !mine) return;
     const now = Date.now();
     const [sel, idOf, headOf, nameOf] = CARDS;
     for (const el of document.querySelectorAll(sel)) {
@@ -157,8 +157,8 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   };
   const onShow = () => { if (document.visibilityState === 'visible') refresh(); };
   // Who's signed in (their id names their data and the cache; their Canvas time zone counts the days), what's kept. On
-  // Ultra the student last confirmed on this site answers first (courses/ultra.js page.known), so the cards draw what's
-  // kept before anything is asked; sure says whether that's who is signed in now, asked once they're drawn.
+  // Ultra the student last confirmed on this site answers first (courses/ultra.js page.known), so what's kept is read while
+  // /users/me confirms who it is; sure says whether it's them, and the tasks show only once it is (mine).
   let heard = false, sure = null, mine = false;
   const start = async () => {
     await ctx.need('planner/todo.js', () => globalThis.GZ_TODO);

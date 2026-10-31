@@ -401,8 +401,9 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   };
   const render = (force = false) => {
     if (!box || !L || !who) return;
-    // Drawn for the student last seen here, not yet confirmed: shown, but nothing in it can be used.
+    // Until the student is confirmed: the list's frame and title only, nobody's work.
     box.inert = !sure;
+    if (!sure) { if (!head.firstChild) head.append(make('h2', { id: 'gz-todo-title', textContent: t('To Do') })); body.replaceChildren(); drawn = ''; return; }
     if (asleep) { drawn = ''; return; }
     const now = Date.now();
     // here(): Ultra moves the list between its Courses page and a course's outline without a page load.
@@ -612,7 +613,8 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
 
   // ---- on the page -------------------------------------------------------------------------------------------------
   // Ultra: the student last confirmed on this site and their courses (courses/ultra.js page.known), so what's kept for
-  // them draws before anything is asked; null elsewhere, or when there's none. Nothing is edited or kept until confirmed.
+  // them is read while /users/me (asked at first paint) confirms who it is; it shows, and anything is asked, edited or
+  // kept, only once confirmed. null elsewhere, or when there's none.
   const seen = () => (ultra ? ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA).then(() => globalThis.GZ_ULTRA?.page?.known?.() || null, () => null) : Promise.resolve(null));
   const start = async () => {
     const g = ++gen;
@@ -639,8 +641,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       cache = r?.[CACHE]?.key === key ? r[CACHE] : null;
       if (!box) return;
       render(true);
-      // Drawn for the student last seen here: who it is now is confirmed before anything is asked, kept or edited; another
-      // student's list goes, and theirs is drawn instead.
+      // Read for the student last seen here: shown once confirmed; another student starts the list again as theirs.
       if (known) {
         const now = await ctx.profile();
         if (g !== gen) return;

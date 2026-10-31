@@ -540,7 +540,8 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
       });
     };
     const me = () => (meP ||= (async () => {
-      const [c, uid] = await Promise.all([kept(), reader().me()]);
+      // The page's own request when it has one (content-ultra.js asks at first paint), else this reader's.
+      const [c, uid] = await Promise.all([kept(), Promise.resolve().then(() => env.me?.()).catch(() => null).then((id) => (ID.test(id) ? id : reader().me()))]);
       remember(uid);
       if (c?.uid === uid) send({ type: 'glaze:ultraMine', op: 'touch', uid });
       return uid;
@@ -716,6 +717,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     // The site's queue once it's in (one backoff for every read), plain fetch where it can't be (node, the preview).
     fetch: (u, init, prio, still) => lmsq().then((q) => (q ? q.fetch(u, init, prio, still) : fetch(u, init))),
     local: area('local'),
+    me: () => (globalThis.GZ_CTX?.site === 'ultra' ? GZ_CTX.me?.() : null),
     send: (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, (r) => res(chrome.runtime.lastError ? null : r))?.then?.(res, () => res(null)); } catch { res(null); } }),
     todo: () => (globalThis.GZ_TODO ? GZ_TODO : globalThis.GZ_CTX?.need ? GZ_CTX.need('planner/todo.js', () => globalThis.GZ_TODO).then(() => globalThis.GZ_TODO || null) : null),
     todoPrefs: () => (typeof GZ_SANITIZE === 'undefined' ? null : area('sync').get('todo').then((r) => GZ_SANITIZE({ todo: r?.todo }).todo)),

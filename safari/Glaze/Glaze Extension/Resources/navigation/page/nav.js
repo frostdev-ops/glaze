@@ -322,7 +322,8 @@ function GZ_ULTRA_RAIL(X) {
       }
       await Promise.all([X.need('courses/ultra.js', () => globalThis.GZ_ULTRA), X.need('planner/todo.js', () => globalThis.GZ_TODO)]);
       if (!current()) return;
-      const plan = await GZ_ULTRA.page.planned(+start, +end, local.todoCache);
+      // The page's confirmed student (/users/me, asked at first paint): no wait of its own when the To Do copy covers the week.
+      const plan = await GZ_ULTRA.page.planned(+start, +end, local.todoCache, await Promise.resolve(X.me?.()).catch(() => ''));
       if (!current()) return;
       const [raw, options] = await Promise.all([get('local', plan.key), get('sync', 'todo')]);
       if (!current()) return;

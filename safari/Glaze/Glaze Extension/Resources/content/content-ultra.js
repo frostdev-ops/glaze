@@ -45,7 +45,9 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const me = () => {
     if (meFailed && askAgain(meFailed)) meId = meFailed = null;
     const at = route();
-    return (meId ||= stores().then((s) => s.me()).catch((e) => { meFailed = failed(e, at); throw e; }));
+    // At once; courses/ultra.js's page.me takes it (GZ_CTX.me).
+    return (meId ||= fetch(`${location.origin}/learn/api/v1/users/me`, { credentials: 'same-origin', redirect: 'error', headers: { accept: 'application/json' } })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status))).then((m) => m.id).catch((e) => { meFailed = failed(e, at); throw e; }));
   };
   const covered = (rows, complete) => Object.defineProperty(rows, 'complete', { value: complete });
   // Shared by names and due-date exceptions.
@@ -724,6 +726,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   discoverNav(document);
   addEventListener('pagehide', () => navObserver.disconnect(), { once: true });
   const paintNav = (n, picture) => {
+    if (!isPreview && I.links.length) me().catch(() => {});
     if (!isPreview && window.top !== window) return;
     I.setAttr('data-gz-nav-size', n.size !== 'medium' || n.labels !== 'normal' || n.collapsed ? n.size : false);
     for (const [key, value] of [['overflow', n.labelOverflow], ['style', n.itemStyle], ['background', n.itemBackground], ['indicator', n.activeIndicator], ['logo-align', n.logoAlign], ['footer-hidden', !n.footer]]) I.setAttr(`data-gz-nav-${key}`, value);
@@ -787,7 +790,6 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   }
 
   return {
-    // content.js's api(), in the site's queue.
     fetch: (u, o) => need('courses/lmsq.js', () => globalThis.GZ_LMSQ).then(() => GZ_LMSQ.fetch(u, o), () => fetch(u, o)),
     paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, stop: () => { GZ_NAV.drop(); syncDashboard(); globalThis.GZ_STREAM_UI?.sync(false); globalThis.GZ_NAVBAR_UI?.sync(); globalThis.GZ_FOLDER_UI?.sync(false); cardsIO.disconnect(); onScreen.clear(); },
     renderProgress, renderNew, renderCalc, syncSyl, syncInsights: () => (syncInsights(), syncTabs()), openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
