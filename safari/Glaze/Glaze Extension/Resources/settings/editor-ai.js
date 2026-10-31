@@ -739,7 +739,12 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       fetchingPics = true;
       ours = { ...ours, pictures: { state: 'downloading', size: ours.pictures.size } };
       render();
-      send({ op: 'prepare', provider: OWN, part: 'pictures' }).then(async () => { fetchingPics = false; await localStatus(); }, () => { fetchingPics = false; });
+      send({ op: 'prepare', provider: OWN, part: 'pictures' }).then(async (r) => {
+        fetchingPics = false;
+        if (r.ok && ours?.pictures && ['download', 'unavailable'].includes(r.state)) localResult({ ok: true, ...ours,
+          pictures: { state: r.state, size: ours.pictures.size, ...(r.reason && { reason: r.reason }) } });
+        else await localStatus();
+      }, () => { fetchingPics = false; });
     };
     const deletePictures = (e) => {
       if (!e?.isTrusted || busy) return;
