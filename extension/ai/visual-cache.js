@@ -109,7 +109,8 @@ var GZ_AI_VISUAL_CACHE = globalThis.GZ_AI_VISUAL_CACHE || (() => {
   };
   // The returned get/set and optional getFailure/setFailure adapters plug directly into writer-image.prepare. Invalid
   // scope or context disables caching (null). Runtime hashing/storage failures are misses/false, never failed inference.
-  const create = ({ store, scope, context, version = 'writer-image-v1', now = Date.now, crypto = globalThis.crypto,
+  // v2 rereads omissions persisted by the old picture prompt and requirement filter.
+  const create = ({ store, scope, context, version = 'writer-image-v2', now = Date.now, crypto = globalThis.crypto,
     locks = globalThis.navigator?.locks, signal } = {}) => {
     let bound;
     try {
