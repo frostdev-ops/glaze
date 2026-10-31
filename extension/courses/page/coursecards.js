@@ -1,4 +1,5 @@
-// The boards' course cards: Glaze DOM over already-loaded metadata, gradebooks and the stored planner. No reader is started.
+// The boards' course cards: Glaze DOM over already-loaded metadata, gradebooks (or the ones kept from the last visit) and the
+// stored planner. No reader is started.
 // Ultra's on its Courses page and Dashboard; Canvas's on its Dashboard, where a card is drawn as Canvas's own
 // (.ic-DashboardCard), so everything Glaze does to Canvas's cards (grades, new items, tasks, bookmarks, styles, the course
 // menu) is done to it too, from the course list Canvas's page has already asked for.
@@ -28,6 +29,21 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
   };
   const setText = (el, text) => { if ((globalThis.GZ_RULES?.real(el) ?? el.textContent) !== text) { el.textContent = text; rules(); } };
   const render = () => { if (live()) { for (const x of mounted) x(); if (pick) syncPicker(); } };
+  // Ultra: a course's overall grade from its gradebook as kept from the last visit (courses/ultra.js page.saved, once
+  // something on the page has loaded it: storage only), for the student confirmed here, until this page's own read is in.
+  const keptGrades = new Map(); // `${uid} ${id}` → overall | null
+  const keptGrade = (id) => {
+    const k = `${uid} ${id}`;
+    if (!keptGrades.has(k) && globalThis.GZ_ULTRA?.page?.saved) {
+      keptGrades.set(k, null);
+      GZ_ULTRA.page.saved(id, uid).then((x) => {
+        if (!x || !keptGrades.has(k)) return;
+        keptGrades.set(k, GZ_PAGE.overall(x.rows, ctx.locale()));
+        render();
+      }, () => {});
+    }
+    return keptGrades.get(k) ?? null;
+  };
   // The color a card wears from its course (Ultra's slot, or a pick): its class and variables, on the board and in the
   // Course cards dialog. Only what differs is written.
   const tone = (card, id) => {
@@ -251,7 +267,8 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       const badgeText = newBadges.map((b) => b.textContent).join(' · ');
       setText(badges, badgeText);
       tone(card, id);
-      const g = uid && ctx.settings().enhance.overall && ctx.canvasPeek().books.get(id)?.overall;
+      const book = ctx.canvasPeek().books.get(id);
+      const g = uid && ctx.settings().enhance.overall && (book?.results ? book.overall : ultra && keptGrade(id));
       setText(grade, g?.label || ''); if (grade.hidden !== !g) grade.hidden = !g;
       if (g && grade.dataset.tone !== g.tone) grade.dataset.tone = g.tone;
       if (uid && L && cache && ctx.settings().enhance.cardTasks) {

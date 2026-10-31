@@ -516,12 +516,17 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
       const now = env.now();
       return c && ID.test(c.uid) && Array.isArray(c.mem) && now >= c.read && now - c.read < MINE_TTL ? c : null;
     }));
-    const remember = (uid) => {
-      if (uid === confirmed) return;
+    // { uid, courses (Canvas's list's shape, list above: id, name, code, closed) } as kept; courses only once read.
+    const remember = (uid, mem) => {
+      const courses = mem && list(mem, { origin: at() }).map((c) => ({ id: c.id, name: c.name, course_code: c.course_code, access_restricted_by_date: c.access_restricted_by_date }));
+      if (uid === confirmed && !courses) return;
       confirmed = uid;
       seen = null;
       const k = SEEN();
-      Promise.resolve(env.local.get(k)).then((r) => { if (r?.[k]?.uid !== uid) return env.local.set({ [k]: { uid } }); }).catch(() => {});
+      Promise.resolve(env.local.get(k)).then((r) => {
+        const was = r?.[k], next = { uid, ...((courses || was?.uid === uid && was.courses) && { courses: courses || was.courses }) };
+        if (JSON.stringify(was) !== JSON.stringify(next)) return env.local.set({ [k]: next });
+      }).catch(() => {});
     };
     const me = () => (meP ||= (async () => {
       const c = await kept(), since = env.framed();
@@ -533,14 +538,17 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     })().catch((e) => { meP = null; copy = null; throw e; }));
     const mine = () => (mineP ||= (async () => {
       const uid = await me(), c = await kept();
-      if (c?.uid === uid) return { uid, mem: covered([...c.mem], c.complete) };
-      const mem = await reader().memberships(uid);
-      send({ type: 'glaze:ultraMine', op: 'put', mine: { uid, mem, complete: mem.complete !== false } });
+      const mem = c?.uid === uid ? covered([...c.mem], c.complete) : await reader().memberships(uid);
+      if (c?.uid !== uid) send({ type: 'glaze:ultraMine', op: 'put', mine: { uid, mem, complete: mem.complete !== false } });
+      remember(uid, mem);
       return { uid, mem };
     })().catch((e) => { mineP = null; throw e; }));
-    // The student last confirmed on this site, before anything is asked: '' when none.
-    const known = () => (confirmed ? Promise.resolve(confirmed) : (seen ||= Promise.resolve().then(() => env.local.get(SEEN()))
-      .then((r) => (ID.test(r?.[SEEN()]?.uid) ? r[SEEN()].uid : ''), () => '')));
+    // The student last confirmed on this site and their courses as last read, before anything is asked: null when none.
+    const known = () => (seen ||= Promise.resolve().then(() => env.local.get(SEEN())).then((r) => {
+      const x = r?.[SEEN()];
+      if (confirmed && x?.uid !== confirmed) return { uid: confirmed };
+      return ID.test(x?.uid) ? { uid: x.uid, courses: Array.isArray(x.courses) ? x.courses.filter((c) => ID.test(c?.id) && typeof c.name === 'string') : undefined } : null;
+    }, () => (confirmed ? { uid: confirmed } : null)));
 
     // ---- the gradebook: one store per site, by student and course ----
     // Every reader of a course's gradebook rows (the card badges and due-date chips, the planner, the GPA, Insights, the
@@ -652,18 +660,22 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     const published = new WeakSet();
 
     const page = {
-      known: () => known().then((id) => (id ? { id, time_zone: zone() } : null)),
+      // Who to paint for before anything answers: { id, time_zone, courses? } or null. Panels confirm it (profile) before
+      // they ask or keep anything, and start again for a different student.
+      known: () => known().then((k) => (k ? { id: k.uid, time_zone: zone(), courses: k.courses } : null)),
       profile: () => me().then((id) => ({ id, time_zone: zone() })),
       me, mine,
       // Canvas's course list's shape (list above).
       courses: () => mine().then((m) => list(m.mem, { origin: at() })),
       due: (from, to) => due(from, to),
-      // Agenda/rail: this account's covered To Do copy for ten minutes; else, inside Better To Do's own range, that
-      // range's read, kept as the To Do copy through the worker as Better To Do keeps it ('glaze:todo', newest wins);
-      // else this range's.
-      planned: async (from, to, cache) => {
+      // Agenda/rail: this account's covered To Do copy for ten minutes (for the student it's drawn for, uid, without
+      // waiting on who is signed in); else, inside Better To Do's own range, that range's read, kept as the To Do copy
+      // through the worker as Better To Do keeps it ('glaze:todo', newest wins); else this range's.
+      planned: async (from, to, cache, uid) => {
+        const covers = (key) => cache?.key === key && env.now() - cache.at < 600000 && Date.parse(cache.start) <= from && Date.parse(cache.end) >= to;
+        if (ID.test(uid) && covers(`todo:${at()}/${uid}`)) return { key: cache.key, items: cache.items || [] };
         const { id } = await page.profile(), key = `todo:${at()}/${id}`, now = env.now();
-        if (cache?.key === key && now - cache.at < 600000 && Date.parse(cache.start) <= from && Date.parse(cache.end) >= to) return { key, items: cache.items || [] };
+        if (covers(key)) return { key, items: cache.items || [] };
         const w = await own(now);
         if (!w || Date.parse(w.start) > from || Date.parse(w.end) < to) return { key, ...await page.due(from, to) };
         const r = await page.due(Date.parse(w.start), Date.parse(w.end));
