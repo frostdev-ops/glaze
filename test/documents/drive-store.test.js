@@ -941,3 +941,28 @@ test('the palette a device wears keeps its name on the other device, the student
   // A name that isn't one is still refused.
   assert.equal(ST.clean('settings', 'preset', { name: 'Mine' }), undefined);
 });
+
+// A record's stamp stays until the sweep after the one that sent it, which reads the value once more to see it unchanged.
+// A note whose text this device can no longer find (Notes answers 'missing') must be passed over there as everywhere else:
+// thrown out of that check, it failed every run from then on, and every record waiting behind it never went up.
+test('a note whose text goes missing after it went up is passed over by the next sweep: later changes still go up, the run succeeds', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  assert.ok((await a.notesOp({ key: ACCT, op: 'save', id: nid(1), base: 0, sid: 'a1', html: '<p>One</p>', title: 'One' })).ok);
+  assert.ok((await a.notesOp({ key: ACCT, op: 'save', id: nid(2), base: 0, sid: 'a2', html: '<p>Two</p>', title: 'Two' })).ok);
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  clock.t += 1000;
+  assert.ok((await a.notesOp({ key: ACCT, op: 'save', id: nid(1), base: (await idxOf(a)).notes[nid(1)].rev, sid: 'a3', html: '<p>One, edited</p>' })).ok);
+  assert.ok((await a.run({ push: true })).ok);
+  // Then the first note's text is gone from A's database.
+  for (const k of [...a.db.stores.bodies.keys()].filter((x) => x.includes(`/${nid(1)}/`))) a.db.stores.bodies.delete(k);
+  assert.equal((await a.notesOp({ key: ACCT, op: 'load', id: nid(1) })).error, 'missing');
+  clock.t += 1000;
+  assert.ok((await a.notesOp({ key: ACCT, op: 'save', id: nid(2), base: (await idxOf(a)).notes[nid(2)].rev, sid: 'a4', html: '<p>Two, edited</p>' })).ok);
+  await a.local.set({ writerWords: ['Beta'] });
+  assert.deepEqual(await a.run({ push: true }), { ok: true });
+  assert.ok((await b.run()).ok);
+  assert.match(await noteOf(b, nid(2)), /Two, edited/, 'the next note\'s edit reached B');
+  assert.match(await noteOf(b, nid(1)), /One, edited/, 'and B keeps the first as it went up');
+  assert.deepEqual((await b.local.get('writerWords')).writerWords, ['Beta']);
+  noDeletes(drive);
+});
