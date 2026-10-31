@@ -626,3 +626,21 @@ test('turning Keep Course Content off releases hidden refresh copies', () => {
   assert.equal(p.c.frames.get('_2_1'), base);
   assert.equal(p.c.spare.get('_2_1')?.includes(it), false);
 });
+
+test('the fresh outline swaps in only once its own page has stopped changing since it was told it shows (Glaze\'s marks on it in)', () => {
+  const { p, base, it } = opened();
+  msg(p, it, { gzCtab: 'drawn', hid: 0 });
+  p.setKey(1);
+  p.api.onItemPop({ stopImmediatePropagation() {} });
+  const fr = it.fresh;
+  it.doc.location.pathname = OUT;
+  p.api.standby = null;
+  fr.asked = 2000; p.tick(1050); // asked at 2000; now 2050
+  fr.changed = 2040; // its page changed just after being told
+  msg(p, it, { gzCtab: 'drawn', hid: 0 });
+  assert.equal(p.c.frames.get('_2_1'), base, 'not while it changes');
+  assert.ok(p.timers.length, 'tried again shortly');
+  p.tick(400);
+  while (p.timers.length && p.c.frames.get('_2_1') === base) p.step();
+  assert.equal(p.c.frames.get('_2_1'), it, 'swapped once quiet');
+});
