@@ -20,7 +20,7 @@ const ENHANCE = {
   'study/pet': ['pet'],
   'study/reminders': ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'],
   'study/imports': ['syllabus', 'insights'],
-  'navigation/tabs': ['tabs'], 'pages/dashboard': ['dashboard', 'instant'], 'pages/declutter': ['hideFolders'],
+  'navigation/tabs': ['tabs', 'prefetch'], 'pages/dashboard': ['dashboard', 'instant'], 'pages/declutter': ['hideFolders'],
 };
 const OVERRIDE = {
   enabled: 'header', footer: 'pages/declutter', preset: 'look/palette', presets: 'look/palette',
@@ -74,7 +74,7 @@ const MORE = {
     ...Object.keys(D.GZ_SPEC.sidebar).filter((k) => !['canvas', 'ultra'].includes(k)).map((k) => `sidebar.${k}`),
     ...['width', 'gap', 'radius', 'height', 'icons', 'create'].map((k) => `card.${k}`),
     ...['group', 'rel', 'urgent', 'teacher', 'progress', 'sync', 'cardN', 'cardStatus', 'cardCross', 'gsDaily'].map((k) => `todo.${k}`),
-    ...['gradeHover', 'gpaPlus', 'gpaWeighted', 'gpaAfter', 'urgency', 'clamp', 'scores', 'reading', 'fold', 'place'].map((k) => `enhance.${k}`),
+    ...['gradeHover', 'gpaPlus', 'gpaWeighted', 'gpaAfter', 'urgency', 'clamp', 'scores', 'reading', 'fold', 'place', 'prefetch'].map((k) => `enhance.${k}`),
     ...['work', 'rest', 'sound', 'quotes', 'quoteMode', 'quoteEvery', 'inhale', 'hold', 'exhale', 'cycles'].map((k) => `widgets.${k}`),
     ...Object.keys(D.GZ_SPEC.docreview).map((k) => `docreview.${k}`), ...Object.keys(D.GZ_SPEC.stream).map((k) => `stream.${k}`),
   ],
