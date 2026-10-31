@@ -426,7 +426,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       const next = MERGE[got.cat](value, got.value, { here: at || was.at || 0, there: got.at }), t = Math.max(at, got.at) || now();
       if (canon(next) === canon(got.value)) return take(h, got, R, was, value);
       if (canon(next) !== canon(value)) await take(h, { ...got, value: next, at: t }, R, was, value, { pending: true });
-      return push(ctx, h, got.area, got.key, got.cat, (await recOf(h)) || was, t, R.appProperties?.sum ?? null);
+      return push(ctx, h, got.area, got.key, got.cat, (await recOf(h)) || was, t, R);
     };
     // A file up as documents/drive-sync.js up sends it (one too large for a request waits for the run's last step: 'pending'),
     // or, for a caller with no transfers (ctx.up), in one request. m: { bytes, id, meta, create, mime, info }.
@@ -438,20 +438,20 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       file ||= await ctx.D((c) => c.put({ meta: m.create, mime: m.mime, bytes: m.bytes }));
       return { file, info: m.info ?? null };
     };
-    // This device's value up, at its time (or a tombstone once it is gone). One still on its way since an earlier run keeps
-    // the time it went with.
-    // One too large for a request is staged: its file's id is written into its link as Drive's answer comes (commit), and
-    // the record is held as this push left it until then (documents/drive-sync.js holds). Aimed at the file as this device
-    // last agreed with it (its sum): another device's write since sends it back to be weighed again.
-    // aim: the sum of Drive's file as this run met it (undefined: as this device last agreed with it).
+    // This device's value up, at its time (or a tombstone once it is gone). One too large for a request is staged: its file's
+    // id is written into its link as Drive's answer comes (commit), and the record is held as this push left it until then
+    // (documents/drive-sync.js holds). It goes over Drive's file as this run met it (aim: its sum and revision; undefined:
+    // its sum as this device last agreed with it): another device's write since, even a change back to the same value with a
+    // newer time, sends it back to be weighed again.
     const push = async (ctx, h, area, key, cat, was, at, aim) => {
       const value = await valueOf(area, key), sum = await sumOf(area, key, value), link = { area, key, cat, lsum: sum, rsum: sum, at, seen: at };
-      const expect = aim !== undefined ? aim : was?.rsum;
+      const expect = aim !== undefined ? aim?.appProperties?.sum : was?.rsum;
       const r = await send(ctx, `R:${h}`, sum, was?.id ?? null, async () => {
         const meta = { appProperties: { glaze: 'rec', cat, key: h, sum, at: String(at) } };
         const bytes = new TextEncoder().encode(JSON.stringify({ glaze: 'record', v: 1, cat, area, key, at, ...(value === undefined ? { deleted: true } : { value }) }));
         if (bytes.length > MAX) throw new Fail('large');
-        return { bytes, id: was?.id ?? null, sum: was?.id && SUM.test(expect || '') ? expect : null, meta, create: { ...meta, name: `${cat}-${h.slice(0, 12)}.json`, mimeType: JSON_TYPE, parents: [ctx.data] }, mime: JSON_TYPE };
+        return { bytes, id: was?.id ?? null, rev: was?.id && aim?.id === was.id ? aim.headRevisionId ?? null : null,
+          sum: was?.id && SUM.test(expect || '') ? expect : null, meta, create: { ...meta, name: `${cat}-${h.slice(0, 12)}.json`, mimeType: JSON_TYPE, parents: [ctx.data] }, mime: JSON_TYPE };
       }, { rec: h, area, key }, { rec: h, link });
       await put(h, { ...link, id: r.file.id }, was);
     };
@@ -488,7 +488,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       if (was?.id && R?.removed) { const other = await lookup(ctx, h); if (other && other.id !== was.id) { await leave(); R = other; } }
       const st = await stamps();
       // A push here goes over Drive's file as this run met it: a write another device makes before it lands sends it back.
-      const over = (w, t) => push(ctx, h, area, key, cat, w, t, R && !R.removed ? R.appProperties?.sum ?? null : null);
+      const over = (w, t) => push(ctx, h, area, key, cat, w, t, R && !R.removed ? R : null);
       if (!key) { // a record only Drive has, met for the first time
         if (!R || R.removed) return;
         // A picture or attachment comes with a note here that uses it (each below, x.need), never by itself: one whose note
