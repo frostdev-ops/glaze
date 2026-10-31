@@ -201,3 +201,33 @@ test('Sync to Google Drive\'s privacy texts say only Glaze\'s own older daily zi
   assert.doesNotMatch(short, /never deletes a Drive file for good\)/);
   assert.match(short, /no Drive file is deleted for good except Glaze's own daily zips past the newest five/);
 });
+
+// Sync's own state (documents/drive-sync.js setState, background/drive-store.js snapshot) keeps the retry bookkeeping (fails,
+// wait, busy) and when the day's snapshot was last tried (snap) in driveSync: the storage disclosure names each.
+test('Sync to Google Drive\'s storage disclosure names the retry bookkeeping and the snapshot time it keeps in driveSync', () => {
+  assert.match(read('documents/drive-sync.js'), /await setState\(\{ problem: why, busy: 0, fails, wait: now\(\) \+ Math\.min\(WAIT\.most, WAIT\.run \* 2 \*\* \(fails - 1\)\) \}\);/, 'the code: a failed run');
+  assert.match(read('documents/drive-sync.js'), /await setState\(\{ busy: now\(\) \}\);/, 'the code: a run under way');
+  assert.match(read('background/drive-store.js'), /await ctx\.state\(\{ snap: now\(\), snapSkip: null \}\);/, 'the code: the day\'s try');
+  const stored = policy.slice(policy.indexOf('- **Google Drive** (off until you connect), unavailable'), policy.indexOf('- **Gradescope in To Do**'));
+  const state = stored.slice(stored.indexOf('also holds its state'), stored.indexOf('(`driveSync`)'));
+  for (const k of ['fails', 'wait', 'busy', 'snap', 'snapSkip']) assert.ok(state.includes(`\`${k}\``), `driveSync's ${k} named`);
+});
+
+// A file larger than one request is staged between workers (documents/drive-sync.js transfers): what it is and how far it
+// got in storage.local driveSyncMoves (an upload's resumable-session address), its bytes in the worker's own IndexedDB
+// glaze-drive (background/background.js). Both privacy texts say so, and when they go.
+test('Sync to Google Drive discloses the transfer state it keeps: session addresses, offsets and staged bytes', () => {
+  assert.match(read('background/background.js'), /GZ_DOC_FILES\.idb\(globalThis\.indexedDB, 'glaze-drive'\)/, 'the code: the stage');
+  assert.match(read('documents/drive-sync.js'), /session: null, file: null \}\);/, 'the code: an upload\'s session on its record');
+  const stored = policy.slice(policy.indexOf('- **Google Drive** (off until you connect), unavailable'), policy.indexOf('- **Gradescope in To Do**'));
+  const moves = stored.slice(stored.indexOf('larger than one request'), stored.indexOf('`glaze-drive`') + 20);
+  assert.ok(stored.includes('larger than one request') && stored.includes('`glaze-drive`'), 'PRIVACY.md: the transfers');
+  assert.match(moves, /resumable[- ]session address/);
+  assert.match(moves, /how far it got/);
+  assert.match(moves, /SHA-256/);
+  assert.match(moves, /`driveSyncMoves`/);
+  assert.match(moves, /until it lands/);
+  const sync = policy.slice(policy.indexOf('  - **Sync to Google Drive**'), policy.indexOf('  - **Submit from Drive**'));
+  assert.match(sync, /larger than one request[^.]*in parts/);
+  assert.match(read('../docs/privacy.md'), /larger than one request[^)]*`glaze-drive`/);
+});
