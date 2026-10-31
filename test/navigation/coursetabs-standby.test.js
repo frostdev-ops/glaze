@@ -568,17 +568,19 @@ test('renewal boots that never get ready back off as any boot: a longer wait eac
 });
 
 // ---- how long a standby is kept (tabs.renew) ----
-test('how long a standby is kept: tabs.renew, 10 minutes by default, 2 to 120, chosen under the switch and off with it', () => {
-  assert.deepEqual(L.SPEC.renew, [10, [2, 120]]);
+test('how long a standby is kept: tabs.renew, 10 minutes by default, one of the offered 2 to 120, chosen under the switch and off with it', () => {
+  assert.deepEqual(L.SPEC.renew, [10, [2, 5, 10, 30, 60, 120]], 'as writer.versions: a select\'s numbers are its choices');
   assert.equal(D.GZ_SANITIZE({}).tabs.renew, 10);
-  for (const [v, want] of [[2, 2], [30, 30], [120, 120], [1, 10], [121, 10], [0, 10], ['30', 10], [null, 10], [NaN, 10]]) {
+  for (const [v, want] of [[2, 2], [30, 30], [120, 120], [1, 10], [121, 10], [0, 10], [7, 10], [45, 10], ['30', 10], [null, 10], [NaN, 10]]) {
     assert.equal(D.GZ_SANITIZE({ tabs: { renew: v } }).tabs.renew, want, String(v));
   }
   const html = read('options.html');
   const row = html.match(/<label class="check"><input type="checkbox" data-key="tabs\.ahead">[^\n]*\n([^\n]*)/)?.[1] || '';
   assert.match(row, /^<label class="field"><span>Renew the waiting page after<\/span><select data-key="tabs\.renew" data-number>/, 'directly under the switch');
-  assert.deepEqual([...row.matchAll(/<option value="(\d+)">([^<]+)<\/option>/g)].map((m) => [+m[1], m[2]]),
-    [[2, '2 minutes'], [5, '5 minutes'], [10, '10 minutes'], [30, '30 minutes'], [60, '1 hour'], [120, '2 hours']]);
+  const offered = [...row.matchAll(/<option value="(\d+)">([^<]+)<\/option>/g)].map((m) => [+m[1], m[2]]);
+  assert.deepEqual(offered, [[2, '2 minutes'], [5, '5 minutes'], [10, '10 minutes'], [30, '30 minutes'], [60, '1 hour'], [120, '2 hours']]);
+  for (const [v] of offered) assert.equal(D.GZ_SANITIZE({ tabs: { renew: v } }).tabs.renew, v, `${v} is kept as offered`);
+  assert.deepEqual(offered.map(([v]) => v), L.SPEC.renew[1], 'every choice offered, and only those');
   for (const f of fs.readdirSync(path.join(root, 'i18n'))) for (const k of ['Renew the waiting page after', '2 minutes', '2 hours']) {
     assert.match(read(`i18n/${f}`), new RegExp(`"${k}": "[^"]+"`), `${f}: ${k}`);
   }
