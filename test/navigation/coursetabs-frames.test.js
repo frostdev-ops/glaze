@@ -278,7 +278,7 @@ test('the worker takes a course tab\'s frame as its Ultra page: its origin stand
 
 test('a live frame saves only its own place through the owner, never a stale whole tab list', () => {
   const sent = [], writes = [];
-  const saveNow = vm.runInNewContext(part('  let saveTimer = ', '  const framed = ') + '\nsaveNow;', { PAGE: 'page', requestAnimationFrame() {}, nudge() {}, keepPage() {}, spare: new Map(), next: new Map(), popping: false,
+  const saveNow = vm.runInNewContext(part('  let saveTimer = ', '  let framed = ') + '\nsaveNow;', { PAGE: 'page', requestAnimationFrame() {}, nudge() {}, keepPage() {}, spare: new Map(), next: new Map(), popping: false,
     clearTimeout() {}, setTimeout() {}, who: '_42_1', loaded: true, preview: false, framed: '_2_1',
     tabs: [{ cid: '_1_1', pin: false }, { cid: '_2_1', path: '/ultra/courses/_2_1/grades', top: 200 }],
     toTop: (op, value) => sent.push({ op, ...value }), local: (f) => f({ set: (v) => writes.push(v) }), key: () => 'key',

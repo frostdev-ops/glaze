@@ -21,7 +21,7 @@ const SECTION = () => part('  const frameEl = ', '  // The stand-in over a frame
 const standbyOf = (over = {}) => {
   const doc = { body: {}, location: { origin, pathname: '/ultra/profile', search: '' }, querySelector: () => null };
   const posted = [];
-  const win = { name: 'gz-ctab:standby', postMessage: (m, o) => posted.push([m, o]) };
+  const win = { name: 'gz-ctab:standby', postMessage: (m, o) => posted.push([structuredClone(m), o]) }; // (as posted: a copy)
   const attrs = new Set(['data-ready']);
   const el = { name: 'gz-ctab:standby', title: '', isConnected: true, contentDocument: doc, contentWindow: win, posted, removed: 0,
     removeAttribute: (k) => attrs.delete(k), toggleAttribute: (k, v) => (v ? attrs.add(k) : attrs.delete(k)), hasAttribute: (k) => attrs.has(k),
@@ -35,13 +35,13 @@ const run = (over = {}) => {
   const c = vm.createContext({
     ctx: { site: 'ultra', courseId: () => '_1_1' }, on: true, preview: false, signedOut: false, framed: '', who: '_42_1', loaded: true,
     prefs: { ahead: true }, P: () => c.prefs, L, t: (s) => s, tabs: [{ cid: '_1_1', name: 'One' }, { cid: '_2_1', name: 'Two' }, { cid: '_3_1', name: 'Three' }],
-    frames: new Map(), PAGE: 'page', LIVE: 4, showing: '', drag: null, location: { origin }, Date, Element: class {},
+    frames: new Map(), PAGE: 'page', LIVE: 4, showing: '', pic: null, drag: null, location: { origin }, Date, Element: class {},
     performance: { now: () => now }, setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout() {},
     requestIdleCallback: (fn) => { timers.push({ fn, idle: true }); return timers.length; },
     document: { visibilityState: 'visible', body: {}, createElement: () => { const el = { style: {}, addEventListener() {} }; made.push(el); return el; } },
     host: { prepend: (el) => did.push(['prepend', el.name]) }, hostIn() {}, loading: () => false, shown: (e) => !!e,
     guardFrame: (cid) => did.push(['guard', cid]), watch: (cid) => did.push(['watch', cid]), load: (cid, f, url) => did.push(['load', cid, url]),
-    toTop: (op, m) => did.push(['toTop', op, m]), open: (cid) => did.push(['open', cid]), send: () => Promise.resolve(null), revoke: () => did.push(['revoke']),
+    toTop: (op, m) => did.push(['toTop', op, structuredClone(m)]), open: (cid) => did.push(['open', cid]), send: () => Promise.resolve(null), revoke: () => did.push(['revoke']),
     ...over,
   });
   const api = vm.runInContext(SECTION() + `
@@ -317,4 +317,21 @@ test('the page hooks: listeners on Ultra only, a sync schedules the standby, and
   const bar = vm.runInNewContext(part('  const bar = {', '  return { sync') + '\nbar;', { on: true, ctx: { site: 'ultra' }, location: { origin }, L, URL, warm: () => warmed.push('canvas'), warmTab: (cid) => warmed.push(cid) });
   bar.warm(`${origin}/ultra/courses/_2_1/outline`); bar.warm(`${origin}/ultra/stream`); bar.warm('https://other.test/ultra/courses/_3_1/outline');
   assert.deepEqual(warmed, ['_2_1']);
+});
+
+test('picked and on screen, an adopted standby stays hidden on its own page until routed (or loading afresh), then shows as any frame', () => {
+  for (const [why, setup, shown] of [['still on its page', () => {}, 'hidden'],
+    ['routed', (x) => { x.f.adopting.ok = true; x.doc.location.pathname = '/ultra/courses/_2_1/outline'; x.doc.querySelector = (q) => (q === '.routed-page' ? {} : null); }, ''],
+    ['loading afresh', (x) => { x.f.adopting.failed = true; }, ''], ['under its stand-in', (x) => { x.f.adopting.failed = true; x.p.c.pic = {}; }, 'hidden']]) {
+    const p = run({ showing: '_2_1' });
+    const { doc, s } = standbyOf();
+    s.el.style = { visibility: 'hidden' };
+    p.api.standby = s;
+    const f = p.api.adopt('_2_1', '/ultra/courses/_2_1/outline', { cid: '_2_1' });
+    p.timers.length = 0; p.api.adopting('_2_1', f);
+    setup({ p, f, doc });
+    p.tick(50); p.step();
+    assert.equal(f.el.style.visibility, shown, why);
+  }
+  assert.match(part('  const picture = ', '  const unpicture = '), /if \(showing === cid && !f\.ready && !pic && !f\.adopting\) f\.el\.style\.visibility = ''/, 'with no sketch, not shown while it adopts');
 });

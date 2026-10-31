@@ -70,7 +70,7 @@ const MORE = {
     ...['style', 'angle', 'blend', 'spread', 'dim', 'blur', 'grain'].map((k) => `bg.${k}`),
     'motion.enter', 'motion.hover', 'motion.transitions',
     ...['rail', 'peek', 'course', 'cmenu', 'tabs', 'badges', 'brand'].map((k) => `navbar.${k}`), ...NAV_MORE.map((k) => `nav.${k}`),
-    ...['cap', 'place', 'shape', 'size', 'width', 'label', 'mark', 'color'].map((k) => `tabs.${k}`),
+    ...['cap', 'place', 'ahead', 'shape', 'size', 'width', 'label', 'mark', 'color'].map((k) => `tabs.${k}`),
     ...Object.keys(D.GZ_SPEC.sidebar).filter((k) => !['canvas', 'ultra'].includes(k)).map((k) => `sidebar.${k}`),
     ...['width', 'gap', 'radius', 'height', 'icons', 'create'].map((k) => `card.${k}`),
     ...['group', 'rel', 'urgent', 'teacher', 'progress', 'sync', 'cardN', 'cardStatus', 'cardCross', 'gsDaily'].map((k) => `todo.${k}`),
