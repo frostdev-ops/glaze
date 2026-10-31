@@ -246,6 +246,7 @@ test('the fresh outline takes the kept one\'s place only with the student still 
   assert.equal(asks(), 1, 'still: asked to ready itself as shown');
   // Not at the same place (its content shorter): hidden again, not swapped.
   it.scroller.max = 100;
+  p.tick(400); // quiet since it was told it shows
   msg(p, it, { gzCtab: 'drawn', hid: 0 });
   assert.equal(p.c.frames.get('_2_1'), base);
   assert.deepEqual(it.posted.at(-1), { gzCtab: 'visible', on: false });
@@ -342,6 +343,7 @@ test('a renewed stale outline keeps the frame navigation guard and completes its
   const fresh = p.c.spare.get('_2_1')[0];
   s.doc.location.pathname = OUT;
   fresh.fresh.asked = 1000;
+  p.tick(400); // quiet since it was told it shows
   msg(p, fresh, { gzCtab: 'drawn', hid: 0 });
   assert.equal(p.c.frames.get('_2_1'), fresh);
   assert.equal(guarded.includes(fresh), true, 'later cross-origin loads get the normal frame guard');
@@ -371,6 +373,7 @@ test('a fresh outline carries keyboard focus out of the retired frame', () => {
   it.el.focus = () => { focused = true; };
   it.doc.location.pathname = OUT;
   it.fresh.asked = 1000;
+  p.tick(400); // quiet since it was told it shows
   msg(p, it, { gzCtab: 'drawn', hid: 0 });
   assert.equal(focused, true, 'keyboard focus follows the visible outline');
 });
