@@ -1333,10 +1333,16 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   // Ready within 30 s, else let go of (a miss); renewed once STALE.
   const standbyCheck = (s) => {
+    const renew = () => {
+      if (standby !== s) return;
+      standbyLater();
+      // (A clock set back can leave it young here: checked again at its new age.)
+      if (standby === s) s.timer = setTimeout(renew, Math.min(STALE, s.at + STALE - Date.now()));
+    };
     s.timer = setTimeout(() => {
       if (standby !== s) return;
       if (!usable(s)) { unStandby(true); standbyLater(); return; }
-      s.timer = setTimeout(() => { if (standby === s) standbyLater(); }, s.at + STALE - Date.now());
+      renew();
     }, 30000);
   };
   // Younger than STALE: an older one's account check is too old to carry into a course.
