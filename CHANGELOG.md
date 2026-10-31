@@ -6,9 +6,37 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [4.0.1] — 2026-10-31
+
 ### Added
 
-- Chrome: **Google Calendar sync** in Settings → Sharing → Google Calendar sync. Connect keeps a calendar named Glaze in your Google account in step with Export calendar (.ics), and touches nothing else there; Disconnect revokes access and can delete the calendar. Off until you connect; Firefox, Edge, Brave and Safari keep the export.
+- Chrome: **Google Calendar sync** in Settings → Sharing. Connect keeps a calendar named Glaze in your Google account in step with Export calendar (.ics), and touches nothing else. Off until you connect.
+- **Google Drive** in Settings → Writer → Papers (Chrome, Edge, Brave and Firefox; off until you connect). **From Google Drive** opens a file in Documents or attaches it to a Blackboard submission; **Save to Google Drive** saves a document's file, or a paper as a Google Doc, and writes a new file beside one edited outside Glaze; **Sync to Google Drive** keeps your documents and what Back up… covers in a Glaze folder, across devices. Glaze reaches only the files it made or you pick. Disconnect is per device.
+- Blackboard: **Open course tabs ahead of time** (Settings → Course tabs). A course tab opens from an already loaded page, and starts loading when you press or hover it.
+- Blackboard: **Keep Course Content ready** (Settings → Course tabs). An item opens over Course Content, and going back is instant, at the same place.
+- Blackboard: **Open Grades, Courses and Activity instantly** (Settings → Course pages → Blackboard Dashboard), from your last visit.
+- Blackboard: **Load course data ahead of time** (Settings → Course tabs). To Do and grades load once a page settles, and a course's content when you point at it.
+- PDFs: Highlight, Pen, Text, Image, Shapes and signatures, and a pages panel to move, turn, delete and add pages, or take another PDF's.
+- Blackboard: **Attach from Documents** adds your documents to an assignment's submission. Workbooks imported from .xlsm export and submit as .xlsm.
+- Canvas: **Open in Glaze** on PDF, slide and spreadsheet files (Settings → Documents → Previews in Glaze). Slides: **Print with notes…**
+- Documents cards show a spreadsheet's charts, and 3-D pie and column charts draw.
+
+### Changed
+
+- Blackboard: Glaze's bar is there at first paint. To Do, grades and the sidebar appear from saved data once Blackboard confirms who's signed in.
+- Blackboard: fewer requests to Blackboard and less work on slower laptops.
+- A PDF keeps one copy, its latest marked-up version.
+- Saved PDF and slide previews offer **Open in Documents**. A spreadsheet opened without saving stays read-only until saved to Documents.
+- Imports show their progress at once and store large files faster.
+
+### Fixed
+
+- Writer: Feedback keeps its comments in German, Spanish, French, Dutch and Portuguese.
+- Writer: a tab opened while Glaze saves settings gets Glaze; a viewer that fails to open goes back to Blackboard's editor.
+- Canvas's document viewer: pen marks stay in place as the page zooms, and Undo takes back Clear page.
+- Agents: an app's pairing and the name in its approval window can be changed only by Glaze's background.
+- Firefox: a site whose access you took back is no longer retried.
+- The announcement pop-up has Close in its footer. Settings → AI's sliders keep their labels apart at 320 px. A note with tens of thousands of line breaks opens.
 
 ## [4.0.0] — 2026-10-30
 

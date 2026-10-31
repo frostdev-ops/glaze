@@ -44,12 +44,13 @@ for (const lang of LANGS) {
     assert.ok(!/\n\n/.test(firefox.notes), 'it stops at the next heading');
     assert.ok(!/^•\s*(?:Chrome|Safari)\s*:/m.test(firefox.notes), 'no other browser\'s bullet on AMO');
     assert.ok(!/^•\s*(?:Chrome|Firefox)\s*:/m.test(apple.whatsNew), 'no other browser\'s bullet on the App Store');
-    // 4.0.0's Agents bullet is AMO's alone: the App Store build has no Agents, and Chrome has no notes field.
+    // Agents and Google Drive bullets are AMO's alone: the App Store build has neither, and Chrome has no notes field.
     const firefoxOnly = (line) => /^•\s*Firefox\s*:/.test(line);
     assert.equal(apple.whatsNew, firefox.notes.split('\n').filter((line) => !firefoxOnly(line)).join('\n'), 'Apple gets AMO\'s notes without their Firefox bullets');
-    assert.ok(firefox.notes.split('\n').some((line) => firefoxOnly(line) && /\bAgent(?:s|en|es)\b/.test(line)), 'Agents is in AMO\'s notes, labelled Firefox');
+    for (const line of firefox.notes.split('\n').filter((l) => /\bAgent(?:s|en|es)\b|Google Drive/.test(l))) assert.ok(firefoxOnly(line), `labelled Firefox on AMO: ${line.slice(0, 40)}`);
     const agents = /\bagent(?:e|s|en|es)?\b|glaze-mcp|\bMCP\b/i;
     for (const field of ['whatsNew', 'description', 'promotionalText', 'keywords']) assert.doesNotMatch(apple[field], agents, `no Agents in the App Store ${field}`);
+    assert.doesNotMatch(apple.whatsNew, /Google/, 'Safari has neither Google Calendar sync nor Google Drive');
     assert.ok(firefox.notes.length <= 3000 && apple.whatsNew.length <= 4000);
   });
 
@@ -180,7 +181,7 @@ test('AMO and Apple filter browser-labelled bullets; Chrome keeps the full listi
   assert.ok(firefox.description.includes('Beschreibung nur Firefox') && !firefox.description.includes('Beschreibung nur Chrome') && !firefox.description.includes('Beschreibung nur Safari'), 'AMO filters the description too');
   assert.ok(firefox.notes.includes('nur Firefox') && !firefox.notes.includes('nur Chrome') && !firefox.notes.includes('nur Safari'));
   assert.ok(apple.whatsNew.includes('nur Safari') && !apple.whatsNew.includes('nur Chrome') && !apple.whatsNew.includes('nur Firefox'));
-  assert.ok(firefox.notes.includes('Glaze Writer') && apple.whatsNew.includes('Glaze Writer'), 'unlabelled bullets go everywhere');
+  assert.ok(firefox.notes.includes('Kursinhalte bereithalten') && apple.whatsNew.includes('Kursinhalte bereithalten'), 'unlabelled bullets go everywhere');
   assert.ok(!listings.fr.firefox.notes.includes('seulement Safari') && listings.fr.apple.whatsNew.includes('seulement Safari'), 'French spacing before the colon');
 });
 

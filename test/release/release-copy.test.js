@@ -46,26 +46,25 @@ for (const [lang, expected] of Object.entries(access)) test(`listing ${lang || '
   assert.ok(!/(?:ten tabs|zehn Tabs|diez pestañas|dix onglets|tien tabbladen|dez abas)/.test(listing(lang)), 'no settings editor in ten tabs');
 });
 
-const writerRelease = {
-  '': ['NEW IN 4.0.0', 'Spelling, grammar and autocorrect', 'no AI or completion', 'rubric and instructions', 'explains estimated grades or why no score is available', 'Glaze never drafts.'],
-  de: ['NEU IN 4.0.0', 'Rechtschreibung, Grammatik und Autokorrektur', 'ohne KI oder Textvervollständigung', 'Bewertungsraster und Anweisungen', 'erklärt geschätzte Noten oder warum keine Punktzahl möglich ist', 'Glaze verfasst keine Entwürfe.'],
-  es: ['NOVEDADES DE 4.0.0', 'La ortografía, la gramática y la autocorrección', 'sin IA ni autocompletado', 'la rúbrica y las instrucciones', 'explica las notas estimadas o por qué no hay puntuación', 'Glaze nunca redacta por ti.'],
-  fr: ['NOUVEAUTÉS DE LA VERSION 4.0.0', 'Orthographe, grammaire et correction automatique', 'sans IA ni complétion', 'la grille et les consignes', 'explique les notes estimées ou l’absence de score', 'Glaze ne rédige jamais à votre place.'],
-  nl: ['NIEUW IN 4.0.0', 'Spelling, grammatica en autocorrectie', 'zonder AI of aanvulling', 'het beoordelingsschema en de instructies', 'verklaart geschatte cijfers of waarom er geen score is', 'Glaze schrijft nooit een tekst voor je.'],
-  'pt-BR': ['NOVO NA 4.0.0', 'Ortografia, gramática e correção automática', 'sem IA nem preenchimento de texto', 'pela rubrica e pelas instruções', 'explica as notas estimadas ou por que não há pontuação', 'O Glaze nunca redige por você.'],
+const release401 = {
+  '': ['NEW IN 4.0.1', 'first paint', 'slower laptops', 'Settings › Course tabs › Open course tabs ahead of time', 'Keep Course Content ready', 'Open Grades, Courses and Activity instantly', 'Load course data ahead of time'],
+  de: ['NEU IN 4.0.1', 'ersten Bild', 'langsameren Laptops', 'Einstellungen › Kurs-Tabs › Kurs-Tabs vorab öffnen', 'Kursinhalte bereithalten', 'Noten, Kurse und Aktivität sofort öffnen', 'Kursdaten vorab laden'],
+  es: ['NOVEDADES DE 4.0.1', 'primer dibujado', 'portátiles más lentos', 'Ajustes › Pestañas de cursos › Abrir las pestañas de cursos por adelantado', 'Mantener listo el contenido del curso', 'Abrir Calificaciones, Cursos y Actividad al instante', 'Cargar los datos del curso por adelantado'],
+  fr: ['NOUVEAUTÉS DE LA VERSION 4.0.1', 'premier affichage', 'portables plus lents', 'Réglages › Onglets de cours › Ouvrir les onglets de cours à l’avance', 'Garder le contenu du cours prêt', 'Ouvrir Notes, Cours et Activité instantanément', "Charger les données des cours à l'avance"],
+  nl: ['NIEUW IN 4.0.1', 'eerste beeld', 'tragere laptops', 'Instellingen › Cursustabbladen › Cursustabbladen vooraf openen', 'Cursusinhoud klaarhouden', 'Cijfers, Cursussen en Activiteit meteen openen', 'Cursusgegevens vooraf laden'],
+  'pt-BR': ['NOVO NA 4.0.1', 'primeiro desenho', 'notebooks mais lentos', 'Configurações › Abas de cursos › Abrir as abas de cursos com antecedência', 'Manter o conteúdo do curso pronto', 'Abrir Notas, Cursos e Atividade na hora', 'Carregar os dados do curso com antecedência'],
 };
-for (const [lang, expected] of Object.entries(writerRelease)) test(`4.0.0 release notes ${lang || 'en'} describe Writer, local proofing, optional AI feedback and paper backups`, () => {
+for (const [lang, expected] of Object.entries(release401)) test(`4.0.1 release notes ${lang || 'en'} name Blackboard's speed settings, Documents' new buttons, and Calendar and Drive for Chrome and Firefox only`, () => {
   const text = listing(lang), block = part(text, 'Release notes');
   const context = {};
   if (lang) vm.runInNewContext(read(`i18n/${lang}.js`), context);
   const ui = (key) => lang ? context.GZ_LANGS[lang][key] : key;
-  assert.ok(block.includes(`${ui('Settings')} › ${ui('AI')}`), 'the release notes use the AI settings UI path');
-  for (const key of ['Back up…', 'Restore…']) assert.ok(block.includes(ui(key)), key);
-  for (const term of ['Glaze Writer', 'MLA 9', 'APA 7', 'Chicago 17', '.docx']) assert.ok(block.includes(term), term);
-  for (const term of expected) assert.ok(block.includes(term), term);
+  // The four speed settings' names come with perf/ultra's strings, so they are written out here.
+  for (const key of ['Attach from Documents', 'Open in Glaze', 'Print with notes…']) assert.ok(block.toLowerCase().includes(ui(key).toLowerCase()), key);
+  assert.ok(block.includes(`${ui('Settings')} › ${ui('Writer')} › ${ui('Papers')}`), 'Google Drive by its UI path');
+  for (const term of expected) assert.ok(block.toLowerCase().includes(term.toLowerCase()), term);
+  for (const line of block.split('\n').filter((l) => /Google/.test(l))) assert.match(line, /^•\s*(?:Chrome|Firefox)\s*:/, 'Google Calendar and Drive are labelled for the browsers that have them');
   assert.ok(!/\b(?:CI|audit)\b/i.test(block), 'no internal process in store copy');
-  assert.ok(!/(?:Export and import all your settings|Exportiere und importiere alle|Exporta e importa todos|Exportez et importez tous|Exporteer en importeer al|Exporte e importe todas)/.test(text), 'one-file backup replaces settings export');
-  for (const key of ['Back up…', 'Restore…']) assert.ok(description(lang).includes(ui(key)), `the description names ${key} too`);
 });
 
 // Typing effects (3.3.6) draw at the caret: the listing says they never read what is typed and stay out of password fields.
@@ -82,12 +81,12 @@ for (const [lang, expected] of Object.entries(terms)) test(`listing ${lang || 'e
   for (const term of expected) assert.ok(text.includes(term), term);
 });
 
-test('4.0.0 versions agree and the exact pure notes transform fits Apple', () => {
-  assert.equal(JSON.parse(read('manifest.json')).version, '4.0.0');
-  assert.equal(JSON.parse(read('../safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '4.0.0');
-  // The helper and its Claude Desktop bundle, glaze-mcp-4.0.0.mcpb on the GitHub release, carry Glaze's version.
-  assert.equal(JSON.parse(read('../mcp/package.json')).version, '4.0.0');
-  assert.equal(JSON.parse(read('../mcp/mcpb/manifest.json')).version, '4.0.0');
+test('4.0.1 versions agree and the exact pure notes transform fits Apple', () => {
+  assert.equal(JSON.parse(read('manifest.json')).version, '4.0.1');
+  assert.equal(JSON.parse(read('../safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '4.0.1');
+  // The helper and its Claude Desktop bundle, glaze-mcp-4.0.1.mcpb on the GitHub release, carry Glaze's version.
+  assert.equal(JSON.parse(read('../mcp/package.json')).version, '4.0.1');
+  assert.equal(JSON.parse(read('../mcp/mcpb/manifest.json')).version, '4.0.1');
   // Extract only this synchronous reader. Do not import or execute the release command or its top-level operations.
   const script = read('../tools/release/store-release.mjs');
   const body = script.slice(script.indexOf('function notes(source) {'), script.indexOf('\nasync function build('));
