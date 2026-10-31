@@ -85,7 +85,7 @@ function setup({ path = '/ultra/course', store = new Map(), account = () => Prom
   class MO { constructor(fn) { this.fn = fn; observers.push(this); } observe() { this.on = true; } disconnect() { this.on = false; } }
   const window = {}; window.top = window;
   const sessionStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
-  const context = vm.createContext({ document, location: document.location, window, URL, sessionStorage, innerWidth: 1440, innerHeight: 900,
+  const context = vm.createContext({ document, location: document.location, window, URL, sessionStorage, innerWidth: 1440, innerHeight: 900, fetch: async (u) => ({ text: async () => `/* ${u} */ :host { all: initial; }` }),
     GZ_NAVBAR: { ...M, build: (...a) => (builds++, M.build(...a)) }, GZ_NAV_LAYOUT: L, GZ_NAV_ITEMS: N, GZ_NAV: { ...NAV, drop: () => document.querySelector('#gz-navbar[data-first]')?.remove() },
     NodeFilter: { SHOW_TEXT: 4, FILTER_ACCEPT: 1, FILTER_REJECT: 2 }, MutationObserver: MO, CSS: { escape: (s) => s }, getComputedStyle: () => ({}),
     matchMedia: (q) => ({ matches: q === '(min-width: 900px)' ? context.innerWidth >= 900 : true }),
@@ -108,7 +108,7 @@ function setup({ path = '/ultra/course', store = new Map(), account = () => Prom
     item: (id) => root.querySelector(`.rail .list [data-id="${id}"]`) };
 }
 
-function firstPage(account) {
+function firstPage(account, css) {
   const h = setup({ navbar: { on: false } }), { document, context, settings, store } = h;
   const create = document.createElement;
   document.createElement = (tag) => {
@@ -124,9 +124,10 @@ function firstPage(account) {
     return e;
   };
   context.GZ_NAV = undefined;
+  context.CSSStyleSheet = class { replaceSync(t) { this.text = t; } };
   context.GZ_SPEC = G.GZ_SPEC; context.GZ_DEFAULTS = G.GZ_DEFAULTS;
   vm.runInContext(read('navigation/nav.js'), context);
-  store.set('gz-navbar', JSON.stringify({ u: '_42_1', t: Date.now(), w: 'rail auto float', k: NAV.key(settings), v: '1440x900', a: [], m: '<nav class="rail"><div class="list"><a class="item" data-id="course" href="https://bb.school.test/ultra/course">Courses</a></div><div class="foot" data-p="0"></div></nav>', p: ['<div class="foot"><a class="item account" data-id="profile">Alex Private</a></div>'] }));
+  store.set('gz-navbar', JSON.stringify({ u: '_42_1', t: Date.now(), w: 'rail auto float', k: NAV.key(settings), v: '1440x900', a: [], m: '<nav class="rail"><div class="list"><a class="item" data-id="course" href="https://bb.school.test/ultra/course">Courses</a></div><div class="foot" data-p="0"></div></nav>', p: ['<div class="foot"><a class="item account" data-id="profile">Alex Private</a></div>'], ...(css && { c: css }) }));
   context.GZ_NAV.first(settings, 'rail auto float', account);
   const host = document.getElementById('gz-navbar');
   return { ...h, host, load: () => host.shadowRoot.querySelector('link').onload(), drop: () => context.GZ_NAV.drop() };
@@ -207,6 +208,7 @@ test('the bar as drawn is kept for the next page, and that page draws it with wh
   const at = { words: 'rail auto float', key: NAV.key(h.settings), size: '1440x900', now: s.t + 1000, from: '', origin };
   assert.deepEqual(NAV.kept(raw, at), s, 'the next page takes it');
   assert.ok(/^<nav [^>]*data-open=""/.test(s.m), 'the rail as pinned, never as peeked');
+  assert.equal(s.c, '/* chrome-extension://glaze/navigation/page/navbar.css */ :host { all: initial; }', "its sheet's text, for the next page's first paint");
   assert.ok(!s.m.includes('Alex') && s.p.some((x) => x.includes('Alex Example')), "the account's name is kept apart");
   assert.match(s.m, /<div class="foot" data-p="(\d+)" style="box-sizing:border-box;visibility:hidden;width:224px;height:52px"><\/div>/, 'its room, at its size');
   assert.ok(s.p[Number(s.m.match(/class="foot" data-p="(\d+)"/)[1])].startsWith('<div class="foot">'));
@@ -326,6 +328,16 @@ test('at first paint the copy has none of the account\'s own parts; confirmed, t
     assert.equal(root.querySelector('[data-p]'), null);
     assert.equal(h.host.hidden, false);
   }
+});
+
+test('styled from its kept sheet, the copy is shown at once, before any sheet loads; without one, once its sheet is in', () => {
+  const styled = firstPage(() => new Promise(() => {}), ':host { all: initial; }');
+  assert.equal(styled.host.hidden, false, 'in the first paint');
+  assert.equal(styled.host.shadowRoot.adoptedStyleSheets[0].text, ':host { all: initial; }');
+  const plain = firstPage(() => new Promise(() => {}));
+  assert.equal(plain.host.hidden, true);
+  plain.load();
+  assert.equal(plain.host.hidden, false);
 });
 
 test('a cached bar is discarded for another or unavailable account', async () => {
