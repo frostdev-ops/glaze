@@ -233,6 +233,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     const unstage = async (slot) => { const ks = await stage.keys(`${slot}@`); if (ks.length) await stage.write([], ks); };
     // Keep the owner recorded for as long as any staged bytes can remain after a worker stops.
     const dropMove = async (slot) => { if (await usable()) await unstage(slot); await setMove(slot, null); };
+    // Nothing more to send or bring, its owner still to be met with what meetings named (due): its bytes let go, its record kept.
+    const owe = async (slot) => { if (await usable()) await unstage(slot); await patchMove(slot, { due: true, session: null }); };
     // Each piece its own copy: IndexedDB would keep a view's whole buffer.
     const staged = async (slot, bytes) => {
       const puts = [];
@@ -278,6 +280,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         if (t.file) { await dropMove(slot); return { file: t.file, info: t.info ?? null }; }
         throw new Fail('pending');
       }
+      // One owed a meeting (due) gives way to this push, which keeps what meetings named for it.
+      if (t?.due) owner = { ...owner, ...(t.owner?.R && !owner?.R && { R: t.owner.R }), ...(t.owner?.E && !owner?.E && { E: t.owner.E }) };
       if (t) await dropMove(slot);
       const m = await make();
       if (!m) return null;
@@ -315,14 +319,16 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       await setMove(slot, { dir: 'down', tag, id: f.id, rev: f.headRevisionId, size, max, at: 0, step: PIECE, owner, since: now(), done: false });
       throw new Fail('pending');
     };
-    // The whole downloads starting with prefix let go: their owner was met without waiting (it took them, or no longer needs them).
+    // The whole downloads starting with prefix let go: their owner, met again in the run's last step with the copy and file
+    // the read was for, no longer waits (it took them, or no longer needs them). Never on another meeting, which may not be
+    // the one the read was for (a run stopped after its change page moved on).
     const settle = async (prefix) => { for (const [slot, t] of Object.entries(await moves())) if (slot.startsWith(prefix) && t.dir === 'down' && t.done) await dropMove(slot); };
     // An upload of h's (a document's: its file or JSON copy) on its way: h is held until Drive's answer is written. A
     // meeting meanwhile leaves the copy it named (another device's, at the lowest id) and its file on the transfer, for the
     // owner's next step. → whether h is held
     const holds = async (slots, hint = {}, own = null) => {
       if (!staging) return false;
-      const m = await moves(), mine = slots.filter((s) => m[s]?.dir === 'up' && m[s].commit);
+      const m = await moves(), mine = slots.filter((s) => m[s]?.dir === 'up' && m[s].commit && !m[s].due);
       if (!mine.length) return false;
       const R = hint.R?.id && hint.R.id !== own ? hint.R.id : null, E = hint.E?.id || null;
       if (R || E) {
@@ -351,7 +357,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         await putDoc(c.doc, { ...c.link, ...(c.set === 'file' ? { file: file.id, fh: rev } : { json: file.id, jh: rev }) }, await docOf(c.doc));
         if (c.set === 'file') await unwait(`up:${c.doc}`);
       } else if (c.rec) await more.commit(c.rec, c.link, file);
-      await dropMove(slot);
+      await owe(slot);
     };
     // One upload sent: its session kept on its record between requests and workers, and Drive's answer written down. A
     // document's whose file is gone from Drive goes back to the document ('missing'), which goes to Trash as a file deleted
@@ -425,6 +431,14 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       }
       const loose = (await stage.keys('')).filter((k) => !named.has(k.slice(0, k.lastIndexOf('@') + 1)));
       if (loose.length) await stage.write([], loose);
+      // Its owner met again, with what meetings named meanwhile; the transfer let go only once that meeting has run, so a
+      // worker stopped first (or a run failing there) meets it again in the next run's last step.
+      const meet = async (slot, t) => {
+        if (!t.due) await owe(slot);
+        const r = await replay(t.owner, folder);
+        if ((await moveOf(slot))?.due) await dropMove(slot);
+        return r;
+      };
       const stop = env.alive?.() || null, tries = new Map();
       try {
         for (;;) {
@@ -433,10 +447,11 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
             .sort(([, a], [, b]) => (!!a.done - !!b.done) || (a.since || 0) - (b.since || 0))[0] || [];
           if (!slot) return;
           tries.set(slot, (tries.get(slot) || 0) + 1);
+          if (t.due) { await meet(slot, t); continue; }
           if (t.dir === 'up' && t.owner?.doc) {
             const key = t.owner.key || (await docOf(t.owner.doc))?.key, rec = key ? await env.papers.get(key) : null;
             // Trashed or deleted here since it was staged: let go, and the document, no longer held, says so in Drive.
-            if (!rec || P().trashed(rec)) { await dropMove(slot); await replay(t.owner, folder); continue; }
+            if (!rec || P().trashed(rec)) { await meet(slot, t); continue; }
           }
           try {
             // A download its owner no longer asks for (a picture whose note went, a copy replaced since) is let go before any
@@ -446,19 +461,15 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
               if (still?.tag !== t.tag || still.done) continue;
               if (r !== 'pending') { await dropMove(slot); continue; }
             }
-            if (t.dir === 'up' && t.owner?.rec && more?.current && !await more.current(t.owner, t.tag)) {
-              await dropMove(slot);
-              await replay(t.owner, folder);
-              continue;
-            }
+            if (t.dir === 'up' && t.owner?.rec && more?.current && !await more.current(t.owner, t.tag)) { await meet(slot, t); continue; }
             if (t.dir === 'up' && !t.file) {
               const a = await aimed(t, folder);
-              if (a.as === 'gone') { await dropMove(slot); await replay(t.owner, folder); continue; }
+              if (a.as === 'gone') { await meet(slot, t); continue; }
               if (a.as === 'landed' && t.commit) await commit(slot, t, a.F);
               else await sendMove(slot, t);
             } else if (t.dir === 'down' && !t.done) await bringMove(slot, t);
           } catch (e) {
-            if (e?.why === 'missing') { await dropMove(slot); await replay(t.owner, folder); continue; }
+            if (e?.why === 'missing') { await meet(slot, t); continue; }
             if (SKIP.has(e?.why) || (t.owner?.snap && e?.why === 'quota')) {
               console.warn('Sync to Google Drive: passed over a transfer', slot, e.why);
               await dropMove(slot);
@@ -468,10 +479,12 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
             }
             throw e;
           }
+          const left = await moveOf(slot);
+          if (left?.due) { await meet(slot, left); continue; } // its answer written (commit)
           await replay(t.owner, folder);
           // The day's snapshot takes its answer as it is met; one not taken (its day over) is let go.
-          const left = await moveOf(slot);
-          if (left?.tag === t.tag && left.file) await dropMove(slot);
+          const after = await moveOf(slot);
+          if (after?.tag === t.tag && after.file) await dropMove(slot);
         }
       } finally { stop?.(); }
     };
@@ -1011,7 +1024,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // → 'pending' for one whose file waits for the run's last step.
     const one = (key, h, hint) => held(`doc:${h}`, async () => (await docHeld(h, hint) ? 'pending' : sync(key, h, hint))).then(async (r) => {
       const k = key || (await docOf(h))?.key;
-      if (r !== 'pending') { if (k) await tooLarge('docs', k, false); await settle(`d:${h}:`); }
+      if (k && r !== 'pending') await tooLarge('docs', k, false);
       return r;
     }, async (e) => {
       // Too large to sync: passed over, marked while this device holds it.
@@ -1180,7 +1193,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       for (const k of Object.keys((await S.get(LARGE))[LARGE]?.docs || {})) if (!await env.papers.get(k)) await tooLarge('docs', k, false);
     };
     const hooks = (folder) => ({ D, folder, state: setState, up, down, large: (id, on) => tooLarge('recs', id, on),
-      move: { get: moveOf, drop: dropMove, hold: (slot, R, own) => holds([slot], { R }, own), settle } });
+      move: { get: moveOf, drop: dropMove, hold: (slot, R, own) => holds([slot], { R }, own) } });
     // ---- runs. o.full: everything (turning it on); o.push: only what was saved here.
     const runNow = async (o = {}) => {
       runStop = stopped;
