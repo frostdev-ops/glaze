@@ -10,7 +10,8 @@
 //   think { budget, close, after } (parts ending in format.js's think prefill): the model reasons first, unmasked but for
 //   text tokens and </think>, until it writes </think> (then `after` is fed) or `budget` tokens (then `close` is fed, which
 //   ends with </think>); then the answer, with the grammar's mask as any run. The reasoning is never decoded to text, posted
-//   or returned. budget is cut to what `window` (the model's trained window) leaves beside the prompt and maxTokens.
+//   or returned. window (a Glaze-tuned model's trained window, think or not): the prompt, the close, the reasoning and the
+//   answer fit it; the budget stays whole while the answer keeps min(maxTokens, LIMIT.answer), the answer cut to the rest.
 //   part 'pictures': the picture download (models.json role pictures, LFM3-VL's language model, and the projector it names,
 //   role projector), fetched and removed as one. A run with images loads that model with its projector (vision.js) on the
 //   engine's device, the one model loaded (another is released first); each { image: i } part of its parts is images[i]
@@ -30,7 +31,7 @@
 // The grammar's mask allows the end token only once the JSON is whole, so a run stops at the end token as any other.
 // Classic script; node exports (create), and in a Worker it starts itself.
 var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
-  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, rate: 16 };
+  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, rate: 16, answer: 256 };
   // What the Worker loads, in order, beside this file: required ones throw at its start; optional ones until they ship.
   const IMPORTS = Object.freeze({ required: Object.freeze(['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', 'grammar.js']),
     optional: Object.freeze(['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'ladder.js']) });
@@ -274,16 +275,25 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         const input = head.length + rest.length, room = Math.min(model.context || LIMIT.context, LIMIT.context);
         if (input + m.maxTokens > room) throw fail('request-rejected', 'context', { tokens: input, context: room });
         // Think mode: </think>'s id, the parts the host may feed, and the budget the window leaves.
-        let think = null;
+        let think = null, close = null;
         if (m.think) {
           const end = tok.id('</think>');
           if (end === undefined || !Number.isSafeInteger(m.think.budget) || m.think.budget < 0 || images.length) throw fail('request-rejected', 'unsupported');
-          const window = Number.isSafeInteger(m.window) && m.window > 0 ? Math.min(m.window, room) : room;
-          const close = Uint32Array.from(encode(job, m.think.close)), after = Uint32Array.from(encode(job, m.think.after));
+          close = Uint32Array.from(encode(job, m.think.close));
           // Even no reasoning feeds the close: the engine must hold it, refused before the sequence is touched as any prompt
-          // over the room. The trained window only cuts the budget, as far as nothing, so a request planned for it runs.
+          // over the room.
           if (input + m.maxTokens + close.length > room) throw fail('request-rejected', 'context', { tokens: input + close.length, context: room });
-          think = { end, close, after, budget: Math.max(0, Math.min(m.think.budget, window - input - m.maxTokens - close.length)) };
+          think = { end, close, after: Uint32Array.from(encode(job, m.think.after)), budget: m.think.budget };
+        }
+        // The trained window (a Glaze-tuned model's): the prompt, the close, the reasoning and the answer share it. The
+        // reasoning keeps its budget while the answer is left at least LIMIT.answer (or its maxTokens, if fewer), and the
+        // answer takes the rest, up to maxTokens. A prompt that leaves the answer less runs as planned in the engine's room.
+        let answer = m.maxTokens;
+        if (Number.isSafeInteger(m.window) && m.window > 0) {
+          const space = Math.min(m.window, room) - input - (close?.length || 0), floor = Math.min(m.maxTokens, LIMIT.answer);
+          if (think) think.budget = Math.max(0, Math.min(think.budget, space - floor));
+          const left = space - (think?.budget || 0);
+          if (left >= floor) answer = Math.min(m.maxTokens, left);
         }
         const grammar = m.schema ? matcher(job, m.schema) : null;
         await prefix(job, head, signal);
@@ -323,7 +333,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         }
         const dec = tok.decoder();
         let text = '', n = 0, finish = 'length';
-        while (n < m.maxTokens) {
+        while (n < answer) {
           const id = await step(grammar ? grammar.mask() : null);
           n++;
           if (id === job.eos) { finish = 'stop'; break; }

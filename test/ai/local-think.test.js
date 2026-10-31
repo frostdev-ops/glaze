@@ -144,15 +144,48 @@ test('at the budget the host writes \\n</think> itself and the model answers aft
   assert.equal(think.length, 256, 'the budget, then no more reasoning');
   assert.ok(!think.some((d) => d.id === ID.thought));
   assert.deepEqual(s.eng.log.prefills.at(-1), [...ID.nl, ID.thought], 'the force-close: a line break, then </think>');
-  // A prompt near the window leaves the reasoning less: the budget is cut to the window less prompt, answer and close.
+  // A large maxTokens no longer starves the reasoning: the answer gives way to it.
   const t = setup({ rates: FAST });
   await P.run('local', request(REVIEW, { text: 'y', maxTokens: 3400 }), LOCAL.config({}));
-  const input = t.eng.log.prefills[0].length + t.eng.log.prefills[1].length, left = LOCAL.TUNED - input - 3400 - (ID.nl.length + 1);
-  assert.ok(left > 0 && left < 256, `${left}`);
-  assert.equal(t.eng.log.decodes.filter((d) => d.phase === 'think').length, left);
+  assert.equal(t.eng.log.decodes.filter((d) => d.phase === 'think').length, 256);
+  // A prompt near the window leaves the reasoning less: it gives way only where the answer would get under H.LIMIT.answer.
+  const close = ID.nl.length + 1, overhead = t.eng.log.prefills[0].length + t.eng.log.prefills[1].length - 1;
+  const u = setup({ rates: FAST });
+  await P.run('local', request(REVIEW, { text: 'y'.repeat(LOCAL.TUNED - close - H.LIMIT.answer - 100 - overhead) }), LOCAL.config({}));
+  assert.equal(u.eng.log.prefills[0].length + u.eng.log.prefills[1].length, LOCAL.TUNED - close - H.LIMIT.answer - 100);
+  assert.equal(u.eng.log.decodes.filter((d) => d.phase === 'think').length, 100);
 });
 
-test('think mode holds the forced close inside the engine\'s room before any prefill; the trained window only cuts the budget', async () => {
+// D4 (glaze-plans/lfm-tune/reports/d4-r1.md): writer.review asks 4,096 tokens of answer, the tuned model's whole window, so
+// the host cut its reasoning to nothing. FORMAT-v2: the reasoning has its budget beside the answer, all in the window.
+test('writer.review thinks at its budget on a Glaze-tuned model, and the prompt, reasoning and answer never pass the window', async () => {
+  const RV = require('../../extension/ai/tasks/writer-review.js'), X = require('../../extension/ai/text.js');
+  const real = RV.task.build(RV.task.input({ text: 'The the cat sat on the mat. It were happy.', context: {} }), { text: X, caps: LOCAL.caps({}) });
+  assert.equal(real.maxTokens, 4096);
+  const s = setup({ rates: FAST, reply: '{"issues":[]}' });
+  const r = await P.run('local', { ...real, schema: RV.OUTPUT, task: { id: 'writer.review', version: RV.task.version } }, LOCAL.config({}));
+  assert.deepEqual(r.json, { issues: [] });
+  assert.equal(s.runs[0].think.budget, 256);
+  assert.equal(s.runs[0].window, LOCAL.TUNED);
+  assert.equal(s.eng.log.decodes.filter((d) => d.phase === 'think').length, 256, 'the whole budget');
+  // An answer that would run on: the window holds the prompt, the close, the reasoning and the answer, and no more.
+  const LONG = T.define({ id: 'writer.review', version: 9, input: (raw) => raw, check: (o) => o, output: 'text',
+    build: (input, { text }) => text.request({ system: 'Answer.', data: [{ label: 'text', text: input.text }], maxTokens: 4096 }) });
+  for (const text of ['x', 'x'.repeat(2500)]) {
+    const t = setup({ rates: FAST, reply: 'a'.repeat(5000) });
+    const out = await P.run('local', request(LONG, { text }), LOCAL.config({}));
+    const fed = t.eng.log.prefills.flat().length, thought = t.eng.log.decodes.filter((d) => d.phase === 'think').length;
+    assert.equal(thought, 256);
+    assert.equal(out.finish, 'length');
+    assert.equal(fed + t.eng.log.decodes.length, LOCAL.TUNED, `${text.length}: exactly the window`);
+  }
+  // A stock model has no trained window to share: its answer keeps the whole maxTokens.
+  const st = setup({ here: { 'lfm3-q4': 'ready' }, rates: FAST, reply: 'a'.repeat(5000) });
+  await P.run('local', request(LONG, { text: 'x' }), LOCAL.config({}));
+  assert.equal(st.eng.log.decodes.length, 4096);
+});
+
+test('think mode holds the forced close inside the engine\'s room before any prefill; the trained window is shared by the reasoning and the answer', async () => {
   const req = request(REVIEW, { text: 'x' });
   const F = require('../../extension/ai/local/format.js');
   const clean = require('../../extension/ai/request.js').clean(req);
@@ -166,19 +199,18 @@ test('think mode holds the forced close inside the engine\'s room before any pre
     assert.equal(s.eng.log.prefills.length, 0, 'an oversized run never mutates the model');
     assert.equal(s.eng.log.decodes.length, 0);
   }
-  // Exactly enough room for the close: no sampled reasoning, and the answer keeps its whole maxTokens.
+  // A maxTokens that fills the window: the reasoning keeps its budget, and the answer gives way to it.
   for (const context of [16000, 1024]) {
-    const window = Math.min(context, LOCAL.TUNED), s = setup({ rates: FAST, context }), maxTokens = window - prompt - close;
-    assert.deepEqual((await P.run('local', { ...req, maxTokens }, LOCAL.config({}))).json, { text: 'hello there' });
-    assert.equal(s.eng.log.decodes.filter((d) => d.phase === 'think').length, 0);
+    const window = Math.min(context, LOCAL.TUNED), s = setup({ rates: FAST, context, reply: `{"text":"${'a'.repeat(5000)}` }), maxTokens = window - prompt - close;
+    await assert.rejects(P.run('local', { ...req, maxTokens }, LOCAL.config({})));
+    assert.equal(s.eng.log.decodes.filter((d) => d.phase === 'think').length, Math.min(256, maxTokens - H.LIMIT.answer), `${context}`);
     assert.deepEqual(s.eng.log.prefills.at(-1), [...ID.nl, ID.thought]);
-    assert.equal(s.eng.log.prefills.flat().length + maxTokens, window);
+    assert.equal(s.eng.log.prefills.flat().length + s.eng.log.decodes.length, window, 'the answer cut where the window ends');
   }
-  // A request planned up to the trained window still runs in think mode, as it would directly: no reasoning, the close
-  // past the window by its two tokens, well inside the engine's room.
+  // A request planned up to the trained window still runs in think mode, the close inside it.
   const s = setup({ rates: FAST });
   assert.deepEqual((await P.run('local', { ...req, maxTokens: LOCAL.TUNED - prompt }, LOCAL.config({}))).json, { text: 'hello there' });
-  assert.equal(s.eng.log.decodes.filter((d) => d.phase === 'think').length, 0);
+  assert.equal(s.eng.log.decodes.filter((d) => d.phase === 'think').length, 256);
 });
 
 test('the speed gate keeps measured versus estimated rates across worker restarts', async () => {

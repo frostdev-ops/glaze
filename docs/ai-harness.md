@@ -471,8 +471,10 @@ browser closes. 40: a full budget then costs at most 6.4 s, and every machine th
 decodes the reasoning unconstrained but for its own mask (text tokens and `</think>`: never the end token or another
 control token) until the model writes `</think>` or the budget is spent, where it feeds `\n</think>` itself; then the
 answer, with the JSON grammar as any run. The reasoning is never decoded to text, posted or returned; `maxTokens` counts the
-answer only, and the budget is cut to what the model's trained window leaves beside the prompt, the answer and the close
-(a request whose close the engine's room can't hold is refused before prefill); `usage.output` counts both. `test/ai/local-think.test.js` holds it with a stub engine.
+answer only. A Glaze-tuned model's trained window holds the prompt, the close, the reasoning and the answer, think mode or
+not: the reasoning keeps its budget while the answer is left at least 256 tokens (or its `maxTokens`, if fewer), and the
+answer is cut to the rest (writer.review asks 4,096 and still thinks its 256); a prompt that leaves the answer less runs
+as planned in the engine's room (a request whose close that room can't hold is refused before prefill); `usage.output` counts both. `test/ai/local-think.test.js` holds it with a stub engine.
 The window a run plans for is its model's: 4,096 tokens for a model without `stock` (FORMAT.md's inference window; the
 training data was made at caps.context 4096), 14,400 (16,000 less a tenth) for a stock one, the picture model included.
 `catalog` says the window of the text model the connection runs (its tier's, else the one here) and that model's store id
