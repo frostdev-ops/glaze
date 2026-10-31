@@ -19,7 +19,7 @@ var GZ_INSTANT_LIB = globalThis.GZ_INSTANT_LIB || (() => {
   const READY = {
     // Every course's tile has its recent and upcoming rows, or says it has none.
     grades: (root) => {
-      const tiles = live(root, 'bb-base-grades-student > div > .base-grades-course-tile');
+      const tiles = live(root, 'bb-base-grades-student .base-grades-course-tile');
       return tiles.length > 0 && tiles.every((t) => t.querySelector('.recent-upcoming .element-card, .base-grades-empty-state'));
     },
     courses: (root) => live(root, 'div.default-group bb-base-course-card > article.course-element-card .js-course-title-element').length > 0,
