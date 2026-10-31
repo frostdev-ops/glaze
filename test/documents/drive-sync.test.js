@@ -1247,3 +1247,45 @@ test('a document sent up again beside a copy in Drive\'s trash brings the device
   assert.deepEqual(visible.map((f) => f.meta.id), [first], 'the folder shows the lowest copy once');
   noDeletes(drive);
 });
+
+test('a deck sent again with its content unchanged is no edit outside Glaze to the other device: nothing goes back and forth', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-000000000a09';
+  const ref = await a.files.put(enc('PK deck one'), MIME.pptx);
+  await b.files.put(enc('PK deck one'), MIME.pptx);
+  const rec = { kind: 'slides', file: ref, size: ref.size, title: 'Talk', named: true, ext: '.pptx' };
+  await a.papers.save(key, rec);
+  await b.papers.save(key, rec); // B holds the same deck, not linked yet (its first sync stopped before it was)
+  assert.ok((await a.sync.set(true)).ok);
+  // The deck is replaced outside Glaze; B meets it first: Drive's replacement kept as a version, B's own sent again.
+  drive.edit(exportOf(drive, key).meta.id, 'PK deck edited outside');
+  assert.ok((await b.sync.set(true)).ok);
+  const uploads = () => drive.log.filter((x) => x.method !== 'GET' && x.path.startsWith('/upload/')).length;
+  for (let i = 0; i < 2; i++) { clock.t += 60e3; assert.ok((await a.sync.run()).ok); assert.ok((await b.sync.run()).ok); }
+  const n = uploads();
+  for (let i = 0; i < 3; i++) { clock.t += 60e3; assert.ok((await a.sync.run()).ok); assert.ok((await b.sync.run()).ok); }
+  assert.equal(uploads(), n, 'quiet: no more uploads');
+  assert.equal((await a.papers.get(key)).file.hash, (await b.papers.get(key)).file.hash, 'both hold the same deck');
+});
+
+test('a Word file edited outside Glaze, kept by one device and kept again by another editing the paper, leaves one file of the document\'s own', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-000000000a10';
+  await b.papers.save(key, { doc: doc('Draft'), title: 'Essay', named: true });
+  assert.ok((await b.sync.set(true)).ok);
+  const first = exportOf(drive, key).meta.id;
+  drive.edit(first, 'PK edited in Word');
+  assert.ok((await a.sync.set(true)).ok);
+  await a.papers.save(key, { doc: doc('A edits') });
+  assert.ok((await b.sync.run()).ok, 'B keeps the edited file and writes a new one');
+  await a.sync.touched(key);
+  clock.t += 60e3;
+  assert.ok((await a.sync.run()).ok);
+  assert.ok((await b.sync.run()).ok);
+  const folder = glazeFolder(drive).meta.id;
+  const own = [...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'file' && f.meta.appProperties.key === sha(key).slice(0, 32) && f.meta.parents.includes(folder) && !drive.view(f.meta.id).trashed);
+  assert.equal(own.length, 1, 'one file of its own in Glaze/');
+  assert.equal(sidecarJson(drive, key).file, own[0].meta.id);
+  assert.equal(drive.files.get(first).bytes.toString(), 'PK edited in Word', 'the edited file kept as it is');
+  assert.equal(textOf(sidecarJson(drive, key).record.doc), 'A edits');
+});
