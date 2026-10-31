@@ -229,7 +229,7 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
     de: ['der', 'die', 'das', 'und', 'ist', 'nicht', 'mit', 'ein', 'eine', 'auch', 'sich', 'auf', 'wird', 'dass', 'werden', 'sind', 'den', 'dem', 'keine', 'zu', 'oder', 'aber', 'nur', 'ohne', 'für'],
     es: ['el', 'los', 'las', 'que', 'y', 'del', 'por', 'una', 'con', 'es', 'más', 'pero', 'lo', 'sus', 'su', 'al', 'sin', 'solo', 'ni', 'muy'],
     fr: ['le', 'les', 'des', 'et', 'est', 'une', 'dans', 'pour', 'pas', 'du', 'sur', 'avec', 'qui', 'ce', 'sont', 'au', 'ne', 'aux', 'sans', 'mais', 'ou', 'il', 'elle'],
-    nl: ['het', 'een', 'van', 'niet', 'dat', 'op', 'voor', 'zijn', 'ook', 'wordt', 'deze', 'worden', 'aan', 'geen', 'naar', 'bij', 'maar', 'dus', 'zonder', 'blijft', 'past', 'er', 'wat', 'nog', 'wel', 'om', 'als'],
+    nl: ['het', 'een', 'van', 'niet', 'dat', 'op', 'voor', 'zijn', 'ook', 'wordt', 'deze', 'worden', 'aan', 'geen', 'naar', 'bij', 'maar', 'dus', 'zonder', 'blijft', 'past', 'er', 'wat', 'nog', 'wel', 'om', 'als', 'ze', 'haar', 'hij', 'zij', 'hun', 'heeft', 'hebben', 'kan', 'tot', 'uit'],
     'pt-BR': ['os', 'uma', 'não', 'do', 'da', 'com', 'é', 'em', 'também', 'são', 'pelo', 'pela', 'ao', 'seu', 'sua', 'que', 'e', 'sem', 'mas', 'nem', 'apenas', 'nos', 'nas'],
   };
   const SMALL = new Map();
@@ -273,9 +273,9 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
   const prose = (lang) => PROSE[lang] || PROSE.en;
   // Glaze's own comments, through t() in the draft's language (i18n/<lang>.js).
   const COMMENTS = {
-    estimate: 'Your author-page citations and Works Cited miss required APA style; no rubric level descriptions are supplied, so Glaze estimates {level}, the lowest band ({value}/{points}; {deduction} points deducted).',
-    brief: 'Your author-page citations and Works Cited miss required APA style; with no level descriptions, Glaze estimates the lowest band ({value}/{points}; {deduction} points deducted).',
-    fallback: 'Your author-page citations and Works Cited heading conflict with required APA style; rubric rating: {level} ({earned}/{total} points).',
+    estimate: 'Your author-page citations and {heading} miss required APA style; no rubric level descriptions are supplied, so Glaze estimates {level}, the lowest band ({value}/{points}; {deduction} points deducted).',
+    brief: 'Your author-page citations and {heading} miss required APA style; with no level descriptions, Glaze estimates the lowest band ({value}/{points}; {deduction} points deducted).',
+    fallback: 'Your author-page citations and {heading} heading conflict with required APA style; rubric rating: {level} ({earned}/{total} points).',
   };
   // An assessment speaks to the student or about the draft; a bare sentence with neither is wording for the paper.
   const ABOUT = /\b(?:you|your|yours|draft|paper|essay|post|reply|paragraph|sentence|thesis|claim|argument|evidence|sources?|citations?|quotes?|quotation|introduction|conclusion|section|analysis|requirement|rubric|criterion|instructions|prompt|words?|length|organization|structure|transition)\b/i;
@@ -321,25 +321,82 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
     return editionClaims(value).some((claim) => !supplied.has(claim.key)
       && !(presets.has(claim.key) && /^[ \t]+(?:preset|template)\b/i.test(value.slice(claim.end))));
   };
-  const requiredStyle = (row) => {
-    if (styleFamilies(row.rubric).length > 1 && /\b(?:or|either|alternatives?|accepted|choose|examples?|compar\w*|versus|discuss\w*|about)\b/i.test(row.rubric || '')) return null;
+  // The citation pipeline's words in Glaze's other locales (English keeps its own rules below, unchanged).
+  // Short labels inherit the draft's language. Read longer fragments in their own language so English homographs
+  // ("still", "permit", "Absent", "APA format") never acquire a localized meaning.
+  const localeReading = (value, lang = 'en') => (languageOf(value) || lang) !== 'en';
+  // A row label naming APA citations: "APA-Zitierweise", "Zitierweise nach APA", "Estilo APA", "Normas da APA", "APA-stijl".
+  const APA_EDITION = String.raw`(?:[ \t]*\(?\d{1,2}(?:st|nd|rd|th|\.?[ªa]|\.|e|ème)?(?:[ \t]+(?:edition|ed\.?|Auflage|Aufl\.|édition|éd\.|edición|edição|editie))?\)?)?`;
+  const APA_AFTER = String.raw`Stil|Zitierweise|Zitierstil|Zitate|Zitation(?:en)?|Quellenangaben|Belege|Format|stijl|bronvermelding(?:en)?|verwijzingen|citaten|normen|opmaak`;
+  const APA_BEFORE = String.raw`Zitierweise|Zitierstil|Zitate|Zitation(?:en)?|Quellenangaben|Belege|Format|Stil|estilo|normas?|citas?|citaci(?:ón|ones)|referencias|formato|style|normes?|citations?|références|citações|citação|referências`
+    + String.raw`|bronvermelding(?:en)?|verwijzingen|citaten|stijl|opmaak|normen`;
+  const APA_LINK = String.raw`de|del|da|do|des|du|selon|según|segundo|conforme|nach|gemäß|laut|volgens|conform|en|em|no|na|in|im|la|le|les|el|o|a|formato|format|estilo|style|normas|normes|stijl`;
+  const LOCALE_APA_LABEL = new RegExp(String.raw`^(?:APA${APA_EDITION}(?:[ \t]*-?[ \t]*(?:${APA_AFTER}))?|(?:${APA_BEFORE})(?:[ \t]+(?:${APA_LINK})){0,3}[ \t]+(?:l['’])?APA${APA_EDITION})$`, 'iu');
+  // Words that make a style one choice among others, or only a topic.
+  const LOCALE_STYLE_CHOICE = new RegExp(String.raw`${B}(?:oder|entweder|optional|wahlweise|Beispiel\p{L}*|vergleich\p{L}*|über|nicht|ou|soit|facultati\p{L}*|exemple\p{L}*|compar\p{L}*|pas|o|u|opcional|ejemplo\p{L}*|sobre|no|exemplo\p{L}*|não|of|optioneel|voorbeeld\p{L}*|vergelijk\p{L}*|niet)${E}`, 'iu');
+  // A requirement worded in the language: "nach APA", "selon les normes APA", "según APA", "de acordo com a APA", "volgens APA".
+  const LOCALE_STYLE_REQUIRED = new RegExp(String.raw`${B}(?:verwende\p{L}*|befolge\p{L}*|nach|gemäß|laut|erforderlich|muss|müssen|utilise\p{L}*|suivre|suivez|respecte\p{L}*|selon|exigé\p{L}*|doit|doivent|usa\p{L}*|utiliza\p{L}*|sigue\p{L}*|según|requiere\p{L}*|debe\p{L}*|segue\p{L}*|segundo|conforme|exige\p{L}*|deve\p{L}*|gebruik\p{L}*|volg\p{L}*|volgens|vereist|moet\p{L}*)${E}`, 'iu');
+  // An assignment that leaves the citation style open: a style word and a word allowing any, or not requiring one.
+  const STYLE_NOUNS = String.raw`Zitierstil\p{L}*|Zitierweise\p{L}*|Zitationsstil\p{L}*|Stil\p{L}*|Format\p{L}*|style\p{L}*|format\p{L}*|normes?|estilo\p{L}*|formato\p{L}*|normas?|citeerstijl\p{L}*|bronvermeldingsstijl\p{L}*|stijl\p{L}*|opmaak`;
+  const LOCALE_STYLE_WORD = new RegExp(`${B}(?:${STYLE_NOUNS})${E}`, 'iu');
+  const LOCALE_STYLE_OPEN = new RegExp(String.raw`${B}(?:akzeptiert|erlaubt|zulässig|freigestellt|optional|wahlweise|frei|nicht\s+(?:erforderlich|bewertet|vorgeschrieben)`
+    + String.raw`|libre|accepté\p{L}*|autorisé\p{L}*|permis|facultati\p{L}*|au\s+choix|n['’]importe|tout\s+style|pas\s+(?:exigé|obligatoire|évalué)\p{L}*`
+    + String.raw`|acept\p{L}*|permit\p{L}*|opcional|no\s+(?:se\s+)?(?:exige|requiere|evalúa)`
+    + String.raw`|aceit\p{L}*|livre|não\s+(?:é\s+)?(?:exigid|obrigatóri|avaliad)\p{L}*`
+    + String.raw`|toegestaan|geaccepteerd|vrij|optioneel|naar\s+keuze|niet\s+(?:verplicht|vereist|beoordeeld))${E}`, 'iu');
+  // "Every/any style" leaves a choice; "APA for every source" does not. Only style modifiers can intervene.
+  const STYLE_MODIFIERS = String.raw`bestimmt\p{L}*|vorgeschrieben\p{L}*|particulier\p{L}*|spécifi\p{L}*|específic\p{L}*|particular\p{L}*|specifiek\p{L}*`;
+  const LOCALE_ANY_STYLE = new RegExp(String.raw`${B}(?:beliebig\p{L}*|jede[rsnm]?|cualquier\p{L}*|qualquer|elke|kein\p{L}*|aucun\p{L}*|geen)(?:\s+(?:${STYLE_MODIFIERS})){0,2}\s+(?:${STYLE_NOUNS})${E}`
+    + String.raw`|${B}(?:no\s+(?:hay|existe)|não\s+(?:há|existe))\s+(?:(?:un|um|uma)\s+)?(?:${STYLE_NOUNS})${E}`, 'iu');
+  const STYLE_USE = String.raw`verwend\p{L}*|benutz\p{L}*|nutz\p{L}*|befolg\p{L}*|anwend\p{L}*|us[ae]\p{L}*|utili\p{L}*|apli\p{L}*|sig[au]\p{L}*|segu\p{L}*|gebruik\p{L}*|volg\p{L}*`;
+  const STYLE_NEGATED_USE = String.raw`(?:nicht|niemals|nie|no|não|niet)\s+(?:\p{L}+\s+){0,3}(?:${STYLE_USE})`
+    + String.raw`|n['’](?:utilis|appliqu|employ|suiv)\p{L}*\s+(?:pas|jamais)`
+    + String.raw`|(?:ne\s+|n['’])(?:\p{L}+\s+){0,2}(?:pas|jamais)\s+(?:\p{L}+\s+){0,2}(?:utilis|appliqu|employ|suiv)\p{L}*`;
+  const LOCALE_STYLE_PROHIBITED = new RegExp(String.raw`${B}(?:${STYLE_NEGATED_USE})${E}[^.!?\n]{0,60}${B}APA${E}`
+    + String.raw`|${B}APA${E}[^.!?\n]{0,30}${B}(?:${STYLE_NEGATED_USE})${E}`
+    + String.raw`|${B}(?:verwend\p{L}*|benutz\p{L}*|nutz\p{L}*|befolg\p{L}*|gebruik\p{L}*|volg\p{L}*)${E}[^.!?\n]{0,60}${B}APA${E}(?:[-\s]+(?:${STYLE_NOUNS}))?\s+(?:bitte\s+)?(?:nicht|niet)${E}`, 'iu');
+  const localeStyleException = (clause, lang) => {
+    const families = styleFamilies(clause);
+    return localeReading(clause, lang) && ((families.includes('apa') && LOCALE_STYLE_PROHIBITED.test(clause))
+      || ((families.length || LOCALE_STYLE_WORD.test(clause)) && (LOCALE_STYLE_OPEN.test(clause) || LOCALE_ANY_STYLE.test(clause))));
+  };
+  // A rubric level named for citations, sources, format or what is missing.
+  const LOCALE_CITATION_LEVEL = new RegExp(String.raw`${B}(?:Zitat\p{L}*|Zitier\p{L}*|Quelle\p{L}*|Beleg\p{L}*|Format\p{L}*|Stil\p{L}*|unvollständig\p{L}*|fehlend\p{L}*|kein\p{L}*|cita\p{L}*|referencia\p{L}*|autor\p{L}*|fuentes?|formato\p{L}*|estilo\p{L}*|incompl[eè]t\p{L}*|ausente\p{L}*|falta\p{L}*|ningun\p{L}*`
+    + String.raw`|citation\p{L}*|référence\p{L}*|auteur\p{L}*|style\p{L}*|manquant\p{L}*|absent\p{L}*|aucun\p{L}*|citaç\p{L}*|referência\p{L}*|fontes?|faltando|nenhum\p{L}*|bron\p{L}*|verwijzing\p{L}*|opmaak|stijl\p{L}*|onvolledig\p{L}*|ontbrek\p{L}*|geen)${E}`, 'iu');
+  // A line that shows a style rather than using one.
+  const LOCALE_STYLE_EXAMPLE = new RegExp(String.raw`${B}(?:Stil\p{L}*|Format\p{L}*|Beispiel\p{L}*|Vergleich\p{L}*|estilo\p{L}*|formato\p{L}*|ejemplo\p{L}*|exemplo\p{L}*|comparaç\p{L}*|comparaci\p{L}*|style\p{L}*|format\p{L}*|exemple\p{L}*|comparaison\p{L}*|stijl\p{L}*|opmaak|voorbeeld\p{L}*|vergelijking\p{L}*)${E}`, 'iu');
+  // Bibliography headings. An author-page list's heading witnesses a different system from APA: "Works Cited" and the
+  // languages' names for it, and in German, Dutch, French, Spanish and Portuguese their usual list names, which name no
+  // system. APA's own list names (References, Referencias, Références, Referências, Referenties) and English
+  // "Bibliography" (Chicago's) are headings that witness nothing.
+  const WITNESS_HEADINGS = String.raw`Works Cited|Literaturverzeichnis|Quellenverzeichnis|Quellen|Zitierte Werke|Bibliographie|Ouvrages cités|Œuvres citées|Obras citadas|Bibliografía|Bibliografia|Literatuurlijst|Bronnenlijst|Bronnen|Geciteerde werken`;
+  const BIBLIOGRAPHY_HEADING = new RegExp(String.raw`^[ \t]*(${WITNESS_HEADINGS}|References|Bibliography|Notes|Referencias|Références|Referências|Referenties)[ \t]*:?[ \t]*$`, 'gimu');
+  const WITNESS_HEADING = new RegExp(String.raw`^(?:${WITNESS_HEADINGS})$`, 'iu');
+  const requiredStyle = (row, lang = 'en') => {
+    if (String(row.rubric || '').split(/[.!?\n]+/).some((clause) => localeStyleException(clause, lang))) return null;
+    if (styleFamilies(row.rubric).length > 1 && (/\b(?:or|either|alternatives?|accepted|choose|examples?|compar\w*|versus|discuss\w*|about)\b/i.test(row.rubric || '')
+      || (localeReading(row.rubric, lang) && LOCALE_STYLE_CHOICE.test(row.rubric)))) return null;
     for (const value of [row.label, row.rubric]) {
       const s = W.plain(value), families = styleFamilies(s);
       if (families.length !== 1 || /\b(?:or|either|optional|examples?|compar\w*|versus|discuss\w*|about|not)\b|\bsuch as\b/i.test(s)) continue;
       if (/^(?:APA|MLA|Chicago)\b/i.test(s) || /\b(?:use|follow|apply|requires?|must)\b/i.test(s)) return families[0];
+      if (localeReading(s, lang) && (LOCALE_APA_LABEL.test(s) || (!LOCALE_STYLE_CHOICE.test(s) && LOCALE_STYLE_REQUIRED.test(s)))) return families[0];
     }
     return null;
   };
-  const citationTarget = (row) => /^APA(?:[ \t]+\(?\d{1,2}(?:st|nd|rd|th)?(?:[ \t]+(?:edition|ed\.?))?\)?)?(?:[ \t]+(?:style|citations?|citation style|references?))?$/i.test(W.plain(row.label));
-  const styleException = (value) => String(value || '').split(/[.!?\n]+/).some((clause) => {
+  const citationTarget = (row, lang = 'en') => /^APA(?:[ \t]+\(?\d{1,2}(?:st|nd|rd|th)?(?:[ \t]+(?:edition|ed\.?))?\)?)?(?:[ \t]+(?:style|citations?|citation style|references?))?$/i.test(W.plain(row.label))
+    || (localeReading(row.label, lang) && LOCALE_APA_LABEL.test(W.plain(row.label)));
+  const styleException = (value, lang = 'en') => String(value || '').split(/[.!?\n]+/).some((clause) => {
     const families = styleFamilies(clause), general = /\b(?:citation|reference|bibliography)\s+(?:styles?|systems?|formats?|standards?|conventions?)\b|\b(?:style|formatting)\b/i.test(clause);
-    if (!families.length && !general) return false;
+    const localized = localeStyleException(clause, lang);
+    if (!families.length && !general) return localized;
     return families.some((family) => family !== 'apa') || /\b(?:do not|don't|must not|never)\s+(?:use|follow|apply|require)\s+APA\b/i.test(clause)
       || /\b(?:either|alternatives?|accepted|permitted|allowed|optional|exceptions?|whichever|prefer\w*)\b|\bnot\s+(?:required|assessed|graded)\b|\bno\s+(?:particular|specific|required|prescribed)\b/i.test(clause)
       || /\bany\b[^.!?\n]{0,50}\b(?:styles?|systems?|formats?|standards?|conventions?)\b/i.test(clause)
-      || (families.length > 1 && /\b(?:or|compar\w*|versus|discuss\w*)\b/i.test(clause));
+      || (families.length > 1 && /\b(?:or|compar\w*|versus|discuss\w*)\b/i.test(clause))
+      || localized;
   });
-  const citationEvidence = (draft) => {
+  const citationEvidence = (draft, lang = 'en') => {
     if (!C?.cites) return null;
     const quoted = quotedRanges(draft);
     const exact = (c) => Number.isSafeInteger(c.from) && Number.isSafeInteger(c.to) && draft.slice(c.from, c.to) === c.text;
@@ -348,14 +405,15 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
       const before = draft.slice(0, c.from).trimEnd().at(-1), after = draft.slice(c.to).trimStart()[0];
       if (/["“‘]/.test(before || '') && /["”’]/.test(after || '')) return true;
       const line = draft.slice(draft.lastIndexOf('\n', c.from - 1) + 1, (draft.indexOf('\n', c.to) + 1 || draft.length + 1) - 1);
-      return /\b(?:APA|MLA|Chicago)\b/i.test(line) && /\b(?:styles?|formats?|examples?|comparisons?|versus)\b/i.test(line);
+      return /\b(?:APA|MLA|Chicago)\b/i.test(line) && (/\b(?:styles?|formats?|examples?|comparisons?|versus)\b/i.test(line)
+        || (localeReading(line, lang) && LOCALE_STYLE_EXAMPLE.test(line)));
     };
     const mla = C.cites(draft, [], 'mla9').filter((c) => exact(c) && !example(c));
     const yearLike = (c) => /^(?:1[5-9]|20|21)\d{2}[a-z]?$/i.test(String(c.page || '').trim()) || /,\s*(?:19|20)\d{2}/.test(c.text);
     const pages = [...new Map(mla.filter((c) => c.kind === 'paren' && c.name && c.page && !c.year && !yearLike(c)).map((c) => [c.text, c])).values()];
     const dated = C.cites(draft, [], 'apa7').filter((c) => exact(c) && !example(c) && c.name && c.year);
-    const headings = [...draft.matchAll(/^[ \t]*(Works Cited|References|Bibliography|Notes)[ \t]*:?[ \t]*$/gim)];
-    const works = headings.find((m) => /^works cited$/i.test(m[1]));
+    const headings = [...draft.matchAll(BIBLIOGRAPHY_HEADING)];
+    const works = headings.find((m) => WITNESS_HEADING.test(m[1]));
     if (!works || headings.length !== 1 || pages.length < 2 || dated.length || mla.some(yearLike)) return null;
     // A named-page regex alone can match ordinary labels such as "Apollo 11". Corroborate each independent witness
     // against an actual bibliography entry's leading author/title before it can constrain a grade.
@@ -377,10 +435,10 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
   const citationObservations = new WeakMap();
   const citationWitnesses = (inp, row) => {
     const a = inp.context.assignment, scoped = { ...row, rubric: row.rubric || a.rowTexts?.[row.id] || row.label };
-    if (!citationTarget(scoped) || requiredStyle(scoped) !== 'apa' || styleException(scoped.rubric)
-      || [inp.context.prompt, a.instructions, a.description, a.rubricDetail, ...a.files.map((f) => f.text), ...(inp.visualRequirements || []), ...(inp.visualReadings || []).map((r) => r.text)].some(styleException)) return null;
+    if (!citationTarget(scoped, inp.lang) || requiredStyle(scoped, inp.lang) !== 'apa' || styleException(scoped.rubric, inp.lang)
+      || [inp.context.prompt, a.instructions, a.description, a.rubricDetail, ...a.files.map((f) => f.text), ...(inp.visualRequirements || []), ...(inp.visualReadings || []).map((r) => r.text)].some((value) => styleException(value, inp.lang))) return null;
     let observed = citationObservations.get(inp);
-    if (!observed || observed.text !== inp.text) { observed = { text: inp.text, evidence: citationEvidence(inp.text) }; citationObservations.set(inp, observed); }
+    if (!observed || observed.text !== inp.text) { observed = { text: inp.text, evidence: citationEvidence(inp.text, inp.lang) }; citationObservations.set(inp, observed); }
     return observed.evidence;
   };
   const citationEstimate = (inp, row) => {
@@ -390,14 +448,20 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
     const levels = row.levels;
     if (new Set(levels.map((level) => level.label.trim().toLowerCase())).size !== levels.length
       || levels.some((level) => !level.label.trim() || !Number.isFinite(level.value) || level.value < 0 || level.value > row.points
-        || level.label.trim().split(/\s+/).length > 4 || styleFamilies(level.label).length || /\b(?:citations?|references?|authors?|format\w*|style|incomplete|missing|no)\b/i.test(level.label))) return null;
+        || level.label.trim().split(/\s+/).length > 4 || styleFamilies(level.label).length || /\b(?:citations?|references?|authors?|format\w*|style|incomplete|missing|no)\b/i.test(level.label)
+        || (localeReading(level.label, inp.lang) && LOCALE_CITATION_LEVEL.test(level.label)))) return null;
     const values = levels.map((level) => level.value), deltas = values.slice(1).map((value, i) => value - values[i]);
     if (Math.max(...values) !== row.points || !(deltas.every((value) => value > 0) || deltas.every((value) => value < 0))) return null;
     return levels.find((level) => level.value === Math.min(...values));
   };
-  const citationEstimateComment = (row, level, lang = 'en') => {
+  // The bibliography heading as the draft writes it ("Works Cited", "Literaturverzeichnis"), for Glaze's own comments.
+  const headingOf = (evidence) => {
+    const heading = (evidence?.witnesses.find((w) => w.kind === 'bibliography-heading')?.text || 'Works Cited').trim().replace(/[ \t]*:$/, '');
+    return /^works cited$/i.test(heading) ? 'Works Cited' : heading;
+  };
+  const citationEstimateComment = (row, level, lang = 'en', heading = 'Works Cited') => {
     const deduction = Number((row.points - level.value).toPrecision(12));
-    const vars = { level: level.label, value: figure(level.value, lang), points: figure(row.points, lang), deduction: figure(deduction, lang) };
+    const vars = { heading, level: level.label, value: figure(level.value, lang), points: figure(row.points, lang), deduction: figure(deduction, lang) };
     const reason = words(lang, COMMENTS.estimate, vars);
     if (reason.length <= prose(lang)) return reason;
     const brief = words(lang, COMMENTS.brief, vars);
@@ -413,6 +477,8 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
       ['auteurs?', String.raw`pagina\p{L}*`, String.raw`zonder|geen|ontbr\p{L}*|mist|missen`, String.raw`jaar|jaartal(?:len)?|jaren|publicatiejaar`, String.raw`geciteerde\s+werken|literatuurlijst`],
     ].map(([author, page, missing, year, heading]) => new RegExp(String.raw`${B}(?:${heading})${E}|${B}(?:${author})${E}[-\s/]{0,3}(?:\p{L}{1,3}\s+){0,2}(?:${page})${E}`
       + String.raw`|${B}(?:${missing})(?:${E}|(?<=['’]))[^.!?]{0,60}${B}(?:${year})${E}|${B}(?:${year})${E}[^.!?]{0,60}${B}(?:${missing})(?:${E}|(?<=['’]))`, 'iu'))];
+  // Or names the draft's own heading.
+  const citationNamed = (comment, heading = '') => CITATION_NAMED.some((r) => r.test(comment)) || (!!heading && comment.toLocaleLowerCase().includes(heading.toLocaleLowerCase()));
   // The same reading in Glaze's other locales: what calls a style unverified or unmet, what turns a clause (negation,
   // concession, "rather than"), what says a draft follows a style, a causal "because", and what says one style meets
   // another. German and Dutch put the verb last in a "because" clause ("weil er MLA folgt"), so a verb may follow its style.
@@ -641,7 +707,7 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
     if (estimates && complete && !materialReason && !invalidScore && ordered.every((c) => c.comment)) for (const criterion of ordered) {
       const row = rows.get(criterion.id), level = criterion.level && Number.isFinite(criterion.level.value) ? citationEstimate(inp, row) : null;
       if (!level) continue;
-      const comment = citationEstimateComment(row, level, inp.lang);
+      const comment = citationEstimateComment(row, level, inp.lang, headingOf(citationWitnesses(inp, row)));
       if (!comment) continue;
       if (criterion.status !== 'missing' || criterion.score.earned !== level.value || criterion.comment !== comment) revised.push(comment);
       Object.assign(criterion, { status: 'missing', comment, quotes: [], level: { label: level.label, value: level.value, points: row.points }, score: { earned: level.value, total: row.points } });
@@ -932,7 +998,7 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
           const checkedDecision = { ...decision, level: assessed.level?.label || null, score: assessed.score?.earned ?? null };
           const estimated = estimateFor(plan.row);
           if (estimated) {
-            const reason = citationEstimateComment(plan.row, estimated, inp.lang);
+            const reason = citationEstimateComment(plan.row, estimated, inp.lang, headingOf(citationsFor(plan.row)));
             row = reason && reason.length <= prose(inp.lang) ? resolve({ ...checkedDecision, criterion: plan.row.id, comment: reason }) : null;
             if (!row) inp.incomplete = true;
             break;
@@ -946,14 +1012,14 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
           let commentFailure = '';
           const explained = await attempt(comment, COMMENT, (out) => {
             if (S.validate(out, commentOutput).length || !completeSentence(out.comment) || !assesses(out.comment, grounded)) return null;
-            if (citationsFor(plan.row) && !CITATION_NAMED.some((r) => r.test(out.comment))) return null;
-            return contradictoryStyle(out.comment, requiredStyle(plan.row), checkedDecision.status) ? RECONSIDER : resolve({ ...checkedDecision, criterion: plan.row.id, comment: out.comment });
+            if (citationsFor(plan.row) && !citationNamed(out.comment, headingOf(citationsFor(plan.row)))) return null;
+            return contradictoryStyle(out.comment, requiredStyle(plan.row, inp.lang), checkedDecision.status) ? RECONSIDER : resolve({ ...checkedDecision, criterion: plan.row.id, comment: out.comment });
           }, note, pass === 0, (reason) => { commentFailure = reason; });
           if (explained === null && commentFailure && inp.grade && assessed.level && Number.isFinite(assessed.level.value) && assessed.score && Number.isFinite(assessed.score.earned) && Number.isFinite(assessed.score.total)
             && ['partly', 'missing'].includes(checkedDecision.status) && citationsFor(plan.row)?.witnesses.every((p) => inp.text.slice(p.start, p.end) === p.text)) {
             // A known unusable explanation cannot erase a complete, grounded rubric decision. This sentence states
             // only our independently verified citation mismatch and that decision's actual normalized band/points.
-            const fallback = words(inp.lang, COMMENTS.fallback, { level: assessed.level.label, earned: figure(assessed.score.earned, inp.lang), total: figure(assessed.score.total, inp.lang) });
+            const fallback = words(inp.lang, COMMENTS.fallback, { heading: headingOf(citationsFor(plan.row)), level: assessed.level.label, earned: figure(assessed.score.earned, inp.lang), total: figure(assessed.score.total, inp.lang) });
             if (fallback.length <= prose(inp.lang)) row = resolve({ ...checkedDecision, criterion: plan.row.id, comment: fallback });
             if (row) break;
           }
@@ -990,6 +1056,6 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
   };
 
   const task = T.add(T.define({ id: 'writer.feedback', version: 14, input, build, output: OUTPUT, check, orchestrate, limits: { ms: 300000, calls: 64 } }));
-  return { task, LIMIT, STATUS, OUTPUT, SYSTEM, assesses, handIn, languageOf, sentenceEnds, citationNamed: (comment) => CITATION_NAMED.some((r) => r.test(comment)) };
+  return { task, LIMIT, STATUS, OUTPUT, SYSTEM, assesses, handIn, languageOf, sentenceEnds, citationNamed };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_TASK_WRITER_FEEDBACK; else GZ_AI_TASK_WRITER_FEEDBACK;
