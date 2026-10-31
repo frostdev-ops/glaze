@@ -909,6 +909,14 @@ test("a course outline's column Ultra has just drawn isn't shown where Ultra lay
     root.attrs = attrs;
     assert.equal(winner(rules, aside, 'visibility') ?? null, null, `${JSON.stringify(attrs)}: Ultra's own column as it is`);
   }
+  // Course notes and the dock on a course's first visit, until Details & Actions is drawn (navigation/page/sidebar.js show).
+  for (const id of ['gz-nt-block', 'gz-sb-widgets']) {
+    const block = chain('html', 'body', 'div#site-wrap', 'aside.outline-actions', `div#${id}`);
+    block.parent.parent.parent.parent.attrs = { 'data-gz-sb-unsized': '' };
+    assert.equal(winner(rules, block, 'visibility')?.[0], 'hidden', id);
+    block.parent.parent.parent.parent.attrs = {};
+    assert.equal(winner(rules, block, 'visibility') ?? null, null, id);
+  }
   // The dock while Course notes is on its way (navigation/page/sidebar.js awaitNotes).
   const dock = chain('html', 'body', 'div#site-wrap', 'aside.outline-actions', 'div#gz-sb-widgets');
   const top = dock.parent.parent.parent.parent;
@@ -1095,6 +1103,69 @@ test('a course outline column waits for Course notes only once when Ultra reuses
   await p.pass();
   assert.equal(p.host(), first);
   assert.equal(p.doc.root.dataset.gzSbNotes, undefined, 'the reused column already spent its one second');
+});
+
+test("a first visit to a course: This page shows from when the sidebar takes the column, and Course notes and the dock appear only once Details & Actions has stopped growing", async () => {
+  const p = page({ at: 'courses', stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  await p.pass();
+  const tick = heightTimers(p);
+  const inner = p.$('#main-content-inner');
+  inner.querySelector('.base-courses-container').remove();
+  p.c.location.pathname = '/ultra/courses/_101_1/outline';
+  const { details, aside, content } = routedOutline(p);
+  inner.append(p.el('div', 'course-content-container', p.el('div', 'panel-wrap', p.el('div', 'bb-course-navigation', 'Course'), p.el('div', 'course-outline-grid', content, aside))));
+  await p.pass();
+  const unsized = () => p.doc.root.dataset.gzSbUnsized != null;
+  assert.equal(aside.dataset.gzSidebarHost, 'native');
+  assert.equal(p.$('.gz-sb-pagehead').hidden, false, 'This page from the start, though the column is still empty');
+  assert.equal(heldRoom(p), 0, 'no height of its own to hold');
+  assert.equal(unsized(), true, "Glaze's blocks under it wait");
+  fillDetails(p, details, 2);
+  tick(100);
+  fillDetails(p, details, 7);
+  tick(299);
+  assert.equal(unsized(), true, 'still growing a moment ago');
+  tick(1);
+  assert.equal(unsized(), false, 'drawn and still: they appear where they stay');
+  assert.equal(p.$('.gz-sb-pagehead').hidden, false);
+  // A block Ultra never fills: they appear after 2 s at most.
+  aside.replaceWith(routedOutline(p).aside);
+  p.c.location.pathname = '/ultra/courses/_102_1/outline';
+  await p.pass();
+  assert.equal(unsized(), true);
+  tick(2000);
+  assert.equal(unsized(), false, 'at most 2 s');
+});
+
+test("a layout reads everything it measures before it writes <html>'s attributes and styles, on a course open", async () => {
+  const { El } = require('../stand-in-dom.js');
+  const p = page({ at: 'courses', stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  await p.pass();
+  const log = [], root = p.doc.root, rect = El.prototype.getBoundingClientRect, cs = p.c.getComputedStyle;
+  const LAYOUT = /^(data-gz-sidebar|data-gz-sb-(fixed|ultra|tool|family|assessment|native-root|layer)$)|^--gz-(sidebar-w|sb-left|sb-top|sb-foot|sb-bar)$/;
+  for (const k of ['setAttribute', 'removeAttribute']) { const f = root[k]; root[k] = function (name, ...a) { if (LAYOUT.test(name) && (k === 'removeAttribute' ? this.hasAttribute(name) : this.getAttribute(name) !== a[0])) log.push(`w ${name}`); return f.call(this, name, ...a); }; }
+  const set = root.style.setProperty;
+  root.style.setProperty = function (k, v) { if (LAYOUT.test(k) && this.getPropertyValue(k) !== String(v)) log.push(`w ${k}`); return set.call(this, k, v); };
+  El.prototype.getBoundingClientRect = function () { log.push('r rect'); return rect.call(this); };
+  p.c.getComputedStyle = (e) => { log.push('r style'); return cs(e); };
+  // Each frame's work (the sidebar's pass runs in one) is its own: the browser lays out between frames.
+  const raf = p.c.requestAnimationFrame;
+  p.c.requestAnimationFrame = (f) => raf(() => { log.push('frame'); f(); });
+  try {
+    const inner = p.$('#main-content-inner');
+    inner.querySelector('.base-courses-container').remove();
+    p.c.location.pathname = '/ultra/courses/_101_1/outline';
+    const { aside, content } = routedOutline(p);
+    inner.append(p.el('div', 'course-content-container', p.el('div', 'panel-wrap', p.el('div', 'bb-course-navigation', 'Course'), p.el('div', 'course-outline-grid', content, aside))));
+    log.length = 0;
+    await p.pass();
+  } finally { El.prototype.getBoundingClientRect = rect; }
+  const frames = log.join('|').split('frame').map((x) => x.split('|').filter(Boolean)).filter((x) => x.some((e) => e.startsWith('w ')));
+  assert.ok(frames.length, 'the course open lays the sidebar out again');
+  for (const f of frames) {
+    const first = f.findIndex((x) => x.startsWith('w '));
+    assert.deepEqual(f.slice(first).filter((x) => x.startsWith('r ')), [], `no read after a write in a frame: ${f.slice(first, first + 6).join(', ')}`);
+  }
 });
 
 test("Details & Actions drawn again on a route back into Content in a course tab is held from when Ultra draws it", async () => {
