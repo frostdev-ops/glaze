@@ -213,3 +213,39 @@ test('a daily snapshot past the limit is skipped for the day, said so, with noth
   assert.ok((await small.sync.set(true)).ok);
   assert.ok([...drive.files.values()].some((f) => f.meta.appProperties?.glaze === 'snapshot'), 'one that fits goes up');
 });
+
+test('large-item marks clear when unsynced documents and records are deleted while Sync is off', async () => {
+  const drive = standin(), dk = disk(), a = worker(drive, dk, { records: true });
+  const key = 'doc:00000000-0000-4000-8000-00000000d007', source = 'writer:sources:gone|x|y|z';
+  await pdfOn(a, dk, key, bytesOf(6 * MiB, 7), 'Local reader');
+  await dk.store.set({ [source]: { sources: [{ id: 's1', title: 's'.repeat(6 * MiB) }], at: 1 } });
+  assert.ok((await a.sync.set(true)).ok);
+  assert.deepEqual(Object.keys((await marks(dk)).docs || {}), [key]);
+  assert.deepEqual(Object.keys((await marks(dk)).recs || {}), [`local:${source}`]);
+  await a.sync.set(false);
+  await a.papers.remove(key);
+  await dk.store.remove(source);
+  // No dirty mark or record link exists for either item. A restarted worker must still discard their size marks.
+  const b = worker(drive, dk, { records: true }), n = drive.log.length;
+  assert.ok((await b.sync.set(true)).ok);
+  assert.deepEqual(await marks(dk), { docs: {}, recs: {} }, 'Settings must not count items no longer on this device');
+  assert.deepEqual(removals(drive, n), [], 'size-mark cleanup never deletes anything in Drive');
+});
+
+test('a remote deletion clears a linked document size mark after its sync link is removed', async () => {
+  const drive = standin(), dk = disk(), a = worker(drive, dk);
+  const key = 'doc:00000000-0000-4000-8000-00000000d008';
+  await pdfOn(a, dk, key, bytesOf(MiB, 8), 'Reader');
+  assert.ok((await a.sync.set(true)).ok);
+  await pdfOn(a, dk, key, bytesOf(6 * MiB, 9), 'Reader');
+  await a.sync.touched(key);
+  assert.ok((await a.sync.run()).ok);
+  assert.deepEqual(Object.keys((await marks(dk)).docs || {}), [key]);
+  // The user deletes the local document while off, and its JSON copy is independently deleted in Drive.
+  await a.sync.set(false);
+  await a.papers.remove(key);
+  drive.remove(fileOf(drive, key, 'doc').meta.id);
+  await dk.store.set({ driveSync: { ...(await dk.store.get('driveSync')).driveSync, on: true } });
+  assert.ok((await worker(drive, dk).sync.run()).ok);
+  assert.deepEqual(Object.keys((await marks(dk)).docs || {}), [], 'the mark cannot outlive the document and its link');
+});
