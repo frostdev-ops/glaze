@@ -1308,7 +1308,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (standby && !standby.el.isConnected) standby = null; // (its host went with the tabs)
     if (!ahead()) { stopAhead(); return; }
     if (framed || !who) { unStandby(); return; }
-    if (standby && !fresh(standby)) unStandby();
+    if (standby && !standbyYoung(standby)) unStandby();
     if (standby || standbyTimer || standbyIdle || standbyMiss >= 3 || !loaded || !useful()) return;
     standbyTimer = setTimeout(() => {
       standbyTimer = 0;
@@ -1340,12 +1340,12 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     }, 30000);
   };
   // Younger than STALE: an older one's account check is too old to carry into a course.
-  const fresh = (s) => !s.at || Date.now() - s.at < STALE;
+  const standbyYoung = (s) => !s.at || Date.now() - s.at < STALE;
   // Ready to take a course: its Glaze in (loaded) and signed in as this page, still on a page of Ultra's outside a course.
   const usable = (s) => {
     try {
       const d = s.el.contentDocument;
-      return fresh(s) && !!d?.body && s.el.isConnected && s.loaded === d && s.accountDoc === d && !!who && s.uid === who && d.location.origin === location.origin
+      return standbyYoung(s) && !!d?.body && s.el.isConnected && s.loaded === d && s.accountDoc === d && !!who && s.uid === who && d.location.origin === location.origin
         && d.location.pathname.startsWith('/ultra/') && !L.courseOf(d.location.pathname, d.location.search);
     } catch { return false; }
   };
