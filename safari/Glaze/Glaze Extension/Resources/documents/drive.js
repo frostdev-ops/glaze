@@ -293,13 +293,16 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
     // from those folders into that one (Sync's folders converging, documents/drive-sync.js converge).
     const patch = async (id, meta, fields = SYNC, move = null) => json(await call(`${API}/${idOf(id)}?${q({ fields, ...(move && { addParents: idOf(move.add), removeParents: move.remove.map(idOf).join(',') }) })}`,
       { method: 'PATCH', headers: { 'content-type': JSON_TYPE }, body: JSON.stringify(meta) }));
+    // files.delete: for good, past Drive's trash. Sync's own daily snapshots past the newest five alone (background/drive-store.js
+    // snapshot checks each first: a zip Glaze made and tagged, in Backups); everything else Glaze removes goes to the trash.
+    const remove = async (id) => { const r = await call(`${API}/${idOf(id)}`, { method: 'DELETE' }); r.body?.cancel().catch(() => {}); };
     // A file with no content (a folder).
     const folder = async (meta, fields = SYNC) => {
       const j = await json(await call(`${API}?${q({ fields })}`, { method: 'POST', headers: { 'content-type': JSON_TYPE }, body: JSON.stringify(meta) }));
       if (typeof j.id !== 'string' || !ID.test(j.id)) throw new Fail('bad');
       return j;
     };
-    return { meta, open, raw, save, file, find, startToken, changes, media, put, patch, folder };
+    return { meta, open, raw, save, file, find, startToken, changes, media, put, patch, remove, folder };
   };
 
   // ---- the port, worker side: one request a port. page → { op: 'open', id, takes } then { op: 'more' } after each chunk;
