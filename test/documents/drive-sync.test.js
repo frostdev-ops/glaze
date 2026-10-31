@@ -1628,3 +1628,66 @@ test('a kept Word file deleted for good after another device sent new content in
   assert.equal(textOf((await a.papers.get(key)).doc), 'B edits');
   assert.ok(!sidecarOf(drive, key).meta.explicitlyTrashed, 'its copy stays out of Drive\'s trash');
 });
+
+test('a first meeting with a deck whose file was deleted for good in Drive sends this device\'s file again, and the other device gets it', async () => {
+  const drive = standin(), a = device(drive), b = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000b01';
+  const ref = await a.files.put(enc('PK deck kept here'), MIME.pptx);
+  await a.papers.save(key, { kind: 'slides', file: ref, size: ref.size, title: 'Talk', named: true, ext: '.pptx' });
+  assert.ok((await a.sync.set(true)).ok);
+  // A switches to another account (its links let go); meanwhile the student deletes the deck's file for good in Drive.
+  a.who.account = 'other@school.edu';
+  assert.equal((await a.sync.run()).why, 'account');
+  const gone = exportOf(drive, key).meta.id;
+  drive.trash(gone); drive.remove(gone);
+  a.who.account = 'student@school.edu';
+  assert.ok((await a.sync.set(true)).ok);
+  assert.ok(!P.trashed(await a.papers.get(key)), 'still live here');
+  const own = exportOf(drive, key);
+  assert.ok(own && own.meta.id !== gone && dec(own.bytes) === 'PK deck kept here', 'its file in Drive again');
+  assert.equal(sidecarJson(drive, key).file, own.meta.id);
+  assert.ok((await b.sync.set(true)).ok);
+  assert.equal((await b.papers.get(key))?.file?.hash, ref.hash, 'the other device gets it');
+  noDeletes(drive);
+});
+
+test('a first meeting with a paper whose file was deleted for good keeps the later edit and gives the paper a new file', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-000000000b02';
+  await a.papers.save(key, { doc: doc('First'), title: 'Essay', named: true });
+  assert.ok((await a.sync.set(true)).ok); assert.ok((await b.sync.set(true)).ok);
+  a.who.account = 'other@school.edu';
+  assert.equal((await a.sync.run()).why, 'account');
+  clock.t += 60e3;
+  await b.papers.save(key, { doc: doc('B later') });
+  await b.sync.touched(key); await b.fire();
+  const gone = exportOf(drive, key).meta.id;
+  drive.trash(gone); drive.remove(gone);
+  a.who.account = 'student@school.edu';
+  assert.ok((await a.sync.set(true)).ok);
+  assert.equal(textOf((await a.papers.get(key)).doc), 'B later', 'the later edit stays current');
+  const own = exportOf(drive, key);
+  assert.ok(own && own.meta.id !== gone, 'a new file of its own');
+  assert.equal(sidecarJson(drive, key).file, own.meta.id);
+  noDeletes(drive);
+});
+
+test('a first meeting with a document in Trash here whose file was deleted for good in Drive puts its JSON copy in Drive\'s trash', async () => {
+  const drive = standin(), a = device(drive), b = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000b03';
+  const ref = await a.files.put(enc('%PDF reading'), MIME.pdf);
+  await a.papers.save(key, { kind: 'pdf', file: ref, size: ref.size, title: 'Reading', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  a.who.account = 'other@school.edu';
+  assert.equal((await a.sync.run()).why, 'account');
+  await a.papers.trash(key);
+  const gone = exportOf(drive, key).meta.id;
+  drive.trash(gone); drive.remove(gone);
+  a.who.account = 'student@school.edu';
+  assert.ok((await a.sync.set(true)).ok);
+  assert.ok(P.trashed(await a.papers.get(key)), 'still in Trash here');
+  assert.ok(sidecarOf(drive, key).meta.explicitlyTrashed, 'its copy follows into Drive\'s trash');
+  assert.ok((await b.sync.set(true)).ok);
+  assert.equal(await b.papers.get(key), null, 'never live on another device');
+  noDeletes(drive);
+});
