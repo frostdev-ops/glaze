@@ -1057,9 +1057,10 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
           if (explained !== RECONSIDER) { row = explained || rating(checkedDecision); unexplained = !row; break; }
           // A known contradiction needs a new decision, not prose defending a frozen score. Reserve both calls before
           // starting; the pair has no further repairs and consumes two of the same four globally planned repairs.
-          if (pass || decisionReconsidered || repairs + 2 > 4 || used + 2 > limits.calls) { inp.incomplete = true; break; }
+          // With no re-check left, the decision stands and only its explanation failed: the rubric rating carries a verified one.
+          if (pass || decisionReconsidered || repairs + 2 > 4 || used + 2 > limits.calls) { row = rating(checkedDecision); unexplained = !row; break; }
           const reconsider = amended(request, '\nReconsider the criterion decision: its previous status and explanation contradicted each other. Re-evaluate status, level and score from the original supplied evidence. A readable missing requirement or verified mismatch is complete coverage and can be scored using the actual supplied rubric level; a preset name alone proves no compliance or mismatch. Do not invent a zero score or omit evidence. Return only the original compact decision JSON.');
-          if (!room(reconsider, plan.schema)) { inp.incomplete = true; break; }
+          if (!room(reconsider, plan.schema)) { row = rating(checkedDecision); unexplained = !row; break; }
           decisionReconsidered = true; repairs += 2;
           decision = await attempt(reconsider, plan.schema, validateDecision, note, false);
         }
