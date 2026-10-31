@@ -6,8 +6,9 @@
 // (checks/platform/google-check.js covers both for real).
 //   Before Drive is connected: no From Google Drive. Connected: it shows beside Import, without a reload.
 //   Open: a Word file (alt=media) and a Google Doc (exported as .docx) become documents; a file Drive no longer has says so.
-//   Save: a new Word file in My Drive, the same file updated next time, a Google Doc, and a new Doc once the remembered one
-//   is gone; each request's address, method, token and body checked; no cookie and no token in storage at any point.
+//   Save: a new Word file in My Drive, the same file updated next time, a new one beside it once the remembered one was
+//   edited outside Glaze (that one left as it is), a Google Doc, and a new Doc once the remembered one is gone; each
+//   request's address, method, token and body checked; no cookie and no token in storage at any point.
 //   The paper's ⋯ menu offers From Google Drive; Disconnect takes the entries away.
 //   NODE_PATH=<installed playwright> nice node checks/documents/drive-files-check.js [evidence directory]
 const { chromium } = require('playwright');
@@ -41,7 +42,7 @@ const until = async (fn, label, ms = 20000) => { const end = Date.now() + ms; fo
 
 // Drive as the stand-in holds it: id → { meta, bytes }; the files saved get new ids.
 const drive = new Map();
-let made = 0;
+let made = 0, revs = 0;
 const log = { drive: [], userinfo: [], revoke: [], other: [] };
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type', 'access-control-allow-methods': 'GET, HEAD, POST, PATCH' };
 const reply = (status, body, headers = {}) => ({ status, headers: { ...CORS, 'content-type': 'application/json; charset=UTF-8', ...headers }, body: Buffer.from(JSON.stringify(body)) });
@@ -72,7 +73,7 @@ const answer = ({ method, url, headers, body }, via) => {
       if (!f) return reply(404, ERRORS[404]);
       if (m[2]) return { status: 200, headers: { ...CORS, 'content-type': u.searchParams.get('mimeType') }, body: f.bytes };
       if (u.searchParams.get('alt') === 'media') return { status: 200, headers: { ...CORS, 'content-type': f.meta.mimeType }, body: f.bytes };
-      const keep = ['id', 'name', 'mimeType', 'size', 'trashed', 'capabilities'];
+      const keep = (u.searchParams.get('fields') || '').split(',').map((k) => k.replace(/\(.*$/, ''));
       return reply(200, Object.fromEntries(keep.filter((k) => f.meta[k] !== undefined).map((k) => [k, f.meta[k]])));
     }
     m = /^\/upload\/drive\/v3\/files(?:\/([\w-]+))?$/.exec(u.pathname);
@@ -80,15 +81,26 @@ const answer = ({ method, url, headers, body }, via) => {
       const p = parts(headers['content-type'], body);
       entry.upload = p && { meta: p.meta, type: p.type, size: p.media.length, zip: p.media.subarray(0, 2).toString('latin1') === 'PK' };
       if (!p) return reply(400, ERRORS[404]);
+      // Drive's File fields: a new headRevisionId and sha256Checksum for each new content of a file with bytes of its own (a
+      // Google Doc has neither), modifiedTime on every change, appProperties merged.
+      const content = (f, bytes) => {
+        f.bytes = bytes;
+        f.meta.size = String(bytes.length);
+        f.meta.modifiedTime = new Date(Date.parse('2026-10-31T12:00:00.000Z') + ++revs * 1000).toISOString();
+        if (f.meta.mimeType !== MIME.doc) Object.assign(f.meta, { headRevisionId: `0B${revs}Rev`, sha256Checksum: crypto.createHash('sha256').update(bytes).digest('hex') });
+        if (p.meta.appProperties) f.meta.appProperties = { ...f.meta.appProperties, ...p.meta.appProperties };
+      };
+      const answer = (f) => reply(200, Object.fromEntries(u.searchParams.get('fields').split(',').filter((k) => f.meta[k] !== undefined).map((k) => [k, f.meta[k]])));
       if (method === 'PATCH') {
         const f = drive.get(m[1]);
         if (!f) return reply(404, ERRORS[404]);
-        f.bytes = p.media;
-        return reply(200, { id: f.meta.id, name: f.meta.name, mimeType: f.meta.mimeType });
+        content(f, p.media);
+        return answer(f);
       }
-      const fresh = { id: `1NeW_${++made}`, name: p.meta.name, mimeType: p.meta.mimeType, size: String(p.media.length), trashed: false, capabilities: { canEdit: true, canDownload: true } };
-      drive.set(fresh.id, { meta: fresh, bytes: p.media });
-      return reply(200, { id: fresh.id, name: fresh.name, mimeType: fresh.mimeType });
+      const fresh = { meta: { id: `1NeW_${++made}`, name: p.meta.name, mimeType: p.meta.mimeType, trashed: false, capabilities: { canEdit: true, canDownload: true } } };
+      content(fresh, p.media);
+      drive.set(fresh.meta.id, fresh);
+      return answer(fresh);
     }
     return reply(400, { error: { errors: [{ domain: 'global', reason: 'badRequest', message: 'Bad Request' }], code: 400, message: 'Bad Request' } });
   }
@@ -216,7 +228,7 @@ const HOSTS = ['www.googleapis.com', 'openidconnect.googleapis.com', 'oauth2.goo
     const edited = await home.evaluate(async (k) => (await chrome.storage.local.get(`writerPaper:${k}`))[`writerPaper:${k}`].updated, river);
     let r = await save(river, 'file');
     ok(r.first === 'file', 'a paper offers a Word file first');
-    ok(r.asked.length === 1 && r.asked[0].method === 'POST' && r.asked[0].path === '/upload/drive/v3/files' && r.asked[0].query.uploadType === 'multipart' && r.asked[0].query.fields === 'id,name,mimeType',
+    ok(r.asked.length === 1 && r.asked[0].method === 'POST' && r.asked[0].path === '/upload/drive/v3/files' && r.asked[0].query.uploadType === 'multipart' && r.asked[0].query.fields === 'id,name,mimeType,headRevisionId,modifiedTime',
       `save new: one multipart create (${JSON.stringify(r.asked.map((x) => [x.method, x.path]))})`);
     ok(r.asked[0].upload?.meta.mimeType === MIME.docx && /\.docx$/.test(r.asked[0].upload.meta.name) && !('parents' in r.asked[0].upload.meta) && r.asked[0].upload.type === MIME.docx && r.asked[0].upload.zip,
       `as the .docx, in My Drive (${JSON.stringify(r.asked[0].upload?.meta)})`);
@@ -229,7 +241,17 @@ const HOSTS = ['www.googleapis.com', 'openidconnect.googleapis.com', 'oauth2.goo
     r = await save(river, 'file');
     ok(r.asked.length === 2 && r.asked[0].method === 'GET' && r.asked[0].path === `/drive/v3/files/${first}` && r.asked[1].method === 'PATCH' && r.asked[1].path === `/upload/drive/v3/files/${first}`,
       `save again: confirmed there, then updated in place (${JSON.stringify(r.asked.map((x) => [x.method, x.path]))})`);
-    ok(JSON.stringify(r.asked[1].upload?.meta) === '{}' && r.drive.id === first && drive.size === 3, 'the content only, no copy made');
+    ok(JSON.stringify(Object.keys(r.asked[1].upload?.meta || {})) === '["appProperties"]' && r.drive.id === first && drive.size === 3, 'the content and its checksum tag only, no copy made');
+
+    // ---- save: the remembered file edited outside Glaze (another app's new content) is never overwritten
+    const outside = Buffer.from('PK edited in Word online');
+    Object.assign(drive.get(first), { bytes: outside });
+    Object.assign(drive.get(first).meta, { headRevisionId: '0BoutsideRev', sha256Checksum: crypto.createHash('sha256').update(outside).digest('hex') });
+    r = await save(river, 'file');
+    const beside = r.drive.id;
+    ok(r.asked.length === 2 && r.asked[0].method === 'GET' && r.asked[1].method === 'POST' && beside !== first && r.drive.as === 'file',
+      `edited outside Glaze: a new file beside it, remembered (${JSON.stringify(r.asked.map((x) => [x.method, x.path]))})`);
+    ok(drive.size === 4 && drive.get(first).bytes.equals(outside), 'both files are there, the edited one as it was');
 
     r = await save(river, 'doc');
     ok(r.asked.length === 1 && r.asked[0].method === 'POST' && r.asked[0].upload?.meta.mimeType === MIME.doc && r.asked[0].upload.type === MIME.docx && !/\.docx$/.test(r.asked[0].upload.meta.name),
