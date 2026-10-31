@@ -75,7 +75,8 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
   const wordsOf = (list, flags = 'iu') => new RegExp(`${B}(?:${list.join('|')})${E}`, flags);
   const offer = (source, flags = 'iu') => new RegExp(B + source, flags);
   // Words that are English too (sections, criteria) count only after one of the language's determiners.
-  const after = (determiners, list) => String.raw`(?<=${B}(?:${determiners})\s*)(?:${list.join('|')})`;
+  // With adjectives, up to that many lowercase words may stand between (die klare, gewichtete These; de scherpe these).
+  const after = (determiners, list, adjectives = 0) => String.raw`(?<=${B}(?:${determiners})(?:\s+\p{Ll}+,?){0,${adjectives}}\s*)(?:${list.join('|')})`;
   // A German noun alone or as the head of a compound (Hauptthese), with any ending (Quellenangaben, Kriterien).
   const noun = (w, compound = true) => `${compound ? String.raw`(?:\p{Lu}\p{Ll}*${w[0].toLowerCase()}|${w[0]})` : w[0]}${w.slice(1)}\\p{Ll}*`;
   const LOCALES = {
@@ -141,8 +142,8 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
             'Anforderung', 'Kriteri', 'Rubrik', 'Aufgabenstellung', 'Gliederung', 'Struktur', 'Behauptung', 'Fazit', 'Übergang', 'Übergäng'].map((w) => noun(w)),
           ...['Antwort', 'Satz', 'Sätz', 'Wort(?!h)', 'Wört', 'Schluss', 'Länge', 'Umfang', 'Aufbau'].map((w) => noun(w, false)),
           String.raw`(?:(?:Haus|Seminar|Fach|Abschluss|Bachelor|Master|Studien)a|A)rbeit\p{Ll}*`,
-          after(String.raw`[Dd](?:er|ie|as|em|en|es)|[Ee]in(?:e[nmrs]?)?|[Dd]ein(?:e[nmrs]?)?|[Ss]ein(?:e[nmrs]?)?|[Ii]hr(?:e[nmrs]?)?|[Uu]nser(?:e[nmrs]?)?|[Dd]iese[nmrs]?|[Kk]ein(?:e[nmrs]?)?`,
-            ['Text', 'These', 'Analyse', 'Argument', 'Essay', 'Passage'].map((w) => noun(w)))], 'u'),
+          after(String.raw`[Dd](?:er|ie|as|em|en|es)|[Ee]in(?:e[nmrs]?)?|[Dd]ein(?:e[nmrs]?)?|[Ss]ein(?:e[nmrs]?)?|[Ii]hr(?:e[nmrs]?)?|[Uu]nser(?:e[nmrs]?)?|[Dd]iese[nmrs]?|[Kk]ein(?:e[nmrs]?)?|mit|ohne|als|durch|für|über|zur|zum|im|aus|bei|nach|statt|und|oder|doch|aber|sowie`,
+            ['Text', 'These', 'Analyse', 'Argument', 'Essay', 'Passage'].map((w) => noun(w)), 3)], 'u'),
       ],
       offers: [
         offer(String.raw`(?:[Dd]u\s+(?:könntest|kannst|solltest)|(?:[Kk]önntest|[Kk]annst|[Ss]olltest)\s+du|Sie\s+(?:könnten|können|sollten)|(?:[Kk]önnten|[Kk]önnen|[Ss]ollten)\s+Sie)${gap(6)}(?:schreiben|sagen|formulieren|ergänzen|hinzufügen|einfügen|beginnen|anfangen|einsteigen|eröffnen|einleiten|abschließen|schließen|enden|ersetzen)${E}`, 'u'),
@@ -166,7 +167,7 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
         'citaat', 'citaten', 'verwijzing(?:en)?', 'inleiding', 'conclusies?', 'afsluiting', 'slotalinea', 'secties?',
         'eis(?:en)?', 'vereisten?', 'criterium', 'beoordelingscriteri(?:um|a)', 'opdracht(?:en)?', 'instructies?', 'woord(?:en)?', 'lengte', 'omvang',
         'opbouw', 'structuur', 'overgang(?:en)?',
-        after('de|het|een|je|jouw|uw|deze|dit|alle|beide|twee|drie|vier|vijf|zijn|haar', ['these', 'essays?', 'analyses?', 'criteria', 'passages?', 'fragment']),
+        after('de|het|een|je|jouw|uw|deze|dit|alle|beide|twee|drie|vier|vijf|zijn|haar|geen|zonder', ['these', 'essays?', 'analyses?', 'criteria', 'passages?', 'fragment'], 3),
         after('die', ['these', 'essays?', 'analyses?', 'criteria', 'passages?', 'fragment']) + String.raw`(?=\s+(?:is|zijn|blijft|blijven|mist|missen|bevat|bevatten)${E})`])],
       offers: [
         offer(String.raw`(?:(?:je|jij|u)\s+(?:zou|kunt|kan|moet)|(?:zou|kun|kan|moet)\s+(?:je|jij|u))${gap(6)}(?:schrijven|zeggen|toevoegen|formuleren|(?:beginnen|openen|starten|eindigen|afsluiten|besluiten)(?:\s+met)?|vervangen)${E}`),
