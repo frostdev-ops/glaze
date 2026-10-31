@@ -57,5 +57,5 @@ test('out wandering, the pet yields to an open site panel within half a second, 
   const before = asked.length; run(5000);
   assert.equal(asked.length, before, 'at home it does not look');
   const css = fs.readFileSync(path.join(__dirname, '../../extension/core/page/apps.css'), 'utf8');
-  assert.match(css, /html:is\(\[data-gz-yield\],\[data-gz-settings\]\) :is\(\.gz-game-world,\.gz-game-home\)\{visibility:hidden!important\}/);
+  assert.match(css, /html:is\(\[data-gz-yield\],\[data-gz-settings\]\) \.gz-game-world,\nhtml:is\(\[data-gz-yield\],\[data-gz-settings\]\) \.gz-game-home\{visibility:hidden!important\}/);
 });

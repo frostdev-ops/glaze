@@ -12,7 +12,13 @@
   --gz-border-strong: color-mix(in srgb, var(--gz-line-strong) var(--gz-surface-border, 100%), transparent);
 }
 /* Per-course colors are inherited locally, including on course cards outside a course page. */
-:is([data-gz-course], [data-course-id], [class*="course-color-"], .ic-DashboardCard, .gz-course-card, .planner-grouping, [data-gz-course-color]) {
+[data-gz-course],
+[data-course-id],
+.ic-DashboardCard,
+.gz-course-card,
+.planner-grouping,
+[data-gz-course-color],
+[class*="course-color-"] {
   --gz-surface-tint: color-mix(in srgb, var(--gz-course, var(--gz-accent)) var(--gz-surface-course-weight, 0%), var(--gz-accent));
   --gz-surface-paint: color-mix(in srgb, var(--gz-surface-tint, var(--gz-accent)) var(--gz-surface-tint-strength, 0%), var(--gz-surface-color, var(--gz-surface)));
   --gz-surface-paint-2: color-mix(in srgb, var(--gz-surface-tint, var(--gz-accent)) var(--gz-surface-tint-strength, 0%), var(--gz-surface-color, var(--gz-surface-2)));

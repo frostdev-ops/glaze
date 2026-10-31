@@ -657,7 +657,7 @@ test('off returns exactly to before (Canvas\'s column, the Dashboard\'s To Do ti
   assert.ok(!p.$('#gz-sidebar') && !p.$('.gz-sb-head'), 'no Glaze column');
   assert.deepEqual(S.clean(p.store[KEY]).dock.map((x) => x.id), ['todo', 'notes'], 'the dock record survives');
   // The CSS hooks the legacy page relies on are still there.
-  assert.match(read('core/page/apps.css'), /html\[data-gz-canvas-todo\] #right-side :is\(\.Sidebar__TodoListContainer, \.todo-list-header, ul\.to-do-list\) \{ display: none !important; \}/);
+  assert.match(read('core/page/apps.css'), /html\[data-gz-canvas-todo\] #right-side :where\(\.Sidebar__TodoListContainer\):is\(\.Sidebar__TodoListContainer, ul\.to-do-list\),\nhtml\[data-gz-canvas-todo\] #right-side :where\(\.todo-list-header\):is\(\.todo-list-header, ul\.to-do-list\),\nhtml\[data-gz-canvas-todo\] #right-side ul\.to-do-list \{ display: none !important; \}/);
   // On again: the same dock.
   sw.sidebar = true;
   await p.pass();

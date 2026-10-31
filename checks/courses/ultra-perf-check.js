@@ -16,7 +16,8 @@ const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest(
 // animation frames and layout shift per stage, an idle window, glaze:load round trips and a cold course-tab open.
 // PERF_DEVICE=neo: a MacBook Neo (A18 Pro, 2P+4E cores, 8 GB): 6 cores, the CPU throttled to its Chrome speed, its screen.
 // PERF_PROFILE=1: the course open's CPU profile (self time by script and function, built-ins charged to their caller) and its
-// style and layout passes with the scripts that forced them, in outline.profile; =selectors adds Chrome's selector stats.
+// style and layout passes (elements restyled, the scripts that forced them), in outline.profile; =selectors adds Chrome's selector
+// stats (PERF_SELECTORS_ALL=1: every rule, not the top 30), =invalidation what marked elements for restyle.
 const speed = process.env.PERF_SPEED === '1';
 const neo = process.env.PERF_DEVICE === 'neo';
 // Speedometer 3.1 in Chrome on the MacBook Neo, from HotHardware's review (Safari: 50.4).
@@ -148,7 +149,12 @@ async function settle(page, change) {
   return page.evaluate(async ({ change, body, fill, outlineAt, rowsAt, rowsHtml, watch }) => {
     const start = performance.now();
     let last = start, changes = 0, held = 0, inserted = start, aside = null;
-    const mo = new MutationObserver((rs) => { last = performance.now(); changes += rs.length; });
+    // Glaze's own row controls taken out and put back in the same pass (moved, not removed): each move restyles the row again.
+    let moved = 0;
+    const mo = new MutationObserver((rs) => {
+      last = performance.now(); changes += rs.length;
+      for (const r of rs) for (const n of r.removedNodes) if (n.nodeType === 1 && n.isConnected && n.matches('.gz-folder-eye, .gz-dl')) moved++;
+    });
     mo.observe(document.body, { childList: true, subtree: true, attributes: true });
     if (['outline', 'grades', 'course'].includes(change)) {
       history.pushState({}, '', location.origin + (change === 'course' ? '/ultra/course' : `/ultra/courses/_101_1/${change}`));
@@ -172,7 +178,7 @@ async function settle(page, change) {
     }
     mo.disconnect();
     if (aside) aside = aside();
-    return { elapsed: performance.now() - start, ...(aside && { aside }), lastMutation: last - start, changes, held, stillHeld: !!document.querySelector('[data-gz-loading]'), longTasks: window.perfLongTasks, nodes: document.body.querySelectorAll('*').length, rows: document.querySelectorAll('.native-row, .content-list-item, .course-element-card').length,
+    return { elapsed: performance.now() - start, ...(aside && { aside }), lastMutation: last - start, changes, moved, held, stillHeld: !!document.querySelector('[data-gz-loading]'), longTasks: window.perfLongTasks, nodes: document.body.querySelectorAll('*').length, rows: document.querySelectorAll('.native-row, .content-list-item, .course-element-card').length,
       ...(window.perfSpeed && { sample: document.querySelector('.content-list-item, .course-element-card, .native-row')?.outerHTML.slice(0, 1200), sidebar: document.documentElement.getAttribute('data-gz-sidebar') }),
       ...(window.perfSpeed && { window: [change ? start : 0, performance.now()], inserted }) };
   }, { change, body: routeBody(change), fill: DETAILS_FILL, outlineAt: OUTLINE_AT, rowsAt: OUTLINE_ROWS_AT, rowsHtml: outlineRows(), watch: asideWatch.toString() });
@@ -356,7 +362,8 @@ const startProfile = async (page) => {
   await cdp.send('Profiler.start');
   const events = [];
   cdp.on('Tracing.dataCollected', ({ value }) => events.push(...value));
-  await cdp.send('Tracing.start', { categories: `devtools.timeline,disabled-by-default-devtools.timeline.stack${process.env.PERF_PROFILE === 'selectors' ? ',disabled-by-default-blink.debug' : ''}`, transferMode: 'ReportEvents' });
+  const extra = { selectors: ',disabled-by-default-blink.debug', invalidation: ',disabled-by-default-devtools.timeline.invalidationTracking' }[process.env.PERF_PROFILE] || '';
+  await cdp.send('Tracing.start', { categories: `devtools.timeline,disabled-by-default-devtools.timeline.stack${extra}`, transferMode: 'ReportEvents' });
   return { cdp, events };
 };
 const stopProfile = async ({ cdp, events }) => {
@@ -369,8 +376,8 @@ const stopProfile = async ({ cdp, events }) => {
   const passes = {};
   for (const e of events) {
     if (e.ph !== 'X' || !['Layout', 'UpdateLayoutTree'].includes(e.name)) continue;
-    const row = passes[e.name] ||= { count: 0, ms: 0, forced: {} };
-    row.count++; row.ms += e.dur / 1000;
+    const row = passes[e.name] ||= { count: 0, ms: 0, elements: 0, forced: {} };
+    row.count++; row.ms += e.dur / 1000; row.elements += e.args?.elementCount || 0;
     const top = (e.args?.beginData?.stackTrace || e.args?.data?.stackTrace)?.[0];
     // Trace stack lines are already one-based; the CPU profile's call frames below are zero-based.
     if (top) { const k = `${top.url.replace(/^chrome-extension:\/\/[a-p]{32}\//, 'ext:') || '(page)'} ${top.functionName}:${top.lineNumber}`; const f = row.forced[k] ||= { count: 0, ms: 0 }; f.count++; f.ms += e.dur / 1000; }
@@ -381,8 +388,32 @@ const stopProfile = async ({ cdp, events }) => {
     const row = selectors[t.selector] ||= { us: 0, attempts: 0, matches: 0 };
     row.us += t['elapsed (us)'] || 0; row.attempts += t.match_attempts || 0; row.matches += t.match_count || 0;
   }
-  if (Object.keys(selectors).length) passes.selectors = Object.entries(selectors).sort((a, b) => b[1].us - a[1].us).slice(0, 30).map(([k, v]) => [k.slice(0, 160), +(v.us / 1000).toFixed(2), v.attempts, v.matches]);
-  for (const row of Object.values(passes).filter((r) => !Array.isArray(r))) { row.ms = +row.ms.toFixed(1); row.forced = Object.entries(row.forced).sort((a, b) => b[1].ms - a[1].ms).slice(0, 15).map(([k, v]) => [k, v.count, +v.ms.toFixed(1)]); }
+  // PERF_PROFILE=invalidation: what marked elements for a style pass (node, reason, the changed attribute or class, the script
+  // that changed it), and each pass's element count with the invalidations since the one before.
+  const where = (st) => st?.[0] ? `${st[0].url.replace(/^chrome-extension:\/\/[a-p]{32}\//, 'ext:') || '(page)'} ${st[0].functionName}:${st[0].lineNumber}` : '';
+  const why = {}, timeline = [];
+  let since = {};
+  for (const e of [...events].sort((a, b) => a.ts - b.ts)) {
+    const d = e.args?.data;
+    let k = null;
+    if (e.name === 'StyleRecalcInvalidationTracking') k = `recalc ${d.nodeName} ${d.subtree ? 'subtree' : 'self'} ${d.reason}${d.extraData ? ` (${d.extraData})` : ''} @ ${where(d.stackTrace)}`;
+    else if (e.name === 'ScheduleStyleInvalidationTracking') k = `schedule ${d.nodeName} ${d.changedAttribute ? `attr ${d.changedAttribute}` : d.changedClass ? `class ${d.changedClass}` : d.changedId ? `id ${d.changedId}` : d.changedPseudo ? `pseudo ${d.changedPseudo}` : d.invalidationSet ? 'set' : '?'}${d.invalidatedSelectorId ? ` ${d.invalidatedSelectorId}` : ''} @ ${where(d.stackTrace)}`;
+    else if (e.name === 'StyleInvalidatorInvalidationTracking') k = `invalidator ${d.nodeName} ${d.reason}${d.selectors ? ` [${d.selectors.map((s) => s.selector || s).join(' , ').slice(0, 200)}]` : ''}`;
+    if (k) { why[k] = (why[k] || 0) + 1; since[k] = (since[k] || 0) + 1; continue; }
+    if (e.ph === 'X' && e.name === 'UpdateLayoutTree' && Object.keys(why).length) {
+      timeline.push({ ms: +(e.dur / 1000).toFixed(2), elements: e.args?.elementCount ?? null, forced: where(e.args?.beginData?.stackTrace), after: Object.entries(since).sort((a, b) => b[1] - a[1]).slice(0, 8) });
+      since = {};
+    }
+  }
+  if (Object.keys(why).length) { passes.invalidations = Object.entries(why).sort((a, b) => b[1] - a[1]).slice(0, 60); passes.timeline = timeline; }
+  if (Object.keys(selectors).length) {
+    // Rules tried on (nearly) every element restyled: their rightmost part gives Chrome nothing to file them under.
+    const rows = Object.entries(selectors).sort((a, b) => b[1].us - a[1].us), styled = passes.UpdateLayoutTree?.elements || 0;
+    const broad = rows.filter(([, v]) => styled && v.attempts >= 0.9 * styled), ms = (list) => +(list.reduce((n, [, v]) => n + v.us, 0) / 1000).toFixed(1);
+    passes.selectorTotals = { rules: rows.length, ms: ms(rows), broadRules: broad.length, broadMs: ms(broad), styled };
+    passes.selectors = rows.slice(0, process.env.PERF_SELECTORS_ALL ? rows.length : 30).map(([k, v]) => [k.slice(0, process.env.PERF_SELECTORS_ALL ? 2000 : 160), +(v.us / 1000).toFixed(2), v.attempts, v.matches]);
+  }
+  for (const row of Object.values(passes).filter((r) => r.forced)) { row.ms = +row.ms.toFixed(1); row.forced = Object.entries(row.forced).sort((a, b) => b[1].ms - a[1].ms).slice(0, 15).map(([k, v]) => [k, v.count, +v.ms.toFixed(1)]); }
   const self = new Map(), parent = new Map(), node = new Map(profile.nodes.map((n) => [n.id, n]));
   profile.samples.forEach((id, i) => self.set(id, (self.get(id) || 0) + (profile.timeDeltas[i] || 0) / 1000));
   for (const n of profile.nodes) for (const c of n.children || []) parent.set(c, n.id);
@@ -654,6 +685,7 @@ if (require.main === module) (async () => {
       assert.deepEqual(result.errors, [], 'the fixture run has no uncaught page/extension exception');
       assert.deepEqual(result.blocked, [], 'the fixture run attempts no unfixed network response');
     }
+    for (const result of results) assert.equal(result.outline.moved, 0, 'Glaze places each outline row control once (a move restyles every row again)');
     if (process.env.PERF_REQUIRE_NO_HOLD) for (const result of results) for (const stage of ['courses', 'outline', 'grades']) {
       assert.equal(result[stage].held, 0, `${stage}: SPA content must remain visible`);
       assert.equal(result[stage].stillHeld, false, `${stage}: no lingering SPA hold`);

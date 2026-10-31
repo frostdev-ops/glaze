@@ -1087,7 +1087,7 @@ test('purges cover the course pages\' copies: sign-out, the switch off, Reset an
 
 test('the copy\'s styles cover a course page\'s main area, and a frame\'s page shows under its copy', () => {
   const css = read('content/extras.css');
-  assert.match(css, /html\[data-gz-instant\] :is\(main\.bb-offcanvas-container, main\.course-main-content\) > :not\(\[id\^="gz-"\]\) \{ visibility: hidden !important; \}/);
+  assert.match(css, /html\[data-gz-instant\] main\.bb-offcanvas-container > :not\(\[id\^="gz-"\]\),\nhtml\[data-gz-instant\] main\.course-main-content > :not\(\[id\^="gz-"\]\) \{ visibility: hidden !important; \}/);
   assert.match(css, /html\[data-gz-instant-frame\] #site-wrap \{ visibility: visible !important; \}/);
 });
 

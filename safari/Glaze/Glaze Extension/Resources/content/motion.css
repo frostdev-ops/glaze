@@ -89,7 +89,8 @@ html[data-gz-ctab-framed] { --gz-ambient: paused; }
    block for position: fixed, which made every panel's background layer scroll sideways.
    Content inside a panel doesn't fade up as well: one movement per opening. */
 .route-view-container, .panel-wrap { animation: var(--gz-enter-page); }
-#site-wrap :is(.bb-offcanvas-panel, .peek-panel__content-wrapper) :is(.route-view-container, .panel-wrap) { animation: none; }
+#site-wrap :is(.bb-offcanvas-panel, .peek-panel__content-wrapper) .route-view-container,
+#site-wrap :is(.bb-offcanvas-panel, .peek-panel__content-wrapper) .panel-wrap { animation: none; }
 #site-wrap .peek-panel__content-wrapper, #site-wrap .bb-offcanvas-panel, .ms-Panel-main { animation: var(--gz-enter-panel); }
 /* Page changes that crossfade (canvas.css, moodle.css: Page transitions). */
 ::view-transition-group(root) { animation-duration: var(--gz-t-page); animation-timing-function: var(--gz-ease); }
@@ -99,7 +100,10 @@ html[data-gz-swap]::view-transition-group(root) { animation-duration: var(--gz-t
 html[data-gz-swap]::view-transition-new(root) { animation-name: gz-fade; }
 html[data-gz-swap]::view-transition-old(root), html[data-gz-swap]::view-transition-new(root) { mix-blend-mode: plus-lighter; }
 /* Tooltips grow from the side they point at. */
-:is(.tooltip, span.enhanced-tooltip, .ms-Tooltip, .gz-tip) { animation: var(--gz-tip-in); }
+:where(.tooltip):is(.tooltip, span.enhanced-tooltip),
+span.enhanced-tooltip,
+:where(.ms-Tooltip):is(.ms-Tooltip, span.enhanced-tooltip),
+:where(.gz-tip):is(.gz-tip, span.enhanced-tooltip) { animation: var(--gz-tip-in); }
 .gz-tip[data-side="bottom"] { --gz-tip-dy: -4px; }
 /* Glaze's own dialogs settle in and fall away, and their backdrops fade, rather than cutting in one frame. Both ways
    are transitions from @starting-style, held on screen while closing by display and overlay (allow-discrete). Only
@@ -146,7 +150,8 @@ html[data-gz-nav-expanded] :is(nav#base_tools, nav[class*="makeStylesnavigation-
 @keyframes gz-grow { from { transform: scaleX(0); } to { transform: none; } }
 
 /* Expressive: lifted cards pick up a faint accent edge. */
-html[data-gz-motion="expressive"] :is(.element-card, .content-list-item .itemContainer):hover {
+html[data-gz-motion="expressive"] :where(.element-card):is(.element-card, .content-list-item .itemContainer):hover,
+html[data-gz-motion="expressive"] :is(.content-list-item .itemContainer):hover {
   box-shadow: var(--gz-hover-shadow), 0 0 0 1px color-mix(in srgb, var(--gz-accent) 40%, transparent) !important;
 }
 

@@ -169,11 +169,24 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
    the button, badge and chip colors written later in this file.) */
 /* SVG's own elements by name, not `svg *`: that made every element on Ultra's page walk its ancestors for an <svg>. */
 #site-wrap :where(*:not(a, .MuiButton-root, .MuiChip-label, svg, svg :is(path, g, circle, rect, use, polygon, polyline, line, ellipse, text, tspan, defs, clipPath, mask, symbol, linearGradient, radialGradient, stop))) { color: inherit !important; }
-#site-wrap :where(.course-id, .course-status, .summary, .ellipsis, .more-info-toggle, .MuiFormLabel-root,
-  .MuiInputLabel-root, .MuiListItemText-secondary, .muted, .secondary, .subtitle) { color: var(--gz-ink-muted) !important; }
-#site-wrap :where(a, .MuiLink-root) { color: var(--gz-accent) !important; transition: color var(--gz-t) var(--gz-ease); }
-#site-wrap :where(a, .MuiLink-root):hover { color: var(--gz-accent-hi) !important; }
-#site-wrap .element-card :where(a, .course-title, .js-course-title-element) { color: var(--gz-ink) !important; }
+#site-wrap :where(.course-id),
+#site-wrap :where(.course-status),
+#site-wrap :where(.summary),
+#site-wrap :where(.ellipsis),
+#site-wrap :where(.more-info-toggle),
+#site-wrap :where(.MuiFormLabel-root),
+#site-wrap :where(.MuiInputLabel-root),
+#site-wrap :where(.MuiListItemText-secondary),
+#site-wrap :where(.muted),
+#site-wrap :where(.secondary),
+#site-wrap :where(.subtitle) { color: var(--gz-ink-muted) !important; }
+#site-wrap :where(a),
+#site-wrap :where(.MuiLink-root) { color: var(--gz-accent) !important; transition: color var(--gz-t) var(--gz-ease); }
+#site-wrap :where(a):hover,
+#site-wrap :where(.MuiLink-root):hover { color: var(--gz-accent-hi) !important; }
+#site-wrap .element-card :where(a),
+#site-wrap .element-card :where(.course-title),
+#site-wrap .element-card :where(.js-course-title-element) { color: var(--gz-ink) !important; }
 .svg-icon, .svg-icon path, .svg-icon use { fill: currentColor !important; }
 #site-wrap svg.svg-icon, #site-wrap bb-svg-icon, #site-wrap svg.MuiSvgIcon-root { color: inherit !important; } /* Ultra sets color:#000/#262626 on the svg itself */
 /* Course outline: the collapse wrappers around nested folders are painted white by Ultra. */
@@ -182,11 +195,18 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
    beat the inherit rule above. Graded pills carry Ultra's grade-band class (excellent … extremeFailing)
    and take that band's tint from the palette remap; --gz-grade-edge is the band's own colour. */
 #site-wrap .wrapping-input-style.pill-style { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; }
-#site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style):is(.excellent, .veryGood) { --gz-grade-edge: var(--gz-ok); }
+#site-wrap :where(.readonly-pill):is(.readonly-pill, .wrapping-input-style.pill-style):is(.excellent, .veryGood),
+#site-wrap .wrapping-input-style.pill-style:is(.excellent, .veryGood) { --gz-grade-edge: var(--gz-ok); }
 #site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style).good { --gz-grade-edge: color-mix(in srgb, var(--gz-ok), var(--gz-accent)); }
-#site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style):is(.fair, .borderline, .warning) { --gz-grade-edge: var(--gz-warn); }
-#site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style):is(.low, .veryLow) { --gz-grade-edge: color-mix(in srgb, var(--gz-warn), var(--gz-err)); }
-#site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style):is(.critical, .failing, .severeFailing, .extremeFailing) { --gz-grade-edge: var(--gz-err); }
+#site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style).fair,
+#site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style).borderline,
+#site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style).warning { --gz-grade-edge: var(--gz-warn); }
+#site-wrap :where(.readonly-pill):is(.readonly-pill, .wrapping-input-style.pill-style):is(.low, .veryLow),
+#site-wrap .wrapping-input-style.pill-style:is(.low, .veryLow) { --gz-grade-edge: color-mix(in srgb, var(--gz-warn), var(--gz-err)); }
+#site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style).critical,
+#site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style).failing,
+#site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style).severeFailing,
+#site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style).extremeFailing { --gz-grade-edge: var(--gz-err); }
 #site-wrap .excellent { --gz-grade-bg: var(--palette-grade-excellent); } #site-wrap .veryGood { --gz-grade-bg: var(--palette-grade-veryGood); }
 #site-wrap .good { --gz-grade-bg: var(--palette-grade-good); } #site-wrap .fair { --gz-grade-bg: var(--palette-grade-fair); }
 #site-wrap .borderline { --gz-grade-bg: var(--palette-grade-borderline); } #site-wrap .warning { --gz-grade-bg: var(--palette-grade-warning); }
@@ -220,12 +240,14 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
    poking past the rounded corners). That ::before becomes a short accent bar with a glow, over a
    soft accent wash. In a narrow window the main nav is a drawer outside #site-wrap, so its list's id
    reaches it there. */
-:is(#site-wrap, #base_tools) :is(.base-navigation-button-content:is(.Mui-selected, [aria-current], .active), li[class*="makeStylestreeListItem-"][class*="makeStylesselected-"]) {
+:is(#site-wrap, #base_tools) :where(.base-navigation-button-content:is(.Mui-selected, [aria-current], .active)):is(.base-navigation-button-content:is(.Mui-selected, [aria-current], .active), li[class*="makeStylestreeListItem-"][class*="makeStylesselected-"]),
+:is(#site-wrap, #base_tools) li[class*="makeStylestreeListItem-"][class*="makeStylesselected-"] {
   position: relative;
   background: radial-gradient(120% 140% at 0% 50%, color-mix(in srgb, var(--gz-accent) 20%, transparent), transparent 70%), color-mix(in srgb, var(--gz-accent-soft) 55%, transparent) !important;
   box-shadow: none !important;
 }
-:is(#site-wrap, #base_tools) :is(.base-navigation-button-content:is(.Mui-selected, [aria-current], .active), li[class*="makeStylestreeListItem-"][class*="makeStylesselected-"])::before {
+:is(#site-wrap, #base_tools) :where(.base-navigation-button-content:is(.Mui-selected, [aria-current], .active)):is(.base-navigation-button-content:is(.Mui-selected, [aria-current], .active), li[class*="makeStylestreeListItem-"][class*="makeStylesselected-"])::before,
+:is(#site-wrap, #base_tools) li[class*="makeStylestreeListItem-"][class*="makeStylesselected-"]::before {
   content: "" !important; display: block !important; position: absolute; left: 0; top: 24%; bottom: 24%; height: auto !important; width: 3px !important;
   border: 0 !important; border-radius: 999px; background: var(--gz-accent) !important;
   box-shadow: 0 0 6px 1px color-mix(in srgb, var(--gz-accent) 85%, transparent), 0 0 18px 5px color-mix(in srgb, var(--gz-accent) 35%, transparent);
@@ -293,7 +315,8 @@ div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) bb-course-navi
   block-size: 1.875rem !important; min-block-size: 0 !important; padding-block: 0 !important; padding-inline: 0.625rem !important; font-size: 0.75rem !important;
 }
 /* Ultra sets the tool's name in a Typography span with a size of its own. */
-div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) bb-course-navigation > [class*="makeStylestoolbar"] .bb-ui-navigation-list-horizontal a :is(.MuiListItemText-root, .MuiTypography-root) {
+div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) bb-course-navigation > [class*="makeStylestoolbar"] .bb-ui-navigation-list-horizontal a .MuiListItemText-root,
+div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) bb-course-navigation > [class*="makeStylestoolbar"] .bb-ui-navigation-list-horizontal a .MuiTypography-root {
   margin-block: 0 !important; font-size: inherit !important; line-height: 1.2 !important;
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -321,7 +344,9 @@ content-page-header > header, .routed-page.bb-offcanvas-container [class*="heade
   box-shadow: var(--gz-rest-shadow) !important;
   transition: var(--gz-card-transition) !important;
 }
-:is(.element-card, .gz-course-card):hover, .content-list-item .itemContainer:hover {
+.element-card:hover,
+.gz-course-card:hover,
+.content-list-item .itemContainer:hover {
   transform: var(--gz-lift);
   filter: var(--gz-card-hover-filter);
   box-shadow: var(--gz-hover-shadow) !important;
@@ -440,11 +465,28 @@ th { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-
 #site-wrap [class*="makeStylestoggleContainer-"] { box-shadow: none !important; border-radius: var(--gz-radius-sm) !important; }
 #site-wrap [class*="makeStylestoggleContainer-"] > * { border-radius: var(--gz-radius-sm) !important; }
 /* Empty-state copy is Noto Serif in Ultra and usernames are Open Sans; the theme is one sans everywhere. */
-#site-wrap :where(p, .main, bb-ui-username, bb-ui-username *, bb-username, bb-username *) { font-family: inherit !important; }
+#site-wrap :where(p),
+#site-wrap :where(.main),
+#site-wrap :where(bb-ui-username),
+#site-wrap :where(bb-username),
+#site-wrap :where(bb-ui-username *),
+#site-wrap :where(bb-username *) { font-family: inherit !important; }
 /* Headings take the heading font (content.js sets it to inherit when it follows the text), code the
    code font once one is chosen. */
-#site-wrap :where(h1, h2, h3, h4, h5, h6, .page-title) { font-family: var(--gz-font-head, inherit) !important; }
-html[data-gz-font-mono] :is(code, pre, kbd, samp, .ql-code-block, .ql-code-block-container, .ql-syntax) { font-family: var(--gz-font-mono) !important; }
+#site-wrap :where(h1),
+#site-wrap :where(h2),
+#site-wrap :where(h3),
+#site-wrap :where(h4),
+#site-wrap :where(h5),
+#site-wrap :where(h6),
+#site-wrap :where(.page-title) { font-family: var(--gz-font-head, inherit) !important; }
+html[data-gz-font-mono] :where(code):is(code, .ql-syntax),
+html[data-gz-font-mono] :where(pre):is(pre, .ql-syntax),
+html[data-gz-font-mono] :where(kbd):is(kbd, .ql-syntax),
+html[data-gz-font-mono] :where(samp):is(samp, .ql-syntax),
+html[data-gz-font-mono] .ql-code-block,
+html[data-gz-font-mono] .ql-code-block-container,
+html[data-gz-font-mono] .ql-syntax { font-family: var(--gz-font-mono) !important; }
 
 /* Document view (course item pages): Ultra paints the whole body and the title bar white. The title
    bar's div is anonymous, so it is reached through :has() from the stable h1 class. */
@@ -465,7 +507,9 @@ html { --gz-doc-w: 50rem; --gz-doc-zoom: clamp(1, calc(100cqi / 92.5rem), 1.5); 
 /* The card: the document's paper, and an assignment's instructions and details. The instructions
    are a MuiPaper, so the Paper surface rule further down outranks the see-through fill there and
    that card stays opaque; the rest of the recipe (edge, radius, shadow) applies to all three. */
-#site-wrap .bbml-editor-parent > .bbml-editor, bb-assignment-attempt-authoring-panel :is(.MuiAccordion-root, [class*="makeStylesdetails-"]) {
+#site-wrap .bbml-editor-parent > .bbml-editor,
+bb-assignment-attempt-authoring-panel .MuiAccordion-root,
+bb-assignment-attempt-authoring-panel [class*="makeStylesdetails-"] {
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important;
   backdrop-filter: blur(var(--gz-glass)) saturate(1.2);
   border: 1px solid color-mix(in srgb, var(--gz-border-strong, var(--gz-line-strong)) 70%, transparent) !important;
@@ -475,7 +519,10 @@ html { --gz-doc-w: 50rem; --gz-doc-zoom: clamp(1, calc(100cqi / 92.5rem), 1.5); 
 #site-wrap .bbml-editor-parent > .bbml-editor { padding: 1.25rem 1.5rem 1rem !important; }
 #site-wrap .bbml-editor :is([class*="makeStylescolumn-"], [class*="makeStylesblockBorder-"]) { border-color: transparent !important; background: transparent !important; }
 #site-wrap .bbml-editor .bb-editor-container.is-read-only { background: transparent !important; border: 0 !important; padding: 0 !important; }
-#site-wrap .bbml-editor :is(.bb-editor-root, .editor-content-container, .ql-container, .ql-editor) { background: transparent !important; }
+#site-wrap .bbml-editor .bb-editor-root,
+#site-wrap .bbml-editor .editor-content-container,
+#site-wrap .bbml-editor .ql-container,
+#site-wrap .bbml-editor .ql-editor { background: transparent !important; }
 /* Ultra's "default" video size is 48% wide at the left; it fills the column instead. Small and
    large keep the size the instructor picked. */
 #site-wrap .bbml-editor .bb-video-embed--default { justify-content: center; }
@@ -493,7 +540,14 @@ html { --gz-doc-w: 50rem; --gz-doc-zoom: clamp(1, calc(100cqi / 92.5rem), 1.5); 
    inside its card, and the details card replaces the divider between the columns. */
 bb-assignment-attempt-authoring-panel div:has(> div > h1.js-header-text) { max-width: 80rem !important; margin-inline: auto !important; width: 100%; }
 bb-assignment-attempt-authoring-panel [class*="makeStylesdetails-"] { padding: 1rem 1.25rem !important; align-self: flex-start; }
-bb-assignment-attempt-authoring-panel .MuiAccordion-root :is(.MuiAccordionSummary-root, .MuiAccordionDetails-root, .MuiCollapse-root, .bb-editor-container, .ql-editor, .ql-container, .editor-content-container, .bb-editor-root) { background: transparent !important; }
+bb-assignment-attempt-authoring-panel .MuiAccordion-root .MuiAccordionSummary-root,
+bb-assignment-attempt-authoring-panel .MuiAccordion-root .MuiAccordionDetails-root,
+bb-assignment-attempt-authoring-panel .MuiAccordion-root .MuiCollapse-root,
+bb-assignment-attempt-authoring-panel .MuiAccordion-root .bb-editor-container,
+bb-assignment-attempt-authoring-panel .MuiAccordion-root .ql-editor,
+bb-assignment-attempt-authoring-panel .MuiAccordion-root .ql-container,
+bb-assignment-attempt-authoring-panel .MuiAccordion-root .editor-content-container,
+bb-assignment-attempt-authoring-panel .MuiAccordion-root .bb-editor-root { background: transparent !important; }
 bb-assignment-attempt-authoring-panel .MuiAccordionSummary-root { border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
 bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-right: 0 !important; }
 /* The Submission heading is a pill its text's width, as the other section headings, even in a column that stretches. */
@@ -536,12 +590,13 @@ html[data-gz-bg="solid"] #site-wrap button[class*="makeStylesexpandTocButton-"] 
 #site-wrap .panel-header, #site-wrap .persistent-white-header, #site-wrap .panel-title, #site-wrap .panel-content, #site-wrap .panel-content-slide-toggle, #site-wrap .collapsible-row, #site-wrap .editable-title-container { background: var(--gz-ground) !important; color: var(--gz-ink) !important; }
 #site-wrap .panel-header { border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; box-shadow: none !important; }
 /* Item titles keep one surface behind the whole band, as the nearby content panels do. */
-#site-wrap :is(.discussion-container .panel-header.panel-header-directive.has-controls,
-  .base-header, .course-groups-header,
-  bb-assignment-attempt-authoring-panel [class*="makeStylespanelHeaderContainerRoot-"],
-  .assessment-overview-modern-panel [class*="makeStylespanelHeaderContainerRoot-"],
-  document-panel-react [class*="makeStylespanelHeaderContainerRoot-"],
-  .routed-page bb-panel-header > .panel-header.persistent-white-header) {
+#site-wrap :is(.discussion-container .panel-header.panel-header-directive.has-controls),
+#site-wrap :where(.base-header):is(.base-header, .discussion-container .panel-header.panel-header-directive.has-controls),
+#site-wrap :where(.course-groups-header):is(.course-groups-header, .discussion-container .panel-header.panel-header-directive.has-controls),
+#site-wrap :where(.routed-page bb-panel-header > .panel-header.persistent-white-header):is(.routed-page bb-panel-header > .panel-header.persistent-white-header, .discussion-container .panel-header.panel-header-directive.has-controls),
+#site-wrap :where(bb-assignment-attempt-authoring-panel [class*="makeStylespanelHeaderContainerRoot-"]):is(bb-assignment-attempt-authoring-panel [class*="makeStylespanelHeaderContainerRoot-"], .discussion-container .panel-header.panel-header-directive.has-controls),
+#site-wrap :where(.assessment-overview-modern-panel [class*="makeStylespanelHeaderContainerRoot-"]):is(.assessment-overview-modern-panel [class*="makeStylespanelHeaderContainerRoot-"], .discussion-container .panel-header.panel-header-directive.has-controls),
+#site-wrap :where(document-panel-react [class*="makeStylespanelHeaderContainerRoot-"]):is(document-panel-react [class*="makeStylespanelHeaderContainerRoot-"], .discussion-container .panel-header.panel-header-directive.has-controls) {
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, var(--gz-panel-opacity, 100%)), transparent) !important;
   backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.4);
   border: 1px solid var(--gz-border-line, var(--gz-line)) !important;
@@ -549,7 +604,13 @@ html[data-gz-bg="solid"] #site-wrap button[class*="makeStylesexpandTocButton-"] 
   box-shadow: var(--gz-rest-shadow) !important;
 }
 #site-wrap :is(.discussion-container .panel-header.panel-header-directive.has-controls,
-  .bb-offcanvas-panel.full .panel-header.simple-header, .routed-page bb-panel-header > .panel-header.persistent-white-header) :is(.panel-title, .editable-title-container, .panel-titles-container, .panel-title-texteditor) { background: transparent !important; }
+  .bb-offcanvas-panel.full .panel-header.simple-header, .routed-page bb-panel-header > .panel-header.persistent-white-header) .panel-title,
+#site-wrap :is(.discussion-container .panel-header.panel-header-directive.has-controls,
+  .bb-offcanvas-panel.full .panel-header.simple-header, .routed-page bb-panel-header > .panel-header.persistent-white-header) .editable-title-container,
+#site-wrap :is(.discussion-container .panel-header.panel-header-directive.has-controls,
+  .bb-offcanvas-panel.full .panel-header.simple-header, .routed-page bb-panel-header > .panel-header.persistent-white-header) .panel-titles-container,
+#site-wrap :is(.discussion-container .panel-header.panel-header-directive.has-controls,
+  .bb-offcanvas-panel.full .panel-header.simple-header, .routed-page bb-panel-header > .panel-header.persistent-white-header) .panel-title-texteditor { background: transparent !important; }
 /* The legacy item pages' band (a test attempt, a journal, a file) sits in the content column, a gap under the strip. */
 #site-wrap .routed-page bb-panel-header > .panel-header.persistent-white-header { margin: var(--gz-float-gap, 12px) 0 0 !important; padding: 1rem 1.5rem !important; min-height: 0 !important; }
 /* A full panel over the page (an announcement opened from a course): its header is a floating glass panel like the course
@@ -574,7 +635,9 @@ html[data-gz-bg="solid"] #site-wrap button[class*="makeStylesexpandTocButton-"] 
    A sheet over the dimmed page: one step above the ground, with an edge and a shadow toward the
    page. Inside it the ground is transparent, so the many pieces Ultra paints in the ground colour
    don't patch over the sheet. */
-#site-wrap :is(.bb-offcanvas-panel.peek, .peek-panel__content-wrapper), .ms-Panel-main {
+#site-wrap .bb-offcanvas-panel.peek,
+#site-wrap :where(.peek-panel__content-wrapper):is(.peek-panel__content-wrapper, .bb-offcanvas-panel.peek),
+.ms-Panel-main {
   --gz-ground: transparent;
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, 45%), var(--gz-surface-paint-2, var(--gz-surface-2))) !important;
   border-left: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important;
@@ -613,7 +676,10 @@ html[data-gz-bg="solid"] #site-wrap button[class*="makeStylesexpandTocButton-"] 
 /* A course tool's list toolbar (Announcements' count, Glaze's Mark all as read and search; Messages' New Message) is no band across the page: no
    fill, no rule under it, and each control a pill on the background. */
 .course-announcement-layer > .guidance-wrapper, #site-wrap .course-announcement-layer > .guidance-wrapper, .messages-header, .messages-header > .summary { background: transparent !important; border-bottom: 0 !important; box-shadow: none !important; }
-:is(.course-announcement-layer > .guidance-wrapper > span, .course-announcement-layer > .guidance-wrapper #search-button, .course-announcement-layer .gz-ann-read-all, .messages-header .send-message-button) {
+:where(.course-announcement-layer > .guidance-wrapper > span):is(.course-announcement-layer > .guidance-wrapper > span, .course-announcement-layer > .guidance-wrapper #search-button),
+:is(.course-announcement-layer > .guidance-wrapper #search-button),
+:where(.course-announcement-layer .gz-ann-read-all):is(.course-announcement-layer .gz-ann-read-all, .course-announcement-layer > .guidance-wrapper #search-button),
+:where(.messages-header .send-message-button):is(.messages-header .send-message-button, .course-announcement-layer > .guidance-wrapper #search-button) {
   display: inline-flex; align-items: center; box-sizing: border-box; min-height: 32px; padding: 4px 12px !important; border-radius: 999px !important; color: var(--gz-ink) !important;
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important;
   border: 1px solid var(--gz-border-line, var(--gz-line)) !important; box-shadow: var(--gz-rest-shadow) !important;
@@ -625,7 +691,9 @@ html[data-gz-bg="solid"] #site-wrap button[class*="makeStylesexpandTocButton-"] 
 .course-announcement-layer .gz-ann-read-all:disabled { opacity: 0.65; cursor: wait; }
 .course-announcement-layer > .guidance-wrapper > .gz-ann-read-status { flex-basis: 100%; border: 0 !important; background: transparent !important; box-shadow: none !important; padding: 0 !important; }
 .course-announcement-layer > .guidance-wrapper > .gz-ann-read-status:empty { display: none; }
-:is(.course-announcement-layer > .guidance-wrapper #search-button, .course-announcement-layer .gz-ann-read-all:enabled, .messages-header .send-message-button):hover { background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent-hi, var(--gz-accent)) 15%, var(--gz-surface-paint, var(--gz-surface))) !important; }
+:is(.course-announcement-layer > .guidance-wrapper #search-button):hover,
+:where(.course-announcement-layer .gz-ann-read-all:enabled):is(.course-announcement-layer .gz-ann-read-all:enabled, .course-announcement-layer > .guidance-wrapper #search-button):hover,
+:where(.messages-header .send-message-button):is(.messages-header .send-message-button, .course-announcement-layer > .guidance-wrapper #search-button):hover { background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent-hi, var(--gz-accent)) 15%, var(--gz-surface-paint, var(--gz-surface))) !important; }
 #site-wrap .guidance-wrapper input { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; }
 /* Search open: the field takes the count's and the button's place, as a pill like them, with no band behind it. */
 .course-announcement-layer #announcement-search { background: transparent !important; border: 0 !important; box-shadow: none !important; }
@@ -647,21 +715,25 @@ html[data-gz-bg="solid"] #site-wrap button[class*="makeStylesexpandTocButton-"] 
 #site-wrap .calendar-toggle button:hover { color: var(--gz-ink) !important; border-color: var(--gz-border-strong, var(--gz-line-strong)) !important; }
 /* Native lists and calendars used the page itself as their fill. Keep one rounded surface behind
    each group, without clipping table controls, calendar popovers or the native scroll containers. */
-#site-wrap :is(.calendar-wrapper, .tabular-list,
-  course-student-grades,
-  course-achievements-panel [class*="makeStylescomponentContainer-"],
-  .messages-container .no-messages, .base-profile .account-snapshot) {
+#site-wrap :where(.calendar-wrapper):is(.calendar-wrapper, .base-profile .account-snapshot),
+#site-wrap :where(.tabular-list):is(.tabular-list, .base-profile .account-snapshot),
+#site-wrap :where(course-student-grades):is(course-student-grades, .base-profile .account-snapshot),
+#site-wrap :is(.messages-container .no-messages),
+#site-wrap :is(.base-profile .account-snapshot),
+#site-wrap :where(course-achievements-panel [class*="makeStylescomponentContainer-"]):is(course-achievements-panel [class*="makeStylescomponentContainer-"], .base-profile .account-snapshot) {
   box-sizing: border-box;
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, var(--gz-panel-opacity, 100%)), transparent) !important;
   border: 1px solid var(--gz-border-line, var(--gz-line)) !important;
   border-radius: var(--gz-radius) !important;
   box-shadow: var(--gz-rest-shadow) !important;
 }
-#site-wrap :is(course-achievements-panel [class*="makeStylescomponentContainer-"], .messages-container .no-messages) { padding: 1.5rem !important; margin-block: 1rem; }
+#site-wrap :is(.messages-container .no-messages),
+#site-wrap :where(course-achievements-panel [class*="makeStylescomponentContainer-"]):is(course-achievements-panel [class*="makeStylescomponentContainer-"], .messages-container .no-messages) { padding: 1.5rem !important; margin-block: 1rem; }
 #site-wrap course-student-grades { display: block; }
 /* The table's own square row fills must not cover the surrounding surface's corners. */
 #site-wrap .tabular-list > table { border-collapse: separate; border-spacing: 0; }
-#site-wrap .tabular-list :is(thead, thead tr) { background: transparent !important; }
+#site-wrap .tabular-list :where(thead):is(thead, thead tr),
+#site-wrap .tabular-list :is(thead tr) { background: transparent !important; }
 #site-wrap .tabular-list thead th:first-child { border-start-start-radius: var(--gz-radius); }
 #site-wrap .tabular-list thead th:last-child { border-start-end-radius: var(--gz-radius); }
 #site-wrap .tabular-list tbody tr:last-child td:first-child { border-end-start-radius: var(--gz-radius); }
@@ -689,7 +761,8 @@ html[data-gz-bg="solid"] #site-wrap button[class*="makeStylesexpandTocButton-"] 
 #site-wrap .readonly-pill .pill-points-possible { opacity: 0.75; }
 /* By id: a leading unread-dot column comes and goes, so the Grade column isn't always the 4th. */
 #site-wrap .grades-list td:has(.readonly-pill), #site-wrap .grades-list th#course-student-grades-header-grade { width: calc(10rem + 32px) !important; }
-#site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style)[class*="customGradePill"] { background: var(--gz-surface-grain, none), var(--gz-grade-bg, var(--gz-surface-paint, var(--gz-surface))) !important; border-color: color-mix(in srgb, var(--gz-grade-edge, var(--gz-border-strong, var(--gz-line-strong))) 55%, var(--gz-border-strong, var(--gz-line-strong))) !important; }
+#site-wrap :where(.readonly-pill):is(.readonly-pill, .wrapping-input-style.pill-style)[class*="customGradePill"],
+#site-wrap .wrapping-input-style.pill-style[class*="customGradePill"] { background: var(--gz-surface-grain, none), var(--gz-grade-bg, var(--gz-surface-paint, var(--gz-surface))) !important; border-color: color-mix(in srgb, var(--gz-grade-edge, var(--gz-border-strong, var(--gz-line-strong))) 55%, var(--gz-border-strong, var(--gz-line-strong))) !important; }
 
 /* Message compose: reply dock + the Quill toolbar. */
 #site-wrap .message-reply-container, #site-wrap .send-wrapper { background: var(--gz-ground) !important; border-top: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
@@ -706,7 +779,10 @@ html[data-gz-bg="solid"] #site-wrap button[class*="makeStylesexpandTocButton-"] 
    A header card of its own keeps its paint. */
 #site-wrap :is(.base-header, .course-groups-header, [class*="makeStylespanelHeaderContainerRoot-"], .calendar-wrapper, .tabular-list, table, course-student-grades,
   .element-card, .base-grades-course-tile, article, .MuiCard-root, .MuiPaper-root:not(.MuiDrawer-paper), .assessment-question, .assessment-progress-header, .assessment-attempt-panel > .black-panel-header)
-  :is(div:is([class*="-header"], [class*="header-"]), .guidance-wrapper):not(.base-header, .base-header-tools, .course-groups-header, .panel-header, [class*="makeStylespanelHeaderContainerRoot-"]) { background: transparent !important; }
+  div:is([class*="-header"], [class*="header-"]):not(.base-header, .base-header-tools, .course-groups-header, .panel-header, [class*="makeStylespanelHeaderContainerRoot-"]),
+#site-wrap :is(.base-header, .course-groups-header, [class*="makeStylespanelHeaderContainerRoot-"], .calendar-wrapper, .tabular-list, table, course-student-grades,
+  .element-card, .base-grades-course-tile, article, .MuiCard-root, .MuiPaper-root:not(.MuiDrawer-paper), .assessment-question, .assessment-progress-header, .assessment-attempt-panel > .black-panel-header)
+  :where(.guidance-wrapper):is(.guidance-wrapper, div:is([class*="-header"], [class*="header-"])):not(.base-header, .base-header-tools, .course-groups-header, .panel-header, [class*="makeStylespanelHeaderContainerRoot-"]) { background: transparent !important; }
 
 /* Attendance peek panel. */
 #site-wrap .peek-panel__content-wrapper, #site-wrap .student-panel, #site-wrap .student-panel__background { background: var(--gz-ground) !important; color: var(--gz-ink) !important; }
@@ -784,15 +860,40 @@ svg:has(> path[class*="makeStylesindeterminateSvg-"]) { filter: drop-shadow(0 0 
 .MuiModal-root, .MuiPopper-root, .MuiPopover-root, .MuiDialog-root { color: var(--gz-ink) !important; }
 .MuiModal-root *:not(a):not(.MuiButton-root):not(.MuiChip-label):not(svg):not(svg :is(path, g, circle, rect, use, polygon, polyline, line, ellipse, text, tspan, defs, clipPath, mask, symbol, linearGradient, radialGradient, stop)), .MuiPopper-root *:not(a):not(.MuiButton-root):not(.MuiChip-label):not(svg):not(svg :is(path, g, circle, rect, use, polygon, polyline, line, ellipse, text, tspan, defs, clipPath, mask, symbol, linearGradient, radialGradient, stop)) { color: inherit !important; }
 .MuiModal-root *, .MuiPopper-root * { border-color: var(--gz-border-line, var(--gz-line)) !important; }
-.MuiModal-root :is(a, .MuiLink-root), .MuiPopper-root :is(a, .MuiLink-root) { color: var(--gz-accent) !important; }
-.MuiModal-root :is(.MuiRadio-root, .MuiCheckbox-root, .MuiSvgIcon-root), .MuiPopper-root :is(.MuiRadio-root, .MuiCheckbox-root, .MuiSvgIcon-root) { color: var(--gz-ink-muted) !important; }
+.MuiModal-root :where(a):is(a, .MuiLink-root),
+.MuiModal-root .MuiLink-root,
+.MuiPopper-root :where(a):is(a, .MuiLink-root),
+.MuiPopper-root .MuiLink-root { color: var(--gz-accent) !important; }
+.MuiModal-root .MuiRadio-root,
+.MuiModal-root .MuiCheckbox-root,
+.MuiModal-root .MuiSvgIcon-root,
+.MuiPopper-root .MuiRadio-root,
+.MuiPopper-root .MuiCheckbox-root,
+.MuiPopper-root .MuiSvgIcon-root { color: var(--gz-ink-muted) !important; }
 .MuiModal-root .Mui-checked, .MuiPopper-root .Mui-checked { color: var(--gz-accent) !important; }
-.MuiModal-root :is(fieldset, legend, legend *, .MuiFormControlLabel-root, [class*="popover-container"]), .MuiPopper-root :is(fieldset, legend, legend *, .MuiFormControlLabel-root, [class*="popover-container"]) { background: transparent !important; }
+.MuiModal-root :where(fieldset):is(fieldset, .MuiFormControlLabel-root),
+.MuiModal-root :where(legend):is(legend, .MuiFormControlLabel-root),
+.MuiModal-root .MuiFormControlLabel-root,
+.MuiModal-root :where(legend *):is(legend *, .MuiFormControlLabel-root),
+.MuiModal-root [class*="popover-container"],
+.MuiPopper-root :where(fieldset):is(fieldset, .MuiFormControlLabel-root),
+.MuiPopper-root :where(legend):is(legend, .MuiFormControlLabel-root),
+.MuiPopper-root .MuiFormControlLabel-root,
+.MuiPopper-root :where(legend *):is(legend *, .MuiFormControlLabel-root),
+.MuiPopper-root [class*="popover-container"] { background: transparent !important; }
 /* Menu and list items are clear at rest too, but not in the states that say where you are: MUI draws no outline on a
    focused item, only a fill, so with every fill cleared the keyboard was nowhere to be seen, and the chosen option
    looked like the rest. */
-.MuiModal-root :is(.MuiMenuItem-root, .MuiListItem-root), .MuiPopper-root :is(.MuiMenuItem-root, .MuiListItem-root) { background: transparent !important; }
-.MuiModal-root :is(.MuiMenuItem-root, .MuiListItem-root, .MuiListItemButton-root):is(:hover, .Mui-focusVisible), .MuiPopper-root :is(.MuiMenuItem-root, .MuiListItem-root, .MuiListItemButton-root):is(:hover, .Mui-focusVisible) { background: var(--gz-hover-fill) !important; }
+.MuiModal-root .MuiMenuItem-root,
+.MuiModal-root .MuiListItem-root,
+.MuiPopper-root .MuiMenuItem-root,
+.MuiPopper-root .MuiListItem-root { background: transparent !important; }
+.MuiModal-root .MuiMenuItem-root:is(:hover, .Mui-focusVisible),
+.MuiModal-root .MuiListItem-root:is(:hover, .Mui-focusVisible),
+.MuiModal-root .MuiListItemButton-root:is(:hover, .Mui-focusVisible),
+.MuiPopper-root .MuiMenuItem-root:is(:hover, .Mui-focusVisible),
+.MuiPopper-root .MuiListItem-root:is(:hover, .Mui-focusVisible),
+.MuiPopper-root .MuiListItemButton-root:is(:hover, .Mui-focusVisible) { background: var(--gz-hover-fill) !important; }
 .MuiModal-root :is(.MuiMenuItem-root, .MuiListItem-root, .MuiListItemButton-root).Mui-focusVisible, .MuiPopper-root :is(.MuiMenuItem-root, .MuiListItem-root, .MuiListItemButton-root).Mui-focusVisible { outline: 2px solid var(--gz-accent) !important; outline-offset: -2px; }
 .MuiModal-root :is(.MuiMenuItem-root, .MuiListItem-root, .MuiListItemButton-root).Mui-selected, .MuiPopper-root :is(.MuiMenuItem-root, .MuiListItem-root, .MuiListItemButton-root).Mui-selected { background: var(--gz-accent-soft) !important; box-shadow: inset 3px 0 0 var(--gz-accent) !important; }
 .MuiPaper-root:not(.MuiDrawer-paper) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; }
@@ -801,9 +902,23 @@ svg:has(> path[class*="makeStylesindeterminateSvg-"]) { filter: drop-shadow(0 0 
    looked like one that would (a dialog's greyed Submit stayed accent). MUI's disabled look, restated in the palette:
    page and portals, its buttons, date-picker days and plain buttons. Menu items keep MUI's own fade; a filled button
    drops Ultra's (its .button's opacity), or the two fades together left its label barely there. ---- */
-:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :is(.MuiButton-root, .MuiIconButton-root, .MuiToggleButton-root, .MuiPickersDay-root, .MuiTab-root, button, a.button):is(.Mui-disabled, :disabled, [aria-disabled="true"]),
-:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :is(.MuiButton-root, .MuiIconButton-root, .MuiToggleButton-root, .MuiPickersDay-root, .MuiTab-root, button, a.button):is(.Mui-disabled, :disabled, [aria-disabled="true"]) * { color: var(--palette-action-disabled) !important; }
-:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :is(.MuiButton-contained, a.button, button.button):is(.Mui-disabled, :disabled, [aria-disabled="true"]) { background: var(--palette-action-disabledBackground) !important; border-color: var(--palette-action-disabledBackground) !important; box-shadow: none !important; filter: none; opacity: 1; }
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :where(.MuiButton-root):is(.MuiButton-root, a.button):is(.Mui-disabled, :disabled, [aria-disabled="true"]),
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :where(.MuiIconButton-root):is(.MuiIconButton-root, a.button):is(.Mui-disabled, :disabled, [aria-disabled="true"]),
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :where(.MuiToggleButton-root):is(.MuiToggleButton-root, a.button):is(.Mui-disabled, :disabled, [aria-disabled="true"]),
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :where(.MuiPickersDay-root):is(.MuiPickersDay-root, a.button):is(.Mui-disabled, :disabled, [aria-disabled="true"]),
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :where(.MuiTab-root):is(.MuiTab-root, a.button):is(.Mui-disabled, :disabled, [aria-disabled="true"]),
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :where(button):is(button, a.button):is(.Mui-disabled, :disabled, [aria-disabled="true"]),
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) a.button:is(.Mui-disabled, :disabled, [aria-disabled="true"]),
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :where(.MuiButton-root):is(.MuiButton-root, a.button):is(.Mui-disabled, :disabled, [aria-disabled="true"]) *,
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :where(.MuiIconButton-root):is(.MuiIconButton-root, a.button):is(.Mui-disabled, :disabled, [aria-disabled="true"]) *,
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :where(.MuiToggleButton-root):is(.MuiToggleButton-root, a.button):is(.Mui-disabled, :disabled, [aria-disabled="true"]) *,
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :where(.MuiPickersDay-root):is(.MuiPickersDay-root, a.button):is(.Mui-disabled, :disabled, [aria-disabled="true"]) *,
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :where(.MuiTab-root):is(.MuiTab-root, a.button):is(.Mui-disabled, :disabled, [aria-disabled="true"]) *,
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :where(button):is(button, a.button):is(.Mui-disabled, :disabled, [aria-disabled="true"]) *,
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) a.button:is(.Mui-disabled, :disabled, [aria-disabled="true"]) * { color: var(--palette-action-disabled) !important; }
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) :where(.MuiButton-contained):is(.MuiButton-contained, a.button):is(.Mui-disabled, :disabled, [aria-disabled="true"]),
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) a.button:is(.Mui-disabled, :disabled, [aria-disabled="true"]),
+:is(#site-wrap, .MuiModal-root, .MuiPopper-root) button.button:is(.Mui-disabled, :disabled, [aria-disabled="true"]) { background: var(--palette-action-disabledBackground) !important; border-color: var(--palette-action-disabledBackground) !important; box-shadow: none !important; filter: none; opacity: 1; }
 :is(#site-wrap, .MuiModal-root, .MuiPopper-root) .MuiButton-outlined:is(.Mui-disabled, :disabled, [aria-disabled="true"]) { border-color: var(--palette-action-disabledBackground) !important; }
 /* The chosen day in MUI's date picker: filled with the primary colour, which is the palette's ink, and its number given
    that same ink by the portal's inherit rule, so the date you picked was a blank disc. The accent, as chosen things are. */
@@ -828,7 +943,8 @@ html[data-gz-footer] .route-view-container, html[data-gz-footer] .routed-page, h
 }
 /* A course or routed page holds the bar's padding inside its own height (and on Ultra is itself a .route-view-container):
    its cap leaves that room in, or the page would stop a bar's height above the footer. */
-html[data-gz-navbar][data-gz-footer] .inner-wrap > :is(section.course, .routed-page) {
+html[data-gz-navbar][data-gz-footer] .inner-wrap > section.course,
+html[data-gz-navbar][data-gz-footer] .inner-wrap > :where(.routed-page):is(.routed-page, section.course) {
   max-height: calc(100vh - var(--gz-footer-h)) !important;
 }
 /* Printed, the page is Ultra's own: no footer on every sheet, and none of its room (the caps above are Ultra's heights). */
@@ -890,8 +1006,18 @@ html[data-gz-navbar][data-gz-footer] .inner-wrap > :is(section.course, .routed-p
 /* ---- borders: every border under the page is a theme line; the few that mean something are restated ---- */
 #site-wrap * { border-color: var(--gz-border-line, var(--gz-line)) !important; }
 /* Except a field's edge (see controls), here and in portals, whose own catch-all comes earlier. */
-#site-wrap :where(input, textarea, select, .MuiOutlinedInput-notchedOutline), .MuiModal-root :where(input, textarea, select, .MuiOutlinedInput-notchedOutline),
-.MuiPopper-root :where(input, textarea, select, .MuiOutlinedInput-notchedOutline) { border-color: var(--gz-ink-faint) !important; }
+#site-wrap :where(input),
+#site-wrap :where(textarea),
+#site-wrap :where(select),
+#site-wrap :where(.MuiOutlinedInput-notchedOutline),
+.MuiModal-root :where(input),
+.MuiModal-root :where(textarea),
+.MuiModal-root :where(select),
+.MuiModal-root :where(.MuiOutlinedInput-notchedOutline),
+.MuiPopper-root :where(input),
+.MuiPopper-root :where(textarea),
+.MuiPopper-root :where(select),
+.MuiPopper-root :where(.MuiOutlinedInput-notchedOutline) { border-color: var(--gz-ink-faint) !important; }
 #site-wrap .element-card:hover, #site-wrap .content-list-item > .itemContainer:hover { border-color: var(--gz-border-strong, var(--gz-line-strong)) !important; }
 #site-wrap .MuiInputBase-root:hover .MuiOutlinedInput-notchedOutline { border-color: var(--gz-ink-muted) !important; }
 #site-wrap .Mui-focused .MuiOutlinedInput-notchedOutline { border-color: var(--gz-accent) !important; }
@@ -978,36 +1104,69 @@ html:not([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap
 /* A discussion's side column: Details & Information and Participation as panels like the outline's; the rules under
    their titles and between their parts, the separators above each participant, and the divider Ultra draws beside the
    column go. */
-#site-wrap .layer-details :is(.discussion-settings, .discussion-participants) {
+#site-wrap .layer-details .discussion-settings,
+#site-wrap .layer-details .discussion-participants {
   padding: 0.75rem 1rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius);
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent); backdrop-filter: blur(var(--gz-glass)) saturate(1.2); box-shadow: var(--gz-rest-shadow);
 }
 #site-wrap .layer-content::after { display: none !important; }
-#site-wrap .layer-details :is(.full-panel-details-title, .separation-border, .guidance-wrapper, [class*="makeStyleselementDetails-"], .element-details) { border-bottom: 0 !important; }
+#site-wrap .layer-details .full-panel-details-title,
+#site-wrap .layer-details .separation-border,
+#site-wrap .layer-details .guidance-wrapper,
+#site-wrap .layer-details .element-details,
+#site-wrap .layer-details [class*="makeStyleselementDetails-"] { border-bottom: 0 !important; }
 #site-wrap .layer-details .discussion-participants li::before { display: none !important; }
 /* Item pages' wells and lists (an assignment's due date, attempts and details; a test's results, which have no well; a
    profile's lists; a group set with nothing in it): panels on Glaze's surface with the Look's corners. Ultra painted the
    wells in the page's own colour, square, so they read as empty outlines. */
-#site-wrap :is(.section-well, .assessment-details-section > ul.section-content, .assessment-results-section > .section-content, .base-profile section ul, .group-empty-state,
-  .assessment-attempt-panel :is(.assessment-question, .assessment-progress-header), .rubric-details-panel > .panel-section-header,
-  .course-announcement-layer .no-result-message, .is-empty-page > .is-empty-wrapper) {
+#site-wrap :where(.section-well):is(.section-well, .assessment-details-section > ul.section-content),
+#site-wrap :is(.assessment-details-section > ul.section-content),
+#site-wrap :where(.assessment-results-section > .section-content):is(.assessment-results-section > .section-content, .assessment-details-section > ul.section-content),
+#site-wrap :where(.base-profile section ul):is(.base-profile section ul, .assessment-details-section > ul.section-content),
+#site-wrap :where(.group-empty-state):is(.group-empty-state, .assessment-details-section > ul.section-content),
+#site-wrap :where(.assessment-attempt-panel .assessment-question):is(.assessment-attempt-panel .assessment-question, .assessment-details-section > ul.section-content),
+#site-wrap :where(.assessment-attempt-panel .assessment-progress-header):is(.assessment-attempt-panel .assessment-progress-header, .assessment-details-section > ul.section-content),
+#site-wrap :where(.rubric-details-panel > .panel-section-header):is(.rubric-details-panel > .panel-section-header, .assessment-details-section > ul.section-content),
+#site-wrap :where(.course-announcement-layer .no-result-message):is(.course-announcement-layer .no-result-message, .assessment-details-section > ul.section-content),
+#site-wrap :where(.is-empty-page > .is-empty-wrapper):is(.is-empty-page > .is-empty-wrapper, .assessment-details-section > ul.section-content) {
   border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important;
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important; backdrop-filter: blur(var(--gz-glass)) saturate(1.2); box-shadow: var(--gz-rest-shadow) !important;
 }
 /* Over a solid background the glass on the nav, the headers and these panels blurs a flat colour: nothing to see, and
    a GPU layer each. Same fill. */
-html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wrap header[class*="makeStylesheader-"], course-page-header > header, content-page-header > header,
-  .routed-page.bb-offcanvas-container [class*="headerRoot"] > [class*="panelHeaderContainerRoot"],
-  #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls, #site-wrap .course-groups-header, #site-wrap .routed-page bb-panel-header > .panel-header.persistent-white-header,
-  bb-assignment-attempt-authoring-panel [class*="makeStylespanelHeaderContainerRoot-"], .assessment-overview-modern-panel [class*="makeStylespanelHeaderContainerRoot-"],
-  #site-wrap document-panel-react [class*="makeStylespanelHeaderContainerRoot-"], #site-wrap .bb-offcanvas-panel.full .panel-header.simple-header::before,
-  .bb-course-navigation [class*="makeStylestoolbar"], #site-wrap .bbml-editor-parent > .bbml-editor,
-  bb-assignment-attempt-authoring-panel :is(.MuiAccordion-root, [class*="makeStylesdetails-"], [class*="makeStylesbaseBody-"] > [class*="makeStylesfooterWrapper-"]), #site-wrap .outline-action-block,
-  #site-wrap .layer-details :is(.discussion-settings, .discussion-participants),
-  #site-wrap :is(.section-well, .assessment-details-section > ul.section-content, .assessment-results-section > .section-content, .base-profile section ul, .group-empty-state,
-  .assessment-attempt-panel :is(.assessment-question, .assessment-progress-header), .rubric-details-panel > .panel-section-header,
-  .course-announcement-layer .no-result-message, .is-empty-page > .is-empty-wrapper)) { backdrop-filter: none; }
-#site-wrap :is(.assessment-details-section > ul.section-content, .assessment-results-section > .section-content) { padding: 0.75rem 1rem !important; }
+html[data-gz-bg="solid"] :where(.MuiDrawer-paper):is(.MuiDrawer-paper, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap .base-header):is(#site-wrap .base-header, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap header[class*="makeStylesheader-"]):is(#site-wrap header[class*="makeStylesheader-"], #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(course-page-header > header):is(course-page-header > header, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(content-page-header > header):is(content-page-header > header, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :is(#site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap .course-groups-header):is(#site-wrap .course-groups-header, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap .routed-page bb-panel-header > .panel-header.persistent-white-header):is(#site-wrap .routed-page bb-panel-header > .panel-header.persistent-white-header, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :is(#site-wrap .bb-offcanvas-panel.full .panel-header.simple-header::before),
+html[data-gz-bg="solid"] :where(#site-wrap .bbml-editor-parent > .bbml-editor):is(#site-wrap .bbml-editor-parent > .bbml-editor, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(bb-assignment-attempt-authoring-panel .MuiAccordion-root):is(bb-assignment-attempt-authoring-panel .MuiAccordion-root, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap .outline-action-block):is(#site-wrap .outline-action-block, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap .layer-details .discussion-settings):is(#site-wrap .layer-details .discussion-settings, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap .layer-details .discussion-participants):is(#site-wrap .layer-details .discussion-participants, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap .section-well):is(#site-wrap .section-well, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap :is(.assessment-details-section > ul.section-content)):is(#site-wrap :is(.assessment-details-section > ul.section-content), #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap :is(.assessment-results-section > .section-content)):is(#site-wrap :is(.assessment-results-section > .section-content), #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap :is(.base-profile section ul)):is(#site-wrap :is(.base-profile section ul), #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap .group-empty-state):is(#site-wrap .group-empty-state, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap :is(.assessment-attempt-panel .assessment-question)):is(#site-wrap :is(.assessment-attempt-panel .assessment-question), #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap :is(.assessment-attempt-panel .assessment-progress-header)):is(#site-wrap :is(.assessment-attempt-panel .assessment-progress-header), #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap :is(.rubric-details-panel > .panel-section-header)):is(#site-wrap :is(.rubric-details-panel > .panel-section-header), #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap :is(.course-announcement-layer .no-result-message)):is(#site-wrap :is(.course-announcement-layer .no-result-message), #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap :is(.is-empty-page > .is-empty-wrapper)):is(#site-wrap :is(.is-empty-page > .is-empty-wrapper), #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(.routed-page.bb-offcanvas-container [class*="headerRoot"] > [class*="panelHeaderContainerRoot"]):is(.routed-page.bb-offcanvas-container [class*="headerRoot"] > [class*="panelHeaderContainerRoot"], #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(bb-assignment-attempt-authoring-panel [class*="makeStylespanelHeaderContainerRoot-"]):is(bb-assignment-attempt-authoring-panel [class*="makeStylespanelHeaderContainerRoot-"], #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(.assessment-overview-modern-panel [class*="makeStylespanelHeaderContainerRoot-"]):is(.assessment-overview-modern-panel [class*="makeStylespanelHeaderContainerRoot-"], #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap document-panel-react [class*="makeStylespanelHeaderContainerRoot-"]):is(#site-wrap document-panel-react [class*="makeStylespanelHeaderContainerRoot-"], #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(.bb-course-navigation [class*="makeStylestoolbar"]):is(.bb-course-navigation [class*="makeStylestoolbar"], #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(bb-assignment-attempt-authoring-panel :is([class*="makeStylesbaseBody-"] > [class*="makeStylesfooterWrapper-"])):is(bb-assignment-attempt-authoring-panel :is([class*="makeStylesbaseBody-"] > [class*="makeStylesfooterWrapper-"]), #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(bb-assignment-attempt-authoring-panel [class*="makeStylesdetails-"]):is(bb-assignment-attempt-authoring-panel [class*="makeStylesdetails-"], #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls) { backdrop-filter: none; }
+#site-wrap :is(.assessment-details-section > ul.section-content),
+#site-wrap :where(.assessment-results-section > .section-content):is(.assessment-results-section > .section-content, .assessment-details-section > ul.section-content) { padding: 0.75rem 1rem !important; }
 #site-wrap .base-profile section ul { overflow: hidden; } /* its rows paint their own fill: kept inside the corners */
 /* Item type at a glance: the type icon carries its name as aria-label. */
 #site-wrap .content-list-item svg[aria-label] { color: var(--gz-type, var(--gz-accent)) !important; }
@@ -1049,41 +1208,66 @@ html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wr
 #site-wrap .discussion-board {
   --gz-discussion-fill: color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, var(--gz-panel-opacity, 100%)), transparent);
 }
-#site-wrap .discussion-board :is(.initial-post, .entry-wrapper, .new-comment, .reply-input-wrapper) {
+#site-wrap .discussion-board .initial-post,
+#site-wrap .discussion-board .entry-wrapper,
+#site-wrap .discussion-board .new-comment,
+#site-wrap .discussion-board .reply-input-wrapper {
   background: var(--gz-surface-grain, none), var(--gz-discussion-fill) !important;
   border: 1px solid var(--gz-border-line, var(--gz-line)) !important;
   border-radius: var(--gz-radius) !important;
   box-shadow: var(--gz-rest-shadow) !important;
 }
-#site-wrap .discussion-board :is(.initial-post, .entry-wrapper, .reply-input-wrapper) { padding: 1rem; margin-block: 0.75rem; }
+#site-wrap .discussion-board .initial-post,
+#site-wrap .discussion-board .entry-wrapper,
+#site-wrap .discussion-board .reply-input-wrapper { padding: 1rem; margin-block: 0.75rem; }
 #site-wrap .discussion-board .entry-wrapper .entry.comment-entry { margin-block-start: 0; }
 #site-wrap .discussion-board .new-comment { padding-inline: 1rem; }
-#site-wrap .discussion-board :is(bb-message, .reply-form, .comments,
-  .bb-editor-root:has(.bb-editor-container.is-read-only), .editor-content-container:has(> .bb-editor-container.is-read-only),
-  .bb-editor-container.is-read-only, .bb-editor-container.is-read-only .ql-editor) { background: transparent !important; }
+#site-wrap .discussion-board :where(bb-message):is(bb-message, .bb-editor-container.is-read-only .ql-editor),
+#site-wrap .discussion-board :where(.reply-form):is(.reply-form, .bb-editor-container.is-read-only .ql-editor),
+#site-wrap .discussion-board :where(.comments):is(.comments, .bb-editor-container.is-read-only .ql-editor),
+#site-wrap .discussion-board .bb-editor-root:has(.bb-editor-container.is-read-only),
+#site-wrap .discussion-board .editor-content-container:has(> .bb-editor-container.is-read-only),
+#site-wrap .discussion-board :where(.bb-editor-container.is-read-only):is(.bb-editor-container.is-read-only, .bb-editor-container.is-read-only .ql-editor),
+#site-wrap .discussion-board :is(.bb-editor-container.is-read-only .ql-editor) { background: transparent !important; }
 #site-wrap .discussion-board .bb-editor-container.is-read-only { padding: 0 !important; border: 0 !important; box-shadow: none !important; }
 #site-wrap .discussion-board .reply-input-wrapper .bb-editor-root { border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm); }
-#site-wrap .discussion-board .reply-input-wrapper :is(.bb-editor-toolbar, .ql-toolbar) { border: 0 !important; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius-sm) var(--gz-radius-sm) 0 0; }
+#site-wrap .discussion-board .reply-input-wrapper .bb-editor-toolbar,
+#site-wrap .discussion-board .reply-input-wrapper .ql-toolbar { border: 0 !important; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius-sm) var(--gz-radius-sm) 0 0; }
 #site-wrap .discussion-board .reply-input-wrapper .editor-content-container { border-radius: 0 0 var(--gz-radius-sm) var(--gz-radius-sm); }
 #site-wrap .discussion-board .reply-input-wrapper .bb-editor-container:not(.is-read-only) { border: 0 !important; border-radius: 0 0 var(--gz-radius-sm) var(--gz-radius-sm) !important; }
 #site-wrap .discussion-board .reply-control { padding-inline: 0.5rem; }
 #site-wrap .discussion-board .discussion-sorting-wrapper { margin-block: 1rem; }
-#site-wrap :is(.assessment-overview-grid > .overview-section > h2.section-label, .assessment-overview-grid > .assessment-results-section > .assessment-results-header > h2.section-label,
-  .activity-stream .activity-group-title, .base-profile .profile-content h2,
-  .assessment-attempt-panel :is(.attempt-header > h2, .question-header > .question-label, .additional-content-label, .assessment-summary > .row.collapse h2, .assessment-summary div.row > .settings-label),
-  bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2),
-#site-wrap .discussion-board :is(.discussion-full-panel-detail-header,
-  discussion-refresh-button button, discussion-follow-button button, bb-discussion-sorting-options button, discussion-reply-button button) {
+#site-wrap :where(.assessment-overview-grid > .overview-section > h2.section-label):is(.assessment-overview-grid > .overview-section > h2.section-label, .assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
+#site-wrap :is(.assessment-overview-grid > .assessment-results-section > .assessment-results-header > h2.section-label),
+#site-wrap :where(.activity-stream .activity-group-title):is(.activity-stream .activity-group-title, .assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
+#site-wrap :where(.base-profile .profile-content h2):is(.base-profile .profile-content h2, .assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
+#site-wrap :where(.assessment-attempt-panel :is(.attempt-header > h2)):is(.assessment-attempt-panel :is(.attempt-header > h2), .assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
+#site-wrap :where(.assessment-attempt-panel :is(.question-header > .question-label)):is(.assessment-attempt-panel :is(.question-header > .question-label), .assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
+#site-wrap :where(.assessment-attempt-panel .additional-content-label):is(.assessment-attempt-panel .additional-content-label, .assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
+#site-wrap :is(.assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
+#site-wrap :is(.assessment-attempt-panel :is(.assessment-summary div.row > .settings-label)),
+#site-wrap :where(bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2):is(bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2, .assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
+#site-wrap .discussion-board .discussion-full-panel-detail-header,
+#site-wrap .discussion-board :where(discussion-refresh-button button):is(discussion-refresh-button button, .discussion-full-panel-detail-header),
+#site-wrap .discussion-board :where(discussion-follow-button button):is(discussion-follow-button button, .discussion-full-panel-detail-header),
+#site-wrap .discussion-board :where(bb-discussion-sorting-options button):is(bb-discussion-sorting-options button, .discussion-full-panel-detail-header),
+#site-wrap .discussion-board :where(discussion-reply-button button):is(discussion-reply-button button, .discussion-full-panel-detail-header) {
   background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important;
   color: var(--gz-ink) !important;
   border: 1px solid var(--gz-border-line, var(--gz-line)) !important;
   border-radius: 999px !important;
 }
 /* Section-heading pills retain the native heading text and scale with the active Look. */
-#site-wrap :is(.assessment-overview-grid > .overview-section > h2.section-label, .assessment-overview-grid > .assessment-results-section > .assessment-results-header > h2.section-label,
-  .activity-stream .activity-group-title, .base-profile .profile-content h2,
-  .assessment-attempt-panel :is(.attempt-header > h2, .question-header > .question-label, .additional-content-label, .assessment-summary > .row.collapse h2, .assessment-summary div.row > .settings-label),
-  bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2),
+#site-wrap :where(.assessment-overview-grid > .overview-section > h2.section-label):is(.assessment-overview-grid > .overview-section > h2.section-label, .assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
+#site-wrap :is(.assessment-overview-grid > .assessment-results-section > .assessment-results-header > h2.section-label),
+#site-wrap :where(.activity-stream .activity-group-title):is(.activity-stream .activity-group-title, .assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
+#site-wrap :where(.base-profile .profile-content h2):is(.base-profile .profile-content h2, .assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
+#site-wrap :where(.assessment-attempt-panel :is(.attempt-header > h2)):is(.assessment-attempt-panel :is(.attempt-header > h2), .assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
+#site-wrap :where(.assessment-attempt-panel :is(.question-header > .question-label)):is(.assessment-attempt-panel :is(.question-header > .question-label), .assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
+#site-wrap :where(.assessment-attempt-panel .additional-content-label):is(.assessment-attempt-panel .additional-content-label, .assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
+#site-wrap :is(.assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
+#site-wrap :is(.assessment-attempt-panel :is(.assessment-summary div.row > .settings-label)),
+#site-wrap :where(bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2):is(bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2, .assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
 #site-wrap .discussion-board .discussion-full-panel-detail-header { display: inline-flex; align-items: center; max-width: 100%; min-height: 2.25rem; padding: 0.35rem 0.85rem; }
 /* A test's Grading and Description labels head their own rows: the pill on its own line above the value. */
 #site-wrap .assessment-attempt-panel .assessment-summary div.row > .settings-label { display: flex; inline-size: fit-content; margin-block: 0.75rem 0.5rem; }
@@ -1104,7 +1288,8 @@ html[data-gz-dark-theme] #site-wrap .bb-editor-container.is-read-only img:not([d
    in it took the palette's ink: light on yellow, about 1:1, on a dark palette. There they take the ground's dark instead.
    Only inline text: a dark table cell or banner pasted from Word keeps the light ink it reads with. Not a see-through
    background (Google Docs puts one on every span), nor a light grey one the sweep repaints to the surface (data-gz-light). */
-html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml-content) :is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])),
+html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml-content) :where(mark):is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])),
+html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml-content) :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light]),
 html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml-content) :is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])) a { color: var(--gz-surface-2) !important; }
 
 /* ---- rich text editor (submissions, replies, messages): toolbar, text and word count as one
@@ -1118,8 +1303,10 @@ html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml
   border: 0 !important; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) var(--gz-radius) 0 0 !important;
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, 55%), var(--gz-surface-paint-2, var(--gz-surface-2))) !important;
 }
-#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .bb-editor-toolbar :is(button, .ql-picker) { border-color: transparent !important; border-radius: var(--gz-radius-sm) !important; }
-#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) :is(.editor-content-container, .bb-editor-container) { border: 0 !important; border-radius: 0 0 var(--gz-radius) var(--gz-radius) !important; }
+#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .bb-editor-toolbar :where(button):is(button, .ql-picker),
+#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .bb-editor-toolbar .ql-picker { border-color: transparent !important; border-radius: var(--gz-radius-sm) !important; }
+#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .editor-content-container,
+#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .bb-editor-container { border: 0 !important; border-radius: 0 0 var(--gz-radius) var(--gz-radius) !important; }
 #site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .ql-editor.ql-blank::before { color: var(--gz-ink-muted) !important; font-style: normal !important; }
 #site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .status-bar { padding: 0.3rem 0.9rem 0.45rem !important; border-radius: 0 0 var(--gz-radius) var(--gz-radius) !important; text-align: right; font-size: 12px; color: var(--gz-ink-muted) !important; }
 #site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .status-bar * { font-style: normal !important; color: inherit !important; }
@@ -1153,8 +1340,14 @@ html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml
 #site-wrap .assessment-attempt-panel .question-header { margin-block-end: 0.75rem; }
 #site-wrap .assessment-attempt-panel .additional-content-label { margin-block-end: 0.75rem; }
 /* Inside a card nothing paints its own square: the prompt's, the instructions' and each answer's Quill layers are see-through. */
-#site-wrap .assessment-attempt-panel .assessment-question :is(.bb-editor-wrapper.read-only, .MuiFormControlLabel-label, .question-container > bb-rich-text-editor),
-#site-wrap .assessment-attempt-panel .assessment-question :is(.bb-editor-wrapper.read-only, .MuiFormControlLabel-label, .question-container > bb-rich-text-editor) :is(.bb-editor-root, .editor-content-container, .bb-editor-container, .ql-container, .ql-editor) { background: transparent !important; border: 0 !important; }
+#site-wrap .assessment-attempt-panel .assessment-question .bb-editor-wrapper.read-only,
+#site-wrap .assessment-attempt-panel .assessment-question :where(.MuiFormControlLabel-label):is(.MuiFormControlLabel-label, .bb-editor-wrapper.read-only),
+#site-wrap .assessment-attempt-panel .assessment-question :where(.question-container > bb-rich-text-editor):is(.question-container > bb-rich-text-editor, .bb-editor-wrapper.read-only),
+#site-wrap .assessment-attempt-panel .assessment-question :is(.bb-editor-wrapper.read-only, .MuiFormControlLabel-label, .question-container > bb-rich-text-editor) .bb-editor-root,
+#site-wrap .assessment-attempt-panel .assessment-question :is(.bb-editor-wrapper.read-only, .MuiFormControlLabel-label, .question-container > bb-rich-text-editor) .editor-content-container,
+#site-wrap .assessment-attempt-panel .assessment-question :is(.bb-editor-wrapper.read-only, .MuiFormControlLabel-label, .question-container > bb-rich-text-editor) .bb-editor-container,
+#site-wrap .assessment-attempt-panel .assessment-question :is(.bb-editor-wrapper.read-only, .MuiFormControlLabel-label, .question-container > bb-rich-text-editor) .ql-container,
+#site-wrap .assessment-attempt-panel .assessment-question :is(.bb-editor-wrapper.read-only, .MuiFormControlLabel-label, .question-container > bb-rich-text-editor) .ql-editor { background: transparent !important; border: 0 !important; }
 /* An answer: the whole row is the control, its letter and its text, one rounded fill with one edge. The edge marks where
    the pointer is, the chosen answer and the keyboard's place; the box's own edge is ink, not a faint line. */
 #site-wrap .assessment-attempt-panel .assessment-question label.MuiFormControlLabel-root {
@@ -1205,7 +1398,11 @@ html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml
 #site-wrap .assessment-summary .no-submission-card * { background: transparent !important; }
 /* The Additional content editor: the card (the rules above) paints once; its layers are see-through inside it. */
 #site-wrap .freeform-response bb-rich-text-editor .bb-editor-root { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; }
-#site-wrap .freeform-response bb-rich-text-editor :is(.editor-content-container, .bb-editor-container, .ql-container, .ql-editor, .status-bar) { background: transparent !important; }
+#site-wrap .freeform-response bb-rich-text-editor .editor-content-container,
+#site-wrap .freeform-response bb-rich-text-editor .bb-editor-container,
+#site-wrap .freeform-response bb-rich-text-editor .ql-container,
+#site-wrap .freeform-response bb-rich-text-editor .ql-editor,
+#site-wrap .freeform-response bb-rich-text-editor .status-bar { background: transparent !important; }
 #site-wrap .freeform-response bb-rich-text-editor .ql-editor { min-height: 6rem; }
 /* The editor's menus are menus: rounded, edged, over the page. */
 #site-wrap .bb-editor-toolbar.bb-editor-toolbar-submenu {
@@ -1242,7 +1439,8 @@ html[data-gz-bg="solid"] #site-wrap .assessment-attempt footer.submit-footer.pan
 
 
 /* ---- empty states: centred, quieter ---- */
-#site-wrap :is(.js-empty-state, [class*="empty-state"]) { padding: 1.5rem 1rem !important; text-align: center; color: var(--gz-ink-muted) !important; border-color: color-mix(in srgb, var(--gz-border-strong, var(--gz-line-strong)) 70%, transparent) !important; }
+#site-wrap .js-empty-state,
+#site-wrap [class*="empty-state"] { padding: 1.5rem 1rem !important; text-align: center; color: var(--gz-ink-muted) !important; border-color: color-mix(in srgb, var(--gz-border-strong, var(--gz-line-strong)) 70%, transparent) !important; }
 
 /* ---- course header pieces Ultra paints #404040 ---- */
 course-page-header > header [data-analytics-id="course.header.home"] { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border-radius: var(--gz-radius-sm) !important; }
@@ -1261,7 +1459,8 @@ course-page-header > header .MuiDivider-root { background-color: var(--gz-line) 
 #site-wrap course-banner [class*="titleContainer"], #site-wrap course-banner [class*="titleContainer"] * { color: #fff !important; text-shadow: 0 1px 12px rgb(0 0 0 / 0.55); }
 
 /* ---- hover fills Ultra hard-codes as #f0f0f0 (the sweep only sees resting colors) ---- */
-#site-wrap :is([class*="courseCard"], .MuiListItemButton-root):is(:hover, :focus-visible) { background: color-mix(in srgb, var(--gz-accent-soft) 45%, transparent) !important; }
+#site-wrap .MuiListItemButton-root:is(:hover, :focus-visible),
+#site-wrap [class*="courseCard"]:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--gz-accent-soft) 45%, transparent) !important; }
 
 /* ---- density ---- */
 #site-wrap [class*="makeStylescontentList-"] { gap: calc(20px * var(--gz-space)) !important; }
@@ -1269,7 +1468,12 @@ course-page-header > header .MuiDivider-root { background-color: var(--gz-line) 
 #site-wrap .element-card { padding-top: calc(6px * var(--gz-space)) !important; padding-bottom: calc(6px * var(--gz-space)) !important; }
 
 /* ---- line height: running text only (course content, posts, announcements), not UI labels ---- */
-#site-wrap :is(.ql-editor, .js-description, .bbml-content, .vtbegenerated) :is(p, li, div, span) , #site-wrap :is(.ql-editor, .js-description) { line-height: var(--gz-leading) !important; }
+#site-wrap :is(.ql-editor, .js-description, .bbml-content, .vtbegenerated) p,
+#site-wrap :is(.ql-editor, .js-description, .bbml-content, .vtbegenerated) li,
+#site-wrap :is(.ql-editor, .js-description, .bbml-content, .vtbegenerated) div,
+#site-wrap :is(.ql-editor, .js-description, .bbml-content, .vtbegenerated) span,
+#site-wrap .ql-editor,
+#site-wrap .js-description { line-height: var(--gz-leading) !important; }
 
 /* ======================================================================================
    Hover, focus and tooltips: one language for everything you can point at.
@@ -1284,11 +1488,13 @@ course-page-header > header .MuiDivider-root { background-color: var(--gz-line) 
 [data-gz-hover]:is(:hover, :focus, :focus-visible, .Mui-focusVisible) { background-color: var(--gz-hover-fill) !important; }
 
 /* Cards: everything card-shaped lifts the same way (the outline and course cards already did). */
-#site-wrap :is(.element-list-row, .messages-container-summary) {
+#site-wrap .element-list-row,
+#site-wrap .messages-container-summary {
   transition: var(--gz-card-transition) !important;
 }
 #site-wrap .element-list-row { border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; }
-#site-wrap :is(.element-list-row, .messages-container-summary):hover {
+#site-wrap .element-list-row:hover,
+#site-wrap .messages-container-summary:hover {
   transform: var(--gz-lift);
   filter: var(--gz-card-hover-filter);
   box-shadow: var(--gz-hover-shadow) !important;
@@ -1296,14 +1502,23 @@ course-page-header > header .MuiDivider-root { background-color: var(--gz-line) 
 }
 
 /* Rows (nested outline items, table rows, menu items) tint instead of lifting. */
-#site-wrap :is(.content-list-item .content-list-item .itemContainer, table tr td, .MuiMenuItem-root, .MuiListItemButton-root) { transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease) !important; }
+#site-wrap :is(.content-list-item .content-list-item .itemContainer),
+#site-wrap :where(table tr td):is(table tr td, .content-list-item .content-list-item .itemContainer),
+#site-wrap :where(.MuiMenuItem-root):is(.MuiMenuItem-root, .content-list-item .content-list-item .itemContainer),
+#site-wrap :where(.MuiListItemButton-root):is(.MuiListItemButton-root, .content-list-item .content-list-item .itemContainer) { transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease) !important; }
 
 /* Icon buttons (the ⋯ menus, the eye, search, close): a round tint behind the icon. */
-#site-wrap :is(.MuiIconButton-root, button.icon.clear, a.standard-button, button.standard-button) {
+#site-wrap :where(.MuiIconButton-root):is(.MuiIconButton-root, button.icon.clear),
+#site-wrap button.icon.clear,
+#site-wrap :where(a.standard-button):is(a.standard-button, button.icon.clear),
+#site-wrap :where(button.standard-button):is(button.standard-button, button.icon.clear) {
   border-radius: 999px !important;
   transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), transform var(--gz-t-slow) var(--gz-spring) !important;
 }
-#site-wrap :is(.MuiIconButton-root, button.icon.clear, a.standard-button, button.standard-button):is(:hover, :focus-visible) {
+#site-wrap :where(.MuiIconButton-root):is(.MuiIconButton-root, button.icon.clear):is(:hover, :focus-visible),
+#site-wrap button.icon.clear:is(:hover, :focus-visible),
+#site-wrap :where(a.standard-button):is(a.standard-button, button.icon.clear):is(:hover, :focus-visible),
+#site-wrap :where(button.standard-button):is(button.standard-button, button.icon.clear):is(:hover, :focus-visible) {
   background: color-mix(in srgb, var(--gz-accent-soft) 80%, transparent) !important;
   color: var(--gz-accent) !important;
 }
@@ -1313,14 +1528,22 @@ course-page-header > header .MuiDivider-root { background-color: var(--gz-line) 
 #site-wrap .bb-ui-navigation-list-horizontal a.MuiListItemButton-root:hover { background: var(--gz-row-hover) !important; }
 
 /* Links: the underline sits clear of descenders and fades in instead of snapping. */
-#site-wrap :where(a, .MuiLink-root) { text-underline-offset: 0.2em; text-decoration-thickness: 1px; transition: color var(--gz-t) var(--gz-ease), text-decoration-color var(--gz-t) var(--gz-ease); }
+#site-wrap :where(a),
+#site-wrap :where(.MuiLink-root) { text-underline-offset: 0.2em; text-decoration-thickness: 1px; transition: color var(--gz-t) var(--gz-ease), text-decoration-color var(--gz-t) var(--gz-ease); }
 
 /* Keyboard focus: always the accent, whatever ring Ultra draws. */
 #site-wrap :focus-visible, .MuiModal-root :focus-visible, .MuiPopper-root :focus-visible { outline-color: var(--gz-accent) !important; }
 
 /* ---- tooltips: every flavour Ultra ships (Foundation .tooltip, enhanced-tooltip, MUI, Fluent,
    keyboard hints) and Glaze's own (.gz-tip, which replaces native title tooltips) ---- */
-:is(.tooltip, span.enhanced-tooltip, .MuiTooltip-tooltip, .ms-Tooltip, .ms-Callout-main, .keyboard-tooltip, .editor-keyboard-tooltip, .gz-tip) {
+:where(.tooltip):is(.tooltip, span.enhanced-tooltip),
+span.enhanced-tooltip,
+:where(.MuiTooltip-tooltip):is(.MuiTooltip-tooltip, span.enhanced-tooltip),
+:where(.ms-Tooltip):is(.ms-Tooltip, span.enhanced-tooltip),
+:where(.ms-Callout-main):is(.ms-Callout-main, span.enhanced-tooltip),
+:where(.keyboard-tooltip):is(.keyboard-tooltip, span.enhanced-tooltip),
+:where(.editor-keyboard-tooltip):is(.editor-keyboard-tooltip, span.enhanced-tooltip),
+:where(.gz-tip):is(.gz-tip, span.enhanced-tooltip) {
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-tip-bg) 94%, transparent) !important;
   color: var(--gz-ink) !important;
   border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important;
@@ -1328,7 +1551,9 @@ course-page-header > header .MuiDivider-root { background-color: var(--gz-line) 
   box-shadow: var(--gz-shadow) !important;
   backdrop-filter: blur(var(--gz-glass));
 }
-:is(.tooltip, span.enhanced-tooltip, .ms-Tooltip) * { color: inherit !important; }
+:where(.tooltip):is(.tooltip, span.enhanced-tooltip) *,
+span.enhanced-tooltip *,
+:where(.ms-Tooltip):is(.ms-Tooltip, span.enhanced-tooltip) * { color: inherit !important; }
 .MuiTooltip-arrow { color: var(--gz-tip-bg) !important; }
 .MuiTooltip-arrow::before { border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); }
 .ms-Callout-beak, .ms-Callout-beakCurtain { background: var(--gz-surface-grain, none), var(--gz-tip-bg) !important; }
@@ -1355,10 +1580,13 @@ span.enhanced-tooltip span.enhanced-tooltip-pip { background-color: var(--gz-tip
 #site-wrap article.course-element-card[data-gz-card="image"] .course-banner::after { background: var(--gz-card-ov); opacity: var(--gz-card-ov-a); }
 html[data-gz-card-plain] #site-wrap article.course-element-card[data-gz-card="image"] .course-banner::after { display: none; }
 /* Only the measured grid gets sizing/condensing. List rows keep Ultra's native geometry. */
-#site-wrap :is(.multi-column-view.course-columns, .multi-column-view .course-columns) { width: 100%; min-width: 0; box-sizing: border-box; }
-#site-wrap .multi-column-view .course-org-list > :is(.term-group, .favorites-group) { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--gz-card-w, 262px)), 1fr)); gap: var(--gz-card-gap, 16px); }
+#site-wrap .multi-column-view.course-columns,
+#site-wrap :is(.multi-column-view .course-columns) { width: 100%; min-width: 0; box-sizing: border-box; }
+#site-wrap .multi-column-view .course-org-list > .term-group,
+#site-wrap .multi-column-view .course-org-list > .favorites-group { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--gz-card-w, 262px)), 1fr)); gap: var(--gz-card-gap, 16px); }
 html[data-gz-card-width] #site-wrap .multi-column-view .course-card-term-name { flex-basis: 100%; }
-html[data-gz-card-gap] #site-wrap .multi-column-view :is(.course-columns, .course-org-list > div) { gap: var(--gz-card-gap) !important; }
+html[data-gz-card-gap] #site-wrap .multi-column-view :where(.course-columns):is(.course-columns, .course-org-list > div),
+html[data-gz-card-gap] #site-wrap .multi-column-view :is(.course-org-list > div) { gap: var(--gz-card-gap) !important; }
 #site-wrap .multi-column-view article.course-element-card { width: 100% !important; min-width: 0; margin: 0 !important; }
 html[data-gz-card-height] #site-wrap .multi-column-view article.course-element-card .course-banner { height: var(--gz-card-h) !important; }
 /* The banner's height sets the card's least height (Ultra's 156px of details below it), never a fixed one. */
@@ -1367,39 +1595,68 @@ html[data-gz-card-height] #site-wrap .multi-column-view article.course-element-c
 html[data-gz-footer] #site-wrap .course-org-list [data-gz-vh], html[data-gz-navbar] #site-wrap .course-org-list [data-gz-vh] { max-height: none !important; }
 #site-wrap .multi-column-view article.course-element-card .course-banner { border-radius: calc(var(--gz-card-r, var(--gz-radius)) - calc(var(--gz-radius, 12px) * 1 / 12)) calc(var(--gz-card-r, var(--gz-radius)) - calc(var(--gz-radius, 12px) * 1 / 12)) 0 0 !important; }
 html[data-gz-card-condensed] #site-wrap .multi-column-view article.course-element-card .course-title { position: absolute; top: auto; bottom: calc(100% - var(--gz-card-banner-h, var(--gz-card-h, 146px))); inset-inline: 12px; margin: 0 !important; padding: 0 0 8px !important; max-height: calc(var(--gz-card-banner-h, var(--gz-card-h, 146px)) - 8px); line-height: 1.3; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; color: white !important; z-index: 1; text-shadow: 0 1px 3px #000; }
-html[data-gz-card-condensed] #site-wrap .multi-column-view article.course-element-card .course-title :is(a, span) { color: white !important; }
+html[data-gz-card-condensed] #site-wrap .multi-column-view article.course-element-card .course-title a,
+html[data-gz-card-condensed] #site-wrap .multi-column-view article.course-element-card .course-title span { color: white !important; }
 #site-wrap article.course-element-card .gz-bm { position: absolute; z-index: 2; top: 8px; left: 8px; right: 80px; display: flex; flex-wrap: wrap; gap: 4px; }
 html:not([data-gz-card-icons]) #site-wrap .gz-bm { display: none; }
 #site-wrap .gz-bm a { display: grid; place-items: center; width: 28px; height: 28px; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 50%; }
 #site-wrap .gz-bm a:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 #site-wrap .gz-bm svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 /* Base navigation: no changes to the course tab bar or other navigation regions. */
-html[data-gz-nav] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools) { isolation: isolate; background: var(--gz-nav-c) !important; }
+html[data-gz-nav] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]),
+html[data-gz-nav] :where(nav#base_tools):is(nav#base_tools, .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"])) { isolation: isolate; background: var(--gz-nav-c) !important; }
 html[data-gz-nav] nav#base_tools { position: relative; }
-html[data-gz-nav="gradient"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools) { background: linear-gradient(var(--gz-nav-a), var(--gz-nav-c), var(--gz-nav-d)) !important; }
-html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::before,
-html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
-html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::before { z-index: -2; background: var(--gz-nav-img) center / cover no-repeat; }
-html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::after { z-index: -1; background: var(--gz-nav-c); opacity: var(--gz-nav-o); }
-html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { color: var(--gz-nav-ink) !important; background: transparent !important; }
-html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) :is(span, svg) { color: inherit !important; }
-html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link):is(:hover, :focus-visible) { text-decoration: underline; outline: 2px solid var(--gz-nav-ink); outline-offset: -2px; }
+html[data-gz-nav="gradient"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]),
+html[data-gz-nav="gradient"] :where(nav#base_tools):is(nav#base_tools, .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"])) { background: linear-gradient(var(--gz-nav-a), var(--gz-nav-c), var(--gz-nav-d)) !important; }
+html[data-gz-nav="image"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"])::before,
+html[data-gz-nav="image"] :where(nav#base_tools):is(nav#base_tools, .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]))::before,
+html[data-gz-nav="image"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"])::after,
+html[data-gz-nav="image"] :where(nav#base_tools):is(nav#base_tools, .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]))::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
+html[data-gz-nav="image"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"])::before,
+html[data-gz-nav="image"] :where(nav#base_tools):is(nav#base_tools, .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]))::before { z-index: -2; background: var(--gz-nav-img) center / cover no-repeat; }
+html[data-gz-nav="image"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"])::after,
+html[data-gz-nav="image"] :where(nav#base_tools):is(nav#base_tools, .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]))::after { z-index: -1; background: var(--gz-nav-c); opacity: var(--gz-nav-o); }
+html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) a.base-navigation-button-content,
+html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) a.MuiListItemButton-root,
+html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) a.gz-nav-link { color: var(--gz-nav-ink) !important; background: transparent !important; }
+html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) span,
+html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) svg { color: inherit !important; }
+html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) a.base-navigation-button-content:is(:hover, :focus-visible),
+html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) a.MuiListItemButton-root:is(:hover, :focus-visible),
+html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) a.gz-nav-link:is(:hover, :focus-visible) { text-decoration: underline; outline: 2px solid var(--gz-nav-ink); outline-offset: -2px; }
 html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link).Mui-selected::before { background: var(--gz-nav-ink) !important; }
-html[data-gz-nav-no-logo] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) header.themed-logo-background-primary-fill :is(img, [analytics-id="baseLayout.logo.link"]) { display: none; }
-html[data-gz-nav-size="small"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { min-height: 40px; padding-block: 6px !important; font-size: 12px; }
-html[data-gz-nav-size="large"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { min-height: 58px; padding-block: 14px !important; font-size: 17px; }
-html[data-gz-nav-labels="small"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { font-size: 11px; }
-html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-expanded]) :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { justify-content: center; min-height: 44px; }
-html[data-gz-nav-f="vivid"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::before { filter: saturate(1.6) contrast(1.08); }
-html[data-gz-nav-f="mono"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::before { filter: grayscale(1); }
-html[data-gz-nav-f="noir"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::before { filter: grayscale(1) contrast(1.45) brightness(0.85); }
-html[data-gz-nav-f="warm"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::before { filter: sepia(0.35) saturate(1.35) hue-rotate(-10deg); }
-html[data-gz-nav-f="cool"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::before { filter: saturate(0.8) hue-rotate(12deg) brightness(1.05); }
-html[data-gz-nav-f="faded"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::before { filter: contrast(0.78) saturate(0.7) brightness(1.12); }
-html[data-gz-nav-f="dreamy"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::before { filter: blur(1.5px) saturate(1.25) brightness(1.08); }
+html[data-gz-nav-no-logo] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) header.themed-logo-background-primary-fill :where(img):is(img, [analytics-id="baseLayout.logo.link"]),
+html[data-gz-nav-no-logo] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) header.themed-logo-background-primary-fill [analytics-id="baseLayout.logo.link"] { display: none; }
+html[data-gz-nav-size="small"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) a.base-navigation-button-content,
+html[data-gz-nav-size="small"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) a.MuiListItemButton-root,
+html[data-gz-nav-size="small"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) a.gz-nav-link { min-height: 40px; padding-block: 6px !important; font-size: 12px; }
+html[data-gz-nav-size="large"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) a.base-navigation-button-content,
+html[data-gz-nav-size="large"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) a.MuiListItemButton-root,
+html[data-gz-nav-size="large"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) a.gz-nav-link { min-height: 58px; padding-block: 14px !important; font-size: 17px; }
+html[data-gz-nav-labels="small"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) a.base-navigation-button-content,
+html[data-gz-nav-labels="small"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) a.MuiListItemButton-root,
+html[data-gz-nav-labels="small"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) a.gz-nav-link { font-size: 11px; }
+html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-expanded]) :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) a.base-navigation-button-content,
+html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-expanded]) :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) a.MuiListItemButton-root,
+html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-expanded]) :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) a.gz-nav-link { justify-content: center; min-height: 44px; }
+html[data-gz-nav-f="vivid"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"])::before,
+html[data-gz-nav-f="vivid"] :where(nav#base_tools):is(nav#base_tools, .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]))::before { filter: saturate(1.6) contrast(1.08); }
+html[data-gz-nav-f="mono"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"])::before,
+html[data-gz-nav-f="mono"] :where(nav#base_tools):is(nav#base_tools, .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]))::before { filter: grayscale(1); }
+html[data-gz-nav-f="noir"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"])::before,
+html[data-gz-nav-f="noir"] :where(nav#base_tools):is(nav#base_tools, .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]))::before { filter: grayscale(1) contrast(1.45) brightness(0.85); }
+html[data-gz-nav-f="warm"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"])::before,
+html[data-gz-nav-f="warm"] :where(nav#base_tools):is(nav#base_tools, .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]))::before { filter: sepia(0.35) saturate(1.35) hue-rotate(-10deg); }
+html[data-gz-nav-f="cool"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"])::before,
+html[data-gz-nav-f="cool"] :where(nav#base_tools):is(nav#base_tools, .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]))::before { filter: saturate(0.8) hue-rotate(12deg) brightness(1.05); }
+html[data-gz-nav-f="faded"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"])::before,
+html[data-gz-nav-f="faded"] :where(nav#base_tools):is(nav#base_tools, .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]))::before { filter: contrast(0.78) saturate(0.7) brightness(1.12); }
+html[data-gz-nav-f="dreamy"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"])::before,
+html[data-gz-nav-f="dreamy"] :where(nav#base_tools):is(nav#base_tools, .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]))::before { filter: blur(1.5px) saturate(1.25) brightness(1.08); }
 
 
-html[data-gz-nav] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) :is(nav, ul) { background: transparent !important; }
+html[data-gz-nav] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) nav,
+html[data-gz-nav] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) ul { background: transparent !important; }
 html[data-gz-nav-size="small"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) svg { width: 20px; height: 20px; }
 html[data-gz-nav-size="large"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) svg { width: 30px; height: 30px; }
 @media (min-width: 900px) {
@@ -1470,9 +1727,13 @@ html[data-gz-nav] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[cl
 
 /* Ultra base rails only: the first-paint values also cover the newer MUI drawer. */
 :root { --gz-nav-width: 200px; --gz-nav-icon: 24px; --gz-nav-text: 14px; --gz-nav-height: 44px; --gz-nav-gap: 2px; --gz-nav-padding: 8px; }
-html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) { display: flex; flex-direction: column; padding: var(--gz-nav-padding) !important; box-sizing: border-box; }
+html[data-gz-nav-brand] nav#base_tools,
+html[data-gz-nav-brand] nav:has(> #base_tools),
+html[data-gz-nav-brand] :where(nav[class*="makeStylesnavigation-"]):is(nav[class*="makeStylesnavigation-"], nav#base_tools) { display: flex; flex-direction: column; padding: var(--gz-nav-padding) !important; box-sizing: border-box; }
 html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) ul { display: flex; flex-direction: column; gap: var(--gz-nav-gap); padding: 0; margin: 0; list-style: none; }
-html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { display: flex; align-items: center; box-sizing: border-box; gap: 12px; min-height: var(--gz-nav-height) !important; padding: 6px 10px !important; font-size: var(--gz-nav-text) !important; color: var(--gz-ink-muted); border-radius: var(--gz-radius-sm); text-decoration: none; }
+html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) a.base-navigation-button-content,
+html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) a.MuiListItemButton-root,
+html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) a.gz-nav-link { display: flex; align-items: center; box-sizing: border-box; gap: 12px; min-height: var(--gz-nav-height) !important; padding: 6px 10px !important; font-size: var(--gz-nav-text) !important; color: var(--gz-ink-muted); border-radius: var(--gz-radius-sm); text-decoration: none; }
 html[data-gz-nav-brand] nav[class*="makeStylesnavigation-"] a:is(:hover, :focus-visible) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; }
 /* Compact labels use the space beside the icon; full text stays in the DOM and tooltip. */
 html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) a:is(.base-navigation-button-content, .MuiListItemButton-root, .gz-nav-link) {
@@ -1481,12 +1742,16 @@ html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="
   border-radius: var(--gz-nav-item-radius, var(--gz-radius-sm)) !important; box-shadow: none !important;
   font-size: var(--gz-nav-text) !important;
 }
-html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) :is(.MuiListItemText-root, a > span:not(:has(svg))) { flex: 1 1 0; min-width: 0 !important; margin: 0 !important; }
-html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) :is(.MuiListItemText-root, .MuiTypography-root, a > span:not(:has(svg))) {
+html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) .MuiListItemText-root,
+html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) :where(a > span:not(:has(svg))):is(a > span:not(:has(svg)), .MuiListItemText-root) { flex: 1 1 0; min-width: 0 !important; margin: 0 !important; }
+html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) .MuiListItemText-root,
+html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) .MuiTypography-root,
+html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) :where(a > span:not(:has(svg))):is(a > span:not(:has(svg)), .MuiTypography-root) {
   display: block; max-width: 100% !important; font: inherit !important; white-space: nowrap !important; word-break: normal !important; overflow-wrap: normal !important; hyphens: none !important; overflow: hidden; text-overflow: ellipsis;
 }
 html[data-gz-nav-brand][data-gz-nav-overflow="wrap"] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) a { height: auto !important; max-height: max(var(--gz-nav-height), calc(var(--gz-nav-text) * 2.6 + 12px)); }
-html[data-gz-nav-overflow="wrap"] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) :is(.MuiTypography-root, a > span:not(:has(svg, .MuiTypography-root))) { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal !important; }
+html[data-gz-nav-overflow="wrap"] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) :where(.MuiTypography-root):is(.MuiTypography-root, a > span:not(:has(svg, .MuiTypography-root))),
+html[data-gz-nav-overflow="wrap"] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) :is(a > span:not(:has(svg, .MuiTypography-root))) { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal !important; }
 html[data-gz-nav-brand][data-gz-nav-overflow="shrink"] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) a { font-size: var(--gz-nav-fit, 10px) !important; }
 html[data-gz-nav-style="pill"] { --gz-nav-item-radius: 999px; }
 html[data-gz-nav-style="flat"] { --gz-nav-item-radius: 0; }
@@ -1500,13 +1765,21 @@ html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="
 /* Glaze settings, last in the nav (content-ultra.js): Glaze's drop for its icon, at the nav's icon size. */
 .gz-nav-glaze-icon { display: inline-block; flex: none; width: var(--gz-nav-icon, 24px); height: var(--gz-nav-icon, 24px); background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22128%22 height=%22128%22 viewBox=%2214 17 100 100%22%3E%3Cdefs%3E%3ClinearGradient id=%22bg%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%230d1b2e%22/%3E%3Cstop offset=%221%22 stop-color=%22%23060d18%22/%3E%3C/linearGradient%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 36 36 Z%22 fill=%22%23060d18%22 opacity=%220.28%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.55%22/%3E%3C/svg%3E") center / contain no-repeat; }
 @media (min-width: 900px) {
-  html[data-gz-nav-brand] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation-"]) { box-sizing: border-box; width: var(--gz-nav-width) !important; flex-basis: var(--gz-nav-width) !important; max-width: 100vw; }
-  html:not([data-gz-nav-detailed])[data-gz-nav-size="small"] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools) { width: 204px !important; flex-basis: 204px !important; }
-  html:not([data-gz-nav-detailed])[data-gz-nav-size="large"] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools) { width: 280px !important; flex-basis: 280px !important; }
-  html[data-gz-nav-collapsed] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation-"]) { width: 80px !important; flex-basis: 80px !important; }
-  html[data-gz-nav-collapsed] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools) { width: 88px !important; flex-basis: 88px !important; }
+  html[data-gz-nav-brand] .MuiDrawer-root:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation-"]),
+  html[data-gz-nav-brand] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation-"]) { box-sizing: border-box; width: var(--gz-nav-width) !important; flex-basis: var(--gz-nav-width) !important; max-width: 100vw; }
+  html:not([data-gz-nav-detailed])[data-gz-nav-size="small"] .MuiDrawer-root:has(#base_tools),
+  html:not([data-gz-nav-detailed])[data-gz-nav-size="small"] .MuiDrawer-paper:has(#base_tools) { width: 204px !important; flex-basis: 204px !important; }
+  html:not([data-gz-nav-detailed])[data-gz-nav-size="large"] .MuiDrawer-root:has(#base_tools),
+  html:not([data-gz-nav-detailed])[data-gz-nav-size="large"] .MuiDrawer-paper:has(#base_tools) { width: 280px !important; flex-basis: 280px !important; }
+  html[data-gz-nav-collapsed] .MuiDrawer-root:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation-"]),
+  html[data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation-"]) { width: 80px !important; flex-basis: 80px !important; }
+  html[data-gz-nav-collapsed] .MuiDrawer-root:has(#base_tools),
+  html[data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools) { width: 88px !important; flex-basis: 88px !important; }
 }
-html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-expanded]) :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) :is(.MuiListItemText-root, .MuiTypography-root, a > span:not(:has(svg)), .gz-nav-label) { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-expanded]) :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) .MuiListItemText-root,
+html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-expanded]) :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) .MuiTypography-root,
+html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-expanded]) :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) :where(a > span:not(:has(svg))):is(a > span:not(:has(svg)), .gz-nav-label),
+html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-expanded]) :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) .gz-nav-label { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-expanded]) :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) a { justify-content: center; gap: 0 !important; }
 html[data-gz-nav-brand] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) header.themed-logo-background-primary-fill a:has(img) { display: grid; position: relative; min-height: calc(var(--gz-nav-logo-size, 48px) + 16px); }
 html[data-gz-nav-brand]:not([data-gz-nav-brand="school"]) .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) header.themed-logo-background-primary-fill img { opacity: 0; }
@@ -1515,7 +1788,8 @@ html[data-gz-dark-theme][data-gz-nav-brand="glaze"] .MuiDrawer-paper:has(#base_t
 html[data-gz-nav-brand="custom"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) header.themed-logo-background-primary-fill a:has(img)::after { background-image: var(--gz-nav-logo, url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22420%22 height=%22120%22 viewBox=%220 0 420 120%22%3E%3Cdefs%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg transform=%22translate(8,4) scale(0.72)%22%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.5%22/%3E%3C/g%3E%3Ctext x=%22110%22 y=%2276%22 font-family=%22system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif%22 font-size=%2254%22 font-weight=%22700%22 fill=%22%230d1b2e%22%3EGlaze%3C/text%3E%3C/svg%3E")); }
 html[data-gz-nav-collapsed]:not([data-gz-nav-expanded])[data-gz-nav-brand="glaze"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) header.themed-logo-background-primary-fill a:has(img)::after { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22128%22 height=%22128%22 viewBox=%220 0 128 128%22%3E%3Cdefs%3E%3ClinearGradient id=%22bg%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%230d1b2e%22/%3E%3Cstop offset=%221%22 stop-color=%22%23060d18%22/%3E%3C/linearGradient%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width=%22128%22 height=%22128%22 rx=%2228%22 fill=%22url(%23bg)%22/%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 36 36 Z%22 fill=%22%23060d18%22 opacity=%220.28%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.55%22/%3E%3C/svg%3E"); }
 html[data-gz-nav-no-logo] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) header.themed-logo-background-primary-fill a:has(img) { display: none; }
-.gz-nav-dashboard :is(svg:not(.gz-nav-dashboard-icon), .MuiListItemIcon-root) { display: none !important; }
+.gz-nav-dashboard svg:not(.gz-nav-dashboard-icon),
+.gz-nav-dashboard :where(.MuiListItemIcon-root):is(.MuiListItemIcon-root, svg:not(.gz-nav-dashboard-icon)) { display: none !important; }
 .gz-nav-dashboard > svg.gz-nav-dashboard-icon { fill: currentColor !important; stroke: none !important; }
 .gz-nav-widgets { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; }
 .gz-nav-widgets:empty { display: none; }
@@ -1541,7 +1815,8 @@ html[data-gz-nav-brand] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > 
 html[data-gz-nav-logo-align="start"] { --gz-nav-logo-position: left; }
 html[data-gz-nav-logo-align="end"] { --gz-nav-logo-position: right; }
 html[data-gz-nav-brand] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) :is(footer, [class*="makeStylesfooter"]) a { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; word-break: normal; overflow-wrap: normal; hyphens: none; font-size: var(--gz-nav-text); }
-html[data-gz-nav-footer-hidden] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) :is(footer, [class*="makeStylesfooter"]) { display: none !important; }
+html[data-gz-nav-footer-hidden] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) :where(footer):is(footer, [class*="makeStylesfooter"]),
+html[data-gz-nav-footer-hidden] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) [class*="makeStylesfooter"] { display: none !important; }
 
 html[data-gz-nav-overflow="wrap"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) :is(footer, [class*="makeStylesfooter"]) a { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; line-height: 1.3; max-height: 2.6em; }
 
@@ -1581,7 +1856,13 @@ html[data-gz-navbar] { --gz-navbar-left: 0px; --gz-navbar-top: 0px; }
 /* What Tab or a link scrolls to stops clear of the top bar, not under it (WCAG 2.4.11), in whichever box Ultra scrolls: the
    page, its main column, a course's panel, a routed page, a box the window's height. One that doesn't scroll ignores it.
    Above the phone's bottom bar, below. */
-html[data-gz-navbar], html[data-gz-navbar] :is(#main-content, #main-content-inner, .panel-wrap, .route-view-container, .routed-page, [data-gz-vh]) { scroll-padding-top: var(--gz-navbar-top); }
+html[data-gz-navbar],
+html[data-gz-navbar] #main-content,
+html[data-gz-navbar] #main-content-inner,
+html[data-gz-navbar] :where(.panel-wrap):is(.panel-wrap, #main-content),
+html[data-gz-navbar] :where(.route-view-container):is(.route-view-container, #main-content),
+html[data-gz-navbar] :where(.routed-page):is(.routed-page, #main-content),
+html[data-gz-navbar] :where([data-gz-vh]):is([data-gz-vh], #main-content) { scroll-padding-top: var(--gz-navbar-top); }
 /* Course tabs only in the bar (tabs.at 'nav', worded by navigation/page/coursetabs.js): no strip, and no room kept for one. */
 html[data-gz-ctabs~="nav"] { --gz-ctabs-h: 0px !important; }
 html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
@@ -1592,7 +1873,8 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
   html[data-gz-navbar~="rail"][data-gz-navbar~="open"][data-gz-navbar~="embed"] { --gz-navbar-left: 248px; }
   html[data-gz-navbar~="top"] { --gz-navbar-top: 80px; }
   html[data-gz-navbar~="top"][data-gz-navbar~="embed"] { --gz-navbar-top: 56px; }
-  html[data-gz-navbar] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation-"]):not(#gz-navbar) {
+  html[data-gz-navbar] .MuiDrawer-root:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation-"]):not(#gz-navbar),
+  html[data-gz-navbar] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation-"]):not(#gz-navbar) {
     width: 0 !important; min-width: 0 !important; max-width: none !important; flex-basis: 0 !important;
     overflow: hidden !important; background: none !important; border: 0 !important; box-shadow: none !important; backdrop-filter: none !important; pointer-events: none;
   }
@@ -1600,7 +1882,9 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
   html[data-gz-navbar] #main-content-inner { padding-inline-start: var(--gz-navbar-left) !important; }
   html[data-gz-navbar] #main-content { box-sizing: border-box; padding-top: var(--gz-navbar-top) !important; }
   /* A course, and a page Ultra routes in its place (an assignment's details and attempts, a document opened on its own). */
-  html[data-gz-navbar] > body > .routed-page.bb-offcanvas-container, html[data-gz-navbar] .inner-wrap > :is(section.course, .routed-page) { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }
+  html[data-gz-navbar] > body > .routed-page.bb-offcanvas-container,
+  html[data-gz-navbar] .inner-wrap > section.course,
+  html[data-gz-navbar] .inner-wrap > :where(.routed-page):is(.routed-page, section.course) { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }
   /* A course whose panel holds its section (.course-content-container > .panel-wrap > section.course, as in
      test/fixtures/ultra-course.html), and the item panels opened over it: absolute over the page, so nothing above moves
      them and the rail covered their first 40px. Not inside a course section that rule already keeps clear: twice the room. */
@@ -1615,14 +1899,20 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
   /* Side panels (Ultra's peek: Notification Settings, an item's details) and MUI's temporary drawers open at the window's top
      and edge: the top bar covered their title and Close, and a rail one on its side. They start below the bar and beside the
      rail; the page-sized layers above keep their own rules. */
-  html[data-gz-navbar] :is(.bb-offcanvas-panel:not(.screen, .full, .bb-offcanvas-panel *), .MuiDrawer-modal > .MuiDrawer-paper:is(.MuiDrawer-paperAnchorLeft, .MuiDrawer-paperAnchorRight)) { top: var(--gz-navbar-top) !important; bottom: 0 !important; height: auto !important; min-height: 0 !important; }
+  html[data-gz-navbar] :where(.bb-offcanvas-panel:not(.screen, .full, .bb-offcanvas-panel *)):is(.bb-offcanvas-panel:not(.screen, .full, .bb-offcanvas-panel *), .MuiDrawer-modal > .MuiDrawer-paper:is(.MuiDrawer-paperAnchorLeft, .MuiDrawer-paperAnchorRight)),
+  html[data-gz-navbar] :is(.MuiDrawer-modal > .MuiDrawer-paper:is(.MuiDrawer-paperAnchorLeft, .MuiDrawer-paperAnchorRight)) { top: var(--gz-navbar-top) !important; bottom: 0 !important; height: auto !important; min-height: 0 !important; }
   html[data-gz-navbar] .MuiDrawer-modal > .MuiDrawer-paperAnchorTop { top: var(--gz-navbar-top) !important; }
   /* A top sheet keeps its content height; pinning both edges would stretch its automatic height. */
   html[data-gz-navbar][data-gz-footer] .MuiDrawer-modal > .MuiDrawer-paper:is(.MuiDrawer-paperAnchorLeft, .MuiDrawer-paperAnchorRight, .MuiDrawer-paperAnchorBottom) { bottom: var(--gz-footer-h) !important; }
-  html[data-gz-navbar]:not([dir="rtl"]) :is(.bb-offcanvas-panel.bb-offcanvas-left:not(.screen, .full, .bb-offcanvas-panel *), .MuiDrawer-modal > .MuiDrawer-paperAnchorLeft) { left: var(--gz-navbar-left) !important; }
-  html[data-gz-navbar][dir="rtl"] :is(.bb-offcanvas-panel.bb-offcanvas-right:not(.screen, .full, .bb-offcanvas-panel *), .MuiDrawer-modal > .MuiDrawer-paperAnchorRight) { right: var(--gz-navbar-left) !important; }
-  html[data-gz-navbar]:not([data-gz-footer]) :is(.route-view-container, .routed-page, [data-gz-vh]) { max-height: calc(100vh - var(--gz-navbar-top)) !important; }
-  html[data-gz-navbar]:not([data-gz-footer]) .inner-wrap > :is(section.course, .routed-page) { max-height: 100vh !important; }
+  html[data-gz-navbar]:not([dir="rtl"]) .bb-offcanvas-panel.bb-offcanvas-left:not(.screen, .full, .bb-offcanvas-panel *),
+  html[data-gz-navbar]:not([dir="rtl"]) :where(.MuiDrawer-modal > .MuiDrawer-paperAnchorLeft):is(.MuiDrawer-modal > .MuiDrawer-paperAnchorLeft, .bb-offcanvas-panel.bb-offcanvas-left:not(.screen, .full, .bb-offcanvas-panel *)) { left: var(--gz-navbar-left) !important; }
+  html[data-gz-navbar][dir="rtl"] .bb-offcanvas-panel.bb-offcanvas-right:not(.screen, .full, .bb-offcanvas-panel *),
+  html[data-gz-navbar][dir="rtl"] :where(.MuiDrawer-modal > .MuiDrawer-paperAnchorRight):is(.MuiDrawer-modal > .MuiDrawer-paperAnchorRight, .bb-offcanvas-panel.bb-offcanvas-right:not(.screen, .full, .bb-offcanvas-panel *)) { right: var(--gz-navbar-left) !important; }
+  html[data-gz-navbar]:not([data-gz-footer]) .route-view-container,
+  html[data-gz-navbar]:not([data-gz-footer]) .routed-page,
+  html[data-gz-navbar]:not([data-gz-footer]) [data-gz-vh] { max-height: calc(100vh - var(--gz-navbar-top)) !important; }
+  html[data-gz-navbar]:not([data-gz-footer]) .inner-wrap > section.course,
+  html[data-gz-navbar]:not([data-gz-footer]) .inner-wrap > :where(.routed-page):is(.routed-page, section.course) { max-height: 100vh !important; }
 }
 /* The strip lives in the layer's own sticky header. Leave the native close button its first 48px. */
 @media screen {
@@ -1652,23 +1942,40 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
   /* What Ultra fixes along the window's bottom (an attempt's Save and Submit, the help button; content.js tags them) stands on
      the bar instead of under it. A layer the window's height (a dialog over the bar, a backdrop: data-gz-vh) and a slide-out
      (its wrapper, above) keep their edges. */
-  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) :is(.pagehelp-directive, [data-gz-fixed-bottom]:not([data-gz-vh], .bb-offcanvas-panel)) { bottom: var(--gz-navbar-bottom) !important; max-height: calc(100vh - var(--gz-navbar-bottom)) !important; }
-  html[data-gz-navbar]:not([data-gz-navbar~="none"]) :is(body, #main-content-inner, .inner-wrap > :is(section.course, .routed-page)) { box-sizing: border-box; padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) :where(.pagehelp-directive):is(.pagehelp-directive, [data-gz-fixed-bottom]:not([data-gz-vh], .bb-offcanvas-panel)),
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) [data-gz-fixed-bottom]:not([data-gz-vh], .bb-offcanvas-panel) { bottom: var(--gz-navbar-bottom) !important; max-height: calc(100vh - var(--gz-navbar-bottom)) !important; }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) :where(body):is(body, #main-content-inner),
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) #main-content-inner,
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) :where(.inner-wrap > section.course):is(.inner-wrap > section.course, #main-content-inner),
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) :where(.inner-wrap > .routed-page):is(.inner-wrap > .routed-page, #main-content-inner) { box-sizing: border-box; padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
   html[data-gz-navbar]:not([data-gz-navbar~="none"]) #gz-ctabs-frames { margin-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
   /* Focus stops above the bottom bar: in the page, over Glaze's footer too; in the boxes Ultra scrolls, its app's, which ends
      at the footer (theme.css shrinks it). */
   html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) { scroll-padding-bottom: var(--gz-navbar-bottom); }
-  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) :is(#main-content, #main-content-inner, .panel-wrap, .route-view-container, .routed-page, [data-gz-vh]) { scroll-padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) #main-content,
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) #main-content-inner,
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) :where(.panel-wrap):is(.panel-wrap, #main-content),
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) :where(.route-view-container):is(.route-view-container, #main-content),
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) :where(.routed-page):is(.routed-page, #main-content),
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) :where([data-gz-vh]):is([data-gz-vh], #main-content) { scroll-padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 }
 /* A window this short: the bar sits lower and is shorter (navigation/page/navbar.css), and what stands on it comes down with it. */
 @media (max-width: 899.98px) and (max-height: 420px) {
   html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) { --gz-navbar-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
   html[data-gz-navbar][data-gz-footer]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) { --gz-navbar-bottom: calc(72px + var(--gz-footer-h) + env(safe-area-inset-bottom, 0px)); }
-  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) :is(#main-content, #main-content-inner, .panel-wrap, .route-view-container, .routed-page, [data-gz-vh]) { scroll-padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) #main-content,
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) #main-content-inner,
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) :where(.panel-wrap):is(.panel-wrap, #main-content),
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) :where(.route-view-container):is(.route-view-container, #main-content),
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) :where(.routed-page):is(.routed-page, #main-content),
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) :where([data-gz-vh]):is([data-gz-vh], #main-content) { scroll-padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
   html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap { bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important; }
 }
 /* Printed, the page is Ultra's own: the bar doesn't print (navigation/page/navbar.css), and the page keeps no room for it. */
 @media print {
   html[data-gz-navbar] { --gz-navbar-left: 0px !important; --gz-navbar-top: 0px !important; --gz-navbar-bottom: 0px !important; }
-  html[data-gz-navbar]:not([data-gz-navbar~="none"]) :is(body, #main-content-inner, .inner-wrap > :is(section.course, .routed-page)) { padding-bottom: 0 !important; }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) :where(body):is(body, #main-content-inner),
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) #main-content-inner,
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) :where(.inner-wrap > section.course):is(.inner-wrap > section.course, #main-content-inner),
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) :where(.inner-wrap > .routed-page):is(.inner-wrap > .routed-page, #main-content-inner) { padding-bottom: 0 !important; }
 }

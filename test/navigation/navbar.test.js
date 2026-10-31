@@ -212,12 +212,12 @@ test('where the bar is: the placement, the course state, the style and the room 
     ['html[data-gz-navbar~="rail"][data-gz-navbar~="open"][data-gz-navbar~="embed"] { --gz-navbar-left', 248], ['html[data-gz-navbar~="top"] { --gz-navbar-top', 80], ['html[data-gz-navbar~="top"][data-gz-navbar~="embed"] { --gz-navbar-top', 56],
     ['html[data-gz-navbar~="rail"][data-gz-navbar~="auto"] { --gz-navbar-left', 272], ['html[data-gz-navbar~="rail"][data-gz-navbar~="auto"][data-gz-navbar~="embed"] { --gz-navbar-left', 248]]) assert.ok(css.includes(`${rule}: ${px}px; }`), rule);
   for (const rule of ['#main-content-inner { padding-inline-start: var(--gz-navbar-left) !important; }', '#main-content { box-sizing: border-box; padding-top: var(--gz-navbar-top) !important; }',
-    '.inner-wrap > :is(section.course, .routed-page) { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }',
+    'html[data-gz-navbar] .inner-wrap > section.course,\n  html[data-gz-navbar] .inner-wrap > :where(.routed-page):is(.routed-page, section.course) { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }',
     '#gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left); top: var(--gz-navbar-top); }', 'html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }']) assert.ok(css.includes(rule), rule);
   // A course is padded for the bar inside its own height (and is itself a .route-view-container on Ultra), so its cap
   // leaves the bar's room in, footer or not: taken twice, the page stopped a bar's height above the footer.
-  for (const rule of ['html[data-gz-navbar][data-gz-footer] .inner-wrap > :is(section.course, .routed-page) {\n  max-height: calc(100vh - var(--gz-footer-h)) !important;',
-    'html[data-gz-navbar]:not([data-gz-footer]) .inner-wrap > :is(section.course, .routed-page) { max-height: 100vh !important; }']) assert.ok(css.includes(rule), rule);
+  for (const rule of ['html[data-gz-navbar][data-gz-footer] .inner-wrap > section.course,\nhtml[data-gz-navbar][data-gz-footer] .inner-wrap > :where(.routed-page):is(.routed-page, section.course) {\n  max-height: calc(100vh - var(--gz-footer-h)) !important;',
+    'html[data-gz-navbar]:not([data-gz-footer]) .inner-wrap > section.course,\n  html[data-gz-navbar]:not([data-gz-footer]) .inner-wrap > :where(.routed-page):is(.routed-page, section.course) { max-height: 100vh !important; }']) assert.ok(css.includes(rule), rule);
   assert.ok(css.indexOf('html[data-gz-navbar][data-gz-footer] .inner-wrap >') > css.indexOf('html[data-gz-footer] .route-view-container'), 'after the general cap, so it wins');
 });
 
@@ -244,7 +244,8 @@ test("below 900px, what Ultra fixes along the window's bottom stands on the bar,
     'the footer under the bar counts too: the lift is from the window\'s bottom');
   // Action bars and the help button: lifted the whole room, not just the footer's. Window-high layers (MUI's dialogs over the
   // bar, backdrops) and slide-outs (their wrapper clears it) keep their edges.
-  const lift = `${on} :is(.pagehelp-directive, [data-gz-fixed-bottom]:not([data-gz-vh], .bb-offcanvas-panel)) { bottom: var(--gz-navbar-bottom) !important; max-height: calc(100vh - var(--gz-navbar-bottom)) !important; }`;
+  const fixed = '[data-gz-fixed-bottom]:not([data-gz-vh], .bb-offcanvas-panel)';
+  const lift = `${on} :where(.pagehelp-directive):is(.pagehelp-directive, ${fixed}),\n  ${on} ${fixed} { bottom: var(--gz-navbar-bottom) !important; max-height: calc(100vh - var(--gz-navbar-bottom)) !important; }`;
   assert.ok(mobile.includes(lift));
   assert.ok(css.indexOf(lift) > css.indexOf('html[data-gz-footer] .pagehelp-directive, html[data-gz-footer] [data-gz-fixed-bottom] {'), "after the footer's lift, which it replaces");
 });
@@ -456,7 +457,10 @@ test("printed, a page is the site's own: none of Glaze's fixed parts on every sh
   assert.match(printed('content/canvas.css'), /html\[data-gz-navbar\]\{--gz-navbar-left:0px !important;--gz-navbar-top:0px !important;?\}/);
   assert.match(printed('navigation/page/coursetabs.css'), /html\[data-gz-ctabs\]\{--gz-ctabs-h:0px !important;?\}/);
   // The phone bar's room under the page: reset after the rule that keeps it, so the reset wins.
-  for (const [file, sel] of [['content/theme.css', 'html[data-gz-navbar]:not([data-gz-navbar~="none"]) :is(body, #main-content-inner, .inner-wrap > :is(section.course, .routed-page)) {'],
+  const on = 'html[data-gz-navbar]:not([data-gz-navbar~="none"])';
+  const room = [`${on} :where(body):is(body, #main-content-inner)`, `${on} #main-content-inner`, `${on} :where(.inner-wrap > section.course):is(.inner-wrap > section.course, #main-content-inner)`,
+    `${on} :where(.inner-wrap > .routed-page):is(.inner-wrap > .routed-page, #main-content-inner)`].join(',\n  ');
+  for (const [file, sel] of [['content/theme.css', `${room} {`],
     ['content/canvas.css', 'html[data-gz-navbar]:not([data-gz-navbar~="none"]) body {']]) {
     const css = read(file), screen = css.search(new RegExp(`${sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^}]*padding-bottom: calc\\(96px`));
     assert.ok(screen > 0 && css.lastIndexOf(`${sel} padding-bottom: 0 !important; }`) > screen, `${file}: the print reset comes after the room it resets`);
@@ -493,13 +497,14 @@ test('a window 420px tall or less (a phone on its side, 400% zoom) keeps more of
 
 test("what focus scrolls to stops clear of the bar on Ultra too, in the boxes Ultra scrolls inside its app (WCAG 2.4.11)", () => {
   // Ultra scrolls inside its app (its main column, a course's panel, a routed page, a box the window's height), not the page.
-  const boxes = ':is(#main-content, #main-content-inner, .panel-wrap, .route-view-container, .routed-page, [data-gz-vh])';
+  // One selector per box (Chrome files each under its id or class), each at the list's specificity (an id's).
+  const each = (scope) => ['#main-content', '#main-content-inner', ...['.panel-wrap', '.route-view-container', '.routed-page', '[data-gz-vh]'].map((b) => `:where(${b}):is(${b}, #main-content)`)].map((b) => `${scope} ${b}`);
   const css = read('content/theme.css'), on = 'html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive])';
-  assert.ok(css.includes(`html[data-gz-navbar], html[data-gz-navbar] ${boxes} { scroll-padding-top: var(--gz-navbar-top); }`), 'under the top bar');
+  assert.ok(css.includes(`${['html[data-gz-navbar]', ...each('html[data-gz-navbar]')].join(',\n')} { scroll-padding-top: var(--gz-navbar-top); }`), 'under the top bar');
   // A phone: the page by the bar's whole room (the footer under it too); the app's boxes end at the footer, so by the bar's.
-  const phone = media('content/theme.css', '@media (max-width: 899.98px)');
+  const phone = media('content/theme.css', '@media (max-width: 899.98px)'), boxes = each(on).join(', ');
   assert.ok(phone.includes(`${on}{scroll-padding-bottom:var(--gz-navbar-bottom);}`));
-  assert.ok(phone.includes(`${on} ${boxes}{scroll-padding-bottom:calc(96px + env(safe-area-inset-bottom, 0px));}`));
-  assert.ok(media('content/theme.css', '@media (max-width: 899.98px) and (max-height: 420px)').includes(`${on} ${boxes}{scroll-padding-bottom:calc(72px + env(safe-area-inset-bottom, 0px));}`),
+  assert.ok(phone.includes(`${boxes}{scroll-padding-bottom:calc(96px + env(safe-area-inset-bottom, 0px));}`));
+  assert.ok(media('content/theme.css', '@media (max-width: 899.98px) and (max-height: 420px)').includes(`${boxes}{scroll-padding-bottom:calc(72px + env(safe-area-inset-bottom, 0px));}`),
     'and the lower, shorter bar of a short window');
 });
