@@ -46,9 +46,10 @@ const rng = (seed) => {
 // Tiny transfers (o.tiny, --tiny): a transfer goes large past TINY.at bytes instead of 5 MB, in chunks and ranges of
 // TINY.step, so most documents, JSON copies, records and snapshots go through staged resumable uploads and ranged downloads.
 // Each device's drive.js and drive-sync.js are rewritten so as they load (the shipped files stay as they are), the stand-ins
-// take chunks of TINY.quantum, and an applied kill on a chunk leaves Drive part of it. In 4.0.1 Sync stages nothing (o.staged
-// off): there tiny transfers make nearly every document and many records too large to sync, which the checks then hold to
-// staying on their device, marked, with nothing staged; o.staged brings the stage back for 4.0.2's repros.
+// take chunks of TINY.quantum, and an applied kill on a chunk leaves Drive part of it. Sync stages as the worker asks
+// (background/background.js env.staged, STAGED below), unless o.staged says otherwise: with it off, tiny transfers make nearly
+// every document and many records too large to sync, which the checks then hold to staying on their device, marked, with
+// nothing staged.
 const TINY = { at: 256, step: 512, quantum: 256 };
 const SHRUNK = {
   'drive.js': [['const SMALL = 5 << 20;', `const SMALL = ${TINY.at};`], ['const STEP = { min: 256 << 10, max: 8 << 20,', `const STEP = { min: ${TINY.quantum}, max: ${TINY.step},`]],
@@ -75,11 +76,14 @@ const FIRST = [...BG_SOURCE.slice(0, BG_SOURCE.indexOf(');')).matchAll(/'([^']+\
 // What brokerIn('backup') loads (background.js BROKER_FILES.backup).
 const BACKUP_FILES = (() => { const m = /BROKER_FILES\.backup = \[([^\]]+)\]/.exec(BG_SOURCE); return m ? [...m[1].matchAll(/'([^']+\.js)'/g)].map((x) => x[1]) : []; })();
 // background.js's Drive section, as test/documents/drive-sync-background.test.js runs it.
-const SECTION = (() => {
+const SECTION_SOURCE = (() => {
   const from = BG_SOURCE.indexOf('// Sync to Google Drive (documents/drive-sync.js'), to = BG_SOURCE.indexOf('// A Download all wait owns', from);
   if (from < 0 || to < 0) throw new Error('drive-chaos: background.js\'s Drive section markers moved');
-  return new vm.Script(BG_SOURCE.slice(from, to), { filename: 'background/background.js#drive' });
+  return BG_SOURCE.slice(from, to);
 })();
+const SECTION = new vm.Script(SECTION_SOURCE, { filename: 'background/background.js#drive' });
+// Whether the worker stages transfers past one request (documents/drive-sync.js env.staged).
+const STAGED = /\n\s*staged: true,/.test(SECTION_SOURCE);
 
 // ---- in the device's context: what the worker has from the browser, over the host's disk. Run there as source, so every
 // object, array and byte array it makes is the context's own (drive.js checks bytes instanceof Uint8Array).
@@ -414,8 +418,8 @@ class Device {
     const S = this.ctx.GZ_DRIVE_SYNC, create = S.create, dev = this, gen = this.gen;
     if (S.__chaos) return;
     S.__chaos = true;
-    // Staged transfers, off in 4.0.1 (documents/drive-sync.js env.staged): on only for the runs that test them (o.staged).
-    S.create = (env) => create({ ...env, staged: dev.world.o.staged === true,
+    // Staged transfers (documents/drive-sync.js env.staged): as the worker asks, or as o.staged says.
+    S.create = (env) => create({ ...env, staged: dev.world.staged,
       sleep: (ms) => new Promise((res) => { dev.world.clock += ms; setImmediate(() => { if (dev.gen === gen && !dev.dead) res(); }); }),
       timer: (fn, ms) => { const id = ++dev.timerSeq; dev.timers.set(id, { fn, ms, gen, push: true }); return () => dev.timers.delete(id); } });
   }
@@ -674,7 +678,7 @@ const KNOWN = {
     about: 'a first push whose JSON copy Drive took but whose answer never came: the next run hears of that copy in Drive\'s changes but passes over it as another device\'s (none linked here yet), and while Drive\'s search lags makes a second one: two copies stay, and a device linked to the first never gets this one\'s later edits',
     skips: () => false,
     stops: 'net.POST',
-    repro: [{ t: 'lag', n: 3 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, kill: 142, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }],
+    repro: [{ t: 'lag', n: 3 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, upload: { method: 'POST', glaze: 'doc' }, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }],
   },
   'stale-sum': {
     fixed: true,
@@ -689,7 +693,7 @@ const KNOWN = {
     about: 'a first push whose JSON copy Drive took but whose answer never came, the document then taken and edited on another device: the first device links the copy as its own push and, holding its own older text as a change not yet sent, writes it over the other device\'s edit, which no device keeps',
     skips: () => false,
     stops: 'net.POST',
-    repro: [{ t: 'paper', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2, kill: 142, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }, { t: 'paper', k: 'edit', d: 0, pick: 0, pick2: 0, s: 4 }],
+    repro: [{ t: 'paper', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2, upload: { method: 'POST', glaze: 'doc' }, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }, { t: 'paper', k: 'edit', d: 0, pick: 0, pick2: 0, s: 4 }],
   },
   'meet-stop': {
     fixed: true,
@@ -754,7 +758,7 @@ const KNOWN = {
     about: 'a first push whose file upload Drive took but whose answer never came, that orphan then put in Drive\'s trash: the next push writes a second file, and the student restoring the first leaves two visible files for the document',
     skips: () => false,
     stops: 'net.POST',
-    repro: [{ t: 'slides', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, kill: 129, apply: true }, { t: 'drive', k: 'trashDoc', pick: 0, s: 3 }, { t: 'run', d: 0, how: 'run', s: 4 },
+    repro: [{ t: 'slides', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, upload: { method: 'POST', glaze: 'file' }, apply: true }, { t: 'drive', k: 'trashDoc', pick: 0, s: 3 }, { t: 'run', d: 0, how: 'run', s: 4 },
       { t: 'drive', k: 'untrashDoc', pick: 0, s: 5 }],
   },
   'lag-duplicate': {
@@ -762,7 +766,7 @@ const KNOWN = {
     about: 'a first push whose file upload Drive took but whose answer never came, while Drive\'s search doesn\'t show it yet: the next push writes a second file, and both stay visible',
     skips: () => false,
     stops: 'net.POST',
-    repro: [{ t: 'lag', n: 6 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, kill: 127, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }],
+    repro: [{ t: 'lag', n: 6 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, upload: { method: 'POST', glaze: 'file' }, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }],
   },
   'old-file-restored': {
     fixed: true,
@@ -926,6 +930,7 @@ const KNOWN = {
 class World {
   constructor(seed, ops, o = {}) {
     this.seed = seed; this.ops = ops; this.o = { devices: 2, rounds: 8, reads: 24, ...o };
+    this.staged = typeof this.o.staged === 'boolean' ? this.o.staged : STAGED;
     this.clock = START; this.step = 0; this.errors = []; this.lines = []; this.rejections = []; this.soft = [];
     this.net = network(!!this.o.tiny);
     this.drive = this.net.drives[ACCOUNTS.A];
@@ -1344,13 +1349,13 @@ class World {
     const fail = [];
     const F = (inv, msg) => fail.push({ inv, msg });
     const views = this.devices.map((d) => this.view(d));
-    // Too large to sync (4.0.1, documents/drive-sync.js driveSyncLarge): what any device marks stays on its device, out of the
-    // comparisons. Nothing is staged, and with tiny transfers every live document is marked (its JSON copy alone is past one
-    // request), on every device Sync is on for.
+    // Too large to sync (documents/drive-sync.js driveSyncLarge): what any device marks stays on its device, out of the
+    // comparisons. With the stage off nothing is staged, and with tiny transfers every live document is marked (its JSON copy
+    // alone is past one request), on every device Sync is on for.
     const large = { docs: new Set(), recs: new Set() };
     for (const d of this.devices) { const m = this.get(d, 'driveSyncLarge') || {}; for (const k of Object.keys(m.docs || {})) large.docs.add(k); for (const k of Object.keys(m.recs || {})) large.recs.add(k); }
     const noteLarge = (id) => [...large.recs].some((r) => r.startsWith('notes:') && r.endsWith(`|${id}`));
-    if (!this.o.staged) {
+    if (!this.staged) {
       for (const d of this.devices) if (Object.keys(this.get(d, 'driveSyncMoves') || {}).length) F('large', `${d.name} staged a transfer: ${Object.keys(this.get(d, 'driveSyncMoves')).join(' ')}`);
       const sent = this.drive.log.filter((x) => x.query?.uploadType === 'resumable' || x.chunk || x.range);
       if (sent.length) F('large', `${sent.length} staged requests, the first ${sent[0].dev} ${sent[0].method} ${sent[0].path}`);
@@ -1519,4 +1524,4 @@ const shrink = async (seed, ops, inv, o = {}, budget = 200) => {
   return list;
 };
 
-module.exports = { TINY, rng, canon, sha, network, Device, World, generate, describe, play, shrink, KNOWN, ACCOUNTS, TOKENS, FIRST, prelude, START };
+module.exports = { TINY, STAGED, rng, canon, sha, network, Device, World, generate, describe, play, shrink, KNOWN, ACCOUNTS, TOKENS, FIRST, prelude, START };

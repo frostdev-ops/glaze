@@ -5,14 +5,14 @@
 // Options: --from N --count N (seeds; default 1, 200), --ops N (40), --devices N (3), --minutes N (stop after),
 // --masks a,b (leave out the operations a known defect needs: test/helpers/drive-chaos.cjs KNOWN; 'all' for every one),
 // --shrink (shrink each failing seed), --json FILE (every result), --tiny (transfers go large past 256 bytes: staged resumable
-// uploads and ranged downloads, killed mid-chunk, with --staged as 4.0.2 will; in 4.0.1 items past it stay on their device,
-// marked too large), SEED=n replays one seed with its full trace.
+// uploads and ranged downloads, killed mid-chunk), --unstaged (the stage off, as 4.0.1's builds ran: items past one request
+// stay on their device, marked too large; --staged, the default, as the worker runs), SEED=n replays one seed with its full trace.
 'use strict';
 const C = require('../../test/helpers/drive-chaos.cjs');
 
 const arg = (name, d) => { const i = process.argv.indexOf(`--${name}`); return i < 0 ? d : process.argv[i + 1]; };
 const flag = (name) => process.argv.includes(`--${name}`);
-const o = { ops: Number(arg('ops', process.env.ITER || 40)), devices: Number(arg('devices', 3)), tiny: flag('tiny') || process.env.TINY === '1', staged: flag('staged') };
+const o = { ops: Number(arg('ops', process.env.ITER || 40)), devices: Number(arg('devices', 3)), tiny: flag('tiny') || process.env.TINY === '1', staged: flag('unstaged') ? false : flag('staged') ? true : undefined };
 const masks = arg('masks', '');
 o.masks = masks === 'all' ? Object.keys(C.KNOWN).filter((k) => !C.KNOWN[k].fixed) : masks.split(',').filter(Boolean);
 const from = Number(arg('from', 1)), count = Number(arg('count', 200)), minutes = Number(arg('minutes', 0));
@@ -56,7 +56,7 @@ const minimal = async (r) => {
     failing.push(seed);
     if (flag('shrink')) await minimal(r);
   }
-  console.log(`\n${n} seeds × ${o.ops} operations × ${o.devices} devices${o.tiny ? ` (tiny transfers${o.staged ? ', staged' : ''})` : ''} in ${Math.round((Date.now() - t0) / 1000)} s; ${failing.length} failing${failing.length ? `: ${failing.join(' ')}` : ''}`);
+  console.log(`\n${n} seeds × ${o.ops} operations × ${o.devices} devices${o.tiny ? ` (tiny transfers${o.staged ?? C.STAGED ? ', staged' : ''})` : ''} in ${Math.round((Date.now() - t0) / 1000)} s; ${failing.length} failing${failing.length ? `: ${failing.join(' ')}` : ''}`);
   if (Object.keys(tally).length) console.log(`by invariant: ${JSON.stringify(tally)}`);
   // Not failures: what last writer wins does by design that a student might still call a loss.
   if (soft.length) console.log(`by design, ${soft.length} seeds:\n  ${soft.slice(0, 5).join('\n  ')}`);

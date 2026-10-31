@@ -781,9 +781,9 @@ test('Settings: a day whose backup Drive had no room for says so beside when Syn
   assert.doesNotMatch(made.els['#gdrive-sync-said'].textContent, /backup/);
 });
 
-// Sync to Google Drive in 4.0.1 (documents/drive-sync.js driveSyncLarge, background/drive-store.js snapSkip 'large'): what stays
-// on this device as too large to sync is counted beside when Sync last ran, only when there is any; a day's zip past the
-// limit says so for that day.
+// Sync to Google Drive (documents/drive-sync.js driveSyncLarge; background/drive-store.js snapSkip 'large' with transfers off):
+// what stays on this device as too large to sync is counted beside when Sync last ran, only when there is any; a day's zip
+// past the limit says so for that day.
 test('Settings: what is too large to sync is counted beside when Sync last ran, only if any; a day\'s zip too large says so', async () => {
   const A = 'student@school.edu', now = Date.now();
   const s = await settings({ sync: { on: true, account: A, last: now, snap: now, problem: null }, large: { docs: { 'doc:00000000-0000-4000-8000-000000000001': true }, recs: { 'local:writerWords': true } } });

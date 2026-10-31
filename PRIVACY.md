@@ -401,15 +401,16 @@ ones described below as on this device only or never synced.
   on, the account it is bound to, the ids of the Glaze folder and its Data and Backups folders, Drive's change-list page
   token, when it last synced, what last stopped it, how many runs in a row failed and when it tries again (`fails`,
   `wait`), when the run under way began (`busy`), when the day's backup was last tried (`snap`) and whether it was skipped
-  because Drive was full or the zip was over 5 MB (`snapSkip`) (`driveSync`); for each document and each synced record, the ids
+  because Drive was full (`snapSkip`) (`driveSync`); for each document and each synced record, the ids
   of its Drive files and a SHA-256 of what each side last held (`driveSyncDoc:…`, `driveSyncRec:…`, `driveSyncFile:…`);
   which documents were saved since their last upload (`driveSyncDirty`); for a document whose Drive file was seen ahead
   of its JSON copy, how many times and since when (`driveSyncWaiting`); the ids of a document's duplicate Drive files
   still to be moved into Glaze/Data (`driveSyncAway`); when each synced setting or record last
   changed here, Sync on or off (`driveSyncStamps`); which documents and records are too large to sync and stay on this
-  device (`driveSyncLarge`); and `driveSyncMoves`, with Glaze's own IndexedDB `glaze-drive`, which only its background
-  worker opens, for files larger than one request, which this version doesn't sync: it keeps nothing there and clears
-  anything an earlier build left. Connecting another account while Sync is on, or turning Sync on for
+  device (`driveSyncLarge`); and, for a file over 5 MB on its way to or from Drive, which file it is, the SHA-256 of its
+  bytes, the address of its resumable upload session and how far it has come (`driveSyncMoves`), with its bytes, while
+  they wait between runs, in Glaze's own IndexedDB `glaze-drive`, which only its background worker opens. Each is cleared
+  once its file has gone up or come in. Connecting another account while Sync is on, or turning Sync on for
   another account, deletes all of it.
 - **Gradescope in To Do** (off by default), in `chrome.storage.local`, on this device only: which Gradescope account
   it's from (your name on Gradescope, and a SHA-256 hash of your Gradescope email address, never the address itself),
@@ -847,10 +848,12 @@ you import) are bundled. It makes requests in these cases:
       records are joined with the folder's as Restore joins a backup's (a note keeps the newer of each field), never
       replaced.
     - in Glaze/Backups, once a day, a **Back up…** zip of Settings, tasks, records, Notes and documents (without their
-      files: each document syncs on its own), the newest five kept; a day's zip over 5 MB is skipped.
-    - Anything over 5 MB (a big PDF, deck or paper, a large Notes attachment) doesn't sync yet: it stays on this device,
-      marked "Too large to sync" in Documents and counted in Settings, and its last copy in Drive, if any, stays as it was.
-      Glaze never sends, fetches, trashes or deletes anything for being too large.
+      files: each document syncs on its own), the newest five kept.
+    - A file over 5 MB (a big PDF, deck or paper, a large Notes attachment, the day's zip) goes up or comes in in pieces,
+      over as many runs as it takes, and is used only once it is whole. A document whose JSON copy would be over 64 MB, or
+      a record over 32 MB, doesn't sync: it stays on this device, marked "Too large to sync" in Documents and counted in
+      Settings, and its last copy in Drive, if any, stays as it was. Glaze never sends, fetches, trashes or deletes
+      anything for being too large.
     - Never in Drive: share keys (each share's end-to-end keys and your delete tokens: anyone who could read your Drive
       folder could otherwise read or delete your shares; **Back up…** still has them), AI keys and connections, Agents
       pairing, Drive's and Google Calendar's sign-in records, what Glaze read from your school (caches, course names, card
