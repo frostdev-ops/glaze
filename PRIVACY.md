@@ -401,17 +401,15 @@ ones described below as on this device only or never synced.
   on, the account it is bound to, the ids of the Glaze folder and its Data and Backups folders, Drive's change-list page
   token, when it last synced, what last stopped it, how many runs in a row failed and when it tries again (`fails`,
   `wait`), when the run under way began (`busy`), when the day's backup was last tried (`snap`) and whether it was skipped
-  because Drive was full (`snapSkip`) (`driveSync`); for each document and each synced record, the ids
+  because Drive was full or the zip was over 5 MB (`snapSkip`) (`driveSync`); for each document and each synced record, the ids
   of its Drive files and a SHA-256 of what each side last held (`driveSyncDoc:…`, `driveSyncRec:…`, `driveSyncFile:…`);
   which documents were saved since their last upload (`driveSyncDirty`); for a document whose Drive file was seen ahead
   of its JSON copy, how many times and since when (`driveSyncWaiting`); the ids of a document's duplicate Drive files
   still to be moved into Glaze/Data (`driveSyncAway`); when each synced setting or record last
-  changed here, Sync on or off (`driveSyncStamps`); and, for a file larger than one request still on its way, what it is
-  and how far it got: an upload's target file and Drive metadata, its resumable-session address (a Google upload address
-  that takes only that file's bytes), how far it got, a SHA-256 of its bytes and Drive's answer once it is sent, or a
-  download's file id, revision and how far it got (`driveSyncMoves`), with the bytes themselves in Glaze's own
-  IndexedDB, which only its background worker opens (`glaze-drive`), until it lands (the day's backup zip until it lands
-  or its day ends). Connecting another account while Sync is on, or turning Sync on for
+  changed here, Sync on or off (`driveSyncStamps`); which documents and records are too large to sync and stay on this
+  device (`driveSyncLarge`); and `driveSyncMoves`, with Glaze's own IndexedDB `glaze-drive`, which only its background
+  worker opens, for files larger than one request, which this version doesn't sync: it keeps nothing there and clears
+  anything an earlier build left. Connecting another account while Sync is on, or turning Sync on for
   another account, deletes all of it.
 - **Gradescope in To Do** (off by default), in `chrome.storage.local`, on this device only: which Gradescope account
   it's from (your name on Gradescope, and a SHA-256 hash of your Gradescope email address, never the address itself),
@@ -848,10 +846,11 @@ you import) are bundled. It makes requests in these cases:
       field by field (a rename on one device and an edit on another both stay); when a second device connects, its own
       records are joined with the folder's as Restore joins a backup's (a note keeps the newer of each field), never
       replaced.
-    - in Glaze/Backups, once a day, a **Back up…** zip of Settings, tasks, records, Notes and documents, the newest five
-      kept.
-    - A file larger than one request (over 5 MB: a big PDF, the day's zip) goes in parts, each run sending or fetching the
-      next ones from where the last stopped, so the rest of Sync never waits for it; it is applied only once whole.
+    - in Glaze/Backups, once a day, a **Back up…** zip of Settings, tasks, records, Notes and documents (without their
+      files: each document syncs on its own), the newest five kept; a day's zip over 5 MB is skipped.
+    - Anything over 5 MB (a big PDF, deck or paper, a large Notes attachment) doesn't sync yet: it stays on this device,
+      marked "Too large to sync" in Documents and counted in Settings, and its last copy in Drive, if any, stays as it was.
+      Glaze never sends, fetches, trashes or deletes anything for being too large.
     - Never in Drive: share keys (each share's end-to-end keys and your delete tokens: anyone who could read your Drive
       folder could otherwise read or delete your shares; **Back up…** still has them), AI keys and connections, Agents
       pairing, Drive's and Google Calendar's sign-in records, what Glaze read from your school (caches, course names, card
