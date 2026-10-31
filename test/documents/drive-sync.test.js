@@ -1608,3 +1608,23 @@ test('a kept mark whose answer is lost still repairs the detached document on th
   assert.equal(drive.files.get(old).bytes.toString(), 'PK edited outside Glaze');
   noDeletes(drive);
 });
+
+test('a kept Word file deleted for good after another device sent new content in a file of its own leaves the document live', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-000000000a21';
+  await b.papers.save(key, { doc: doc('Draft'), title: 'Essay', named: true });
+  assert.ok((await b.sync.set(true)).ok);
+  assert.ok((await a.sync.set(true)).ok);
+  const first = exportOf(drive, key).meta.id;
+  drive.edit(first, 'PK edited in Word');
+  await b.papers.save(key, { doc: doc('B edits') });
+  await b.sync.touched(key);
+  clock.t += 60e3;
+  assert.ok((await b.sync.run()).ok, 'B keeps the edited file and sends its edit in a new one');
+  drive.remove(first);
+  clock.t += 60e3;
+  assert.ok((await a.sync.run()).ok);
+  assert.ok(!P.trashed(await a.papers.get(key)), 'still live on A');
+  assert.equal(textOf((await a.papers.get(key)).doc), 'B edits');
+  assert.ok(!sidecarOf(drive, key).meta.explicitlyTrashed, 'its copy stays out of Drive\'s trash');
+});
