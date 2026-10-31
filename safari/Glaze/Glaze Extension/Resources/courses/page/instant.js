@@ -169,3 +169,5 @@ var GZ_INSTANT = globalThis.GZ_INSTANT || (() => {
   };
   return { sync, signout, now: () => (v ? { kind: v.kind, painted: !!v.copy, ready: v.ready } : null) };
 })();
+
+GZ_INSTANT;
