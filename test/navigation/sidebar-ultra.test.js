@@ -837,19 +837,25 @@ test("Ultra's Details & Actions, filled late, keeps the room it took on this cou
   const HELD = `detailsHeight:${O}`;
   const p = page({ at: 'outline', aside: 'live', stored: { ...record(), [HELD]: { _101_1: 231 } } });
   const before = natives(p);
-  // The room under it: sidebar.css's margin while <html> says it is held (Ultra's node keeps its own style).
-  const details = p.$('.js-details-and-actions'), margin = () => (p.doc.root.dataset.gzSbHeld != null && parseFloat(p.doc.root.style.getPropertyValue('--gz-sb-held'))) || 0;
+  // The room: sidebar.css holds the block at least this tall while <html> says it is held (Ultra's node keeps its own style).
+  const details = p.$('.js-details-and-actions'), room = () => (p.doc.root.dataset.gzSbHeld != null && parseFloat(p.doc.root.style.getPropertyValue('--gz-sb-held'))) || 0;
+  const tall = () => Math.max(details.box.height, room());
   details.box = { left: 1248, top: 140, width: 320, height: 0 };
   await p.pass();
   assert.ok(p.host()?.className.includes('outline-actions'), 'the dock is in Ultra\'s column');
-  assert.equal(margin(), 231, 'empty, it keeps its room under it before the dock is drawn there');
-  // Ultra fills it in steps, each seen before that frame paints (ResizeObserver).
-  const fill = (h) => { details.box = { left: 1248, top: 140, width: 320, height: h }; for (const r of p.sizes.filter((x) => x.targets.includes(details))) r.f([{ target: details, borderBoxSize: [{ blockSize: h }] }]); };
-  fill(64);
-  assert.equal(64 + margin(), 231, 'part filled: what is under it stays where it was');
-  fill(231);
-  assert.equal(margin(), 0, 'drawn: the room is its own again');
-  assert.equal(p.doc.root.dataset.gzSbHeld, undefined, 'and its own margin is back');
+  assert.equal(room(), 231, 'empty, it is held at the height it took last time, before the dock is drawn under it');
+  assert.equal(p.$('.gz-sb-pagehead').hidden, false, 'This page shows from the start: Ultra is about to fill the column');
+  // Ultra fills it in steps; the sidebar looks again as the column changes (its observer, once a frame).
+  const fill = (n) => {
+    details.replaceChildren(...Array.from({ length: n }, (_, i) => Object.assign(p.el('div', '', `Action ${i + 1}`), { box: { left: 1248, top: 140 + 33 * i, width: 320, height: 33 } })));
+    details.box = { ...details.box, height: Math.max(33 * n, room()) };
+    p.mutate(p.host(), { addedNodes: [details.lastElementChild] });
+  };
+  fill(2);
+  assert.equal(tall(), 231, 'part filled: still as tall, so what is under it stays where it was');
+  fill(7);
+  assert.equal(room(), 0, 'drawn as tall as the room: the room goes, and nothing moves');
+  assert.equal(p.doc.root.dataset.gzSbHeld, undefined);
   assert.deepEqual(Object.keys(details.style).filter((k) => typeof details.style[k] !== 'function'), [], "Ultra's node keeps its inline style");
   unmoved(p, before, 'kept room');
   // Leaving, what it took is kept for the next visit.
@@ -868,6 +874,7 @@ test("Ultra's Details & Actions on a course not seen before keeps the least room
   fresh.$('.js-details-and-actions').box = { left: 1248, top: 140, width: 320, height: 0 };
   await fresh.pass();
   assert.equal(fresh.doc.root.dataset.gzSbHeld, undefined, 'no guess without a measurement');
+  assert.equal(fresh.$('.gz-sb-pagehead').hidden, true, 'and an empty column has no This page');
 });
 
 test("Ultra's Details & Actions reservation wins over the theme's native block margin reset", () => {
