@@ -594,7 +594,7 @@ if (require.main === module) (async () => {
     // PERF_REQUIRE_STILL_ASIDE (with PERF_WIDTH at least 1560, where the sidebar is the outline's right column, and
     // PERF_REPS at least 2): on a course seen before, Course notes and the dock never move while Ultra fills Details &
     // Actions, and take part in no layout shift. A move in the frame the sidebar takes the column (its header put in above
-    // them) is the sidebar's own and is listed, not asserted.
+    // them, with Details & Actions unchanged) is the sidebar's own and is listed, not asserted.
     if (stillAside) {
       assert.ok(WIDTH >= 1560 && reps >= 2, 'PERF_REQUIRE_STILL_ASIDE needs PERF_WIDTH >= 1560 and PERF_REPS >= 2');
       const returning = results.filter((r) => r.rep > 0 && r.glaze !== 'off');
@@ -603,7 +603,8 @@ if (require.main === module) (async () => {
         const { frames, shifts } = r.outline.aside, moves = [];
         for (let i = 1; i < frames.length; i++) for (const block of ['aside.outline-actions > #gz-nt-block', 'aside.outline-actions > #gz-sb-widgets']) {
           const was = frames[i - 1][block], now = frames[i][block];
-          if (was != null && now != null && was !== now) moves.push({ t: frames[i].t, block, from: was, to: now, adopt: !frames[i - 1].host && !!frames[i].host });
+          if (was != null && now != null && was !== now) moves.push({ t: frames[i].t, block, from: was, to: now,
+            adopt: !frames[i - 1].host && !!frames[i].host && frames[i - 1].details === frames[i].details });
         }
         r.outline.aside.moves = moves;
         console.log(JSON.stringify({ rep: r.rep, instrumented: r.instrumented, asideMoves: moves, asideShifts: shifts }));
