@@ -139,7 +139,7 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       if (!env.firefox && !interactive) Object.assign(details, { abortOnLoadForNonInteractive: false, timeoutMsForNonInteractive: 10000 });
       try { return await i.launchWebAuthFlow(details); } catch { throw new Fail(offline() ? 'network' : interactive ? 'cancel' : 'auth'); }
     };
-    // The browser's redirect URL; the identity API is gone with its permission (Firefox's add-on settings can take it back).
+    // The browser's redirect URL; the identity API is gone with its permission.
     const own = () => {
       const i = id();
       if (typeof i?.getRedirectURL !== 'function') throw new Fail('permission');
@@ -234,7 +234,8 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
         await env.storage.set({ google: { email, sub, flow: 'native', at: now() } });
         return { ok: true, email };
       }
-      if (!await Promise.resolve(env.permissions.contains({ permissions: ['identity'] })).catch(() => false)) return { ok: false, why: 'permission' };
+      // Firefox's package holds identity from install (it has no optional identity, and its permissions API throws if asked).
+      if (!env.firefox && !await Promise.resolve().then(() => env.permissions.contains({ permissions: ['identity'] })).catch(() => false)) return { ok: false, why: 'permission' };
       let flow = s.flow, token;
       held = null;
       if (flow === 'chrome') {
@@ -301,7 +302,7 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       const i = id();
       if (t && g.flow === 'chrome') await Promise.resolve().then(() => i?.removeCachedAuthToken({ token: t })).catch(() => {});
       if (g?.flow === 'chrome') await Promise.resolve().then(() => i?.clearAllCachedAuthTokens()).catch(() => {});
-      await Promise.resolve().then(() => env.permissions.remove({ permissions: ['identity'] })).catch(() => {});
+      if (!env.firefox) await Promise.resolve().then(() => env.permissions.remove({ permissions: ['identity'] })).catch(() => {});
       await env.storage.remove('google');
       return { ok: true, revoked: !!r?.ok, had: !!g };
     });
