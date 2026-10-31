@@ -467,6 +467,11 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       area ||= was?.area || left?.area; key ||= was?.key || left?.key;
       if (R === undefined) R = was?.id ? await ctx.D((c) => c.file(was.id)).catch((e) => { if (e.why === 'missing') return { removed: true }; throw e; }) : ctx.listed ? ctx.known.get(h) || null : await lookup(ctx, h);
       if (R && !R.removed && R.trashed) R = { removed: true }; // a record file moved to Drive's trash: put back from here
+      // This device's file outside Data (left in a Data merged into this one before Drive's search showed it): moved in, where
+      // every other device lists and hears it.
+      if (was?.id && R?.id === was.id && !R.removed && ctx.data && Array.isArray(R.parents) && !R.parents.includes(ctx.data)) {
+        await ctx.D((c) => c.patch(R.id, {}, undefined, { add: ctx.data, remove: R.parents }));
+      }
       // Unless another device put it back first (Glaze/Data trashed with it, say): that one is met as a first meeting, never
       // a second file made beside it.
       if (was?.id && R?.removed) { const other = await lookup(ctx, h); if (other && other.id !== was.id) { await leave(); R = other; } }
