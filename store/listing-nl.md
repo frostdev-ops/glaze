@@ -84,6 +84,6 @@ NIEUW IN 4.0.1
 • Canvas: Openen in Glaze bij pdf-, dia- en spreadsheetbestanden. Dia's krijgen Afdrukken met notities…, en kaarten in Documenten tonen de grafieken van een spreadsheet.
 • De feedback van Writer antwoordt in de taal van je concept, en de opmerkingen en controles bij bronvermeldingen werken in alle zes talen.
 • Haalt een opmerking van de feedback haar controles niet, dan toont Writer de gecontroleerde beoordeling volgens het beoordelingsschema in plaats van het cijfer achter te houden.
-• Firefox: Google Drive (Instellingen › Writer › Werkstukken) opent, bewaart, voegt bij en synchroniseert je documenten. Uit tot je verbinding maakt.
+• Firefox: Google Drive (Instellingen › Writer › Werkstukken) opent, bewaart, voegt bij en synchroniseert je documenten, ook grote bestanden. Uit tot je verbinding maakt.
 • Firefox: een site waarvan je de toegang hebt ingetrokken, wordt niet meer opnieuw geprobeerd.
-• Chrome: Synchronisatie met Google Agenda (Instellingen › Delen) houdt een agenda met de naam Glaze in je Google-account bij, en Google Drive (Instellingen › Writer › Werkstukken) opent, bewaart, voegt bij en synchroniseert je documenten. Beide blijven uit tot je verbinding maakt.
+• Chrome: Synchronisatie met Google Agenda (Instellingen › Delen) houdt een agenda met de naam Glaze in je Google-account bij, en Google Drive (Instellingen › Writer › Werkstukken) opent, bewaart, voegt bij en synchroniseert je documenten, ook grote bestanden. Beide blijven uit tot je verbinding maakt.

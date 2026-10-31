@@ -84,6 +84,6 @@ NOVEDADES DE 4.0.1
 • Canvas: Abrir en Glaze en archivos PDF, de diapositivas y de hojas de cálculo. Las diapositivas tienen Imprimir con notas…, y las tarjetas de Documentos muestran los gráficos de una hoja.
 • Los comentarios de Writer responden en el idioma de tu borrador, y sus revisiones de citas funcionan en los seis idiomas.
 • Si un comentario de Writer no supera sus revisiones, Writer muestra el nivel de la rúbrica que comprobó en lugar de retener la nota.
-• Firefox: Google Drive (Ajustes › Writer › Trabajos) abre, guarda, adjunta y sincroniza tus documentos. Desactivado hasta que te conectes.
+• Firefox: Google Drive (Ajustes › Writer › Trabajos) abre, guarda, adjunta y sincroniza tus documentos, también archivos grandes. Desactivado hasta que te conectes.
 • Firefox: un sitio al que retiraste el acceso ya no se vuelve a intentar.
-• Chrome: Sincronización con Google Calendar (Ajustes › Compartir) mantiene al día un calendario llamado Glaze en tu cuenta de Google, y Google Drive (Ajustes › Writer › Trabajos) abre, guarda, adjunta y sincroniza tus documentos. Ambos siguen desactivados hasta que te conectes.
+• Chrome: Sincronización con Google Calendar (Ajustes › Compartir) mantiene al día un calendario llamado Glaze en tu cuenta de Google, y Google Drive (Ajustes › Writer › Trabajos) abre, guarda, adjunta y sincroniza tus documentos, también archivos grandes. Ambos siguen desactivados hasta que te conectes.
