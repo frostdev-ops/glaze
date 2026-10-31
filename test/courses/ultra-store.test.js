@@ -191,7 +191,7 @@ test('the last student per site is known before anything is asked, and remembere
   assert.equal((await site().page.known()), null, 'none yet');
 });
 
-test("memberships come once per site: a page confirms the student and keeps the worker's copy; a frame takes it as it is", async () => {
+test("memberships come once per site: every document confirms its student before using the worker's copy", async () => {
   // A first page: both asked, and handed to the worker.
   const a = site({ answers: ANSWERS() });
   const ma = await a.page.mine();
@@ -205,11 +205,11 @@ test("memberships come once per site: a page confirms the student and keeps the 
   assert.equal(mb.mem.complete, true);
   assert.deepEqual([count(b.asked, /users\/me$/), count(b.asked, /memberships/)], [1, 0]);
   assert.equal(b.box.session.at, LATER + 60000, 'confirmed by this page');
-  // A course tab's frame under it: nothing asked at all.
+  // A course tab's frame confirms identity too; the site's snapshot can also be updated by unrelated tabs.
   const f = site({ answers: ANSWERS(), session: b.box.session, framed: LATER + 1000, now: LATER + 62000 });
   assert.equal((await f.page.mine()).mem.length, 4);
-  assert.equal(f.asked.length, 0);
-  // A frame whose top page hasn't confirmed the copy confirms it itself.
+  assert.deepEqual([count(f.asked, /users\/me$/), count(f.asked, /memberships/)], [1, 0]);
+  // The top page's timestamp does not change the identity requirement.
   const g = site({ answers: ANSWERS(), session: b.box.session, framed: LATER + 61000, now: LATER + 62000 });
   await g.page.mine();
   assert.deepEqual([count(g.asked, /users\/me$/), count(g.asked, /memberships/)], [1, 0]);
@@ -365,4 +365,69 @@ test('the kept gradebooks are read from storage once a page per student, however
   const [a, b, c] = await Promise.all([page.saved('_101_1', '_900_1'), page.saved('_102_1', '_900_1'), page.saved('_103_1', '_900_1')]);
   assert.equal(reads, 1);
   assert.deepEqual([a.rows.length, a.rows.complete, b.rows.complete, c], [1, true, false, null]);
+});
+
+test('outline upgrades join a pending metadata read and retain the document bodies for search', async () => {
+  let release;
+  const s = site();
+  s.env.fetch = async (url) => {
+    const body = new URL(url).searchParams.get('fields').split(',').includes('body');
+    if (!body) await new Promise((r) => { release = r; });
+    return { ok: true, text: async () => JSON.stringify({ results: [{ id: '_1_1', ...(body && { body: 'Document text' }) }] }) };
+  };
+  const page = U.makePage(s.env);
+  const metadata = page.outline('_101_1');
+  const bodies = page.outline('_101_1', { body: true });
+  // Either order is safe: a richer read may run beside metadata or wait for it.
+  await settle();
+  release();
+  await metadata;
+  const rich = await bodies;
+  assert.equal(page.outlineNow('_101_1', { body: true }), rich);
+  assert.equal(page.outlineNow('_101_1').items[0].body, 'Document text');
+});
+
+test('overlapping gradebook saves preserve both courses when a storage read is delayed', async () => {
+  const s = site({ answers: ANSWERS() }), key = `ultraBooks:${O}/_900_1`;
+  const get = s.env.local.get;
+  let release, reads = 0;
+  s.env.local.get = async (k) => {
+    const snapshot = await get(k);
+    if (k === key && ++reads === 1) await new Promise((r) => { release = r; });
+    return snapshot;
+  };
+  const page = U.makePage(s.env);
+  await page.book('_101_1', '_900_1');
+  await settle();
+  await page.book('_102_1', '_900_1');
+  await settle();
+  release();
+  await settle();
+  assert.deepEqual(Object.keys(s.store[key]).sort(), ['_101_1', '_102_1']);
+});
+
+test('remembering identity cannot overwrite the course list saved while its first storage read was delayed', async () => {
+  const s = site({ answers: ANSWERS() }), key = `ultraMe:${O}`;
+  const get = s.env.local.get;
+  let release, reads = 0;
+  s.env.local.get = async (k) => {
+    const snapshot = await get(k);
+    if (k === key && ++reads === 1) await new Promise((r) => { release = r; });
+    return snapshot;
+  };
+  await s.page.mine();
+  await settle();
+  release();
+  await settle();
+  assert.equal(s.store[key].uid, '_900_1');
+  assert.equal(s.store[key].courses.length, 4);
+});
+
+test('a frame cannot treat a snapshot refreshed by another tab as its current account', async () => {
+  const s = site({ answers: ANSWERS(), framed: LATER - 1000, session: {
+    uid: '_800_1', mem: [], complete: true, read: LATER, at: LATER,
+  } });
+  assert.equal((await s.page.profile()).id, '_900_1');
+  assert.equal((await s.page.mine()).mem.length, 4);
+  assert.equal(count(s.asked, /users\/me$/), 1);
 });

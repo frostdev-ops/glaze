@@ -72,6 +72,7 @@ const worker = ({ local = {}, sync = {}, granted = () => true, m = manifest, ses
     },
   });
   vm.runInContext(read('background/background.js'), context, { filename: 'background/background.js' });
+  w.session = context.chrome.storage.session;
   // A message as the browser hands it on: its reply, or 'ignored' once nothing has answered.
   w.send = (m, s) => new Promise((res) => {
     let kept = false;
@@ -248,6 +249,25 @@ test("an Ultra site's student and memberships: kept in the worker's session for 
   // Removing the site forgets it.
   assert.deepEqual(await w.send({ type: 'glaze:sites', op: 'remove', origin: B }, editor), { ok: true });
   assert.deepEqual(w.store.session, {});
+});
+
+test('an Ultra identity touch cannot overwrite a newer account saved by another page', async () => {
+  const B = 'https://bb.school.edu', key = `ultraMine:${B}`, sender = page(`${B}/ultra/course`);
+  const w = worker({ local: { ultra: [B] }, session: { [key]: { uid: '_800_1', mem: [], at: 1, read: 1 } } });
+  let release, first = true;
+  const get = w.session.get;
+  w.session.get = async (k) => {
+    const snapshot = await get(k);
+    if (k === key && first) { first = false; await new Promise((r) => { release = r; }); }
+    return snapshot;
+  };
+  const touch = w.send({ type: 'glaze:ultraMine', op: 'touch', uid: '_800_1' }, sender);
+  await settle();
+  const put = w.send({ type: 'glaze:ultraMine', op: 'put', mine: { uid: '_900_1', mem: [], complete: true } }, sender);
+  await settle();
+  release();
+  await Promise.all([touch, put]);
+  assert.equal(w.store.session[key].uid, '_900_1');
 });
 
 test('review: Glaze extension preview frames retain code-on-demand access', async () => {

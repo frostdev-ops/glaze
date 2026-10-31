@@ -104,3 +104,48 @@ test('the setting: on by default, in Course tabs\' options, and the file loads o
   assert.match(read('background/background.js'), /'courses\/page\/ahead\.js'/);
   for (const lang of ['de', 'es', 'fr', 'nl', 'pt-BR']) assert.match(read(`i18n/${lang}.js`), /"Load course data ahead of time":/, lang);
 });
+
+test('prefetch turned off while its library loads starts no identity or content reads', async (t) => {
+  for (const kind of ['idle', 'pointer']) await t.test(kind, async () => {
+    const p = page();
+    let release;
+    p.c.GZ_CTX.need = () => new Promise((r) => { release = r; });
+    p.c.GZ_ULTRA.page.profile = async () => { p.asked.push(['profile']); return { id: '_900_1' }; };
+    p.A.sync(true);
+    if (kind === 'idle') p.idle.shift()();
+    else { p.fire('pointerover', p.el({ cid: '_101_1' })); p.timers.at(-1).f(); }
+    await settle();
+    p.A.sync(false);
+    p.c.GZ_CTX.need = async () => {};
+    release();
+    await settle();
+    assert.deepEqual(p.asked, [], kind);
+  });
+});
+
+test('prefetch turned off while saved gradebooks are read starts no later gradebook request', async () => {
+  const p = page({ items: [item('_101_1', NOW + 864e5)] });
+  let release;
+  p.c.GZ_ULTRA.page.saved = () => new Promise((r) => { release = r; });
+  p.A.sync(true); p.idle.shift()();
+  await settle();
+  p.A.sync(false);
+  release(null);
+  await settle();
+  assert.deepEqual(p.asked.filter((a) => a[0] === 'book'), []);
+});
+
+test('a tab that settles while hidden prefetches once it becomes visible', async () => {
+  const p = page();
+  p.c.document.visibilityState = 'hidden';
+  p.A.sync(true); p.idle.shift()();
+  await settle();
+  assert.deepEqual(p.asked, []);
+  p.c.document.visibilityState = 'visible';
+  p.fire('visibilitychange');
+  assert.equal(p.idle.length, 1);
+  p.idle.shift()();
+  await settle();
+  assert.equal(p.asked.filter((a) => a[0] === 'planned').length, 1);
+  p.A.sync(false);
+});

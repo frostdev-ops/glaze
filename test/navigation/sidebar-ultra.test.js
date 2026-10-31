@@ -816,3 +816,19 @@ test('D: the dock draws before the account is confirmed; another account signed 
   assert.equal(p.side.context().accountId, '_4_1');
   assert.ok(!p.sent.some((m) => m.type === 'glaze:sidebar' && m.key === KEY && m.ops?.some((o) => o.op !== 'migrate')), 'nothing written for the account not signed in');
 });
+
+test('the cached Ultra sidebar cannot edit the previous account before confirmation', async () => {
+  const p = page({ at: 'outline', stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  let confirm;
+  p.c.GZ_ULTRA = { page: { known: async () => ({ id: '_3_1' }) } };
+  p.c.GZ_CTX.account = () => new Promise((res) => { confirm = res; });
+  await p.pass();
+  const before = p.sent.length;
+  const ok = await p.side.op([{ op: 'width', px: 380 }]);
+  assert.equal(ok, false);
+  assert.equal(p.sent.length, before, 'no account-scoped write until the identity is confirmed');
+  p.c.GZ_CTX.account = async () => '_3_1';
+  confirm('_3_1');
+  await p.pass();
+  assert.equal(await p.side.op([{ op: 'width', px: 380 }]), true, 'the confirmed account can edit');
+});

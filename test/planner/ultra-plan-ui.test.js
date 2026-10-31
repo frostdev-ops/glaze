@@ -386,6 +386,7 @@ test('D: Better To Do on Ultra draws the kept list while who is signed in is sti
   const { box, key } = p.c.GZ_TODO_UI.probe.get();
   assert.equal(key, KEY);
   assert.ok(box.text.includes('Kept lab'), 'drawn from what was kept');
+  assert.equal(box.inert, true, 'but nothing in it can be used until confirmed');
   assert.equal(p.due.length, 0, 'nothing asked of Ultra yet');
   assert.ok(!p.sent.some((m) => m.cache), 'nothing kept yet');
   confirm('_900_1');
@@ -429,6 +430,7 @@ test('D: tasks on Ultra\'s cards draw from what was kept before who is signed in
   assert.equal(p.due.length, 0, 'a pass meanwhile asks nothing either');
   confirm('_900_1');
   await settle();
+  assert.ok(p.card.children[1]?.text.includes('Kept lab'), 'the confirmed account uses its cache');
   assert.equal(p.due.length, 0, 'the kept answer is still fresh');
 });
 
@@ -446,4 +448,30 @@ test('D: cards drawn for another student than the one signed in lose those tasks
   assert.ok(!p.card.children.some((c) => c?.text?.includes('Someone else')));
   assert.equal(p.due.length, 1, 'the student signed in: theirs asked');
   assert.equal(p.store.todoCache.key, KEY);
+});
+
+test('the cached Ultra To Do preview cannot edit another account before confirmation', async () => {
+  const oldKey = T.storeKey(O, '_800_1');
+  const p = page({ stored: { ...keptFor('_800_1', []), [oldKey]: { tasks: [], items: {} } } });
+  known(p, '_800_1');
+  vm.runInContext(probe(read('planner/page/todo.js'), 'save, get: () => ({ box })'), p.c);
+  p.c.GZ_TODO_UI.sync(true);
+  await settle();
+  const saved = await p.c.GZ_TODO_UI.probe.save([['task', { id: 'other', title: 'Wrong account' }]]);
+  assert.equal(saved, false);
+  assert.equal(p.sent.filter((m) => m.edits).length, 0);
+  assert.deepEqual(p.store[oldKey].tasks, []);
+  assert.equal(p.c.GZ_TODO_UI.probe.get().box.inert, true);
+});
+
+test('the cached Ultra To Do preview leaves the previous account draft stored until confirmation', async () => {
+  const draftKey = `draft:todo:${O}/_800_1`, draft = { text: 'Private draft', at: NOW, todo: { draft: { title: 'Private draft' } } };
+  const p = page({ enhance: { todo: true, drafts: true }, stored: { ...keptFor('_800_1', []), [draftKey]: draft } });
+  p.c.chrome.storage.local.remove = (k) => { delete p.store[k]; };
+  known(p, '_800_1');
+  vm.runInContext(probe(read('planner/page/todo.js'), 'get: () => ({ box, form })'), p.c);
+  p.c.GZ_TODO_UI.mount(new E(), { scope: 'all' });
+  await settle();
+  assert.deepEqual(p.store[draftKey], draft);
+  assert.equal(p.c.GZ_TODO_UI.probe.get().form, null);
 });
