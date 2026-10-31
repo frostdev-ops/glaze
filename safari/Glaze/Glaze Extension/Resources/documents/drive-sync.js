@@ -824,6 +824,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (R && !R.removed && (R.appProperties?.sum === d.rsum || E?.removed) && R.headRevisionId && R.headRevisionId !== d.jh) {
         const j = await readCopy(R, h, key, owner);
         const moved = !!j.file && (j.file !== d.file || (j.fileRev ?? null) !== (d.fh ?? null));
+        // This device's own new file, its copy not yet sent (another device wrote the document one at the same time): put
+        // away as a losing copy's, recorded before its link goes.
+        if (moved && d.unsent && d.file && d.file !== j.file) await away([d.file], h);
         d = await putDoc(h, { ...d, jh: R.headRevisionId, ...(moved && { file: j.file, fh: j.fileRev ?? null, fsum: j.sum }) }, d);
         if (moved) E = named?.id === d.file ? named : files?.get(d.file) || await meta(d.file);
       }
