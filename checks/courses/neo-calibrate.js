@@ -24,7 +24,9 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/ja
     const commit = (() => { try { return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(); } catch { return null; } })();
     root = fs.realpathSync(root);
     server = http.createServer((req, res) => {
-      const file = path.join(root, decodeURIComponent(new URL(req.url, 'http://x').pathname));
+      // A folder's address is its index.html (the Perf-Dashboard suite loads one), as a web server would serve it.
+      let file = path.join(root, decodeURIComponent(new URL(req.url, 'http://x').pathname));
+      if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, 'index.html');
       if (!file.startsWith(root + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) { res.writeHead(404); return res.end(); }
       res.writeHead(200, { 'content-type': types[path.extname(file)] || 'application/octet-stream' });
       fs.createReadStream(file).pipe(res);
