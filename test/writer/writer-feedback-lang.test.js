@@ -203,9 +203,9 @@ test('uncertainty about another style does not contradict a met APA assessment',
 
 test('Glaze\'s own Feedback comments pass its comment check and fit the allowance in every locale', () => {
   const I = require('../../extension/core/i18n.js');
-  const keys = [['Your author-page citations and Works Cited miss required APA style; no rubric level descriptions are supplied, so Glaze estimates {level}, the lowest band ({value}/{points}; {deduction} points deducted).', { level: 'Unsatisfactory', value: '12,5', points: '25', deduction: '12,5' }],
-    ['Your author-page citations and Works Cited miss required APA style; with no level descriptions, Glaze estimates the lowest band ({value}/{points}; {deduction} points deducted).', { value: '12,5', points: '25', deduction: '12,5' }],
-    ['Your author-page citations and Works Cited heading conflict with required APA style; rubric rating: {level} ({earned}/{total} points).', { level: 'Unsatisfactory', earned: '12,5', total: '25' }]];
+  const keys = [['Your author-page citations and {heading} miss required APA style; no rubric level descriptions are supplied, so Glaze estimates {level}, the lowest band ({value}/{points}; {deduction} points deducted).', { heading: 'Geciteerde werken', level: 'Unsatisfactory', value: '12,5', points: '25', deduction: '12,5' }],
+    ['Your author-page citations and {heading} miss required APA style; with no level descriptions, Glaze estimates the lowest band ({value}/{points}; {deduction} points deducted).', { heading: 'Geciteerde werken', value: '12,5', points: '25', deduction: '12,5' }],
+    ['Your author-page citations and {heading} heading conflict with required APA style; rubric rating: {level} ({earned}/{total} points).', { heading: 'Geciteerde werken', level: 'Unsatisfactory', earned: '12,5', total: '25' }]];
   for (const [lang, limit] of [['de', 312], ['es', 288], ['fr', 288], ['nl', 288], ['pt-BR', 288]]) {
     for (const [key, vars] of keys) {
       const said = I.t(key, vars, lang);
