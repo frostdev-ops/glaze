@@ -1167,7 +1167,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
       const keys = ['ultraCopyFence', `ultraCopyFence:${origin}`], fences = await chrome.storage.local.get(keys);
       return m.fence === keys.map((key) => fences[key]?.epoch || '').join('/') ? { epoch } : null;
     }
-    if (m.op === 'invalidate') { await purgeUltra(origin, false); return { ok: true }; }
+    if (m.op === 'invalidate') { await purgeUltra(origin, false, true); return { ok: true }; }
     const settings = await chrome.storage.sync.get('enabled');
     if (settings.enabled === false) return null;
     const id = /^_\d+_\d+$/;
@@ -1223,7 +1223,26 @@ const copyState = async () => {
   await chrome.storage.session.set({ ultraCopyEpochs: copyEpochs });
   return copyEpochs;
 };
-const purgeCopies = async (origin, retire = true) => {
+// Whether Ultra was used here: a visit's lease this session, a fence, Ultra's own data kept or an open approved page.
+// An open page may still be waking the worker for its first lease when Settings purges it. A student who never used Ultra
+// gets no fence from a site removal, Reset or the switch, so those add nothing to storage.
+const ultraUsed = async (origin) => {
+  if (!chrome.storage.session || (await chrome.storage.session.get('ultraCopyEpochs')).ultraCopyEpochs) return true;
+  const keys = chrome.storage.local.getKeys ? await chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null));
+  if (keys.some((k) => k === 'ultraCopyFence' || ['ultraCopyFence:', 'ultraCopy:', 'ultraMe:', 'ultraBooks:'].some((p) => k.startsWith(origin ? `${p}${origin}` : p)))) return true;
+  try {
+    for (const tab of await chrome.tabs.query({})) {
+      const site = await fromUltra({ id: chrome.runtime.id, tab, frameId: 0, url: tab.url });
+      if (site && (!origin || site === origin)) return true;
+    }
+    return false;
+  } catch { return true; } // Unknown open visits still need a fence.
+};
+// seen: the caller knows Ultra was used (a page of the site asked, or it checked before dropping Ultra's data itself).
+const purgeCopies = async (origin, retire = true, seen = false) => {
+  const used = seen || await ultraUsed(origin);
+  // Unused: no lease was ever handed out to retire, and the next visit draws fresh epochs.
+  if (!used) { copyEpochs = null; return; }
   const state = await copyState();
   if (origin) state.sites[origin] = crypto.randomUUID();
   else { state.all = crypto.randomUUID(); state.sites = {}; }
@@ -1235,8 +1254,8 @@ const purgeCopies = async (origin, retire = true) => {
   // read cannot paint after a purge. Sign-out/Reset retire the document; the switch can be turned on again there.
   await chrome.storage.local.set({ [origin ? `ultraCopyFence:${origin}` : 'ultraCopyFence']: { epoch: origin ? state.sites[origin] : state.all, retire, at: Date.now() } });
 };
-const purgeUltra = async (origin, retire = true) => {
-  await purgeCopies(origin, retire);
+const purgeUltra = async (origin, retire = true, seen = false) => {
+  await purgeCopies(origin, retire, seen);
   if (origin) ultraStoreAt.delete(origin); else ultraStoreAt.clear();
   const all = await chrome.storage.local.get(null);
   const belongs = (key, prefix, end = '') => (origin ? end ? key.startsWith(`${prefix}${origin}${end}`) : key === `${prefix}${origin}` : key.startsWith(prefix));
@@ -1253,7 +1272,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   (brokerTurn ||= GZ_CARDS.queue())(async () => {
     const origin = s.frameId === 0 && await fromUltra(s);
     if (!origin) return null;
-    if (m.op === 'drop') { await purgeUltra(origin); return { ok: true }; }
+    if (m.op === 'drop') { await purgeUltra(origin, true, true); return { ok: true }; }
     if (!['begin', 'put'].includes(m.op)) return null;
     const settings = await chrome.storage.sync.get(['enabled', 'enhance']);
     if (settings.enabled === false || settings.enhance?.instant === false) return { ok: false };
@@ -1922,6 +1941,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // the Not nows. Pages open on a site removed keep Glaze until they reload, refused by every check above meanwhile.
 const forget = async (origin) => {
   await mcpClearReads(origin);
+  const used = await ultraUsed(origin);
   const u = new URL(origin);
   const got = await chrome.storage.local.get([...LMS, 'seenCourses', 'courseSlots', 'todoCache']);
   const patch = {};
@@ -1941,13 +1961,14 @@ const forget = async (origin) => {
   if (typeof got.todoCache?.key === 'string' && got.todoCache.key.startsWith(`todo:${origin}/`)) drop.push('todoCache');
   if (Object.keys(patch).length) await chrome.storage.local.set(patch);
   if (drop.length) await chrome.storage.local.remove(drop);
-  await (brokerTurn ||= GZ_CARDS.queue())(() => purgeUltra(origin));
+  await (brokerTurn ||= GZ_CARDS.queue())(() => purgeUltra(origin, true, used));
   await Promise.resolve(chrome.storage.session?.remove(`ultraMine:${origin}`)).catch(() => {});
   await ensure();
   return true;
 };
 const forgetAll = async () => {
   await mcpClearReads();
+  const used = await ultraUsed();
   const all = await chrome.storage.local.get(null), origins = new Set();
   for (const kind of LMS) for (const value of Array.isArray(all[kind]) ? all[kind] : []) {
     try { origins.add(new URL(value).origin); } catch { /* old invalid entry */ }
@@ -1959,7 +1980,7 @@ const forgetAll = async () => {
     try { origins.add(new URL(k.slice(k.indexOf(':') + 1)).origin); } catch { /* invalid entry */ }
   }
   for (const origin of origins) await forget(origin);
-  await (brokerTurn ||= GZ_CARDS.queue())(() => purgeUltra());
+  await (brokerTurn ||= GZ_CARDS.queue())(() => purgeUltra(undefined, true, used));
   await chrome.storage.local.remove([...LMS, 'askLater']);
   await ensure();
   return true;
