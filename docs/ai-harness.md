@@ -144,18 +144,23 @@ Defined, tested and trained for, unused until a feature adopts them: name the fi
   (math, science, code, essay, reading, other), locale? (en, pt-BR, es, fr, de, nl), material?, context? }` (context as
   `writer-context.js` cleans it). Output `{ kind: hint | question | concept | check-my-step, step: correct | mistake |
   unclear | null, reply, followUp }`. `check` refuses a reply that states the answer (each locale's "the answer is…", the
-  correct option), gives a result one step of arithmetic on the problem's numbers makes or a new equation in its
+  correct option, including a bare number or option letter), gives a result one step of arithmetic on the problem's numbers makes or a new equation in its
   variables, writes code with the student's own names, offers wording (`wording.js`, Feedback's rules but "for example,"),
   quotes three words no source holds, or (essay, reading, other) makes a statement that neither speaks to the student nor
-  is about their work; `why(output, input)` names the rule.
+  is about their work; `why(output, input)` names the rule. Symbolic rearrangements count as steps too; a number merely
+  appearing in the attempt does not excuse a new result. Quotations may come from any context block shown to the model,
+  including the discussion prompt.
 - `agent.tools`: one turn of a small model's tool loop over twelve of Agents' tools (`SPECS`: accounts, courses,
   assignments, an assignment, to-do, schedule, grades, a course's grades, documents, a document, a document's assignment,
   and `todo_mark_done`, the one write, which waits for the student's approval as in Agents). `SPECS.parameters` are
   Agents' `inputSchema` with shorter words (the test holds them equal). Input `{ question, tools (names), steps: [{ call,
   result }], now, zone, locale? }`; each result is fenced data, its times in the student's zone (`readable`). Output
-  `{ call, answer }`, one null: `check` validates a call against its tool's schema and refuses one whose ids no result or
+  `{ call, answer }`, one null: `check` validates a call against its tool's schema and refuses one whose ids no result value or
   the question holds, a repeat, or a call after six steps; an answer's quotes must be in a result and its numbers in a
-  result, the question or the time. The feature runs each call through Agents' grants and approvals and runs the task again
+  result value, the question or the time, preserving signs and the locale's number formatting. Single-character grades
+  and scores are valid quotes when they are whole values. History accepts the checked call (including its derived `kind`)
+  and normalizes it to `{ name, arguments }`. Unserializable or oversized results, results deeper than 12 levels and
+  clocks outside JavaScript's Date range are refused as input. The feature runs each call through Agents' grants and approvals and runs the task again
   with the step added. Glaze's model reads it in LFM3's own tool syntax (`layout`, `native`); `ai/local/format.js` refuses
   it in the one-turn layout.
 

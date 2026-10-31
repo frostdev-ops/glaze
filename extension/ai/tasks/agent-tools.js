@@ -110,20 +110,27 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // A result as compact JSON for the model: times (ms since 1970 under Glaze's time keys) as the student's local
   // "YYYY-MM-DD HH:MM", long strings cut, and the longest list cut from its end ("… N more") until it fits LIMIT.result.
   const readable = (value, zone) => {
-    const walk = (v, key) => (Array.isArray(v) ? v.map((x) => walk(x)) : S.isObj(v) ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x, k)]))
-      : typeof v === 'number' && TIMES.has(key) && v > 1e11 && v < 1e14 ? local(v, zone) : typeof v === 'string' && v.length > LIMIT.string ? `${v.slice(0, LIMIT.string - 1)}…` : v);
-    const out = walk(value);
-    const cut = new Map();
-    const lists = (v, acc = []) => { if (Array.isArray(v)) { acc.push(v); v.forEach((x) => lists(x, acc)); } else if (S.isObj(v)) Object.values(v).forEach((x) => lists(x, acc)); return acc; };
-    while (JSON.stringify(out).length > LIMIT.result) {
-      const longest = lists(out).filter((l) => l.length > (cut.has(l) ? 1 : 0)).sort((a, b) => JSON.stringify(b).length - JSON.stringify(a).length)[0];
-      if (!longest) return null;
-      if (cut.has(longest)) longest.pop();
-      longest.pop();
-      cut.set(longest, (cut.get(longest) || 0) + 1);
-      longest.push(`… ${cut.get(longest)} more`);
-    }
-    return JSON.stringify(out);
+    try {
+      const json = JSON.stringify(value);
+      if (typeof json !== 'string' || json.length > LIMIT.json) return null;
+      const walk = (v, key, depth = 0) => {
+        if (depth > S.LIMIT.depth) throw new TypeError('result depth');
+        return Array.isArray(v) ? v.map((x) => walk(x, undefined, depth + 1)) : S.isObj(v) ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x, k, depth + 1)]))
+          : typeof v === 'number' && TIMES.has(key) && v > 1e11 && v < 1e14 ? local(v, zone) : typeof v === 'string' && v.length > LIMIT.string ? `${v.slice(0, LIMIT.string - 1)}…` : v;
+      };
+      const out = walk(JSON.parse(json));
+      const cut = new Map();
+      const lists = (v, acc = []) => { if (Array.isArray(v)) { acc.push(v); v.forEach((x) => lists(x, acc)); } else if (S.isObj(v)) Object.values(v).forEach((x) => lists(x, acc)); return acc; };
+      while (JSON.stringify(out).length > LIMIT.result) {
+        const longest = lists(out).filter((l) => l.length > (cut.has(l) ? 1 : 0)).sort((a, b) => JSON.stringify(b).length - JSON.stringify(a).length)[0];
+        if (!longest) return null;
+        if (cut.has(longest)) longest.pop();
+        longest.pop();
+        cut.set(longest, (cut.get(longest) || 0) + 1);
+        longest.push(`… ${cut.get(longest)} more`);
+      }
+      return JSON.stringify(out);
+    } catch { return null; }
   };
 
   // ---- the task ------------------------------------------------------------------------------------------------------
@@ -146,18 +153,19 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   }, ['call', 'answer']);
 
   const zoneOk = (z) => { try { clock(z); return true; } catch { return false; } };
-  const size = (v) => { try { return JSON.stringify(v)?.length ?? 0; } catch { return Infinity; } };
-  const validCall = (c, names) => S.isObj(c) && Object.keys(c).join() === 'name,arguments' && names.includes(c.name) && S.isObj(c.arguments) && !S.validate(c.arguments, spec(c.name).parameters).length;
+  // A history step may carry check()'s derived kind. It is checked here, then omitted from the native call.
+  const validCall = (c, names) => S.isObj(c) && Object.keys(c).filter((k) => k !== 'kind').sort().join() === 'arguments,name' && names.includes(c.name)
+    && (!Object.hasOwn(c, 'kind') || c.kind === spec(c.name).kind) && S.isObj(c.arguments) && !S.validate(c.arguments, spec(c.name).parameters).length;
   const input = (raw) => {
     if (!S.isObj(raw) || Object.keys(raw).some((k) => !['question', 'tools', 'steps', 'now', 'zone', 'locale'].includes(k))) return null;
     const { question, tools, steps = [], now, zone, locale = 'en' } = raw;
     if (typeof question !== 'string' || !question.trim() || question.length > LIMIT.question || !Array.isArray(tools) || !tools.length || new Set(tools).size !== tools.length
-      || !tools.every((n) => NAMES.includes(n)) || !Array.isArray(steps) || steps.length > LIMIT.steps || !Number.isSafeInteger(now) || now <= 0 || typeof zone !== 'string' || !zoneOk(zone)
+      || !tools.every((n) => NAMES.includes(n)) || !Array.isArray(steps) || steps.length > LIMIT.steps || !Number.isSafeInteger(now) || now <= 0 || now > 8640000000000000 || typeof zone !== 'string' || !zoneOk(zone)
       || !Object.hasOwn(LANGUAGES, locale)) return null;
-    if (!steps.every((s) => S.isObj(s) && Object.keys(s).sort().join() === 'call,result' && validCall(s.call, tools) && size(s.result) <= LIMIT.json)) return null;
+    if (!steps.every((s) => S.isObj(s) && Object.keys(s).sort().join() === 'call,result' && validCall(s.call, tools))) return null;
     const shown_ = steps.map((s) => readable(s.result, zone));
     if (shown_.includes(null)) return null;
-    return { question: question.trim(), tools: offered(tools).map((t) => t.name), steps: steps.map((s, i) => ({ call: s.call, result: shown_[i] })), now, zone, locale };
+    return { question: question.trim(), tools: offered(tools).map((t) => t.name), steps: steps.map((s, i) => ({ call: { name: s.call.name, arguments: s.call.arguments }, result: shown_[i] })), now, zone, locale };
   };
   const nowText = (inp) => `${local(inp.now, inp.zone, true)}, ${inp.zone}`;
   const label = (i, name) => `result ${i + 1} ${name}`;
@@ -187,13 +195,31 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
 
   // ---- check ---------------------------------------------------------------------------------------------------------
   const canon = (v) => (Array.isArray(v) ? v.map(canon) : S.isObj(v) ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canon(v[k])])) : v);
-  const NUM = /\d+(?:[.,]\d+)?/g;
-  const nums = (s) => (String(s).match(NUM) || []).map((n) => Number(n.replace(',', '.')));
+  // A minus belongs to a number except between date components (2026-10-31).
+  const NUM = /(?<!\d)[-−]?\d+(?:[.,]\d+)*/g;
+  const nums = (s, locale = 'en') => {
+    const dotGroup = ['pt-BR', 'es', 'de', 'nl'].includes(locale);
+    const text = String(s).replace(/(?<=\d)[ \u00a0\u202f](?=\d{3}(?:\D|$))/g, '');
+    return (text.match(NUM) || []).map((n) => {
+      let t = n.replace('−', '-');
+      if (dotGroup && /^-?\d{1,3}(?:\.\d{3})+(?:,\d+)?$/.test(t)) t = t.replace(/\./g, '');
+      if (locale === 'en' && /^-?\d{1,3}(?:,\d{3})+(?:\.\d+)?$/.test(t)) t = t.replace(/,/g, '');
+      return Number(t.replace(',', '.'));
+    });
+  };
+  // Ground against values, never JSON keys. Results have already been bounded and serialized by input().
+  const values = (results) => {
+    const out = [];
+    const walk = (v) => { if (Array.isArray(v)) v.forEach(walk); else if (S.isObj(v)) Object.values(v).forEach(walk); else if (typeof v === 'string' || typeof v === 'number') out.push(v); };
+    results.forEach((r) => walk(JSON.parse(r)));
+    return out;
+  };
   // → '' when the output may be used, else why not: schema, one, tool, arguments, id, repeat, steps, quote, number.
   const why = (out, inp) => {
     if (S.validate(out, OUTPUT).length) return 'schema';
     if ((out.call === null) === (out.answer === null)) return 'one';
     const results = inp.steps.map((s) => s.result);
+    const data = values(results);
     if (out.call) {
       const { name, arguments: args } = out.call;
       if (!inp.tools.includes(name)) return 'tool';
@@ -202,7 +228,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
         const v = args[k];
         if (typeof v !== 'string') continue;
         const word = new RegExp(`(?<![\\p{L}\\p{N}_])${v.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}(?![\\p{L}\\p{N}_])`, 'u');
-        if (!word.test(inp.question) && !results.some((r) => r.includes(JSON.stringify(v)) || (/^\d+$/.test(v) && new RegExp(`:${v}[,}\\]]`).test(r)))) return 'id';
+        if (!word.test(inp.question) && !data.some((x) => String(x) === v)) return 'id';
       }
       if (inp.steps.some((s) => JSON.stringify(canon(s.call)) === JSON.stringify(canon(out.call)))) return 'repeat';
       if (inp.steps.length >= LIMIT.steps) return 'steps';
@@ -210,14 +236,14 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     }
     const { text, quotes } = out.answer;
     if (!text.trim()) return 'schema';
-    const sources = results.map((r) => X().source(r, { min: 2 }));
-    if (quotes.some((q) => !q.trim() || !sources.some((x) => x.has(q)))) return 'quote';
+    const sources = data.map((r) => X().source(r, { min: 2 })), singles = new Set(data.map((r) => X().norm(r)));
+    if (quotes.some((q) => !q.trim() || ([...X().norm(q)].length === 1 ? !singles.has(X().norm(q)) : !sources.some((x) => x.has(q))))) return 'quote';
     // Every number the reply says is in a result, the question or the time; or an hour of a result on a 12-hour clock,
     // or a count no longer than a result's longest list.
-    const allowed = [...nums(results.join('\n')), ...nums(inp.question), ...nums(nowText(inp))];
+    const allowed = [...data.flatMap((v) => typeof v === 'number' ? [v] : nums(v, inp.locale)), ...nums(inp.question, inp.locale), ...nums(nowText(inp))];
     for (const r of results) for (const m of r.matchAll(/ (\d{2}):\d{2}"/g)) allowed.push(Number(m[1]) % 12 || 12);
     const longest = Math.max(0, ...results.map((r) => { try { const lens = []; JSON.parse(r, (k, v) => { if (Array.isArray(v)) lens.push(v.length); return v; }); return Math.max(0, ...lens); } catch { return 0; } }));
-    if (nums(text).some((n) => !allowed.includes(n) && !(Number.isInteger(n) && n <= longest))) return 'number';
+    if (nums(text, inp.locale).some((n) => !allowed.includes(n) && !(Number.isInteger(n) && n >= 0 && n <= longest))) return 'number';
     return '';
   };
   const check = (out, inp) => {

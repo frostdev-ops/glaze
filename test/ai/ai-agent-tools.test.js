@@ -66,6 +66,36 @@ test('input: offered tools sorted by name; unknown tools, a bad zone, an invalid
   }
 });
 
+test('a checked call can be appended to the next turn without dropping its kind by hand', async () => {
+  for (const [name, args, first] of [
+    ['todo_list', { days: 3 }, raw()],
+    ['todo_mark_done', { type: 'assignment', id: '88121' }, raw({ question: 'Mark my lab report done.', steps: [step('todo_list', { days: 7 }, TODO)] })],
+  ]) {
+    const result = await T.run(A.task, first, { provider: 'mock', cfg: { replies: [{ json: call(name, args) }] } });
+    const next = A.task.input({ ...first, steps: [...(first.steps || []), { call: result.output.call, result: TODO }] });
+    assert.ok(next, name);
+    assert.deepEqual(next.steps.at(-1).call, { name, arguments: args }, 'history keeps the native call shape');
+    assert.equal(A.why(call(name, args), next), 'repeat');
+  }
+});
+
+test('history calls accept JSON keys in either order and reject a forged kind', () => {
+  assert.ok(A.task.input(raw({ steps: [{ call: { arguments: {}, name: 'todo_list' }, result: TODO }] })));
+  assert.equal(A.task.input(raw({ steps: [{ call: { name: 'todo_list', arguments: {}, kind: 'write' }, result: TODO }] })), null);
+});
+
+test('input refuses a clock outside the Date range before building a turn', () => {
+  assert.equal(A.task.input(raw({ now: Number.MAX_SAFE_INTEGER })), null);
+});
+
+const cycle = {}; cycle.self = cycle;
+for (const [name, result] of [['undefined', undefined], ['function', () => {}], ['bigint', 1n], ['cycle', cycle],
+  ['deep', Array.from({ length: 6000 }).reduce((v) => [v], null)]]) {
+  test(`input refuses a ${name} result instead of throwing`, () => {
+    assert.equal(A.task.input(raw({ steps: [step('todo_list', {}, result)] })), null);
+  });
+}
+
 test('results as the model reads them: times in the student\'s zone, long lists cut from the end and said so', () => {
   const r = JSON.parse(withTodo().steps[0].result);
   assert.equal(r.items[0].due, '2026-10-31 23:59');
@@ -136,6 +166,13 @@ test('check refuses ungrounded calls: an id no result or question holds, a repea
   assert.equal(A.why(answer('Lab report 3 is due 2026-10-31 23:59.', ['Lab report 3']), full), '', 'the last turn still answers');
 });
 
+test('ids come from result values, including numeric array values, never JSON property names', () => {
+  const keys = A.task.input(raw({ steps: [step('todo_list', {}, { assignment: false, id: '88121' })] }));
+  assert.equal(A.why(call('todo_mark_done', { type: 'assignment', id: '88121' }), keys), 'id');
+  const values = A.task.input(raw({ steps: [step('todo_list', {}, { ids: [5521] })] }));
+  assert.equal(A.why(call('todo_list', { course: '5521' }), values), '');
+});
+
 // ---- check: answers ---------------------------------------------------------------------------------------------------
 test('check keeps an answer grounded in the results: quotes copied, numbers from them, a 12-hour clock, a count', () => {
   const inp = withTodo();
@@ -159,6 +196,40 @@ test('check refuses an ungrounded answer: a quote or a number no result holds', 
   assert.equal(A.why(answer('You have 3 assignments due.'), A.task.input(raw())), 'number');
   assert.equal(A.why(answer('  ', []), inp), 'schema');
   assert.equal(A.task.check(answer('Lab report 4.', ['Lab report 4']), inp), null);
+});
+
+test('one-character grades and scores are valid quotes of result values', () => {
+  const i = A.task.input(raw({ steps: [step('grades_list', {}, { letter: 'A', points: 9 })] }));
+  assert.equal(A.why(answer('Your grade is A, with 9 points.', ['A', '9']), i), '');
+  assert.equal(A.why(answer('Your grade is B.', ['B']), i), 'quote');
+  assert.equal(A.why(answer('Your grade is l.', ['l']), i), 'quote', 'a JSON key is no grade');
+});
+
+test('changing a score to a negative number or inventing a negative count is ungrounded', () => {
+  const i = A.task.input(raw({ steps: [step('grades_list', {}, GRADES)] }));
+  assert.equal(A.why(answer('Your grade is -92.5%.', ['92.5']), i), 'number');
+  assert.equal(A.why(answer('You have -1 courses.'), i), 'number');
+  const negative = A.task.input(raw({ steps: [step('grades_list', {}, { percent: -47 })] }));
+  assert.equal(A.why(answer('Your grade is -47%.', ['-47']), negative), '');
+  assert.equal(A.why(answer('Your grade is 47%.', ['-47']), negative), 'number');
+});
+
+for (const [locale, points] of [['en', '1,234.5'], ['pt-BR', '1.234,5'], ['es', '1.234,5'], ['fr', '1\u202f234,5'], ['de', '1.234,5'], ['nl', '1.234,5']]) {
+  test(`${locale}: formatting a grounded number for the student preserves its value`, () => {
+    const i = A.task.input(raw({ locale, steps: [step('grades_list', {}, { points: 1234.5 })] }));
+    assert.equal(A.why(answer(`${points}`, ['1234.5']), i), '');
+    assert.equal(A.why(answer(`${points.replace('234', '235')}`, ['1234.5']), i), 'number');
+  });
+}
+
+test('French decimal commas with three decimal places keep their fractional value', () => {
+  const i = A.task.input(raw({ locale: 'fr', steps: [step('grades_list', {}, { points: 1.234 })] }));
+  assert.equal(A.why(answer('1,234', ['1.234']), i), '');
+});
+
+test('a number in a JSON property name cannot ground a claim in the answer', () => {
+  const i = A.task.input(raw({ steps: [step('grades_list', {}, { course_99999: 'Biology' })] }));
+  assert.equal(A.why(answer('You have 99999 courses.'), i), 'number');
 });
 
 // ---- LFM3's own syntax ------------------------------------------------------------------------------------------------

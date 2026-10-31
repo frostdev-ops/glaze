@@ -206,3 +206,49 @@ test('quoting the student\'s own equation back is no step: only a new result or 
   assert.equal(why(m, 'check-my-step', 'Look at how the 5 moved: in your 3x = 25 it was added to 20. What do you get when you take 5 away from both sides of 3x + 5 = 20?', 'mistake'), '');
   assert.equal(why(m, 'hint', 'So 3x + 5 - 5 = 20 - 5 = 15.'), 'solves');
 });
+
+test('a number mentioned in the attempt cannot excuse doing the next arithmetic step', () => {
+  const i = inp({ question: 'Solve for x: 3x + 5 = 20', attempt: 'I tried subtracting 5 from both sides. Then I got 3x = 25.' });
+  assert.equal(why(i, 'hint', 'Divide by 3 and you get 5.'), 'solves');
+  assert.equal(why(i, 'check-my-step', 'Look at your 3x = 25. Did you add or subtract 5?', 'mistake'), '');
+});
+
+test('rearranging the student\'s symbolic equation still does their step', () => {
+  const i = inp({ question: 'Rearrange a + b = c to make a the subject.' });
+  assert.equal(why(i, 'hint', 'So a = c - b.'), 'solves');
+  assert.equal(why(i, 'hint', 'Look at a + b = c. What operation would undo adding b?'), '');
+  assert.equal(why(i, 'concept', 'Think of p + q = r. Which operation undoes adding q?'), '');
+});
+
+const SHORT_CODE = { question: 'Fix f(x).', attempt: 'def f(x):\n    return x', subject: 'code' };
+for (const [name, q, reply] of [
+  ['one-letter names', SHORT_CODE, 'Change it to `return x + 1`.'],
+  ['an inline call', CODE, 'Call `nums.sort()`.'],
+  ['a call in prose', CODE, 'Call nums.sort() before returning the mean.'],
+]) test(`new code using the student's names is refused: ${name}`, () => {
+  assert.equal(why(inp(q), 'hint', reply), 'code');
+});
+
+test('the student\'s one-letter code can still be quoted for a check', () => {
+  const i = inp(SHORT_CODE);
+  assert.equal(why(i, 'check-my-step', 'Look at `return x`. What value are you returning?', 'unclear'), '');
+});
+
+test('a concept cannot give the reading answer by starting with its source\'s name', () => {
+  assert.equal(why(inp(GATSBY), 'concept', 'Gatsby represents an unattainable dream of love.'), 'speaks');
+  assert.equal(why(inp(GATSBY), 'concept', 'The symbol in a fairy tale can represent an obstacle. What might yours represent?'), '');
+});
+
+test('a discussion prompt shown to the model is also a source for quoted feedback', () => {
+  const i = inp({ question: 'How should I approach this prompt?', subject: 'reading', context: { prompt: 'Discuss the green light in the novel.' } });
+  assert.equal(why(i, 'hint', 'Look at the phrase "the green light" in your prompt. Where does it appear in your reading?'), '');
+});
+
+for (const [q, reply] of [[MATH, '5.'], [SPEED, '60 km/h.'], [QUIZ, 'C.']]) test(`a bare result or quiz choice is an answer: ${reply}`, () => {
+  assert.equal(why(inp(q), 'hint', reply), 'answer');
+});
+
+for (const kind of ['hint', 'concept']) test(`a short ${kind} still cannot answer the reading question with a supplied name`, () => {
+  assert.equal(why(inp(GATSBY), kind, 'Gatsby wants Daisy.'), 'speaks');
+  assert.equal(why(inp(GATSBY), kind, 'Good. What does Gatsby want most?'), '');
+});

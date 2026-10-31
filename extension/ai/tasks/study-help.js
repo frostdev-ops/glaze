@@ -125,7 +125,7 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
   // Equations in the reply: math tokens (numbers, single letters, a function's name, operators) around an = or ≈.
   const TOKEN = String.raw`(?:\d+(?:[.,]\d+)?|(?<![\p{L}])(?:sin|cos|tan|log|ln|sqrt|exp)(?![\p{L}])|(?<![\p{L}])[a-zA-Zα-ωθπ](?![\p{L}])|[+\-−*/^²³√×·÷()[\]{}])`;
   const EQUATION = new RegExp(String.raw`(?:${TOKEN}[ \t]*)+[=≈](?:[ \t]*(?:${TOKEN}|[=≈]))+`, 'gu');
-  const equations = (s) => (String(s).match(EQUATION) || []).map((e) => e.trim()).filter((e) => /\d/.test(e));
+  const equations = (s) => (String(s).match(EQUATION) || []).map((e) => e.trim());
 
   // Code: fenced blocks and inline spans.
   const FENCE = /```[^\n`]*\n?([\s\S]*?)```/g, INLINE = /`([^`\n]+)`/g;
@@ -135,48 +135,52 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
   // The student's own names: what they call, define, index or assign, and their parameters.
   const identifiers = (s) => {
     const t = String(s), out = new Set();
-    const add = (w) => { if (w && w.length >= 2 && !KEYWORDS.has(w.toLowerCase())) out.add(w); };
+    const add = (w) => { if (w && !KEYWORDS.has(w.toLowerCase())) out.add(w); };
     for (const m of t.matchAll(/([A-Za-z_$][\w$]*)\s*(?=\(|\[|\.\w|\s*[+\-*/%]?=(?!=))/g)) add(m[1]);
     for (const m of t.matchAll(/(?:def|function|class|let|const|var|int|float|double|String|bool|void|fn)\s+([A-Za-z_$][\w$]*)/g)) add(m[1]);
-    for (const m of t.matchAll(/\(([^()\n]{1,120})\)/g)) for (const w of m[1].match(/[A-Za-z_$][\w$]*/g) || []) if (/[_\d]|[a-z][A-Z]/.test(w) || /^[a-z]{2,}$/.test(w)) add(w);
+    for (const m of t.matchAll(/\(([^()\n]{1,120})\)/g)) for (const w of m[1].match(/[A-Za-z_$][\w$]*/g) || []) if (/[_\d]|[a-z][A-Z]/.test(w) || /^[a-z]+$/.test(w)) add(w);
     for (const w of t.match(/[A-Za-z_$][\w$]*/g) || []) if (/_|\d|[a-z][A-Z]/.test(w)) add(w);
     return out;
   };
-  const CODE_OP = /[=([{]|return\b|\+\+|--|=>/, STATEMENT = /(?<![=!<>])=(?!=)|\breturn\b|\+\+|--|=>|[;:]\s*$/;
+  const CALL = String.raw`[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\s*\([^\n)]*\)`;
+  const CODE_OP = /[=([{]|return\b|\+\+|--|=>/, STATEMENT = new RegExp(String.raw`(?<![=!<>])=(?!=)|\breturn\b|\+\+|--|=>|[;:]\s*$|${CALL}`);
   // The text with code marks out (math in backticks is still math), and the prose alone.
   const flat = (s) => s.replace(/```[^\n`]*\n?|`/g, ' ');
   const prose = (s) => s.replace(FENCE, ' ').replace(INLINE, ' ');
   const sentences = (s) => (s.match(/[^.!?…。！？]+(?:[.!?…。！？]+["”’»)\]]*|$)/gu) || []).map((x) => x.trim()).filter(Boolean);
   const words = (s) => (s.match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu) || []);
   const asks = (s) => /[?？]/.test(s) || /^¿/.test(s);
+  // Sentence-initial articles/determiners are capitalized without being names.
+  const OPENERS = /^(?:the|this|that|these|those|les|une|los|las|una|uma|der|die|das|ein|eine|het|een|dit|dat)$/iu;
+  // A result or option alone supplies an answer, with or without an introductory "the answer is".
+  const BARE = new RegExp(String.raw`^\s*(?:\(?[A-E]\)?|${NUM.source}(?:\s*[/÷]\s*${NUM.source})?(?:\s*(?:%|[\p{L}°²³]+(?:[/*·^][\p{L}\d²³]+)*))?)\s*[.!]?\s*$`, 'u');
 
   // → '' when the reply may go to the student, else the rule it breaks: schema, kind, answer, solves, code, wording, quote, speaks.
   const why = (out, inp) => {
     if (S.validate(out, OUTPUT).length || !out.reply.trim()) return 'schema';
     if ((out.kind === 'check-my-step') !== (out.step !== null) || (out.kind === 'check-my-step' && !inp.attempt) || (out.kind === 'question' && !asks(out.reply))) return 'kind';
-    const ctx = inp.context, texts = [inp.question, inp.attempt, inp.material, ctx.course, ctx.assignment?.title, ctx.assignment?.description, ctx.assignment?.instructions,
+    const ctx = inp.context, texts = [inp.question, inp.attempt, inp.material, ctx.course, ctx.prompt, ctx.assignment?.title, ctx.assignment?.description, ctx.assignment?.instructions,
       ctx.assignment?.rubric, ...(ctx.assignment?.files || []).map((f) => f.text)].filter(Boolean);
     const sources = texts.map((t) => X().source(t)), own = squash(`${inp.question}\n${inp.attempt}`), theirs = `${inp.question}\n${inp.attempt}`;
     for (const piece of [out.reply, out.followUp].filter((p) => typeof p === 'string' && p.trim())) {
       const words_ = prose(piece), all = flat(piece);
-      if (ANSWERS.some((r) => r.test(all))) return 'answer';
+      if (BARE.test(all) || ANSWERS.some((r) => r.test(all))) return 'answer';
       // Solving their problem: a result one step of arithmetic on its numbers gives, said of its own numbers or variables
       // (an example's foreign number or letter on the left makes it the example's), or a new equation in its variables
       // whose numbers all come from it.
       const known = numbers(texts.join('\n')), problem = numbers(theirs), steps = derived(problem), vars = variables(theirs);
       const isKnown = (n) => known.some((k) => same(k, n)), isStep = (n, d = 0) => steps.some((x) => same(x, n) || (d > 0 && same(Number(x.toFixed(Math.min(d, 12))), n)));
-      const mine = numbers(inp.attempt);
       for (const m of all.matchAll(RESULT)) {
         const r = value(m[1]), left = all.slice(0, m.index).split(/[.!?;\n=≈→⇒]/).pop();
         const quoted = (`${left}${m[0]}`.match(EQUATION) || []).pop();
-        if (mine.some((k) => same(k, r)) || (quoted && own.includes(squash(quoted))) || (isKnown(r) && !OPS.test(left)) || !isStep(r, decimals(m[1]))) continue;
+        if ((quoted && own.includes(squash(quoted))) || (isKnown(r) && !OPS.test(left)) || !isStep(r, decimals(m[1]))) continue;
         if (numbers(left).some((n) => !isKnown(n)) || letters(left).some((v) => !vars.has(v) && variables(left).has(v))) continue;
         return 'solves';
       }
       for (const eq of equations(all)) {
         if (own.includes(squash(eq)) || !letters(eq).some((v) => vars.has(v))) continue;
         const nums = numbers(eq);
-        if (nums.length && nums.every((n) => isKnown(n) || isStep(n))) return 'solves';
+        if (nums.every((n) => isKnown(n) || isStep(n))) return 'solves';
       }
       // Code with the student's own names, beyond quoting their code back to them: a line of a code block, a statement in
       // a code span, or (for code questions) an assignment or call written in prose.
@@ -187,7 +191,7 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
       const fresh = (l) => l.trim() && !seen.includes(squash(l));
       if (blocks.flatMap((b) => b.split('\n')).some((l) => fresh(l) && CODE_OP.test(l) && theirName(l))) return 'code';
       if ([...piece.replace(FENCE, ' ').matchAll(INLINE)].map((m) => m[1]).some((l) => fresh(l) && STATEMENT.test(l) && theirName(l))) return 'code';
-      if (inp.subject === 'code' && [...words_.matchAll(/[A-Za-z_$][\w$.]*\s*(?:[+\-*/%]?=(?!=)|\+\+|--)\s*[^\s.,;!?][^\n.;!?]*|\breturns?\s+[^\n.;!?]*[+\-*/%(][^\n.;!?]*/g)].some((m) => fresh(m[0]) && theirName(m[0]))) return 'code';
+      if (inp.subject === 'code' && [...words_.matchAll(new RegExp(String.raw`[A-Za-z_$][\w$.]*\s*(?:[+\-*/%]?=(?!=)|\+\+|--)\s*[^\s.,;!?][^\n.;!?]*|\breturns?\s+[^\n.;!?]*[+\-*/%(][^\n.;!?]*|${CALL}`, 'g'))].some((m) => fresh(m[0]) && theirName(m[0]))) return 'code';
       // Wording for their paper: an offer, or a quotation of three words or more that no source holds.
       if (WD.offers(words_, { examples: false })) return 'wording';
       for (const q of WD.quotedRanges(words_, true)) if (q.text.trim().split(/\s+/).length >= 3 && !sources.some((x) => x.has(q.text))) return 'quote';
@@ -195,9 +199,9 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
       // with another text, but never with a name or three words in a row from theirs.
       if (['essay', 'reading', 'other'].includes(inp.subject)) {
         for (const s of sentences(words_)) {
-          if (asks(s) || words(s).length < 5 || WD.about(s) || IMPERATIVE.test(s)) continue;
-          if (out.kind !== 'concept') return 'speaks';
-          const names = words(s).slice(1).filter((w) => /^\p{Lu}\p{Ll}{2,}/u.test(w));
+          if (asks(s) || WD.about(s) || IMPERATIVE.test(s)) continue;
+          if (out.kind !== 'concept' && words(s).length >= 5) return 'speaks';
+          const names = words(s).filter((w, i) => /^\p{Lu}\p{Ll}{2,}/u.test(w) && (i > 0 || !OPENERS.test(w)));
           const triples = words(s).map((_, i, a) => a.slice(i, i + 3).join(' ')).filter((t, i, a) => i <= a.length - 3);
           if (names.some((w) => texts.some((t) => new RegExp(`${B}${w}${E}`, 'u').test(t))) || triples.some((t) => sources.some((x) => x.has(t)))) return 'speaks';
         }
