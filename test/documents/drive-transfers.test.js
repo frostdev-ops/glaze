@@ -28,6 +28,11 @@ const memory = () => {
     set: async (o) => { for (const [k, v] of Object.entries(o)) m.set(k, structuredClone(v)); },
     remove: async (k) => { for (const x of [].concat(k)) m.delete(x); },
     keys: async () => [...m.keys()],
+    replace: async (key, expected, value) => {
+      if (JSON.stringify(m.get(key)) !== JSON.stringify(expected)) return false;
+      if (value === undefined) m.delete(key); else m.set(key, structuredClone(value));
+      return true;
+    },
   };
 };
 // The worker's file store, by SHA-256.
@@ -198,6 +203,23 @@ test('a queued Word upload never resumes into a file preserved after an outside 
   assert.ok(own && own.meta.id !== old, 'Glaze writes its new file beside the preserved one');
   assert.equal(JSON.parse(fileOf(drive, key, 'doc').bytes).file, own.meta.id);
   assert.deepEqual(await moves(dk), {});
+});
+
+test('deleting a new record while its first upload is pending never restores the deleted value', async () => {
+  const drive = standin(), dk = disk(), key = 'writer:sources:local|local|papers|reader';
+  const value = { at: dk.clock.t, sources: [{ id: 's1', title: 'Source', text: 'D'.repeat(12 * MiB) }] };
+  await dk.store.set({ [key]: value });
+  const a = worker(drive, dk, { records: true });
+  await stopped(a.sync.set(true), drive.cut(0, (e) => e.chunk && !e.chunk.status && e.chunk.from > 0));
+  await dk.store.remove(key);
+  dk.clock.t += 1000;
+  await a.more.stamp({ [key]: { oldValue: value } }, 'local');
+  const n = drive.log.length;
+  assert.ok((await worker(drive, dk, { records: true }).sync.run()).ok);
+  assert.equal(chunks(drive, n).length, 0, 'the obsolete record upload never resumes');
+  assert.equal((await dk.store.get(key))[key], undefined, 'the source stays deleted');
+  assert.deepEqual(await moves(dk), {});
+  assert.deepEqual([...dk.stage.m.keys()], []);
 });
 
 test('a worker stopped mid-chunk: the next one asks Drive where the session stands and goes on from there', async () => {
