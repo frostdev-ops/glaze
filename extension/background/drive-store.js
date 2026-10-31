@@ -358,12 +358,14 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     const sub = async (ctx, tag, name) => {
       const st = (await S.get(STATE))[STATE] || {};
       const id = await L.sync().converge(ctx.D, { parent: ctx.folder, tag, name, mine: st[tag] || null, hide: tag === 'data' ? null : () => sub(ctx, 'data', 'Data') });
-      if (id !== st[tag]) {
-        // Another Data than the one this device had (that one in Drive's trash, gone, or merged into another): every record
-        // goes over to it, unchanged ones too, before it is the Data on driveSync, so a run stopped midway does it again.
-        if (tag === 'data' && st.data) { ctx.data = id; await all(ctx); ctx.whole = true; }
-        await ctx.state({ [tag]: id });
-      }
+      // Another Data than the one this device had (that one in Drive's trash, gone, or merged into another): every record goes
+      // over to it, unchanged ones too, before it is the Data on driveSync. moving: such a pass under way, so a run stopped
+      // midway does it again over whichever Data is the one then, even the old one put back (records went to the new one).
+      if (tag === 'data' && (st.moving || (st.data && id !== st.data))) {
+        await ctx.state({ moving: id });
+        ctx.data = id; await all(ctx); ctx.whole = true;
+        await ctx.state({ data: id, moving: null });
+      } else if (id !== st[tag]) await ctx.state({ [tag]: id });
       return id;
     };
 
@@ -482,7 +484,9 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         // was deleted for good stays in Drive and off this device.
         if (R.appProperties?.cat === 'noteFiles' && !x.need) return;
         const got = await fetchRec(ctx, R, h);
-        if (got.value !== undefined && await valueOf(got.area, got.key) === undefined) return take(h, got, R, null);
+        // Not here and never changed here: taken. One deleted here (its time stamped while bound, so it was here once, its
+        // record's note lost to a worker stopped before it landed) is weighed below as a deletion made here.
+        if (got.value !== undefined && await valueOf(got.area, got.key) === undefined && !(await stamps())[`${got.area}:${got.key}`]) return take(h, got, R, null);
         return one(ctx, h, { area: got.area, key: got.key, R });
       }
       const def = defOf(area, key), cat = def?.cat, owner = { rec: h, area, key, ...(x.need && { need: x.need }) };
