@@ -914,3 +914,26 @@ test('a conflict whose push Drive keeps refusing keeps Drive\'s side once, howev
   assert.equal(sidecarJson(drive, pdf).record.file.hash, rb.hash);
   noDeletes(drive);
 });
+
+test('a device joining with its own later copy, its push refused, keeps the folder\'s copy once', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), c = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-0000000000f3';
+  await a.papers.save(key, { doc: doc('A wrote this'), title: 'Essay', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  clock.t += 60e3;
+  await c.papers.save(key, { doc: doc('C wrote this later'), title: 'Essay', named: true });
+  drive.fail(403, ERRORS.storageQuotaExceeded, (x) => x.path.startsWith('/upload/'), 50);
+  assert.deepEqual(await c.sync.set(true), { ok: false, why: 'quota' });
+  for (let i = 0; i < 2; i++) {
+    clock.t = (await state(c)).wait + 1;
+    assert.deepEqual(await c.sync.run(), { ok: false, why: 'quota' });
+  }
+  drive.clearFaults();
+  clock.t = (await state(c)).wait + 1;
+  assert.ok((await c.sync.run()).ok);
+  const kept = (await c.papers.versions(key)).filter((v) => v.reason === 'conflict');
+  assert.equal(kept.length, 1, 'the folder\'s copy is one version');
+  assert.equal(textOf((await c.papers.version(key, kept[0].id)).doc), 'A wrote this');
+  assert.equal(textOf(sidecarJson(drive, key).record.doc), 'C wrote this later');
+  noDeletes(drive);
+});
