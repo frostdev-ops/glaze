@@ -35,7 +35,7 @@ const run = (over = {}) => {
   const c = vm.createContext({
     ctx: { site: 'ultra', courseId: () => '_1_1' }, on: true, preview: false, signedOut: false, framed: '', who: '_42_1', loaded: true,
     prefs: { ahead: true }, P: () => c.prefs, L, t: (s) => s, tabs: [{ cid: '_1_1', name: 'One' }, { cid: '_2_1', name: 'Two' }, { cid: '_3_1', name: 'Three' }],
-    frames: new Map(), PAGE: 'page', LIVE: 4, showing: '', pic: null, drag: null, location: { origin }, Date, Element: class {},
+    frames: new Map(), spare: new Map(), waiting: '', wait() {}, PAGE: 'page', LIVE: 4, showing: '', pic: null, drag: null, location: { origin }, Date, Element: class {},
     performance: { now: () => now }, setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout() {},
     requestIdleCallback: (fn) => { timers.push({ fn, idle: true }); return timers.length; },
     document: { visibilityState: 'visible', body: {}, createElement: () => { const el = { style: {}, addEventListener() {} }; made.push(el); return el; } },

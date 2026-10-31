@@ -11,10 +11,11 @@ var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
   // only Glaze's own navigation's tabs (the strip's `above` where that bar doesn't hold them); auto (the default): nav where
   // that bar is a top bar holding them, else above (GZ_TABS_AUTO). cap: how many
   // tabs before the least recently used unpinned one closes. place: a tab goes back to where it was. ahead: on Ultra, a
-  // standby frame and a press or hover start a course tab's frame before it is picked. The rest is the tab buttons' look;
+  // standby frame and a press or hover start a course tab's frame before it is picked. keep: on Ultra, an item opened from
+  // Course Content opens over it, the outline kept as it was for the way back. The rest is the tab buttons' look;
   // color: none, a tint of each course's colour, or more of it.
   const SPEC = {
-    at: ['auto', ['auto', 'above', 'between', 'below', 'nav']], cap: [8, [2, 20]], place: [true, 'bool'], ahead: [true, 'bool'],
+    at: ['auto', ['auto', 'above', 'between', 'below', 'nav']], cap: [8, [2, 20]], place: [true, 'bool'], ahead: [true, 'bool'], keep: [true, 'bool'],
     shape: ['tab', ['tab', 'rounded', 'pill', 'square']], size: ['medium', ['small', 'medium', 'large']], width: [180, [96, 320]],
     label: ['short', ['short', 'name', 'code']], mark: ['dot', ['dot', 'icon', 'none']], color: ['off', ['off', 'tint', 'theme']],
   };
@@ -81,6 +82,19 @@ var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
     if (!m) return null;
     const tool = TOOLS.find((x) => x === m[2] || x === `${m[2]}/${m[3]}`) || (m[2] === 'groups' ? 'groups/enrollments' : 'outline');
     return `/ultra/courses/${m[1]}/${tool}`;
+  };
+  // Ultra's Course Content: its course, when `path` is the outline itself (not a panel over it).
+  const outlineOf = (path) => (typeof path === 'string' && path.match(/^\/ultra\/courses\/(_\d+_\d+)\/outline\/?$/)?.[1]) || null;
+  // Where a link on course `cid`'s outline goes: 'item', a page of the course that Ultra builds in place of the outline (a
+  // document, an assessment's overview, a discussion, a learning module's page, a file); 'peek', a panel Ultra opens over the
+  // outline (outline/…), which keeps it; else null: an attempt, a tool launch, a download, another course or none.
+  const ITEM = /^\/ultra\/courses\/(_\d+_\d+)\/(?:document\/_\d+_\d+|assessment\/_\d+_\d+\/overview|discussion\/_\d+_\d+|learning-module\/_\d+_\d+(?:\/(?:document|page|file)\/_\d+_\d+)?|file\/_\d+_\d+)\/?$/;
+  const itemOf = (path, search, cid) => {
+    if (!validId(cid, 'ultra') || !owns(path, cid) || !safe(path, search) || /\/(?:attempt|lti|launch\w*|download\w*|external\w*)(?:\/|$)/i.test(path)) return null;
+    const q = new URLSearchParams(typeof search === 'string' ? search : '');
+    if (['courseId', 'course_id'].some((k) => q.getAll(k).some((id) => id !== cid)) || /download/i.test(q.toString())) return null;
+    if (path.startsWith(`${rootOf(cid)}/outline/`)) return 'peek';
+    return path.match(ITEM)?.[1] === cid ? 'item' : null;
   };
   // Ultra puts an assignment's rubric in the address. Keep that destination valid for an explicit click, but never
   // save or restore its panel: closing it can leave the assignment's main nodes unchanged, so its last capture lingers.
@@ -302,7 +316,7 @@ var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
     return [...items].reverse().sort((a, b) => b[2] - a[2]).filter(([, n]) => (sum += n) > all).map(([k]) => k);
   };
 
-  return { courseOf, validId, rootOf, homeOf, owns, SPEC, shortName, TOOLS, safe, outside, back, placeOf, target, clean, open, close, pin, move, order, MAX, KEY, storeKey, BOXES, sketch, clip, drawn, SNAP_ONE, SNAP_ALL, fit };
+  return { courseOf, validId, rootOf, homeOf, owns, outlineOf, itemOf, SPEC, shortName, TOOLS, safe, outside, back, placeOf, target, clean, open, close, pin, move, order, MAX, KEY, storeKey, BOXES, sketch, clip, drawn, SNAP_ONE, SNAP_ALL, fit };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_CTABS_LIB; else GZ_CTABS_LIB;

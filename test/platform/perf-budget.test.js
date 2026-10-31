@@ -485,7 +485,7 @@ const STYLE_READS = [
   ['pet/page/petworld.js', 'getComputedStyle(e)', 1], // only matching panel roots with layout boxes, while the pet is wandering
   ['navigation/page/place.js', 'getComputedStyle(p)', 1], // the scroller above a course's outline or Modules list
   ['courses/page/announce-read.js', 'getComputedStyle(p)', 1], // the scroller above Ultra's Announcements list, once per read-circle click or Mark all as read
-  ['navigation/page/coursetabs.js', 'getComputedStyle(p)', 1], // the scroller above the course tabs, once a tab switch lands
+  ['navigation/page/coursetabs.js', 'getComputedStyle(p)', 2], // the scroller above the course tabs, once a tab switch lands; Course Content's scroller, the ancestors of its outline only, once a fresh outline swaps in
   ['navigation/page/coursetabs.js', 'getComputedStyle(list)', 1], // the tab strip's direction, once per arrow key
   // A course tab's sketch (navigation/coursetabs.js sketch): off-screen subtrees stop at their outer box, without reading their
   // styles; visible content is never lost to an element-count cap. Captures run at most each 0.6 s, each 15 s per page.
