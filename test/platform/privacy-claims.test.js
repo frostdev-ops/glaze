@@ -75,13 +75,18 @@ test('Google Drive storage disclosures include the account id and Safari refresh
   assert.doesNotMatch(policy, /Safari will (?:keep it|use[^.]*keep it)\s+in the Keychain/);
 });
 
-// Save to Drive keeps the file it made on the document (documents/drive.js serve: record.set(key, { id, as })): the policy
-// says so, and that the next Save updates that file.
-test('Save to Drive discloses the Drive file id it keeps on the document', () => {
-  assert.match(read('documents/drive.js'), /record\.set\(m\.key, \{ id: r\.id, as: m\.as \}\)/);
+// Save to Drive keeps the file it made on the document with its revision (documents/drive.js serve: record.set(key, { id,
+// as, rev, mod })) and tags the file with its bytes' SHA-256 (appProperties b): the policy says so, that the next Save
+// updates that file, and that one edited outside Glaze is never overwritten (owner, 2026-10-31).
+test('Save to Drive discloses what it keeps on the document and the file, and that it never overwrites an outside edit', () => {
+  const src = read('documents/drive.js');
+  assert.match(src, /record\.set\(m\.key, \{ id: r\.id, as: m\.as, \.\.\.\(r\.rev && \{ rev: r\.rev \}\), \.\.\.\(r\.mod && \{ mod: r\.mod \}\) \}\)/);
+  assert.match(src, /appProperties: \{ b: await digest\(bytes\) \}/);
   const save = policy.slice(policy.indexOf('  - **Save to Drive**'), policy.indexOf('  - **Sync to Google Drive**'));
-  assert.match(save, /Drive id[^.]*on the document/);
+  assert.match(save, /Drive id[^.]*revision[^.]*on the document/);
+  assert.match(save, /SHA-256/);
   assert.match(save, /next Save\s+updates/);
+  assert.match(save, /edited outside Glaze[^.]*new file beside it/);
 });
 
 const languages = {
