@@ -1131,3 +1131,17 @@ test('a worker stopped right after saving a conflict\'s "(Drive copy)" sends tha
   assert.ok(sidecarOf(drive, copies[0].key), 'and it syncs');
   assert.equal((await b.papers.get(key)).file.hash, rb.hash);
 });
+
+test('a document\'s own file put in Drive\'s trash while Sync was off puts the document in Trash when Sync comes back on', async () => {
+  const drive = standin(), a = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000a03';
+  const ref = await a.files.put(enc('%PDF reading'), MIME.pdf);
+  await a.papers.save(key, { kind: 'pdf', file: ref, size: ref.size, title: 'Reading', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  await a.sync.set(false);
+  drive.trash(exportOf(drive, key).meta.id);
+  assert.ok((await a.sync.set(true)).ok);
+  assert.ok(P.trashed(await a.papers.get(key)), 'in Trash here');
+  assert.ok(sidecarOf(drive, key).meta.explicitlyTrashed, 'its JSON copy follows into Drive\'s trash');
+  noDeletes(drive);
+});
