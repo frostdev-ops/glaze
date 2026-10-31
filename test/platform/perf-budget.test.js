@@ -616,19 +616,65 @@ const SPLIT_LEFT = { 'navigation/page/sidebar.css': 15 };
 // What remains tried on every element once split (`*`, `[class*=…]`, :not(), pseudo-elements …), and the rules with a
 // [class*=…] or a :has() in those sheets: the counts may fall, never rise.
 const UNKEYED_MAX = 190, CLASS_STAR_MAX = 162, HAS_MAX = 140;
+// A CSS escape can include six hex digits and a terminating whitespace character, all part of one identifier.
+const escapeEnd = (text, at) => {
+  let j = at + 1;
+  if (!/[0-9a-f]/i.test(text[j] || '')) return Math.min(text.length, j + 1);
+  const start = j;
+  while (j - start < 6 && /[0-9a-f]/i.test(text[j] || '')) j++;
+  if (text[j] === '\r' && text[j + 1] === '\n') return j + 2;
+  return j + (/[\t\n\f\r ]/.test(text[j] || '') ? 1 : 0);
+};
+const identEnd = (text, at) => {
+  while (at < text.length) {
+    if (text[at] === '\\') at = escapeEnd(text, at);
+    else if (/[\w-]/.test(text[at]) || text.charCodeAt(at) >= 128) at++;
+    else break;
+  }
+  return at;
+};
+const cssName = (text) => text.replace(/\\([0-9a-f]{1,6})(?:\r\n|[\t\n\f\r ])?|\\([\s\S])/gi, (_, hex, c) => {
+  const n = parseInt(hex, 16);
+  return hex ? String.fromCodePoint(!n || n > 0x10ffff || n >= 0xd800 && n <= 0xdfff ? 0xfffd : n) : c;
+}).toLowerCase();
+const closeCss = (text, at) => {
+  const stack = []; let q = null;
+  for (let j = at; j < text.length; j++) {
+    const c = text[j];
+    if (c === '\\') { j = escapeEnd(text, j) - 1; continue; }
+    if (q) { if (c === q) q = null; continue; }
+    if (c === '"' || c === "'") q = c;
+    else if ('([{'.includes(c)) stack.push({ '(': ')', '[': ']', '{': '}' }[c]);
+    else if (c === stack.at(-1)) { stack.pop(); if (!stack.length) return j; }
+  }
+  return text.length;
+};
 const cssRules = (css) => {
-  css = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  // Comment markers inside strings or escaped identifiers are data.
+  let clean = '', quote = null;
+  for (let i = 0; i < css.length; i++) {
+    const c = css[i];
+    if (c === '\\') { const end = escapeEnd(css, i); clean += css.slice(i, end); i = end - 1; continue; }
+    if (quote) { clean += c; if (c === quote) quote = null; continue; }
+    if (c === '"' || c === "'") quote = c;
+    else if (c === '/' && css[i + 1] === '*') { const end = css.indexOf('*/', i + 2); i = end < 0 ? css.length : end + 1; continue; }
+    clean += c;
+  }
+  css = clean;
   const out = [];
-  const block = (from) => { let depth = 0, q = null; for (let i = from; i < css.length; i++) { const c = css[i]; if (q) { if (c === '\\') i++; else if (c === q) q = null; } else if (c === '"' || c === "'") q = c; else if (c === '{') depth++; else if (c === '}' && --depth === 0) return i; } return css.length; };
   const walk = (from, to) => {
-    let start = from, q = null;
+    let start = from, q = null, depth = 0;
     for (let i = from; i < to; i++) {
       const c = css[i];
-      if (q) { if (c === '\\') i++; else if (c === q) q = null; continue; }
+      if (c === '\\') { i = escapeEnd(css, i) - 1; continue; }
+      if (q) { if (c === q) q = null; continue; }
       if (c === '"' || c === "'") { q = c; continue; }
+      if (c === '(' || c === '[') { depth++; continue; }
+      if (c === ')' || c === ']') { depth--; continue; }
+      if (depth) continue;
       if (c === ';' || c === '}') { start = i + 1; continue; }
       if (c !== '{') continue;
-      const prelude = css.slice(start, i).trim(), end = block(i);
+      const prelude = css.slice(start, i).trim(), end = closeCss(css, i);
       // Grouping at-rules hold rules; the rest (@keyframes, @font-face …) hold none. A rule's own nested rules stay out.
       if (prelude[0] === '@') { if (/^@(media|supports|layer|container|scope|starting-style|document)\b/i.test(prelude)) walk(i + 1, end); }
       else out.push(prelude);
@@ -642,8 +688,8 @@ const depth0 = (text, at) => {
   const cuts = []; let depth = 0, q = null;
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
-    if (q) { if (c === '\\') i++; else if (c === q) q = null; continue; }
-    if (c === '\\') { i++; continue; }
+    if (c === '\\') { i = escapeEnd(text, i) - 1; continue; }
+    if (q) { if (c === q) q = null; continue; }
     if (c === '"' || c === "'") q = c; else if (c === '(' || c === '[') depth++; else if (c === ')' || c === ']') depth--; else if (!depth && at(c)) cuts.push(i);
   }
   return cuts;
@@ -664,16 +710,20 @@ const compoundsOf = (sel) => {
 // The simple selectors of a compound outside parentheses: kind, name, argument.
 const simplesOf = (comp) => {
   const out = []; let i = 0;
-  const ident = (j) => { while (j < comp.length && /[\w-]|\\/.test(comp[j])) j += comp[j] === '\\' ? 2 : 1; return j; };
-  const close = (j, open, shut) => { let d = 0; for (; j < comp.length; j++) { if (comp[j] === open) d++; else if (comp[j] === shut && --d === 0) return j; } return j; };
+  const ident = (j) => identEnd(comp, j);
   while (i < comp.length) {
     const c = comp[i];
     if (c === '*') { out.push({ kind: '*' }); i++; } else if (c === '.' || c === '#') { out.push({ kind: c }); i = ident(i + 1); } else if (c === '[') {
-      const j = close(i, '[', ']'), m = /^\[\s*([\w-]+)\s*([~|^$*]?=)?/.exec(comp.slice(i, j + 1)); out.push({ kind: '[', name: m[1].toLowerCase(), op: m[2] || '' }); i = j + 1;
+      const end = closeCss(comp, i); let at = i + 1;
+      while (/\s/.test(comp[at] || '')) at++;
+      let j = comp[at] === '*' ? at + 1 : ident(at);
+      if (comp[j] === '|' && comp[j + 1] !== '=') { at = j + 1; j = ident(at); }
+      const op = /^[~|^$*]?=/.exec(comp.slice(j, end).trim())?.[0] || '';
+      out.push({ kind: '[', name: cssName(comp.slice(at, j)), op }); i = end + 1;
     } else if (c === ':') {
-      const element = comp[i + 1] === ':', j = ident(i + (element ? 2 : 1)), name = comp.slice(i + (element ? 2 : 1), j).toLowerCase();
-      if (comp[j] === '(') { const k = close(j, '(', ')'); out.push({ kind: element ? '::' : ':', name, arg: comp.slice(j + 1, k) }); i = k + 1; } else { out.push({ kind: element ? '::' : ':', name }); i = j; }
-    } else if (/[\w-]|\\/.test(c)) { out.push({ kind: 'tag' }); i = ident(i); } else i++;
+      const element = comp[i + 1] === ':', j = ident(i + (element ? 2 : 1)), name = cssName(comp.slice(i + (element ? 2 : 1), j));
+      if (comp[j] === '(') { const k = closeCss(comp, j); out.push({ kind: element ? '::' : ':', name, arg: comp.slice(j + 1, k) }); i = k + 1; } else { out.push({ kind: element ? '::' : ':', name }); i = j; }
+    } else if (/[\w-]|\\/.test(c) || comp.charCodeAt(i) >= 128) { out.push({ kind: 'tag' }); i = ident(i); } else i++;
   }
   return out;
 };
@@ -683,8 +733,15 @@ const oneArg = (s) => (s.name === 'is' || s.name === 'where') && s.arg != null &
 const keyedComp = (comp) => simplesOf(comp).some((s) => ['#', '.', 'tag'].includes(s.kind) || (s.kind === '[' && !(s.name === 'class' && s.op)) || (oneArg(s) && keyedComp(lastOf(s.arg))));
 // What the ancestor filter takes from a compound: the same, `class` attributes aside.
 const hashedComp = (comp) => simplesOf(comp).some((s) => ['#', '.', 'tag'].includes(s.kind) || (s.kind === '[' && s.name !== 'class') || (oneArg(s) && hashedComp(lastOf(s.arg))));
-// A list beside a one-argument :where() only raises that argument's specificity (the idiom below): it is not tried alone.
-const listedKeys = (comp) => !simplesOf(comp).some((s) => s.name === 'where' && oneArg(s)) && simplesOf(comp).some((s) => (s.name === 'is' || s.name === 'where') && s.arg != null && selectorList(s.arg).length > 1 && selectorList(s.arg).some((a) => keyedComp(lastOf(a))));
+// Only the padding idiom :where(x):is(x, pad) suppresses a list; an unrelated, unkeyed :where() does not file it.
+const listedKeys = (comp) => {
+  const ss = simplesOf(comp);
+  return ss.some((s) => {
+    if (!['is', 'where'].includes(s.name) || s.arg == null) return false;
+    const args = selectorList(s.arg);
+    return args.length > 1 && args.some((a) => keyedComp(lastOf(a))) && !ss.some((w) => w.name === 'where' && oneArg(w) && args.includes(w.arg.trim()));
+  });
+};
 // A selector that could be split: its rightmost compound unkeyed but listing keyed arguments, or (its rightmost unkeyed) the
 // compound before a descendant or child combinator with no key of its own but a list of keyed ones.
 const splittable = (sel) => {
