@@ -1585,7 +1585,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (showing === cid) { showEl(base, true); post(base, { gzCtab: 'visible', on: true }); if (document.activeElement === it.el) base.el.focus(); }
     } else if (showing === cid) show('');
     if (how === 'ultra' && s.key && itemEntry() === s.key) { s.back = true; try { history.back(); } catch { /* not allowed here */ } }
+    // The item kept for its work: the standby renews the outline instead.
     if (!it.dirty) freshen(cid, it, base, L.outlineOf(pathOf(it).split('?')[0]) === cid);
+    else if (base) staleCheck(cid, base);
   };
   const onItemPop = (e) => {
     if (framed || !on) return;
