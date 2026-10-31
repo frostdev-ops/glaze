@@ -86,10 +86,7 @@ test('a frame showing its copy is never covered by its stand-in when it is shown
 
 test('the strip goes in Ultra\'s own course bar, never a copy\'s', () => {
   const live = { localName: 'div', closest: () => null }, copy = { localName: 'div', closest: (s) => (s === '#gz-instant' ? {} : null) };
-  const c = vm.createContext({ ctx: { site: 'ultra' }, document: { getElementsByClassName: () => [live, copy] } });
-  const courseBar = vm.runInContext(`${part('  const bars = ', '  const topLayer = ')}\ncourseBar;`, c);
-  assert.equal(courseBar(), live, 'a copy comes after Ultra\'s view in its main area');
-  c.document.getElementsByClassName = () => [copy];
-  const alone = vm.runInContext(`${part('  const bars = ', '  const topLayer = ')}\ncourseBar;`, c);
-  assert.equal(alone(), null, 'only the copy\'s: none yet');
+  const courseBar = (bars) => vm.runInNewContext(`${part('  const bars = ', '  const topLayer = ')}\ncourseBar;`, { ctx: { site: 'ultra' }, document: { getElementsByClassName: () => bars } });
+  assert.equal(courseBar([live, copy])(), live, 'a copy comes after Ultra\'s view in its main area');
+  assert.equal(courseBar([copy])(), null, 'only the copy\'s: none yet');
 });

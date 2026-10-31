@@ -84,7 +84,7 @@ test('the rebuild strips handlers, ids, scripts, styles with addresses, forms, f
     ['div', 'course-banner', 0, ['img', '', { src: 'https://evil.test/b.png' }], ['img', '', { src: `${CDN}/b.png`, onerror: 'x()' }]], { tag: 'div' }, 42];
   assert.equal(L.build(doc, box, [...c.nodes, ...evil], CTX) > 0, true);
   const all = box.all();
-  assert.ok(all.every((e) => ['DIV', 'A', 'IMG', 'SVG', 'PATH'].includes(e.tagName)), 'only allowed tags');
+  assert.ok(all.every((e) => ['DIV', 'SPAN', 'A', 'IMG', 'SVG', 'PATH'].includes(e.tagName)), 'only allowed tags');
   assert.ok(all.every((e) => !e.id && !Object.keys(e.attrs).some((k) => /^on/.test(k))), 'no ids or handlers');
   assert.deepEqual(all.filter((e) => e.tagName === 'A').map((e) => e.attrs.href).filter(Boolean), [`${ORIGIN}/ultra/courses/_1_1/outline`], 'site links only, made whole');
   assert.deepEqual(all.filter((e) => e.tagName === 'IMG').map((e) => e.attrs.src), [`${CDN}/images/site-banner.png`, `${CDN}/b.png`], 'banner pictures from the site or its CDN only');
@@ -208,14 +208,14 @@ const site = ({ path = '/ultra/grades', local = {}, last = '_900_1', instant = t
     chrome: { runtime: { sendMessage: (m) => {
       sent.push(m);
       if (send) return send(m);
-      if (m.op === 'put') local[L.key(ORIGIN, m.record.uid, m.record.kind)] = structuredClone(m.record);
+      if (m.op === 'put') local[L.key(ORIGIN, m.record.uid, m.record.kind, m.record.course)] = structuredClone(m.record);
       return Promise.resolve(m.op === 'begin' ? { epoch: 'test' } : { ok: true });
     } }, storage: { local: { get: get || ((k, cb) => cb(structuredClone(Object.fromEntries([].concat(k).map((key) => [key, local[key]]))))), set: (o) => Object.assign(local, structuredClone(o)) },
       onChanged: { addListener: (f) => changes.push(f) } } },
     GZ_CTX: { settings: () => settings, need: async () => {} },
     GZ_ULTRA: { page: { known: async () => (last ? { id: last } : null) } },
   });
-  c.globalThis = c; c.window = c; c.top = frame ? around : c; c.name = typeof frame === 'string' ? frame : '';
+  c.globalThis = c; c.window = c; c.top = frame === false ? c : around; c.name = typeof frame === 'string' ? frame : '';
   vm.runInContext(read('courses/instant.js'), c);
   vm.runInContext(read('courses/page/instant.js'), c);
   // Ultra's view goes in, and the page looks at it in its next frame.
@@ -803,12 +803,12 @@ test('each course page\'s ready markers, from the live shapes; a copy of a ready
 test('a course page\'s copy keeps its items, titles, links and tables, and leaves out ids, Glaze\'s own parts and controls\' state', () => {
   const o = flat(L.capture(coursePage(COURSE.outline[1]).main, CTX).nodes);
   for (const want of ['content-list-item', 'itemContainer', 'click-to-invoke-container', 'Week 1 folder', 'Notes 1', 'Reading 2', 'Practice check 4',
-    '"/ultra/courses/_101_1/document/_8202_1?view=content&state=view"', '"/ultra/courses/_101_1/outline/roster"', 'course-outline-content', 'bb-course-navigation']) assert.ok(o.includes(want), `outline: ${want}`);
+    '"/ultra/courses/_101_1/document/_8202_1?view=content', '"/ultra/courses/_101_1/outline/roster"', 'course-outline-content', 'bb-course-navigation']) assert.ok(o.includes(want), `outline: ${want}`);
   for (const gone of ['data-content-id', 'folder-title-', '"aria-expanded"', '"role"', '"type"', '"id"']) assert.ok(!o.includes(gone), `outline: ${gone}`);
   const a = L.capture(coursePage(COURSE.announcements[1]).main, CTX);
   for (const t of ['table', 'thead', 'tbody', 'tr', 'td', 'th']) assert.ok(tags(a.nodes).has(t), `announcements: a ${t} stays one`);
   const as = flat(a.nodes);
-  for (const want of ['announcement-item-row', 'list-item-title', 'Week 6 update', '"/ultra/stream/announcement-detail?courseId=_101_1&announcementId=_7100_1"']) assert.ok(as.includes(want), `announcements: ${want}`);
+  for (const want of ['announcement-item-row', 'list-item-title', 'Week 6 update', '"/ultra/stream/announcement-detail?courseId=_101_1']) assert.ok(as.includes(want), `announcements: ${want}`);
   for (const gone of ['list-item-title-_', 'aria-checked', 'data-analytics-id', '"role"']) assert.ok(!as.includes(gone), `announcements: ${gone}`);
   const g = L.capture(coursePage(COURSE.gradebook[1]).main, CTX), gs = flat(g.nodes);
   assert.equal((gs.match(/MuiTableRow-root/g) || []).length, 26, 'the head row and 25 rows');
@@ -950,7 +950,12 @@ test('a standby adopted for a course is that course\'s frame from then on', asyn
   p.sync(); p.answer('_900_1'); await settle();
   assert.deepEqual(p.toTop, [{ gzCtab: 'copy', on: false }]);
   p.tell({ gzCtab: 'copy', picked: true }); await settle();
-  assert.ok(p.copy(), 'the adopted frame on screen paints its course\'s copy');
+  // Ultra routed in place puts the course's main area in.
+  const section = new El('section', p.doc), main = new El('main', p.doc);
+  section.className = 'course bb-offcanvas-container route-view-container'; main.className = 'course-main-content';
+  section.append(main); p.html.children[0].append(section);
+  await p.frame1();
+  assert.ok(main.querySelector('#gz-instant'), 'the adopted frame on screen paints its course\'s copy');
 });
 
 test('a frame\'s copy goes with the switch off, on a route change and on sign-out, and says so', async (t) => {

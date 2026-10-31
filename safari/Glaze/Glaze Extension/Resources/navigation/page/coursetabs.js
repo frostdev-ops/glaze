@@ -76,7 +76,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // .js-course-navigation). A panel opened over the course is the last visible layer that doesn't hold the bar.
   const LAYER = ':is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)';
   const bars = document.getElementsByClassName('bb-course-navigation');
-  const courseBar = () => { if (ctx.site === 'canvas') return [document.querySelector('.ic-app-nav-toggle-and-crumbs'), document.getElementById('mobile-header'), document.getElementById('breadcrumbs')].find(shown) || null; for (let i = bars.length - 1; i >= 0; i--) if (bars[i].localName === 'div') return bars[i]; return null; };
+  const courseBar = () => { if (ctx.site === 'canvas') return [document.querySelector('.ic-app-nav-toggle-and-crumbs'), document.getElementById('mobile-header'), document.getElementById('breadcrumbs')].find(shown) || null; for (let i = bars.length - 1; i >= 0; i--) if (bars[i].localName === 'div' && !bars[i].closest('#gz-instant')) return bars[i]; return null; };
   const topLayer = () => [...document.querySelectorAll(LAYER)].filter(shown).pop() || null;
   // Full routed documents/overviews have neither the course bar nor the old panel wrappers. Peek stays excluded.
   const routed = () => [...document.querySelectorAll('.routed-page.bb-offcanvas-container:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)')]
@@ -1475,6 +1475,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     // A course's frame, or one kept beside it (its outline under an item, a fresh outline on its way).
     const [cid, f] = [...frames, ...[...spare].flatMap(([k, a]) => a.map((g) => [k, g]))].find(([, g]) => g.el.contentWindow === e.source) || [];
     if (!f) return;
+    if (d.gzCtab === 'copy') return copyFrom(cid, f, d.on === true);
     const live = frames.get(cid) === f, it = items.get(cid);
     // An item frame's Glaze told what it is: at its first word, and again once it listens (a cold frame's first word comes earlier).
     if ((d.gzCtab === 'loaded' || d.gzCtab === 'account') && live && f.item) post(f, { gzCtab: 'item', on: !!it?.open });
@@ -1798,7 +1799,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const s = snaps.get(cid);
     const put = (snap) => {
       // Shown as it loads, unless it is an adopted standby still on its own page (adopting shows it once routed).
-      if (showing !== cid || frames.get(cid) !== f || f.ready || f.slow || pic || !fits(snap, f.url)) { if (showing === cid && !f.ready && !pic && !f.adopting) f.el.style.visibility = ''; return; }
+      // (Its copy up, it shows as it is: copyFrom.)
+      if (showing !== cid || frames.get(cid) !== f || f.ready || f.slow || pic || !fits(snap, f.url) || (!!f.copied && f.copied === f.el.contentDocument)) { if (showing === cid && !f.ready && !pic && !f.adopting) f.el.style.visibility = ''; return; }
       const box = document.createElement('div');
       box.className = 'gz-ctabs-pic';
       // A Canvas frame sits inside the navigation's room; the sketch is of the whole window, so it moves by that room.
@@ -1835,6 +1837,18 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (now || html.getAttribute('data-gz-motion') === 'off' || !p.isConnected) return p.remove();
     p.style.opacity = '0';
     setTimeout(() => p.remove(), 300);
+  };
+  // ---- a course page's copy in a tab's frame (Ultra) -----------------------------------------------------------------
+  // A course page's instant copy (courses/page/instant.js) paints in the frame on screen while it loads, which then shows at
+  // once with it, in place of its stand-in. The standby and frames kept hidden (ahead of a click, an outline under an item,
+  // a fresh outline) are never told to. A frame says whether it has one up ('copy' on) as its visit starts and as it is
+  // shown or hidden ('visible'), and is told whether it is that frame (picked).
+  const copyFrom = (cid, f, has) => {
+    const picked = ctx.site === 'ultra' && !!on && !framed && showing === cid && frames.get(cid) === f && !f.ready;
+    let doc = null; try { doc = f.el.contentDocument; } catch { /* another site */ }
+    f.copied = has ? doc : null;
+    post(f, { gzCtab: 'copy', picked });
+    if (picked && has) { unpicture(); f.el.style.visibility = ''; hoist(); }
   };
   const show = async (cid) => {
     const me = ++showTurn;

@@ -1208,8 +1208,11 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   }).then(reply, () => reply(null));
   return true;
 });
-// Ultra's instant copies of Grades, Courses and Activity (courses/instant.js, storage.local ultraCopy:<origin>/<uid>/<kind>):
-// a site's go when its student signs out (its top page says so: 'glaze:ultraCopy' drop), every one with the switch off.
+// Ultra's instant copies of Grades, Courses and Activity (courses/instant.js, storage.local ultraCopy:<origin>/<uid>/<kind>),
+// and of a course's pages (ultraCopy:<origin>/<uid>/<kind>/<course>, from its top page or a course tab's frame; the
+// COURSE_COPIES newest a site and student, by ultraCopy:<origin>/<uid>/index): a site's go when its student signs out (its
+// top page says so: 'glaze:ultraCopy' drop), every one with the switch off.
+const COPY_KINDS = ['grades', 'courses', 'stream'], COURSE_COPY_KINDS = ['outline', 'announcements', 'gradebook'], COURSE_COPIES = 48;
 const copyKeys = async (origin) => (chrome.storage.local.getKeys ? await chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null)))
   .filter((k) => k.startsWith(origin ? `ultraCopy:${origin}/` : 'ultraCopy:'));
 // Saves and purges share the broker queue. A visit holds a generation, invalidated on sign-out or switch-off, so a
@@ -1270,10 +1273,10 @@ const purgeUltra = async (origin, retire = true, seen = false) => {
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:ultraCopy') return;
   (brokerTurn ||= GZ_CARDS.queue())(async () => {
-    const origin = s.frameId === 0 && await fromUltra(s);
+    const top = s.frameId === 0, origin = ultraPage(s) && await fromUltra(s);
     if (!origin) return null;
-    if (m.op === 'drop') { await purgeUltra(origin, true, true); return { ok: true }; }
-    if (!['begin', 'put'].includes(m.op)) return null;
+    if (m.op === 'drop') { if (!top) return null; await purgeUltra(origin, true, true); return { ok: true }; }
+    if (!['begin', 'put'].includes(m.op) || (m.op === 'put' && !top && !COURSE_COPY_KINDS.includes(m.record?.kind))) return null;
     const settings = await chrome.storage.sync.get(['enabled', 'enhance']);
     if (settings.enabled === false || settings.enhance?.instant === false) return { ok: false };
     const state = await copyState(), epoch = `${state.all}/${state.sites[origin] || ''}`;
@@ -1282,12 +1285,20 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
       if ((m.fence ?? '/') !== keys.map((k) => fences[k]?.epoch || '').join('/')) return { ok: false };
       return { epoch };
     }
-    const r = m.record;
-    if (m.epoch !== epoch || r?.v !== 1 || typeof r.uid !== 'string' || !/^_\d+_\d+$/.test(r.uid) || !['grades', 'courses', 'stream'].includes(r.kind)
+    const r = m.record, course = COURSE_COPY_KINDS.includes(r?.kind);
+    if (m.epoch !== epoch || r?.v !== 1 || typeof r.uid !== 'string' || !/^_\d+_\d+$/.test(r.uid) || !(course || COPY_KINDS.includes(r.kind))
+      || (course ? typeof r.course !== 'string' || !/^_\d+_\d+$/.test(r.course) : r.course !== undefined)
       || !Number.isFinite(r.at) || !Array.isArray(r.nodes) || JSON.stringify(r).length > 201024) return { ok: false };
-    const key = `ultraCopy:${origin}/${r.uid}/${r.kind}`, was = (await chrome.storage.local.get(key))[key];
+    const key = `ultraCopy:${origin}/${r.uid}/${r.kind}${course ? `/${r.course}` : ''}`, was = (await chrome.storage.local.get(key))[key];
     if (was?.at > r.at) return { ok: true, kept: false };
-    await chrome.storage.local.set({ [key]: { v: 1, uid: r.uid, kind: r.kind, at: r.at, full: !!r.full, nodes: r.nodes } });
+    const rec = { v: 1, uid: r.uid, kind: r.kind, ...(course && { course: r.course }), at: r.at, full: !!r.full, nodes: r.nodes };
+    if (!course) { await chrome.storage.local.set({ [key]: rec }); return { ok: true }; }
+    const ik = `ultraCopy:${origin}/${r.uid}/index`, had = (await chrome.storage.local.get(ik))[ik];
+    const index = { ...(had && typeof had === 'object' ? had : {}), [key]: r.at };
+    const old = Object.keys(index).sort((a, b) => (index[b] || 0) - (index[a] || 0)).slice(COURSE_COPIES);
+    for (const k of old) delete index[k];
+    if (old.length) await chrome.storage.local.remove(old);
+    await chrome.storage.local.set({ [key]: rec, [ik]: index });
     return { ok: true };
   }).then(reply, () => reply(null));
   return true;
