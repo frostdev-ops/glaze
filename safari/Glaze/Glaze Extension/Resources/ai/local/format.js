@@ -1,12 +1,11 @@
 // A harness request as the parts Glaze's own model reads (docs/ai-harness.md "Glaze's own model"): [{ special } | { text }],
 // in order, for ai/local/tokenizer.js encodeWith(), which never reads a special out of a text part, so page text can't
 // make a control token. Runs in the worker; the engine host tokenizes. Two dialects:
-//   glaze: the fine-tune's format (glaze-plans/lfm-tune/FORMAT.md). ChatML; the task's own token first in the system turn;
-//     the trust rule without the random fence's sentence; each context block as <|gz_ctx|>label\ntext<|/gz_ctx|>, each
-//     data block as <|gz_data|>…<|/gz_data|>, joined by a line break; a JSON task's schema said as openai.js says it; no
-//     <think>.
-//     TODO(FORMAT.md): built against lfm-tune/train/format.js (the D2 draft, 2026-10-30) before FORMAT.md was written; align
-//     with FORMAT.md when it lands and keep test/ai/local-format.test.js's vectors in step with it.
+//   glaze: the fine-tune's format (glaze-plans/lfm-tune/FORMAT.md v1). ChatML; the task's own token first in the system
+//     turn; the trust rule without the random fence's sentence; each context block as <|gz_ctx|>label\ntext<|/gz_ctx|>,
+//     each data block as <|gz_data|>…<|/gz_data|>, joined by a line break; a JSON task's schema said as openai.js says it;
+//     no <think>. test/ai/local-format-ids.test.js holds it, id for id, to what FORMAT.md's train/format.js gives for each
+//     trained task (tools/dev/local-format-fixture.js writes that fixture again when FORMAT.md changes).
 //   chatml: a stock model (models.json `stock: true`), whose weights never learnt Glaze's tokens: LFM3's own chat template
 //     with thinking off (`<think></think>` after the assistant header), the request's messages as the harness wrote them.
 //     With `images` (the picture model, LFM3-VL): each picture after its line (text.js request()) as <|vision_start|>,
