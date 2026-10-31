@@ -557,7 +557,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       // every device keeps the lowest id, met as a first meeting; any other is not this one's. One live while this device's
       // copy is in Drive's trash and the document in Trash (another device that never saw that copy sent the document up
       // again): restored wins, this device's copy comes out of the trash and the other device then meets it as the lowest id.
-      if (d && R?.id && R.id !== d.json && !R.removed) {
+      // None linked yet (this device's first push stopped before its copy's answer came): met below as its own or another's.
+      if (d?.json && R?.id && R.id !== d.json && !R.removed) {
         if (R.id < d.json && !R.trashed) {
           gone = d;
           await away([gone.json, gone.file], h);
@@ -660,6 +661,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       // Deleted for good in Drive, either file: into Trash here, the other file into Drive's trash. Its file deleted for good
       // while its copy came out of Drive's trash (in Trash on both sides before): restored wins, with a file of its own again.
       if (E?.removed && R && !R.removed && R.trashed === false && d.trashed === true) { d = await putDoc(h, { ...d, file: null, fh: null, fsum: null }, d); E = undefined; }
+      // Its copy deleted for good while another device's is live (one that sent the document up again meanwhile): that one is
+      // the document's now, met as a first meeting (restored wins), never left behind with the document in Trash here.
+      if (R?.removed) { const other = await lookup(h, folder); if (other && !other.trashed && other.id !== d.json) { await dropDoc(h, d); return sync(key, h, { R: other, folder, files }); } }
       if (R?.removed || E?.removed) {
         if (l && !lt) await env.papers.trash(key);
         if (R?.removed) { await trashTo(d.file, true); await dropDoc(h, d); return; }
@@ -966,8 +970,13 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         if (o.full || !st.folder || !st.token) await full(st);
         else {
           const folder = await folderOf(st);
-          if (!o.push) await pull(await state(), folder);
-          if (!o.push && st.again && now() >= st.again) await recheck(folder);
+          // Another Glaze took this one's place (one made at the same time, or the old one restored from Drive's trash): what
+          // was in it before this device's page token never comes as a change, so everything is met again, as on a first run.
+          if (folder !== st.folder) await full(await state());
+          else {
+            if (!o.push) await pull(await state(), folder);
+            if (!o.push && st.again && now() >= st.again) await recheck(folder);
+          }
         }
         await sweep((await state()).folder);
         await tidy((await state()).folder);
