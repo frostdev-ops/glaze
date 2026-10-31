@@ -512,6 +512,7 @@ const KNOWN = {
     repro: [{ t: 'setting', d: 0, k: 'footer', v: false, pick: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2 }, { t: 'drive', k: 'trashData', pick: 0, s: 3 }, { t: 'run', d: 0, how: 'run', s: 4 }],
   },
   'orphan-overwrite': {
+    fixed: true,
     about: 'a .docx whose first push stopped before its JSON copy, then edited outside Glaze, is overwritten by the next push',
     skips: () => false, // outsideDocx picks only files with their JSON copy while masked
     // The same adoption after a first meeting that found the JSON copy in Drive's trash and the file put back.
@@ -519,6 +520,7 @@ const KNOWN = {
     repro: [{ t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'faults', d: 0, p: 0, cut: '\\.docx$' }, { t: 'run', d: 0, how: 'run', s: 2 }, { t: 'drive', k: 'outsideDocx', pick: 0, s: 3 }],
   },
   'off-edits': {
+    fixed: true,
     about: 'a document saved while Sync was off never goes up when the full run turning Sync on doesn\'t finish (offline, Drive busy, the worker stopping)',
     skips: () => false, // turning Sync on runs with no faults, online and uncut while masked
     // And a document saved while its device had Sync off may differ (the full run can stop for the Glaze folder in the trash too).
@@ -526,22 +528,26 @@ const KNOWN = {
     repro: [{ t: 'sync', d: 0, on: false, s: 1 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 2 }, { t: 'net', d: 0, offline: true, s: 3 }, { t: 'sync', d: 0, on: true, s: 4 }],
   },
   'stray-file': {
+    fixed: true,
     about: 'a .docx edited outside Glaze, kept by one device that writes a new file, is kept again by another device editing the document: the first new file stays in Glaze/ as a second copy',
     skips: () => false,
     ignore: (f) => f.inv === 'drive-state' && /visible files for one document/.test(f.msg),
     repro: [{ t: 'paper', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2 }, { t: 'drive', k: 'outsideDocx', pick: 0, s: 3 }, { t: 'run', d: 0, how: 'run', s: 4 }, { t: 'paper', k: 'edit', d: 0, pick: 0, pick2: 0, s: 5 }, { t: 'run', d: 1, how: 'run', s: 6 }],
   },
   'missed-file-trash': {
+    fixed: true,
     about: 'a document\'s own file put in Drive\'s trash is never seen by a full pass (Sync turned on, off before or already on): it reads only the JSON copies, so the document stays live with its file in the trash; a PDF so is passed over as unreadable by every other device',
     skips: () => false, // trashDoc leaves a document's own file alone while masked
     repro: [{ t: 'pdf', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2 }, { t: 'sync', d: 1, on: false, s: 3 }, { t: 'drive', k: 'trashDoc', pick: 0, s: 4 }],
   },
   'file-trash-skip': {
+    fixed: true,
     about: 'a PDF or deck met while its JSON copy is out of Drive\'s trash and its file still in it (restored one before the other) is passed over for good: the file coming back later brings it to no device that hadn\'t it',
     skips: () => false, // untrashDoc restores a JSON copy only once its document's file is out of the trash, while masked
     repro: [{ t: 'slides', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2 }, { t: 'drive', k: 'trashDoc', pick: 0.99, s: 3 }, { t: 'run', d: 1, how: 'run', s: 4 }, { t: 'drive', k: 'untrashDoc', pick: 0.99, s: 5 }, { t: 'run', d: 0, how: 'run', s: 6 }],
   },
   'drive-copy-stop': {
+    fixed: true,
     about: 'a worker stopped right after saving a conflict\'s "(Drive copy)" (a PDF\'s, or one too big for a version), before marking it, leaves that copy on its device only, and the next run makes a second one',
     skips: () => false,
     ignore: (f, w) => (f.inv === 'convergence:docs' || f.inv === 'drive-state') && w.devices.some((d) => Object.values(w.view(d).docs).some((v) => v.includes('(Drive copy)') && f.msg.includes(JSON.parse(v).key))),
@@ -549,11 +555,13 @@ const KNOWN = {
       { t: 'pdf', k: 'edit', d: 1, pick: 0, pick2: 0, s: 5 }, { t: 'run', d: 1, how: 'run', s: 6 }, { t: 'run', d: 0, how: 'run', s: 7, after: '(Drive copy)' }],
   },
   'file-push-echo': {
+    fixed: true,
     about: 'a PDF or deck pushed again with its content unchanged (after a first meeting kept Drive\'s replacement aside) looks to the other device like a replacement made outside Glaze: each takes it and pushes again, uploading the whole file twice a run, forever',
     skips: (op) => op.t === 'drive' && op.k === 'outsidePdf',
     repro: [{ t: 'slides', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2 }, { t: 'run', d: 1, how: 'run', s: 3, after: 'writerPaper:' }, { t: 'drive', k: 'outsidePdf', pick: 0, s: 4 }, { t: 'sync', d: 0, on: false, s: 5 }],
   },
   'lagged-full': {
+    fixed: true,
     about: 'a full pass (a device joining, or Sync turned on) while Drive\'s search lags misses a document made just before: its token is taken first, so the document\'s change never comes either, and the device never gets it',
     skips: (op) => op.t === 'lag',
     join: [0],
@@ -567,6 +575,7 @@ const KNOWN = {
     repro: [{ t: 'note', k: 'new', d: 0, pick: 0, pick2: 0.9, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2 }, { t: 'run', d: 1, how: 'run', s: 3 }, { t: 'account', d: 0, to: 'B', s: 4 }, { t: 'note', k: 'rename', d: 0, pick: 0, pick2: 0, s: 5 }, { t: 'note', k: 'edit', d: 1, pick: 0, pick2: 0, s: 6 }],
   },
   'first-meeting-trash': {
+    fixed: true,
     about: 'on a first meeting (an account switched back, a restored device), a document in Trash on one side is never met: one in Drive\'s trash goes up again as new (and other devices, picking the lower id of two copies even in the trash, never get it), one in Trash here stays live in Drive',
     skips: () => false,
     // Masked: a document in Trash on some device, or whose JSON copy is in Drive's trash, may differ.

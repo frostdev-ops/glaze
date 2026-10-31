@@ -9,8 +9,8 @@ const C = require('../helpers/drive-chaos.cjs');
 
 const ITER = Number(process.env.ITER || 30), DEVICES = Number(process.env.DEVICES || 3);
 // Seeds that hit a known defect (C.KNOWN; glaze-plans/release-4.0.1/drive-chaos-findings.md), todo until it is fixed.
-const TODO = { 32: 'missed-file-trash' };
-const SEEDS = process.env.SEED ? [Number(process.env.SEED)] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16, 22, 27, ...Object.keys(TODO).map(Number)];
+const TODO = {};
+const SEEDS = process.env.SEED ? [Number(process.env.SEED)] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16, 22, 27, 32, ...Object.keys(TODO).map(Number)];
 const FINDINGS = 'glaze-plans/release-4.0.1/drive-chaos-findings.md';
 
 const show = (r) => [`seed ${r.seed}:`, ...r.failures.map((f) => `  ${f.inv}: ${f.msg}`), '', ...r.trace, '',
