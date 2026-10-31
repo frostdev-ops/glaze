@@ -1101,3 +1101,33 @@ test('a document saved while Sync was off goes up even when the run turning Sync
   assert.equal(textOf(sidecarJson(drive, key).record.doc), 'Written while off');
   assert.ok(exportOf(drive, key), 'and its file');
 });
+
+test('a worker stopped right after saving a conflict\'s "(Drive copy)" sends that copy on its next run and makes no second one', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-000000000a02';
+  const r1 = await a.files.put(enc('%PDF one'), MIME.pdf);
+  await a.papers.save(key, { kind: 'pdf', file: r1, size: r1.size, title: 'Reading', named: true });
+  await a.sync.set(true); await b.sync.set(true);
+  const ra = await a.files.put(enc('%PDF A marked'), MIME.pdf), rb = await b.files.put(enc('%PDF B marked'), MIME.pdf);
+  await a.papers.save(key, { file: ra, size: ra.size }, { reason: 'edit' });
+  await a.sync.touched(key); await a.fire();
+  await b.papers.save(key, { file: rb, size: rb.size }, { reason: 'edit' });
+  await b.sync.touched(key);
+  // B's worker stops the moment the copy is saved: nothing after that save runs, and its storage event is never heard.
+  const save = b.env.papers.save;
+  let stop = true;
+  b.env.papers.save = async (k, patch, o) => {
+    const out = await save(k, patch, o);
+    if (stop && /\(Drive copy\)$/.test(patch.title || '')) { stop = false; throw Object.assign(new Error('stopped'), { why: 'network' }); }
+    return out;
+  };
+  assert.equal((await b.sync.run()).ok, false);
+  clock.t = (await state(b)).wait + 1;
+  assert.ok((await b.sync.run()).ok);
+  assert.ok((await b.sync.run()).ok);
+  const copies = (await b.papers.list()).filter((x) => x.title === 'Reading (Drive copy)');
+  assert.equal(copies.length, 1, 'one copy of Drive\'s side');
+  assert.equal((await b.papers.get(copies[0].key)).file.hash, ra.hash);
+  assert.ok(sidecarOf(drive, copies[0].key), 'and it syncs');
+  assert.equal((await b.papers.get(key)).file.hash, rb.hash);
+});
