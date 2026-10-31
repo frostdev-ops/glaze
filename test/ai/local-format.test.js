@@ -1,5 +1,5 @@
 // Glaze's own model's prompt (ai/local/format.js): a harness request (ai/text.js request) as the parts encodeWith reads, in
-// the fine-tune's format (glaze-plans/lfm-tune FORMAT, its draft train/format.js of 2026-10-30) and a stock model's chat
+// the fine-tune's format (glaze-plans/lfm-tune/FORMAT.md v1; ids: local-format-ids.test.js) and a stock model's chat
 // template; the fence parsed back exactly; what isn't a request text.request wrote, refused. The real Glaze tasks' first
 // requests all parse.
 const test = require('node:test');

@@ -422,8 +422,12 @@ A run: `ai/local/format.js` writes the request as `[{ special } | { text }]` par
 out. Dialects: `glaze` (the fine-tune: `<|startoftext|><|im_start|>system\n<|gz_task:ID|>{system}\n\n{TRUST}[\n\n{schema in
 words}]<|im_end|>\n<|im_start|>user\n<|gz_ctx|>label\ntext<|/gz_ctx|>\n…<|gz_data|>label\ntext<|/gz_data|><|im_end|>\n<|im_start|>
 assistant\n`, no `<think>`), and `chatml` for a `stock: true` model, whose weights never learnt Glaze's tokens (the harness's
-messages as written, the schema in words, `<think></think>` after the assistant header). The draft it follows is
-`glaze-plans/lfm-tune/train/format.js`; FORMAT.md is still to come (a TODO in `format.js`). The system turn is the prefix kept
+messages as written, the schema in words, `<think></think>` after the assistant header). A models.json entry without
+`stock` (the fine-tune, once published; `tools/vendor/model-manifest.js` without `--stock`) reads `glaze`.
+`test/ai/local-format-ids.test.js` holds `glaze` to `glaze-plans/lfm-tune/FORMAT.md` v1 id for id: for requests each
+trained task builds, the ids its `train/format.js` and LFM3's tokenizer give (fixture: `tools/dev/local-format-fixture.js`).
+FORMAT.md's inference window of 4,096 tokens isn't applied: caps say 16,000 for every model, so `writer.review` and
+`syllabus.read` cut a long text into fewer, longer parts than any the fine-tune trained on. The system turn is the prefix kept
 warm: up to three per loaded model, as snapshots. Sampling: the request's temperature, else LFM3's GGUF defaults
 (temperature 0.1, top-k 50); output up to the request's `maxTokens` (1,024 by default) and refused before reading when the
 prompt and output exceed the window (`request-rejected`, `context`).
