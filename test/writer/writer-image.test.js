@@ -254,3 +254,29 @@ test('the standalone visual request stays within 512 tokens despite a larger Adv
     assert.equal(cfg.seen[0].maxTokens, Math.min(maxTokens, I.LIMIT.tokens));
   }
 });
+
+// The stock picture model (Glaze's own, LFM3-VL) put the picture's file name, and once the context line, into requirements
+// (glaze-plans/release-4.0.1/c9c omarchy-real-final/pictures.json): requirements hold only text visible in the picture.
+test('a requirement that is the picture\'s file name or copies a context line is dropped; real ones stay', async () => {
+  const inp = I.input({ ...raw(), name: 'c9a-table.png', context: 'Read the attached picture for this assignment.' });
+  const got = I.check({ ...reading(), requirements: ['c9a-table.png', 'C9A-TABLE', 'Complete task context: Read the attached picture for this assignment.', 'Read the attached picture for this assignment', 'Submit one PDF.'] }, inp);
+  assert.deepEqual(got.requirements, ['Submit one PDF.']);
+  assert.equal(got.complete, true);
+  const labelled = I.input(raw());
+  assert.deepEqual(I.check({ ...reading(), requirements: ['Task.png', 'Instructions: Explain plant growth.', 'Explain plant growth.'] }, labelled).requirements, ['Explain plant growth.'],
+    'a requirement the picture shows stays even when the instructions say it too');
+  const cfg = { caps: { context: 8192, images: true }, replies: [{ json: { ...reading(), requirements: ['Task.png', 'Explain plant growth.'] } }], seen: [] };
+  assert.deepEqual((await T.run(I.task, raw(), { provider: 'mock', cfg })).output.requirements, ['Explain plant growth.']);
+});
+
+test('on a model on this computer the reader is told the file name and the context are not in the picture', async () => {
+  const local = { caps: { context: 8192, images: true, local: true }, replies: [{ json: reading() }], seen: [] };
+  await T.run(I.task, raw(), { provider: 'mock', cfg: local });
+  const system = local.seen[0].messages[0].content[0].text;
+  assert.match(system, /file name/i);
+  assert.match(system, /never .*requirements/i);
+  assert.ok(contents(local.seen[0]).includes('Task.png'), 'the name still says which picture it is');
+  const cloud = { caps: { context: 8192, images: true }, replies: [{ json: reading() }], seen: [] };
+  await T.run(I.task, raw(), { provider: 'mock', cfg: cloud });
+  assert.doesNotMatch(cloud.seen[0].messages[0].content[0].text, /file name/i, 'other models keep their prompt');
+});
