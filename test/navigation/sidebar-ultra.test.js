@@ -1030,6 +1030,30 @@ test("an outline column still showing another course's filled Details & Actions 
   assert.equal(p.store[HELD]._102_1, 300, 'nor its height kept as the next course\'s');
 });
 
+test("an outgoing empty Details block keeps its course ownership until Ultra replaces the view", async () => {
+  const HELD = `detailsHeight:${O}`;
+  const p = page({ at: 'outline', aside: 'live', stored: { ...record(), [HELD]: { _101_1: 231, _102_1: 300 } } });
+  const tick = heightTimers(p), details = p.$('.js-details-and-actions');
+  details.box = { left: 1248, top: 140, width: 320, height: 0 };
+  await p.pass();
+  p.c.location.pathname = '/ultra/courses/_102_1/outline';
+  p.$('.course-outline-content').replaceChildren(p.el('div', 'spinner'));
+  await p.pass();
+  assert.equal(p.side.context().courseId, '_101_1', 'the outgoing view has not settled into the next course');
+  assert.equal(heldRoom(p), 231, 'an address change cannot rebind the outgoing empty block');
+  // The outgoing course's delayed response arrives before the replacement view.
+  fillDetails(p, details, 7);
+  tick(2000);
+  await settle();
+  assert.deepEqual(p.store[HELD], { _101_1: 231, _102_1: 300 }, 'the old response cannot overwrite the next course\'s height');
+  const panel = p.$('.course-content-container');
+  panel.remove();
+  const next = routedOutline(p);
+  p.$('#main-content-inner').append(p.el('div', 'course-content-container', p.el('div', 'course-outline-grid', next.content, next.aside)));
+  await p.pass();
+  assert.equal(heldRoom(p), 300, 'the replacement empty block gets the next course\'s reservation');
+});
+
 test('Ultra remembers a settled Details height while the course remains open', async () => {
   const HELD = `detailsHeight:${O}`;
   for (const cached of [undefined, { _101_1: 200 }]) {
