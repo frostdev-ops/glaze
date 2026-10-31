@@ -252,6 +252,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     const push = async (key, h, l, d, folder) => {
       const kind = kindOf(l.rec), b = body(key, l.rec, l.parts), sum = await env.hash(canon(b));
       const ex = await env.exportOf(key, l.rec, l.parts);
+      // No file to make here (a PDF's bytes still in its record from before the file store, or gone from this device) and
+      // Drive's copy already this one: nothing new to send.
+      if (!ex && d?.json && d.rsum === sum && d.lsum === sum) return d;
       const base = (ex?.name || `${safe(l.rec.title) || 'Untitled'}${EXT[kind]}`).replace(/\.[^.]+$/, '');
       let file = d?.file || null, fh = d?.fh || null;
       // A document going up for the first time may have a file there already: its push stopped before the JSON copy went.
