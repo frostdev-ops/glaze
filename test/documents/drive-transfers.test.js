@@ -476,3 +476,32 @@ test('a document changed while its large update uploads keeps that file as its o
     assert.deepEqual(await moves(dk), {});
   }
 });
+
+test('a document changed while its large JSON copy uploads is never kept as a conflict with itself', async () => {
+  const drive = standin(), dk = disk(), key = 'doc:00000000-0000-4000-8000-00000000a022';
+  let a = worker(drive, dk);
+  await a.papers.save(key, { doc: doc(`A${'a'.repeat(6 * MiB)}`), title: 'Paper', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  const own = fileOf(drive, key, 'file').meta.id;
+  await a.papers.save(key, { doc: doc(`B${'b'.repeat(6 * MiB)}`) });
+  await a.sync.touched(key);
+  // The file's bytes go first, then the copy's: the student types again as the copy's begin.
+  let starts = 0, changed = false;
+  const fetch = async (u, init = {}) => {
+    if (/^bytes 0-/.test(init.headers?.['content-range'] || '') && ++starts === 2) {
+      changed = true;
+      await a.papers.save(key, { doc: doc(`C${'c'.repeat(6 * MiB)}`) });
+      await a.sync.touched(key);
+    }
+    return drive.fetch(u, init);
+  };
+  a = worker(drive, dk, { fetch });
+  for (let i = 0; i < 3; i++) { assert.ok((await a.sync.run()).ok); dk.clock.t += 60e3; }
+  assert.ok(changed);
+  assert.deepEqual((await a.papers.list()).map((r) => r.key), [key], 'no "(Drive copy)" of the student\'s own text');
+  assert.equal((await dk.store.get(`writerVersions:${key}`))[`writerVersions:${key}`], undefined, 'nor a version of it');
+  const copy = JSON.parse(fileOf(drive, key, 'doc').bytes);
+  assert.equal(textOf(copy.record.doc)[0], 'C');
+  assert.equal(copy.file, own);
+  assert.deepEqual(await moves(dk), {});
+});
