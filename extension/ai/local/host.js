@@ -4,15 +4,20 @@
 // warm-up or a run with the same instructions starts after them. Chrome starts it from an offscreen document
 // (ai/local/offscreen.js), Firefox from the background event page (ai/local/link.js); both pass messages to it as they are.
 //   in  { op: 'config', idle }  { op: 'detach' } (the worker's port went: runs and warm-ups stop, a download goes on)
-//       { id, op: 'prepare', tier? }  { id, op: 'run', model, parts, stable, schema?, sampler, maxTokens }
-//       { id, op: 'warm', model, parts }  { id, op: 'remove' }  { id, op: 'release' }  { id, op: 'cancel' }
+//       { id, op: 'prepare', tier?, part? }  { id, op: 'run', model, parts, stable, schema?, sampler, maxTokens, projector?,
+//       images? }  { id, op: 'warm', model, parts }  { id, op: 'remove', part? }  { id, op: 'release' }  { id, op: 'cancel' }
+//   part 'pictures': the picture download (models.json role pictures, LFM3-VL's language model, and the projector it names,
+//   role projector), fetched and removed as one. A run with images loads that model with its projector (vision.js) on the
+//   engine's device, the one model loaded (another is released first); each { image: i } part of its parts is images[i]
+//   ({ mime, data: base64 }), decoded here (env.decode), encoded and fed as prefill embeds between <|vision_start|> and
+//   <|vision_end|>. A projector that isn't here: provider-unavailable, reason 'pictures'.
 //   out { id, type: 'progress', loaded }  { id, type: 'delta', text }  { id, type: 'done', result }
 //       { id, type: 'error', error: { category, reason?, code?, tokens?, context? } }  { type: 'tick' } (every LIMIT.tick
 //       while anything is in flight: Chrome's worker hears it and stays)  { type: 'idle' } (LIMIT.idle with nothing in
 //       flight: the engine is released and the host may go)
 // parts come from ai/local/format.js and are tokenized here with encodeWith, never by reading specials out of text.
 // The engine, the JSON grammar and the tier ladder are their own files (engine.js, grammar.js, ladder.js); a missing one
-// is reported (engine: 'engine') or done without (grammar: the schema in words only; ladder: the smallest stock model).
+// is reported (engine, vision: 'engine') or done without (grammar: the schema in words only; ladder: the smallest stock model).
 // The grammar's mask allows the end token only once the JSON is whole, so a run stops at the end token as any other.
 // Classic script; node exports (create), and in a Worker it starts itself.
 var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
@@ -31,14 +36,15 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
   }));
   const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
-  // env: { store (ai/local/store.js), gguf (gguf.js), tokenizer (tokenizer.js), engine(), grammar(), ladder() (each the
-  // global or null), gpu() (navigator.gpu or null), bench?() (the ladder's bench kernel's source), post(message),
-  // setTimeout?, clearTimeout? }.
+  // env: { store (ai/local/store.js), gguf (gguf.js), tokenizer (tokenizer.js), engine(), grammar(), ladder(), vision?()
+  // (each the global or null), gpu() (navigator.gpu or null), bench?() (the ladder's bench kernel's source), decode?({ mime,
+  // data }) → { width, height, data: RGBA bytes } (the picture's pixels), kernels? (vision.js's kernels' base URL),
+  // post(message), setTimeout?, clearTimeout? }.
   const create = (env) => {
     const later = env.setTimeout || setTimeout, cancelTimer = env.clearTimeout || clearTimeout;
     const ops = new Map(); // id → { control, kind }
     let idleMs = LIMIT.idle, idleTimer = null, tickTimer = null;
-    let loaded = null; // { id, control, ready, model, tok, eos, base, warm: [{ ids, snap }] }
+    let loaded = null; // { id, key, projector, control, ready, model, tok, eos, base, vision?, warm: [{ ids, snap }] }
     let turn = Promise.resolve(); // one sequence at a time
     const post = (m) => { try { env.post(m); } catch { /* the host's page is gone */ } };
 
@@ -56,19 +62,23 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       loaded = null;
       if (!was) return;
       was.control.abort(new DOMException('Released', 'AbortError'));
-      return was.ready.then((job) => { for (const w of job.warm) { try { w.snap.drop?.(); } catch { /* gone */ } } try { job.base?.drop?.(); } catch { /* gone */ } try { job.model.release(); } catch { /* gone */ } }, () => {});
+      return was.ready.then((job) => { for (const w of job.warm) { try { w.snap.drop?.(); } catch { /* gone */ } } try { job.base?.drop?.(); } catch { /* gone */ } try { job.vision?.release(); } catch { /* gone */ } try { job.model.release(); } catch { /* gone */ } }, () => {});
     };
-    // The engine with model `id`, loaded once and shared by the calls that ask together; another model releases it first.
-    const load = (id) => {
-      if (loaded?.id === id) return loaded.ready;
+    // The engine with model `id` (and, for pictures, its projector on the engine's device), loaded once and shared by the
+    // calls that ask together; another model releases it first.
+    const load = (id, projector = null) => {
+      const key = projector ? `${id}+${projector}` : id;
+      if (loaded?.key === key) return loaded.ready;
       const retired = unload();
-      const E = env.engine();
-      if (typeof E?.load !== 'function') return Promise.reject(fail('provider-unavailable', 'engine'));
-      const job = { id, control: new AbortController(), warm: [], schemas: new Map() };
+      const E = env.engine(), V = projector ? env.vision?.() : null;
+      if (typeof E?.load !== 'function' || (projector && typeof V?.load !== 'function')) return Promise.reject(fail('provider-unavailable', 'engine'));
+      const job = { id, key, projector, control: new AbortController(), warm: [], schemas: new Map() };
       job.ready = (async () => {
         await retired;
         if (job.control.signal.aborted) throw aborted(job.control.signal);
-        let file;
+        // The projector first: one that isn't here says so before the language model loads.
+        let file, pfile;
+        if (projector) { try { pfile = await env.store.open(projector); } catch { throw fail('provider-unavailable', 'pictures'); } }
         try { file = await env.store.open(id); } catch { throw fail('provider-unavailable', 'assets'); }
         let g, tok;
         try {
@@ -79,9 +89,23 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         let model;
         try { model = await E.load(g, { context: LIMIT.context, signal: job.control.signal }); }
         catch (e) { if (job.control.signal.aborted) throw e; throw fail('provider-unavailable', ENGINE[e?.reason] || 'engine'); }
-        if (job.control.signal.aborted) { try { model.release(); } catch { /* gone */ } throw aborted(job.control.signal); }
-        Object.assign(job, { model, tok, eos: tok.eos ?? tok.id('<|im_end|>'), base: await model.snapshot() });
-        return job;
+        try {
+          if (job.control.signal.aborted) throw aborted(job.control.signal);
+          if (projector) {
+            let pg;
+            try { pg = await env.gguf.open(pfile); } catch { throw fail('provider-unavailable', 'pictures'); }
+            try { job.vision = await V.load(pg, { device: model.device, signal: job.control.signal, ...(env.kernels && { kernels: env.kernels }) }); }
+            catch (e) { if (job.control.signal.aborted) throw e; throw fail('provider-unavailable', e?.reason === 'model' ? 'pictures' : ENGINE[e?.reason] || 'engine'); }
+            if (job.control.signal.aborted) throw aborted(job.control.signal);
+          }
+          Object.assign(job, { model, tok, eos: tok.eos ?? tok.id('<|im_end|>'), base: await model.snapshot() });
+          return job;
+        } catch (e) {
+          // A failed initialization never becomes loaded: unload() cannot recover its allocations later.
+          try { job.vision?.release(); } catch { /* gone */ }
+          try { model.release(); } catch { /* gone */ }
+          throw e;
+        }
       })();
       job.ready.catch(() => { if (loaded === job) loaded = null; });
       loaded = job;
@@ -127,7 +151,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
     // ---- ops ------------------------------------------------------------------------------------------------------------
     // The model a download takes: one with that tier, else one already here (ready, then partial), else the ladder's pick.
     const pick = async (tier) => {
-      const all = (await env.store.list()).filter((m) => m.state !== 'stale');
+      const all = (await env.store.list()).filter((m) => m.state !== 'stale' && !m.role);
       if (tier) { const m = all.find((x) => x.tier === tier); return m ? { id: m.id } : { reason: 'assets' }; }
       const here = all.find((m) => m.state === 'ready') || all.find((m) => m.state === 'partial');
       if (here) return { id: here.id };
@@ -147,7 +171,32 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       const stock = all.filter((m) => m.stock).sort((a, b) => a.tier - b.tier)[0];
       return stock ? { id: stock.id } : { reason: 'assets' };
     };
+    // The picture download: the projector, then its language model, one progress over both.
+    const pictureFiles = async () => {
+      const all = (await env.store.list()).filter((m) => m.state !== 'stale');
+      const lm = all.find((m) => m.role === 'pictures'), proj = lm && all.find((m) => m.role === 'projector' && m.id === lm.projector);
+      return lm && proj ? [proj, lm] : null;
+    };
+    const pictures = async (m, signal) => {
+      const files = await pictureFiles();
+      if (!files) return { state: 'unavailable', reason: 'assets' };
+      if (!env.gpu()) return { state: 'unavailable', reason: 'webgpu' };
+      const total = files.reduce((n, f) => n + f.size, 0);
+      let done = 0;
+      try {
+        for (const f of files) {
+          if (signal.aborted) return { state: 'download' };
+          await env.store.download(f.id, { signal, onProgress: (loaded) => post({ id: m.id, type: 'progress', loaded: (done + loaded * f.size) / total }) });
+          done += f.size;
+        }
+        return { state: 'ready', model: files[1].id };
+      } catch (e) {
+        if (signal.aborted || e?.reason === 'removed' || e?.reason === 'aborted') return { state: 'download' };
+        return { state: 'download', reason: e?.reason === 'quota' ? 'quota' : 'network' };
+      }
+    };
     const prepare = async (m, signal) => {
+      if (m.part === 'pictures') return pictures(m, signal);
       const p = await pick(Number.isSafeInteger(m.tier) && m.tier > 0 ? m.tier : 0);
       if (signal.aborted) return { state: 'download' };
       if (!p.id) return { state: 'unavailable', reason: p.reason };
@@ -160,15 +209,60 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         return { state: 'download', model: p.id, reason: e?.reason === 'quota' ? 'quota' : 'network' };
       }
     };
+    // The pictures' pixels, each { width, height, data, tokens } (the encoder's count for its resized size).
+    const pixels = async (job, images, signal) => {
+      const out = [];
+      for (const image of images) {
+        if (signal.aborted) throw aborted(signal);
+        let img;
+        try { img = await env.decode(image); } catch { throw fail('request-rejected', 'unsupported'); }
+        if (signal.aborted) throw aborted(signal);
+        let size;
+        try { size = job.vision.prepare(img); } catch { throw fail('request-rejected', 'unsupported'); }
+        out.push({ ...img, tokens: size.tokens });
+      }
+      return out;
+    };
+    // parts after the system turn → ids, with a row of placeholders for each { image: i } part, and where each sits.
+    const feed = (job, parts, pictures) => {
+      const ids = [], slots = [];
+      let text = [];
+      const flush = () => { if (text.length) ids.push(...encode(job, text)); text = []; };
+      for (const p of parts) {
+        if (p?.image === undefined) { text.push(p); continue; }
+        const pic = Number.isSafeInteger(p.image) ? pictures[p.image] : undefined;
+        if (!pic || Object.keys(p).length !== 1) throw fail('request-rejected', 'unsupported');
+        flush();
+        slots.push({ at: ids.length, pic });
+        for (let i = 0; i < pic.tokens; i++) ids.push(0);
+      }
+      flush();
+      return { rest: Uint32Array.from(ids), slots };
+    };
     const run = async (m, signal) => {
       return queued(async () => {
-        const job = await wait(load(m.model), signal);
+        const images = Array.isArray(m.images) ? m.images : [];
+        if (images.length && typeof m.projector !== 'string') throw fail('request-rejected', 'unsupported');
+        if (images.length && typeof env.decode !== 'function') throw fail('provider-unavailable', 'engine');
+        const job = await wait(load(m.model, images.length ? m.projector : null), signal);
         const { model, tok } = job;
-        const head = encode(job, m.parts.slice(0, m.stable)), rest = encode(job, m.parts.slice(m.stable));
+        const pictures = images.length ? await pixels(job, images, signal) : [];
+        const head = encode(job, m.parts.slice(0, m.stable)), { rest, slots } = feed(job, m.parts.slice(m.stable), pictures);
         const input = head.length + rest.length, room = Math.min(model.context || LIMIT.context, LIMIT.context);
         if (input + m.maxTokens > room) throw fail('request-rejected', 'context', { tokens: input, context: room });
         await prefix(job, head, signal);
-        if (rest.length) await model.prefill(rest, { signal });
+        // Each picture encoded on the engine's device, fed in place of its placeholders, and its buffer freed at once.
+        const encoded = [];
+        try {
+          for (const s of slots) {
+            let r;
+            try { r = await job.vision.encode(s.pic, { signal }); } catch (e) { if (signal.aborted) throw aborted(signal); throw fail('provider-unavailable', ENGINE[e?.reason] === 'assets' ? 'pictures' : ENGINE[e?.reason] || 'engine'); }
+            encoded.push(r);
+            if (r.tokens !== s.pic.tokens) throw fail('provider-unavailable', 'engine');
+            s.pic.data = null;
+          }
+          if (rest.length) await model.prefill(rest, { signal, ...(slots.length && { embeds: slots.map((s, i) => ({ at: s.at, tokens: encoded[i].tokens, buffer: encoded[i].buffer })) }) });
+        } finally { for (const r of encoded) { try { r.drop?.(); } catch { /* gone */ } } }
         const grammar = m.schema ? matcher(job, m.schema) : null;
         const sampler = { ...SAMPLER, ...m.sampler };
         const dec = tok.decoder();
@@ -197,7 +291,15 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         return { ok: true };
       }, signal);
     };
-    const remove = async () => {
+    const remove = async (m) => {
+      if (m?.part === 'pictures') {
+        for (const o of ops.values()) if (o.part === 'pictures' && o.kind !== 'remove') o.control.abort(new DOMException('Removed', 'AbortError'));
+        return queued(async () => {
+          if (loaded?.projector) await unload();
+          for (const x of await env.store.list()) if (x.role) await env.store.remove(x.id);
+          return { state: 'download' };
+        });
+      }
       for (const o of ops.values()) if (o.kind === 'prepare') o.control.abort(new DOMException('Removed', 'AbortError'));
       stopSequences();
       return queued(async () => {
@@ -217,7 +319,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       const op = Object.hasOwn(OPS, m.op) ? OPS[m.op] : null;
       if (!op || ops.has(m.id) || m.id === undefined) return post({ id: m.id, type: 'error', error: { code: 'request' } });
       const control = new AbortController();
-      ops.set(m.id, { control, kind: m.op });
+      ops.set(m.id, { control, kind: m.op, ...((m.part === 'pictures' || (m.op === 'run' && Array.isArray(m.images) && m.images.length)) && { part: 'pictures' }) });
       quiet();
       return Promise.resolve().then(() => op(m, control.signal)).then(
         (result) => post({ id: m.id, type: 'done', result }),
@@ -236,10 +338,31 @@ if (typeof module !== 'undefined') module.exports = GZ_AI_LOCAL_HOST;
 else if (typeof WorkerGlobalScope !== 'undefined' && globalThis instanceof WorkerGlobalScope) {
   // In its Worker: the store, the GGUF reader and the tokenizer, then what the engine needs and the engine, grammar and
   // ladder, each optional until it ships.
-  importScripts('store.js', 'gguf.js', 'tokenizer.js');
-  for (const f of ['quant.js', 'reference.js', 'engine.js', 'grammar.js', 'ladder.js']) { try { importScripts(f); } catch { /* not shipped yet */ } }
+  importScripts('../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js');
+  for (const f of ['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'grammar.js', 'ladder.js']) { try { importScripts(f); } catch { /* not shipped yet */ } }
   const g = (name) => (typeof globalThis[name] !== 'undefined' ? globalThis[name] : null);
+  // Bound decompression from the header before calling the browser, as the document reader does. A compressed-byte
+  // limit alone does not bound pixels. Then draw at most MAX pixels, with a side limit even for very thin pictures.
+  // createImageBitmap reads a GIF's first frame and turns a JPEG upright; the encoder resizes again for its own window.
+  const MAX = 4096 * 4096, SIDE = 16384;
+  const bounded = (w, h) => Number.isSafeInteger(w) && Number.isSafeInteger(h) && w > 0 && h > 0 && w * h <= GZ_DOCTEXT.READ.pixels;
+  const decode = async ({ mime, data }) => {
+    const bin = atob(data), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const size = GZ_DOCTEXT.imageSize(bytes);
+    if (!size || !bounded(size.w, size.h)) throw new Error('unsupported picture dimensions');
+    const bmp = await createImageBitmap(new Blob([bytes], { type: mime }));
+    try {
+      if (!bounded(bmp.width, bmp.height)) throw new Error('unsupported picture dimensions');
+      const k = Math.min(1, Math.sqrt(MAX / (bmp.width * bmp.height)), SIDE / bmp.width, SIDE / bmp.height);
+      const width = Math.max(1, Math.floor(bmp.width * k)), height = Math.max(1, Math.floor(bmp.height * k));
+      const ctx = new OffscreenCanvas(width, height).getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(bmp, 0, 0, width, height);
+      return { width, height, data: ctx.getImageData(0, 0, width, height).data, channels: 4 };
+    } finally { bmp.close(); }
+  };
   const host = GZ_AI_LOCAL_HOST.create({ store: GZ_AI_STORE, gguf: GZ_AI_GGUF, tokenizer: GZ_AI_TOKENIZER, engine: () => g('GZ_AI_ENGINE'),
+    vision: () => g('GZ_AI_VISION'), decode, kernels: new URL('kernels/', location.href).href,
     grammar: () => g('GZ_AI_GRAMMAR'), ladder: () => g('GZ_AI_LADDER'), gpu: () => globalThis.navigator?.gpu || null, post: (m) => postMessage(m),
     bench: () => fetch(new URL('kernels/bench.wgsl', location.href)).then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status))))) });
   addEventListener('message', (e) => host.handle(e.data));

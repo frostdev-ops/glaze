@@ -960,3 +960,18 @@ test('Glaze\'s model in the picker needs no model id; a download that stopped sa
   assert.equal(E.localText({ state: 'unavailable', reason: 'browser' }, t, String), 'Not available in this browser');
   assert.equal(E.gb(1846238496, t), '1.8 GB');
 });
+
+test('a failed picture download keeps its failure reason beside its own Download button', async () => {
+  for (const reason of ['quota', 'network']) {
+    const local = async (m) => m.op === 'prepare'
+      ? { ok: true, state: 'download', reason }
+      : { ok: true, state: 'ready', size: 1100000000, pictures: { state: 'download', size: 1500000000 } };
+    const p = await open({ ai: { on: true }, providers: ['local'], local, conns: { local: { provider: 'local' } } });
+    await p.click(p.card('Glaze on-device AI'));
+    await p.click(p.button('Download', p.$('ai-local-pictures')));
+    assert.ok(p.sent.some((m) => m.op === 'prepare' && m.part === 'pictures'));
+    assert.match(text(p.$('ai-local-pictures')), reason === 'quota' ? /enough free space/ : /lost its connection/);
+    assert.ok(p.button('Download', p.$('ai-local-pictures')));
+    assert.equal(p.note().textContent, 'Ready · 1.1 GB', 'the text model remains ready');
+  }
+});

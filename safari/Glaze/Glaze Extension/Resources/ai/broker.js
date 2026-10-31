@@ -145,11 +145,12 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   // worker's one) and connection generation for LIMIT.listed, so a run asks for it once an hour, not every time.
   const listed = new WeakMap(); // env.vault → Map(`${id}|${generation}` → { at, list })
   const unlist = (env, id) => { for (const k of listed.get(env.vault)?.keys() || []) if (k.startsWith(`${id}|`)) listed.get(env.vault).delete(k); };
-  const catalog = async (env, use, signal, now = Date.now()) => {
+  // fresh: read it again whatever is kept (Glaze's own model for a task that may carry pictures, below).
+  const catalog = async (env, use, signal, now = Date.now(), fresh = false) => {
     if (!use.p.catalog) return null;
     if (!listed.has(env.vault)) listed.set(env.vault, new Map());
     const kept = listed.get(env.vault), k = `${use.id}|${use.generation || ''}`, was = kept.get(k);
-    if (was && now - was.at < LIMIT.listed) return was.list;
+    if (!fresh && was && now - was.at < LIMIT.listed) return was.list;
     const t = F().deadline(LIMIT.catalog), s = F().anySignal([signal, t.signal]);
     let list;
     try { list = await F().wait(() => use.p.catalog(use.cfg, { fetch: pinned(env, use), cache: cache(env), signal: s.signal }), s.signal); } catch { list = null; } finally { t.done(); s.done(); }
@@ -319,7 +320,9 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         if (typeof use.p.prepare === 'function') stopKeepAlive = keepAlive(m.id, control.signal);
         row.provider = shown(use);
         if (use.p.id === 'openai') row.model = use.cfg.model;
-        const list = await catalog(env, use, control.signal, now());
+        // Glaze's own picture download may finish in its host after Settings' prepare answered (four minutes), with no
+        // connection change: a task that may carry pictures reads its catalog again; others (the gray text) keep theirs.
+        const list = await catalog(env, use, control.signal, now(), use.p.id === 'local' && (task.caps.images === true || task.id === 'writer.feedback'));
         const chosen = M().select(use.cfg.model, list, { tools: !!task.tools, images: !!task.caps.images });
         const takes = use.p.id === 'openai' ? M().efforts(use.cfg.base, use.cfg.model, list?.models.find((x) => x.id === use.cfg.model)) : [];
         const cfg = { ...use.cfg, ...(chosen.caps.context && !use.cfg.context && { context: chosen.caps.context }), ...(chosen.caps.images !== undefined && use.cfg.images === undefined && { images: chosen.caps.images }) };
@@ -433,22 +436,27 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   //     downloaded and loaded; meanwhile env.say({ type: 'glaze:ai-config', event: 'progress', provider, loaded: 0..1 }).
   //     Not queued: a download takes minutes. Its one-time message channel holds the worker until the reply (the
   //     provider's four-minute deadline is below Chrome's five-minute limit). A crash still needs Settings' next 'test'.
+  //     Glaze's own model (provider 'local'): 'test' also says its picture download (pictures: { state, size, progress? });
+  //     'prepare' and 'delete' with part: 'pictures' fetch or remove that download only, its progress events with part.
   const local = (m, env) => {
     const p = typeof m.provider === 'string' && A().PROVIDERS.includes(m.provider) ? P().get(m.provider) : null;
     const cfg = p && typeof p.prepare === 'function' && p.config({});
-    if (!cfg) return Promise.resolve({ ok: false, error: 'setup' });
+    if (!cfg || (m.part !== undefined && (m.part !== 'pictures' || p.id !== 'local' || m.op === 'test'))) return Promise.resolve({ ok: false, error: 'setup' });
+    const part = m.part === 'pictures' ? { part: 'pictures' } : {};
     // Glaze's own model also says its size, tier and the tiers there are (Settings' card), and how far a download is.
     const n = (v) => Number.isSafeInteger(v) && v > 0;
     const done = (st) => ({ ok: true, state: ['ready', 'download', 'downloading', 'unavailable'].includes(st?.state) ? st.state : 'unavailable', ...(typeof st?.reason === 'string' && { reason: st.reason }),
       ...(n(st?.size) && { size: st.size }), ...(n(st?.tier) && { tier: st.tier }), ...(Number.isFinite(st?.progress) && { progress: Math.min(1, Math.max(0, st.progress)) }),
-      ...(Array.isArray(st?.tiers) && { tiers: st.tiers.filter((x) => n(x?.tier) && n(x?.size)).map((x) => ({ tier: x.tier, size: x.size })) }) });
+      ...(Array.isArray(st?.tiers) && { tiers: st.tiers.filter((x) => n(x?.tier) && n(x?.size)).map((x) => ({ tier: x.tier, size: x.size })) }),
+      ...(isObj(st?.pictures) && ['ready', 'download', 'downloading'].includes(st.pictures.state) && n(st.pictures.size) && { pictures: { state: st.pictures.state, size: st.pictures.size,
+        ...(Number.isFinite(st.pictures.progress) && { progress: Math.min(1, Math.max(0, st.pictures.progress)) }) } }) });
     const failed = () => ({ ok: true, state: 'unavailable', reason: 'failed' });
     // The kept connection's settings (Glaze's own model's tier), as a run would take them.
     const kept = async () => { const rec = env.vault ? (await stored(env).catch(() => ({})))[p.id] : null; const c = isObj(rec) && rec.provider === p.id && p.config((({ provider: _, ...r }) => r)(rec)); return c || cfg; };
     if (m.op === 'test') return kept().then((c) => p.status(c, {})).then(done, failed);
-    if (m.op === 'delete') return typeof p.remove === 'function' ? kept().then((c) => p.remove(c)).then(done, failed).finally(() => revoke(p.id, env)) : Promise.resolve({ ok: false, error: 'setup' });
-    // A model just downloaded may take more than the catalog kept from before said.
-    return kept().then((c) => p.prepare(c, { onProgress: (loaded) => { try { env.say?.({ type: 'glaze:ai-config', event: 'progress', provider: p.id, loaded }); } catch { /* no page listening */ } } })
+    if (m.op === 'delete') return typeof p.remove === 'function' ? kept().then((c) => p.remove(c, part)).then(done, failed).finally(() => revoke(p.id, env)) : Promise.resolve({ ok: false, error: 'setup' });
+    // A model just downloaded may take more than the catalog kept from before said (pictures, too).
+    return kept().then((c) => p.prepare(c, { ...part, onProgress: (loaded) => { try { env.say?.({ type: 'glaze:ai-config', event: 'progress', provider: p.id, ...part, loaded }); } catch { /* no page listening */ } } })
       .then(done, failed)).finally(() => { if (env.vault) listed.delete(env.vault); });
   };
   let turn = Promise.resolve();

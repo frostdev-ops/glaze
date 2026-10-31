@@ -153,6 +153,63 @@
       "quant": "Q8_0",
       "tier": 4,
       "stock": true
+    },
+    {
+      "id": "lfm3-vl-2b-q4_k_m",
+      "name": "LFM3 VL 2B Q4_K_M",
+      "repo": "LiquidAI/LFM3-VL-2B-GGUF",
+      "commit": "b36554cfd35854b06429900131730cd80f092cdb",
+      "file": "LFM3-VL-2B-Q4_K_M.gguf",
+      "url": "https://huggingface.co/LiquidAI/LFM3-VL-2B-GGUF/resolve/b36554cfd35854b06429900131730cd80f092cdb/LFM3-VL-2B-Q4_K_M.gguf",
+      "size": 1099627808,
+      "chunk": 67108864,
+      "sha256": [
+        "c4924d42cfe933372f46520239b930b4bb03e04df34be2637f0baa7ab6d615aa",
+        "c8ee683814554f889784ab28925a7b9cdcbe0609971362dd4fecf20b6c1961f9",
+        "a02beebc612222bd0bb277d864a988d466309809d91cc62da5d523eef734e4ea",
+        "a4e21eb996fc8ffa6e9a8ba47fb6c2c2fff318c4b8c13d548f2b9f13c12a9bf8",
+        "379ad5d0077ed66e984aa21e56feb0468c22c5f0f70c8f173968ad06ef0d02f3",
+        "68211a506d2f9a782080fc9f3ce87e086f16b41a3105abeefe1b417300bf542b",
+        "611e9c70d391e94567d574c7374b5be7139b5cb7dddb72299c308a636f48ee3e",
+        "50d60679364dd6a1f2ec94f08175c36243de088460cd3dda280770b2c0c3baea",
+        "43b6933074e5f25b65d6a5188fd7bdbc951de2e586d4c496aaf7c171c0c1f83a",
+        "9d9d48c0a039aa114ac20f5fe25884bd1c288dc917efc175402ab5d28977ace4",
+        "bc1700386fbd448ad61d8144233fcdca6bc4f7debc62dad8755da024221b402e",
+        "d4c6c48da788e6f7de1ae0344805fcd558883094ce5d7bc3f58883aafa9a5cd7",
+        "1517c7459cdd10628a3d07f4db07084e629967c9ae86c08d42b93d7aa2b15b57",
+        "1f6b7d5b0c59580a7e68f2f1f76acfd69ad7209154ee4daa0ef2132774ca41ed",
+        "0b2cfa92c24a41217c2a68cc03c660ce5799f22b44ab24a7893687c0cd1a4985",
+        "3fa3554d8b65a7add180e88b0c3bd775cb5ffb8eb65d518ffc8abee0a7a60ff8",
+        "339d6cd0248b43a5082a7045113eb5ba20619f6b253683afb218af61d2747525"
+      ],
+      "total": "56dac2e192ff0d9ab8507f4f1aeb4aed0463449bbbefaac79497f041c95f21eb",
+      "license": "lfm1.0",
+      "quant": "Q4_K_M",
+      "role": "pictures",
+      "projector": "mmproj-lfm3-vl-2b-f16",
+      "stock": true
+    },
+    {
+      "id": "mmproj-lfm3-vl-2b-f16",
+      "name": "LFM3 VL 2B projector F16",
+      "repo": "LiquidAI/LFM3-VL-2B-GGUF",
+      "commit": "b36554cfd35854b06429900131730cd80f092cdb",
+      "file": "mmproj-LFM3-VL-2B-F16.gguf",
+      "url": "https://huggingface.co/LiquidAI/LFM3-VL-2B-GGUF/resolve/b36554cfd35854b06429900131730cd80f092cdb/mmproj-LFM3-VL-2B-F16.gguf",
+      "size": 378996032,
+      "chunk": 67108864,
+      "sha256": [
+        "c643ddb665a7d4ece48755b8880d3ea8b46f26ab81ee0a5c4683eaeb653a6673",
+        "1e453d6c88defcacee38085a5a5b962e6f835de5b85dcde4206052a025ec5d34",
+        "9b7384e33db3eb7ef98d8e13e22f531aba4b9a8b2a8a2727835bb34d35844a34",
+        "f53da399118a9fefe2a6ea6f155c502943567b28eb53d73abaa7217e92315b77",
+        "5e128ae1301a8a58fb234deff4d739b045632283c8ac2cd5fe3705e7113ea61d",
+        "8368ed852472f700b5394ed7b3c57b4ed5b1826eca50cc0f66d8d64a2a48430b"
+      ],
+      "total": "1d8e6e58eefc093e09d6332f081516e1ddbd5b35cfca7f35463fb270db230b1e",
+      "license": "lfm1.0",
+      "quant": "F16",
+      "role": "projector"
     }
   ]
 }

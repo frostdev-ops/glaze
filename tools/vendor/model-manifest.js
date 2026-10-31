@@ -3,6 +3,8 @@
 // the whole-file hash must match it. --local hashes a copy already here instead of downloading, once its size matches.
 //   node tools/vendor/model-manifest.js --repo <owner/name> --commit <sha> --file <f.gguf> --tier <n>
 //     [--local <path>] [--id <id>] [--name <name>] [--quant <Q>] [--license <id>] [--stock] [--out ai/local/models.json]
+// The picture download's two files take --role instead of --tier: pictures (its language model, with --projector <id>
+// naming the other) or projector (the vision encoder and projector, mmproj).
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -14,15 +16,16 @@ const args = process.argv.slice(2);
 const flag = (name) => { const i = args.indexOf(name); return i < 0 ? null : args.splice(i, 2)[1]; };
 const bool = (name) => { const i = args.indexOf(name); return i < 0 ? false : (args.splice(i, 1), true); };
 const repo = flag('--repo'), commit = flag('--commit'), file = flag('--file'), local = flag('--local');
-const tier = Number(flag('--tier')), stock = bool('--stock');
+const tierArg = flag('--tier'), tier = tierArg === null ? NaN : Number(tierArg), stock = bool('--stock'), role = flag('--role'), projector = flag('--projector');
 const out = path.resolve(flag('--out') || path.join(__dirname, '../../extension/ai/local/models.json'));
 const base = file && path.basename(file).replace(/\.gguf$/i, '');
 const id = flag('--id') || (base && base.toLowerCase());
 const name = flag('--name') || (base && base.replace(/-/g, ' '));
 const quant = flag('--quant') || (base && base.split('-').pop());
 let license = flag('--license');
-if (!repo || !/^[0-9a-f]{40}$/.test(commit || '') || !file || !Number.isSafeInteger(tier) || args.length) {
-  console.error('usage: node scripts/model-manifest.js --repo <owner/name> --commit <40-hex sha> --file <f.gguf> --tier <n> [--local <path>] [--id] [--name] [--quant] [--license] [--stock] [--out]');
+const placed = role ? ['pictures', 'projector'].includes(role) && tierArg === null && (role === 'pictures') === !!projector : Number.isSafeInteger(tier) && !projector;
+if (!repo || !/^[0-9a-f]{40}$/.test(commit || '') || !file || !placed || args.length) {
+  console.error('usage: node tools/vendor/model-manifest.js --repo <owner/name> --commit <40-hex sha> --file <f.gguf> (--tier <n> | --role pictures --projector <id> | --role projector) [--local <path>] [--id] [--name] [--quant] [--license] [--stock] [--out]');
   process.exit(2);
 }
 
@@ -68,10 +71,12 @@ const api = async (u) => {
   const whole = total.digest('hex');
   if (oid && whole !== oid) throw new Error(`SHA-256 ${whole} is not HF's LFS oid ${oid}`);
 
-  const entry = { id, name, repo, commit, file, url, size, chunk: CHUNK, sha256: sums, total: whole, license, quant, tier, ...(stock && { stock: true }) };
+  const entry = { id, name, repo, commit, file, url, size, chunk: CHUNK, sha256: sums, total: whole, license, quant, ...(role ? { role, ...(projector && { projector }) } : { tier }), ...(stock && { stock: true }) };
   if (!S.valid(entry)) throw new Error(`the entry would not pass store.valid: ${JSON.stringify({ ...entry, sha256: sums.length })}`);
   const doc = fs.existsSync(out) ? JSON.parse(fs.readFileSync(out, 'utf8')) : { models: [] };
-  doc.models = [...doc.models.filter((m) => m.id !== id), entry].sort((a, b) => a.tier - b.tier || a.id.localeCompare(b.id));
+  // The tiers in order, then the picture download's files.
+  const rank = (m) => (m.role ? Infinity : m.tier);
+  doc.models = [...doc.models.filter((m) => m.id !== id), entry].sort((a, b) => (rank(a) === rank(b) ? a.id.localeCompare(b.id) : rank(a) - rank(b)));
   fs.writeFileSync(out, `${JSON.stringify(doc, null, 2)}\n`);
   console.log(`${id}: ${size} bytes, ${sums.length} chunks, sha256 ${whole}${oid ? ' (matches HF)' : ''} → ${path.relative(process.cwd(), out)}`);
 })().catch((e) => { console.error(e.message); process.exit(1); });

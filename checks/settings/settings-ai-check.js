@@ -225,10 +225,27 @@ async function pass(scheme) {
 
     // Glaze's own model's card in each state, at desktop width and at 320 px: not downloaded with its size, downloading
     // with its progress (as the worker reports it), ready (the store's chunk files written sparse into OPFS, as a finished
-    // download leaves them; nothing is fetched), and its size to use in Advanced. Delete then removes them.
+    // download leaves them; nothing is fetched), and its size to use in Advanced. Its picture download's row the same way:
+    // needing a download, downloading, ready, and its own Delete, which leaves the text model. Delete then removes them.
     await check('glaze', async () => {
       const card = page.locator('#ai-providers .ai-prov', { hasText: 'Glaze on-device AI' });
-      const note = page.locator('#ai-drawer .note');
+      const note = page.locator('#ai-drawer .line.own:not(#ai-local-pictures) .note');
+      const pics = page.locator('#ai-local-pictures'), picNote = page.locator('#ai-local-pictures .note');
+      // The store's files for models.json's entries `pick` chooses, written sparse as a finished download leaves them.
+      const place = (pick) => page.evaluate(async (pick) => {
+        const all = (await (await fetch('/ai/local/models.json')).json()).models.filter((x) => (pick === 'pictures' ? !!x.role : x.tier === 1));
+        const top = await (await navigator.storage.getDirectory()).getDirectoryHandle('glaze-models', { create: true });
+        let n = 0;
+        for (const m of all) {
+          const dir = await (await top.getDirectoryHandle(m.id, { create: true })).getDirectoryHandle(`${m.total.slice(0, 16)}-${m.chunk}`, { create: true });
+          for (let i = 0; i < m.sha256.length; i++, n++) {
+            const w = await (await dir.getFileHandle(String(i), { create: true })).createWritable();
+            await w.truncate(Math.min(m.chunk, m.size - i * m.chunk)); await w.close();
+          }
+          await dir.getFileHandle('ready', { create: true });
+        }
+        return n;
+      }, pick);
       const both = async (name) => {
         await shoot(`glaze-${name}`);
         const was = page.viewportSize();
@@ -237,8 +254,12 @@ async function pass(scheme) {
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= 320), `${name}: nothing wider than 320 px`);
         const fits = await page.locator('#ai-drawer').evaluate((d) => [...d.querySelectorAll('*')].every((e) => { const r = e.getBoundingClientRect(), o = d.getBoundingClientRect(); return !r.width || (r.left >= o.left - 0.5 && r.right <= o.right + 0.5); }));
         assert.ok(fits, `${name}: the drawer's parts stay inside it at 320 px`);
-        const name1 = await page.locator('#ai-drawer .line b').evaluate((b) => { const r = b.getBoundingClientRect(), h = parseFloat(getComputedStyle(b).lineHeight) || 20; return r.height < h * 1.6; });
-        assert.ok(name1, `${name}: the model's name keeps one line at 320 px`);
+        const name1 = await page.locator('#ai-drawer .line b').evaluateAll((all) => all.every((b) => { const r = b.getBoundingClientRect(), h = parseFloat(getComputedStyle(b).lineHeight) || 20; return r.height < h * 1.6; }));
+        assert.ok(name1, `${name}: each name keeps one line at 320 px`);
+        if (await pics.count()) {
+          const [a, b] = await page.locator('#ai-drawer .line.own > b').evaluateAll((all) => all.map((x) => x.getBoundingClientRect().left));
+          assert.ok(Math.abs(a - b) < 1, `${name}: the picture row's name lines up with the model's at 320 px`);
+        }
         await shoot(`glaze-${name}-320`);
         await page.setViewportSize(was);
         await pause(200);
@@ -248,34 +269,49 @@ async function pass(scheme) {
       await open();
       await card.click();
       await note.filter({ hasText: /^Needs a download · 1\.1 GB$/ }).waitFor();
-      assert.ok(await page.getByRole('button', { name: 'Download', exact: true }).isVisible());
+      await picNote.filter({ hasText: /^Needs a download · 1\.5 GB$/ }).waitFor();
+      assert.equal(await pics.locator('b').innerText(), 'Picture reading');
+      assert.equal(await page.getByRole('button', { name: 'Download', exact: true }).count(), 2, 'the model\'s Download and the picture row\'s');
       assert.equal(await page.getByRole('button', { name: 'Delete', exact: true }).count(), 0);
       await both('download');
 
       await (context.serviceWorkers()[0] || worker).evaluate(() => chrome.runtime.sendMessage({ type: 'glaze:ai-config', event: 'progress', provider: 'local', loaded: 0.42 }).catch(() => {}));
       await note.filter({ hasText: /^42% · 1\.1 GB$/ }).waitFor();
       assert.equal(await page.locator('#ai-drawer progress').evaluate((b) => b.value), 0.42);
+      await picNote.filter({ hasText: /^Needs a download · 1\.5 GB$/ }).waitFor();
       assert.equal(await card.locator('.pct').innerText(), '42%');
       await both('downloading');
 
-      const files = await page.evaluate(async () => {
-        const m = (await (await fetch('/ai/local/models.json')).json()).models.find((x) => x.tier === 1);
-        const top = await (await navigator.storage.getDirectory()).getDirectoryHandle('glaze-models', { create: true });
-        const dir = await (await top.getDirectoryHandle(m.id, { create: true })).getDirectoryHandle(`${m.total.slice(0, 16)}-${m.chunk}`, { create: true });
-        for (let i = 0; i < m.sha256.length; i++) {
-          const w = await (await dir.getFileHandle(String(i), { create: true })).createWritable();
-          await w.truncate(Math.min(m.chunk, m.size - i * m.chunk)); await w.close();
-        }
-        await dir.getFileHandle('ready', { create: true });
-        return m.sha256.length;
-      });
-      assert.ok(files > 1);
+      assert.ok(await place('text') > 1);
       await open();
       await card.click();
       await note.filter({ hasText: /^Ready · 1\.1 GB$/ }).waitFor();
       assert.ok(await card.locator('.st.ok').isVisible());
-      assert.ok(await page.getByRole('button', { name: 'Delete', exact: true }).isVisible());
+      assert.ok(await page.locator('#ai-drawer .line.own:not(#ai-local-pictures)').getByRole('button', { name: 'Delete', exact: true }).isVisible());
+      await picNote.filter({ hasText: /^Needs a download · 1\.5 GB$/ }).waitFor();
       await both('ready');
+
+      // The picture download: its progress (the worker's events carry part 'pictures'), then ready, then its own Delete.
+      await (context.serviceWorkers()[0] || worker).evaluate(() => chrome.runtime.sendMessage({ type: 'glaze:ai-config', event: 'progress', provider: 'local', part: 'pictures', loaded: 0.3 }).catch(() => {}));
+      await picNote.filter({ hasText: /^30% · 1\.5 GB$/ }).waitFor();
+      await note.filter({ hasText: /^Ready · 1\.1 GB$/ }).waitFor();
+      assert.equal(await page.locator('#ai-drawer progress').count(), 1);
+      assert.equal(await page.locator('#ai-drawer progress').evaluate((b) => [b.value, b.getAttribute('aria-label')].join(' ')), '0.3 Picture reading');
+      assert.equal(await card.locator('.pct').count(), 0, 'the model itself is not downloading');
+      assert.ok(await pics.getByRole('button', { name: 'Delete', exact: true }).isVisible());
+      await both('pictures-downloading');
+
+      assert.ok(await place('pictures') > 1);
+      await open();
+      await card.click();
+      await picNote.filter({ hasText: /^Ready · 1\.5 GB$/ }).waitFor();
+      assert.equal(await page.getByRole('button', { name: 'Delete', exact: true }).count(), 2);
+      assert.equal(await page.getByRole('button', { name: 'Download', exact: true }).count(), 0);
+      await both('pictures-ready');
+      await pics.getByRole('button', { name: 'Delete', exact: true }).click();
+      await picNote.filter({ hasText: /^Needs a download · 1\.5 GB$/ }).waitFor();
+      await note.filter({ hasText: /^Ready · 1\.1 GB$/ }).waitFor();
+      assert.deepEqual(await page.evaluate(async () => { const top = await (await navigator.storage.getDirectory()).getDirectoryHandle('glaze-models'); const out = []; for await (const [k, h] of top.entries()) if (h.kind === 'directory') out.push(k); return out.sort(); }), ['lfm3-1.7b-q4_k_m']);
 
       await page.locator('label', { hasText: 'Advanced' }).click();
       const tier = page.locator('#ai-local-tier');
@@ -287,6 +323,7 @@ async function pass(scheme) {
 
       await page.getByRole('button', { name: 'Delete', exact: true }).click();
       await note.filter({ hasText: /^Needs a download/ }).waitFor();
+      await picNote.filter({ hasText: /^Needs a download · 1\.5 GB$/ }).waitFor();
       assert.equal(await page.evaluate(async () => { try { await (await (await navigator.storage.getDirectory()).getDirectoryHandle('glaze-models')).getDirectoryHandle('lfm3-1.7b-q4_k_m'); return 'kept'; } catch (e) { return e.name; } }), 'NotFoundError');
       await card.click();
     });
