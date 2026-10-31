@@ -250,8 +250,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (t?.dir === 'down' && t.tag === tag) {
         if (!t.done) throw new Fail('pending');
         const bytes = await unstaged(slot, size);
-        await dropMove(slot);
         if (bytes) return bytes;
+        await dropMove(slot);
       } else if (t) await dropMove(slot);
       await setMove(slot, { dir: 'down', tag, id: f.id, rev: f.headRevisionId, size, max, at: 0, step: PIECE, owner, since: now(), done: false });
       throw new Fail('pending');
@@ -323,21 +323,29 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
             }
             throw e;
           }
-          await replay(t.owner, folder);
+          const result = await replay(t.owner, folder);
           const left = await moveOf(slot);
-          if (left?.tag === t.tag && (left.file || left.done)) await dropMove(slot); // finished, and its owner had no use for it
+          if (left?.tag === t.tag && (left.file || (left.done && result !== 'pending'))) await dropMove(slot);
         }
       } finally { stop?.(); }
     };
     // A transfer's owner again, as the run met it: a document (by its tag, with the copy and file a change named), or one of
     // background/drive-store.js's.
     const replay = async (owner, folder) => {
+      let result;
       if (owner?.doc) {
         const hint = { folder };
         if (owner.R) hint.R = await meta(owner.R);
         if (owner.E) hint.E = await meta(owner.E);
-        await one(owner.key || null, owner.doc, hint);
-      } else if (owner && more?.replay) await more.replay(owner, hooks(folder));
+        result = await one(owner.key || null, owner.doc, hint);
+      } else if (owner && more?.replay) result = await more.replay(owner, hooks(folder));
+      // A document may need both its JSON and its file: keep each completed download until it has taken both.
+      const same = (t) => owner?.doc ? t.owner?.doc === owner.doc : owner?.rec ? t.owner?.rec === owner.rec : false;
+      const held = Object.entries(await moves()).filter(([, t]) => same(t) && t.dir === 'down');
+      if (result !== 'pending' || !held.some(([, t]) => !t.done)) for (const [slot, t] of held) {
+        if (t.done) await dropMove(slot);
+      }
+      return result;
     };
 
     // ---- the documents here

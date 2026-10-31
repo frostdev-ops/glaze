@@ -478,7 +478,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         }
       } catch (e) {
         // On its way in the run's last step (documents/drive-sync.js transfers), which hands it back here (replay).
-        if (e?.why === 'pending') return;
+        if (e?.why === 'pending') return 'pending';
         if (e?.why === 'bad' || e?.why === 'size' || e?.why === 'denied') { console.warn('Sync to Google Drive: passed over a record', h, e.why); return; }
         throw e;
       }
