@@ -282,10 +282,13 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       }
       // One owed a meeting (due) gives way to this push, which keeps what meetings named for it.
       if (t?.due) owner = { ...owner, ...(t.owner?.R && !owner?.R && { R: t.owner.R }), ...(t.owner?.E && !owner?.E && { E: t.owner.E }) };
-      if (t) await dropMove(slot);
+      // An inline push leaves that meeting for the run's last step; only another staged push takes it over.
+      if (t && !t.due) await dropMove(slot);
       const m = await make();
       if (!m) return null;
       if (m.bytes.length <= BIG || !await usable()) return { file: await send(m, m.bytes), info: m.info ?? null };
+      // Keep the owed owner until setMove replaces it, including a stop before the new bytes have been staged.
+      if (t?.due) await unstage(slot);
       await setMove(slot, { dir: 'up', tag, aim: target === undefined ? m.id ?? null : target ?? null, size: m.bytes.length, b: await bytesSum(m.bytes), id: m.id ?? null, rev: m.rev ?? null,
         sum: m.sum ?? null, meta: m.meta, create: m.create, mime: m.mime, info: m.info ?? null, owner, since: now(), session: null, file: null, commit });
       await staged(slot, m.bytes);
@@ -434,13 +437,11 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (!staging || !stage) return;
       const named = new Set(Object.keys(await moves()).map((s) => `${s}@`));
       if (!named.size) return;
-      // The stage no longer opens (an earlier worker's could): each transfer let go, its owner going again in one go.
-      if (!await usable()) {
-        for (const [slot, t] of Object.entries(await moves())) { await setMove(slot, null); await replay(t.owner, folder); }
-        return;
+      const open = await usable();
+      if (open) {
+        const loose = (await stage.keys('')).filter((k) => !named.has(k.slice(0, k.lastIndexOf('@') + 1)));
+        if (loose.length) await stage.write([], loose);
       }
-      const loose = (await stage.keys('')).filter((k) => !named.has(k.slice(0, k.lastIndexOf('@') + 1)));
-      if (loose.length) await stage.write([], loose);
       // Its owner met again, with what meetings named meanwhile; the transfer let go only once that meeting has run, so a
       // worker stopped first (or a run failing there) meets it again in the next run's last step.
       const meet = async (slot, t) => {
@@ -457,13 +458,14 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
             .sort(([, a], [, b]) => (!!a.done - !!b.done) || (a.since || 0) - (b.since || 0))[0] || [];
           if (!slot) return;
           tries.set(slot, (tries.get(slot) || 0) + 1);
-          if (t.due) { await meet(slot, t); continue; }
-          if (t.dir === 'up' && t.owner?.doc) {
-            const key = t.owner.key || (await docOf(t.owner.doc))?.key, rec = key ? await env.papers.get(key) : null;
-            // Trashed or deleted here since it was staged: let go, and the document, no longer held, says so in Drive.
-            if (!rec || P().trashed(rec)) { await meet(slot, t); continue; }
-          }
           try {
+            // Without IndexedDB the owner goes again in one go, still owed until its replay succeeds.
+            if (!open || t.due) { await meet(slot, t); continue; }
+            if (t.dir === 'up' && t.owner?.doc) {
+              const key = t.owner.key || (await docOf(t.owner.doc))?.key, rec = key ? await env.papers.get(key) : null;
+              // Trashed or deleted here since it was staged: let go, and the document, no longer held, says so in Drive.
+              if (!rec || P().trashed(rec)) { await meet(slot, t); continue; }
+            }
             // A download its owner no longer asks for (a picture whose note went, a copy replaced since) is let go before any
             // of its bytes come: its owner, met again, waits on this transfer ('pending') or no longer does.
             if (t.dir === 'down' && !t.done) {
@@ -475,7 +477,12 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
             if (t.dir === 'up' && !t.file) {
               const a = await aimed(t, folder);
               if (a.as === 'gone') {
-                if (a.R) await patchMove(slot, { owner: { ...t.owner, R: a.R.id } });
+                if (a.R) {
+                  // Search may show this upload's own landed file before the lower one already named by a change.
+                  const named = t.owner?.R && t.owner.R < a.R.id ? await meta(t.owner.R) : null;
+                  const R = named && !named.removed && named.trashed === false ? named : a.R;
+                  await patchMove(slot, { owner: { ...t.owner, R: R.id } });
+                }
                 await meet(slot, (await moveOf(slot)) || t);
                 continue;
               }
