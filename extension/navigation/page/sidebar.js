@@ -300,10 +300,11 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
 
   // ---- Ultra's Details & Actions, held -------------------------------------------------------------------------------
-  // A course outline's column fills its Details & Actions late (1.5–2.3 s on the owner's school): Course notes and the dock
-  // under it moved down by its height as it filled. Until Ultra has drawn it, it is held at least as tall as it was on this
-  // course last time (storage.local detailsHeight:<origin>; on a course not seen yet, the least any course here took), and
-  // This page shows from the start. The browser keeps the box (min-height), so nothing waits on a frame; the hold goes once
+  // A course outline's column fills its Details & Actions late (on a route into Content, Ultra adds it empty about 140 ms
+  // in and fills it about 330 ms later): Course notes and the dock under it moved down by its height as it filled. From
+  // when Ultra adds it until it has drawn it, it is held at least as tall as it was on this course last time (storage.local
+  // detailsHeight:<origin>; on a course not seen yet, the least any course here took), and This page shows from the start.
+  // That is before the page settles and the sidebar takes the column (place: early), since the fill is what settles it. The browser keeps the box (min-height), so nothing waits on a frame; the hold goes once
   // its own content is as tall. Nothing is guessed without a measurement. As with the panels absorbed below, Ultra's node
   // keeps its attributes and inline style: sidebar.css holds it (html[data-gz-sb-held], --gz-sb-held).
   const HELD = `detailsHeight:${location.origin}`;
@@ -352,10 +353,17 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     // What it took this visit, for the next (a page left before Ultra finished keeps less: never too much room).
     rememberHeight(d);
   };
-  const hold = () => {
-    const el = ultra && host && !host.own && has(host.el, 'outline-actions') ? [...host.el.children].find((x) => has(x, 'js-details-and-actions')) || null : null;
+  // n: the page's column (A.native()). early: the page hasn't settled, so the column may still be the last course's: a
+  // block already drawn there, or one Ultra marks as another course's, is left for after it settles.
+  const hold = (n, early = false) => {
+    const el = ultra && n && has(n.el, 'outline-actions') ? [...n.el.children].find((x) => has(x, 'js-details-and-actions')) || null : null;
     const cid = A.courseId();
     if (held && held.el === el && held.cid === cid) { if (held.paused) held.resume(); else held.check(); return; }
+    if (early) {
+      if (!el || !cid) return;
+      const of = viewOf(n).cid;
+      if ((of && of !== cid) || (filled(el) && el.getBoundingClientRect().height > 0)) return;
+    }
     unhold();
     if (!el || !cid || typeof ResizeObserver !== 'function') return;
     const known = Object.values(heights);
@@ -498,8 +506,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // The column dressed: a native one keeps its own content where it is, with Glaze's header first and the widgets last;
   // without one (or one Glaze doesn't recognize, left as it is), Glaze's own beside the content.
   const ATTRS = ['role', 'aria-labelledby', 'aria-modal', 'aria-label'];
-  const detach = () => {
-    unhold();
+  // keep: the column is being taken again (attach), and the hold on its Details & Actions stays for hold() to keep or end.
+  const detach = (keep = false) => {
+    if (!keep) unhold();
     if (!host) return;
     lift(false);
     watchNativeScroll(null);
@@ -519,7 +528,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
   const attach = (n) => {
     closeDrawer(false);
-    detach();
+    detach(true);
     if (n) {
       host = { el: n.el, page: n.page, own: false, kind: n.kind };
       kept = ATTRS.map((k) => [k, n.el.getAttribute(k)]);
@@ -1074,7 +1083,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (!enabled()) { teardown(); return; }
     const moved = fam !== family || cid !== course;
     const n = A.native();
-    if (moved && !settled(fam, cid, n)) return;
+    if (moved && !settled(fam, cid, n)) { hold(n, true); return; }
     if (moved) { family = fam; course = cid; gen++; }
     nativeView = viewOf(n);
     if (!host || !host.el.isConnected || (n ? host.el !== n.el || host.page !== n.page : !host.own)) attach(n);
@@ -1087,7 +1096,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       // Ultra's late blocks stay before the dock visually through flex order, without reinserting live media.
     }
     host.fallback = !n && !!A.standalone?.();
-    hold();
+    hold(n);
     const first = !active;
     active = true;
     if (first) emit('change');
