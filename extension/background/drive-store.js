@@ -91,6 +91,9 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       if (cat === 'noteFiles') return obj(v) && ['image', 'file'].includes(v.kind) && typeof v.data === 'string' && L.notes().ID.test(v.note || '') ? { kind: v.kind, name: String(v.name || ''), type: String(v.type || ''), note: v.note, data: v.data } : undefined;
       if (cat === 'settings') {
         if (v === undefined || canon(v).length > 1 << 20) return undefined;
+        // The palette's name: checked alone, without the student's own palettes (presets, a record of its own) and colours
+        // beside it, it would become a built-in one. Settings check it against those as they load.
+        if (key === 'preset') return v === null || (typeof v === 'string' && v.length <= 40 && v.trim() === v && !!v) ? v : undefined;
         const d = L.sanitize()({});
         return Object.hasOwn(d, key) ? L.sanitize()({ [key]: v })[key] : v;
       }
