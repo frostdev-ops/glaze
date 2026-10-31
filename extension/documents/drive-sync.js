@@ -591,7 +591,10 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         // Past it, a new file is made, and the folder is listed once more a minute later for the first, should it show then.
         if (went) { const st = await state(); if (!st.again || st.again > now() + WAIT.again) await setState({ again: now() + WAIT.again }); }
       }
-      if (ex || onWay) {
+      // Its file already holds this content as Glaze wrote it, recorded by a push that stopped before its copy went (unsent):
+      // not sent again, only the copy.
+      const have = !!d?.unsent && !onWay && !!file && file === d.file && !!fh && fh === d.fh && d.fsum === sum;
+      if ((ex || onWay) && !have) {
         // A completed upload's cached answer cannot undo the ownership check above (edited or moved before replay).
         if (onWay?.file && file !== onWay.file.id) await dropMove(`u:${h}:file`);
         if (!file) await uploading(h);
@@ -605,8 +608,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
           file = r.file.id; fh = r.file.headRevisionId || null;
           await unwait(`up:${h}`);
           // Recorded before the copy goes: a push that stops between the two meets this file's revision next time, so an edit
-          // made outside Glaze meanwhile is told from Glaze's own.
-          await putDoc(h, { ...(d || { key, h, kind, json: null, jh: null, rsum: null, lsum: null, rev: -1, trashed: false }), file, fh, fsum: sum }, d);
+          // made outside Glaze meanwhile is told from Glaze's own, and sends the copy then (unsent), which may still name a file
+          // that is gone, though both sides otherwise read as agreed.
+          await putDoc(h, { ...(d || { key, h, kind, json: null, jh: null, rsum: null, lsum: null, rev: -1, trashed: false }), file, fh, fsum: sum, unsent: true }, d);
         }
       }
       // updated: Last edited where it was pushed, for a first meeting's later-edited rule (not in the sum: no change by itself).
@@ -676,7 +680,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       // own is weighed against what it sent, never taken as one not yet sent.
       if (d && !d.json && R && !R.removed) {
         const j = await readCopy(R, h, key, owner);
-        if (j.file && j.file === d.file) d = await putDoc(h, { ...d, json: R.id, jh: R.headRevisionId || null, rsum: d.fsum ?? j.sum, lsum: d.fsum ?? null, rev: -1 }, d);
+        if (j.file && j.file === d.file) d = await putDoc(h, { ...d, json: R.id, jh: R.headRevisionId || null, rsum: d.fsum ?? j.sum, lsum: d.fsum ?? null, rev: -1, unsent: false }, d);
         else { gone = d; await away([gone.file], h); await dropDoc(h, d); d = null; }
       }
       // This device's copy moved out of the Glaze folder (put away by the device whose copy it was, as above, or moved by
@@ -762,7 +766,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       const sent = R && !R.removed && R.id === d.json ? await moveOf(`u:${h}:json`) : null;
       if (sent?.dir === 'up' && sent.file?.id === R.id && !!R.headRevisionId && sent.file.headRevisionId === R.headRevisionId && SUM.test(R.appProperties?.sum || '')
         && R.appProperties.sum !== d.rsum) {
-        d = await putDoc(h, { ...d, jh: R.headRevisionId, rsum: R.appProperties.sum, lsum: R.appProperties.sum, rev: Number(R.appProperties.rev) || 0 }, d);
+        d = await putDoc(h, { ...d, jh: R.headRevisionId, rsum: R.appProperties.sum, lsum: R.appProperties.sum, rev: Number(R.appProperties.rev) || 0, unsent: false }, d);
       }
       // Follow a same-content copy's new file before weighing Trash or deletion: the old kept file is no longer this
       // document's. Its change must not move the replacement into Trash, nor supply bytes for it. So too for a copy with new
@@ -826,7 +830,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
 
       // Content.
       const ldirty = await dirty(key, l, d), rdirty = R.appProperties?.sum !== d.rsum;
-      let force = !d.file;
+      let force = !d.file || !!d.unsent;
       if (d.file && !E && ldirty) E = await meta(d.file);
       if (E?.removed) { await env.papers.trash(key); await trashTo(d.json, true); await putDoc(h, { ...d, file: null, fh: null, trashed: true }, d); return; }
       if (E && E.headRevisionId && E.headRevisionId !== d.fh && (E.appProperties?.sum === d.fsum || rewritten(E)) && E.appProperties?.glaze === 'file'

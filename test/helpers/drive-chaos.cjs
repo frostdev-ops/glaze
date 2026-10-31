@@ -794,7 +794,7 @@ const KNOWN = {
     repro: [{ t: 'pdf', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2 }, { t: 'drive', k: 'outsidePdf', pick: 0, s: 3 }],
   },
   'copy-stop': {
-    fixed: false,
+    fixed: true,
     join: [0],
     about: 'a document restored from Trash whose file was deleted for good in Drive gets a new file, the worker stopping before its JSON copy names it: the link records the new file and both sides read as agreed, so the copy keeps naming the deleted file and no other device ever gets the document (seed 9700878, 2026-10-31)',
     skips: () => false,
