@@ -584,6 +584,56 @@ test('a lease request delayed across sign-out cannot authorize a stale visit', a
   assert.equal(Object.keys(local).some((k) => k.startsWith('ultraCopy:')), false, 'the delayed begin must not return a current lease');
 });
 
+test('a first lease delayed across Reset, site removal or switch-off cannot save an old visit', async (t) => {
+  for (const reason of ['reset', 'remove', 'switch']) await t.test(reason, async () => {
+    const local = { ultra: [] }, w = workerEnv({ store: { sync: { version: 2, enabled: true, enhance: { instant: true } }, local, session: {} } });
+    const from = { id: 'glaze', tab: { id: 3, url: `${ORIGIN}/ultra/grades` }, frameId: 0, url: `${ORIGIN}/ultra/grades` };
+    w.context.chrome.tabs.query = async () => [from.tab];
+    let deliver;
+    const p = site({ local, send: (m) => m.op === 'begin' ? new Promise((resolve) => { deliver = () => w.send(m, from).then(resolve); }) : w.send(m, from) });
+    p.sync(); p.answer('_900_1'); await settle();
+    p.fill('ultra-instant-grades.html'); await p.frame1();
+    assert.ok(deliver, 'the open tab has not delivered its first lease request');
+    assert.equal(w.store.session.ultraCopyEpochs, undefined, 'no lease has reached the worker yet');
+    if (reason === 'switch') {
+      await w.context.chrome.storage.sync.set({ enhance: { instant: false } }); await w.settle();
+      await w.context.chrome.storage.sync.set({ enhance: { instant: true } }); await w.settle();
+    } else {
+      await w.send({ type: 'glaze:sites', op: reason, origin: ORIGIN }, { id: 'glaze', tab: { id: 5 }, frameId: 0, url: 'chrome-extension://x/options.html' });
+    }
+    // A suspended tab may receive storage notifications only after its pending message is delivered.
+    await deliver(); await settle();
+    for (const f of p.idle.splice(0)) f();
+    for (const f of p.events.get('pagehide') || []) f();
+    await w.settle();
+    assert.equal(Object.keys(local).some((k) => k.startsWith('ultraCopy:')), false, 'the old visit cannot recreate cleared data');
+  });
+});
+
+test('removing an approved custom Ultra site fences its open page before deleting the approval', async () => {
+  const origin = 'https://bb.school.test', local = { ultra: [origin] };
+  const w = workerEnv({ store: { sync: { version: 2, enabled: true }, local, session: {} } });
+  w.context.chrome.tabs.query = async () => [{ id: 3, url: `${origin}/ultra/grades` }];
+  await w.send({ type: 'glaze:sites', op: 'remove', origin }, { id: 'glaze', tab: { id: 5 }, frameId: 0, url: 'chrome-extension://x/options.html' });
+  assert.deepEqual(local.ultra, []);
+  assert.equal(local[`ultraCopyFence:${origin}`]?.retire, true, 'the first lease may still be in flight');
+});
+
+test('unused Ultra purges add no fences for Canvas or an unapproved /ultra page', async (t) => {
+  for (const reason of ['reset', 'remove', 'switch']) await t.test(reason, async () => {
+    const local = { canvas: ['https://canvas.school.test/*'] };
+    const w = workerEnv({ store: { sync: { version: 2, enabled: true }, local, session: {} } });
+    w.context.chrome.tabs.query = async () => [{ id: 3, url: 'https://canvas.school.test/courses/1' }, { id: 4, url: 'https://unapproved.test/ultra/grades' }];
+    if (reason === 'switch') {
+      await w.context.chrome.storage.sync.set({ enhance: { instant: false } }); await w.settle();
+    } else {
+      await w.send({ type: 'glaze:sites', op: reason, origin: 'https://canvas.school.test' }, { id: 'glaze', tab: { id: 5 }, frameId: 0, url: 'chrome-extension://x/options.html' });
+    }
+    assert.equal(Object.keys(local).some((k) => k.startsWith('ultraCopyFence')), false);
+    assert.equal(w.store.session.ultraCopyEpochs, undefined);
+  });
+});
+
 // ---- the worker ----
 test('the worker drops a site\'s copies on its sign-out, all of them with the switch off, and only for Ultra\'s own pages', async () => {
   const other = 'https://other.blackboard.com';
