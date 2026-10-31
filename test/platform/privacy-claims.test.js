@@ -176,3 +176,16 @@ test('Safari\'s token requests to oauth2.googleapis.com are disclosed in both pr
   assert.match(network, /`https:\/\/oauth2\.googleapis\.com`[^.]*Safari[^.]*access tokens/);
   assert.match(read('../docs/privacy.md'), /`oauth2\.googleapis\.com`[^)]*Safari[^)]*access tokens/);
 });
+
+// Another account's Connect forgets Sync's state only through Sync's binding check (documents/drive-sync.js runNow, set):
+// while Sync is off the worker's listener leaves it as it is (background/background.js), until Sync is turned on for that
+// account. The policy says when it goes, not that every Connect deletes it.
+test('Sync to Google Drive\'s storage disclosure says when another account deletes its state', () => {
+  const bg = read('background/background.js'), sync = read('documents/drive-sync.js');
+  assert.match(bg, /if \(!googleLib\(\)\.ON \|\| st\?\.off === true\) return;\n\s*\/\/ Reconnecting a different account/, 'the code: Sync off, another account\'s Connect leaves its state');
+  assert.match(sync, /if \(st\.account && st\.account !== who\) \{\s*await forget\(\);/, 'the code: a run under another account forgets it');
+  assert.match(sync, /changed = st\.account && st\.account !== who;\s*if \(changed\) await forget\(\);/, 'the code: turning it on for another account forgets it');
+  const stored = policy.slice(policy.indexOf('- **Google Drive** (off until you connect), unavailable'), policy.indexOf('- **Gradescope in To Do**'));
+  assert.doesNotMatch(stored, /Connecting another account deletes all of it/);
+  assert.match(stored, /Connecting another account while Sync is on, or turning Sync on for\s+another account, deletes all of it\./);
+});
