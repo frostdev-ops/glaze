@@ -36,6 +36,8 @@ class NavEl extends El {
   }
   matches(selector) {
     return selector.split(',').some((s) => {
+      if (s.includes(':empty') && this.childNodes.some((n) => n.tagName || n.textContent)) return false;
+      s = s.replace(/:empty/g, '');
       const excluded = [...s.matchAll(/:not\(([^)]+)\)/g)].map((m) => m[1]);
       const includes = [...s.matchAll(/\[([\w-]+)\*="([^"]*)"\]/g)];
       const simple = s.replace(/:not\([^)]+\)/g, '').replace(/\[([\w-]+)\*="[^"]*"\]/g, '[$1]').trim();
@@ -63,7 +65,11 @@ function setup({ path = '/ultra/course', store = new Map(), account = () => Prom
   document.querySelector = (s) => document.root.querySelector(s);
   document.querySelectorAll = (s) => document.root.querySelectorAll(s);
   document.getElementById = (id) => document.root.querySelector(`#${id}`);
-  document.createTreeWalker = (el) => { let next = true; return { nextNode: () => (next ? (next = false, { data: el.textContent }) : null) }; };
+  document.createTreeWalker = (el, _, filter) => {
+    const walk = (n) => n.tagName ? n.childNodes.flatMap(walk) : [{ data: n.textContent, parentElement: n.parentNode }];
+    const nodes = walk(el).filter((n) => !filter || filter.acceptNode(n) === 1);
+    return { nextNode: () => nodes.shift() || null };
+  };
   const paper = document.createElement('div'); paper.className = 'MuiPaper-root MuiDrawer-paper';
   const nav = document.createElement('nav'); nav.className = 'makeStylesnavigation-0-2-5';
   for (const [id, label] of [...ITEMS, ['profile', 'Alex Example'], ['#', 'Sign Out']]) { const a = document.createElement('a'); a.href = id === '#' ? '#' : `/ultra/${id}`; a.textContent = label; nav.append(a); }
@@ -242,6 +248,43 @@ test('what was kept is drawn only for this tab\'s same settings and window, from
   assert.throws(() => NAV.kept('{', at));
 });
 
+test('cached widget rooms survive the stylesheet rules that hide empty widget containers', async () => {
+  const h = setup();
+  await tick();
+  for (const selector of ['.wtop', '.dock']) {
+    const box = h.root.querySelector(selector);
+    box.append(h.document.createElement('div'));
+    box.lastElementChild.textContent = 'Private widget contents';
+    box.box = { left: 0, top: 0, width: 224, height: 80 };
+  }
+  h.events.pagehide();
+  const { m } = JSON.parse(h.store.get('gz-navbar'));
+  assert.match(m, /height:80px/);
+  const doc = { location: new URL(origin) }; doc.root = new El('html', doc);
+  const copy = upgrade(parse(`<body>${m}</body>`, doc));
+  assert.ok(!copy.textContent.includes('Private widget contents'), 'widget interiors stay out of the copy');
+  const hidden = [...read('navigation/page/navbar.css').matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .filter(([, , declarations]) => /\bdisplay\s*:\s*none\b/.test(declarations)).map(([, selector]) => selector.trim());
+  for (const selector of ['.wtop', '.dock']) {
+    const box = copy.querySelector(selector);
+    assert.equal(hidden.some((s) => box.matches(s)), false, `${selector} must reserve its measured height`);
+  }
+  const empty = copy.querySelector('.wbottom');
+  assert.equal(hidden.some((s) => empty.matches(s)), true, 'an originally empty container still stays out of layout');
+});
+
+test('private badge counts are absent from the generic copy, including tooltip metadata', async () => {
+  const h = setup();
+  const badge = h.document.createElement('span'); badge.className = 'MuiBadge-badge'; badge.textContent = '7319';
+  h.nav.querySelectorAll('a')[4].append(badge);
+  h.mutate(); h.ui.sync(); await tick();
+  assert.equal(h.item('grades').dataset.tip, 'Grades · 7319', 'the live tooltip has the native count');
+  h.events.pagehide();
+  const s = JSON.parse(h.store.get('gz-navbar'));
+  assert.ok(s.p.some((part) => part.includes('7319')), 'the count is held for account confirmation');
+  assert.ok(!s.m.includes('7319'), 'the unconfirmed copy contains no count in its text or attributes');
+});
+
 test('cached markup strips handlers regardless of their text and rejects alternate URL attributes', () => {
   const doc = { location: new URL(`${origin}/ultra/course`) };
   doc.root = new El('html', doc);
@@ -303,6 +346,24 @@ test('a late account result cannot remove a bar already taken over or resurrect 
     resolve(adopted ? '_7_1' : '_42_1'); await tick();
     assert.equal(h.host.isConnected, adopted);
   }
+});
+
+test('dropping a first-paint copy cancels its pending sheet delivery', () => {
+  const h = firstPage(() => new Promise(() => {}));
+  h.drop();
+  h.load();
+  assert.equal(h.host.hidden, true, 'a late sheet cannot reveal a discarded copy');
+});
+
+test('dropping a first-paint copy cancels its pending private-part delivery', async () => {
+  let resolve;
+  const h = firstPage(() => new Promise((r) => { resolve = r; }));
+  await tick();
+  const root = h.host.shadowRoot;
+  h.drop();
+  resolve('_42_1'); await tick();
+  assert.equal(root.querySelector('.account'), null, 'private markup is never parsed into a discarded copy');
+  assert.ok(root.querySelector('[data-p]'), 'its placeholder is left untouched');
 });
 
 test('nothing is kept once the account signs out, for an unknown account, or for another one', async () => {
