@@ -341,7 +341,6 @@ class Device {
       },
       backupFiles: BACKUP_FILES,
       console: { log: (...a) => dev.note('log', a), info: (...a) => dev.note('info', a), warn: (...a) => dev.note('warn', a), error: (...a) => dev.note('error', a), debug: () => {} },
-      TextDecoderClass: TextDecoder,
     };
     this.host = host;
     const ctx = vm.createContext({ URL, URLSearchParams, TextDecoder, Response, Headers, ReadableStream, WritableStream, TransformStream, AbortController, AbortSignal, atob, btoa, structuredClone, queueMicrotask, Event, EventTarget, DOMException });
@@ -515,6 +514,8 @@ const KNOWN = {
   'off-edits': {
     about: 'a document saved while Sync was off never goes up when the full run turning Sync on doesn\'t finish (offline, Drive busy, the worker stopping)',
     skips: () => false, // turning Sync on runs with no faults, online and uncut while masked
+    // And a document saved while its device had Sync off may differ (the full run can stop for the Glaze folder in the trash too).
+    ignore: (f, w) => ['convergence:docs', 'drive-state'].includes(f.inv) && [...w.offEdited].some((k) => f.msg.includes(k)),
     repro: [{ t: 'sync', d: 0, on: false, s: 1 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 2 }, { t: 'net', d: 0, offline: true, s: 3 }, { t: 'sync', d: 0, on: true, s: 4 }],
   },
   'stray-file': {
@@ -539,6 +540,17 @@ const KNOWN = {
     ignore: (f, w) => (f.inv === 'convergence:docs' || f.inv === 'drive-state') && w.devices.some((d) => Object.values(w.view(d).docs).some((v) => v.includes('(Drive copy)') && f.msg.includes(JSON.parse(v).key))),
     repro: [{ t: 'pdf', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2 }, { t: 'run', d: 1, how: 'run', s: 3 }, { t: 'pdf', k: 'edit', d: 0, pick: 0, pick2: 0, s: 4 },
       { t: 'pdf', k: 'edit', d: 1, pick: 0, pick2: 0, s: 5 }, { t: 'run', d: 1, how: 'run', s: 6 }, { t: 'run', d: 0, how: 'run', s: 7, after: '(Drive copy)' }],
+  },
+  'file-push-echo': {
+    about: 'a PDF or deck pushed again with its content unchanged (after a first meeting kept Drive\'s replacement aside) looks to the other device like a replacement made outside Glaze: each takes it and pushes again, uploading the whole file twice a run, forever',
+    skips: (op) => op.t === 'drive' && op.k === 'outsidePdf',
+    repro: [{ t: 'slides', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2 }, { t: 'run', d: 1, how: 'run', s: 3, after: 'writerPaper:' }, { t: 'drive', k: 'outsidePdf', pick: 0, s: 4 }, { t: 'sync', d: 0, on: false, s: 5 }],
+  },
+  'lagged-full': {
+    about: 'a full pass (a device joining, or Sync turned on) while Drive\'s search lags misses a document made just before: its token is taken first, so the document\'s change never comes either, and the device never gets it',
+    skips: (op) => op.t === 'lag',
+    join: [0],
+    repro: [{ t: 'lag', n: 3 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2 }, { t: 'account', d: 1, to: 'A', s: 3 }],
   },
   'join-stamp': {
     about: 'a first meeting\'s joined record goes up stamped with the time of the meeting, not of the latest change it holds, so it beats a later change another device hadn\'t pushed yet: a note\'s newer text lost to a rename, a task lost when a second device connects',
@@ -576,6 +588,7 @@ class World {
     this.notes = new Map(); // note id → [{ step, dev, kind, text, rec }]
     this.settings = new Map(); // Settings key → the last change made to it { v (JSON), step, dev }
     this.met = false; // a first meeting happened (an account switched, a device joining late)
+    this.offEdited = new Set(); // documents saved while their device had Sync off
     this.n = 0;
     for (const dev of this.devices) dev.observe = (name, c) => this.observe(dev, name, c);
   }
@@ -627,13 +640,14 @@ class World {
     const live = (kind) => this.papers(dev).filter((p) => (p.rec.kind || 'paper') === kind && !P.trashed(p.rec) && P.local(p.key));
     const note = (s) => this.trace(`#${step} ${dev.name} ${s}`);
     if (['paper', 'sheet', 'pdf', 'slides'].includes(op.t)) {
-      const kind = op.t, list = live(kind);
+      const kind = op.t, list = live(kind), off = !(this.get(dev, 'driveSync') || {}).on;
       const newKey = () => `doc:${uuidOf(r)}`;
       // A PDF's or deck's bytes, each holding its token (the file store keeps them by hash).
       const fileBytes = (tok) => { const s = FILE_TEXT[kind](tok); this.pdfTok.set(sha(s), tok); return new ctx.TextEncoder().encode(s); };
       if (op.k === 'new' || (op.k === 'edit' && !list.length)) {
         const key = newKey(), tok = this.token(), title = `${kind[0].toUpperCase()}${this.n}`;
         this.fresh.set(tok, { key, kind });
+        if (off) this.offEdited.add(key);
         note(`${kind}.new ${short(key)} ${tok}`);
         if (kind === 'paper') return save(key, { doc: docOf(tok), title, named: true });
         if (kind === 'sheet') {
@@ -647,6 +661,7 @@ class World {
       if (op.k === 'edit') {
         const p = at(list), tok = this.token();
         this.fresh.set(tok, { key: p.key, kind });
+        if (off) this.offEdited.add(p.key);
         note(`${kind}.edit ${short(p.key)} ${this.tokenOf(dev, p.rec)}→${tok}`);
         if (kind === 'paper') return save(p.key, { doc: docOf(tok) }, { base: p.rec.revision });
         if (kind === 'sheet') {

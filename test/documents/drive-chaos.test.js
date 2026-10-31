@@ -63,7 +63,7 @@ test('a worker stopped at any await of a first push (its write landed or not) st
 // Each known defect's fewest operations: todo while it stands, passing once it is fixed (then drop its mask and TODO seeds).
 for (const [name, k] of Object.entries(C.KNOWN)) {
   test(`known (${name}): ${k.about}`, { todo: FINDINGS }, async () => {
-    const r = await C.play(1, { list: k.repro, devices: 2, join: 'all' });
+    const r = await C.play(1, { list: k.repro, devices: 2, join: k.join || 'all' });
     assert.ok(r.ok, show(r));
   });
 }

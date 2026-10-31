@@ -40,13 +40,14 @@ const minimal = async (r) => {
     process.exitCode = r.ok ? 0 : 1;
     return;
   }
-  const t0 = Date.now(), tally = {}, failing = [], all = [];
+  const t0 = Date.now(), tally = {}, failing = [], all = [], soft = [];
   let n = 0;
   for (let seed = from; seed < from + count; seed++) {
     if (minutes && Date.now() - t0 > minutes * 60e3) break;
     const r = await C.play(seed, o);
     n++;
-    all.push({ seed, ok: r.ok, failures: r.failures });
+    all.push({ seed, ok: r.ok, failures: r.failures, soft: r.soft });
+    if (r.soft.length) soft.push(`seed ${seed}: ${r.soft[0]}`);
     if (r.ok) continue;
     const kinds = report(r);
     for (const k of kinds) tally[k] = (tally[k] || 0) + 1;
@@ -55,6 +56,8 @@ const minimal = async (r) => {
   }
   console.log(`\n${n} seeds × ${o.ops} operations × ${o.devices} devices in ${Math.round((Date.now() - t0) / 1000)} s; ${failing.length} failing${failing.length ? `: ${failing.join(' ')}` : ''}`);
   if (Object.keys(tally).length) console.log(`by invariant: ${JSON.stringify(tally)}`);
+  // Not failures: what last writer wins does by design that a student might still call a loss.
+  if (soft.length) console.log(`by design, ${soft.length} seeds:\n  ${soft.slice(0, 5).join('\n  ')}`);
   if (arg('json')) require('node:fs').writeFileSync(arg('json'), JSON.stringify({ o, results: all }, null, 1));
   process.exitCode = failing.length ? 1 : 0;
 })().catch((e) => { console.error(e); process.exitCode = 2; });
