@@ -739,6 +739,19 @@ const KNOWN = {
     devices: 3,
     repro: [{ t: 'paper', k: 'new', d: 1, pick: 0.07755651348270476, pick2: 0.061293802224099636, s: 1566503089 }, { t: 'run', d: 1, how: 'poke', s: 108594567 }, { t: 'paper', k: 'trash', d: 1, pick: 0.6084586172364652, pick2: 0.08099821559153497, s: 197002345 }, { t: 'run', d: 1, how: 'poke', s: 1861582629 }, { t: 'drive', k: 'removeDoc', pick: 0.7160781854763627, s: 238334440 }, { t: 'sync', d: 1, on: true, s: 1281916806 }, { t: 'run', d: 1, how: 'timers', s: 1768177510, inject: { at: 41, op: { t: 'paper', k: 'untrash', d: 1, pick: 0.9296708647161722, pick2: 0.22527607856318355, s: 227905390 } } }, { t: 'run', d: 1, how: 'timers', s: 1917384663 }, { t: 'sheet', k: 'edit', d: 2, pick: 0.8254707367159426, pick2: 0.9578920800704509, s: 593990753 }, { t: 'drive', k: 'untrashDoc', pick: 0.30130292498506606, s: 1568503414 }, { t: 'paper', k: 'edit', d: 2, pick: 0.533804090693593, pick2: 0.335794823942706, s: 535149113 }],
   },
+  'kept-first-meeting': {
+    fixed: true,
+    about: 'a device back on its account after another meets a paper whose JSON copy still names the file let go as edited outside Glaze (its new file never went up before the switch): it links that file as the paper\'s, and no device writes the paper a file of its own',
+    skips: () => false,
+    repro: [{ t: 'paper', k: 'new', d: 1, pick: 0.12736053694970906, pick2: 0.026920746779069304, s: 868051097 }, { t: 'paper', k: 'new', d: 1, pick: 0.10011307010427117, pick2: 0.18896764400415123, s: 700670706 }, { t: 'run', d: 1, how: 'startup', s: 2131732419 }, { t: 'faults', d: 1, p: 0.15, quota: false, refuse: 3 }, { t: 'run', d: 1, how: 'poke', s: 538016774 }, { t: 'drive', k: 'trashDoc', pick: 0.4520150083117187, s: 1306075949 }, { t: 'drive', k: 'outsideDocx', pick: 0.9514843598008156, s: 1542684737 }, { t: 'run', d: 1, how: 'poke', s: 60911011, after: 'notesIdx:' }, { t: 'account', d: 1, to: 'B', s: 1972720148 }],
+  },
+  'kept-first-meeting-3': {
+    fixed: true,
+    devices: 3,
+    about: 'kept-first-meeting, the device that let the file go switching accounts right after',
+    skips: () => false,
+    repro: [{ t: 'paper', k: 'new', d: 2, pick: 0.6620774620678276, pick2: 0.5868986349087209, s: 400112753 }, { t: 'sync', d: 2, on: true, s: 1985057254 }, { t: 'drive', k: 'outsideDocx', pick: 0.9624791145324707, s: 621458078 }, { t: 'faults', d: 2, p: 0.3, quota: false, refuse: 3 }, { t: 'run', d: 2, how: 'run', s: 2090746289 }, { t: 'account', d: 2, to: 'B', s: 1047616833 }],
+  },
   // Open, accepted by the owner: Settings written straight to storage.sync between the worker's compare and its write (a few
   // milliseconds) are written over by Drive's value. Found 2026-10-31 (seed 300933, 80 operations, 3 devices).
   'settings-cas': {
