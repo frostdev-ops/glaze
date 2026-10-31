@@ -919,6 +919,30 @@ const KNOWN = {
     repro: [{ t: 'paper', k: 'edit', d: 1, pick: 0.4102183519862592, pick2: 0.7268775182310492, s: 381382203 }, { t: 'run', d: 1, how: 'startup', s: 11655903 }, { t: 'paper', k: 'edit', d: 1, pick: 0.49151708907447755, pick2: 0.836380569729954, s: 262429425 },
       { t: 'faults', d: 0, p: 0.15, quota: false, refuse: 0 }, { t: 'run', d: 0, how: 'poke', s: 1885313995 }, { t: 'drive', k: 'outsideDocx', pick: 0.6393347012344748, s: 1120477327 }, { t: 'sync', d: 0, on: true, s: 327744370 }],
   },
+  'staged-reasked-edit': {
+    fixed: false,
+    tiny: true,
+    staged: true,
+    devices: 3,
+    join: [0, 1],
+    about: 'a worker stopped right after writing a staged upload\'s answer, its .docx then edited outside Glaze: the next worker asks the finished session again, takes the edited revision as Glaze\'s own, and the next push overwrites the edit (found by the bar sweep, seed 9500455)',
+    skips: () => false,
+    repro: [{ t: 'paper', k: 'edit', d: 0, pick: 0.7370798222254962, pick2: 0.5469275573268533, s: 47084577 }, { t: 'run', d: 0, how: 'timers', s: 1942766170, after: 'driveSyncDoc:' },
+      { t: 'drive', k: 'outsideDocx', pick: 0.605260512791574, s: 712871565 }, { t: 'paper', k: 'edit', d: 0, pick: 0.12561764963902533, pick2: 0.8504263516515493, s: 1788424472 }],
+  },
+  'staged-stale-parent': {
+    fixed: false,
+    tiny: true,
+    staged: true,
+    devices: 3,
+    join: [0, 1],
+    about: 'a record\'s staged first upload goes into the Glaze/Data it was staged for after that Data went to Drive\'s trash and was replaced: linked to its file there, no other device ever gets it (found by the bar sweep, seed 9500402)',
+    skips: () => false,
+    repro: [{ t: 'pdf', k: 'new', d: 0, pick: 0.5046410250943154, pick2: 0.5602296148426831, s: 1736712198 }, { t: 'setting', k: 'footer', d: 0, pick: 0.9339969209395349, pick2: 0.09851757227443159, s: 971247784 },
+      { t: 'setting', k: 'preset', d: 0, pick: 0.45765523659065366, pick2: 0.38037433032877743, s: 1201517812 }, { t: 'gradescope', k: 'place', d: 0, pick: 0.35789258894510567, pick2: 0.14992592576891184, s: 593080703 },
+      { t: 'faults', d: 0, p: 0.15, quota: false, refuse: 1 }, { t: 'run', d: 0, how: 'timers', s: 1157860440 }, { t: 'drive', k: 'trashData', pick: 0.8646272781770676, s: 592490877 },
+      { t: 'note', k: 'edit', d: 0, pick: 0.5276434142142534, pick2: 0.32105529750697315, s: 1516532219 }, { t: 'run', d: 0, how: 'timers', s: 614898878, after: 'driveSyncDoc:' }, { t: 'run', d: 0, how: 'run', s: 1595333163 }],
+  },
   // Open, accepted by the owner: Settings written straight to storage.sync between the worker's compare and its write (a few
   // milliseconds) are written over by Drive's value. Found 2026-10-31 (seed 300933, 80 operations, 3 devices).
   'settings-cas': {
