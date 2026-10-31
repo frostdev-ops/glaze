@@ -111,7 +111,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (first) { host.removeAttribute('data-first'); host.inert = false; for (const n of [...root.childNodes]) if (n !== sheet) n.remove(); }
     // Unstyled, the bar would flash as a list: it shows once its sheet is in.
     const mounted = host;
-    if (first && sheet.sheet) host.hidden = false;
+    if (first && (sheet.sheet || root.adoptedStyleSheets?.length)) host.hidden = false;
     else sheet.addEventListener('load', () => { if (host === mounted && on()) { host.hidden = false; placed = false; layout(); } }, { once: true });
     el.skip = part(make('a', { className: 'skip', href: '#', textContent: t('Skip to content') }), 'skip');
     // The rail.
@@ -916,13 +916,16 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       if (!host?.isConnected || host.hidden || host.hasAttribute('data-replaced') || !me || leaving || !wide() || !lay) { sessionStorage.removeItem(KEEP); return; }
       const p = [], m = markup(el.rail, p) + markup(el.topbar, p);
       sessionStorage.setItem(KEEP, JSON.stringify({ u: me, t: Date.now(), w: words, k: GZ_NAV.key(X.settings()), v: `${innerWidth}x${innerHeight}`,
-        a: ['dir', 'data-place', 'data-style', 'data-footer', 'data-motion'].filter((k) => host.hasAttribute(k)).map((k) => [k, host.getAttribute(k)]), m, p }));
+        a: ['dir', 'data-place', 'data-style', 'data-footer', 'data-motion'].filter((k) => host.hasAttribute(k)).map((k) => [k, host.getAttribute(k)]), m, p, c: css }));
     } catch { /* blocked or full */ }
   };
   const forget = () => { leaving = true; try { sessionStorage.removeItem(KEEP); } catch { /* blocked */ } };
   // Who is signed in: what was kept for anyone else goes.
+  // Its sheet's text, kept with it: the next page styles its copy at once, not once a sheet loads after the first paint.
+  let css = '';
   const whom = () => {
     if (X.site !== 'ultra' || isPreview || me) return;
+    if (!css) try { fetch(chrome.runtime.getURL('navigation/page/navbar.css')).then((r) => r.text()).then((t) => { css = t; }, () => {}); } catch { /* none here */ }
     Promise.resolve(X.account?.()).then((id) => {
       if (!id) return;
       me = String(id);
