@@ -172,7 +172,7 @@ module.exports = async ({ ctx, opts, O, ok, out }) => {
     // A course tab's frame: the course's Announcements tool, as checks/navigation/ctab-panel-close-check.js opens it.
     ultraShell = 'course';
     const key = `ctabs:${UB}:_42_1`;
-    await store(settings({ enhance: { tabs: true, place: true }, tabs: G.GZ_SANITIZE({}).tabs }), { ultra: [UB], moodle: [`${MD}/*`], freshDefaults: { fresh: false },
+    await store(settings({ enhance: { tabs: true, place: true }, tabs: { ...G.GZ_SANITIZE({}).tabs, ahead: false } }), { ultra: [UB], moodle: [`${MD}/*`], freshDefaults: { fresh: false },
       [key]: { tabs: [101, 102].map((n, i) => ({ cid: `_${n}_1`, name: `Synthetic course ${i + 1}`, path: `/ultra/courses/_${n}_1/outline`, top: 0, at: i, pin: false })) } });
     await page.goto(`${UB}/ultra/courses/_101_1/outline`);
     await page.locator('#gz-ctabs [data-course-id="_102_1"]').click();

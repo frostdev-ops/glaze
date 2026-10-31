@@ -68,7 +68,7 @@ const measure = (p) => p.evaluate(() => {
     const setup = async (look, at = 'above', sidebar = false) => {
       const base = { ...G.GZ_DEFAULTS, navbar: { ...G.GZ_DEFAULTS.navbar, on: true, tabs: false, rail: 'icons' },
         enhance: Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, ['tabs', 'place', ...(sidebar ? ['sidebar', 'notes', 'widgets'] : [])].includes(k)])) };
-      const settings = { ...base, ...G.GZ_LOOK_APPLY(base, look), motion: { ...base.motion, level: 'off' }, tabs: { ...G.GZ_SANITIZE({}).tabs, at } };
+      const settings = { ...base, ...G.GZ_LOOK_APPLY(base, look), motion: { ...base.motion, level: 'off' }, tabs: { ...G.GZ_SANITIZE({}).tabs, at, ahead: false } }; // frames load cold here (checks/navigation/ultra-standby-check.js has the standby)
       await opts.evaluate(async ({ settings, key, site }) => {
         await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.session.clear();
         await chrome.storage.sync.set(settings); await chrome.storage.local.set({ ultra: [site], [key]: { tabs: [1, 2].map((i) => ({ cid: `_10${i}_1`, name: `Course ${i}`, path: `/ultra/courses/_10${i}_1/outline`, at: i, top: 0 })) },

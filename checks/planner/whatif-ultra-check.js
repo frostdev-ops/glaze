@@ -66,7 +66,7 @@ const calc = async (where) => {
       await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings);
       await chrome.storage.local.set({ ultra: [site] }); // the student's yes to this Ultra site (background/background.js approved)
       await chrome.storage.local.set({ [`ctabs:${site}:${user}`]: { tabs: [{ cid: '_102_1', name: 'Synthetic course 2', path: '/ultra/courses/_102_1/grades', top: 0, at: 1, pin: false }] } });
-    }, { settings: { ...G.GZ_DEFAULTS, enhance: { ...G.GZ_DEFAULTS.enhance, calc: true, tabs: true } }, site, user });
+    }, { settings: { ...G.GZ_DEFAULTS, enhance: { ...G.GZ_DEFAULTS.enhance, calc: true, tabs: true }, tabs: { ahead: false } }, site, user }); // frames load cold here (checks/navigation/ultra-standby-check.js has the standby)
     const page = await ctx.newPage();
     const errors = []; page.on('pageerror', (e) => errors.push(String(e)));
     await page.goto(`${site}/ultra/courses/_101_1/grades`);

@@ -49,7 +49,7 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
     });
     const opts = await ctx.newPage(); await opts.goto(`chrome-extension://${id}/options.html`);
     // Glaze's bar on, as by default, holding the course tabs and its Search item.
-    const settings = { ...G.GZ_DEFAULTS, enhance: { ...G.GZ_DEFAULTS.enhance, sidebar: false }, tabs: G.GZ_SANITIZE({}).tabs, navbarItems: { glaze: ['search'] } };
+    const settings = { ...G.GZ_DEFAULTS, enhance: { ...G.GZ_DEFAULTS.enhance, sidebar: false }, tabs: { ...G.GZ_SANITIZE({}).tabs, ahead: false }, navbarItems: { glaze: ['search'] } }; // frames load cold here (checks/navigation/ultra-standby-check.js has the standby)
     await opts.evaluate(async ({ settings, key, site, courses }) => {
       await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings);
       await chrome.storage.local.set({ ultra: [site] });

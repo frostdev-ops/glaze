@@ -47,7 +47,7 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
     const settings = { ...G.GZ_DEFAULTS, bg: { ...G.GZ_DEFAULTS.bg, kind: 'scene', scene: 'contours', intensity: 70 }, motion: { ...G.GZ_DEFAULTS.motion, level: 'off', followSystem: false },
       // Glaze's rail on (the frame sits beside it, where the seam was) and the strip at the top.
       navbar: { ...G.GZ_DEFAULTS.navbar, on: true, tabs: false },
-      enhance: Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, ['tabs', 'place'].includes(k)])), tabs: G.GZ_SANITIZE({}).tabs };
+      enhance: Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, ['tabs', 'place'].includes(k)])), tabs: { ...G.GZ_SANITIZE({}).tabs, ahead: false } }; // frames load cold here (checks/navigation/ultra-standby-check.js has the standby)
     await opts.evaluate(async ({ settings, key, site }) => {
       await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings);
       await chrome.storage.local.set({ ultra: [site] }); // the student's yes to this Ultra site (background/background.js approved)
