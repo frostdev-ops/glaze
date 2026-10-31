@@ -705,7 +705,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       let force = !d.file;
       if (d.file && !E && ldirty) E = await meta(d.file);
       if (E?.removed) { await env.papers.trash(key); await trashTo(d.json, true); await putDoc(h, { ...d, file: null, fh: null, trashed: true }, d); return; }
-      if (E && E.headRevisionId && E.headRevisionId !== d.fh && E.appProperties?.sum === d.fsum && E.appProperties?.glaze === 'file') {
+      if (E && E.headRevisionId && E.headRevisionId !== d.fh && (E.appProperties?.sum === d.fsum || rewritten(E)) && E.appProperties?.glaze === 'file') {
         if (FILES.includes(d.kind || kindOf(l.rec))) {
           // A PDF or deck replaced in Drive: its new bytes are Drive's side.
           const copy = rdirty ? await linkedCopy(R, h, key, owner) : null;
@@ -733,27 +733,38 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (rdirty) {
         const got = await linkedCopy(R, h, key, owner);
         if (!got) return;
-        // Both changed to the same thing (another device took what this one pushed only halfway): nothing to keep apart.
-        if (ldirty && (await sumOf(key, l)) === got.sum) { await agreed(key, h, R, got, l, d); return; }
+        // Both changed to the same thing (another device took what this one pushed only halfway): nothing to keep apart, unless
+        // the file it names is no longer this document's Glaze file as that copy wrote it (let go above as edited outside
+        // Glaze): then a file of its own goes up.
+        if (ldirty && (await sumOf(key, l)) === got.sum) {
+          if (!force || !got.file || got.external || await adopt(got, h)) { await agreed(key, h, R, got, l, d); return; }
+          return push(key, h, l, { ...d, json: R.id }, folder);
+        }
         // Then this device's goes up as a change of its own, into the file Drive's copy names (another device may have left
         // the one this device knew) and as that file stands (edited outside Glaze since: kept as it is).
         if (ldirty) { await keepOther(key, l, got); await kept(h, { ...d, ...(got.file && { file: got.file, fh: got.fileRev, fsum: got.sum }) }, R); return sync(key, h, { folder }); }
         const now2 = await take(key, l, got);
-        if (force && got.file && !got.external) {
-          // No Glaze file of its own here (none yet, or the one it had is no longer Glaze's): the one Drive's copy names, while
-          // it is still this document's Glaze file and not edited outside Glaze since that copy was written. Never a new one
-          // beside it. One edited outside since is kept as it is (as above), and a new one goes up.
-          const F = await meta(got.file);
-          const ours = !F.removed && F.trashed === false && F.appProperties?.glaze === 'file' && F.appProperties?.key === h;
-          const outside = !!F.headRevisionId && F.headRevisionId !== got.fileRev && F.appProperties?.sum === got.sum;
-          if (ours && !outside) { await agreed(key, h, R, got, now2, d); return; }
-          if (ours && !FILES.includes(got.kind)) await D((c) => c.patch(got.file, { appProperties: { glaze: 'kept', sum: null } }));
-        }
+        if (force && got.file && !got.external && await adopt(got, h)) { await agreed(key, h, R, got, now2, d); return; }
         if (force || got.external) return push(key, h, now2, { ...d, json: R.id }, folder);
         await agreed(key, h, R, got, now2, d);
         return;
       }
       if (ldirty || force) await push(key, h, l, d, folder);
+    };
+    // A Glaze file whose bytes are no longer the ones Glaze wrote on it (b, against Drive's checksum when it gives one): edited
+    // outside Glaze whatever sum it carries, as after an upload Drive took whose answer never came (its sum there, its
+    // revision unknown here).
+    const rewritten = (F) => !!F?.appProperties?.b && !!F.sha256Checksum && String(F.sha256Checksum).toLowerCase() !== F.appProperties.b;
+    // No Glaze file of its own here (none yet, or the one it had is no longer Glaze's): the one Drive's copy names, while it is
+    // still this document's Glaze file and not edited outside Glaze since that copy was written. Never a new one beside it.
+    // One edited outside since is kept as it is, and a new one goes up. → whether it is the document's
+    const adopt = async (got, h) => {
+      const F = await meta(got.file);
+      const ours = !F.removed && F.trashed === false && F.appProperties?.glaze === 'file' && F.appProperties?.key === h;
+      const outside = !!F.headRevisionId && F.headRevisionId !== got.fileRev && (F.appProperties?.sum === got.sum || rewritten(F));
+      if (ours && !outside) return true;
+      if (ours && !FILES.includes(got.kind)) await D((c) => c.patch(got.file, { appProperties: { glaze: 'kept', sum: null } }));
+      return false;
     };
     // A file let go as edited outside Glaze, recorded on the document (keep) until Glaze's properties on it say so: never the
     // document's file again, nor counted as one. → the document's record
