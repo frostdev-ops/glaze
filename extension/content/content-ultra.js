@@ -229,7 +229,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // Requests behind file previews (courses/page/docs.js).
   try { new PerformanceObserver((l) => { for (const e of l.getEntries()) if (/view(er)?Url/.test(e.name)) (self.GZ_ASKS ||= []).unshift(e.name); self.GZ_ASKS?.splice(50); }).observe({ type: 'resource', buffered: true }); } catch {}
   // Keep the course strip attached when Ultra replaces its header; no route paint hold.
-  const gate = (scope) => { discoverNav(scope); tagDocs([scope]); globalThis.GZ_WIDGETS_UI?.held?.(); return globalThis.GZ_CTABS?.held(); };
+  const gate = (scope) => { const s = [].concat(scope); s.forEach(discoverNav); tagDocs(s); globalThis.GZ_WIDGETS_UI?.held?.(); return globalThis.GZ_CTABS?.held(); };
 
   // ---- course progress (Extras) ---------------------------------------------------------------
   // One bar above the course outline adding up what the outline already says: each folder's
