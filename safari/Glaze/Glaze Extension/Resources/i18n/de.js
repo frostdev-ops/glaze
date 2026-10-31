@@ -3725,6 +3725,8 @@
   "Your author-page citations and {heading} miss required APA style; no rubric level descriptions are supplied, so Glaze estimates {level}, the lowest band ({value}/{points}; {deduction} points deducted).": "Deine Zitate im Autor-Seite-Format und die Liste {heading} verfehlen den geforderten APA-Stil; das Bewertungsraster beschreibt seine Stufen nicht, daher schätzt Glaze {level}, die niedrigste Stufe ({value}/{points} Punkte; −{deduction}).",
   "Your author-page citations and {heading} miss required APA style; with no level descriptions, Glaze estimates the lowest band ({value}/{points}; {deduction} points deducted).": "Deine Zitate im Autor-Seite-Format und die Liste {heading} verfehlen den geforderten APA-Stil; ohne Stufenbeschreibungen schätzt Glaze die niedrigste Stufe ({value}/{points} Punkte; −{deduction}).",
   "Your author-page citations and {heading} heading conflict with required APA style; rubric rating: {level} ({earned}/{total} points).": "Deine Zitate im Autor-Seite-Format und die Überschrift {heading} widersprechen dem geforderten APA-Stil; Bewertung laut Bewertungsraster: {level} ({earned}/{total} Punkte).",
+  "Rubric rating: {level} ({earned}/{total} points).": "Bewertung für dieses Kriterium: {level} ({earned}/{total} Punkte).",
+  "Rubric score: {earned}/{total} points.": "Punkte für dieses Kriterium: {earned}/{total}.",
   "The model could not produce grounded feedback for every criterion.": "Das Modell konnte nicht zu jedem Kriterium belegbares Feedback erstellen.",
   "Checking criterion {n} of {total}…": "Kriterium {n} von {total} wird geprüft…",
   "Reading assignment material…": "Aufgabenmaterial wird gelesen…",
