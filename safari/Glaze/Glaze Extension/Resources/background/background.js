@@ -3418,8 +3418,9 @@ const openDriveSync = () => {
       return ['notes', 'noteFolders', 'noteFiles'].includes(cat) ? GZ_DRIVE_STORE.join(cat, key, value, local, notesArea, rt, own) : turn(() => GZ_DRIVE_STORE.join(cat, key, value, local, notesArea, rt, own));
     },
     // The daily snapshot: Back up…'s zip as Settings makes it (background/backup.js pack), its Settings with the hidden course
-    // folders, tasks, pet, records, every Notes account and documents with their files. Never share keys (the owner's call:
-    // they stay out of Drive; Settings' own Back up… carries them behind its warning).
+    // folders, tasks, pet, records, every Notes account and documents without their files (each syncs on its own, so the zip
+    // stays small; one past one request is skipped for the day: background/drive-store.js snapshot). Never share keys (the
+    // owner's call: they stay out of Drive; Settings' own Back up… carries them behind its warning).
     snapshot: async () => {
       brokerIn('backup');
       // The zip (and Notes' export, which builds on it) is loaded only by a document's export: a restarted worker may have none.
@@ -3445,14 +3446,9 @@ const openDriveSync = () => {
       });
       const notes = [];
       for (const account of Object.keys(all).filter((k) => GZ_BACKUP.ACCOUNT.test(k))) notes.push({ account, entries: await GZ_BACKUP.notesOut(account, notesSend) });
-      // Files past one upload (documents/drive.js put: GZ_DOC_KINDS.FILE * 4 bytes) make no snapshot, and are never read for one.
-      let total = 0;
+      // Documents' files are never read for it: their records go in, as Back up… keeps a record whose file isn't there.
       try {
-        const files = await GZ_BACKUP.filesOf(all, (ref) => {
-          if ((total += ref.size) > GZ_DOC_KINDS.FILE * 4) throw Object.assign(new Error('big'), { why: 'big' });
-          return fileBytes(ref).then((b) => { if (!b) throw Object.assign(new Error('missing'), { why: 'missing' }); return b; });
-        });
-        const entries = GZ_BACKUP.pack({ settings, tasks: { tasks, pets }, local: all, notes, version: chrome.runtime.getManifest().version, files });
+        const entries = GZ_BACKUP.pack({ settings, tasks: { tasks, pets }, local: all, notes, version: chrome.runtime.getManifest().version });
         return { name: GZ_BACKUP.fileName(), bytes: new Uint8Array(await new Blob(GZ_ZIP.zip(entries)).arrayBuffer()) };
       } catch (e) { if (e?.why === 'big') return null; throw e; }
     },

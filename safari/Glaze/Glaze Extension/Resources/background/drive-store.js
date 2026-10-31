@@ -26,7 +26,9 @@
 // State: driveSyncRec:<h> { area, key, cat, id, lsum, rsum, at, seen } (or, for a picture a note here uses that Drive doesn't
 // have yet, { area, key, cat, id: null, want: the note's key }) and driveSyncFile:<id> 'r:<h>'; the folders and the
 // last snapshot on driveSync (data, backups, snap); a record file or the day's zip larger than one request on its way in
-// documents/drive-sync.js's transfers (driveSyncMoves 'R:<h>', 'r:<h>', 'snap').
+// documents/drive-sync.js's transfers (driveSyncMoves 'R:<h>', 'r:<h>', 'snap'), which in 4.0.1 are off: a record file or the
+// day's zip larger than one request is never sent or brought ('large'), the record marked too large while this device holds it
+// (documents/drive-sync.js driveSyncLarge), the day's zip skipped (snapSkip 'large').
 // Classic script for the worker; module.exports for node.
 var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
   const REC = 'driveSyncRec:', FILE = 'driveSyncFile:', STAMPS = 'driveSyncStamps', STATE = 'driveSync';
@@ -596,9 +598,12 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       const r = await ctx.D((c) => c.find(`'${ctx.data}' in parents and appProperties has { key='key' and value='${h}' } and appProperties has { key='glaze' and value='rec' } and trashed=false`, { pageSize: 10 }));
       return r.files.filter((f) => f.appProperties?.key === h).sort((a, b) => (a.id < b.id ? -1 : 1))[0] || null;
     };
+    // A record's 'area:key' as this pass met it, for its too-large mark.
+    const idOf = async (h, x) => { const r = await recOf(h); return x.area && x.key ? `${x.area}:${x.key}` : r ? `${r.area}:${r.key}` : null; };
     const each = async (ctx, h, x) => {
       try {
         await one(ctx, h, x);
+        { const id = await idOf(h, x); if (id) await ctx.large?.(id, false); }
         // A note's pictures and attachments go up with it (each once).
         const r = await recOf(h);
         if (r?.cat === 'notes') {
@@ -608,7 +613,12 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
             // Its file as this pass met it (a full pass's listing, a change page), else looked up.
             const R = ctx.known?.get(fh);
             if (!await recOf(fh) || await valueOf('notes', k) === undefined) {
-              await one(ctx, fh, { area: 'notes', key: k, need: r.key, ...(R && { R }) });
+              // One too large to sync stays here, marked; the note and its other pictures go on.
+              try { await one(ctx, fh, { area: 'notes', key: k, need: r.key, ...(R && { R }) }); await ctx.large?.(`notes:${k}`, false); } catch (e) {
+                if (e?.why !== 'large') throw e;
+                if (await valueOf('notes', k).catch(() => undefined) !== undefined) await ctx.large?.(`notes:${k}`, true);
+                continue;
+              }
               // Not in Drive yet (its device's push stopped between the note and it, say): wanted by this note, so it is
               // fetched once it comes (one, was.want), not passed over as a picture no note here asked for.
               if (!await recOf(fh) && await valueOf('notes', k) === undefined) await put(fh, { area: 'notes', key: k, cat: 'noteFiles', id: null, want: r.key }, null);
@@ -618,6 +628,12 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       } catch (e) {
         // On its way in the run's last step (documents/drive-sync.js transfers), which hands it back here (replay).
         if (e?.why === 'pending') return 'pending';
+        // Too large to sync (larger than one request): passed over, marked while this device holds it.
+        if (e?.why === 'large') {
+          const id = await idOf(h, x), at = id ? id.indexOf(':') : -1;
+          if (id && await valueOf(id.slice(0, at), id.slice(at + 1)).catch(() => undefined) !== undefined) await ctx.large?.(id, true);
+          return;
+        }
         if (e?.why === 'bad' || e?.why === 'size' || e?.why === 'denied') { console.warn('Sync to Google Drive: passed over a record', h, e.why); return; }
         throw e;
       }
@@ -722,7 +738,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       // Tried once a day: one too big for a backup (null), one that can't be built, or one Drive refuses as it stands
       // (larger than one upload, or more than a full Drive has room for) waits for tomorrow, never failing the run or being
       // built again on every run. snapSkip: 'quota' while the day's was skipped for want of room (Settings says so).
-      const skip = async (e) => { if (e) console.warn('Sync to Google Drive: no snapshot today', e?.why || e); await ctx.state({ snap: now(), snapSkip: e?.why === 'quota' ? 'quota' : null }); };
+      const skip = async (e) => { if (e) console.warn('Sync to Google Drive: no snapshot today', e?.why || e); await ctx.state({ snap: now(), snapSkip: ['quota', 'large'].includes(e?.why) ? e.why : null }); };
       const back = () => ctx.state({ snap: st.snap ?? null, snapSkip: st.snapSkip ?? null });
       let made = null;
       if (!t) {
@@ -748,7 +764,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         }), { snap: made?.name || t.tag });
       } catch (e) {
         if (e?.why === 'pending') return; // staged: the run's last step sends it
-        if (['bad', 'size', 'quota'].includes(e?.why)) return skip(e);
+        if (['bad', 'size', 'quota', 'large'].includes(e?.why)) return skip(e);
         await back(); throw e;
       }
       await ctx.state({ snapSkip: null, ...(made && { snap: now() }) });
@@ -775,7 +791,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       return each(ctx, owner.rec, { area: owner.area, key: owner.key, need: owner.need, ...(R && { R }) });
     };
     // One Drive refused as it stands: the day's snapshot skipped (snapSkip 'quota' while for want of room).
-    const failed = async (owner, why, ctx) => { if (owner.snap) await ctx.state({ snapSkip: why === 'quota' ? 'quota' : null }); };
+    const failed = async (owner, why, ctx) => { if (owner.snap) await ctx.state({ snapSkip: ['quota', 'large'].includes(why) ? why : null }); };
     // A staged upload may outlive a local edit or deletion before the first record link exists.
     const current = async (owner, tag) => tag === await sumOf(owner.area, owner.key, await valueOf(owner.area, owner.key));
     const forget = async () => {

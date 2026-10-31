@@ -1225,17 +1225,21 @@ GZ_UI.load().then((s) => {
       scope: 'Connect Google Drive again to keep syncing.', permission: 'Connect Google Drive again to keep syncing.', quota: 'Your Google Drive is full. Free up space to keep syncing.',
       folder: "The Glaze folder is in Google Drive's trash. Restore it to keep syncing.", busy: 'Google Drive is busy. Glaze will try again soon.',
       network: "Couldn't reach Google Drive. Glaze will try again soon.", offline: "Couldn't reach Google Drive. Glaze will try again soon." };
+    const SNAP_SAYS = { quota: "Today's backup was skipped: your Google Drive is full.", large: "Today's backup was too large." };
     const gsWhen = (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium', timeStyle: 'short' }).format(at);
     const gsRender = async () => {
       const connected = !$('#gdrive').hidden && !!$('#gdrive-who').textContent;
       $('#gdrive-sync').hidden = !connected;
       if (!connected) return;
-      const st = (await chrome.storage.local.get('driveSync')).driveSync || {};
+      const got = await chrome.storage.local.get(['driveSync', 'driveSyncLarge']), st = got.driveSync || {};
+      const large = Object.keys(got.driveSyncLarge?.docs || {}).length + Object.keys(got.driveSyncLarge?.recs || {}).length;
       $('#gdrive-sync-on').checked = st.on === true;
       $('#gdrive-sync-said').textContent = st.on !== true ? '' : st.busy && Date.now() - st.busy < 120e3 ? t('Syncing…')
         : st.problem ? t(SYNC_SAYS[st.problem] || "Couldn't sync. Glaze will try again soon.") : st.last ? t('Last synced {when}.', { when: gsWhen(st.last) })
-          // The day's backup skipped for want of room (background/drive-store.js snapshot), for the day it covers.
-          + (st.snapSkip === 'quota' && Date.now() - (st.snap || 0) < 864e5 ? ` ${t("Today's backup was skipped: your Google Drive is full.")}` : '') : '';
+          // The day's backup skipped for want of room or past one request (background/drive-store.js snapshot), for the day it
+          // covers; then what stays on this device as too large to sync (documents/drive-sync.js driveSyncLarge), if anything.
+          + (Date.now() - (st.snap || 0) < 864e5 && SNAP_SAYS[st.snapSkip] ? ` ${t(SNAP_SAYS[st.snapSkip])}` : '')
+          + (large ? ` ${t('{n} items are too large to sync.', { n: large })}` : '') : '';
       // Connect stays beside Disconnect while that line asks for it.
       $('#gdrive-connect').hidden = $('#gdrive-sync-said').textContent !== t(SYNC_SAYS.auth);
     };
@@ -1248,7 +1252,7 @@ GZ_UI.load().then((s) => {
       if (!r.ok && on && !(await chrome.storage.local.get('driveSync')).driveSync?.on) $('#gdrive-sync-on').checked = false;
       gsRender();
     });
-    chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.driveSync) gsRender(); });
+    chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && (changes.driveSync || changes.driveSyncLarge)) gsRender(); });
   }
 
   // Another surface changed something: read after our queued saves, and never apply a read older than an edit.
