@@ -272,8 +272,10 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       const same = (f) => !f.removed && f.trashed !== true && f.headRevisionId === t.rev && Number(f.size) === t.size;
       if (!same(await meta(t.id))) throw new Fail('missing');
       let at = t.at || 0, step = t.step || PIECE;
+      if (t.sending) step = Math.max(256 << 10, Math.floor(step / 2));
       while (at < t.size) {
         const to = Math.min(t.size, at + step) - 1, began = Date.now();
+        await patchMove(slot, { step, sending: true });
         const r = await D((c) => c.part(t.id, at, to, t.max));
         if (r.whole) {
           if (r.bytes.length !== t.size) throw new Fail('missing');
@@ -284,7 +286,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         }
         const took = Date.now() - began;
         step = took > 15000 ? Math.max(256 << 10, step / 2) : took < 5000 ? Math.min(PIECE, step * 2) : step;
-        await patchMove(slot, { at, step });
+        await patchMove(slot, { at, step, sending: false });
       }
       if (!same(await meta(t.id))) throw new Fail('missing');
       await patchMove(slot, { done: true });
