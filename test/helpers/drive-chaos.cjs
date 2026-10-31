@@ -656,6 +656,12 @@ const KNOWN = {
     repro: [{ t: 'slides', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2 }, { t: 'drive', k: 'trashDoc', pick: 0, s: 3 }, { t: 'run', d: 0, how: 'startup', s: 4 },
       { t: 'drive', k: 'untrashDoc', pick: 0, s: 5 }, { t: 'run', d: 0, how: 'run', s: 6, kill: 62, apply: true }],
   },
+  'stranded-records': {
+    fixed: true,
+    about: 'a second Data made while Drive\'s search didn\'t show the first yet, then merged into it before its record files showed: they stay in the merged folder, followed by the device that wrote them and listed by no other, which never gets them',
+    skips: () => false,
+    repro: [{ t: 'faults', d: 1, p: 0.3, quota: false, refuse: 2 }, { t: 'run', d: 1, how: 'poke', s: 1059538193 }, { t: 'sheet', k: 'new', d: 1, pick: 0.4254337348975241, pick2: 0.710770957171917, s: 1655149833 }, { t: 'drive', k: 'trashData', pick: 0.695207278477028, s: 206590386 }, { t: 'paper', k: 'new', d: 1, pick: 0.7763760664965957, pick2: 0.5383014006074518, s: 263146629 }, { t: 'note', k: 'new', d: 1, pick: 0.8037255362141877, pick2: 0.8429688038304448, s: 472602691 }, { t: 'lag', n: 2 }, { t: 'run', d: 1, how: 'timers', s: 1477004821 }, { t: 'run', d: 1, how: 'poke', s: 1295093123 }],
+  },
   // Open: within the accepted limit that switching accounts A→B→A brings older data back. Found 2026-10-31 (seed 60348,
   // 140 operations, 2 devices).
   'stale-restore': {
