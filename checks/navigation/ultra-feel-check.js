@@ -41,26 +41,50 @@ function probe() {
     if (!hit) return null;
     hit.scrollIntoView({ block: 'nearest' });
     const b = hit.getBoundingClientRect();
-    run = { hit, item, anchor: [...document.querySelectorAll(anchor)].find(shows) || null, dest, frames: [], downAt: null, clickAt: null, done: false, base: '' };
+    const at = document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2);
+    // What's already there of the destination (a list under a course's panel) isn't it coming in.
+    run = { hit, item, anchor: [...document.querySelectorAll(anchor)].find(shows) || null, dest, stale: new Set(document.querySelectorAll(dest)), from: location.href, frames: [], downAt: null, clickAt: null, done: false, base: '', covered: at && !hit.contains(at) && !(at.shadowRoot && at.shadowRoot.contains(hit)) ? at.outerHTML.slice(0, 160) : '' };
     return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+  };
+  // The item is what the pointer would hit at its centre: no transition holding the page, nothing over it.
+  P.hits = () => {
+    const b = run.hit.getBoundingClientRect(), x = b.x + b.width / 2, y = b.y + b.height / 2, r = run.hit.getRootNode();
+    const at = r !== document && r.elementFromPoint ? r.elementFromPoint(x, y) : document.elementFromPoint(x, y);
+    return !!at && run.hit.contains(at) && { x, y };
+  };
+  // The item has stopped moving under the pointer (a card's hover lift or tilt): the same box as at the last call.
+  let was = '';
+  P.still = () => { const b = run.hit.getBoundingClientRect(), now = [b.x, b.y, b.width, b.height].join(); const same = now === was; was = now; return same && !!P.hits(); };
+  // Glaze answers a press there: a pointerdown of the page's own (not the measured one) marks the item, and its cancel unmarks it.
+  P.armed = () => {
+    const o = { bubbles: true, composed: true, isPrimary: true, pointerId: 99 };
+    run.hit.dispatchEvent(new PointerEvent('pointerdown', o));
+    const ok = run.item.hasAttribute('data-gz-press');
+    run.hit.dispatchEvent(new PointerEvent('pointercancel', o));
+    return ok && !run.item.hasAttribute('data-gz-press');
   };
   P.base = () => { run.base = look(run.item); return run.base; };
   const frame = () => {
     if (!run || run.done) return;
     const skel = document.getElementById('gz-skel');
     const spin = [...document.querySelectorAll('div.spinner')].some(shows);
-    const dest = [...document.querySelectorAll(run.dest)].some(shows);
-    const destIn = !!document.querySelector(run.dest);
+    const fresh = [...document.querySelectorAll(run.dest)].filter((e) => !run.stale.has(e));
+    const dest = fresh.some(shows), destIn = fresh.length > 0;
     const f = { t: performance.now(), item: run.item.isConnected && look(run.item) !== run.base, skel: shows(skel), spin, dest, destIn, anchorGone: !!run.anchor && !shows(run.anchor),
       press: !!document.querySelector('[data-gz-press]') || !!bar()?.querySelector('[data-gz-press]') };
     f.main = f.skel || f.spin || f.dest || f.anchorGone;
     run.frames.push(f);
-    if ((f.dest && !f.skel && !window.__loading) || run.frames.length > 1800) { run.done = true; return; }
+    if ((run.clickAt != null && location.href !== run.from && f.dest && !f.skel && !window.__loading) || run.frames.length > 1800) { run.done = true; return; }
     requestAnimationFrame(frame);
   };
-  addEventListener('pointerdown', (e) => { if (run && run.downAt == null) { run.downAt = e.timeStamp; requestAnimationFrame(frame); } }, true);
-  addEventListener('click', (e) => { if (run && run.clickAt == null) run.clickAt = e.timeStamp; }, true);
+  addEventListener('pointerdown', (e) => { if (e.isTrusted && run && run.downAt == null) { run.downAt = e.timeStamp; requestAnimationFrame(frame); } }, true);
+  addEventListener('click', (e) => { if (e.isTrusted && run && run.clickAt == null) { run.clickAt = e.timeStamp; run.target = e.composedPath()[0]?.outerHTML?.slice(0, 160); } }, true);
   P.frames = () => run?.frames.length || 0;
+  // Where a click stands, for a check that times out.
+  P.state = () => ({ href: location.href, loading: window.__loading, skel: !!document.getElementById('gz-skel'), skelAttr: document.documentElement.getAttribute('data-gz-skel'),
+    host: document.querySelector('[data-gz-skel-host]')?.className || null, dest: run && document.querySelectorAll(run.dest).length, frames: run?.frames.length, downAt: run?.downAt, clickAt: run?.clickAt, last: run?.frames.at(-1),
+    everPress: run?.frames.some((f) => f.press), everSkel: run?.frames.some((f) => f.skel), covered: run?.covered, target: run?.target,
+    html: [...document.documentElement.attributes].filter((a) => a.name !== 'style').map((a) => `${a.name}=${a.value}`).join(' '), frames: [...document.querySelectorAll('iframe')].map((f) => `${f.name}:${getComputedStyle(f).visibility}`) });
   P.done = () => !!run?.done;
   // The first frame from `from` with `key` set: its index among those frames (1: the first after it) and its time.
   P.result = () => {
@@ -138,15 +162,21 @@ const frames = (page, n = 2) => page.evaluate((k) => new Promise((r) => { const 
     };
     // One click: pointed at, pressed, two frames on let go, then followed until the page is ready.
     const click = async (page, mode, what, how) => {
-      const at = await page.evaluate((a) => window.__feel.arm(a), how);
-      if (!at) throw Error(`${mode} ${what}: nothing to click`);
+      if (!(await page.evaluate((a) => !!window.__feel.arm(a), how))) throw Error(`${mode} ${what}: nothing to click`);
+      const at = await until(() => page.evaluate(() => window.__feel.hits()), `${mode} ${what}: under the pointer`);
+      if (mode === 'on') await until(() => page.evaluate(() => window.__feel.armed()), `${mode} ${what}: Glaze answering presses`);
       await page.mouse.move(at.x, at.y);
-      await frames(page, 1);
+      await until(async () => { await frames(page, 1); return page.evaluate(() => window.__feel.still()); }, `${mode} ${what}: still under the pointer`);
+      const settled = await page.evaluate(() => window.__feel.hits());
+      await page.mouse.move(settled.x, settled.y);
       await page.evaluate(() => window.__feel.base());
       await page.mouse.down();
       await until(() => page.evaluate(() => window.__feel.frames() >= 2), 'two frames after the press');
       await page.mouse.up();
-      await until(() => page.evaluate(() => window.__feel.done()), `${mode} ${what}: the page ready`);
+      await until(() => page.evaluate(() => window.__feel.done()), `${mode} ${what}: the page ready`).catch(async (e) => {
+        if (out) await page.screenshot({ path: path.join(out, `fail-${mode.replace(/\W/g, '-')}.png`) });
+        throw Error(`${e.message} ${JSON.stringify(await page.evaluate(() => window.__feel.state()))}`);
+      });
       const r = { mode, what, ...(await page.evaluate(() => window.__feel.result())) };
       evidence.clicks.push(r);
       console.log(`${mode.padEnd(10)} ${what.padEnd(28)} press→item ${r.downToItem ? `${r.downToItem.ms} ms (frame ${r.downToItem.frame})` : 'none'}; click→main ${r.clickToMain ? `${r.clickToMain.ms} ms (frame ${r.clickToMain.frame})` : 'none'}; click→ready ${r.clickToReady?.ms} ms; shift ${r.shift}`);
@@ -181,9 +211,8 @@ const frames = (page, n = 2) => page.evaluate((k) => new Promise((r) => { const 
     // An instant copy coming in takes its place at once.
     await on.page.evaluate(() => { window.__delay = 5000; });
     await on.page.evaluate((a) => window.__feel.arm(a), { find: 'bar', arg: 'grades', anchor: 'article.course-element-card', dest: '#gz-instant' });
-    await on.page.evaluate(() => { const a = window.__feel; a.base(); });
-    const g = await on.page.evaluate(() => { const r = document.getElementById('gz-navbar').shadowRoot; return [...r.querySelectorAll('[data-id="grades"]')].find((e) => e.getClientRects().length && r.elementFromPoint(e.getBoundingClientRect().x + 5, e.getBoundingClientRect().y + 5)?.closest('[data-id]') === e).getBoundingClientRect(); });
-    await on.page.mouse.click(g.x + g.width / 2, g.y + g.height / 2);
+    const gp = await until(() => on.page.evaluate(() => window.__feel.hits()), 'Grades under the pointer');
+    await on.page.mouse.click(gp.x, gp.y);
     await until(() => on.page.evaluate(() => !!document.getElementById('gz-skel')), 'a skeleton for Grades');
     await until(() => on.page.evaluate(() => [...document.querySelectorAll('div.spinner')].length > 0), 'Ultra\'s spinners under it');
     if (out) await on.page.screenshot({ path: path.join(out, 'feel-skeleton-tiles.png') });
