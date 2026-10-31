@@ -242,3 +242,22 @@ test('a warm-up is built for the window and model the run will use', async () =>
     } finally { T.prepare = plain; LOCAL._env(null); B._reset(); }
   }
 });
+
+test('a connection changed while a warm-up reads its catalog cannot start warming the old model', async () => {
+  let resume, started;
+  const waiting = new Promise((resolve) => { started = resolve; });
+  const gate = new Promise((resolve) => { resume = resolve; });
+  const warms = [];
+  LOCAL._env({ store: { list: async () => { started(); await gate; return [tuned()]; } },
+    link: { kind: 'worker', up: true, call: async (op, m) => { if (op === 'warm') warms.push(m); return { ok: true }; } }, gpu: () => ({}) });
+  const e = env({ features: { completion: true } });
+  let pending;
+  try {
+    pending = ask({ op: 'warm', feature: 'completion', task: 'writer.complete', input: { before: 'The essay begins with' } }, e);
+    await waiting;
+    assert.equal((await B.config({ op: 'remove', id: 'local' }, e)).ok, true);
+    resume();
+    assert.deepEqual(await pending, { id: 1, type: 'warmed', ok: false });
+    assert.deepEqual(warms, [], 'releasing a connection must not be followed by an old warm-up');
+  } finally { resume(); await pending; LOCAL._env(null); B._reset(); }
+});

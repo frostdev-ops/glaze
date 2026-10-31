@@ -280,3 +280,17 @@ test('on a model on this computer the reader is told the file name and the conte
   await T.run(I.task, raw(), { provider: 'mock', cfg: cloud });
   assert.doesNotMatch(cloud.seen[0].messages[0].content[0].text, /file name/i, 'other models keep their prompt');
 });
+
+test('metadata filtering cannot bring an oversized completed JSON response under the accepted bound', async () => {
+  const lines = Array.from({ length: 10 }, (_, i) => `${i}: ${'x'.repeat(90)}`);
+  const input = { ...raw(), context: lines.join('\n') };
+  const answer = { ...reading(), requirements: lines.map((line) => ` ${line}${' '.repeat(180)}`) };
+  assert.ok(X.estimateTokens(answer) > I.LIMIT.tokens, 'the whole response exceeds 512 estimated tokens');
+  assert.equal(I.check(answer, I.input(input)), null);
+  assert.match(I.problem(answer, I.input(input)), /512-token estimated bound/);
+  const cfg = { caps: { context: 8192, images: true }, replies: [{ json: answer }], seen: [] };
+  const result = await T.run(I.task, input, { provider: 'mock', cfg });
+  assert.equal(result.output.complete, false);
+  assert.match(result.output.reason, /512-token estimated bound/);
+  assert.equal(cfg.seen.length, 1);
+});
