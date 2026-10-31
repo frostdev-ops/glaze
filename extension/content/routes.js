@@ -27,6 +27,9 @@ var GZ_ROUTES = globalThis.GZ_ROUTES || (() => {
     'writer/page/editor-menu.js', 'GZ_EDITOR_MENU');
   // A course's top bar and a test attempt's progress band, folded into pills once the page scrolls under them.
   add((l, site) => site === 'ultra' && /^\/ultra\/courses\/_\d+_\d+\//.test(l.pathname), 'navigation/page/sticky-fold.js', 'GZ_STICKY_FOLD');
+  // A click answering within its frame: what it's on looks current from the press, and the page it opens shows a skeleton
+  // until it's ready. In the page and course tabs' frames, never the hidden standby (until it's adopted and renamed).
+  add((l, site) => site === 'ultra' && ctx.solo && window.name !== 'gz-ctab:standby' && /^\/ultra(?:\/|$)/.test(l.pathname), 'navigation/page/feedback.js', 'GZ_FEEDBACK');
   const sync = () => {
     for (const e of table) {
       let yes = false;
