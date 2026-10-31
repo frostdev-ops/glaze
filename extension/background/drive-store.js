@@ -52,10 +52,16 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     { cat: 'writerWords', area: 'local', test: (k) => k === 'writerWords' },
     { cat: 'sources', area: 'local', test: (k) => /^writer:sources:(?:[\w.!~*'()%-]{1,2700}\|){3}[\w.!~*'()%-]{1,2700}$/.test(k) },
     // Gradescope: what the student chose (the account, each course's placing, the bar's dismissal, each Canvas account's
-    // answer); what was read from Gradescope stays on the device that read it.
+    // answer); what was read from Gradescope stays on the device that read it. A device signed in to a Gradescope account
+    // keeps it: another account's record (a second device signed in to someone else's) changes nothing here, so the two
+    // never replace each other back and forth; a device with none takes the record's.
     { cat: 'gradescope', area: 'local', test: (k) => k === 'gradescope', view: (v) => (obj(v) ? { acct: v.acct ?? null, map: v.map ?? {}, hide: !!v.hide, bind: v.bind ?? {} } : v),
-      merge: (here, v) => ({ ...v, courses: here?.acct?.id === v.acct?.id && obj(here?.courses)
-        ? Object.fromEntries(Object.entries(here.courses).filter(([id]) => v.map[id]?.to && v.map[id].to === here.map?.[id]?.to)) : {} }) },
+      merge: (here, v) => {
+        const mine = L.gradescope().clean(here).acct;
+        if (mine && mine.id !== v.acct?.id) return here;
+        return { ...v, courses: here?.acct?.id === v.acct?.id && obj(here?.courses)
+          ? Object.fromEntries(Object.entries(here.courses).filter(([id]) => v.map[id]?.to && v.map[id].to === here.map?.[id]?.to)) : {} };
+      } },
     { cat: 'settings', area: 'sync', test: () => true },
     // Notes, in the order a record needs what it points at: an account's folders, then its files, then its notes.
     { cat: 'noteFolders', area: 'notes', test: (k) => NREC.exec(k)?.[2] !== undefined, order: 1 },
@@ -156,6 +162,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     // only for a course still placed where they were read.
     if (cat === 'gradescope') {
       const G = L.gradescope(), raw = (await local.get(key))[key], here = G.clean(raw), same = !!here.acct && here.acct.id === value.acct?.id;
+      if (here.acct && !same) return; // another account's: this device keeps its own (the category's merge)
       const view = { acct: here.acct || value.acct, map: same ? { ...value.map, ...here.map } : here.acct ? here.map : value.map, hide: here.hide || value.hide, bind: { ...value.bind, ...here.bind } };
       const next = G.clean(defOf('local', key).merge(raw, view));
       if (canon(next) !== canon(here)) await local.set({ [key]: next });
@@ -363,8 +370,10 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         }
       }
       await restamp({ [id]: got.at }, { [id]: stampBefore });
-      // A later local write is still dirty even if it lands before the sync bookkeeping finishes.
-      await put(h, { area: got.area, key: got.key, cat: got.cat, id: R.id, lsum: await sumOf(got.area, got.key, got.value), rsum: got.sum, at: got.at, seen: got.at }, was);
+      // A later local write is still dirty even if it lands before the sync bookkeeping finishes. lsum: what this device holds
+      // now, as it is compared (a view's own merge may keep this device's, Gradescope's account).
+      const held = d?.merge && got.value !== undefined ? d.view(write) : got.value;
+      await put(h, { area: got.area, key: got.key, cat: got.cat, id: R.id, lsum: await sumOf(got.area, got.key, held), rsum: got.sum, at: got.at, seen: got.at }, was);
     };
     // A file up as documents/drive-sync.js up sends it (one too large for a request waits for the run's last step: 'pending'),
     // or, for a caller with no transfers (ctx.up), in one request. m: { bytes, id, meta, create, mime, info }.
@@ -407,6 +416,9 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       const st = await stamps();
       if (!key) { // a record only Drive has, met for the first time
         if (!R || R.removed) return;
+        // A picture or attachment comes with a note here that uses it (each below, x.need), never by itself: one whose note
+        // was deleted for good stays in Drive and off this device.
+        if (R.appProperties?.cat === 'noteFiles' && !x.need) return;
         const got = await fetchRec(ctx, R, h);
         if (got.value !== undefined && await valueOf(got.area, got.key) === undefined) return take(h, got, R, null);
         return one(ctx, h, { area: got.area, key: got.key, R });
@@ -415,9 +427,10 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       if (!cat) return;
       const value = await valueOf(area, key), lsum = await sumOf(area, key, value), at = st[`${area}:${key}`] || 0;
       if (def.immutable) {
-        // The bytes never change, but Notes may have cleaned up this device's copy since it last used them.
+        // The bytes never change, but Notes may have cleaned up this device's copy since it last used them: fetched again
+        // only for a note that uses it again (x.need), never for one deleted with its note.
         if (value === undefined) {
-          if (R && !R.removed) { const got = await fetchRec(ctx, R, h, owner); if (got.value !== undefined) await take(h, got, R, was, value); }
+          if (R && !R.removed && x.need) { const got = await fetchRec(ctx, R, h, owner); if (got.value !== undefined) await take(h, got, R, was, value); }
           return;
         }
         if (was && R && !R.removed) return;
@@ -457,7 +470,9 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
           const v = await valueOf('notes', r.key);
           for (const id of v ? L.notes().refs(v.html) : []) {
             const k = `${r.key.slice(0, r.key.lastIndexOf('|'))}|file|${id}`, fh = await hk('notes', k);
-            if (!await recOf(fh) || await valueOf('notes', k) === undefined) await one(ctx, fh, { area: 'notes', key: k });
+            // Its file as this pass met it (a full pass's listing, a change page), else looked up.
+            const R = ctx.known?.get(fh);
+            if (!await recOf(fh) || await valueOf('notes', k) === undefined) await one(ctx, fh, { area: 'notes', key: k, need: true, ...(R && { R }) });
           }
         }
       } catch (e) {
@@ -488,6 +503,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         for (const f of r.files) if (HASH.test(f.appProperties?.key || '') && (!remote.has(f.appProperties.key) || f.id < remote.get(f.appProperties.key).id)) remote.set(f.appProperties.key, f);
         page = r.nextPageToken || null;
       } while (page);
+      ctx.known = remote;
       const seen = new Set();
       for (const { area, key } of await locals()) {
         const h = await hk(area, key);
@@ -503,6 +519,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     const changes = async (list, ctx) => {
       ctx.data = await sub(ctx, 'data', 'Data');
       list = [...list].sort((a, b) => (ORDER[a?.file?.appProperties?.cat] || 0) - (ORDER[b?.file?.appProperties?.cat] || 0));
+      ctx.known = new Map(list.filter((c) => c?.file?.appProperties?.glaze === 'rec' && !c.file.trashed && (c.file.parents || []).includes(ctx.data)).map((c) => [c.file.appProperties.key, c.file]));
       for (const c of list) {
         const f = c?.file;
         if (c?.removed || !f) {

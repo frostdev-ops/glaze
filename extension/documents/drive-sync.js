@@ -575,6 +575,16 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         // the one this device knew) and as that file stands (edited outside Glaze since: kept as it is).
         if (ldirty) { await keepOther(key, l, got); await kept(h, { ...d, ...(got.file && { file: got.file, fh: got.fileRev, fsum: got.sum }) }, R); return sync(key, h, { folder }); }
         const now2 = await take(key, l, got);
+        if (force && got.file && !got.external) {
+          // No Glaze file of its own here (none yet, or the one it had is no longer Glaze's): the one Drive's copy names, while
+          // it is still this document's Glaze file and not edited outside Glaze since that copy was written. Never a new one
+          // beside it. One edited outside since is kept as it is (as above), and a new one goes up.
+          const F = await meta(got.file);
+          const ours = !F.removed && F.trashed === false && F.appProperties?.glaze === 'file' && F.appProperties?.key === h;
+          const outside = !!F.headRevisionId && F.headRevisionId !== got.fileRev && F.appProperties?.sum === got.sum;
+          if (ours && !outside) { await agreed(key, h, R, got, now2, d); return; }
+          if (ours && !FILES.includes(got.kind)) await D((c) => c.patch(got.file, { appProperties: { glaze: 'kept', sum: null } }));
+        }
         if (force || got.external) return push(key, h, now2, { ...d, json: R.id }, folder);
         await agreed(key, h, R, got, now2, d);
         return;

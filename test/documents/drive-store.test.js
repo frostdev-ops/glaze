@@ -404,7 +404,9 @@ test('Gradescope downloads invalidate cached rows when their account or course p
     clock.t += 1000;
     await a.local.set({ gradescope: GS.clean({ ...original, courses: {}, ...(change === 'account' ? { acct: { id: 'b'.repeat(24), name: 'Alex' } } : change === 'placing' ? { map: { 111: { to: 'canvas:https://school.instructure.com/8', name: 'Other class' } } } : { hide: true }) }) });
     assert.ok((await a.run()).ok); assert.ok((await b.run()).ok);
-    assert.deepEqual((await b.local.get('gradescope')).gradescope.courses, change === 'compatible' ? original.courses : {}, `${change}: keep rows only for the same account and course placing`);
+    // Another account on A: B, signed in to its own, keeps that account and what it read for it.
+    assert.deepEqual((await b.local.get('gradescope')).gradescope.courses, change === 'placing' ? {} : original.courses, `${change}: keep rows only for the same account and course placing`);
+    if (change === 'account') assert.equal((await b.local.get('gradescope')).gradescope.acct.id, acct.id, 'B keeps its own account');
   }
 });
 
@@ -1147,10 +1149,10 @@ test('two devices signed in to different Gradescope accounts each keep their own
   await b.local.set({ gradescope: gs(alex, '222', 'canvas:https://school.instructure.com/8', 'Quiz 1') });
   assert.ok((await b.on()).ok);
   assert.ok((await a.run()).ok); assert.ok((await b.run()).ok);
-  const check = async () => {
+  const check = async (placed = ['111']) => {
     const ga = await mine(a), gb = await mine(b);
     assert.equal(ga.acct.id, sam.id, 'A keeps its own Gradescope account');
-    assert.deepEqual(Object.keys(ga.map), ['111'], 'and its own placings');
+    assert.deepEqual(Object.keys(ga.map).sort(), placed, 'and its own placings');
     assert.ok(ga.courses['111']?.rows.length, 'and what it read');
     assert.equal(gb.acct.id, alex.id, 'B keeps its own');
     assert.deepEqual(Object.keys(gb.map), ['222']);
@@ -1174,5 +1176,5 @@ test('two devices signed in to different Gradescope accounts each keep their own
   await a.local.set({ gradescope: { ...(await mine(a)), map: { ...(await mine(a)).map, 333: { to: 'canvas:https://school.instructure.com/9', name: 'Chem' } } } });
   assert.ok((await a.run()).ok); assert.ok((await c.run()).ok); assert.ok((await b.run()).ok);
   assert.deepEqual(Object.keys((await mine(c)).map).sort(), ['111', '333'], 'the same account\'s placings reach it');
-  await check();
+  await check(['111', '333']);
 });
