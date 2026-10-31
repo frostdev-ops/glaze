@@ -129,7 +129,7 @@ a { color: inherit; text-decoration: none; }
 
 /* ---- Glaze's widgets: cards in the open rail, compact in the icons rail and the top bar, a grid in a phone's sheet ---- */
 .widgets { display: flex; flex-direction: column; gap: 6px; }
-.widgets:empty { display: none; }
+.widgets:empty:not([data-room]) { display: none; }
 .wtop { margin-bottom: 10px; }
 .wbottom { margin: 8px 0; padding-top: 10px; border-top: 1px solid var(--nb-line); }
 .widget[data-w="pet"]:not([data-ready]) { display: none; }
@@ -167,7 +167,7 @@ a.widget[aria-disabled="true"] { cursor: default; }
 .rail:not([data-open]) .w-pet, .rail:not([data-open]) .w-pet :is(img, canvas) { width: 30px; height: 30px; }
 /* Mods' navigation widgets: the dock, under the open rail's items (it never moves: a frame moved loads again). */
 .dock { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; outline: none; }
-.dock:empty { display: none; }
+.dock:empty:not([data-room]) { display: none; }
 .dock > * { display: block; box-sizing: border-box; width: 100%; padding: 8px 12px; border-radius: 14px; overflow: hidden; background: var(--nb-hover); }
 .rail:not([data-open]) .dock { visibility: hidden; }
 

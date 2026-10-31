@@ -272,7 +272,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       // Better To Do's copy when it's this account's, covers the day and is under ten minutes old; else this day alone.
       const items = async (d) => {
         const lo = L.midnight(d, me.tz), hi = L.midnight(d + 1, me.tz);
-        if (ultra) return (await GZ_ULTRA.page.planned(lo, hi, cache)).items;
+        if (ultra) return (await GZ_ULTRA.page.planned(lo, hi, cache, me.uid)).items;
         if (cache?.key === L.storeKey(location.origin, me.uid) && Date.now() - cache.at < 6e5 && Date.parse(cache.start) <= lo && Date.parse(cache.end) >= hi) return cache.items || [];
         const m = memo.get(d);
         if (m && Date.now() - m.at < 12e4) return m.items;
@@ -528,7 +528,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       let alive = true;
       const scope = () => (side ? { courseId: side.context().courseId, scope: side.scope?.() || side.rec()?.todoScope || 'follow', setScope: (v) => side?.op([{ op: 'todoScope', v }]), rendered: () => todoIn(), failed: () => todoIn() } : null);
       const mount = () => { if (alive && side && globalThis.GZ_TODO_UI?.mount) { GZ_TODO_UI.mount(body, scope()); todoIn(); } };
-      ctx.need('planner/page/todo.js', () => globalThis.GZ_TODO_UI).then(mount, () => {});
+      ctx.need([...ultra ? ['courses/ultra.js'] : [], 'planner/todo.js', 'planner/page/todo.js'], () => globalThis.GZ_TODO_UI).then(mount, () => {});
       return { context: mount, suspend: () => globalThis.GZ_TODO_UI?.suspend?.(), resume: () => globalThis.GZ_TODO_UI?.resume?.(), stop: () => { alive = false; globalThis.GZ_TODO_UI?.unmount?.(body); } };
     },
 

@@ -31,7 +31,9 @@ const size = (f) => fs.statSync(path.join(root, f)).size;
 // site; the nav layout (x.nav) 525 on Ultra, 545 on Canvas and 488 on Moodle; and the Look's parts themselves (package A)
 // 794 on every site: GZ_CTX.parts(), the check for a Look that has parts, the preview hand-over and two more values of
 // defaults.js's bg.kind. Everything else about them loads on demand (looks/lookparts.js, looks/page/lookparts.js).
-const FIRST_SCRIPT_BASELINE = { ultra: 225195 + 427 + 525 + 794, canvas: 201446 + 427 + 545 + 794, moodle: 172222 + 427 + 488 + 794 };
+// Ultra's stores (D, 2026-10-30, against a6fa9919): content-ultra.js's own identity, memberships and gradebook reads move to
+// courses/ultra.js on demand, 7 bytes fewer on Ultra.
+const FIRST_SCRIPT_BASELINE = { ultra: 225195 + 427 + 525 + 794 - 6, canvas: 201446 + 427 + 545 + 794, moodle: 172222 + 427 + 488 + 794 };
 // Look parts put small hooks in the first script; the owner approved raising the baseline for them
 // (2026-10-16). One line per package, the bytes it added: the motion package's moment emitter ('glaze:moment', the
 // completion and new-grade call sites) and the hook that loads looks/page/motionx.js when a Look has animations, effects or a
@@ -148,6 +150,10 @@ const ULTRA_SIGNOUT = { ultra: 243, canvas: 0, moodle: 0 };
 // the queue (courses/lmsq.js) loads on demand. Measured against 7bf3623.
 // Review versus immutable f8dc85a: liveness/auth/member failure guards and incomplete Canvas-list checks included.
 const LMS_REQUESTS = { ultra: 1769, canvas: 201, moodle: 0 };
+// Ultra's /users/me at first paint (D, coordinator-approved 2026-10-30, measured against 3298f6f9): content-ultra.js asks it
+// straight away, before the stores' files load, so personal panels can show their kept copy the moment it confirms who's
+// signed in; courses/ultra.js takes the same request (and content.js's api keeps working on its own). 376 bytes on Ultra.
+const ULTRA_EARLY_ME = 376;
 // Shortcut roles and IME (WP-N2; the owner's audit-fix allowance): content.js's keyOn skips menus, menubars, lists, grids, trees and
 // comboboxes across composed event paths, preserves queued IME flags and ignores Safari keyCode 229: 365 bytes/site. Canvas's
 // frame word also distinguishes course Hide from a disabled menu (+8 bytes). Measured against immutable WP-N2 base f8dc85a.
@@ -278,6 +284,35 @@ const AREA_PATHS = { ultra: 573, canvas: 514, moodle: 395 };
 // content.js loads the already-lazy courses/page/docs.js where a Canvas page shows a file preview or links a file (162), on every
 // site (one shared file); docs.js loads courses/page/canvasopen.js, which does the rest. Measured against f3e110c2.
 const CANVAS_OPEN = 162;
+// Glaze's own work on Ultra pages (plan step C, 2026-10-30; a named raise under the 2026-10-19 approval): need() groups a
+// feature's files into one worker round trip, a class or style change sweeps its element rather than its subtree, a hidden
+// tab's passes wait until it is shown, the startup storage.local reads go in one get, and settings and course-list changes
+// apply from their new values. All of it is the passes and loader in the shared content.js (5,545 bytes on every site) and
+// Ultra's groups and startup reads in content-ultra.js (521). Measured against a6fa9919.
+const ULTRA_PASSES = { ultra: 5545 + 521, canvas: 5545, moodle: 5545 };
+// Ultra's course tabs ahead of time (the perf/ultra plan's step 1c, 2026-10-30; a named raise under the 2026-10-19 approval):
+// content.js takes a frame named gz-ctab:standby as a course tab's frame (its name test and comment), 16 bytes on every site
+// (one shared file); the standby itself lives in the already-lazy navigation/page/coursetabs.js. Measured against a6fa9919.
+const CTAB_STANDBY = 16;
+// Glaze's bar on Ultra at first paint (perf step 1b; a named raise under the owner's 2026-10-19 approval): navigation/nav.js
+// draws the bar as this tab last drew it, inert in its room until navigation/page/navbar.js takes it over, after checking
+// it is this tab's, recent, from Ultra and for the same settings and window, with only the bar's own elements, and fills in
+// the account's own parts (its name, course tabs, counts) in their kept room once the account is confirmed; content-ultra.js
+// asks for it at first paint and drops it with the bar; styled at once from its kept sheet, it is in the first paint. 4,810
+// bytes on Ultra only; keeping it loads on demand with the bar.
+// Measured against a6fa9919.
+const NAV_FIRST_PAINT = { ultra: 4810, canvas: 0, moodle: 0 };
+// Instant copies of Ultra's Grades, Courses and Activity (perf step S; a named raise under the owner's 2026-10-19 approval):
+// content-ultra.js asks for courses/page/instant.js at first paint on those pages and drops the site's copies on sign-out,
+// keeping no more in that page, 1,197 bytes on Ultra; defaults.js's enhance.instant, 54 on every site. The copy itself
+// loads on demand. Measured against 3298f6f9.
+// Waiting for the settings before loading it (Glaze may be off): 41 more on Ultra, measured at integration.
+const INSTANT_COPIES = { ultra: 1197 + 54 + 41, canvas: 54, moodle: 54 };
+// Ultra staleness review: keep startup consumers current, expire the due-list memo, preserve Look parts patches,
+// and retire the first-paint bar on purge/timeout. Storage and frame lifecycle work remains on demand.
+// Measured against b3e26392; shared content.js bytes also apply to Canvas and Moodle.
+// Canvas's and Moodle's ten-minute due-list cache: 104 more on every site, against 737a67d0.
+const ULTRA_STALENESS = { ultra: 2278 + 104, canvas: 1127 + 104, moodle: 1127 + 104 };
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what background/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;
@@ -286,7 +321,7 @@ const FIRST_SCRIPT = { ultra: entry((c) => c.js.includes('content/content-ultra.
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + UI_SWAP + ULTRA_VT_ABORT[site] + VT_GUARD[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS + SYLLABUS_DOCS + WRITER + WRITER_SETTINGS + CTAB_PALETTE[site] + LOOK_CATALOG + COURSE_LOOKS_SYNC + BB_PREVIEWS + CANVAS_OPEN + AREA_PATHS[site];
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + (site === 'ultra' ? ULTRA_EARLY_ME : 0) + UI_SWAP + ULTRA_VT_ABORT[site] + VT_GUARD[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS + SYLLABUS_DOCS + WRITER + WRITER_SETTINGS + CTAB_PALETTE[site] + LOOK_CATALOG + COURSE_LOOKS_SYNC + BB_PREVIEWS + CANVAS_OPEN + AREA_PATHS[site] + ULTRA_PASSES[site] + CTAB_STANDBY + NAV_FIRST_PAINT[site] + INSTANT_COPIES[site] + ULTRA_STALENESS[site];
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }
@@ -407,6 +442,7 @@ test('PDF timeouts under a minute are reviewed and retain their clear', () => {
 
 // Reading styles or every element: each site is bounded (one element, its ancestors, or the documented first pass).
 const STYLE_READS = [
+  ['navigation/nav.js', "querySelectorAll('*')", 1], // Only the parsed copy of Glaze's own bar, once at first paint, inside a template, not the page.
   ['writer/writer-ultra.js', "querySelectorAll('*')", 1], // Only the recognized Quill body at takeover or after a foreign edit; mounted boxes are skipped on observer passes.
   ['courses/page/rubric.js', 'getComputedStyle(a.box)', 1], // One recognized rubric section's padding and font per layout pass; no descendant sweep.
   ['writer/page/writer.js', 'getComputedStyle(html)', 1], // The root's Look tokens, when a Writer box opens or <html>'s Look attributes change.
@@ -437,12 +473,16 @@ const STYLE_READS = [
   // WP-T2: only where a Look's colour rule meets Glaze settings: the root's palette, Glaze's item, and that part's ancestors
   // up to the first solid background.
   ['looks/page/rules.js', 'getComputedStyle(el)', 1],
-  ['documents/sheets/sheet-grid.js', 'getComputedStyle(gridEl)', 1], // the spreadsheet grid's font, once as it mounts, for fitting a column to its text on a canvas
+  ['documents/sheets/sheet-grid.js', 'getComputedStyle(gridEl)', 1],
+  ['courses/page/instant.js', 'getComputedStyle(m)', 1], // Ultra's one main area's padding, to lay an instant copy over it, only while a copy shows // the spreadsheet grid's font, once as it mounts, for fitting a column to its text on a canvas
 
   // The long-tail sweep (content.js, "long tail"): the first pass reads every element once, capped at MAX_FULL; later
   // passes only the subtrees the mutation observer reports. Its own colour reads, and an InstUI icon's.
   ['content/content.js', "querySelectorAll('*')", 2],
   ['content/content.js', 'getComputedStyle(e)', 2],
+  // A class or style change's own subtree (attributeRoots): only one under 64 elements is swept with it; the live list is
+  // indexed at 64, so a big container stops counting there.
+  ['content/content.js', "getElementsByTagName('*')", 1],
   ['content/content.js', 'getComputedStyle(p)', 1], // a highlight's fill above an element
   ['content/content-ultra.js', 'getComputedStyle(p)', 1], // a course slot's probe
   ['courses/page/docs.js', 'getComputedStyle(p)', 1], // the scroller above the document in focus mode
@@ -451,7 +491,7 @@ const STYLE_READS = [
   ['pet/page/petworld.js', 'getComputedStyle(e)', 1], // only matching panel roots with layout boxes, while the pet is wandering
   ['navigation/page/place.js', 'getComputedStyle(p)', 1], // the scroller above a course's outline or Modules list
   ['courses/page/announce-read.js', 'getComputedStyle(p)', 1], // the scroller above Ultra's Announcements list, once per read-circle click or Mark all as read
-  ['navigation/page/coursetabs.js', 'getComputedStyle(p)', 1], // the scroller above the course tabs, once a tab switch lands
+  ['navigation/page/coursetabs.js', 'getComputedStyle(p)', 2], // the scroller above the course tabs, once a tab switch lands; Course Content's scroller, the ancestors of its outline only, once a fresh outline swaps in
   ['navigation/page/coursetabs.js', 'getComputedStyle(list)', 1], // the tab strip's direction, once per arrow key
   // A course tab's sketch (navigation/coursetabs.js sketch): off-screen subtrees stop at their outer box, without reading their
   // styles; visible content is never lost to an element-count cap. Captures run at most each 0.6 s, each 15 s per page.

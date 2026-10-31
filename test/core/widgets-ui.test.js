@@ -38,6 +38,12 @@ const page = ({ local = {}, sync = {}, replies = [], clock = { t: Date.now() }, 
   const reads = [];
   const sent = [];
   const listeners = [], win = [];
+  // The worker's part of Ultra's stored identity (background.js 'glaze:ultraMine' save): the page's commit lands in local.
+  const worker = (m) => {
+    if (m?.type !== 'glaze:ultraMine' || m.op !== 'save' || typeof m.key !== 'string' || !m.key.startsWith('ultraMe:')) return;
+    const was = local[m.key];
+    local[m.key] = { ...m.value, ...(was?.uid === m.value.uid && !m.value.courses && { courses: was.courses }) };
+  };
   const c = {
     console, URL, URLSearchParams, Intl, Date: FakeDate, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String,
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' },
@@ -46,10 +52,10 @@ const page = ({ local = {}, sync = {}, replies = [], clock = { t: Date.now() }, 
       ...(ultra && { site: 'ultra', capi: () => { throw new Error('not on Ultra'); }, profile: () => { throw new Error('not on Ultra'); } }) },
     location: ultra ? { origin: 'https://school.blackboard.test', pathname: '/ultra/course' } : { origin: 'https://canvas.test', pathname: '/' },
     setTimeout: (f, ms) => { timers.set(++n, { f, ms }); return n; },
-    clearTimeout: (id) => timers.delete(id),
+    clearTimeout: (id) => timers.delete(id), cancelAnimationFrame() {},
     addEventListener: (type, f) => win.push({ type, f }), removeEventListener: (type, f) => { const i = win.findIndex((x) => x.type === type && x.f === f); if (i >= 0) win.splice(i, 1); },
     chrome: {
-      runtime: { id: 'glaze', lastError: undefined, getURL: (p) => `chrome-extension://x/${p}`, getManifest: () => ({ version: '2.3.0' }), sendMessage: (m, cb) => { sent.push(m); const r = replies.shift() || { ok: true, kept: true }; if (hold) held.push(() => cb(r)); else Promise.resolve().then(() => cb(r)); } },
+      runtime: { id: 'glaze', lastError: undefined, getURL: (p) => `chrome-extension://x/${p}`, getManifest: () => ({ version: '2.3.0' }), sendMessage: (m, cb) => { sent.push(m); worker(m); const r = replies.shift() || { ok: true, kept: true }; if (hold) held.push(() => cb(r)); else Promise.resolve().then(() => cb(r)); } },
       storage: {
         local: { get: (keys, cb) => reads.push(() => cb(Object.fromEntries([keys].flat().filter((k) => k in local).map((k) => [k, local[k]])))), set: (v, cb) => { Object.assign(local, v); cb?.(); } },
         sync: { get: (k, cb) => cb(Object.fromEntries([k].flat().filter((x) => x in sync).map((x) => [x, sync[x]]))) },
@@ -68,7 +74,7 @@ const page = ({ local = {}, sync = {}, replies = [], clock = { t: Date.now() }, 
       assert.equal(u.origin, c.location.origin); assert.equal(init.credentials, 'same-origin');
       ultra.requests.push(u.pathname);
       let value;
-      if (u.pathname === '/learn/api/v1/users/me') value = { id: uid };
+      if (u.pathname === '/learn/api/v1/users/me') { if (ultra.holdMe) await new Promise((resolve) => ultra.pending.push(resolve)); value = { id: ultra.uid || uid }; }
       else if (u.pathname === `/learn/api/v1/users/${uid}/memberships`) value = { results: [] };
       else if (u.pathname.endsWith('/todo/studentItems')) {
         ultra.asked.push({ origin: u.origin, from: Date.parse(u.searchParams.get('since')), to: Date.parse(u.searchParams.get('until')) });
@@ -322,13 +328,15 @@ test("Ultra: the agenda reads the day from Ultra's To Do and calendar (courses/u
   assert.ok(find(list, (e) => e.tagName === 'LI' && 'done' in e.dataset), 'handed in: done');
   assert.equal(ultra.asked.length, 1);
   assert.equal(ultra.asked[0].origin, 'https://school.blackboard.test', "this Ultra site's own");
-  assert.equal(ultra.asked[0].to - ultra.asked[0].from, 864e5, 'one day');
-  // The day again within two minutes: not asked again.
+  // The day is inside Better To Do's own range: that range is read (one To Do request, laid back from its end) and
+  // answers the days around it too, within two minutes.
+  const [lo, hi] = ultraDay(p);
+  assert.ok(ultra.asked[0].from <= lo && ultra.asked[0].to >= hi + 7 * 864e5, "Better To Do's range, which holds the day");
   find(body, (e) => e.attrs?.['aria-label'] === 'Next day').fire('click');
   for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
   find(body, (e) => e.attrs?.['aria-label'] === 'Previous day').fire('click');
   for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
-  assert.equal(ultra.asked.length, 2, 'the next day once, today from memory');
+  assert.equal(ultra.asked.length, 1, 'the next day and today from the same read');
 });
 
 const agendaText = (el) => [el.textContent || '', ...(el.children || []).map((c) => (typeof c === 'object' ? agendaText(c) : String(c)))].join(' ');
@@ -336,6 +344,13 @@ const loadAgenda = async (p) => {
   const body = new E(), tile = p.ui.probe.WIDGETS.agenda(body);
   for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
   return { body, tile };
+};
+// Awaits a store call while answering the storage reads it makes on the way (the fence before a lease, the kept student).
+const pumped = async (p, x) => {
+  let done = false;
+  x.then(() => { done = true; }, () => { done = true; });
+  while (!done) { p.answer(); await settle(); }
+  return x;
 };
 const ultraDay = (p) => {
   const L = p.c.GZ_TODO, tz = Intl.DateTimeFormat().resolvedOptions().timeZone, d = L.dayOf(p.clock.t, tz);
@@ -350,12 +365,42 @@ const cachedDay = (p) => {
 test('Ultra shared planner: an agenda reuses the profile and range already read by another consumer', async () => {
   const ultra = { items: [] }, p = page({ ultra });
   const range = ultraDay(p);
-  await p.c.GZ_ULTRA.page.planned(...range);
+  await pumped(p, p.c.GZ_ULTRA.page.planned(...range));
   const { tile } = await loadAgenda(p);
   assert.equal(ultra.requests.filter((s) => s.endsWith('/users/me')).length, 1, 'shared identity, no independent widget read');
   assert.equal(ultra.requests.filter((s) => s.endsWith('/memberships')).length, 1);
   assert.equal(ultra.asked.length, 1, 'the shared fresh range supplies the agenda');
   tile.stop();
+});
+
+test('D: the agenda draws its frame at once and the kept day the moment /users/me confirms the student', async () => {
+  const ultra = { holdMe: true, items: [] }, p = page({ ultra });
+  p.ui.probe.set(W, D.GZ_SANITIZE({}).widgets, null); // nobody confirmed on this page yet
+  p.local[`ultraMe:${p.c.location.origin}`] = { uid: '_5_1' };
+  p.local.todoCache = cachedDay(p);
+  const { body, tile } = await loadAgenda(p);
+  assert.ok(!agendaText(body).includes('Covered work'), 'nobody\'s day before the account is confirmed');
+  assert.match(agendaText(body), /Class schedule/, 'its frame is there');
+  assert.equal(ultra.asked.length, 0, 'nothing of To Do asked');
+  assert.equal(ultra.pending.length, 1, 'who is signed in still on its way');
+  ultra.holdMe = false; for (const resolve of ultra.pending.splice(0)) resolve();
+  for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
+  assert.match(agendaText(body), /Covered work/, 'the kept day, once confirmed');
+  assert.equal((await p.ui.who()).uid, '_5_1');
+  tile.stop();
+});
+
+test('D: the agenda drawn for another student than the one signed in is not kept as theirs', async () => {
+  const ultra = { holdMe: true, uid: '_6_1', items: [] }, p = page({ ultra });
+  p.ui.probe.set(W, D.GZ_SANITIZE({}).widgets, null);
+  p.local[`ultraMe:${p.c.location.origin}`] = { uid: '_5_1' };
+  p.local.todoCache = cachedDay(p);
+  const { body } = await loadAgenda(p);
+  assert.ok(!agendaText(body).includes('Covered work'));
+  ultra.holdMe = false; for (const resolve of ultra.pending.splice(0)) resolve();
+  for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
+  assert.equal((await p.ui.who()).uid, '_6_1', 'the account is the one signed in');
+  assert.equal(p.local[`ultraMe:${p.c.location.origin}`].uid, '_6_1', 'and remembered as the last one here');
 });
 
 test('Ultra shared planner: two agendas join an in-flight range and keep absolute own-site links', async () => {
@@ -388,7 +433,7 @@ test('Ultra shared planner: covered To Do cache is account-scoped and fresh for 
 
 test('Ultra shared planner: memo age belongs to the shared read, and expires at two minutes', async () => {
   const ultra = { items: [] }, clock = { t: Date.parse('2026-10-15T16:00:00Z') }, p = page({ ultra, clock });
-  await p.c.GZ_ULTRA.page.planned(...ultraDay(p));
+  await pumped(p, p.c.GZ_ULTRA.page.planned(...ultraDay(p)));
   clock.t += 119999;
   const { body, tile } = await loadAgenda(p);
   assert.equal(ultra.asked.length, 1, 'opening the agenda does not restart or duplicate another consumer’s memo');

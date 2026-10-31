@@ -97,7 +97,7 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     const one = async (c) => {
       if (ultra) {
         const r = GZ_ULTRA.read({ origin: go.origin, signal: go.signal, live: go });
-        const rows = await r.grades(c.id, uid);
+        const rows = await GZ_ULTRA.page.book(c.id, uid, { signal: go.signal, live: go });
         const excepted = await GZ_ULTRA.excepts(r, c.m, c.id, rows, at);
         return { id: c.id, name: c.name, q: false, more: rows.complete === false, items: GZ_ULTRA.work(rows, at, excepted), trend: rows.complete === false ? [] : GZ_ULTRA.trend(rows, tz), gp: '' };
       }

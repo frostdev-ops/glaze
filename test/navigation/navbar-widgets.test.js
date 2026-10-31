@@ -229,6 +229,19 @@ test('Ultra next due validates course and content ids before building a link', a
   assert.equal(node.box.href, 'https://school.test/ultra/redirect?redirectType=nautilus&courseId=_1_1&contentId=_2_1');
 });
 
+test("D: Ultra's next due asks the planner for the page's confirmed student, the one /users/me at first paint answered", async () => {
+  const asked = [];
+  const { w, X } = harness({ site: 'ultra', need: (_, c) => {
+    c.GZ_ULTRA = { page: { planned: async (from, to, cache, uid) => { asked.push(uid); return { key: 'todo:school', items: [] }; } } };
+    c.GZ_TODO = { clean: () => ({ items: {} }), isDone: () => false };
+    return Promise.resolve();
+  } });
+  X.me = async () => '_9_1';
+  w.set(['next']); await settle(); await settle(); await settle();
+  assert.deepEqual(asked, ['_9_1']);
+  for (const f of ['navigation/page/nav.js', 'navigation/page/navbar-widgets.js']) assert.match(fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8'), /GZ_ULTRA\.page\.planned\(\+start, \+end, local\.todoCache, await Promise\.resolve\(X\.me\?\.\(\)\)\.catch\(\(\) => ''\)\)/, f);
+});
+
 test('late local reads and timer replies cannot overwrite a newer storage read', async () => {
   const pending = [];
   let reply;
@@ -240,11 +253,30 @@ test('late local reads and timer replies cannot overwrite a newer storage read',
   pending[0]({ widgetTimer: { end: 0 } }); await settle();
   assert.equal(node.box.hasAttribute('data-running'), true);
   node.go.dispatchEvent({ type: 'click' });
-  changes[0]({ widgetTimer: {} }, 'local');
-  pending[2]({ widgetTimer: { end: 0 } }); await settle();
+  // Once a read has landed, a change brings its own new value: nothing is read again.
+  changes[0]({ widgetTimer: { newValue: { end: 0 } } }, 'local'); await settle();
+  assert.equal(pending.length, 2, 'no read for a change that carries its value');
   reply({ ok: true, timer: { end: Date.now() + 60000 } }); await settle();
   assert.equal(node.box.hasAttribute('data-running'), false);
 });
+
+for (const file of ['navigation/page/nav.js', 'navigation/page/navbar-widgets.js']) {
+  test(`${file}: a change during a resumed read preserves keys changed while widgets were stopped`, async () => {
+    const source = read(file), pending = [];
+    const start = source.indexOf('  const readLocal ='), end = source.indexOf('  const refreshNext =', start);
+    const c = vm.createContext({ active: true, live: () => true, rev: 0, reads: 0, local: {}, isPreview: false,
+      nextItems: [], nextAt: 0, get: () => new Promise((res) => pending.push(res)), draw() {}, drawWidgets() {} });
+    const api = vm.runInContext(`${source.slice(start, end)}\n({ readLocal, takeLocal, state: () => local });`, c);
+    api.readLocal(); pending.shift()({ widgetTimer: { end: 0 }, todoCache: { key: 'old-account' } }); await settle();
+    // Widgets have resumed after missing another tab's timer and account changes. A pet event arrives before the read.
+    api.readLocal();
+    api.takeLocal({ 'pet:school': { newValue: { level: 2 } } });
+    for (const reply of pending) reply({ widgetTimer: { end: 60000 }, todoCache: { key: 'new-account' } });
+    await settle();
+    assert.equal(api.state().widgetTimer.end, 60000, 'the missed timer change is recovered');
+    assert.equal(api.state().todoCache.key, 'new-account', 'the missed account change is recovered');
+  });
+}
 
 test('a next response from a former page is discarded and the current page is requested', async () => {
   const pending = [];
@@ -292,4 +324,19 @@ test('a timer options read cannot overwrite a setting changed while it loads', a
   reply({ widgets: { work: 25 } }); await settle();
   assert.equal(node.options.work, 60);
   assert.equal(node.time.textContent, '60:00');
+});
+
+
+test('a local To Do tick refreshes the next-due item immediately', async () => {
+  const { w, ctx, changes } = harness({ site: 'ultra', need: async (f, c) => {
+    c.GZ_ULTRA = { page: { planned: async () => ({ key: 'todo:https://school.test/_1_1', items: [{ type: 'assignment', id: '_2_1', title: 'Essay', at: Date.now() + 864e5, url: '/ultra/work' }] }) } };
+    c.GZ_TODO = { clean: (v) => v || { items: {} }, isDone: (i, mode, done) => !!done };
+  }, local: { items: {} } });
+  const next = w.set(['next']).get('next');
+  await settle(); await settle();
+  assert.equal(next.detail.textContent, 'Essay');
+  ctx.chrome.storage.local.get = (k, cb) => cb({ [k]: { items: { 'assignment:_2_1': { done: true } } } });
+  changes[0]({ 'todo:https://school.test/_1_1': { newValue: {} } }, 'local');
+  await settle(); await settle();
+  assert.equal(next.box.getAttribute('aria-disabled'), 'true');
 });

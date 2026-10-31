@@ -310,7 +310,11 @@ const BROKER = {
   todo: {
     allow: async (m, s) => (fromEditor(s) ? !!m.restore && m.key === undefined && s.frameId === 0
       : !m.restore && typeof m.key === 'string' && GZ_TODO.STORE_KEY.test(m.key) && m.key.startsWith(`todo:${(await fromCanvas(s)) || (await fromUltra(s))}/`)),
-    run: async (m, area) => {
+    run: async (m, area, sender) => {
+      if (m.cache && ultraAt(sender)) {
+        const origin = await fromUltra(sender), state = await copyState();
+        if (!origin || m.cache.epoch !== `${state.all}/${state.sites[origin] || ''}` || (await chrome.storage.sync.get('enabled')).enabled === false) return { ok: false, error: 'stale' };
+      }
       // A Canvas planner answer brings its site's due list (planner/todo.js publishIn): kept per site, as content.js keeps it.
       let target = { ...area, local: { ...area.local, set: (patch) => area.local.set(dueBySite(patch)) } };
       const pets = m.restore?.pets === undefined ? {} : GZ_PET.backup(m.restore.pets);
@@ -1146,6 +1150,152 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     .then(reply, () => reply({ first: false }));
   return true;
 });
+// An Ultra site's student and memberships (courses/ultra.js page), as a page there last read them: kept in this worker's
+// session storage (gone when the browser closes, never the page's) for the site's other pages and course-tab frames.
+// get, put (a fresh read, dated when requested), touch, and serialized local saves under the page's purge lease.
+const ultraStoreAt = new Map();
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:ultraMine') return;
+  (brokerTurn ||= GZ_CARDS.queue())(async () => {
+    const origin = ultraPage(s) && await fromUltra(s);
+    if (!origin) return null;
+    const k = `ultraMine:${origin}`, now = Date.now();
+    const had = chrome.storage.session ? (await chrome.storage.session.get(k))[k] || null : null;
+    if (m.op === 'get') return had;
+    const state = await copyState(), epoch = `${state.all}/${state.sites[origin] || ''}`;
+    if (m.op === 'begin') {
+      const keys = ['ultraCopyFence', `ultraCopyFence:${origin}`], fences = await chrome.storage.local.get(keys);
+      return m.fence === keys.map((key) => fences[key]?.epoch || '').join('/') ? { epoch } : null;
+    }
+    if (m.op === 'invalidate') { await purgeUltra(origin, false, true); return { ok: true }; }
+    const settings = await chrome.storage.sync.get('enabled');
+    if (settings.enabled === false) return null;
+    const id = /^_\d+_\d+$/;
+    if (m.op === 'touch') { if (had && had.uid === m.uid) await chrome.storage.session.set({ [k]: { ...had, at: now } }); return null; }
+    if (m.op === 'week') {
+      const keys = [`dueWeek:${origin}`, 'ultraCopyFence', `ultraCopyFence:${origin}`], saved = await chrome.storage.local.get(keys);
+      const floor = Math.max(saved.ultraCopyFence?.at || 0, saved[`ultraCopyFence:${origin}`]?.at || 0);
+      if (!Number.isFinite(m.at) || m.at <= floor || m.at > now + 60000 || !Array.isArray(m.list) || m.list.length > 200 || JSON.stringify(m.list).length > 1e5 || saved[keys[0]]?.at > m.at) return null;
+      await chrome.storage.local.set({ [keys[0]]: { at: m.at, list: m.list } });
+      return null;
+    }
+    if (m.epoch !== epoch) return null;
+    if (m.op === 'save') {
+      if (!Number.isFinite(m.at) || m.at > now + 60000 || !m.value || typeof m.value !== 'object') return null;
+      const key = m.key, v = m.value;
+      if (key === `ultraMe:${origin}`) {
+        if (!id.test(v.uid) || v.courses && (!Array.isArray(v.courses) || JSON.stringify(v.courses).length > 1e6)) return null;
+        const clock = `ultraStoreAt:${origin}`, prev = chrome.storage.session ? (await chrome.storage.session.get(clock))[clock] || 0 : ultraStoreAt.get(origin) || 0;
+        if (prev > m.at) return null;
+        const was = (await chrome.storage.local.get(key))[key];
+        await chrome.storage.local.set({ [key]: { ...v, ...(was?.uid === v.uid && !v.courses && { courses: was.courses }) } });
+        if (chrome.storage.session) await chrome.storage.session.set({ [clock]: m.at }); else ultraStoreAt.set(origin, m.at);
+      } else if (typeof key === 'string' && key.startsWith(`ultraBooks:${origin}/`) && id.test(key.slice(key.lastIndexOf('/') + 1))) {
+        const all = { ...(await chrome.storage.local.get(key))[key] };
+        for (const [cid, book] of Object.entries(v)) if (id.test(cid) && Array.isArray(book?.rows) && Number.isFinite(book.at) && book.at <= now + 60000 && !(all[cid]?.at > book.at)) all[cid] = book;
+        const rows = Object.entries(all).filter(([, book]) => now - book.at < 30 * 864e5).sort((a, b) => b[1].at - a[1].at).slice(0, 30);
+        while (rows.length && JSON.stringify(rows).length > 2e6) rows.pop();
+        await chrome.storage.local.set({ [key]: Object.fromEntries(rows) });
+      }
+      return null;
+    }
+    if (!chrome.storage.session) return null;
+    const v = m.op === 'put' && m.mine;
+    if (!v || !id.test(v.uid) || !Array.isArray(v.mem) || v.mem.length > 2000 || JSON.stringify(v.mem).length > 4e6
+      || !Number.isFinite(v.read) || v.read > now + 60000 || had?.read > v.read) return null;
+    await chrome.storage.session.set({ [k]: { uid: v.uid, mem: v.mem, complete: v.complete !== false, read: v.read, at: now } });
+    return null;
+  }).then(reply, () => reply(null));
+  return true;
+});
+// Ultra's instant copies of Grades, Courses and Activity (courses/instant.js, storage.local ultraCopy:<origin>/<uid>/<kind>):
+// a site's go when its student signs out (its top page says so: 'glaze:ultraCopy' drop), every one with the switch off.
+const copyKeys = async (origin) => (chrome.storage.local.getKeys ? await chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null)))
+  .filter((k) => k.startsWith(origin ? `ultraCopy:${origin}/` : 'ultraCopy:'));
+// Saves and purges share the broker queue. A visit holds a generation, invalidated on sign-out or switch-off, so a
+// delayed idle/pagehide save in another tab cannot recreate grades after a purge, even after the worker restarts.
+let copyEpochs = null;
+const copyState = async () => {
+  copyEpochs ||= { all: crypto.randomUUID(), sites: {} };
+  if (!chrome.storage.session) return copyEpochs;
+  const { ultraCopyEpochs: saved } = await chrome.storage.session.get('ultraCopyEpochs');
+  if (saved?.all && saved.sites) return saved;
+  await chrome.storage.session.set({ ultraCopyEpochs: copyEpochs });
+  return copyEpochs;
+};
+// Whether Ultra was used here: a visit's lease this session, a fence, Ultra's own data kept or an open approved page.
+// An open page may still be waking the worker for its first lease when Settings purges it. A student who never used Ultra
+// gets no fence from a site removal, Reset or the switch, so those add nothing to storage.
+const ultraUsed = async (origin) => {
+  if (!chrome.storage.session || (await chrome.storage.session.get('ultraCopyEpochs')).ultraCopyEpochs) return true;
+  const keys = chrome.storage.local.getKeys ? await chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null));
+  if (keys.some((k) => k === 'ultraCopyFence' || ['ultraCopyFence:', 'ultraCopy:', 'ultraMe:', 'ultraBooks:'].some((p) => k.startsWith(origin ? `${p}${origin}` : p)))) return true;
+  try {
+    for (const tab of await chrome.tabs.query({})) {
+      const site = await fromUltra({ id: chrome.runtime.id, tab, frameId: 0, url: tab.url });
+      if (site && (!origin || site === origin)) return true;
+    }
+    return false;
+  } catch { return true; } // Unknown open visits still need a fence.
+};
+// seen: the caller knows Ultra was used (a page of the site asked, or it checked before dropping Ultra's data itself).
+const purgeCopies = async (origin, retire = true, seen = false) => {
+  const used = seen || await ultraUsed(origin);
+  // Unused: no lease was ever handed out to retire, and the next visit draws fresh epochs.
+  if (!used) { copyEpochs = null; return; }
+  const state = await copyState();
+  if (origin) state.sites[origin] = crypto.randomUUID();
+  else { state.all = crypto.randomUUID(); state.sites = {}; }
+  copyEpochs = state;
+  if (chrome.storage.session) await chrome.storage.session.set({ ultraCopyEpochs: state });
+  const drop = await copyKeys(origin);
+  if (drop.length) await chrome.storage.local.remove(drop);
+  // Content scripts cannot read session storage. Notify every open visit, even if no copy was saved yet, so an old
+  // read cannot paint after a purge. Sign-out/Reset retire the document; the switch can be turned on again there.
+  await chrome.storage.local.set({ [origin ? `ultraCopyFence:${origin}` : 'ultraCopyFence']: { epoch: origin ? state.sites[origin] : state.all, retire, at: Date.now() } });
+};
+const purgeUltra = async (origin, retire = true, seen = false) => {
+  await purgeCopies(origin, retire, seen);
+  if (origin) ultraStoreAt.delete(origin); else ultraStoreAt.clear();
+  const all = await chrome.storage.local.get(null);
+  const belongs = (key, prefix, end = '') => (origin ? end ? key.startsWith(`${prefix}${origin}${end}`) : key === `${prefix}${origin}` : key.startsWith(prefix));
+  const drop = Object.keys(all).filter((key) => belongs(key, 'ultraMe:') || belongs(key, 'ultraBooks:', '/') || belongs(key, 'dueWeek:'));
+  if (typeof all.todoCache?.key === 'string' && belongs(all.todoCache.key, 'todo:', '/')) drop.push('todoCache');
+  if (drop.length) await chrome.storage.local.remove(drop);
+  if (chrome.storage.session) {
+    const session = await chrome.storage.session.get(null);
+    await chrome.storage.session.remove(Object.keys(session).filter((key) => belongs(key, 'ultraMine:') || belongs(key, 'ultraStoreAt:')));
+  }
+};
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:ultraCopy') return;
+  (brokerTurn ||= GZ_CARDS.queue())(async () => {
+    const origin = s.frameId === 0 && await fromUltra(s);
+    if (!origin) return null;
+    if (m.op === 'drop') { await purgeUltra(origin, true, true); return { ok: true }; }
+    if (!['begin', 'put'].includes(m.op)) return null;
+    const settings = await chrome.storage.sync.get(['enabled', 'enhance']);
+    if (settings.enabled === false || settings.enhance?.instant === false) return { ok: false };
+    const state = await copyState(), epoch = `${state.all}/${state.sites[origin] || ''}`;
+    if (m.op === 'begin') {
+      const keys = ['ultraCopyFence', `ultraCopyFence:${origin}`], fences = await chrome.storage.local.get(keys);
+      if ((m.fence ?? '/') !== keys.map((k) => fences[k]?.epoch || '').join('/')) return { ok: false };
+      return { epoch };
+    }
+    const r = m.record;
+    if (m.epoch !== epoch || r?.v !== 1 || typeof r.uid !== 'string' || !/^_\d+_\d+$/.test(r.uid) || !['grades', 'courses', 'stream'].includes(r.kind)
+      || !Number.isFinite(r.at) || !Array.isArray(r.nodes) || JSON.stringify(r).length > 201024) return { ok: false };
+    const key = `ultraCopy:${origin}/${r.uid}/${r.kind}`, was = (await chrome.storage.local.get(key))[key];
+    if (was?.at > r.at) return { ok: true, kept: false };
+    await chrome.storage.local.set({ [key]: { v: 1, uid: r.uid, kind: r.kind, at: r.at, full: !!r.full, nodes: r.nodes } });
+    return { ok: true };
+  }).then(reply, () => reply(null));
+  return true;
+});
+chrome.storage.onChanged.addListener((c, area) => {
+  if (area === 'sync' && c.enabled?.newValue === false) (brokerTurn ||= GZ_CARDS.queue())(() => purgeUltra(null, false)).catch(() => {});
+  else if (area === 'sync' && c.enhance?.newValue?.instant === false) (brokerTurn ||= GZ_CARDS.queue())(() => purgeCopies(null, false)).catch(() => {});
+});
 chrome.tabs?.onRemoved?.addListener((id) => {
   chrome.storage.session?.remove([`landed:${id}`, ...Object.keys(FRAMED).map((what) => frameKey(what, id))]).catch(() => {});
   for (const frames of Object.values(FRAMED)) frames.delete(id);
@@ -1791,6 +1941,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // the Not nows. Pages open on a site removed keep Glaze until they reload, refused by every check above meanwhile.
 const forget = async (origin) => {
   await mcpClearReads(origin);
+  const used = await ultraUsed(origin);
   const u = new URL(origin);
   const got = await chrome.storage.local.get([...LMS, 'seenCourses', 'courseSlots', 'todoCache']);
   const patch = {};
@@ -1805,15 +1956,19 @@ const forget = async (origin) => {
     patch.courseSlots = slots;
   }
   const keys = chrome.storage.local.getKeys ? await chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null));
-  const drop = keys.filter((k) => k === `dueWeek:${origin}` || k === `seenCoursesAt ${origin}` || k.startsWith(`seenCoursesAt moodle:${origin}/`));
+  const drop = keys.filter((k) => k === `dueWeek:${origin}` || k === `seenCoursesAt ${origin}` || k.startsWith(`seenCoursesAt moodle:${origin}/`)
+    || k === `ultraMe:${origin}` || k.startsWith(`ultraBooks:${origin}/`) || k.startsWith(`ultraCopy:${origin}/`));
   if (typeof got.todoCache?.key === 'string' && got.todoCache.key.startsWith(`todo:${origin}/`)) drop.push('todoCache');
   if (Object.keys(patch).length) await chrome.storage.local.set(patch);
   if (drop.length) await chrome.storage.local.remove(drop);
+  await (brokerTurn ||= GZ_CARDS.queue())(() => purgeUltra(origin, true, used));
+  await Promise.resolve(chrome.storage.session?.remove(`ultraMine:${origin}`)).catch(() => {});
   await ensure();
   return true;
 };
 const forgetAll = async () => {
   await mcpClearReads();
+  const used = await ultraUsed();
   const all = await chrome.storage.local.get(null), origins = new Set();
   for (const kind of LMS) for (const value of Array.isArray(all[kind]) ? all[kind] : []) {
     try { origins.add(new URL(value).origin); } catch { /* old invalid entry */ }
@@ -1821,10 +1976,11 @@ const forgetAll = async () => {
   for (const [k, c] of Object.entries(all.seenCourses || {})) {
     try { origins.add(new URL(c?.site || k.replace(/^(canvas|moodle):/, '')).origin); } catch { /* unscoped legacy entry */ }
   }
-  for (const k of Object.keys(all)) if (k.startsWith('dueWeek:')) {
-    try { origins.add(new URL(k.slice(8)).origin); } catch { /* invalid entry */ }
+  for (const k of Object.keys(all)) if (k.startsWith('dueWeek:') || k.startsWith('ultraMe:') || k.startsWith('ultraBooks:') || k.startsWith('ultraCopy:')) {
+    try { origins.add(new URL(k.slice(k.indexOf(':') + 1)).origin); } catch { /* invalid entry */ }
   }
   for (const origin of origins) await forget(origin);
+  await (brokerTurn ||= GZ_CARDS.queue())(() => purgeUltra(undefined, true, used));
   await chrome.storage.local.remove([...LMS, 'askLater']);
   await ensure();
   return true;
@@ -2314,7 +2470,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   task.then(reply, () => reply({ ok: false }));
   return true;
 });
-const LOADABLE = new Set(['core/motion.js', 'looks/scene-host.js', 'navigation/nav.js', 'looks/page/light.js', 'navigation/nav-items.js', 'navigation/navlayout.js', 'content/content-ultra.js', 'content/content-canvas.js', 'navigation/page/nav.js', 'navigation/navbar.js', 'navigation/page/navbar-canvas.js', 'navigation/page/navbar-moodle.js', 'navigation/page/navbar.js', 'navigation/page/navbar-widgets.js', 'settings/page/settingspage.js', 'courses/stream.js', 'courses/page/stream.js', 'courses/folders.js', 'courses/page/folders.js', 'core/zip.js', 'writer/drafts.js', 'planner/gradecalc.js', 'planner/page/grades.js', 'looks/page/schedule.js', 'planner/todo.js', 'planner/page/todo.js', 'i18n/de.js', 'i18n/es.js', 'i18n/fr.js', 'i18n/nl.js', 'i18n/pt-BR.js', 'courses/cards.js', 'courses/page/cards.js', 'courses/page/cardtasks.js', 'courses/moodle.js', 'courses/page/moodle.js', 'navigation/seek.js', 'navigation/page/search.js', 'courses/page/discussion-nav.js', 'planner/remind.js', 'planner/page/reminders.js', 'navigation/page/palette.js', 'navigation/page/keys.js', 'navigation/page/coursemenu.js', 'courses/page/previews.js', 'courses/page/download.js', 'core/widgets.js', 'navigation/sidebar.js', 'navigation/page/sidebar.js', 'core/page/widgets.js', 'courses/page/coursecards.js', 'courses/page/dashboard.js', 'looks/lookx.js', 'looks/lookset.js', 'looks/looks.js', 'looks/page/lookx.js', 'looks/lookparts.js', 'looks/page/lookparts.js', 'looks/motionx.js', 'writer/page/drafts.js', 'courses/page/docs.js', 'courses/page/bbpreview.js', 'courses/page/canvasopen.js', 'courses/page/docreview.js', 'navigation/page/place.js', 'planner/gradescope.js', 'planner/ics.js', 'planner/calexport.js', 'planner/page/calexport.js', 'planner/gpa.js', 'core/doctext.js', 'planner/page/import.js', 'planner/page/gpaterms.js', 'planner/syllabus.js', 'planner/syllabus-ai.js', 'planner/page/syllabus.js', 'planner/classes.js', 'planner/page/classes.js', 'planner/insights.js', 'planner/page/insights.js', 'planner/notes.js', 'planner/page/notes.js', 'courses/ultra.js', 'courses/lmsq.js', 'pet/pet.js', 'pet/petbrain.js', 'pet/petphysics.js', 'pet/page/petworld.js', 'pet/petsprites.js', 'pet/petplayer.js', 'pet/page/pet.js', 'navigation/coursetabs.js', 'navigation/page/coursetabs.js', 'sharing/page/sharing.js', 'looks/parts.js', 'looks/page/rules.js', 'looks/page/motionx.js', 'looks/glsl.js', 'mods/page/mods.js', 'mods/page/modui.js', 'mods/page/modwidgets.js', 'content/routes.js', 'core/popup.js', 'courses/page/popup.js', 'courses/announce.js', 'courses/page/announce.js', 'courses/page/announce-read.js', 'courses/rubric.js', 'courses/page/rubric.js', 'writer/page/editor-menu.js', 'navigation/page/sticky-fold.js', 'writer/writer-ultra.js', 'writer/page/writer.js', 'writer/writer-target.js', 'writer/writer-context-discussion.js', 'writer/page/writer-quote.js', 'writer/writer-context-assignment.js', 'writer/writer-submit.js', 'writer/page/writer-submit.js']);
+const LOADABLE = new Set(['core/motion.js', 'looks/scene-host.js', 'navigation/nav.js', 'looks/page/light.js', 'navigation/nav-items.js', 'navigation/navlayout.js', 'content/content-ultra.js', 'content/content-canvas.js', 'navigation/page/nav.js', 'navigation/navbar.js', 'navigation/page/navbar-canvas.js', 'navigation/page/navbar-moodle.js', 'navigation/page/navbar.js', 'navigation/page/navbar-widgets.js', 'settings/page/settingspage.js', 'courses/stream.js', 'courses/page/stream.js', 'courses/folders.js', 'courses/page/folders.js', 'core/zip.js', 'writer/drafts.js', 'planner/gradecalc.js', 'planner/page/grades.js', 'looks/page/schedule.js', 'planner/todo.js', 'planner/page/todo.js', 'i18n/de.js', 'i18n/es.js', 'i18n/fr.js', 'i18n/nl.js', 'i18n/pt-BR.js', 'courses/cards.js', 'courses/page/cards.js', 'courses/page/cardtasks.js', 'courses/moodle.js', 'courses/page/moodle.js', 'navigation/seek.js', 'navigation/page/search.js', 'courses/page/discussion-nav.js', 'planner/remind.js', 'planner/page/reminders.js', 'navigation/page/palette.js', 'navigation/page/keys.js', 'navigation/page/coursemenu.js', 'courses/page/previews.js', 'courses/page/download.js', 'core/widgets.js', 'navigation/sidebar.js', 'navigation/page/sidebar.js', 'core/page/widgets.js', 'courses/page/coursecards.js', 'courses/page/dashboard.js', 'looks/lookx.js', 'looks/lookset.js', 'looks/looks.js', 'looks/page/lookx.js', 'looks/lookparts.js', 'looks/page/lookparts.js', 'looks/motionx.js', 'writer/page/drafts.js', 'courses/page/docs.js', 'courses/page/bbpreview.js', 'courses/page/canvasopen.js', 'courses/page/docreview.js', 'navigation/page/place.js', 'planner/gradescope.js', 'planner/ics.js', 'planner/calexport.js', 'planner/page/calexport.js', 'planner/gpa.js', 'core/doctext.js', 'planner/page/import.js', 'planner/page/gpaterms.js', 'planner/syllabus.js', 'planner/syllabus-ai.js', 'planner/page/syllabus.js', 'planner/classes.js', 'planner/page/classes.js', 'planner/insights.js', 'planner/page/insights.js', 'planner/notes.js', 'planner/page/notes.js', 'courses/ultra.js', 'courses/lmsq.js', 'courses/page/ahead.js', 'courses/instant.js', 'courses/page/instant.js', 'pet/pet.js', 'pet/petbrain.js', 'pet/petphysics.js', 'pet/page/petworld.js', 'pet/petsprites.js', 'pet/petplayer.js', 'pet/page/pet.js', 'navigation/coursetabs.js', 'navigation/page/coursetabs.js', 'sharing/page/sharing.js', 'looks/parts.js', 'looks/page/rules.js', 'looks/page/motionx.js', 'looks/glsl.js', 'mods/page/mods.js', 'mods/page/modui.js', 'mods/page/modwidgets.js', 'content/routes.js', 'core/popup.js', 'courses/page/popup.js', 'courses/announce.js', 'courses/page/announce.js', 'courses/page/announce-read.js', 'courses/rubric.js', 'courses/page/rubric.js', 'writer/page/editor-menu.js', 'navigation/page/sticky-fold.js', 'writer/writer-ultra.js', 'writer/page/writer.js', 'writer/writer-target.js', 'writer/writer-context-discussion.js', 'writer/page/writer-quote.js', 'writer/writer-context-assignment.js', 'writer/writer-submit.js', 'writer/page/writer-submit.js']);
 chrome.runtime.onMessage.addListener((m, sender, reply) => {
   if (m?.type !== 'glaze:load') return;
   const files = Array.isArray(m.files) ? m.files : [];

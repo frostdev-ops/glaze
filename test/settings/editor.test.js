@@ -20,7 +20,7 @@ const ENHANCE = {
   'study/pet': ['pet'],
   'study/reminders': ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'],
   'study/imports': ['syllabus', 'insights'],
-  'navigation/tabs': ['tabs'], 'pages/dashboard': ['dashboard'], 'pages/declutter': ['hideFolders'],
+  'navigation/tabs': ['tabs', 'prefetch'], 'pages/dashboard': ['dashboard', 'instant'], 'pages/declutter': ['hideFolders'],
 };
 const OVERRIDE = {
   enabled: 'header', footer: 'pages/declutter', preset: 'look/palette', presets: 'look/palette',
@@ -70,11 +70,11 @@ const MORE = {
     ...['style', 'angle', 'blend', 'spread', 'dim', 'blur', 'grain'].map((k) => `bg.${k}`),
     'motion.enter', 'motion.hover', 'motion.transitions',
     ...['rail', 'peek', 'course', 'cmenu', 'tabs', 'badges', 'brand'].map((k) => `navbar.${k}`), ...NAV_MORE.map((k) => `nav.${k}`),
-    ...['cap', 'place', 'shape', 'size', 'width', 'label', 'mark', 'color'].map((k) => `tabs.${k}`),
+    ...['cap', 'place', 'ahead', 'keep', 'shape', 'size', 'width', 'label', 'mark', 'color'].map((k) => `tabs.${k}`),
     ...Object.keys(D.GZ_SPEC.sidebar).filter((k) => !['canvas', 'ultra'].includes(k)).map((k) => `sidebar.${k}`),
     ...['width', 'gap', 'radius', 'height', 'icons', 'create'].map((k) => `card.${k}`),
     ...['group', 'rel', 'urgent', 'teacher', 'progress', 'sync', 'cardN', 'cardStatus', 'cardCross', 'gsDaily'].map((k) => `todo.${k}`),
-    ...['gradeHover', 'gpaPlus', 'gpaWeighted', 'gpaAfter', 'urgency', 'clamp', 'scores', 'reading', 'fold', 'place'].map((k) => `enhance.${k}`),
+    ...['gradeHover', 'gpaPlus', 'gpaWeighted', 'gpaAfter', 'urgency', 'clamp', 'scores', 'reading', 'fold', 'place', 'prefetch'].map((k) => `enhance.${k}`),
     ...['work', 'rest', 'sound', 'quotes', 'quoteMode', 'quoteEvery', 'inhale', 'hold', 'exhale', 'cycles'].map((k) => `widgets.${k}`),
     ...Object.keys(D.GZ_SPEC.docreview).map((k) => `docreview.${k}`), ...Object.keys(D.GZ_SPEC.stream).map((k) => `stream.${k}`),
   ],

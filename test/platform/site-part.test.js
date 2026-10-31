@@ -78,7 +78,8 @@ const page = ({ site, preload, answer, raw = {}, local: own = {}, pathname }) =>
     // Timers are left unrun: the boot is what is checked, not the throttled passes after it.
     setTimeout: () => 1, clearTimeout() {}, setInterval: () => 1, clearInterval() {}, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
     performance: { now: () => 0 }, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} }, innerHeight: 900, innerWidth: 1400,
-    fetch: () => Promise.resolve({ ok: true, url: 'https://school.test/', text: () => Promise.resolve('[]'), json: () => Promise.resolve([]), headers: { get: () => null } }),
+    // Ultra's /users/me (asked once storage has answered) answers a student; anything else, nothing.
+    fetch: (u) => Promise.resolve(/\/users\/me$/.test(u) ? new Response('{"id":"_900_1"}') : { ok: true, url: 'https://school.test/', text: () => Promise.resolve('[]'), json: () => Promise.resolve([]), headers: { get: () => null } }),
     chrome: {
       runtime: {
         id: 'glaze', getURL: (p) => `chrome-extension://glaze/${p}`, lastError: undefined,
@@ -204,7 +205,7 @@ test('Ultra course cards peek at existing promises and books without starting a 
   const p = page({ site: 'ultra', preload: true, raw: { enabled: false } });
   await p.done;
   let requests = 0;
-  p.c.fetch = async (u) => { requests++; return { ok: true, url: u, text: async () => JSON.stringify(u.endsWith('/users/me') ? { id: '_900_1' } : { results: [] }), headers: { get: () => null } }; };
+  p.c.fetch = async (u) => { requests++; return new Response(JSON.stringify(u.endsWith('/users/me') ? { id: '_900_1' } : { results: [] })); };
   const cold = p.c.GZ_CTX.canvasPeek();
   for (let i = 0; i < 10; i++) { const next = p.c.GZ_CTX.canvasPeek(); assert.equal(next.me, cold.me); assert.equal(next.courses, cold.courses); assert.equal(next.books, cold.books); }
   assert.equal(requests, 0, 'peeking starts nothing, even if the boot already has a pending reader');
@@ -234,5 +235,5 @@ test('an existing Ultra grade request refreshes mounted course cards when it fin
   assert.equal(book.pending, false);
   assert.equal(updates, 1, 'the existing grade reader wakes cached board cards');
   assert.equal(observed, '87%', 'the cache is ready before the callback');
-  assert.equal(requests, 2, 'only the existing profile and grade requests');
+  assert.equal(requests, 1, 'only the grade: who is signed in was asked once storage answered, before (D)');
 });

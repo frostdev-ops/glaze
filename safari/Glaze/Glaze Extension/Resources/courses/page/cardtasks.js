@@ -64,7 +64,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
       await ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA);
       if (!on) throw new Error('off');
       const r = await GZ_ULTRA.page.due(Date.parse(start), Date.parse(end));
-      c = { key, at: now, start, end, teach: o.teacher, progress: o.progress, items: r.items, complete: r.complete, grading: [], sums: {} };
+      c = { key, at: r.at ?? now, epoch: r.epoch, start, end, teach: o.teacher, progress: o.progress, items: r.items, complete: r.complete, grading: [], sums: {} };
     } else {
       const [raw, list] = await Promise.all([pages(`/api/v1/planner/items?start_date=${start}&end_date=${end}&per_page=100`), ctx.canvasCourses()]);
       const teaches = list.some((c) => (c.enrollments || []).some((e) => /^(teacher|ta)/i.test(e.type || '')));
@@ -72,14 +72,15 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
       due = GZ_CANVAS_DUE_WEEK(raw, now);
     }
     const best = (await new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:todo', key, cache: c, due }, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } }))?.cache || c;
+    if (!on) return;
     if (!(cache?.key === key && cache.at > best.at)) cache = best;
     paint();
   };
   // When the cards start, the page is shown again and the list's settings change, and from content.js's passes while
   // the cards have nothing or the list that was to ask has gone (it failed). Not while the list is on the page, and not
   // within a minute of a failed ask.
-  const refresh = () => {
-    if (!on || !L || asking || Date.now() - failed < 60000 || fresh(cache, Date.now()) || document.getElementById('gz-todo')) return;
+  const refresh = (force = false) => {
+    if (!on || !L || !mine || asking || Date.now() - failed < 60000 || (!force && fresh(cache, Date.now())) || document.getElementById('gz-todo')) return;
     asking = load().catch(() => { failed = Date.now(); }).finally(() => { asking = null; });
   };
 
@@ -123,7 +124,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     if (was) was.replaceWith(box); else head.after(box);
   };
   const paint = () => {
-    if (!on || !data) return;
+    if (!on || !data || !mine) return;
     const now = Date.now();
     const [sel, idOf, headOf, nameOf] = CARDS;
     for (const el of document.querySelectorAll(sel)) {
@@ -150,35 +151,58 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   const onStore = (ch, area) => {
     if (area === 'sync' && ch.todo) return void readPrefs().then(() => { paint(); refresh(); });
     if (area !== 'local' || !(ch[CACHE] || ch[key])) return;
+    if (ch[CACHE] && !ch[CACHE].newValue) cache = null;
     const c = ch[CACHE]?.newValue;
     if (c?.key === key && !(cache?.key === key && cache.at > c.at)) cache = c;
     if (ch[key]) data = L.clean(ch[key].newValue);
     paint();
   };
+  document.addEventListener('glaze:ultra-refresh', (e) => {
+    if (!ultra) return;
+    cache = null;
+    if (e.detail?.retire) { sync(false); mine = false; }
+    else if (on) refresh(true);
+  });
   const onShow = () => { if (document.visibilityState === 'visible') refresh(); };
-  // Who's signed in (their id names their data and the cache; their Canvas time zone counts the days), what's kept.
+  // Who's signed in (their id names their data and the cache; their Canvas time zone counts the days), what's kept. On
+  // Ultra the student last confirmed on this site answers first (courses/ultra.js page.known), so what's kept is read while
+  // /users/me confirms who it is; sure says whether it's them, and the tasks show only once it is (mine).
+  let heard = false, sure = null, mine = false;
   const start = async () => {
     await ctx.need('planner/todo.js', () => globalThis.GZ_TODO);
     L = globalThis.GZ_TODO;
-    const [p] = await Promise.all([ctx.profile(), readPrefs()]);
+    const known = ultra ? await ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA).then(() => globalThis.GZ_ULTRA?.page?.known?.() || null, () => null) : null;
+    const [p] = known ? [known, await readPrefs()] : await Promise.all([ctx.profile(), readPrefs()]);
     if (!L.ID.test(String(p?.id))) throw new Error('no profile');
     tz = L.zone(p.time_zone);
     uid = String(p.id);
     key = L.storeKey(location.origin, uid);
+    mine = !known;
+    sure = known ? () => ctx.profile().then((x) => String(x?.id) === String(p.id)) : () => true;
     const r = await get([key, CACHE]);
     data = L.clean(r[key]);
     cache = r[CACHE]?.key === key ? r[CACHE] : null;
+    if (heard) return;
+    heard = true;
     try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
     document.addEventListener('visibilitychange', onShow);
     addEventListener('focus', onShow);
   };
-  // If it can't start (no profile), the cards stay as Canvas has them, and it tries again after a minute.
+  // If it can't start (no profile), the cards stay as Canvas has them, and it tries again after a minute. Drawn for
+  // another student than the one signed in: those tasks go, and it starts again.
   const sync = (want) => {
     on = !!want;
     if (!on) { for (const e of document.querySelectorAll('.gz-ct')) e.remove(); asked?.remove(); asked = null; return; }
     const list = !!document.getElementById('gz-todo');
     // Started: whether the list is here now counts as seen, so its going later is noticed whenever it goes.
-    if (!starting) starting = start().then(() => { listed = !!document.getElementById('gz-todo'); paint(); refresh(); }, () => { setTimeout(() => { starting = null; }, 60000); });
+    if (!starting) starting = start().then(() => { listed = !!document.getElementById('gz-todo'); paint(); return sure(); }).then((ok) => {
+      mine = ok;
+      if (ok) { paint(); if (ultra && fresh(cache, Date.now())) setTimeout(() => { if (on) refresh(true); }, 0); else return refresh(); }
+      for (const e of document.querySelectorAll('.gz-ct')) e.remove();
+      cache = data = null;
+      starting = null;
+      sync(on);
+    }, () => { setTimeout(() => { starting = null; }, 60000); });
     else {
       paint();
       if (!cache || (listed && !list)) refresh();

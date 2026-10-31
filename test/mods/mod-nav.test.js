@@ -159,7 +159,7 @@ test('the page refreshes installed parts when a navigation layout opt-out change
   const fs = require('node:fs'), vm = require('node:vm'), source = fs.readFileSync(require.resolve('../../extension/content/content.js'), 'utf8');
   const from = source.indexOf('    if (changes.lookX && area'), to = source.indexOf('    if (isPreview ||', from);
   let reads = 0;
-  const changed = vm.runInNewContext(`(changes, area) => { ${source.slice(from, to)} }`, { modsIn: () => reads++, partsIn() {} });
+  const changed = vm.runInNewContext(`(changes, area) => { ${source.slice(from, to)} }`, { modsIn: () => reads++, partsIn() {}, ultra: false, DUE: 'dueWeek:https://school.test', location: { origin: 'https://school.test' } });
   changed({ [`modNavLayout:${ID}`]: { newValue: false } }, 'local');
   assert.equal(reads, 1);
 });
