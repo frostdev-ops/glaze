@@ -909,6 +909,14 @@ test("a course outline's column Ultra has just drawn isn't shown where Ultra lay
     root.attrs = attrs;
     assert.equal(winner(rules, aside, 'visibility') ?? null, null, `${JSON.stringify(attrs)}: Ultra's own column as it is`);
   }
+  // The dock while Course notes is on its way (navigation/page/sidebar.js awaitNotes).
+  const dock = chain('html', 'body', 'div#site-wrap', 'aside.outline-actions', 'div#gz-sb-widgets');
+  const top = dock.parent.parent.parent.parent;
+  dock.parent.attrs = { 'data-gz-sidebar-host': 'native' };
+  top.attrs = { 'data-gz-sb-ultra': '', 'data-gz-sidebar': 'expanded', 'data-gz-sb-notes': '' };
+  assert.equal(winner(rules, dock, 'visibility')?.[0], 'hidden');
+  delete top.attrs['data-gz-sb-notes'];
+  assert.equal(winner(rules, dock, 'visibility') ?? null, null);
 });
 
 // Ultra's content in Details & Actions, this tall (0: none yet, or the block hidden), in the box the browser gives it: never
