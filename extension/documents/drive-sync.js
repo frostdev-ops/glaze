@@ -211,17 +211,22 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       return n === size ? out : null;
     };
     // o: { id (the file to update, or null), meta (for an update), create (for a new file, in its folder), mime }: as put
-    // sends it, a new file when the one to update is gone.
-    const send = async (o, bytes, keep = null) => {
-      if (o.id) { try { return await D((c) => c.put({ id: o.id, meta: o.meta, mime: o.mime, bytes, keep })); } catch (e) { if (e.why !== 'missing') throw e; await keep?.drop(); } }
+    // sends it, a new file when the one to update is gone (gone(): told first, so a later worker goes on with the new one;
+    // null: 'missing' instead).
+    const send = async (o, bytes, keep = null, gone = async () => {}) => {
+      if (o.id) {
+        try { return await D((c) => c.put({ id: o.id, meta: o.meta, mime: o.mime, bytes, keep })); } catch (e) { if (e.why !== 'missing' || !gone) throw e; }
+        await keep?.drop(); await gone();
+      }
       return D((c) => c.put({ meta: o.create, mime: o.mime, bytes, keep }));
     };
-    // An upload of this content (tag) to slot, to the file target (undefined: whichever make chooses). make() → { bytes, id,
-    // meta, create, mime, info } or null (nothing to send), called only when it isn't already on its way. Small: sent now.
-    // Large: staged, 'pending' until sent. → { file (Drive's answer), info } or null
+    // An upload of this content (tag) to slot, aimed at the file target (undefined: whichever make chooses). make() → { bytes,
+    // id, meta, create, mime, info } or null (nothing to send), called only when it isn't already on its way. Small: sent now.
+    // Large: staged, 'pending' until sent; one on its way to another file than the one aimed at now starts again. Once sent,
+    // taken whichever file it landed in (a new one when its own was gone). → { file (Drive's answer), info } or null
     const up = async (slot, tag, target, make, owner) => {
       const t = await moveOf(slot);
-      if (t?.dir === 'up' && t.tag === tag && (target === undefined || (t.id ?? null) === (target ?? null))) {
+      if (t?.dir === 'up' && t.tag === tag && (t.file || target === undefined || (t.aim ?? null) === (target ?? null))) {
         if (t.file) { await dropMove(slot); return { file: t.file, info: t.info ?? null }; }
         throw new Fail('pending');
       }
@@ -230,7 +235,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (!m) return null;
       if (!stage || m.bytes.length <= BIG) return { file: await send(m, m.bytes), info: m.info ?? null };
       await staged(slot, m.bytes);
-      await setMove(slot, { dir: 'up', tag, size: m.bytes.length, id: m.id ?? null, meta: m.meta, create: m.create, mime: m.mime, info: m.info ?? null, owner, since: now(), session: null, file: null });
+      await setMove(slot, { dir: 'up', tag, aim: target === undefined ? m.id ?? null : target ?? null, size: m.bytes.length, id: m.id ?? null, meta: m.meta, create: m.create, mime: m.mime,
+        info: m.info ?? null, owner, since: now(), session: null, file: null });
       throw new Fail('pending');
     };
     // A download of file f (its metadata: id, size, headRevisionId), at most max bytes. Small, or of no size Drive gives:
@@ -250,12 +256,14 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       await setMove(slot, { dir: 'down', tag, id: f.id, rev: f.headRevisionId, size, max, at: 0, step: PIECE, owner, since: now(), done: false });
       throw new Fail('pending');
     };
-    // One upload sent: its session kept on its record between requests and workers.
+    // One upload sent: its session kept on its record between requests and workers. A document's whose file is gone from
+    // Drive goes back to the document ('missing'), which goes to Trash as a file deleted for good in Drive does; a record's
+    // or the snapshot's goes into a new file.
     const sendMove = async (slot, t) => {
       const bytes = await unstaged(slot, t.size);
       if (!bytes) throw new Fail('missing');
       const keep = { get: async () => (await moveOf(slot))?.session || null, set: (session) => patchMove(slot, { session }), drop: () => patchMove(slot, { session: null }) };
-      const file = await send(t, bytes, keep);
+      const file = await send(t, bytes, keep, t.owner?.doc ? null : () => patchMove(slot, { id: null }));
       await patchMove(slot, { file, session: null });
     };
     // One download brought in by ranges, each piece kept as it comes; a file whose revision or size moved meanwhile, or that
