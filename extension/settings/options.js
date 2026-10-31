@@ -1201,7 +1201,8 @@ GZ_UI.load().then((s) => {
           $('#gdrive-disconnect').focus();
           return hint(t('Connected.'));
         }
-        hint(r.why === 'scope' ? t('Connect again and allow Google Drive access.') : r.why === 'cancel' ? '' : t("Google Drive didn't connect. Try again in a moment."), r.why !== 'cancel');
+        hint(r.why === 'scope' ? t('Connect again and allow Google Drive access.') : r.why === 'signin' ? t('Sign in to the browser with your Google account, then connect again.')
+          : r.why === 'cancel' ? '' : t("Google Drive didn't connect. Try again in a moment."), r.why !== 'cancel');
       } finally { gdBusy = false; }
     });
     $('#gdrive-disconnect').addEventListener('click', async (e) => {

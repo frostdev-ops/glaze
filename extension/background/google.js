@@ -7,9 +7,10 @@
 // (why: 'account') until the student connects again. Glaze never revokes a grant: Disconnect is this device only.
 // Flows (flowOf):
 //   chrome  Google Chrome and Chromium: getAuthToken with the browser's Google account and the "Chrome extension" client
-//           (the packaged manifest's oauth2).
+//           (the packaged manifest's oauth2). With no Google account in the browser, Connect takes the web flow.
 //   web     Edge, Brave, other Chromium browsers and Firefox: launchWebAuthFlow, the "Web application" client's implicit flow
-//           (response_type=token), its state checked (background/oauth.js reply), renewed silently (prompt=none, interactive:false).
+//           (response_type=token) for Drive's scopes alone (no include_granted_scopes: the token the Picker page gets carries
+//           nothing else), its state checked (background/oauth.js reply), renewed silently (prompt=none, interactive:false).
 //   native  Safari: the extension's handler (safari/Glaze/Glaze Extension/GlazeGoogle.swift) holds the refresh token in the
 //           Keychain and mints tokens; the sign-in page runs in the Glaze app, opened by the handler (macOS) or by a tab
 //           the student taps (iOS, env.open). Connect answers why: 'pending' until the app has answered; Settings asks again.
@@ -49,7 +50,7 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
     : protocol === 'chrome-extension:' && Array.isArray(brands) && brands.length > 0 && brands.every((b) => CHROME.test(b?.brand)) ? 'chrome' : 'web');
 
   const authUrl = (c, { redirect, state, prompt, hint }) => `${AUTH}?${new URLSearchParams({
-    client_id: c.web, response_type: 'token', redirect_uri: redirect, scope: c.scopes.join(' '), state, include_granted_scopes: 'true',
+    client_id: c.web, response_type: 'token', redirect_uri: redirect, scope: c.scopes.join(' '), state,
     ...(prompt && { prompt }), ...(hint && { login_hint: hint }),
   })}`;
   const pickerUrl = (base, { token, state, redirect, key, appId }) => `${base}#${new URLSearchParams({ access_token: token, state, redirect_uri: redirect, key, app_id: appId })}`;
@@ -155,8 +156,11 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       const i = id();
       if (typeof i?.getAuthToken !== 'function') throw new Fail('permission');
       let r;
+      // 'signin': no Google account signed in to the browser, or browser sign-in turned off (Chrome closes its own sign-in
+      // prompt with the same answer).
       try { r = await i.getAuthToken({ interactive, scopes: c().scopes }); } catch (e) {
-        throw new Fail(/support/i.test(String(e?.message || e)) ? 'unsupported' : offline() ? 'network' : interactive ? 'cancel' : 'auth');
+        const m = String(e?.message || e);
+        throw new Fail(/support/i.test(m) ? 'unsupported' : /not signed in|browser ?sign-?in/i.test(m) ? 'signin' : offline() ? 'network' : interactive ? 'cancel' : 'auth');
       }
       const token = typeof r === 'string' ? r : r?.token;
       if (typeof token !== 'string' || !token) throw new Fail('auth');
@@ -239,7 +243,12 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       let flow = s.flow, token;
       held = null;
       if (flow === 'chrome') {
-        try { token = await chromeToken(true); } catch (e) { if (e.why !== 'unsupported' || !usable('web')) throw e.why === 'unsupported' ? new Fail('browser') : e; flow = 'web'; }
+        // No getAuthToken here, or no Google account in the browser: Google's own sign-in page instead.
+        try { token = await chromeToken(true); } catch (e) {
+          if (!['unsupported', 'signin'].includes(e.why)) throw e;
+          if (!usable('web')) throw new Fail(e.why === 'unsupported' ? 'browser' : 'signin');
+          flow = 'web';
+        }
       }
       if (flow === 'web') token = await webToken(true, '');
       try {

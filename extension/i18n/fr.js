@@ -3755,6 +3755,7 @@
   "Google Drive": "Google Drive",
   "Glaze needs the browser's sign-in permission to connect.": "Glaze a besoin de l’autorisation de connexion du navigateur pour se connecter.",
   "Connect again and allow Google Drive access.": "Reconnecte-toi et autorise l’accès à Google Drive.",
+  "Sign in to the browser with your Google account, then connect again.": "Connecte-toi au navigateur avec ton compte Google, puis reconnecte-toi.",
   "Google Drive didn't connect. Try again in a moment.": "Google Drive ne s’est pas connecté. Réessaie dans un instant.",
   "Couldn't disconnect. Try again in a moment.": "Impossible de se déconnecter. Réessaie dans un instant.",
   "From Google Drive": "Depuis Google Drive",
