@@ -9,7 +9,7 @@ const B = require('../../extension/ai/broker.js');
 const T = require('../../extension/ai/task.js');
 const P = require('../../extension/ai/providers.js');
 const LOCAL = require('../../extension/ai/providers/local.js');
-for (const f of ['syllabus-read', 'writer-review', 'writer-image']) require(`../../extension/ai/tasks/${f}.js`);
+for (const f of ['syllabus-read', 'writer-review', 'writer-image', 'writer-complete']) require(`../../extension/ai/tasks/${f}.js`);
 const W = require('../fixtures/ai/local-format/window.json');
 
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -48,10 +48,10 @@ const setup = (here, answers = []) => {
   T.run = (task, input, o) => { seen.push({ cfg: o.cfg, context: P.caps(o.provider, o.provider.config(o.cfg)).context }); return plain(task, input, o); };
   return { runs, seen, done: () => { T.run = plain; LOCAL._env(null); } };
 };
-const env = () => {
+const env = (more = {}) => {
   const vault = new Map([['connections', { local: { provider: 'local', generation: 'gen-1' } }]]), data = {};
   return { who: '7', allowed: Promise.resolve(true), local: { get: async (k) => ({ [k]: data[k] }), set: async (v) => { Object.assign(data, v); return true; } },
-    settings: async () => ({ on: true, model: { use: 'local', model: '' }, features: { writing: true, syllabus: true } }), enabled: async () => true,
+    settings: async () => ({ on: true, model: { use: 'local', model: '' }, features: { writing: true, syllabus: true }, ...more }), enabled: async () => true,
     vault: { get: async (k) => structuredClone(vault.get(k)), set: async (k, v) => { vault.set(k, structuredClone(v)); return true; }, remove: async (k) => vault.delete(k) },
     reach: async () => false, fetch: async () => { throw new Error('nothing goes over the network'); }, task: async (id) => T.get(id), say() {} };
 };
@@ -183,4 +183,62 @@ test('a catalog with no selected text model is not reused after a download becom
     assert.deepEqual(s.runs.map((r) => r.model), W.review.parts.map(() => tuned().id));
     assert.ok(s.seen.length && s.seen.every((x) => x.context === 4096), JSON.stringify(s.seen));
   } finally { s.done(); }
+});
+
+// Advanced: a feature's own context (Settings → AI's tuning).
+const advanced = (context) => ({ mode: 'advanced', tune: { writing: { context }, syllabus: { context } } });
+
+test('Advanced can\'t raise a Glaze-tuned model past its trained window; a stock model takes the setting as before', async () => {
+  let s = setup([tuned()], W.review.parts.map((p) => p.answer));
+  try {
+    assert.equal((await run('writing', 'writer.review', W.review.input, env(advanced(16000))))?.type, 'end');
+    assert.ok(s.seen.length && s.seen.every((x) => x.context === 4096), JSON.stringify(s.seen.map((x) => x.context)));
+    assert.equal(s.runs.length, W.review.parts.length, 'the draft in the parts its training window makes');
+  } finally { s.done(); }
+  s = setup([stock()], Array(8).fill('{"issues":[]}'));
+  try {
+    assert.equal((await run('writing', 'writer.review', W.review.input, env(advanced(8000))))?.type, 'end');
+    assert.ok(s.seen.length && s.seen.every((x) => x.context === 8000));
+    s.seen.length = 0;
+    assert.equal((await run('writing', 'writer.review', W.review.input, env(advanced(16000))))?.type, 'end');
+    assert.ok(s.seen.length && s.seen.every((x) => x.context === LOCAL.CONTEXT), 'the stock model\'s own 16,000 for Advanced\'s 16,000');
+  } finally { s.done(); }
+});
+
+// One message to the broker → its answer.
+const ask = async (msg, e = env()) => {
+  const posted = [], on = [];
+  B.connect({ postMessage: (m) => posted.push(JSON.parse(JSON.stringify(m))), disconnect() {}, onMessage: { addListener: (f) => on.push(f) }, onDisconnect: { addListener() {} } }, e);
+  for (const f of on) f({ id: 1, ...msg });
+  for (let i = 0; i < 50 && !posted.some((m) => m.id === 1); i++) await settle();
+  return posted.find((m) => m.id === 1);
+};
+
+test('Writer\'s status says the window the model runs with: 4,096 for a Glaze-tuned model, Advanced\'s 16,000 included', async () => {
+  for (const [here, more, want] of [[[tuned()], {}, 4096], [[tuned()], advanced(16000), 4096], [[tuned()], advanced(2000), 2000], [[stock()], {}, STOCK.input], [[stock()], advanced(8000), 8000]]) {
+    const s = setup(here);
+    try {
+      const st = await ask({ op: 'status', feature: 'writing' }, env(more));
+      assert.equal(st?.type, 'status', JSON.stringify(st));
+      assert.equal(st.ready, true);
+      assert.equal(st.caps.context, want, `${here[0].id} ${JSON.stringify(more)}`);
+    } finally { s.done(); B._reset(); }
+  }
+});
+
+test('a warm-up is built for the window and model the run will use', async () => {
+  const plain = T.prepare;
+  for (const [here, more, want, model] of [[[tuned(), stock()], {}, 4096, tuned().id], [[tuned()], advanced(16000), 4096, tuned().id], [[stock()], {}, STOCK.input, stock().id]]) {
+    const warms = [], sized = [];
+    LOCAL._env({ store: { list: async () => here },
+      link: { kind: 'worker', up: true, call: async (op, m) => { if (op === 'warm') warms.push(m); return { ok: true }; } }, gpu: () => ({}) });
+    T.prepare = (task, raw, o) => { sized.push(P.caps(o.provider, o.provider.config(o.cfg)).context); return plain(task, raw, o); };
+    try {
+      const e = env({ features: { completion: true }, ...(more.mode && { mode: more.mode, tune: { completion: more.tune.writing } }) });
+      const said = await ask({ op: 'warm', feature: 'completion', task: 'writer.complete', input: { before: 'The essay begins with' } }, e);
+      assert.deepEqual(said, { id: 1, type: 'warmed', ok: true });
+      assert.deepEqual(sized, [want], `${model} ${JSON.stringify(more)}`);
+      assert.deepEqual(warms.map((w) => w.model), [model]);
+    } finally { T.prepare = plain; LOCAL._env(null); B._reset(); }
+  }
 });
