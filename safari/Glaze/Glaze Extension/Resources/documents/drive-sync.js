@@ -191,7 +191,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     const patchMove = (slot, patch) => held('moves', async () => { const m = await moves(); if (!m[slot]) return; m[slot] = { ...m[slot], ...patch }; await S.set({ [MOVES]: m }); });
     const at12 = (n) => String(n).padStart(12, '0');
     const unstage = async (slot) => { const ks = await stage.keys(`${slot}@`); if (ks.length) await stage.write([], ks); };
-    const dropMove = async (slot) => { await setMove(slot, null); if (stage) await unstage(slot); };
+    // Keep the owner recorded for as long as any staged bytes can remain after a worker stops.
+    const dropMove = async (slot) => { if (stage) await unstage(slot); await setMove(slot, null); };
     // Each piece its own copy: IndexedDB would keep a view's whole buffer.
     const staged = async (slot, bytes) => {
       const puts = [];
@@ -234,9 +235,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       const m = await make();
       if (!m) return null;
       if (!stage || m.bytes.length <= BIG) return { file: await send(m, m.bytes), info: m.info ?? null };
-      await staged(slot, m.bytes);
       await setMove(slot, { dir: 'up', tag, aim: target === undefined ? m.id ?? null : target ?? null, size: m.bytes.length, id: m.id ?? null, meta: m.meta, create: m.create, mime: m.mime,
         info: m.info ?? null, owner, since: now(), session: null, file: null });
+      await staged(slot, m.bytes);
       throw new Fail('pending');
     };
     // A download of file f (its metadata: id, size, headRevisionId), at most max bytes. Small, or of no size Drive gives:
