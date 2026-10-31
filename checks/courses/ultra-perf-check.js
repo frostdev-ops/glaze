@@ -32,6 +32,7 @@ const NEO_VIEWPORT = { width: 1280, height: 800 }, NEO_SCALE = 2;
 // PERF_WIDTH: a wider window than the device's, in CSS pixels. At 1280 Glaze's sidebar is a closed drawer beside the synthetic
 // outline (its page starts at 472 px); from about 1560 it is the outline's right column, as on the owner's Mac.
 const WIDTH = Number(process.env.PERF_WIDTH) || 0;
+const stillAside = !!process.env.PERF_REQUIRE_STILL_ASIDE;
 // Pins this process to 6 cores, so the browsers it launches inherit them; null where taskset is missing (macOS).
 const pinCores = () => { try { execFileSync('taskset', ['-a', '-cp', '0-5', String(process.pid)], { stdio: 'ignore' }); return '0-5'; } catch { return null; } };
 module.exports = { NEO_CHROME_SPEEDOMETER, NEO_CHROME_SOURCE, pinCores, stageSpeed: (...a) => stageSpeed(...a), summarize: (...a) => summarize(...a) };
@@ -108,21 +109,29 @@ const fixture = `<!doctype html><html lang="en"><head><base href="//ultra-cdn.in
 // Glaze's blocks in the outline's right column, from the route on: each one's top while shown, and the layout shift they
 // take part in (aside, below).
 function asideWatch() {
-  const blocks = ['aside.outline-actions > #gz-nt-block', 'aside.outline-actions > #gz-sb-widgets'], tops = Object.fromEntries(blocks.map((b) => [b, []])), shifts = [];
-  let frame;
+  const blocks = ['aside.outline-actions > #gz-nt-block', 'aside.outline-actions > #gz-sb-widgets'], tops = Object.fromEntries(blocks.map((b) => [b, []])), shifts = [], frames = [];
+  const from = performance.now();
+  let frame, was = '';
+  // Each frame that differs from the last: the column's state (Details & Actions' height, the hold, the sidebar's host) and the blocks' tops.
   const sample = () => {
+    const t = Math.round(performance.now() - from), row = {};
     for (const b of blocks) {
       const e = document.querySelector(b), r = e?.getBoundingClientRect();
-      if (r && r.height > 0 && r.width > 0) { const t = Math.round(r.top * 10) / 10, list = tops[b]; if (list.at(-1)?.top !== t) list.push({ t: Math.round(performance.now()), top: t }); }
+      if (r && r.height > 0 && r.width > 0) { const top = Math.round(r.top * 10) / 10, list = tops[b]; row[b] = top; if (list.at(-1)?.top !== top) list.push({ t, top }); }
     }
+    const d = document.querySelector('aside.outline-actions > .js-details-and-actions');
+    Object.assign(row, { details: d ? Math.round(d.getBoundingClientRect().height) : null, held: document.documentElement.style.getPropertyValue('--gz-sb-held') && document.documentElement.hasAttribute('data-gz-sb-held') ? document.documentElement.style.getPropertyValue('--gz-sb-held') : null,
+      host: d?.parentElement.getAttribute('data-gz-sidebar-host') ?? null });
+    const key = JSON.stringify(row);
+    if (key !== was && frames.length < 200) { was = key; frames.push({ t, ...row }); }
     frame = requestAnimationFrame(sample);
   };
   frame = requestAnimationFrame(sample);
   const ours = (n) => { const e = n?.nodeType === 1 ? n : n?.parentElement; return blocks.find((b) => e?.closest(b)) || null; };
-  const take = (list) => { for (const e of list) if (!e.hadRecentInput) for (const x of e.sources || []) { const b = ours(x.node); if (b) shifts.push({ t: Math.round(e.startTime), value: e.value, block: b, prev: x.previousRect.top, cur: x.currentRect.top }); } };
+  const take = (list) => { for (const e of list) if (!e.hadRecentInput) for (const x of e.sources || []) { const b = ours(x.node); if (b) shifts.push({ t: Math.round(e.startTime - from), value: e.value, block: b, prev: x.previousRect.top, cur: x.currentRect.top }); } };
   let po = null;
   try { po = new PerformanceObserver((l) => take(l.getEntries())); po.observe({ type: 'layout-shift' }); } catch { /* no layout-shift entries here */ }
-  return () => { cancelAnimationFrame(frame); if (po) { take(po.takeRecords()); po.disconnect(); } return { tops, shifts }; };
+  return () => { cancelAnimationFrame(frame); if (po) { take(po.takeRecords()); po.disconnect(); } return { tops, shifts, frames }; };
 }
 
 async function settle(page, change) {
@@ -416,10 +425,12 @@ if (require.main === module) (async () => {
       const opts = await context.newPage(); await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
       // What Glaze measured of the course's layout (detailsHeight:<origin>, navigation/page/sidebar.js) stays from one rep to
       // the next: rep 0 opens the course for the first time, the later reps as a student who has opened it before.
+      // PERF_REQUIRE_STILL_ASIDE: Course notes on, as the owner has it, so its block is in the outline's column.
+      const base = stillAside ? { ...D.GZ_DEFAULTS, enhance: { ...D.GZ_DEFAULTS.enhance, notes: true } } : D.GZ_DEFAULTS;
       const reset = () => opts.evaluate(async (defaults) => {
         const seen = Object.fromEntries(Object.entries(await chrome.storage.local.get(null)).filter(([k]) => k.startsWith('detailsHeight:')));
         await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(defaults); await chrome.storage.local.set({ ultra: ['https://ultra.fixture.test'], ...seen });
-      }, glaze === 'off' ? { ...D.GZ_DEFAULTS, enabled: false } : D.GZ_DEFAULTS);
+      }, { ...base, ...(glaze === 'off' && { enabled: false }) });
       // PERF_DEVICE=neo: the Neo's CPU speed on the page and on every frame in a process of its own.
       const prepare = async (page) => {
         if (!cpuRate) return;
@@ -582,15 +593,22 @@ if (require.main === module) (async () => {
     }
     // PERF_REQUIRE_STILL_ASIDE (with PERF_WIDTH at least 1560, where the sidebar is the outline's right column, and
     // PERF_REPS at least 2): on a course seen before, Course notes and the dock never move while Ultra fills Details &
-    // Actions, and take part in no layout shift.
-    if (process.env.PERF_REQUIRE_STILL_ASIDE) {
+    // Actions, and take part in no layout shift. A move in the frame the sidebar takes the column (its header put in above
+    // them) is the sidebar's own and is listed, not asserted.
+    if (stillAside) {
       assert.ok(WIDTH >= 1560 && reps >= 2, 'PERF_REQUIRE_STILL_ASIDE needs PERF_WIDTH >= 1560 and PERF_REPS >= 2');
       const returning = results.filter((r) => r.rep > 0 && r.glaze !== 'off');
       assert.ok(returning.length, 'a returning visit was measured');
       for (const r of returning) {
-        const { tops, shifts } = r.outline.aside;
-        assert.ok(tops['aside.outline-actions > #gz-nt-block'].length, `rep ${r.rep}: Course notes showed in the outline's column`);
-        for (const [block, list] of Object.entries(tops)) assert.ok(list.length <= 1, `rep ${r.rep}: ${block} moved: ${JSON.stringify(list)}`);
+        const { frames, shifts } = r.outline.aside, moves = [];
+        for (let i = 1; i < frames.length; i++) for (const block of ['aside.outline-actions > #gz-nt-block', 'aside.outline-actions > #gz-sb-widgets']) {
+          const was = frames[i - 1][block], now = frames[i][block];
+          if (was != null && now != null && was !== now) moves.push({ t: frames[i].t, block, from: was, to: now, adopt: !frames[i - 1].host && !!frames[i].host });
+        }
+        r.outline.aside.moves = moves;
+        console.log(JSON.stringify({ rep: r.rep, instrumented: r.instrumented, asideMoves: moves, asideShifts: shifts }));
+        assert.ok(frames.some((f) => f['aside.outline-actions > #gz-nt-block'] != null), `rep ${r.rep}: Course notes showed in the outline's column`);
+        assert.deepEqual(moves.filter((m) => !m.adopt), [], `rep ${r.rep}: Glaze's blocks moved while Ultra filled Details & Actions`);
         assert.deepEqual(shifts, [], `rep ${r.rep}: Glaze's blocks took part in a layout shift`);
       }
     }

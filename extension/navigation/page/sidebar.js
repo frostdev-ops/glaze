@@ -414,6 +414,14 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     d.resume();
   };
 
+  // A pass of the site's, ahead of its frame's place(): a Details & Actions Ultra has just added is held in the frame it is
+  // drawn in, with what Glaze drew under it in the same pass (Course notes).
+  const holdNow = () => {
+    if (!rec || asleep || !enabled() || !/^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname)) return;
+    const el = document.querySelector('aside.outline-actions');
+    if (el) hold({ el, page: el }, true);
+  };
+
   // ---- Glaze's parts of the column -----------------------------------------------------------------------------------
   let live0 = null;
   const say = (text) => { if (live) live.textContent = text; else live0 = text; };
@@ -1425,7 +1433,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       if (covered()) { cover(); return; }
       if (!active) { addEventListener('resize', onResize); document.addEventListener('visibilitychange', cover); if (ultra) addEventListener('pagehide', flushHeight); }
       // Ultra's passes come with every change Angular makes: once there, they are gathered into one a frame.
-      if (ultra && active) { cancelAnimationFrame(passFrame); passFrame = requestAnimationFrame(() => { if (on && active && !asleep) place(); }); }
+      if (ultra && active) { holdNow(); cancelAnimationFrame(passFrame); passFrame = requestAnimationFrame(() => { if (on && active && !asleep) place(); }); }
       else place();
     });
   };

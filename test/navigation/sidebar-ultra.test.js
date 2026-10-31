@@ -994,6 +994,23 @@ test("Details & Actions drawn again on a route back into Content in a course tab
   assert.deepEqual(p.store[HELD], { _101_1: 231 });
 });
 
+test("Details & Actions added by Ultra is held in the site's pass that draws Course notes under it, not a frame later", async () => {
+  const HELD = `detailsHeight:${O}`;
+  const p = page({ at: 'courses', stored: { ...record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }), [HELD]: { _101_1: 231 } } });
+  await p.pass();
+  const frames = [];
+  p.c.requestAnimationFrame = (f) => { frames.push(f); return frames.length; };
+  const inner = p.$('#main-content-inner');
+  inner.querySelector('.base-courses-container').remove();
+  p.c.location.pathname = '/ultra/courses/_101_1/outline';
+  const { aside, content } = routedOutline(p);
+  inner.append(p.el('div', 'course-content-container', p.el('div', 'panel-wrap', p.el('div', 'bb-course-navigation', 'Course'), p.el('div', 'course-outline-grid', content, aside))));
+  p.side.sync(true);
+  await settle();
+  assert.ok(frames.length, "the sidebar's own pass waits for the frame");
+  assert.equal(heldRoom(p), 231, 'held before that frame is drawn');
+});
+
 test("an outline column still showing another course's filled Details & Actions is not measured for the course being routed to", async () => {
   const HELD = `detailsHeight:${O}`;
   const p = page({ at: 'outline', aside: 'live', stored: { ...record(), [HELD]: { _101_1: 231, _102_1: 300 } } });
