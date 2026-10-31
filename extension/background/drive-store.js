@@ -337,11 +337,24 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       // to pass over the student's own later change back to this value.
       if (canon(write ?? null) !== canon(before ?? null)) {
         applying.set(id, canon(write ?? null));
+        const mine = [id];
         try {
-          const onChange = got.area === 'notes' && !d?.immutable ? (old, next) => owned.set(id, transition(got.key, old, next)) : undefined;
+          // Notes: the transition this record makes, and with an account's folders each note Notes takes out of a folder no
+          // longer there (planner/notes.js 'folders'): a consequence of what came, never a change made here to outweigh that
+          // note's own change from the other device.
+          const onChange = got.area === 'notes' && !d?.immutable ? (old, next) => {
+            owned.set(id, transition(got.key, old, next));
+            if (d.cat !== 'noteFolders') return;
+            const acct = NREC.exec(got.key)[1];
+            for (const n of new Set([...Object.keys(old.notes), ...Object.keys(next.notes)])) {
+              if (canon(old.notes[n]) === canon(next.notes[n])) continue;
+              const k = `${acct}|${n}`;
+              owned.set(`notes:${k}`, transition(k, old, next)); mine.push(`notes:${k}`);
+            }
+          } : undefined;
           if (!await a.replace(got.key, before, write, onChange)) throw new Fail('stale');
         } catch (e) {
-          applying.delete(id); owned.delete(id);
+          applying.delete(id); for (const x of mine) owned.delete(x);
           // storage.sync refusing this value (past its 8 KB an item, its total or its count of items): passed over as too big.
           // Its writes-a-minute and -an-hour limits pass, so those are tried again.
           if (got.area === 'sync' && !(e instanceof Fail) && !/MAX_WRITE_OPERATIONS/.test(String(e?.message))) throw new Fail('bad');
