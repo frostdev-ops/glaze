@@ -55,7 +55,7 @@ var GZ_AI_TOKENIZER = globalThis.GZ_AI_TOKENIZER || (() => {
   // reserved row, in this order), so never reorder or remove one.
   const GLAZE_TOKENS = Object.freeze(['<|gz_ctx|>', '<|/gz_ctx|>', '<|gz_data|>', '<|/gz_data|>',
     ...['writer.complete', 'writer.review', 'writer.feedback', 'writer.outline', 'writer.requirements', 'writer.cite', 'writer.sources',
-      'writer.decide', 'writer.image', 'syllabus.read'].map((t) => `<|gz_task:${t}|>`)]);
+      'writer.decide', 'writer.image', 'syllabus.read', 'study.help', 'agent.tools'].map((t) => `<|gz_task:${t}|>`)]);
   const enc = new TextEncoder();
   const fail = (what) => { throw new TypeError(`tokenizer: ${what}`); };
   // Lone surrogates → U+FFFD, as TextEncoder makes them.

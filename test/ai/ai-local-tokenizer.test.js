@@ -146,8 +146,12 @@ test('Glaze specials take the model\'s reserved rows, once, and are never text',
 
 test('the Glaze table: fixed order, and the same ids from a GGUF\'s [PAD] rows and after a tokenizer.json\'s last token', () => {
   assert.deepEqual(K.GLAZE_TOKENS.slice(0, 4), ['<|gz_ctx|>', '<|/gz_ctx|>', '<|gz_data|>', '<|/gz_data|>']);
-  assert.deepEqual(K.GLAZE_TOKENS.slice(4), ['writer.complete', 'writer.review', 'writer.feedback', 'writer.outline', 'writer.requirements', 'writer.cite', 'writer.sources', 'writer.decide', 'writer.image', 'syllabus.read'].map((t) => `<|gz_task:${t}|>`));
+  assert.deepEqual(K.GLAZE_TOKENS.slice(4), ['writer.complete', 'writer.review', 'writer.feedback', 'writer.outline', 'writer.requirements', 'writer.cite', 'writer.sources', 'writer.decide', 'writer.image', 'syllabus.read', 'study.help', 'agent.tools'].map((t) => `<|gz_task:${t}|>`));
   assert.ok(Object.isFrozen(K.GLAZE_TOKENS));
+  // Appended: LFM3-1.7B's rows from 125033, so the two new tasks take 125047 and 125048 and the first fourteen keep theirs.
+  const lfm = require('../helpers/local-vocab.cjs')(require('../fixtures/ai/local-format/vocab.json'));
+  assert.deepEqual(K.GLAZE_TOKENS.map((t) => lfm.id(t)), K.GLAZE_TOKENS.map((_, i) => 125033 + i));
+  assert.deepEqual(['<|gz_task:syllabus.read|>', '<|gz_task:study.help|>', '<|gz_task:agent.tools|>'].map((t) => lfm.id(t)), [125046, 125047, 125048]);
   const v = neutral({ added: ADDED });
   const n = v.tokens.length, rows = n + 20;
   // LFM3's layout: tokenizer.json ends at its last added token; the GGUF lists the rest of the rows as [PADi], unused.

@@ -160,7 +160,10 @@ test('Firefox\'s event page loads every file of the harness the worker would imp
   // files itself, and the worker never does.
   const host = ['local/host.js', 'local/offscreen.js', 'local/tokenizer.js', 'local/gguf.js', 'local/quant.js', 'local/reference.js', 'local/engine.js', 'local/grammar.js', 'local/ladder.js', 'local/vision-reference.js', 'local/vision.js'];
   for (const f of ['ai/local/store.js', 'ai/local/format.js', 'ai/local/link.js', 'ai/providers/local.js']) assert.ok(named.has(f), f);
-  const shipped = fs.readdirSync(path.join(__dirname, '../../extension/ai'), { recursive: true }).filter((f) => f.endsWith('.js') && f !== 'providers/mock.js' && !host.includes(f)).map((f) => `ai/${f}`);
+  // Tasks defined and tested that no feature runs yet stay out until one adopts them (docs/ai-harness.md).
+  const unused = ['tasks/study-help.js', 'tasks/agent-tools.js', 'tasks/wording.js'];
+  for (const f of unused) assert.ok(!named.has(`ai/${f}`), `${f} waits for a feature`);
+  const shipped = fs.readdirSync(path.join(__dirname, '../../extension/ai'), { recursive: true }).filter((f) => f.endsWith('.js') && f !== 'providers/mock.js' && !host.includes(f) && !unused.includes(f)).map((f) => `ai/${f}`);
   assert.ok(shipped.length >= 14);
   for (const f of shipped) assert.ok(named.has(f), `${f} is named in an importScripts call`);
   for (const f of host) assert.ok(!named.has(`ai/${f}`), `${f} stays out of the worker`);

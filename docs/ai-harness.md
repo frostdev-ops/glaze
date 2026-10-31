@@ -24,6 +24,7 @@ until the student has turned AI on, chosen a model for that feature and allowed 
 | `ai/task.js` | Task definitions and `run`. Tasks live in `ai/tasks/<id>.js`. |
 | `ai/tasks/syllabus-read.js` | `syllabus.read`: a syllabus's values as written, each with its quote; `planner/syllabus-ai.js` reads them with `planner/syllabus.js` and merges them into the import dialog's review. |
 | `ai/tasks/writer-*.js` | Glaze Writer's tasks (below); `writer-context.js` cleans the page's context and writes it as the request's reusable context. |
+| `ai/tasks/study-help.js`, `ai/tasks/agent-tools.js` | `study.help` and `agent.tools` (below), defined and tested; no feature runs them, so the worker doesn't load them. `wording.js`: the wording-offer rules they share with Feedback. |
 | `ai/settings.js` | storage.local `ai`: `{ on, outline, sources, mode, model, models, tune, features }` (below), the providers Settings names (`PRESETS`), and `migrate` for an older store. Features: `syllabus`, `completion` (the writer's ghost text), `writing` (its review, feedback, requirements, citations and autocorrect calls). |
 | `ai/broker.js` | The worker's broker: the port, admission, connections (IndexedDB), Settings' config messages. |
 
@@ -132,6 +133,31 @@ began; `GZ_WRITER_AI.feedbackView(container)` is the Feedback panel; `GZ_WRITER_
 choice an index into the candidates (-1 with keep). `GZ_WRITER_AI.requirements(prompt)` and `cite({ text, url })` give the other parts of the
 writer those tasks' outputs, or null. `writer/writer-tools.js` declares editor tools (read: document, issues, sources,
 assignment; confirm: insert a citation, apply a fix). `agents/writer.js` exposes them to apps allowed in **Settings → AI → Agents**. Stored-document reads use opaque session keys; reading issues and making changes require an open Writer page, and each change waits for approval in Glaze.
+
+## Tasks no feature runs yet
+
+Defined, tested and trained for, unused until a feature adopts them: name the file in `aiFiles` then (and
+`test/ai/ai-worker.test.js`'s `unused` loses it). Both have a token in `GLAZE_TOKENS` (ids 125047, 125048);
+`glaze-plans/lfm-tune/FORMAT-new-tasks.md` gives their training layouts.
+
+- `study.help`: help with a question about coursework that never gives the answer. Input `{ question, attempt?, subject
+  (math, science, code, essay, reading, other), locale? (en, pt-BR, es, fr, de, nl), material?, context? }` (context as
+  `writer-context.js` cleans it). Output `{ kind: hint | question | concept | check-my-step, step: correct | mistake |
+  unclear | null, reply, followUp }`. `check` refuses a reply that states the answer (each locale's "the answer is…", the
+  correct option), gives a result one step of arithmetic on the problem's numbers makes or a new equation in its
+  variables, writes code with the student's own names, offers wording (`wording.js`, Feedback's rules but "for example,"),
+  quotes three words no source holds, or (essay, reading, other) makes a statement that neither speaks to the student nor
+  is about their work; `why(output, input)` names the rule.
+- `agent.tools`: one turn of a small model's tool loop over twelve of Agents' tools (`SPECS`: accounts, courses,
+  assignments, an assignment, to-do, schedule, grades, a course's grades, documents, a document, a document's assignment,
+  and `todo_mark_done`, the one write, which waits for the student's approval as in Agents). `SPECS.parameters` are
+  Agents' `inputSchema` with shorter words (the test holds them equal). Input `{ question, tools (names), steps: [{ call,
+  result }], now, zone, locale? }`; each result is fenced data, its times in the student's zone (`readable`). Output
+  `{ call, answer }`, one null: `check` validates a call against its tool's schema and refuses one whose ids no result or
+  the question holds, a repeat, or a call after six steps; an answer's quotes must be in a result and its numbers in a
+  result, the question or the time. The feature runs each call through Agents' grants and approvals and runs the task again
+  with the step added. Glaze's model reads it in LFM3's own tool syntax (`layout`, `native`); `ai/local/format.js` refuses
+  it in the one-turn layout.
 
 ## Add a provider
 
