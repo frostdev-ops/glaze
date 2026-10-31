@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const P = require('../../extension/writer/writer-papers.js');
 const { standin } = require('../helpers/drive-standin.cjs');
-const { MIME } = require('../fixtures/drive/v3.js');
+const { MIME, ERRORS } = require('../fixtures/drive/v3.js');
 
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const enc = (s) => new TextEncoder().encode(s);
@@ -131,6 +131,24 @@ test('a PDF with a large JSON copy and large file downloads without cycling betw
   assert.equal(rec.text, text);
   assert.equal(sha(await db.files.read(rec.file.hash)), sha(bytes));
   assert.deepEqual(await moves(db), {});
+  assert.deepEqual([...db.stage.m.keys()], []);
+});
+
+test('a staged download whose owner metadata is denied is discarded without stalling transfers', async () => {
+  const drive = standin(), da = disk(), db = disk(da.clock), key = 'doc:00000000-0000-4000-8000-00000000a015';
+  const a = worker(drive, da);
+  await a.papers.save(key, { doc: doc('A'.repeat(6 * MiB)), title: 'Large essay', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  const id = fileOf(drive, key, 'doc').meta.id;
+  drive.offline((x) => x.path === `/drive/v3/files/${id}` && x.query.alt === 'media');
+  const b = worker(drive, db);
+  assert.equal((await b.sync.set(true)).why, 'network');
+  assert.ok(Object.values(await moves(db)).some((t) => t.dir === 'down'), 'a download waits');
+  drive.fail(403, ERRORS.insufficientFilePermissions, (x) => x.path === `/drive/v3/files/${id}` && !x.query.alt, 10);
+  db.clock.t = (await db.store.get('driveSync')).driveSync.wait + 1;
+  const r = await worker(drive, db).sync.run({ push: true });
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.deepEqual(await moves(db), {}, 'the refused transfer cannot block later runs');
   assert.deepEqual([...db.stage.m.keys()], []);
 });
 

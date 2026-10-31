@@ -1691,3 +1691,60 @@ test('a first meeting with a document in Trash here whose file was deleted for g
   assert.equal(await b.papers.get(key), null, 'never live on another device');
   noDeletes(drive);
 });
+
+for (const kind of ['paper', 'pdf', 'slides']) test(`an interrupted first-meeting restoration of a ${kind} retries the JSON copy without following the deleted file`, async () => {
+  const drive = standin(), a = device(drive), b = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000b04';
+  if (kind === 'paper') await a.papers.save(key, { doc: doc('Kept here'), title: 'Essay', named: true });
+  else {
+    const ref = await a.files.put(enc(kind === 'pdf' ? '%PDF kept here' : 'PK deck kept here'), TYPE[kind]);
+    await a.papers.save(key, { kind, file: ref, size: ref.size, title: 'Kept here', named: true });
+  }
+  assert.ok((await a.sync.set(true)).ok);
+  const expected = sidecarJson(drive, key).record;
+  a.who.account = 'other@school.edu';
+  assert.equal((await a.sync.run()).why, 'account');
+  const gone = exportOf(drive, key).meta.id, json = sidecarOf(drive, key).meta.id;
+  drive.trash(gone); drive.remove(gone);
+  a.who.account = 'student@school.edu';
+  drive.offline((x) => x.path === `/upload/drive/v3/files/${json}`);
+  assert.equal((await a.sync.set(true)).why, 'network', 'the replacement lands before its JSON copy fails');
+  const replacement = exportOf(drive, key).meta.id;
+  assert.notEqual(replacement, gone);
+  assert.ok((await a.sync.run({ full: true })).ok);
+  assert.ok((await a.sync.run({ full: true })).ok);
+  assert.ok(!P.trashed(await a.papers.get(key)), 'the restored document stays live');
+  assert.equal(sidecarJson(drive, key).file, replacement, 'the JSON copy names the replacement');
+  assert.ok((await b.sync.set(true)).ok);
+  assert.deepEqual(S.strip(await b.papers.get(key)), expected, 'another device gets the restored content');
+  const n = drive.log.filter((x) => x.upload).length;
+  assert.ok((await a.sync.run()).ok); assert.ok((await b.sync.run()).ok);
+  assert.equal(drive.log.filter((x) => x.upload).length, n, 'restoration settles');
+  noDeletes(drive);
+});
+
+test('an interrupted first-meeting restoration with unavailable remote deck bytes retries this device\'s file', async () => {
+  const drive = standin(), a = device(drive), b = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000b05';
+  const mine = await a.files.put(enc('PK local deck'), MIME.pptx);
+  await a.papers.save(key, { kind: 'slides', file: mine, size: mine.size, title: 'Talk', named: true });
+  assert.ok((await a.sync.set(true)).ok); assert.ok((await b.sync.set(true)).ok);
+  a.who.account = 'other@school.edu';
+  assert.equal((await a.sync.run()).why, 'account');
+  const other = await b.files.put(enc('PK remote deck'), MIME.pptx);
+  await b.papers.save(key, { file: other, size: other.size });
+  await b.sync.touched(key); await b.fire();
+  const gone = exportOf(drive, key).meta.id, json = sidecarOf(drive, key).meta.id;
+  drive.trash(gone); drive.remove(gone);
+  a.who.account = 'student@school.edu';
+  drive.offline((x) => x.path === `/upload/drive/v3/files/${json}`);
+  assert.equal((await a.sync.set(true)).why, 'network');
+  assert.ok((await a.sync.run({ full: true })).ok);
+  assert.ok((await a.sync.run({ full: true })).ok);
+  assert.ok(!P.trashed(await a.papers.get(key)));
+  assert.equal(sidecarJson(drive, key).record.file.hash, mine.hash, 'the available local bytes are published');
+  assert.ok(drive.view(sidecarJson(drive, key).file), 'the copy names a live file');
+  assert.ok((await b.sync.run()).ok);
+  assert.equal((await b.papers.get(key)).file.hash, mine.hash, 'the other device receives the restored file');
+  noDeletes(drive);
+});
