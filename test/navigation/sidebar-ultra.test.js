@@ -1014,6 +1014,43 @@ test("the sidebar takes a course outline's column as soon as Ultra draws it, bef
   }
 });
 
+test("the dock in a course outline's column taken before Course notes is drawn waits for it (at most a second), so it never moves down for it", async () => {
+  const HELD = `detailsHeight:${O}`;
+  for (const notes of [true, false]) {
+    const p = page({ at: 'courses', enhance: { notes }, stored: { ...record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }), [HELD]: { _101_1: 231 } } });
+    await p.pass();
+    const tick = heightTimers(p);
+    const inner = p.$('#main-content-inner');
+    inner.querySelector('.base-courses-container').remove();
+    p.c.location.pathname = '/ultra/courses/_101_1/outline';
+    const { aside, content } = routedOutline(p);
+    inner.append(p.el('div', 'course-content-container', p.el('div', 'panel-wrap', p.el('div', 'bb-course-navigation', 'Course'), p.el('div', 'course-outline-grid', content, aside))));
+    await p.pass();
+    assert.equal(aside.dataset.gzSidebarHost, 'native');
+    const waiting = () => p.doc.root.dataset.gzSbNotes != null;
+    assert.equal(waiting(), notes, `notes ${notes}: the dock waits only for a Course notes that is coming`);
+    if (!notes) continue;
+    // Course notes lands above the dock (planner/page/notes.js), a frame later.
+    const block = p.el('div', 'outline-action-block', 'Course notes');
+    block.id = 'gz-nt-block';
+    p.$('#gz-sb-widgets').before(block);
+    p.mutate(aside, { addedNodes: [block] });
+    await settle();
+    assert.equal(waiting(), false, 'shown once Course notes is above it');
+    // A column Course notes never comes to: shown after a second, and not hidden again on the next pass.
+    block.remove();
+    aside.replaceWith(routedOutline(p).aside);
+    await p.pass();
+    const next = p.$('aside.outline-actions');
+    assert.equal(next.dataset.gzSidebarHost, 'native');
+    assert.equal(waiting(), true);
+    tick(1000);
+    assert.equal(waiting(), false, 'at most a second');
+    await p.pass();
+    assert.equal(waiting(), false, 'once per column');
+  }
+});
+
 test("Details & Actions drawn again on a route back into Content in a course tab is held from when Ultra draws it", async () => {
   const HELD = `detailsHeight:${O}`;
   const p = page({ at: 'outline', aside: 'live', stored: { ...record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }), [HELD]: { _101_1: 231 } } });
