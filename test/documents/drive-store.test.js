@@ -1483,3 +1483,32 @@ test('a note that arrives before its picture gets the picture once Drive has it'
   assert.equal(b.db.stores.blobs.get(`https://school.instructure.com/42/${pic2}`), undefined, 'a deleted note\'s picture stays in Drive');
   assert.ok(drive.log.filter((x) => x.query?.alt === 'media').length - reads <= 1, 'at most the deleted note\'s tombstone is read');
 });
+
+// The chaos run's seeds 22 and 54 at 100 operations (lww:settings): a device's later change to the value Drive already held
+// sent nothing, so another device's earlier change, not pushed yet, went up over it unseen.
+test('a later change to the value Drive already holds still wins over an earlier change another device hadn\'t pushed', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  // First meeting with the key: B's value went up; B changes it again; A, never having heard of it, sets B's first value.
+  clock.t += 1000; await b.settings.set({ enabled: true });
+  assert.ok((await b.run({ push: true })).ok);
+  clock.t += 1000; await b.settings.set({ enabled: false });
+  clock.t += 1000; await a.settings.set({ enabled: true });
+  assert.ok((await a.run()).ok); assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
+  for (const d of [a, b]) assert.equal((await d.settings.get('enabled')).enabled, true, 'A\'s later change wins on both');
+  // Both synced: B changes it, A changes it and back, later.
+  clock.t += 1000; await b.settings.set({ enabled: false });
+  clock.t += 1000; await a.settings.set({ enabled: false });
+  clock.t += 1000; await a.settings.set({ enabled: true });
+  assert.ok((await a.run()).ok); assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
+  for (const d of [a, b]) assert.equal((await d.settings.get('enabled')).enabled, true, 'A\'s change back, the later, wins on both');
+  // And a later change on B still wins over A's earlier one.
+  clock.t += 1000; await a.settings.set({ enabled: false });
+  clock.t += 1000; await a.settings.set({ enabled: true });
+  clock.t += 1000; await b.settings.set({ enabled: false });
+  assert.ok((await a.run()).ok); assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
+  for (const d of [a, b]) assert.equal((await d.settings.get('enabled')).enabled, false, 'B\'s later change wins on both');
+  const ups = drive.log.filter((x) => x.upload).length;
+  await a.run(); await b.run(); await a.run();
+  assert.equal(drive.log.filter((x) => x.upload).length, ups, 'settled');
+});
