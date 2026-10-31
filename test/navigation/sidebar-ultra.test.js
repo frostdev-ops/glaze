@@ -1014,3 +1014,13 @@ test('an empty Details placeholder with padding keeps its reservation until cont
   expire(15000);
   assert.equal(empty.doc.root.dataset.gzSbHeld, undefined, 'an empty course still has a bounded hold');
 });
+
+test("the sidebar starts from its record when storage is read one key at a time, Details & Actions' heights read beside it", async () => {
+  const p = page({ at: 'outline', stored: record({ width: 400, chose: { width: true } }) });
+  // As checks/navigation/sidebar-ultra-check.js stands in for storage: one key per get, and no worker behind it.
+  p.c.chrome.storage.local.get = (k, cb) => cb({ [k]: structuredClone(p.store[k]) });
+  p.c.chrome.runtime.sendMessage = undefined;
+  await p.pass();
+  assert.ok(p.host()?.className.includes('outline-actions'), 'the dock is in Ultra\'s column');
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sidebar-w'), '400px', 'drawn from the stored record');
+});
