@@ -494,18 +494,29 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
   const dayStart = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return +d; };
   const dayEnd = (t) => { const s = dayStart(t); if (s === t) return t; const d = new Date(s); d.setDate(d.getDate() + 1); return +d; };
   const covered = (rows, complete) => Object.defineProperty(rows, 'complete', { value: complete !== false });
-  // env: { origin(), now(), fetch(url, init, prio, live), live(), local: { get(k), set(v) }, send(m), framed() (the top page's
-  // timeOrigin in a course tab's frame, else null), todo() (planner/todo.js or null), todoPrefs() }.
+  // env: { origin(), now(), fetch(url, init, prio, live), live(), local: { get(k), set(v) }, send(m),
+  // todo() (planner/todo.js or null), todoPrefs() }.
   const makePage = (env) => {
     const at = () => env.origin();
+    // Serialize this page's read/modify/write operations for each stored record.
+    const writes = new Map();
+    const update = (key, change) => {
+      const run = () => Promise.resolve(env.local.get(key)).then((r) => {
+        const next = change(r?.[key]);
+        if (next !== undefined) return env.local.set({ [key]: next });
+      });
+      const p = (writes.has(key) ? writes.get(key).then(run) : run()).catch(() => {});
+      writes.set(key, p);
+      p.then(() => { if (writes.get(key) === p) writes.delete(key); });
+    };
     // The fan-outs (gradebooks, outlines) stop once the page isn't live; who's signed in and what's due are asked as before.
     const reader = (o = {}) => read({ origin: at(), f: (u, init) => env.fetch(u, init, o.prio || 0, o.live), ...o });
     const fanout = (prio) => reader({ prio, live: env.live });
 
     // ---- who's signed in, and their courses: one source per site ----
     // Asked once a page, and kept by the worker a few minutes (storage.session, 'glaze:ultraMine') for the site's other
-    // pages and course-tab frames. A frame takes the kept pair as it is once its top page confirmed it; any other page
-    // confirms the student (/users/me, light) and keeps the memberships when it's the same one. The last student
+    // pages and course-tab frames. Each document confirms the student (/users/me, light), then keeps the memberships
+    // when it's the same one: a shared snapshot's timestamp cannot prove which account a frame is signed in as. The last student
     // confirmed is kept per site too (storage.local ultraMe:<origin>, purged with the site), so what's saved for them
     // paints before anything answers (known). Ultra keeps no time zone for a student ([M] /users/me has none): days are
     // the browser's, named, so what's kept with a time zone is kept in one.
@@ -523,17 +534,15 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
       confirmed = uid;
       seen = null;
       const k = SEEN();
-      Promise.resolve(env.local.get(k)).then((r) => {
-        const was = r?.[k], next = { uid, ...((courses || was?.uid === uid && was.courses) && { courses: courses || was.courses }) };
-        if (JSON.stringify(was) !== JSON.stringify(next)) return env.local.set({ [k]: next });
-      }).catch(() => {});
+      update(k, (was) => {
+        const next = { uid, ...((courses || was?.uid === uid && was.courses) && { courses: courses || was.courses }) };
+        return JSON.stringify(was) !== JSON.stringify(next) ? next : undefined;
+      });
     };
     const me = () => (meP ||= (async () => {
-      const c = await kept(), since = env.framed();
-      const uid = c && since && c.at >= since ? c.uid : await reader().me();
+      const [c, uid] = await Promise.all([kept(), reader().me()]);
       remember(uid);
-      // Confirmed here: frames under this page take the kept pair from now on.
-      if (c?.uid === uid && !(since && c.at >= since)) send({ type: 'glaze:ultraMine', op: 'touch', uid });
+      if (c?.uid === uid) send({ type: 'glaze:ultraMine', op: 'touch', uid });
       return uid;
     })().catch((e) => { meP = null; copy = null; throw e; }));
     const mine = () => (mineP ||= (async () => {
@@ -572,7 +581,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     const flush = () => {
       for (const [uid, add] of toKeep) {
         const k = BOOKS(uid);
-        Promise.resolve(env.local.get(k)).then((r) => env.local.set({ [k]: prune({ ...r?.[k], ...Object.fromEntries(add) }, env.now()) })).catch(() => {});
+        update(k, (was) => prune({ ...was, ...Object.fromEntries(add) }, env.now()));
       }
       toKeep.clear();
     };
@@ -623,7 +632,8 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     const outline = (cid, { prio = 0, maxAge = OUTLINE_TTL, body = false } = {}) => {
       if (!ID.test(cid)) return Promise.resolve({ items: [], complete: true });
       const o = outlines.get(cid);
-      if (o?.p && (o.pBody || !body)) return o.p;
+      // Finish the narrower read before upgrading it, so a late metadata answer cannot replace document bodies.
+      if (o?.p) return o.pBody || !body ? o.p : o.p.catch(() => {}).then(() => outline(cid, { prio, maxAge, body }));
       if (o?.value && (o.body || !body) && env.now() - o.at < maxAge) return Promise.resolve(o.value);
       const p = fanout(prio).list(`/learn/api/public/v1/courses/${cid}/contents`, `${OUTLINE_FIELDS}${body ? ',body' : ''}`, true).then((value) => {
         outlines.set(cid, { at: env.now(), body, value });
@@ -707,7 +717,6 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     fetch: (u, init, prio, still) => lmsq().then((q) => (q ? q.fetch(u, init, prio, still) : fetch(u, init))),
     local: area('local'),
     send: (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, (r) => res(chrome.runtime.lastError ? null : r))?.then?.(res, () => res(null)); } catch { res(null); } }),
-    framed: () => { try { return globalThis.top !== globalThis.window && parent.location.origin === location.origin ? parent.performance.timeOrigin : null; } catch { return null; } },
     todo: () => (globalThis.GZ_TODO ? GZ_TODO : globalThis.GZ_CTX?.need ? GZ_CTX.need('planner/todo.js', () => globalThis.GZ_TODO).then(() => globalThis.GZ_TODO || null) : null),
     todoPrefs: () => (typeof GZ_SANITIZE === 'undefined' ? null : area('sync').get('todo').then((r) => GZ_SANITIZE({ todo: r?.todo }).todo)),
   });

@@ -1151,7 +1151,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // get, put (a fresh read: read and at now) and touch (the student confirmed again by a top page: at now).
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:ultraMine') return;
-  (async () => {
+  (brokerTurn ||= GZ_CARDS.queue())(async () => {
     const origin = ultraPage(s) && chrome.storage.session && await fromUltra(s);
     if (!origin) return null;
     const k = `ultraMine:${origin}`, now = Date.now();
@@ -1163,7 +1163,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     if (!v || !id.test(v.uid) || !Array.isArray(v.mem) || v.mem.length > 2000 || JSON.stringify(v.mem).length > 4e6) return null;
     await chrome.storage.session.set({ [k]: { uid: v.uid, mem: v.mem, complete: v.complete !== false, read: now, at: now } });
     return null;
-  })().then(reply, () => reply(null));
+  }).then(reply, () => reply(null));
   return true;
 });
 chrome.tabs?.onRemoved?.addListener((id) => {

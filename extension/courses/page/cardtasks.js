@@ -189,7 +189,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     // Started: whether the list is here now counts as seen, so its going later is noticed whenever it goes.
     if (!starting) starting = start().then(() => { listed = !!document.getElementById('gz-todo'); paint(); return sure(); }).then((ok) => {
       mine = ok;
-      if (ok) return refresh();
+      if (ok) { paint(); return refresh(); }
       for (const e of document.querySelectorAll('.gz-ct')) e.remove();
       cache = data = null;
       starting = null;
