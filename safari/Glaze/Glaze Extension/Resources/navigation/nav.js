@@ -25,7 +25,7 @@ var GZ_NAV = globalThis.GZ_NAV || (() => {
   const key = (s) => JSON.stringify([s.navbar, s.enhance?.tabs, s.enhance?.dashboard, s.nav?.li]);
   const kept = (raw, at) => {
     const s = JSON.parse(raw), from = at.from && new URL(at.from);
-    return s && typeof s.u === 'string' && s.u && s.w === at.words && s.k === at.key && s.v === at.size && Number.isFinite(s.t) && s.t <= at.now && at.now - s.t < 6e5 && (!from || from.origin === at.origin && /^\/ultra(?:\/|$)/.test(from.pathname)) && typeof s.m === 'string' && Array.isArray(s.a) && s.a.every((p) => Array.isArray(p) && p.length === 2 && /^(dir|data-(place|style|footer|motion))$/.test(p[0]) && typeof p[1] === 'string') ? s : null;
+    return s && typeof s.u === 'string' && s.u && s.w === at.words && s.k === at.key && s.v === at.size && Number.isFinite(s.t) && s.t <= at.now && at.now - s.t < 6e5 && (!from || from.origin === at.origin && /^\/ultra(?:\/|$)/.test(from.pathname)) && typeof s.m === 'string' && Array.isArray(s.p) && s.p.every((x) => typeof x === 'string') && Array.isArray(s.a) && s.a.every((p) => Array.isArray(p) && p.length === 2 && /^(dir|data-(place|style|footer|motion))$/.test(p[0]) && typeof p[1] === 'string') ? s : null;
   };
   // The bar's elements only, no handlers or other addresses; where the student is, marked.
   const paint = (box, path) => {
@@ -49,25 +49,31 @@ var GZ_NAV = globalThis.GZ_NAV || (() => {
     try { k = kept(sessionStorage.getItem('gz-navbar'), { words, key: key(s), size: innerWidth + 'x' + innerHeight, now: Date.now(), from: document.referrer, origin: location.origin }); sessionStorage.removeItem('gz-navbar'); } catch { /* none */ }
     if (!k || document.getElementById('gz-navbar')) return;
     const host = Object.assign(document.createElement('div'), { id: 'gz-navbar', hidden: true, inert: true }), root = host.attachShadow({ mode: 'open' });
-    const t = document.createElement('template'), l = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: chrome.runtime.getURL('navigation/page/navbar.css') });
+    const l = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: chrome.runtime.getURL('navigation/page/navbar.css') });
     for (const [n, v] of k.a) host.setAttribute(n, v);
     host.dataset.first = '';
-    t.innerHTML = k.m;
-    paint(t.content, location.pathname.replace(/\/$/, ''));
-    // Shown once its sheet is in and the account is known to be the one it was drawn for.
-    const styled = new Promise((resolve) => { l.onload = resolve; });
-    root.append(l, t.content);
-    (document.body || document.documentElement).prepend(host);
-    Promise.all([styled, Promise.resolve().then(() => account?.())]).then(([, id]) => {
-      if (!host.isConnected || !host.hasAttribute('data-first')) return;
-      if (!id || String(id) !== k.u) { host.remove(); return; }
-      host.hidden = false;
+    const path = location.pathname.replace(/\/$/, ''), parse = (m) => { const t = document.createElement('template'); t.innerHTML = m; paint(t.content, path); return t.content; };
+    // Its markers on the current item, as the bar's layout() puts them.
+    const glide = () => {
       for (const i of root.querySelectorAll('.ind, .tind')) {
         const c = i.parentNode.querySelector('.item[aria-current="page"]:not([data-over]), .ctab-go[aria-current="page"]'), y = i.matches('.ind');
         i.hidden = !c;
         if (c) for (const [v, n] of y ? [['--y', c.offsetTop]] : [['--x', c.offsetLeft], ['--w', c.offsetWidth]]) i.style.setProperty(v, n + 'px');
       }
-    }, () => { if (host.hasAttribute('data-first')) host.remove(); });
+    };
+    // Shown with its sheet; the account's own parts (kept apart, their room held) once the account is the one they were drawn
+    // for, and the copy gone for any other.
+    const live = () => host.isConnected && host.hasAttribute('data-first');
+    l.onload = () => { if (live()) { host.hidden = false; glide(); } };
+    root.append(l, parse(k.m));
+    (document.body || document.documentElement).prepend(host);
+    const gone = () => live() && host.remove();
+    Promise.resolve().then(() => account?.()).then((id) => {
+      if (!live()) return;
+      if (!id || String(id) !== k.u) return gone();
+      for (const e of root.querySelectorAll('[data-p]')) e.replaceWith(parse(k.p[e.dataset.p] || ''));
+      if (!host.hidden) glide();
+    }, gone);
   };
   return { SPEC, dimensions, NATIVE, native, key, kept, paint, first, drop };
 })();
