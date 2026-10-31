@@ -129,6 +129,29 @@ test('a PDF with a large JSON copy and large file downloads without cycling betw
   assert.deepEqual([...db.stage.m.keys()], []);
 });
 
+test('a range interrupted by worker shutdown is retried in smaller pieces before making progress', async () => {
+  const drive = standin(), da = disk(), db = disk(da.clock), key = 'doc:00000000-0000-4000-8000-00000000a012';
+  const bytes = bytesOf(12 * MiB, 53), a = worker(drive, da);
+  await pdfOn(a, da, key, bytes, 'Slow reader');
+  assert.ok((await a.sync.set(true)).ok);
+  let hang, first;
+  const reached = new Promise((r) => { hang = r; });
+  const interrupted = (u, init = {}) => {
+    if (init.headers?.range) { first = init.headers.range; hang(); return new Promise(() => {}); }
+    return drive.fetch(u, init);
+  };
+  await stopped(worker(drive, db, { fetch: interrupted }).sync.set(true), reached);
+  const n = drive.log.length, b = worker(drive, db);
+  assert.ok((await b.sync.run()).ok);
+  const next = drive.log.slice(n).find((e) => e.range)?.range;
+  const old = /^bytes=(\d+)-(\d+)$/.exec(first);
+  assert.equal(next?.from, Number(old[1]), 'the range that never landed is retried from its start');
+  assert.ok(next.to - next.from < Number(old[2]) - Number(old[1]), 'smaller than the range that outlived the worker');
+  const rec = await b.papers.get(key);
+  assert.equal(sha(await db.files.read(rec.file.hash)), sha(bytes));
+  assert.deepEqual(await moves(db), {});
+});
+
 test('a worker stopped mid-chunk: the next one asks Drive where the session stands and goes on from there', async () => {
   const drive = standin(), dk = disk(), key = 'doc:00000000-0000-4000-8000-00000000a001', big = bytesOf(20 * MiB, 7);
   const a = worker(drive, dk);
