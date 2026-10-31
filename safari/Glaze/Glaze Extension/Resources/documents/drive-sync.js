@@ -518,6 +518,10 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         // upload, even when it fits in one request. A staged upload checks again just before its bytes are sent.
         const F = await meta(file);
         if (F.removed || F.trashed || F.appProperties?.glaze !== 'file' || F.appProperties?.key !== h || (Array.isArray(F.parents) && !F.parents.includes(folder))) return sync(key, h, { E: F, folder });
+        // This device's own staged upload, landed in this file while the document changed again (Drive's answer still on its
+        // transfer): Glaze's revision, recorded as its link would have been, never an outside edit or another device's.
+        const landed = going?.dir === 'up' && going.file?.id === file && !!F.headRevisionId && going.file.headRevisionId === F.headRevisionId;
+        if (landed && F.appProperties?.sum === going.tag && unchanged(F)) { d = await putDoc(h, { ...d, fh: F.headRevisionId, fsum: going.tag }, d); fh = F.headRevisionId; }
         if (F.headRevisionId && F.headRevisionId !== fh) {
           if (F.appProperties?.sum === d.fsum || rewritten(F)) return sync(key, h, { E: F, folder });
           if (!(F.appProperties?.sum === sum && unchanged(F))) {
@@ -712,6 +716,13 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
 
       // A file let go as edited outside Glaze (below) whose mark didn't land, the run stopping between: marked now.
       if (d.keep) d = await tagKept(h, d);
+      // This device's own staged copy, landed while the document changed again (Drive's answer still on its transfer): what it
+      // sent is what both sides agree on, as its push would have recorded, never Drive's side of a conflict.
+      const sent = R && !R.removed && R.id === d.json ? await moveOf(`u:${h}:json`) : null;
+      if (sent?.dir === 'up' && sent.file?.id === R.id && !!R.headRevisionId && sent.file.headRevisionId === R.headRevisionId && SUM.test(R.appProperties?.sum || '')
+        && R.appProperties.sum !== d.rsum) {
+        d = await putDoc(h, { ...d, jh: R.headRevisionId, rsum: R.appProperties.sum, lsum: R.appProperties.sum, rev: Number(R.appProperties.rev) || 0 }, d);
+      }
       // Follow a same-content copy's new file before weighing Trash or deletion: the old kept file is no longer this
       // document's. Its change must not move the replacement into Trash, nor supply bytes for it. So too for a copy with new
       // content beside the file this device knew deleted for good (another device kept it and wrote a file of its own).
