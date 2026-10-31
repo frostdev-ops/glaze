@@ -57,13 +57,13 @@ const ultra = ({ answer, pathname = '/ultra/courses/_1_1/outline', local = {}, c
     URL, URLSearchParams, Response, fetch: s.fetch, structuredClone,
     IntersectionObserver: class { observe() {} unobserve() {} disconnect() {} }, MutationObserver: class { observe() {} disconnect() {} },
     addEventListener() {}, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
-    chrome: { runtime: { id: 'x' }, storage: { local: { get: (k, cb) => cb(structuredClone(local)), set: (o) => Object.assign(local, o) }, onChanged: { addListener() {} } } },
+    chrome: { runtime: { id: 'x', sendMessage: (m, cb) => { if (m.op === 'save') local[m.key] = m.value; const r = m.op === 'begin' ? { epoch: 'test' } : null; cb?.(r); return Promise.resolve(r); } }, storage: { local: { get: (k, cb) => cb(structuredClone(local)), set: (o) => Object.assign(local, o) }, onChanged: { addListener() {} } } },
     GZ_GRADES: require(path.join(root, 'planner/grades.js')), GZ_PAGE: require(path.join(root, 'core/page.js')), GZ_COURSES: require(path.join(root, 'content/defaults.js')).GZ_COURSES,
   });
   ctx.globalThis = ctx; ctx.window = ctx; ctx.top = ctx;
   vm.runInContext(read('content/content-ultra.js'), ctx);
   const need = (file, ready) => {
-    try { if (!ready()) vm.runInContext(read(file), ctx); } catch (e) { return Promise.reject(e); }
+    try { if (!ready()) for (const f of [].concat(file)) vm.runInContext(read(f), ctx); } catch (e) { return Promise.reject(e); }
     return ready() ? Promise.resolve() : Promise.reject(new Error('not ready'));
   };
   const api = (p, base = '/learn/api/v1') => s.fetch(`${ORIGIN}${base}${p}`).then((r) => (r.ok ? r.text() : Promise.reject(r.status))).then((t) => JSON.parse(t));
@@ -74,7 +74,7 @@ const ultra = ({ answer, pathname = '/ultra/courses/_1_1/outline', local = {}, c
     cardsInView: { observe() {}, unobserve() {} }, inView, tagCards() {}, tagExtras() {}, courseSlots: {}, courseColors: () => ({}), varText: () => '', CARD: 'article', dueLabelled: () => false,
     links: [1], settings: { enabled: true, enhance: { inline: true, progress: true, newgrades: false, newcontent: false, ...enhance }, nav: { brand: 'x' }, courses: { names: {}, tint: false, tinted: [] }, sidebar: {} },
     observer: {}, worn: { nav: {} }, courseList: {} };
-  return { X: ctx.GZ_SITE_ULTRA(I), s, c, location, badges, local, I };
+  return { X: ctx.GZ_SITE_ULTRA(I), s, c, location, badges, local, I, ctx };
 };
 // A course card on the Courses page, on screen or not.
 const card = (cid, seen = true) => { const el = { isConnected: true }; return { id: `course-element-card${cid}`, el, seen, querySelector: (sel) => (sel.startsWith('h4') ? el : null) }; };
@@ -138,6 +138,123 @@ test('ULT-5: eight courses never have more than three requests open at once, and
     cards: ids.map((id, i) => card(id, i < 3)) });
   page.X.renderNew(); await settle(); page.X.renderNew(); await settle();
   assert.deepEqual(page.s.asked.filter((p) => /gradebook/.test(p)).map((p) => p.split('/')[5]), ids.slice(0, 3), 'the cards on screen, none off it');
+});
+
+// D: one gradebook store per site (courses/ultra.js page.book) behind the card badges, the planner, the GPA, Insights, the
+// rubric and agent apps; and the copy kept from the last visit drawing before the network answers.
+test('Ultra Grades badges read each direct-child course tile from the live fixture', async () => {
+  const { El } = require('../stand-in-dom.js');
+  const { parse } = require('../fixture-dom.js');
+  const doc = {};
+  doc.root = new El('#root', doc);
+  const body = parse(fs.readFileSync(path.join(__dirname, '../fixtures/ultra-instant-grades.html'), 'utf8'), doc);
+  const ids = ['_101_1', '_102_1'];
+  const u = ultra({ pathname: '/ultra/grades', enhance: { newgrades: true, newcontent: true },
+    local: { seenContent: Object.fromEntries(ids.map((id) => [id, ['_1_1', '+']])) },
+    answer: (r) => /users\/me$/.test(r.pathname) ? ME : /gradebook\/grades/.test(r.pathname)
+      ? [200, { results: [{ columnId: '_5_1', status: 'GRADED', hasBeenViewedByStudent: false, displayGrade: { text: 'A' }, column: { calculationType: 'NON_CALCULATED', contentId: '_1_1' } }] }]
+      : [200, { results: [{ id: '_1_1' }, { id: '_2_1' }] }],
+  });
+  u.ctx.document.querySelectorAll = (sel) => body.querySelectorAll(sel);
+  const observed = new Set();
+  u.I.cardsInView.observe = (e) => observed.add(e);
+  for (const e of body.querySelectorAll('.grades-header a.bb-click-target')) u.I.inView.add(e);
+  u.X.renderNew();
+  await settle(20);
+  u.X.renderNew();
+  await settle(20);
+  assert.equal(observed.size, 2, 'each course title is observed');
+  assert.deepEqual(u.s.asked.filter((p) => /gradebook\/grades/.test(p)).map((p) => p.split('/')[5]).sort(), ids);
+  for (const id of ids) {
+    assert.ok(u.badges.some(([cid, n, kind]) => cid === id && n === 1 && kind === 'grades'), `${id}: new grade`);
+    assert.ok(u.badges.some(([cid, n, kind]) => cid === id && n === 1 && kind === 'items'), `${id}: new content`);
+  }
+});
+
+test('D: the badges and another feature asking for one course\'s gradebook at once send one request', async () => {
+  const held = [];
+  const u = ultra({ answer: (r) => (/users\/me$/.test(r.pathname) ? ME : new Promise((done) => held.push(() => done([200, { results: [{ columnId: '_5_1' }] }])))) });
+  const b = u.X.ctx.bookFor('_1_1');
+  await settle();
+  const other = u.ctx.GZ_ULTRA.page.book('_1_1', '_9_1');
+  const more = u.ctx.GZ_ULTRA.page.book('_1_1', '_9_1', { maxAge: 0 });
+  await settle();
+  for (const done of held.splice(0)) done();
+  await settle();
+  assert.equal(u.s.count(/gradebook\/grades/), 1);
+  assert.equal(await other, b.results);
+  assert.equal(await more, b.results, 'a read in flight answers whatever age is asked for');
+  assert.deepEqual(Object.keys(u.local[`ultraBooks:${ORIGIN}/_9_1`]), ['_1_1'], 'kept for the next page');
+});
+
+test('D: the badges draw the copy kept from the last visit while the gradebook is asked again', async () => {
+  const held = [];
+  const kept = { [`ultraBooks:${ORIGIN}/_9_1`]: { _1_1: { at: 1e12 - 864e5, rows: [{ columnId: '_5_1', status: 'GRADED', displayGrade: { text: 'A' } }], complete: true } } };
+  const u = ultra({ local: kept, answer: (r) => (/users\/me$/.test(r.pathname) ? ME : new Promise((done) => held.push(() => done([200, { results: [{ columnId: '_5_1', status: 'GRADED', displayGrade: { text: 'B' } }] }])))) });
+  const b = u.X.ctx.bookFor('_1_1');
+  await settle();
+  assert.equal(held.length, 1, 'asked again at once');
+  assert.deepEqual([b.saved, b.pending, [...b.results].map((r) => r.displayGrade.text)], [true, true, ['A']]);
+  held.shift()();
+  await settle();
+  assert.deepEqual([b.saved, b.pending, [...b.results].map((r) => r.displayGrade.text)], [false, false, ['B']]);
+});
+
+test("D: content.js's api asks Ultra through the site part's queue, so a 429 there holds it too; Canvas keeps plain fetch", async () => {
+  const u = ultra({ answer: (r) => (/users\/me$/.test(r.pathname) ? ME : /_1_1/.test(r.pathname) ? [429, {}, { 'Retry-After': '30' }] : [200, { results: [] }]) });
+  u.X.ctx.bookFor('_1_1'); await settle();
+  const late = u.X.fetch(`${ORIGIN}/learn/api/v1/calendars/calendarItems?since=x`, { credentials: 'same-origin', redirect: 'error', headers: { accept: 'application/json' } });
+  await settle();
+  assert.equal(u.s.count(/calendarItems/), 0, 'held while the school asked for 30 s');
+  await u.c.tick(30000);
+  assert.equal((await late).status, 200);
+  assert.equal(u.s.count(/calendarItems/), 1);
+  // content.js's api: the site part's fetch where it has one (Ultra's, taken with the part), else the browser's.
+  const core = read('content/content.js'), start = core.indexOf('  const api = '), end = core.indexOf('  // The Canvas course', start);
+  assert.match(core, /Object\.assign\(X, globalThis\[part\]\(I\)\); siteFetch = X\.fetch;/);
+  for (const via of ['part', 'fetch']) {
+    const used = [];
+    const g = vm.createContext({ location: { origin: ORIGIN }, Promise, JSON, fetch: async () => { used.push('fetch'); return new Response('{"ok":1}'); },
+      part: async () => { used.push('part'); return new Response('{"ok":1}'); } });
+    vm.runInContext(`${core.slice(start, end)}; this.api = api;${via === 'part' ? ' siteFetch = part;' : ''}`, g);
+    assert.deepEqual(await g.api('/users/me'), { ok: 1 });
+    assert.deepEqual(used, [via]);
+  }
+});
+
+test('D: who is signed in is asked at once, before any library loads, and the stores take that same request', async () => {
+  let answer;
+  const u = ultra({ answer: (r) => (/users\/me$/.test(r.pathname) ? new Promise((done) => { answer = () => done(ME); }) : [200, { results: [] }]) });
+  const first = u.X.ctx.me();
+  await settle();
+  assert.equal(u.s.count(/users\/me$/), 1, 'asked straight away');
+  assert.equal(u.ctx.GZ_ULTRA, undefined, 'without waiting on courses/ultra.js');
+  // The stores (courses/ultra.js) arrive while it's out: they take the page's request, as GZ_CTX.me hands it over.
+  u.ctx.GZ_CTX = { site: 'ultra', me: () => u.X.ctx.me(), settings: () => u.I.settings };
+  vm.runInContext(read('courses/lmsq.js'), u.ctx); vm.runInContext(read('courses/ultra.js'), u.ctx);
+  const store = u.ctx.GZ_ULTRA.page.me();
+  answer();
+  assert.deepEqual([await first, await store], ['_9_1', '_9_1']);
+  assert.equal(u.s.count(/users\/me$/), 1, 'one request between them');
+  assert.match(read('content/content-ultra.js'), /const paintNav = \(n, picture\) => \{\n(?: {4}\/\/[^\n]*\n)? {4}if \(!isPreview && I\.links\.length\) Promise\.resolve\(\)\.then\(\(\) => I\.ready\)\.then\(\(\) => I\.settings\.enabled && me\(\)\)/, 'started at first paint once storage has answered, in frames too');
+});
+
+test('review: the stores share a failed identity request and its retry gate', async () => {
+  for (const status of [401, 500]) {
+    const u = ultra({ answer: () => [status, {}] });
+    u.ctx.GZ_CTX = { site: 'ultra', me: () => u.X.ctx.me(), settings: () => u.I.settings };
+    vm.runInContext(read('courses/lmsq.js'), u.ctx);
+    vm.runInContext(read('courses/ultra.js'), u.ctx);
+    const both = await Promise.allSettled([u.X.ctx.me(), u.ctx.GZ_ULTRA.page.me()]);
+    assert.ok(both.every((r) => r.status === 'rejected'));
+    assert.equal(u.s.count(/users\/me$/), 1, `${status}: no independent fallback after the shared request fails`);
+    await assert.rejects(u.ctx.GZ_ULTRA.page.me());
+    assert.equal(u.s.count(/users\/me$/), 1, `${status}: the page's retry gate also governs the store`);
+    if (status === 401) u.location.pathname += '/grades';
+    else await u.c.tick(60000);
+    await assert.rejects(u.ctx.GZ_ULTRA.page.me());
+    assert.equal(u.s.count(/users\/me$/), 2, `${status}: one shared retry once permitted`);
+  }
 });
 
 // courses/lmsq.js alone: its queue's order and its holds.
@@ -299,7 +416,7 @@ const modulesPage = (mods) => {
     Date: c.Date, setTimeout: c.setTimeout, clearTimeout() {}, WeakMap, Map, Set, Promise, URL, Response, console };
   g.globalThis = g;
   vm.createContext(g);
-  ctx.need = (file, ready) => { try { if (!ready()) vm.runInContext(read(file), g); } catch (e) { return Promise.reject(e); } return ready() ? Promise.resolve() : Promise.reject(new Error('not ready')); };
+  ctx.need = (file, ready) => { try { if (!ready()) for (const f of [].concat(file)) vm.runInContext(read(f), g); } catch (e) { return Promise.reject(e); } return ready() ? Promise.resolve() : Promise.reject(new Error('not ready')); };
   vm.runInContext(read('courses/page/download.js'), g);
   return { sync: () => g.GZ_DOWNLOAD.sync(), calls, held, buttons, c, ctx, g, peak: () => peak, open: () => open };
 };

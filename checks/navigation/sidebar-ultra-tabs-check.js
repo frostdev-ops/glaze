@@ -90,12 +90,13 @@ const hiddenCounts = () => page.evaluate(() => globalThis.__gzSbCounts);
     });
     const opts = await ctx.newPage(); await opts.goto(`chrome-extension://${id}/options.html`);
     const recordKey = `sidebar:ultra:${site}/${uid}`;
-    const settings = { ...G.GZ_DEFAULTS, navbar: { ...G.GZ_DEFAULTS.navbar, on: false }, motion: { level: 'off' }, enhance: Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, ['tabs', 'place', 'sidebar', 'notes', 'widgets'].includes(k)])), tabs: G.GZ_SANITIZE({}).tabs };
+    const settings = { ...G.GZ_DEFAULTS, navbar: { ...G.GZ_DEFAULTS.navbar, on: false }, motion: { level: 'off' }, enhance: Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, ['tabs', 'place', 'sidebar', 'notes', 'widgets'].includes(k)])), tabs: { ...G.GZ_SANITIZE({}).tabs, ahead: false, keep: false } }; // frames load cold and items open in place here (ultra-standby-check.js, ultra-keep-content-check.js cover those)
     await opts.evaluate(async ({ settings, site, uid, recordKey }) => {
       await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings);
       await chrome.storage.local.set({ ultra: [site], [`ctabs:${site}:${uid}`]: { tabs: [1, 2, 3].map((i) => ({ cid: `_${100 + i}_1`, name: `Synthetic course ${i}`, path: `/ultra/courses/_${100 + i}_1/outline`, top: 0, at: i, pin: false })) },
         [recordKey]: { v: 1, rev: 1, mig: 1, dock: [{ id: 'notes' }], dest: { notes: 'dock' } } });
     }, { settings, site, uid, recordKey });
+    await require('../../tools/dev/check-env.js').ultraReady(opts);
     const record = () => opts.evaluate(async (k) => (await chrome.storage.local.get(k))[k], recordKey);
     page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e)));
     const tab = (cid) => ({

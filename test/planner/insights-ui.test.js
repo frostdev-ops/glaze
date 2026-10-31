@@ -155,6 +155,8 @@ const ultraPage = ({ partial = false } = {}) => {
     GZ_CTX: { site: 'ultra', t: (k) => k, locale: () => 'en', on: () => true, settings: () => S, need: () => Promise.resolve(), myCourses: async () => ufix('memberships').results },
     GZ_TODO: require('../../extension/planner/todo.js'), GZ_GRADECALC: require('../../extension/planner/gradecalc.js'), GZ_INSIGHTS: require('../../extension/planner/insights.js'), GZ_I18N: require('../../extension/core/i18n.js'),
     GZ_PAGE: require('../../extension/core/page.js'), GZ_COURSES: require('../../extension/content/defaults.js').GZ_COURSES,
+    // The site's queue (courses/lmsq.js), passing each request straight on.
+    GZ_LMSQ: { fetch: (url, init) => context.fetch(url, init) },
     chrome: { runtime: { sendMessage: async (m) => { sent.push(m); return { ok: true }; } }, storage: { local: { get: (k, cb) => cb({}) } } },
     document: doc, location: { origin: UO, pathname: '/ultra/course' }, window: {}, navigator: {}, URL, Date: FixedDate, Promise, JSON, setTimeout, Intl,
     getComputedStyle: () => ({ getPropertyValue: () => '', fontFamily: '' }),

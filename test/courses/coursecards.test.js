@@ -216,3 +216,17 @@ test('Ultra board metadata reads native course text beneath Look labels', async 
   assert.equal(p.ui.list()[0].code, 'BIO-101');
   assert.equal(p.body.querySelector('a.course-title').title, 'Botany · BIO-101');
 });
+
+test('Ultra board grades paint the saved grade then ask the site even without native cards', async () => {
+  const live = deferred(), asked = [];
+  const p = page({ more: { GZ_PAGE: { overall: (rows) => ({ label: rows[0].label }) }, GZ_ULTRA: { page: {
+    saved: async () => ({ rows: [{ label: 'Old grade' }] }),
+    book: (cid, uid) => { asked.push([cid, uid]); return live.promise; },
+  } } } });
+  p.setPeek({ me: Promise.resolve('_8_1'), courses: null, books: new Map() });
+  await settle(); p.answer(); await settle();
+  assert.ok(p.body.querySelector('.gz-course-card').textContent.includes('Old grade'));
+  assert.deepEqual(asked, [['_101_1', '_8_1']]);
+  live.resolve([{ label: 'New grade' }]); await settle();
+  assert.ok(p.body.querySelector('.gz-course-card').textContent.includes('New grade'));
+});

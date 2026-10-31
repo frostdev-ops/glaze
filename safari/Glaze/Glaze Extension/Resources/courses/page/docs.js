@@ -54,7 +54,8 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
       if (!url.startsWith(`${location.origin}/learn/api/`)) continue;
       const found = [];
       try {
-        const r = await fetch(url, { credentials: 'same-origin', redirect: 'error', headers: { accept: 'application/json' } });
+        // In the site's queue, so its backoff holds this poll too.
+        const r = await ctx.need('courses/lmsq.js', () => globalThis.GZ_LMSQ).then(() => GZ_LMSQ.fetch(url, { credentials: 'same-origin', redirect: 'error', headers: { accept: 'application/json' } }));
         // Wherever it is in the answer: a field, or an attachment in a document's HTML.
         if (r.ok) JSON.parse(await r.text(), (_, v) => { if (typeof v === 'string') for (const m of v.replace(/&quot;/g, '"').replace(/&amp;/g, '&').matchAll(/https:\/\/annotate[^"'\s<>\\]+/g)) found.push(m[0]); return v; });
       } catch { /* signed out, or not JSON */ }

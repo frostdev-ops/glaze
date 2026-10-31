@@ -135,6 +135,13 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
       const sys = messages.find((m) => m.role === 'system');
       if (sys) sys.content = `${sys.content}\n\n${SAY_JSON(req.schema)}`; else messages.unshift({ role: 'system', content: SAY_JSON(req.schema) });
     }
+    // The answer's language, last in the system turn (ai/request.js reply).
+    if (req.reply) {
+      const name = new Intl.DisplayNames(['en'], { type: 'language' }).of(req.reply.lang);
+      const line = req.schema ? `Write your answer's prose in ${name}; keep JSON keys, IDs and enum values exactly as given.` : `Write your answer in ${name}.`;
+      const sys = messages.find((m) => m.role === 'system');
+      if (sys) sys.content = `${sys.content}\n\n${line}`; else messages.unshift({ role: 'system', content: line });
+    }
     return {
       model: cfg.model, messages, stream,
       ...(stream && { stream_options: { include_usage: true } }),

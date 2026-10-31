@@ -91,7 +91,7 @@ const writerWords = [
   // The PDF tools' names, colours and the reason a file refuses them (documents/pdf/pdf-tools.js).
   ...tableOf('documents/pdf/pdf-tools.js', 'SHAPES', 'INKS', 'MARKS', 'TOOLS', 'NO_TOOLS'), ...tableOf('documents/pdf/pdf-kind.js', 'SIGNED', 'PROTECTED', 'PAGE_SAYS'),
   ...tableOf('writer/frame/writer-paper.js', 'SPACING', 'KIND', 'STYLES', 'REASONS'), ...tableOf('writer/writer-format.js', 'ROWS', 'names'),
-  ...tableOf('ai/tasks/writer-feedback.js', 'GRADE_REASONS'), ...tableOf('ai/failure.js', 'REASONS', 'ERRORS'),
+  ...tableOf('ai/tasks/writer-feedback.js', 'GRADE_REASONS', 'COMMENTS'), ...tableOf('ai/failure.js', 'REASONS', 'ERRORS'),
   // Labels handed to the paper chrome's helpers, which translate them.
   ...fromJs(read('writer/frame/writer-paper.js'), /\b(?:mark\('\w+',|row\(|setState\()\s*/g),
   ...[...read('writer/frame/writer-paper.js').matchAll(/\['\w+', '([A-Z][^']*)'\]/g)].map((m) => m[1]),

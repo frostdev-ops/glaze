@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.0 (Dutch)
+# Chrome Web Store listing — Glaze 4.0.1 (Dutch)
 
 ## Short summary (132 character maximum)
 
@@ -73,16 +73,17 @@ Canvas is een handelsmerk van Instructure, Inc. Blackboard is een handelsmerk va
 
 ## Release notes
 
-NIEUW IN 4.0.0
+NIEUW IN 4.0.1
 
-• Blackboard Ultra: Glaze Writer neemt de editor over in discussies, dagboeken, berichten, opdrachten en toetsen; de eigen editor van Blackboard blijft in het ⋯-menu. Discussies en berichten krijgen een werkbalk bij geselecteerde tekst, de doelen uit de opdracht en Ctrl/⌘+Enter om te plaatsen.
-• Opdrachten schrijven in het tekstvak van Blackboard voor de eigen inleverknop, of worden echte pagina’s met Volledige Writer: MLA 9, APA 7, Chicago 17, Leeg of je eigen opmaak, met opmaakcontroles, voetnoten, versies en .docx-import, -export en -inleveren.
-• Documenten bewaart werkstukken, spreadsheets, PDF’s en PowerPoint-presentaties. Spreadsheets hebben meer dan 380 Excel-functies, tonen en maken grafieken en importeren .xlsx, .csv en .tsv. PDF’s hebben zoomen, zoeken en invulbare formulieren; presentaties openen in een viewer met Presenteren. Bestandsvoorbeelden in Blackboard Ultra openen in de PDF-viewer van Glaze. Verwijderde bestanden wachten 30 dagen in de Prullenbak.
-• Begin een opdracht als Document of Spreadsheet. Geüploade PDF’s, presentaties en spreadsheets openen in hun viewer om in te leveren; spreadsheets lever je in als .xlsx. Instellingen › Writer › Werkstukken heeft schakelaars voor Spreadsheets, PDF's en Dia's; opgeslagen bestanden kun je blijven openen.
-• Spelling, grammatica en autocorrectie werken op je apparaat, en Citeren zoekt een DOI, ISBN of webadres alleen op als je klikt. Toetsen krijgen alleen tekstcontrole, zonder AI of aanvulling.
-• Instellingen › AI verbindt genoemde aanbieders met hun sleutel of een model op dit apparaat, met één model voor alles of één per functie. AI blijft uit tot je het instelt. Aanvullen met Tab maakt alleen de huidige zin af, en Feedback toetst je werk aan het beoordelingsschema en de instructies en verklaart geschatte cijfers of waarom er geen score is. Glaze schrijft nooit een tekst voor je.
-• Firefox: met Agents koppel je AI-apps op je computer aan je cursussen, taken en cijfers. Elke app en elke wijziging heeft jouw toestemming nodig.
-• “Back-up maken…” en “Herstellen…” bevatten werkstukken, spreadsheets, PDF’s, presentaties, versies, je woordenboek en opgeslagen bronnen.
-• De pagina’s van Writer volgen een donkere stijl, en Lichte pagina houdt ze wit. Stijlen die je opslaat of uit de galerie gebruikt met “Dit thema gebruiken”, staan overal waar je een stijl kiest.
-• Blackboard: het beoordelingsschema verschijnt op de pagina van een opgeslagen concept, deadlinelabels kloppen ook na het verzetten van de klok en zoeken volgt de eigen links van Blackboard.
-• Uiterlijk › Beweging begint bij Expressief. De update zet Subtiel eenmalig op Expressief; Uit blijft Uit.
+• Blackboard Ultra: cursustabbladen openen vanuit een pagina die al geladen is en beginnen te laden zodra je op een tabblad drukt of eroverheen gaat (Instellingen › Cursustabbladen › Cursustabbladen vooraf openen).
+• Cursusinhoud klaarhouden: een item opent over de cursusinhoud, en teruggaan is meteen, op dezelfde plek.
+• Pagina's meteen openen: Cijfers, Cursussen, Activiteit en de inhoud, aankondigingen en cijfers van een cursus tonen je vorige bezoek terwijl Blackboard laadt. Laden van pagina’s meteen tonen: een klik is meteen te zien. De balk van Glaze staat er vanaf het eerste beeld, de voettekst en panelen verschuiven de pagina niet meer, en Taken, cijfers en de zijbalk verschijnen uit opgeslagen gegevens zodra Blackboard bevestigt wie er is ingelogd.
+• Cursusgegevens vooraf laden, minder verzoeken aan Blackboard en minder werk op tragere laptops.
+• Pdf's: markeren, pen, tekst, afbeeldingen, vormen en handtekeningen, en een paginapaneel om pagina's te verplaatsen, te draaien, te verwijderen en toe te voegen. Een pdf houdt één kopie, de laatste versie met markeringen.
+• Bijvoegen uit Documenten voegt je documenten toe aan de inlevering van een opdracht in Blackboard Ultra. Werkmappen uit .xlsm worden als .xlsm geëxporteerd en ingeleverd.
+• Canvas: Openen in Glaze bij pdf-, dia- en spreadsheetbestanden. Dia's krijgen Afdrukken met notities…, en kaarten in Documenten tonen de grafieken van een spreadsheet.
+• De feedback van Writer antwoordt in de taal van je concept, en de opmerkingen en controles bij bronvermeldingen werken in alle zes talen.
+• Haalt een opmerking van de feedback haar controles niet, dan toont Writer de gecontroleerde beoordeling volgens het beoordelingsschema in plaats van het cijfer achter te houden.
+• Firefox: Google Drive (Instellingen › Writer › Werkstukken) opent, bewaart, voegt bij en synchroniseert je documenten. Uit tot je verbinding maakt.
+• Firefox: een site waarvan je de toegang hebt ingetrokken, wordt niet meer opnieuw geprobeerd.
+• Chrome: Synchronisatie met Google Agenda (Instellingen › Delen) houdt een agenda met de naam Glaze in je Google-account bij, en Google Drive (Instellingen › Writer › Werkstukken) opent, bewaart, voegt bij en synchroniseert je documenten. Beide blijven uit tot je verbinding maakt.

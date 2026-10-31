@@ -235,6 +235,11 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
     return { place, open, style: n.style, tabs: hosted, menu: sub, left, top, words };
   };
 
-  return { ICONS, PICKS, MOD_PICKS, ICON_OF, GLAZE, DEFAULT, TABS, clean, initial, build, named, railOpen, layout, BAR, courseIcon };
+  // What the bar draws, as text to compare, without where the student is (an item's active, a course tab's cur): only a
+  // change to this draws it again. A change to marks only moves its marks (navigation/page/navbar.js).
+  const shape = (v) => JSON.stringify(v, (k, x) => (k === 'active' || k === 'cur' ? undefined : x));
+  const marks = (model, rows = [], cmenu = null) => JSON.stringify([[...model.items, ...(cmenu?.items || [])].filter((i) => i.active).map((i) => i.id), rows.filter((r) => r.cur).map((r) => r.cid)]);
+
+  return { ICONS, PICKS, MOD_PICKS, ICON_OF, GLAZE, DEFAULT, TABS, clean, initial, build, named, railOpen, layout, BAR, courseIcon, shape, marks };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_NAVBAR; else GZ_NAVBAR;

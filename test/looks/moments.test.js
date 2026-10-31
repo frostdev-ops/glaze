@@ -214,7 +214,7 @@ test('Ultra does not treat a gradebook still loading as a known zero count', () 
 
 test('Ultra completion follows a trusted review action once, never hydration or duplicate mutations', () => {
   const x = rig();
-  Object.assign(x.ctx, { ultra: true, chrome: { runtime: { id: 'test' } }, hid: () => false, dirty: new Set(), full: false, timer: 1, X: { lift() {} } });
+  Object.assign(x.ctx, { ultra: true, chrome: { runtime: { id: 'test' } }, hid: () => false, dirty: new Set(), touched: new Set(), full: false, timer: 1, X: { lift() {} } });
   vm.runInContext(`${slice('  const schedule = (records)', '  const startSweep =')}; globalThis.schedule = schedule`, x.ctx);
   let checked = 'false';
   x.el.getAttribute = () => checked;

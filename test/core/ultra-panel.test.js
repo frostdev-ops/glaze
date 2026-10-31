@@ -90,6 +90,69 @@ test("Ultra: the panel goes first in the Courses page's To Do column, and comes 
   assert.equal(col.querySelectorAll('#gz-panel').length, 1, 'once, however often the pass runs');
 });
 
+test("Ultra: the panel goes in with the Courses page Ultra has just drawn (held, before that frame paints), not at the next pass", async () => {
+  const p = page({ todo: false, local: structuredClone(ONLY_PET) });
+  p.c.location.pathname = '/ultra/stream';
+  p.ui.sync(true);
+  await settle();
+  assert.equal(p.panel(), null, 'no panel off the Courses page');
+  // Ultra routes to Courses and draws it: its mutation callback calls held(), with no pass yet.
+  p.c.location.pathname = '/ultra/course';
+  p.ui.held?.();
+  await Promise.resolve();
+  const col = p.doc.querySelector('div.courses-panel');
+  assert.equal(col.firstElementChild, p.panel(), 'placed before the course list is painted');
+  p.ui.held?.(); p.ui.held?.();
+  await Promise.resolve();
+  assert.equal(col.querySelectorAll('#gz-panel').length, 1, 'once, however often Ultra mutates');
+});
+
+test('Ultra: a header drawn after the early panel receives its toolbar before paint', async () => {
+  const p = page({ todo: false, local: structuredClone(ONLY_PET) });
+  p.c.location.pathname = '/ultra/stream';
+  p.ui.sync(true);
+  await settle();
+  p.c.location.pathname = '/ultra/course';
+  p.ui.held();
+  await Promise.resolve();
+  const toolbar = p.doc.getElementById('gz-toolbar');
+  assert.equal(toolbar.parentNode.id, 'gz-dash', 'fallback while Ultra has no header');
+  const header = p.doc.createElement('div'), tools = p.doc.createElement('div');
+  header.className = 'base-courses-header-container';
+  tools.className = 'base-header-tools';
+  header.append(tools);
+  p.doc.querySelector('.base-courses-container').prepend(header);
+  p.ui.held();
+  await Promise.resolve();
+  assert.ok(toolbar.parentNode === tools, 'the toolbar moves into the completed header');
+  tools.remove();
+  p.ui.held();
+  await Promise.resolve();
+  assert.equal(toolbar.parentNode.id, 'gz-dash', 'a replaced header returns the toolbar to the grid');
+  assert.equal(p.filled.length, 1, 'moving controls preserves the tile');
+});
+
+test('Ultra: early placement waits for the sidebar record before drawing widgets', async () => {
+  const p = page({ local: structuredClone(ONLY_PET) });
+  let ready;
+  const pending = new Promise((resolve) => { ready = resolve; });
+  p.settings.enhance.sidebar = true;
+  p.c.GZ_SIDEBAR_UI = { on() {}, active: () => false, ready: () => pending };
+  p.ui.sync(true);
+  await settle();
+  assert.equal(p.panel(), null, 'initialization waits for the saved widget destinations');
+  p.ui.held();
+  await Promise.resolve();
+  assert.ok(!p.panel(), 'mutations cannot bypass the pending sidebar read');
+  p.ui.sync(true);
+  assert.ok(!p.panel(), 'a normal pass uses the same startup barrier');
+  assert.equal(p.filled.length, 0, 'no widget is filled in a temporary destination');
+  ready();
+  await settle();
+  assert.ok(p.panel(), 'the resolved sidebar permits normal placement');
+  assert.equal(p.filled.length, 1);
+});
+
 test('Ultra: the panel has no heading to fold: the To Do is a widget, and Hide widgets is in the toolbar', async () => {
   const p = page({ local: structuredClone(ONLY_PET) });
   p.ui.sync(true);

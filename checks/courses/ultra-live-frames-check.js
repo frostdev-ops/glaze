@@ -53,7 +53,7 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
       return route.abort();
     });
     const opts = await ctx.newPage(); await opts.goto(`chrome-extension://${id}/options.html`);
-    const settings = { ...G.GZ_DEFAULTS, navbar: { ...G.GZ_DEFAULTS.navbar, on: false }, enhance: Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, ['tabs', 'place'].includes(k)])), tabs: G.GZ_SANITIZE({}).tabs };
+    const settings = { ...G.GZ_DEFAULTS, navbar: { ...G.GZ_DEFAULTS.navbar, on: false }, enhance: Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, ['tabs', 'place'].includes(k)])), tabs: { ...G.GZ_SANITIZE({}).tabs, ahead: false, keep: false } }; // frames load cold and items open in place here (ultra-standby-check.js, ultra-keep-content-check.js cover those)
     await opts.evaluate(async ({ settings, key, site }) => {
       await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings);
       await chrome.storage.local.set({ ultra: [site] }); // the student's yes to this Ultra site (background/background.js approved)

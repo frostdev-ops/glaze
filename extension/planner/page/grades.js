@@ -113,19 +113,21 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     st.old = old.ok ? old.v?.[st.cid] : undefined;
     st.oldAt = at;
     // Ultra's page has the course's gradebook already (bookFor): no request, so its figure is shown at once, closed.
-    if (st.saved || st.old || (ultra && X.bookFor(st.cid).results)) load(st); else whatIf();
+    if (st.saved || st.old || (ultra && pageBook(st.cid).results)) load(st); else whatIf();
   };
-  // Ultra: the course's gradebook as its own Grades page already has it (content-ultra.js bookFor, asked there anyway),
-  // else asked through courses/ultra.js; the titles of its categories only when one in the recipe has no work to name it.
-  // → { g: GZ_ULTRA.grade(), book: the page's answer it came from (its key), or null }.
-  const reader = () => GZ_ULTRA.read({ origin: location.origin, live: () => live() });
-  const pageBook = (cid) => (GRADES.test(location.pathname) && courseHere() === cid ? X.bookFor(cid) : {});
+  // Ultra: the course's gradebook as its own Grades page already has it (content-ultra.js bookFor, asked there anyway; not
+  // the copy kept from a last visit), else courses/ultra.js's gradebook store; the titles of its categories only when one
+  // in the recipe has no work to name it. Through the site's queue. → { g: GZ_ULTRA.grade(), book: the page's answer it
+  // came from (its key), or null }.
+  const queued = (u, o) => X.need('courses/lmsq.js', () => globalThis.GZ_LMSQ).then(() => GZ_LMSQ.fetch(u, o, 0, () => live()));
+  const reader = () => GZ_ULTRA.read({ origin: location.origin, live: () => live(), f: queued });
+  const pageBook = (cid) => { const b = GRADES.test(location.pathname) && courseHere() === cid ? X.bookFor(cid) : {}; return b.saved ? {} : b; };
   // courses/ultra.js's grade() works through planner/gradecalc.js, so both are in before it runs: the page's gradebook is often
   // in hand before planner/gradecalc.js has come.
   const ultraGrade = async (st) => {
     await Promise.all([ultraIn(), calcIn()]);
     const b = pageBook(st.cid);
-    const rows = b.results || await reader().grades(st.cid, st.me.user_id);
+    const rows = b.results || await GZ_ULTRA.page.book(st.cid, st.me.user_id);
     const g = GZ_ULTRA.grade(rows);
     st.names = {};
     if (g.kind === 'weighted' && g.course.groups.some((x) => !x.name)) {
@@ -477,7 +479,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     if (!D.books.has(c.id)) {
       D.books.set(c.id, null);
       const got = (rows) => { D.books.set(c.id, rows); D.v++; gpa(); };
-      ultraIn().then(() => reader().grades(c.id, c.enrollments[0].user_id)).then(got, () => got([]));
+      ultraIn().then(() => GZ_ULTRA.page.book(c.id, c.enrollments[0].user_id)).then(got, () => got([]));
     }
     return D.books.get(c.id);
   };

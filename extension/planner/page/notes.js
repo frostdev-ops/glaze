@@ -123,8 +123,9 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     try {
       await libs();
       N = globalThis.GZ_NOTES;
-      // Ultra: the student's id (/users/me) and their courses (memberships), through courses/ultra.js's reader.
-      const [p, list] = ultra ? await reader().then(async (r) => { const id = await r.me(); return [{ id }, await r.memberships(id).catch(() => [])]; })
+      // Ultra: the student's id (/users/me) and their courses (memberships), from courses/ultra.js's page store, which reads
+      // them once per site.
+      const [p, list] = ultra ? await reader().then(async () => { const id = await GZ_ULTRA.page.me(); return [{ id }, await GZ_ULTRA.page.mine().then((m) => m.mem, () => [])]; })
         .then(([p, ms]) => [p, ms.filter((m) => m?.course).map((m) => ({ id: m.courseId, name: ctx.nickOf(m.courseId) || m.course.name }))])
         : await Promise.all([ctx.profile(), ctx.canvasCourses().catch(() => [])]);
       if (!(ultra ? /^_\d+_\d+$/ : /^\d+$/).test(String(p?.id))) throw new Error('no profile');

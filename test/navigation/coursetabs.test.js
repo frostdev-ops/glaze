@@ -13,7 +13,7 @@ const C = '/ultra/courses/_1_1';
 test('on by default; its settings join GZ_SPEC from here, so the first content script carries only the switch', () => {
   assert.equal(D.GZ_SPEC.enhance.tabs[0], true);
   assert.equal(D.GZ_SPEC.tabs, L.SPEC);
-  assert.deepEqual(D.GZ_SANITIZE({}).tabs, { at: 'auto', cap: 8, place: true, shape: 'tab', size: 'medium', width: 180, label: 'short', mark: 'dot', color: 'off' });
+  assert.deepEqual(D.GZ_SANITIZE({}).tabs, { at: 'auto', cap: 8, place: true, ahead: true, renew: 10, keep: true, shape: 'tab', size: 'medium', width: 180, label: 'short', mark: 'dot', color: 'off' });
   assert.deepEqual(D.GZ_SANITIZE({ tabs: { at: 'inside', cap: 99, width: 200, color: 'theme' } }).tabs, { ...D.GZ_SANITIZE({}).tabs, width: 200, color: 'theme' });
   assert.ok(!/\btabs: \{/.test(read('content/defaults.js')), 'the group itself is not in defaults.js');
 });
@@ -244,7 +244,9 @@ test('wired up: loadable on demand, in the worker and the editor, and both sites
   const bg = read('background/background.js');
   assert.ok(bg.includes("'navigation/coursetabs.js', 'navigation/page/coursetabs.js'") && bg.includes("'../navigation/coursetabs.js');"));
   assert.ok(read('options.html').includes('<script src="navigation/coursetabs.js"></script>'));
-  assert.ok(read('content/content-ultra.js').includes("need('navigation/coursetabs.js'") && !read('content/content.js').includes("need('navigation/page/coursetabs.js'") && read('content/content-canvas.js').includes("need('navigation/page/coursetabs.js'"));
+  // Ultra asks for the page part alone: the worker puts the shared manager in with it.
+  assert.ok(bg.includes("files.includes('navigation/page/coursetabs.js') ? ['navigation/coursetabs.js']"));
+  assert.ok(read('content/content-ultra.js').includes("need('navigation/page/coursetabs.js'") && !read('content/content.js').includes("need('navigation/page/coursetabs.js'") && read('content/content-canvas.js').includes("need('navigation/page/coursetabs.js'"));
   // The copies live in storage.session only, never storage.local: what a page stores there is its tab list.
   const page = read('navigation/page/coursetabs.js').replace(/(^|\s)\/\/.*$/gm, '');
   assert.ok(!/storage\.session|indexedDB|localStorage/.test(page));

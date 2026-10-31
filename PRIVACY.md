@@ -782,11 +782,11 @@ you import) are bundled. It makes requests in these cases:
 - **Google Calendar sync** (Chrome, off until you connect). The only destination is Google's Calendar API at
   `https://www.googleapis.com`; requests carry the access token Chrome gives Glaze, never cookies, and never follow a
   redirect. There is no Glaze server.
-  - **Connect** (your click in Glaze's settings): Chrome asks for the `identity` permission and shows Google's own
-    sign-in and consent for one scope, `https://www.googleapis.com/auth/calendar.app.created` ("make secondary Google
-    calendars, and see, create, change and delete events on them"). With it Glaze can't see or change your other
-    calendars, nor list them. Chrome talks to Google for the sign-in itself. Glaze then creates one calendar named
-    Glaze, with your time zone. **Link another device** opens that same calendar by its ID instead of making one.
+  - **Connect** (your click in Settings → Sharing → Google Calendar sync): Chrome asks for the `identity` permission and
+    shows Google's own sign-in and consent for one scope, `https://www.googleapis.com/auth/calendar.app.created` ("make
+    secondary Google calendars, and see, create, change and delete events on them"). With it Glaze can't see or change
+    your other calendars, nor list them. Chrome talks to Google for the sign-in itself. Glaze then creates one calendar
+    named Glaze, with your time zone. **Link another device** opens that same calendar by its ID instead of making one.
   - **Sync**: a Canvas or Blackboard page works out what Export calendar (.ics) would save, with the same choices, and Glaze sends
     Google what changed: for each event its title (an assignment, task, plan or class name), the course name, your
     task's notes, its date or time, the class's room, and the link back to the item on your Canvas or Blackboard site. No
