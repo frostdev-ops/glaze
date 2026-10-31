@@ -964,7 +964,7 @@ const KNOWN = {
     repro: [{ t: 'sheet', k: 'new', d: 0, pick: 0.0005167394410818815, pick2: 0.944620011607185, s: 463542006 }, { t: 'run', d: 0, how: 'timers', s: 1732642908 }, { t: 'folder', k: 'rename', d: 0, pick: 0.08206198690459132, pick2: 0.4447550403419882, s: 7503228 }, { t: 'slides', k: 'edit', d: 0, pick: 0.14362404658459127, pick2: 0.7645050184801221, s: 612798184 }, { t: 'time', ms: 89614943 }, { t: 'setting', k: 'preset', d: 1, pick: 0.08503693481907248, pick2: 0.6097094353754073, s: 741330601 }, { t: 'folder', k: 'new', d: 1, pick: 0.20517836906947196, pick2: 0.6513672687578946, s: 1526126662 }, { t: 'paper', k: 'edit', d: 0, pick: 0.7705752935726196, pick2: 0.7185106063261628, s: 395626547 }, { t: 'faults', d: 0, p: 0.05, quota: false, refuse: 0 }, { t: 'run', d: 0, how: 'poke', s: 409358450 }, { t: 'run', d: 1, how: 'startup', s: 2028041668 }, { t: 'run', d: 0, how: 'poke', s: 1206227927 }],
   },
   'staged-create-race': {
-    fixed: false,
+    fixed: true,
     tiny: true,
     staged: true,
     about: 'a device\'s staged new file for a record sent after another device had already made one in Glaze/Data (both putting the record back after Data went to Drive\'s trash): two files for one record, each device on its own, never converging (found by the bar sweep, seeds 9600354, 9600370, 9600431)',

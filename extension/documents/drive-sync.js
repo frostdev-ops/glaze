@@ -324,13 +324,14 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // the one the read was for (a run stopped after its change page moved on).
     const settle = async (prefix) => { for (const [slot, t] of Object.entries(await moves())) if (slot.startsWith(prefix) && t.dir === 'down' && t.done) await dropMove(slot); };
     // An upload of h's (a document's: its file or JSON copy) on its way: h is held until Drive's answer is written. A
-    // meeting meanwhile leaves the copy it named (another device's, at the lowest id) and its file on the transfer, for the
-    // owner's next step. → whether h is held
+    // meeting meanwhile leaves the copy it named (another device's, out of Drive's trash, at the lowest id) and its file on
+    // the transfer, for the owner's next step. → whether h is held
     const holds = async (slots, hint = {}, own = null) => {
       if (!staging) return false;
       const m = await moves(), mine = slots.filter((s) => m[s]?.dir === 'up' && m[s].commit && !m[s].due);
       if (!mine.length) return false;
-      const R = hint.R?.id && hint.R.id !== own ? hint.R.id : null, E = hint.E?.id || null;
+      // Another file named for it counts only out of Drive's trash, as a meeting would weigh it (lowest id first).
+      const R = hint.R?.id && hint.R.id !== own && !hint.R.removed && hint.R.trashed !== true ? hint.R.id : null, E = hint.E?.id || null;
       if (R || E) {
         await held('moves', async () => {
           const n = await moves();
@@ -377,7 +378,16 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       // The folder it belongs in as it is now: the Glaze folder for a document's, Glaze/Data for a record's (replaced since
       // it was staged, Drive's trash say: a new file goes into the new one, an update only into a file there).
       const home = t.owner?.doc ? folder : t.owner?.rec ? (await state()).data || null : null;
-      if (!t.id) return { as: home && t.create?.parents?.[0] !== home ? 'gone' : 'send' };
+      if (!t.id) {
+        if (home && t.create?.parents?.[0] !== home) return { as: 'gone' };
+        // A new file, while another device made one for the same document or record since it was staged: that one is met
+        // first, never a second made beside it.
+        const role = t.create?.appProperties?.glaze, key = t.owner?.rec || t.owner?.doc;
+        if (!home || !key || !['rec', 'doc', 'file'].includes(role)) return { as: 'send' };
+        const r = await D((c) => c.find(`'${home}' in parents and appProperties has { key='key' and value='${key}' } and appProperties has { key='glaze' and value='${role}' } and trashed=false`, { pageSize: 10 }));
+        const other = r.files.filter((f) => f.appProperties?.key === key && f.appProperties?.glaze === role && f.trashed !== true).sort(byId)[0];
+        return other ? { as: 'gone', R: role === 'file' ? null : other } : { as: 'send' };
+      }
       const F = await meta(t.id);
       if (F.removed) return { as: 'send' }; // send's own answer: a new file, or 'missing' for a document's
       const file = t.owner?.doc ? (t.meta?.appProperties?.glaze === 'file' ? 'file' : 'doc') : null;
@@ -464,7 +474,11 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
             if (t.dir === 'up' && t.owner?.rec && more?.current && !await more.current(t.owner, t.tag)) { await meet(slot, t); continue; }
             if (t.dir === 'up' && !t.file) {
               const a = await aimed(t, folder);
-              if (a.as === 'gone') { await meet(slot, t); continue; }
+              if (a.as === 'gone') {
+                if (a.R) await patchMove(slot, { owner: { ...t.owner, R: a.R.id } });
+                await meet(slot, (await moveOf(slot)) || t);
+                continue;
+              }
               if (a.as === 'landed' && t.commit) await commit(slot, t, a.F);
               else await sendMove(slot, t);
             } else if (t.dir === 'down' && !t.done) await bringMove(slot, t);
