@@ -494,11 +494,13 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
   const dayStart = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return +d; };
   const dayEnd = (t) => { const s = dayStart(t); if (s === t) return t; const d = new Date(s); d.setDate(d.getDate() + 1); return +d; };
   const covered = (rows, complete) => Object.defineProperty(rows, 'complete', { value: complete !== false });
-  // env: { origin(), now(), fetch(url, init, prio), live(), local: { get(k), set(v) }, send(m), framed() (the top page's
-  // timeOrigin in a course tab's frame, else null), later(f, ms), todo() (planner/todo.js or null), todoPrefs() }.
+  // env: { origin(), now(), fetch(url, init, prio, live), live(), local: { get(k), set(v) }, send(m), framed() (the top page's
+  // timeOrigin in a course tab's frame, else null), todo() (planner/todo.js or null), todoPrefs() }.
   const makePage = (env) => {
     const at = () => env.origin();
-    const reader = (o = {}) => read({ origin: at(), live: env.live, f: (u, init) => env.fetch(u, init, o.prio || 0), ...o });
+    // The fan-outs (gradebooks, outlines) stop once the page isn't live; who's signed in and what's due are asked as before.
+    const reader = (o = {}) => read({ origin: at(), f: (u, init) => env.fetch(u, init, o.prio || 0, o.live), ...o });
+    const fanout = (prio) => reader({ prio, live: env.live });
 
     // ---- who's signed in, and their courses: one source per site ----
     // Asked once a page, and kept by the worker a few minutes (storage.session, 'glaze:ultraMine') for the site's other
@@ -557,16 +559,18 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
       while (list.length && total > BOOKS_BYTES) { list.pop(); total -= sizes.pop(); }
       return Object.fromEntries(list);
     };
-    const keep = (uid, cid, rows, t) => {
-      const first = !toKeep.has(uid);
-      if (first) toKeep.set(uid, new Map());
-      toKeep.get(uid).set(cid, { at: t, rows: [...rows], complete: rows.complete !== false });
-      const k = BOOKS(uid);
-      if (first) env.later(() => {
-        const add = toKeep.get(uid);
-        toKeep.delete(uid);
+    // Written once the reads in flight have all come back, so a page of courses is one write, not one each.
+    let flying = 0;
+    const flush = () => {
+      for (const [uid, add] of toKeep) {
+        const k = BOOKS(uid);
         Promise.resolve(env.local.get(k)).then((r) => env.local.set({ [k]: prune({ ...r?.[k], ...Object.fromEntries(add) }, env.now()) })).catch(() => {});
-      }, 1000);
+      }
+      toKeep.clear();
+    };
+    const keep = (uid, cid, rows, t) => {
+      if (!toKeep.has(uid)) toKeep.set(uid, new Map());
+      toKeep.get(uid).set(cid, { at: t, rows: [...rows], complete: rows.complete !== false });
     };
     const stale = (signal, live) => { if (signal?.aborted || (live && !live())) throw new Error(STALE); };
     const book = (cid, uid, { maxAge = BOOK_TTL, prio = 0, signal, live } = {}) => {
@@ -575,12 +579,15 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
       let p = b?.p;
       if (!p && b?.rows && env.now() - b.at < maxAge) p = Promise.resolve(b.rows);
       if (!p) {
-        p = reader({ prio }).grades(cid, uid).then((rows) => {
+        flying += 1;
+        const landed = () => { if (!--flying) flush(); };
+        p = fanout(prio).grades(cid, uid).then((rows) => {
           const t = env.now();
           books.set(k, { at: t, rows });
           keep(uid, cid, rows, t);
+          landed();
           return rows;
-        }, (e) => { if (books.get(k)?.p === p) books.set(k, { ...b, p: null }); throw e; });
+        }, (e) => { if (books.get(k)?.p === p) books.set(k, { ...b, p: null }); landed(); throw e; });
         books.set(k, { ...b, p });
       }
       // One caller giving up (its page, its signal) leaves the read for the others.
@@ -607,13 +614,15 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
       const o = outlines.get(cid);
       if (o?.p && (o.pBody || !body)) return o.p;
       if (o?.value && (o.body || !body) && env.now() - o.at < maxAge) return Promise.resolve(o.value);
-      const p = reader({ prio }).list(`/learn/api/public/v1/courses/${cid}/contents`, `${OUTLINE_FIELDS}${body ? ',body' : ''}`, true).then((value) => {
+      const p = fanout(prio).list(`/learn/api/public/v1/courses/${cid}/contents`, `${OUTLINE_FIELDS}${body ? ',body' : ''}`, true).then((value) => {
         outlines.set(cid, { at: env.now(), body, value });
         return value;
       }, (e) => { if (outlines.get(cid)?.p === p) outlines.set(cid, { ...o, p: null }); throw e; });
       outlines.set(cid, { ...o, p, pBody: body });
       return p;
     };
+    // A fresh read already in hand, or null: search takes one with bodies as it is.
+    const outlineNow = (cid, { body = false } = {}) => { const o = outlines.get(cid); return o?.value && (o.body || !body) && env.now() - o.at < OUTLINE_TTL ? o.value : null; };
     // Fresh enough not to ask again: for the idle prefetch.
     const fresh = { book: (cid, uid) => { const b = books.get(`${uid} ${cid}`); return !!b?.p || (!!b?.rows && env.now() - b.at < BOOK_TTL); } };
 
@@ -664,7 +673,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
         }
         return { key, ...r };
       },
-      book, saved, outline, fresh,
+      book, saved, outline, outlineNow, fresh,
     };
     return page;
   };
@@ -674,19 +683,20 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     get: (k) => new Promise((res) => { try { chrome.storage[name].get(k, (r) => res(chrome.runtime.lastError ? {} : r || {})); } catch { res({}); } }),
     set: (v) => new Promise((res) => { try { chrome.storage[name].set(v, () => res(!chrome.runtime.lastError)); } catch { res(false); } }),
   });
-  // Reads stop once Glaze is off or reloaded under the page.
-  const live = () => globalThis.GZ_CTX?.settings?.()?.enabled !== false && (typeof chrome === 'undefined' || !!chrome.runtime?.id);
+  // Reads stop once Glaze is turned off, or off this page (the site's part says so: page.alive).
+  let alive = () => true;
+  const live = () => globalThis.GZ_CTX?.settings?.()?.enabled !== false && alive();
   const page = makePage({
     origin: () => location.origin, now: () => Date.now(), live,
     // The site's queue once it's in (one backoff for every read), plain fetch where it can't be (node, the preview).
-    fetch: (u, init, prio) => lmsq().then((q) => (q ? q.fetch(u, init, prio, live) : fetch(u, init))),
+    fetch: (u, init, prio, still) => lmsq().then((q) => (q ? q.fetch(u, init, prio, still) : fetch(u, init))),
     local: area('local'),
-    send: (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } }),
+    send: (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, (r) => res(chrome.runtime.lastError ? null : r))?.then?.(res, () => res(null)); } catch { res(null); } }),
     framed: () => { try { return globalThis.top !== globalThis.window && parent.location.origin === location.origin ? parent.performance.timeOrigin : null; } catch { return null; } },
-    later: (f, ms) => setTimeout(f, ms),
     todo: () => (globalThis.GZ_TODO ? GZ_TODO : globalThis.GZ_CTX?.need ? GZ_CTX.need('planner/todo.js', () => globalThis.GZ_TODO).then(() => globalThis.GZ_TODO || null) : null),
     todoPrefs: () => (typeof GZ_SANITIZE === 'undefined' ? null : area('sync').get('todo').then((r) => GZ_SANITIZE({ todo: r?.todo }).todo)),
   });
+  page.alive = (f) => { alive = f; };
 
   return { contentLink, SEARCH_KINDS, searchItems, PEEK_FIELDS, peekItem, FILES_FIELDS, attachments, files, courses, ownDates, list, current, standing, due, work, grade, trend, slices, read, planner, excepts, page, makePage, STALE };
 })();
