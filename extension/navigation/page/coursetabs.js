@@ -1646,7 +1646,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const mo = new MutationObserver(() => { fr.changed = performance.now(); });
     mo.observe(d.body, { subtree: true, childList: true });
     fr.off = () => {
-      clearTimeout(fr.timer); mo.disconnect();
+      clearTimeout(fr.timer); clearTimeout(fr.settle); mo.disconnect();
       for (const doc of docs) {
         for (const ev of EVENTS) doc.removeEventListener(ev, act, { capture: true });
         for (const ev of EDITS) doc.removeEventListener(ev, edit, true);
@@ -1672,6 +1672,13 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const finishFresh = (cid, g) => {
     const fr = g.fresh, base = fr.base;
     if (!fr.current() || !fr.matches(g.el.contentDocument) || g.cold && (g.uid !== who || g.accountDoc !== g.el.contentDocument)) return dropFresh(cid, g);
+    // Told it shows, its Glaze marks it up again: swapped once that is done (300 ms quiet, 2 s at most), never shifting on screen.
+    const now = performance.now();
+    if (fr.asked && now - Math.max(fr.changed, fr.asked) < 300 && now - fr.asked < 2000) {
+      clearTimeout(fr.settle);
+      fr.settle = setTimeout(() => { if (g.fresh === fr && fr.asked) finishFresh(cid, g); }, 100);
+      return;
+    }
     let from = null, to = null; try { from = outlineScroller(base ? base.el.contentDocument : document); to = outlineScroller(g.el.contentDocument); } catch { /* gone */ }
     const top = from ? from.scrollTop : 0;
     if (to) to.scrollTop = top;
