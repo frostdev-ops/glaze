@@ -909,7 +909,16 @@ class World {
       if (f) { note(`untrash ${f.meta.name}`); drive.trash(f.meta.id, false); }
       return;
     }
-    if (op.k === 'removeDoc') { const f = at([...tagged('file'), ...tagged('doc')].filter((x) => x.meta.explicitlyTrashed)); if (f) { note(`delete for good ${f.meta.name}`); this.outside.delete(f.meta.id); drive.remove(f.meta.id); } return; }
+    // The student's delete for good lets go of what only that file held: a .docx's outside edit, a PDF's or deck's bytes no
+    // device holds.
+    if (op.k === 'removeDoc') {
+      const f = at([...tagged('file'), ...tagged('doc')].filter((x) => x.meta.explicitlyTrashed));
+      if (!f) return;
+      note(`delete for good ${f.meta.name}`); this.outside.delete(f.meta.id);
+      const t = f.bytes && this.pdfTok.get(sha(f.bytes));
+      drive.remove(f.meta.id);
+      return t && (async () => { for (const d of this.devices) if ((await this.held(d)).has(t)) return; this.released.add(t); })();
+    }
     const folder = (tag) => at(tagged(tag).filter((x) => !trashed(x) && x.meta.mimeType === drive.FOLDER));
     if (op.k === 'trashData' || op.k === 'trashBackups' || op.k === 'trashRoot') { const f = folder({ trashData: 'data', trashBackups: 'backups', trashRoot: 'root' }[op.k]); if (f) { note(`trash folder ${f.meta.name}`); drive.trash(f.meta.id, true); } return; }
     const f = at(files.filter((x) => x.meta.mimeType === drive.FOLDER && x.meta.explicitlyTrashed));
@@ -929,7 +938,7 @@ class World {
     if (op.t === 'time') { this.clock += op.ms; this.trace(`#${this.step} ${describe(op)}`); return; }
     if (op.t === 'lag') { this.net.lag = op.n; this.trace(`#${this.step} ${describe(op)}`); return; }
     if (op.t === 'faults') { dev.faults = op.p ? { p: op.p, quota: op.quota } : null; dev.syncRefuse = op.refuse || 0; dev.cut = op.cut || null; this.trace(`#${this.step} ${describe(op)}`); return; }
-    if (op.t === 'drive') { this.driveOp(op); return; }
+    if (op.t === 'drive') { await this.driveOp(op); return; }
     if (op.t === 'restart') { this.trace(`#${this.step} ${dev.name} worker restarts (idle)`); dev.dead = true; dev.boot(); return; }
     // Masked off-edits: the run turning Sync on finishes (no faults, online, never cut short).
     let held = null;
