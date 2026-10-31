@@ -1488,6 +1488,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const keeping = () => ctx.site === 'ultra' && on && !preview && !signedOut && P().keep !== false;
   const post = (f, m) => { try { f.el.contentWindow?.postMessage(m, location.origin); } catch { /* gone */ } };
   const showEl = (f, yes) => { f.el.style.visibility = yes ? '' : 'hidden'; f.el.inert = !yes; };
+  // Its item state, open only while its item frame is the course's frame (a tab let go of takes its frames with it).
+  const itemAt = (cid) => { const s = items.get(cid); if (s?.open && frames.get(cid)?.item !== cid) items.delete(cid); return items.get(cid); };
   // A plain click on an item link on Course Content (opened over it), or, in an item frame, on its link back (a close).
   const onItemClick = (e) => {
     if (!keeping() || !e.isTrusted || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -1512,7 +1514,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   // `again`: Forward to its entry, made already.
   const openItem = (cid, url, again = false) => {
-    if (framed || !keeping() || items.get(cid)?.open) return false;
+    if (framed || !keeping() || itemAt(cid)?.open) return false;
     const x = tabs.find((y) => y.cid === cid);
     let mine = frames.get(cid);
     const base = showing === cid && mine && !mine.item ? mine : !showing && cid === ctx.courseId() && (!mine || mine.item) ? null : undefined;
@@ -1559,7 +1561,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const onItemPop = (e) => {
     if (framed || !on) return;
     const k = entry();
-    for (const [cid, s] of items) {
+    for (const cid of [...items.keys()]) {
+      const s = itemAt(cid);
+      if (!s) continue;
       if (s.open && (!k || k !== s.key)) { if (k && k === s.from) e.stopImmediatePropagation(); closeItem(cid, 'back'); }
       else if (!s.open && k && k === s.key) { e.stopImmediatePropagation(); openItem(cid, s.url, true); }
       else if (s.back && k && k === s.from) { s.back = false; e.stopImmediatePropagation(); }
@@ -1742,6 +1746,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       g.cmd = '';
       g.el.contentWindow?.postMessage({ gzCtab: 'visible', on: k === cid && g.ready }, location.origin);
     }
+    // Kept beside another course (its outline under an item not yet drawn): never on screen with this one.
+    for (const [k, a] of spare) if (k !== cid) for (const g of a) { g.el.style.visibility = 'hidden'; g.el.inert = true; }
     if (host) { host.toggleAttribute('data-on', !!cid); lay(); }
     if (f?.ready) nudge(f);
     clearSlow();
