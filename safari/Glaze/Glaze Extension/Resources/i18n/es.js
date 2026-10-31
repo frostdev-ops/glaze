@@ -3772,6 +3772,7 @@
   "Syncing…": "Sincronizando…",
   "Connect Google Drive again to keep syncing.": "Vuelve a conectar Google Drive para seguir sincronizando.",
   "Your Google Drive is full. Free up space to keep syncing.": "Tu Google Drive está lleno. Libera espacio para seguir sincronizando.",
+  "Today's backup was skipped: your Google Drive is full.": "Se omitió la copia de seguridad de hoy: tu Google Drive está lleno.",
   "The Glaze folder is in Google Drive's trash. Restore it to keep syncing.": "La carpeta Glaze está en la papelera de Google Drive. Restáurala para seguir sincronizando.",
   "Google Drive is busy. Glaze will try again soon.": "Google Drive está ocupado. Glaze lo intentará de nuevo pronto.",
   "Couldn't reach Google Drive. Glaze will try again soon.": "No se pudo acceder a Google Drive. Glaze lo intentará de nuevo pronto.",

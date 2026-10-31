@@ -3772,6 +3772,7 @@
   "Syncing…": "Synchroniseren…",
   "Connect Google Drive again to keep syncing.": "Verbind Google Drive opnieuw om te blijven synchroniseren.",
   "Your Google Drive is full. Free up space to keep syncing.": "Je Google Drive is vol. Maak ruimte vrij om te blijven synchroniseren.",
+  "Today's backup was skipped: your Google Drive is full.": "De back-up van vandaag is overgeslagen: je Google Drive is vol.",
   "The Glaze folder is in Google Drive's trash. Restore it to keep syncing.": "De map Glaze staat in de prullenbak van Google Drive. Zet hem terug om te blijven synchroniseren.",
   "Google Drive is busy. Glaze will try again soon.": "Google Drive is bezet. Glaze probeert het zo opnieuw.",
   "Couldn't reach Google Drive. Glaze will try again soon.": "Google Drive was niet bereikbaar. Glaze probeert het zo opnieuw.",

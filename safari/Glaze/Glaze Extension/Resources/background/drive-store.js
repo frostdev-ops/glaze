@@ -329,7 +329,13 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         try {
           const onChange = got.area === 'notes' && !d?.immutable ? (old, next) => owned.set(id, transition(got.key, old, next)) : undefined;
           if (!await a.replace(got.key, before, write, onChange)) throw new Fail('stale');
-        } catch (e) { applying.delete(id); owned.delete(id); throw e; }
+        } catch (e) {
+          applying.delete(id); owned.delete(id);
+          // storage.sync refusing this value (past its 8 KB an item, its total or its count of items): passed over as too big.
+          // Its writes-a-minute and -an-hour limits pass, so those are tried again.
+          if (got.area === 'sync' && !(e instanceof Fail) && !/MAX_WRITE_OPERATIONS/.test(String(e?.message))) throw new Fail('bad');
+          throw e;
+        }
       }
       await restamp({ [id]: got.at }, { [id]: stampBefore });
       // A later local write is still dirty even if it lands before the sync bookkeeping finishes.
@@ -487,20 +493,22 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       const st = (await S.get(STATE))[STATE] || {};
       if (!env.snapshot || (st.snap && now() - st.snap < SNAP.every)) return;
       // Tried once a day: one too big for a backup (null), one that can't be built, or one Drive refuses as it stands
-      // (larger than one upload) waits for tomorrow, never failing the run or being built again on every run.
-      const skip = async (e) => { if (e) console.warn('Sync to Google Drive: no snapshot today', e?.why || e); await ctx.state({ snap: now() }); };
+      // (larger than one upload, or more than a full Drive has room for) waits for tomorrow, never failing the run or being
+      // built again on every run. snapSkip: 'quota' while the day's was skipped for want of room (Settings says so).
+      const skip = async (e) => { if (e) console.warn('Sync to Google Drive: no snapshot today', e?.why || e); await ctx.state({ snap: now(), snapSkip: e?.why === 'quota' ? 'quota' : null }); };
       let made;
       // A note saved while it was read (background/backup.js notesOut 'changed'): the next run tries again.
       try { made = await env.snapshot(); } catch (e) { if (e?.why === 'changed') return; return skip(e); }
       if (!made) return skip();
-      const backups = await sub(ctx, 'backups', 'Backups');
-      const r = await ctx.D((c) => c.find(`'${backups}' in parents and appProperties has { key='glaze' and value='snapshot' } and trashed=false`, { fields: 'id,name,trashed,appProperties,version', pageSize: 100 }));
-      // Another device's of the same day (its name is the day's) is replaced, a new revision of the one file: five kept are five days.
-      const same = r.files.filter((f) => f.name === made.name).sort((a, b) => (a.id < b.id ? -1 : 1))[0];
-      let up;
-      try { up = await ctx.D((c) => c.put({ ...(same && { id: same.id }), meta: { ...(!same && { name: made.name, mimeType: ZIP, parents: [backups] }), appProperties: { glaze: 'snapshot' } }, mime: ZIP, bytes: made.bytes })); }
-      catch (e) { if (e?.why === 'bad' || e?.why === 'size') return skip(e); throw e; }
-      await ctx.state({ snap: now() });
+      let r, same, up;
+      try {
+        const backups = await sub(ctx, 'backups', 'Backups');
+        r = await ctx.D((c) => c.find(`'${backups}' in parents and appProperties has { key='glaze' and value='snapshot' } and trashed=false`, { fields: 'id,name,trashed,appProperties,version', pageSize: 100 }));
+        // Another device's of the same day (its name is the day's) is replaced, a new revision of the one file: five kept are five days.
+        same = r.files.filter((f) => f.name === made.name).sort((a, b) => (a.id < b.id ? -1 : 1))[0];
+        up = await ctx.D((c) => c.put({ ...(same && { id: same.id }), meta: { ...(!same && { name: made.name, mimeType: ZIP, parents: [backups] }), appProperties: { glaze: 'snapshot' } }, mime: ZIP, bytes: made.bytes }));
+      } catch (e) { if (['bad', 'size', 'quota'].includes(e?.why)) return skip(e); throw e; }
+      await ctx.state({ snap: now(), snapSkip: null });
       const all = same ? r.files : [...r.files, { id: up.id, name: made.name }];
       const old = all.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : a.id < b.id ? 1 : -1)).slice(SNAP.keep);
       for (const f of old) await ctx.D((c) => c.patch(f.id, { trashed: true }));

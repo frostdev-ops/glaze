@@ -1230,7 +1230,9 @@ GZ_UI.load().then((s) => {
       const st = (await chrome.storage.local.get('driveSync')).driveSync || {};
       $('#gdrive-sync-on').checked = st.on === true;
       $('#gdrive-sync-said').textContent = st.on !== true ? '' : st.busy && Date.now() - st.busy < 120e3 ? t('Syncing…')
-        : st.problem ? t(SYNC_SAYS[st.problem] || "Couldn't sync. Glaze will try again soon.") : st.last ? t('Last synced {when}.', { when: gsWhen(st.last) }) : '';
+        : st.problem ? t(SYNC_SAYS[st.problem] || "Couldn't sync. Glaze will try again soon.") : st.last ? t('Last synced {when}.', { when: gsWhen(st.last) })
+          // The day's backup skipped for want of room (background/drive-store.js snapshot), for the day it covers.
+          + (st.snapSkip === 'quota' && Date.now() - (st.snap || 0) < 864e5 ? ` ${t("Today's backup was skipped: your Google Drive is full.")}` : '') : '';
       // Connect stays beside Disconnect while that line asks for it.
       $('#gdrive-connect').hidden = $('#gdrive-sync-said').textContent !== t(SYNC_SAYS.auth);
     };
