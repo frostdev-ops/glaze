@@ -2,9 +2,11 @@
 // on a synthetic Ultra that routes in place (test/fixtures/ultra-feel.html: the live pages' shapes, invented text; Ultra's
 // spinners 35 ms after a route change, its view later). Each click is a real press and release; every frame from the press
 // until the page is ready says whether the clicked item looks different and whether the main area does (a skeleton, Ultra's
-// spinners, the old view gone or the new one in). Measured with Glaze on, with Glaze off (enabled: false) and with the
-// switch off: press → item, click → main area, the skeleton never beside a visible spinner and gone with the page ready,
-// layout shift, and the skeleton giving way to an instant copy at once. Waits on state, never on a pause. No real LMS.
+// spinners, the old view gone or the new one in), and whether a view transition holds what's painted. Measured with Glaze
+// on, with Glaze off (enabled: false) and with the switch off: press → item, click → first painted change in the main area
+// (within two frames of Glaze off for a course's tab and the main menu), the skeleton never beside a visible spinner and gone
+// with the page ready, layout shift, and the skeleton giving way to an instant copy at once. Waits on state, never on a
+// pause. No real LMS.
 // node checks/navigation/ultra-feel-check.js <evidence dir>
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
@@ -43,7 +45,7 @@ function probe() {
     const b = hit.getBoundingClientRect();
     const at = document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2);
     // What's already there of the destination (a list under a course's panel) isn't it coming in.
-    run = { hit, item, anchor: [...document.querySelectorAll(anchor)].find(shows) || null, dest, stale: new Set(document.querySelectorAll(dest)), from: location.href, frames: [], downAt: null, clickAt: null, done: false, base: '', covered: at && !hit.contains(at) && !(at.shadowRoot && at.shadowRoot.contains(hit)) ? at.outerHTML.slice(0, 160) : '' };
+    run = { hit, item, anchor: [...document.querySelectorAll(anchor)].find(shows) || null, dest, stale: new Set(document.querySelectorAll(dest)), from: location.href, frames: [], transitions: 0, downAt: null, clickAt: null, done: false, base: '', covered: at && !hit.contains(at) && !(at.shadowRoot && at.shadowRoot.contains(hit)) ? at.outerHTML.slice(0, 160) : '' };
     return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
   };
   // The item is what the pointer would hit at its centre: no transition holding the page, nothing over it.
@@ -64,13 +66,21 @@ function probe() {
     return ok && !run.item.hasAttribute('data-gz-press');
   };
   P.base = () => { run.base = look(run.item); return run.base; };
+  // A view transition holds what's painted until its update is done: a frame then shows the old page, whatever the DOM says.
+  const vts = new WeakMap();
+  const vtHeld = () => {
+    const vt = document.activeViewTransition;
+    if (!vt) return false;
+    if (!vts.has(vt)) { vts.set(vt, true); if (run) run.transitions++; vt.updateCallbackDone.then(() => vts.set(vt, false), () => vts.set(vt, false)); }
+    return vts.get(vt);
+  };
   const frame = () => {
     if (!run || run.done) return;
     const skel = document.getElementById('gz-skel');
     const spin = [...document.querySelectorAll('div.spinner')].some(shows);
     const fresh = [...document.querySelectorAll(run.dest)].filter((e) => !run.stale.has(e));
     const dest = fresh.some(shows), destIn = fresh.length > 0;
-    const f = { t: performance.now(), item: run.item.isConnected && look(run.item) !== run.base, skel: shows(skel), spin, dest, destIn, anchorGone: !!run.anchor && !shows(run.anchor),
+    const f = { t: performance.now(), held: vtHeld(), item: run.item.isConnected && look(run.item) !== run.base, skel: shows(skel), spin, dest, destIn, anchorGone: !!run.anchor && !shows(run.anchor),
       press: !!document.querySelector('[data-gz-press]') || !!bar()?.querySelector('[data-gz-press]') };
     f.main = f.skel || f.spin || f.dest || f.anchorGone;
     run.frames.push(f);
@@ -78,7 +88,7 @@ function probe() {
     requestAnimationFrame(frame);
   };
   addEventListener('pointerdown', (e) => { if (e.isTrusted && run && run.downAt == null) { run.downAt = e.timeStamp; requestAnimationFrame(frame); } }, true);
-  addEventListener('click', (e) => { if (e.isTrusted && run && run.clickAt == null) { run.clickAt = e.timeStamp; run.target = e.composedPath()[0]?.outerHTML?.slice(0, 160); } }, true);
+  addEventListener('click', (e) => { if (e.isTrusted && run && run.clickAt == null) { run.clickAt = e.timeStamp; run.target = e.composedPath()[0]?.outerHTML?.slice(0, 160); setTimeout(vtHeld); } }, true);
   P.frames = () => run?.frames.length || 0;
   // Where a click stands, for a check that times out.
   P.state = () => ({ href: location.href, loading: window.__loading, skel: !!document.getElementById('gz-skel'), skelAttr: document.documentElement.getAttribute('data-gz-skel'),
@@ -86,14 +96,17 @@ function probe() {
     everPress: run?.frames.some((f) => f.press), everSkel: run?.frames.some((f) => f.skel), covered: run?.covered, target: run?.target,
     html: [...document.documentElement.attributes].filter((a) => a.name !== 'style').map((a) => `${a.name}=${a.value}`).join(' '), frames: [...document.querySelectorAll('iframe')].map((f) => `${f.name}:${getComputedStyle(f).visibility}`) });
   P.done = () => !!run?.done;
-  // The first frame from `from` with `key` set: its index among those frames (1: the first after it) and its time.
+  const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : 0; };
+  // The first painted frame from `from` with `key` set (one a view transition holds shows the old page): its index among
+  // those frames (1: the first after it) and its time.
   P.result = () => {
-    const first = (key, from) => { const i = run.frames.findIndex((f) => f.t >= from && f[key]); return i < 0 ? null : { frame: run.frames.filter((f) => f.t >= from).indexOf(run.frames[i]) + 1, ms: +(run.frames[i].t - from).toFixed(1) }; };
+    const first = (key, from) => { const i = run.frames.findIndex((f) => f.t >= from && f[key] && !f.held); return i < 0 ? null : { frame: run.frames.filter((f) => f.t >= from).indexOf(run.frames[i]) + 1, ms: +(run.frames[i].t - from).toFixed(1) }; };
     const last = run.frames.at(-1), lastSkel = run.frames.findLastIndex((f) => f.skel), firstIn = run.frames.findIndex((f) => f.destIn);
     return {
       downToItem: first('item', run.downAt), clickToItem: first('item', run.clickAt), clickToMain: first('main', run.clickAt), downToMain: first('main', run.downAt),
       clickToSkel: first('skel', run.clickAt), clickToSpin: first('spin', run.clickAt), clickToReady: first('dest', run.clickAt),
-      pressMs: +(run.clickAt - run.downAt).toFixed(1), frames: run.frames.length,
+      pressMs: +(run.clickAt - run.downAt).toFixed(1), frames: run.frames.length, transitions: run.transitions, heldFrames: run.frames.filter((f) => f.held).length,
+      frameMs: +median(run.frames.slice(1).map((f, i) => f.t - run.frames[i].t)).toFixed(1),
       skelBesideSpin: run.frames.filter((f) => f.skel && f.spin).length, everSkel: run.frames.some((f) => f.skel), everPress: run.frames.some((f) => f.press), everSpin: run.frames.some((f) => f.spin),
       // Frames between Ultra's view coming in (hidden under the skeleton) and the skeleton going.
       skelAfterIn: firstIn < 0 ? null : Math.max(0, lastSkel - firstIn + 1),
@@ -162,7 +175,8 @@ const frames = (page, n = 2) => page.evaluate((k) => new Promise((r) => { const 
     };
     // One click: pointed at, pressed, two frames on let go, then followed until the page is ready.
     const click = async (page, mode, what, how) => {
-      if (!(await page.evaluate((a) => !!window.__feel.arm(a), how))) throw Error(`${mode} ${what}: nothing to click`);
+      // Something over the page (a crossfade's pictures) can keep the item from the pointer for a moment.
+      await until(() => page.evaluate((a) => !!window.__feel.arm(a), how), `${mode} ${what}: something to click`);
       const at = await until(() => page.evaluate(() => window.__feel.hits()), `${mode} ${what}: under the pointer`);
       if (mode === 'on') await until(() => page.evaluate(() => window.__feel.armed()), `${mode} ${what}: Glaze answering presses`);
       await page.mouse.move(at.x, at.y);
@@ -200,13 +214,6 @@ const frames = (page, n = 2) => page.evaluate((k) => new Promise((r) => { const 
 
     // ---- Glaze on ----
     const on = await tour('on');
-    for (const r of on.runs) {
-      check(r.downToItem?.frame === 1, `on, ${r.what}: the item looks current in the first frame after the press`, r.downToItem);
-      check(r.clickToSkel?.frame === 1, `on, ${r.what}: the skeleton is in the first frame after the click`, r.clickToSkel);
-      check(r.skelBesideSpin === 0, `on, ${r.what}: Ultra's spinners never show beside it`, { skelBesideSpin: r.skelBesideSpin });
-      check(r.readyShown && r.skelAfterIn <= 1, `on, ${r.what}: it goes with the page's view in`, { skelAfterIn: r.skelAfterIn });
-      check(r.shift <= 0.01, `on, ${r.what}: layout shift <= 0.01`, { shift: r.shift });
-    }
     check(!(await on.page.evaluate(() => !!document.getElementById('gz-skel') || !!document.querySelector('[data-gz-press], [data-gz-skel-host]') || document.documentElement.hasAttribute('data-gz-skel'))), 'on: nothing left behind');
     // An instant copy coming in takes its place at once.
     await on.page.evaluate(() => { window.__delay = 5000; });
@@ -249,6 +256,20 @@ const frames = (page, n = 2) => page.evaluate((k) => new Promise((r) => { const 
     const median = (xs) => { const s = xs.filter((x) => x != null).sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : null; };
     const sum = (runs) => ({ pressToItemMs: median(runs.map((r) => r.downToItem?.ms)), clickToMainMs: median(runs.map((r) => r.clickToMain?.ms)), pressToMainMs: median(runs.map((r) => r.downToMain?.ms)), clickToReadyMs: median(runs.map((r) => r.clickToReady?.ms)), shift: Math.max(...runs.map((r) => r.shift)) });
     evidence.summary = { on: sum(on.runs), off: sum(off.runs), switchOff: sum(sw.runs) };
+    // A course's tab and the main menu (Glaze's bar clicks Ultra's own link): the first painted change no later than two
+    // frames after Ultra's own.
+    for (const i of [0, 1, 2, 3]) {
+      const a = on.runs[i], b = off.runs[i], slack = 2 * Math.max(a.frameMs, b.frameMs);
+      check(a.clickToMain && a.clickToMain.ms <= b.clickToMain.ms + slack, `${a.what}: click → first painted change within 2 frames of Glaze off`, { on: a.clickToMain, off: b.clickToMain, slack, heldFrames: a.heldFrames });
+    }
+    // Each click of the tour with Glaze on, once the controls are in.
+    for (const r of on.runs) {
+      check(r.downToItem?.frame === 1, `on, ${r.what}: the item looks current in the first frame after the press`, r.downToItem);
+      check(r.clickToSkel?.frame === 1, `on, ${r.what}: the skeleton is in the first frame after the click`, r.clickToSkel);
+      check(r.skelBesideSpin === 0, `on, ${r.what}: Ultra's spinners never show beside it`, { skelBesideSpin: r.skelBesideSpin });
+      check(r.readyShown && r.skelAfterIn <= 1, `on, ${r.what}: it goes with the page's view in`, { skelAfterIn: r.skelAfterIn });
+      check(r.shift <= 0.01, `on, ${r.what}: layout shift <= 0.01`, { shift: r.shift });
+    }
     for (const i of on.runs.keys()) check(on.runs[i].clickToMain.ms < off.runs[i].clickToMain.ms, `${on.runs[i].what}: the main area answers sooner with Glaze on`, { on: on.runs[i].clickToMain, off: off.runs[i].clickToMain });
     check(evidence.summary.on.shift <= Math.max(0.01, evidence.summary.off.shift), 'no more layout shift with Glaze on than off', evidence.summary);
     console.log(JSON.stringify(evidence.summary));
