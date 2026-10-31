@@ -591,7 +591,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       }
 
       if (!d) {
-        if (R?.removed) R = !lt && l ? await lookup(h, folder) : null;
+        // Its copy gone for good: another one live (a device that sent it up again) is the document's now, here or not.
+        if (R?.removed) R = await lookup(h, folder);
         if (!R) { if (l && !lt) await push(key, h, l, null, folder); return; }
         // In Drive's trash and in Trash here, or never here: nothing to meet. Met by its tag alone, its copy says whether this
         // device holds it (a download stopped before its link was kept, say).

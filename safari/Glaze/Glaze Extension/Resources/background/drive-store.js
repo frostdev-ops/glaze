@@ -520,7 +520,13 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
           if (at > got.at && !def.view && !MERGE[cat]) return push(ctx, h, area, key, cat, { id: R.id }, at);
           return put(h, { area, key, cat, id: R.id, lsum, rsum: got.sum, at: got.at, seen: Math.max(at, got.at) }, null);
         }
-        if (value === undefined) { if (got.value !== undefined) await take(h, got, R, null, value); else await put(h, { area, key, cat, id: R.id, lsum, rsum: got.sum, at: got.at, seen: got.at }, null); return; }
+        // Gone here: Drive's value taken, unless this device deleted it later than that value's change (its time stamped while
+        // bound, so it had the key): the deletion goes up, as a later change would.
+        if (value === undefined) {
+          if (got.value !== undefined && at > got.at) return push(ctx, h, area, key, cat, { id: R.id }, at);
+          if (got.value !== undefined) await take(h, got, R, null, value); else await put(h, { area, key, cat, id: R.id, lsum, rsum: got.sum, at: got.at, seen: got.at }, null);
+          return;
+        }
         if (got.value === undefined) return push(ctx, h, area, key, cat, { id: R.id }, Math.max(at, got.at + 1) || now());
         // First meeting, both hold it: Settings by time; the rest joined as Restore joins.
         if (cat === 'settings') { if (got.at > at) return take(h, got, R, null, value); return push(ctx, h, area, key, cat, { id: R.id }, at || now()); }
