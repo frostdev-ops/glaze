@@ -1013,7 +1013,8 @@ test('Glaze/Data put in Drive\'s trash: records go back into a new Data, one fil
   clock.t += 1000;
   await a.local.set({ writerWords: ['One', 'Two'] });
   assert.ok((await a.run()).ok); assert.ok((await b.run()).ok);
-  assert.deepEqual((await b.local.get('writerWords')).writerWords, ['One', 'Two'], 'A\'s change reached B');
+  // Met as a first meeting, the two joined as Restore joins them (the words, in any order).
+  assert.deepEqual([...(await b.local.get('writerWords')).writerWords].sort(), ['One', 'Two'], 'A\'s change reached B');
   clock.t += 1000;
   await b.settings.set({ colors: accent('#222222') });
   assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
