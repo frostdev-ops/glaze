@@ -1178,12 +1178,14 @@ GZ_UI.load().then((s) => {
     // answers 'pending' until the app is done (each answer waits a while), and Settings asks again.
     $('#gdrive-connect').addEventListener('click', async (e) => {
       if (!e.isTrusted || gdBusy) return;
+      // Firefox has no optional identity: its package holds it from install (tools/build/oauth-manifest.js), so nothing is asked.
+      const held = gdFlow === 'native' || /^moz-extension:/i.test(chrome.runtime.getURL(''));
       const native = gdFlow === 'native';
-      // Settings framed in a school's page may have no permissions API (Firefox): its own tab asks, at this section.
-      if (!native && typeof chrome.permissions?.request !== 'function') return GZ_SITE.elsewhere ? GZ_SITE.elsewhere(e.currentTarget) : hint(t("Glaze needs the browser's sign-in permission to connect."), true);
+      // Settings framed in a school's page may have no permissions API: its own tab asks, at this section.
+      if (!held && typeof chrome.permissions?.request !== 'function') return GZ_SITE.elsewhere ? GZ_SITE.elsewhere(e.currentTarget) : hint(t("Glaze needs the browser's sign-in permission to connect."), true);
       gdBusy = true;
       try {
-        if (!native) {
+        if (!held) {
           const asked = chrome.permissions.request({ permissions: ['identity'] });
           if (!await Promise.resolve(asked).catch(() => false)) return hint(t("Glaze needs the browser's sign-in permission to connect."), true);
         }

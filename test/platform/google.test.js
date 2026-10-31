@@ -637,7 +637,7 @@ const settings = async ({ email = 'student@school.edu', sync = {}, connect = { o
       },
     },
     // Firefox's permissions API takes only optional permissions, and identity isn't one there: asked for it, it throws.
-    permissions: { request: async (p) => { asked.push(p); if (firefox) throw new TypeError('Type error for parameter permissions'); return true; } },
+    permissions: { request: async (p) => { asked.push(structuredClone(p)); if (firefox) throw new TypeError('Type error for parameter permissions'); return true; } },
     storage: { local: { get: async (k) => ({ [k]: structuredClone(local[k]) }) }, onChanged: { addListener: (f) => heard.push(f) } },
   };
   chrome.runtime.getURL = (p = '') => `${firefox ? 'moz-extension://6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b' : 'chrome-extension://abcdefghijklmnopabcdefghijklmnop'}/${p}`;
@@ -685,7 +685,7 @@ test('Settings: while Sync asks to connect Google Drive again, Connect is there 
 });
 
 test('Settings on Firefox: Connect goes straight to Google, never asking Firefox for identity (the package holds it; Firefox has no optional identity)', async () => {
-  const s = await settings({ email: null, firefox: true });
+  const s = await settings({ email: null, firefox: true, connect: { ok: true, email: 'student@school.edu' } });
   await s.click('#gdrive-connect');
   assert.deepEqual(s.asked, [], 'no permissions.request');
   assert.deepEqual(s.sent.filter((m) => m.type === 'glaze:google').map((m) => m.op), ['status', 'connect', 'status']);
@@ -753,6 +753,11 @@ test('packages: real ids give Chrome the Drive client and its three scopes, with
   assert.equal(firefox.oauth2, undefined);
   assert.ok(firefox.permissions.includes('identity'), 'Firefox signs in with the Web client, holding identity from install (it has no optional identity, and asks nothing for it)');
   assert.ok(!(firefox.optional_permissions || []).includes('identity'));
+});
+
+test('package-firefox.sh takes the permissions oauth-manifest.js gives Firefox, identity among them once Drive is on', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../../tools/build/package-firefox.sh'), 'utf8');
+  assert.match(src, /for \(const k of \['oauth2', 'optional_permissions', 'permissions'\]\) if \(k in google\) m\[k\] = google\[k\]; else delete m\[k\];/);
 });
 
 test('packages: switched on, the shipped config gives Chrome Calendar\'s client with Drive\'s three scopes, and Firefox identity', () => {

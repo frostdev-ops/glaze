@@ -810,7 +810,8 @@ you import) are bundled. It makes requests in these cases:
   browser and Google: `https://accounts.google.com` to sign in, `https://openidconnect.googleapis.com` for your
   account's email address, `https://www.googleapis.com` for Drive and `https://oauth2.googleapis.com` to revoke access
   (and, in Safari, to exchange the sign-in for access tokens and renew them). To pick a file, Glaze also opens a static picker page (below). There is no Glaze server, and nothing goes to Frostdev.
-  - **Connect** (your click in Glaze's settings): the browser asks for the `identity` permission and Google shows its own
+  - **Connect** (your click in Glaze's settings): Chrome, Edge and Brave ask for the `identity` permission (Firefox has
+    no optional `identity`, so its package holds it from install, with no prompt) and Google shows its own
     sign-in and consent for three scopes: `https://www.googleapis.com/auth/drive.file`, `openid` and `email`. With
     `drive.file` Glaze can reach only the Drive files it creates and the files you pick in Google's Picker; it can't
     list or open anything else in your Drive. The email address is used to show which account is connected. Glaze never
@@ -864,9 +865,9 @@ you import) are bundled. It makes requests in these cases:
   - **Submit from Drive**: Glaze downloads the Drive file you pick and attaches it to your Blackboard Ultra assignment's
     hand-in.
   - **Disconnect**: Glaze asks Google to revoke its access (the token goes in the request body), has the browser forget
-    its cached tokens, removes the `identity` permission and deletes the `google` record. While Google Calendar sync
-    still uses the same access, Glaze doesn't revoke it, and only Drive's record goes. You can also remove Glaze's
-    access at https://myaccount.google.com/permissions.
+    its cached tokens, removes the `identity` permission (except on Firefox, whose package holds it) and deletes the
+    `google` record. While Google Calendar sync on this device still uses the same access, Glaze doesn't revoke it, and
+    only Drive's record goes. You can also remove Glaze's access at https://myaccount.google.com/permissions.
   - Uninstalling Glaze doesn't revoke Google's access by itself, and files in your Drive stay there: disconnect first,
     or remove access at https://myaccount.google.com/permissions.
 - **Tasks on course cards** (Canvas, off by default). On the Dashboard's card view, Glaze asks your own Canvas site

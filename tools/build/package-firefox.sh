@@ -58,9 +58,9 @@ const imports = [...fs.readFileSync(background, 'utf8').matchAll(/importScripts\
 m.background = { scripts: ['background/firefox-background.js', ...new Set(imports), 'background/background.js'] };
 delete m.minimum_chrome_version;
 // Google (tools/build/oauth-manifest.js): no oauth2 key, which is getAuthToken's; identity only for Drive, switched on (background/google.js ON)
-// with its Web client real.
+// with its Web client real, and held from install (Firefox has no optional identity).
 const google = require(path.join(process.cwd(), 'tools/build/oauth-manifest.js')).oauth(m, { target: 'firefox', calendar: false, drive: require(path.join(process.cwd(), 'extension/background/google.js')).ON === true, config: require(path.join(process.cwd(), 'extension/background/google-config.js')) });
-for (const k of ['oauth2', 'optional_permissions']) if (k in google) m[k] = google[k]; else delete m[k];
+for (const k of ['oauth2', 'optional_permissions', 'permissions']) if (k in google) m[k] = google[k]; else delete m[k];
 for (const entry of m.web_accessible_resources || []) delete entry.use_dynamic_url;
 // Firefox has no declarativeContent (Chrome's lit button) and no addHostAccessRequest; AMO's linter flags both, the second
 // even behind popup.js's check, so the Firefox popup goes without that line. The button starts on the toolbar for new

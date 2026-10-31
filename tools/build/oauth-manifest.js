@@ -1,5 +1,5 @@
-// What a package's manifest carries for Google (package.sh, tools/build/package-firefox.sh): the oauth2 key and the optional
-// identity permission, each only while a feature that uses it is on. Google Calendar sync: planner/gcal.js ON, off until Google
+// What a package's manifest carries for Google (package.sh, tools/build/package-firefox.sh): the oauth2 key and the identity
+// permission (optional, but held from install on Firefox), each only while a feature that uses it is on. Google Calendar sync: planner/gcal.js ON, off until Google
 // verifies the app. Drive: background/google.js ON, and then only once its clients in background/google-config.js are real (ready). Safari carries neither
 // (tools/build/safari-manifest.sh): its sign-in goes through the app.
 //   node tools/build/oauth-manifest.js <chrome|firefox> <manifest.json>   → the manifest, to stdout
@@ -15,10 +15,14 @@ function oauth(manifest, { target, calendar, drive, config }) {
   if (scopes.length) m.oauth2 = { client_id: chrome ? config.chrome : manifest.oauth2.client_id, scopes };
   else delete m.oauth2;
   const identity = target === 'chrome' ? calendar || chrome || web : web;
-  const optional = (manifest.optional_permissions || []).filter((p) => identity || p !== 'identity');
-  if (identity && !optional.includes('identity')) optional.unshift('identity');
+  // Firefox has no optional identity: its schema grants identity only from install, with no prompt. Listed as optional it is
+  // dropped, and permissions.request refuses it. So the Firefox package holds it, and Connect asks nothing for it there.
+  const held = target === 'firefox' && identity;
+  const optional = (manifest.optional_permissions || []).filter((p) => (identity && !held) || p !== 'identity');
+  if (identity && !held && !optional.includes('identity')) optional.unshift('identity');
   if (optional.length) m.optional_permissions = optional;
   else delete m.optional_permissions;
+  if (held && !m.permissions.includes('identity')) m.permissions.push('identity');
   return m;
 }
 
