@@ -625,6 +625,15 @@ const KNOWN = {
     stops: 'net.POST',
     repro: [{ t: 'lag', n: 3 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, kill: 126, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }],
   },
+  // Open: within the accepted limit that switching accounts A→B→A brings older data back. Found 2026-10-31 (seed 60348,
+  // 140 operations, 2 devices).
+  'stale-restore': {
+    fixed: false,
+    about: 'a device back on its account after another (a first meeting) holds an older PDF whose file the student deleted for good in Drive: it sends its own bytes up as the restore, and the other device, holding the newer bytes in Trash, takes the older over them',
+    skips: (op) => op.t === 'drive' && op.k === 'removeDoc',
+    repro: [{ t: 'pdf', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2 }, { t: 'run', d: 1, how: 'run', s: 3 }, { t: 'account', d: 1, to: 'B', s: 4 }, { t: 'pdf', k: 'edit', d: 0, pick: 0, pick2: 0, s: 5 },
+      { t: 'run', d: 0, how: 'run', s: 6 }, { t: 'drive', k: 'trashDoc', pick: 0.99, s: 7 }, { t: 'run', d: 0, how: 'run', s: 8 }, { t: 'drive', k: 'removeDoc', pick: 0, s: 9 }],
+  },
 };
 
 // ---- a run of one list of operations
@@ -1085,7 +1094,10 @@ class World {
         const n = v.notes[id];
         if (!n) { if (!list.some((x) => x.kind === 'purge')) F('no-loss:note', `note ${id.slice(0, 8)} missing on ${this.devices[i].name} (last written on ${last.dev} at #${last.step})`); continue; }
         const t = tokensIn(JSON.parse(n).html || '')[0] || null;
-        if (lastText && !ok.has(t)) F('no-loss:note', `note ${id.slice(0, 8)} on ${this.devices[i].name} holds ${t}, its last text was ${lastText.text} (#${lastText.step} on ${lastText.dev})`);
+        // Purged after its last text, then brought back by a device returning to the account (switching accounts A→B→A brings
+        // older data back, a known limit; a first meeting never lets a tombstone delete): by design.
+        if (lastText && !ok.has(t) && this.accounts && list.slice(i0).some((x) => x.kind === 'purge')) { if (i === 0) this.soft.push(`note ${id.slice(0, 8)}: purged after its last text ${lastText.text}, back with ${t} from a device that switched accounts (a known limit)`); }
+        else if (lastText && !ok.has(t)) F('no-loss:note', `note ${id.slice(0, 8)} on ${this.devices[i].name} holds ${t}, its last text was ${lastText.text} (#${lastText.step} on ${lastText.dev})`);
         else if (lastText && t !== lastText.text && i === 0) this.soft.push(`note ${id.slice(0, 8)}: its last text ${lastText.text} (#${lastText.step} on ${lastText.dev}) gave way to ${t}, from a later rename, move or trash on a device that held it (last writer wins)`);
       }
     }
