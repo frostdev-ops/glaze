@@ -1069,3 +1069,37 @@ test('the pet\'s record settles between two devices whose focus timers differ: n
   assert.match((await b.local.get(PET))[PET].timerSignal, /^rest:/, 'B keeps its own timer\'s state');
   assert.match((await a.local.get(PET))[PET].timerSignal, /^work:.*:focus$/, 'and A its own');
 });
+
+// Taking another device's folders, Notes takes each note out of a folder no longer there (planner/notes.js 'folders'): a
+// consequence of what came, never a change of this device's own. Stamped as one, it outweighed the other device's own later
+// change to that note, which had yet to come (a push cut short between the two, as by the network or Safari unloading the
+// worker), and the note's older text went back over the newer on both devices.
+test('a note moved out of a folder that is then deleted keeps its newer text on both devices, the push cut short between them', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const old = nid(900), next = nid(901);
+  assert.ok((await a.notesOp({ key: ACCT, op: 'folder', id: old, name: 'Biology' })).ok);
+  assert.ok((await a.notesOp({ key: ACCT, op: 'folder', id: next, name: 'Chemistry' })).ok);
+  assert.ok((await a.notesOp({ key: ACCT, op: 'save', id: nid(1), base: 0, sid: 's1', html: '<p>Cells</p>', title: 'Cells', folder: old })).ok);
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  assert.equal((await idxOf(b)).notes[nid(1)].folder, old);
+  // On A: the note rewritten and moved, its old folder deleted for good.
+  clock.t += 1000;
+  assert.ok((await a.notesOp({ key: ACCT, op: 'save', id: nid(1), base: (await idxOf(a)).notes[nid(1)].rev, sid: 's2', html: '<p>Cells, rewritten</p>' })).ok);
+  assert.ok((await a.notesOp({ key: ACCT, op: 'meta', id: nid(1), folder: next, at: clock.t })).ok);
+  assert.ok((await a.notesOp({ key: ACCT, op: 'folderDel', id: old, notes: 'keep' })).ok);
+  assert.ok((await a.notesOp({ key: ACCT, op: 'purge', ids: [old] })).ok);
+  // The push stops after its first record (the folders); B hears of that much a minute later.
+  let ups = 0;
+  drive.offline((x) => x.path.startsWith('/upload/') && ++ups === 2);
+  assert.equal((await a.run({ push: true })).ok, false);
+  clock.t += 60e3;
+  assert.ok((await b.run()).ok);
+  clock.t = Math.max(clock.t, (await a.local.get(S.STATE))[S.STATE].wait + 1);
+  assert.ok((await a.run()).ok); assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
+  for (const [d, name] of [[a, 'A'], [b, 'B']]) {
+    assert.match(await noteOf(d, nid(1)), /rewritten/, `${name} keeps the newer text`);
+    assert.equal((await idxOf(d)).notes[nid(1)].folder, next, `${name} files it in Chemistry`);
+    assert.equal((await idxOf(d)).folders[old], undefined, `${name} has no Biology`);
+  }
+  noDeletes(drive);
+});
