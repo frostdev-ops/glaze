@@ -10,9 +10,9 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
-- Chrome: **Google Calendar sync** in Settings → Sharing → Google Calendar sync. Connect keeps a calendar named Glaze in your Google account in step with Export calendar (.ics) and touches nothing else there. Off until you connect.
-- **Google Drive** in Settings → Writer → Papers (Chrome, Edge, Brave and Firefox; off until you connect). **From Google Drive** opens a file in Documents or attaches it to a Blackboard submission; **Save to Google Drive** saves a document's file, or a paper as a Google Doc; **Sync to Google Drive** keeps your documents and what Back up… covers in a Glaze folder in your Drive, across devices. Glaze reaches only the files it made or you pick.
-- Blackboard: **Open course tabs ahead of time** (Settings → Course tabs). A course tab opens from a page that's already loaded, and starts loading when you press or hover it.
+- Chrome: **Google Calendar sync** in Settings → Sharing. Connect keeps a calendar named Glaze in your Google account in step with Export calendar (.ics), and touches nothing else. Off until you connect.
+- **Google Drive** in Settings → Writer → Papers (Chrome, Edge, Brave and Firefox; off until you connect). **From Google Drive** opens a file in Documents or attaches it to a Blackboard submission; **Save to Google Drive** saves a document's file, or a paper as a Google Doc, and writes a new file beside one edited outside Glaze; **Sync to Google Drive** keeps your documents and what Back up… covers in a Glaze folder, across devices. Glaze reaches only the files it made or you pick. Disconnect is per device.
+- Blackboard: **Open course tabs ahead of time** (Settings → Course tabs). A course tab opens from an already loaded page, and starts loading when you press or hover it.
 - Blackboard: **Keep Course Content ready** (Settings → Course tabs). An item opens over Course Content, and going back is instant, at the same place.
 - Blackboard: **Open Grades, Courses and Activity instantly** (Settings → Course pages → Blackboard Dashboard), from your last visit.
 - Blackboard: **Load course data ahead of time** (Settings → Course tabs). To Do and grades load once a page settles, and a course's content when you point at it.
@@ -26,7 +26,7 @@ All notable changes to Glaze are documented here. The format follows
 - Blackboard: Glaze's bar is there at first paint. To Do, grades and the sidebar appear from saved data once Blackboard confirms who's signed in.
 - Blackboard: fewer requests to Blackboard and less work on slower laptops.
 - A PDF keeps one copy, its latest marked-up version.
-- Saved PDF and slide previews offer **Open in Documents**. A spreadsheet opened without saving is read-only until you save it to Documents.
+- Saved PDF and slide previews offer **Open in Documents**. A spreadsheet opened without saving stays read-only until saved to Documents.
 - Imports show their progress at once and store large files faster.
 
 ### Fixed
