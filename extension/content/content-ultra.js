@@ -723,7 +723,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     // First-paint room, as GZ_NAVBAR.layout words it.
     const b = I.settings.navbar, c = /^\/ultra\/courses\//.test(location.pathname) ? b?.course : 'same';
     if (!globalThis.GZ_NAVBAR_UI?.live()) I.setAttr('data-gz-navbar', !!b?.on && `${c === 'same' ? `${b.place} ${b.rail}` : c === 'icons' ? 'rail icons' : c === 'hide' ? 'none' : 'top'} ${b.style}${c !== 'hide' && b.tabs && I.settings.enhance.tabs ? ' tabs' : ''}`);
-    if (!isPreview && !globalThis.GZ_NAVBAR_UI?.live()) GZ_NAV.first(I.settings, html.getAttribute('data-gz-navbar')); // the bar as last drawn, till it is in
+    if (!isPreview && !globalThis.GZ_NAVBAR_UI?.live()) GZ_NAV.first(I.settings, html.getAttribute('data-gz-navbar'), me);
     I.setAttr('data-gz-nav-detailed', n.detailed);
     for (const [k, v] of Object.entries(GZ_NAV.dimensions(n))) I.setVar(`--gz-nav-${k}`, `${v}px`);
     const src = n.i ? picture : n.u;
