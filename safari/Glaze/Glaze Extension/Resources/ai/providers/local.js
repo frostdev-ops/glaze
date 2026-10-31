@@ -10,15 +10,19 @@
 // role pictures and its projector; Settings' second Download, part 'pictures') is here: caps.images and the catalog's
 // vision say so, and a request with pictures runs on that model (LFM3-VL, stock: its own chat template) in the host, which
 // lets the text model go first; the text model's runs bring it back.
-// cfg: { model: MODEL, tier?, context?, images?, generation? }; images, what the catalog said (the broker sets it). Classic
-// script; module.exports for node.
+// cfg: { model: MODEL, tier?, context?, images?, weights?, generation? }; images, what the catalog said, and weights, the store id
+// of the text model whose window it gave (the broker sets both): a text request runs on that model only. Classic script;
+// module.exports for node.
 var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const P = typeof GZ_AI_PROVIDERS !== 'undefined' ? GZ_AI_PROVIDERS : require('../providers.js');
   const R = typeof GZ_AI_REQUEST !== 'undefined' ? GZ_AI_REQUEST : require('../request.js');
   const FMT = () => (typeof GZ_AI_LOCAL_FORMAT !== 'undefined' ? GZ_AI_LOCAL_FORMAT : require('../local/format.js'));
   const MODEL = 'glaze-local', NAME = 'Glaze on-device AI';
-  // A tier's window (docs/ai-harness.md): every tier reads 16k tokens for now.
-  const CONTEXT = 16000, MAX_TOKENS = 1024;
+  // A stock model's window; TUNED, a Glaze-tuned model's (no `stock`): the one its training data was planned for
+  // (glaze-plans/lfm-tune FORMAT.md, caps.context 4096), which a request then plans for exactly.
+  const CONTEXT = 16000, TUNED = 4096, MAX_TOKENS = 1024;
+  const ID = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+  const windowOf = (m) => (m && !m.stock ? { window: TUNED, inputLimit: TUNED } : { window: CONTEXT, inputLimit: CONTEXT - CONTEXT / 10 });
   const LIMIT = { prepare: 240000 };
   const fail = (category, reason, extra = {}) => Object.assign(new Error(`local: ${reason || category}`), { category, ...(reason && { reason }), ...extra });
   const refuse = (code, message) => Object.assign(new Error(message), { code });
@@ -36,13 +40,14 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const accept = (port) => own().link.accept(port);
 
   const config = (raw) => {
-    if (!R.isObj(raw) || Object.keys(raw).some((k) => !['model', 'tier', 'context', 'images', 'generation'].includes(k))) return null;
+    if (!R.isObj(raw) || Object.keys(raw).some((k) => !['model', 'tier', 'context', 'images', 'weights', 'generation'].includes(k))) return null;
     if (raw.model !== undefined && raw.model !== MODEL) return null;
     if (raw.tier !== undefined && !(Number.isSafeInteger(raw.tier) && raw.tier >= 1 && raw.tier <= 9)) return null;
     if (raw.context !== undefined && !(Number.isSafeInteger(raw.context) && raw.context > 0)) return null;
     if (raw.images !== undefined && typeof raw.images !== 'boolean') return null;
+    if (raw.weights !== undefined && !(typeof raw.weights === 'string' && ID.test(raw.weights))) return null;
     if (raw.generation !== undefined && (typeof raw.generation !== 'string' || !/^[\w-]{1,64}$/.test(raw.generation))) return null;
-    return { model: MODEL, ...(raw.tier && { tier: raw.tier }), ...(raw.context && { context: raw.context }), ...(raw.images !== undefined && { images: raw.images }), ...(raw.generation && { generation: raw.generation }) };
+    return { model: MODEL, ...(raw.tier && { tier: raw.tier }), ...(raw.context && { context: raw.context }), ...(raw.images !== undefined && { images: raw.images }), ...(raw.weights && { weights: raw.weights }), ...(raw.generation && { generation: raw.generation }) };
   };
   const caps = (cfg) => ({ text: true, json: true, stream: true, tools: false, images: cfg.images === true, local: true, context: Math.min(cfg.context || CONTEXT, CONTEXT) });
 
@@ -118,7 +123,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
       if (!pics.ready || preparing.pictures) throw fail('provider-unavailable', 'pictures');
       return { m: pics.model, projector: pics.projector.id, ...FMT().format(req, { dialect: 'chatml', images: true }) };
     }
-    const m = choose(list, cfg);
+    const m = cfg.weights ? tiers(list).find((x) => x.id === cfg.weights) : choose(list, cfg);
     if (!m || m.state !== 'ready') throw fail('provider-unavailable', 'assets');
     return { m, ...FMT().format(req, { dialect: m.stock ? 'chatml' : 'glaze' }) };
   };
@@ -152,11 +157,15 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     try { plan = await ready(req, cfg); } catch { return false; }
     try { return (await own().link.call('warm', { model: plan.m.id, parts: plan.parts.slice(0, plan.stable) }, { signal }))?.ok === true; } catch { return false; }
   };
-  // vision: whether the picture download is here (the broker sets cfg.images from it for a run).
-  const catalog = async () => {
-    let vision = false;
-    try { vision = !preparing.pictures && !!pictures(await models())?.ready; } catch { /* none */ }
-    return { models: [{ id: MODEL, name: NAME, json: true, tools: false, vision, context: { window: CONTEXT, inputLimit: CONTEXT - CONTEXT / 10 } }], source: 'live', at: Date.now() };
+  // vision: whether the picture download is here (the broker sets cfg.images from it for a run). context: the window of the
+  // text model this cfg runs, and weights its id (the broker sets cfg.context and cfg.weights from them); pictures.context,
+  // the picture model's, for a task that only reads pictures.
+  const catalog = async (cfg = {}) => {
+    let list = [];
+    try { list = await models(); } catch { /* none */ }
+    const m = choose(list, cfg), pics = pictures(list), vision = !preparing.pictures && !!pics?.ready;
+    return { models: [{ id: MODEL, name: NAME, json: true, tools: false, vision, context: windowOf(m), ...(m && { weights: m.id }),
+      ...(vision && { pictures: { context: windowOf(pics.model) } }) }], source: 'live', at: Date.now() };
   };
   // A connection changed: the host lets the model go (it loads again at the next run). Starts no host.
   const release = () => { broken = null; const l = own().link; if (l.up) l.call('release').catch(() => {}); };
@@ -171,7 +180,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     return status(cfg);
   };
 
-  const provider = { id: 'local', config, caps, status, prepare, run, warm, catalog, release, remove, accept, MODEL, NAME, CONTEXT, LIMIT,
+  const provider = { id: 'local', config, caps, status, prepare, run, warm, catalog, release, remove, accept, MODEL, NAME, CONTEXT, TUNED, LIMIT,
     _env: (e) => { env = e; preparing.text = preparing.pictures = null; broken = null; } };
   return P.add(provider);
 })();
