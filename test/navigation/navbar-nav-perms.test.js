@@ -80,7 +80,7 @@ test('a replacement hides bar surfaces while keeping the panel host and frame mo
   const c = vm.createContext({ host, globalThis: { GZ_MODS: { navStands: () => stands } },
     menuTo: () => calls.push('menu'), sheetTo: () => calls.push('sheet'), dockTo: () => calls.push('dock'), tip: () => calls.push('tip'),
   });
-  const replace = () => vm.runInContext(`(() => { ${part("    // A mod's nav stands in for the bar", "    host.setAttribute('dir'")} })();`, c);
+  const replace = () => vm.runInContext(`(() => { ${part("    // A mod's nav stands in for the bar", "    attr(host, 'dir'")} })();`, c);
   replace();
   assert.notEqual(host.style.display, 'none', 'panels must remain visible over the replacement');
   assert.equal(host.hasAttribute('data-replaced'), true);
