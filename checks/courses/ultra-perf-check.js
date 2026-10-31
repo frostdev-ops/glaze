@@ -29,6 +29,9 @@ const NEO_MEMORY_MB = 8192;
 // The Neo's panel is 2408×1506; macOS draws it at 2× by default. Sources disagree on the default "looks like" size, so a
 // 1280×800 window's viewport stands in for it.
 const NEO_VIEWPORT = { width: 1280, height: 800 }, NEO_SCALE = 2;
+// PERF_WIDTH: a wider window than the device's, in CSS pixels. At 1280 Glaze's sidebar is a closed drawer beside the synthetic
+// outline (its page starts at 472 px); from about 1560 it is the outline's right column, as on the owner's Mac.
+const WIDTH = Number(process.env.PERF_WIDTH) || 0;
 // Pins this process to 6 cores, so the browsers it launches inherit them; null where taskset is missing (macOS).
 const pinCores = () => { try { execFileSync('taskset', ['-a', '-cp', '0-5', String(process.pid)], { stdio: 'ignore' }); return '0-5'; } catch { return null; } };
 module.exports = { NEO_CHROME_SPEEDOMETER, NEO_CHROME_SOURCE, pinCores, stageSpeed: (...a) => stageSpeed(...a), summarize: (...a) => summarize(...a) };
@@ -121,7 +124,7 @@ async function settle(page, change) {
     }
     mo.disconnect();
     return { elapsed: performance.now() - start, lastMutation: last - start, changes, held, stillHeld: !!document.querySelector('[data-gz-loading]'), longTasks: window.perfLongTasks, nodes: document.body.querySelectorAll('*').length, rows: document.querySelectorAll('.native-row, .content-list-item, .course-element-card').length,
-      ...(window.perfSpeed && { sample: document.querySelector('.content-list-item, .course-element-card, .native-row')?.outerHTML.slice(0, 1200) }),
+      ...(window.perfSpeed && { sample: document.querySelector('.content-list-item, .course-element-card, .native-row')?.outerHTML.slice(0, 1200), sidebar: document.documentElement.getAttribute('data-gz-sidebar') }),
       ...(window.perfSpeed && { window: [change ? start : 0, performance.now()] }) };
   }, { change, body: routeBody(change), fill: DETAILS_FILL });
 }
@@ -338,7 +341,7 @@ if (require.main === module) (async () => {
   if (neo) assert.ok(cpuRate >= 1, 'PERF_DEVICE=neo needs NEO_CPU_RATE (run checks/courses/neo-calibrate.js) or PERF_CPU_RATE');
   const pinned = neo ? pinCores() : null;
   const device = (speed || neo) ? { name: neo ? 'MacBook Neo' : 'runner', cpuRate, rateSource: neo ? (process.env.PERF_CPU_RATE ? 'PERF_CPU_RATE' : 'NEO_CPU_RATE') : null, runnerSpeedometer: RUNNER_SPEEDOMETER,
-    neoChromeSpeedometer: neo ? NEO_CHROME_SPEEDOMETER : null, pinned, browserCores: null, viewport: neo ? { ...NEO_VIEWPORT, scale: NEO_SCALE } : { width: 1280, height: 900, scale: 1 },
+    neoChromeSpeedometer: neo ? NEO_CHROME_SPEEDOMETER : null, pinned, browserCores: null, viewport: { ...(neo ? NEO_VIEWPORT : { width: 1280, height: 900 }), ...(WIDTH && { width: WIDTH }), scale: neo ? NEO_SCALE : 1 },
     memoryBudgetMB: neo ? NEO_MEMORY_MB : null, unthrottled: neo ? ['the extension worker', 'options.html (the driver)'] : [] } : null;
   // PERF_SPEED adds a Glaze-off control (the plain extension with enabled: false) ahead of the two usual passes.
   const passes = speed ? [{ instrumented: false, glaze: 'off' }, { instrumented: false, glaze: 'on' }, { instrumented: true, glaze: 'on' }] : [{ instrumented: false }, { instrumented: true }];
@@ -361,7 +364,7 @@ if (require.main === module) (async () => {
       const profile = path.join(scratch, instrumented ? 'instrumented-profile' : glaze === 'off' ? 'plain-off-profile' : 'plain-profile');
       await require('../../tools/dev/wait-for-browser.js')();
       context = await chromium.launchPersistentContext(profile, {
-        ...chromeLaunch, headless: true, viewport: neo ? NEO_VIEWPORT : { width: 1280, height: 900 }, ...(neo && { deviceScaleFactor: NEO_SCALE }), reducedMotion: 'reduce',
+        ...chromeLaunch, headless: true, viewport: { ...(neo ? NEO_VIEWPORT : { width: 1280, height: 900 }), ...(WIDTH && { width: WIDTH }) }, ...(neo && { deviceScaleFactor: NEO_SCALE }), reducedMotion: 'reduce',
         args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--renderer-process-limit=1', '--disable-background-networking'],
       });
       context.setDefaultTimeout(10000);
