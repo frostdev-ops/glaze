@@ -518,6 +518,10 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         // upload, even when it fits in one request. A staged upload checks again just before its bytes are sent.
         const F = await meta(file);
         if (F.removed || F.trashed || F.appProperties?.glaze !== 'file' || F.appProperties?.key !== h || (Array.isArray(F.parents) && !F.parents.includes(folder))) return sync(key, h, { E: F, folder });
+        // This device's own staged upload, landed in this file while the document changed again (Drive's answer still on its
+        // transfer): Glaze's revision, recorded as its link would have been, never an outside edit or another device's.
+        const landed = going?.dir === 'up' && going.file?.id === file && !!F.headRevisionId && going.file.headRevisionId === F.headRevisionId;
+        if (landed && F.appProperties?.sum === going.tag && unchanged(F)) { d = await putDoc(h, { ...d, fh: F.headRevisionId, fsum: going.tag }, d); fh = F.headRevisionId; }
         if (F.headRevisionId && F.headRevisionId !== fh) {
           if (F.appProperties?.sum === d.fsum || rewritten(F)) return sync(key, h, { E: F, folder });
           if (!(F.appProperties?.sum === sum && unchanged(F))) {
