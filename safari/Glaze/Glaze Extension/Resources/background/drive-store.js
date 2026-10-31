@@ -455,7 +455,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         if (R.id < was.id && !R.trashed) { await S.remove([REC + h, FILE + was.id]); was = null; } else R = undefined;
       }
       area ||= was?.area; key ||= was?.key;
-      if (R === undefined) R = was?.id ? await ctx.D((c) => c.file(was.id)).catch((e) => { if (e.why === 'missing') return { removed: true }; throw e; }) : await lookup(ctx, h);
+      if (R === undefined) R = was?.id ? await ctx.D((c) => c.file(was.id)).catch((e) => { if (e.why === 'missing') return { removed: true }; throw e; }) : ctx.listed ? ctx.known.get(h) || null : await lookup(ctx, h);
       if (R && !R.removed && R.trashed) R = { removed: true }; // a record file moved to Drive's trash: put back from here
       // Unless another device put it back first (Glaze/Data trashed with it, say): that one is met as a first meeting, never
       // a second file made beside it.
@@ -470,7 +470,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         if (got.value !== undefined && await valueOf(got.area, got.key) === undefined) return take(h, got, R, null);
         return one(ctx, h, { area: got.area, key: got.key, R });
       }
-      const def = defOf(area, key), cat = def?.cat, owner = { rec: h, area, key, ...(x.need && { need: true }) };
+      const def = defOf(area, key), cat = def?.cat, owner = { rec: h, area, key, ...(x.need && { need: x.need }) };
       if (!cat) return;
       const value = await valueOf(area, key), lsum = await sumOf(area, key, value), at = st[`${area}:${key}`] || 0;
       if (def.immutable) {
@@ -479,9 +479,13 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         if (value === undefined) {
           // One a note here wanted before Drive had it (was.want: that note's key): fetched now, while that note still uses
           // it; let go once it doesn't.
-          const need = x.need || (!!was?.want && await uses(was.want, key));
+          const noteKey = typeof x.need === 'string' ? x.need : was?.want;
+          const need = !!(x.need || was?.want) && await uses(noteKey, key);
           if (was?.want && !was.id && !need) { await S.remove(REC + h); return; }
-          if (R && !R.removed && need) { const got = await fetchRec(ctx, R, h, owner); if (got.value !== undefined) await take(h, got, R, was, value); }
+          if (R && !R.removed && need) {
+            const got = await fetchRec(ctx, R, h, owner);
+            if (got.value !== undefined && await uses(noteKey, key)) await take(h, got, R, was, value);
+          }
           return;
         }
         if (was && R && !R.removed) return;
@@ -541,10 +545,20 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       if (at && retold > at) return take(h, await fetchRec(ctx, R, h, owner), R, was, value);
       return push(ctx, h, area, key, cat, was, at || now());
     };
-    // Whether the note at noteKey here shows the picture or attachment at fileKey (both Notes record keys).
+    // Whether a note here still shows this picture. A conflict copy may share its id, so losing the note that first wanted
+    // it does not abandon a picture the copy still uses. No reference is kept alive by a transfer's old need flag.
     const uses = async (noteKey, fileKey) => {
-      const v = await valueOf('notes', noteKey).catch(() => undefined);
-      return !!v && L.notes().refs(v.html).has(fileKey.slice(fileKey.lastIndexOf('|') + 1));
+      const shows = async (key) => {
+        const v = await valueOf('notes', key).catch(() => undefined);
+        return !!v && L.notes().refs(v.html).has(fileKey.slice(fileKey.lastIndexOf('|') + 1));
+      };
+      if (noteKey && await shows(noteKey)) return true;
+      const acct = NREC.exec(fileKey)?.[1];
+      if (!acct) return false;
+      for (const key of await env.area('notes').keys()) {
+        if (key !== noteKey && NREC.exec(key)?.[1] === acct && catOf('notes', key) === 'notes' && await shows(key)) return true;
+      }
+      return false;
     };
     // The file another device made for h first, if any (oldest id first), so two devices never keep two.
     const lookup = async (ctx, h) => {
@@ -563,7 +577,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
             // Its file as this pass met it (a full pass's listing, a change page), else looked up.
             const R = ctx.known?.get(fh);
             if (!await recOf(fh) || await valueOf('notes', k) === undefined) {
-              await one(ctx, fh, { area: 'notes', key: k, need: true, ...(R && { R }) });
+              await one(ctx, fh, { area: 'notes', key: k, need: r.key, ...(R && { R }) });
               // Not in Drive yet (its device's push stopped between the note and it, say): wanted by this note, so it is
               // fetched once it comes (one, was.want), not passed over as a picture no note here asked for.
               if (!await recOf(fh) && await valueOf('notes', k) === undefined) await put(fh, { area: 'notes', key: k, cat: 'noteFiles', id: null, want: r.key }, null);
@@ -604,15 +618,19 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         page = r.nextPageToken || null;
       } while (page);
       ctx.known = remote;
-      const seen = new Set();
-      for (const { area, key } of await locals()) {
-        const h = await hk(area, key);
-        seen.add(h);
-        const was = await recOf(h), R = remote.get(h) || null;
-        await each(ctx, h, { area, key, R: !was?.id || (R && R.id <= was.id) ? R : undefined });
-      }
-      for (const [h, R] of [...remote].sort(([, a], [, b]) => (ORDER[a.appProperties?.cat] || 0) - (ORDER[b.appProperties?.cat] || 0))) if (!seen.has(h)) { seen.add(h); await each(ctx, h, { R }); }
-      for (const k of (await S.keys()).filter((x) => x.startsWith(REC))) if (!seen.has(k.slice(REC.length))) await each(ctx, k.slice(REC.length), {});
+      // While this pass goes over what it listed, the listing says what Drive has: nothing is looked up again.
+      ctx.listed = true;
+      try {
+        const seen = new Set();
+        for (const { area, key } of await locals()) {
+          const h = await hk(area, key);
+          seen.add(h);
+          const was = await recOf(h), R = remote.get(h) || null;
+          await each(ctx, h, { area, key, R: !was?.id || (R && R.id <= was.id) ? R : undefined });
+        }
+        for (const [h, R] of [...remote].sort(([, a], [, b]) => (ORDER[a.appProperties?.cat] || 0) - (ORDER[b.appProperties?.cat] || 0))) if (!seen.has(h)) { seen.add(h); await each(ctx, h, { R }); }
+        for (const k of (await S.keys()).filter((x) => x.startsWith(REC))) if (!seen.has(k.slice(REC.length))) await each(ctx, k.slice(REC.length), {});
+      } finally { ctx.listed = false; }
     };
     // A page of Drive's changes: the record files among them.
     const changes = async (list, ctx) => {
@@ -639,7 +657,8 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       ctx.data = await sub(ctx, 'data', 'Data');
       const settled = {}, split = (id) => [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)];
       const rank = (id) => ORDER[catOf(...split(id))] || 0;
-      for (const [id, at] of Object.entries(await stamps()).sort(([a], [b]) => rank(a) - rank(b))) {
+      const due = Object.entries(await stamps()).sort(([a], [b]) => rank(a) - rank(b)), notesChanged = due.some(([id]) => id.startsWith('notes:'));
+      for (const [id, at] of due) {
         const [area, key] = split(id);
         if (!catOf(area, key)) { settled[id] = at; continue; }
         const h = await hk(area, key), was = await recOf(h);
@@ -651,6 +670,12 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         if (!await recOf(h) && await valueOf(area, key).catch(() => null) === undefined) settled[id] = at;
       }
       if (Object.keys(settled).length) await unstamp(settled);
+      // A picture wanted but never come is let go once no note here uses it, looked at after a change to Notes here (a note
+      // deleted, or its last use of the picture edited away), in one read, never on every run.
+      if (notesChanged) {
+        const recs = await S.get((await S.keys()).filter((k) => k.startsWith(REC)));
+        for (const [k, r] of Object.entries(recs)) if (r?.want && !r.id && !await uses(r.want, r.key)) await S.remove(k);
+      }
       await snapshot(ctx);
     };
     // The daily snapshot: Back up…'s zip in Backups, the newest SNAP.keep kept, older ones deleted for good. One larger than a
