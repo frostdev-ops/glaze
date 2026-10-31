@@ -133,3 +133,46 @@ test('what Glaze stores says Sync to Google Drive copies records it otherwise ke
   const data = policy.slice(policy.indexOf('in Glaze/Data, one JSON file per setting'), policy.indexOf('in Glaze/Backups'));
   assert.match(data, /Gradescope's account/);
 });
+
+// The daily snapshot is Back up…'s zip with every Notes account in it (background/background.js snapshot: notesOut per
+// account, handed to pack): the Backups line names Notes rather than sending them elsewhere.
+test('Sync to Google Drive\'s daily Backups zip discloses the Notes it carries', () => {
+  const bg = read('background/background.js');
+  const snap = bg.slice(bg.indexOf('    snapshot: async () => {'), bg.indexOf('  const P = () => (openPapers(), GZ_WRITER_PAPERS), PAPER'));
+  assert.match(snap, /notes\.push\(\{ account, entries: await GZ_BACKUP\.notesOut\(account, notesSend\) \}\)/, 'the code: each Notes account goes in the zip');
+  assert.match(snap, /GZ_BACKUP\.pack\(\{ settings, tasks: \{ tasks, pets \}, local: all, notes,/);
+  const backups = policy.slice(policy.indexOf('in Glaze/Backups, once a day'), policy.indexOf('- Never in Drive:'));
+  assert.match(backups, /zip of[^.]*\bNotes\b/);
+  assert.doesNotMatch(backups, /Notes are in Glaze\/Data/);
+});
+
+// Every storage.local key Sync keeps (documents/drive-sync.js and background/drive-store.js) is named where the policy lists
+// them, and the policy says they stay once Sync is turned off: the worker keeps stamping changes while Sync is off but
+// still bound to its account (background/background.js), and turning it off keeps its state (drive-sync.js set).
+test('Sync to Google Drive\'s storage disclosure names every key it keeps, and that they stay once it is turned off', () => {
+  const keys = new Set();
+  for (const f of ['documents/drive-sync.js', 'background/drive-store.js']) {
+    const line = read(f).split('\n').find((l) => /^ {2}const [A-Z]+ = 'driveSync/.test(l));
+    assert.ok(line, `${f}: its storage keys`);
+    for (const [, k] of line.matchAll(/'(driveSync[\w]*:?)'/g)) keys.add(k);
+  }
+  assert.ok(keys.has('driveSyncWaiting') && keys.has('driveSyncStamps'), [...keys].join());
+  assert.match(read('background/background.js'), /if \(!\(on \|\| typeof st\?\.account === 'string'\) \|\| !googleLib\(\)\.ON\) return;/, 'the code: stamped while off but bound');
+  assert.match(read('documents/drive-sync.js'), /if \(!on\) \{ stopped\+\+; await setState\(\{ on: false, off: true, busy: 0 \}\);/, 'the code: turning it off keeps its state');
+  const stored = policy.slice(policy.indexOf('- **Google Drive** (off until you connect), unavailable'), policy.indexOf('- **Gradescope in To Do**'));
+  for (const k of keys) assert.ok(stored.includes(`\`${k}${k.endsWith(':') ? '…' : ''}\``), `PRIVACY.md names ${k}`);
+  assert.doesNotMatch(stored, /While \*\*Sync to Google Drive\*\* is on, `chrome\.storage\.local` also holds/);
+  assert.match(stored, /Sync to Google Drive\*\* is on, `chrome\.storage\.local` also holds its state[^:]*turned off/);
+});
+
+// Safari signs in with the authorization code flow in its handler (safari/…/GlazeGoogle.swift): the code is exchanged and
+// access tokens renewed at oauth2.googleapis.com/token, not only revoked there.
+test('Safari\'s token requests to oauth2.googleapis.com are disclosed in both privacy texts', () => {
+  const swift = fs.readFileSync(path.join(__dirname, '../../safari/Glaze/Glaze Extension/GlazeGoogle.swift'), 'utf8');
+  assert.match(swift, /static let tokenURL = URL\(string: "https:\/\/oauth2\.googleapis\.com\/token"\)!/);
+  assert.match(swift, /"grant_type": "refresh_token"/);
+  const at = policy.indexOf('- **Google Drive** (off until you connect). Unavailable'), network = policy.slice(at, policy.indexOf('  - **Connect**', at));
+  assert.ok(at > 0 && network.length > 0);
+  assert.match(network, /`https:\/\/oauth2\.googleapis\.com`[^.]*Safari[^.]*access tokens/);
+  assert.match(read('../docs/privacy.md'), /`oauth2\.googleapis\.com`[^)]*Safari[^)]*access tokens/);
+});
