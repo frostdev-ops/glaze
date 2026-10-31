@@ -448,7 +448,8 @@ A cancel ends it at the next encoder stage, prefill chunk or token. A projector 
 `pictures` (Writer: "Picture reading isn’t downloaded."). The text model's next run brings it back.
 
 A run: `ai/local/format.js` writes the request as `[{ special } | { text }]` parts, which the host tokenizes with
-`encodeWith` (page text never makes a control token). `ai/task.js` puts `task: { id, version }` on every request and
+`encodeWith` (page text never makes a control token). `ai/task.js` puts `task: { id, version, call? }` on every request (call: an orchestrated request's kind, as `ask`
+was given it; writer.feedback's scan, decide, explain, summary) and
 `ai/text.js` `fenced: { context, data }`; `ai/request.js` keeps both, no provider sends them, and `estimateTokens` leaves them
 out. Dialects: `glaze` (the fine-tune: `<|startoftext|><|im_start|>system\n<|gz_task:ID|>{system}\n\n{TRUST}[\n\n{schema in
 words}]<|im_end|>\n<|im_start|>user\n<|gz_ctx|>label\ntext<|/gz_ctx|>\n…<|gz_data|>label\ntext<|/gz_data|><|im_end|>\n<|im_start|>
@@ -459,9 +460,10 @@ the assistant header; never think mode). A models.json entry without `stock` (th
 `glaze-plans/lfm-tune/FORMAT-v2.md` id for id: for requests each trained task builds, the ids its `train/format.js`
 `promptV2` and LFM3's tokenizer give, direct and, for a think task, think (fixture: `tools/dev/local-format-fixture.js`).
 
-Think mode (FORMAT-v2): a Glaze-tuned model reasons before it answers for the tasks `THINK` in `ai/providers/local.js`
-gives a budget (256 tokens each: writer.feedback, grading included, writer.review, study.help, agent.tools; every other task
-0), once this computer decodes that model at `THINK_TPS` (40 tokens a second) or faster; any other run answers directly.
+Think mode (FORMAT-v2): a Glaze-tuned model reasons before it answers for the requests `THINK` in `ai/providers/local.js`
+gives a budget (256 tokens each: writer.review, study.help, agent.tools, and writer.feedback's `decide`, `explain` and
+`summary` calls; its `scan` calls 0, their think-mode training too thin to trust; every other task, and a Feedback request
+without a call, 0), once this computer decodes that model at `THINK_TPS` (40 tokens a second) or faster; any other run answers directly.
 The rate is the host's measure of the model's decoding over a run of at least 16 tokens (a run's `rate`, averaged with the
 last), else the ladder's estimate for the model it picked at Download (`tps`); none yet: direct. It is kept per model id in
 `storage.session` `aiLocalRates`, and which of them were measured in `aiLocalMeasured`, so they outlive the worker until the

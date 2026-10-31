@@ -116,12 +116,14 @@ var GZ_AI_REQUEST = globalThis.GZ_AI_REQUEST || (() => {
       if (tools.length) out.tools = tools;
     }
     for (const [k, rule] of Object.entries(OPTS)) if (raw[k] !== undefined) { const v = rule(raw[k]); if (v === null) return null; out[k] = v; }
-    // The task the request is for (ai/task.js), and how many fenced blocks are context and data (ai/text.js request): what
-    // Glaze's own model reads them by (ai/local/format.js). No provider sends either.
+    // The task the request is for (ai/task.js; call, an orchestrated task's kind of request), and how many fenced blocks are
+    // context and data (ai/text.js request): what Glaze's own model reads them by (ai/local/format.js, providers/local.js
+    // THINK). No provider sends either.
     if (raw.task !== undefined) {
       const t = raw.task;
-      if (!isObj(t) || Object.keys(t).some((k) => !['id', 'version'].includes(k)) || typeof t.id !== 'string' || !TASK.test(t.id) || !(Number.isSafeInteger(t.version) && t.version > 0)) return null;
-      out.task = { id: t.id, version: t.version };
+      if (!isObj(t) || Object.keys(t).some((k) => !['id', 'version', 'call'].includes(k)) || typeof t.id !== 'string' || !TASK.test(t.id) || !(Number.isSafeInteger(t.version) && t.version > 0)) return null;
+      if (t.call !== undefined && !(typeof t.call === 'string' && /^[a-z]{1,16}$/.test(t.call))) return null;
+      out.task = { id: t.id, version: t.version, ...(t.call !== undefined && { call: t.call }) };
     }
     if (raw.fenced !== undefined) {
       const f = raw.fenced, n = (v) => Number.isSafeInteger(v) && v >= 0 && v <= LIMIT.parts * 64;
