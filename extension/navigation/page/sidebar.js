@@ -307,12 +307,36 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // (html[data-gz-sb-held], --gz-sb-held).
   const HELD = `detailsHeight:${location.origin}`;
   const cleanHeights = (v) => Object.fromEntries(Object.entries(v && typeof v === 'object' ? v : {}).filter(([c, h]) => /^_\d+_\d+$/.test(c) && Number.isFinite(h) && h > 0 && h < 4000).slice(-40));
-  let heights = {}, held = null;
+  let heights = {}, held = null, heightWrites = Promise.resolve();
   const letGo = (d) => {
     if (!d.want) return;
     d.want = 0;
     html().removeAttribute('data-gz-sb-held');
     html().style.removeProperty('--gz-sb-held');
+  };
+  const rememberHeight = (d) => {
+    const cid = d.cid, h = Math.round(d.size);
+    if (!/^_\d+_\d+$/.test(cid) || !(h > 0 && h < 4000) || h === heights[cid]) return;
+    const { [cid]: _, ...rest } = heights;
+    heights = cleanHeights({ ...rest, [cid]: h });
+    const write = async () => {
+      const current = cleanHeights((await get(HELD))[HELD]);
+      if (h === current[cid]) return;
+      const { [cid]: _, ...rest } = current;
+      const next = cleanHeights({ ...rest, [cid]: h });
+      await new Promise((resolve) => {
+        try { area('local').set({ [HELD]: next }, () => { void chrome.runtime.lastError; resolve(); }); }
+        catch { resolve(); /* reloaded */ }
+      });
+    };
+    // Course tabs share this map. Merge inside the origin's lock, not from a possibly stale onChanged snapshot.
+    heightWrites = heightWrites.then(() => globalThis.navigator?.locks?.request ? navigator.locks.request(`glaze:${HELD}`, write) : write()).catch(() => {});
+  };
+  const flushHeight = () => { if (held) rememberHeight(held); };
+  const pauseHold = () => {
+    if (!held) return;
+    held.paused = true;
+    held.ro.disconnect(); clearTimeout(held.timer); clearTimeout(held.quiet);
   };
   const unhold = () => {
     const d = held;
@@ -321,17 +345,12 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     d.ro.disconnect(); clearTimeout(d.timer); clearTimeout(d.quiet);
     letGo(d);
     // What it took this visit, for the next (a page left before Ultra finished keeps less: never too much room).
-    const h = Math.round(d.size);
-    if (h > 0 && h !== heights[d.cid]) {
-      const { [d.cid]: _, ...rest } = heights;
-      heights = cleanHeights({ ...rest, [d.cid]: h });
-      try { area('local').set({ [HELD]: heights }); } catch { /* reloaded */ }
-    }
+    rememberHeight(d);
   };
   const hold = () => {
     const el = ultra && host && !host.own && has(host.el, 'outline-actions') ? [...host.el.children].find((x) => has(x, 'js-details-and-actions')) || null : null;
     const cid = A.courseId();
-    if (held && held.el === el && held.cid === cid) return;
+    if (held && held.el === el && held.cid === cid) { if (held.paused) held.resume(); return; }
     unhold();
     if (!el || !cid || typeof ResizeObserver !== 'function') return;
     const known = Object.values(heights);
@@ -339,20 +358,28 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     // Its own margin, kept under the room.
     if (d.want) try { d.base = parseFloat(getComputedStyle(el).marginBlockEnd) || 0; } catch { /* no styles to ask */ }
     const fit = (size) => {
-      d.size = size;
+      // Hidden/folded native blocks report zero; keep their last measurement for the next visit.
+      if (size > 0) d.size = size;
+      // First visits and growth beyond the reservation need saving too, without waiting for a sidebar detach.
+      if (size > 0) {
+        clearTimeout(d.quiet);
+        // If Ultra stopped drawing smaller than last time, also give back the unused room.
+        d.quiet = setTimeout(() => { if (held === d && !d.paused) { rememberHeight(d); if (filled(el)) letGo(d); } }, 2000);
+      }
       if (!d.want) return;
       if (size >= d.want - 0.5) return letGo(d);
       setVar('--gz-sb-held', `${d.base + d.want - size}px`);
       html().setAttribute('data-gz-sb-held', '');
-      // Drawn smaller than last time: once Ultra has stopped drawing it, the rest of the room goes.
-      clearTimeout(d.quiet);
-      if (size > 0) d.quiet = setTimeout(() => { if (held === d) letGo(d); }, 2000);
     };
-    d.ro = new ResizeObserver((es) => { if (held === d) fit(es.at(-1)?.borderBoxSize?.[0]?.blockSize ?? el.getBoundingClientRect().height); });
-    d.ro.observe(el);
-    fit(el.getBoundingClientRect().height);
-    // Never drawn at all: not held for ever.
-    if (d.want) d.timer = setTimeout(() => { if (held === d) letGo(d); }, 15000);
+    d.ro = new ResizeObserver((es) => { if (held === d && !d.paused) fit(es.at(-1)?.borderBoxSize?.[0]?.blockSize ?? el.getBoundingClientRect().height); });
+    d.resume = () => {
+      d.paused = false;
+      d.ro.observe(el, { box: 'border-box' });
+      fit(el.getBoundingClientRect().height);
+      // Never drawn at all: not held for ever. Covered documents pause this deadline.
+      if (d.want) d.timer = setTimeout(() => { if (held === d && !d.paused) letGo(d); }, 15000);
+    };
+    d.resume();
   };
 
   // ---- Glaze's parts of the column -----------------------------------------------------------------------------------
@@ -1086,6 +1113,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       closeMenu();
       closeDrawer(false);
       asleep = true;
+      pauseHold();
       mo?.disconnect();
       topRO?.disconnect(); topHeaders = [];
       peekMO?.disconnect(); cancelAnimationFrame(peekFrame); peekFrame = 0;
@@ -1331,6 +1359,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     removeEventListener('resize', onResize);
     watchNativeScroll(null);
     document.removeEventListener('visibilitychange', cover);
+    removeEventListener('pagehide', flushHeight);
     try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ }
     starting = null; rec = null; key = ''; flying = 0; lost = false;
     drawnCount = null;
@@ -1361,7 +1390,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       // Drawn for the account last seen here: once confirmed, another account's dock goes and theirs comes.
       if (ultra) account().then((real) => { if (g === epoch && on && S.key(LMS, location.origin, real) !== key) { seen = null; teardown(); sync(true); } }, () => { if (g === epoch) teardown(); });
       if (covered()) { cover(); return; }
-      if (!active) { addEventListener('resize', onResize); document.addEventListener('visibilitychange', cover); }
+      if (!active) { addEventListener('resize', onResize); document.addEventListener('visibilitychange', cover); if (ultra) addEventListener('pagehide', flushHeight); }
       // Ultra's passes come with every change Angular makes: once there, they are gathered into one a frame.
       if (ultra && active) { cancelAnimationFrame(passFrame); passFrame = requestAnimationFrame(() => { if (on && active && !asleep) place(); }); }
       else place();
