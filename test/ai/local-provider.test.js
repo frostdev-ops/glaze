@@ -255,7 +255,7 @@ test('a run: the request as the fine-tune\'s parts, tokenized in the host, the a
   const all = [...run.prefills[0], ...run.prefills[1]];
   const text = TOK.decode(all, { specials: true });
   assert.ok(text.startsWith('<|startoftext|><|im_start|>system\n<|gz_task:writer.complete|>Finish the sentence.\n\n'), text);
-  assert.ok(text.endsWith('<|im_start|>user\n<|gz_data|>sentence\nThe cell<|/gz_data|><|im_end|>\n<|im_start|>assistant\n'), text);
+  assert.ok(text.endsWith('<|im_start|>user\n<|gz_data|>sentence\nThe cell<|/gz_data|><|im_end|>\n<|im_start|>assistant\n<think></think>'), text);
   assert.ok(!/<<<DATA-/.test(text), 'no random fence');
   assert.deepEqual(r.usage, { input: all.length, output: TOK.encode('Hello world.').length + 1 });
   assert.equal(run.samplers[0].temperature, 0.1, 'the GGUF\'s default temperature where the request names none');

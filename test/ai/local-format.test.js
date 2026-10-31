@@ -1,5 +1,5 @@
 // Glaze's own model's prompt (ai/local/format.js): a harness request (ai/text.js request) as the parts encodeWith reads, in
-// the fine-tune's format (glaze-plans/lfm-tune/FORMAT.md v1; ids: local-format-ids.test.js) and a stock model's chat
+// the fine-tune's format (glaze-plans/lfm-tune/FORMAT-v2.md, direct and think; ids: local-format-ids.test.js) and a stock model's chat
 // template; the fence parsed back exactly; what isn't a request text.request wrote, refused. The real Glaze tasks' first
 // requests all parse.
 const test = require('node:test');
@@ -24,12 +24,18 @@ test('the fine-tune\'s format, part by part: the task token first, the trust rul
     { special: '<|gz_ctx|>' }, { text: 'course\nBiology\n101' }, { special: '<|/gz_ctx|>' }, { text: '\n' },
     { special: '<|gz_ctx|>' }, { text: 'assignment title\nLab' }, { special: '<|/gz_ctx|>' }, { text: '\n' },
     { special: '<|gz_data|>' }, { text: 'instructions\nWrite 300 words.' }, { special: '<|/gz_data|>' },
-    { special: '<|im_end|>' }, { text: '\n' }, { special: '<|im_start|>' }, { text: 'assistant\n' },
+    { special: '<|im_end|>' }, { text: '\n' }, { special: '<|im_start|>' }, { text: 'assistant\n' }, { special: '<think>' }, { special: '</think>' },
   ]);
   assert.equal(stable, 7, 'the system turn, with its line break, is the prefix kept warm');
+  // Think mode: the same prompt up to the assistant header, then <think> and a line break; the host's parts for the close.
+  const t = F.format(built(), { think: true });
+  assert.deepEqual(t.parts, [...parts.slice(0, -2), { special: '<think>' }, { text: '\n' }]);
+  assert.equal(t.stable, stable, 'one warm prefix serves both modes');
+  assert.deepEqual(t.think, { close: [{ text: '\n' }, { special: '</think>' }], after: [] });
+  assert.equal(F.format(built()).think, undefined);
   assert.ok(!JSON.stringify(parts).includes('DATA-00112233aabb'), 'no random fence');
   // Every special a part names is one Glaze's tokenizer has (GLAZE_TOKENS) or LFM3's own.
-  for (const p of parts) if (p.special) assert.ok(K.GLAZE_TOKENS.includes(p.special) || ['<|startoftext|>', '<|im_start|>', '<|im_end|>'].includes(p.special), p.special);
+  for (const p of parts) if (p.special) assert.ok(K.GLAZE_TOKENS.includes(p.special) || ['<|startoftext|>', '<|im_start|>', '<|im_end|>', '<think>', '</think>'].includes(p.special), p.special);
   assert.deepEqual(F.TASKS, K.GLAZE_TOKENS.slice(4).map((t) => t.slice(10, -2)), 'a token for each task, in the tokenizer\'s order');
 });
 
@@ -41,6 +47,7 @@ test('a stock model: its own chat template with the harness\'s messages as writt
     { special: '<|im_start|>' }, { text: `user\n${user}` }, { special: '<|im_end|>' }, { text: '\n' }, { special: '<|im_start|>' }, { text: 'assistant\n' }, { special: '<think>' }, { special: '</think>' }]);
   assert.equal(stable, 5);
   assert.match(user, /<<<DATA-00112233aabb/);
+  assert.throws(() => F.format(req, { dialect: 'chatml', think: true }), (e) => e.code === 'request', 'a stock model never thinks');
 });
 
 test('the fence parses back exactly: cache parts, an amended system turn, a body that spells another fence', () => {

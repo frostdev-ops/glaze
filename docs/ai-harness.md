@@ -452,11 +452,25 @@ A run: `ai/local/format.js` writes the request as `[{ special } | { text }]` par
 `ai/text.js` `fenced: { context, data }`; `ai/request.js` keeps both, no provider sends them, and `estimateTokens` leaves them
 out. Dialects: `glaze` (the fine-tune: `<|startoftext|><|im_start|>system\n<|gz_task:ID|>{system}\n\n{TRUST}[\n\n{schema in
 words}]<|im_end|>\n<|im_start|>user\n<|gz_ctx|>label\ntext<|/gz_ctx|>\n…<|gz_data|>label\ntext<|/gz_data|><|im_end|>\n<|im_start|>
-assistant\n`, no `<think>`), and `chatml` for a `stock: true` model, whose weights never learnt Glaze's tokens (the harness's
-messages as written, the schema in words, `<think></think>` after the assistant header). A models.json entry without
-`stock` (the fine-tune, once published; `tools/vendor/model-manifest.js` without `--stock`) reads `glaze`.
-`test/ai/local-format-ids.test.js` holds `glaze` to `glaze-plans/lfm-tune/FORMAT.md` v1 id for id: for requests each
-trained task builds, the ids its `train/format.js` and LFM3's tokenizer give (fixture: `tools/dev/local-format-fixture.js`).
+assistant\n` and the mode's prefill: direct `<think></think>`, think `<think>\n`), and `chatml` for a `stock: true` model,
+whose weights never learnt Glaze's tokens (the harness's messages as written, the schema in words, `<think></think>` after
+the assistant header; never think mode). A models.json entry without `stock` (the fine-tune, once published;
+`tools/vendor/model-manifest.js` without `--stock`) reads `glaze`. `test/ai/local-format-ids.test.js` holds `glaze` to
+`glaze-plans/lfm-tune/FORMAT-v2.md` id for id: for requests each trained task builds, the ids its `train/format.js`
+`promptV2` and LFM3's tokenizer give, direct and, for a think task, think (fixture: `tools/dev/local-format-fixture.js`).
+
+Think mode (FORMAT-v2): a Glaze-tuned model reasons before it answers for the tasks `THINK` in `ai/providers/local.js`
+gives a budget (256 tokens each: writer.feedback, grading included, writer.review, study.help, agent.tools; every other task
+0), once this computer decodes that model at `THINK_TPS` (40 tokens a second) or faster; any other run answers directly.
+The rate is the host's measure of the model's decoding over a run of at least 16 tokens (a run's `rate`, averaged with the
+last), else the ladder's estimate for the model it picked at Download (`tps`); none yet: direct. It is kept per model id in
+`storage.session` `aiLocalRates`, so it outlives the worker until the browser closes. 40: a full budget then costs at most
+6.4 s, and every machine the ladder measured (79 to 133 tokens a second, Q8_0 to Q4_K_M) thinks at every tier. The host
+decodes the reasoning unconstrained but for its own mask (text tokens and `</think>`: never the end token or another
+control token) until the model writes `</think>` or the budget is spent, where it feeds `\n</think>` itself; then the
+answer, with the JSON grammar as any run. The reasoning is never decoded to text, posted or returned; `maxTokens` counts the
+answer only, and the budget is cut to what the model's trained window leaves beside the prompt, the answer and the close.
+`usage.output` counts both. `test/ai/local-think.test.js` holds it with a stub engine.
 The window a run plans for is its model's: 4,096 tokens for a model without `stock` (FORMAT.md's inference window; the
 training data was made at caps.context 4096), 14,400 (16,000 less a tenth) for a stock one, the picture model included.
 `catalog` says the window of the text model the connection runs (its tier's, else the one here) and that model's store id
@@ -500,7 +514,7 @@ one), `models` the store's list. Each is optional in the host until it ships: no
 grammar, words only; no ladder, the smallest stock model where there is an adapter.
 
 The host's messages (`host.js` header): `prepare { tier?, part? }`, `run { model, parts, stable, schema?, sampler, maxTokens,
-projector?, images? }`, `warm { model, parts }`, `remove { part? }`, `release`, `cancel`; it answers `progress`, `delta`, `done` or `error`, `tick` every 20 s
+projector?, images?, think?: { budget, close, after }, window? }`, `warm { model, parts }`, `remove { part? }`, `release`, `cancel`; it answers `progress`, `delta`, `done` or `error`, `tick` every 20 s
 while anything is in flight, and `idle`.
 
 What needs a real GPU or browser: the engine's numbers and speed, the ladder's tiers, Firefox's event page staying while its

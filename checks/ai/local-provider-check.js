@@ -286,7 +286,7 @@ const records = () => ({
       const load = heard.find((m) => m.type === 'load'), fed = heard.filter((m) => m.type === 'prefill').at(-1)?.text || '';
       assert.deepEqual(load?.opts, ['context', 'signal'], 'Engine.load(gguf, { context, signal })');
       assert.ok(fed.startsWith('<|startoftext|><|im_start|>system\n<|gz_task:writer.complete|>'), fed.slice(0, 200));
-      assert.ok(fed.endsWith('<|im_end|>\n<|im_start|>assistant\n'), fed.slice(-200));
+      assert.ok(fed.endsWith('<|im_end|>\n<|im_start|>assistant\n<think></think>'), fed.slice(-200));
       assert.ok(fed.includes('<|gz_data|>') && !fed.includes('<<<DATA-'), 'the fine-tune\'s fences, not the random one');
       assert.deepEqual(await offscreen(), [`${base}/ai/local/host.html`], 'the host started again for the run');
     });

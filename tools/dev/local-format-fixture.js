@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Writes test/fixtures/ai/local-format/cases.json and vocab.json for test/ai/local-format-ids.test.js: the token ids the
-// Glaze fine-tune was trained to read (glaze-plans/lfm-tune FORMAT.md, made by its train/format.js), for requests Glaze's
+// Glaze fine-tune was trained to read (glaze-plans/lfm-tune FORMAT-v2.md, made by its train/format.js promptV2: each case's
+// direct prompt, and for a think task its think prompt too; the force-close's ids; the think tasks and budget), for requests Glaze's
 // real tasks build from inputs.json, so the test can hold ai/local/format.js and ai/local/tokenizer.js to them id for id
 // without either file or LFM3's 18 MB tokenizer.json at run time.
 // Each run of inputs.json goes through ai/task.js run() with the `local` provider (a Glaze-tuned model, context 4096 as
@@ -34,6 +35,7 @@ const hf = JSON.parse(hfText);
 const full = K.fromHF(hf, { rows: ROWS });
 for (const t of K.GLAZE_TOKENS) full.add(t);
 K.GLAZE_TOKENS.forEach((t, i) => { if (full.id(t) !== TF.FIRST_ID + i) throw new Error(`${t}: id ${full.id(t)}`); });
+if (typeof TF.promptV2 !== 'function' || !Array.isArray(TF.THINK_TASKS) || !Number.isSafeInteger(TF.THINK_BUDGET)) throw new Error('train/format.js is not FORMAT v2 (promptV2, THINK_TASKS, THINK_BUDGET)');
 
 // ---- the requests Glaze's tasks build ---------------------------------------------------------------------------------
 const inputs = JSON.parse(fs.readFileSync(path.join(OUT, 'inputs.json'), 'utf8'));
@@ -76,9 +78,13 @@ const provider = { ...LOCAL, run: (req, cfg, o) => { seen.push(req); return LOCA
 
   // ---- expected ids: train/format.js and LFM3's tokenizer ------------------------------------------------------------
   const strip = (blocks) => blocks.map(({ label, text }) => ({ label, text }));
-  const segments = (c) => TF.runs(TF.prompt({ task: c.task, system: c.system + (c.amend || ''), context: strip(c.context), data: strip(c.data), schema: c.schema || null }));
+  const segments = (c, mode = 'direct') => TF.runs(TF.promptV2({ task: c.task, system: c.system + (c.amend || ''), context: strip(c.context), data: strip(c.data), schema: c.schema || null }, mode));
   const idsOf = (tok, segs) => segs.flatMap((s) => (s.s !== undefined ? [tok.id(s.s)] : [...tok.encode(s.t)]));
-  for (const c of cases) c.ids = idsOf(full, segments(c));
+  const thinks = (c) => TF.THINK_TASKS.includes(c.task);
+  for (const c of cases) { c.ids = idsOf(full, segments(c)); if (thinks(c)) c.think = idsOf(full, segments(c, 'think')); }
+  // FORMAT-v2's force-close: a line break, then </think> (the trained reasoning ends `\n</think>`).
+  const closeSegs = [{ t: '\n' }, { s: TF.THINK[1] }];
+  const close = idsOf(full, closeSegs);
 
   // ---- the tokenizer cut to what these prompts reach --------------------------------------------------------------------
   const m = hf.model, byId = [];
@@ -92,7 +98,7 @@ const provider = { ...LOCAL, run: (req, cfg, o) => { seen.push(req); return LOCA
     keep.add(t);
     for (const i of makes.get(t) || []) { merges.add(i); reach(pairs[i][0]); reach(pairs[i][1]); }
   };
-  for (const c of cases) for (const id of c.ids) if (byId[id] !== undefined) reach(byId[id]);
+  for (const c of cases) for (const id of [...c.ids, ...(c.think || []), ...close]) if (byId[id] !== undefined) reach(byId[id]);
   // Every byte's own token (the tokenizer refuses a vocabulary without them).
   for (let b = 0, n = 0; b < 256; b++) reach(String.fromCharCode((b >= 33 && b <= 126) || (b >= 161 && b <= 172) || b >= 174 ? b : 256 + n++));
   const tokens = {};
@@ -104,22 +110,26 @@ const provider = { ...LOCAL, run: (req, cfg, o) => { seen.push(req); return LOCA
   // The cut tokenizer, as the test loads it, gives the full one's ids for every prompt.
   const cut = require(path.join(ROOT, 'test', 'helpers', 'local-vocab.cjs'))(vocab);
   for (const c of cases) {
-    const got = idsOf(cut, segments(c));
-    if (JSON.stringify(got) !== JSON.stringify(c.ids)) throw new Error(`${c.name}: the cut tokenizer differs`);
+    if (JSON.stringify(idsOf(cut, segments(c))) !== JSON.stringify(c.ids)) throw new Error(`${c.name}: the cut tokenizer differs`);
+    if (c.think && JSON.stringify(idsOf(cut, segments(c, 'think'))) !== JSON.stringify(c.think)) throw new Error(`${c.name}: the cut tokenizer differs in think mode`);
   }
+  if (JSON.stringify(idsOf(cut, closeSegs)) !== JSON.stringify(close)) throw new Error('the cut tokenizer differs on the force-close');
   // And Glaze's own path, for the record (the test is what holds it).
-  let same = 0;
+  let same = 0, n = 0;
   for (const c of cases) {
     const req = X.request({ system: c.system, context: c.context, data: c.data });
     if (c.amend) req.messages[0].content += c.amend;
-    const got = [...cut.encodeWith(F.format(R.clean({ ...req, ...(c.schema && { schema: c.schema }), task: { id: c.task, version: 1 } })).parts)];
-    if (JSON.stringify(got) === JSON.stringify(c.ids)) same++; else console.log(`differs: ${c.name}`);
+    for (const [think, want] of [[false, c.ids], ...(c.think ? [[true, c.think]] : [])]) {
+      n++;
+      const got = [...cut.encodeWith(F.format(R.clean({ ...req, ...(c.schema && { schema: c.schema }), task: { id: c.task, version: 1 } }), { think }).parts)];
+      if (JSON.stringify(got) === JSON.stringify(want)) same++; else console.log(`differs: ${c.name}${think ? ' (think)' : ''}`);
+    }
   }
 
   const commit = (() => { try { return execFileSync('git', ['-C', ROOT, 'rev-parse', '--short=8', 'HEAD'], { encoding: 'utf8' }).trim(); } catch { return null; } })();
   const made = { by: 'node tools/dev/local-format-fixture.js --format <glaze-plans/lfm-tune/train/format.js> --hf <LiquidAI/LFM3-1.7B tokenizer.json>',
     format: `train/format.js sha256 ${sha(fs.readFileSync(path.resolve(FORMAT)))}`, tokenizer: `tokenizer.json sha256 ${sha(hfText)}, ${ROWS} rows, GLAZE_TOKENS added`, glaze: commit };
-  fs.writeFileSync(path.join(OUT, 'cases.json'), `${JSON.stringify({ made, cases }, null, 1)}\n`);
+  fs.writeFileSync(path.join(OUT, 'cases.json'), `${JSON.stringify({ made, think: { tasks: TF.THINK_TASKS, budget: TF.THINK_BUDGET, close }, cases }, null, 1)}\n`);
   fs.writeFileSync(path.join(OUT, 'vocab.json'), `${JSON.stringify({ made, ...vocab })}\n`);
-  console.log(`${cases.length} cases (${[...new Set(cases.map((c) => c.task))].length} tasks), ${Object.keys(tokens).length} tokens, ${vocab.merges.length} merges; Glaze's formatter matches ${same}/${cases.length}`);
+  console.log(`${cases.length} cases (${[...new Set(cases.map((c) => c.task))].length} tasks, ${cases.filter((c) => c.think).length} with think), ${Object.keys(tokens).length} tokens, ${vocab.merges.length} merges; Glaze's formatter matches ${same}/${n}`);
 })().catch((e) => { console.error(e); process.exit(1); });

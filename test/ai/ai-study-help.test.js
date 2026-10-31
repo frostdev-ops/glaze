@@ -180,13 +180,14 @@ for (const [locale, c] of Object.entries(LOCALES)) {
   });
 }
 
-test('Glaze\'s own model reads it in FORMAT.md v1\'s layout, its token placed by id', () => {
+test('Glaze\'s own model reads it in FORMAT-v2\'s layout, its token placed by id, direct or thinking', () => {
   const X = require('../../extension/ai/text.js'), R = require('../../extension/ai/request.js');
   const i = inp({ question: 'Solve 3x + 5 = 20', attempt: '3x = 25', locale: 'fr' });
   const req = R.clean({ ...H.task.build(i, { text: X }), schema: H.OUTPUT, task: { id: 'study.help', version: 1 } });
   const { parts } = F.format(req);
   assert.equal(parts.map((p) => p.special ?? p.text).join(''), `<|startoftext|><|im_start|>system\n<|gz_task:study.help|>${H.system('fr')}\n\n${X.TRUST}\n\n${F.SAY_JSON(H.OUTPUT)}<|im_end|>\n`
-    + '<|im_start|>user\n<|gz_ctx|>subject\nmath<|/gz_ctx|>\n<|gz_data|>question\nSolve 3x + 5 = 20<|/gz_data|>\n<|gz_data|>attempt\n3x = 25<|/gz_data|><|im_end|>\n<|im_start|>assistant\n');
+    + '<|im_start|>user\n<|gz_ctx|>subject\nmath<|/gz_ctx|>\n<|gz_data|>question\nSolve 3x + 5 = 20<|/gz_data|>\n<|gz_data|>attempt\n3x = 25<|/gz_data|><|im_end|>\n<|im_start|>assistant\n<think></think>');
+  assert.deepEqual(F.format(req, { think: true }).parts.slice(-2), [{ special: '<think>' }, { text: '\n' }]);
   const tok = vocab(require('../fixtures/ai/local-format/vocab.json'));
   assert.equal([...tok.encodeWith(parts)].filter((id) => id === 125047).length, 1);
 });

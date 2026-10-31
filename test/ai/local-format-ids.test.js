@@ -1,6 +1,8 @@
-// Glaze's own model reads exactly what its fine-tune was trained on (glaze-plans/lfm-tune FORMAT.md): for a request of each
+// Glaze's own model reads exactly what its fine-tune was trained on (glaze-plans/lfm-tune FORMAT-v2.md): for a request of each
 // task the fine-tune covers, ai/local/format.js and ai/local/tokenizer.js give, id for id, the prompt train/format.js and
-// LFM3's tokenizer give (test/fixtures/ai/local-format, made by tools/dev/local-format-fixture.js, which says how). The
+// LFM3's tokenizer give, in direct mode and, for a think task, in think mode; the host's force-close is the trained one, and
+// the provider thinks for the tasks and budget training did (test/fixtures/ai/local-format, made by
+// tools/dev/local-format-fixture.js, which says how). The
 // real tasks' requests reach the local provider with their own task and their context and data blocks apart; page text
 // never makes a special token; models.json marks which models are stock.
 const test = require('node:test');
@@ -13,7 +15,7 @@ const K = require('../../extension/ai/local/tokenizer.js');
 const STORE = require('../../extension/ai/local/store.js');
 const LOCAL = require('../../extension/ai/providers/local.js');
 const SHIPPED = require('../../extension/ai/local/models.json');
-const { cases } = require('../fixtures/ai/local-format/cases.json');
+const { cases, think: THINK } = require('../fixtures/ai/local-format/cases.json');
 const inputs = require('../fixtures/ai/local-format/inputs.json');
 const tok = require('../helpers/local-vocab.cjs')(require('../fixtures/ai/local-format/vocab.json'));
 for (const f of ['syllabus-read', 'writer-complete', 'writer-review', 'writer-feedback', 'writer-outline', 'writer-requirements', 'writer-cite', 'writer-decide']) require(`../../extension/ai/tasks/${f}.js`);
@@ -30,33 +32,54 @@ const requestOf = (c) => {
   if (c.amend) req.messages[0].content += c.amend;
   return R.clean({ ...req, ...(c.schema && { schema: c.schema }), task: { id: c.task, version: 1 } });
 };
-const idsOf = (c) => [...tok.encodeWith(F.format(requestOf(c)).parts)];
+const idsOf = (c, think = false) => [...tok.encodeWith(F.format(requestOf(c), { think }).parts)];
 const firstDiff = (a, b) => { let i = 0; while (i < a.length && a[i] === b[i]) i++; return i; };
 
-test('every trained task\'s prompt is the fine-tune\'s, id for id, up to and including the assistant header', () => {
+test('every trained task\'s prompt is the fine-tune\'s, id for id, through its mode\'s prefill: direct, and think for a think task', () => {
   assert.deepEqual([...new Set(cases.map((c) => c.task))].sort(), [...TRAINED].sort(), 'a case for each trained task');
+  assert.deepEqual([...new Set(cases.filter((c) => c.think).map((c) => c.task))].sort(), TRAINED.filter((t) => THINK.tasks.includes(t)).sort(), 'think cases for each trained think task');
+  const same = (name, got, want) => {
+    const at = firstDiff(got, want);
+    assert.ok(got.length === want.length && at === got.length,
+      `${name}: first difference at id ${at} of ${want.length}: Glaze ${JSON.stringify(tok.decode(got.slice(Math.max(0, at - 6), at + 10), { specials: true }))}, trained ${JSON.stringify(tok.decode(want.slice(Math.max(0, at - 6), at + 10), { specials: true }))}`);
+  };
   for (const c of cases) {
-    const got = idsOf(c), at = firstDiff(got, c.ids);
-    assert.ok(got.length === c.ids.length && at === got.length,
-      `${c.name}: first difference at id ${at} of ${c.ids.length}: Glaze ${JSON.stringify(tok.decode(got.slice(Math.max(0, at - 6), at + 10), { specials: true }))}, trained ${JSON.stringify(tok.decode(c.ids.slice(Math.max(0, at - 6), at + 10), { specials: true }))}`);
+    same(c.name, idsOf(c), c.ids);
+    if (c.think) same(`${c.name} (think)`, idsOf(c, true), c.think);
   }
-  // The pieces FORMAT.md names, by id: BOS once and first, the task's token right after `system\n`, no <think>, the
-  // prompt ending `<|im_start|>assistant\n`.
+  // The pieces FORMAT-v2 names, by id: BOS once and first, the task's token right after `system\n`, the prompt ending
+  // `<|im_start|>assistant\n` and then <think></think> (direct) or <think>\n (think); both modes alike up to the header.
+  const header = [SPECIAL.start, ...tok.encode('assistant\n')], think = [tok.id('<think>'), tok.id('</think>')];
+  assert.deepEqual(think, [124901, 124902]);
   for (const c of cases) {
     assert.equal(c.ids.filter((id) => id === SPECIAL.bos).length, 1, c.name);
     assert.deepEqual(c.ids.slice(0, 2), [SPECIAL.bos, SPECIAL.start], c.name);
     assert.equal(c.ids[2 + tok.encode('system\n').length], 125037 + K.GLAZE_TOKENS.slice(4).indexOf(`<|gz_task:${c.task}|>`), c.name);
-    assert.ok(!c.ids.includes(tok.id('<think>')) && !c.ids.includes(tok.id('</think>')), c.name);
-    assert.deepEqual(c.ids.slice(-(1 + tok.encode('assistant\n').length)), [SPECIAL.start, ...tok.encode('assistant\n')], c.name);
+    assert.deepEqual(c.ids.slice(-(header.length + 2)), [...header, ...think], c.name);
+    if (!c.think) continue;
+    assert.deepEqual(c.think.slice(-(header.length + 1 + tok.encode('\n').length)), [...header, think[0], ...tok.encode('\n')], c.name);
+    assert.deepEqual(c.think.slice(0, c.ids.length - 2), c.ids.slice(0, -2), `${c.name}: one prompt up to the prefill`);
   }
+});
+
+test('think mode as trained: the host\'s force-close is FORMAT-v2\'s `\\n</think>`, nothing follows the model\'s own </think>, and the provider thinks for training\'s tasks and budget', () => {
+  const c = cases.find((x) => x.think);
+  const { think } = F.format(requestOf(c), { think: true });
+  assert.deepEqual([...tok.encodeWith(think.close)], THINK.close);
+  assert.deepEqual(THINK.close, [...tok.encode('\n'), tok.id('</think>')]);
+  assert.deepEqual(think.after, [], 'the answer right after </think>');
+  assert.deepEqual(Object.keys(LOCAL.THINK).filter((t) => LOCAL.THINK[t] > 0).sort(), [...THINK.tasks].sort());
+  for (const t of THINK.tasks) assert.equal(LOCAL.THINK[t], THINK.budget, t);
+  assert.deepEqual(Object.keys(LOCAL.THINK).sort(), [...F.TASKS].sort(), 'one row for each task');
+  assert.throws(() => F.format(requestOf(c), { dialect: 'chatml', think: true }), /think/, 'a stock model never thinks');
 });
 
 test('page text that spells Glaze\'s tokens, a turn or a fence stays text: specials only where the format puts them', () => {
   const c = cases.find((x) => x.data.some((d) => d.text.includes('<|gz_ctx|>')));
   assert.ok(c, 'a case whose page text spells <|gz_ctx|>');
   const ids = idsOf(c), specials = ids.filter((id) => id >= SPECIAL.added);
-  // bos; system turn: start, task, end; user turn: start, each block's two, end; assistant: start.
-  assert.equal(specials.length, 1 + 3 + 1 + 2 * (c.context.length + c.data.length) + 1 + 1, tok.decode(specials, { specials: true }));
+  // bos; system turn: start, task, end; user turn: start, each block's two, end; assistant: start, <think>, </think>.
+  assert.equal(specials.length, 1 + 3 + 1 + 2 * (c.context.length + c.data.length) + 1 + 1 + 2, tok.decode(specials, { specials: true }));
   for (const name of ['<|gz_ctx|>', '<|/gz_ctx|>', '<|gz_data|>', '<|/gz_data|>', '<|im_end|>', '<|im_start|>', `<|gz_task:writer.feedback|>`]) {
     assert.ok(![...tok.encode(name)].some((id) => id >= SPECIAL.added), `${name} as text is no special`);
   }

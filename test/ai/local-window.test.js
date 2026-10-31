@@ -26,6 +26,9 @@ const segments = (parts) => {
 };
 // A stock model's chat template fences page text with a fresh marker per request.
 const unfenced = (parts) => JSON.parse(JSON.stringify(segments(parts)).replace(/DATA-[0-9a-f]{12}/g, 'DATA-*'));
+// A v1 training prompt as FORMAT-v2 re-renders it for direct mode (train/format.js toDirect): LFM3's empty think block
+// after the assistant header.
+const direct = (prompt) => [...prompt, { s: '<think>' }, { s: '</think>' }];
 const data = (prompt) => prompt.flatMap((s, i) => (s.s === '<|gz_data|>' ? [prompt[i + 1].t] : []));
 const longSyllabus = { text: [W.syllabus.input.text, ...W.syllabi].join('\n\n'), names: [] };
 const IMAGE_ANSWER = JSON.stringify({ description: 'A chart.', requirements: [], complete: true, reason: '', relevance: 'relevant' });
@@ -86,7 +89,7 @@ test('a Glaze-tuned model: writer.review sends a long draft in the parts the fin
       assert.equal(r.model, tuned().id);
       assert.deepEqual(data(segments(r.parts)), data(want.prompt), `${want.id}: its data block`);
       assert.match(data(want.prompt)[0], new RegExp(`^draft part ${i + 1} of 2\\n`));
-      assert.deepEqual(segments(r.parts), want.prompt, `${want.id}: the whole prompt`);
+      assert.deepEqual(segments(r.parts), direct(want.prompt), `${want.id}: the whole prompt`);
       assert.equal(r.maxTokens, want.maxTokens, `${want.id}: maxTokens`);
     });
   } finally { s.done(); }
@@ -97,7 +100,7 @@ test('a Glaze-tuned model: syllabus.read sizes its answer as training did and sp
   try {
     assert.equal((await run('syllabus', 'syllabus.read', W.syllabus.input))?.type, 'end');
     assert.equal(s.runs.length, 1);
-    assert.deepEqual(segments(s.runs[0].parts), W.syllabus.parts[0].prompt);
+    assert.deepEqual(segments(s.runs[0].parts), direct(W.syllabus.parts[0].prompt));
     assert.equal(s.runs[0].maxTokens, W.syllabus.parts[0].maxTokens);
   } finally { s.done(); }
   const want = await at(4096, 'syllabus.read', longSyllabus, [tuned()], [W.syllabus.parts[0].answer, W.syllabus.parts[0].answer, W.syllabus.parts[0].answer]);

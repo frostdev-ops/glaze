@@ -5,13 +5,20 @@
 // (ai/local/offscreen.js), Firefox from the background event page (ai/local/link.js); both pass messages to it as they are.
 //   in  { op: 'config', idle }  { op: 'detach' } (the worker's port went: runs and warm-ups stop, a download goes on)
 //       { id, op: 'prepare', tier?, part? }  { id, op: 'run', model, parts, stable, schema?, sampler, maxTokens, projector?,
-//       images? }  { id, op: 'warm', model, parts }  { id, op: 'remove', part? }  { id, op: 'release' }  { id, op: 'cancel' }
+//       images?, think?, window? }  { id, op: 'warm', model, parts }  { id, op: 'remove', part? }  { id, op: 'release' }
+//       { id, op: 'cancel' }
+//   think { budget, close, after } (parts ending in format.js's think prefill): the model reasons first, unmasked but for
+//   text tokens and </think>, until it writes </think> (then `after` is fed) or `budget` tokens (then `close` is fed, which
+//   ends with </think>); then the answer, with the grammar's mask as any run. The reasoning is never decoded to text, posted
+//   or returned. budget is cut to what `window` (the model's trained window) leaves beside the prompt and maxTokens.
 //   part 'pictures': the picture download (models.json role pictures, LFM3-VL's language model, and the projector it names,
 //   role projector), fetched and removed as one. A run with images loads that model with its projector (vision.js) on the
 //   engine's device, the one model loaded (another is released first); each { image: i } part of its parts is images[i]
 //   ({ mime, data: base64 }), decoded here (env.decode), encoded and fed as prefill embeds between <|vision_start|> and
 //   <|vision_end|>. A projector that isn't here: provider-unavailable, reason 'pictures'.
-//   out { id, type: 'progress', loaded }  { id, type: 'delta', text }  { id, type: 'done', result }
+//   out { id, type: 'progress', loaded }  { id, type: 'delta', text }  { id, type: 'done', result } (a run's: { text, finish,
+//       model, usage: { input, output, thought }, rate? }, rate the decode tokens a second it measured over at least
+//       LIMIT.rate tokens; a text prepare's: { state, model?, reason?, tps? }, tps the ladder's estimate for its pick)
 //       { id, type: 'error', error: { category, reason?, code?, tokens?, context? } }  { type: 'tick' } (every LIMIT.tick
 //       while anything is in flight: Chrome's worker hears it and stays)  { type: 'idle' } (LIMIT.idle with nothing in
 //       flight: the engine is released and the host may go)
@@ -21,7 +28,7 @@
 // The grammar's mask allows the end token only once the JSON is whole, so a run stops at the end token as any other.
 // Classic script; node exports (create), and in a Worker it starts itself.
 var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
-  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000 };
+  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, rate: 16 };
   // LFM3's GGUF sampling defaults (general.sampling.*: top_k 50, temp 0.1) where a request names none.
   const SAMPLER = Object.freeze({ temperature: 0.1, topK: 50 });
   const fail = (category, reason, extra = {}) => Object.assign(new Error(`${category}: ${reason}`), { category, reason, ...extra });
@@ -39,9 +46,9 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
   // env: { store (ai/local/store.js), gguf (gguf.js), tokenizer (tokenizer.js), engine(), grammar(), ladder(), vision?()
   // (each the global or null), gpu() (navigator.gpu or null), bench?() (the ladder's bench kernel's source), decode?({ mime,
   // data }) → { width, height, data: RGBA bytes } (the picture's pixels), kernels? (vision.js's kernels' base URL),
-  // post(message), setTimeout?, clearTimeout? }.
+  // post(message), setTimeout?, clearTimeout?, now? (ms) }.
   const create = (env) => {
-    const later = env.setTimeout || setTimeout, cancelTimer = env.clearTimeout || clearTimeout;
+    const later = env.setTimeout || setTimeout, cancelTimer = env.clearTimeout || clearTimeout, now = env.now || (() => performance.now());
     const ops = new Map(); // id → { control, kind }
     let idleMs = LIMIT.idle, idleTimer = null, tickTimer = null;
     let loaded = null; // { id, key, projector, control, ready, model, tok, eos, base, vision?, warm: [{ ids, snap }] }
@@ -144,6 +151,14 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         return job.schemas.get(key)?.matcher() || null;
       } catch { return null; }
     };
+    // The think phase's mask: every token with text, and </think>; never the end token or another control token.
+    const reasoning = (job, end) => {
+      if (job.reasoning) return job.reasoning;
+      const bytes = job.tok.byteStrings(), mask = new Uint32Array(Math.ceil(job.tok.size / 32));
+      for (let i = 0; i < bytes.length; i++) if (bytes[i] && i !== job.eos) mask[i >>> 5] |= 1 << (i & 31);
+      mask[end >>> 5] |= 1 << (end & 31);
+      return (job.reasoning = mask);
+    };
     const encode = (job, parts) => {
       try { return job.tok.encodeWith(parts); } catch { throw fail('request-rejected', 'unsupported'); }
     };
@@ -163,7 +178,10 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         // pick() decides. Its refusals, as the provider says them.
         const r = await Promise.resolve().then(async () => L.pick({ ...await L.probe({ gpu, ...(env.bench && { source: await env.bench().catch(() => undefined) }) }),
           models: all, stored: all.filter((m) => m.state !== 'missing').map((m) => m.id) })).catch(() => null);
-        if (r && typeof r.id === 'string' && all.some((m) => m.id === r.id)) return { id: r.id };
+        if (r && typeof r.id === 'string' && all.some((m) => m.id === r.id)) {
+          const tps = r.quants?.find?.((q) => q.id === r.id)?.tps;
+          return { id: r.id, ...(Number.isFinite(tps) && tps > 0 && { tps }) };
+        }
         return { reason: r?.reason === 'storage' ? 'quota' : r?.reason === 'no-model' ? 'assets' : 'hardware' };
       }
       const adapter = await Promise.resolve().then(() => gpu.requestAdapter({ powerPreference: 'high-performance' })).catch(() => null);
@@ -202,7 +220,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       if (!p.id) return { state: 'unavailable', reason: p.reason };
       try {
         await env.store.download(p.id, { signal, onProgress: (loaded) => post({ id: m.id, type: 'progress', loaded }) });
-        return { state: 'ready', model: p.id };
+        return { state: 'ready', model: p.id, ...(p.tps && { tps: p.tps }) };
       } catch (e) {
         if (signal.aborted) return { state: 'download' };
         if (e?.reason === 'removed' || e?.reason === 'aborted') return { state: 'download', model: p.id };
@@ -250,6 +268,15 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         const head = encode(job, m.parts.slice(0, m.stable)), { rest, slots } = feed(job, m.parts.slice(m.stable), pictures);
         const input = head.length + rest.length, room = Math.min(model.context || LIMIT.context, LIMIT.context);
         if (input + m.maxTokens > room) throw fail('request-rejected', 'context', { tokens: input, context: room });
+        // Think mode: </think>'s id, the parts the host may feed, and the budget the window leaves.
+        let think = null;
+        if (m.think) {
+          const end = tok.id('</think>');
+          if (end === undefined || !Number.isSafeInteger(m.think.budget) || m.think.budget < 0 || images.length) throw fail('request-rejected', 'unsupported');
+          const window = Number.isSafeInteger(m.window) && m.window > 0 ? Math.min(m.window, room) : room;
+          const close = Uint32Array.from(encode(job, m.think.close)), after = Uint32Array.from(encode(job, m.think.after));
+          think = { end, close, after, budget: Math.max(0, Math.min(m.think.budget, window - input - m.maxTokens - close.length)) };
+        }
         await prefix(job, head, signal);
         // Each picture encoded on the engine's device, fed in place of its placeholders, and its buffer freed at once.
         const encoded = [];
@@ -263,15 +290,33 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
           }
           if (rest.length) await model.prefill(rest, { signal, ...(slots.length && { embeds: slots.map((s, i) => ({ at: s.at, tokens: encoded[i].tokens, buffer: encoded[i].buffer })) }) });
         } finally { for (const r of encoded) { try { r.drop?.(); } catch { /* gone */ } } }
-        const grammar = m.schema ? matcher(job, m.schema) : null;
         const sampler = { ...SAMPLER, ...m.sampler };
+        let spent = 0; // ms in decode, for the rate
+        const step = async (mask) => {
+          if (signal.aborted) throw aborted(signal);
+          const t = now(), id = await model.decode({ sampler, ...(mask && { mask }), signal });
+          spent += now() - t;
+          if (signal.aborted) throw aborted(signal);
+          return id;
+        };
+        // The reasoning: decoded and fed, never turned into text.
+        let thought = 0;
+        if (think) {
+          let closed = false;
+          while (thought < think.budget) {
+            const id = await step(reasoning(job, think.end));
+            thought++;
+            if (id === think.end) { closed = true; break; }
+          }
+          const fed = closed ? think.after : think.close;
+          if (fed.length) await model.prefill(fed, { signal });
+          if (signal.aborted) throw aborted(signal);
+        }
+        const grammar = m.schema ? matcher(job, m.schema) : null;
         const dec = tok.decoder();
         let text = '', n = 0, finish = 'length';
         while (n < m.maxTokens) {
-          if (signal.aborted) throw aborted(signal);
-          const mask = grammar ? grammar.mask() : null;
-          const id = await model.decode({ sampler, ...(mask && { mask }), signal });
-          if (signal.aborted) throw aborted(signal);
+          const id = await step(grammar ? grammar.mask() : null);
           n++;
           if (id === job.eos) { finish = 'stop'; break; }
           grammar?.advance(id);
@@ -280,7 +325,8 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         }
         const tail = dec.end();
         if (tail) { text += tail; post({ id: m.id, type: 'delta', text: tail }); }
-        return { text, finish, model: m.model, usage: { input, output: n } };
+        const rate = thought + n >= LIMIT.rate && spent > 0 ? Math.round((thought + n) / spent * 10000) / 10 : null;
+        return { text, finish, model: m.model, usage: { input, output: thought + n, thought }, ...(rate && { rate }) };
       }, signal);
     };
     const warm = async (m, signal) => {
