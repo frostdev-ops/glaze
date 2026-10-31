@@ -110,7 +110,7 @@ var GZ_FEEDBACK = globalThis.GZ_FEEDBACK || (() => {
     const t = targetOf(e);
     if (!t) return;
     if (!plain(e)) { if (p?.el === t.el) unpress(); return; }
-    // Answered already: Glaze's crossfade gives Ultra the click again inside its transition (content-ultra.js).
+    // Answered already: a second click on the item while its page comes keeps the skeleton the first started.
     if (p?.el === t.el && p.clicked && p.visit && p.visit === v) return;
     if (p?.el !== t.el) press(t); // from the keyboard
     const q = p;

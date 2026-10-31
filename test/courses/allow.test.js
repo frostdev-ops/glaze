@@ -398,7 +398,7 @@ test('content.js tells the worker each page and frame Glaze starts in', () => {
   const js = read('content/content.js');
   const line = js.slice(js.indexOf('if (!site) return;')).split('\n').find((l) => l.includes("sendMessage({ type: 'glaze:here' })"));
   assert.ok(line && /!isPreview/.test(line), 'not from Glaze\'s own preview');
-  assert.doesNotMatch(line, /window\.top === window/, 'a frame starts crossfades of its own (content-ultra.js), so it needs the guard too');
+  assert.doesNotMatch(line, /window\.top === window/, 'each frame Glaze starts in gets the guard too');
 });
 
 test('a tab closing during glaze:here leaves no unhandled icon rejection in the worker', async () => {

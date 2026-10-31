@@ -32,8 +32,9 @@ const size = (f) => fs.statSync(path.join(root, f)).size;
 // 794 on every site: GZ_CTX.parts(), the check for a Look that has parts, the preview hand-over and two more values of
 // defaults.js's bg.kind. Everything else about them loads on demand (looks/lookparts.js, looks/page/lookparts.js).
 // Ultra's stores (D, 2026-10-30, against a6fa9919): content-ultra.js's own identity, memberships and gradebook reads move to
-// courses/ultra.js on demand, 7 bytes fewer on Ultra.
-const FIRST_SCRIPT_BASELINE = { ultra: 225195 + 427 + 525 + 794 - 6, canvas: 201446 + 427 + 545 + 794, moodle: 172222 + 427 + 488 + 794 };
+// courses/ultra.js on demand, 7 bytes fewer on Ultra. Ultra's page-link view transition gone (perf/click-feel, against
+// 11e2a04e): 3397 bytes fewer, its three allowances included, at the same headroom.
+const FIRST_SCRIPT_BASELINE = { ultra: 225195 + 427 + 525 + 794 - 6 - 2632, canvas: 201446 + 427 + 545 + 794, moodle: 172222 + 427 + 488 + 794 };
 // Look parts put small hooks in the first script; the owner approved raising the baseline for them
 // (2026-10-16). One line per package, the bytes it added: the motion package's moment emitter ('glaze:moment', the
 // completion and new-grade call sites) and the hook that loads looks/page/motionx.js when a Look has animations, effects or a
@@ -139,10 +140,6 @@ const LOOK_OFFER = 577;
 // page/consent.js) loads on demand. Measured against a7e4bc9.
 // Review against 28b5425: detected-kind consent gating and default-port early-sheet guard included.
 const LMS_CONSENT = { ultra: 1146, canvas: 898, moodle: 898 };
-// Ultra's own Sign Out (WP-U1; the owner's audit-fix allowance, 2026-10-22): content-ultra.js's page-transition click handler
-// leaves native fragment actions and logout route/query links alone, so course tabs see the trusted click and forget their
-// pictures: 243 bytes on Ultra. Measured against immutable package base c1bdd3e.
-const ULTRA_SIGNOUT = { ultra: 243, canvas: 0, moodle: 0 };
 // LMS request discipline (WP-A1; the owner's audit-fix allowance): content-ultra.js's failure gates for /users/me and each
 // gradebook (a minute, a 401 until the page changes), the hook that reads gradebooks and paged course contents through
 // courses/ultra.js and the site's queue, on-screen cards only, and the check that keeps an incomplete or pre-paging read from
@@ -180,14 +177,10 @@ const CTAB_ONE_BG = 2218;
 // system's light/dark switch to core/motion.js's swap where a feature has loaded it, else applies them at once: 159 bytes on
 // every site. Measured against 27f83a1.
 const UI_SWAP = 159;
-// Ultra's page-link crossfade (content-ultra.js) handles the rejections of a transition the browser aborts (a resize),
-// which reached the page as errors (owner's go-ahead for the Mac session's requests, 2026-10-23): 118 bytes on Ultra.
-// Measured against bf11791.
-const ULTRA_VT_ABORT = { ultra: 118, canvas: 0, moodle: 0 };
 // Chrome rejects a skipped or timed-out crossfade's ready in the page's own world too, where a school's error tracker would
-// collect it (owner-approved raises, 2026-10-19): Ultra's page-link crossfade asks for and tells the page world's guard
-// (content-ultra.js), and content.js asks for that guard from every frame: 367 bytes on Ultra, 23 elsewhere. Against b2d3ed7.
-const VT_GUARD = { ultra: 367, canvas: 23, moodle: 23 };
+// collect it (owner-approved raises, 2026-10-19): content.js asks for the page world's guard from every frame: 23 bytes on
+// every site. Against b2d3ed7.
+const VT_GUARD = { ultra: 23, canvas: 23, moodle: 23 };
 // The Frostdev Look (a named raise, as the owner approved for first scripts on 2026-10-19): its row in GZ_LOOKS (palette, fonts,
 // shape and the topography scene, 90% surfaces) and the two names it adds to GZ_SPEC (the scene, the pointer set) in defaults.js, which
 // every site reads for per-course Looks: 408 bytes on every site. Its scene, parts and pointers load only when worn.
@@ -330,7 +323,7 @@ const FIRST_SCRIPT = { ultra: entry((c) => c.js.includes('content/content-ultra.
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + (site === 'ultra' ? ULTRA_EARLY_ME : 0) + UI_SWAP + ULTRA_VT_ABORT[site] + VT_GUARD[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS + SYLLABUS_DOCS + WRITER + WRITER_SETTINGS + CTAB_PALETTE[site] + LOOK_CATALOG + COURSE_LOOKS_SYNC + BB_PREVIEWS + CANVAS_OPEN + AREA_PATHS[site] + ULTRA_PASSES[site] + CTAB_STANDBY + NAV_FIRST_PAINT[site] + INSTANT_COPIES[site] + ULTRA_STALENESS[site] + NO_SHIFT[site] + FEEDBACK;
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + (site === 'ultra' ? ULTRA_EARLY_ME : 0) + UI_SWAP + VT_GUARD[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS + SYLLABUS_DOCS + WRITER + WRITER_SETTINGS + CTAB_PALETTE[site] + LOOK_CATALOG + COURSE_LOOKS_SYNC + BB_PREVIEWS + CANVAS_OPEN + AREA_PATHS[site] + ULTRA_PASSES[site] + CTAB_STANDBY + NAV_FIRST_PAINT[site] + INSTANT_COPIES[site] + ULTRA_STALENESS[site] + NO_SHIFT[site] + FEEDBACK;
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }

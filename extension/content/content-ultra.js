@@ -462,53 +462,6 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const syncTabs = () => (tabsOn() ? need('navigation/page/coursetabs.js', () => globalThis.GZ_CTABS_LIB && globalThis.GZ_CTABS)
     .then(() => GZ_CTABS.sync(tabsOn()), () => {}) : globalThis.GZ_CTABS?.sync(false));
 
-  // ---- page changes ---------------------------------------------------------------------------
-  // Ultra swaps pages in place, painting its half-built states on the way (and one long script can
-  // stall it for half a second). A click on the main menu or a course's tabs instead holds the old
-  // page in a view transition until the next one exists, then crossfades into it: when the address has
-  // changed and the new page has been still for 120 ms, or after 500 ms at most. A page of its own (a course tab's
-  // frame too), and only while entrances are on. Route containers themselves stay visible as Ultra builds them.
-  if (solo && document.startViewTransition) {
-    const PAGE_LINKS = '#base_tools a, .bb-ui-navigation-list-horizontal a';
-    // Waits on the page, not a poll: each change restarts the 120 ms; once it is still, the address is watched a frame at a time.
-    const settled = (from) => new Promise((done) => {
-      let quiet = 0, frame = 0;
-      const end = () => { mo.disconnect(); clearTimeout(quiet); clearTimeout(cap); cancelAnimationFrame(frame); done(); };
-      const moved = () => { if (location.href !== from) end(); else frame = requestAnimationFrame(moved); };
-      const still = () => { clearTimeout(quiet); cancelAnimationFrame(frame); quiet = setTimeout(moved, 120); };
-      const mo = new MutationObserver(still);
-      mo.observe(document.body, { childList: true, subtree: true });
-      const cap = setTimeout(end, 500);
-      still();
-    });
-    let replaying = false;
-    document.addEventListener('click', (e) => {
-      if (replaying || !I.observer || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-      if (html.getAttribute('data-gz-motion') === 'off' || html.hasAttribute('data-gz-no-enter')) return;
-      const link = e.target instanceof Element && e.target.closest(PAGE_LINKS);
-      // Native fragment actions and Sign Out must keep their trusted click for later listeners (course tabs included).
-      if (!link || link.matches('[aria-current="page"], .active') || /^#|^$|(?:^|\/)logout(?:[/?#]|$)|[?&](?:action|event)=logout(?:[&#]|$)/i.test((link.getAttribute('href') || '').trim())) return;
-      // The page-world guard handles ready too (background/background.js).
-      if ('activeViewTransition' in document && dispatchEvent(new Event('glaze:transition', { cancelable: true }))) return;
-      // Ultra gets the click inside the transition, once the old page has been captured.
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      const from = location.href;
-      const vt = document.startViewTransition(async () => {
-        replaying = true;
-        link.click();
-        replaying = false;
-        await settled(from);
-        // The crossfade is the entrance: the new page's own fade-up would be a second movement. Marked
-        // on the element rather than switched on <html>, so it can't restart when the mark goes.
-        for (const el of document.querySelectorAll('.route-view-container, .panel-wrap')) el.setAttribute('data-gz-held', '');
-      });
-      // A resize can abort it: handled, here and in the page's world.
-      for (const p of [vt.ready, vt.finished]) p.catch(() => {});
-      if ('activeViewTransition' in document) dispatchEvent(new (globalThis.PageRevealEvent || Event)('glaze:transition', { viewTransition: vt }));
-    }, true);
-  }
-
   // ---- course colors and tint ------------------------------------------------------------------
   // A course's own pages carry its color slot on the course section; its item pages carry nothing, so
   // the slot is remembered per course id, on this device (courseSlots, content.js's).
