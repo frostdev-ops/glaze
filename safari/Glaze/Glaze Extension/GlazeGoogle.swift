@@ -2,14 +2,17 @@
 //  GlazeGoogle.swift
 //  Glaze Extension (and both Glaze apps)
 //
-//  Google sign-in for Drive in Safari: background/google.js's native flow. Google's "iOS" OAuth client, the authorization code
+//  Google sign-in for Drive and Calendar sync in Safari: background/google.js's native flow. Google's "iOS" OAuth client, the authorization code
 //  flow with PKCE (S256), no client secret. ASWebAuthenticationSession needs a window to present from (its
 //  presentationContextProvider), and this extension has none, so the sign-in page runs in the Glaze app
 //  (GlazeGoogleSignIn.swift). The code verifier never leaves this extension: the app gets only the state and the challenge
 //  in its sign-in URL, and hands back the URL Google redirected to through a file named by the state in the app group's
 //  container. This extension exchanges the code, keeps the refresh token in its own Keychain items (one per Safari
-//  profile) and mints access tokens, held in this process's memory only. Messages (sendNativeMessage, type google.*):
-//    { type: 'google.status' } → { ok: true, email, sub } (null until connected) | { ok: false, why: 'setup' }
+//  profile and feature) and mints access tokens, held in this process's memory only. Drive and Calendar are separate
+//  grants (feature): each its own sign-in, scope, refresh token and Disconnect; neither reads the other's. Messages
+//  (sendNativeMessage, type google.*, each with feature: 'drive' (the default) or 'calendar'):
+//    { type: 'google.status' } → { ok: true, email, sub (null until connected), pending (a sign-in under way) } |
+//      { ok: false, why: 'setup' }
 //    { type: 'google.connect', hint? } → { ok: true, pending: true, open, opened }: open is the app's sign-in URL; opened,
 //      whether this extension opened it (macOS); if not, the worker opens it in a tab for the student to tap (iOS)
 //    { type: 'google.finish', wait? } → { ok: true, email, sub } | { ok: false, why: 'pending' (ask again) | 'cancel' |
@@ -31,7 +34,8 @@ nonisolated enum GlazeGoogle {
     static let callbackScheme = "com.googleusercontent.apps.1071735898350-h5i3v4abnj2o4btvn270vq9689585eeh"
     static let redirect = callbackScheme + ":/oauth2redirect"
     static let drive = "https://www.googleapis.com/auth/drive.file"
-    static let scopes = [drive, "openid", "email"]
+    static let calendar = "https://www.googleapis.com/auth/calendar.app.created"
+    static let scopes = Feature.drive.scopes
     static let authorize = URL(string: "https://accounts.google.com/o/oauth2/v2/auth")!
     static let tokenURL = URL(string: "https://oauth2.googleapis.com/token")!
     /// The app's sign-in URL: io.frostdev.glaze-google://signin?state=…&challenge=…[&hint=…]
@@ -40,6 +44,16 @@ nonisolated enum GlazeGoogle {
     static let pendingFor: TimeInterval = 600, early: TimeInterval = 60, maxWait: TimeInterval = 20
 
     enum Fail: String, Error { case signin, account, network, revoked, cancel, state, scope, auth, setup, pending, request }
+
+    /// What a grant is for: Drive (drive.file) or Calendar sync (calendar.app.created), each with openid and email for the
+    /// account it binds to. No include_granted_scopes: a grant's tokens carry its own feature's scope alone.
+    enum Feature: String, Sendable {
+        case drive, calendar
+        var scope: String { self == .drive ? GlazeGoogle.drive : GlazeGoogle.calendar }
+        var scopes: [String] { [scope, "openid", "email"] }
+        /// Its Keychain items' and memory's prefix: Drive's keys predate Calendar's.
+        var prefix: String { self == .drive ? "" : rawValue + "." }
+    }
 
     // MARK: PKCE and URLs
 
@@ -67,7 +81,12 @@ nonisolated enum GlazeGoogle {
     static func validEmail(_ s: String) -> Bool { s.utf8.count <= 320 && matches(s, "^[^@\\s]+@[^@\\s]+$") }
     static func validSub(_ s: String) -> Bool { matches(s, "^[A-Za-z0-9_-]{1,255}$") }
 
-    struct SignIn: Equatable, Sendable { let state: String, challenge: String, hint: String? }
+    struct SignIn: Equatable, Sendable {
+        let state: String, challenge: String, hint: String?, feature: Feature
+        init(state: String, challenge: String, hint: String?, feature: Feature = .drive) {
+            self.state = state; self.challenge = challenge; self.hint = hint; self.feature = feature
+        }
+    }
 
     static func signInURL(_ s: SignIn) -> URL {
         var c = URLComponents()
@@ -75,6 +94,7 @@ nonisolated enum GlazeGoogle {
         c.host = "signin"
         c.queryItems = [URLQueryItem(name: "state", value: s.state), URLQueryItem(name: "challenge", value: s.challenge)]
             + (s.hint.map { [URLQueryItem(name: "hint", value: $0)] } ?? [])
+            + (s.feature == .drive ? [] : [URLQueryItem(name: "for", value: s.feature.rawValue)])
         return c.url!
     }
     /// The app's sign-in URL, each value checked; nil for anything else (any page can open this scheme).
@@ -83,17 +103,20 @@ nonisolated enum GlazeGoogle {
               let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems else { return nil }
         var q: [String: String] = [:]
         for i in items {
-            guard ["state", "challenge", "hint"].contains(i.name), q[i.name] == nil, let v = i.value else { return nil }
+            guard ["state", "challenge", "hint", "for"].contains(i.name), q[i.name] == nil, let v = i.value else { return nil }
             q[i.name] = v
         }
         guard let state = q["state"], validState(state), let challenge = q["challenge"], validChallenge(challenge) else { return nil }
         if let hint = q["hint"], !validEmail(hint) { return nil }
-        return SignIn(state: state, challenge: challenge, hint: q["hint"])
+        // Drive's URL names no feature; only Calendar's says for=calendar.
+        var feature = Feature.drive
+        if let f = q["for"] { guard f == Feature.calendar.rawValue else { return nil }; feature = .calendar }
+        return SignIn(state: state, challenge: challenge, hint: q["hint"], feature: feature)
     }
     /// Google's authorization URL for a sign-in, built here from checked values only.
     static func authURL(_ s: SignIn) -> URL {
         var c = URLComponents(url: authorize, resolvingAgainstBaseURL: false)!
-        var q = [("client_id", client), ("redirect_uri", redirect), ("response_type", "code"), ("scope", scopes.joined(separator: " ")),
+        var q = [("client_id", client), ("redirect_uri", redirect), ("response_type", "code"), ("scope", s.feature.scopes.joined(separator: " ")),
                  ("state", s.state), ("code_challenge", s.challenge), ("code_challenge_method", "S256")]
         q.append(s.hint.map { ("login_hint", $0) } ?? ("prompt", "select_account"))
         c.queryItems = q.map { URLQueryItem(name: $0.0, value: $0.1) }
@@ -122,9 +145,9 @@ nonisolated enum GlazeGoogle {
     struct Account: Equatable, Codable, Sendable { let sub: String, email: String }
     struct Grant: Sendable { let access: String, expires: Date, refresh: String?, account: Account? }
 
-    /// The token endpoint's answer (code exchange or refresh). invalid_grant: the refresh token is dead (revoked); other
-    /// refusals: auth; Google unreachable or failing: network.
-    static func grant(status: Int, body: Data, now: Date) throws -> Grant {
+    /// The token endpoint's answer (code exchange or refresh), for the grant of scope. invalid_grant: the refresh token is
+    /// dead (revoked); other refusals: auth; Google unreachable or failing: network.
+    static func grant(status: Int, body: Data, now: Date, scope: String = drive) throws -> Grant {
         let j = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
         guard status == 200 else {
             if (400...499).contains(status) { throw j?["error"] as? String == "invalid_grant" ? Fail.revoked : Fail.auth }
@@ -132,7 +155,7 @@ nonisolated enum GlazeGoogle {
         }
         guard let j, let access = j["access_token"] as? String, !access.isEmpty, access.utf8.count <= 4096,
               (j["token_type"] as? String)?.lowercased() == "bearer" else { throw Fail.auth }
-        guard ((j["scope"] as? String) ?? "").split(separator: " ").contains(Substring(drive)) else { throw Fail.scope }
+        guard ((j["scope"] as? String) ?? "").split(separator: " ").contains(Substring(scope)) else { throw Fail.scope }
         let s = (j["expires_in"] as? NSNumber)?.doubleValue ?? 0
         let refresh = j["refresh_token"] as? String
         if let refresh, refresh.isEmpty || refresh.utf8.count > 4096 { throw Fail.auth }
@@ -162,10 +185,15 @@ nonisolated enum GlazeGoogle {
         struct Saved: Codable, Equatable { let refresh: String, sub: String, email: String }
 
         private let vault: Vault, slot: Slot?, transport: Transport, now: @Sendable () -> Date
+        /// By feature and profile (slot()).
         private var held: [String: (token: String, expires: Date, sub: String)] = [:]
         /// Bumped by Connect, Disconnect and committing a grant: older answers across an await are dropped.
         private var generation: [String: Int] = [:]
-        private func bump(_ profile: String) { generation[profile, default: 0] += 1 }
+        private func bump(_ key: String) { generation[key, default: 0] += 1 }
+        /// A feature's grant on a profile: the key its memory goes by, and its two Keychain items.
+        private func slot(_ f: Feature, _ profile: String) -> String { f.prefix + profile }
+        private func refreshKey(_ f: Feature, _ profile: String) -> String { f.prefix + "refresh." + profile }
+        private func pendingKey(_ f: Feature, _ profile: String) -> String { f.prefix + "pending." + profile }
 
         init(vault: Vault, slot: Slot?, transport: Transport, now: @escaping @Sendable () -> Date = { Date() }) {
             self.vault = vault; self.slot = slot; self.transport = transport; self.now = now
@@ -174,28 +202,31 @@ nonisolated enum GlazeGoogle {
         private func load<T: Decodable>(_ type: T.Type, _ key: String) -> T? { vault.read(key).flatMap { try? JSONDecoder().decode(T.self, from: $0) } }
         private func store<T: Encodable>(_ value: T, _ key: String) -> Bool { (try? JSONEncoder().encode(value)).map { vault.write(key, $0) } ?? false }
 
-        func status(profile: String) -> [String: any Sendable] {
+        func status(profile: String, feature f: Feature = .drive) -> [String: any Sendable] {
             guard slot != nil else { return ["ok": false, "why": Fail.setup.rawValue] }
-            let s = load(Saved.self, "refresh." + profile)
-            return ["ok": true, "email": s?.email ?? NSNull(), "sub": s?.sub ?? NSNull()]
+            let s = load(Saved.self, refreshKey(f, profile))
+            let p = load(Pending.self, pendingKey(f, profile))
+            let pending = p.map { now().timeIntervalSince1970 - $0.at < pendingFor } ?? false
+            return ["ok": true, "email": s?.email ?? NSNull(), "sub": s?.sub ?? NSNull(), "pending": pending]
         }
 
-        func connect(profile: String, hint: String?) async throws -> SignIn {
+        func connect(profile: String, hint: String?, feature f: Feature = .drive) async throws -> SignIn {
             guard let slot else { throw Fail.setup }
             if let hint, !validEmail(hint) { throw Fail.request }
             guard let state = random(), let verifier = random() else { throw Fail.setup }
-            bump(profile)
-            if let old = load(Pending.self, "pending." + profile) { slot.remove(old.state) }
+            bump(self.slot(f, profile))
+            if let old = load(Pending.self, pendingKey(f, profile)) { slot.remove(old.state) }
             slot.sweep(olderThan: now().addingTimeInterval(-pendingFor))
-            guard store(Pending(state: state, verifier: verifier, at: now().timeIntervalSince1970), "pending." + profile) else { throw Fail.setup }
-            return SignIn(state: state, challenge: challenge(verifier), hint: hint)
+            guard store(Pending(state: state, verifier: verifier, at: now().timeIntervalSince1970), pendingKey(f, profile)) else { throw Fail.setup }
+            return SignIn(state: state, challenge: challenge(verifier), hint: hint, feature: f)
         }
 
-        func finish(profile: String, wait: TimeInterval) async throws -> Account {
+        func finish(profile: String, wait: TimeInterval, feature f: Feature = .drive) async throws -> Account {
             guard let slot else { throw Fail.setup }
-            guard let p = load(Pending.self, "pending." + profile) else { throw Fail.signin }
-            let started = generation[profile, default: 0]
-            let drop = { self.vault.remove("pending." + profile); slot.remove(p.state) }
+            let key = self.slot(f, profile)
+            guard let p = load(Pending.self, pendingKey(f, profile)) else { throw Fail.signin }
+            let started = generation[key, default: 0]
+            let drop = { self.vault.remove(self.pendingKey(f, profile)); slot.remove(p.state) }
             guard now().timeIntervalSince1970 - p.at < pendingFor else { drop(); throw Fail.signin }
             let until = now().addingTimeInterval(min(max(wait, 0), maxWait))
             var reply = slot.take(p.state)
@@ -203,7 +234,7 @@ nonisolated enum GlazeGoogle {
                 try? await Task.sleep(nanoseconds: 250_000_000)
                 reply = slot.take(p.state)
             }
-            guard generation[profile, default: 0] == started else { throw Fail.signin }
+            guard generation[key, default: 0] == started else { throw Fail.signin }
             guard let reply else { throw Fail.pending }
             // The sign-in is answered either way: a new one starts with google.connect.
             drop()
@@ -213,47 +244,51 @@ nonisolated enum GlazeGoogle {
             let (status, body) = try await post(tokenURL, ["client_id": client, "code": code, "code_verifier": p.verifier,
                                                            "grant_type": "authorization_code", "redirect_uri": redirect])
             let g: Grant
-            do { g = try grant(status: status, body: body, now: now()) } catch Fail.revoked { throw Fail.auth } // a spent code
-            guard generation[profile, default: 0] == started else { throw Fail.signin }
+            do { g = try grant(status: status, body: body, now: now(), scope: f.scope) } catch Fail.revoked { throw Fail.auth } // a spent code
+            guard generation[key, default: 0] == started else { throw Fail.signin }
             guard let refresh = g.refresh, let account = g.account else { throw Fail.auth }
-            guard store(Saved(refresh: refresh, sub: account.sub, email: account.email), "refresh." + profile) else { throw Fail.setup }
+            guard store(Saved(refresh: refresh, sub: account.sub, email: account.email), refreshKey(f, profile)) else { throw Fail.setup }
             // A refresh can start after Connect but before this exchange finishes. It belongs to the previous grant.
-            bump(profile)
-            held[profile] = (g.access, g.expires, account.sub)
+            bump(key)
+            held[key] = (g.access, g.expires, account.sub)
             return account
         }
 
-        func token(profile: String, sub: String?) async throws -> (token: String, expires: Date) {
-            guard let s = load(Saved.self, "refresh." + profile) else { held[profile] = nil; throw Fail.signin }
+        func token(profile: String, sub: String?, feature f: Feature = .drive) async throws -> (token: String, expires: Date) {
+            let key = slot(f, profile), rk = refreshKey(f, profile)
+            guard let s = load(Saved.self, rk) else { held[key] = nil; throw Fail.signin }
             if let sub, sub != s.sub { throw Fail.account }
-            if let h = held[profile], h.sub == s.sub, h.expires.timeIntervalSince(now()) > early { return (h.token, h.expires) }
-            held[profile] = nil
-            let started = generation[profile, default: 0]
+            if let h = held[key], h.sub == s.sub, h.expires.timeIntervalSince(now()) > early { return (h.token, h.expires) }
+            held[key] = nil
+            let started = generation[key, default: 0]
             let (status, body) = try await post(tokenURL, ["client_id": client, "grant_type": "refresh_token", "refresh_token": s.refresh])
-            guard generation[profile, default: 0] == started,
-                  load(Saved.self, "refresh." + profile) == s else { throw Fail.signin }
+            guard generation[key, default: 0] == started,
+                  load(Saved.self, rk) == s else { throw Fail.signin }
             let g: Grant
-            do { g = try grant(status: status, body: body, now: now()) } catch Fail.revoked { vault.remove("refresh." + profile); throw Fail.revoked }
-            catch Fail.scope { vault.remove("refresh." + profile); throw Fail.revoked } // Drive's access was taken back
+            do { g = try grant(status: status, body: body, now: now(), scope: f.scope) } catch Fail.revoked { vault.remove(rk); throw Fail.revoked }
+            catch Fail.scope { vault.remove(rk); throw Fail.revoked } // the feature's access was taken back
             catch Fail.network { throw Fail.network } catch { throw Fail.auth }
             if let a = g.account, a.sub != s.sub { throw Fail.account }
-            held[profile] = (g.access, g.expires, s.sub)
+            held[key] = (g.access, g.expires, s.sub)
             return (g.access, g.expires)
         }
 
-        func drop(profile: String, token: String) {
-            if held[profile]?.token == token { held[profile] = nil }
+        func drop(profile: String, token: String, feature f: Feature = .drive) {
+            let key = slot(f, profile)
+            if held[key]?.token == token { held[key] = nil }
         }
 
-        /// This device only (owner, 2026-10-31): the refresh token, a sign-in under way and held tokens forgotten here;
-        /// Google's grant stays for the student's other devices. → whether there was a connection
-        func disconnect(profile: String) -> Bool {
-            bump(profile)
-            let had = vault.read("refresh." + profile) != nil
-            if let p = load(Pending.self, "pending." + profile) { slot?.remove(p.state) }
-            vault.remove("refresh." + profile)
-            vault.remove("pending." + profile)
-            held[profile] = nil
+        /// This device only (owner, 2026-10-31): the feature's refresh token, its sign-in under way and held tokens
+        /// forgotten here; Google's grant stays for the student's other devices, and the other feature's grant stays too.
+        /// → whether there was a connection
+        func disconnect(profile: String, feature f: Feature = .drive) -> Bool {
+            let key = slot(f, profile)
+            bump(key)
+            let had = vault.read(refreshKey(f, profile)) != nil
+            if let p = load(Pending.self, pendingKey(f, profile)) { slot?.remove(p.state) }
+            vault.remove(refreshKey(f, profile))
+            vault.remove(pendingKey(f, profile))
+            held[key] = nil
             return had
         }
 
@@ -335,7 +370,7 @@ nonisolated enum GlazeGoogle {
                 }
             }
         }
-        /// The app group's container: macOS, from this process's own entitlement (only the DMG build has one); iOS,
+        /// The app group's container: macOS, from this process's own entitlement (<team>.io.frostdev.Glaze, both Mac builds); iOS,
         /// group.<app's bundle id>. nil without one, or if it can't be written.
         static func shared() -> GroupSlot? {
             #if os(macOS)
@@ -393,6 +428,8 @@ nonisolated enum GlazeGoogle {
     /// A google.* message, its fields checked before anything awaits.
     struct Request: Sendable {
         let type: String, profile: String, hint: String?, sub: String?, token: String?, wait: TimeInterval
+        /// nil: a feature that isn't Drive's or Calendar's (the reply says request).
+        let feature: Feature?
         init?(_ message: Any?, profile: UUID?) {
             guard let m = message as? [String: Any], let type = m["type"] as? String, type.hasPrefix("google.") else { return nil }
             self.type = type
@@ -401,6 +438,7 @@ nonisolated enum GlazeGoogle {
             sub = m["sub"] as? String
             token = m["token"] as? String
             wait = ((m["wait"] as? NSNumber)?.doubleValue ?? 0) / 1000
+            feature = m["feature"] == nil ? .drive : (m["feature"] as? String).flatMap(Feature.init(rawValue:))
         }
     }
 
@@ -409,24 +447,25 @@ nonisolated enum GlazeGoogle {
     /// The reply to r. open: opens the app's sign-in URL where this process can (macOS), answering whether it did.
     static func reply(to r: Request, engine: Engine = engine, open: @Sendable (URL) async -> Bool = { _ in false }) async -> [String: any Sendable] {
         let fail = { (f: Fail) -> [String: any Sendable] in ["ok": false, "why": f.rawValue] }
+        guard let f = r.feature else { return fail(.request) }
         do {
             switch r.type {
-            case "google.status": return await engine.status(profile: r.profile)
+            case "google.status": return await engine.status(profile: r.profile, feature: f)
             case "google.connect":
-                let url = signInURL(try await engine.connect(profile: r.profile, hint: r.hint))
+                let url = signInURL(try await engine.connect(profile: r.profile, hint: r.hint, feature: f))
                 return ["ok": true, "pending": true, "open": url.absoluteString, "opened": await open(url)]
             case "google.finish":
-                let a = try await engine.finish(profile: r.profile, wait: r.wait)
+                let a = try await engine.finish(profile: r.profile, wait: r.wait, feature: f)
                 return ["ok": true, "email": a.email, "sub": a.sub]
             case "google.token":
                 if let sub = r.sub, !validSub(sub) { return fail(.request) }
-                let t = try await engine.token(profile: r.profile, sub: r.sub)
+                let t = try await engine.token(profile: r.profile, sub: r.sub, feature: f)
                 return ["ok": true, "token": t.token, "expiresAt": (t.expires.timeIntervalSince1970 * 1000).rounded()]
             case "google.disconnect":
-                return ["ok": true, "had": await engine.disconnect(profile: r.profile)]
+                return ["ok": true, "had": await engine.disconnect(profile: r.profile, feature: f)]
             case "google.drop":
                 guard let token = r.token, !token.isEmpty, token.utf8.count <= 4096 else { return fail(.request) }
-                await engine.drop(profile: r.profile, token: token)
+                await engine.drop(profile: r.profile, token: token, feature: f)
                 return ["ok": true]
             default: return fail(.request)
             }

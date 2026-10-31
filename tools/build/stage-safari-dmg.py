@@ -110,8 +110,9 @@ extension_entitlements = project / 'Glaze Extension/Release.entitlements'
 with extension_entitlements.open('rb') as f:
     x = plistlib.load(f)
 require(x.get('com.apple.security.app-sandbox') is True, 'extension sandbox entitlement')
+# The checked-in Mac targets carry this group already (Google's sign-in, GlazeGoogle.swift); agent access shares it.
 for path, values in ((entitlements, e), (extension_entitlements, x)):
-    require('com.apple.security.application-groups' not in values, 'app group already set')
+    require(values.get('com.apple.security.application-groups', [app_group]) == [app_group], 'app group')
     values['com.apple.security.application-groups'] = [app_group]
     with path.open('wb') as f:
         plistlib.dump(values, f)

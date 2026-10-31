@@ -1,19 +1,19 @@
-// Google Calendar sync (Chrome; W13): a calendar named "Glaze" in the student's
+// Google Calendar sync (Chrome, and Safari through the Glaze app; W13): a calendar named "Glaze" in the student's
 // Google account, made by Glaze and the only one it touches, kept in step with what Export calendar (.ics) would save
 // (planner/calexport.js, with the same choices). Runs in the background worker (background/background.js 'glaze:gcal'), which gives
-// it Chrome's sign-in; node tests run it against a local mock of the API (scripts/gcal-mock.js).
+// it Chrome's sign-in, or Safari's handler's; node tests run it against a local mock of the API (scripts/gcal-mock.js).
 // Requests go only to www.googleapis.com (the Calendar API), never with cookies, never following a redirect. Disconnect
 // never revokes Google's grant, which Google Drive shares (background/background.js). Classic script; module.exports for node.
 //
-// env: { fetch, token() → an access token from Chrome's cache (never a prompt), drop(token): Chrome forgets a token
-// Google refused, sleep(ms), api: the address (tests point it at the mock), act(send) (optional): the
+// env: { fetch, token() → an access token from Chrome's cache or Safari's handler (never a prompt), drop(token): forgets a
+// token Google refused, sleep(ms), now() (optional; Date.now), api: the address (tests point it at the mock), act(send) (optional): the
 // guard nearest each request, after the token: it reads what the run rests on, checks it, and only then calls send(),
 // which issues the request with nothing awaited in between (or it throws a Fail, stopped) }.
 var GZ_GCAL = globalThis.GZ_GCAL || (() => {
   // The build-time switch, on since 4.0.1 (docs/development.md, Google Calendar sync). Off: Glaze's
   // settings show nothing about Google sync, the worker refuses every operation and runs nothing, and package.sh leaves
   // the manifest's oauth2 client and optional identity permission out of the package. Firefox and Safari leave them out
-  // either way: the sync needs Chrome's getAuthToken.
+  // either way: Firefox has no sync, and Safari signs in through the Glaze app (background/google-config.js native).
   const ON = true;
   const API = 'https://www.googleapis.com/calendar/v3';
   // The one scope: make secondary calendars, and see, change and delete events on those (S3 §2).
@@ -123,8 +123,10 @@ var GZ_GCAL = globalThis.GZ_GCAL || (() => {
   // from Google, for still(), → true once kept (anything else stops the run before Google's changes count as read, so the
   // next run reads them again); mine(): Better To Do's data as it is now, after those (a plan event whose plan isn't
   // there any more is left alone: the page read it before); whole: false, the page's read was partial, so nothing is
-  // deleted for being missing from it. → { wrote, more }: more when writes are left for the next run.
-  const sync = async (env, cal, st, { src, events, from, first, whole }, { signal, save = async () => {}, plans = async () => true, mine = null } = {}) => {
+  // deleted for being missing from it. until: a time (ms) after which no more writes start (Safari, which unloads the
+  // worker about 30 s after the page's message: what's written is saved, the rest is more). → { wrote, more }: more when
+  // writes are left for the next run.
+  const sync = async (env, cal, st, { src, events, from, first, whole }, { signal, save = async () => {}, plans = async () => true, mine = null, until = 0 } = {}) => {
     const call = client(env, signal);
     const path = `/calendars/${encodeURIComponent(cal)}/events`;
     // 1. Google's changes since the cursor. The first run lists every event: none yet, or another device's, deleted ones
@@ -205,6 +207,7 @@ var GZ_GCAL = globalThis.GZ_GCAL || (() => {
     }
     let wrote = 0;
     for (const op of ops.slice(0, WRITES)) {
+      if (until && (env.now || Date.now)() >= until) break;
       if (typeof op === 'string') {
         await call('DELETE', `${path}/${op}`, { ok: [404, 410] });
         // Keep the deletion's provenance across cursor reads and worker restarts, so selecting this source again can
@@ -220,7 +223,7 @@ var GZ_GCAL = globalThis.GZ_GCAL || (() => {
       if (++wrote % 25 === 0) await save();
     }
     await save();
-    return { wrote, more: ops.length > WRITES };
+    return { wrote, more: ops.length > wrote };
   };
 
   // The plan changes from sync() that still hold for one account's Better To Do data (planner/todo.js clean()): each only

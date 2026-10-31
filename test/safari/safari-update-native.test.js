@@ -65,7 +65,7 @@ test('DMG staging is repeatable and isolates Sparkle from the checked-in Mac/iOS
     assert.deepEqual([appEntitlements[GROUPS], appEntitlements['com.apple.security.app-sandbox']], [['22AAZFMTV8.io.frostdev.Glaze'], undefined]);
     assert.deepEqual([extensionEntitlements[GROUPS], extensionEntitlements['com.apple.security.app-sandbox']], [['22AAZFMTV8.io.frostdev.Glaze'], true]);
     for (const f of ['../safari/Glaze/Glaze/Release.entitlements', '../safari/Glaze/Glaze Extension/Release.entitlements']) {
-      assert.equal(plist(path.join(root, f))[GROUPS], undefined, `${f}: the App Store build has no group`);
+      assert.deepEqual(plist(path.join(root, f))[GROUPS], ['22AAZFMTV8.io.frostdev.Glaze'], `${f}: the App Store build shares the same group`);
     }
     // What each staged Mac target compiles typechecks with its own settings (test/helpers/swift-native.cjs), Sparkle as a stand-in.
     if (swift.supported) {
@@ -297,7 +297,7 @@ test('the build-id helper gives a DMG project\'s entitlements the build group, a
   }
 });
 
-test('the DMG release signs its extension and app with Glaze\'s app group, from explicit entitlements; the App Store build has no group or agent URL', () => {
+test('both Mac releases sign their extension and app with Glaze\'s app group, from explicit entitlements; the App Store build has no agent URL', () => {
   const build = fs.readFileSync(path.join(__dirname, '../../tools/build/build-safari.sh'), 'utf8');
   const loop = build.slice(build.indexOf('for bundle in "$sparkle/XPCServices/Downloader.xpc"'), build.indexOf('codesign --verify --deep'));
   assert.match(loop, /"\$extension" \| "\$app"\)\n\s+codesign -d --entitlements - --xml "\$bundle" > "\$stage\/built\.entitlements" 2>\/dev\/null\n\s+python3 tools\/build\/safari-build-ids\.py entitlements "\$stage\/built\.entitlements" "\$stage\/release\.entitlements"\n\s+set -- --entitlements "\$stage\/release\.entitlements" --preserve-metadata=flags ;;/);
@@ -307,5 +307,9 @@ test('the DMG release signs its extension and app with Glaze\'s app group, from 
   assert.match(build, /if entitlements\.get\('com\.apple\.security\.application-groups'\) != \[sys\.argv\[3\] \+ '\.io\.frostdev\.Glaze'\]:/);
   assert.match(build, /python3 - "\$stage\/entitlements\.plist" "\$bundle" "\$team" <<'PY'/);
   const store = fs.readFileSync(path.join(__dirname, '../../tools/build/appstore-safari.sh'), 'utf8');
-  assert.doesNotMatch(store, /stage-safari-dmg|application-groups|glaze-agent/);
+  assert.doesNotMatch(store, /stage-safari-dmg|glaze-agent/);
+  const resign = store.slice(store.indexOf('safari-build-ids.py app'), store.indexOf('ExportOptions.plist'));
+  assert.match(resign, /codesign -d --entitlements - --xml "\$bundle" > "\$stage\/built\.entitlements" 2>\/dev\/null\n\s+python3 tools\/build\/safari-build-ids\.py entitlements "\$stage\/built\.entitlements" "\$stage\/release\.entitlements"\n\s+codesign --force --sign - --entitlements "\$stage\/release\.entitlements" --preserve-metadata=flags "\$bundle"/,
+    'the archive\'s build group goes back to Glaze\'s before the export signs it');
+  assert.doesNotMatch(resign, /--preserve-metadata=[a-z,]*entitlements/);
 });

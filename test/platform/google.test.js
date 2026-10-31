@@ -496,7 +496,7 @@ test('status says where the Picker works, so From Google Drive shows only there:
   }
   const s = harness({ flow: 'native', config: { ...REAL, native: true }, native: async (m) => (m.type === 'google.status' ? { ok: true } : null) });
   s.local.google = { email: 'student@icloud.com', sub: '9', flow: 'native', at: 1 };
-  assert.deepEqual(await s.g.status(), { ok: true, flow: 'native', email: 'student@icloud.com', picker: false }, 'Safari: connected, Save to Drive and Sync work');
+  assert.deepEqual(await s.g.status(), { ok: true, flow: 'native', email: 'student@icloud.com', picker: false, pending: false }, 'Safari: connected, Save to Drive and Sync work');
   assert.deepEqual(await s.g.pick(), { ok: false, why: 'browser' }, 'and Pick refuses there, which reconnecting can\'t change');
 });
 
@@ -514,6 +514,80 @@ test('native Disconnect cancels a pending sign-in even before an account is save
   await h.g.connect();
   assert.equal(h.log.native.filter((m) => m.type === 'google.connect').length, 2, 'the old pending attempt is not resumed');
   assert.deepEqual(h.log.permRemoved, [], 'Safari has no identity permission');
+});
+
+// Safari's handler as a stand-in: it holds the sign-in under way and the refresh token (as GlazeGoogle.swift does, in the
+// Keychain and the app group), outliving any worker. answer(): the app finishing the sign-in.
+const handler = () => {
+  const h = { pending: false, answered: false, refresh: null, minted: 0, exp: 0, sent: [], clock: 1_000_000 };
+  h.native = async (m) => {
+    h.sent.push(m);
+    if (m.feature !== undefined) throw new Error(`Drive's messages name no feature: ${m.feature}`);
+    if (m.type === 'google.status') return { ok: true, email: h.refresh?.email ?? null, sub: h.refresh?.sub ?? null, pending: h.pending };
+    if (m.type === 'google.connect') { h.pending = true; h.answered = false; return { ok: true, pending: true, open: 'io.frostdev.glaze-google://signin?state=s', opened: true }; }
+    if (m.type === 'google.finish') {
+      if (!h.pending) return { ok: false, why: 'signin' };
+      if (!h.answered) return { ok: false, why: 'pending' };
+      h.pending = false; h.refresh = { sub: 'S1', email: 'student@icloud.com' };
+      return { ok: true, ...h.refresh };
+    }
+    if (m.type === 'google.token') {
+      if (!h.refresh) return { ok: false, why: 'signin' };
+      h.minted++; h.exp = h.clock + 3599e3;
+      return { ok: true, token: `native-${h.minted}`, expiresAt: h.exp };
+    }
+    if (m.type === 'google.drop') return { ok: true };
+    if (m.type === 'google.disconnect') { const had = !!h.refresh; h.refresh = null; h.pending = false; return { ok: true, had }; }
+    throw new Error(m.type);
+  };
+  return h;
+};
+// A worker over shared storage and the handler; a new one is a worker Safari loaded again, nothing in memory.
+const nativeWorker = (h, local) => G.create({
+  on: true, config: { ...REAL, native: true }, flow: 'native', storage: { get: async (k) => structuredClone(Object.fromEntries([].concat(k).filter((x) => x in local).map((x) => [x, local[x]]))), set: async (v) => Object.assign(local, structuredClone(v)), remove: async (k) => { for (const x of [].concat(k)) delete local[x]; } },
+  fetch: async (url) => { throw new Error(`unexpected request: ${url}`); }, native: h.native, open: async () => { throw new Error('the Mac handler opens the app'); },
+  manifest: () => ({}), identity: () => undefined, permissions: { contains: async () => false, remove: async () => true }, keep: async () => false, now: () => h.clock,
+});
+
+test('Safari: a sign-in Safari unloaded the worker during finishes from the next worker, never starting another', async () => {
+  const h = handler(), local = {};
+  const a = nativeWorker(h, local);
+  assert.deepEqual(await a.connect(), { ok: false, why: 'pending' });
+  assert.deepEqual(await a.status(), { ok: true, flow: 'native', email: null, picker: false, pending: true }, 'Settings sees the sign-in under way');
+  h.answered = true; // the student finished in the app; Safari had unloaded the worker meanwhile
+  const b = nativeWorker(h, local);
+  assert.deepEqual(await b.finish(), { ok: true, email: 'student@icloud.com' });
+  assert.equal(h.sent.filter((m) => m.type === 'google.connect').length, 1, 'one sign-in, never a second');
+  assert.deepEqual(local.google, { email: 'student@icloud.com', sub: 'S1', flow: 'native', at: h.clock });
+  assert.deepEqual(await b.finish(), { ok: false, why: 'signin' }, 'nothing left to finish: the next Connect starts again');
+  assert.equal((await b.status()).pending, false);
+  assert.equal(await nativeWorker(h, {}).finish().then((r) => r.why), 'signin');
+  const web = harness({ flow: 'web' });
+  assert.deepEqual(await web.g.finish(), { ok: false, why: 'request' }, 'only Safari finishes a sign-in');
+});
+
+test('Safari: a token is held until a minute before it expires, and after Safari unloads the worker the handler mints one with no sign-in', async () => {
+  const h = handler(), local = {};
+  const a = nativeWorker(h, local);
+  await a.connect();
+  h.answered = true;
+  assert.equal((await a.finish()).ok, true);
+  const tokens = () => h.sent.filter((m) => m.type === 'google.token');
+  assert.equal(await a.token(), 'native-1');
+  assert.equal(await a.token(), 'native-1');
+  assert.equal(tokens().length, 1, 'a run\'s requests share the held token');
+  assert.deepEqual(tokens()[0], { type: 'google.token', sub: 'S1' }, 'bound to the connected account');
+  h.clock = h.exp - 60e3; // its last minute
+  assert.equal(await a.token(), 'native-2');
+  assert.equal(tokens().length, 2);
+  const b = nativeWorker(h, local); // Safari unloaded the worker and loaded it again
+  assert.equal(await b.token(), 'native-3');
+  assert.equal(h.sent.filter((m) => m.type === 'google.connect').length, 1, 'no sign-in again');
+  await b.drop('native-3');
+  assert.equal(await b.token(), 'native-4', 'a refused token is never handed out again');
+  assert.deepEqual(await b.disconnect(), { ok: true });
+  await assert.rejects(b.token(), (e) => e.why === 'connect');
+  assert.equal(tokens().length, 4, 'Disconnect forgets the held token: nothing asked once disconnected');
 });
 
 test('a stale native revoked response cannot erase a newer connection', async () => {
@@ -668,7 +742,9 @@ test('pick: frostdev.io first, its GitHub Pages copy when it doesn\'t load, the 
 });
 
 // ---- Settings' Google Drive rows (settings/options.js), run in a VM with the worker and storage stubbed ----
-const settings = async ({ email = 'student@school.edu', sync = {}, connect = { ok: true, email }, firefox = false, large } = {}) => {
+// safari: Settings in Safari (the worker's native flow); finish: the worker's answers to each finish in turn; pending: a
+// sign-in under way in the app as Settings opens.
+const settings = async ({ email = 'student@school.edu', sync = {}, connect = { ok: true, email }, firefox = false, large, safari = false, finish = [], pending = false } = {}) => {
   const vm = require('node:vm');
   const src = fs.readFileSync(path.join(__dirname, '../../extension/settings/options.js'), 'utf8');
   const block = src.slice(src.indexOf('  // ---- Google Drive (background/google.js'), src.indexOf('  // Another surface changed something'));
@@ -686,8 +762,9 @@ const settings = async ({ email = 'student@school.edu', sync = {}, connect = { o
       lastError: undefined,
       sendMessage: (m, reply) => {
         sent.push(structuredClone(m));
-        const r = m.type === 'glaze:google' ? (m.op === 'status' ? { ok: true, flow: firefox ? 'web' : 'chrome', email: local.google?.email || null } : m.op === 'connect' ? connect : { ok: true }) : { ok: true };
-        if (m.type === 'glaze:google' && m.op === 'connect' && r.ok) local.google = { email: r.email };
+        const r = m.type === 'glaze:google' ? (m.op === 'status' ? { ok: true, flow: safari ? 'native' : firefox ? 'web' : 'chrome', email: local.google?.email || null, ...(safari && { picker: false, pending: !local.google && pending }) }
+          : m.op === 'connect' ? connect : m.op === 'finish' ? finish.shift() || { ok: false, why: 'signin' } : { ok: true }) : { ok: true };
+        if (m.type === 'glaze:google' && (m.op === 'connect' || m.op === 'finish') && r.ok) local.google = { email: r.email };
         if (m.type === 'glaze:google' && m.op === 'disconnect') delete local.google;
         setTimeout(() => reply(r), 0);
       },
@@ -696,7 +773,7 @@ const settings = async ({ email = 'student@school.edu', sync = {}, connect = { o
     permissions: { request: async (p) => { asked.push(structuredClone(p)); if (firefox) throw new TypeError('Type error for parameter permissions'); return true; } },
     storage: { local: { get: async (k) => Object.fromEntries([].concat(k).map((x) => [x, structuredClone(local[x])])) }, onChanged: { addListener: (f) => heard.push(f) } },
   };
-  chrome.runtime.getURL = (p = '') => `${firefox ? 'moz-extension://6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b' : 'chrome-extension://abcdefghijklmnopabcdefghijklmnop'}/${p}`;
+  chrome.runtime.getURL = (p = '') => `${safari ? 'safari-web-extension://6F1C2A3B-4D5E-4F60-8A7B-9C0D1E2F3A4B' : firefox ? 'moz-extension://6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b' : 'chrome-extension://abcdefghijklmnopabcdefghijklmnop'}/${p}`;
   if (email) local.google = { email };
   vm.runInNewContext(block, {
     $: (s) => els[s], chrome, t: (s, v = {}) => s.replace(/\{(\w+)\}/g, (m, k) => (k in v ? String(v[k]) : m)), hint: (text, bad = false) => hints.push([text, bad]), GZ_SITE: {}, GZ_I18N: { locale: () => 'en', ui: () => 'en' }, Intl, Date,
@@ -748,6 +825,26 @@ test('Settings: Disconnect says only that it disconnected, for Drive and Calenda
   const src = fs.readFileSync(path.join(__dirname, '../../extension/settings/options.js'), 'utf8');
   assert.doesNotMatch(src, /myaccount\.google\.com|revoked/);
   assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '../../extension/options.html'), 'utf8'), /asks Google to remove/);
+});
+
+test('Settings in Safari: Connect asks nothing of the browser and waits on the app through finish; a sign-in still under way as Settings opens finishes without a click', async () => {
+  const A = 'student@icloud.com';
+  const s = await settings({ safari: true, email: null, connect: { ok: false, why: 'pending' }, finish: [{ ok: false, why: 'pending' }, { ok: true, email: A }] });
+  await s.click('#gdrive-connect');
+  assert.deepEqual(s.asked, [], 'no identity permission in Safari');
+  assert.deepEqual(s.sent.filter((m) => m.type === 'glaze:google').map((m) => m.op), ['status', 'connect', 'finish', 'finish', 'status'], 'one sign-in, then its answer');
+  assert.equal(s.els['#gdrive-who'].textContent, A);
+  assert.deepEqual(s.hints, [['Connected.', false]]);
+  const back = await settings({ safari: true, email: null, pending: true, finish: [{ ok: false, why: 'pending' }, { ok: true, email: A }] });
+  assert.deepEqual(back.sent.filter((m) => m.type === 'glaze:google').map((m) => m.op), ['status', 'finish', 'finish', 'status'], 'finished from the app\'s answer, no Connect');
+  assert.equal(back.els['#gdrive-who'].textContent, A);
+  const gone = await settings({ safari: true, email: null, pending: true, finish: [{ ok: false, why: 'signin' }] });
+  assert.deepEqual([gone.hints, gone.els['#gdrive-who'].textContent], [[], ''], 'an expired sign-in says nothing');
+  const late = await settings({ safari: true, email: null, connect: { ok: false, why: 'pending' }, finish: [{ ok: false, why: 'signin' }] });
+  await late.click('#gdrive-connect');
+  assert.deepEqual(late.hints, [["Google Drive didn't connect. Try again in a moment.", true]], 'never "sign in to the browser" in Safari');
+  const none = await settings({ safari: true, email: null });
+  assert.deepEqual(none.sent.map((m) => m.op), ['status'], 'nothing under way: nothing asked');
 });
 
 test('Settings: a Connect Chrome could not sign in for says to sign in to the browser; a cancel says nothing', async () => {

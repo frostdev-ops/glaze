@@ -13,9 +13,12 @@
 //           nothing else), its state checked (background/oauth.js reply), renewed silently (prompt=none, interactive:false).
 //   native  Safari: the extension's handler (safari/Glaze/Glaze Extension/GlazeGoogle.swift) holds the refresh token in the
 //           Keychain and mints tokens; the sign-in page runs in the Glaze app, opened by the handler (macOS) or by a tab
-//           the student taps (iOS, env.open). Connect answers why: 'pending' until the app has answered; Settings asks again.
-// API: status(), connect() (from a click), token({ interactive }), drop(token) (one Google refused), account(), disconnect(),
-// pick(). The Picker (pick): Google's Picker on Glaze's picker page, frostdev.io's, else its GitHub Pages copy, opened with
+//           the student taps (iOS, env.open). Connect answers why: 'pending' until the app has answered; Settings then asks
+//           finish() until it has. The handler holds the sign-in under way, not this worker, so one Safari unloaded the
+//           worker during (the app's page, or iOS switching apps) finishes from the next message (nativeGrant). Calendar
+//           sync signs in the same way with a grant of its own (feature 'calendar': background/background.js).
+// API: status(), connect() (from a click), finish() (Safari: the sign-in under way), token({ interactive }), drop(token) (one
+// Google refused), account(), disconnect(), pick(). The Picker (pick): Google's Picker on Glaze's picker page, frostdev.io's, else its GitHub Pages copy, opened with
 // launchWebAuthFlow, the access token and a state in the fragment; the page comes back to the redirect URL with the state and
 // the files picked (picked()). Requests carry no cookies, follow no redirect and skip the cache.
 // env: { config, flow, firefox, identity() (chrome.identity, which exists once the permission is held), permissions, manifest(),
@@ -52,6 +55,49 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
     client_id: c.web, response_type: 'token', redirect_uri: redirect, scope: c.scopes.join(' '), state,
     ...(prompt && { prompt }), ...(hint && { login_hint: hint }),
   })}`;
+  // Safari's handler for one feature's grant ('drive', or 'calendar' for Calendar sync), Drive's and Calendar's alike.
+  // env: { native(message) (sendNativeMessage), open(url) (iOS: the worker's tab), now() }. Nothing about a sign-in is held
+  // here: the handler keeps it (ten minutes), so start() and finish() work across workers. The access token from mint() is
+  // held in this worker's memory only, until a minute before Google's expiry, so a run's requests don't each ask the
+  // handler (whose process Safari may have ended, and which would ask Google again). → { status, start, finish, mint,
+  // drop, forget, disconnect }; mint(sub) → the handler's answer ({ ok, token } or { ok: false, why }).
+  const nativeGrant = (env, feature) => {
+    const now = env.now || Date.now;
+    const ask = (m) => Promise.resolve().then(() => env.native(feature === 'drive' ? m : { ...m, feature })).catch(() => null);
+    let held = null, epoch = 0;
+    const status = () => ask({ type: 'google.status' });
+    // A new sign-in: the app's page opened (macOS: by the handler; iOS: a tab the student taps).
+    const start = async () => {
+      epoch++; held = null;
+      const r = await ask({ type: 'google.connect' });
+      if (r?.ok !== true || typeof r.open !== 'string') throw new Fail(r?.why === 'setup' ? 'setup' : 'auth');
+      if (!r.opened) await Promise.resolve().then(() => env.open(r.open)).catch(() => { throw new Fail('auth'); });
+    };
+    // The sign-in under way, waited on up to wait ms: → { email, sub }, or Fail 'pending' (ask again), 'signin' (none under
+    // way, or it expired), 'cancel', 'state', 'scope', 'network' or 'auth'.
+    const finish = async (wait = 15000) => {
+      const r = await ask({ type: 'google.finish', wait });
+      if (r?.why === 'pending') throw new Fail('pending');
+      if (r?.ok !== true || typeof r.email !== 'string' || typeof r.sub !== 'string') throw new Fail(['cancel', 'state', 'scope', 'network', 'signin'].includes(r?.why) ? r.why : 'auth');
+      epoch++; held = null;
+      return { email: r.email, sub: r.sub };
+    };
+    const mint = async (sub) => {
+      if (held && held.sub === sub && held.exp - EARLY > now()) return { ok: true, token: held.token };
+      const at = epoch;
+      const r = await ask({ type: 'google.token', ...(sub && { sub }) });
+      if (r?.ok === true && typeof r.token === 'string' && r.token && at === epoch) {
+        const exp = Number(r.expiresAt);
+        held = { token: r.token, sub, exp: exp > now() ? exp : now() + EARLY + 60e3 };
+      }
+      return r;
+    };
+    const forget = () => { epoch++; held = null; };
+    const drop = async (token) => { if (held?.token === token) held = null; await ask({ type: 'google.drop', token }); };
+    const disconnect = async () => { forget(); return ask({ type: 'google.disconnect' }); };
+    return { status, start, finish, mint, drop, forget, disconnect };
+  };
+
   const pickerUrl = (base, { token, state, redirect, key, appId }) => `${base}#${new URLSearchParams({ access_token: token, state, redirect_uri: redirect, key, app_id: appId })}`;
 
   // The implicit flow's answer, from the fragment only: our state, a bearer token and the Drive scope (the consent screen
@@ -106,29 +152,21 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
     // A sign-in that failed while the browser knows it is offline: 'network', never a reason to connect again.
     const offline = () => globalThis.navigator?.onLine === false;
 
-    // Safari's handler: one google.* message, its answer or null.
-    const native = (message) => Promise.resolve().then(() => env.native(message)).catch(() => null);
-    let started = false; // a native sign-in under way, this worker's memory only
-    const nativeConnect = async () => {
-      if (!started) {
-        const r = await native({ type: 'google.connect' });
-        if (r?.ok !== true || typeof r.open !== 'string') throw new Fail(r?.why === 'setup' ? 'setup' : 'auth');
-        if (!r.opened) await Promise.resolve().then(() => env.open(r.open)).catch(() => { throw new Fail('auth'); });
-        started = true;
-      }
-      const r = await native({ type: 'google.finish', wait: 15000 });
-      if (r?.why === 'pending') throw new Fail('pending');
-      started = false;
-      if (r?.ok !== true || typeof r.email !== 'string' || typeof r.sub !== 'string') throw new Fail(['cancel', 'state', 'scope', 'network'].includes(r?.why) ? r.why : 'auth');
-      return { email: r.email, sub: r.sub };
-    };
+    // Safari's handler (nativeGrant), Drive's grant.
+    const drive = nativeGrant(env, 'drive');
     const nativeToken = async (g) => {
       const at = gen;
-      const r = await native({ type: 'google.token', sub: g.sub });
+      const r = await drive.mint(g.sub);
       current(at);
       if (r?.ok === true && typeof r.token === 'string' && r.token) return r.token;
       if (r?.why === 'revoked') await env.storage.remove('google');
       throw new Fail(r?.why === 'account' ? 'account' : r?.why === 'revoked' || r?.why === 'signin' ? 'connect' : 'network');
+    };
+    // The account a native sign-in connected, kept as the other flows keep theirs.
+    const nativeSave = async ({ email, sub }) => {
+      gen++;
+      await env.storage.set({ google: { email, sub, flow: 'native', at: now() } });
+      return { ok: true, email };
     };
     const launch = async (url, interactive) => {
       const i = id();
@@ -224,18 +262,19 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       const flow = flowNow();
       if (flow === 'native' && c().native !== true) return { ok: false, why: 'browser' };
       if (!usable(flow)) return { ok: false, why: 'setup' };
-      if (flow === 'native' && (await native({ type: 'google.status' }))?.ok !== true) return { ok: false, why: 'setup' }; // no app group
-      return { ok: true, flow, email: (await saved())?.email || null, picker: flow !== 'native' && pickable(c()) };
+      if (flow !== 'native') return { ok: true, flow, email: (await saved())?.email || null, picker: pickable(c()) };
+      const h = await drive.status();
+      if (h?.ok !== true) return { ok: false, why: 'setup' }; // no app group
+      // pending: a sign-in under way in the app, for Settings to finish (the student may be back from it already).
+      return { ok: true, flow, email: (await saved())?.email || null, picker: false, pending: h.pending === true };
     };
     // From Settings' click, once the page holds the identity permission. → { ok, email } or { ok: false, why }
     const connect = () => turn(fails(async () => {
       const s = await status();
       if (!s.ok) return s;
       if (s.flow === 'native') {
-        const { email, sub } = await nativeConnect();
-        gen++;
-        await env.storage.set({ google: { email, sub, flow: 'native', at: now() } });
-        return { ok: true, email };
+        await drive.start();
+        return nativeSave(await drive.finish());
       }
       // Firefox's package holds identity from install (it has no optional identity, and its permissions API throws if asked).
       if (!env.firefox && !await Promise.resolve().then(() => env.permissions.contains({ permissions: ['identity'] })).catch(() => false)) return { ok: false, why: 'permission' };
@@ -258,6 +297,14 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
         return { ok: true, email };
       } catch (e) { held = null; throw e; }
     }));
+    // Safari: the sign-in Connect started, answered once the app has it (why: 'pending' until then). → { ok, email } or
+    // { ok: false, why }
+    const finish = () => turn(fails(async () => {
+      const s = await status();
+      if (!s.ok) return s;
+      if (s.flow !== 'native') return { ok: false, why: 'request' };
+      return nativeSave(await drive.finish());
+    }));
     // The worker's token for a Drive request; interactive only for something the student pressed.
     const token = async ({ interactive = false } = {}) => {
       if (!on) throw new Fail('off');
@@ -278,7 +325,7 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       checked.delete(t);
       const g = await saved();
       if (g?.flow === 'chrome') await Promise.resolve().then(() => id()?.removeCachedAuthToken({ token: t })).catch(() => {});
-      else if (g?.flow === 'native') await native({ type: 'google.drop', token: t });
+      else if (g?.flow === 'native') await drive.drop(t);
       else if (held?.token === t) held = null;
     };
     // This device only (owner, 2026-10-31): the account, its tokens (Chrome's cache, this worker's memory, Safari's Keychain)
@@ -289,10 +336,8 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       const g = await saved();
       held = null;
       checked.clear();
-      if (env.flow === 'native' || g?.flow === 'native') {
-        await native({ type: 'google.disconnect' });
-        started = false;
-      } else if (!await Promise.resolve().then(() => env.keep?.()).catch(() => true)) {
+      if (env.flow === 'native' || g?.flow === 'native') await drive.disconnect();
+      else if (!await Promise.resolve().then(() => env.keep?.()).catch(() => true)) {
         if (g?.flow === 'chrome') await Promise.resolve().then(() => id()?.clearAllCachedAuthTokens()).catch(() => {});
         if (!env.firefox) await Promise.resolve().then(() => env.permissions.remove({ permissions: ['identity'] })).catch(() => {});
       }
@@ -327,9 +372,9 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       return { ok: true, files: picked(url, state) };
     });
 
-    return { status, connect, token, drop: forget, account, disconnect, pick };
+    return { status, connect, finish, token, drop: forget, account, disconnect, pick };
   };
 
-  return { ON, AUTH, USERINFO, DRIVE, APP, Fail, real, ready, pickable, flowOf, authUrl, pickerUrl, grant, picked, create };
+  return { ON, AUTH, USERINFO, DRIVE, APP, Fail, real, ready, pickable, flowOf, authUrl, pickerUrl, grant, picked, nativeGrant, create };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_GOOGLE;
