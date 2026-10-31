@@ -601,15 +601,18 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
       // One caller giving up (its page, its signal) leaves the read for the others.
       return signal || live ? p.then((rows) => { stale(signal, live); return rows; }, (e) => { stale(signal, live); throw e; }) : p;
     };
-    // The last answer kept on this device, however old: { at, rows (complete as kept) }, or null.
+    // The last answer kept on this device, however old: { at, rows (complete as kept) }, or null. The kept record is read
+    // once a page per student, however many cards ask.
+    const keptBooks = new Map(); // uid → Promise of the record as it was when the page first asked
     const saved = (cid, uid) => {
       const b = books.get(`${uid} ${cid}`);
       if (b?.rows) return Promise.resolve({ at: b.at, rows: b.rows });
       if (!ID.test(cid) || !ID.test(uid)) return Promise.resolve(null);
-      return Promise.resolve().then(() => env.local.get(BOOKS(uid))).then((r) => {
-        const x = r?.[BOOKS(uid)]?.[cid];
-        return Array.isArray(x?.rows) && Number.isFinite(x.at) ? { at: x.at, rows: covered(x.rows, x.complete) } : null;
-      }, () => null);
+      if (!keptBooks.has(uid)) keptBooks.set(uid, Promise.resolve().then(() => env.local.get(BOOKS(uid))).then((r) => r?.[BOOKS(uid)] || {}, () => ({})));
+      return keptBooks.get(uid).then((all) => {
+        const x = all[cid];
+        return Array.isArray(x?.rows) && Number.isFinite(x.at) ? { at: x.at, rows: covered([...x.rows], x.complete) } : null;
+      });
     };
 
     // ---- a course's content: one store per site, by course ----
