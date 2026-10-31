@@ -98,6 +98,21 @@ const pdfOn = async (w, dk, key, bytes, title) => {
   return ref;
 };
 
+test('an upload queued before its document was trashed or deleted is discarded before sending more bytes', async () => {
+  for (const deleted of [false, true]) {
+    const drive = standin(), dk = disk(), key = 'doc:00000000-0000-4000-8000-00000000a010', a = worker(drive, dk);
+    await pdfOn(a, dk, key, bytesOf(12 * MiB, 43), 'Reader');
+    await stopped(a.sync.set(true), drive.cut(0, (e) => e.chunk && !e.chunk.status && e.chunk.from > 0));
+    if (deleted) await a.papers.remove(key); else await a.papers.trash(key);
+    const n = drive.log.length, b = worker(drive, dk);
+    assert.ok((await b.sync.run()).ok);
+    assert.equal(chunks(drive, n).length, 0, 'the obsolete upload never resumes');
+    assert.ok(!fileOf(drive, key, 'file'), 'no orphan file lands in Drive');
+    assert.deepEqual(await moves(dk), {});
+    assert.deepEqual([...dk.stage.m.keys()], []);
+  }
+});
+
 test('a worker stopped mid-chunk: the next one asks Drive where the session stands and goes on from there', async () => {
   const drive = standin(), dk = disk(), key = 'doc:00000000-0000-4000-8000-00000000a001', big = bytesOf(20 * MiB, 7);
   const a = worker(drive, dk);
