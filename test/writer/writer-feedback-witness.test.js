@@ -122,6 +122,126 @@ test('style examples quoted in a localized line are not the draft\'s citations',
   }
 });
 
+test('localized prohibitions and absent style requirements disable citation witnesses', async (t) => {
+  for (const [lang, heading, label, instructions] of [
+    ['de', 'Literaturverzeichnis', 'APA-Zitierweise', 'Verwenden Sie APA nicht.'],
+    ['fr', 'Bibliographie', 'Normes APA', 'N’utilisez pas APA.'],
+    ['es', 'Obras citadas', 'Estilo APA', 'No use APA.'],
+    ['pt-BR', 'Obras citadas', 'Normas da APA', 'Não use APA.'],
+    ['nl', 'Literatuurlijst', 'APA-stijl', 'Gebruik APA niet.'],
+    ['de', 'Literaturverzeichnis', 'APA-Zitierweise', 'APA darf nicht verwendet werden.'],
+    ['fr', 'Bibliographie', 'Normes APA', 'L’APA ne doit pas être utilisé.'],
+    ['es', 'Obras citadas', 'Estilo APA', 'APA no debe utilizarse.'],
+    ['pt-BR', 'Obras citadas', 'Normas da APA', 'APA não deve ser usado.'],
+    ['nl', 'Literatuurlijst', 'APA-stijl', 'APA moet niet worden gebruikt.'],
+    ['de', 'Literaturverzeichnis', 'APA-Zitierweise', 'Es ist kein bestimmter Zitierstil vorgeschrieben.'],
+    ['fr', 'Bibliographie', 'Normes APA', 'Aucun style particulier n’est exigé.'],
+    ['es', 'Obras citadas', 'Estilo APA', 'No hay un estilo de citación obligatorio.'],
+    ['nl', 'Literatuurlijst', 'APA-stijl', 'Geen specifieke citeerstijl is vereist.'],
+  ]) await t.test(instructions, async () => {
+    const { cfg, result } = run(input(lang, heading, label, { instructions }));
+    assert.deepEqual((await result).output.criteria[0]?.score, { earned: 18.75, total: 25 });
+    assert.ok(cfg.seen.every((req) => !blocks(req).some((b) => b.label === 'citation evidence')));
+  });
+});
+
+test('requiring APA for every source does not allow every citation style', async (t) => {
+  for (const [lang, heading, label, instructions] of [
+    ['de', 'Literaturverzeichnis', 'APA-Zitierweise', 'Verwende für jede Quelle den APA-Stil.'],
+    ['es', 'Obras citadas', 'Estilo APA', 'Sigue APA en cualquier cita.'],
+    ['pt-BR', 'Obras citadas', 'Normas da APA', 'Use APA em qualquer citação.'],
+    ['nl', 'Literatuurlijst', 'APA-stijl', 'Gebruik APA bij elke bronvermelding.'],
+    ['de', 'Literaturverzeichnis', 'APA-Zitierweise', 'Verwenden Sie APA und vergessen Sie nicht das Jahr.'],
+  ]) await t.test(instructions, async () => {
+    const { result } = run(input(lang, heading, label, { instructions }));
+    assert.deepEqual((await result).output.criteria[0]?.score, { earned: 6.25, total: 25 });
+  });
+});
+
+test('localized APA labels accept articles, prepositions and edition-only names', async (t) => {
+  for (const [lang, heading, label] of [
+    ['pt-BR', 'Obras citadas', 'Citações no formato APA'],
+    ['fr', 'Bibliographie', 'Citations selon les normes APA'],
+    ['fr', 'Bibliographie', 'Normes de l’APA'],
+    ['de', 'Literaturverzeichnis', 'APA (7. Auflage)'],
+    ['fr', 'Bibliographie', 'APA (7e édition)'],
+    ['es', 'Obras citadas', 'APA (7.ª edición)'],
+    ['pt-BR', 'Obras citadas', 'APA (7ª edição)'],
+    ['nl', 'Literatuurlijst', 'APA (7e editie)'],
+  ]) await t.test(label, async () => {
+    const { result } = run(input(lang, heading, label));
+    assert.deepEqual((await result).output.criteria[0]?.score, { earned: 6.25, total: 25 });
+  });
+});
+
+test('localized rubric alternatives do not contradict a met assessment using an allowed style', async (t) => {
+  for (const [lang, heading, label, detail, comment] of [
+    ['de', 'Literaturverzeichnis', 'APA-Zitierweise', 'Verwenden Sie APA oder MLA.', 'Ihr Entwurf folgt der MLA-Zitierweise.'],
+    ['fr', 'Bibliographie', 'Normes APA', 'Utilisez APA ou MLA.', 'Votre brouillon suit le style MLA.'],
+    ['es', 'Obras citadas', 'Estilo APA', 'Utiliza APA o MLA.', 'Su borrador sigue el formato MLA.'],
+    ['pt-BR', 'Obras citadas', 'Normas da APA', 'Use APA ou MLA.', 'Seu rascunho segue o estilo MLA.'],
+    ['nl', 'Literatuurlijst', 'APA-stijl', 'Gebruik APA of MLA.', 'Je tekst volgt de MLA-stijl.'],
+  ]) await t.test(lang, async () => {
+    const inp = input(lang, heading, label);
+    inp.context.assignment.rubric.criteria[0].detail = detail;
+    const { cfg, result } = run(inp, (req) => req.schema.properties.status
+      ? { json: { ...decision(req).json, status: 'met', level: 'Excellent', score: 25 } } : replies(comment)(req));
+    assert.equal((await result).output.grade.earned, 25);
+    assert.equal(cfg.seen.filter((req) => req.schema.properties.status).length, 1);
+  });
+});
+
+test('localized citation-specific bands cannot be treated as an undescribed quality scale', async (t) => {
+  for (const [lang, heading, label, band] of [
+    ['de', 'Literaturverzeichnis', 'APA-Zitierweise', 'Zitierweise'],
+    ['fr', 'Bibliographie', 'Normes APA', 'Incomplète'],
+    ['es', 'Obras citadas', 'Estilo APA', 'Fuentes'],
+    ['pt-BR', 'Obras citadas', 'Normas da APA', 'Fontes'],
+  ]) await t.test(`${lang}: ${band}`, async () => {
+    const { result } = run(input(lang, heading, label, { levels: ['Excellent', 'Satisfactory', 'Unsatisfactory', band] }));
+    assert.deepEqual((await result).output.criteria[0]?.score, { earned: 18.75, total: 25 });
+  });
+});
+
+test('a localized rubric that makes APA optional cannot enforce APA in the comment check', async (t) => {
+  for (const [lang, heading, label, detail, comment] of [
+    ['de', 'Literaturverzeichnis', 'APA-Zitierweise', 'APA ist nicht erforderlich.', 'Ihr Entwurf folgt der MLA-Zitierweise.'],
+    ['fr', 'Bibliographie', 'Normes APA', 'Le style APA est facultatif.', 'Votre brouillon suit le style MLA.'],
+    ['es', 'Obras citadas', 'Estilo APA', 'El estilo APA no se requiere.', 'Su borrador sigue el formato MLA.'],
+    ['pt-BR', 'Obras citadas', 'Normas da APA', 'O estilo APA não é obrigatório.', 'Seu rascunho segue o estilo MLA.'],
+    ['nl', 'Literatuurlijst', 'APA-stijl', 'De APA-stijl is niet verplicht.', 'Je tekst volgt de MLA-stijl.'],
+  ]) await t.test(lang, async () => {
+    const inp = input(lang, heading, label);
+    inp.context.assignment.rubric.criteria[0].detail = detail;
+    const { cfg, result } = run(inp, (req) => req.schema.properties.status
+      ? { json: { ...decision(req).json, status: 'met', level: 'Excellent', score: 25 } } : replies(comment)(req));
+    assert.equal((await result).output.grade.earned, 25);
+    assert.equal(cfg.seen.filter((req) => req.schema.properties.status).length, 1);
+  });
+});
+
+test('English citation behavior is not changed by localized homographs', async (t) => {
+  for (const [name, extra, earned] of [
+    ['permit is an English verb', { instructions: 'Use APA style to permit clear source tracking.' }, 6.25],
+    ['still is not German Stil', { text: `The MLA method still helps the class learn together (Smith 23).\nThe MLA method still guides the class as they record the harvest (Jones 41).\nWorks Cited\n${ENTRIES}` }, 6.25],
+    ['Absent remains a generic English band', { levels: ['Excellent', 'Satisfactory', 'Unsatisfactory', 'Absent'] }, 6.25],
+    ['APA format remains outside the narrow English citation target', {}, 18.75],
+  ]) await t.test(name, async () => {
+    const { result } = run(input('en', 'Works Cited', name.startsWith('APA format') ? 'APA format' : 'APA style', extra));
+    assert.deepEqual((await result).output.criteria[0]?.score, { earned, total: 25 });
+  });
+});
+
+test('English fixed comments keep the canonical Works Cited spelling', async () => {
+  const canonical = (await run(input('en', 'Works Cited', 'APA style')).result).output.criteria[0].comment;
+  const varied = (await run(input('en', 'works cited :', 'APA style')).result).output.criteria[0].comment;
+  assert.equal(varied, canonical);
+});
+
+test('Dutch vocabulary does not change recognition of the English verb met', () => {
+  assert.equal(F.languageOf('We met Jane and met John with Sam.'), null);
+});
+
 // English citation-witness runs (local and cloud), every text sent with its fence tag made constant: pinned at 86d30463.
 const digest = (seen) => crypto.createHash('sha256').update(JSON.stringify(seen.map((r) => ({ messages: r.messages, schema: r.schema, maxTokens: r.maxTokens })))
   .replace(/DATA-[0-9a-f]{12}/g, 'DATA-X')).digest('hex').slice(0, 16);
