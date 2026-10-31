@@ -2,7 +2,7 @@
 // (background/background.js), with drive.file only (documents/drive.js; Glaze sees only the files it made); everything else
 // Glaze keeps rides the same runs (env.more: background/drive-store.js). A setting, offered only while Drive is connected
 // (settings/options.js), turned on when Drive connects unless the student turned it off (off); its state is this device's:
-// storage.local driveSync { on, off, account, folder, token (the Changes API's page token), last, problem, wait, fails, busy }, a record per document
+// storage.local driveSync { on, off, account, folder, token (the Changes API's page token), again (when the documents are listed once more), last, problem, wait, fails, busy }, a record per document
 // (driveSyncDoc:<h>: its key, its two files and the copy's head revision, what each side held when they last agreed) and each file's document
 // (driveSyncFile:<id>). h: the first 32 hex digits of the key's SHA-256, the tag both files carry (appProperties key).
 // Each document is two files in the folder: its kind's file (.docx, .xlsx, .pdf, .pptx, written by the worker's own export:
@@ -47,7 +47,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
   // What a record carries that is this device's own, never synced or compared.
   const STRIP = ['key', 'revision', 'titled', 'edited', 'lastVersion', 'parts', 'partDrops', 'drive', 'trashed', 'updated'];
   // copy: how long a file that moved on waits for its JSON copy (tries, or ms since first seen) before it stands alone.
-  const WAIT = { push: 5000, pull: 30e3, retry: [1000, 2000, 4000, 8000, 16000], run: 60e3, most: 3600e3, copy: { tries: 3, ms: 10 * 60e3 } };
+  // again: how long after a full pass the next run lists the documents once more (Drive's search may not show a file made just
+  // before the pass's page token yet, and its change came before that token).
+  const WAIT = { push: 5000, pull: 30e3, retry: [1000, 2000, 4000, 8000, 16000], run: 60e3, most: 3600e3, copy: { tries: 3, ms: 10 * 60e3 }, again: 60e3 };
   const MAX_JSON = 64e6;
   // Larger than this, a transfer waits for the run's last step (documents/drive.js SMALL: an upload past it goes resumable);
   // the stage keeps its bytes in pieces of up to PIECE, each at its offset.
@@ -770,15 +772,12 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     };
 
     // Everything, both sides: the first run, and again whenever the page token is lost.
-    const full = async (st) => {
-      const folder = await folderOf(st);
-      const token = await D((c) => c.startToken());
-      const dirt = (await S.get(DIRTY))[DIRTY] || {};
+    // Every JSON copy in the folder, in Drive's trash too (a first meeting weighs it as Trash, never sending the document up
+    // again beside it): per document, one out of the trash first, then the lowest id. → h → its metadata
+    const copies = async (folder) => {
       const remote = new Map();
       let page = null;
       do {
-        // In Drive's trash too (a first meeting weighs it as Trash, never sending the document up again beside it): per
-        // document, one out of the trash first, then the lowest id.
         const r = await D((c) => c.find(`'${folder}' in parents and appProperties has { key='glaze' and value='doc' }`, { pageToken: page }));
         for (const f of r.files) {
           const k = f.appProperties?.key, was = HASH.test(k || '') && remote.get(k);
@@ -786,6 +785,14 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         }
         page = r.nextPageToken || null;
       } while (page);
+      return remote;
+    };
+    const full = async (st) => {
+      const folder = await folderOf(st);
+      const token = await D((c) => c.startToken());
+      const dirt = (await S.get(DIRTY))[DIRTY] || {};
+      const remote = await copies(folder);
+      let page = null;
       // Each document's own file too, in Drive's trash or not: one trashed or edited while no change could say so (Sync off,
       // or the token lost) is met as its change would have been.
       const own = new Map();
@@ -808,7 +815,14 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       for (const k of (await S.keys()).filter((x) => x.startsWith(DOC))) if (!seen.has(k.slice(DOC.length))) await one(null, k.slice(DOC.length), { E: E(await docOf(k.slice(DOC.length))), folder, files: own });
       for (const [k, n] of Object.entries(dirt)) if (!waiting.has(k)) await unmark(k, n);
       if (more) await more.full(hooks(folder));
-      await setState({ token });
+      await setState({ token, again: now() + WAIT.again });
+    };
+    // The copies listed again, once, WAIT.again after a full pass: one Drive's search didn't show then (made just before that
+    // pass's page token, so its change never comes either) is met now, as that pass would have; one this device is linked to
+    // already is passed over.
+    const recheck = async (folder) => {
+      for (const [h, R] of await copies(folder)) if ((await docOf(h))?.json !== R.id) await one(null, h, { R, folder });
+      await setState({ again: 0 });
     };
     // What changed in Drive since the token, a page at a time, each page's documents done before the token moves past it.
     const pull = async (st, folder) => {
@@ -882,6 +896,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         else {
           const folder = await folderOf(st);
           if (!o.push) await pull(await state(), folder);
+          if (!o.push && st.again && now() >= st.again) await recheck(folder);
         }
         await sweep((await state()).folder);
         await tidy((await state()).folder);
@@ -916,7 +931,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         // No page token until this full pass completes: what was saved here while off (never marked) goes up on a later full
         // pass if this one stops short, never left behind by a run reading only the changes since a token from before.
         await setState({ ...(changed && { folder: null, data: null, backups: null, snap: null, snapSkip: null, last: null }),
-          token: null, on: true, off: false, account: who, problem: null, wait: 0, fails: 0 }, () => request === switching);
+          token: null, again: 0, on: true, off: false, account: who, problem: null, wait: 0, fails: 0 }, () => request === switching);
         if (request !== switching) return { ok: false, why: 'off' };
         return runNow({ full: true });
       });
