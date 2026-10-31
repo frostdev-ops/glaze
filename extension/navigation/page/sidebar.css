@@ -167,7 +167,7 @@
   /* One row: Jump to widgets showing later takes room from the title, never a second row that moves the column under it. */
   .gz-sb-head > :is(.gz-sb-btn, .gz-sb-icon) { flex: none; white-space: nowrap; }
   html[data-gz-sb-notitle] .gz-sb-head { justify-content: flex-end; }
-  .gz-sb-title { flex: 1 1 6rem; min-width: 0; margin: 0; padding: 0; border: 0; font: 600 0.95rem/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); overflow-wrap: anywhere; text-transform: none; letter-spacing: 0; }
+  .gz-sb-title { flex: 1 1 6rem; min-width: 0; margin: 0; padding: 0; border: 0; font: 600 0.95rem/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: none; letter-spacing: 0; }
   :is(.gz-sb-head, #gz-sb-widgets, .gz-sb-own, .gz-sb-menu) .gz-sb-btn, .gz-sb-btn, .gz-sb-icon {
     display: inline-flex; align-items: center; justify-content: center; gap: 0.25rem; padding: 0.2rem 0.75rem; font: 600 0.8rem/1.4 var(--gz-font); color: var(--gz-ink);
     background: none; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; cursor: pointer; text-decoration: none; white-space: normal; text-align: center;
