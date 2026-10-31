@@ -16,7 +16,7 @@ var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
   // Course Content opens over it, the outline kept as it was for the way back. The rest is the tab buttons' look;
   // color: none, a tint of each course's colour, or more of it.
   const SPEC = {
-    at: ['auto', ['auto', 'above', 'between', 'below', 'nav']], cap: [8, [2, 20]], place: [true, 'bool'], ahead: [true, 'bool'], renew: [10, [2, 120]], keep: [true, 'bool'],
+    at: ['auto', ['auto', 'above', 'between', 'below', 'nav']], cap: [8, [2, 20]], place: [true, 'bool'], ahead: [true, 'bool'], renew: [10, [2, 5, 10, 30, 60, 120]], keep: [true, 'bool'],
     shape: ['tab', ['tab', 'rounded', 'pill', 'square']], size: ['medium', ['small', 'medium', 'large']], width: [180, [96, 320]],
     label: ['short', ['short', 'name', 'code']], mark: ['dot', ['dot', 'icon', 'none']], color: ['off', ['off', 'tint', 'theme']],
   };
