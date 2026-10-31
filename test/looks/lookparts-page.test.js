@@ -318,6 +318,9 @@ const loaders = async ({ lookX, mods = ['abcdefghijklmnop'], runtimes = false, e
     on: (s) => s.enabled, local: (f) => f({ get: (_, cb) => setImmediate(() => cb({ mods })) }),
     need: async (file) => { asked.push(file); ctx.GZ_XPARTS_PAGE ||= { read: () => reads.push('read') }; },
     chrome: { runtime: { sendMessage: async (m) => { messages.push(m); return {}; } }, storage: { onChanged: { addListener: (f) => { ctx.changed = f; } } } },
+    // Names the listener reads from content.js's wider scope: not Ultra, so no due fence; the keys that are settings.
+    ultra: false, DUE: 'dueWeek:https://school.test', location: { origin: 'https://school.test' },
+    SETTING_KEYS: [...Object.keys(require('../../extension/content/defaults.js').GZ_DEFAULTS), 'lookX'],
     GZ_SPEC: {}, links: [], looks: [], settingsKnown: true, load: async () => ctx.settings, enable() {}, disable() {}, applySettings() {}, no() {},
   });
   ctx.window.top = top ? ctx.window : {};
