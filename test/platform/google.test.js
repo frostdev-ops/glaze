@@ -590,6 +590,47 @@ test('Safari: a token is held until a minute before it expires, and after Safari
   assert.equal(tokens().length, 4, 'Disconnect forgets the held token: nothing asked once disconnected');
 });
 
+test('Safari: a grant committed before the worker lost its finish reply is recovered from the handler', async () => {
+  for (const old of [null, { email: 'old@school.edu', sub: 'OLD', flow: 'native', at: 1 }]) {
+    const h = handler(), local = old ? { google: old } : {};
+    await nativeWorker(h, local).connect();
+    h.answered = true;
+    // The handler finished, but Safari ended the worker before nativeSave ran.
+    await h.native({ type: 'google.finish' });
+    const fresh = nativeWorker(h, local);
+    assert.equal((await fresh.status()).email, 'student@icloud.com');
+    assert.equal(local.google.sub, 'S1');
+    assert.equal(await fresh.token(), 'native-1');
+    assert.equal(h.sent.filter((m) => m.type === 'google.connect').length, 1);
+  }
+});
+
+test('Safari: a lost native Disconnect reply keeps Drive connected and retryable until the handler confirms deletion', async () => {
+  const h = handler(), local = {};
+  const real = h.native;
+  let fail = false;
+  h.native = (m) => m.type === 'google.disconnect' && fail ? Promise.reject(new Error('native host unavailable')) : real(m);
+  const w = nativeWorker(h, local);
+  await w.connect(); h.answered = true; await w.finish();
+  fail = true;
+  assert.deepEqual(await w.disconnect(), { ok: false, why: 'network' });
+  assert.equal(local.google.sub, 'S1');
+  assert.ok(h.refresh);
+  fail = false;
+  assert.deepEqual(await w.disconnect(), { ok: true });
+  assert.equal(local.google, undefined);
+  assert.equal(h.refresh, null);
+});
+
+test('Safari: native tokens with an expired or unknown expiry are never cached beyond their lifetime', async () => {
+  for (const expiresAt of [999999, undefined, NaN, Infinity]) {
+    let calls = 0;
+    const grant = G.nativeGrant({ now: () => 1000000, native: async () => ({ ok: true, token: `token-${++calls}`, expiresAt }) }, 'calendar');
+    assert.equal((await grant.mint()).token, 'token-1');
+    assert.equal((await grant.mint()).token, 'token-2', `expiry ${expiresAt} cannot be extended in the worker`);
+  }
+});
+
 test('a stale native revoked response cannot erase a newer connection', async () => {
   let release, entered, account = { sub: 'A', email: 'a@school.edu' };
   const waiting = new Promise((r) => { entered = r; });

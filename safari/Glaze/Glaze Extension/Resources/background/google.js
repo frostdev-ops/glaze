@@ -88,13 +88,19 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       const r = await ask({ type: 'google.token', ...(sub && { sub }) });
       if (r?.ok === true && typeof r.token === 'string' && r.token && at === epoch) {
         const exp = Number(r.expiresAt);
-        held = { token: r.token, sub, exp: exp > now() ? exp : now() + EARLY + 60e3 };
+        // Only the handler knows the token's lifetime. An absent or expired timestamp cannot extend it here.
+        held = Number.isFinite(exp) && exp > now() ? { token: r.token, sub, exp } : null;
       }
       return r;
     };
     const forget = () => { epoch++; held = null; };
     const drop = async (token) => { if (held?.token === token) held = null; await ask({ type: 'google.drop', token }); };
-    const disconnect = async () => { forget(); return ask({ type: 'google.disconnect' }); };
+    const disconnect = async () => {
+      forget();
+      const r = await ask({ type: 'google.disconnect' });
+      if (r?.ok !== true) throw new Fail('network');
+      return r;
+    };
     return { status, start, finish, mint, drop, forget, disconnect };
   };
 
@@ -265,8 +271,16 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       if (flow !== 'native') return { ok: true, flow, email: (await saved())?.email || null, picker: pickable(c()) };
       const h = await drive.status();
       if (h?.ok !== true) return { ok: false, why: 'setup' }; // no app group
+      let g = await saved();
+      // The handler may have committed the grant just before Safari ended the worker that asked finish(). Its account
+      // is durable too: recover that reply here, including a reconnect to another account, without another sign-in.
+      if (!h.pending && typeof h.email === 'string' && /^[^@\s]+@[^@\s]+$/.test(h.email) && h.email.length <= 320
+        && typeof h.sub === 'string' && /^[\w-]{1,255}$/.test(h.sub) && (g?.flow !== 'native' || g.sub !== h.sub || g.email !== h.email)) {
+        await nativeSave(h);
+        g = await saved();
+      }
       // pending: a sign-in under way in the app, for Settings to finish (the student may be back from it already).
-      return { ok: true, flow, email: (await saved())?.email || null, picker: false, pending: h.pending === true };
+      return { ok: true, flow, email: g?.email || null, picker: false, pending: h.pending === true };
     };
     // From Settings' click, once the page holds the identity permission. → { ok, email } or { ok: false, why }
     const connect = () => turn(fails(async () => {
@@ -331,7 +345,7 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
     // This device only (owner, 2026-10-31): the account, its tokens (Chrome's cache, this worker's memory, Safari's Keychain)
     // and the identity permission forgotten here, Google's grant kept, so Drive and Calendar on the student's other devices,
     // and Calendar here, keep working. While Calendar sync shares Chrome's cache and identity (keep), both stay. → { ok }
-    const disconnect = () => turn(async () => {
+    const disconnect = () => turn(fails(async () => {
       gen++;
       const g = await saved();
       held = null;
@@ -343,7 +357,7 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       }
       await env.storage.remove('google');
       return { ok: true };
-    });
+    }));
     // The first picker page that answers, else null: frostdev.io's, then its GitHub Pages copy (which answers every origin).
     const reach = async () => {
       for (const base of c().picker) {
@@ -372,7 +386,9 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       return { ok: true, files: picked(url, state) };
     });
 
-    return { status, connect, finish, token, drop: forget, account, disconnect, pick };
+    // Status can recover a native account: serialize it with Connect/Disconnect so a late status cannot reconnect one
+    // the student just disconnected. Internal calls already hold this turn.
+    return { status: env.flow === 'native' ? () => turn(status) : status, connect, finish, token, drop: forget, account, disconnect, pick };
   };
 
   return { ON, AUTH, USERINFO, DRIVE, APP, Fail, real, ready, pickable, flowOf, authUrl, pickerUrl, grant, picked, nativeGrant, create };

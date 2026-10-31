@@ -3392,7 +3392,9 @@ const gcalOps = {
     if (m.drop === true && g?.cal) await GZ_GCAL.remove(gcalEnv, g.cal);
     if (SAFARI) {
       // Calendar's own grant forgotten in the handler; Drive's stays, and Safari has no identity permission.
-      if (gcalSafari()) await Promise.resolve().then(() => gcalGrant().disconnect()).catch(() => {});
+      // Cleanup still reaches the handler when new native sign-ins are switched off. Keep the connection here on a
+      // failed native reply, so Settings offers a retry instead of claiming that the Keychain grant was forgotten.
+      await gcalGrant().disconnect();
       await chrome.storage.local.remove(['gcal', 'gcalSync']);
       serial(ensure);
       return { ok: true };

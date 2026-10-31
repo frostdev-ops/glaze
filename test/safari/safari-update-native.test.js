@@ -113,6 +113,12 @@ test('DMG staging is repeatable and isolates Sparkle from the checked-in Mac/iOS
     const listed = run('python3', [path.join(fixture, 'tools/build/stage-safari-dmg.py'), path.join(temp, 'drift')]);
     assert.notEqual(listed.status, 0);
     assert.match(listed.stderr, /agent sources already in the project/, 'the checked-in project never compiles agent code');
+    // Another signing team (SAFARI_TEAM_ID): the staged group follows it, from the checked-in Glaze team's group.
+    const other = run('python3', ['../tools/build/stage-safari-dmg.py', path.join(temp, 'team')], { env: { ...process.env, SAFARI_TEAM_ID: 'A1B2C3D4E5', SAFARI_UPDATE_PUBLIC_KEY: 'REPLACE_WITH_SPARKLE_EDDSA_PUBLIC_KEY' } });
+    assert.equal(other.status, 0, other.stderr);
+    for (const f of ['Glaze/Release.entitlements', 'Glaze Extension/Release.entitlements']) {
+      assert.deepEqual(plist(path.join(temp, 'team/Glaze', f))[GROUPS], ['A1B2C3D4E5.io.frostdev.Glaze'], f);
+    }
     const invalidKey = run('python3', ['../tools/build/stage-safari-dmg.py', path.join(temp, 'bad')], {
       env: { ...process.env, SAFARI_UPDATE_PUBLIC_KEY: 'bad-key' },
     });

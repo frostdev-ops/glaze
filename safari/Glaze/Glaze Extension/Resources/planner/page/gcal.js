@@ -36,15 +36,16 @@
       if (!c || !await c.recheck()) return;
       // whole: false (Ultra couldn't send its calendar whole): the worker deletes nothing for being missing from it.
       const sent = chrome.runtime.sendMessage({ type: 'glaze:gcal', op: 'sync', src, events: c.events, from: c.from, first: c.first, consent: c.consent, whole: c.whole !== false });
-      let r;
+      let r, timeout;
       try {
-        r = await (LOST ? Promise.race([sent, new Promise((_, no) => { setTimeout(no, LOST); })]) : sent);
+        r = await (LOST ? Promise.race([sent, new Promise((_, no) => { timeout = setTimeout(no, LOST); })]) : sent);
+        if (LOST && !r) throw new Error('worker');
         lost = 0;
       } catch {
         if (!chrome.runtime?.id || ++lost > 3) return;
         next = 6e4; again = true;
         return;
-      }
+      } finally { clearTimeout(timeout); }
       if (r?.error === 'off') off = true;
       if (r?.more) { next = 6e4; again = true; }
     } catch { /* the site or the worker didn't answer: the next turn tries again */ } finally {

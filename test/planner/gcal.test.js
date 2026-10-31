@@ -41,6 +41,50 @@ const withMock = (name, f) => test(name, async () => {
 const run = (e, cal, st, events = EVENTS, more = {}) => G.sync(e, cal, st, { src: SRC, events, from: FROM, first: FIRST, whole: true }, more);
 const writes = (mock) => mock.log.filter(([m]) => m !== 'GET');
 
+test('until: token acquisition and Retry-After cannot start writes past the deadline', async () => {
+  for (const slow of ['token', 'backoff']) {
+    let clock = 0, tokens = 0;
+    const sent = [], waits = [], saved = [];
+    const st = G.fresh();
+    const r = await run({
+      now: () => clock,
+      token: async () => { if (++tokens === 2 && slow === 'token') clock = 21000; return 'token'; },
+      drop: async () => {},
+      sleep: async (ms) => { waits.push(ms); clock += ms; },
+      fetch: async (url, init) => {
+        sent.push([init.method, clock]);
+        return init.method === 'GET' ? Response.json({ items: [], nextSyncToken: 's1' })
+          : Response.json({}, { status: 429, headers: { 'retry-after': '60' } });
+      },
+    }, 'c', st, EVENTS.slice(0, 1), { until: 20000, save: async () => saved.push(structuredClone(st)) });
+    assert.deepEqual(r, { wrote: 0, more: true });
+    assert.ok(sent.every(([, at]) => at < 20000), `${slow}: no request after expiry`);
+    if (slow === 'token') assert.deepEqual(sent.map(([method]) => method), ['GET']);
+    else assert.ok(clock <= 20000, `Retry-After was bounded: ${waits}`);
+    assert.equal(saved.at(-1).sync, 's1');
+  }
+});
+
+test('until: a stalled request is aborted and earlier writes are saved before returning more', async () => {
+  let posts = 0, aborted = false;
+  const st = G.fresh(), saved = [];
+  const r = await run({
+    token: async () => 'token', drop: async () => {}, sleep: async () => {},
+    fetch: async (url, init) => {
+      if (init.method === 'GET') return Response.json({ items: [], nextSyncToken: 's1' });
+      if (++posts === 1) return Response.json({ etag: 'first' });
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, 150);
+        init.signal?.addEventListener('abort', () => { aborted = true; clearTimeout(timer); reject(new Error('aborted')); }, { once: true });
+      });
+      return Response.json({ etag: 'late' });
+    },
+  }, 'c', st, EVENTS.slice(0, 2), { until: Date.now() + 75, save: async () => saved.push(structuredClone(st)) });
+  assert.equal(aborted, true);
+  assert.deepEqual(r, { wrote: 1, more: true });
+  assert.equal(Object.keys(saved.at(-1).map).length, 1);
+});
+
 withMock('connect makes one calendar named Glaze; the account label is its dataOwner; requests carry no cookies and follow no redirect', async (mock) => {
   const e = env(mock);
   const c = await G.connect(e, 'America/New_York');
@@ -437,7 +481,8 @@ const worker = (mock, { on = true, drive = false, local = {}, sync = { enabled: 
   const permissions = { contains: async () => true, remove: async () => true };
   const context = vm.createContext({
     URL, URLSearchParams, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, AbortController, crypto: globalThis.crypto, atob, btoa, navigator: {},
-    setTimeout: (f, ms) => setTimeout(f, Math.min(ms, 1)), clearTimeout,
+    // Shorten pacing/backoff, but keep the worker's 20 s deadline on the same clock as Date.now().
+    setTimeout: (f, ms) => setTimeout(f, ms >= 10000 ? ms : Math.min(ms, 1)), clearTimeout,
     fetch: (url, init) => {
       asked.push(url);
       assert.ok(url.startsWith(`${G.API}/`), `only Google Calendar's address: ${url}`);
@@ -974,6 +1019,24 @@ const handler = (mock) => {
 };
 const SAFARI_EDITOR = { id: 'glaze', url: 'safari-web-extension://x/options.html#gcal' };
 
+test('Safari: Calendar Disconnect must confirm native deletion, including with native sign-in switched off', async () => {
+  const h = handler({ tokens: new Set() });
+  const real = h.native;
+  let fail = true;
+  h.grants = { drive: true, calendar: true };
+  h.native = (app, m) => m.type === 'google.disconnect' && fail ? Promise.reject(new Error('native host unavailable')) : real(app, m);
+  const local = { gcal: { cal: 'c@group.calendar.google.com', gen: 'G' }, gcalSync: { gen: 'G' } };
+  const w = worker({}, { safari: h, native: false, local });
+  const bye = () => w.send({ type: 'glaze:gcal', op: 'disconnect', drop: false }, SAFARI_EDITOR);
+  assert.deepEqual(await bye(), { ok: false, error: 'network' });
+  assert.ok(local.gcal && local.gcalSync, 'the user can retry Disconnect');
+  fail = false;
+  assert.deepEqual(await bye(), { ok: true });
+  assert.deepEqual(h.grants, { drive: true });
+  assert.equal(local.gcal, undefined);
+  assert.equal(local.gcalSync, undefined);
+});
+
 withMock('Safari: Connect signs in through the Glaze app with Calendar\'s own grant, makes the calendar with the handler\'s token, syncs, and Disconnect forgets only Calendar\'s grant', async (mock) => {
   const h = handler(mock), w = worker(mock, { safari: h });
   h.grants.drive = true; // Drive connected on this device already
@@ -1044,6 +1107,33 @@ test('the page asks again a minute later when Safari ended the worker before it 
   const src = read('planner/page/gcal.js');
   assert.match(src, /const LOST = \/\^safari-web-extension:\/\.test\(chrome\.runtime\.getURL\?\.\(''\) \|\| ''\) \? 45e3 : 0;/);
   assert.match(src, /if \(!chrome\.runtime\?\.id \|\| \+\+lost > 3\) return;\n\s+next = 6e4; again = true;/);
+});
+
+test('Safari: a worker channel closed without a reply retries in a minute and ignores the last-run timestamp', async () => {
+  const timers = new Map(), sent = [];
+  let id = 0;
+  const gcal = { cal: 'c', last: {} };
+  const window = {}; window.top = window;
+  vm.runInNewContext(read('planner/page/gcal.js'), {
+    window, location: { origin: 'https://canvas.test' }, Date,
+    setTimeout: (f, ms) => { timers.set(++id, { f, ms }); return id; }, clearTimeout: (n) => timers.delete(n),
+    chrome: {
+      runtime: { id: 'glaze', getURL: () => 'safari-web-extension://x/', sendMessage: async (m) => { sent.push(m); return undefined; } },
+      storage: { local: { get: async () => ({ gcal }) }, onChanged: { addListener() {} } },
+    },
+    GZ_CTX: { site: 'canvas', on: () => true, settings: () => ({ enabled: true }), profile: async () => ({ id: 3 }), need: async () => {} },
+    GZ_CAL_UI: { compose: async () => ({ events: [], recheck: async () => true }) },
+  });
+  const flush = async () => { for (let n = 0; n < 30; n++) await Promise.resolve(); };
+  await flush();
+  assert.equal(sent.length, 1);
+  gcal.last[SRC] = Date.now(); // The lost worker may have saved its timestamp before its channel closed.
+  for (let n = 0; n < 3; n++) {
+    assert.deepEqual([...timers.values()].map((t) => t.ms), [60000], 'the reply timeout is cleared and one retry is scheduled');
+    const [key, timer] = [...timers][0]; timers.delete(key); timer.f(); await flush();
+  }
+  assert.equal(sent.length, 4);
+  assert.deepEqual([...timers.values()].map((t) => t.ms), [15 * 60000], 'three rapid retries, then the normal interval');
 });
 
 // Settings' Calendar section (settings/options.js) in Safari, in a VM: the worker's answers scripted, every element a stub.
