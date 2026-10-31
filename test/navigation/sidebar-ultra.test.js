@@ -832,3 +832,40 @@ test('the cached Ultra sidebar cannot edit the previous account before confirmat
   await p.pass();
   assert.equal(await p.side.op([{ op: 'width', px: 380 }]), true, 'the confirmed account can edit');
 });
+
+test("Ultra's Details & Actions, filled late, keeps the room it took on this course last time: the blocks under it never move", async () => {
+  const HELD = `detailsHeight:${O}`;
+  const p = page({ at: 'outline', aside: 'live', stored: { ...record(), [HELD]: { _101_1: 231 } } });
+  const before = natives(p);
+  // The room under it: sidebar.css's margin while <html> says it is held (Ultra's node keeps its own style).
+  const details = p.$('.js-details-and-actions'), margin = () => (p.doc.root.dataset.gzSbHeld != null && parseFloat(p.doc.root.style.getPropertyValue('--gz-sb-held'))) || 0;
+  details.box = { left: 1248, top: 140, width: 320, height: 0 };
+  await p.pass();
+  assert.ok(p.host()?.className.includes('outline-actions'), 'the dock is in Ultra\'s column');
+  assert.equal(margin(), 231, 'empty, it keeps its room under it before the dock is drawn there');
+  // Ultra fills it in steps, each seen before that frame paints (ResizeObserver).
+  const fill = (h) => { details.box = { left: 1248, top: 140, width: 320, height: h }; for (const r of p.sizes.filter((x) => x.targets.includes(details))) r.f([{ target: details, borderBoxSize: [{ blockSize: h }] }]); };
+  fill(64);
+  assert.equal(64 + margin(), 231, 'part filled: what is under it stays where it was');
+  fill(231);
+  assert.equal(margin(), 0, 'drawn: the room is its own again');
+  assert.equal(p.doc.root.dataset.gzSbHeld, undefined, 'and its own margin is back');
+  assert.deepEqual(Object.keys(details.style).filter((k) => typeof details.style[k] !== 'function'), [], "Ultra's node keeps its inline style");
+  unmoved(p, before, 'kept room');
+  // Leaving, what it took is kept for the next visit.
+  p.c.location.pathname = '/ultra/courses/_101_1/grades';
+  await p.pass();
+  assert.deepEqual(p.store[HELD], { _101_1: 231 });
+});
+
+test("Ultra's Details & Actions on a course not seen before keeps the least room any course here took, and none on a first course", async () => {
+  const HELD = `detailsHeight:${O}`;
+  const seen = page({ at: 'outline', aside: 'live', stored: { ...record(), [HELD]: { _102_1: 260, _103_1: 200 } } });
+  seen.$('.js-details-and-actions').box = { left: 1248, top: 140, width: 320, height: 0 };
+  await seen.pass();
+  assert.equal(parseFloat(seen.doc.root.style.getPropertyValue('--gz-sb-held')), 200);
+  const fresh = page({ at: 'outline', aside: 'live', stored: record() });
+  fresh.$('.js-details-and-actions').box = { left: 1248, top: 140, width: 320, height: 0 };
+  await fresh.pass();
+  assert.equal(fresh.doc.root.dataset.gzSbHeld, undefined, 'no guess without a measurement');
+});
