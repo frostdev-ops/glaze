@@ -6,27 +6,30 @@
 // (driveSyncDoc:<h>: its key, its two files and the copy's head revision, what each side held when they last agreed) and each file's document
 // (driveSyncFile:<id>). h: the first 32 hex digits of the key's SHA-256, the tag both files carry (appProperties key).
 // Each document is two files in the folder: its kind's file (.docx, .xlsx, .pdf, .pptx, written by the worker's own export:
-// appProperties { glaze: 'file', key: h, sum }) and a JSON copy of the document and its record ({ glaze: 'document', v: 1,
+// appProperties { glaze: 'file', key: h, sum, b (its bytes' SHA-256) }) and a JSON copy of the document and its record ({ glaze: 'document', v: 1,
 // key, kind, record, parts (a spreadsheet's cells), file, fileRev }: appProperties { glaze: 'doc', key: h, sum, rev }).
 // sum: the SHA-256 of what the copy holds (canon below), so each side's change is told by content: here, the record's
 // revision moved and its sum is not the one last agreed; in Drive, the copy's sum is not the one last agreed. Glaze's own
 // uploads come back through the Changes API with the sum already agreed, and change nothing. The kind's file is Glaze's
 // while its head revision is the one Glaze wrote (fileRev); one whose head moved with Glaze's sum still on it was edited
-// outside Glaze.
+// outside Glaze; one found with no copy naming it (a push stopped between the two) is Glaze's only while Drive's checksum of
+// its bytes is b.
 // The rules:
 //   changed here only: pushed (the kind's file first, then its copy). Changed in Drive only: taken (papers.save).
 //   Changed on both sides: both kept, nothing overwritten unseen. This device's stays current; Drive's becomes a version in
 //     writerVersions (a paper, a deck, a spreadsheet's packed workbook), or, for a PDF (one copy, no versions), a document
 //     of its own named "<title> (Drive copy)" (so is one too big to be a version); then this device's is pushed.
 //   Met for the first time on both (a second device joining): as Restore, the later edited (updated) stays current and the
-//     other is kept beside it as above. Two copies of one document (first syncs that overlapped): the lowest id is kept.
+//     other is kept beside it as above; Trash on either side (either file in Drive's trash) as moved on both: restored
+//     wins. Two copies of one document (first syncs that overlapped): the lowest id is kept.
 //   A .docx or .xlsx edited outside Glaze is never overwritten: it stays in Drive as it is (glaze: 'kept') and Glaze writes
 //     a new file beside it. A .pdf or .pptx edited outside Glaze is the document's new content, as a change in Drive.
 //   Trash: a document trashed or restored in Glaze moves its two files into or out of Drive's trash; a file trashed or
 //     restored in Drive moves the document into or out of Glaze's Trash (both changed: restored wins). A document deleted
 //     for good here (Delete forever, Trash's 30 days, Clear) has its files trashed in Drive; a file deleted for good in Drive
 //     (a 404, or removed from the changes) puts the document in Trash here. No document is ever deleted for good by Glaze.
-// When: turning it on uploads every document and takes Drive's (a full pass, the page token taken first); then each run
+// When: turning it on uploads every document and takes Drive's (a full pass, the page token taken first, the documents
+// listed once more a minute later for any Drive's search didn't show yet; runs stay full until one completes); then each run
 // reads the changes since its token and pushes the documents saved since (driveSyncDirty, marked by the worker as they are
 // written), each push 5 s after the last save (WAIT.push). Runs start when it is turned on, when the browser starts or
 // comes back online, and when Documents or Writer opens (at most every 30 s). One run at a time and one document at a
