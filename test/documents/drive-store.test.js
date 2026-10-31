@@ -1258,6 +1258,26 @@ test('a first meeting whose join is Drive\'s own value links to it: nothing goes
   assert.equal(body(recFile(drive, 'local', TODO)).at, t0);
 });
 
+test('a first meeting whose joined upload fails retains the joined time on retry', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), c = device(drive, { clock });
+  await a.local.set({ [TODO]: todo('A1') });
+  assert.ok((await a.on()).ok);
+  const originalAt = body(recFile(drive, 'local', TODO)).at;
+  clock.t += 60e3;
+  await a.local.set({ [TODO]: todo('A1', 'A2') }); // a later change, still waiting to go up
+  clock.t += 60e3;
+  await c.local.set({ [TODO]: todo('C1') });
+  drive.offline((x) => x.path.startsWith('/upload/'));
+  assert.equal((await c.on()).ok, false);
+  assert.deepEqual((await c.local.get(TODO))[TODO].tasks.map((t) => t.id).sort(), ['tA1', 'tC1'], 'the join landed locally');
+  assert.equal(await timeOf(c, 'local', TODO), originalAt, 'the pending join retains its provenance after the upload failed');
+  clock.t = (await c.local.get(S.STATE))[S.STATE].wait + 1;
+  assert.ok((await c.run()).ok);
+  assert.equal(body(recFile(drive, 'local', TODO)).at, originalAt, 'retry does not date the join at the meeting');
+  assert.ok((await a.run()).ok); assert.ok((await c.run()).ok);
+  for (const d of [a, c]) assert.ok((await d.local.get(TODO))[TODO].tasks.some((t) => t.id === 'tA2'), 'the later edit survives');
+});
+
 // ---- Notes, field by field (the owner's call, 2026-10-31): a note's text, title, folder, course and Trash each keep their
 // own latest change; an account's folders each by name, course, order and Trash, a folder added or deleted on one device
 // beside a rename on the other.
@@ -1390,4 +1410,20 @@ test('the merge of two notes or two accounts\' folders is the same whichever sid
   assert.equal(mf.folders[f1].name, 'One renamed');
   assert.deepEqual(mf.gone, { [f2]: 25 });
   assert.deepEqual(Object.keys(ST.mergeFolders(h, t, {}, true).folders).sort(), [f1, f2, f3, f4], 'a first meeting keeps every folder');
+});
+
+test('equal legacy and explicit Trash times merge identically in either direction', () => {
+  const note = { note: { title: 'T', folder: '', course: '', cn: '', created: 1, at: 10, ft: { title: 10, folder: 10, course: 10 }, del: 25 }, html: '<p>T</p>' };
+  const timed = structuredClone(note);
+  timed.note.ft.trash = 25;
+  const merged = ST.mergeNote(note, timed);
+  assert.deepEqual(merged, ST.mergeNote(timed, note));
+  assert.equal(merged.note.ft.trash, 25, 'retain an explicit time already present on either side');
+  assert.deepEqual(ST.mergeNote(merged, merged), merged, 'idempotent');
+  assert.equal(ST.mergeNote(note, note).note.ft.trash, undefined, 'legacy shape stays unchanged');
+
+  const folder = { name: 'F', course: '', cn: '', order: 0, created: 1, ft: { name: 10, course: 10, order: 10 }, del: 25 };
+  const a = { folders: { [nid(900)]: folder } }, b = structuredClone(a);
+  b.folders[nid(900)].ft.trash = 25;
+  assert.deepEqual(ST.mergeFolders(a, b), ST.mergeFolders(b, a));
 });

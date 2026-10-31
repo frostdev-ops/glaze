@@ -311,6 +311,19 @@ test('a folder deleted for good keeps a tombstone 30 days, and Sync\'s folders b
   assert.equal(w.idx().fgone, undefined);
 });
 
+test('a received folder tombstone prevents recreation even when the folder was never here', async () => {
+  const w = world(), deleted = w.now;
+  assert.ok((await w.run({ op: 'folders', folders: {}, gone: { [id(10)]: deleted } })).ok);
+  assert.equal(w.idx().gone[id(10)], undefined, 'there was no local folder for folders to remove');
+  assert.deepEqual(await w.run({ op: 'folder', id: id(10), name: 'Stale rename' }, w.tick()), { ok: false, error: 'gone' });
+  assert.equal(w.idx().folders[id(10)], undefined);
+  assert.equal(w.idx().fgone[id(10)], deleted);
+  // An explicit import can still bring it back and clear the received tombstone.
+  assert.ok((await w.run({ op: 'import', folders: [{ id: id(10), name: 'Restored' }], notes: [] }, w.tick())).ok);
+  assert.equal(w.idx().fgone, undefined);
+  assert.equal(w.idx().folders[id(10)].name, 'Restored');
+});
+
 test('rename and move: each field is set only by a change made after its last one', async () => {
   const w = world();
   await w.run({ op: 'save', id: id(1), base: 0, sid: 'a', html: '<p>1</p>', title: 'First', copy: id(90) }, 100);
