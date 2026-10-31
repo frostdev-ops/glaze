@@ -17,7 +17,7 @@ until the student has turned AI on, chosen a model for that feature and allowed 
 | `ai/providers/openai.js` | Any Chat Completions server. A request's `effort` goes as OpenRouter's `reasoning.effort` there and as `reasoning_effort` elsewhere; a model that refuses it gets the next level up (none, minimal, low), then none at all, remembered an hour for that model. `mock.js` is for tests and evals only; the worker never loads it. |
 | `ai/providers/device.js` | Chrome's Prompt API (Chrome 138+), in the worker itself. Chrome chooses its built-in model; Glaze retains `gemini-nano` as its compatibility id. Unavailable elsewhere. |
 | `ai/providers/local.js` | Glaze's own model on this computer (LFM3, Glaze's WebGPU engine), Chrome and Firefox; unavailable in Safari. Below. |
-| `ai/local/` | Its formatter (`format.js`), the link to its engine host (`link.js`), the host (`host.js`, `host.html`, `offscreen.js`), the store, GGUF reader, tokenizer, engine, grammar and ladder. |
+| `ai/local/` | Its formatter (`format.js`), the link to its engine host (`link.js`), the host (`host.js`, `host.html`, `offscreen.js`), the store, GGUF reader, tokenizer, engine, picture encoder (`vision.js`), grammar and ladder. |
 | `ai/providers/apple.js` | Safari only: Apple's Foundation Models on this device, through the extension's native handler, `GlazeAI.swift`. One reply per request; no tools, no streaming. |
 | `ai/tools.js` | Tool definitions, `aiTools` (adds the required `reason`), `invokeReadTool`. |
 | `ai/loop.js` | The agent loop: rounds, batch triage, approvals, receipts, repair. |
@@ -377,8 +377,8 @@ If the system refuses token counting, the request retains its output ceiling and
 ## Glaze's own model
 
 `ai/providers/local.js` (`local`, Settings' **Glaze on-device AI**) runs LiquidAI's LFM3 from `ai/local/models.json` on
-Glaze's WebGPU engine. caps: `{ text, json, stream, local: true, tools: false, images: false, context: 16000 }` (every tier
-reads 16k for now), so `writer.complete`'s brief path and Feedback's local orchestration apply. Settings, `ai/settings.js`
+Glaze's WebGPU engine. caps: `{ text, json, stream, local: true, tools: false, images, context: 16000 }` (every tier
+reads 16k for now; `images` below), so `writer.complete`'s brief path and Feedback's local orchestration apply. Settings, `ai/settings.js`
 `HERE` and `writer-ai.js` treat `device`, `apple` and `local` alike as models on this computer: no model id, no key.
 
 Where it runs: Chrome, an offscreen document (`ai/local/host.html`, reason WORKERS, the `offscreen` permission) whose
@@ -400,6 +400,21 @@ is replayed. The host page's CSP: `default-src 'none'; script-src 'self' 'wasm-u
 Download click (progress events as the device's; it answers `downloading` after four minutes while the download goes on in
 the host); `delete { provider: 'local' }` removes every downloaded model and ends a download. A failed download answers
 `download` with reason `quota` or `network`, so Download stays.
+
+Pictures are a second, optional download on the same card: models.json's `role: 'pictures'` entry (LFM3-VL-2B's own
+language model, Q4_K_M, the smallest tier's quant and the one C9b checked end to end) and the `role: 'projector'` file it
+names (its mmproj, F16: `vision.js` reads F16 and F32 matrices), fetched and removed together, never a tier and never the
+ladder's. Settings' ops take `part: 'pictures'` (`prepare` and `delete`; progress events carry it), and `test` answers
+`pictures: { state, size, progress? }`. `status` says `caps.images` and `catalog` says `vision` from it, so the broker's
+`cfg.images` and Writer's `caps.images` are true only while both files are here; then `writer.image` (and Feedback's
+picture reading) run on Glaze's model. A request with pictures goes to LFM3-VL in its own chat template (`chatml`, it is
+stock), each picture after its line as `<|vision_start|>`, its embeddings, `<|vision_end|>`; the host releases the text
+model first (one model is loaded at a time), loads LFM3-VL and its projector on the engine's device, decodes each picture
+in the Worker (the header checked before `createImageBitmap`, unknown dimensions or over 60 MP refused as in the document
+reader; an `OffscreenCanvas` of at most 16.8 MP and 16,384 pixels per side), sizes it (`prepare`; a prompt over the window
+is refused before encoding), encodes it and feeds it as prefill `embeds`, then decodes with the JSON grammar as for text.
+A cancel ends it at the next encoder stage, prefill chunk or token. A projector that isn't there, or isn't one: reason
+`pictures` (Writer: "Picture reading isn’t downloaded."). The text model's next run brings it back.
 
 A run: `ai/local/format.js` writes the request as `[{ special } | { text }]` parts, which the host tokenizes with
 `encodeWith` (page text never makes a control token). `ai/task.js` puts `task: { id, version }` on every request and
@@ -441,8 +456,8 @@ model.release()                                 // frees every GPU resource; the
 one), `models` the store's list. Each is optional in the host until it ships: no engine is `unavailable`, reason `engine`; no
 grammar, words only; no ladder, the smallest stock model where there is an adapter.
 
-The host's messages (`host.js` header): `prepare { tier? }`, `run { model, parts, stable, schema?, sampler, maxTokens }`,
-`warm { model, parts }`, `remove`, `release`, `cancel`; it answers `progress`, `delta`, `done` or `error`, `tick` every 20 s
+The host's messages (`host.js` header): `prepare { tier?, part? }`, `run { model, parts, stable, schema?, sampler, maxTokens,
+projector?, images? }`, `warm { model, parts }`, `remove { part? }`, `release`, `cancel`; it answers `progress`, `delta`, `done` or `error`, `tick` every 20 s
 while anything is in flight, and `idle`.
 
 What needs a real GPU or browser: the engine's numbers and speed, the ladder's tiers, Firefox's event page staying while its

@@ -158,7 +158,7 @@ test('Firefox\'s event page loads every file of the harness the worker would imp
   // Glaze's own model: the worker loads its provider, the store (status), the formatter and the link to the engine host;
   // the host (ai/local/host.js, a Worker of Chrome's offscreen document or of Firefox's event page) loads the engine's
   // files itself, and the worker never does.
-  const host = ['local/host.js', 'local/offscreen.js', 'local/tokenizer.js', 'local/gguf.js', 'local/quant.js', 'local/reference.js', 'local/engine.js', 'local/grammar.js', 'local/ladder.js', 'local/vision-reference.js'];
+  const host = ['local/host.js', 'local/offscreen.js', 'local/tokenizer.js', 'local/gguf.js', 'local/quant.js', 'local/reference.js', 'local/engine.js', 'local/grammar.js', 'local/ladder.js', 'local/vision-reference.js', 'local/vision.js'];
   for (const f of ['ai/local/store.js', 'ai/local/format.js', 'ai/local/link.js', 'ai/providers/local.js']) assert.ok(named.has(f), f);
   const shipped = fs.readdirSync(path.join(__dirname, '../../extension/ai'), { recursive: true }).filter((f) => f.endsWith('.js') && f !== 'providers/mock.js' && !host.includes(f)).map((f) => `ai/${f}`);
   assert.ok(shipped.length >= 14);
@@ -169,8 +169,8 @@ test('Firefox\'s event page loads every file of the harness the worker would imp
   const hs = fs.readFileSync(path.join(__dirname, '../../extension/ai/local/host.js'), 'utf8');
   const imported = [...hs.matchAll(/importScripts\(([^)]*)\)/g)].flatMap(([, a]) => [...a.matchAll(/'([^']+)'/g)].map(([, f]) => f));
   const optional = [...hs.matchAll(/for \(const f of \[([^\]]*)\]\) \{ try \{ importScripts\(f\)/g)].flatMap(([, a]) => [...a.matchAll(/'([^']+)'/g)].map(([, f]) => f));
-  assert.deepEqual(imported, ['store.js', 'gguf.js', 'tokenizer.js']);
-  assert.deepEqual(optional, ['quant.js', 'reference.js', 'engine.js', 'grammar.js', 'ladder.js']);
+  assert.deepEqual(imported, ['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js']);
+  assert.deepEqual(optional, ['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'grammar.js', 'ladder.js']);
   for (const f of imported) assert.ok(fs.existsSync(path.join(__dirname, '../../extension/ai/local', f)), f);
   assert.match(fs.readFileSync(path.join(__dirname, '../../extension/ai/local/host.html'), 'utf8'), /<script src="offscreen\.js"><\/script>/);
   assert.match(fs.readFileSync(path.join(__dirname, '../../extension/ai/local/offscreen.js'), 'utf8'), /new Worker\('host\.js'\)/);

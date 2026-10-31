@@ -1,5 +1,5 @@
 // The local model's weights in OPFS (navigator.storage.getDirectory()), for Glaze's own engine. A model comes from
-// ai/local/models.json (scripts/model-manifest.js writes it): a Hugging Face file pinned to a commit, its size and the
+// ai/local/models.json (tools/vendor/model-manifest.js writes it): a Hugging Face file pinned to a commit, its size and the
 // SHA-256 of each 64 MB chunk. download() fetches it by Range from huggingface.co's resolve URL, which redirects to HF's
 // CDN, on the student's click only. Each chunk is checked before the next starts and kept as its own file, so a
 // cancelled or killed download resumes from its verified chunks (a writable commits on close; rewriting one 1 GB file in
@@ -40,7 +40,9 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
     && m.url === `https://huggingface.co/${m.repo}/resolve/${m.commit}/${m.file}`
     && Number.isSafeInteger(m.size) && m.size > 0 && Number.isSafeInteger(m.chunk) && m.chunk > 0 && m.chunk <= 268435456
     && Array.isArray(m.sha256) && m.sha256.length === Math.ceil(m.size / m.chunk) && m.sha256.every((h) => typeof h === 'string' && HEX.test(h))
-    && typeof m.total === 'string' && HEX.test(m.total);
+    && typeof m.total === 'string' && HEX.test(m.total)
+    // The picture download's files: its language model (role pictures, naming its projector) and the projector.
+    && (m.role === undefined || m.role === 'projector' ? m.projector === undefined : m.role === 'pictures' && typeof m.projector === 'string' && ID.test(m.projector));
 
   const anySignal = (signals) => {
     if (AbortSignal.any) return AbortSignal.any(signals);
@@ -372,8 +374,8 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
       const cat = await load();
       const out = [];
       for (const m of cat.values()) {
-        const { id, name, size, quant, tier, license, stock } = m;
-        out.push({ id, name, size, quant, tier, license, ...(stock && { stock }), ...(await status(id)) });
+        const { id, name, size, quant, tier, license, stock, role, projector } = m;
+        out.push({ id, name, size, quant, tier, license, ...(stock && { stock }), ...(role && { role }), ...(projector && { projector }), ...(await status(id)) });
       }
       let top = null;
       try { top = await (await root()).getDirectoryHandle(TOP); } catch (e) { if (!gone(e)) throw e; }

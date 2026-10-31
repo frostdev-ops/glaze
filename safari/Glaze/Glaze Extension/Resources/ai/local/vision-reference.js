@@ -29,7 +29,7 @@
 // session.forwardEmbeddings from ai/local/reference.js.
 // Numerics as reference.js: every stored value a float32, sums and products inside an op in doubles; weights stay as
 // their GGUF bytes and are dequantized a row at a time, bit for bit as ggml (ai/local/quant.js). Classic script; node exports.
-var GZ_AI_VISION = globalThis.GZ_AI_VISION || (() => {
+var GZ_AI_VISION_REFERENCE = globalThis.GZ_AI_VISION_REFERENCE || (() => {
   let quant = null, ref = null;
   const Q = () => quant || (quant = typeof GZ_AI_QUANT !== 'undefined' ? GZ_AI_QUANT : require('./quant.js'));
   const R = () => ref || (ref = typeof GZ_AI_REFERENCE !== 'undefined' ? GZ_AI_REFERENCE : require('./reference.js'));
@@ -379,4 +379,4 @@ var GZ_AI_VISION = globalThis.GZ_AI_VISION || (() => {
 
   return { config, load, targetSize, preprocess, resize, encode, tokens, feed, _ops: { smartResize, axisWeights, erf, geluErf, layernorm } };
 })();
-if (typeof module !== 'undefined') module.exports = GZ_AI_VISION; else GZ_AI_VISION;
+if (typeof module !== 'undefined') module.exports = GZ_AI_VISION_REFERENCE; else GZ_AI_VISION_REFERENCE;

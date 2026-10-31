@@ -6,8 +6,12 @@
 // chose, else the one downloaded, else, at Download, the ladder's pick for this computer (host.js). prepare() downloads in
 // the host and answers once it is there, or `downloading` after four minutes while it goes on (its progress still reaches
 // Settings). run() writes the request as the model's tokens' parts (ai/local/format.js: the fine-tune's format, or a stock
-// model's chat template) and streams the answer. Tools and pictures: not taken.
-// cfg: { model: MODEL, tier?, context?, images?, generation? }. Classic script; module.exports for node.
+// model's chat template) and streams the answer. Tools: not taken. Pictures: only once the picture download (models.json's
+// role pictures and its projector; Settings' second Download, part 'pictures') is here: caps.images and the catalog's
+// vision say so, and a request with pictures runs on that model (LFM3-VL, stock: its own chat template) in the host, which
+// lets the text model go first; the text model's runs bring it back.
+// cfg: { model: MODEL, tier?, context?, images?, generation? }; images, what the catalog said (the broker sets it). Classic
+// script; module.exports for node.
 var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const P = typeof GZ_AI_PROVIDERS !== 'undefined' ? GZ_AI_PROVIDERS : require('../providers.js');
   const R = typeof GZ_AI_REQUEST !== 'undefined' ? GZ_AI_REQUEST : require('../request.js');
@@ -38,15 +42,21 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     if (raw.context !== undefined && !(Number.isSafeInteger(raw.context) && raw.context > 0)) return null;
     if (raw.images !== undefined && typeof raw.images !== 'boolean') return null;
     if (raw.generation !== undefined && (typeof raw.generation !== 'string' || !/^[\w-]{1,64}$/.test(raw.generation))) return null;
-    return { model: MODEL, ...(raw.tier && { tier: raw.tier }), ...(raw.context && { context: raw.context }), ...(raw.generation && { generation: raw.generation }) };
+    return { model: MODEL, ...(raw.tier && { tier: raw.tier }), ...(raw.context && { context: raw.context }), ...(raw.images !== undefined && { images: raw.images }), ...(raw.generation && { generation: raw.generation }) };
   };
-  const caps = (cfg) => ({ text: true, json: true, stream: true, tools: false, images: false, local: true, context: Math.min(cfg.context || CONTEXT, CONTEXT) });
+  const caps = (cfg) => ({ text: true, json: true, stream: true, tools: false, images: cfg.images === true, local: true, context: Math.min(cfg.context || CONTEXT, CONTEXT) });
 
-  let preparing = null; // the download in the host: { done, listeners, last }
+  const preparing = { text: null, pictures: null }; // a download in the host: { call, listeners, last }
   let broken = null; // a reason the engine gave that holds until a connection changes (release)
-  // The store's models, and the one this cfg runs: its tier's, else the one here (ready, then partial).
+  // The store's text models (the tiers), and the one this cfg runs: its tier's, else the one here (ready, then partial).
   const models = async () => (await own().store.list()).filter((m) => m.state !== 'stale');
-  const choose = (list, cfg) => (cfg.tier ? list.find((m) => m.tier === cfg.tier) : list.find((m) => m.state === 'ready') || list.find((m) => m.state === 'partial')) || null;
+  const tiers = (list) => list.filter((m) => !m.role);
+  const choose = (list, cfg) => { list = tiers(list); return (cfg.tier ? list.find((m) => m.tier === cfg.tier) : list.find((m) => m.state === 'ready') || list.find((m) => m.state === 'partial')) || null; };
+  // The picture download: { model, projector, size, ready } when models.json offers it, else null.
+  const pictures = (list) => {
+    const model = list.find((m) => m.role === 'pictures'), projector = model && list.find((m) => m.role === 'projector' && m.id === model.projector);
+    return projector ? { model, projector, size: model.size + projector.size, ready: model.state === 'ready' && projector.state === 'ready' } : null;
+  };
   const where = () => {
     if (safari()) return 'browser';
     const e = own();
@@ -54,46 +64,61 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     if (!e.gpu()) return 'webgpu';
     return broken;
   };
-  // → { state, reason?, size?, tier?, tiers, progress? }: size and tier of the model it runs or would download (the smallest
-  // when the ladder hasn't picked yet), tiers each { tier, size }, for Settings' card.
+  // → { state, reason?, size?, tier?, tiers, progress?, pictures?, caps }: size and tier of the model it runs or would
+  // download (the smallest when the ladder hasn't picked yet), tiers each { tier, size }, for Settings' card; pictures, the
+  // picture download's { state: 'ready' | 'download' | 'downloading', size, progress? } where models.json offers one; caps,
+  // whether pictures can be read now.
   const status = async (cfg) => {
     const no = where();
     if (no) return { state: 'unavailable', reason: no };
     let list;
     try { list = await models(); } catch { return { state: 'unavailable', reason: 'failed' }; }
-    const m = choose(list, cfg) || [...list].sort((a, b) => a.tier - b.tier)[0];
-    const about = { ...(m && { size: m.size, tier: m.tier }), tiers: list.map((x) => ({ tier: x.tier, size: x.size })).sort((a, b) => a.tier - b.tier) };
-    if (preparing) return { state: 'downloading', ...about, ...(preparing.last !== null && { progress: preparing.last }) };
+    const text = tiers(list), m = choose(list, cfg) || [...text].sort((a, b) => a.tier - b.tier)[0], pics = pictures(list);
+    const job = preparing.pictures;
+    const about = { ...(m && { size: m.size, tier: m.tier }), tiers: text.map((x) => ({ tier: x.tier, size: x.size })).sort((a, b) => a.tier - b.tier),
+      ...(pics && { pictures: { state: job ? 'downloading' : pics.ready ? 'ready' : 'download', size: pics.size, ...(job && job.last !== null && { progress: job.last }) } }),
+      ...(pics && { caps: { images: pics.ready && !job } }) };
+    if (preparing.text) return { state: 'downloading', ...about, ...(preparing.text.last !== null && { progress: preparing.text.last }) };
     return { state: m?.state === 'ready' && choose(list, cfg) ? 'ready' : 'download', ...about };
   };
 
-  // The download, in the host. Callers that ask while it runs join it and hear its progress.
-  const prepare = async (cfg, { onProgress } = {}) => {
+  // A download, in the host: the text model (its tier's, or the ladder's pick), or with part 'pictures' the picture
+  // download. Callers that ask while one runs join it and hear its progress.
+  const prepare = async (cfg, { onProgress, part } = {}) => {
     const no = where();
     if (no) return { state: 'unavailable', reason: no };
     const listen = typeof onProgress === 'function' ? (p) => { if (Number.isFinite(p)) onProgress(Math.min(1, Math.max(0, p))); } : null;
-    if (!preparing) {
-      const job = preparing = { listeners: new Set(), last: null };
-      job.call = own().link.call('prepare', { ...(cfg.tier && { tier: cfg.tier }) }, { onEvent: (e) => {
+    const which = part === 'pictures' ? 'pictures' : 'text';
+    if (!preparing[which]) {
+      const job = preparing[which] = { listeners: new Set(), last: null };
+      job.call = own().link.call('prepare', which === 'pictures' ? { part: 'pictures' } : { ...(cfg.tier && { tier: cfg.tier }) }, { onEvent: (e) => {
         if (e?.type !== 'progress' || !Number.isFinite(e.loaded)) return;
         job.last = e.loaded;
         for (const f of job.listeners) try { f(e.loaded); } catch { /* a listener's own */ }
       } }).then((r) => (R.isObj(r) && ['ready', 'download', 'unavailable'].includes(r.state) ? { state: r.state, ...(typeof r.reason === 'string' && { reason: r.reason }) } : { state: 'unavailable', reason: 'failed' }),
         (e) => ({ state: 'unavailable', reason: typeof e?.reason === 'string' ? e.reason : 'failed' }))
-        .finally(() => { if (preparing === job) preparing = null; job.listeners.clear(); });
+        .finally(() => { if (preparing[which] === job) preparing[which] = null; job.listeners.clear(); });
     }
-    const job = preparing;
+    const job = preparing[which];
     if (listen) { job.listeners.add(listen); if (job.last !== null) listen(job.last); }
     let timer;
     const late = new Promise((r) => { timer = setTimeout(() => r({ state: 'downloading' }), LIMIT.prepare); timer.unref?.(); });
     try { return await Promise.race([job.call, late]); } finally { clearTimeout(timer); }
   };
 
-  // The model a run or a warm-up uses, ready, with its parts.
+  // The model a run or a warm-up uses, ready, with its parts: a request with pictures, the picture model and its
+  // projector (both here, else reason 'pictures'), in its own chat template; any other, the text model.
   const ready = async (req, cfg) => {
     const no = where();
     if (no) throw fail('provider-unavailable', no);
-    const m = choose(await models(), cfg);
+    const list = await models();
+    if (R.images(req) > 0) {
+      const pics = pictures(list);
+      if (!pics) throw refuse('caps', 'Glaze\'s own model does not take pictures.');
+      if (!pics.ready || preparing.pictures) throw fail('provider-unavailable', 'pictures');
+      return { m: pics.model, projector: pics.projector.id, ...FMT().format(req, { dialect: 'chatml', images: true }) };
+    }
+    const m = choose(list, cfg);
     if (!m || m.state !== 'ready') throw fail('provider-unavailable', 'assets');
     return { m, ...FMT().format(req, { dialect: m.stock ? 'chatml' : 'glaze' }) };
   };
@@ -106,14 +131,13 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   };
   const run = async (req, cfg, { signal, onDelta } = {}) => {
     if (req.tools || req.messages.some((m) => m.role === 'tool' || m.toolCalls)) throw refuse('caps', 'Glaze\'s own model does not take tool calls.');
-    if (R.images(req) > 0) throw refuse('caps', 'Glaze\'s own model does not take pictures.');
     let plan;
     try { plan = await ready(req, cfg); } catch (e) { if (e?.code) throw refuse(e.code, e.message); throw e; }
     if (signal?.aborted) throw signal.reason;
     const maxTokens = Math.min(req.maxTokens || MAX_TOKENS, CONTEXT);
     let r;
     try {
-      r = await own().link.call('run', { model: plan.m.id, parts: plan.parts, stable: plan.stable, ...(req.schema && { schema: req.schema }),
+      r = await own().link.call('run', { model: plan.m.id, parts: plan.parts, stable: plan.stable, ...(plan.images && { projector: plan.projector, images: plan.images }), ...(req.schema && { schema: req.schema }),
         sampler: { ...(req.temperature !== undefined && { temperature: req.temperature }) }, maxTokens },
       { signal, onEvent: (e) => { if (e?.type === 'delta' && typeof e.text === 'string' && e.text) onDelta?.(e.text); } });
     } catch (e) { if (signal?.aborted) throw signal.reason; throw host(e); }
@@ -128,21 +152,27 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     try { plan = await ready(req, cfg); } catch { return false; }
     try { return (await own().link.call('warm', { model: plan.m.id, parts: plan.parts.slice(0, plan.stable) }, { signal }))?.ok === true; } catch { return false; }
   };
-  const catalog = async () => ({ models: [{ id: MODEL, name: NAME, json: true, tools: false, vision: false, context: { window: CONTEXT, inputLimit: CONTEXT - CONTEXT / 10 } }], source: 'live', at: Date.now() });
+  // vision: whether the picture download is here (the broker sets cfg.images from it for a run).
+  const catalog = async () => {
+    let vision = false;
+    try { vision = !preparing.pictures && !!pictures(await models())?.ready; } catch { /* none */ }
+    return { models: [{ id: MODEL, name: NAME, json: true, tools: false, vision, context: { window: CONTEXT, inputLimit: CONTEXT - CONTEXT / 10 } }], source: 'live', at: Date.now() };
+  };
   // A connection changed: the host lets the model go (it loads again at the next run). Starts no host.
   const release = () => { broken = null; const l = own().link; if (l.up) l.call('release').catch(() => {}); };
-  // Delete: the downloaded model goes (a download in progress ends), in the host when it is up, else here.
-  const remove = async (cfg) => {
-    const l = own().link;
+  // Delete: every downloaded model goes (a download in progress ends), or with part 'pictures' the picture download only,
+  // in the host when it is up, else here.
+  const remove = async (cfg, { part } = {}) => {
+    const l = own().link, only = part === 'pictures';
     try {
-      if (l.up) await l.call('remove');
-      else for (const m of await own().store.list()) await own().store.remove(m.id);
+      if (l.up) await l.call('remove', only ? { part: 'pictures' } : {});
+      else for (const m of await own().store.list()) if (!only || m.role) await own().store.remove(m.id);
     } catch { return { state: 'unavailable', reason: 'failed' }; }
     return status(cfg);
   };
 
   const provider = { id: 'local', config, caps, status, prepare, run, warm, catalog, release, remove, accept, MODEL, NAME, CONTEXT, LIMIT,
-    _env: (e) => { env = e; preparing = null; broken = null; } };
+    _env: (e) => { env = e; preparing.text = preparing.pictures = null; broken = null; } };
   return P.add(provider);
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_LOCAL; else GZ_AI_LOCAL;

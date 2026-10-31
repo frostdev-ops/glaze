@@ -35,6 +35,7 @@ var GZ_AI_FAILURE = globalThis.GZ_AI_FAILURE || (() => {
     host: 'Glaze’s on-device model stopped. Try again.',
     quota: 'There isn’t enough free space for the model.',
     network: 'The download lost its connection. Try again.',
+    pictures: 'Picture reading isn’t downloaded. Download it in Settings → AI.',
     outline: 'The model returned an outline that did not match the document’s structure.',
     'outline-sections': 'This document has too many sections for one AI outline pass. The local outline is shown.',
     'outline-section-context': 'A section is too long for this model’s context window. The local outline is shown.',

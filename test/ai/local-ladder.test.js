@@ -3,7 +3,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const L = require('../../extension/ai/local/ladder.js');
-const { models } = require('../../extension/ai/local/models.json');
+// The text tiers; the picture download's files (role) are never one.
+const models = require('../../extension/ai/local/models.json').models.filter((m) => !m.role);
 
 const GB = 1e9;
 // The engine's decode speeds the model is fitted to (C3, glaze-plans/release-4.0.1, `local-engine-check.js speed`,
