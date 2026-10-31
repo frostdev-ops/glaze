@@ -163,7 +163,10 @@ test('a full off-canvas panel (an announcement) has a floating glass header and 
   assert.match(g, /pointer-events:\s*none/);
   const edge = ruleWith(THEME, '#site-wrap .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *)', '> .bb-offcanvas-panel-wrap')[0];
   assert.ok(edge && /border-inline-start:\s*0 !important/.test(edge[1]) && /box-shadow:\s*none !important/.test(edge[1]), 'no edge line on the panel or its wrap');
-  assert.ok(ruleWith(THEME, 'html[data-gz-bg="solid"]', '.panel-header.simple-header::before').length, 'no blur over a solid background');
+  // A pseudo-element inside :is() is invalid there and matches nothing: the solid rule must name it outside any list.
+  const solid = ruleWith(THEME, 'html[data-gz-bg="solid"]', '.panel-header.simple-header::before')
+    .filter(([sel, decl]) => /backdrop-filter:\s*none/.test(decl) && sel.split(/,(?![^(]*\))/).some((one) => /\.panel-header\.simple-header::before\s*$/.test(one.trim()) && !/:(?:is|where)\([^)]*::before/.test(one)));
+  assert.ok(solid.length, 'no blur over a solid background, from a selector the browser keeps');
 });
 
 test('Announcements with search open: no band behind the field, which is a pill like the closed toolbar', () => {
