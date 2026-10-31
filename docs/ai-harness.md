@@ -408,8 +408,8 @@ If the system refuses token counting, the request retains its output ceiling and
 ## Glaze's own model
 
 `ai/providers/local.js` (`local`, Settings' **Glaze on-device AI**) runs LiquidAI's LFM3 from `ai/local/models.json` on
-Glaze's WebGPU engine. caps: `{ text, json, stream, local: true, tools: false, images, context: 16000 }` (every tier
-reads 16k for now; `images` below), so `writer.complete`'s brief path and Feedback's local orchestration apply. Settings, `ai/settings.js`
+Glaze's WebGPU engine. caps: `{ text, json, stream, local: true, tools: false, images, context }` (`context`, the window
+below; `images` below), so `writer.complete`'s brief path and Feedback's local orchestration apply. Settings, `ai/settings.js`
 `HERE` and `writer-ai.js` treat `device`, `apple` and `local` alike as models on this computer: no model id, no key.
 
 Where it runs: Chrome, an offscreen document (`ai/local/host.html`, reason WORKERS, the `offscreen` permission) whose
@@ -457,8 +457,15 @@ messages as written, the schema in words, `<think></think>` after the assistant 
 `stock` (the fine-tune, once published; `tools/vendor/model-manifest.js` without `--stock`) reads `glaze`.
 `test/ai/local-format-ids.test.js` holds `glaze` to `glaze-plans/lfm-tune/FORMAT.md` v1 id for id: for requests each
 trained task builds, the ids its `train/format.js` and LFM3's tokenizer give (fixture: `tools/dev/local-format-fixture.js`).
-FORMAT.md's inference window of 4,096 tokens isn't applied: caps say 16,000 for every model, so `writer.review` and
-`syllabus.read` cut a long text into fewer, longer parts than any the fine-tune trained on. The system turn is the prefix kept
+The window a run plans for is its model's: 4,096 tokens for a model without `stock` (FORMAT.md's inference window; the
+training data was made at caps.context 4096), 14,400 (16,000 less a tenth) for a stock one, the picture model included.
+`catalog` says the window of the text model the connection runs (its tier's, else the one here) and that model's store id
+(`weights`), and, while pictures are here, `pictures.context`; the broker sets `cfg.context` from the first (from the
+second for a task that only reads pictures, `writer.image`) and `cfg.weights`, and a text request runs on that model
+only (missing or not ready: `provider-unavailable`, `assets`), so a request is never planned for one model and read by
+another. A picture request goes to the picture model whatever the window: its own is the larger. In Advanced a feature's
+context still replaces the window. `test/ai/local-window.test.js` holds `writer.review` and `syllabus.read` through the
+broker to lfm-tune's training examples (fixture: `tools/dev/local-window-fixture.js`). The system turn is the prefix kept
 warm: up to three per loaded model, as snapshots. Sampling: the request's temperature, else LFM3's GGUF defaults
 (temperature 0.1, top-k 50); output up to the request's `maxTokens` (1,024 by default) and refused before reading when the
 prompt and output exceed the window (`request-rejected`, `context`).

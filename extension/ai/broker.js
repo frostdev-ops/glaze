@@ -325,7 +325,11 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         const list = await catalog(env, use, control.signal, now(), use.p.id === 'local' && (task.caps.images === true || task.id === 'writer.feedback'));
         const chosen = M().select(use.cfg.model, list, { tools: !!task.tools, images: !!task.caps.images });
         const takes = use.p.id === 'openai' ? M().efforts(use.cfg.base, use.cfg.model, list?.models.find((x) => x.id === use.cfg.model)) : [];
-        const cfg = { ...use.cfg, ...(chosen.caps.context && !use.cfg.context && { context: chosen.caps.context }), ...(chosen.caps.images !== undefined && use.cfg.images === undefined && { images: chosen.caps.images }) };
+        // Glaze's own model: the window of the text model its catalog chose, which then runs the text requests (weights); a
+        // task that only reads pictures plans for the picture model's.
+        const known = list?.models.find((x) => x.id === chosen.model), planned = (task.caps.images === true && known?.pictures?.context?.inputLimit) || chosen.caps.context;
+        const cfg = { ...use.cfg, ...(planned && !use.cfg.context && { context: planned }), ...(chosen.caps.images !== undefined && use.cfg.images === undefined && { images: chosen.caps.images }),
+          ...(typeof known?.weights === 'string' && { weights: known.weights }) };
         if (rate ? often(`${env.who}|${m.feature}|${m.task}`, now(), rate.perMinute || LIMIT.perMinute, '|rated') : often(key, now())) throw R().error('often');
         if (control.signal.aborted) throw Object.assign(R().error('cancelled'), { category: 'cancelled' });
         const remember = (id) => { const parked = confirms.get(id); if (parked) Object.assign(parked, { runId: m.id, feature: m.feature, task: m.task, to: m.to, use }); };
