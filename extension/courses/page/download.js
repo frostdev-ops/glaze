@@ -76,12 +76,11 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
     b.toggleAttribute('data-job', !!j);
     b.style.setProperty('--gz-pct', `${j?.done ? 0 : j?.pct || 0}%`);
   };
-  // Glaze's Allow frame (courses/allow.html) beside a folder's button, for a host the worker can't reach yet: its one button
-  // asks the browser for that host. → whether it was allowed; no when the download stops first or the button is gone.
-  // Only the frame's own answer counts (a page can post anything); the worker checks the grant again either way.
-  const allowFrame = (fid, host, signal, ticket) => new Promise((resolve) => {
-    const b = document.getElementById(`gz-dl-${fid}`);
-    if (!b || signal.aborted) return resolve(false);
+  // Glaze's Allow frame (courses/allow.html) beside a button (a folder's; Open in Glaze's), for a host the worker can't reach
+  // yet: its one button asks the browser for that host. → whether it was allowed; no when the download stops first or the
+  // button is gone. Only the frame's own answer counts (a page can post anything); the worker checks the grant again either way.
+  const allowFrame = (b, host, signal, ticket) => new Promise((resolve) => {
+    if (!b?.isConnected || signal.aborted) return resolve(false);
     const f = document.createElement('iframe');
     f.className = 'gz-dl-allow';
     f.title = t('Allow {host}', { host });
@@ -106,13 +105,13 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
     const cid = ultra ? courseId() : canvasCourseId();
     const ctl = new AbortController();
     const job = { ctl, label: t('Finding files · Cancel'), pct: 0 };
-    const bridge = ultra ? null : canvasBytes(ctl.signal, (host, ticket) => allowFrame(fid, host, ctl.signal, ticket));
+    const bridge = ultra ? null : canvasBytes(ctl.signal, (host, ticket) => allowFrame(document.getElementById(`gz-dl-${fid}`), host, ctl.signal, ticket));
     jobs.set(fid, job);
     const say = (label, pct = 0) => { Object.assign(job, { label, pct }); paintDl(fid); };
     say(job.label);
     // Only the fields used: never an item's contentDetail, where an LTI link keeps its tool's secret and key. Through
-    // courses/ultra.js's reader: GET, this site, redirects refused (one means signed out).
-    const get = (path) => GZ_ULTRA.read({ origin: location.origin, signal: ctl.signal }).get(`/learn/api/${path}`);
+    // courses/ultra.js's reader: GET, this site, redirects refused (one means signed out), in the site's queue.
+    const get = (path) => need('courses/lmsq.js', () => globalThis.GZ_LMSQ).then(() => GZ_ULTRA.read({ origin: location.origin, signal: ctl.signal, f: (u, o) => GZ_LMSQ.fetch(u, o) }).get(`/learn/api/${path}`));
     const list = (id) => get(`v1/courses/${cid}/contents/${id}/children?limit=200&fields=${GZ_ULTRA.FILES_FIELDS}`).then((j) => j.results || []);
     const found = [];
     let skipped = 0;
@@ -263,8 +262,31 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
     }
   };
 
+  // One Canvas file by its id, read on a click as Download all reads each (courses/page/canvasopen.js): Canvas's API names it and
+  // signs its address, the worker's byte port reads it, an unheld file server asked for beside `beside`. → { name, bytes };
+  // throws an Error whose message is why: locked (not yours to open now), big (over max bytes), url, read, refused.
+  const canvasFile = async (id, { signal, max, beside }) => {
+    await need('core/zip.js', () => globalThis.GZ_ZIP);
+    const f = await capi(`/files/${id}`).catch(() => null);
+    signal.throwIfAborted();
+    if (!f || f.locked_for_user || f.hidden_for_user) throw new Error('locked');
+    if (!(f.size <= max)) throw new Error('big');
+    const signed = await capi(`/files/${id}/public_url`).catch(() => null);
+    signal.throwIfAborted();
+    const url = GZ_ZIP.canvasURL({ ...f, url: signed?.public_url }, location.origin);
+    if (!url) throw new Error('url');
+    const bridge = canvasBytes(signal, (host, ticket) => allowFrame(beside, host, signal, ticket));
+    try {
+      const bytes = await bridge.read(url).catch((e) => { throw new Error(e?.refused ? 'refused' : e?.limit ? 'big' : 'read'); });
+      if (!bytes?.length) throw new Error('read');
+      if (bytes.length > max) throw new Error('big');
+      return { name: f.display_name || f.filename || '', bytes };
+    } finally { bridge.close(); }
+  };
+
   return {
     sync,
+    canvasFile,
     // Glaze switched off: what is still being fetched stops.
     stop: () => { for (const j of jobs.values()) j.ctl.abort(); canvasAsked = new Map(); },
   };

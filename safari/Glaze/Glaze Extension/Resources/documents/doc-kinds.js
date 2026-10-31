@@ -18,7 +18,7 @@ var GZ_DOC_KINDS = globalThis.GZ_DOC_KINDS || (() => {
   // larger one; param: its name in a page's address.
   const KINDS = freeze({
     paper: { label: 'Document', icon: 'paper', accept: ['.docx'], mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', max: 15e6, param: 'paper' },
-    sheet: { label: 'Spreadsheet', icon: 'sheet', accept: ['.xlsx', '.csv', '.tsv'], mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', max: 15e6, param: 'sheet' },
+    sheet: { label: 'Spreadsheet', icon: 'sheet', accept: ['.xlsx', '.xlsm', '.csv', '.tsv'], mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', max: 15e6, param: 'sheet' },
     pdf: { label: 'PDF', icon: 'pdf', accept: ['.pdf'], mime: 'application/pdf', max: FILE, big: 'Choose a PDF smaller than 50 MB.', param: 'pdf' },
     slides: { label: 'Slides', icon: 'slides', accept: ['.pptx', '.ppsx'], mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', max: FILE, big: 'Choose a PowerPoint file smaller than 50 MB.', param: 'slides' },
   });

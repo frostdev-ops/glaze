@@ -18,8 +18,9 @@
 //   split?(input, { budget, text }) → [input] and merge([output], input) → output: a long input in parts, each its own
 //     request, put back together before check. budget: tokens a part's data may take on this provider.
 //   orchestrate?(input, { caps, text, ask, fits, signal, limits }) → a raw output, or undefined for the ordinary run.
-//     Trusted task code only. ask(request, { output?, check? }) uses this run's provider, deadline and accounting; it
-//     never retries. Calls are sequential and bounded by limits.calls (at most LIMIT.calls). fits reserves output room.
+//     Trusted task code only. ask(request, { output?, check?, accept?, call? }) uses this run's provider, deadline and
+//     accounting (accept: providers.js run's, a looser schema the answer is checked against); it never retries. Calls are
+//     sequential and bounded by limits.calls (at most LIMIT.calls). fits reserves output room.
 //     ask's call: the orchestration's own kind of request (CALL, e.g. writer.feedback's decide, explain, summary, scan),
 //     on the request's task info beside id and version, which no provider sends; Glaze's own model reads it
 //     (ai/providers/local.js THINK).
@@ -109,7 +110,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
       const pictures = (request.messages || []).flatMap((m) => Array.isArray(m.content) ? m.content : []).filter((c) => c.type === 'image').length;
       return X().estimateTokens(request) + (request.maxTokens || 1024) + pictures * 1024 + Math.max(128, Math.ceil(context * 0.08)) <= context;
     };
-    const ask = async (built, { output = task.output, check, note, maxTokensCap, call } = {}) => {
+    const ask = async (built, { output = task.output, check, note, maxTokensCap, call, accept } = {}) => {
       if (!active) throw Q.error('limit', 'finished');
       if (call !== undefined && !(typeof call === 'string' && CALL.test(call))) throw Q.error('input', 'call');
       if (both.signal.aborted) throw both.signal.reason;
@@ -120,7 +121,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
       emit({ type: 'note', part: calls, parts: task.limits.calls || LIMIT.parts, ...(Q.isObj(note) && ['evidence', 'criterion', 'summary'].includes(note.stage) && Number.isSafeInteger(note.part) && Number.isSafeInteger(note.parts) && note.part > 0 && note.part <= note.parts ? { stage: note.stage, part: note.part, parts: note.parts } : {}) });
       try {
         const request = requestOf(built, output, maxTokensCap, call);
-        const res = await L().run({ request, tools: [], call: (r, o) => P().run(p, r, c, { ...o, fetch }), policy, rounds: task.limits.steps, limits, headless, stream: false, signal: both.signal, emit, ctx, confirms });
+        const res = await L().run({ request, tools: [], call: (r, o) => P().run(p, r, c, { ...o, fetch, ...(accept && { accept }) }), policy, rounds: task.limits.steps, limits, headless, stream: false, signal: both.signal, emit, ctx, confirms });
         steps.push(...res.steps); rounds += res.rounds;
         usage.input += res.usage?.input || 0; usage.output += res.usage?.output || 0;
         if (both.signal.aborted) throw both.signal.reason;

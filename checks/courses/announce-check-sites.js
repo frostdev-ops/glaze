@@ -59,10 +59,13 @@ module.exports = async ({ ctx, opts, O, ok, out }) => {
     await opts.evaluate(async ([s, l]) => {
       for (const [area, v] of [[chrome.storage.sync, s], [chrome.storage.local, l]]) { await area.remove(Object.keys(await area.get(null)).filter((k) => !(k in v))); await area.set(v); }
     }, [sync, local]);
-    await opts.waitForFunction(async ([want]) => {
+    // Polled from Node: waitForFunction resolves at once on an async predicate (its promise is truthy).
+    const want = [[`${MD}/*`, !!local.moodle?.length], [`${UB}/ultra/*`, !!local.ultra?.length]];
+    const done = () => opts.evaluate(async (w) => {
       const scripts = await chrome.scripting.getRegisteredContentScripts();
-      return want.every(([pattern, on]) => scripts.some((s) => s.matches?.includes(pattern)) === on);
-    }, [[[`${MD}/*`, !!local.moodle?.length], [`${UB}/ultra/*`, !!local.ultra?.length]]], { timeout: 10000 });
+      return w.every(([pattern, on]) => scripts.some((s) => s.matches?.includes(pattern)) === on);
+    }, want);
+    ok(await until(done, 10000), `the worker has registered what the lists name (${JSON.stringify(want)})`);
   };
   const settings = (extra = {}) => G.GZ_SANITIZE({ navbar: { on: false }, motion: { level: 'off' }, announce: { delay: 300 }, ...extra, enhance: { ...off, ...extra.enhance } });
   await store(settings(), { ultra: [UB], moodle: [`${MD}/*`], freshDefaults: { fresh: false } });
@@ -169,7 +172,7 @@ module.exports = async ({ ctx, opts, O, ok, out }) => {
     // A course tab's frame: the course's Announcements tool, as checks/navigation/ctab-panel-close-check.js opens it.
     ultraShell = 'course';
     const key = `ctabs:${UB}:_42_1`;
-    await store(settings({ enhance: { tabs: true, place: true }, tabs: G.GZ_SANITIZE({}).tabs }), { ultra: [UB], moodle: [`${MD}/*`], freshDefaults: { fresh: false },
+    await store(settings({ enhance: { tabs: true, place: true }, tabs: { ...G.GZ_SANITIZE({}).tabs, ahead: false, keep: false } }), { ultra: [UB], moodle: [`${MD}/*`], freshDefaults: { fresh: false },
       [key]: { tabs: [101, 102].map((n, i) => ({ cid: `_${n}_1`, name: `Synthetic course ${i + 1}`, path: `/ultra/courses/_${n}_1/outline`, top: 0, at: i, pin: false })) } });
     await page.goto(`${UB}/ultra/courses/_101_1/outline`);
     await page.locator('#gz-ctabs [data-course-id="_102_1"]').click();

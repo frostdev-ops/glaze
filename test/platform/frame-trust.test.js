@@ -37,7 +37,7 @@ test('Download all: any other frame is refused before it can ask for a file', as
     ['another site than its tab', course({ url: `${OTHER}/courses/25/modules`, origin: OTHER })],
     ['a tab whose page is on another site', course({ tab: { id: 7, url: `${OTHER}/` } })],
     ['no address for its tab', course({ tab: { id: 7 } })],
-    ['not a course page', course({ url: `${CANVAS}/courses/25/files` })],
+    ['not a course page that shows or links a file', course({ url: `${CANVAS}/courses/25/settings` })],
     ['no tab', course({ tab: undefined })],
     ['another extension', course({ id: 'other' })],
     ['opaque sandbox origin', course({ origin: 'null' })],

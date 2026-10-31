@@ -102,6 +102,7 @@ const D = require('../../extension/content/defaults.js');
 // course's content items as content-ultra.js hands them over).
 const ULTRA = 'https://school.blackboard.test';
 const U = require('../../extension/courses/ultra.js');
+const { ultraFor } = require('../helpers/ultra-page.cjs');
 const page = ({ on = true, stored = on, live = true, enabled = true, ultra = false, items = [] } = {}) => {
   const doc = { activeElement: null, root: null };
   const make = (t) => {
@@ -176,7 +177,7 @@ const page = ({ on = true, stored = on, live = true, enabled = true, ultra = fal
       ...(ultra && { site: 'ultra', profile: undefined, canvasCourses: undefined, myCourses: undefined, courseItems: undefined }),
     },
     // The real reader over a stand-in fetch that records what it was asked and how (env.fetched).
-    ...(ultra && { GZ_ULTRA: { ...U, read: (o) => U.read({ ...o, f: ultraFetch }) } }),
+    ...(ultra && { GZ_ULTRA: { ...ultraFor({ origin: () => ULTRA, fetch: (u, i) => ultraFetch(u, i) }), read: (o) => U.read({ ...o, f: ultraFetch }) } }),
     chrome: {
       runtime: { getURL: (f = '') => `chrome-extension://x/${f}`, sendMessage: (m, cb) => { sent.push(m); if (m.type === 'glaze:sessions-open') return Promise.resolve({ ok: true }); if (m.type === 'glaze:quick-ticket') { const p = Promise.resolve(env.ticket?.(m) ?? { ok: true, ticket: 'ab'.repeat(16) }); if (cb) p.then(cb); return p; } const p = Promise.resolve(env.hold(m)).then(() => N.run(m, { local }, idb)).then((r) => JSON.parse(JSON.stringify(r))); if (cb) p.then(cb); else return p; } },
       storage: { local: { get: (k, cb) => local.get(k).then(cb) }, sync: { get: (k, cb) => { if (env.syncFail) throw new Error('Extension context invalidated.'); const r = structuredClone(env.sync); Promise.resolve(env.syncHold).then(() => cb(r)); } }, onChanged: { addListener: (f) => changed.push(f) } },
@@ -568,6 +569,25 @@ test('uploads: a file over the limit is refused before it is read, and nothing i
   bytes.resolve(new ArrayBuffer(10));
   await settle();
   assert.ok(!P.ops().includes('file'));
+});
+
+test('a note whose paragraph holds 70,000 line breaks opens whole, its children added in bounded batches', async () => {
+  // Chromium overflows its stack on a spread of tens of thousands of arguments (Codex B6 review).
+  const P = page();
+  await P.seed([{ id: id(1), title: 'Long', course: '7', html: `<p>${'<br>'.repeat(70000)}</p>` }]);
+  await P.openView();
+  let most = 0;
+  const { append, replaceChildren } = El.prototype;
+  El.prototype.append = function (...k) { most = Math.max(most, k.length); return append.apply(this, k); };
+  El.prototype.replaceChildren = function (...k) { most = Math.max(most, k.length); return replaceChildren.apply(this, k); };
+  try {
+    P.fire(P.items()[0], 'click');
+    await settle(40);
+  } finally { Object.assign(El.prototype, { append, replaceChildren }); }
+  const body = P.box().querySelector('.gz-nt-body');
+  assert.equal(body.children.length, 1);
+  assert.equal(body.children[0].children.filter((c) => c.tagName?.toLowerCase() === 'br').length, 70000);
+  assert.ok(most <= 1024, `at most 1024 children per call (${most})`);
 });
 
 test('Duplicate makes "<title> (copy)" and opens it', async () => {

@@ -312,6 +312,7 @@ test('content.js loads the declarative widgets on every browser, in the top fram
       chrome: { runtime: { getManifest: () => (sandbox ? { sandbox: { pages: ['mods/host.html'] } } : {}), sendMessage: async (m) => { messages.push(m); return answer || { ok: true, mods, plain: plainList }; } } },
       need: async (file) => { asked.push(file); if (file === 'mods/page/mods.js') ctx.GZ_MODS = { start: () => started.push('mods') }; else ctx.GZ_MODWIDGETS = { start: () => started.push('widgets') }; },
     });
+    ctx.stored = (k, cb) => ctx.local((l) => l.get(k, cb)); // content.js's startup read, here storage itself
     ctx.window = {};
     ctx.window.top = top ? ctx.window : {};
     ctx.globalThis = ctx;

@@ -95,8 +95,8 @@ test("an Ultra page's reads, all through courses/ultra.js's reader: the student 
     assert.ok(asked.every(({ url, init }) => url.startsWith(`${o}/learn/api/`) && init.method === 'GET' && init.redirect === 'error'));
     assert.equal(asked.filter(({ url }) => /\/users\/(me|_900_1\/memberships)/.test(url)).length, 2, 'the student and their courses, once a page');
     const n = asked.length;
-    await U.page.due(...range);
-    assert.ok(asked.length > n, 'a read that has come back is asked again next time: nothing is kept here');
+    assert.equal(await U.page.due(...range), a, 'a read that has come back answers its range for two minutes');
+    assert.equal(asked.length, n);
   } finally { Object.assign(globalThis, had); }
 });
 

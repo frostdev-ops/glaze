@@ -189,6 +189,19 @@ test('a site added: it registers, the others stay through it, and Notes\' hook t
 });
 
 
+test('the lists taken away and put back (a restore, an undo): the pass the first write started takes nothing away', async () => {
+  const was = await before();
+  const w = worker({ registered: was, local, sync });
+  // The second write lands while the first write's pass, which read the lists empty, asks what is registered.
+  let back = false;
+  w.read = async () => { if (!back) { back = true; w.change('local', local); } };
+  w.change('local', { canvas: undefined, moodle: undefined, ultra: undefined });
+  await settle();
+  assert.ok(back, 'the second write landed during the first pass');
+  neverGone(w, was.map((s) => s.id));
+  assert.deepEqual(w.calls, [], 'the registrations are left as they were');
+});
+
 for (const [id, key, value, expected] of [
   [`${C}/*`, 'matchOriginAsFallback', true, false],
   ['gz-notes-home', 'allFrames', true, false],

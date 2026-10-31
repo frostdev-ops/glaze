@@ -3,6 +3,8 @@
 // state (I) and puts what it returns over its defaults (X). A second copy keeps the first; it ends on its value (loadable).
 var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const { C, html, isPreview, solo, tabFrame, need, t, locale, api, courseId, markDue, drawProgress, cardBadge, cardsInView, inView, tagCards, tagExtras, courseSlots, courseColors, varText, CARD, dueLabelled } = I;
+  // The first read of a key content.js reads as it starts comes from that one get.
+  const stored = (keys, cb) => (I.stored ? I.stored(keys, cb) : chrome.storage.local.get(keys, cb));
 
   // ---- the student's courses -------------------------------------------------------------------
   // Every course and the color slot Ultra gives it, for the editor's course list and the tint on
@@ -12,7 +14,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const record = () => {
     const at = `seenCoursesAt ${location.origin}`;
     try {
-      chrome.storage.local.get(at, (r) => {
+      stored(at, (r) => {
         if (Date.now() - (r?.[at] || 0) < 600000) return;
         myCourses().then((ms) => {
           const seen = GZ_COURSES(ms);
@@ -31,31 +33,34 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   };
 
   // ---- the gradebook --------------------------------------------------------------------------
-  // One /users/me for everything that asks at once. A failure (this, a gradebook) is asked again after a minute, a 401
-  // (signed out) once the page changes.
-  let meId = null;
+  // Who's signed in, their courses, gradebooks and content: courses/ultra.js's stores, through the site's queue. A failure
+  // (this, a gradebook) is asked again after a minute, a 401 (signed out) once the page changes.
+  let meId = null, meAt = 0;
   let meFailed = null;
   const route = () => location.pathname + (location.search || '');
   const failed = (e, at = route()) => ({ at: Date.now(), out: (e === 401 || /HTTP 401/.test(e?.message)) && at });
   const askAgain = (f) => (f.out ? f.out !== route() : Date.now() - f.at >= 60000);
+  const stores = () => need(['courses/lmsq.js', 'courses/ultra.js'], () => globalThis.GZ_LMSQ && globalThis.GZ_ULTRA)
+    .then(() => { GZ_ULTRA.page.alive(() => I.settings.enabled && !!I.links.length); return GZ_ULTRA.page; });
   const me = () => {
+    if (Date.now() - meAt >= 600000) { meId = meFailed = null; meAt = Date.now(); }
     if (meFailed && askAgain(meFailed)) meId = meFailed = null;
     const at = route();
-    return (meId ||= api('/users/me').then((m) => m.id).catch((e) => { meFailed = failed(e, at); throw e; }));
+    // At once, outside the queue (fetch below); courses/ultra.js's page.me takes it (GZ_CTX.me).
+    return (meId ||= api('/users/me').then((m) => (/^_\d+_\d+$/.test(m?.id) ? m.id : Promise.reject(0))).catch((e) => { meFailed = failed(e, at); throw e; }));
   };
-  // Gradebooks and contents, fanned out over course cards: courses/ultra.js's reader through the site's queue (courses/lmsq.js).
-  const reader = () => need('courses/lmsq.js', () => globalThis.GZ_LMSQ).then(() => need('courses/ultra.js', () => globalThis.GZ_ULTRA))
-    .then(() => { const live = () => I.settings.enabled && !!I.links.length; return GZ_ULTRA.read({ origin: location.origin, live, f: (u, o) => GZ_LMSQ.fetch(u, o, 0, live) }); });
   const covered = (rows, complete) => Object.defineProperty(rows, 'complete', { value: complete });
-  // One page of memberships, shared by names and due-date exceptions.
-  let memberships = null;
+  // Shared by names and due-date exceptions.
+  let memberships = null, membershipsAt = 0;
   let membershipsFailed = null;
   const myCourses = () => {
+    if (Date.now() - membershipsAt >= 600000) { memberships = membershipsFailed = null; membershipsAt = Date.now(); }
     if (membershipsFailed && askAgain(membershipsFailed)) memberships = membershipsFailed = null;
     const at = route();
-    return (memberships ||= me().then((id) => api(`/users/${id}/memberships?expand=course&limit=200`))
-      .then((j) => covered(j.results || [], !j.paging?.nextPage)).catch((e) => { membershipsFailed = failed(e, at); return covered([], false); }));
+    return (memberships ||= stores().then((s) => s.mine()).then((m) => m.mem).catch((e) => { membershipsFailed = failed(e, at); return covered([], false); }));
   };
+  const rowsOf = (cid, id) => stores().then((s) => s.book(cid, id));
+  const keptRows = (cid, id) => stores().then((s) => s.saved(cid, id));
   // Planning (planner/page/todo.js…), as Canvas's part: courses/ultra.js reads; each file loaded once on, asked again as it lands.
   const page = (k) => () => need('courses/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page[k]());
   const load = (on, file, n) => (on() ? need(file, () => globalThis[n]).then(() => globalThis[n].sync(!!on()), () => {}) : globalThis[n]?.sync(false));
@@ -64,12 +69,27 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // otherwise its legacy places stay in use, including while the sidebar cannot start.
   const sidebarHere = () => !!top()?.sidebar && I.settings.sidebar?.ultra !== false && /^\/ultra(\/|$)/.test(location.pathname);
   const sidebarOn = () => sidebarHere() && (globalThis.GZ_SIDEBAR_UI?.enabled?.() ?? !I.settings.sidebar?.off?.length);
-  const syncSidebar = () => load(sidebarHere, 'navigation/page/sidebar.js', 'GZ_SIDEBAR_UI');
+  // The sidebar and To Do come with the files they ask for as they start: one load each.
+  const syncSidebar = () => load(sidebarHere, ['core/widgets.js', 'navigation/sidebar.js', 'navigation/page/sidebar.js'], 'GZ_SIDEBAR_UI');
   const syncStream = () => load(() => I.links.length && (isPreview ? globalThis.GZ_STREAM_UI && html.dataset.previewPage === 'stream' : solo && /^\/ultra\/stream(?:\/|$)/.test(location.pathname)), 'courses/page/stream.js', 'GZ_STREAM_UI');
-  const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|institution-page\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname) && !(sidebarOn() && !globalThis.GZ_SIDEBAR_UI?.failed()), 'planner/page/todo.js', 'GZ_TODO_UI');
+  const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|institution-page\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname) && !(sidebarOn() && !globalThis.GZ_SIDEBAR_UI?.failed()), ['courses/ultra.js', 'planner/todo.js', 'planner/page/todo.js'], 'GZ_TODO_UI');
   const syncCardTasks = () => load(() => top()?.cardTasks && /^\/ultra\/course\/?$/.test(location.pathname) && document.querySelector(CARD), 'courses/page/cardtasks.js', 'GZ_CARD_TASKS');
   // Reminders and floating widgets are the page's, once: never again in a course tab's frame over it.
   const syncRemind = () => load(() => !tabFrame && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => top()?.[k]), 'planner/page/reminders.js', 'GZ_REMIND_UI');
+  const syncAhead = () => load(() => !tabFrame && top()?.prefetch, 'courses/page/ahead.js', 'GZ_AHEAD');
+  // Pages from the student's last visit (enhance.instant), in any course tab frame too: courses/page/instant.js.
+  // Signing out (Ultra's menu's "#" link; Glaze's bar clicks it too) forgets this site's copies.
+  let copySignedOut = false;
+  const syncInstant = () => solo && !isPreview && Promise.resolve(I.ready).then(() => I.settings.enabled && (globalThis.GZ_INSTANT || (!copySignedOut && top()?.instant && (tabFrame || /^\/ultra\/(grades|course|stream|courses\/_\d+_\d+\/(outline|announcements|grades))\/?$/.test(location.pathname))))
+    && need(['courses/instant.js', 'courses/page/instant.js'], () => globalThis.GZ_INSTANT).then(() => copySignedOut ? GZ_INSTANT.signout() : GZ_INSTANT.sync(!!top()?.instant, me, I.ready))).catch(() => {});
+  if (window.top === window) document.addEventListener('click', (e) => {
+    const a = e.target?.closest?.('.MuiDrawer-paper a[href], #base_tools a[href]'), h = a?.getAttribute('href') || '';
+    if (a && (h === '#' || /logout/i.test(h))) {
+      copySignedOut = true;
+      globalThis.GZ_INSTANT?.signout();
+      try { chrome.runtime.sendMessage({ type: 'glaze:ultraCopy', op: 'drop' })?.catch?.(() => {}); } catch { /* reloaded */ }
+    }
+  }, true);
 
   // Only submitted attempts have a hand-in date. A newer draft leaves earlier submission timing unknown.
   // Course and item due-date exceptions suppress lateness.
@@ -85,24 +105,31 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     return excepted.then((exc) => new Set(waiting.filter((g) => !exc(g.columnId) && g.lastAttempt?.status !== 'IN_PROGRESS'
       && GZ_GRADES.late(g.lastAttempt?.attemptDate, g.column.dueDate)).map((g) => g.columnId)));
   };
-  // Per-course gradebook cache. Only due-date chips ask for lateness; changed answers re-tag the page.
+  // Per-course gradebook cache. Only due-date chips ask for lateness; changed answers re-tag the page. The last visit's
+  // copy draws (saved) until the first answer.
   const books = new Map();
+  const take = (b, rows, lateCols) => {
+    const key = JSON.stringify([rows.map((g) => [g.columnId, g.status, g.isExempt, g.displayGrade, g.submissionStatus?.status, g.lastAttempt?.status, g.lastAttempt?.attemptDate]), [...(lateCols || [])], rows.complete !== false]);
+    b.results = rows;
+    if (key === b.key) return;
+    Object.assign(b, { grades: GZ_PAGE.gradesByContent(rows), overall: GZ_PAGE.overall(rows, locale()), key });
+    onBook();
+  };
   const bookFor = (cid, late = false) => {
     let b = books.get(cid);
     if (!b || (!b.pending && (b.fail ? askAgain(b.fail) : Date.now() - b.at > 60000 || (late && !b.late)))) {
+      const first = !b;
       b = { key: '', ...b, at: Date.now(), route: route(), pending: true, fail: null };
       books.set(cid, b);
-      // One page (200 grades); calculators reject an incomplete answer.
-      Promise.all([me(), reader()]).then(([id, r]) => r.get(`/learn/api/v1/courses/${cid}/gradebook/grades?userId=${id}&limit=200&includeNoGradeItems=true&expand=column,lastAttempt,submissionStatus`))
-        .then((j) => (late || b.late ? lateIn(cid, j.results) : Promise.resolve(undefined)).then((lateCols) => {
+      const asked = me();
+      if (first) asked.then((id) => keptRows(cid, id)).then((k) => { if (k && books.get(cid) === b && b.pending && !b.results) { b.saved = true; take(b, k.rows); } }, () => {});
+      asked.then((id) => rowsOf(cid, id))
+        .then((rows) => (late || b.late ? lateIn(cid, rows) : Promise.resolve(undefined)).then((lateCols) => {
+          if (books.get(cid) !== b) return;
           b.pending = false;
-          const complete = !j.paging?.nextPage;
-          const key = JSON.stringify([j.results.map((g) => [g.columnId, g.status, g.isExempt, g.displayGrade, g.submissionStatus?.status, g.lastAttempt?.status, g.lastAttempt?.attemptDate]), [...(lateCols || [])], complete]);
+          b.saved = false;
           b.late = lateCols;
-          b.results = covered(j.results, complete);
-          if (key === b.key) return;
-          Object.assign(b, { grades: GZ_PAGE.gradesByContent(j.results), overall: GZ_PAGE.overall(j.results, locale()), key });
-          onBook();
+          take(b, rows, lateCols);
         }))
         .catch((e) => { b.pending = false; b.fail = failed(e, b.route); });
     }
@@ -202,14 +229,14 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // Requests behind file previews (courses/page/docs.js).
   try { new PerformanceObserver((l) => { for (const e of l.getEntries()) if (/view(er)?Url/.test(e.name)) (self.GZ_ASKS ||= []).unshift(e.name); self.GZ_ASKS?.splice(50); }).observe({ type: 'resource', buffered: true }); } catch {}
   // Keep the course strip attached when Ultra replaces its header; no route paint hold.
-  const gate = (scope) => { discoverNav(scope); tagDocs([scope]); return globalThis.GZ_CTABS?.held(); };
+  const gate = (scope) => { discoverNav(scope); tagDocs([scope]); globalThis.GZ_WIDGETS_UI?.held?.(); return globalThis.GZ_CTABS?.held(); };
 
   // ---- course progress (Extras) ---------------------------------------------------------------
   // One bar above the course outline adding up what the outline already says: each folder's
   // "N of M completed" (in any language: core/page.js) plus each top-level item's review circle. Redrawn
   // only when the numbers move. The Content page only: other course tabs (Discussions) list items too.
   const renderProgress = () => {
-    if (top()?.hideFolders && /^\/ultra\/courses\/_\d+_\d+\/outline(?:\/|$)/.test(location.pathname)) need('courses/folders.js', () => globalThis.GZ_FOLDERS).then(() => need('courses/page/folders.js', () => globalThis.GZ_FOLDER_UI)).then(() => GZ_FOLDER_UI.sync(!!top()?.hideFolders, meId), () => {});
+    if (top()?.hideFolders && /^\/ultra\/courses\/_\d+_\d+\/outline(?:\/|$)/.test(location.pathname)) need(['courses/folders.js', 'courses/page/folders.js'], () => globalThis.GZ_FOLDERS && globalThis.GZ_FOLDER_UI).then(() => GZ_FOLDER_UI.sync(!!top()?.hideFolders, meId), () => {});
     else globalThis.GZ_FOLDER_UI?.sync(false, meId);
     const old = document.getElementById('gz-progress');
     if (!I.settings.enhance.progress || !/^\/ultra\/courses\/_\d+_\d+\/outline(\/|$)/.test(location.pathname)) return old?.remove();
@@ -238,9 +265,15 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const shown = new Map(); // cid → column ids badged on this page
   const loadSeen = () => {
     seenLoad ||= new Promise((res) => {
-      try { chrome.storage.local.get(['seenGrades', 'seenContent'], (r) => res(r || {})); } catch { res({}); }
+      try { stored(['seenGrades', 'seenContent'], (r) => res(r || {})); } catch { res({}); }
     }).then((r) => { seen = r.seenGrades || {}; seenItems = r.seenContent || {}; renderNew(); });
   };
+  chrome.storage.onChanged.addListener((c, area) => {
+    if (area !== 'local') return;
+    if (c.seenGrades) seen = c.seenGrades.newValue || {};
+    if (c.seenContent) seenItems = c.seenContent.newValue || {};
+    if (c.seenGrades || c.seenContent) renderNew();
+  });
   // One course at a time, over what's stored: another tab may have recorded other courses since.
   const keepSeen = (key, cid, v) => {
     try { chrome.storage.local.get(key, (r) => chrome.storage.local.set({ [key]: { ...r?.[key], [cid]: v } })); } catch { /* extension reloaded under the tab */ }
@@ -319,14 +352,14 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // what's in a folder only once it's unfolded. Kept on this device (storage.local, seenContent).
   // ponytail: "on the page", not on screen; a long outline's last rows count as seen unscrolled.
   // The course's items come from one paged read (ten pages of 200 at most), shared with the command palette and
-  // asked again after five minutes at most, with only the fields used.
+  // asked again after a minute at most, with only the fields used.
   const contents = new Map(); // cid → { at, p, items }
-  const courseItems = (cid) => {
+  const courseItems = (cid, prio = 0) => {
     let c = contents.get(cid);
-    if (!c || Date.now() - c.at > 300000) {
+    if (!c || Date.now() - c.at > 60000) {
       c = { at: Date.now(), items: c?.items };
-      c.p = reader().then((r) => r.list(`/learn/api/public/v1/courses/${cid}/contents`, 'id,parentId,title,availability.available,links,contentHandler.id,contentHandler.isBbPage', true))
-        .then((j) => { c.items = covered(j.items.filter((i) => i.availability?.available !== 'No'), j.complete); renderNew(); return c.items; }, () => c.items || []);
+      c.p = stores().then((s) => s.outline(cid, { prio }))
+        .then((j) => { if (contents.get(cid) !== c) return []; c.items = covered(j.items.filter((i) => i.availability?.available !== 'No'), j.complete); renderNew(); return c.items; }, () => c.items || []);
       contents.set(cid, c);
     }
     return c;
@@ -376,6 +409,12 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     }
   };
 
+  document.addEventListener('glaze:ultra-refresh', (e) => {
+    books.clear(); contents.clear();
+    if (e.detail?.identity) { meId = meFailed = memberships = membershipsFailed = null; }
+    if (!e.detail?.retire) { tagCards(); tagExtras([document.body]); }
+  });
+
   // ---- grades (Extras): planner/page/grades.js (what-if, GPA), syllabus.js (outline), insights.js (Courses) ----
   const loadIf = (want, f, name, run) => (globalThis[name] || (I.observer && want)) && need(`planner/page/${f}.js`, () => globalThis[name]).then(() => run(globalThis[name]), () => {});
   const onPath = (re) => re.test(location.pathname);
@@ -403,6 +442,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const syncWidgets = () => {
     syncSidebar();
     syncStream();
+    syncInstant();
     const on = widgetsHere();
     if (!dash()) html.removeAttribute('data-gz-dash'); else if (!html.hasAttribute('data-gz-dash')) html.setAttribute('data-gz-dash', '');
     if (on) need('core/page/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => { if (dash()) html.setAttribute('data-gz-dash', 'ip'); }); else globalThis.GZ_WIDGETS_UI?.sync(false);
@@ -412,13 +452,14 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   if (window.top === window) try {
     const epoch = floatEpoch;
     // Not on a fresh tab's defaults: Glaze may be off.
-    chrome.storage.local.get('widgetLayout', (r) => { const go = () => epoch === floatEpoch && floatsIn(r?.widgetLayout); if (!chrome.runtime.lastError) Promise.resolve().then(() => I.ready).then(go, go); });
+    stored('widgetLayout', (r) => { const go = () => epoch === floatEpoch && floatsIn(r?.widgetLayout); if (!chrome.runtime.lastError) Promise.resolve().then(() => I.ready).then(go, go); });
     chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.widgetLayout) { const epoch = ++floatEpoch; Promise.resolve().then(() => I.ready).then(() => { if (epoch === floatEpoch) floatsIn(ch.widgetLayout.newValue); }, () => {}); } });
   } catch { /* extension reloaded */ }
 
-  // Course tabs load on demand; extras.css first reserves their cached place and size.
+  // Course tabs load on demand (the worker puts navigation/coursetabs.js in with the page); extras.css first reserves
+  // their cached place and size.
   const tabsOn = () => !!I.links.length && (isPreview || solo) && I.settings.enhance.tabs && !globalThis.GZ_CTABS?.revoked?.();
-  const syncTabs = () => (tabsOn() ? need('navigation/coursetabs.js', () => globalThis.GZ_CTABS_LIB).then(() => need('navigation/page/coursetabs.js', () => globalThis.GZ_CTABS))
+  const syncTabs = () => (tabsOn() ? need('navigation/page/coursetabs.js', () => globalThis.GZ_CTABS_LIB && globalThis.GZ_CTABS)
     .then(() => GZ_CTABS.sync(tabsOn()), () => {}) : globalThis.GZ_CTABS?.sync(false));
 
   // ---- page changes ---------------------------------------------------------------------------
@@ -429,16 +470,16 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // frame too), and only while entrances are on. Route containers themselves stay visible as Ultra builds them.
   if (solo && document.startViewTransition) {
     const PAGE_LINKS = '#base_tools a, .bb-ui-navigation-list-horizontal a';
+    // Waits on the page, not a poll: each change restarts the 120 ms; once it is still, the address is watched a frame at a time.
     const settled = (from) => new Promise((done) => {
-      const t0 = performance.now();
-      let still = t0;
-      const mo = new MutationObserver(() => { still = performance.now(); });
+      let quiet = 0, frame = 0;
+      const end = () => { mo.disconnect(); clearTimeout(quiet); clearTimeout(cap); cancelAnimationFrame(frame); done(); };
+      const moved = () => { if (location.href !== from) end(); else frame = requestAnimationFrame(moved); };
+      const still = () => { clearTimeout(quiet); cancelAnimationFrame(frame); quiet = setTimeout(moved, 120); };
+      const mo = new MutationObserver(still);
       mo.observe(document.body, { childList: true, subtree: true });
-      const check = () => {
-        const now = performance.now();
-        if ((location.href !== from && now - still > 120) || now - t0 > 500) { mo.disconnect(); done(); } else setTimeout(check, 25);
-      };
-      setTimeout(check, 25);
+      const cap = setTimeout(end, 500);
+      still();
     });
     let replaying = false;
     document.addEventListener('click', (e) => {
@@ -713,6 +754,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   discoverNav(document);
   addEventListener('pagehide', () => navObserver.disconnect(), { once: true });
   const paintNav = (n, picture) => {
+    // Once storage has answered: nothing before, nothing with Glaze off.
+    if (!isPreview && I.links.length) Promise.resolve().then(() => I.ready).then(() => I.settings.enabled && me()).catch(() => {});
     if (!isPreview && window.top !== window) return;
     I.setAttr('data-gz-nav-size', n.size !== 'medium' || n.labels !== 'normal' || n.collapsed ? n.size : false);
     for (const [key, value] of [['overflow', n.labelOverflow], ['style', n.itemStyle], ['background', n.itemBackground], ['indicator', n.activeIndicator], ['logo-align', n.logoAlign], ['footer-hidden', !n.footer]]) I.setAttr(`data-gz-nav-${key}`, value);
@@ -723,6 +766,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     // First-paint room, as GZ_NAVBAR.layout words it.
     const b = I.settings.navbar, c = /^\/ultra\/courses\//.test(location.pathname) ? b?.course : 'same';
     if (!globalThis.GZ_NAVBAR_UI?.live()) I.setAttr('data-gz-navbar', !!b?.on && `${c === 'same' ? `${b.place} ${b.rail}` : c === 'icons' ? 'rail icons' : c === 'hide' ? 'none' : 'top'} ${b.style}${c !== 'hide' && b.tabs && I.settings.enhance.tabs ? ' tabs' : ''}`);
+    if (!isPreview && !globalThis.GZ_NAVBAR_UI?.live()) GZ_NAV.first(I.settings, html.getAttribute('data-gz-navbar'), me);
+    syncInstant();
     I.setAttr('data-gz-nav-detailed', n.detailed);
     for (const [k, v] of Object.entries(GZ_NAV.dimensions(n))) I.setVar(`--gz-nav-${k}`, `${v}px`);
     const src = n.i ? picture : n.u;
@@ -775,10 +820,11 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   }
 
   return {
-    paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, stop: () => { syncDashboard(); globalThis.GZ_STREAM_UI?.sync(false); globalThis.GZ_NAVBAR_UI?.sync(); globalThis.GZ_FOLDER_UI?.sync(false); cardsIO.disconnect(); onScreen.clear(); },
+    fetch: (u, o) => (/\/users\/me$/.test(u) ? fetch(u, o) : need('courses/lmsq.js', () => globalThis.GZ_LMSQ).then(() => GZ_LMSQ.fetch(u, o), () => fetch(u, o))),
+    paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, stop: () => { GZ_NAV.drop(); syncDashboard(); globalThis.GZ_STREAM_UI?.sync(false); globalThis.GZ_NAVBAR_UI?.sync(); globalThis.GZ_FOLDER_UI?.sync(false); cardsIO.disconnect(); onScreen.clear(); },
     renderProgress, renderNew, renderCalc, syncSyl, syncInsights: () => (syncInsights(), syncTabs()), openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
     unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); },
-    syncTodo, syncCardTasks, syncRemind, syncWidgets,
+    syncTodo, syncCardTasks, syncRemind: () => (syncRemind(), syncAhead()), syncWidgets,
     ctx: { canvasPeek: () => ({ me: meId, courses: memberships, books }), me, myCourses, courseItems, bookFor, courseColor, profile: page('profile'), canvasCourses: page('courses') },
   };
 });

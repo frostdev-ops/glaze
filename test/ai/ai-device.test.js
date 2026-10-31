@@ -976,3 +976,12 @@ test('throwing clone cleans its base; concurrent clones never prompt the shared 
   assert.deepEqual(s.log.prompts.map((p) => p.input[0].content[0].value).sort(), ['another document', 'hello']);
   D.release(); await settle(); assert.equal(s.log.destroyed, s.log.sessions);
 });
+
+test('an answer language is the cloud providers\' line: the session and the prompt on this device stay the same', async () => {
+  const plain = install(stub());
+  await P.run('device', req({ temperature: 0.2 }), {});
+  const asked = install(stub());
+  await P.run('device', req({ temperature: 0.2, reply: { lang: 'de' } }), {});
+  assert.deepEqual(asked.log.create[0].initialPrompts, plain.log.create[0].initialPrompts);
+  assert.deepEqual(asked.log.prompts.map((p) => p.input), plain.log.prompts.map((p) => p.input));
+});

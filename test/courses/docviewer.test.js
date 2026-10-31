@@ -47,7 +47,9 @@ test('regional DocViewer hosts get the viewer script, and it keeps to canvadocs 
 });
 
 // A ratchet, as the first script's: courses/ink.js and courses/page/docviewer.js as W9 left them (with the review's fixes), plus about 2%.
-const DOCVIEWER_BASELINE = 34317; // Shared surface model and local viewer controls, including message validation.
+// + 250: the ResizeObserver that keeps the ink layer on a page the viewer resizes as it zooms (4.0.1).
+// + 150: a Clear page this tab made stays undoable when its own removal comes back from storage (4.0.1).
+const DOCVIEWER_BASELINE = 34317 + 250 + 150; // Shared surface model and local viewer controls, including message validation.
 // The extension's code by feature area (2026-10-30): the same files under their new folders' paths. Measured against 1cec2e64.
 const DOCVIEWER_AREA_PATHS = 14;
 test('the DocViewer script stays within its budget', () => {

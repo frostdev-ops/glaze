@@ -56,7 +56,7 @@ const fixture = () => {
   const local = { get: async (keys) => structuredClone(keys === null ? store : typeof keys === 'string' ? { [keys]: store[keys] } : Object.fromEntries(keys.map((k) => [k, store[k]]))), set: async (p) => { Object.assign(store, structuredClone(p)); return true; } };
   const chrome = { storage: { local, onChanged: { addListener() {} } }, runtime: { sendMessage: async (m) => { sent.push(m); return F.change(m, { local }); } } };
   const document = { head, body, querySelectorAll: (s) => html.querySelectorAll(s), getElementById: (id) => html.querySelector(`#${id}`) };
-  html.setOwner(document); document.createElement = (t) => { const e = new E(t); e.setOwner(document); return e; }; document.activeElement = body;
+  html.setOwner(document); document.createElement = (t) => { const e = new E(t); e.setOwner(document); return e; }; document.createElementNS = (_, t) => document.createElement(t); document.activeElement = body;
   let on = true;
   const ctx = { site: 'canvas', on: () => on, settings: () => ({ enhance: { hideFolders: true } }), courseId: () => undefined, toggleOf: () => null,
     canvasCourseId: () => location.pathname.match(/^\/courses\/(\d+)/)?.[1], t: (k, args) => k.replace(/\{(\w+)\}/g, (_, p) => args[p]) };

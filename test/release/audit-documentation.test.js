@@ -31,13 +31,23 @@ for (const [name, subject, facts, anchor] of topics) {
 }
 
 const unavailable = /unavailable|not (?:yet )?available|not enabled|disabled|coming soon|future|not shipped|pending (?:verification|approval)|off until Google|when (?:available|supported)|where available/i;
-for (const file of ['README.md', 'docs/privacy.md']) {
-  test(`GZ-04: ${file} does not advertise disabled Google Calendar sync as connectable`, () => {
-    if (G.ON) return;
+for (const file of ['README.md', 'docs/privacy.md', 'PRIVACY.md', 'docs/features.md', 'docs/development.md']) {
+  test(`GZ-04: ${file} describes Google Calendar sync as the build has it`, () => {
     const claims = sentences(read(`../${file}`)).filter((s) => /Google Calendar sync/i.test(s));
+    if (G.ON) {
+      assert.deepEqual(claims.filter((s) => unavailable.test(s)), [],
+        'Google Calendar sync is on in this build (Chrome, off until you connect); no sentence may call it unavailable or pending');
+      return;
+    }
     const unqualified = claims.filter((s) => !unavailable.test(s));
     assert.deepEqual(unqualified, [],
       'Google Calendar sync is disabled at build time; current feature claims must disclose that or be removed');
+  });
+  test(`GZ-04: ${file} describes Google Drive as the build has it`, () => {
+    if (!require('../../extension/background/google.js').ON) return;
+    const claims = sentences(read(`../${file}`)).filter((s) => /Google Drive|\bDrive\b/.test(s));
+    assert.deepEqual(claims.filter((s) => unavailable.test(s)), [],
+      'Google Drive is on in this build (Chrome, Edge, Brave and Firefox, off until you connect); no sentence may call it unavailable or pending');
   });
 }
 
@@ -92,12 +102,45 @@ test('BLD-5: the permission text matches the manifest and the packaging scripts'
   assert.ok(manifest.permissions.includes('unlimitedStorage'));
   assert.ok(!/doesn't ask for unlimited/i.test(policy));
   assert.match(policy, /Glaze asks the browser for\s+`unlimitedStorage`/);
-  assert.equal(G.ON, false, 'Google Calendar sync is built off, so released builds omit identity');
-  assert.match(code('../tools/build/package.sh'), /filter\(\(p\) => p !== "identity"\)/);
-  assert.match(code('../tools/build/package-firefox.sh'), /filter\(\(p\) => p !== 'identity'\)/);
-  assert.match(code('../tools/build/safari-manifest.sh'), /p != 'identity'/);
-  assert.match(policy, /`identity` \(Chrome only, optional\) — not requested by released builds/);
+  assert.equal(G.ON, true, 'Google Calendar sync is built on, so the Chrome package keeps identity and the OAuth client');
+  assert.deepEqual(manifest.oauth2.scopes, [G.SCOPE]);
+  assert.ok(manifest.optional_permissions.includes('identity'));
+  // Drive (background/google.js ON, background/google-config.js): on since 4.0.1 with real clients, so the policy says it is offered.
+  const drive = require('../../extension/background/google-config.js'), { oauth } = require('../../tools/build/oauth-manifest.js'), { ready } = require('../../extension/background/google.js');
+  assert.match(code('../tools/build/package.sh'), /node "\$root\/tools\/build\/oauth-manifest\.js" chrome manifest\.json > "\$stage\/manifest\.json"/);
+  assert.match(code('../tools/build/package-firefox.sh'), /oauth-manifest\.js'\)\)\.oauth\(m, \{ target: 'firefox', calendar: false,/, 'Firefox always leaves Calendar\'s out');
+  const ON = require('../../extension/background/google.js').ON;
+  assert.equal(ON, true, 'Google Drive is built on: Chrome carries its scopes, Firefox holds identity');
+  const offered = { chrome: ON && (ready(drive, 'chrome') || ready(drive, 'web')), firefox: ON && ready(drive, 'web') };
+  const chrome = oauth(manifest, { target: 'chrome', calendar: G.ON, drive: ON, config: drive });
+  assert.deepEqual(chrome.oauth2, { client_id: manifest.oauth2.client_id, scopes: [G.SCOPE, ...(offered.chrome ? drive.scopes : [])] }, 'Chrome: Calendar\'s scope, Drive\'s only while it is on');
+  assert.ok(chrome.optional_permissions.includes('identity'));
+  const firefox = oauth(manifest, { target: 'firefox', calendar: false, drive: ON, config: drive });
+  assert.equal(firefox.oauth2, undefined);
+  assert.equal(firefox.permissions.includes('identity'), offered.firefox, 'Firefox: identity only while Drive is offered, held from install (Firefox has no optional identity)');
+  assert.ok(!(firefox.optional_permissions || []).includes('identity'));
+  assert.ok(offered.chrome && offered.firefox);
+  for (const text of [policy, summary]) assert.doesNotMatch(text, /Google Drive[^.]*unavailable in (?:this|the current) build|(?:future|later) build that enables/, 'a build that offers Drive must not call it unavailable');
+  assert.match(code('../tools/build/safari-manifest.sh'), /manifest\.pop\('oauth2', None\)\noptional = \[p for p in manifest\.get\('optional_permissions', \[\]\) if p != 'identity'/, 'Safari always leaves them out');
+  assert.match(policy, /`identity` \(Chrome, Edge and Brave, optional; Firefox, from install\) — on Chrome, Edge and Brave, asked for only when\s+you press Connect/);
+  assert.ok(!/not requested by released builds/.test(policy));
   assert.match(policy, /Chrome sync \(or Firefox Sync\)/);
   assert.match(policy, /\*\*Music widget\*\* \(Canvas and Blackboard Ultra/);
   assert.ok(/music/.test(code('core/widgets.js').match(/const TILES = \[[^\]]*\]/)[0]), 'the music tile is a widget on both sites');
+});
+
+test('the developer guide distinguishes Calendar permissions from the enabled Drive package', () => {
+  const drive = require('../../extension/background/google.js');
+  if (!drive.ON) return;
+  const config = require('../../extension/background/google-config.js');
+  const manifest = require('../../extension/manifest.json');
+  const { oauth } = require('../../tools/build/oauth-manifest.js');
+  const firefox = oauth(manifest, { target: 'firefox', calendar: false, drive: drive.ON, config });
+  assert.ok(firefox.permissions.includes('identity'), 'the enabled Firefox package holds identity');
+  assert.equal(firefox.oauth2, undefined);
+  const guide = paragraphs(code('../docs/development.md')).find((p) => p.includes('Google Calendar sync is on'));
+  assert.ok(guide, 'Calendar packaging is documented');
+  assert.doesNotMatch(guide, /Firefox and Safari packages leave both out/, 'Firefox retains identity for Drive');
+  assert.match(guide, /Firefox[^.]*`identity`[^.]*from install[^.]*Drive/, 'Firefox identity belongs to Drive');
+  assert.match(guide, /switch off.*Calendar.*keeping the client and permission while Drive needs them/, 'disabling Calendar retains what enabled Drive needs');
 });

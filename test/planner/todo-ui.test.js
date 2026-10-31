@@ -105,7 +105,7 @@ const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, d
   c.globalThis = c;
   const src = read('planner/page/todo.js').replace('  return { sync, add, cmds, mount, unmount, suspend, resume };', `  return { sync, add, cmds, mount, unmount, suspend, resume, probe: {
     refresh, keepDraft, onStore, onChange, onShow, onSubmit, onClick, form: (x) => { form = x; }, formNow: () => form, save, rowOf, render, get: () => ({ data, cache, fetching, note: line?.textContent, box, dead, who }),
-    seed(x) { L = GZ_TODO; who = { uid: '3', tz: 'America/New_York' }; key = 'todo:https://canvas.test/3'; prefs = { ...x.prefs };
+    seed(x) { L = GZ_TODO; who = { uid: '3', tz: 'America/New_York' }; sure = true; key = 'todo:https://canvas.test/3'; prefs = { ...x.prefs };
       data = x.data || { tasks: [], items: {} }; cache = x.cache || null; started = Promise.resolve(); courses = { cids: null, names: {}, list: [] };
       box = new E('section'); head = new E(); line = new E('p'); body = new E(); },
   } };`).replace('var GZ_TODO_UI = globalThis.GZ_TODO_UI ||', 'var GZ_TODO_UI =');

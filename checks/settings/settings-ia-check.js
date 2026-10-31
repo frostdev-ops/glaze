@@ -243,6 +243,29 @@ const check = async (name, test) => {
       await open('navigation/tabs');
       assert.equal(await automatic.isChecked(), true, 'Automatic survives a reload');
     });
+    await check('standby-renew', async () => {
+      await open('navigation/tabs');
+      await page.evaluate(async () => { await chrome.storage.sync.set({ tabs: GZ_SANITIZE().tabs }); });
+      await open('navigation/tabs');
+      const renew = page.locator('[data-key="tabs.renew"]'), ahead = page.locator('label:has([data-key="tabs.ahead"])');
+      const more = renew.locator('xpath=ancestor::details[1]');
+      if (!await more.evaluate((d) => d.open)) await more.locator('summary').click();
+      assert.equal(await renew.inputValue(), '10', '10 minutes by default');
+      assert.deepEqual(await renew.locator('option').evaluateAll((os) => os.map((o) => o.value)), ['2', '5', '10', '30', '60', '120']);
+      assert.equal(await renew.isEnabled(), true);
+      await renew.selectOption('2');
+      await waitFor(page, async () => (await chrome.storage.sync.get('tabs')).tabs?.renew === 2);
+      await ahead.click();
+      await waitFor(page, async () => (await chrome.storage.sync.get('tabs')).tabs?.ahead === false);
+      assert.equal(await renew.isDisabled(), true, 'off with ahead of time');
+      await open('navigation/tabs');
+      assert.equal(await renew.inputValue(), '2', 'kept after a reload');
+      assert.equal(await renew.isDisabled(), true, 'still off after a reload');
+      await page.locator('[data-reset-section="navigation/tabs"]').click();
+      await waitFor(page, async () => { const { tabs } = await chrome.storage.sync.get('tabs'); return tabs?.renew === 10 && tabs?.ahead === true; });
+      assert.equal(await renew.inputValue(), '10', 'Reset restores 10 minutes');
+      assert.equal(await renew.isEnabled(), true);
+    });
     await check('setting-badges', async () => {
       const gaps = [];
       for (const [route, key] of [['pages/documents', 'enhance.quizLight'], ['courses/cards', 'card.create'], ['study/todo', 'todo.teacher'], ['study/todo', 'todo.progress']]) {

@@ -2,7 +2,8 @@
 # Package Glaze for Firefox (addons.mozilla.org) from the Chrome package: dist/glaze-v<version>-firefox.zip.
 # Firefox has no extension service worker: the background runs as an event page from every script the worker
 # imports, listed in order, and importScripts becomes a no-op. Google Calendar sync needs Chrome's identity API,
-# so its oauth2 key and permission go, as in Safari. DIST: the folder the zips go in (default dist).
+# so its oauth2 key goes, as in Safari; identity stays only for Drive's web sign-in, once its client is real
+# (tools/build/oauth-manifest.js). DIST: the folder the zips go in (default dist).
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
@@ -36,6 +37,14 @@ cat > "$stage/background/firefox-background.js" <<'JS'
 // Firefox runs the background as an event page: the manifest already loads every script the worker would import.
 globalThis.importScripts = () => {};
 JS
+cat > "$stage/planner/gcal-auth.js" <<'JS'
+// Firefox has no Chrome Google sign-in API; calendar-file export remains available.
+var GZ_GCAL_AUTH = {
+  token: async () => { throw new Error('Google Calendar sign-in requires Chrome.'); },
+  drop: async () => {},
+  clear: async () => {},
+};
+JS
 node - "$stage/manifest.json" "$stage/background/background.js" "$stage/settings/popup.js" "$development" "$branch" "$commit" "$dirty" <<'JS'
 const fs = require('fs');
 const path = require('path');
@@ -48,9 +57,10 @@ const imports = [...fs.readFileSync(background, 'utf8').matchAll(/importScripts\
   .flatMap(([, args]) => [...args.matchAll(/'([^']+)'/g)].map(([, f]) => path.posix.join('background', f)));
 m.background = { scripts: ['background/firefox-background.js', ...new Set(imports), 'background/background.js'] };
 delete m.minimum_chrome_version;
-delete m.oauth2;
-m.optional_permissions = (m.optional_permissions || []).filter((p) => p !== 'identity');
-if (!m.optional_permissions.length) delete m.optional_permissions;
+// Google (tools/build/oauth-manifest.js): no oauth2 key, which is getAuthToken's; identity only for Drive, switched on (background/google.js ON)
+// with its Web client real, and held from install (Firefox has no optional identity).
+const google = require(path.join(process.cwd(), 'tools/build/oauth-manifest.js')).oauth(m, { target: 'firefox', calendar: false, drive: require(path.join(process.cwd(), 'extension/background/google.js')).ON === true, config: require(path.join(process.cwd(), 'extension/background/google-config.js')) });
+for (const k of ['oauth2', 'optional_permissions', 'permissions']) if (k in google) m[k] = google[k]; else delete m[k];
 for (const entry of m.web_accessible_resources || []) delete entry.use_dynamic_url;
 // Firefox has no declarativeContent (Chrome's lit button) and no addHostAccessRequest; AMO's linter flags both, the second
 // even behind popup.js's check, so the Firefox popup goes without that line. The button starts on the toolbar for new
@@ -73,7 +83,10 @@ m.web_accessible_resources = (m.web_accessible_resources || []).map((e) => ({ ..
 // 140 (ESR) reads data_collection_permissions; 127+ grants host permissions at install. Glaze sends nothing anywhere
 // on its own: shared sessions and the Looks gallery go out only when the user starts them. Agent access gives course data to
 // an app on this computer, outside the browser, so it asks for website content when it is turned on (settings/editor-agents.js).
-m.browser_specific_settings = { gecko: { id: 'glaze@frostdev.io', strict_min_version: '140.0', data_collection_permissions: { required: ['none'], optional: ['websiteContent'] } } };
+m.browser_specific_settings = {
+  gecko: { id: 'glaze@frostdev.io', strict_min_version: '140.0', data_collection_permissions: { required: ['none'], optional: ['websiteContent'] } },
+  gecko_android: { strict_min_version: '142.0' },
+};
 fs.writeFileSync(file, JSON.stringify(m, null, 2) + '\n');
 JS
 rm -rf "$stage/mods/boot.js" "$stage/mods/host.html" "$stage/mods/host.js" "$stage/mods/page/mods.js"

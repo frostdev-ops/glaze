@@ -23,11 +23,13 @@ test('package-firefox.sh builds a Firefox manifest whose background scripts all 
     assert.deepEqual(m.background.scripts.slice(0, 1), ['background/firefox-background.js']);
     assert.equal(m.background.scripts.at(-1), 'background/background.js');
     for (const f of m.background.scripts) assert.ok(files.has(f), `${f} is a background script but isn't packaged`);
-    for (const f of ['sharing/relay.js', 'sharing/sessions.js', 'content/defaults.js']) assert.ok(m.background.scripts.includes(f), f);
+    for (const f of ['sharing/relay.js', 'sharing/sessions.js', 'content/defaults.js', 'navigation/sidebar.js', 'planner/gcal-auth.js']) assert.ok(m.background.scripts.includes(f), f);
+    for (const f of ['navigation/page/sidebar.js', 'navigation/page/sidebar.css', 'courses/page/docreview.js', 'courses/page/docreview.css']) assert.ok(files.has(f), f);
     // Nothing without consent; agent access sends the student's course data to an app on this computer, outside the browser.
     assert.deepEqual(m.browser_specific_settings.gecko.data_collection_permissions, { required: ['none'], optional: ['websiteContent'] });
     assert.equal(m.oauth2, undefined);
-    assert.deepEqual(m.optional_permissions, ['nativeMessaging'], 'no identity; agent access asks for native messaging');
+    assert.deepEqual(m.optional_permissions, ['nativeMessaging'], 'agent access asks for native messaging');
+    assert.ok(m.permissions.includes('identity'), 'Drive\'s web sign-in: held from install, as Firefox has no optional identity');
     assert.ok(m.web_accessible_resources.every((e) => !('use_dynamic_url' in e)));
     // Code mods need Chrome: no sandbox page, CSP or files, so content.js never starts them.
     assert.equal(m.sandbox, undefined);
@@ -62,7 +64,7 @@ test('package-firefox.sh: no declarativeContent or addHostAccessRequest, the but
     const chrome = require('../../extension/manifest.json');
     const zip = path.join(dist, `glaze-v${chrome.version}-firefox.zip`);
     const m = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json'], { encoding: 'utf8' }));
-    assert.deepEqual(m.permissions, chrome.permissions.filter((p) => p !== 'declarativeContent' && p !== 'offscreen'), 'no offscreen documents: the engine host is a Worker of the event page');
+    assert.deepEqual(m.permissions, [...chrome.permissions.filter((p) => p !== 'declarativeContent' && p !== 'offscreen'), 'identity'], 'no offscreen documents: the engine host is a Worker of the event page');
     assert.ok(m.permissions.includes('activeTab'));
     assert.equal(m.action.default_area, 'navbar');
     assert.equal(chrome.action.default_area, undefined, "Chrome's manifest has no Firefox-only key");

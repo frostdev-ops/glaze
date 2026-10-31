@@ -28,4 +28,4 @@ var GZ_STREAM = globalThis.GZ_STREAM || (() => {
   };
   return { json, deadline, encouragement, date };
 })();
-if (typeof module !== 'undefined') module.exports = GZ_STREAM;
+if (typeof module !== 'undefined') module.exports = GZ_STREAM; else GZ_STREAM;

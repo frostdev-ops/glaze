@@ -351,3 +351,14 @@ test('frame: paper mode sends the page nothing as it changes, so a paper is neve
   assert.deepEqual(p.sent.filter((m) => m.type === 'change'), []);
   assert.equal(heard, 1, 'the frame\'s own parts still hear it');
 });
+
+test('page world: attachment filenames and Markdown append as literal Quill text', () => {
+  const p = pageWorld(); p.run();
+  const q = p.boxes['gzw-1'].__quill, updates = [];
+  q.text = 'Existing draft\n'; q.getLength = () => q.text.length;
+  q.updateContents = (ops, source) => updates.push({ ops, source });
+  const text = 'Attached: <img src=x onerror=alert(1)>.bin, **[notes](javascript:alert(1))**.txt';
+  assert.equal(p.ask('append', JSON.stringify({ id: 'gzw-1', text }))[0].ok, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(updates)), [{ ops: [{ retain: 15 }, { insert: `\n${text}\n` }], source: 'user' }]);
+  assert.equal(p.calls.length, 0, 'no clipboard conversion or HTML parsing');
+});

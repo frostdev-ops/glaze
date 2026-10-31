@@ -5,16 +5,17 @@ const source = fs.readFileSync(process.env.PERF_ULTRA_SOURCE || require.resolve(
 const settle = () => new Promise(setImmediate);
 const light = vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/looks/page/light.js'), 'utf8'), { document: { addEventListener() {} } });
 const covered = vm.runInNewContext(`(${source.match(/  const covered = ([^\n]+);/)[1]})`);
-// bookFor's failure gate (WP-A1), and its reader: courses/ultra.js's, through the site's queue; here its get() alone.
+// bookFor's failure gate (WP-A1), and its rows: courses/ultra.js's gradebook store (rowsOf), here an answer's results
+// with its coverage; no copy kept from a last visit (keptRows).
 const gate = source.match(/(?:  const route = [^\n]+\n)?  const failed = [^\n]+\n  const askAgain = [^\n]+\n/)[0];
-const reader = (get) => async () => ({ get });
+const reader = (get) => async () => { const j = await get(); return covered(j.results, !j.paging?.nextPage); };
 
 test('GZ-01: the one-page gradebook cache preserves coverage and redraws when only coverage changes', async () => {
-  const start = source.indexOf('  const bookFor = '), end = source.indexOf('  // undefined until', start);
+  const start = source.indexOf('  const take = '), end = source.indexOf('  // undefined until', start);
   let changed = 0, now = 100000, partial = true;
   const bookFor = vm.runInNewContext(`${gate}${source.slice(start, end)} bookFor`, {
     books: new Map(), covered, Date: { now: () => now }, me: async () => '_900_1', location: { pathname: '/ultra/courses/_101_1/outline' },
-    reader: reader(async () => ({ results: [], ...(partial && { paging: { nextPage: '?offset=200' } }) })),
+    keptRows: async () => null, rowsOf: reader(async () => ({ results: [], ...(partial && { paging: { nextPage: '?offset=200' } }) })),
     GZ_PAGE: { gradesByContent: () => new Map(), overall: () => null }, locale: () => 'en', onBook: () => changed++,
   });
   bookFor('_101_1'); await settle();
@@ -26,12 +27,12 @@ test('GZ-01: the one-page gradebook cache preserves coverage and redraws when on
 });
 
 test('an unchanged gradebook remembers a successful empty late-status answer', async () => {
-  const start = source.indexOf('  const bookFor = '), end = source.indexOf('  // undefined until', start);
+  const start = source.indexOf('  const take = '), end = source.indexOf('  // undefined until', start);
   let requests = 0, changed = 0, now = 100000, fail = false;
   const books = new Map();
   const bookFor = vm.runInNewContext(`${gate}${source.slice(start, end)} bookFor`, {
     books, covered, Date: { now: () => now }, me: async () => '_900_1', location: { pathname: '/ultra/courses/_101_1/outline' },
-    reader: reader(async () => { requests++; if (fail) throw new Error('offline'); return { results: [] }; }), lateIn: async () => new Set(),
+    keptRows: async () => null, rowsOf: reader(async () => { requests++; if (fail) throw new Error('offline'); return { results: [] }; }), lateIn: async () => new Set(),
     GZ_PAGE: { gradesByContent: () => new Map(), overall: () => null }, locale: () => 'en', onBook: () => changed++,
   });
   bookFor('_101_1'); await settle();
@@ -59,7 +60,7 @@ test('Ultra native-added-subtree hooks run synchronously before the batched pass
   const start = core.indexOf('  const schedule = '), end = core.indexOf('  const startSweep = ', start);
   const added = [], dirty = new Set(); let pass;
   const schedule = vm.runInNewContext(`${core.slice(start, end)} schedule`, {
-    chrome: { runtime: { id: 'glaze' } }, observer: {}, ultra: true, dirty, full: false, timer: 0, hid: () => false,
+    chrome: { runtime: { id: 'glaze' } }, observer: {}, ultra: true, dirty, touched: new Set(), full: false, timer: 0, hid: () => false,
     X: { lift() {}, gate: (node) => added.push(node) }, flush: () => {}, setTimeout: (fn) => { pass = fn; return 1; },
   });
   const a = { nodeType: 1 }, b = { nodeType: 1 }, own = { closest: () => ({}) };
@@ -73,7 +74,7 @@ test('a course tab\'s hidden frame sweeps nothing and owes one full pass; the po
   const start = core.indexOf('  const schedule = '), end = core.indexOf('  const startSweep = ', start);
   let hidden = true, timers = 0;
   const context = vm.createContext({
-    chrome: { runtime: { id: 'glaze' } }, observer: {}, ultra: true, dirty: new Set([{}]), full: false, timer: 0, hid: () => hidden, GZ_LIGHT: light,
+    chrome: { runtime: { id: 'glaze' } }, observer: {}, ultra: true, dirty: new Set([{}]), touched: new Set(), full: false, timer: 0, hid: () => hidden, GZ_LIGHT: light,
     X: { lift() {}, gate() {} }, flush: () => {}, setTimeout: () => ++timers,
   });
   const schedule = vm.runInContext(`${core.slice(start, end)} schedule`, context);
@@ -89,17 +90,17 @@ test('a course tab\'s hidden frame sweeps nothing and owes one full pass; the po
 test('a lit card still sweeps native style, class and child changes', () => {
   const core = fs.readFileSync(process.env.PERF_CORE_SOURCE || require.resolve('../../extension/content/content.js'), 'utf8');
   const start = core.indexOf('  const schedule = '), end = core.indexOf('  const startSweep = ', start);
-  const dirty = new Set(), added = [];
+  const dirty = new Set(), touched = new Set(), added = [];
   const schedule = vm.runInNewContext(`${core.slice(start, end)} schedule`, {
-    chrome: { runtime: { id: 'glaze' } }, observer: {}, ultra: true, dirty, full: false, timer: 0, hid: () => false, GZ_LIGHT: light,
+    chrome: { runtime: { id: 'glaze' } }, observer: {}, ultra: true, dirty, touched, full: false, timer: 0, hid: () => false, GZ_LIGHT: light,
     X: { lift() {}, gate: (n) => added.push(n) }, flush() {}, setTimeout: () => 1,
   });
   const card = { closest: () => null, getAttribute: () => 'background: white; --gz-mx: 1px; --gz-my: 2px;' };
   schedule([{ type: 'attributes', attributeName: 'style', target: card, oldValue: '--gz-mx: 1px; --gz-my: 2px;' }]);
-  assert.ok(dirty.has(card), 'native background changes on a lit card must be themed');
-  dirty.clear();
+  assert.ok(touched.has(card), 'native background changes on a lit card must be themed');
+  touched.clear();
   schedule([{ type: 'attributes', attributeName: 'class', target: card, oldValue: 'native --gz-mx-card' }]);
-  assert.ok(dirty.has(card), 'only style records may be light-only writes');
+  assert.ok(touched.has(card), 'only style records may be light-only writes');
   const child = { nodeType: 1 };
   schedule([{ type: 'childList', target: card, addedNodes: [child] }]);
   assert.deepEqual(added, [child]);
@@ -112,7 +113,7 @@ test('a queued flush stays paused while hidden and rediscovers native roots on r
   const body = {}, gates = [], tags = [];
   const X = new Proxy({ gate: (n) => gates.push(n) }, { get: (o, k) => o[k] || (() => {}) });
   const context = vm.createContext({
-    timer: 1, dirty: new Set([{}]), full: true, wordsLate: false, hid: () => hidden, ultra: true,
+    timer: 1, dirty: new Set([{}]), touched: new Set(), full: true, wordsLate: false, hid: () => hidden, ultra: true, location: { pathname: '/ultra/stream' },
     outermost: () => [], words: () => true, sweepAll: () => sweeps++, sweepRoots() {},
     document: { body }, X, tagExtras: (r) => tags.push(r), themeEditors() {}, tip: null,
     tintKey: () => '', tinted: '', lookHere: () => '', looked: '', placeScene() {},

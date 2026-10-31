@@ -21,7 +21,7 @@ const EVENTS = [
 
 // The worker's env, pointed at the mock: no real waits (each is recorded), and a fetch that refuses anything else.
 const env = (mock, more = {}) => {
-  const e = { waits: [], dropped: [], sent: [], api: mock.api, revoke: mock.revoke, tok: 'tok-1' };
+  const e = { waits: [], dropped: [], sent: [], api: mock.api, tok: 'tok-1' };
   Object.assign(e, {
     fetch: (url, init) => {
       assert.ok(url.startsWith(`http://127.0.0.1:${mock.port}/`), `only the mock: ${url}`);
@@ -101,7 +101,7 @@ withMock('incremental: nothing changed costs one read; one changed item is one u
   const r = await G.sync(e, cal, st, { src: SRC, events: [], from: later, first: '2026-10-21', whole: true });
   assert.ok(mock.live(cal).some((x) => x.summary === 'BIO 101') && mock.live(cal).some((x) => x.summary === 'Lab 1 (revised)'), 'past events stay');
   assert.equal(r.wrote, 0);
-  assert.equal(Object.keys(st.map).length, 0, 'and are forgotten here');
+  assert.ok(Object.values(st.map).every((m) => m.removed), 'past events are forgotten; only Glaze removal markers remain');
 });
 
 withMock('conflict rule: an edited deadline is written over, a deleted one stays deleted; a moved or deleted plan moves or clears the plan here', async (mock) => {
@@ -186,6 +186,19 @@ withMock('an expired cursor (410) lists everything again and carries on', async 
   assert.deepEqual(mock.log.map(([m, p]) => [m, /syncToken/.test(p)]), [['GET', true], ['GET', false]]);
 });
 
+withMock('sync query: full and incremental listings preserve showDeleted, including after a cursor expires', async (mock) => {
+  const e = env(mock);
+  const { cal } = await G.connect(e);
+  const st = G.fresh();
+  await run(e, cal, st);
+  await run(e, cal, st);
+  mock.expire();
+  await run(e, cal, st);
+  const listings = mock.log.filter(([m, p]) => m === 'GET' && p.includes('/events?'));
+  assert.ok(listings.some(([, p]) => p.includes('syncToken=')));
+  for (const [, p] of listings) assert.equal(new URL(p, mock.api).searchParams.get('showDeleted'), 'true', p);
+});
+
 withMock('link another device: the code opens the same calendar, and that device\'s events land on the same ones, not duplicates', async (mock) => {
   const a = env(mock);
   const { cal } = await G.connect(a);
@@ -209,18 +222,109 @@ withMock('link another device: the code opens the same calendar, and that device
   await assert.rejects(G.link(b, 'their@group.calendar.google.com'), (x) => x.code === 'denied', 'a calendar Glaze did not make is out of reach');
 });
 
-withMock('disconnect: the calendar deleted if asked, and the grant revoked with the token in the body, not the address', async (mock) => {
+// Codex, 4.0.1: a newly linked device has no deletion history, and a full listing leaves cancelled events out.
+withMock('link another device: a deadline deleted in Google stays deleted on the linked device', async (mock) => {
+  const a = env(mock);
+  const { cal } = await G.connect(a);
+  await run(a, cal, G.fresh());
+  const lab = mock.live(cal).find((x) => x.summary === 'Lab 1').id;
+  mock.del(cal, lab);
+  const b = env(mock);
+  await G.link(b, cal);
+  const st = G.fresh();
+  await run(b, cal, st);
+  assert.ok(!mock.live(cal).some((x) => x.id === lab), 'not put back');
+  assert.ok(st.gone.includes(lab) && !(lab in st.map));
+  assert.equal(mock.live(cal).length, 4);
+});
+
+withMock('export choices: events Glaze removed return when selected again, including after a worker restart', async (mock) => {
+  const e = env(mock);
+  const { cal } = await G.connect(e);
+  let st = G.fresh();
+  await run(e, cal, st);
+  const omitted = EVENTS.filter((x) => x.summary !== 'Lab 1' && !x.plan);
+  await run(e, cal, st, omitted);
+  assert.equal(mock.live(cal).length, 2);
+  st = G.fresh(JSON.parse(JSON.stringify(st)));
+  const edits = [];
+  await run(e, cal, st, EVENTS, { plans: async (x) => { edits.push(...x); return true; } });
+  assert.deepEqual(mock.live(cal).map((x) => x.summary).sort(), EVENTS.map((x) => x.summary).sort());
+  assert.deepEqual(edits, [], 'Glaze removing an unselected plan is not a student deleting that plan');
+  assert.deepEqual(st.gone, [], 'only student deletions suppress deadlines');
+  await run(e, cal, st, omitted);
+  mock.log.length = 0;
+  await run(e, cal, st, omitted);
+  assert.equal(writes(mock).length, 0, 'an acknowledged Glaze removal is not deleted again');
+  st = G.fresh(JSON.parse(JSON.stringify(st)));
+  await run(e, cal, st);
+  assert.equal(mock.live(cal).length, EVENTS.length, 'restoring also works after reading the deletion cursor');
+  await run(e, cal, st, omitted);
+  const later = Date.parse('2026-10-25T04:00:00Z');
+  await G.sync(e, cal, st, { src: SRC, events: [], from: later, first: '2026-10-25', whole: true });
+  st = G.fresh(JSON.parse(JSON.stringify(st)));
+  mock.expire();
+  await G.sync(e, cal, st, { src: SRC, events: [{ ...EVENTS[0], start: later + DAY }], from: later, first: '2026-10-25', whole: true });
+  assert.ok(mock.live(cal).some((x) => x.summary === 'Lab 1'), 'a rescheduled deadline also returns after its old date and a full cursor refresh');
+});
+
+withMock('link another device: deleted deadlines survive a sync for another school account and a worker restart', async (mock) => {
+  const a = env(mock);
+  const { cal } = await G.connect(a);
+  await run(a, cal, G.fresh());
+  const lab = mock.live(cal).find((x) => x.summary === 'Lab 1').id;
+  mock.del(cal, lab);
+  const b = env(mock);
+  let st = G.fresh();
+  let saved;
+  await G.sync(b, cal, st, { src: 'https://other.test/7', events: [], from: FROM, first: FIRST, whole: true }, {
+    save: async () => { saved = JSON.parse(JSON.stringify(st)); },
+  });
+  st = G.fresh(saved);
+  await run(b, cal, st);
+  assert.ok(!mock.live(cal).some((x) => x.id === lab), 'advancing the shared calendar cursor must not lose another account deletion');
+  assert.ok(st.gone.includes(lab));
+});
+
+withMock('link another device: a deleted deadline outside the first export survives a later range expansion', async (mock) => {
+  const a = env(mock);
+  const { cal } = await G.connect(a);
+  await run(a, cal, G.fresh());
+  const lab = mock.live(cal).find((x) => x.summary === 'Lab 1').id;
+  mock.del(cal, lab);
+  const b = env(mock);
+  let saved;
+  const st = G.fresh();
+  await assert.rejects(run(b, cal, st, [], { save: async () => { saved = JSON.parse(JSON.stringify(st)); throw new Error('worker stopped'); } }), /worker stopped/);
+  await run(b, cal, G.fresh(saved));
+  assert.ok(!mock.live(cal).some((x) => x.id === lab), 'the deletion must be durable whenever its cursor is saved');
+});
+
+withMock('deletion history: discovering another deleted deadline does not evict an earlier student deletion', async (mock) => {
+  const e = env(mock);
+  const { cal } = await G.connect(e);
+  await run(e, cal, G.fresh(), EVENTS.slice(0, 2));
+  const lab = mock.live(cal).find((x) => x.summary === 'Lab 1').id;
+  for (const x of mock.live(cal)) mock.del(cal, x.id);
+  let st = G.fresh({ gone: [lab, ...Array.from({ length: 999 }, (_, i) => String(i).padStart(64, '0'))] });
+  await run(e, cal, st, EVENTS.slice(0, 2));
+  assert.equal(mock.live(cal).length, 0, 'an older deletion must not be recreated to make room for a newly discovered one');
+  st = G.fresh(JSON.parse(JSON.stringify(st)));
+  await run(e, cal, st, EVENTS.slice(0, 2));
+  assert.equal(mock.live(cal).length, 0, 'the full deletion history survives a worker restart');
+});
+
+// Disconnect is this device only (owner, 2026-10-31): Google's grant, which Drive shares, is never revoked.
+withMock('disconnect: the calendar deleted if asked; nothing can revoke the grant', async (mock) => {
   const e = env(mock);
   const { cal } = await G.connect(e);
   await run(e, cal, G.fresh());
   await G.remove(e, cal);
   assert.ok(!mock.calendars.has(cal));
   await G.remove(e, cal); // already gone: fine
-  assert.equal(await G.revoke(e, 'tok-1'), true);
-  assert.deepEqual(mock.revoked, ['tok-1']);
-  assert.ok(mock.log.at(-1)[1] === '/revoke', 'no token in the address');
-  assert.deepEqual([e.sent.at(-1).body, e.sent.at(-1).credentials, e.sent.at(-1).redirect], ['token=tok-1', 'omit', 'error']);
-  assert.equal(await G.revoke(e, 'tok-1'), false, 'an answer that is not ok says so');
+  assert.equal(G.revoke, undefined);
+  assert.doesNotMatch(read('planner/gcal.js'), /oauth2\.googleapis\.com\/revoke|REVOKE/);
+  assert.deepEqual(mock.revoked, []);
 });
 
 withMock('a big first fill goes in runs of 150, and says when there is more', async (mock) => {
@@ -245,7 +349,7 @@ test('what a page sends is checked: no uid, no times, an end before the start, o
 
 test('Google only: the addresses, the one scope, and the manifest\'s client asking for exactly it', () => {
   assert.equal(G.API, 'https://www.googleapis.com/calendar/v3');
-  assert.equal(G.REVOKE, 'https://oauth2.googleapis.com/revoke');
+  assert.equal(G.REVOKE, undefined);
   assert.equal(G.SCOPE, 'https://www.googleapis.com/auth/calendar.app.created');
   const m = require('../../extension/manifest.json');
   assert.deepEqual(m.oauth2.scopes, [G.SCOPE]);
@@ -260,10 +364,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
-// on: the build-time switch (planner/gcal.js ON) turned on in the worker's copy, as tools/dev/dev-gcal.sh does.
-const switched = (src, on) => (on ? src.replace('  const ON = false;\n', '  const ON = true;\n') : src);
+// on: the build-time switch (planner/gcal.js ON) as the worker's copy has it; off is a build that leaves Google sync out.
+const SWITCH = /\n {2}const ON = (?:true|false);\n/;
+const switched = (src, on) => { assert.match(src, SWITCH); return src.replace(SWITCH, `\n  const ON = ${on};\n`); };
 // failSet(patch): a storage write that fails, as a full disk or a quota does. identity.hold: what getAuthToken waits on.
-const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet = () => false } = {}) => {
+const worker = (mock, { on = true, drive = false, local = {}, sync = { enabled: true }, failSet = () => false } = {}) => {
   const store = { local, sync };
   // As chrome.storage: a read is served when it's asked (hooks.read runs after that, while the answer is on its way, as a
   // change landing then would), and every change is heard through onChanged.
@@ -288,8 +393,9 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
   const identity = {
     cleared: 0, removed: [],
     asked: 0, hold: null,
-    getAuthToken: async ({ interactive }) => {
+    getAuthToken: async ({ interactive, scopes }) => {
       assert.equal(interactive, false, 'the worker never prompts');
+      assert.deepEqual(scopes && [...scopes], [G.SCOPE], 'Calendar asks for its own scope only, never the manifest\'s list (Drive\'s are there too)'); // the worker's array is of the vm's realm
       identity.asked++;
       await identity.hold;
       return { token: 'tok-1', grantedScopes: [G.SCOPE] };
@@ -297,21 +403,22 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
     removeCachedAuthToken: async ({ token }) => { identity.removed.push(token); },
     clearAllCachedAuthTokens: async () => { identity.cleared++; },
   };
+  const permissions = { contains: async () => true, remove: async () => true };
   const context = vm.createContext({
     URL, URLSearchParams, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, AbortController, crypto: globalThis.crypto, atob, btoa, navigator: {},
     setTimeout: (f, ms) => setTimeout(f, Math.min(ms, 1)), clearTimeout,
     fetch: (url, init) => {
       asked.push(url);
-      assert.ok(url.startsWith(`${G.API}/`) || url === G.REVOKE, `only Google's two addresses: ${url}`);
-      return fetch(url.replace(G.API, mock.api).replace(G.REVOKE, mock.revoke), init);
+      assert.ok(url.startsWith(`${G.API}/`), `only Google Calendar's address: ${url}`);
+      return fetch(url.replace(G.API, mock.api), init);
     },
-    importScripts: (...files) => { for (const f of files) vm.runInContext(switched(read(`background/${f}`), on && f === '../planner/gcal.js'), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(f === '../planner/gcal.js' ? switched(read(`background/${f}`), on) : f === 'google.js' ? switched(read(`background/${f}`), drive) : read(`background/${f}`), context); },
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         onInstalled: { addListener: (f) => (listeners.installed ||= []).push(f) }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area('local', store.local), sync: area('sync', store.sync), onChanged: { addListener: (f) => heard.push(f) } },
       identity,
-      permissions: { contains: async () => true }, // the student granted every host (Chrome)
+      permissions, // the student granted every host (Chrome)
       tabs: { query: async () => [] },
       scripting: {
         getRegisteredContentScripts: async () => registered,
@@ -324,7 +431,7 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
   const send = (m, sender) => new Promise((res) => { for (const f of listeners) f(structuredClone(m), sender, (r) => res(structuredClone(r))); });
   // change(): a change made elsewhere (the popup, the editor), heard as Chrome tells it.
   const change = (name, patch) => { const c = Object.fromEntries(Object.keys(patch).map((k) => [k, { oldValue: store[name][k], newValue: patch[k] }])); Object.assign(store[name], patch); fire(name, c); };
-  return { store, identity, asked, send, hooks, change, registered: () => registered, install: () => { for (const f of listeners.installed) f(); } };
+  return { store, identity, permissions, asked, send, hooks, change, registered: () => registered, install: () => { for (const f of listeners.installed) f(); } };
 };
 // What the page sends with its batch (planner/calexport.js consent), worked out from the worker's storage as it is now.
 const D = require('../../extension/content/defaults.js');
@@ -370,7 +477,7 @@ withMock('worker: only the editor connects; a page syncs only its own site\'s ac
   assert.ok(w.asked.every((u) => u.startsWith('https://www.googleapis.com/') || u.startsWith('https://oauth2.googleapis.com/')));
 });
 
-withMock('worker: disconnect deletes the calendar when asked, revokes the grant, clears Chrome\'s tokens and every trace here; a run under way keeps nothing', async (mock) => {
+withMock('worker: disconnect deletes the calendar when asked, clears Chrome\'s tokens and every trace here, revokes nothing; a run under way keeps nothing', async (mock) => {
   const w = worker(mock);
   await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
   const cal = w.store.local.gcal.cal;
@@ -380,10 +487,10 @@ withMock('worker: disconnect deletes the calendar when asked, revokes the grant,
   while (!mock.log.some(([m, p]) => m === 'GET' && p.includes('/events'))) await settle(1);
   const bye = await w.send({ type: 'glaze:gcal', op: 'disconnect', drop: true }, EDITOR);
   assert.deepEqual(await running, { ok: false, error: 'stopped' });
-  assert.deepEqual(bye, { ok: true, revoked: true, had: true });
+  assert.deepEqual(bye, { ok: true });
   await settle();
   assert.ok(!mock.calendars.has(cal));
-  assert.deepEqual(mock.revoked, ['tok-1']);
+  assert.deepEqual(mock.revoked, []);
   assert.equal(w.identity.cleared, 1);
   assert.ok(!('gcal' in w.store.local) && !('gcalSync' in w.store.local));
   assert.ok(!w.registered().some((s) => s.id === 'gz-gcal'));
@@ -392,14 +499,85 @@ withMock('worker: disconnect deletes the calendar when asked, revokes the grant,
   await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
   mock.fail(5, 500);
   assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'disconnect', drop: true }, EDITOR), { ok: false, error: 'busy' });
-  assert.ok(w.store.local.gcal?.cal && mock.revoked.length === 1);
-  assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'disconnect' }, EDITOR), { ok: true, revoked: true, had: true });
+  assert.ok(w.store.local.gcal?.cal);
+  assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'disconnect' }, EDITOR), { ok: true });
+  assert.deepEqual(mock.revoked, []);
   assert.equal(mock.calendars.size, 1, 'kept, as chosen');
 });
 
-// ---- the build-time switch (planner/gcal.js ON): off in the repo and the store package until Google verifies the app ----
-test('switch off (the repo as it is): no settings section, no sync, no page script, even with a connection left from a dev build', async () => {
-  assert.equal(G.ON, false, 'planner/gcal.js ON stays false until Google verifies the app');
+withMock('worker: Calendar\'s disconnect while Drive is connected through Chrome drops only Calendar\'s state: Chrome\'s cache and identity stay', async (mock) => {
+  const w = worker(mock, { drive: true }); // Drive in this build, connected through Chrome's own client as Calendar is
+  await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
+  const cal = w.store.local.gcal.cal;
+  w.store.local.google = { email: 'student@school.edu', flow: 'chrome', at: NOW }; // Drive connected (background/google.js)
+  assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'disconnect', drop: true }, EDITOR), { ok: true });
+  assert.ok(!mock.calendars.has(cal), 'the calendar still goes, as chosen');
+  assert.deepEqual([mock.revoked, w.identity.cleared, w.identity.removed], [[], 0, []]);
+  assert.ok(!('gcal' in w.store.local) && !('gcalSync' in w.store.local));
+  assert.deepEqual(w.store.local.google, { email: 'student@school.edu', flow: 'chrome', at: NOW }, 'Drive\'s record stays');
+});
+
+withMock('worker: Calendar\'s and Drive\'s Disconnects at once, in either order: the last one gives identity back, once', async (mock) => {
+  for (const first of ['gcal', 'google']) {
+    const w = worker(mock, { drive: true });
+    mock.tokens.add('tok-1');
+    await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
+    let removed = 0;
+    w.permissions.remove = async () => { removed++; return true; };
+    w.store.local.google = { email: 'student@school.edu', sub: '1', flow: 'web', at: NOW }; // Drive connected too
+    const cal = () => w.send({ type: 'glaze:gcal', op: 'disconnect' }, EDITOR), drive = () => w.send({ type: 'glaze:google', op: 'disconnect' }, EDITOR);
+    const [c, d] = first === 'gcal' ? await Promise.all([cal(), drive()]) : (([x, y]) => [y, x])(await Promise.all([drive(), cal()]));
+    assert.deepEqual([c, d], [{ ok: true }, { ok: true }]);
+    assert.equal(removed, 1, `${first} first`);
+    assert.deepEqual(mock.revoked, []);
+    assert.ok(!('gcal' in w.store.local) && !('google' in w.store.local));
+  }
+});
+
+test('Calendar releases identity before replying so Settings cannot remove a later Drive connection permission', async () => {
+  const w = worker({ api: G.API }, { local: { gcal: { gen: 'g', cal: 'calendar', last: {} } } });
+  w.identity.getAuthToken = async () => { throw new Error('signed out'); };
+  let permissionHeld = true, close, removed = 0;
+  w.permissions.remove = async () => { removed++; permissionHeld = false; return true; };
+  const nodes = {
+    '#gcal-bye': { returnValue: 'ok', addEventListener: (_, f) => { close = f; } },
+    '#gcal-drop': { checked: false }, '#gcal-connect': { focus() {} },
+  };
+  const source = read('settings/options.js');
+  const start = source.indexOf("$('#gcal-bye').addEventListener('close'");
+  const end = source.indexOf('chrome.storage.onChanged.addListener', start);
+  vm.runInNewContext(source.slice(start, end), {
+    $: (s) => nodes[s], chrome: { permissions: w.permissions }, t: (s) => s, hint() {}, gcalRender() {},
+    gcalOp: async (m) => {
+      const result = await w.send({ type: 'glaze:gcal', ...m }, EDITOR);
+      // A queued Drive Connect completes before the reply reaches Settings.
+      permissionHeld = true;
+      w.store.local.google = { email: 'student@school.edu', sub: '1', flow: 'chrome', at: NOW };
+      return result;
+    },
+  });
+  await close();
+  assert.equal(removed, 1, 'the worker releases the old permission');
+  assert.equal(permissionHeld, true, 'the old Calendar reply must not remove Drive\'s new permission');
+});
+
+test('Settings\' Calendar sign-in asks Chrome for Calendar\'s scope only', () => {
+  const src = read('settings/options.js');
+  const sign = src.slice(src.indexOf('const gcalSignIn = async () => {'), src.indexOf('// Only a person\'s click or key, while the page has their activation'));
+  assert.match(sign, /GZ_GCAL_AUTH\.token\(\{ interactive: true, scopes: \[GZ_GCAL\.SCOPE\] \}\)/);
+  assert.match(sign, /const scope = GZ_GCAL\.SCOPE;/);
+  assert.doesNotMatch(sign, /getManifest\(\)\.oauth2/);
+});
+
+test('Settings leaves Calendar identity cleanup to the worker grant queue', () => {
+  const src = read('settings/options.js');
+  const bye = src.slice(src.indexOf("$('#gcal-bye').addEventListener('close'"), src.indexOf("chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.gcal)"));
+  assert.doesNotMatch(bye, /permissions\.remove/);
+});
+
+// ---- the build-time switch (planner/gcal.js ON): on in the repo and the Chrome package since 4.0.1 ----
+test('switch off (a build that leaves it out): no settings section, no sync, no page script, even with a connection left', async () => {
+  assert.equal(G.ON, true, 'planner/gcal.js ON is on since 4.0.1');
   // The section is hidden in the page itself, and only the switch shows it; the editor loads the switch.
   assert.match(read('options.html'), /<div class="group" id="gcal" hidden>/);
   assert.match(read('options.html'), /<script src="planner\/gcal\.js"><\/script>[\s\S]*<script src="settings\/options\.js"><\/script>/);
@@ -423,28 +601,6 @@ test('switch off (the repo as it is): no settings section, no sync, no page scri
     assert.ok(['https://bb.school.edu/ultra', 'https://bb.school.edu/ultra/*'].every((p) => on.registered().find((s) => s.id === 'gz-gcal').matches.includes(p)), 'an approved Ultra site\'s pages too');
     assert.deepEqual([w.asked, mock.log], [[], []], 'no request at all');
   } finally { await mock.stop(); }
-});
-
-test('the store package leaves Google sync out while the switch is off; scripts/dev-gcal.sh turns it on in its copy only', () => {
-  const { execFileSync } = require('node:child_process');
-  const os = require('node:os');
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-gcal-pkg-'));
-  try {
-    const keyFile = path.join(dir, 'key.txt');
-    fs.writeFileSync(keyFile, require('node:crypto').randomBytes(294).toString('base64'));
-    const env = { ...process.env, DIST: path.join(dir, 'dist') };
-    execFileSync(path.join(__dirname, '../../tools/dev/dev-gcal.sh'), [keyFile, path.join(dir, 'dev')], { env, stdio: 'pipe' });
-    const repo = require('../../extension/manifest.json');
-    const zip = path.join(dir, 'dist', `glaze-v${repo.version}.zip`);
-    const packed = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json']));
-    const { oauth2, optional_permissions: optional, ...rest } = repo, store = optional.filter((p) => p !== 'identity');
-    assert.deepEqual(packed, store.length ? { ...rest, optional_permissions: store } : rest, 'the store manifest: the same, without oauth2 and the optional identity permission');
-    assert.match(execFileSync('unzip', ['-p', zip, 'planner/gcal.js']).toString(), /\n {2}const ON = false;\n/);
-    const dev = JSON.parse(fs.readFileSync(path.join(dir, 'dev/manifest.json')));
-    assert.deepEqual([dev.oauth2, dev.optional_permissions, dev.key], [oauth2, repo.optional_permissions, fs.readFileSync(keyFile, 'utf8')]);
-    assert.match(fs.readFileSync(path.join(dir, 'dev/planner/gcal.js'), 'utf8'), /\n {2}const ON = true;\n/);
-    assert.equal(G.ON, false, "the repo's switch is untouched");
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 // ---- review (Codex, W13): each failed before its fix ----
@@ -489,7 +645,7 @@ withMock('review: Glaze turned off while the token is awaited: the run stops and
   assert.ok(!w.store.local.gcal.last[SITE_SRC], 'nor its own state');
 });
 
-withMock('review: syncs in flight and queued when Disconnect comes stop before it revokes, and nothing is written after', async (mock) => {
+withMock('review: syncs in flight and queued when Disconnect comes stop, and nothing is written after', async (mock) => {
   const w = worker(mock);
   await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
   const cal = w.store.local.gcal.cal;
@@ -503,7 +659,7 @@ withMock('review: syncs in flight and queued when Disconnect comes stop before i
   const bye = w.send({ type: 'glaze:gcal', op: 'disconnect' }, EDITOR);
   open();
   assert.deepEqual([await a, await b], [{ ok: false, error: 'stopped' }, { ok: false, error: 'stopped' }]);
-  assert.deepEqual(await bye, { ok: true, revoked: true, had: true });
+  assert.deepEqual(await bye, { ok: true });
   assert.deepEqual(eventWrites(mock), []);
   assert.equal(mock.live(cal).length, 0);
   assert.ok(!('gcal' in w.store.local) && !('gcalSync' in w.store.local));
@@ -713,4 +869,38 @@ withMock('review (B2 residual): a batch that doesn\'t say it was read whole dele
   await G.sync(e, cal, st, { src: SRC, events: EVENTS.slice(0, 1), from: FROM, first: FIRST });
   assert.equal(mock.live(cal).length, 5, 'no flag: nothing deleted');
   assert.ok(!mock.log.some(([m]) => m === 'DELETE'));
+});
+
+withMock('worker: with Drive switched off in this build, Calendar\'s disconnect clears Chrome\'s cache and gives identity back, whatever Drive record is left', async (mock) => {
+  const w = worker(mock); // Drive's build switch off (background/google.js ON)
+  await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
+  let removed = 0;
+  w.permissions.remove = async () => { removed++; return true; };
+  w.store.local.google = { email: 'student@school.edu', sub: '1', flow: 'chrome', at: NOW }; // left by a build with Drive on
+  assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'disconnect' }, EDITOR), { ok: true });
+  assert.deepEqual([mock.revoked, w.identity.cleared, removed], [[], 1, 1]);
+});
+
+withMock('worker: Drive connected through the web client: Calendar\'s disconnect clears Chrome\'s cache, revokes nothing and leaves identity to Drive', async (mock) => {
+  const w = worker(mock, { drive: true });
+  await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
+  let removed = 0;
+  w.permissions.remove = async () => { removed++; return true; };
+  w.store.local.google = { email: 'student@school.edu', sub: '1', flow: 'web', at: NOW }; // Chrome's rare fallback (background/google.js)
+  assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'disconnect' }, EDITOR), { ok: true });
+  assert.deepEqual([mock.revoked, w.identity.cleared], [[], 1], 'Chrome\'s cache cleared: Drive\'s web sign-in doesn\'t use it');
+  assert.equal(removed, 0, 'identity stays: Drive\'s web sign-in needs it');
+  assert.deepEqual(w.store.local.google, { email: 'student@school.edu', sub: '1', flow: 'web', at: NOW }, 'Drive stays connected');
+});
+
+withMock('worker: Drive\'s disconnect through the web client leaves Calendar its identity, Chrome\'s cache and the grant', async (mock) => {
+  const w = worker(mock, { drive: true });
+  await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
+  let removed = 0;
+  w.permissions.remove = async () => { removed++; return true; };
+  w.store.local.google = { email: 'student@school.edu', sub: '1', flow: 'web', at: NOW };
+  assert.deepEqual(await w.send({ type: 'glaze:google', op: 'disconnect' }, EDITOR), { ok: true });
+  assert.equal(removed, 0, 'identity stays while Calendar is connected');
+  assert.deepEqual([mock.revoked, w.identity.cleared], [[], 0], 'Calendar\'s grant and Chrome\'s cache untouched');
+  assert.ok(!('google' in w.store.local) && w.store.local.gcal?.cal);
 });

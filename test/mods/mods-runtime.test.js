@@ -559,6 +559,7 @@ test('content.js loads the page side only in the top frame, where the package ha
       chrome: { runtime: { getManifest: () => (sandbox ? { sandbox: { pages: ['mods/host.html'] } } : {}), sendMessage: async (m) => { messages.push(m); return { ok: true, mods }; } } },
       need: async (file) => { asked.push(file); ctx.GZ_MODS = { start: (l) => started.push(l) }; },
     });
+    ctx.stored = (k, cb) => ctx.local((l) => l.get(k, cb)); // content.js's startup read, here storage itself
     ctx.window = {};
     ctx.window.top = top ? ctx.window : {};
     ctx.globalThis = ctx;

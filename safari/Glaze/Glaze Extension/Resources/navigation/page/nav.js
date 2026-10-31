@@ -284,13 +284,26 @@ function GZ_ULTRA_RAIL(X) {
     });
   };
   const readLocal = () => {
+    localKnown = false; // A resumed read may contain changes missed while the rail was off.
     const token = rev, read = ++reads;
     get('local', isPreview ? ['todoCache'] : ['widgetTimer', 'todoCache']).then(async (r) => {
       if (!active || token !== rev || read !== reads) return;
       if (r.todoCache?.key !== local.todoCache?.key) { nextItems = []; nextAt = 0; }
       local = { ...r, ...(isPreview && { widgetTimer: local.widgetTimer }) };
+      localKnown = true;
       if (active && token === rev && read === reads) drawWidgets();
     });
+  };
+  // A change brings its new values, so there is nothing to read; a read still out held what was stored before it.
+  let localKnown = false;
+  const takeLocal = (changes) => {
+    if (!localKnown) return readLocal();
+    reads++;
+    const r = { ...local };
+    for (const k of isPreview ? ['todoCache'] : ['widgetTimer', 'todoCache']) if (changes[k]) { if ('newValue' in changes[k]) r[k] = changes[k].newValue; else delete r[k]; }
+    if (r.todoCache?.key !== local.todoCache?.key) { nextItems = []; nextAt = 0; }
+    local = r;
+    drawWidgets();
   };
   const refreshNext = async () => {
     const token = rev, read = reads, url = location.href;
@@ -309,7 +322,8 @@ function GZ_ULTRA_RAIL(X) {
       }
       await Promise.all([X.need('courses/ultra.js', () => globalThis.GZ_ULTRA), X.need('planner/todo.js', () => globalThis.GZ_TODO)]);
       if (!current()) return;
-      const plan = await GZ_ULTRA.page.planned(+start, +end, local.todoCache);
+      // The page's confirmed student (/users/me, asked at first paint): no wait of its own when the To Do copy covers the week.
+      const plan = await GZ_ULTRA.page.planned(+start, +end, local.todoCache, await Promise.resolve(X.me?.()).catch(() => ''));
       if (!current()) return;
       const [raw, options] = await Promise.all([get('local', plan.key), get('sync', 'todo')]);
       if (!current()) return;
@@ -546,8 +560,9 @@ function GZ_ULTRA_RAIL(X) {
     if (area === 'sync' && changes.navItems) { stored = N.clean(changes.navItems.newValue); if (active) sync(true); }
     if (area === 'local') {
       if (logoId && changes[`navLogo:${logoId}`]) { logoId = ''; if (active) loadLogo(); }
-      if (active && Object.keys(changes).some((k) => (!isPreview && k === 'widgetTimer') || k === 'todoCache' || k.startsWith('todo:') || k.startsWith('pet:'))) { if (changes.todoCache) nextAt = 0; readLocal(); }
+      if (active && Object.keys(changes).some((k) => (!isPreview && k === 'widgetTimer') || k === 'todoCache' || k.startsWith('todo:') || k.startsWith('pet:'))) { if (changes.todoCache || changes.todo || Object.keys(changes).some((k) => k.startsWith(`todo:${location.origin}/`))) nextAt = 0; takeLocal(changes); }
     }
+    if (area === 'sync' && changes.todo && active) { reads++; nextAt = 0; drawWidgets(); }
     if (area === 'sync' && changes.widgets && active) { signature = ''; sync(true); }
   });
   addEventListener('pagehide', () => { active = false; rev++; restore(); });

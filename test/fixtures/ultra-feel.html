@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<!-- A synthetic Blackboard Ultra that routes in place, for checks/navigation/ultra-feel-check.js: the global pages' main area
+     (bb-base-layout > div.base > main#main-content.bb-offcanvas-container), a course over it (div.inner-wrap >
+     section.course.bb-offcanvas-container > div.course-content-container > div.panel-wrap > main.course-main-content), its
+     tabs (div.bb-course-navigation, .js-course-navigation) and each page's view, in the shapes measured on the owner's site
+     (glaze-plans/perf-ultra/0b/live-shapes-2026-10-31.md), with invented text. As there, a route change leaves the old view
+     until four div.spinner.bb-secondary-color-2 take its place 35 ms on, and the view fills later (window.__delay, 600 ms by
+     default). Where its tab marks move and when the course comes in are approximations: on the route change, and with the
+     spinners. Its <base href> is a CDN, as Ultra's is. -->
+<base href="//ultra-cdn.invalid/ultra/uiv4001.0.0-rel/">
+<title>Blackboard Learn</title>
+<style>
+  body { margin: 0; font: 14px/1.4 system-ui, sans-serif; }
+  .MuiDrawer-paper { position: fixed; top: 0; bottom: 0; left: 0; width: 220px; overflow: auto; }
+  .MuiDrawer-paper ul { list-style: none; margin: 0; padding: 8px; }
+  .MuiDrawer-paper a { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; color: inherit; text-decoration: none; }
+  .MuiDrawer-paper a[aria-current] { font-weight: 700; }
+  main#main-content { margin-left: 220px; padding: 24px; min-height: 100vh; box-sizing: border-box; }
+  .inner-wrap > section.course { position: fixed; top: 0; right: 0; bottom: 0; left: 220px; z-index: 10; background: Canvas; color: CanvasText; }
+  .course-content-container, .panel-wrap { height: 100%; }
+  .panel-wrap { overflow-y: auto; }
+  main.course-main-content { display: block; min-height: 100%; }
+  div.bb-course-navigation { position: sticky; top: 0; z-index: 2; background: Canvas; }
+  course-page-header > header { display: flex; align-items: center; gap: 12px; height: 47px; padding: 0 16px; }
+  .bb-ui-navigation-list-horizontal { display: flex; gap: 4px; margin: 0; padding: 0 16px; list-style: none; border-bottom: 1px solid; }
+  .bb-ui-navigation-list-horizontal a { display: flex; align-items: center; height: 46px; padding: 0 12px; color: inherit; text-decoration: none; }
+  .bb-ui-navigation-list-horizontal a[aria-current="page"] { border-bottom: 3px solid; }
+  .course-tool-content { padding: 16px; }
+  div.spinner { width: 24px; height: 24px; margin: 24px auto; box-sizing: border-box; border: 3px solid; border-top-color: transparent; border-radius: 50%; }
+  .content-list-item { min-height: 76px; padding: 12px 16px; box-sizing: border-box; border-bottom: 1px solid; }
+  .element-card { display: block; margin: 8px 0; padding: 12px; border: 1px solid; }
+  .default-group { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { padding: 10px; border-bottom: 1px solid; text-align: start; }
+</style>
+</head>
+<body>
+<div id="site-wrap"><div class="inner-wrap">
+  <bb-base-layout><div class="base">
+    <div class="MuiPaper-root MuiDrawer-paper"><nav class="makeStylesnavigation-0-2-5" aria-label="Base navigation"><ul>
+      <li><a class="MuiButtonBase-root MuiListItemButton-root base-navigation-button-content" href="/ultra/institution-page"><span>Institution Page</span></a></li>
+      <li><a class="MuiButtonBase-root MuiListItemButton-root base-navigation-button-content" href="/ultra/stream"><span>Activity Stream</span></a></li>
+      <li><a class="MuiButtonBase-root MuiListItemButton-root base-navigation-button-content" href="/ultra/course"><span>Courses</span></a></li>
+      <li><a class="MuiButtonBase-root MuiListItemButton-root base-navigation-button-content" href="/ultra/calendar"><span>Calendar</span></a></li>
+      <li><a class="MuiButtonBase-root MuiListItemButton-root base-navigation-button-content" href="/ultra/grades"><span>Grades</span></a></li>
+      <li><a class="MuiButtonBase-root MuiListItemButton-root base-navigation-button-content" href="#"><span>Sign Out</span></a></li>
+    </ul></nav></div>
+    <main id="main-content" class="bb-offcanvas-container"></main>
+  </div></bb-base-layout>
+</div></div>
+<script>
+(() => {
+  'use strict';
+  const COURSES = [{ id: '_101_1', name: 'Sample Course One', code: 'FIX-101-01' }, { id: '_102_1', name: 'Sample Course Two', code: 'FIX-102-01' }, { id: '_103_1', name: 'Sample Course Three', code: 'FIX-103-01' }];
+  const TOOLS = [['outline', 'outline', 'Content'], ['calendar', 'calendar', 'Calendar'], ['announcement', 'announcements', 'Announcements'], ['discussion', 'engagement', 'Discussions'], ['grades', 'grades', 'Gradebook'], ['messages', 'messages', 'Messages']];
+  const SPINNERS = '<div class="spinner bb-secondary-color-2"></div>'.repeat(4);
+  const $ = (s, r = document) => r.querySelector(s);
+  const inner = $('.inner-wrap'), base = $('#main-content');
+  const times = (n, f) => Array.from({ length: n }, (_, i) => f(i + 1)).join('');
+
+  // ---- the views ----
+  const GLOBAL = {
+    course: () => `<section class="base-courses-container route-view-container"><div class="base-header"><h1 id="main-heading">Courses</h1></div><div class="default-group term-_10_1">`
+      + COURSES.map((c) => `<bb-base-course-card><article id="course-list-course-${c.id}" class="element-card course-element-card"><div class="course-banner"></div><div class="element-details summary"><a class="course-title" href="/ultra/courses/${c.id}/outline"><h4 class="js-course-title-element">${c.name}</h4></a><div class="multi-column-course-id">${c.code}</div><div class="course-status"><span class="status-text">Open</span></div></div></article></bb-base-course-card>`).join('')
+      + '</div></section>',
+    grades: () => `<section class="route-view-container"><div class="base-header"><h1 id="main-heading">Grades</h1></div><div class="carousel-slide" id="container-term-current">`
+      + COURSES.map((c) => `<bb-base-grades-student><div class="element-card tile base-grades-course-tile active-course"><div class="grades-header"><div class="course-number">${c.code}</div><h3 class="subheader"><a class="bb-click-target" href="/ultra/courses/${c.id}/grades">${c.name}</a></h3></div><div class="current-grade">A-</div><div class="recent-upcoming"><div class="element-card">Essay 1</div></div></div></bb-base-grades-student>`).join('')
+      + '</div></section>',
+    stream: () => `<div id="activity-stream" class="activity-stream"><div class="activity-group js-upcomingStreamEntries"><h2 class="activity-group-title">Upcoming</h2><ul class="activity-feed">`
+      + times(8, (n) => `<li class="stream-item-container"><div class="stream-item"><div class="stream-item-contents"><div class="element-card stream-panel-activity-card"><div class="element-details">Activity ${n}</div></div></div></div></li>`) + '</ul></div></div>',
+  };
+  const generic = (title) => `<section class="route-view-container"><div class="base-header"><h1 id="main-heading">${title}</h1></div>${times(6, (n) => `<div class="element-card">${title} item ${n}</div>`)}</section>`;
+  const TOOL = {
+    outline: (c) => `<section class="course-outline-content route-view-container js-course-skip-link-target"><div class="course-outline"><div class="course-outline-grid"><div class="outline-column dropzoneTarget"><div class="js-content-outline course-outline-content-list"><course-content-outline><react-course-content-outline class="react-container"><div><div><div><div class="makeStyleslist-0-2-1">`
+      + times(10, (n) => `<div class="root content-list-item"><div><div role="region"><div class="itemContainer"><div class="click-to-invoke-container"><h3>Week ${n}</h3><div class="js-description">${c.name}: invented item ${n}.</div></div></div></div></div></div>`)
+      + '</div></div></div></div></react-course-content-outline></course-content-outline></div></div></div></div></section>',
+    announcement: () => `<section class="route-view-container"><announcement-list><div><div class="page-announcement course-announcement-layer"><div class="list-announcement-content"><div class="row collapse"><div class="tabular-list-container"><div class="tabular-list"><table class="table-content sortable-table"><thead class="list-item-columns announcement-sort-header"><tr><th class="announcement-header-column">Title</th><th class="announcement-status-column">Status</th></tr></thead><tbody>`
+      + times(6, (n) => `<tr class="announcement-item-row"><td class="announcement-title-detail">Week ${n} notes</td><td class="announcement-status-column">Posted</td></tr>`) + '</tbody></table></div></div></div></div></div></div></announcement-list></section>',
+    grades: () => `<section class="guidance-wrapper gradebook-panel route-view-container"><div class="student-view"><bb-course-grades-student><div class="base-grades course-grades-instructor"><div class="grades-list"><course-student-grades id="student-tab-panel-grades" class="react-container"><div><table id="course-student-grades-sortable-table" class="MuiTable-root"><thead><tr class="MuiTableRow-root MuiTableRow-head"><th>Item</th><th>Due</th><th>Status</th><th>Grade</th><th>Out of</th></tr></thead><tbody class="MuiTableBody-root">`
+      + times(25, (n) => `<tr class="MuiTableRow-root">${['Item ' + n, 'Nov ' + n, 'Graded', '9', '10'].map((t) => `<td class="MuiTableCell-body">${t}</td>`).join('')}</tr>`) + '</tbody></table></div></course-student-grades></div></div></bb-course-grades-student></div></section>',
+  };
+
+  // ---- a course over the page ----
+  const S = { c: null, section: null, tool: '', tok: 0 };
+  window.__loading = false;
+  const nav = (c, tool) => `<div class="bb-course-navigation"><bb-course-navigation><course-page-header><header><a class="MuiButtonBase-root" href="/ultra/course" aria-label="Home">⌂</a><span>${c.code}</span></header></course-page-header>`
+    + `<div class="makeStylestoolbar-0-2-11"><div class="js-course-navigation"><nav aria-label="Course"><ul class="MuiList-root bb-ui-navigation-list-horizontal">`
+    + TOOLS.map(([id, path, label]) => `<li><a class="MuiButtonBase-root MuiListItemButton-root js-course-${id}-tool"${id === tool ? ' aria-current="page"' : ''} href="/ultra/courses/${c.id}/${path}">${label}</a></li>`).join('')
+    + '</ul></nav></div></div></bb-course-navigation></div>';
+  const courseShell = (c, tool) => {
+    S.section?.remove();
+    const s = document.createElement('section');
+    s.className = 'course bb-offcanvas-container route-view-container';
+    s.innerHTML = `<div class="course-content-container"><div class="panel-wrap hide-in-background modern"><main class="course-main-content">${nav(c, tool)}<div class="course-tool-content">${SPINNERS}</div></main></div></div>`;
+    inner.append(s);
+    Object.assign(S, { c, section: s });
+  };
+  // The view goes: spinners 35 ms on, the new view `__delay` later.
+  const load = (where, html) => {
+    const my = ++S.tok;
+    window.__loading = true;
+    setTimeout(() => {
+      if (my !== S.tok) return;
+      where().innerHTML = SPINNERS;
+      setTimeout(() => { if (my !== S.tok) return; where().innerHTML = html(); window.__loading = false; }, Math.max(0, (window.__delay ?? 600) - 35));
+    }, 35);
+  };
+  const marks = (path) => {
+    for (const a of document.querySelectorAll('.MuiDrawer-paper a')) {
+      const on = a.getAttribute('href') === path || (path.startsWith('/ultra/courses/') && a.getAttribute('href') === '/ultra/course');
+      a.classList.toggle('Mui-selected', on);
+      if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    }
+  };
+
+  function render(first) {
+    const seg = location.pathname.split('/').filter(Boolean);
+    marks(location.pathname);
+    const c = seg[1] === 'courses' && COURSES.find((x) => x.id === seg[2]);
+    if (!c) {
+      const key = seg[1] || 'stream';
+      const html = () => (GLOBAL[key] ? GLOBAL[key]() : generic(key.replace(/-/g, ' ')));
+      if (first) { base.innerHTML = html(); return; }
+      const leave = S.section;
+      S.c = null; S.tool = '';
+      const my = S.tok + 1;
+      setTimeout(() => { if (my === S.tok && leave && leave === S.section) { leave.remove(); S.section = null; } }, 35);
+      load(() => base, html);
+      return;
+    }
+    const t = TOOLS.find((x) => x[1] === (seg[3] || 'outline')) || TOOLS[0];
+    const html = () => (TOOL[t[0]] ? TOOL[t[0]](c) : generic(t[2]));
+    if (first) { if (!base.firstChild) base.innerHTML = GLOBAL.course(); courseShell(c, t[0]); S.tool = t[0]; $('.course-tool-content', S.section).innerHTML = html(); return; }
+    if (S.c !== c) {
+      // A course opened from the page: it comes in with its spinners.
+      const my = ++S.tok;
+      window.__loading = true;
+      setTimeout(() => {
+        if (my !== S.tok) return;
+        courseShell(c, t[0]);
+        S.tool = t[0];
+        setTimeout(() => { if (my !== S.tok) return; $('.course-tool-content', S.section).innerHTML = html(); window.__loading = false; }, Math.max(0, (window.__delay ?? 600) - 35));
+      }, 35);
+      return;
+    }
+    S.tool = t[0];
+    for (const a of S.section.querySelectorAll('.js-course-navigation a')) if (a.classList.contains(`js-course-${t[0]}-tool`)) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    load(() => $('.course-tool-content', S.section), html);
+  }
+
+  // A framework's link handling: the document, bubbling, plain left clicks on its own paths.
+  document.addEventListener('click', (e) => {
+    const a = e.target instanceof Element && e.target.closest('a[href]');
+    if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const href = a.getAttribute('href');
+    if (href === '#') { e.preventDefault(); return; }
+    if (!href.startsWith('/ultra/') || (a.target && a.target !== '_self')) return;
+    e.preventDefault();
+    if (href === location.pathname + location.search) return;
+    history.pushState(null, '', location.origin + href); // absolute: the <base> is on another origin
+    render(false);
+  });
+  window.addEventListener('popstate', () => render(false));
+  render(true);
+})();
+</script>
+</body></html>

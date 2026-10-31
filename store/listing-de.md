@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.0 (German)
+# Chrome Web Store listing — Glaze 4.0.1 (German)
 
 ## Short summary (132 character maximum)
 
@@ -73,16 +73,17 @@ Canvas ist eine Marke von Instructure, Inc. Blackboard ist eine Marke von Anthol
 
 ## Release notes
 
-NEU IN 4.0.0
+NEU IN 4.0.1
 
-• Blackboard Ultra: Glaze Writer ersetzt den Editor in Diskussionen, Journalen, Nachrichten, Aufgaben und Tests; Blackboards eigener Editor bleibt im ⋯-Menü. Diskussionen und Nachrichten bekommen eine Symbolleiste für markierten Text, die Vorgaben der Aufgabenstellung und Strg/⌘+Eingabe zum Posten.
-• Aufgaben schreiben in Blackboards Textfeld für dessen eigene Abgabe oder werden mit Voller Writer zu echten Seiten: MLA 9, APA 7, Chicago 17, Leer oder dein eigenes Format, mit Formatprüfung, Fußnoten, Versionen sowie .docx-Import, -Export und -Abgabe.
-• Dokumente bündelt Arbeiten, Tabellen, PDFs und PowerPoint-Präsentationen. Tabellen bieten mehr als 380 Excel-Funktionen, zeigen und erstellen Diagramme und importieren .xlsx, .csv und .tsv. PDFs bieten Zoom, Suche und ausfüllbare Formulare; Präsentationen öffnen sich im Betrachter mit „Vorführen“. Dateivorschauen in Blackboard Ultra öffnen sich im PDF-Betrachter von Glaze. Gelöschte Dateien bleiben 30 Tage im Papierkorb.
-• Beginne eine Aufgabe als Dokument oder Tabelle. Hochgeladene PDFs, Präsentationen und Tabellen öffnen sich zur Abgabe in ihrem Betrachter; Tabellen werden als .xlsx abgegeben. Unter Einstellungen › Writer › Arbeiten findest du Schalter für Tabellen, PDFs und Folien; gespeicherte Dateien öffnen sich weiterhin.
-• Rechtschreibung, Grammatik und Autokorrektur laufen auf deinem Gerät, und „Zitieren“ sucht eine DOI, ISBN oder Webadresse nur, wenn du klickst. Tests erhalten nur Korrekturhilfen, ohne KI oder Textvervollständigung.
-• Einstellungen › KI verbindet benannte Anbieter mit ihrem Schlüssel oder ein Modell auf diesem Gerät, mit einem Modell für alles oder einem pro Funktion. KI bleibt aus, bis du sie einrichtest. Die Tab-Vervollständigung beendet nur den aktuellen Satz, und Feedback bewertet deine Arbeit anhand von Bewertungsraster und Anweisungen und erklärt geschätzte Noten oder warum keine Punktzahl möglich ist. Glaze verfasst keine Entwürfe.
-• Firefox: Mit Agenten verbindest du KI-Apps auf deinem Computer mit deinen Kursen, To-dos und Noten. Jede App und jede Änderung braucht deine Zustimmung.
-• „Sichern…“ und „Wiederherstellen…“ enthalten Arbeiten, Tabellen, PDFs, Präsentationen, Versionen, dein Wörterbuch und gespeicherte Quellen.
-• Die Seiten von Writer folgen einem dunklen Design; Helle Seite lässt sie weiß. Gespeicherte Designs und solche, die du in der Galerie mit „Dieses Design verwenden“ nutzt, stehen überall zur Wahl, wo du ein Design auswählst.
-• Blackboard: Das Bewertungsraster erscheint auf der Seite eines gespeicherten Entwurfs, Fälligkeitshinweise stimmen auch nach einer Zeitumstellung, und die Suche folgt Blackboards eigenen Links.
-• Aussehen › Bewegung beginnt bei Lebhaft. Das Update stellt Dezent einmalig auf Lebhaft um; Aus bleibt Aus.
+• Blackboard Ultra: Kurs-Tabs öffnen sich aus einer schon geladenen Seite und laden, sobald du auf einen Tab drückst oder darüberfährst (Einstellungen › Kurs-Tabs › Kurs-Tabs vorab öffnen).
+• Kursinhalte bereithalten: Ein Element öffnet sich über den Kursinhalten, und zurück geht es sofort an dieselbe Stelle.
+• Seiten sofort öffnen: Noten, Kurse, Aktivität und die Inhalte, Ankündigungen und Noten eines Kurses zeigen deinen letzten Besuch, während Blackboard lädt. Laden von Seiten sofort zeigen: Ein Klick zeigt sich sofort. Die Leiste von Glaze ist ab dem ersten Bild da, ihre Fußzeile und Panels verschieben die Seite nicht mehr, und To-do, Noten und Seitenleiste erscheinen aus gespeicherten Daten, sobald Blackboard bestätigt, wer angemeldet ist.
+• Kursdaten vorab laden, weniger Anfragen an Blackboard und weniger Arbeit auf langsameren Laptops.
+• PDFs: Hervorheben, Stift, Text, Bilder, Formen und Unterschriften sowie ein Seitenbereich zum Verschieben, Drehen, Löschen und Hinzufügen von Seiten. Ein PDF behält eine Kopie, seine zuletzt markierte Fassung.
+• Aus Dokumenten anhängen fügt deine Dokumente der Abgabe einer Aufgabe in Blackboard Ultra hinzu. Arbeitsmappen aus .xlsm werden als .xlsm exportiert und abgegeben.
+• Canvas: In Glaze öffnen bei PDF-, Folien- und Tabellendateien. Folien bekommen Mit Notizen drucken…, und die Karten unter Dokumente zeigen die Diagramme einer Tabelle.
+• Das Feedback von Writer antwortet in der Sprache deines Entwurfs, und seine Zitierhinweise und -prüfungen funktionieren in allen sechs Sprachen.
+• Besteht ein Kommentar des Feedbacks seine Prüfungen nicht, zeigt Writer die geprüfte Bewertung nach dem Bewertungsraster, statt die Note zurückzuhalten.
+• Firefox: Google Drive (Einstellungen › Writer › Arbeiten) öffnet, speichert, hängt an und synchronisiert deine Dokumente. Aus, bis du dich verbindest.
+• Firefox: Eine Website, der du den Zugriff entzogen hast, wird nicht mehr erneut angefragt.
+• Chrome: Google Kalender-Synchronisierung (Einstellungen › Teilen) hält einen Kalender namens Glaze in deinem Google-Konto aktuell, und Google Drive (Einstellungen › Writer › Arbeiten) öffnet, speichert, hängt an und synchronisiert deine Dokumente. Beides bleibt aus, bis du dich verbindest.

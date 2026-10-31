@@ -97,8 +97,8 @@ const GZ_SPEC = {
     // sidebar: the page's sidebar, widgets docked under it (navigation/sidebar.js).
     sidebar: [true, 'bool'],
     // place: remember Canvas Modules position. Ultra retains live course pages. coursemenu: each course card's button for its color,
-    // tint and look. tabs: Ultra's course tabs (navigation/coursetabs.js).
-    place: [true, 'bool'], coursemenu: [true, 'bool'], tabs: [true, 'bool'],
+    // tint and look. tabs: Ultra's course tabs (navigation/coursetabs.js). prefetch: courses/page/ahead.js. instant: courses/instant.js.
+    place: [true, 'bool'], coursemenu: [true, 'bool'], tabs: [true, 'bool'], prefetch: [true, 'bool'], instant: [true, 'bool'],
     // docPages: previews in a dark palette, plain, dimmed or inverted (the floating button too); toggles: the floating
     // document buttons. Canvas's document viewer: docTheme its palette, docInk the pen.
     docPages: ['plain', ['plain', 'dim', 'dark']], toggles: [true, 'bool'], docTheme: [true, 'bool'], docInk: [false, 'bool'],
@@ -110,6 +110,8 @@ const GZ_SPEC = {
     // Syllabus import on a course's home and Syllabus page (planner/page/syllabus.js).
     syllabus: [false, 'bool'],
     fold: [true, 'bool'], titleScroll: [true, 'bool'],
+    // feedback: Ultra's clicks pressed at once, pages loading drawn (navigation/page/feedback.js).
+    feedback: [true, 'bool'],
   },
   docreview: { compact: [true, 'bool'], fullscreen: [true, 'bool'], focus: [true, 'bool'], hideBars: [true, 'bool'], remember: [false, 'bool'] },
   stream: { dates: ['smart', ['smart', 'posted', 'both']], relative: [false, 'bool'], compact: [false, 'bool'], encouragement: [true, 'bool'] },

@@ -64,7 +64,7 @@ const ITEMS = [item('_603_1', '_101_1', 'Lab report', NOW + 5 * H), item('_604_1
 const page = ({ path = '/ultra/course', course = '', complete = true, prefs = {}, items = ITEMS, stored = {}, hold = [], enhance = { todo: true, cardTasks: true, remind: true } } = {}) => {
   const store = JSON.parse(JSON.stringify(stored));
   const held = [];
-  const calls = [], due = [], sent = [];
+  const calls = [], due = [], sent = [], changes = [], events = {};
   const panel = new E('div'); panel.className = 'todo-panel';
   const bb = new E('bb-todo'); panel.append(bb);
   const aside = new E('aside'); aside.className = 'outline-actions';
@@ -96,7 +96,7 @@ const page = ({ path = '/ultra/course', course = '', complete = true, prefs = {}
     navigator: { userActivation: { isActive: true } },
     document: {
       activeElement: null, documentElement: new E('html'), visibilityState: 'visible', cookie: '',
-      createElement: (tag) => new E(tag), createElementNS: (ns, tag) => new E(tag), addEventListener() {}, removeEventListener() {},
+      createElement: (tag) => new E(tag), createElementNS: (ns, tag) => new E(tag), addEventListener: (t, f) => (events[t] ||= []).push(f), removeEventListener() {},
       querySelector: (sel) => ({ 'div.todo-panel > bb-todo': bb, 'aside.outline-actions > .js-details-and-actions': details })[sel] || null,
       querySelectorAll: (sel) => (sel === 'article[id^="course-list-course-"]' ? [card] : []),
       getElementById: (id) => (id === 'gz-todo' ? [panel, aside].flatMap((p) => p.children).find((x) => x.attrs.id === 'gz-todo' || x.id === 'gz-todo') || null : null),
@@ -116,13 +116,13 @@ const page = ({ path = '/ultra/course', course = '', complete = true, prefs = {}
       storage: {
         local: { get: (k, cb) => cb(local(Object.fromEntries([k].flat().filter((x) => x in store).map((x) => [x, store[x]])))), set: (v, cb) => { Object.assign(store, local(v)); cb?.(); } },
         sync: { get: (k, cb) => cb({ todo: { ...prefs }, remind: {} }) },
-        onChanged: { addListener() {}, removeListener() {} },
+        onChanged: { addListener: (f) => changes.push(f), removeListener() {} },
       },
     },
   };
   c.globalThis = c;
   vm.createContext(c);
-  return { c, store, calls, due, sent, panel, bb, aside, details, card, release: () => { for (const f of held.splice(0)) f(); } };
+  return { c, store, calls, due, sent, panel, bb, aside, details, card, change: (ch, area) => changes.forEach((f) => f(ch, area)), fire: (type, detail) => events[type]?.forEach((f) => f({ detail })), release: () => { for (const f of held.splice(0)) f(); } };
 };
 const probe = (src, fields) => src.replace(/( {2}return \{\s*sync,)/, `$1 probe: { ${fields} },`).replace(/var (GZ_\w+) = globalThis\.\1 \|\|/, 'var $1 =');
 
@@ -225,7 +225,7 @@ test('content-ultra.js loads each where it goes: Better To Do on the Courses pag
     I: { links: [1], settings: { enhance: { todo: true, cardTasks: true, remind: false, remindExam: false, remindPlan: false, remindClass: false, streak: true } } },
     location: { pathname: '/ultra/course' }, window: {}, CARD: 'article[id^="course-list-course-"]', cards: true, tabFrame: '',
     document: { querySelector: () => (ctx.cards ? {} : null) },
-    need: async (file) => { asked.push(file); },
+    need: async (file) => { asked.push([].concat(file).join(' ')); },
     GZ_TODO_UI: { sync: (on) => asked.push(`todo ${on}`) }, GZ_CARD_TASKS: { sync: (on) => asked.push(`cards ${on}`) }, GZ_REMIND_UI: { sync: (on) => asked.push(`remind ${on}`) },
   };
   ctx.window.top = ctx.window;
@@ -233,10 +233,11 @@ test('content-ultra.js loads each where it goes: Better To Do on the Courses pag
   ctx.globalThis = ctx;
   vm.createContext(ctx);
   vm.runInContext(`${decls}\nglobalThis.all = () => [syncTodo(), syncCardTasks(), syncRemind()];`, ctx);
+  const TODO = 'courses/ultra.js planner/todo.js planner/page/todo.js'; // one load: the list, its data and Ultra's reader
   const run = async (path, cards = true) => { asked.length = 0; ctx.location.pathname = path; ctx.cards = cards; await Promise.all(ctx.all()); return [...asked]; };
-  assert.deepEqual(await run('/ultra/course'), ['planner/page/todo.js', 'courses/page/cardtasks.js', 'planner/page/reminders.js', 'todo true', 'cards true', 'remind true']);
-  assert.deepEqual(await run('/ultra/course', false), ['planner/page/todo.js', 'cards false', 'planner/page/reminders.js', 'todo true', 'remind true'], 'no cards drawn yet: none asked');
-  assert.deepEqual(await run('/ultra/courses/_101_1/outline'), ['planner/page/todo.js', 'cards false', 'planner/page/reminders.js', 'todo true', 'remind true']);
+  assert.deepEqual(await run('/ultra/course'), [TODO, 'courses/page/cardtasks.js', 'planner/page/reminders.js', 'todo true', 'cards true', 'remind true']);
+  assert.deepEqual(await run('/ultra/course', false), [TODO, 'cards false', 'planner/page/reminders.js', 'todo true', 'remind true'], 'no cards drawn yet: none asked');
+  assert.deepEqual(await run('/ultra/courses/_101_1/outline'), [TODO, 'cards false', 'planner/page/reminders.js', 'todo true', 'remind true']);
   assert.deepEqual(await run('/ultra/courses/_101_1/grades'), ['todo false', 'cards false', 'planner/page/reminders.js', 'remind true']);
   assert.deepEqual(await run('/ultra/coursesx'), ['todo false', 'cards false', 'planner/page/reminders.js', 'remind true']);
   ctx.window.top = {}; // a frame inside the page
@@ -244,7 +245,7 @@ test('content-ultra.js loads each where it goes: Better To Do on the Courses pag
   assert.deepEqual(await run('/ultra/course'), ['todo false', 'cards false', 'remind false']);
   // A course tab's frame is a page of its own (its To Do panel), but reminders stay the page's around it.
   ctx.solo = true; ctx.tabFrame = '_101_1';
-  assert.deepEqual(await run('/ultra/courses/_101_1/outline'), ['planner/page/todo.js', 'cards false', 'remind false', 'todo true']);
+  assert.deepEqual(await run('/ultra/courses/_101_1/outline'), [TODO, 'cards false', 'remind false', 'todo true']);
 });
 
 // ---- Codex's B2 review: each failed before its fix ----
@@ -364,4 +365,145 @@ test('NEW-1: Ultra W11 stores its calculation day without changing a stable run'
   assert.equal(r.sent.filter((m) => m.op === 'streak').length, 1);
   assert.deepEqual(r.calls, [], 'no new direct request');
   r.c.GZ_REMIND_UI.sync(false);
+});
+
+// D: what's kept draws before anything is asked. The student last confirmed on this site (courses/ultra.js page.known) names
+// the kept copy; who is signed in (profile) is confirmed after it draws, and only then is Ultra asked or anything kept.
+const known = (p, id = '_900_1') => {
+  let answer;
+  p.c.GZ_ULTRA.page.known = async () => ({ id, time_zone: 'America/New_York', courses: [{ id: '_101_1', name: 'BIO 1100: Biology I' }] });
+  p.c.GZ_CTX.profile = () => new Promise((res) => { answer = (who) => res({ id: who, time_zone: 'America/New_York' }); });
+  return (who) => answer(who);
+};
+const keptFor = (uid, items, at = NOW) => ({ todoCache: { key: T.storeKey(O, uid), at, ...T.fetchRange(D.GZ_SANITIZE({}).todo, NOW, 'America/New_York'), teach: true, progress: true, items, complete: true, grading: [], sums: {} } });
+
+test('D: Better To Do on Ultra draws its frame at once and the kept list the moment the student is confirmed, then asks Ultra', async () => {
+  // Kept three minutes ago: drawn once confirmed, and asked again.
+  const p = page({ stored: keptFor('_900_1', [item('_701_1', '_101_1', 'Kept lab', NOW + 2 * H)], Date.now() - 180000) });
+  const confirm = known(p);
+  vm.runInContext(probe(read('planner/page/todo.js'), 'get: () => ({ box, key })'), p.c);
+  // Ultra's answer stays out, so what shows meanwhile is the kept list.
+  p.c.GZ_ULTRA.page.due = (from, to) => { p.due.push([from, to]); return new Promise(() => {}); };
+  p.c.GZ_TODO_UI.sync(true);
+  await settle();
+  const { box, key } = p.c.GZ_TODO_UI.probe.get();
+  assert.equal(key, KEY);
+  assert.ok(box.isConnected && box.text.includes('To Do'), 'its frame and title are there at once');
+  assert.ok(!box.text.includes('Kept lab'), 'nobody\'s work before the account is confirmed');
+  assert.equal(p.due.length, 0, 'nothing asked of Ultra yet');
+  assert.ok(!p.sent.some((m) => m.cache), 'nothing kept yet');
+  confirm('_900_1');
+  await settle();
+  assert.ok(box.text.includes('Kept lab'), 'the kept list, as soon as the account is confirmed');
+  assert.equal(p.due.length, 1, 'asked once the student is confirmed');
+});
+
+test('D: another student signed in than the one last seen here: their list replaces the kept one, and nothing is kept under the other', async () => {
+  const p = page({ stored: { ...keptFor('_800_1', [item('_701_1', '_101_1', 'Someone else', NOW + 2 * H)]) } });
+  const confirm = known(p, '_800_1');
+  vm.runInContext(probe(read('planner/page/todo.js'), 'get: () => ({ box, key })'), p.c);
+  p.c.GZ_TODO_UI.sync(true);
+  await settle();
+  assert.ok(!p.c.GZ_TODO_UI.probe.get().box.text.includes('Someone else'), 'another student\'s list never shows');
+  // page.known now answers the confirmed student, as courses/ultra.js does once /users/me has answered.
+  p.c.GZ_ULTRA.page.known = async () => ({ id: '_900_1', time_zone: 'America/New_York' });
+  confirm('_900_1');
+  await settle();
+  // The new start asks who again: answered at once.
+  p.c.GZ_CTX.profile = async () => ({ id: '_900_1', time_zone: 'America/New_York' });
+  await settle();
+  const { box, key } = p.c.GZ_TODO_UI.probe.get();
+  assert.equal(key, KEY);
+  assert.ok(!box.text.includes('Someone else'));
+  assert.ok(p.sent.filter((m) => m.cache).every((m) => m.key === KEY), 'kept for the student signed in only');
+});
+
+test('D: tasks on Ultra\'s cards draw what was kept once the student is confirmed, and ask Ultra only after', async () => {
+  const p = page({ stored: keptFor('_900_1', [item('_701_1', '_101_1', 'Kept lab', NOW + 2 * H)]) });
+  const confirm = known(p);
+  vm.runInContext(read('courses/page/cardtasks.js'), p.c);
+  p.c.GZ_ULTRA.page.due = async (from, to) => { p.due.push([from, to]); return { items: [item('_702_1', '_101_1', 'Fresh lab', NOW + 3 * H)], complete: true }; };
+  p.c.GZ_CTX.profile = (() => { const f = p.c.GZ_CTX.profile; return () => f(); })();
+  p.c.GZ_CARD_TASKS.sync(true);
+  await settle();
+  const ct = p.card.children[1];
+  assert.ok(!ct?.text?.includes('Kept lab'), 'nobody\'s tasks before the account is confirmed');
+  assert.equal(p.due.length, 0);
+  p.c.GZ_CARD_TASKS.sync(true);
+  await settle();
+  assert.equal(p.due.length, 0, 'a pass meanwhile asks nothing either');
+  confirm('_900_1');
+  await settle();
+  assert.ok(p.card.children[1]?.text.includes('Kept lab'), 'the confirmed account uses its cache');
+  assert.equal(p.due.length, 0, 'the kept answer is still fresh');
+});
+
+test('D: cards drawn for another student than the one signed in lose those tasks and start again for theirs', async () => {
+  const p = page({ stored: keptFor('_800_1', [item('_701_1', '_101_1', 'Someone else', NOW + 2 * H)]) });
+  const confirm = known(p, '_800_1');
+  vm.runInContext(read('courses/page/cardtasks.js'), p.c);
+  p.c.GZ_CARD_TASKS.sync(true);
+  await settle();
+  assert.ok(!p.card.children[1]?.text?.includes('Someone else'));
+  p.c.GZ_ULTRA.page.known = async () => ({ id: '_900_1', time_zone: 'America/New_York' });
+  confirm('_900_1');
+  p.c.GZ_CTX.profile = async () => ({ id: '_900_1', time_zone: 'America/New_York' });
+  await settle();
+  assert.ok(!p.card.children.some((c) => c?.text?.includes('Someone else')));
+  assert.equal(p.due.length, 1, 'the student signed in: theirs asked');
+  assert.equal(p.store.todoCache.key, KEY);
+});
+
+test('the cached Ultra To Do preview cannot edit another account before confirmation', async () => {
+  const oldKey = T.storeKey(O, '_800_1');
+  const p = page({ stored: { ...keptFor('_800_1', []), [oldKey]: { tasks: [], items: {} } } });
+  known(p, '_800_1');
+  vm.runInContext(probe(read('planner/page/todo.js'), 'save, get: () => ({ box })'), p.c);
+  p.c.GZ_TODO_UI.sync(true);
+  await settle();
+  const saved = await p.c.GZ_TODO_UI.probe.save([['task', { id: 'other', title: 'Wrong account' }]]);
+  assert.equal(saved, false);
+  assert.equal(p.sent.filter((m) => m.edits).length, 0);
+  assert.deepEqual(p.store[oldKey].tasks, []);
+  assert.equal(p.c.GZ_TODO_UI.probe.get().box.inert, true);
+});
+
+test('the cached Ultra To Do preview leaves the previous account draft stored until confirmation', async () => {
+  const draftKey = `draft:todo:${O}/_800_1`, draft = { text: 'Private draft', at: NOW, todo: { draft: { title: 'Private draft' } } };
+  const p = page({ enhance: { todo: true, drafts: true }, stored: { ...keptFor('_800_1', []), [draftKey]: draft } });
+  p.c.chrome.storage.local.remove = (k) => { delete p.store[k]; };
+  known(p, '_800_1');
+  vm.runInContext(probe(read('planner/page/todo.js'), 'get: () => ({ box, form })'), p.c);
+  p.c.GZ_TODO_UI.mount(new E(), { scope: 'all' });
+  await settle();
+  assert.deepEqual(p.store[draftKey], draft);
+  assert.equal(p.c.GZ_TODO_UI.probe.get().form, null);
+});
+
+test('a reused Ultra range is published with its original timestamp by both planner readers', async () => {
+  for (const [file, name] of [['planner/page/todo.js', 'GZ_TODO_UI'], ['courses/page/cardtasks.js', 'GZ_CARD_TASKS']]) {
+    const p = page(), at = NOW - 90000;
+    p.c.GZ_ULTRA.page.due = async () => ({ at, items: structuredClone(ITEMS), complete: true });
+    vm.runInContext(read(file), p.c);
+    p.c[name].sync(true); await settle();
+    assert.equal(p.sent.find((m) => m.cache)?.cache.at, at, file);
+  }
+});
+
+
+test('a mounted Ultra To Do accepts a newer worker answer from another tab', async () => {
+  const p = page();
+  vm.runInContext(probe(read('planner/page/todo.js'), 'get: () => ({ cache })'), p.c);
+  const ui = p.c.GZ_TODO_UI; ui.sync(true); await settle();
+  const cache = { ...ui.probe.get().cache, at: Date.now() + 1, items: [{ ...ITEMS[0], title: 'New title' }] };
+  p.change({ todoCache: { newValue: cache } }, 'local');
+  assert.equal(ui.probe.get().cache.items[0].title, 'New title');
+});
+
+test('Ultra To Do revalidates a fresh saved copy at startup', async () => {
+  const range = T.fetchRange(D.GZ_SANITIZE({}).todo, Date.now(), 'America/New_York');
+  const p = page({ stored: { todoCache: { key: KEY, at: Date.now(), ...range, teach: true, progress: true, items: [] } } });
+  vm.runInContext(read('planner/page/todo.js'), p.c);
+  p.c.GZ_TODO_UI.sync(true); await settle();
+  assert.equal(p.due.length, 1);
 });

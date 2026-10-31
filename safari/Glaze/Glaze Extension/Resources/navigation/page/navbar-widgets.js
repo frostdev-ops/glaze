@@ -16,13 +16,26 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
   const live = () => !!chrome.runtime?.id && ids.length > 0;
 
   const readLocal = () => {
+    localKnown = false; // A resumed read may contain changes missed while the widgets were off.
     const token = rev, read = ++reads;
     get('local', isPreview ? ['todoCache'] : ['widgetTimer', 'todoCache']).then((r) => {
       if (!live() || token !== rev || read !== reads) return;
       if (r.todoCache?.key !== local.todoCache?.key) { nextItems = []; nextAt = 0; }
       local = { ...r, ...(isPreview && { widgetTimer: local.widgetTimer }) };
+      localKnown = true;
       draw();
     });
+  };
+  // A change brings its new values, so there is nothing to read; a read still out held what was stored before it.
+  let localKnown = false;
+  const takeLocal = (changes) => {
+    if (!localKnown) return readLocal();
+    reads++;
+    const r = { ...local };
+    for (const k of isPreview ? ['todoCache'] : ['widgetTimer', 'todoCache']) if (changes[k]) { if ('newValue' in changes[k]) r[k] = changes[k].newValue; else delete r[k]; }
+    if (r.todoCache?.key !== local.todoCache?.key) { nextItems = []; nextAt = 0; }
+    local = r;
+    draw();
   };
   // What's due next: Canvas and Moodle from the week the palette and the popup read (content.js dueWeek), Ultra from its
   // planner, done and dismissed work left out (as navigation/page/nav.js).
@@ -42,7 +55,8 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
       }
       await Promise.all([X.need('courses/ultra.js', () => globalThis.GZ_ULTRA), X.need('planner/todo.js', () => globalThis.GZ_TODO)]);
       if (!current()) return;
-      const plan = await GZ_ULTRA.page.planned(+start, +end, local.todoCache);
+      // The page's confirmed student (/users/me, asked at first paint): no wait of its own when the To Do copy covers the week.
+      const plan = await GZ_ULTRA.page.planned(+start, +end, local.todoCache, await Promise.resolve(X.me?.()).catch(() => ''));
       if (!current()) return;
       const [raw, options] = await Promise.all([get('local', plan.key), get('sync', 'todo')]);
       if (!current()) return;
@@ -175,7 +189,8 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
   const stop = () => set([]);
   chrome.storage.onChanged.addListener((changes, area) => {
     if (!live()) return;
-    if (area === 'local' && Object.keys(changes).some((k) => (!isPreview && k === 'widgetTimer') || k === 'todoCache' || k.startsWith('todo:') || k.startsWith('pet:'))) { if (changes.todoCache) nextAt = 0; readLocal(); }
+    if (area === 'local' && Object.keys(changes).some((k) => (!isPreview && k === 'widgetTimer') || k === 'todoCache' || k.startsWith('todo:') || k.startsWith('pet:'))) { if (changes.todoCache || changes.todo || Object.keys(changes).some((k) => k.startsWith(`todo:${location.origin}/`))) nextAt = 0; takeLocal(changes); }
+    if (area === 'sync' && changes.todo) { reads++; nextAt = 0; draw(); }
     if (area === 'sync' && changes.widgets && nodes.get('timer')) { const node = nodes.get('timer'); node.options = GZ_SANITIZE({ widgets: changes.widgets.newValue }).widgets; draw(); }
   });
   document.addEventListener('visibilitychange', () => { if (live()) draw(); });

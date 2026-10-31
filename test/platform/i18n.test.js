@@ -65,7 +65,7 @@ const fromJs = (js, calls = /\b(?:t|tr)\s*\(/g) => {
 const JS = ['sharing/quick.js', 'agents/approve-page.js', 'settings/welcome.js', 'sharing/sessions-ui.js', 'content/content.js', 'content/content-ultra.js', 'content/content-canvas.js', 'settings/options.js', 'settings/popup.js', 'core/ui.js', 'core/page.js', 'pet/petlibrary.js', 'pet/petsprites.js', 'planner/todo.js', 'courses/ultra.js', 'settings/editor-x.js', 'settings/editor-xbg.js', 'settings/editor-xmotion.js', 'settings/editor-pointer.js', 'settings/editor-xparts.js', 'settings/editor-mods.js', 'settings/editor-widget.js', 'settings/editor-navbar.js', 'settings/editor-ai.js', 'settings/editor-writer.js', 'looks/parts.js', 'looks/lookparts.js', ...fs.readdirSync(root, { recursive: true }).map((f) => f.split(path.sep).join('/')).filter((f) => /^[a-z]+\/page\/[^/]+\.js$/.test(f)).sort()];
 // Glaze Writer's frame (writer.html, papers.html) and the libraries whose words it shows. writer/writer-docx.js's t() reads
 // a run's marks, so only its warnings and refusals are words (below).
-const WRITER = ['writer/frame/writer.js', 'documents/papers.js', 'documents/sheets/sheet-kind.js', 'documents/sheets/sheet-grid.js', 'documents/sheets/sheet-chart.js', 'documents/pdf/pdf-kind.js', 'documents/slides/slides-kind.js', 'agents/writer-mcp.js', ...fs.readdirSync(path.join(root, 'writer/frame')).filter((f) => /^writer-.+\.js$/.test(f)).map((f) => `writer/frame/${f}`), ...fs.readdirSync(path.join(root, 'writer')).filter((f) => /^writer-.+\.js$/.test(f) && f !== 'writer-docx.js').map((f) => `writer/${f}`)];
+const WRITER = ['writer/frame/writer.js', 'documents/papers.js', 'documents/sheets/sheet-kind.js', 'documents/sheets/sheet-grid.js', 'documents/sheets/sheet-chart.js', 'documents/pdf/pdf-kind.js', 'documents/pdf/pdf-tools.js', 'documents/pdf/pdf-sign.js', 'documents/pdf/pdf-pages.js', 'documents/slides/slides-kind.js', 'agents/writer-mcp.js', ...fs.readdirSync(path.join(root, 'writer/frame')).filter((f) => /^writer-.+\.js$/.test(f)).map((f) => `writer/frame/${f}`), ...fs.readdirSync(path.join(root, 'writer')).filter((f) => /^writer-.+\.js$/.test(f) && f !== 'writer-docx.js').map((f) => `writer/${f}`)];
 JS.push(...WRITER);
 // The capitalised strings of a `const NAME = …;` table (its labels and messages, not its ids, CSS or numbers).
 const tableOf = (f, ...names) => {
@@ -88,8 +88,10 @@ const tableOf = (f, ...names) => {
 const writerWords = [
   ...tableOf('writer/frame/writer.js', 'LABELS'), ...tableOf('writer/frame/writer-cite.js', 'TYPES', 'FIELDS'), ...tableOf('writer/frame/writer-ai.js', 'STATUS'),
   ...tableOf('writer/frame/writer-submit.js', 'SAYS'), ...tableOf('writer/frame/writer-proof.js', 'LABEL'),
+  // The PDF tools' names, colours and the reason a file refuses them (documents/pdf/pdf-tools.js).
+  ...tableOf('documents/pdf/pdf-tools.js', 'SHAPES', 'INKS', 'MARKS', 'TOOLS', 'NO_TOOLS'), ...tableOf('documents/pdf/pdf-kind.js', 'SIGNED', 'PROTECTED', 'PAGE_SAYS'),
   ...tableOf('writer/frame/writer-paper.js', 'SPACING', 'KIND', 'STYLES', 'REASONS'), ...tableOf('writer/writer-format.js', 'ROWS', 'names'),
-  ...tableOf('ai/tasks/writer-feedback.js', 'GRADE_REASONS'), ...tableOf('ai/failure.js', 'REASONS', 'ERRORS'),
+  ...tableOf('ai/tasks/writer-feedback.js', 'GRADE_REASONS', 'COMMENTS'), ...tableOf('ai/failure.js', 'REASONS', 'ERRORS'),
   // Labels handed to the paper chrome's helpers, which translate them.
   ...fromJs(read('writer/frame/writer-paper.js'), /\b(?:mark\('\w+',|row\(|setState\()\s*/g),
   ...[...read('writer/frame/writer-paper.js').matchAll(/\['\w+', '([A-Z][^']*)'\]/g)].map((m) => m[1]),

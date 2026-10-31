@@ -51,6 +51,9 @@ const SITES = {
     { at: 'reach: reachable, fetch: (u, i) => fetch(u, i), task:', kind: 'via', to: 'ai/broker.js' },
     { at: 'const channelEnv = () => ({', kind: 'asked', flow: 'a mod channel\'s relay: share.frostdev.io, or one the editor asked for (settings/editor-mods.js Read code)', guard: /reachable\(u\)/, near: 0 },
     { at: 'fetch: (url, init) => fetch(url, init),', kind: 'via', to: 'planner/gcal.js', exact: true },
+    { at: 'fetch: (u, init) => fetch(u, init),', kind: 'via', to: 'background/google.js', exact: true },
+    { at: 'drive: D.create({ fetch: (u, init) => fetch(u, init),', kind: 'via', to: 'documents/drive.js' },
+    { at: 'drive: (active) => GZ_DRIVE.create({ fetch: (u, init) => fetch(u, init),', kind: 'via', to: 'documents/drive.js' },
     { at: 'fetch(chrome.runtime.getURL(`icons/icon', kind: 'extension' },
     { at: "credentials: 'include', redirect: 'error'", kind: 'asked', flow: 'Gradescope: the Settings switch asks for www.gradescope.com', guard: /reachable\(GZ_GRADESCOPE\.HOST\)/ },
     { at: "redirect: wide ? 'follow' : 'manual', cache: 'no-store', signal: ctl.signal", kind: 'asked', flow: 'Canvas Download all: the page\'s Allow frame (courses/allow.html) for the file server', guard: /if \(!await reachable\(url\)\)/ },
@@ -95,9 +98,13 @@ const SITES = {
     { at: 'WebSocket: W = globalThis.WebSocket', kind: 'via', to: 'sharing/sessions.js' },
   ],
   'planner/gcal.js': [
-    { at: 'env.fetch(`${env.api || API}', kind: 'open', host: 'https://www.googleapis.com', why: 'Google Calendar API, CORS for any origin; behind GZ_GCAL.ON (off)' },
-    { at: 'env.fetch(env.revoke || REVOKE', kind: 'open', host: 'https://oauth2.googleapis.com', why: 'token revocation, CORS for any origin; behind GZ_GCAL.ON (off)' },
+    { at: 'env.fetch(`${env.api || API}', kind: 'open', host: 'https://www.googleapis.com', why: 'Google Calendar API, CORS for any origin; behind GZ_GCAL.ON (on; Chrome only)' },
   ],
+  // Drive's sign-in (behind background/google-config.js's placeholders until its clients are real): Google's userinfo, and the
+  // HEAD that finds the picker page that loads.
+  // Drive's files (behind background/google.js's ON): the Drive v3 API and its upload address, both on www.googleapis.com.
+  'documents/drive.js': [{ at: 'const send = (url, init) => env.fetch(url', kind: 'open', host: 'https://www.googleapis.com', why: 'Drive v3 (files and uploads) answers every origin (CORS); behind GZ_GOOGLE.ON' }],
+  'background/google.js': [{ at: 'const send = (url, init = {}) => env.fetch(url', kind: 'open', why: 'openidconnect.googleapis.com answers every origin (CORS); of the picker pages, frostdev.io is a required host and its GitHub Pages copy answers every origin' }],
   'looks/fonts.js': [{ at: 'const get = (url, as) => fetch(url', kind: 'open', host: 'https://fonts.googleapis.com', hosts: ['https://fonts.googleapis.com', 'https://fonts.gstatic.com', 'https://cdn.jsdelivr.net'], why: 'Google Fonts CSS, fonts.gstatic.com and the jsDelivr catalog files answer every origin' }],
   'settings/options.js': [{ at: 'fetch(GZ_FONTS.cssUrl(name, false)', kind: 'open', host: 'https://fonts.googleapis.com', why: 'whether a typed Google font exists' }],
   'core/site.js': [
@@ -105,6 +112,8 @@ const SITES = {
     { at: 'const nearby = async (site, { f = fetch', kind: 'open', why: 'no-cors existence checks whose answer is never read; the homepage read only when held' },
   ],
   'settings/editor-xbg.js': [{ at: 'fetch(`assets/shaders/', kind: 'extension' }],
+  // Ultra's bar keeps its own sheet's text for the next page's first paint (navigation/nav.js first).
+  'navigation/page/navbar.js': [{ at: "fetch(chrome.runtime.getURL('navigation/page/navbar.css'))", kind: 'extension' }],
   // A deck's card picture carries the bundled faces its slide 1 uses (vendor/fonts), read from the extension itself.
   'documents/slides/slides-kind.js': [{ at: 'fetch(chrome.runtime.getURL(`vendor/fonts/', kind: 'extension' }],
   'planner/ocr.js': [{ at: 'fetch(here(', kind: 'extension' }],
@@ -113,9 +122,12 @@ const SITES = {
   // The picture encoder's kernels (ai/local/kernels/vision-*.wgsl), the same way.
   'ai/local/vision.js': [{ at: 'const r = await fetch(url);', kind: 'extension' }],
   'courses/lmsq.js': [{ at: 'return fetch(url, init)', kind: 'page' }],
-  'courses/ultra.js': [{ at: 'f = (...a) => fetch(...a)', kind: 'page' }],
-  'content/content.js': [{ at: 'fetch(`${location.origin}${base}${path}`', kind: 'page' }],
-  'content/content-ultra.js': [{ at: 'GZ_LMSQ.fetch(u, o, 0, live)', kind: 'page' }],
+  // The page stores' reads (who's signed in, gradebooks, outlines, what's due): the page's own site, through its queue.
+  'courses/ultra.js': [{ at: 'f = (...a) => fetch(...a)', kind: 'page' }, { at: 'f: (u, init) => env.fetch(u, init, o.prio', kind: 'page' },
+    { at: 'fetch: (u, init, prio, still) => lmsq()', kind: 'page', n: 2 }],
+  // The page's own site; Ultra's through its queue (content-ultra.js's fetch, courses/lmsq.js).
+  'content/content.js': [{ at: '(siteFetch || ((u, o) => fetch(u, o)))(`${location.origin}${base}${path}`', kind: 'page' }],
+  'content/content-ultra.js': [{ at: 'GZ_LMSQ.fetch(u, o), () => fetch(u, o))),', kind: 'page', n: 3 }],
   'content/content-canvas.js': [{ at: 'fetch(`${location.origin}/courses/${cid}/grades`', kind: 'page' }],
   // An announcement from the page's own site, and Canvas's read mark, through the site's queue (courses/lmsq.js).
   'courses/page/announce.js': [{ at: 'const q = (url, init) => GZ_LMSQ.fetch(url', kind: 'page' }, { at: 'f: (u, i) => GZ_LMSQ.fetch(u, i, prio)', kind: 'page' }, { at: 'GZ_LMSQ.fetch(m.url,', kind: 'page' }],
@@ -131,17 +143,18 @@ const SITES = {
   'courses/page/cardtasks.js': [{ at: 'await fetch(url,', kind: 'page' }],
   'planner/page/classes.js': [{ at: 'await fetch(u.href,', kind: 'page' }],
   'navigation/page/coursemenu.js': [{ at: 'fetch(`${location.origin}/api/v1/users/self/', kind: 'page' }],
-  'courses/page/docs.js': [{ at: 'await fetch(url,', kind: 'page' }],
+  'courses/page/docs.js': [{ at: 'GZ_LMSQ.fetch(url, { credentials:', kind: 'page' }],
   // A Blackboard preview (the worker's courses/bb-preview.js answers with the address): its converted PDF, read from the Ultra
   // page's own origin.
   'courses/page/bbpreview.js': [{ at: "await fetch(url, { mode: 'cors', credentials: 'omit'", kind: 'open', host: 'https://annotate-doc-viewer-prod-filesbucket.s3-fips.us-east-1.amazonaws.com',
     why: "a presigned S3 converted.pdf, without cookies: the bucket's CORS lets the Ultra page's origin read it (live probe, 2026-10-30)" }],
   // The worker: the preview's own address on the asking Ultra page's site, then basic-doc-viewer under *.blackboard.com.
   'courses/bb-preview.js': [{ at: '{ fetch: get = fetch, now = Date.now', kind: 'asked', flow: 'an Ultra site Glaze runs on (its built-in or granted host), from that site\'s page only; Blackboard\'s document viewer is a required host', in: 'background/background.js', guard: /const origin = ultraPage\(s\) \? await fromUltra\(s\) : null;/ }],
-  'courses/page/download.js': [{ at: 'await fetch(f.url,', kind: 'page' }],
-  'planner/page/grades.js': [{ at: 'await fetch(url,', kind: 'page' }],
+  'courses/page/download.js': [{ at: 'await fetch(f.url,', kind: 'page' }, { at: 'signal: ctl.signal, f: (u, o) => GZ_LMSQ.fetch(u, o)', kind: 'page' }],
+  'courses/page/previews.js': [{ at: 'GZ_ULTRA.read({ origin: location.origin, f: (u, o) => GZ_LMSQ.fetch(u, o) })', kind: 'page' }],
+  'planner/page/grades.js': [{ at: 'await fetch(url,', kind: 'page' }, { at: "const queued = (u, o) => X.need('courses/lmsq.js'", kind: 'page' }],
   'planner/page/gradescope.js': [{ at: "fetch('/account/edit'", kind: 'page' }, { at: 'fetch(`/courses/${gid}`', kind: 'page' }],
-  'planner/page/insights.js': [{ at: 'await fetch(url,', kind: 'page' }],
+  'planner/page/insights.js': [{ at: 'await fetch(url,', kind: 'page' }, { at: "f: (u, o) => ctx.need('courses/lmsq.js'", kind: 'page' }],
   'courses/page/moodle.js': [{ at: 'fetch(`${s.root}/lib/ajax/service.php', kind: 'page' }, { at: 'fetch(`${s.root}/grade/report/overview', kind: 'page' }],
   'navigation/page/navbar-canvas.js': [{ at: 'await fetch(next,', kind: 'page' }, { at: "fetch('/logout'", kind: 'page' }],
   'navigation/page/navbar-moodle.js': [{ at: 'fetch(`${s.root}/lib/ajax/service.php', kind: 'page' }],

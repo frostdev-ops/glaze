@@ -55,7 +55,7 @@ const LIVE = {
 
 // at: 'courses' | 'outline' | 'detail' | 'stream' (no column), or a LIVE page; width: the window; stored: storage.local; enhance;
 // widgets: run core/page/widgets.js too; todo: a stand-in Better To Do (planner/page/todo.js) that mounts a list.
-const page = ({ at = 'outline', width = 1600, stored = {}, enhance = {}, widgets = false, todo = false, registration = null } = {}) => {
+const page = ({ at = 'outline', width = 1600, stored = {}, enhance = {}, widgets = false, todo = false, registration = null, aside = '' } = {}) => {
   const doc = { activeElement: null };
   const make = (t) => new El(t, doc);
   const el = (tag, cls, ...kids) => { const e = make(tag); e.className = cls; e.append(...kids); return e; };
@@ -77,7 +77,14 @@ const page = ({ at = 'outline', width = 1600, stored = {}, enhance = {}, widgets
     const faculty = el('bb-course-instructors', '', 'Course Faculty');
     const details = el('div', 'js-details-and-actions outline-action-block', 'Details & Actions');
     const sched = el('div', 'conditional-block', 'Schedule');
-    inner.append(el('div', 'course-content-container', el('div', 'panel-wrap', el('div', 'bb-course-navigation', 'Course'), el('section', 'course-outline-content', 'Week 1'), el('aside', 'outline-actions', faculty, details, sched))));
+    // aside 'live': the column as the owner's Course Content had it (2026-10-31, structure only): Faculty and the schedule
+    // empty and hidden, Details & Actions there but still empty, as Ultra fills it late.
+    const live = aside === 'live' && [el('bb-course-instructors', 'outline-action-block block-display top-block'), el('div', 'js-details-and-actions outline-action-block'),
+      el('bb-course-schedule', 'conditional-block react-container')];
+    if (live) for (const x of [live[0], live[2]]) x.style.display = 'none';
+    const column = live ? el('aside', 'js-course-info-skip-link-target outline-actions', ...live) : el('aside', 'outline-actions', faculty, details, sched);
+    inner.append(el('div', 'course-content-container', el('div', 'panel-wrap', el('div', 'bb-course-navigation', 'Course'),
+      live ? el('div', 'course-outline-grid', el('section', 'course-outline-content', 'Week 1'), column) : el('section', 'course-outline-content', 'Week 1'), ...(live ? [] : [column]))));
     if (at === 'detail') inner.append(el('div', 'layer-content', 'A discussion'), el('div', 'layer-details', el('div', 'discussion-settings', 'Details & Information'), el('div', 'discussion-participants', 'Participation')));
   }
   const store = structuredClone(stored), sent = [], loads = [], storeListeners = [], winListeners = [], observers = [], sizes = [], docListeners = [], todoCalls = [];
@@ -103,7 +110,7 @@ const page = ({ at = 'outline', width = 1600, stored = {}, enhance = {}, widgets
       site: 'ultra', solo: true, t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n]), locale: () => 'en', settings, acted: () => 0,
       account: async () => '_3_1', profile: async () => ({ id: '_3_1', time_zone: 'UTC' }),
       courseId: () => c.location.pathname.match(/\/ultra\/courses\/(_\d+_\d+)\//)?.[1],
-      need: async (f) => { loads.push(f); },
+      need: async (f) => { loads.push(...[].concat(f)); },
     },
     chrome: {
       runtime: { id: 'glaze', lastError: undefined, getURL: (p) => p, getManifest: () => ({ version: '3' }), sendMessage: (m, cb) => {

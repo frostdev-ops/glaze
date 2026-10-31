@@ -221,6 +221,9 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     check(saved.length === 2 && lab?.kind === 'pdf' && lab.size === pdfs[LAB.hash].length && lab.pages === 3, `Save to Documents adds one PDF record (${JSON.stringify(saved)})`);
     const index = await worker.evaluate(async () => (await chrome.storage.local.get('writerPapers')).writerPapers);
     check(JSON.stringify(index || {}).includes(lab.k.slice('writerPaper:'.length)), 'and it lists in Documents (the index row)');
+    const openPdf = await fr.evaluate(() => { const a = document.querySelector('[data-act="open"]'); return a && { tag: a.tagName, text: a.textContent, href: a.getAttribute('href'), save: !!document.querySelector('[data-act="save"]') }; });
+    check(openPdf?.tag === 'A' && openPdf.text === 'Open in Documents' && openPdf.href === `papers.html?pdf=${encodeURIComponent(lab.k.slice('writerPaper:'.length))}` && !openPdf.save,
+      `Save to Documents becomes Open in Documents, the saved PDF's link (${JSON.stringify(openPdf)})`);
     await set({ enhance: { docPages: 'plain' } });
 
     // ---- the switch off: Blackboard's frames back; on with a preview open: Glaze's at once

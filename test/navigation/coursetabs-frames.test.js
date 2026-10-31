@@ -117,7 +117,7 @@ test('the bridge takes picks only from this page\'s own frames, on this origin, 
 test('a pick in a tab\'s frame goes to the page around it; on the page, its own course shows the page itself', () => {
   const sent = [], shown = [];
   const run = (framed, courseId) => vm.runInNewContext(part('  const visit = (cid) => {', "  if (!framed && !preview) addEventListener('message'") + '\nvisit;', { PAGE: 'page', requestAnimationFrame() {}, nudge() {}, keepPage() {}, spare: new Map(), next: new Map(), popping: false,
-    framed, preview: false, tabs: [{ cid: '_1_1' }, { cid: '_2_1' }], save() {}, Date, frames: new Map(), showing: '',
+    framed, preview: false, tabs: [{ cid: '_1_1' }, { cid: '_2_1' }], save() {}, Date, frames: new Map(), showing: '', itemAt: () => undefined,
     toTop: (op, m) => sent.push([op, m.cid]), show: (c) => shown.push(c), reveal: (c) => shown.push(c), ctx: { courseId: () => courseId },
   });
   run('_2_1', '_2_1')('_1_1');
@@ -169,7 +169,7 @@ const switching = () => {
   const frames = new Map([['_1_1', frame()], ['_2_1', frame(true)]]), timers = new Map();
   let n = 0;
   const context = vm.createContext({ PAGE: 'page', requestAnimationFrame() {}, nudge() {}, keepPage() {}, spare: new Map(), next: new Map(), popping: false,
-    showTurn: 0, showing: '_1_1', shownFrom: '', shooting: null, on: true, frames,
+    showTurn: 0, showing: '_1_1', shownFrom: '', shooting: null, on: true, frames, items: new Map(),
     host: { toggleAttribute() {} }, strip: null, list: null, LIVE: 2, Date, Promise,
     location: { pathname: '/ultra/course', search: '' }, document: { activeElement: null },
     setTimeout: (fn, ms) => { timers.set(++n, { fn, ms }); return n; }, clearTimeout: (id) => timers.delete(id),
@@ -278,7 +278,7 @@ test('the worker takes a course tab\'s frame as its Ultra page: its origin stand
 
 test('a live frame saves only its own place through the owner, never a stale whole tab list', () => {
   const sent = [], writes = [];
-  const saveNow = vm.runInNewContext(part('  let saveTimer = ', '  const framed = ') + '\nsaveNow;', { PAGE: 'page', requestAnimationFrame() {}, nudge() {}, keepPage() {}, spare: new Map(), next: new Map(), popping: false,
+  const saveNow = vm.runInNewContext(part('  let saveTimer = ', '  let framed = ') + '\nsaveNow;', { PAGE: 'page', requestAnimationFrame() {}, nudge() {}, keepPage() {}, spare: new Map(), next: new Map(), popping: false,
     clearTimeout() {}, setTimeout() {}, who: '_42_1', loaded: true, preview: false, framed: '_2_1',
     tabs: [{ cid: '_1_1', pin: false }, { cid: '_2_1', path: '/ultra/courses/_2_1/grades', top: 200 }],
     toTop: (op, value) => sent.push({ op, ...value }), local: (f) => f({ set: (v) => writes.push(v) }), key: () => 'key',

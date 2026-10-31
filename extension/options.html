@@ -280,6 +280,8 @@
   .wr-rows > .wr-row:first-child { border-block-start: 0; padding-block-start: .1rem; }
   .wr-name { display: flex; align-items: center; gap: .5rem; min-width: 0; font-size: calc(14px * var(--gz-scale, 1)); }
   .wr-row > select { min-inline-size: 11rem; }
+  .wr-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .6rem; min-width: 0; }
+  .wr-acts .desc { overflow-wrap: anywhere; }
   .wr-sub { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; padding-block-start: .9rem; border-block-start: 1px solid var(--gz-border-line, var(--gz-line)); }
   .wr-sub h3 { margin: 0; font-size: calc(13px * var(--gz-scale, 1)); }
   .wr-sub .desc { margin-inline-end: auto; }
@@ -302,8 +304,8 @@
   .ai-effort .tick { inset-inline-start: calc(var(--k) / var(--steps) * 100%); }
   .ai-effort .thumb { position: absolute; inset-block-start: 50%; inset-inline-start: calc(var(--i) / (var(--steps)) * 100%); inline-size: 18px; block-size: 18px; margin-block-start: -9px; margin-inline-start: -9px; border-radius: 50%;
     background: var(--gz-surface-fill, var(--gz-surface)); border: 2px solid var(--gz-accent); box-shadow: 0 1px 4px rgb(0 0 0 / .25); transition: inset-inline-start .22s var(--gz-ease); }
-  .ai-effort .stops { position: relative; block-size: 16px; }
-  .ai-effort .stops button { position: absolute; inset-inline-start: calc(var(--k) / (var(--steps)) * 100%); transform: translateX(-50%); border: 0; background: none; padding: 0; font-size: calc(11.5px * var(--gz-scale, 1)); color: var(--gz-ink-faint); white-space: nowrap; }
+  .ai-effort .stops { position: relative; block-size: calc(16px * var(--gz-scale, 1)); }
+  .ai-effort .stops button { position: absolute; inset-inline-start: calc(var(--k) / (var(--steps)) * 100%); transform: translateX(-50%); border: 0; background: none; padding: 0; font-size: calc(11.5px * var(--gz-scale, 1)); line-height: calc(16px * var(--gz-scale, 1)); color: var(--gz-ink-faint); white-space: nowrap; }
   .ai-effort .stops button.on { color: var(--gz-ink); font-weight: 600; }
   .ai-effort .stops button:first-child { transform: translateX(-9px); }
   .ai-effort .stops button:last-child { transform: translateX(calc(-100% + 9px)); }
@@ -318,7 +320,8 @@
   .ai-calls small { color: var(--gz-ink-faint); font-size: calc(11.5px * var(--gz-scale, 1)); overflow-wrap: anywhere; }
   .ai-calls small.bad { color: var(--gz-err); }
   #ai-activity .section-heading > #ai-calls-clear { margin-inline-start: auto; }
-  @media (max-width: 900px) { .ai-fh { display: none; } .ai-feat > .row, .ai-tune { grid-template-columns: minmax(0, 1fr); } .ai-tune .g { grid-column: 1; grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 900px) { .ai-fh { display: none; } .ai-feat > .row, .ai-tune { grid-template-columns: minmax(0, 1fr); } .ai-tune .g { grid-column: 1; grid-template-columns: minmax(0, 1fr); } .ai-tune .g > button { grid-column: 1; } }
+  @media (max-width: 600px) { .ai-tune .field { grid-template-columns: minmax(0, 1fr) 4.2rem; row-gap: .35rem; } }
   html[data-gz-motion="off"] :is(.ai-fold, .ai-picker, .ai-tune .g) { animation: none; }
   html[data-gz-motion="off"] :is(.ai-prov, .ai-prov .bar i, .ai-effort .fill, .ai-effort .thumb) { transition: none; }
   html[data-gz-motion="off"] .ai-prov:hover { transform: none; }
@@ -1023,6 +1026,11 @@
 <p class="desc info-pop" id="tabs-cap-note" popover>With more, the tab you used longest ago closes, and the strip says which. Pinned tabs never close on their own.</p>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="tabs.place" aria-describedby="info-tabs-place"><span id="info-tabs-place-name">Go back to where you were</span></label><button type="button" class="info" popovertarget="info-tabs-place" aria-labelledby="info-more info-tabs-place-name" aria-describedby="info-tabs-place"></button>
 <div class="info-pop" id="info-tabs-place" popover><span class="desc">A tab opens its course at the page and scroll you left it at. Off: the Canvas course home or Blackboard course content.</span></div></div>
+<label class="check"><input type="checkbox" data-key="tabs.ahead"><span>Open course tabs ahead of time</span></label>
+<label class="field"><span>Renew the waiting page after</span><select data-key="tabs.renew" data-number><option value="2">2 minutes</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option></select></label>
+<label class="check"><input type="checkbox" data-key="tabs.keep"><span>Keep Course Content ready</span></label>
+<div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.prefetch" aria-describedby="info-enhance-prefetch"><span id="info-enhance-prefetch-name">Load course data ahead of time</span></label><button type="button" class="info" popovertarget="info-enhance-prefetch" aria-labelledby="info-more info-enhance-prefetch-name" aria-describedby="info-enhance-prefetch"></button>
+<div class="info-pop" id="info-enhance-prefetch" popover><span class="desc">On Blackboard, your To Do and grades are read while the page is idle, and a course's content when you point at it, so they open at once.</span></div></div>
 <div class="group">
           <h3>Tab buttons</h3>
           <div class="field wide"><span>Shape</span>
@@ -1055,7 +1063,7 @@
           <p class="desc">Colors and nicknames come from Your courses.</p>
         </div>
 </details>
-<p class="desc" id="tabs-memory-note">Still copies of your courses stay in memory, never on disk; Glaze never loads a course in the background.</p>
+<p class="desc" id="tabs-memory-note">Still copies of your courses stay in memory, never on disk; Glaze loads a course only once you point at, press or open its tab.</p>
 </section>
 <section id="side-panel" data-editor-section="navigation/sidebar" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-navigation-sidebar">
 <p class="section-path" data-editor-breadcrumb><a href="#navigation/sidebar" data-editor-alias>Sidebar</a></p><div class="section-heading"><h2 id="heading-navigation-sidebar">Sidebar</h2><span class="site-badge" translate="no">Canvas · Blackboard</span><button type="button" class="section-reset" data-reset-section="navigation/sidebar">Reset section</button></div>
@@ -1430,7 +1438,7 @@
           <span class="desc">A quiz you are taking, and tools such as New Quizzes, show without Glaze.</span></label></div>
 <div class="has-badge"><label class="check"><input type="checkbox" data-key="enhance.titleScroll"><span>Scrolling assignment titles <span class="site-badge" translate="no">Blackboard</span></span>
           <span class="desc">An assignment's title scrolls away with the page instead of staying on top.</span></label></div>
-<div class="has-badge"><label class="check"><input type="checkbox" data-key="enhance.bbPreviews"><span>Previews in Glaze <span class="site-badge" translate="no">Blackboard</span></span></label></div>
+<div class="has-badge"><label class="check"><input type="checkbox" data-key="enhance.bbPreviews"><span>Previews in Glaze</span></label></div>
 <details class="more"><summary>More options</summary>
 <div class="group" id="document-review"><h3>Document review</h3>
 <label class="check"><input type="checkbox" data-key="docreview.compact"><span>Compact submission header</span></label>
@@ -1447,6 +1455,8 @@
 <div class="info-pop" id="info-enhance-dashboard" popover><span class="desc">Blackboard's Institution page becomes Glaze's Dashboard: your widgets and Better To Do, in a layout of its own. Its Institution page tab shows Blackboard's own.</span></div></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="widgets.land" aria-describedby="info-widgets-land"><span id="info-widgets-land-name">Open Blackboard on the dashboard</span></label><button type="button" class="info" popovertarget="info-widgets-land" aria-labelledby="info-more info-widgets-land-name" aria-describedby="info-widgets-land"></button>
 <div class="info-pop" id="info-widgets-land" popover><span class="desc">When Blackboard opens on its start page right after you sign in, go on to Glaze's Dashboard, once. A page you open by its address, a bookmark or a link is left alone.</span></div></div>
+<label class="check"><input type="checkbox" data-key="enhance.instant"><span>Open pages instantly</span></label>
+<label class="check"><input type="checkbox" data-key="enhance.feedback"><span>Show pages loading at once</span></label>
 <a href="#study/widgets" data-editor-alias>Notes and widgets</a>
 <details class="more"><summary>More options</summary>
 <div class="group" id="bb-stream"><h3>Activity Stream</h3>
@@ -1537,6 +1547,8 @@
 <div class="wr-row"><span class="wr-name" id="writer-slides-name">Slides</span><input type="checkbox" data-key="writer.slides" aria-labelledby="writer-slides-name"></div>
 <div class="wr-row has-info"><span class="wr-name"><span id="info-writer-versions-name">Versions kept</span><button type="button" class="info" popovertarget="info-writer-versions" aria-labelledby="info-more info-writer-versions-name" aria-describedby="info-writer-versions"></button></span><select data-key="writer.versions" data-number aria-labelledby="info-writer-versions-name" aria-describedby="info-writer-versions"></select>
 <div class="info-pop" id="info-writer-versions" popover><span class="desc">How many earlier versions each paper keeps on this device, the oldest going first. The last version you submitted always stays.</span></div></div>
+<div class="wr-row" id="gdrive" hidden><span class="wr-name" id="gdrive-name">Google Drive</span><span class="wr-acts"><span class="desc" id="gdrive-who" translate="no"></span><button type="button" id="gdrive-connect" aria-labelledby="gdrive-connect gdrive-name">Connect</button><button type="button" id="gdrive-disconnect" aria-labelledby="gdrive-disconnect gdrive-name" hidden>Disconnect</button></span></div>
+<div class="wr-row" id="gdrive-sync" hidden><span class="wr-name" id="gdrive-sync-name">Sync to Google Drive</span><span class="wr-acts"><span class="desc" id="gdrive-sync-said" role="status"></span><input type="checkbox" id="gdrive-sync-on" aria-labelledby="gdrive-sync-name" aria-describedby="gdrive-sync-said"></span></div>
 </div>
 <div class="wr-sub"><h3 id="writer-papers-head">Saved papers</h3><span class="desc" id="writer-papers-count"></span><a class="button" id="writer-documents" href="papers.html" target="_blank" rel="noopener">Documents</a><button type="button" class="wr-danger" id="writer-clear-all" disabled>Clear all papers and documents</button></div>
 <ul class="wr-courses" id="writer-paper-list" aria-labelledby="writer-papers-head"></ul>
@@ -1820,7 +1832,7 @@
   <dialog id="gcal-bye" aria-labelledby="gcal-bye-title" aria-describedby="gcal-bye-note">
     <form method="dialog">
       <h3 id="gcal-bye-title">Disconnect Google Calendar?</h3>
-      <p class="desc" id="gcal-bye-note">Glaze stops syncing, forgets its Google sign-in here and asks Google to remove its access.</p>
+      <p class="desc" id="gcal-bye-note">Glaze stops syncing on this device.</p>
       <label class="check"><input type="checkbox" id="gcal-drop"><span>Also delete the Glaze calendar and its events from Google Calendar</span></label>
       <div class="row"><button value="cancel" id="gcal-bye-cancel">Cancel</button><button value="ok" class="primary">Disconnect</button></div>
     </form>
@@ -1898,6 +1910,7 @@
   <script src="planner/remind.js"></script>
   <script src="planner/gradescope.js"></script>
   <script src="planner/gcal.js"></script>
+  <script src="planner/gcal-auth.js"></script>
   <script src="navigation/coursetabs.js"></script>
   <script src="core/zip.js"></script>
   <script src="background/backup.js"></script>

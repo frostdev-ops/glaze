@@ -8,7 +8,7 @@ let extensionBundleIdentifier = (Bundle.main.bundleIdentifier ?? "io.frostdev.Gl
 @main
 struct GlazeApp: App {
     var body: some Scene {
-        WindowGroup { Guide().ignoresSafeArea() }
+        WindowGroup { Guide().ignoresSafeArea().onOpenURL { GlazeGoogleSignIn.shared.open($0) } }
     }
 }
 

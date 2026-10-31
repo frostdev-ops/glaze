@@ -166,7 +166,8 @@ const page = ({ frame = '', body = false, marker = true, wrapper = true, cached 
   return { c, doc, html, head, body: bodyEl, El, events, queries, requests, sent, storage, observers, timeouts, intervals, session, done,
     answer, loaded, advance, addBody, fire: (type, data) => fire(doc, type, data), fireOn: fire,
     detect: () => { hasMarker = true; observers.find((o) => o.active && o.target === doc).deliver([]); },
-    change: async (settings) => { raw = settings; for (const f of changes) f({ enabled: { newValue: settings.enabled } }, 'sync'); await answer(); },
+    // A change carries its keys' new values, and is applied from them.
+    change: async (settings) => { raw = settings; for (const f of changes) f(Object.fromEntries(Object.keys(settings).map((k) => [k, { newValue: settings[k] }])), 'sync'); await settle(); },
     sweep: () => observers.find((o) => o.active && o.target === bodyEl),
     sheets: () => head.children.filter((el) => el.tagName === 'LINK'),
   };
@@ -226,6 +227,8 @@ test("Canvas's footer goes last in its page, even when the settings come while t
   assert.equal(p.doc.getElementById('gz-footer'), null, 'not while the page is still coming in');
   const app = new p.El('div'); app.id = 'application'; p.body.append(app);
   await p.loaded(); await p.done;
+  assert.equal(p.doc.getElementById('gz-footer'), null, 'not before canvas.css, which gives it its place');
+  const sheet = p.sheets()[0]; sheet.sheet = {}; p.fireOn(sheet, 'load'); await settle();
   assert.equal(p.body.children.at(-1).id, 'gz-footer', 'after the page, where it shows');
   await p.change({ ...raw, footer: false });
   assert.equal(p.doc.getElementById('gz-footer'), null, 'and off with its switch');

@@ -251,9 +251,12 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
 
   // ---- the library: what's kept in storage.local ------------------------------------------------------------------
   // { notes: { id: { title, folder, course, created, at (last edit), rev, ft {title, folder, course: when each was last
-  //   set}, ex (the start of its text), sid (the last save applied), del? (when trashed), with? (the folder it went to
-  //   the trash with) } }, folders: { id: { name, course, order, created, ft {name, course, order}, del? } }, gone: { id:
-  //   when it was deleted for good } }. A course is a Canvas course id on the same site; folder '' is No folder.
+  //   set; trash?: when it last went to the trash or came back}, ex (the start of its text), sid (the last save applied),
+  //   del? (when trashed), with? (the folder it went to the trash with) } }, folders: { id: { name, course, order, created,
+  //   ft {name, course, order, trash?}, del? } }, gone: { id: when it was deleted for good }, fgone?: { folder id: when it
+  //   was deleted for good } }. A course is a Canvas course id on the same site; folder '' is No folder. Sync to Google
+  //   Drive merges notes and folders field by field by these times (background/drive-store.js), a folder deleted for good
+  //   by its fgone; an older index has no trash time (del stands for it) and no fgone.
   const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
   const str = (v, max) => (typeof v === 'string' ? clip(v, max) : '');
   const time = (v) => (Number.isFinite(v) && v > 0 ? v : 0);
@@ -261,24 +264,26 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
   const FIELDS = ['title', 'folder', 'course']; // a note's fields set on their own, each with its time in ft
   const FOLDER_FIELDS = ['name', 'course', 'order']; // and a folder's
   const times = (ft, fields) => Object.fromEntries(fields.map((f) => [f, time(obj(ft)[f])]));
+  const trashTime = (ft) => (time(obj(ft).trash) ? { trash: obj(ft).trash } : {}); // only once there is one, so an older index reads the same
   const clean = (raw) => {
     const r = obj(raw);
-    const folders = {}, notes = {}, gone = {};
+    const folders = {}, notes = {}, gone = {}, fgone = {};
     for (const [id, f] of Object.entries(obj(r.folders))) {
       if (!ID.test(id) || !f || typeof f !== 'object') continue;
-      folders[id] = { name: str(f.name, LIMIT.name).trim() || '…', course: cid(f.course), cn: str(f.cn, 120), order: Number.isFinite(f.order) ? f.order : 0, created: time(f.created), ft: times(f.ft, FOLDER_FIELDS), ...(time(f.del) && { del: f.del }) };
+      folders[id] = { name: str(f.name, LIMIT.name).trim() || '…', course: cid(f.course), cn: str(f.cn, 120), order: Number.isFinite(f.order) ? f.order : 0, created: time(f.created), ft: { ...times(f.ft, FOLDER_FIELDS), ...trashTime(f.ft) }, ...(time(f.del) && { del: f.del }) };
     }
     for (const [id, n] of Object.entries(obj(r.notes))) {
       if (!ID.test(id) || !n || typeof n !== 'object') continue;
       const ft = obj(n.ft);
       notes[id] = {
         title: str(n.title, LIMIT.title), folder: isId(n.folder) && Object.hasOwn(folders, n.folder) ? n.folder : '', course: cid(n.course), cn: str(n.cn, 120), created: time(n.created), at: time(n.at),
-        rev: Number.isInteger(n.rev) && n.rev >= 0 ? n.rev : 0, ft: { title: time(ft.title), folder: time(ft.folder), course: time(ft.course) }, ex: str(n.ex, 160), sid: str(n.sid, 40),
+        rev: Number.isInteger(n.rev) && n.rev >= 0 ? n.rev : 0, ft: { title: time(ft.title), folder: time(ft.folder), course: time(ft.course), ...trashTime(ft) }, ex: str(n.ex, 160), sid: str(n.sid, 40),
         ...(time(n.del) && { del: n.del }), ...(time(n.del) && isId(n.with) && Object.hasOwn(folders, n.with) && { with: n.with }),
       };
     }
     for (const [id, at] of Object.entries(obj(r.gone))) if (ID.test(id) && time(at)) gone[id] = at;
-    return { notes, folders, gone };
+    for (const [id, at] of Object.entries(obj(r.fgone))) if (ID.test(id) && time(at)) fgone[id] = at;
+    return { notes, folders, gone, ...(Object.keys(fgone).length && { fgone }) };
   };
   const fold = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const terms = (q) => fold(q).split(/\s+/).filter(Boolean).slice(0, 8);
@@ -303,14 +308,17 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
       if (idx.notes[id]) { delete idx.notes[id]; idx.gone[id] = now; out.push(id); } else if (idx.folders[id]) {
         delete idx.folders[id];
         idx.gone[id] = now;
+        (idx.fgone ||= {})[id] = now;
         for (const n of Object.values(idx.notes)) { if (n.folder === id) n.folder = ''; if (n.with === id) delete n.with; }
       }
     }
     return out;
   };
   // The trash's 30 days, and tombstones kept as long.
+  const unfold = (idx, id) => { if (idx.fgone) { delete idx.fgone[id]; if (!Object.keys(idx.fgone).length) delete idx.fgone; } };
   const expire = (idx, now) => {
     for (const [id, at] of Object.entries(idx.gone)) if (at < now - TRASH) delete idx.gone[id];
+    for (const [id, at] of Object.entries(idx.fgone || {})) if (at < now - TRASH) unfold(idx, id);
     return purge(idx, [...Object.entries(idx.folders), ...Object.entries(idx.notes)].filter(([, x]) => x.del && x.del < now - TRASH).map(([id]) => id), now);
   };
   // A course and its name as Canvas showed it (so a past term's course still reads as a name), from a change or, failing
@@ -343,7 +351,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
   // a new revision's body is written beside the last one, the index then points at it, and only then does the last
   // one go, so a failed save leaves the note as it was. What's left behind by any step that failed (a body nothing
   // points at, a file nothing uses, bytes without a file) goes at the next clean-up ('tidy', each time Notes opens).
-  const run = async (m, { local }, db, now = Date.now()) => {
+  const run = async (m, { local, onChange }, db, now = Date.now()) => {
     if (typeof m?.key !== 'string' || !KEY.test(m.key)) return { ok: false, error: 'bad' };
     const scope = m.key.slice('notesIdx:'.length);
     const bk = (id, rev) => `${scope}/${id}/${rev}`;
@@ -352,7 +360,12 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
     try { const got = await local.get(m.key); before = JSON.stringify(got?.[m.key] ?? null); idx = clean(got?.[m.key]); } catch { return { ok: false, error: 'read' }; }
     const purged = expire(idx, now);
     const old = []; // bodies a committed change supersedes
-    const save = async () => (JSON.stringify(idx) === before || await local.set({ [m.key]: idx }));
+    const save = async () => {
+      if (JSON.stringify(idx) === before) return true;
+      // Drive records the exact index transition inside the broker turn, before storage can deliver its event.
+      onChange?.(clean(JSON.parse(before)), idx);
+      return local.set({ [m.key]: idx });
+    };
     // Bodies the index doesn't point at (an earlier revision, a failed save's, a note gone for good). Pictures and
     // attachments no note's text uses: those a note deleted for good had at once, the rest after a day (an undo can bring
     // a removed picture back, and a file is stored before the note that uses it is saved: a backup restoring a deleted
@@ -449,18 +462,23 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
         return finish({ ok: true });
       }
       case 'trash': {
-        for (const id of ids(m.ids)) if (idx.notes[id] && !idx.notes[id].del) idx.notes[id].del = now;
+        for (const id of ids(m.ids)) if (idx.notes[id] && !idx.notes[id].del) { idx.notes[id].del = now; idx.notes[id].ft.trash = now; }
         return finish({ ok: true });
       }
       case 'restore': {
         for (const id of ids(m.ids)) {
           const f = idx.folders[id];
           if (f?.del) {
-            delete f.del;
-            for (const n of Object.values(idx.notes)) if (n.with === id) { delete n.del; delete n.with; }
+            delete f.del; f.ft.trash = now;
+            for (const n of Object.values(idx.notes)) if (n.with === id) { delete n.del; delete n.with; n.ft.trash = now; }
           }
           const n = idx.notes[id];
-          if (n?.del) { delete n.del; delete n.with; n.folder = liveFolder(idx, n.folder); }
+          if (n?.del) {
+            delete n.del; delete n.with; n.ft.trash = now;
+            // Its folder still in the trash: No folder, a move like any other.
+            const to = liveFolder(idx, n.folder);
+            if (to !== n.folder) { n.folder = to; n.ft.folder = at; }
+          }
         }
         return finish({ ok: true });
       }
@@ -475,7 +493,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
       }
       case 'folder': {
         if (!isId(m.id)) return { ok: false, error: 'bad' };
-        if (idx.gone[m.id]) return finish({ ok: false, error: 'gone' });
+        if (idx.gone[m.id] || idx.fgone?.[m.id]) return finish({ ok: false, error: 'gone' });
         let f = idx.folders[m.id];
         if (!f) {
           if (Object.keys(idx.folders).length >= LIMIT.folders) return finish({ ok: false, error: 'many' });
@@ -495,10 +513,10 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
         if (!isId(m.id)) return { ok: false, error: 'bad' };
         const f = idx.folders[m.id];
         if (!f || !['keep', 'trash'].includes(m.notes)) return finish({ ok: false, error: f ? 'bad' : 'gone' });
-        f.del = now;
+        f.del = now; f.ft.trash = now;
         for (const n of Object.values(idx.notes)) {
           if (n.folder !== m.id || n.del) continue;
-          if (m.notes === 'trash') { n.del = now; n.with = m.id; } else { n.folder = ''; n.ft.folder = at; }
+          if (m.notes === 'trash') { n.del = now; n.with = m.id; n.ft.trash = now; } else { n.folder = ''; n.ft.folder = at; }
         }
         return finish({ ok: true });
       }
@@ -580,6 +598,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
           }
           if (Object.keys(idx.folders).length >= LIMIT.folders) { many = true; break; }
           delete idx.gone[f.id];
+          unfold(idx, f.id);
           idx.folders[f.id] = { name, ...courseOf(f), order: Math.max(0, ...Object.values(idx.folders).map((x) => x.order + 1)), created: now, ft: ft || times(null, FOLDER_FIELDS) };
           if (ft) placed.add(f.id);
         }
@@ -614,10 +633,41 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
           if (cut || x.big === true || html.length > LIMIT.body) { skipped++; continue; }
           delete idx.gone[x.id];
           await write(x.id, html, { title: note.title, folder: liveFolder(idx, note.folder), course: note.course, cn: note.cn, created: Math.min(time(x.created) || when, when), at: when,
-            rev: (had?.rev || 0) + 1, ft: note.ft, ex: '', sid: '' }, had?.rev);
+            rev: (had?.rev || 0) + 1, ft: had?.del ? { ...note.ft, trash: now } : note.ft, ex: '', sid: '' }, had?.rev);
           done++;
         }
         return finish({ ok: true, done, skipped });
+      }
+      // Sync to Google Drive (background/drive-store.js), each a record as it is to be here (another device's, or both merged):
+      // 'put' { id, note: the index entry, html }: the note, a new revision here; 'drop' { id }: deleted for good there, gone
+      // here too (with its tombstone); 'folders' { folders, gone? }: the account's folders, and those deleted for good.
+      case 'put': {
+        if (!isId(m.id) || !m.note || typeof m.note !== 'object' || typeof m.html !== 'string') return { ok: false, error: 'bad' };
+        const { html, cut } = sanitized(m.html);
+        if (cut || html.length > LIMIT.body) return { ok: false, error: 'big' };
+        const had = idx.notes[m.id];
+        if (!had && count() >= LIMIT.notes) return finish({ ok: false, error: 'many' });
+        const entry = clean({ folders: idx.folders, notes: { [m.id]: { ...m.note, rev: 0 } } }).notes[m.id];
+        if (!entry) return { ok: false, error: 'bad' };
+        delete idx.gone[m.id];
+        await write(m.id, html, { ...entry, rev: (had?.rev || 0) + 1, ex: '', sid: '' }, had?.rev);
+        return finish({ ok: true });
+      }
+      case 'drop': {
+        if (!isId(m.id)) return { ok: false, error: 'bad' };
+        if (idx.notes[m.id]) purged.push(...purge(idx, [m.id], now)); else idx.gone[m.id] = now;
+        return finish({ ok: true });
+      }
+      case 'folders': {
+        if (!m.folders || typeof m.folders !== 'object') return { ok: false, error: 'bad' };
+        const { folders, fgone } = clean({ folders: m.folders, fgone: m.gone });
+        if (Object.keys(folders).length > LIMIT.folders) return { ok: false, error: 'many' };
+        for (const id of Object.keys(idx.folders)) if (!folders[id]) idx.gone[id] = now;
+        for (const id of Object.keys(folders)) delete idx.gone[id]; // one deleted for good here, back from there
+        idx.folders = folders;
+        if (fgone) idx.fgone = fgone; else delete idx.fgone;
+        for (const n of Object.values(idx.notes)) { if (n.folder && !folders[n.folder]) n.folder = ''; if (n.with && !folders[n.with]) delete n.with; }
+        return finish({ ok: true });
       }
       default: return { ok: false, error: 'bad' };
     }

@@ -22673,7 +22673,7 @@ class PDFWorker {
       const worker = await import(
       /*webpackIgnore: true*/
       /*@vite-ignore*/
-      this.workerSrc);
+      "./pdf.worker.mjs");
       return worker.WorkerMessageHandler;
     };
     return util_shadow(this, "_setupFakeWorkerGlobal", loader());

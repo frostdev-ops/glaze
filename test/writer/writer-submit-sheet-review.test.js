@@ -146,3 +146,12 @@ test('Save and Close: the 30 second failure is said once and a late save cannot 
   assert.equal(s.messages.at(-1).ok, true);
   assert.equal(notices.length, 1);
 });
+
+test('a partial failure is visible with the failed name and retained files', async () => {
+  const s = sheet(); await s.open(); s.builds[0].resolve(); await s.flush();
+  s.click('.gs-primary'); await s.flush();
+  const run = s.messages.find((m) => m.type === 'submit:go').run;
+  s.handles['submit:done']({ run, ok: false, error: 'attach', file: 'Notes.pdf', retained: ['Essay2.docx', 'Notes.pdf'] }); await s.flush();
+  const text = s.doc.querySelector('.gs-err').textContent;
+  assert.match(text, /Notes\.pdf/); assert.match(text, /Essay2\.docx/); assert.match(text, /review or remove/);
+});

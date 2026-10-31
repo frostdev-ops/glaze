@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.0
+# Chrome Web Store listing — Glaze 4.0.1
 
 ## Name
 
@@ -81,19 +81,20 @@ Canvas is a trademark of Instructure, Inc. Blackboard is a trademark of Antholog
 
 ## Release notes
 
-NEW IN 4.0.0
+NEW IN 4.0.1
 
-• Blackboard Ultra: Glaze Writer takes the place of the editor in discussions, journals, messages, assignments and tests; Blackboard's own editor stays in ⋯. Discussions and messages get a selection toolbar, the prompt's targets and Ctrl/⌘+Enter to post.
-• Assignments write into Blackboard's box for its own Submit, or become real pages with Full writer: MLA 9, APA 7, Chicago 17, Blank or your own format, with format checks, footnotes, versions and .docx import, export and submit.
-• Documents holds papers, spreadsheets, PDFs and PowerPoint decks. Spreadsheets have more than 380 Excel functions, show and create charts, and import .xlsx, .csv and .tsv. PDFs have zoom, find and fillable forms; decks open in a viewer with Present. Blackboard Ultra's file previews open in Glaze's PDF viewer. Deleted files wait 30 days in Trash.
-• Start an assignment as Document or Spreadsheet. Uploaded PDFs, decks and spreadsheets open in their viewers for submission; spreadsheets submit as .xlsx. Switches for Spreadsheets, PDFs and Slides are in Settings › Writer › Papers; saved files still open.
-• Spelling, grammar and autocorrect run on your device, and Cite looks up a DOI, ISBN or web address only when you click. Tests get proofing only, with no AI or completion.
-• Settings › AI connects named providers with their keys, or a model on this device, with one model for everything or one per feature. AI stays off until you set it up. Tab completion only finishes the current sentence, and Feedback assesses your work against the rubric and instructions and explains estimated grades or why no score is available. Glaze never drafts.
-• Firefox: Agents connects AI apps on your computer to your courses, to-dos and grades. Every app and every change needs your OK.
-• Back up… and Restore… include papers, spreadsheets, PDFs, decks, versions, your dictionary and saved sources.
-• Writer's pages follow a dark Look; Light page keeps them white. Looks you save, or use from the gallery with Use this theme, appear wherever you pick a Look.
-• Blackboard: the rubric shows on a saved draft's page, due chips stay right across a clock change, and search follows Blackboard's own links.
-• Look › Motion starts at Expressive. Updating moves Subtle to Expressive once; Off stays Off.
+• Blackboard Ultra: course tabs open from a page that's already loaded, and start loading when you press or hover a tab (Settings › Course tabs › Open course tabs ahead of time).
+• Keep Course Content ready: an item opens over Course Content, and going back is instant, at the same place.
+• Open pages instantly: Grades, Courses, Activity and a course's Content, Announcements and Gradebook show your last visit while Blackboard loads. Show pages loading at once: a click shows at once. Glaze's bar is there at first paint, its footer and panels no longer push the page, and To Do, grades and the sidebar appear from saved data once Blackboard confirms who's signed in.
+• Load course data ahead of time, fewer requests to Blackboard and less work on slower laptops.
+• PDFs: highlight, pen, text, images, shapes and signatures, and a pages panel to move, turn, delete and add pages. A PDF keeps one copy, its latest marked-up version.
+• Attach from Documents adds your documents to a Blackboard Ultra assignment's submission. Workbooks from .xlsm export and submit as .xlsm.
+• Canvas: Open in Glaze on PDF, slide and spreadsheet files. Slides get Print with notes…, and Documents cards show a spreadsheet's charts.
+• Writer's Feedback answers in your draft's language, and its citation comments and checks work in all six languages.
+• When one of Feedback's comments fails its checks, Writer shows the rubric rating it checked instead of withholding the grade.
+• Firefox: Google Drive (Settings › Writer › Papers) opens, saves, attaches and syncs your documents. Off until you connect.
+• Firefox: a site whose access you took back is no longer retried.
+• Chrome: Google Calendar sync (Settings › Sharing) keeps a calendar named Glaze in your Google account up to date, and Google Drive (Settings › Writer › Papers) opens, saves, attaches and syncs your documents. Both stay off until you connect.
 
 ## Single-purpose statement
 
@@ -133,6 +134,10 @@ Registers Glaze's packaged content scripts on the sites the user allowed, so lat
 
 The theme stylesheets (theme.css, motion.css, extras.css, canvas.css, moodle.css, core/page/apps.css, looks/page/lookx.css), bundled fonts, logos, stickers, pointers and pet sprites provide the theme in the page. looks/scene.js and the bundled vendor/three.js draw animated backgrounds, and looks/scene-media.js with the bundled Lottie player (vendor/lottie/) plays a video or animation behind the page. reader.html opens a file the user imports, and reads only with a one-use pass from Glaze's worker. Chrome requires these packaged files to be web-accessible to load them into LMS pages.
 
+### identity
+
+Optional and off by default. Requested only when the student presses Connect for Google Calendar sync (Chrome) or Google Drive, and removed on Disconnect unless the other still uses it. Chrome signs in with the browser's Google account through getAuthToken; Edge and Brave open Google's own sign-in page. OAuth scopes: calendar.app.created (one calendar named Glaze that Glaze creates, and its events; no other calendar), drive.file (only the Drive files Glaze creates or the student picks in Google's Picker), openid and email (to show which account is connected). Requests go directly from the browser to Google; access tokens stay in Chrome's sign-in cache or the background worker's memory, and nothing goes to FrostDev. Glaze's use of Google data adheres to the Google API Services User Data Policy, including the Limited Use requirements.
+
 ### nativeMessaging
 
 Optional and off by default. Requested only when the student turns on Settings → AI → Agents. It connects Glaze only to the glaze-mcp helper on their computer. Each app receives data only after approval for that app and data group: courses/to-dos/schedule, grades, assignments and rubrics, Writer documents, or mod tools. Every change, including a to-do tick, Writer fix or citation, waits for the student's OK. Agents cannot submit work. Glaze sends nothing to FrostDev. A receiving app may send the data to its own AI service under its own policy.
@@ -143,7 +148,7 @@ All of Glaze's own code ships in the package. The only code not in it is user-in
 
 ## Data usage (privacy practices tab)
 
-Glaze has no analytics and does not sell user data or use it for unrelated purposes, creditworthiness or lending. Optional share sessions and mod channels send encrypted content to the selected relay. The optional signed blocklist sends a fixed credential-free GET without student identifiers. Optional AI sends a feature's context, such as a draft, to the provider or endpoint the user chooses; Writer's citation lookups send a DOI, ISBN or web address only on the user's click. With Agents on, the data groups the user allows go only to the AI apps they approve on their own computer, through the glaze-mcp helper; those apps may send it to their own AI services under their own policies, and Glaze sends nothing to FrostDev. User-installed mods and linked media may contact other hosts as described above; a mod granted personal data and network access can send that data to its granted hosts. These services receive ordinary connection information such as an IP address. Keep the store's data-use answers consistent with these behaviors and PRIVACY.md.
+Glaze has no analytics and does not sell user data or use it for unrelated purposes, creditworthiness or lending. Optional share sessions and mod channels send encrypted content to the selected relay. The optional signed blocklist sends a fixed credential-free GET without student identifiers. Optional AI sends a feature's context, such as a draft, to the provider or endpoint the user chooses; Writer's citation lookups send a DOI, ISBN or web address only on the user's click. Optional Google Calendar sync and Google Drive send calendar events, the documents the user saves or syncs and, with Sync to Google Drive on, what Back up… covers (never share keys, AI keys or Agents pairing) directly to the user's own Google account. With Agents on, the data groups the user allows go only to the AI apps they approve on their own computer, through the glaze-mcp helper; those apps may send it to their own AI services under their own policies, and Glaze sends nothing to FrostDev. User-installed mods and linked media may contact other hosts as described above; a mod granted personal data and network access can send that data to its granted hosts. These services receive ordinary connection information such as an IP address. Keep the store's data-use answers consistent with these behaviors and PRIVACY.md.
 
 ## Screenshot and promo delivery
 

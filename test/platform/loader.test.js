@@ -106,6 +106,8 @@ test('without a document id, a frame that now holds another document gets nothin
 test('success means the file ran to its end: an injection that fails, throws or stops short is reported', async () => {
   const send = (execute, protocol) => worker(execute, protocol).send({ type: 'glaze:load', files: ['writer/drafts.js'] }, { ...tab(), documentId: 'A' });
   assert.deepEqual(await send(() => Promise.reject(new Error('Frame with ID 3 was removed.'))), { ok: false, error: 'Frame with ID 3 was removed.' });
+  // Firefox, the site's grant taken back: a refusal content.js doesn't ask again.
+  assert.deepEqual(await send(() => Promise.reject(new Error('Missing host permission for the tab or frames'))), { ok: false, error: 'sender' });
   // Chrome: a file that throws leaves no last value. Firefox reports the error.
   assert.deepEqual(await send(() => Promise.resolve([{ frameId: 3, result: null }])), { ok: false, error: 'did not finish' });
   assert.deepEqual(await send(() => Promise.resolve([{ frameId: 3 }])), { ok: false, error: 'did not finish' });
@@ -115,10 +117,27 @@ test('success means the file ran to its end: an injection that fails, throws or 
   assert.deepEqual(await send(() => Promise.resolve([{ frameId: 3 }]), 'safari-web-extension:'), { ok: true });
 });
 
+test('only the browser host-permission refusal is final, not a script exception or a similar message', async () => {
+  const missing = 'Missing host permission for the tab or frames';
+  const similar = 'Missing host permission data; try again';
+  const message = { type: 'glaze:load', files: ['writer/drafts.js'], doc: 'A' };
+  for (const sender of [tab(), { ...tab(), documentId: 'A' }]) {
+    const refused = worker(() => Promise.reject(new Error(missing)));
+    assert.deepEqual(await refused.send(message, sender), { ok: false, error: 'sender' }, 'the document probe or injection is refused');
+    const retryable = worker(() => Promise.reject(new Error(similar)));
+    assert.deepEqual(await retryable.send(message, sender), { ok: false, error: similar }, 'a shared prefix does not prove a revoked grant');
+  }
+  const script = worker(() => Promise.resolve([{ frameId: 3, error: new Error(missing) }]));
+  assert.deepEqual(await script.send(message, { ...tab(), documentId: 'A' }), { ok: false, error: missing }, 'a script exception is still retryable');
+  const afterProbe = worker((o) => o.func ? Promise.resolve([{ result: true }]) : Promise.reject(new Error(missing)));
+  assert.deepEqual(await afterProbe.send(message, tab()), { ok: false, error: 'sender' }, 'a successful probe does not hide an injection refusal');
+});
+
 // What a feature file reads from content.js when it loads (<area>/page/*.js).
 const CTX = { placeAsked: () => 0, t: (k) => k, locale: () => 'en', capi() {}, canvasCourses() {}, canvasCourseId() {}, need() {}, settings: () => ({}), site: 'canvas', wordsIn: new Set() };
 // What a feature file touches as it loads: the listeners it adds (navigation/page/keys.js, coursemenu.js, previews.js).
-const page = () => ({ document: { addEventListener() {}, documentElement: {} }, location: { pathname: '/host' }, addEventListener() {}, GZ_COLOR: {}, IntersectionObserver: class {} });
+const page = () => ({ document: { addEventListener() {}, documentElement: {} }, location: { pathname: '/host' }, addEventListener() {}, GZ_COLOR: {}, IntersectionObserver: class {},
+  chrome: { storage: { onChanged: { addListener() {} } } } });
 // Moved out of the first content script in W0c: the palette, the keys, the course menu, the previews and Download all.
 // W0d: the draft backup, the document buttons and your place in a course (Ultra's what-if is planner/page/grades.js since B4).
 const W0C = [['navigation/page/palette.js', 'GZ_CMD'], ['navigation/page/keys.js', 'GZ_KEYS'], ['navigation/page/coursemenu.js', 'GZ_COURSE_MENU'], ['courses/page/previews.js', 'GZ_PEEK'], ['courses/page/download.js', 'GZ_DOWNLOAD'],
@@ -129,10 +148,15 @@ const W15 = [['planner/syllabus.js', 'GZ_SYLLABUS'], ['planner/page/syllabus.js'
 // Insights (W17).
 const W17 = [['planner/insights.js', 'GZ_INSIGHTS'], ['planner/page/insights.js', 'GZ_INSIGHTS_UI']];
 test('every loadable file ends on a value, which is how the worker knows it ran', () => {
-  for (const f of ['core/zip.js', 'writer/drafts.js', 'planner/gradecalc.js', 'planner/page/grades.js', 'i18n/de.js', 'courses/cards.js', 'navigation/seek.js', 'navigation/page/search.js', 'core/widgets.js', 'core/page/widgets.js', ...W0C.map(([f]) => f), ...W15.map(([f]) => f), ...W17.map(([f]) => f), 'planner/classes.js', 'planner/page/classes.js', 'planner/ics.js', 'core/doctext.js', 'content/content-ultra.js', 'content/content-canvas.js']) {
+  for (const f of ['core/zip.js', 'writer/drafts.js', 'planner/gradecalc.js', 'planner/page/grades.js', 'i18n/de.js', 'courses/cards.js', 'navigation/seek.js', 'navigation/page/search.js', 'core/widgets.js', 'core/page/widgets.js', ...W0C.map(([f]) => f), ...W15.map(([f]) => f), ...W17.map(([f]) => f), 'planner/classes.js', 'planner/page/classes.js', 'planner/ics.js', 'core/doctext.js', 'content/content-ultra.js', 'content/content-canvas.js', 'courses/instant.js', 'courses/page/instant.js']) {
     const context = vm.createContext({ TextEncoder, Uint8Array, Uint32Array, DataView, Blob: class {}, btoa, atob, GZ_CTX: CTX, GZ_SPEC: {}, ...page() });
     assert.ok(vm.runInContext(read(f), context), `${f}: no last value`);
   }
+});
+
+test('Ultra\'s stream lib ends on its value in a page, not only on module.exports', () => {
+  const context = vm.createContext({ GZ_PAGE: require('../../extension/core/page.js'), Intl, Date });
+  assert.ok(vm.runInContext(read('courses/stream.js'), context), 'courses/stream.js: no last value');
 });
 
 // Each site's first content script, from the manifest: Ultra's, Canvas's and MoodleCloud's (Canvas's without its part, as

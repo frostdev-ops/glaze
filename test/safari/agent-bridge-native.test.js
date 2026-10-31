@@ -206,8 +206,8 @@ test('the bridge compiles for macOS 12 in the extension and in the app, with com
 });
 
 test('the extension compiles with the bridge in the DMG build and without it in the App Store build', { skip: !S.supported }, () => {
-  const handler = path.join(ext, 'SafariWebExtensionHandler.swift'), ai = path.join(ext, 'GlazeAI.swift');
-  for (const [files, flags] of [[[handler, ai, bridgeFile], ['-D', 'GLAZE_DMG']], [[handler, ai], []]]) {
+  const handler = path.join(ext, 'SafariWebExtensionHandler.swift'), ai = path.join(ext, 'GlazeAI.swift'), google = path.join(ext, 'GlazeGoogle.swift');
+  for (const [files, flags] of [[[handler, ai, google, bridgeFile], ['-D', 'GLAZE_DMG']], [[handler, ai, google], []]]) {
     const r = S.typecheck(files, flags);
     assert.equal(r.status, 0, `${flags.join(' ') || 'App Store'}: ${r.stderr}`);
   }

@@ -226,7 +226,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
   // A change that finishes after the page moved on still counts (what is stored is adopted), but says nothing here.
   const op = (ops) => {
-    if (!active || asleep || !rec || !S?.ops(ops)) return Promise.resolve(false);
+    if (!active || asleep || !rec || !S?.ops(ops) || (ultra && S.key(LMS, location.origin, confirmedAccount) !== key)) return Promise.resolve(false);
     reads++;
     rec = S.apply(rec, ops, { lms: LMS });
     emit('change');
@@ -246,6 +246,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     });
   };
   const onStore = (ch, a) => {
+    if (a === 'local' && ultra && ch[HELD]) heights = cleanHeights(ch[HELD].newValue);
     if (a !== 'local' || !key) return;
     if (ch[key]) { reads++; if (!flying && rec) adopt(ch[key].newValue); }
     // Registration and the localhost copy's clear/install can finish after the first request. Retry from stored state.
@@ -253,21 +254,29 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
 
   // Who is signed in: the page's account reader (content.js GZ_CTX.account), the uid the worker checks the key against.
-  const account = async () => String((await ctx.account()) ?? '');
+  // On Ultra the account last confirmed on this site answers first (courses/ultra.js page.known), so the dock draws before
+  // /users/me does; sync confirms it, and for another account starts again. Nothing is written for an unconfirmed one.
+  let confirmedAccount = '';
+  const account = async () => (confirmedAccount = String((await ctx.account()) ?? ''));
+  let seen = null;
+  const first = async () => (ultra && await (seen ||= ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA).then(() => globalThis.GZ_ULTRA?.page?.known?.(), () => null)
+    .then((k) => (/^_\d+_\d+$/.test(String(k?.id)) ? String(k.id) : '')))) || account();
   const start = async () => {
     const g = epoch;
-    await ctx.need('core/widgets.js', () => globalThis.GZ_WIDGETS);
-    if (g !== epoch) return false;
-    await ctx.need('navigation/sidebar.js', () => globalThis.GZ_SIDEBAR);
+    await ctx.need(['core/widgets.js', 'navigation/sidebar.js'], () => globalThis.GZ_WIDGETS && globalThis.GZ_SIDEBAR);
     if (g !== epoch) return false;
     S = globalThis.GZ_SIDEBAR;
-    const k = S.key(LMS, location.origin, await account());
+    const uid = await first();
+    const k = S.key(LMS, location.origin, uid);
     if (g !== epoch) return false;
     if (!k) throw new Error('no account');
-    const r = await get(k);
+    // Two reads side by side: one key each, as every reader of the record asks for it.
+    const [r, hr] = await Promise.all([get(k), ultra ? get(HELD) : null]);
     if (g !== epoch) return false;
+    if (ultra) heights = cleanHeights(hr[HELD]);
     let next = S.clean(r[k]);
     // The one-time move into the dock is written first, and only then shown (navigation/sidebar.js migrate).
+    if (!next.mig && (await account()) !== uid) { if (g !== epoch) return false; seen = null; return start(); }
     if (!next.mig) { const a = await post(k, [{ op: 'migrate' }]); if (a?.ok && a.rec) next = S.clean(a.rec); }
     if (g !== epoch) return false;
     if (key !== k) gen++;
@@ -288,6 +297,113 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       retryTimer = setTimeout(() => { if (g === epoch) { starting = null; failed = false; } }, 60000);
       return false;
     }));
+  };
+
+  // ---- Ultra's Details & Actions, held -------------------------------------------------------------------------------
+  // A course outline's column fills its Details & Actions late (1.5–2.3 s on the owner's school): Course notes and the dock
+  // under it moved down by its height as it filled. Until Ultra has drawn it, it is held at least as tall as it was on this
+  // course last time (storage.local detailsHeight:<origin>; on a course not seen yet, the least any course here took), and
+  // This page shows from the start. The browser keeps the box (min-height), so nothing waits on a frame; the hold goes once
+  // its own content is as tall. Nothing is guessed without a measurement. As with the panels absorbed below, Ultra's node
+  // keeps its attributes and inline style: sidebar.css holds it (html[data-gz-sb-held], --gz-sb-held).
+  const HELD = `detailsHeight:${location.origin}`;
+  const cleanHeights = (v) => Object.fromEntries(Object.entries(v && typeof v === 'object' ? v : {}).filter(([c, h]) => /^_\d+_\d+$/.test(c) && Number.isFinite(h) && h > 0 && h < 4000).slice(-40));
+  let heights = {}, held = null, heightWrites = Promise.resolve();
+  const letGo = (d) => {
+    if (!d.want) return;
+    d.want = 0;
+    html().removeAttribute('data-gz-sb-held');
+    html().style.removeProperty('--gz-sb-held');
+    clearTimeout(d.timer);
+    // Timers and ResizeObserver callbacks can release it without a sidebar pass.
+    if (held === d) queueLayout();
+  };
+  const rememberHeight = (d) => {
+    const cid = d.cid, h = Math.round(d.size);
+    if (!/^_\d+_\d+$/.test(cid) || !(h > 0 && h < 4000) || h === heights[cid]) return;
+    const { [cid]: _, ...rest } = heights;
+    heights = cleanHeights({ ...rest, [cid]: h });
+    const write = async () => {
+      const current = cleanHeights((await get(HELD))[HELD]);
+      if (h === current[cid]) return;
+      const { [cid]: _, ...rest } = current;
+      const next = cleanHeights({ ...rest, [cid]: h });
+      await new Promise((resolve) => {
+        try { area('local').set({ [HELD]: next }, () => { void chrome.runtime.lastError; resolve(); }); }
+        catch { resolve(); /* reloaded */ }
+      });
+    };
+    // Course tabs share this map. Merge inside the origin's lock, not from a possibly stale onChanged snapshot.
+    heightWrites = heightWrites.then(() => globalThis.navigator?.locks?.request ? navigator.locks.request(`glaze:${HELD}`, write) : write()).catch(() => {});
+  };
+  const flushHeight = () => { if (held) rememberHeight(held); };
+  const pauseHold = () => {
+    if (!held) return;
+    held.paused = true;
+    held.ro.disconnect(); clearTimeout(held.timer); clearTimeout(held.quiet);
+    held.quiet = 0;
+  };
+  const unhold = () => {
+    const d = held;
+    if (!d) return;
+    held = null;
+    d.ro.disconnect(); clearTimeout(d.timer); clearTimeout(d.quiet);
+    letGo(d);
+    // What it took this visit, for the next (a page left before Ultra finished keeps less: never too much room).
+    rememberHeight(d);
+  };
+  const hold = () => {
+    const el = ultra && host && !host.own && has(host.el, 'outline-actions') ? [...host.el.children].find((x) => has(x, 'js-details-and-actions')) || null : null;
+    const cid = A.courseId();
+    if (held && held.el === el && held.cid === cid) { if (held.paused) held.resume(); else held.check(); return; }
+    unhold();
+    if (!el || !cid || typeof ResizeObserver !== 'function') return;
+    const known = Object.values(heights);
+    const d = held = { el, cid, size: 0, want: heights[cid] || (known.length ? Math.min(...known) : 0), edge: 0, timer: 0, quiet: 0 };
+    // Its padding and border under the content: with the box held, the content's own height is read from its last block.
+    if (d.want) try { const c = getComputedStyle(el); d.edge = (parseFloat(c.paddingBlockEnd) || 0) + (parseFloat(c.borderBlockEndWidth) || 0); } catch { /* no styles to ask */ }
+    const own = (box) => {
+      for (let k = el.lastElementChild; k; k = k.previousElementSibling) {
+        const r = k.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) return r.bottom - box.top + d.edge;
+      }
+      return 0;
+    };
+    d.check = () => {
+      const children = [...el.children];
+      if (children.length !== d.children.length || children.some((k, i) => k !== d.children[i])) observe();
+      if (!filled(el)) return;
+      const box = el.getBoundingClientRect();
+      if (!(box.width > 0 && box.height > 0)) return;
+      const size = d.want ? own(box) : box.height;
+      if (!(size > 0)) return;
+      // Only this block's growth restarts settling; unrelated Angular/sidebar passes do not.
+      if (size === d.size && d.quiet) return;
+      d.size = size;
+      // Drawn as tall as the room: it goes, and nothing moves.
+      if (d.want && size >= d.want - 0.5) letGo(d);
+      // Once Ultra stops drawing it: kept for the next visit, and room it doesn't fill (smaller than last time) goes.
+      clearTimeout(d.quiet);
+      d.quiet = setTimeout(() => { if (held === d && !d.paused) { rememberHeight(d); letGo(d); } }, 2000);
+    };
+    // min-height masks content growth from the block's own ResizeObserver. Its direct content blocks must be watched
+    // too: wrapping, fonts and images can resize them without a childList mutation. Rebind when Ultra swaps them.
+    d.ro = new ResizeObserver(() => { if (held === d && !d.paused) d.check(); });
+    const observe = () => {
+      d.ro.disconnect();
+      d.ro.observe(el, { box: 'border-box' });
+      d.children = [...el.children];
+      for (const child of d.children) d.ro.observe(child, { box: 'border-box' });
+    };
+    d.resume = () => {
+      d.paused = false;
+      if (d.want) { setVar('--gz-sb-held', `${d.want}px`); html().setAttribute('data-gz-sb-held', ''); }
+      observe();
+      d.check();
+      // Never drawn at all: not held for ever. Covered documents pause this deadline.
+      if (d.want) d.timer = setTimeout(() => { if (held === d && !d.paused) letGo(d); }, 15000);
+    };
+    d.resume();
   };
 
   // ---- Glaze's parts of the column -----------------------------------------------------------------------------------
@@ -383,6 +499,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // without one (or one Glaze doesn't recognize, left as it is), Glaze's own beside the content.
   const ATTRS = ['role', 'aria-labelledby', 'aria-modal', 'aria-label'];
   const detach = () => {
+    unhold();
     if (!host) return;
     lift(false);
     watchNativeScroll(null);
@@ -829,7 +946,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     safeEnd = styleOf() === 'float' ? parseFloat(css?.getPropertyValue('--gz-sb-safe')) || 0 : 0;
     const hidePage = cfg().page === 'hidden';
     const shownPanels = family === 'assessment' && host.own ? absorbable() : [];
-    const pageEmpty = hidePage || ((!host.page || (ultra && A.overlay()) || !filled(host.page)) && !shownPanels.length);
+    const pageEmpty = hidePage || ((!host.page || (ultra && A.overlay()) || (!filled(host.page) && !held?.want)) && !shownPanels.length);
     const docked = drawnCount ?? (widgetsOn() ? S.docked(rec).length : 0);
     const width = S.shown(rec, cfg()).width;
     const layer = A.layer?.(), review = layer && rubricView();
@@ -970,6 +1087,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       // Ultra's late blocks stay before the dock visually through flex order, without reinserting live media.
     }
     host.fallback = !n && !!A.standalone?.();
+    hold();
     const first = !active;
     active = true;
     if (first) emit('change');
@@ -1019,6 +1137,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       closeMenu();
       closeDrawer(false);
       asleep = true;
+      pauseHold();
       mo?.disconnect();
       topRO?.disconnect(); topHeaders = [];
       peekMO?.disconnect(); cancelAnimationFrame(peekFrame); peekFrame = 0;
@@ -1087,6 +1206,15 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
   const nativeModal = () => [...document.querySelectorAll('[role="dialog"], [role="alertdialog"], dialog[open]')].some((e) =>
     e !== host?.el && e !== A.layer?.() && !host?.el.contains(e) && e.style.display !== 'none' && !e.closest('[hidden], [aria-hidden="true"]') && (e.getClientRects?.().length ?? 1));
+  let modalFrame = 0;
+  // A check still waiting for its frame runs now: focus or a key may be on a native modal it hasn't seen yet.
+  const modalNow = () => { if (modalFrame) { cancelAnimationFrame(modalFrame); modalFrame = 0; modalSync(); } };
+  const modalSoon = () => {
+    if (modalFrame) return;
+    modalFrame = -1;
+    const id = requestAnimationFrame(() => { modalFrame = 0; modalSync(); });
+    if (modalFrame) modalFrame = id;
+  };
   const modalSync = () => {
     if (!drawer || !host) return;
     const away = nativeModal(), wanted = new Set();
@@ -1106,7 +1234,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     drawer = true;
     layout();
     modalSync();
-    modalObserver ||= new MutationObserver(modalSync);
+    // One check a frame: Ultra's ripples and popper moves change classes and styles many times a frame.
+    modalObserver ||= new MutationObserver(modalSoon);
     modalObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['role', 'aria-hidden', 'open', 'hidden', 'style', 'class'] });
     document.addEventListener('keydown', onKey);
     document.addEventListener('focusin', onFocus);
@@ -1121,6 +1250,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     forced = false;
     modalAway = false;
     modalObserver?.disconnect();
+    cancelAnimationFrame(modalFrame);
+    modalFrame = 0;
     for (const e of inerted) e.inert = false;
     inerted = [];
     document.removeEventListener('keydown', onKey);
@@ -1137,9 +1268,11 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     !x.disabled && x.type !== 'hidden' && (x.tabIndex ?? 0) >= 0 && !x.hidden && !x.closest('[hidden], [inert], [aria-hidden="true"]')
     && (x.getClientRects?.().length ?? 1) && (typeof getComputedStyle !== 'function' || getComputedStyle(x).visibility !== 'hidden'));
   const onFocus = (e) => {
+    modalNow();
     if (drawer && !modalAway && !host?.el.contains(e.target) && !menuEl?.contains(e.target)) (focusables()[0] || toggle).focus();
   };
   const onKey = (e) => {
+    modalNow();
     if (!drawer || modalAway || menuEl?.contains(e.target)) return;
     if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); closeDrawer(); return; }
     if (e.key !== 'Tab') return;
@@ -1250,6 +1383,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     removeEventListener('resize', onResize);
     watchNativeScroll(null);
     document.removeEventListener('visibilitychange', cover);
+    removeEventListener('pagehide', flushHeight);
     try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ }
     starting = null; rec = null; key = ''; flying = 0; lost = false;
     drawnCount = null;
@@ -1274,11 +1408,13 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       if (!ok || !on) return;
       const g = epoch;
       let uid;
-      try { uid = await account(); } catch { if (g === epoch) teardown(); return; }
+      try { uid = await first(); } catch { if (g === epoch) teardown(); return; }
       if (g !== epoch || !on) return;
       if (S.key(LMS, location.origin, uid) !== key) { teardown(); sync(true); return; }
+      // Drawn for the account last seen here: once confirmed, another account's dock goes and theirs comes.
+      if (ultra) account().then((real) => { if (g === epoch && on && S.key(LMS, location.origin, real) !== key) { seen = null; teardown(); sync(true); } }, () => { if (g === epoch) teardown(); });
       if (covered()) { cover(); return; }
-      if (!active) { addEventListener('resize', onResize); document.addEventListener('visibilitychange', cover); }
+      if (!active) { addEventListener('resize', onResize); document.addEventListener('visibilitychange', cover); if (ultra) addEventListener('pagehide', flushHeight); }
       // Ultra's passes come with every change Angular makes: once there, they are gathered into one a frame.
       if (ultra && active) { cancelAnimationFrame(passFrame); passFrame = requestAnimationFrame(() => { if (on && active && !asleep) place(); }); }
       else place();

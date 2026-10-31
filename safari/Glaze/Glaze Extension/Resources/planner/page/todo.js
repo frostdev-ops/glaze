@@ -29,6 +29,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   let dead = false; // it failed for good on this page: Canvas's own list stays
   let gen = 0; // which start is current: off() and each start move it on, and a superseded start's results are dropped
   let who = null; // { uid, tz }
+  let sure = false; // who is the student signed in now, not only the one last seen here (start)
   let key = '';
   let data = { tasks: [], items: {} };
   let cache = null;
@@ -112,7 +113,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       if (g !== gen || !box) throw new Error('stale');
       const r = await GZ_ULTRA.page.due(Date.parse(start), Date.parse(end));
       // complete: false, the calendar couldn't be read whole: the list says some work may be missing.
-      return [{ key, at: now, start, end, teach: o().teacher, progress: o().progress, items: r.items, complete: r.complete, grading: [], sums: {} }, undefined];
+      return [{ key, at: r.at ?? now, epoch: r.epoch, start, end, teach: o().teacher, progress: o().progress, items: r.items, complete: r.complete, grading: [], sums: {} }, undefined];
     }
     const own = reuse && cache?.teach === null && covers({ ...cache, teach: o().teacher, progress: o().progress }, now) ? cache : null;
     const { start, end } = own || L.fetchRange(o(), now, who.tz);
@@ -139,7 +140,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   // and an older answer is dropped when it comes.
   const refresh = (force = false) => {
     const g = gen;
-    if (!who || dead || asleep || document.visibilityState === 'hidden') return null;
+    if (!who || !sure || dead || asleep || document.visibilityState === 'hidden') return null;
     if (fetching && fetchGen === g) return fetching;
     const done = (p) => { fetching = p; fetchGen = g; p.finally(() => { if (fetching === p) fetching = null; }); return p; };
     if (!force && covers(cache, Date.now())) {
@@ -150,6 +151,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (!cache) setBusy(true);
     return done(load(!force).then(([c, due]) => {
       if (g !== gen) return;
+      if (cache?.key === c.key && cache.at > c.at) return;
       cache = c;
       return keep(c, due);
     }, () => {
@@ -174,6 +176,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   // refuses changes nothing and is said so. One made in a list that has since gone (off, remounted, another account)
   // is still stored under its own account, and shown nowhere. ok: what to say once it's kept.
   const save = (edits, ok = '') => {
+    if (!sure) return Promise.resolve(false);
     const k0 = key, g0 = gen;
     return new Promise((res) => {
       try { chrome.runtime.sendMessage({ type: 'glaze:todo', key: k0, edits }, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); }
@@ -399,6 +402,9 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   };
   const render = (force = false) => {
     if (!box || !L || !who) return;
+    // Until the student is confirmed: the list's frame and title only, nobody's work.
+    box.inert = !sure;
+    if (!sure) { if (!head.firstChild) head.append(make('h2', { id: 'gz-todo-title', textContent: t('To Do') })); body.replaceChildren(); drawn = ''; return; }
     if (asleep) { drawn = ''; return; }
     const now = Date.now();
     // here(): Ultra moves the list between its Courses page and a course's outline without a page load.
@@ -598,38 +604,65 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     const k = e.target.dataset?.kind;
     if (k) { if (e.target.open) shut.delete(k); else shut.add(k); }
   };
+  document.addEventListener('glaze:ultra-refresh', (e) => {
+    if (!ultra) return;
+    if (e.detail?.retire) { dead = true; off(); }
+    else { ++gen; fetching = null; if (box) refresh(true); }
+  });
   const onShow = () => { if (document.visibilityState === 'visible' && !asleep) { render(); refresh(); } };
   const onStore = (changes, area) => {
     if (!L || !who) return;
     if (area === 'sync' && changes.todo) readPrefs().then(() => { render(true); refresh(); });
+    if (area === 'local' && changes[CACHE]) {
+      const c = changes[CACHE].newValue;
+      if (!c || c.key === key && !(cache?.at > c.at)) cache = c || null;
+      render(true);
+    }
     if (area === 'local' && changes[key]) { data = L.clean(changes[key].newValue); render(true); }
     if (area === 'local' && !asleep && changes[draftKey()]) { takeDraft(changes[draftKey()].newValue); render(true); }
   };
 
   // ---- on the page -------------------------------------------------------------------------------------------------
+  // Ultra: the student last confirmed on this site and their courses (courses/ultra.js page.known), so what's kept for
+  // them is read while /users/me (asked at first paint) confirms who it is; it shows, and anything is asked, edited or
+  // kept, only once confirmed. null elsewhere, or when there's none.
+  const seen = () => (ultra ? ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA).then(() => globalThis.GZ_ULTRA?.page?.known?.() || null, () => null) : Promise.resolve(null));
   const start = async () => {
     const g = ++gen;
     try {
       await ctx.need('planner/todo.js', () => globalThis.GZ_TODO);
       if (g !== gen) return;
       L = globalThis.GZ_TODO;
-      const [p, list] = await Promise.all([ctx.profile(), ctx.canvasCourses(), readPrefs()]);
+      const known = await seen();
+      if (g !== gen) return;
+      const [p, list] = known ? [known, known.courses || [], await readPrefs()] : await Promise.all([ctx.profile(), ctx.canvasCourses(), readPrefs()]);
       if (g !== gen) return;
       if (!L.ID.test(String(p?.id))) throw new Error('no profile');
       if (formAccount && formAccount !== String(p.id)) form = null;
       formAccount = String(p.id);
       who = { uid: String(p.id), tz: L.zone(p.time_zone) };
+      sure = !known;
       coursesIn(list);
       key = L.storeKey(location.origin, who.uid);
       const r = await new Promise((res) => { try { store().get([key, CACHE, draftKey()], res); } catch { res({}); } });
       if (g !== gen) return;
       // A form left open on another page (keepDraft) opens again here, once.
-      takeDraft(r?.[draftKey()]);
+      if (sure) takeDraft(r?.[draftKey()]);
       data = L.clean(r?.[key]);
       cache = r?.[CACHE]?.key === key ? r[CACHE] : null;
       if (!box) return;
       render(true);
-      await refresh();
+      // Read for the student last seen here: shown once confirmed; another student starts the list again as theirs.
+      if (known) {
+        const now = await ctx.profile();
+        if (g !== gen) return;
+        if (String(now?.id) !== who.uid) { body?.replaceChildren(); drawn = ''; started = start(); return; }
+        sure = true;
+        takeDraft(r?.[draftKey()]);
+        render(true);
+        ctx.canvasCourses().then((l) => { if (g === gen) { coursesIn(l); render(true); } }, () => {});
+      }
+      await refresh(ultra);
     } catch {
       if (g === gen) fail();
     }
@@ -709,7 +742,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   };
   const draftKey = () => (who ? `draft:todo:${location.origin}/${who.uid}` : '');
   const keepDraft = () => {
-    if (asleep) return;
+    if (asleep || !sure) return;
     captureForm();
     const k = draftKey();
     if (!k || !mounted) return;
@@ -719,7 +752,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     } catch { /* reloaded */ }
   };
   const takeDraft = (d) => {
-    if (asleep || form || !mounted || !ctx.settings().enhance.drafts || !d || !(Date.now() - d.at < 14 * 864e5) || !d.todo || typeof d.todo !== 'object') return;
+    if (!sure || asleep || form || !mounted || !ctx.settings().enhance.drafts || !d || !(Date.now() - d.at < 14 * 864e5) || !d.todo || typeof d.todo !== 'object') return;
     form = draftForm(d.todo);
     try { store().remove(draftKey()); } catch { /* reloaded */ }
   };
@@ -771,7 +804,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   };
   // "Add task" from the palette: the form, open and focused.
   const add = () => {
-    if (!box || !who) return false;
+    if (!box || !who || !sure) return false;
     form = { cid: here() };
     render(true);
     box.scrollIntoView({ block: 'nearest' });
@@ -780,7 +813,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   };
 
   // The command palette's entries while the list is on the page.
-  const cmds = () => (box && who ? [{ label: t('Add task'), hint: 'Glaze', group: 'Glaze', run: add }] : []);
+  const cmds = () => (box && who && sure ? [{ label: t('Add task'), hint: 'Glaze', group: 'Glaze', run: add }] : []);
 
   return { sync, add, cmds, mount, unmount, suspend, resume };
 })();

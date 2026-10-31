@@ -15219,10 +15219,12 @@ class WasmImage {
   async #getJsModule(fallbackCallback) {
     let instance = null;
     try {
-      const mod = await import(
+      const mod = await (
       /*webpackIgnore: true*/
       /*@vite-ignore*/
-      `${WasmImage.#wasmUrl}${this._noWasmFilename}`);
+      this._noWasmFilename === "jbig2_nowasm_fallback.js" ? import("./jbig2_nowasm_fallback.js")
+        : this._noWasmFilename === "openjpeg_nowasm_fallback.js" ? import("./openjpeg_nowasm_fallback.js")
+        : Promise.reject(new Error("Unknown PDF image decoder")));
       instance = mod.default();
     } catch (ex) {
       warn(`#getJsModule: ${ex}`);

@@ -123,8 +123,9 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     try {
       await libs();
       N = globalThis.GZ_NOTES;
-      // Ultra: the student's id (/users/me) and their courses (memberships), through courses/ultra.js's reader.
-      const [p, list] = ultra ? await reader().then(async (r) => { const id = await r.me(); return [{ id }, await r.memberships(id).catch(() => [])]; })
+      // Ultra: the student's id (/users/me) and their courses (memberships), from courses/ultra.js's page store, which reads
+      // them once per site.
+      const [p, list] = ultra ? await reader().then(async () => { const id = await GZ_ULTRA.page.me(); return [{ id }, await GZ_ULTRA.page.mine().then((m) => m.mem, () => [])]; })
         .then(([p, ms]) => [p, ms.filter((m) => m?.course).map((m) => ({ id: m.courseId, name: ctx.nickOf(m.courseId) || m.course.name }))])
         : await Promise.all([ctx.profile(), ctx.canvasCourses().catch(() => [])]);
       if (!(ultra ? /^_\d+_\d+$/ : /^\d+$/).test(String(p?.id))) throw new Error('no profile');
@@ -514,7 +515,17 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     // A note that can't be read stays closed: never an empty note that a save could write over the real one.
     if (!r?.ok) { el.body.textContent = t(r?.error === 'missing' ? "This note's text couldn't be found on this device." : "Couldn't open this note. Try again in a moment."); cur.saved = null; cur.ro = true; return; }
     cur.rev = r.rev;
-    el.body.innerHTML = N.sanitize(r.html);
+    // Build from the sanitizer's allowlisted tree, without interpreting another HTML string. Children go in batches: a
+    // spread of tens of thousands (a paragraph of line breaks) overflows the stack.
+    const fill = (e, kids) => { for (let i = 0; i < kids.length; i += 1024) e.append(...kids.slice(i, i + 1024).filter((k) => k !== '')); return e; };
+    const node = (n) => {
+      if (typeof n === 'string') return n;
+      const e = attr(fill(make(n.tag), n.kids.map(node)), n.attrs);
+      if (n.tag === 'a' && n.attrs.href) attr(e, { rel: 'noopener noreferrer', target: '_blank' });
+      return e;
+    };
+    el.body.replaceChildren();
+    fill(el.body, N.parse(r.html).kids.map(node));
     cur.saved = serialize();
     el.body.setAttribute('contenteditable', String(!cur.ro));
     if (keep?.sel) el.body.focus();

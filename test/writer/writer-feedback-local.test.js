@@ -50,11 +50,13 @@ test('local decisions cannot cite invented assignment facts or draft passage IDs
   }
 });
 
-test('unsafe or missing local comments cannot turn valid decisions into an overall grade', async () => {
+test('unsafe or missing local comments never reach the student; a valid decision keeps its grade with Glaze\'s rubric rating', async () => {
   const { cfg, result } = run(raw(), (req) => req.schema.properties.comment ? { json: { comment: 'You could write "Gardens improve all schools."' } } : reply(req));
   const out = await result;
-  assert.equal(out.output.grade.earned, null);
-  assert.equal(out.output.criteria.length, 0);
+  assert.equal(out.output.grade.reason, null, 'an explanation failure is never reported as unassessed material');
+  assert.equal(out.output.grade.earned, 100);
+  assert.deepEqual(out.output.criteria.map((c) => c.comment), ['Rubric score: 40/40 points.', 'Rubric score: 60/60 points.']);
+  assert.ok(!JSON.stringify(out.output).includes('Gardens improve all schools'));
   assert.equal(cfg.seen.filter((req) => req.schema.properties.comment).length, 4);
 });
 
@@ -193,8 +195,11 @@ const styleRun = (label, comment, status = 'met', detail = label) => {
 test('APA met cannot be justified by affirmative MLA compliance, but comparisons and alternatives stay valid', async () => {
   const conflict = styleRun('APA style', 'Your draft meets APA style because it adheres to MLA 9 formatting.');
   const out = await conflict.result;
-  assert.equal(out.output.grade.earned, null);
-  assert.equal(out.output.criteria.length, 0);
+  // The contradicting explanation never reaches the student; the re-checked, verified decision keeps its points with
+  // Glaze's rubric rating, and nothing is reported as unassessed material.
+  assert.ok(!JSON.stringify(out.output).includes('adheres to MLA 9'));
+  assert.equal(out.output.criteria[0]?.comment, 'Rubric score: 20/20 points.');
+  assert.equal(out.output.grade.reason, null); assert.equal(out.output.grade.earned, 20);
   assert.equal(conflict.cfg.seen.filter((req) => req.schema.properties.comment).length, 2);
   const comparison = await styleRun('APA style', 'Your draft uses an MLA 9 preset, which does not establish the required APA style.', 'partly').result;
   assert.equal(comparison.output.criteria[0]?.status, 'partly');
@@ -208,7 +213,8 @@ test('APA met cannot be justified by affirmative MLA compliance, but comparisons
     assert.equal(compatible.output.criteria[0]?.status, 'met', metadata);
   }
   const causal = await styleRun('APA style', 'Your draft meets APA style because it uses an MLA 9 preset.').result;
-  assert.equal(causal.output.grade.earned, null, 'a preset label cannot be causal proof of a different required style');
+  assert.ok(!JSON.stringify(causal.output).includes('because it uses an MLA 9 preset'), 'a preset label cannot be causal proof of a different required style');
+  assert.equal(causal.output.criteria[0]?.comment, 'Rubric score: 20/20 points.');
   const permitted = await styleRun('APA style', 'Your draft follows MLA style with matching citations and a Works Cited list.', 'met', 'Either APA or MLA formatting is accepted for this assignment.').result;
   assert.equal(permitted.output.criteria[0]?.status, 'met', 'explicit alternatives in row detail override an abbreviated label');
 });
