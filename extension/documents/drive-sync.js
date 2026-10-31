@@ -817,8 +817,10 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         if (request !== switching) return { ok: false, why: 'off' };
         const st = await state(), changed = st.account && st.account !== who;
         if (changed) await forget();
-        await setState({ ...(changed && { folder: null, token: null, data: null, backups: null, snap: null, snapSkip: null, last: null }),
-          on: true, off: false, account: who, problem: null, wait: 0, fails: 0 }, () => request === switching);
+        // No page token until this full pass completes: what was saved here while off (never marked) goes up on a later full
+        // pass if this one stops short, never left behind by a run reading only the changes since a token from before.
+        await setState({ ...(changed && { folder: null, data: null, backups: null, snap: null, snapSkip: null, last: null }),
+          token: null, on: true, off: false, account: who, problem: null, wait: 0, fails: 0 }, () => request === switching);
         if (request !== switching) return { ok: false, why: 'off' };
         return runNow({ full: true });
       });
