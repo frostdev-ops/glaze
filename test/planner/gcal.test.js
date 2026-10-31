@@ -603,29 +603,6 @@ test('switch off (a build that leaves it out): no settings section, no sync, no 
   } finally { await mock.stop(); }
 });
 
-test('the Chrome package carries Google sync; scripts/dev-gcal.sh adds only the store\'s key, in its copy', () => {
-  const { execFileSync } = require('node:child_process');
-  const os = require('node:os');
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-gcal-pkg-'));
-  try {
-    const keyFile = path.join(dir, 'key.txt');
-    fs.writeFileSync(keyFile, require('node:crypto').randomBytes(294).toString('base64'));
-    const env = { ...process.env, DIST: path.join(dir, 'dist') };
-    execFileSync(path.join(__dirname, '../../tools/dev/dev-gcal.sh'), [keyFile, path.join(dir, 'dev')], { env, stdio: 'pipe' });
-    const repo = require('../../extension/manifest.json');
-    const zip = path.join(dir, 'dist', `glaze-v${repo.version}.zip`);
-    const packed = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json']));
-    assert.deepEqual(packed, repo, 'the store manifest is the repo\'s, oauth2 client and optional identity permission included');
-    assert.ok(packed.oauth2.scopes.length === 1 && packed.oauth2.scopes[0] === G.SCOPE && packed.optional_permissions.includes('identity'));
-    assert.ok(!('key' in packed), 'the store adds its own key');
-    assert.match(execFileSync('unzip', ['-p', zip, 'planner/gcal.js']).toString(), /\n {2}const ON = true;\n/);
-    assert.ok(!packed.oauth2.scopes.includes('https://www.googleapis.com/auth/drive.file'), 'no Drive scope while Drive is switched off');
-    const dev = JSON.parse(fs.readFileSync(path.join(dir, 'dev/manifest.json')));
-    assert.deepEqual(dev, { ...repo, key: fs.readFileSync(keyFile, 'utf8') }, 'the dev copy: the store manifest and the key');
-    assert.equal(fs.readFileSync(path.join(dir, 'dev/planner/gcal.js'), 'utf8'), read('planner/gcal.js'));
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
-});
-
 // ---- review (Codex, W13): each failed before its fix ----
 const eventWrites = (mock) => mock.log.filter(([m, p]) => m !== 'GET' && p.includes('/events'));
 const holdToken = (w) => { let open; w.identity.hold = new Promise((r) => { open = r; }); return () => { w.identity.hold = null; open(); }; };

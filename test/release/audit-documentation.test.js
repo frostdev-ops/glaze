@@ -128,3 +128,19 @@ test('BLD-5: the permission text matches the manifest and the packaging scripts'
   assert.match(policy, /\*\*Music widget\*\* \(Canvas and Blackboard Ultra/);
   assert.ok(/music/.test(code('core/widgets.js').match(/const TILES = \[[^\]]*\]/)[0]), 'the music tile is a widget on both sites');
 });
+
+test('the developer guide distinguishes Calendar permissions from the enabled Drive package', () => {
+  const drive = require('../../extension/background/google.js');
+  if (!drive.ON) return;
+  const config = require('../../extension/background/google-config.js');
+  const manifest = require('../../extension/manifest.json');
+  const { oauth } = require('../../tools/build/oauth-manifest.js');
+  const firefox = oauth(manifest, { target: 'firefox', calendar: false, drive: drive.ON, config });
+  assert.ok(firefox.permissions.includes('identity'), 'the enabled Firefox package holds identity');
+  assert.equal(firefox.oauth2, undefined);
+  const guide = paragraphs(code('../docs/development.md')).find((p) => p.includes('Google Calendar sync is on'));
+  assert.ok(guide, 'Calendar packaging is documented');
+  assert.doesNotMatch(guide, /Firefox and Safari packages leave both out/, 'Firefox retains identity for Drive');
+  assert.match(guide, /Firefox[^.]*`identity`[^.]*from install[^.]*Drive/, 'Firefox identity belongs to Drive');
+  assert.match(guide, /switch off.*Calendar.*keeping the client and permission while Drive needs them/, 'disabling Calendar retains what enabled Drive needs');
+});
