@@ -176,7 +176,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       }
     };
     const meta = async (id) => { try { return await D((c) => c.file(id)); } catch (e) { if (e.why === 'missing') return { id, removed: true }; throw e; } };
-    const trashTo = async (id, on) => { if (!id) return; try { await D((c) => c.patch(id, { trashed: on })); } catch (e) { if (e.why !== 'missing') throw e; } };
+    // → false when the file is gone from Drive for good
+    const trashTo = async (id, on) => { if (!id) return true; try { await D((c) => c.patch(id, { trashed: on })); return true; } catch (e) { if (e.why !== 'missing') throw e; return false; } };
 
     // ---- transfers larger than one request. env.stage (IndexedDB glaze-drive in the worker: '<slot>@<offset>' → a piece)
     // keeps an upload's bytes and a download's so far; storage.local driveSyncMoves { slot: { dir, tag, size, owner, since,
@@ -602,7 +603,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
 
       // A file let go as edited outside Glaze (below) whose mark didn't land, the run stopping between: marked now.
       if (d.keep) d = await tagKept(h, d);
-      // Deleted for good in Drive, either file: into Trash here, the other file into Drive's trash.
+      // Deleted for good in Drive, either file: into Trash here, the other file into Drive's trash. Its file deleted for good
+      // while its copy came out of Drive's trash (in Trash on both sides before): restored wins, with a file of its own again.
+      if (E?.removed && R && !R.removed && R.trashed === false && d.trashed === true) { d = await putDoc(h, { ...d, file: null, fh: null, fsum: null }, d); E = undefined; }
       if (R?.removed || E?.removed) {
         if (l && !lt) await env.papers.trash(key);
         if (R?.removed) { await trashTo(d.file, true); await dropDoc(h, d); return; }
@@ -633,10 +636,11 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         if (to !== lt) await (to ? env.papers.trash(key) : env.papers.untrash(key));
         // Into Drive's trash the copy first, out of it the file first: a device meeting the document between the two moves
         // never finds its copy out of the trash with its file still in it.
+        // Restored, its file deleted for good meanwhile: the document gets a file of its own again (as one with none).
         const moves = [[rt !== to, d.json], [!!d.file && et !== to, d.file]];
-        for (const [go, id] of to ? moves : moves.reverse()) if (go) await trashTo(id, to);
-        await putDoc(h, { ...d, trashed: to }, d);
-        d.trashed = to;
+        let lost = false;
+        for (const [go, id] of to ? moves : moves.reverse()) if (go && !await trashTo(id, to) && !to && id === d.file) lost = true;
+        d = await putDoc(h, { ...d, trashed: to, ...(lost && { file: null, fh: null, fsum: null }) }, d);
         if (to) return;
         l = await local(key);
       }
