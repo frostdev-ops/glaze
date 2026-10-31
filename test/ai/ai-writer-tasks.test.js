@@ -543,6 +543,13 @@ test('writer.feedback: locale vocabulary preserves English admission decisions f
     'La relación entre las ideas sigue confusa para ti.']) assert.equal(FB.assesses(c, []), c, c);
 });
 
+test('writer.feedback: an adjective between the determiner and a shared noun keeps the comment', () => {
+  for (const c of ['Die klare These wird konsistent vertreten.', 'Es ist keine präzise These formuliert.', 'Der Kommentar bleibt ohne eigene These.',
+    'Die Diskussion enthält keine klare, gewichtete These.', 'Die Sprache wirkt präzise, mit klarer Argumentation.',
+    'Een duidelijke these ontbreekt nog.', 'De scherpe these antwoordt direct op de vraag.']) assert.equal(FB.assesses(c, []), c, c);
+  for (const c of ['The Text remains unreadable.', 'Several old Passages describe the river.', 'Memories die fragment by fragment.']) assert.equal(FB.assesses(c, []), '', c);
+});
+
 test('writer.feedback: quoted English words are not locale wording commands', () => {
   for (const c of ['Your sentence ends with "sag" to signal exhaustion.', 'Your sentence quotes "dis" as slang.',
     'Your sentence uses \'di\' as a musical note.']) assert.equal(FB.assesses(c, []), c, c);
