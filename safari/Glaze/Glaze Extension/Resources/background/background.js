@@ -3401,6 +3401,7 @@ const openDriveSync = () => {
   if (!globalThis.GZ_DRIVE_SYNC) importScripts('../documents/drive-sync.js');
   if (!globalThis.GZ_DRIVE_STORE) importScripts('drive-store.js');
   brokerIn('backup'); // A restarted worker needs every record's validator before its first download, not after it.
+  openPapers(); // and the paper store's library, which documents/drive-sync.js reads before any paper is asked for
   const turn = (f) => (brokerTurn ||= GZ_CARDS.queue())(f);
   // Everything else Glaze keeps (background/drive-store.js): its writes in the broker's queue, as every other store's are.
   const keysOf = async (a) => (typeof chrome.storage[a].getKeys === 'function' ? chrome.storage[a].getKeys() : Object.keys(await chrome.storage[a].get(null)));
@@ -3429,6 +3430,8 @@ const openDriveSync = () => {
     // they stay out of Drive; Settings' own Back up… carries them behind its warning).
     snapshot: async () => {
       brokerIn('backup');
+      // The zip (and Notes' export, which builds on it) is loaded only by a document's export: a restarted worker may have none.
+      if (!globalThis.GZ_ZIP) importScripts('../core/zip.js');
       const all = await chrome.storage.local.get(null), raw = await chrome.storage.sync.get(null);
       const tasks = Object.fromEntries(Object.entries(all).filter(([k]) => GZ_TODO.STORE_KEY.test(k)));
       const pets = GZ_PET.backup(Object.fromEntries(Object.entries(all).filter(([k]) => GZ_PET.KEY.test(k)))) || {};

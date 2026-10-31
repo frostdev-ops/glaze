@@ -737,3 +737,23 @@ test('two devices that each made a Glaze folder at once end in one: the other\'s
   assert.ok([...drive.files.values()].every((f) => !f.meta.explicitlyTrashed), 'nothing moved to Drive\'s trash');
   noDeletes(drive);
 });
+
+test('a note whose text this device can no longer find is passed over: the rest of Sync goes on, both ways', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  await a.notesOp({ key: ACCT, op: 'save', id: nid(1), base: 0, sid: 'a1', html: '<p>Lost here</p>', title: 'Lost' });
+  await a.local.set({ writerWords: ['Alpha'] });
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  // A's copy of the note's text is gone from its database (Notes itself answers 'missing' for it); B edits that note.
+  for (const k of [...a.db.stores.bodies.keys()]) a.db.stores.bodies.delete(k);
+  assert.equal((await a.notesOp({ key: ACCT, op: 'load', id: nid(1) })).error, 'missing');
+  clock.t += 1000; await b.notesOp({ key: ACCT, op: 'save', id: nid(1), base: (await idxOf(b)).notes[nid(1)].rev, sid: 'b1', html: '<p>Edited on B</p>' });
+  assert.ok((await b.run()).ok);
+  // A's own change still goes up, its runs succeed, and a full pass (Sync turned on again) does too.
+  clock.t += 1000; await a.local.set({ writerWords: ['Alpha', 'Beta'] });
+  assert.ok((await a.run()).ok, 'a run with the note among Drive\'s changes');
+  assert.ok((await a.run({ full: true })).ok, 'a full pass');
+  assert.ok((await b.run()).ok);
+  assert.deepEqual((await b.local.get('writerWords')).writerWords, ['Alpha', 'Beta'], 'A\'s change reached B');
+  assert.match(await noteOf(b, nid(1)), /Edited on B/, 'nothing of the lost text went over B\'s');
+  noDeletes(drive);
+});

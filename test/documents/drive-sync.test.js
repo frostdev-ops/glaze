@@ -882,3 +882,106 @@ test('a device whose JSON copy was moved out of the Glaze folder puts the docume
   assert.equal(textOf((await a.papers.get(key)).doc), 'Edited on B', 'and A follows it');
   noDeletes(drive);
 });
+
+test('a conflict whose push Drive keeps refusing keeps Drive\'s side once, however often the run is tried again', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-0000000000f1', pdf = 'doc:00000000-0000-4000-8000-0000000000f2';
+  await a.papers.save(key, { doc: doc('Draft one'), title: 'Essay', named: true });
+  const r1 = await a.files.put(enc('%PDF one'), MIME.pdf);
+  await a.papers.save(pdf, { kind: 'pdf', file: r1, size: r1.size, title: 'Reading', named: true });
+  assert.ok((await a.sync.set(true)).ok); assert.ok((await b.sync.set(true)).ok);
+  // Both edit both documents; A's reach Drive first.
+  clock.t += 60e3;
+  await a.papers.save(key, { doc: doc('A wrote this') });
+  const ra = await a.files.put(enc('%PDF A marked'), MIME.pdf);
+  await a.papers.save(pdf, { file: ra, size: ra.size }, { reason: 'edit' });
+  await a.sync.touched(key); await a.sync.touched(pdf); await a.fire();
+  await b.papers.save(key, { doc: doc('B wrote that') });
+  const rb = await b.files.put(enc('%PDF B marked'), MIME.pdf);
+  await b.papers.save(pdf, { file: rb, size: rb.size }, { reason: 'edit' });
+  await b.sync.touched(key); await b.sync.touched(pdf);
+  // B's Drive is full: each run keeps Drive's side, then its push is refused.
+  drive.fail(403, ERRORS.storageQuotaExceeded, (x) => x.path.startsWith('/upload/'), 50);
+  for (let i = 0; i < 3; i++) {
+    assert.deepEqual(await b.sync.run(), { ok: false, why: 'quota' });
+    clock.t = (await state(b)).wait + 1;
+  }
+  drive.clearFaults();
+  assert.ok((await b.sync.run()).ok);
+  assert.equal((await b.papers.versions(key)).filter((v) => v.reason === 'conflict').length, 1, 'Drive\'s side of the paper is one version');
+  assert.equal((await b.papers.list()).filter((x) => x.title === 'Reading (Drive copy)').length, 1, 'Drive\'s PDF is one document of its own');
+  assert.equal(textOf(sidecarJson(drive, key).record.doc), 'B wrote that', 'B\'s went up once Drive had room');
+  assert.equal(sidecarJson(drive, pdf).record.file.hash, rb.hash);
+  noDeletes(drive);
+});
+
+test('a device joining with its own later copy, its push refused, keeps the folder\'s copy once', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), c = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-0000000000f3';
+  await a.papers.save(key, { doc: doc('A wrote this'), title: 'Essay', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  clock.t += 60e3;
+  await c.papers.save(key, { doc: doc('C wrote this later'), title: 'Essay', named: true });
+  drive.fail(403, ERRORS.storageQuotaExceeded, (x) => x.path.startsWith('/upload/'), 50);
+  assert.deepEqual(await c.sync.set(true), { ok: false, why: 'quota' });
+  for (let i = 0; i < 2; i++) {
+    clock.t = (await state(c)).wait + 1;
+    assert.deepEqual(await c.sync.run(), { ok: false, why: 'quota' });
+  }
+  drive.clearFaults();
+  clock.t = (await state(c)).wait + 1;
+  assert.ok((await c.sync.run()).ok);
+  const kept = (await c.papers.versions(key)).filter((v) => v.reason === 'conflict');
+  assert.equal(kept.length, 1, 'the folder\'s copy is one version');
+  assert.equal(textOf((await c.papers.version(key, kept[0].id)).doc), 'A wrote this');
+  assert.equal(textOf(sidecarJson(drive, key).record.doc), 'C wrote this later');
+  noDeletes(drive);
+});
+
+test('a Word file another device kept as edited outside Glaze is never overwritten by this one', async () => {
+  for (const late of [false, true]) {
+    const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+    const key = 'doc:00000000-0000-4000-8000-000000000821';
+    await a.papers.save(key, { doc: doc('Glaze text'), title: 'Essay', named: true });
+    assert.ok((await a.sync.set(true)).ok); assert.ok((await b.sync.set(true)).ok);
+    const word = exportOf(drive, key).meta.id;
+    drive.edit(word, enc('Edited in Word'));
+    // A sees the Word edit and keeps that file; late: its own new file and copy haven't gone up yet.
+    clock.t += 1000;
+    await a.papers.save(key, { doc: doc('A edits') });
+    await a.sync.touched(key);
+    if (late) drive.offline((x) => x.path.startsWith('/upload/'));
+    assert.equal((await a.sync.run()).ok, !late);
+    assert.equal(drive.files.get(word).meta.appProperties.glaze, 'kept');
+    // B, still naming that file as its document's, edits and syncs.
+    clock.t += 1000;
+    await b.papers.save(key, { doc: doc('B edits') });
+    await b.sync.touched(key);
+    assert.ok((await b.sync.run()).ok);
+    assert.equal(dec(drive.files.get(word).bytes), 'Edited in Word', `the Word edits stay as they are${late ? ' (A not yet up)' : ''}`);
+    assert.equal(drive.files.get(word).meta.appProperties.glaze, 'kept', 'and the file stays out of Glaze\'s hands');
+    assert.notEqual(sidecarJson(drive, key).file, word, 'the document names another file');
+    noDeletes(drive);
+  }
+});
+
+test('a Word file edited outside Glaze after another device\'s push is never overwritten by a device in conflict', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-000000000831';
+  await a.papers.save(key, { doc: doc('Glaze text'), title: 'Essay', named: true });
+  assert.ok((await a.sync.set(true)).ok); assert.ok((await b.sync.set(true)).ok);
+  const word = exportOf(drive, key).meta.id;
+  clock.t += 1000;
+  await a.papers.save(key, { doc: doc('A edits') });
+  await a.sync.touched(key); await a.fire();
+  drive.edit(word, enc('Edited in Word after A'));
+  clock.t += 1000;
+  await b.papers.save(key, { doc: doc('B edits') });
+  await b.sync.touched(key);
+  assert.ok((await b.sync.run()).ok);
+  assert.equal(dec(drive.files.get(word).bytes), 'Edited in Word after A', 'the Word edits stay as they are');
+  assert.equal(textOf(sidecarJson(drive, key).record.doc), 'B edits');
+  assert.notEqual(sidecarJson(drive, key).file, word);
+  assert.equal((await b.papers.versions(key)).filter((v) => v.reason === 'conflict').length, 1, 'A\'s side kept once');
+  noDeletes(drive);
+});

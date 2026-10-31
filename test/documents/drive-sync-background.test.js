@@ -31,7 +31,7 @@ const worker = () => {
     chrome: { storage: { local, sync, onChanged: changed }, runtime: { onMessage: listener, onStartup: listener } },
     GZ_CARDS: { queue: () => { let tail = Promise.resolve(); return (fn) => { const p = tail.then(fn); tail = p.catch(() => {}); return p; }; } },
     GZ_DRIVE_SYNC: { create: (env) => { documents = env; return {}; } }, brokerTurn: null,
-    driveLib: () => {}, googleLib: () => ({ ON: true }),
+    driveLib: () => {}, googleLib: () => ({ ON: true }), openPapers: () => ({}),
     NOTES_DB: db, brokerArea: () => ({ get: local.get, set: async (o) => { await local.set(o); return true; } }), GZ_NOTES: N,
     brokerIn: (name) => { assert.equal(name, 'backup'); context.GZ_CLASSES = C; context.GZ_GPA = G; },
   });
@@ -184,4 +184,66 @@ test('a daily snapshot holds Notes and hidden course folders as Back up… does,
   assert.equal(r.cats.shareKeys, undefined);
   assert.ok(!r.zip.names.some((n) => /share-keys/.test(n)), 'no share keys');
   assert.deepEqual(JSON.parse(await r.zip.text('glaze-backup.json')).settings.folders, { 'hiddenFolders:https://school.instructure.com/42/7': hidden }, 'the hidden course folders');
+});
+
+test('a restarted worker builds the daily snapshot without a document export having loaded the zip library first', async () => {
+  const { context, records, local } = worker();
+  // The worker's own importScripts, relative to background/: what a restarted worker has is only what something loaded.
+  const path = require('node:path');
+  const loaded = [];
+  context.importScripts = (...files) => { for (const f of files) { loaded.push(f); vm.runInContext(fs.readFileSync(path.resolve(__dirname, '../../extension/background', f), 'utf8'), context); } };
+  const B = require('../../extension/background/backup.js');
+  Object.assign(context, {
+    GZ_BACKUP: B, GZ_TODO: require('../../extension/planner/todo.js'), GZ_PET: require('../../extension/pet/pet.js'), GZ_SANITIZE: require('../../extension/content/defaults.js').GZ_SANITIZE,
+    GZ_HISTORY: require('../../extension/looks/history.js'), GZ_DOC_KINDS: require('../../extension/documents/doc-kinds.js'), GZ_FOLDERS: require('../../extension/courses/folders.js'), Blob, URL,
+  });
+  assert.equal(context.GZ_ZIP, undefined, 'no export ran in this worker');
+  context.chrome.runtime.getManifest = () => ({ version: '4.0.1' });
+  context.openDocFiles = () => ({ read: async () => { throw new Error('no files'); } });
+  const get = local.get;
+  local.get = async (k) => (k === null ? Object.fromEntries(await Promise.all((await local.getKeys()).map(async (x) => [x, (await get(x))[x]]))) : get(k));
+  await local.set({ writerWords: ['Glaze'] });
+  const made = await records.snapshot();
+  assert.ok(made?.bytes?.length > 0, 'a snapshot was made');
+  const r = await B.read(Object.assign(new Blob([made.bytes]), { name: made.name }));
+  assert.deepEqual(JSON.parse(await r.zip.text('glaze-backup.json')).writerWords, ['Glaze']);
+  assert.ok(loaded.includes('../core/zip.js'));
+});
+
+test('a restarted worker\'s push run checks a document saved before it stopped, without Documents having loaded the paper store', async () => {
+  // The real Sync to Google Drive in a classic worker: no require, only what the worker's own importScripts loaded.
+  const path = require('node:path');
+  const area = () => {
+    const m = new Map();
+    return {
+      get: async (k) => (k === null ? Object.fromEntries(structuredClone([...m])) : Object.fromEntries([].concat(k).filter((x) => m.has(x)).map((x) => [x, structuredClone(m.get(x))]))),
+      set: async (o) => { for (const [k, v] of Object.entries(o)) m.set(k, structuredClone(v)); },
+      remove: async (k) => { for (const x of [].concat(k)) m.delete(x); }, getKeys: async () => [...m.keys()],
+    };
+  };
+  const listener = { addListener() {} }, local = area(), sync = area();
+  const FOLDER = 'application/vnd.google-apps.folder', root = { id: 'F1', name: 'Glaze', mimeType: FOLDER, trashed: false, parents: ['0AroOt'], appProperties: { glaze: 'root' } };
+  const data = { id: 'D1', name: 'Data', mimeType: FOLDER, trashed: false, parents: ['F1'], appProperties: { glaze: 'data' } };
+  const client = {
+    file: async (id) => ({ F1: root, D1: data })[id],
+    find: async (q) => ({ files: /glaze' and value='data'/.test(q) ? [data] : /glaze' and value='root'/.test(q) ? [root] : [] }),
+  };
+  const context = vm.createContext({
+    console, TextEncoder, TextDecoder, URL, crypto: globalThis.crypto, navigator: {},
+    chrome: { storage: { local, sync, onChanged: listener }, runtime: { onMessage: listener, onStartup: listener } },
+    GZ_CARDS: { queue: () => { let tail = Promise.resolve(); return (fn) => { const p = tail.then(fn); tail = p.catch(() => {}); return p; }; } }, brokerTurn: null,
+    driveLib: () => {}, googleLib: () => ({ ON: true }), openGoogle: () => ({ account: async () => 'student@school.edu' }), GZ_DRIVE: { create: () => client },
+    NOTES_DB: { keys: async () => [] }, brokerArea: () => local, GZ_NOTES: N, brokerIn: () => {},
+  });
+  context.importScripts = (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(path.resolve(__dirname, '../../extension/background', f), 'utf8'), context); };
+  context.openPapers = () => { if (!context.paperStore) { context.importScripts('../writer/writer-styles.js', '../writer/writer-papers.js'); context.paperStore = context.GZ_WRITER_PAPERS.open(local, () => Date.now(), {}); } return context.paperStore; };
+  const source = fs.readFileSync(require.resolve('../../extension/background/background.js'), 'utf8');
+  const from = source.indexOf('// Sync to Google Drive (documents/drive-sync.js');
+  vm.runInContext(source.slice(from, source.indexOf('// A Download all wait owns', from)), context);
+  // A paper saved, its push still waiting when the last worker stopped; Sync on, its folders known, today's snapshot made.
+  const key = 'doc:00000000-0000-4000-8000-000000000001';
+  await local.set({ driveSync: { on: true, account: 'student@school.edu', folder: 'F1', data: 'D1', token: '7', snap: Date.now() }, driveSyncDirty: { [key]: 1 } });
+  const r = await vm.runInContext('openDriveSync()', context).run({ push: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(r)), { ok: true });
+  assert.deepEqual((await local.get('driveSyncDirty')).driveSyncDirty, {}, 'the mark let go');
 });
