@@ -37,7 +37,7 @@
 // Nothing goes anywhere but Google Drive.
 // Classic script for the worker; module.exports for node.
 var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
-  const STATE = 'driveSync', DOC = 'driveSyncDoc:', FILE = 'driveSyncFile:', DIRTY = 'driveSyncDirty', WAITING = 'driveSyncWaiting';
+  const STATE = 'driveSync', DOC = 'driveSyncDoc:', FILE = 'driveSyncFile:', DIRTY = 'driveSyncDirty', WAITING = 'driveSyncWaiting', AWAY = 'driveSyncAway';
   const FOLDER = 'application/vnd.google-apps.folder', JSON_TYPE = 'application/json', NAME = 'Glaze';
   const KINDS = ['paper', 'sheet', 'pdf', 'slides'], FILES = ['pdf', 'slides'];
   const EXT = { paper: '.docx', sheet: '.xlsx', pdf: '.pdf', slides: '.pptx' };
@@ -133,7 +133,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     };
     const dropDoc = (h, was) => S.remove([DOC + h, ...[was?.json, was?.file].filter(Boolean).map((id) => FILE + id)]);
     const forget = async () => {
-      const keys = (await S.keys()).filter((k) => k.startsWith(DOC) || k.startsWith(FILE) || k === DIRTY || k === WAITING);
+      const keys = (await S.keys()).filter((k) => k.startsWith(DOC) || k.startsWith(FILE) || k === DIRTY || k === WAITING || k === AWAY);
       if (keys.length) await S.remove(keys);
       await more?.forget();
     };
@@ -288,7 +288,12 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       // Another device's copy of the same document. One made while this device made its own (first syncs that overlapped):
       // every device keeps the lowest id, met as a first meeting; any other is not this one's.
       if (d && R?.id && R.id !== d.json && !R.removed) {
-        if (R.id < d.json && !R.trashed) { gone = d; await dropDoc(h, d); d = null; await putAway(gone.json, folder); } else R = undefined;
+        if (R.id < d.json && !R.trashed) {
+          gone = d;
+          await away([gone.json, gone.file], h);
+          await dropDoc(h, d); d = null;
+          await putAway(gone.json, folder); await away([gone.json], null);
+        } else R = undefined;
       }
       if (d && E && E.id !== d.file) E = undefined;
       if (R === undefined) R = d?.json ? await meta(d.json) : d ? null : !lt && l ? await lookup(h, folder) : null;
@@ -305,7 +310,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         // Met by its tag alone (Drive's changes) while this device holds that document too, unlinked (written before its first
         // push, or its link let go): a first meeting with this device's own, never a download over it.
         if (!key && await env.papers.get(got.key)) return sync(got.key, h, { R, folder });
-        if (gone?.file && gone.file !== got.file) await putAway(gone.file, folder);
+        if (gone?.file) { if (gone.file !== got.file) await putAway(gone.file, folder); await away([gone.file], null); }
         const source = { json: R.id, file: got.file, fh: got.fileRev, fsum: got.sum };
         if (!l) { const now2 = await take(got.key, null, got); if (got.external) return push(got.key, h, now2, source, folder); await agreed(got.key, h, R, got, now2, null); return; }
         if ((await sumOf(key, l)) !== got.sum) {
@@ -413,6 +418,23 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (!f || f.removed || !(f.parents || []).includes(folder)) return;
       const data = await converge(D, { parent: folder, tag: 'data', name: 'Data' });
       await D((c) => c.patch(id, {}, undefined, { add: data, remove: [folder] }));
+    };
+    // A losing copy's files still to be put away (storage.local driveSyncAway: id → its document's tag), recorded before its
+    // link goes, so a run that stopped first finishes the move on the next. h null: done.
+    const away = (ids, h) => held('away', async () => {
+      const m = (await S.get(AWAY))[AWAY] || {};
+      for (const id of ids.filter(Boolean)) { if (h) m[id] = h; else delete m[id]; }
+      await S.set({ [AWAY]: m });
+    });
+    // Those whose document met the folder's copy since: each moved unless it is that copy's own (a file both shared); one
+    // whose document hasn't yet waits.
+    const tidy = async (folder) => {
+      for (const [id, h] of Object.entries((await S.get(AWAY))[AWAY] || {})) {
+        const d = await docOf(h);
+        if (!d) continue;
+        if (id !== d.json && id !== d.file) await putAway(id, folder);
+        await away([id], null);
+      }
     };
     // The JSON copy Drive holds for h, if another device made one first (oldest id first).
     const lookup = async (h, folder) => {
@@ -550,6 +572,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
           if (!o.push) await pull(await state(), folder);
         }
         await sweep((await state()).folder);
+        await tidy((await state()).folder);
         if (more) await more.sweep(hooks((await state()).folder));
         await setState({ last: now(), problem: null, fails: 0, wait: 0, busy: 0 });
         return { ok: true };
