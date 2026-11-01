@@ -25,7 +25,8 @@ const load = (kind = 'progress') => {
     removeEventListener: (type, f) => { const i = listeners.findIndex((l) => l.target === target && l.type === type && l.f === f); if (i >= 0) listeners.splice(i, 1); },
   });
   Object.assign(doc, { documentElement: doc.root, querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s), ...on('document') });
-  const state = { scroll: 0 };
+  // stretch: Safari's bounce past the top, scrollTop held at 0 while what it scrolls is drawn further down.
+  const state = { scroll: 0, stretch: 0, inset: kind === 'progress' ? 8 : 0, whole: kind === 'progress' ? 170.6 : 118.4 };
   let header, parent, scroller;
   if (kind === 'progress') {
     // The parent's top moves with the scroll; the band sits 8px into it, sticks at y 60, and is 170.6px tall (40.2 folded).
@@ -36,8 +37,8 @@ const load = (kind = 'progress') => {
       const top = 100 - state.scroll;
       if (e === parent) return { left: 0, top, width: 900, height: 1500 };
       if (e === header) {
-        const natural = top + 8;
-        return { left: 0, top: header.style.position === 'static' ? natural : Math.max(natural, 60), width: 900, height: header.hasAttribute('data-gz-stuck') ? 40.2 : 170.6 };
+        const natural = top + state.inset;
+        return { left: 0, top: header.style.position === 'static' ? natural : Math.max(natural, 60), width: 900, height: header.hasAttribute('data-gz-stuck') ? 40.2 : state.whole };
       }
       return null;
     };
@@ -52,8 +53,8 @@ const load = (kind = 'progress') => {
       const top = parent === scroller ? 0 : -state.scroll;
       if (e === parent) return { left: 0, top: parent === scroller ? 0 : top, width: 1280, height: parent === scroller ? 800 : 3000 };
       if (e === header) {
-        const natural = parent === scroller ? -state.scroll : top;
-        return { left: 0, top: header.style.position === 'static' ? natural : Math.max(natural, 0), width: 1280, height: header.hasAttribute('data-gz-stuck') ? 48.2 : 118.4 };
+        const natural = (parent === scroller ? -state.scroll : top) + state.stretch + state.inset;
+        return { left: 0, top: header.style.position === 'static' ? natural : Math.max(natural, 0), width: 1280, height: header.hasAttribute('data-gz-stuck') ? parseFloat(header.style.getPropertyValue('--gz-whole')) || state.whole : state.whole };
       }
       return null;
     };
@@ -63,12 +64,15 @@ const load = (kind = 'progress') => {
   let frameId = 0;
   const flush = () => { const pending = [...frames.values()]; frames.clear(); for (const f of pending) f(); };
   const c = { document: doc, requestAnimationFrame: (f) => { frames.set(++frameId, f); return frameId; }, cancelAnimationFrame: (id) => frames.delete(id),
-    GZ_CTX: { site: 'ultra', on: () => c.glazeOn, settings: () => c.settings }, glazeOn: true, settings: { enhance: { fold: true } }, ...on('window') };
+    GZ_CTX: { site: 'ultra', on: () => c.glazeOn, settings: () => c.settings }, glazeOn: true, settings: { enhance: { fold: true } }, ...on('window'),
+    getComputedStyle: (e) => ({ overflowY: e === scroller && parent === scroller ? 'auto' : 'visible' }) };
   c.globalThis = c;
   vm.createContext(c);
   const ui = vm.runInContext(read('navigation/page/sticky-fold.js'), c);
   const scrollTo = (y) => { state.scroll = y; for (const l of listeners.filter((x) => x.type === 'scroll')) l.f({ type: 'scroll', target: scroller }); flush(); };
-  return { c, ui, header, listeners, scrollTo, flush, el };
+  const stretchTo = (y) => { state.stretch = y; for (const l of listeners.filter((x) => x.type === 'scroll')) l.f({ type: 'scroll', target: scroller }); flush(); };
+  const resize = (layout) => { Object.assign(state, layout); for (const l of listeners.filter((x) => x.type === 'resize')) l.f(); flush(); };
+  return { c, ui, header, listeners, scrollTo, stretchTo, resize, flush, el };
 };
 
 test('in its place the band stays whole; scrolled under, it folds and gives the fold back below', () => {
@@ -149,6 +153,71 @@ test('a course\'s bar stays whole at the top and folds once the course scrolls u
     scrollTo(0);
     assert.equal(header.hasAttribute('data-gz-stuck'), false, `${kind}: back at the top`);
     assert.equal(header.style.getPropertyValue('--gz-whole'), '');
+  }
+});
+
+// The owner, 2026-11-01: on a MacBook Neo the bar "jitters" as it turns back into its whole self. A trackpad's last pixels at
+// the top (measured on a real course: 2, 0, 1, 0, 3, 0.4, 0) flipped it between whole and pill at each one.
+test('a wiggle at the top never folds the bar, and a folded bar stays a pill until it is back in its place', () => {
+  for (const kind of ['bar', 'bar in its scroller', 'progress']) {
+    const { ui, header, scrollTo, flush } = load(kind);
+    const at = kind === 'progress' ? 48 : 0; // where it leaves its place
+    ui.sync();
+    flush();
+    const states = [];
+    for (const y of [2, 0, 1, 0, 3, 0.4, 0, 6]) { scrollTo(at + y); states.push(header.hasAttribute('data-gz-stuck')); }
+    assert.deepEqual(states, Array(8).fill(false), `${kind}: whole through the wiggle`);
+    scrollTo(at + 400);
+    assert.equal(header.hasAttribute('data-gz-stuck'), true, `${kind}: folded once well past its place`);
+    states.length = 0;
+    for (const y of [3, 6, 1, 2]) { scrollTo(at + y); states.push(header.hasAttribute('data-gz-stuck')); }
+    assert.deepEqual(states, Array(4).fill(true), `${kind}: still a pill on the way up, short of its place`);
+    scrollTo(at);
+    assert.equal(header.hasAttribute('data-gz-stuck'), false, `${kind}: whole back in its place`);
+    for (const y of [2, 0, 1]) { scrollTo(at + y); assert.equal(header.hasAttribute('data-gz-stuck'), false, `${kind}: whole again at ${y}`); }
+  }
+});
+
+test('at its scroller\'s top the bar stays whole through Safari\'s bounce', () => {
+  const { ui, header, scrollTo, stretchTo, flush } = load('bar in its scroller');
+  ui.sync();
+  flush();
+  for (const y of [12, 40, 90, 30, 0]) { stretchTo(y); assert.equal(header.hasAttribute('data-gz-stuck'), false, `bounce ${y}`); }
+  scrollTo(400);
+  assert.equal(header.hasAttribute('data-gz-stuck'), true);
+  scrollTo(0); stretchTo(40);
+  assert.equal(header.hasAttribute('data-gz-stuck'), false, 'arriving at the top with a bounce');
+});
+
+test('resizing a folded band refreshes the height it preserves without resetting hysteresis', () => {
+  for (const kind of ['progress', 'bar', 'bar in its scroller']) {
+    const { ui, header, scrollTo, resize } = load(kind);
+    const at = kind === 'progress' ? 48 : 0;
+    ui.sync(); scrollTo(400); scrollTo(at + 4);
+    resize({ whole: 210.8 });
+    assert.equal(header.hasAttribute('data-gz-stuck'), true, `${kind}: still folded inside the return threshold`);
+    const prop = kind === 'progress' ? '--gz-fold' : '--gz-whole';
+    const height = kind === 'progress' ? 210.8 - 40.2 : 210.8;
+    assert.equal(Number(header.style.getPropertyValue(prop).slice(0, -2)).toFixed(3), height.toFixed(3), `${kind}: preserves the resized height`);
+    resize({ inset: 40 });
+    assert.equal(header.hasAttribute('data-gz-stuck'), false, `${kind}: a resized band back in place unfolds`);
+    assert.equal(header.style.getPropertyValue('--gz-fold') + header.style.getPropertyValue('--gz-whole'), '');
+    scrollTo(400);
+    assert.equal(header.hasAttribute('data-gz-stuck'), true, `${kind}: folds at the new place`);
+    scrollTo(0);
+    assert.equal(header.hasAttribute('data-gz-stuck'), false, `${kind}: whole at the top`);
+  }
+});
+
+test('resizing while folding is off does not reuse the previous place when enabled again', () => {
+  for (const kind of ['progress', 'bar', 'bar in its scroller']) {
+    const { ui, header, scrollTo, resize, flush } = load(kind);
+    ui.sync(); scrollTo(400); ui.off();
+    scrollTo(0); resize({ inset: 40, whole: 210.8 });
+    ui.sync(); flush(); scrollTo(4);
+    assert.equal(header.hasAttribute('data-gz-stuck'), false, `${kind}: still in its resized natural place`);
+    scrollTo(400);
+    assert.equal(header.hasAttribute('data-gz-stuck'), true, `${kind}: folds past the new place`);
   }
 });
 

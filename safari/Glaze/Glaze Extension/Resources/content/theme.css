@@ -1199,6 +1199,11 @@ html[data-gz-bg="solid"] :where(bb-assignment-attempt-authoring-panel [class*="m
 #site-wrap .activity-stream .stream-panel-activity-icon { display: grid; place-items: center; width: 48px; height: 48px; float: none; margin: 0; }
 #site-wrap .activity-stream .stream-panel-activity-icon svg { display: block; }
 #site-wrap .activity-stream .stream-panel-activity-card > .element-details { min-width: 0; margin: 0 !important; padding-inline-start: 0.75rem !important; }
+/* What a card is about first, in bold; its course under it, then the rest in Ultra's order (Ultra puts the course on top). */
+#activity-stream .element-details > .timestamp { order: -2; }
+#activity-stream .element-details > .name { order: -1; }
+#activity-stream .element-details > .name, #activity-stream .element-details > .name a { font-weight: 700 !important; }
+#activity-stream .element-details > .context, #activity-stream .element-details > .context a { font-weight: 400 !important; }
 #site-wrap .activity-stream .timestamp .date { background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: 999px; padding: 0.2rem 0.55rem; line-height: 1.5; white-space: nowrap; }
 
 /* ---- discussions: the author header was its own card, narrower than the post body under it ---- */

@@ -17,19 +17,20 @@ const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32
     await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(temp, 'profile'), { ...chromeLaunch, headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', hasTouch: true, isMobile: true, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--renderer-process-limit=1'] });
     context.setDefaultTimeout(8000);
-    let requests = 0;
+    let requests = 0, signedIn = true;
     await context.route('**/*', (r) => {
       const u = new URL(r.request().url());
       if (u.protocol === 'chrome-extension:') return r.continue();
       if (u.hostname === 'bb.school.test' && /^\/ultra\/courses\//.test(u.pathname)) return r.fulfill({ contentType: 'text/html', body: fixture });
       requests++;
-      if (u.hostname === 'bb.school.test' && u.pathname === '/learn/api/v1/users/me') return r.fulfill({ contentType: 'application/json', body: '{"id":"_900_1"}' });
+      if (u.hostname === 'bb.school.test' && u.pathname === '/learn/api/v1/users/me') return signedIn ? r.fulfill({ contentType: 'application/json', body: '{"id":"_900_1"}' }) : r.fulfill({ status: 401, body: '' });
       if (u.hostname === 'bb.school.test' && u.pathname.includes('/memberships')) return r.fulfill({ contentType: 'application/json', body: '{"results":[]}' });
       return r.abort();
     });
     const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/options.html`);
     const settings = { ...D.GZ_DEFAULTS, enhance: Object.fromEntries(Object.keys(D.GZ_DEFAULTS.enhance).map((k) => [k, k === 'hideFolders'])) };
     await opts.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(s); await chrome.storage.local.set({ ultra: ['https://bb.school.test'] }); }, settings);
+    await require('../../tools/dev/check-env.js').ultraReady(opts);
     const page = await context.newPage();
     const errors = []; page.on('pageerror', (e) => errors.push(e.message));
     await page.goto('https://bb.school.test/ultra/courses/_800_1/outline');
@@ -145,7 +146,9 @@ const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32
     await page.evaluate(() => { history.pushState({}, '', `${location.origin}/ultra/courses/_800_1/outline`); document.body.append(document.createElement('div')); });
     await page.waitForFunction(() => document.querySelectorAll('.gz-folder-eye').length === 3);
     assert.deepEqual(errors, []);
-    // A fresh identity cache from course recording (this site's gate) has no account ID of its own: B9 must stay absent.
+    // A fresh identity cache from course recording (this site's gate) has no account ID of its own, and Ultra names no one
+    // (content-ultra.js asks /users/me on every page): B9 must stay absent.
+    signedIn = false;
     await opts.evaluate(async () => chrome.storage.local.set({ 'seenCoursesAt https://bb.school.test': Date.now() }));
     await page.reload();
     await page.waitForTimeout(650);
