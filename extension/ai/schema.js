@@ -102,11 +102,13 @@ var GZ_AI_SCHEMA = globalThis.GZ_AI_SCHEMA || (() => {
     };
     return isObj(schema) && schema.type === 'object' && node(schema);
   };
-  // The schema without span keywords: the same object when it has none, else a copy (kept, so a task's is made once).
+  // The schema without span keywords: the same object when it has none, else a copy. Schemas are mutable (define()
+  // freezes the task, not its output), so a cached copy is reused only while the schema still has the same JSON.
   const bared = new WeakMap();
   const bare = (s) => {
     if (!isObj(s)) return s;
-    if (bared.has(s)) return bared.get(s);
+    const json = JSON.stringify(s), was = bared.get(s);
+    if (was?.json === json) return was.value;
     const out = { ...s };
     delete out.span;
     if (isObj(s.properties)) out.properties = Object.fromEntries(Object.entries(s.properties).map(([k, v]) => [k, bare(v)]));
@@ -114,9 +116,9 @@ var GZ_AI_SCHEMA = globalThis.GZ_AI_SCHEMA || (() => {
     if (Array.isArray(s.anyOf)) out.anyOf = s.anyOf.map(bare);
     const same = Object.keys(out).length === Object.keys(s).length && Object.keys(s).every((k) => out[k] === s[k]
       || (k === 'properties' && Object.keys(s.properties).every((p) => out.properties[p] === s.properties[p])) || (k === 'anyOf' && s.anyOf.every((a, i) => out.anyOf[i] === a)));
-    const r = same ? s : out;
-    bared.set(s, r);
-    return r;
+    const value = same ? s : out;
+    bared.set(s, { json, value });
+    return value;
   };
   // A model's JSON answer, read as Rimeward's askJson (src/lib/agent/oneshot.ts, MIT) reads one: from the first { to the last
   // }, so a fence or a sentence around it is tolerated, and it must be an object. undefined otherwise.
