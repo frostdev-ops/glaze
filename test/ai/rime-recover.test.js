@@ -79,6 +79,20 @@ test('the fallback keeps distinct same-title assignments, deduplicating only the
   assert.match(text, /\*\*Homework 1\*\* \(BIO 1100\)/);
 });
 
+test('marking a to-do done never makes the fallback claim it was submitted, in any language', () => {
+  const steps = [{ result: JSON.stringify({ items: [
+    { title: 'Manual mark', submitted: false, marked: true, complete: true },
+    { title: 'LMS mark', submitted: false, done: true },
+    { title: 'Handed in', submitted: true },
+  ] }) }];
+  for (const [locale, pending] of Object.entries({ en: 'not submitted', es: 'sin entregar', 'pt-BR': 'não entregue', fr: 'non rendu', de: 'nicht abgegeben', nl: 'niet ingeleverd' })) {
+    const lines = A.listAnswer(steps, { locale }).split('\n');
+    assert.equal(lines[1], `- **Manual mark**: ${pending}`, locale);
+    assert.equal(lines[2], `- **LMS mark**: ${pending}`, locale);
+    assert.ok(!lines[3].endsWith(pending), locale);
+  }
+});
+
 // ---- the step loop: the stub model's bad answer, then each recovery path -------------------------------------------------
 // outs: each agent.tools run's answer in order: an output, or { why, raw } for a check failure.
 const loop = async (outs) => {
