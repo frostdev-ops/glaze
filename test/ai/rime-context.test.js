@@ -307,3 +307,20 @@ test('the tool union follows the current provider window when it changes during 
     assert.deepEqual([...h.seen.runs.filter((m) => m.task === 'agent.tools').at(-1).input.tools].sort(), expected.sort(), `window ${windows.join(' -> ')}`);
   }
 });
+
+test('compaction includes the offered tool union in its context budget', async () => {
+  const questions = ["What's due this week?", 'Any new announcements in BIO 1100?', 'Any new announcements in BIO 1100?'];
+  const h = harness({ count: (m) => ({ used: m.input.history?.length >= 3 ? 10000 + K.unionCost(m.input.tools) : 900,
+    window: 16384, reserve: 768, exact: true }),
+    script: { 'agent.tools': questions.map(() => said('Done.')), 'chat.compact': [{ text: '- Due dates', quotes: [] }] } });
+  const history = [];
+  for (const [i, question] of questions.entries()) {
+    h.say({ id: i + 1, op: 'ask', question, ...(history.length && { history: history.slice() }) });
+    await settle();
+    history.push(turn(question, 'Done.'));
+  }
+  const offered = h.seen.runs.filter((m) => m.task === 'agent.tools').at(-1).input.tools;
+  assert.ok(10000 + K.unionCost(offered) + 768 > 16384 * 0.7, 'the union crosses the compaction threshold');
+  assert.ok(h.seen.runs.some((m) => m.task === 'chat.compact'), 'compaction must not budget only the smaller routed set');
+  assert.deepEqual(h.seen.counts.find((m) => m.input.history?.length === 3).input.tools, offered);
+});
