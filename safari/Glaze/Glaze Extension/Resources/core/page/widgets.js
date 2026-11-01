@@ -1794,7 +1794,16 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     if (a === 'sync' && ch.card) readPrefs().then(() => { cancelAnimationFrame(frame0); frame0 = requestAnimationFrame(() => { if (on && board && !asleep) layoutBoard(); }); });
     // Another tab's change (this tab's own come back as the worker's answer).
     if (a === 'local' && ch.widgetLayout) { layoutRead++; if (!flying && lay) adopt(ch.widgetLayout.newValue); }
-    if (a === 'local' && ch.ai && asks(ch.ai.newValue) !== askOn) { askOn = !askOn; if (on && lay) draw(); }
+    if (a === 'local' && ch.ai && asks(ch.ai.newValue) !== askOn) {
+      askOn = asks(ch.ai.newValue);
+      // Revocation also applies while drawing is deferred for a hidden or covered page.
+      if (!askOn) {
+        if (gesture?.id === 'ask') gesture.cancel();
+        const x = tiles.get('ask');
+        x?.stop?.(); x?.el.remove(); tiles.delete('ask');
+      }
+      if (on && lay) draw();
+    }
   };
   const onShow = () => cover();
   const onResize = () => { if (!on || !lay) return; if (board && !asleep) layoutBoard(); placeFloats(); };
