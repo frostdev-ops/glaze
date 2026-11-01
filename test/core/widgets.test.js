@@ -780,8 +780,12 @@ test("filled per account: a second student on the device gets the board's first 
   assert.deepEqual(W.apply(W.apply(second, { ops: [{ s: 'dash', id: key(2), remove: true }] }), { fill: 'dash', account: B, ops: [{ s: 'dash', id: key(2), set: { on: true } }] }).boards.dash.filter((x) => W.course(x.id)).map((x) => x.id), [key(1)], 'removed stays removed');
   assert.deepEqual(W.apply({ ...W.layout(first), starter: undefined }, { fill: 'dash', account: B, ops: [{ s: 'dash', id: key(2), set: { on: true } }] }).boards.dash.filter((x) => W.course(x.id)).map((x) => x.id), [key(1)], 'only a starter layout fills');
   for (const bad of ['dash bb.test/_2_1', 'dash https://bb.test/_2_1/x', 'nope https://bb.test/_2_1', `dash https://bb.test/${'1'.repeat(30)}`, 7]) assert.deepEqual(W.layout({ starter: true, filled: ['dash', bad] }).filled, ['dash'], String(bad));
-  const crowd = Array.from({ length: 40 }, (_, n) => `dash https://bb.test/_${n}_1`);
-  assert.deepEqual(W.layout({ starter: true, filled: ['dash', ...crowd, crowd[39]] }).filled, ['dash', ...crowd.slice(-16)], 'the newest accounts, each once, bounded');
+  const crowd = Array.from({ length: 80 }, (_, n) => `dash https://bb.test/_${n}_1`);
+  assert.deepEqual(W.layout({ starter: true, filled: ['dash', ...crowd, crowd[79]] }).filled, ['dash', ...crowd.slice(-64)], 'the newest 64 accounts, each once, bounded');
+  let visited = W.apply(first, { ops: [{ s: 'dash', id: key(1), remove: true }] });
+  for (let n = 2; n <= 18; n++) visited = W.apply(visited, { fill: 'dash', account: `https://bb.test/_${n}_1`, ops: [] });
+  assert.ok(visited.filled.includes(`dash ${A}`), 'seventeen other students cannot forget this student');
+  assert.deepEqual(W.apply(visited, { fill: 'dash', account: A, ops: [{ s: 'dash', id: key(1), set: { on: true } }] }), visited, 'their removed card stays removed');
 });
 
 test('a queued first fill cannot consume an account mark when the shared board has no stored room', () => {
