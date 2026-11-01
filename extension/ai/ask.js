@@ -36,6 +36,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const AT = () => (typeof GZ_AI_TASK_AGENT_TOOLS !== 'undefined' ? GZ_AI_TASK_AGENT_TOOLS : require('./tasks/agent-tools.js'));
   const SH = () => (typeof GZ_AI_TASK_STUDY_HELP !== 'undefined' ? GZ_AI_TASK_STUDY_HELP : require('./tasks/study-help.js'));
   const CALLS = () => (typeof GZ_MCP_CALLS !== 'undefined' ? GZ_MCP_CALLS : require('../agents/calls.js'));
+  const F = () => (typeof GZ_AI_FAILURE !== 'undefined' ? GZ_AI_FAILURE : require('./failure.js'));
   const TL = () => (typeof GZ_AI_TOOLS !== 'undefined' ? GZ_AI_TOOLS : require('./tools.js'));
   const JS = () => (typeof GZ_AI_RIME_JS !== 'undefined' ? GZ_AI_RIME_JS : require('./agent/js.js'));
   const PLACES = () => (typeof GZ_AI_RIME_PLACES !== 'undefined' ? GZ_AI_RIME_PLACES : require('./agent/places.js'));
@@ -316,11 +317,12 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       : name === 'page_highlight' ? r?.marked : undefined);
     const own = async (c, signal) => {
       const mine = current, def = owned().get(c.name), { step, ms } = card(mine, c, def.kind === 'confirm' ? 'write' : 'read');
-      const context = await ownContext(c.arguments, mine);
+      const context = await F().wait(() => ownContext(c.arguments, mine), signal);
+      if (signal?.aborted) throw cancelled();
       if (def.kind === 'confirm') {
         let summary;
-        try { summary = String(await def.summarize(structuredClone(c.arguments), context)).trim().slice(0, 2000); }
-        catch (e) { step('fail', { ms: ms() }); return { result: { ok: false, error: e instanceof Error ? e.message : 'That can\'t be done.' }, asked: 'yes' }; }
+        try { summary = String(await F().wait(() => def.summarize(structuredClone(c.arguments), context), signal)).trim().slice(0, 2000); }
+        catch (e) { if (signal?.aborted) throw cancelled(); step('fail', { ms: ms() }); return { result: { ok: false, error: e instanceof Error ? e.message : 'That can\'t be done.' }, asked: 'yes' }; }
         step('ask');
         post({ id: mine?.id, type: 'approve' });
         const answer = await env.approve.ask('action', { app: { name: APP, exe: null }, tool: { name: c.name, title: TITLES[c.name] }, summary },
@@ -328,6 +330,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         if (signal?.aborted) throw cancelled();
         if (answer !== 'yes') { step('no'); return { result: null, asked: answer || 'no' }; }
       } else step('run');
+      if (signal?.aborted) throw cancelled();
+      if (!(await live()) || signal?.aborted) throw signal?.aborted ? cancelled() : R().error('off');
       let result;
       try { result = await def.run(structuredClone(c.arguments), context); } catch (e) { result = { ok: false, error: e instanceof Error ? e.message : 'The tool failed.' }; }
       const more = detail(c.name, result);
