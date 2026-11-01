@@ -257,3 +257,17 @@ test('route: mixed account topics always retain the account-discovery tool withi
     if (question.startsWith('Mark')) assert.ok(names.includes('todo_mark_done'));
   }
 });
+
+test('port: a sender check that never settles cannot hold later cancellation forever', async () => {
+  let checks = 0;
+  const h = harness({ allowed: () => ++checks === 2 ? new Promise(() => {}) : true,
+    script: { 'study.help': [() => new Promise(() => {})] } });
+  h.say({ id: 21, op: 'ask', question: 'Explain mitosis' });
+  await settle();
+  assert.equal(h.seen.runs.length, 1);
+  h.say({ id: 22, op: 'status' });
+  h.say({ id: 21, op: 'cancel' });
+  const deadline = Date.now() + 6000;
+  while (!h.ends().some((m) => m.id === 21) && Date.now() < deadline) await tick();
+  assert.deepEqual(h.ends(), [{ id: 22, type: 'error', error: 'timeout' }, { id: 21, type: 'error', error: 'cancelled' }]);
+});
