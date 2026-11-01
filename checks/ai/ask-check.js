@@ -81,7 +81,7 @@ const AI = (ask) => ({ on: true, model: { use: 'custom-1', model: 'stub' }, feat
       try { fs.mkdirSync(lock); held = true; } catch (e) { if (e.code !== 'EEXIST') throw e; await pause(1000); }
     }
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nask-check\n`);
-    const ext = env.staged(root, [`${ULTRA}/*`], scratch);
+    const ext = require('../../tools/dev/check-env.js').staged(root, [`${ULTRA}/*`], scratch);
     // The staged files are hard links to the checkout: replace the worker's, never write through it.
     const worker0 = fs.readFileSync(path.join(ext, 'background/background.js'), 'utf8');
     fs.rmSync(path.join(ext, 'background/background.js'));
