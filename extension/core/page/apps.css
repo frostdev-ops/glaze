@@ -801,7 +801,7 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 #gz-ask[open] { display: flex; flex-direction: column; }
 #gz-ask::backdrop { background: rgb(0 0 0 / 0.35); }
 #gz-ask [hidden] { display: none !important; }
-#gz-ask :is(p, h2, ol) { margin: 0; }
+#gz-ask p, #gz-ask h2, #gz-ask ol { margin: 0; }
 #gz-ask .gz-ask-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 1rem 1.25rem 0.6rem; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); }
 #gz-ask h2 { font: 600 18px/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); }
 #gz-ask h2:focus { outline: none; }
@@ -822,7 +822,7 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 #gz-ask button:disabled { opacity: 0.45; cursor: default; }
 #gz-ask .gz-ask-send { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); font-weight: 600; }
 #gz-ask .gz-ask-more[aria-expanded="true"] { border-color: var(--gz-accent); }
-#gz-ask :focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#gz-ask button:focus-visible, #gz-ask textarea:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 /* ---- syllabus import (planner/page/syllabus.js): a card on the course home (Ultra: on its outline), a line above Canvas's Syllabus, and the review dialog ---- */
 #gz-syl { margin: 0 0 1rem; padding: 0.75rem 0.9rem; font-size: 0.875rem; line-height: 1.45; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-panel); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); }
 #gz-syl.gz-syl-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
