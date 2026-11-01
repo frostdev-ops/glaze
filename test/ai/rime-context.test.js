@@ -290,3 +290,20 @@ test('from 16K up the tools offered are the chat\'s union, so later turns share 
   assert.ok(K.unionCost(all) > K.UNION.budget, 'this chat needs trimming');
   assert.ok(!last.includes('announcements_list') || last.includes('syllabus_read'), 'an older topic goes before a newer one');
 });
+
+test('the tool union follows the current provider window when it changes during a chat', async () => {
+  const questions = ["What's due this week?", 'Any new announcements in BIO 1100?'];
+  for (const windows of [[32768, 8192], [8192, 32768]]) {
+    let window = windows[0];
+    const h = harness({ count: () => ({ used: 900, window, reserve: 768, exact: true }),
+      script: { 'agent.tools': questions.map(() => said('Done.')) } });
+    h.say({ id: 1, op: 'ask', question: questions[0] });
+    await settle();
+    window = windows[1];
+    h.say({ id: 2, op: 'ask', question: questions[1], history: [turn(questions[0], 'Done.')] });
+    await settle();
+    const routed = questions.map((q) => K.route(q, { locale: 'en', level: 3 }).tools);
+    const expected = window >= K.UNION.from ? [...new Set(routed.flat())] : routed[1];
+    assert.deepEqual([...h.seen.runs.filter((m) => m.task === 'agent.tools').at(-1).input.tools].sort(), expected.sort(), `window ${windows.join(' -> ')}`);
+  }
+});
