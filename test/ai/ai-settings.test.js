@@ -31,7 +31,7 @@ const kept = (id, more = {}) => ({ provider: 'openai', base: AS.PRESETS[id].base
 // page({ ai, calls, conns, granted, device, providers, features, server }): Settings with the AI tab mounted.
 //   conns: the worker's kept connections; device(m, gesture): the device provider's worker side; server(url, init): the
 //   providers' servers.
-const page = ({ ai, calls, conns, granted = true, device, local: own, providers, features, embedded = false, save = true, shared, locks, server = SERVERS } = {}) => {
+const page = ({ ai, calls, conns, granted = true, device, local: own, providers, features, embedded = false, save = true, shared, locks, server = SERVERS, ladder, gpu, deviceMemory } = {}) => {
   const ids = new Map(), sent = [], asked = [], reads = [], onChanged = shared?.listeners || [], onMessage = [], held = new Set(), vault = new Map(), fetched = [], docOn = {};
   if (conns) vault.set('connections', structuredClone(conns));
   const data = shared?.data || { ...(ai && { ai: structuredClone(ai) }), ...(calls && { aiCalls: structuredClone(calls) }) };
@@ -91,7 +91,7 @@ const page = ({ ai, calls, conns, granted = true, device, local: own, providers,
   };
   const settings = { ...AS, ...(providers && { PROVIDERS: [...new Set([...AS.PROVIDERS, ...providers])] }), ...(features && { FEATURES: features, clean: (raw) => ({ ...AS.clean(raw), features: Object.fromEntries(features.map((f) => [f, raw?.features?.[f] === true])) }) }) };
   const window = {}; window.top = embedded ? {} : window;
-  const ctx = vm.createContext({ chrome, window, navigator: { locks }, document: doc, URL, Promise, Date, Number, Array, Object, Math, Map, Set, structuredClone, setTimeout, clearTimeout,
+  const ctx = vm.createContext({ chrome, window, navigator: { locks, ...(gpu && { gpu }), ...(deviceMemory && { deviceMemory }) }, ...(ladder && { GZ_AI_LADDER: ladder }), document: doc, URL, Promise, Date, Number, Array, Object, Math, Map, Set, structuredClone, setTimeout, clearTimeout,
     GZ_AI_FAILURE: require('../../extension/ai/failure.js'), GZ_AI_SETTINGS: settings, GZ_AI_ENDPOINT: require('../../extension/ai/endpoint.js') });
   vm.runInContext(read('core/site.js'), ctx);
   vm.runInContext(read('settings/editor-ai.js'), ctx);
@@ -967,6 +967,40 @@ test('a download that ends Ready shows the version it brought', async () => {
   await p.click(p.button('Download', p.$('ai-drawer')));
   await settle();
   assert.equal(p.note().textContent, 'Ready · r5 · 1.1 GB');
+});
+
+test('Rime\'s context size in Advanced: 4K by default to 128K, sizes this computer can\'t hold refused with why, kept with the tier', async () => {
+  const sent = [];
+  const local = async (m) => {
+    sent.push({ op: m.op, ...(m.cfg && { cfg: m.cfg }) });
+    if (m.op === 'set') return { ok: true };
+    if (m.op === 'updates') return { ok: true, auto: true };
+    return { ok: true, state: 'ready', size: 1099627200, tier: 3, tiers: [{ tier: 1, size: 1099627200 }, { tier: 3, size: 1427637696 }] };
+  };
+  const ladder = require('../../extension/ai/local/ladder.js');
+  const p = await open({ ai: { on: true, mode: 'advanced' }, providers: ['local'], local, conns: { local: { provider: 'local', tier: 3 } },
+    ladder, gpu: { requestAdapter: async () => ({ features: new Set() }) }, deviceMemory: 8 });
+  await p.click(p.card('Rime'));
+  await settle();
+  const pick = p.$('ai-local-window');
+  assert.deepEqual([pick.tagName, pick.attrs['aria-label']], ['SELECT', 'Context size']);
+  const opts = pick.children.map((o) => [o.value, o.textContent, o.disabled, o.selected]);
+  assert.deepEqual(opts.map((o) => o[0]), ['4096', '8192', '16384', '32768', '65536', '131072']);
+  assert.deepEqual(opts[0], ['4096', '4K', false, true], '4K, chosen by default');
+  const want = Object.fromEntries(ladder.windows({ size: 1099627200 }, { f16: false, deviceMemory: 8 }).map((w) => [String(w.size), w.refused]));
+  for (const [value, words, disabled] of opts) {
+    const why = want[value];
+    assert.equal(disabled, !!why, value);
+    assert.equal(words, why === 'memory' ? `${value / 1024}K · Too large for this computer` : why === 'no-f16' ? `${value / 1024}K · Needs a GPU with f16` : `${value / 1024}K`, value);
+  }
+  assert.ok(Object.values(want).includes('no-f16') && Object.values(want).includes('memory'), JSON.stringify(want));
+  pick.value = '8192'; p.fire(pick, 'change'); await settle();
+  assert.deepEqual(sent.filter((m) => m.op === 'set').at(-1).cfg, { provider: 'local', tier: 3, window: 8192 }, 'the tier stays');
+  const tier = p.$('ai-local-tier');
+  tier.value = '1'; p.fire(tier, 'change'); await settle();
+  assert.deepEqual(sent.filter((m) => m.op === 'set').at(-1).cfg, { provider: 'local', tier: 1, window: 8192 }, 'the size stays');
+  pick.value = '4096'; p.fire(p.$('ai-local-window'), 'change'); await settle();
+  assert.deepEqual(sent.filter((m) => m.op === 'set').at(-1).cfg, { provider: 'local', tier: 1 }, '4K is the default, never stored');
 });
 
 test('Update automatically is kept in ai settings, on unless turned off', () => {
