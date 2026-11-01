@@ -181,6 +181,7 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
   const localeOf = (ctx) => (LOCALES.includes(ctx?.locale) ? ctx.locale : 'en');
   const tr = (key, vars, locale) => {
     // The worker cached every catalogue at install (background/background.js); node's i18n.js loads them all.
+    if (typeof GZ_I18N === 'undefined' && typeof importScripts === 'function') importScripts('../core/i18n.js');
     if (locale !== 'en' && !globalThis.GZ_LANGS?.[locale] && typeof importScripts === 'function') try { importScripts(`../i18n/${locale}.js`); } catch { /* English */ }
     return I18N().t(key, vars, locale);
   };
