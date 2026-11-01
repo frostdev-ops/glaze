@@ -417,3 +417,30 @@ test('a faithful summary quoting a record\'s title after a colon passes in all s
     assert.equal(SH.hands(text, inp), 'wording', `${locale}: ${text}`);
   }
 });
+
+// ---- direct requests: the question forms the router accepts pass the check too (the D4 agent's finding) ----------------------
+test('a wake, a watch and a cancel are asked for in each language\'s common question and imperative forms; mentions still ask for nothing', () => {
+  const later = new Date(NOW + 3 * 3600e3).toISOString().slice(0, 16).replace('T', ' ');
+  const wake = { call: { name: 'wake_create', arguments: { at: later, say: 'Lab' } }, answer: null };
+  const watch = { call: { name: 'monitor_create', arguments: { watch: 'announcement' } }, answer: null };
+  const listed = step('wakes_list', {}, { items: [{ id: 'w-abcd1234', what: 'wake', at: NOW + 3600e3, say: 'Lab' }] });
+  const cancel = { call: { name: 'wake_cancel', arguments: { id: 'w-abcd1234' } }, answer: null };
+  const asks = {
+    en: [['Remind me tonight about the lab', 'Can you remind me tonight about the lab?'], ['Watch for new announcements', 'Could you let me know when there is a new announcement?'], ['Cancel my lab reminder', 'Can you cancel my lab reminder?']],
+    'pt-BR': [['Me lembra de terminar o laboratório hoje à noite', 'Você pode me lembrar de terminar o laboratório?'], ['Me avisa quando sair um aviso novo', 'Pode monitorar os avisos novos?'], ['Cancela meu lembrete do laboratório', 'Pode cancelar meu lembrete?']],
+    es: [['Recuérdame terminar el laboratorio esta noche', '¿Puedes recordarme terminar el laboratorio?'], ['Avísame cuando haya un anuncio nuevo', '¿Puedes vigilar los anuncios nuevos?'], ['Cancela mi recordatorio del laboratorio', '¿Puedes cancelar mi recordatorio?']],
+    fr: [['Rappelle-moi de finir le labo ce soir', 'Tu peux me rappeler de finir le labo ce soir ?'], ['Préviens-moi quand il y a une nouvelle annonce', 'Tu peux surveiller les nouvelles annonces ?'], ['Annule mon rappel du labo', 'Tu peux annuler mon rappel du labo ?']],
+    de: [['Erinnere mich heute Abend an das Labor', 'Kannst du mich heute Abend an das Labor erinnern?'], ['Benachrichtige mich bei neuen Ankündigungen', 'Kannst du die Ankündigungen überwachen?'], ['Lösch meine Erinnerung für das Labor', 'Kannst du meine Erinnerung für das Labor löschen?']],
+    nl: [['Herinner me vanavond aan het lab', 'Kun je me eraan herinneren dat ik het lab vanavond afmaak?'], ['Laat me weten als er een nieuwe aankondiging is', 'Kun je de aankondigingen in de gaten houden?'], ['Annuleer mijn herinnering voor het lab', 'Kun je mijn herinnering voor het lab annuleren?']],
+  };
+  for (const [locale, [w, m, c]] of Object.entries(asks)) {
+    for (const q of w) assert.equal(A.why(wake, A.task.input({ question: q, tools: [...A.NAMES], steps: [], now: NOW, zone: 'UTC', locale })), '', `${locale} wake: ${q}`);
+    for (const q of m) assert.equal(A.why(watch, A.task.input({ question: q, tools: [...A.NAMES], steps: [], now: NOW, zone: 'UTC', locale })), '', `${locale} watch: ${q}`);
+    for (const q of c) assert.equal(A.why(cancel, A.task.input({ question: q, tools: [...A.NAMES], steps: [listed], now: NOW, zone: 'UTC', locale })), '', `${locale} cancel: ${q}`);
+  }
+  // Nobody asked: a mention, a question about one, or a negation.
+  for (const [locale, q] of [['en', 'What is due tonight?'], ['en', 'Did you remind me yesterday?'], ['en', "Don't remind me about the lab"], ['pt-BR', 'O lembrete de ontem funcionou?'],
+    ['fr', 'Ne me rappelle pas le labo'], ['de', 'Erinnerst du dich an das Labor?'], ['nl', 'Herinner je je het lab nog?'], ['es', '¿Qué tengo que entregar hoy?']]) {
+    assert.equal(A.why(wake, A.task.input({ question: q, tools: [...A.NAMES], steps: [], now: NOW, zone: 'UTC', locale })), 'asked', `${locale}: ${q}`);
+  }
+});
