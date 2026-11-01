@@ -56,6 +56,26 @@ const harness = ({ script = {}, level = 3, count = () => ({ used: 900, window: 4
 const turn = (question, answer) => ({ question, answer });
 const H3 = [turn('Which courses am I in?', 'You are in **BIO 1100**.'), turn('What is due in BIO 1100?', 'Nothing in what Glaze read.')];
 
+test('broker count gets a provider window even when its config and catalog omit context', async () => {
+  const B = require('../../extension/ai/broker.js'), P = require('../../extension/ai/providers.js');
+  const apple = require('../../extension/ai/providers/apple.js');
+  P.add(apple);
+  const previous = globalThis.GZ_AI_SETTINGS, settings = require('../../extension/ai/settings.js');
+  globalThis.GZ_AI_SETTINGS = { ...settings, PROVIDERS: [...settings.PROVIDERS, 'apple'] };
+  const [page, worker] = ports(), got = [];
+  B.connect(worker, { who: 'count-provider-window', allowed: Promise.resolve(true), enabled: async () => true,
+    settings: async () => ({ on: true, model: { use: 'native-apple', model: 'on-device' }, features: { ask: true } }),
+    vault: { get: async () => ({ 'native-apple': { provider: 'apple', model: 'on-device' } }) }, task: async () => A.task });
+  page.onMessage.addListener((m) => got.push(m));
+  try {
+    page.postMessage({ id: 1, op: 'count', feature: 'ask', task: 'agent.tools', input: { question: 'What is due?', tools: ['todo_list'], now: C.NOW, zone: 'UTC', first: true } });
+    await settle();
+    assert.equal(got.at(-1)?.window, P.caps(apple, apple.config({ model: 'on-device' })).context, JSON.stringify(got));
+    assert.ok(got.at(-1).used > 0);
+    assert.equal(got.at(-1).exact, false);
+  } finally { page.disconnect(); B._reset(); globalThis.GZ_AI_SETTINGS = previous; }
+});
+
 test('a new question cancels unfinished compaction before taking the broker slot, even for New chat', async () => {
   for (const fresh of [false, true]) {
     let release;
