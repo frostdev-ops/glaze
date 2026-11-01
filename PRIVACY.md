@@ -241,7 +241,8 @@ ones described below as on this device only or never synced.
 - **Fresh-install defaults**, in `chrome.storage.local`: `freshDefaults` records whether this was a new install and
   whether setup is pending, with the first sidebar account key and whether its settings tile was added;
   `freshDefaultAccount` keeps that first key too. `widgetLayout` keeps the starter layout and its starter/migration
-  markers. Edits made before setup finishes can wait locally in `earlyWidgetEdits` (widget/course ids, layout,
+  markers. Its `filled` marks keep the board, school address and Blackboard user id, up to the newest 64 marks.
+  Edits made before setup finishes can wait locally in `earlyWidgetEdits` (widget/course ids, layout,
   sizes, order, widths and music link). A new install starts with pet, timer, notes and quote tiles on both Dashboards,
   course cards added once their list arrives, and To Do and Glaze settings in the first account's sidebar. Notes and
   pet switches start on locally unless a saved preference says otherwise; updates keep existing choices, including
@@ -251,7 +252,7 @@ ones described below as on this device only or never synced.
   navigation choices sync normally. Separate `starterOff:*` booleans sync removals and re-additions so defaults do not
   return: board/widget choices, empty-board and course-card choices. Course-card keys include the school origin and
   course id; sidebar To Do/settings keys (`starterOff:sidebar:<lms>:<origin>/<uid>:<widget>`) include the origin and
-  account id. These identifiers can therefore follow browser sync; the sidebar records and starter layout do not.
+  account id. These identifiers can therefore follow browser sync; sidebar records and `widgetLayout` do not use browser sync.
 - **Blackboard navigation:** drawer layout and expansion are local presentation only and add no storage or requests. Precise size/spacing, label overflow, item style/background, active indicator, logo size/alignment, footer visibility and hover-expansion choices sync in `nav`; up to eight custom link names,
   http/https URLs, built-in icon choices, new-tab preferences, native-item order/hidden choices and rail-widget
   switches/order/position sync in the separate capped `navItems` item. A link is contacted only when you click it;
@@ -445,7 +446,10 @@ ones described below as on this device only or never synced.
   page on a recorded Ultra site while the master, Dashboard and landing switches are on; failed session-storage reads or
   writes leave the page where it is.
   Course-card widgets keep the school origin and course id, term label and placement/size/fold choices in
-  `widgetLayout`, up to 48 cards per board. They draw names, codes, terms, colors, native pictures and action links,
+  `widgetLayout`, up to 48 per student at a school on a board and up to 384 stored per board in all. To make room,
+  Glaze drops only the oldest cards at this school known to belong to other students who used this browser.
+  The per-student marks and other students' cards saved on this device are part of `widgetLayout`, so Backup and
+  Google Drive sync include them with the rest of the layout. They draw names, codes, terms, colors, native pictures and action links,
   unread counts, grades and progress from the page and its existing readers, and tasks from the existing planner
   cache when enabled. Canvas's native card picture address is retained in page memory across card replacement;
   drawing it can load that image from its host as the native card does. There is no separate stored copy of grades,
