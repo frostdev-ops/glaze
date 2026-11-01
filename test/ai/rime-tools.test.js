@@ -279,6 +279,20 @@ test('run_js: stopped at its time, its memory capped, value and logs sharing one
   assert.equal((await run('6 * 7')).value, 42);
 });
 
+test('run_js: the engine\'s whole heap is capped, so many small allocations end fast; a built-in that backtracks still stops', async () => {
+  // QuickJS can't total a run's allocations in this build: without the heap's own maximum, 1 MB strings ran to 2 GB in 7 s.
+  for (const code of ['const a = []; while (true) a.push("x".repeat(1e6));', 'const a = []; while (true) a.push({ x: 1 });', 'Array.from({ length: 2e6 }, (_, i) => -i).sort((a, b) => a - b).length']) {
+    const t = Date.now(), r = await run(code);
+    assert.deepEqual([r.ok, r.error], [false, 'The code ran out of memory.'], code);
+    assert.ok(Date.now() - t < 1500, `${code}: ${Date.now() - t} ms`);
+  }
+  const t = Date.now(), regex = await run('/(a+)+$/.test("a".repeat(32) + "b")', { ms: 500 });
+  assert.equal(regex.error, 'Stopped after 0.5 seconds.');
+  assert.ok(Date.now() - t < 1500, `${Date.now() - t} ms`);
+  assert.equal(J.LIMIT.heap, 64 << 20);
+  assert.equal((await run('6 * 7')).value, 42, 'and the engine works after');
+});
+
 test('run_js: nothing outside ECMAScript reaches the code, and each run starts from a fresh context', async () => {
   const names = ['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'importScripts', 'setTimeout', 'setInterval', 'indexedDB', 'localStorage', 'caches', 'Worker', 'postMessage',
     'navigator', 'location', 'document', 'window', 'self', 'chrome', 'browser', 'require', 'process', 'std', 'os', 'WebAssembly'];
@@ -677,7 +691,7 @@ test('a fired wake or monitor is a turn of its own: a fired block before the que
   const text = A.layout(inp).map((p) => p.special ?? p.text).join('');
   assert.match(text, /<\|im_start\|>user\n<\|gz_ctx\|>now\n[^<]+<\|\/gz_ctx\|>\n<\|gz_data\|>fired\n\{"what":"monitor"[^<]+<\|\/gz_data\|>\n<\|gz_data\|>question\nTell me my new grade<\|\/gz_data\|><\|im_end\|>/);
   // build()'s request reads back to the same turns.
-  const req = A.task.build(inp, { text: require('../../extension/ai/text.js') });
+  const req = require('../../extension/ai/request.js').clean({ ...A.task.build(inp, { text: require('../../extension/ai/text.js') }), schema: A.OUTPUT, task: { id: 'agent.tools', version: 1 } });
   assert.deepEqual(A.fromRequest(req).parts, A.layout(inp));
   // Without fired, nothing changes: the same request and turns as before.
   const plain = A.task.input({ question: 'Tell me my new grade', tools: ['grades_list'], now: NOW, zone: ZONE });
