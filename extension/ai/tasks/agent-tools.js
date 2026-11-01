@@ -215,6 +215,17 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     'Copy dates as the results give them.',
     'Write the final answer in markdown: a short lead sentence; two or more items as a list, one line each: - **title** (course): friendly date, status; steps as a numbered list; math as `inline code`; links only to https addresses a tool returned; no headings in a short answer, no tables, no emoji.',
   ].join('\n');
+  // The corrective turn after an answer that broke one of these rules (tools level 3): a check block after the results.
+  const FIX = Object.freeze({
+    first: 'Your answer came before any result. Call a tool first, then answer from what it returns.',
+    ground: 'Your answer quoted no value from the results. Answer again from the results above, quoting their exact titles and dates.',
+    quote: 'A quote in your answer is not in the results. Quote only exact values the results hold.',
+    number: 'Your answer says a number the results do not have. Use numbers and dates only as the results give them.',
+    missed: 'The results list work not handed in. Name it with its due date instead of saying nothing is due.',
+    schema: 'Your answer was not in the answer format. Reply with text and quotes, or with one tool call.',
+    one: 'Give either one tool call or the final answer, not both.',
+  });
+  const FIXES = Object.keys(FIX);
   const instructions = (locale, first = false) => `${SYSTEM}${first ? `\n${SYSTEM3}` : ''}\nReply in ${LANGUAGES[locale]}.`;
   const OUTPUT = S.obj({
     call: { anyOf: [{ type: 'null' }, S.obj({ name: { enum: NAMES }, arguments: { type: 'object', description: "The tool's arguments" } }, ['name', 'arguments'])] },
@@ -258,7 +269,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     } catch { return false; }
   };
   const input = (raw) => {
-    if (!S.isObj(raw) || Object.keys(raw).some((k) => !['question', 'tools', 'steps', 'now', 'zone', 'locale', 'fired', 'first', 'help', 'history', 'summary'].includes(k))) return null;
+    if (!S.isObj(raw) || Object.keys(raw).some((k) => !['question', 'tools', 'steps', 'now', 'zone', 'locale', 'fired', 'first', 'help', 'history', 'summary', 'fix'].includes(k))) return null;
     // first: answer only from tool results (tools level 3: Ask Rime's tool-first rule, check() 'first' and 'ground'); help:
     // study.help's subject, for a turn that reads what the student's help question names before study help answers it.
     if ((raw.first !== undefined && raw.first !== true) || (raw.help !== undefined && !HELP.includes(raw.help))) return null;
@@ -266,6 +277,8 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     if (raw.history !== undefined && (raw.first !== true || !Array.isArray(raw.history) || raw.history.length > 6
       || !raw.history.every((h) => S.isObj(h) && Object.keys(h).sort().join() === 'answer,question' && typeof h.question === 'string' && typeof h.answer === 'string'))) return null;
     // summary (tools level 3 only): chat.compact's bullets for the turns history no longer carries.
+    // fix (tools level 3 only, after results): the rule the last answer broke, for one corrective turn (FIX).
+    if (raw.fix !== undefined && (raw.first !== true || !FIXES.includes(raw.fix) || !Array.isArray(raw.steps) || !raw.steps.length)) return null;
     if (raw.summary !== undefined && (raw.first !== true || typeof raw.summary !== 'string' || raw.summary.length > HISTORY.summary)) return null;
     const summary = (raw.summary || '').trim();
     const history = (raw.history || []).filter((h) => h.question.trim() && h.answer.trim()).slice(-HISTORY.turns)
@@ -279,7 +292,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     if (shown_.includes(null)) return null;
     const fired = Object.hasOwn(raw, 'fired') ? firedOf(raw.fired, zone) : undefined;
     if (fired === null) return null;
-    return { question: question.trim(), tools: offered(tools).map((t) => t.name), steps: steps.map((s, i) => ({ call: { name: s.call.name, arguments: s.call.arguments }, result: shown_[i] })), now, zone, locale, ...(fired && { fired }), ...(raw.first === true && { first: true }), ...(raw.help && { help: raw.help }), ...(history.length && { history }), ...(summary && { summary }) };
+    return { question: question.trim(), tools: offered(tools).map((t) => t.name), steps: steps.map((s, i) => ({ call: { name: s.call.name, arguments: s.call.arguments }, result: shown_[i] })), now, zone, locale, ...(fired && { fired }), ...(raw.first === true && { first: true }), ...(raw.help && { help: raw.help }), ...(history.length && { history }), ...(summary && { summary }), ...(raw.fix && { fix: raw.fix }) };
   };
   const earlierText = (history) => history.map((h) => `Student: ${h.question}\nRime: ${h.answer}`).join('\n');
   const nowText = (inp) => `${local(inp.now, inp.zone, true)}, ${inp.zone}${inp.first ? `\n${windows(inp.now, inp.zone)}` : ''}`;
@@ -287,7 +300,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   const build = (inp, { text }) => text.request({
     system: `${instructions(inp.locale, inp.first === true)}\n\n<tools>\n${offered(inp.tools).map(line).join('\n')}\n</tools>`,
     context: [{ label: 'now', text: nowText(inp) }],
-    data: [...(inp.fired ? [{ label: 'fired', text: inp.fired }] : []), ...(inp.help ? [{ label: 'help', text: inp.help }] : []), ...(inp.summary ? [{ label: 'summary', text: inp.summary }] : []), ...(inp.history ? [{ label: 'earlier', text: earlierText(inp.history) }] : []), { label: 'question', text: inp.question }, ...inp.steps.flatMap((s, i) => [{ label: `call ${i + 1}`, text: JSON.stringify(s.call) }, { label: label(i, s.call.name), text: s.result }])],
+    data: [...(inp.fired ? [{ label: 'fired', text: inp.fired }] : []), ...(inp.help ? [{ label: 'help', text: inp.help }] : []), ...(inp.summary ? [{ label: 'summary', text: inp.summary }] : []), ...(inp.history ? [{ label: 'earlier', text: earlierText(inp.history) }] : []), { label: 'question', text: inp.question }, ...inp.steps.flatMap((s, i) => [{ label: `call ${i + 1}`, text: JSON.stringify(s.call) }, { label: label(i, s.call.name), text: s.result }]), ...(inp.fix ? [{ label: 'check', text: FIX[inp.fix] }] : [])],
     // D4: p3dpo's answers ran to 469 tokens, LFM2.5 350M's to 497 with two cut at 512; 768 with a full think budget fits
     // the 99th-percentile prompt (3,059 tokens) in the 4,096 window.
     temperature: 0, maxTokens: 768,
@@ -301,7 +314,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // fired, a fired wake's or monitor's record, as a data block of its own before the question (absent: the turns as before).
   // help: study help's subject, a data block before the question (absent: as before).
   // window: the window's size token after the task's (format.js sizeOf; absent: none).
-  const draw = ({ head, lines, now, question, steps, fired, help, summary, earlier, window }) => {
+  const draw = ({ head, lines, now, question, steps, fired, help, summary, earlier, check, window }) => {
     const name = window === undefined ? null : F().sizeOf(window);
     if (window !== undefined && !name) throw Object.assign(new Error(`agent.tools: window ${window}`), { code: 'request' });
     const size = name ? [{ special: name }] : [];
@@ -314,10 +327,12 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
         ...block('gz_ctx', 'now', now), { text: '\n' }, ...(fired ? [...block('gz_data', 'fired', fired), { text: '\n' }] : []), ...(help ? [...block('gz_data', 'help', help), { text: '\n' }] : []), ...block('gz_data', 'question', question)),
       ...steps.flatMap((s, i) => [...turn('assistant', ...native.parts(s.call)),
         ...turn('tool', { special: '<tool_response>' }, { text: '\n' }, ...block('gz_data', label(i, s.call.name), s.result), { text: '\n' }, { special: '</tool_response>' })]),
+      // The corrective turn (fix): the rule the last answer broke, as data in a user turn after the results.
+      ...(check ? turn('user', ...block('gz_data', 'check', check)) : []),
       { special: '<|im_start|>' }, { text: 'assistant\n' }]);
   };
   const layout = (inp, { window } = {}) => draw({ head: instructions(inp.locale, inp.first === true), lines: offered(inp.tools).map(line).join('\n'), now: nowText(inp), question: inp.question, steps: inp.steps, fired: inp.fired, help: inp.help,
-    ...(inp.summary && { summary: inp.summary }), ...(inp.history && { earlier: earlierText(inp.history) }), window });
+    ...(inp.summary && { summary: inp.summary }), ...(inp.history && { earlier: earlierText(inp.history) }), ...(inp.fix && { check: FIX[inp.fix] }), window });
   // Glaze's own model gets a run's request, never its input: build()'s request read back (format.js parse) into the same
   // pieces → { parts: layout()'s, tools: the names offered }. A request build() didn't make is refused (code 'request').
   const fromRequest = (req, { window } = {}) => {
@@ -337,7 +352,10 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     const summary = helped[1]?.kind === 'data' && helped[1].label === 'summary' ? helped[1].text : undefined;
     const summed = summary === undefined ? helped : [helped[0], ...helped.slice(2)];
     const earlier = summed[1]?.kind === 'data' && summed[1].label === 'earlier' ? summed[1].text : undefined;
-    const [now, question, ...rest] = earlier === undefined ? summed : [summed[0], ...summed.slice(2)];
+    const [now, question, ...all] = earlier === undefined ? summed : [summed[0], ...summed.slice(2)];
+    const check = all.length % 2 && all.at(-1)?.kind === 'data' && all.at(-1).label === 'check' ? all.at(-1).text : undefined;
+    if (check !== undefined && !FIXES.some((k) => FIX[k] === check)) throw refuse('check');
+    const rest = check === undefined ? all : all.slice(0, -1);
     if (now?.kind !== 'ctx' || now.label !== 'now' || question?.kind !== 'data' || question.label !== 'question' || rest.length % 2 || rest.length / 2 > LIMIT.steps) throw refuse('blocks');
     const steps = [];
     for (let i = 0; i < rest.length; i += 2) {
@@ -347,7 +365,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       if (rest[i].label !== `call ${n + 1}` || !validCall(c, tools.map((t) => t.name)) || rest[i + 1].label !== label(n, c.name)) throw refuse('step');
       steps.push({ call: { name: c.name, arguments: c.arguments }, result: rest[i + 1].text });
     }
-    return { parts: draw({ head, lines, now: now.text, question: question.text, steps, fired, help, summary, earlier, window }), tools: offered(tools.map((t) => t.name)).map((t) => t.name) };
+    return { parts: draw({ head, lines, now: now.text, question: question.text, steps, fired, help, summary, earlier, check, window }), tools: offered(tools.map((t) => t.name)).map((t) => t.name) };
   };
   // The answer Glaze's own model writes for an output: a native call, or the answer as compact JSON.
   const answerParts = (out) => (out.call ? native.parts(out.call) : [{ text: JSON.stringify({ text: out.answer.text, quotes: out.answer.quotes }) }]);
@@ -584,7 +602,39 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
 
   // rate: Ask Glaze (ai/ask.js) runs a question's steps as runs of their own, at most seven (six calls, then the answer): six
   // questions a minute in a tab, where the broker's default would stop the first question's seventh run.
-  const task = T.add(T.define({ id: 'agent.tools', version: 1, input, build, output: OUTPUT, check, limits: { ms: 60000 }, rate: { perMinute: 6 * (LIMIT.steps + 1) } }));
-  return { task, LIMIT, HISTORY, SPECS, NAMES, OWN, PHRASES, AGENTS, AHEAD, HELP, rich, gradedWork, fold, LATER, moment, SYSTEM, OUTPUT, ANSWER, constraint, instructions, line, py, shown, native, fromNative, readable, layout, fromRequest, answerParts, why };
+  // Glaze's own answer when the model's fails twice (ai/ask.js episode): the items the results list, as MARKDOWN.md writes
+  // them (a lead sentence, then - **title** (course): date, status), in the student's language, no model. steps: input()'s
+  // (readable results). → the markdown, or null when no result lists an item.
+  const LIST = {
+    en: ['From what Glaze read:', 'submitted', 'not submitted', 'graded', 'late', 'missing'],
+    es: ['Según lo que leyó Glaze:', 'entregado', 'sin entregar', 'calificado', 'atrasado', 'faltante'],
+    'pt-BR': ['Pelo que o Glaze leu:', 'entregue', 'não entregue', 'avaliado', 'atrasado', 'pendente'],
+    fr: ['D’après ce que Glaze a lu :', 'rendu', 'non rendu', 'noté', 'en retard', 'manquant'],
+    de: ['Laut dem, was Glaze gelesen hat:', 'abgegeben', 'nicht abgegeben', 'bewertet', 'verspätet', 'fehlt'],
+    nl: ['Volgens wat Glaze heeft gelezen:', 'ingeleverd', 'niet ingeleverd', 'beoordeeld', 'te laat', 'ontbreekt'],
+  };
+  const listAnswer = (steps, { locale = 'en' } = {}) => {
+    const w = LIST[locale] || LIST.en, items = [], seen = new Set();
+    const walk = (v) => {
+      if (Array.isArray(v)) return v.forEach(walk);
+      if (!S.isObj(v)) return;
+      if (typeof v.title === 'string' && v.title.trim()) {
+        const key = `${v.id ?? ''}|${v.title}`;
+        if (!seen.has(key)) { seen.add(key); items.push(v); }
+        return;
+      }
+      Object.values(v).forEach(walk);
+    };
+    for (const st of steps || []) { try { walk(JSON.parse(st.result)); } catch { /* not a result */ } }
+    if (!items.length) return null;
+    const status = (v) => (typeof v.submitted !== 'boolean' ? '' : v.graded ? w[3] : v.missing ? w[5] : v.late ? w[4] : v.submitted || v.done || v.complete ? w[1] : w[2]);
+    const lines = items.slice(0, 12).map((v) => {
+      const when = typeof v.due === 'string' ? v.due : typeof v.at === 'string' ? v.at : '', tail = [when, status(v)].filter(Boolean).join(', ');
+      return `- **${v.title.trim()}**${typeof v.course === 'string' && v.course ? ` (${v.course})` : ''}${tail ? `: ${tail}` : ''}`;
+    });
+    return [w[0], ...lines, ...(items.length > 12 ? [`- … ${items.length - 12}`] : [])].join('\n');
+  };
+  const task = T.add(T.define({ id: 'agent.tools', version: 1, input, build, output: OUTPUT, check, why: (out, inp) => why(out, inp), limits: { ms: 60000 }, rate: { perMinute: 6 * (LIMIT.steps + 1) } }));
+  return { task, LIMIT, HISTORY, FIX, FIXES, listAnswer, SPECS, NAMES, OWN, PHRASES, AGENTS, AHEAD, HELP, rich, gradedWork, fold, LATER, moment, SYSTEM, OUTPUT, ANSWER, constraint, instructions, line, py, shown, native, fromNative, readable, layout, fromRequest, answerParts, why };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_TASK_AGENT_TOOLS; else GZ_AI_TASK_AGENT_TOOLS;

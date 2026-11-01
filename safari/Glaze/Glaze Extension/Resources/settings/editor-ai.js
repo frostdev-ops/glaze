@@ -654,7 +654,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       $('ai-calls').replaceChildren(...list.map((r) => {
         const li = el('li'), what = el('span', '', [r.task === 'writer.image' ? t('Image preparation') : r.task === 'writer.outline' ? t('AI outline') : r.task === 'writer.sources' ? t('AI source extraction') : featureName(r.feature, t), providerName(r.provider === 'openai' && !r.model ? '' : r.provider, t, conns), r.model].filter(Boolean).join(' · '));
         const more = el('small', failed(r) ? 'bad' : '', [when(r.at), r.count > 1 ? `×${r.count}` : '', r.tokens ? t('{n} tokens', { n: r.tokens }) : '',
-          `${outcome(r.category || r.state, t)}${r.status ? ` (HTTP ${r.status})` : ''}`, D().explain(r) && t(D().explain(r)) !== outcome(r.category || r.state, t) ? t(D().explain(r)) + (Number.isSafeInteger(r.actual) && Number.isSafeInteger(r.limit) ? ` (${r.reason === 'response-limit' ? t('{n} bytes', { n: `${r.actual}/${r.limit}` }) : `${r.actual}/${r.limit}`})` : '') : ''].filter(Boolean).join(' · '));
+          `${outcome(r.category || r.state, t)}${r.status ? ` (HTTP ${r.status})` : ''}${r.why ? ` (${r.why}${Number.isSafeInteger(r.toolSteps) ? `, ${r.toolSteps}` : ''})` : ''}`, D().explain(r) && t(D().explain(r)) !== outcome(r.category || r.state, t) ? t(D().explain(r)) + (Number.isSafeInteger(r.actual) && Number.isSafeInteger(r.limit) ? ` (${r.reason === 'response-limit' ? t('{n} bytes', { n: `${r.actual}/${r.limit}` }) : `${r.actual}/${r.limit}`})` : '') : ''].filter(Boolean).join(' · '));
         li.append(what, more);
         return li;
       }));

@@ -343,7 +343,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
       return { s, task, use };
     };
     const run = async (m, def) => {
-      const fail = (e) => post({ id: m.id, type: 'error', error: R().code(e), ...F().diagnostic(e), ...(e?.reference && { reference: e.reference }), ...(e?.status && { status: e.status }) });
+      const fail = (e) => post({ id: m.id, type: 'error', error: R().code(e), ...F().diagnostic(e), ...(typeof e?.raw === 'string' && { raw: e.raw }), ...(e?.reference && { reference: e.reference }), ...(e?.status && { status: e.status }) });
       if (mine.has(m.id) || typeof m.feature !== 'string' || !FEATURE.test(m.feature) || typeof m.task !== 'string' || !T().ID.test(m.task)
         || Object.keys(m).some((k) => !['id', 'op', 'feature', 'task', 'input', 'to'].includes(k))
         || (m.to !== undefined && (typeof m.to !== 'string' || m.to.length > 300))) return fail(R().error('request'));
@@ -369,6 +369,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         if (typeof use.p.prepare === 'function') stopKeepAlive = keepAlive(m.id, control.signal);
         row.provider = shown(use);
         if (use.p.id === 'openai') row.model = use.cfg.model;
+        else if (use.p.id === 'local' && typeof use.cfg.weights === 'string') row.model = use.cfg.weights;
         // Glaze's own picture download may finish in its host after Settings' prepare answered (four minutes), with no
         // connection change: a task that may carry pictures reads its catalog again; others (the gray text) keep theirs.
         const list = await catalog(env, use, control.signal, now(), use.p.id === 'local' && (task.caps.images === true || task.id === 'writer.feedback'));
@@ -410,6 +411,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
       } catch (e) {
         const err = control.signal.aborted && R().code(e) !== 'timeout' ? (R().code(control.signal.reason) === 'changed' ? R().error('changed') : Object.assign(R().error('cancelled'), { category: 'cancelled' })) : e;
         forget(m.id);
+        if (Array.isArray(m.input?.steps)) row.toolSteps = m.input.steps.length;
         Object.assign(row, { state: R().code(err), ...F().diagnostic(err), ...(err?.category && { category: err.category }), ...(err?.status && { status: err.status }), ...(err?.reference && { id: err.reference }) });
         fail(err);
         if (!row.provider) row.provider = await named(env, m.feature);

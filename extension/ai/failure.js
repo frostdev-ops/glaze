@@ -48,7 +48,8 @@ var GZ_AI_FAILURE = globalThis.GZ_AI_FAILURE || (() => {
   };
   const diagnostic = (e) => ({ ...(Object.hasOwn(REASONS, e?.reason) && { reason: e.reason }),
     ...(['create', 'measure', 'response'].includes(e?.phase) && { phase: e.phase }),
-    ...Object.fromEntries(['context', 'tokens', 'actual', 'limit'].filter((k) => Number.isSafeInteger(e?.[k]) && e[k] >= 0 && e[k] <= 10000000).map((k) => [k, e[k]])) });
+    ...(typeof e?.why === 'string' && /^[a-z][a-z-]{0,23}$/.test(e.why) && { why: e.why }),
+    ...Object.fromEntries(['context', 'tokens', 'actual', 'limit', 'toolSteps'].filter((k) => Number.isSafeInteger(e?.[k]) && e[k] >= 0 && e[k] <= 10000000).map((k) => [k, e[k]])) });
   const ERRORS = { permission: 'Glaze isn’t allowed to reach this address.', setup: 'Choose a model', off: 'AI is off. Turn it on in Settings → AI.', feature: 'Feedback is off. Turn it on in Settings → AI.',
     timeout: 'Timed out', 'connection-lost': 'Connection lost', 'invalid-response': 'Unreadable answer', check: 'No usable answer', refusal: 'No usable answer',
     'request-rejected': 'Refused', 'provider-unavailable': 'The provider is unavailable and did not report a specific reason.', often: 'Not ready', busy: 'Running', cancelled: 'Cancelled', size: 'The document is too large.', limit: 'The document is too large.' };

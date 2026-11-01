@@ -318,6 +318,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const cancelled = () => Object.assign(R().error('cancelled'), { category: 'cancelled' });
   const episode = async ({ question, tools, locale, now, zone, run, call, signal, fired, first, help, history, summary, measure }) => {
     const steps = [];
+    let fix, fixed = false;
     const inputOf = () => ({ question, tools, steps: steps.map((s) => ({ call: s.call, result: s.result })), now, zone, locale, ...(fired && { fired }), ...(first && { first: true }), ...(help && { help }),
       ...(first && history?.length && { history }), ...(first && summary && { summary }) });
     for (;;) {
@@ -327,7 +328,21 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         const fit = await measure('agent.tools', inputOf());
         if (fit && fit.used + fit.reserve > fit.window) for (const s of steps.slice(0, -1)) if (!s.digested) Object.assign(s, { result: digest(s.result), digested: true });
       }
-      const out = await run('agent.tools', inputOf());
+      // An answer that fails its check after results came back gets one corrective turn naming the rule (FIX); if that fails
+      // too, Glaze's own list from the results (built), when they hold one. The error says why (its code, the steps, the raw).
+      let out;
+      try { out = await run('agent.tools', { ...inputOf(), ...(fix && { fix }) }); }
+      catch (e) {
+        if (signal?.aborted) throw e;
+        const failed = R().code(e) === 'check' && first && steps.length;
+        if (failed && !fixed && AT().FIXES.includes(e.why)) { fixed = true; fix = e.why; continue; }
+        if (failed && fixed) {
+          const shown = AT().task.input(inputOf())?.steps, text = shown && AT().listAnswer(shown, { locale });
+          if (text) return { answer: { text, quotes: [] }, steps, built: true };
+        }
+        throw Object.assign(e, { steps: steps.length });
+      }
+      fix = undefined;
       if (signal?.aborted) throw cancelled();
       if (out?.answer) return { answer: out.answer, steps };
       if (!isObj(out?.call)) throw R().error('check');
@@ -404,7 +419,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       waits.set(id, (a) => {
         if (!['end', 'error', 'status'].includes(a.type)) return each?.(a);
         waits.delete(id); signal?.removeEventListener('abort', stop);
-        if (a.type === 'error') reject(R().error(R().CODES.includes(a.error) ? a.error : 'request')); else resolve(a);
+        if (a.type === 'error') reject(Object.assign(R().error(R().CODES.includes(a.error) ? a.error : 'request'), typeof a.why === 'string' && { why: a.why }, typeof a.raw === 'string' && { raw: a.raw }));
+        else resolve(a);
       });
       try { mine.postMessage({ id, ...m }); } catch { waits.delete(id); reject(R().error('connection-lost')); }
     });
@@ -630,15 +646,18 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         const how = level >= 3 ? { locale, now: env.now() } : undefined;
         const material = res.steps.map((s) => AT().readable(s.result, zone, how) || '').join('\n').slice(0, LIMIT.material);
         const inp = SH().task.input({ question, subject: 'math', locale, ...(material && { material }) });
-        if (!inp || SH().hands(res.answer.text, inp)) throw R().error('check');
+        if (!res.built && (!inp || SH().hands(res.answer.text, inp))) throw Object.assign(R().error('check'), { why: 'hands', steps: res.steps.length });
         // What the tools asked of the page (open, highlight), for the panel to perform once it shows the answer.
         await carry(env, current.actions).catch(() => {});
         if (signal.aborted) throw cancelled();
         for (const a of current.actions) { const { action, ...rest } = a; post({ id, type: 'action', action: { kind: action, ...rest } }); }
-        post({ id, type: 'end', task: r.task, answer: { text: res.answer.text } });
+        post({ id, type: 'end', task: r.task, answer: { text: res.answer.text, ...(res.built && { built: true }) } });
         if (level >= 3) void compact({ open, turn: { question, answer: res.answer.text }, locale, tools, zone }).catch(() => {});
       } catch (e) {
-        fail(signal.aborted ? 'cancelled' : R().code(e));
+        // { id, type: 'error', error, why?, steps?, raw? }: the check's code, the tool steps run, and the model's raw answer
+        // (to this panel only; Activity keeps the code, never the answer).
+        if (signal.aborted) fail('cancelled');
+        else post({ id, type: 'error', error: R().code(e), ...(typeof e?.why === 'string' && { why: e.why }), ...(Number.isSafeInteger(e?.steps) && { steps: e.steps }), ...(typeof e?.raw === 'string' && { raw: e.raw.slice(0, 2000) }) });
       } finally { if (current?.control === control) current = null; }
     };
     const status = async (m) => {
