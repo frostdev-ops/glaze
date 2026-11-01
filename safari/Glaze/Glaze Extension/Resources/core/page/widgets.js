@@ -1830,12 +1830,13 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   };
   const forgetAccount = (destroy = true) => {
     identity++;
-    me = asking = null;
+    asking = null;
     askedWho = false;
-    if (destroy) { dashboardEdited = false; teardown(true); drawn = null; }
+    if (destroy) { me = null; dashboardEdited = false; teardown(true); drawn = null; }
   };
   // The Ultra store can change identity without a sidebar context (including when the sidebar is switched off).
-  // An ordinary refresh also rechecks the same student: retain the painted board until a different id is confirmed.
+  // An ordinary refresh also rechecks the same student: retain the painted board and its confirmed account until a
+  // different id is confirmed. Live tiles still read that account during storage changes and painting.
   document.addEventListener('glaze:ultra-refresh', (e) => {
     if (!ultra || !(e.detail?.identity || e.detail?.retire)) return;
     const before = me;
