@@ -188,7 +188,9 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
     // The model a download takes: one with that tier, else one already here (ready, then partial), else the ladder's pick.
     const pick = async (tier) => {
       const all = (await env.store.list()).filter((m) => m.state !== 'stale' && !m.role);
-      if (tier) { const m = all.find((x) => x.tier === tier); return m ? { id: m.id } : { reason: 'assets' }; }
+      // An older catalog may have offered the saved tier; if it is gone, use Auto.
+      const chosen = tier && all.find((x) => x.tier === tier);
+      if (chosen) return { id: chosen.id };
       const here = all.find((m) => m.state === 'ready') || all.find((m) => m.state === 'partial');
       if (here) return { id: here.id };
       const gpu = env.gpu();

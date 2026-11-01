@@ -117,9 +117,10 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const preparing = { text: null, pictures: null }; // a download in the host: { call, listeners, last }
   let broken = null; // a reason the engine gave that holds until a connection changes (release)
   // The store's text models (the tiers), and the one this cfg runs: its tier's, else the one here (ready, then partial).
+  // A saved tier the catalog no longer offers follows Auto, as Settings' picker does.
   const models = async () => (await own().store.list()).filter((m) => m.state !== 'stale');
   const tiers = (list) => list.filter((m) => !m.role);
-  const choose = (list, cfg) => { list = tiers(list); return (cfg.tier ? list.find((m) => m.tier === cfg.tier) : list.find((m) => m.state === 'ready') || list.find((m) => m.state === 'partial')) || null; };
+  const choose = (list, cfg) => { list = tiers(list); return (cfg.tier && list.find((m) => m.tier === cfg.tier)) || list.find((m) => m.state === 'ready') || list.find((m) => m.state === 'partial') || null; };
   // The picture download: { model, projector, size, ready } when models.json offers it, else null.
   const pictures = (list) => {
     const model = list.find((m) => m.role === 'pictures'), projector = model && list.find((m) => m.role === 'projector' && m.id === model.projector);
