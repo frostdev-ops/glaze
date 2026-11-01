@@ -12,28 +12,29 @@ All notable changes to Glaze are documented here. The format follows
 
 - Chrome and Safari: **Google Calendar sync** (Settings → Sharing) keeps a calendar named Glaze in step with Export calendar (.ics), touching nothing else. Off until you connect.
 - **Google Drive** in Settings → Writer → Papers (Chrome, Edge, Brave, Firefox and Safari; off until you connect). **From Google Drive** opens a file in Documents or attaches it to a Blackboard submission; **Save to Google Drive** saves a document's file or a paper as a Google Doc, never overwriting one edited outside Glaze; **Sync to Google Drive** keeps your documents and what Back up… covers in a Glaze folder, across devices; large files sync in pieces; only a document over 64 MB or a record over 32 MB stays on this device, marked **Too large to sync**. Glaze reaches only the files it made or you pick. Disconnect is per device.
-- Blackboard, in Settings → Course tabs: **Open course tabs ahead of time** (a tab opens from a page already loaded), **Keep Course Content ready** (going back from an item is instant, at the same place) and **Load course data ahead of time**.
+- Blackboard, in Settings → Course tabs: **Open course tabs ahead of time** (a tab opens from a page already loaded), **Keep Course Content ready** (back from an item is instant, at the same place) and **Load course data ahead of time**.
 - Blackboard: **Open pages instantly** (Settings → Course pages → Blackboard Dashboard) shows your last view of Grades, Courses, Activity and a course's Content, Announcements and Gradebook while Blackboard loads. **Show pages loading at once** answers each click.
-- PDFs: Highlight, Pen, Text, Image, Shapes and signatures, and a pages panel to move, turn, delete and add pages, or take another PDF's.
-- Blackboard: **Attach from Documents** adds your documents to a submission. Workbooks imported from .xlsm export and submit as .xlsm.
+- PDFs: Highlight, Pen, Text, Image, Shapes and signatures, and a pages panel to move, turn, delete, add or import pages.
+- Blackboard: **Attach from Documents** adds your documents to a submission. Workbooks from .xlsm export and submit as .xlsm.
 - Canvas: **Open in Glaze** on PDF, slide and spreadsheet files (Settings → Documents). Slides: **Print with notes…**
-- Documents cards show a spreadsheet's charts; 3-D pie and column charts draw.
+- Documents cards show spreadsheet charts, 3-D pies and columns included.
 
 ### Changed
 
-- Blackboard: a click shows the next page at once, Glaze's bar is there at first paint, and its footer, notes and panels never push the page. To Do, grades and the sidebar appear from saved data once Blackboard confirms it's you. Less work on slower laptops.
+- Blackboard: a click shows the next page at once, a page loads behind one loading layout in your Look (no grey screen or stacked spinners), and Glaze's bar, footer, notes and panels never push the page. To Do, grades and the sidebar appear from saved data once Blackboard confirms it's you.
 - A PDF keeps one copy, its latest marked-up version.
-- Saved PDF and slide previews offer **Open in Documents**. A spreadsheet opened without saving stays read-only until saved to Documents.
+- Saved PDF and slide previews offer **Open in Documents**; an unsaved spreadsheet stays read-only.
 - Imports show progress at once and store large files faster.
 
 ### Fixed
 
 - Writer: Feedback answers in your draft's language, its citation checks work in all six languages, and a failed comment shows the rubric rating instead of withholding the grade.
+- Documents: Close in a document goes back to your documents.
 - Writer: a tab opened while Glaze saves settings gets Glaze; a viewer that fails goes back to Blackboard's editor.
-- Canvas's document viewer: pen marks stay put as the page zooms, and Undo takes back Clear page.
+- Canvas's document viewer: pen marks stay put on zoom, and Undo takes back Clear page.
 - Agents: only Glaze's background can change an app's pairing or the name in its approval window.
 - Firefox: a site whose access you took back is no longer retried.
-- The announcement pop-up has Close in its footer. A note with tens of thousands of line breaks opens.
+- The announcement pop-up has Close in its footer; a note with very many line breaks opens.
 
 ## [4.0.0] — 2026-10-30
 
