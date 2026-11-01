@@ -778,6 +778,17 @@ test("filled per account: a second student on the device gets the board's first 
   assert.deepEqual(W.layout({ starter: true, filled: ['dash', ...crowd, crowd[39]] }).filled, ['dash', ...crowd.slice(-16)], 'the newest accounts, each once, bounded');
 });
 
+test('a queued first fill cannot consume an account mark when the shared board has no stored room', () => {
+  const key = (n) => `course:https://bb.test/_${n}_1`, account = 'https://bb.test/_2_1';
+  const full = W.layout({ ...W.fresh(), filled: ['dash'], boards: { dash: Array.from({ length: W.COURSE_TOTAL }, (_, n) => ({ id: key(n + 1), on: true })) } });
+  const fill = { fill: 'dash', account, ops: [{ s: 'dash', id: key(999), set: { on: true } }] };
+  assert.deepEqual(W.apply(full, fill), full, 'a request queued before another tab used the last room stays retryable');
+  const room = W.apply(full, { ops: [{ s: 'dash', id: key(1), remove: true }] });
+  const next = W.apply(room, fill);
+  assert.ok(next.boards.dash.some((x) => x.id === key(999)));
+  assert.ok(next.filled.includes(`dash ${account}`));
+});
+
 test('kept: an update keeps what a device without a stored layout showed, and adds nothing the widgets switch now turns on', () => {
   const on = (l, b) => (b ? l.boards[b] : l.tiles).filter((t) => t.on).map((t) => t.id);
   const four = ['notes', 'agenda', 'timer', 'quotes'];

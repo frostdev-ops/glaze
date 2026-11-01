@@ -1674,6 +1674,19 @@ test('a partial membership list cannot consume the first Dashboard fill before t
   assert.ok(lay(p).filled.includes('dash https://school.blackboard.test/_2_1'));
 });
 
+test('a full shared Dashboard waits for stored room before marking another student filled', async () => {
+  const board = Array.from({ length: W.COURSE_TOTAL }, (_, n) => ({ id: ckey(`_${500 + n}_1`), on: true }));
+  const seed = W.layout({ ...W.fresh(), filled: ['dash'], boards: { dash: board } });
+  const p = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: seed } }), Promise.resolve(members()), '_2_1');
+  p.ui.sync(true); await settle(); p.ui.sync(true); await settle();
+  assert.equal(lay(p).filled.includes('dash https://school.blackboard.test/_2_1'), false, 'an unsuccessful fill cannot consume the mark');
+  assert.equal(layoutSends(p).filter((m) => m.fill).length, 0, 'a full board sends no repeated fill attempts');
+  p.store.widgetLayout = W.apply(p.store.widgetLayout, { ops: board.slice(0, COURSES.length).map((x) => ({ s: 'dash', id: x.id, remove: true })) });
+  p.changed({ widgetLayout: { newValue: p.store.widgetLayout } }); p.ui.sync(true); await settle();
+  for (const c of COURSES) assert.ok(p.tile(ckey(c.id)), 'the first cards arrive once room is available');
+  assert.ok(lay(p).filled.includes('dash https://school.blackboard.test/_2_1'));
+});
+
 test("a tile's Fold, Remove and Float sit above its resize corner, which a folded tile brings up beside them", () => {
   // Both are positioned children of the tile, the corner last; its 24px reach covered a folded tile's Unfold.
   const css = read('core/page/apps.css').replace(/\/\*[\s\S]*?\*\//g, '');
