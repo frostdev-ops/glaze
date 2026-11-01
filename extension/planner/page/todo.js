@@ -339,11 +339,11 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     return g;
   };
   const LABEL = { past: 'Past due', today: 'Today', tomorrow: 'Tomorrow', week: 'This week', later: 'Later', none: 'No date', all: 'Upcoming' };
-  const news = (r) => {
+  const news = (r, now) => {
     const a = make('a', { href: r.url, className: 'gz-todo-title', textContent: r.title });
     if (r.url) { a.dataset.ann = r.key; a.dataset.focus = `news ${r.key}`; }
     const li = make('li', { className: 'gz-todo-item gz-todo-news' }, make('div', { className: 'gz-todo-main' }, a,
-      make('div', { className: 'gz-todo-meta' }, r.course && make('span', { textContent: r.course }), make('span', { textContent: when(r, Date.now())[o().rel ? 'rel' : 'abs'] }),
+      make('div', { className: 'gz-todo-meta' }, r.course && make('span', { textContent: r.course }), make('span', { textContent: when(r, now)[o().rel ? 'rel' : 'abs'] }),
         !r.read && chip(t('Unread')))));
     if (!r.read) li.dataset.unread = '';
     return li;
@@ -420,8 +420,13 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     // Drawn again only when what it shows changed: a refresh of Ultra's kept data, another tab's answer or the echo of its
     // own write with nothing new moves no row and takes no focus.
     const question = gs.question(who.uid, t), remind = globalThis.GZ_REMIND_UI?.head() || [];
+    // Relative labels round from each deadline, and imported focus sessions can end between clock minutes.
+    const times = [...new Set([...out.groups.flatMap(([, rows]) => rows), ...out.done, ...out.graded])].map((r) => [
+      r.at !== null && when(r, now), planText(r, now),
+      open.has(r.key) && (r.local.sessions || []).map((x) => [when({ at: x.at }, now), x.at + x.min * 6e4 <= now]),
+    ]);
     const view = JSON.stringify([sig, out, form, form && courses.list.map((c) => [String(c.id), c.name]), tools, [...open], [...shut], !!cache, cache?.complete, o().progress && cache?.sums,
-      question?.outerHTML ?? null, remind.map((e) => e.outerHTML)]);
+      question?.outerHTML ?? null, remind.map((e) => e.outerHTML), times, [...out.unread, ...out.read].map((r) => when(r, now)[o().rel ? 'rel' : 'abs'])]);
     if (view === viewed) return;
     viewed = view;
     firstIds = new Map();
