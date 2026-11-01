@@ -14,11 +14,13 @@ var GZ_AI_TASK_WRITER_REVIEW = globalThis.GZ_AI_TASK_WRITER_REVIEW || (() => {
   const LIMIT = { text: 120000, issues: 40, parts: 8, quote: 300, message: 200, suggestion: 160, suggestions: 3 };
   const KINDS = ['spelling', 'grammar', 'punctuation', 'style', 'clarity'];
   const str = (description, maxLength) => ({ ...S.str(description), maxLength });
+  // Words of the draft (schema.js span): what check() anchors, so Glaze's own model can't spell a quote its own way.
+  const copied = (description, maxLength, min = 0) => ({ ...str(description, maxLength), span: { source: 'draft', min } });
   const OUTPUT = S.obj({
     issues: { type: 'array', maxItems: LIMIT.issues, items: S.obj({
-      quote: str('The exact words with the problem, copied character for character: as few as show it', LIMIT.quote),
-      before: str('The one to four words just before the quote, copied', 80),
-      after: str('The one to four words just after the quote, copied', 80),
+      quote: copied('The exact words with the problem, copied character for character: as few as show it', LIMIT.quote, 1),
+      before: copied('The one to four words just before the quote, copied', 80),
+      after: copied('The one to four words just after the quote, copied', 80),
       kind: { enum: KINDS },
       message: str('One short sentence: what is wrong', LIMIT.message),
       suggestions: { type: 'array', maxItems: LIMIT.suggestions, description: 'Replacements for the quoted words only', items: str('A replacement for the quote', LIMIT.suggestion) },
