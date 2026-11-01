@@ -453,6 +453,15 @@ test('a copied citation cannot hide an explicit offer of wording for the student
   }
 });
 
+test('multiword writing suggestions before copied citations remain offers in all six languages', () => {
+  const SH = require('../../extension/ai/tasks/study-help.js'), material = 'Cells move nutrients across membranes.';
+  for (const [locale, lead] of [['en', 'Use this opening:'], ['es', 'Usa esta apertura:'], ['pt-BR', 'Use esta abertura:'],
+    ['fr', 'Utilise cette introduction :'], ['de', 'Verwende diesen Einstieg:'], ['nl', 'Gebruik deze opening:']]) {
+    const inp = SH.task.input({ question: 'Help me write my reflection', subject: 'essay', locale, material });
+    assert.equal(SH.hands(`${lead} “${material}”`, inp), 'wording', locale);
+  }
+});
+
 // ---- direct requests: the question forms the router accepts pass the check too (the D4 agent's finding) ----------------------
 test('a wake, a watch and a cancel are asked for in each language\'s common question and imperative forms; mentions still ask for nothing', () => {
   const later = new Date(NOW + 3 * 3600e3).toISOString().slice(0, 16).replace('T', ' ');
