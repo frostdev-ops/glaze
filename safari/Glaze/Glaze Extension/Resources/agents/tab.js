@@ -223,7 +223,8 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     if (String(j?.id) !== a.id) return no('none');
     const it = S.item(j, go.origin);
     if (it.locked) return no('locked');
-    return { ok: true, title: it.title, author: it.author, at: it.at, text: text(it.html), files: it.files.map((f) => f.name) };
+    return { ok: true, title: it.title, author: it.author, at: it.at, text: text(it.html), files: it.files.map((f) => f.name),
+      ...(it.html.length > LIMIT.text && { truncated: true }) };
   };
   const search = async (go, a) => {
     const x = X();
@@ -234,7 +235,8 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     // Each item's text as palette search reads it (core/doctext.js).
     const list = await reader.search({ id: a.course, name: '' }, k, (html) => GZ_DOCTEXT.html(html));
     if (!go()) return no('late');
-    return { ok: true, complete: list.complete !== false, items: list.map((i) => ({ id: i.key.slice(i.key.lastIndexOf(':') + 1), title: i.title, kind: i.kind, text: i.text })) };
+    return { ok: true, complete: list.complete !== false, items: list.map((i) => ({ id: i.key.slice(i.key.lastIndexOf(':') + 1), title: i.title, kind: i.kind, text: i.text,
+      ...(i.text.length >= 20000 && { truncated: true }) })) };
   };
   const modules = async (go, a) => {
     if (X().site !== 'canvas' || !ID.test(a.course || '')) return no('args');

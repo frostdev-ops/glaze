@@ -38,10 +38,10 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
     return r;
   };
   // A page of a text, from 1: { text, page, pages }, or why not.
-  const paged = (text, page = 1) => {
+  const paged = (text, page = 1, truncated = false) => {
     const t = String(text || '').slice(0, LIMIT.text), pages = Math.max(1, Math.ceil(t.length / PAGE));
     if (page > pages) return { error: `There are ${pages} pages.` };
-    return { text: t.slice((page - 1) * PAGE, page * PAGE), page, pages };
+    return { text: t.slice((page - 1) * PAGE, page * PAGE), page, pages, ...((truncated || String(text || '').length > LIMIT.text) && { truncated: true }) };
   };
   const capped = (items) => ({ items: items.slice(0, LIMIT.items), ...(items.length > LIMIT.items && { more: items.length - LIMIT.items }) });
   const spec = (name) => AT().SPECS.find((t) => t.name === name);
@@ -73,7 +73,7 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
       if (!course(w, args.course)) return fail(ERRORS.args);
       const r = await viaTab(w, ctx, 'announcement', { course: args.course, id: args.id });
       if (r.ok === false) return r;
-      const p = paged(r.text, args.page || 1);
+      const p = paged(r.text, args.page || 1, r.truncated);
       return p.error ? fail(p.error) : { account: w.account, title: r.title, ...(r.author && { author: r.author }), at: r.at, ...p, ...(r.files.length && { files: r.files.slice(0, 20) }) };
     }),
     def('content_list', async (args, ctx) => {
@@ -93,7 +93,7 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
       const it = r.items.find((i) => i.id === args.id);
       if (!it) return fail('No such item in this course for the student now; content_list names them.');
       if (!it.text) return fail(`“${it.title}” holds no text Glaze can read (a ${it.kind.toLowerCase()}); open it on the site.`);
-      const p = paged(it.text, args.page || 1);
+      const p = paged(it.text, args.page || 1, it.truncated);
       return p.error ? fail(p.error) : { account: w.account, title: it.title, kind: it.kind, ...p };
     }),
     def('syllabus_read', async (args, ctx) => {
@@ -119,19 +119,19 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
       const w = who(ctx?.account);
       if (!w) return fail(NONE);
       if (!course(w, args.course)) return fail(ERRORS.args);
-      let title, text, at, author;
+      let title, text, at, author, truncated;
       if (w.lms === 'ultra') {
         const r = await viaTab(w, ctx, 'search', { course: args.course, kind: 'discussions' });
         if (r.ok === false) return r;
         const it = r.items.find((i) => i.id === args.id);
         if (!it) return fail('No such discussion in this course for the student now; discussions_list names them.');
-        ({ title, text } = it);
+        ({ title, text, truncated } = it);
       } else {
         const r = await viaTab(w, ctx, 'announcement', { course: args.course, id: args.id });
         if (r.ok === false) return r;
-        ({ title, text, at, author } = r);
+        ({ title, text, at, author, truncated } = r);
       }
-      const p = paged(text, args.page || 1);
+      const p = paged(text, args.page || 1, truncated);
       return p.error ? fail(p.error) : { account: w.account, title, ...(author && { author }), ...(at && { at }), ...p };
     }),
   ];
