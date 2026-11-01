@@ -283,6 +283,41 @@ test('run_js: the last expression\'s value and console lines; errors and promise
   assert.match((await run('new Promise(() => {})')).error, /never settled/);
 });
 
+test('run_js: output crosses into the host only after bounding it, and serialization obeys the deadline', async () => {
+  require('../../extension/vendor/quickjs/quickjs.js');
+  const sandbox = { process, require, __dirname: path.join(ROOT, 'extension/ai/agent'), WebAssembly,
+    GZ_QUICKJS: { load: async (...args) => {
+      const q = await globalThis.GZ_QUICKJS.load(...args), create = q.newRuntime.bind(q);
+      q.newRuntime = () => {
+        const rt = create(), context = rt.newContext.bind(rt);
+        rt.newContext = () => {
+          const ctx = context(), get = ctx.getString.bind(ctx);
+          ctx.getString = (h) => { const s = get(h); assert.ok(s.length <= J.LIMIT.output + 1, `transferred ${s.length} characters`); return s; };
+          return ctx;
+        };
+        return rt;
+      };
+      return q;
+    } } };
+  vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'extension/ai/agent/js.js'), 'utf8'), sandbox);
+  const loud = await sandbox.GZ_AI_RIME_JS.run('console.log(...Array(100).fill("x".repeat(10000))); "y".repeat(10000)');
+  assert.equal(loud.ok, true);
+  assert.equal(loud.cut, true);
+  assert.equal(loud.logs[0].length, J.LIMIT.line);
+  assert.equal(loud.logs[0].length + loud.value.length, J.LIMIT.output);
+  assert.deepEqual(await run('console.log(12n, Symbol("s")); 9007199254740993n'), { ok: true, logs: ['12 Symbol(s)'], value: '9007199254740993' });
+  for (const code of ['({get n(){while(true){}}})', 'console.log({toJSON(){while(true){}}}); 42', 'throw {toJSON(){while(true){}}}', 'Promise.reject({toJSON(){while(true){}}})']) {
+    const r = await run(code, { ms: 50 });
+    assert.equal(r.ok, false, code);
+    assert.equal(r.error, 'Stopped after 0.05 seconds.', code);
+  }
+  assert.deepEqual(await run('console.log("x".repeat(501)); 42'), { ok: true, value: 42, logs: ['x'.repeat(500)], cut: true });
+  assert.equal((await run('console.log.constructor("return typeof process")()')).value, 'undefined');
+  await run('Object.prototype.hostPolluted = true; JSON.parse("{\"__proto__\":{\"hostPolluted\":true}}")');
+  assert.equal({}.hostPolluted, undefined);
+  assert.equal((await run('6 * 7')).value, 42);
+});
+
 test('run_js: stopped at its time, its memory capped, value and logs sharing one output budget, its code held to its length', async () => {
   const t = Date.now(), loop = await run('while (true) {}', { ms: 300 });
   assert.deepEqual(loop, { ok: false, value: null, logs: [], error: 'Stopped after 0.3 seconds.' });
