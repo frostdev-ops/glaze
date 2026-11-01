@@ -280,7 +280,8 @@ test('route at level 3: announcements, content, the syllabus and discussions rea
 
 test('ordinary study terms do not trigger school record reads', () => {
   for (const q of ['What is a Python module?', 'Explain Python modules', 'Explain reading comprehension',
-    'What are atomic weights?', 'What is a discussion forum?', 'Explain essay structure', 'Help me write an essay', 'Explain project management', 'What is the news?']) {
+    'What are atomic weights?', 'What is a discussion forum?', 'Explain essay structure', 'Help me write an essay',
+    'Help me write an essay about the French Revolution', 'Explain project management', 'What is the news?']) {
     const r = K.route(q, { level: 3 });
     assert.equal(r.task, 'study.help', q);
     assert.equal(r.read, undefined, `${q}: no school records named`);
