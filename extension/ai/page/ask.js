@@ -183,10 +183,20 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
 
   // ---- the view ---------------------------------------------------------------------------------------------------------
   const turns = []; // [{ question, answer }] of this panel, for follow-ups; gone when it closes
+  const reveals = new Map(), copyTimers = new Map();
   let box = null, opener = null, current = 0, pending = null, follow = true, frame = 0, written = -1, sizes = null, moved = 0;
   const $ = (sel) => box?.querySelector(sel);
   const say = (s) => { const l = $('.gz-ask-say'); if (l && l.textContent !== s) l.textContent = s; };
   const log = () => $('.gz-ask-log');
+  const releaseView = () => {
+    if (frame) { cancelAnimationFrame(frame); frame = 0; }
+    for (const id of reveals.values()) cancelAnimationFrame(id);
+    reveals.clear();
+    for (const id of copyTimers.values()) clearTimeout(id);
+    copyTimers.clear();
+    sizes?.disconnect();
+  };
+  const drop = (li) => { if (li) { sizes?.unobserve(li); li.remove(); } };
 
   // The log follows its newest line while the student reads at the bottom; scrolled up, it stays, and Jump to latest shows.
   // Only the student leaves the bottom: a scroll within a second of their wheel, touch, key or pointer on the log (moved)
@@ -239,8 +249,10 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     b.addEventListener('click', async (e) => {
       if (!real(e)) return;
       try { await navigator.clipboard.writeText(text); } catch { return; }
+      if (!b.isConnected) return;
+      clearTimeout(copyTimers.get(b));
       b.lastChild.textContent = t('Copied');
-      setTimeout(() => { if (b.lastChild) b.lastChild.textContent = t('Copy'); }, 1600);
+      copyTimers.set(b, setTimeout(() => { copyTimers.delete(b); if (b.lastChild) b.lastChild.textContent = t('Copy'); }, 1600));
     });
     return b;
   };
@@ -265,6 +277,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     li.dataset.streaming = '';
     let at = 0;
     const tick = () => {
+      reveals.delete(li);
       if (!li.isConnected) return;
       let left = step;
       while (left > 0 && at < nodes.length) {
@@ -275,10 +288,10 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
         if (n.data.length >= full.length) at++;
       }
       pin(true);
-      if (at < nodes.length) requestAnimationFrame(tick);
+      if (at < nodes.length) reveals.set(li, requestAnimationFrame(tick));
       else { for (const b of waiting) b.hidden = false; delete li.dataset.streaming; }
     };
-    requestAnimationFrame(tick);
+    reveals.set(li, requestAnimationFrame(tick));
   };
   const answer = (text, follow_ = '') => {
     const body = make('div', { className: 'gz-ask-body' });
@@ -295,7 +308,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
   // ---- a question's run: the thinking line, its tool cards, its end ------------------------------------------------------
   const busy = (yes) => {
     const l = log();
-    l?.querySelector('.gz-ask-busy')?.remove();
+    drop(l?.querySelector('.gz-ask-busy'));
     if (yes && l) {
       const li = make('li', { className: 'gz-ask-busy' }, make('span', { className: 'gz-ask-mark' }, icon('rime')), make('span', { className: 'gz-ask-busy-words', textContent: t('Thinking…') }));
       li.setAttribute('aria-hidden', 'true');
@@ -392,7 +405,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
       li.append(retry);
       retry.addEventListener('click', (e) => {
         if (!real(e) || !activated() || current || pending) return;
-        li.remove();
+        drop(li);
         ask({ question: q, attempt, shown: true });
       });
     }
@@ -432,7 +445,9 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
   const clear = (e) => {
     if (!real(e) || current || pending) return;
     turns.length = 0;
+    releaseView();
     log()?.replaceChildren(empty());
+    if (sizes && log()) sizes.observe(log());
     say('');
     follow = true;
     jumpShown();
@@ -504,9 +519,9 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     box.addEventListener('close', () => {
       if (current) try { port?.postMessage({ id: current, op: 'cancel' }); } catch { /* gone */ }
       current = 0; pending = null; shutting = false; follow = true;
-      if (frame) { try { cancelAnimationFrame(frame); } catch { /* none */ } frame = 0; }
+      releaseView();
       turns.length = 0;
-      sizes?.disconnect(); sizes = null; written = -1;
+      sizes = null; written = -1;
       hangUp();
       box?.remove(); box = null;
       if (opener?.isConnected) opener.focus({ preventScroll: true });
