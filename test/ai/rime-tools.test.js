@@ -590,6 +590,19 @@ test('monitor grade: a score posting in Insights\' record of the course; letters
   assert.equal((await mk.run({ watch: 'grade' }, ctx)).error, 'grade takes the course id.');
 });
 
+test('monitor grade: a new day at the same percent is visible after Insights reaches its trend cap', async () => {
+  const store = {}, env = wakesEnv(store), ctx = { account: ACC, zone: 'UTC' };
+  const keep = async (last) => C.keepInsights(store, CANVAS, '5', [{ id: '25', name: 'Biology', items: [],
+    trend: Array.from({ length: 401 }, (_, i) => [last - (400 - i) * 864e5, 80]) }], last);
+  await keep(T0);
+  const mk = await wtool(env, 'monitor_create').run({ watch: 'grade', course: '25' }, ctx);
+  assert.ok(mk.id);
+  assert.equal((await reader(store)('course_grades', { course: '25' }, ACC)).trend.length, 400);
+  await keep(T0 + 864e5);
+  assert.equal(await W.tick(env), 1, 'a new trend point must fire even when the retained count and percent stay the same');
+  assert.equal((await W.take(env))[0].id, mk.id);
+});
+
 test('monitor announcement: a new one in Canvas\'s planner; on Blackboard refused; expired monitors go without firing', async () => {
   const note = (id, title, at) => C.planner({ type: 'announcement', id, course: 25, name: 'BIO 1100', title, at });
   const store = { todoCache: await C.canvasPlan('5', [note(70, 'Welcome', '2026-10-10T12:00:00Z')]) }, env = wakesEnv(store), ctx = { account: ACC, zone: 'UTC' };
