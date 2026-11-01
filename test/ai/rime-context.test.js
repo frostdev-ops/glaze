@@ -283,6 +283,7 @@ test('a question on a new port carries the chat\'s summary: the next request has
   for (const [id, bad] of [[2, 5], [3, 'x'.repeat(701)]]) h.say({ id, op: 'ask', question: 'And next week?', history: H3, summary: bad });
   await settle(60);
   assert.deepEqual(h.got.filter((m) => m.id >= 2 && m.type === 'error').map((m) => [m.id, m.error]), [[2, 'request'], [3, 'request']]);
+});
 
 test('from 16K up the tools offered are the chat\'s union, so later turns share the system turn; below 16K each question gets its own; the union stays under its budget, oldest dropped first', async () => {
   const toolsOf = (h, n) => h.seen.runs.filter((r) => r.task === 'agent.tools')[n].input.tools;
