@@ -100,11 +100,14 @@ test('a spare\'s download resumes after a restart from its verified chunks', asy
   await m.store.download('rime-q4');
   await m.store.edit(() => ({ v: 1, serial: 1, models: [fresh], pins: { 'rime-q4': old }, keep: { 'rime-q4': [fresh] } }));
   await assert.rejects(m.store.download('rime-q4', { total: fresh.total, signal: ctl.signal }), (e) => e.reason === 'aborted');
-  assert.deepEqual(await m.store.status('rime-q4', { total: fresh.total }), { state: 'partial', bytes: 2 * 1024 });
+  await settle(); // a chunk that had arrived when the cancel came is kept
+  const { state, bytes: kept } = await m.store.status('rime-q4', { total: fresh.total });
+  assert.equal(state, 'partial');
+  assert.ok(kept >= 2 * 1024 && kept % 1024 === 0);
   const before = m.fetch.log.length;
   const again = twin(m); // the browser restarted
   assert.equal((await again.download('rime-q4', { total: fresh.total, whole: true })).state, 'ready');
-  assert.deepEqual(m.fetch.log.slice(before).map((l) => l.range[0] / 1024), [2, 3, 4], 'only the chunks it lacked');
+  assert.deepEqual(m.fetch.log.slice(before).map((l) => l.range[0] / 1024), [2, 3, 4].filter((i) => i >= kept / 1024), 'only the chunks it lacked');
 });
 
 test('pause is awaited before every chunk', async () => {
@@ -129,7 +132,7 @@ test('a chunk failing its hash twice ends with reason hash; a file whose whole h
 });
 
 test('too little room for the spare beside the model in use is reason quota, cleanly', async () => {
-  const { store } = make({ quota: OLD.length + 2048 });
+  const { store } = make({ quota: OLD.length + 6000 }); // the state file takes some of it
   await store.download('rime-q4');
   await store.edit(() => ({ v: 1, serial: 1, models: [fresh], pins: { 'rime-q4': old }, keep: { 'rime-q4': [fresh] } }));
   await assert.rejects(store.download('rime-q4', { total: fresh.total }), (e) => e.reason === 'quota' && e.needed === NEW.length && Number.isFinite(e.available));
