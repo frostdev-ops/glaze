@@ -163,6 +163,36 @@ test('within one run, results the model has used become digests when the next re
   assert.ok(!last.steps.at(-1).result.digest, 'the latest result stays whole');
 });
 
+test('digests retain the item identity and submission facts used by tool and missed-work checks', async () => {
+  let runs = 0;
+  await K.episode({ question: 'Watch my lab due date', tools: [...A.NAMES], locale: 'en', now: C.NOW, zone: 'UTC', first: true,
+    measure: async () => ({ used: 5000, window: 4096, reserve: 768 }),
+    call: async ({ name }) => ({ result: name === 'todo_list'
+      ? { account: ACC, items: [{ id: '181', type: 'assignment', courseId: '25', course: 'BIO 1100', title: 'Lab report', due: C.NOW + 864e5, submitted: false, missing: true }] }
+      : { items: [] } }),
+    run: async (_task, raw) => {
+      if (++runs === 1) return call('todo_list', {});
+      if (runs === 2) return call('wakes_list', {});
+      const inp = A.task.input(raw);
+      assert.equal(A.why(said('Nothing is due; Lab report.', ['Lab report']), inp), 'missed');
+      assert.equal(A.why(call('monitor_create', { watch: 'due', type: 'assignment', id: '181' }), inp), '');
+      return said('Lab report.', ['Lab report']);
+    } });
+});
+
+test('compacting an older scalar result retains its calculation value', async () => {
+  let runs = 0;
+  await K.episode({ question: 'Convert miles to km', tools: [...A.NAMES], locale: 'en', now: C.NOW, zone: 'UTC', first: true,
+    measure: async () => ({ used: 5000, window: 4096, reserve: 768 }),
+    call: async ({ name }) => ({ result: name === 'run_js' ? { ok: true, value: '5.15' } : { items: [] } }),
+    run: async (_task, raw) => {
+      if (++runs === 1) return call('run_js', { code: '3.2 * 1.609344' });
+      if (runs === 2) return call('wakes_list', {});
+      assert.equal(A.why(said('5.15 km.', ['5.15']), A.task.input(raw)), '');
+      return said('5.15 km.', ['5.15']);
+    } });
+});
+
 test('New chat (no history) clears the summary; level 1 sends neither summary nor history, and no counts without the broker\'s', async () => {
   const h = harness({ count: () => ({ used: 3500, window: 4096, reserve: 768, exact: true }), script: { 'agent.tools': [said('BIO 1100.', ['BIO 1100']), said('BIO 1100.', ['BIO 1100'])], 'chat.compact': [] } });
   h.say({ id: 1, op: 'ask', question: "What's due this week?", history: H3 });
