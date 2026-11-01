@@ -290,3 +290,18 @@ test('history: a cloud model reads the conversation so far as data; a local mode
     assert.equal(inp({ question: 'q', history: bad }), null, JSON.stringify(bad).slice(0, 40));
   }
 });
+
+test('history: follow-up replies are checked against the earlier student problem, never the assistant example', () => {
+  for (const [question, bad, good] of [
+    [MATH.question, 'So x = 5.', 'Look at the +5. Which operation undoes it?'],
+    [CODE.question, 'Change it to `return sum(nums) / len(nums)`.', 'What should you divide the sum by?'],
+    [GATSBY.question, 'Gatsby wants Daisy.', 'What does Gatsby want most?'],
+  ]) {
+    const i = inp({ question: 'And then?', subject: 'other', history: [{ question, answer: 'Think about your next step.' }] });
+    assert.equal(H.task.check(out('concept', bad), i), null, bad);
+    assert.ok(H.task.check(out('hint', good), i), good);
+    assert.equal(H.task.check(out('hint', good, null, `${bad} What next?`), i), null, 'the follow-up is checked too');
+  }
+  const example = inp({ question: 'And then?', history: [{ question: MATH.question, answer: 'Think of 2y + 4 = 10.' }] });
+  assert.ok(H.task.check(out('concept', 'In 2y + 4 = 10, removing 4 gives 2y = 6. Which operation would undo the addition in yours?'), example), 'an assistant example does not become the student problem');
+});
