@@ -5,6 +5,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const vm = require('node:vm');
 const path = require('node:path');
 const { Worker } = require('node:worker_threads');
 const S = require('../../extension/ai/schema.js');
@@ -191,6 +192,47 @@ const make = (src) => {
   return { postMessage: (m) => w.postMessage(m), set onmessage(f) { w.on('message', (d) => f({ data: d })); }, set onerror(f) { w.on('error', (e) => f(e)); }, terminate: () => w.terminate() };
 };
 const sandbox = (code, o) => SB.run(code, { make, ...o });
+
+// A first-load navigation can replace the sandbox before the host transfers its port.
+// The replacement sees exactly the host's message, but cannot read the closed root's URL.
+const frameHarness = (receive) => {
+  const timers = new Map(); let serial = 0, frame;
+  const element = (tag) => ({ style: {}, setAttribute() {}, append() {}, remove() {},
+    attachShadow() { return { append(f) { frame = f; } }; },
+    addEventListener(type, f) { if (type === 'load') this.load = f; },
+    contentWindow: { postMessage(data, origin, ports) { receive(data, ports[0], frame.src); } },
+  });
+  class Channel {
+    constructor() {
+      this.port1 = { close() {}, postMessage: (data) => queueMicrotask(() => this.port2.onmessage?.({ data })) };
+      this.port2 = { close() {}, postMessage: (data) => queueMicrotask(() => this.port1.onmessage?.({ data })) };
+    }
+  }
+  const ctx = vm.createContext({
+    document: { createElement: element, documentElement: { append() { queueMicrotask(() => frame.load()); } } },
+    location: { protocol: 'https:' }, chrome: { runtime: { getManifest: () => ({ sandbox: { pages: ['ai/sandbox/js.html'] } }), getURL: (p) => `chrome-extension://glaze/${p}` } },
+    crypto, Uint8Array, btoa, MessageChannel: Channel,
+    setTimeout: (f, ms, ...args) => { const id = ++serial; timers.set(id, () => f(...args)); return id; },
+    clearTimeout: (id) => timers.delete(id),
+  });
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'extension/ai/sandbox/frame.js'), 'utf8'), ctx);
+  return { api: ctx.GZ_AI_RIME_FRAME, expire: () => { for (const f of [...timers.values()]) f(); }, timers };
+};
+
+test('sandbox frame: a first-load replacement cannot authenticate with the secret the host sends it', async () => {
+  let leaked;
+  const h = frameHarness((d, port) => {
+    leaked = d.nonce;
+    port.onmessage = ({ data }) => port.postMessage({ id: data.id, ok: true, value: 'forged', logs: [] });
+    port.postMessage({ ready: true, nonce: leaked });
+  });
+  const pending = h.api.run('40+2');
+  await new Promise(setImmediate);
+  h.expire();
+  const r = await pending;
+  assert.equal(r.ok, false, 'the replacement must not return a forged successful calculation');
+  assert.ok(leaked);
+});
 
 test('sandbox: the last expression\'s value and console lines; errors as words', async () => {
   assert.deepEqual(await sandbox('const a = [81, 92, 77]; console.log("n", a.length); (a.reduce((x, y) => x + y) / a.length).toFixed(2)').then(({ ms, ...r }) => r),
