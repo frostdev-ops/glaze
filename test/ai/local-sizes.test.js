@@ -135,7 +135,8 @@ test('the default switch keeps today\'s values: no size token, the legacy THINK 
 const MODELS = [{ id: 'glaze-q4', tier: 1, size: 1, state: 'ready' }, { id: 'lfm3-q4', tier: 3, size: 1, state: 'ready', stock: true }];
 const setup = (scale) => {
   const runs = [];
-  const link = { kind: 'offscreen', up: true, call: async (op, payload) => { if (op !== 'run') return {}; runs.push(payload); return { text: A.native.text({ name: 'todo_list', arguments: { days: 7 } }), finish: 'stop' }; } };
+  const link = { kind: 'offscreen', up: true, call: async (op, payload) => { if (op !== 'run') return {}; runs.push(payload);
+    return { text: payload.tools ? A.native.text({ name: 'todo_list', arguments: { days: 7 } }) : '{"call":{"name":"todo_list","arguments":{"days":7}},"answer":null}', finish: 'stop' }; } };
   const session = { get: async () => ({ aiLocalRates: { 'glaze-q4': 100, 'lfm3-q4': 100 }, aiLocalMeasured: [] }), set: async () => {} };
   LOCAL._env({ store: { list: async () => MODELS }, link, gpu: () => ({}), session, ...(scale && { scale }) });
   return runs;

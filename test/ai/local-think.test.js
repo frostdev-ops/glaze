@@ -219,7 +219,8 @@ test('think mode holds the forced close inside the engine\'s room before any pre
 // The size tables (ai/providers/local.js THINK_SIZED, ANSWER) switched on: the host still caps the reasoning and the answer by
 // the room the prompt leaves in the window, the answer keeping H.LIMIT.answer before the reasoning keeps its budget.
 test('switched on, the 4k think budget and answer reserve are capped by the room left in the window', async () => {
-  const HELP = task('study.help'), all = (v) => ({ '4k': v, '8k': v, '16k': v, '32k': v, '64k': v, '128k': v });
+  const HELP = T.define({ id: 'study.help', version: 9, input: (raw) => raw, check: (o) => o, output: 'text',
+    build: (input, { text }) => text.request({ system: 'Answer.', data: [{ label: 'text', text: input.text }] }) }), all = (v) => ({ '4k': v, '8k': v, '16k': v, '32k': v, '64k': v, '128k': v });
   const scale = { token: true, answer: true, think: { 'agent.tools': all(true), 'study.help': all(true) } };
   const short = setup({ rates: FAST, scale, reply: 'a'.repeat(5000) });
   await P.run('local', request(HELP, { text: 'x' }), LOCAL.config({}));
@@ -228,16 +229,17 @@ test('switched on, the 4k think budget and answer reserve are capped by the room
   assert.ok(fed(short).includes('<|gz_task:study.help|><|gz_ctx:4k|>'));
   assert.equal(short.eng.log.decodes.filter((d) => d.phase === 'think').length, 128, 'room for the whole budget');
   assert.equal(short.eng.log.decodes.filter((d) => d.phase === 'answer').length, 512, 'and the whole reserve');
-  // A prompt that leaves less than both: the reasoning gives way first, the answer takes the rest, the window holds.
-  for (const n of [3500, 3700]) {
+  // A prompt that leaves less than both: the reasoning gives way first, then the answer takes the rest of the window; under
+  // H.LIMIT.answer left, no reasoning, and the answer runs as planned in the engine's room (host.js).
+  for (const n of [3300, 3420, 3500]) {
     const s = setup({ rates: FAST, scale, reply: 'a'.repeat(5000) });
     await P.run('local', request(HELP, { text: 'x'.repeat(n) }), LOCAL.config({}));
     const input = s.eng.log.prefills.slice(0, -1).flat().length, close = ID.nl.length + 1;
     const thought = s.eng.log.decodes.filter((d) => d.phase === 'think').length, answer = s.eng.log.decodes.length - thought;
-    const space = LOCAL.TUNED - input - close;
-    assert.equal(thought, Math.max(0, Math.min(128, space - H.LIMIT.answer)), `${n}: reasoning capped`);
-    assert.equal(answer, Math.min(512, space - thought), `${n}: answer capped`);
-    assert.ok(s.eng.log.prefills.flat().length + s.eng.log.decodes.length <= LOCAL.TUNED, `${n}: inside the window`);
+    const space = LOCAL.TUNED - input - close, floor = Math.min(512, H.LIMIT.answer);
+    assert.equal(thought, Math.max(0, Math.min(128, space - floor)), `${n}: reasoning capped`);
+    assert.equal(answer, space - thought >= floor ? Math.min(512, space - thought) : 512, `${n}: answer capped`);
+    if (space - thought >= floor) assert.ok(s.eng.log.prefills.flat().length + s.eng.log.decodes.length <= LOCAL.TUNED, `${n}: inside the window`);
   }
 });
 

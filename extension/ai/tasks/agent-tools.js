@@ -297,21 +297,25 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // From its pieces as text: head, the instructions; lines, the <tools> lines; now, question; steps [{ call, result }];
   // fired, a fired wake's or monitor's record, as a data block of its own before the question (absent: the turns as before).
   // help: study help's subject, a data block before the question (absent: as before).
-  const draw = ({ head, lines, now, question, steps, fired, help, earlier }) => {
+  // window: the window's size token after the task's (format.js sizeOf; absent: none).
+  const draw = ({ head, lines, now, question, steps, fired, help, earlier, window }) => {
+    const name = window === undefined ? null : F().sizeOf(window);
+    if (window !== undefined && !name) throw Object.assign(new Error(`agent.tools: window ${window}`), { code: 'request' });
+    const size = name ? [{ special: name }] : [];
     const turn = (role, ...parts) => [{ special: '<|im_start|>' }, { text: `${role}\n` }, ...parts, { special: '<|im_end|>' }, { text: '\n' }];
     const block = (kind, l, t) => [{ special: `<|${kind}|>` }, { text: `${l}\n${X().plain(t)}` }, { special: `<|/${kind}|>` }];
     return F().join([{ special: '<|startoftext|>' },
-      ...turn('system', { special: '<|gz_task:agent.tools|>' }, { text: `${head}\n\n${X().TRUST}\n\n` }, { special: '<tools>' }, { text: `\n${lines}\n` }, { special: '</tools>' }),
+      ...turn('system', { special: '<|gz_task:agent.tools|>' }, ...size, { text: `${head}\n\n${X().TRUST}\n\n` }, { special: '<tools>' }, { text: `\n${lines}\n` }, { special: '</tools>' }),
       ...turn('user', ...block('gz_ctx', 'now', now), { text: '\n' }, ...(fired ? [...block('gz_data', 'fired', fired), { text: '\n' }] : []), ...(help ? [...block('gz_data', 'help', help), { text: '\n' }] : []), ...(earlier ? [...block('gz_data', 'earlier', earlier), { text: '\n' }] : []), ...block('gz_data', 'question', question)),
       ...steps.flatMap((s, i) => [...turn('assistant', ...native.parts(s.call)),
         ...turn('tool', { special: '<tool_response>' }, { text: '\n' }, ...block('gz_data', label(i, s.call.name), s.result), { text: '\n' }, { special: '</tool_response>' })]),
       { special: '<|im_start|>' }, { text: 'assistant\n' }]);
   };
-  const layout = (inp) => draw({ head: instructions(inp.locale, inp.first === true), lines: offered(inp.tools).map(line).join('\n'), now: nowText(inp), question: inp.question, steps: inp.steps, fired: inp.fired, help: inp.help,
-    ...(inp.history && { earlier: earlierText(inp.history) }) });
+  const layout = (inp, { window } = {}) => draw({ head: instructions(inp.locale, inp.first === true), lines: offered(inp.tools).map(line).join('\n'), now: nowText(inp), question: inp.question, steps: inp.steps, fired: inp.fired, help: inp.help,
+    ...(inp.history && { earlier: earlierText(inp.history) }), window });
   // Glaze's own model gets a run's request, never its input: build()'s request read back (format.js parse) into the same
   // pieces → { parts: layout()'s, tools: the names offered }. A request build() didn't make is refused (code 'request').
-  const fromRequest = (req) => {
+  const fromRequest = (req, { window } = {}) => {
     const refuse = (why) => Object.assign(new Error(`agent.tools: ${why}`), { code: 'request' });
     const { system, blocks } = F().parse(req);
     const at = system.indexOf('\n\n<tools>\n');
@@ -336,7 +340,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       if (rest[i].label !== `call ${n + 1}` || !validCall(c, tools.map((t) => t.name)) || rest[i + 1].label !== label(n, c.name)) throw refuse('step');
       steps.push({ call: { name: c.name, arguments: c.arguments }, result: rest[i + 1].text });
     }
-    return { parts: draw({ head, lines, now: now.text, question: question.text, steps, fired, help, earlier }), tools: offered(tools.map((t) => t.name)).map((t) => t.name) };
+    return { parts: draw({ head, lines, now: now.text, question: question.text, steps, fired, help, earlier, window }), tools: offered(tools.map((t) => t.name)).map((t) => t.name) };
   };
   // The answer Glaze's own model writes for an output: a native call, or the answer as compact JSON.
   const answerParts = (out) => (out.call ? native.parts(out.call) : [{ text: JSON.stringify({ text: out.answer.text, quotes: out.answer.quotes }) }]);

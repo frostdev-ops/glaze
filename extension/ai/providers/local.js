@@ -47,11 +47,30 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const THINK = Object.freeze({ 'writer.feedback': Object.freeze({ decide: 0, explain: 0, summary: 0, scan: 0 }),
     'writer.review': 0, 'study.help': 0, 'agent.tools': 0,
     'writer.complete': 0, 'writer.outline': 0, 'writer.requirements': 0, 'writer.cite': 0, 'writer.sources': 0, 'writer.decide': 0,
-    'syllabus.read': 0, 'writer.image': 0 });
+    'syllabus.read': 0, 'writer.image': 0, 'chat.compact': 0 });
   // table: THINK, or a test's own (_env's think).
   const thinkFor = (task, table = env?.think || THINK) => {
     const row = Object.hasOwn(table, task?.id || '') ? table[task.id] : 0;
     return typeof row === 'number' ? row : (typeof task.call === 'string' && Object.hasOwn(row, task.call) ? row[task.call] : 0);
+  };
+  // The window's size (format.js SIZES, its token after the task's) scales the reasoning and the answer (owner, 2026-11-01).
+  // THINK_SIZED: the tasks that reason, per size; the rest answer directly. ANSWER: the answer's reserve per size; a request
+  // asking less keeps its own. SCALE: the switches, all off until a round trained with the size tokens passes the gate, so
+  // Rime r5 reads what it was gated on (no size token, THINK, the request's maxTokens): token sends the size token, answer
+  // takes ANSWER, think[task][size] lets that task reason at that size. The host caps both by the room left in the window.
+  const SIZE = ['4k', '8k', '16k', '32k', '64k', '128k'];
+  const bySize = (f) => Object.freeze(Object.fromEntries(SIZE.map((k, i) => [k, f(i)])));
+  const REASONS = bySize((i) => [128, 256, 512, 1024, 1024, 1024][i]);
+  const THINK_SIZED = Object.freeze({ 'agent.tools': REASONS, 'study.help': REASONS });
+  const ANSWER = bySize((i) => [512, 768, 1024, 1536, 2048, 2048][i]);
+  const SCALE = Object.freeze({ token: false, answer: false, think: Object.freeze({ 'agent.tools': bySize(() => false), 'study.help': bySize(() => false) }) });
+  // A Glaze-tuned model's run in a window: → { size (its token, when sent), think (the budget before the host's rate check
+  // and cap), maxTokens }. scale: SCALE, or a test's own (_env's scale).
+  const limits = (task, window, { maxTokens, scale = env?.scale || SCALE } = {}) => {
+    const token = FMT().sizeOf(window), key = token && token.slice(9, -2);
+    const think = key && scale.think?.[task?.id]?.[key] === true && Object.hasOwn(THINK_SIZED, task.id) ? THINK_SIZED[task.id][key] : thinkFor(task);
+    return { size: scale.token === true ? token : null, think,
+      maxTokens: key && scale.answer === true ? Math.min(maxTokens || ANSWER[key], ANSWER[key]) : Math.min(maxTokens || MAX_TOKENS, CONTEXT) };
   };
   // Decode tokens a second below which every task answers directly: a full budget then costs at most 256 / 40 = 6.4 s. The
   // ladder's measured machines decode 79 to 133 (ai/local/ladder.js: M5 Pro Q8_0 78.9 to RTX 3080 Ti Q4_K_M 133.2), so each
@@ -110,7 +129,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   };
   // The tokens this request reasons in on model m: its task's budget, for a Glaze-tuned model this computer runs fast enough.
   const budget = async (req, m) => {
-    const b = m.stock ? 0 : thinkFor(req.task);
+    const b = m.stock ? 0 : limits(req.task, windowOf(m).window).think;
     return b && (await known()).get(m.id) >= THINK_TPS ? b : 0;
   };
 
@@ -201,8 +220,8 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     }
     const m = cfg.weights ? tiers(list).find((x) => x.id === cfg.weights) : choose(list, cfg);
     if (!m || m.state !== 'ready') throw fail('provider-unavailable', 'assets');
-    const think = await budget(req, m);
-    return { m, budget: think, ...FMT().format(req, { dialect: m.stock ? 'chatml' : 'glaze', think: think > 0 }) };
+    const think = await budget(req, m), window = windowOf(m).window, sized = !m.stock && limits(req.task, window).size;
+    return { m, budget: think, ...FMT().format(req, { dialect: m.stock ? 'chatml' : 'glaze', think: think > 0, ...(sized && { window }) }) };
   };
   const host = (e) => {
     if (e?.category === 'cancelled') return e;
@@ -233,7 +252,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     let plan;
     try { plan = await ready(req, cfg); } catch (e) { if (e?.code) throw refuse(e.code, e.message); throw e; }
     if (signal?.aborted) throw signal.reason;
-    const maxTokens = Math.min(req.maxTokens || MAX_TOKENS, CONTEXT);
+    const maxTokens = plan.projector || plan.m.stock ? Math.min(req.maxTokens || MAX_TOKENS, CONTEXT) : limits(req.task, windowOf(plan.m).window, { maxTokens: req.maxTokens }).maxTokens;
     let r;
     try {
       // A task in its own turns (agent.tools) is held to its answer's schema or one offered call (format.js constraint); a
@@ -283,6 +302,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   };
 
   const provider = { id: 'local', config, caps, status, prepare, run, warm, catalog, release, remove, accept, levelOf, toolsLevel, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
+    THINK_SIZED, ANSWER, SCALE, limits,
     _env: (e) => { env = e; preparing.text = preparing.pictures = null; broken = null; rates = null; measured.clear(); } };
   return P.add(provider);
 })();
