@@ -624,7 +624,7 @@ test('course tiles are site-scoped, bounded and confined to Ultra boards', () =>
   for (const bad of ['course:1', 'course:https://bb.test/1/2', 'course:https://bb.test/_1', key(1) + '?x', key(1) + '#x', 'course:https://a@bb.test/_1_1', 'course:http://bb.test/_1_1', 'course:https://bb.test:443/_1_1']) assert.equal(W.course(bad), null, bad);
   const rows = Array.from({ length: 80 }, (_, n) => ({ id: key(n), on: true, term: '<img>'.repeat(100), extra: 'gone' }));
   const l = W.layout({ todo: true, tiles: rows, boards: { courses: rows, dash: [{ id: key(1, 'other.test'), on: true }], pages: rows } });
-  assert.equal(l.boards.courses.filter((x) => W.course(x.id)).length, W.COURSE_MAX);
+  assert.equal(l.boards.courses.filter((x) => W.course(x.id)).length, 80, "a school's board keeps every account's cards; the page shows each account its own COURSE_MAX");
   assert.ok(!l.tiles.some((x) => W.course(x.id)) && !l.boards.pages.some((x) => W.course(x.id)));
   assert.equal(l.boards.courses[0].term.length, 120);
   assert.equal(l.boards.courses[0].extra, undefined);
@@ -636,7 +636,11 @@ test('course tiles are site-scoped, bounded and confined to Ultra boards', () =>
   assert.ok(!two.boards.courses.some((x) => W.course(x.id)));
   assert.ok(two.boards.dash.some((x) => x.id === key(1)), 'separate layouts');
   assert.ok(!two.boards.pages.some((x) => W.course(x.id)));
-  assert.equal(W.apply(l, { ops: [{ s: 'courses', id: key(100), set: { on: true } }] }).boards.courses.filter((x) => W.course(x.id)).length, 48);
+  assert.equal(W.apply(l, { ops: [{ s: 'courses', id: key(100), set: { on: true } }] }).boards.courses.filter((x) => W.course(x.id)).length, 81, 'room is per account, counted by the page');
+  const most = Array.from({ length: W.COURSE_TOTAL + 20 }, (_, n) => ({ id: key(n, `s${n % 9}.test`), on: true }));
+  const full = W.layout({ todo: true, boards: { courses: most } });
+  assert.equal(full.boards.courses.filter((x) => W.course(x.id)).length, W.COURSE_TOTAL, 'the stored bound is the total');
+  assert.equal(W.apply(full, { ops: [{ s: 'courses', id: key(999), set: { on: true } }] }).boards.courses.filter((x) => W.course(x.id)).length, W.COURSE_TOTAL);
 });
 
 test('fresh course cards start in the native list area, grouped by term and clear of the right column', () => {
@@ -741,8 +745,8 @@ test("Canvas course tiles: Canvas's numeric ids, on Canvas's Dashboard board onl
   const l = W.apply(W.layout({}), { ops: [{ s: 'cdash', id: key(27), set: { on: true, term: 'Fall 2026' } }, { s: 'courses', id: key(28), set: { on: true } }, { s: 'dash', id: key(29), set: { on: true } }, { s: 'cdash', id: ultraKey, set: { on: true } }] });
   assert.deepEqual(l.boards.cdash.filter((x) => W.course(x.id)).map((x) => [x.id, x.on, x.term]), [[key(27), true, 'Fall 2026']]);
   assert.ok(!l.boards.courses.some((x) => W.course(x.id)) && !l.boards.dash.some((x) => W.course(x.id)), "Canvas's never on Ultra's boards, Ultra's never on Canvas's");
-  const many = Array.from({ length: 60 }, (_, n) => ({ id: key(n + 1), on: true }));
-  assert.equal(W.layout({ boards: { cdash: many } }).boards.cdash.filter((x) => W.course(x.id)).length, W.COURSE_MAX);
+  const many = Array.from({ length: W.COURSE_TOTAL + 10 }, (_, n) => ({ id: key(n + 1), on: true }));
+  assert.equal(W.layout({ boards: { cdash: many } }).boards.cdash.filter((x) => W.course(x.id)).length, W.COURSE_TOTAL);
   assert.deepEqual(W.apply(l, { ops: [{ s: 'cdash', id: key(27), remove: true }] }).boards.cdash.filter((x) => W.course(x.id)), [], 'removed');
 });
 
@@ -758,6 +762,35 @@ test('filled: a board given its first tiles is marked once, so one emptied since
   assert.deepEqual(W.apply(emptied, { fill: 'cdash', ops: [] }).filled, ['cdash'], 'once');
   assert.deepEqual(W.layout({ starter: true, filled: ['cdash', 'nope', 'cdash'] }).filled, ['cdash'], 'only boards, each once');
   assert.deepEqual(W.apply(fresh, { fill: 'nope', ops: [] }).filled, []);
+});
+
+test("filled per account: a second student on the device gets the board's first cards once, beside the first student's", () => {
+  const key = (n) => `course:https://bb.test/_${n}_1`, A = 'https://bb.test/_1_1', B = 'https://bb.test/_2_1';
+  const first = W.apply(W.fresh(), { fill: 'dash', account: A, ops: [{ s: 'dash', id: key(1), set: { on: true, size: 's' } }] });
+  assert.deepEqual(first.filled, ['dash', `dash ${A}`], 'the first fill marks its account too');
+  assert.deepEqual(W.apply(first, { fill: 'dash', account: A, ops: [{ s: 'dash', id: key(9), set: { on: true } }] }), first, 'never twice for one account');
+  assert.deepEqual(W.apply(first, { fill: 'dash', ops: [{ s: 'dash', id: key(9), set: { on: true } }] }), first, 'nor without one, once the board is filled');
+  const big = W.apply(first, { ops: [{ s: 'dash', id: key(1), set: { size: 'l' } }] });
+  const second = W.apply(big, { fill: 'dash', account: B, ops: [{ s: 'dash', id: key(1), set: { on: true, size: 's' } }, { s: 'dash', id: key(2), set: { on: true, size: 's' } }] });
+  assert.deepEqual(second.boards.dash.filter((x) => W.course(x.id)).map((x) => [x.id, x.size]), [[key(1), 'l'], [key(2), 's']], "the other's cards stay as they are; a card already there is left alone");
+  assert.deepEqual(second.filled, ['dash', `dash ${A}`, `dash ${B}`]);
+  assert.deepEqual(W.layout(second).filled, second.filled, 'kept as stored');
+  assert.deepEqual(W.apply(W.apply(second, { ops: [{ s: 'dash', id: key(2), remove: true }] }), { fill: 'dash', account: B, ops: [{ s: 'dash', id: key(2), set: { on: true } }] }).boards.dash.filter((x) => W.course(x.id)).map((x) => x.id), [key(1)], 'removed stays removed');
+  assert.deepEqual(W.apply({ ...W.layout(first), starter: undefined }, { fill: 'dash', account: B, ops: [{ s: 'dash', id: key(2), set: { on: true } }] }).boards.dash.filter((x) => W.course(x.id)).map((x) => x.id), [key(1)], 'only a starter layout fills');
+  for (const bad of ['dash bb.test/_2_1', 'dash https://bb.test/_2_1/x', 'nope https://bb.test/_2_1', `dash https://bb.test/${'1'.repeat(30)}`, 7]) assert.deepEqual(W.layout({ starter: true, filled: ['dash', bad] }).filled, ['dash'], String(bad));
+  const crowd = Array.from({ length: 40 }, (_, n) => `dash https://bb.test/_${n}_1`);
+  assert.deepEqual(W.layout({ starter: true, filled: ['dash', ...crowd, crowd[39]] }).filled, ['dash', ...crowd.slice(-16)], 'the newest accounts, each once, bounded');
+});
+
+test('a queued first fill cannot consume an account mark when the shared board has no stored room', () => {
+  const key = (n) => `course:https://bb.test/_${n}_1`, account = 'https://bb.test/_2_1';
+  const full = W.layout({ ...W.fresh(), filled: ['dash'], boards: { dash: Array.from({ length: W.COURSE_TOTAL }, (_, n) => ({ id: key(n + 1), on: true })) } });
+  const fill = { fill: 'dash', account, ops: [{ s: 'dash', id: key(999), set: { on: true } }] };
+  assert.deepEqual(W.apply(full, fill), full, 'a request queued before another tab used the last room stays retryable');
+  const room = W.apply(full, { ops: [{ s: 'dash', id: key(1), remove: true }] });
+  const next = W.apply(room, fill);
+  assert.ok(next.boards.dash.some((x) => x.id === key(999)));
+  assert.ok(next.filled.includes(`dash ${account}`));
 });
 
 test('kept: an update keeps what a device without a stored layout showed, and adds nothing the widgets switch now turns on', () => {

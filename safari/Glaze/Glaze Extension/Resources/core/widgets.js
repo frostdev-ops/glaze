@@ -33,7 +33,11 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
   const frac = (v) => (Number.isFinite(v) && v >= 0 && v <= 1 ? v : null);
   // more: tiles other files add (core/page/widgets.js MORE: { id: { size } }), after the built-in ones and off until added.
   const MORE_ID = /^[a-z][a-z0-9]{1,15}$/;
-  const COURSE_MAX = 48, COURSE_TOTAL = 384; // eight full school boards, bounded together
+  // A board shows a student up to COURSE_MAX of their courses at a school (the page counts that room); it keeps up to
+  // COURSE_TOTAL of all, so another student's on this device, or another school's, stay for them.
+  const COURSE_MAX = 48, COURSE_TOTAL = 384;
+  // filled's per-student marks: '<board> <site>/<student id>', the newest FILLED_MARKS.
+  const FILLED_MARK = /^(cdash|dash) (https:\/\/[a-z0-9.-]+(:\d+)?|http:\/\/localhost(:\d+)?)\/(_\d+_\d+|\d{1,20})$/, FILLED_MARKS = 16;
   // A course card's tile: course:<site>/<course id>, Ultra's _1_1 ids or Canvas's numbers (canvas). Sites are https, but
   // for a development build's local Canvas (http://localhost, which a store build never runs on).
   const course = (key) => {
@@ -102,11 +106,11 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     const start = { cdash: tiles.map((x) => ({ id: x.id, on: x.on && !x.float, size: x.size })), courses: tiles.map((x) => ({ id: x.id, on: x.on, size: 's' })), dash: TILES.map((id) => ({ id, on: starts.includes(id) || id === 'todo' })) };
     const boards = Object.fromEntries(BOARDS.map((b) => {
       const list = Array.isArray(raw?.boards?.[b]) ? raw.boards[b] : start[b];
-      const courses = [], counts = new Map();
+      const courses = [];
       for (const x of list) {
         const c = course(x?.id);
-        if (!c || c.canvas !== (b === 'cdash') || courses.includes(x.id) || courses.length >= COURSE_TOTAL || (counts.get(c.origin) || 0) >= COURSE_MAX) continue;
-        courses.push(x.id); counts.set(c.origin, (counts.get(c.origin) || 0) + 1);
+        if (!c || c.canvas !== (b === 'cdash') || courses.includes(x.id) || courses.length >= COURSE_TOTAL) continue;
+        courses.push(x.id);
       }
       const empty = Array.isArray(raw?.boards?.[b]) && !raw.boards[b].length;
       return [b, each(list, [...ids, ...courses], (x) => btile(x, more, empty ? [] : starts))];
@@ -122,8 +126,9 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     // The room's width each board (and the floating tiles) was last arranged in (arrange's and floating's w0).
     const widths = Object.fromEntries([...BOARDS, 'pages', 'canvas'].map((b) => [b, px(raw?.widths?.[b]) || 0]));
     // filled: the boards that were given their first tiles already (core/page/widgets.js fillCourses), so one emptied since
-    // stays empty.
+    // stays empty; and, marked by student, who on this device was given theirs.
     const filled = BOARDS.filter((b) => Array.isArray(raw?.filled) && raw.filled.includes(b));
+    const marks = [...new Set((Array.isArray(raw?.filled) ? raw.filled : []).filter((f) => typeof f === 'string' && FILLED_MARK.test(f)).reverse())].reverse().slice(-FILLED_MARKS);
     // Layouts kept before auto-fill had no marker. Their board, including an intentionally empty one, stays as it was.
     if (raw && Object.keys(raw).length && !Array.isArray(raw.filled)) filled.push('cdash');
     // Ultra auto-fill began with the starter layout. Earlier Dashboards, even empty ones, keep their cards as saved.
@@ -131,7 +136,7 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     // starter records the initial seed; it never enables a removed widget.
     // sidebarFresh: this device's layout began with a new install (background/background.js keepWidgets), for the sidebar's
     // one-time move of To Do (navigation/sidebar.js migrate). Kept as it is; nothing here reads it.
-    return { tiles, music: music(raw?.music) ? raw.music.trim() : '', boards, widths, todo: true, canvasTodo: true, filled: BOARDS.filter((b) => filled.includes(b)), ...(raw?.starter === true && { starter: true }), ...(raw?.sidebarFresh === true && { sidebarFresh: true }) };
+    return { tiles, music: music(raw?.music) ? raw.music.trim() : '', boards, widths, todo: true, canvasTodo: true, filled: [...BOARDS.filter((b) => filled.includes(b)), ...marks], ...(raw?.starter === true && { starter: true }), ...(raw?.sidebarFresh === true && { sidebarFresh: true }) };
   };
   // Only onInstalled authorizes the starter layout. Missing storage on an update, restore or another page is not proof.
   const fresh = () => layout({ starter: true, sidebarFresh: true, todo: true, canvasTodo: true, filled: [],
@@ -373,12 +378,24 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     let l = layout(lay, more);
     // Check auto-fill against the layout in the worker's queue, not the tab's earlier snapshot. A second fill cannot
     // restore removed cards or reset their size; an edit made while the request waited also takes precedence.
+    // account: the student it is for ('<site>/<id>'). A board already filled for another student on this device gets this
+    // one's first cards once, beside the other's, never over a card already on it.
+    const mark = BOARDS.includes(m?.fill) && typeof m.account === 'string' ? `${m.fill} ${m.account}` : '';
+    let ops = Array.isArray(m?.ops) ? m.ops.slice(0, 64) : [];
     if (BOARDS.includes(m?.fill)) {
-      if (!l.starter || l.filled.includes(m.fill)) return l;
-      l = { ...l, filled: [...l.filled, m.fill] };
-      if (l.boards[m.fill].some((x) => x.on && x.id !== 'todo' && !(l.starter && STARTER.includes(x.id)))) return l;
+      const marked = FILLED_MARK.test(mark);
+      if (!l.starter || (marked && l.filled.includes(mark))) return l;
+      if (l.filled.includes(m.fill)) {
+        if (!marked) return l;
+        ops = ops.filter((o) => o?.s === m.fill && course(o.id) && !l.boards[m.fill].some((x) => x.id === o.id));
+        // Another tab may have used the last stored room after the page counted it. No cards added means no fill used.
+        if (ops.some((o) => o.set) && l.boards[m.fill].filter((x) => course(x.id)).length >= COURSE_TOTAL) return l;
+        l = { ...l, filled: [...l.filled, mark] };
+      } else {
+        l = { ...l, filled: [...l.filled, m.fill, ...(marked ? [mark] : [])] };
+        if (l.boards[m.fill].some((x) => x.on && x.id !== 'todo' && !(l.starter && STARTER.includes(x.id)))) return l;
+      }
     }
-    const ops = Array.isArray(m?.ops) ? m.ops.slice(0, 64) : [];
     // Any deliberate Dashboard edit opts out, even if it empties the board before its cards arrive.
     for (const b of ['cdash', 'dash']) if (ops.some((o) => o?.s === b) && !l.filled.includes(b)) l = { ...l, filled: [...l.filled, b] };
     for (const o of ops) {
@@ -394,7 +411,7 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
         if (course(o.id).canvas ? o.s !== 'cdash' : !['courses', 'dash'].includes(o.s)) continue;
         const rows = l.boards[o.s];
         if (o.remove === true) { l = { ...l, boards: { ...l.boards, [o.s]: rows.filter((x) => x.id !== o.id) } }; continue; }
-        if (!rows.some((x) => x.id === o.id) && o.set && rows.filter((x) => course(x.id)?.origin === course(o.id).origin).length < COURSE_MAX && rows.filter((x) => course(x.id)).length < COURSE_TOTAL)
+        if (!rows.some((x) => x.id === o.id) && o.set && rows.filter((x) => course(x.id)).length < COURSE_TOTAL)
           l = { ...l, boards: { ...l.boards, [o.s]: [...rows, btile({ id: o.id, ...patch }, more)] } };
       }
       if (o.set) l = bset(l, o.s, o.id, patch, more);

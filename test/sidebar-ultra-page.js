@@ -180,7 +180,7 @@ const page = ({ at = 'outline', width = 1600, stored = {}, enhance = {}, widgets
     };
   }
   // Course cards, as far as a board needs them: a tile's body.
-  c.GZ_COURSE_CARDS = { fill: (body) => { body.append('A course'); return {}; }, sync() {}, picker: { close() {} }, title: () => 'A course' };
+  c.GZ_COURSE_CARDS = { fill: (body) => { body.append('A course'); return {}; }, sync() {}, own: () => true, shows: () => true, picker: { close() {} }, title: () => 'A course' };
   vm.createContext(c);
   const side = vm.runInContext(read('navigation/page/sidebar.js'), c);
   const ui = widgets ? vm.runInContext(read('core/page/widgets.js'), c) : null;
