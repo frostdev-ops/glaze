@@ -328,8 +328,8 @@ const GATE_BATCH = { ultra: 61 + 26, canvas: 61, moodle: 61 };
 // approval, 2026-11-01): content-ultra.js's check and its line of why, 166 bytes on Ultra. Measured against 34b6c95ec.
 const LANDING_WAIT = { ultra: 166, canvas: 0, moodle: 0 };
 // Ask Rime on a school page's load (content.js, owner-approved named allowance, 2026-11-01): one storage read and, with Ask on,
-// the worker's count of reminders and watches that fired; the panel loads only for a carried highlight or one that fired.
-const RIME_ARRIVE = { ultra: 885, canvas: 769, moodle: 769 };
+// the worker's count of reminders and watches that fired and its private handoff; the panel loads only when needed.
+const RIME_ARRIVE = { ultra: 711, canvas: 595, moodle: 595 };
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what background/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;

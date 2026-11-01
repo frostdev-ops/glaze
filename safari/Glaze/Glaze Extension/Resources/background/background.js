@@ -2549,7 +2549,7 @@ chrome.runtime.onConnect.addListener((p) => {
   ai(); GZ_AI_ASK.connect(p, { allowed, broker: (q) => ai().connect(q, { ...aiEnv(), who: String(s.tab?.id ?? 'none'), allowed }), settings: aiEnv().settings, enabled: glazeOn,
     registry: GZ_MCP_REGISTRY, state: mcpRead, approve: core.approve, refresh: mcpRefresh, accounts: async () => (await GZ_AI_TOOLS.get('accounts_list').run({}, mcpCtx(null))).items,
     local: chrome.storage.local, keys: mcpKeys, now: Date.now, turn: (f) => (brokerTurn ||= GZ_CARDS.queue())(f),
-    scope: `${s.tab?.id}|${s.documentId || `${s.frameId}|${s.url}`}`, level: rimeLevel, page: () => ({ url: s.url }), own: { read: rimeWakesEnv().read, writer: async () => GZ_SANITIZE(await chrome.storage.sync.get(null)).enhance.writer !== false, wakes: rimeWakesEnv() } });
+    ...rimePage(s), scope: `${s.tab?.id}|${s.documentId || `${s.frameId}|${s.url}`}`, level: rimeLevel, page: () => ({ url: s.url }), own: { read: rimeWakesEnv().read, writer: async () => GZ_SANITIZE(await chrome.storage.sync.get(null)).enhance.writer !== false, wakes: rimeWakesEnv() } });
 });
 // The tools level of Ask Rime's model (ai/ask.js route): Glaze's own model's, as models.json says it was trained (1 for Rime r5,
 // so its requests stay what it was gated on); every other model gets Rime's own tools.
@@ -2561,10 +2561,18 @@ const rimeLevel = async () => {
   const cfg = GZ_AI_LOCAL.config(raw);
   return cfg ? GZ_AI_LOCAL.toolsLevel(cfg) : 1;
 };
+const rimePage = (s) => ({ tab: s.tab?.id, session: chrome.storage.session, now: Date.now, page: () => ({ url: s.url }) });
 // A school page's look for reminders and watches that fired (ai/agent/wakes.js peek): how many, none taken; the panel takes them.
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:rime' || m.op !== 'peek') return;
-  (async () => (await aiSender(s, { op: 'status', feature: 'ask' })) === true ? (ai(), GZ_AI_RIME_WAKES.peek(rimeWakesEnv())) : 0)().then((n) => reply({ fired: n }), () => reply({ fired: 0 }));
+  (async () => {
+    if (await aiSender(s, { op: 'status', feature: 'ask' }) !== true || !await glazeOn()) return {};
+    const a = (await chrome.storage.local.get('ai')).ai;
+    if (a?.on !== true || a.features?.ask !== true) return {};
+    ai();
+    if (!GZ_AI_SETTINGS.allowed(GZ_AI_SETTINGS.clean(a), 'ask')) return {};
+    return { fired: await GZ_AI_RIME_WAKES.peek(rimeWakesEnv()), carried: (await GZ_AI_ASK.arrival(rimePage(s))).length > 0 };
+  })().then(reply, () => reply({}));
   return true;
 });
 let aiVault = null, aiLocal = null, aiRevision = 0;

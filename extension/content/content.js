@@ -1749,14 +1749,12 @@
   // watches that fired (the worker counts them, taking none), each a card. Top frame, Canvas and Ultra, AI and Ask on.
   ready.then(() => {
     if (!solo || isPreview || window.top !== window || !on(settings) || moodle) return;
-    let carried = false;
-    try { carried = !!sessionStorage.getItem('gz-ask-carry'); } catch { /* no storage */ }
     stored('ai', (r) => {
       const a = r?.ai;
       if (a?.on !== true || a.features?.ask !== true) return;
-      const go = (n) => (carried || n > 0) && need('ai/page/ask.js', () => globalThis.GZ_ASK_UI).then(() => GZ_ASK_UI.arrive({ fired: n }), no);
-      if (a.wakes === false) return go(0);
-      chrome.runtime.sendMessage({ type: 'glaze:rime', op: 'peek' }).then((x) => go(x?.fired | 0), () => go(0));
+      chrome.runtime.sendMessage({ type: 'glaze:rime', op: 'peek' }).then((x) => {
+        if (on(settings) && (x?.carried || x?.fired > 0)) need('ai/page/ask.js', () => globalThis.GZ_ASK_UI).then(() => GZ_ASK_UI.arrive(x), no);
+      }, no);
     });
   });
   // The preview is fed the editor's state directly, before it is saved, and ignores storage so a

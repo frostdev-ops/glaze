@@ -268,8 +268,8 @@ In Ask Rime (`ai/ask.js`, `ai/page/ask.js`):
   answer but Allow ends the question with nothing done and no further model run.
 - **Cards and actions.** A card shows run_js's value or error, the place opened and the words marked (`detail`). The
   actions (`open`, `highlight`) reach the panel just before the answer's end and run once the answer shows: open goes to a
-  place on this site only (or Documents, Settings), a highlight after it carried to that page in sessionStorage for a
-  minute; highlight marks the words (`mark.gz-ask-spot`, never in Glaze's own panel or cards) and gives the answer a Show
+  place on this site only (or Documents, Settings), a highlight after it carried in the extension's private session storage for a
+  minute, bound to the tab and exact destination including its query; highlight marks the words (`mark.gz-ask-spot`, never in Glaze's own panel or cards) and gives the answer a Show
   on the page button. There is no fill.
 - **Fired reminders and watches.** On each Canvas or Ultra page with AI and Ask on, `content/content.js` asks the worker
   how many fired (`glaze:rime` peek; with Reminders and watches off, none) and loads the panel only for one or for a carried

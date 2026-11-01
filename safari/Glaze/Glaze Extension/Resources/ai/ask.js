@@ -52,6 +52,41 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   // text: the page's visible words a question may carry, for page_highlight's check.
   const LIMIT = { question: 2000, attempt: 12000, tools: 6, material: 24000, sender: 5000, turns: 6, turn: 2000, text: 20000 };
   const GROUPS = ['courses', 'grades', 'assignments', 'writer'];
+  // Navigation handoffs live only in the extension. Page sessionStorage is controlled by school scripts.
+  const CARRY = 'rimeCarry';
+  let carried = [], carryQueue = Promise.resolve();
+  const address = (url) => { try { const u = new URL(url); return /^https?:$/.test(u.protocol) ? u.origin + u.pathname + u.search : ''; } catch { return ''; } };
+  const handoff = (env, change) => {
+    const p = carryQueue.then(async () => {
+      const now = env.now(), raw = env.session ? (await env.session.get(CARRY))[CARRY] : carried;
+      const list = (Array.isArray(raw) ? raw : []).filter((c) => c.until > now && c.until <= now + 60e3);
+      const result = change(list);
+      carried = list.slice(-100);
+      if (env.session) await env.session.set({ [CARRY]: carried });
+      return result;
+    });
+    carryQueue = p.catch(() => {});
+    return p;
+  };
+  const arrival = (env, take = false) => handoff(env, (list) => {
+    if (!Number.isInteger(env.tab)) return [];
+    const at = list.findIndex((c) => c.tab === env.tab && c.url === address(env.page?.()?.url));
+    if (at < 0) return [];
+    const marks = structuredClone(list[at].marks);
+    if (take) list.splice(at, 1);
+    return marks;
+  });
+  const carry = (env, actions) => handoff(env, (list) => {
+    if (!Number.isInteger(env.tab)) return;
+    const here = address(env.page?.()?.url);
+    const at = actions.findIndex((a) => a.action === 'open' && a.url && address(a.url) !== here);
+    if (at < 0) return;
+    const url = address(actions[at].url);
+    if (!here || !url || new URL(here).origin !== new URL(url).origin) return;
+    const marks = actions.slice(at + 1).filter((a) => a.action === 'highlight').slice(0, 5).map((a) => ({ text: a.text, note: a.note }));
+    for (let i = list.length - 1; i >= 0; i--) if (list[i].tab === env.tab) list.splice(i, 1);
+    if (marks.length) list.push({ tab: env.tab, url, marks, until: env.now() + 60e3 });
+  });
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
 
   // ---- the routing rule ------------------------------------------------------------------------------------------------
@@ -412,6 +447,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         const inp = SH().task.input({ question, subject: 'math', locale, ...(material && { material }) });
         if (!inp || SH().hands(res.answer.text, inp)) throw R().error('check');
         // What the tools asked of the page (open, highlight), for the panel to perform once it shows the answer.
+        await carry(env, current.actions).catch(() => {});
+        if (signal.aborted) throw cancelled();
         for (const a of current.actions) { const { action, ...rest } = a; post({ id, type: 'action', action: { kind: action, ...rest } }); }
         post({ id, type: 'end', task: r.task, answer: { text: res.answer.text } });
       } catch (e) {
@@ -435,12 +472,13 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         if (m.op === 'status') return void status(m);
         if (m.op === 'ask') return void ask(m);
         if (m.op === 'fired') return void fired(m);
+        if (m.op === 'carry') return void (async () => post({ id: m.id, type: 'end', marks: await live() ? await arrival(env, true) : [] }))().catch(() => post({ id: m.id, type: 'end', marks: [] }));
         post({ id: m.id, type: 'error', error: 'request' });
       }).catch(() => {});
     });
     return { close };
   };
 
-  return { FEATURE, LIMIT, TOPICS, TOPICS3, WORK, TOOLS, TOOLS3, SUBJECTS, route, routeFired, episode, connect, channel };
+  return { FEATURE, LIMIT, TOPICS, TOPICS3, WORK, TOOLS, TOOLS3, SUBJECTS, route, routeFired, episode, connect, channel, arrival };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_ASK; else GZ_AI_ASK;

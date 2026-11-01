@@ -11,7 +11,7 @@
 // STEPS names a tool's card (any other shows its reason, else its name), and a card shows the worker's detail (run_js's value
 // or error, the place opened). The UI actions a run sends ({ id, type: 'action', action: { kind, … } }) wait until the
 // answer shows: open goes to the place (on this site only; a highlight after it is carried to that page in
-// sessionStorage), highlight marks the words on the page and gives the answer a Show on the page button; on(kind,
+// the extension's session storage), highlight marks the words on the page and gives the answer a Show on the page button; on(kind,
 // handler) adds a kind. arrive() is the school page's look on load (content/content.js): a carried highlight, and the
 // reminders and watches that fired, each a card on the page whose Ask Rime asks its words (run({ event, question, fired })),
 // for the student's own click only. A question carries the page's site and visible words (page_highlight's check).
@@ -217,7 +217,6 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     for (let d = first?.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true;
     return first;
   };
-  const CARRY = 'gz-ask-carry';
   const sameSite = (url) => { try { const u = new URL(url, location.origin); return /^https?:$/.test(u.protocol) && u.origin === location.origin ? u : null; } catch { return null; } };
   // open: a place on this site (the course tabs open it when they run, as the palette does), else Glaze's Documents or
   // Settings. A highlight after it goes with it, kept a minute for that page.
@@ -226,8 +225,6 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     if (a.app === 'documents') { try { Promise.resolve(chrome.runtime.sendMessage('papers')).catch(() => {}); } catch { /* reloaded */ } return; }
     const u = sameSite(a.url);
     if (!u) return;
-    const later = (rest || []).filter((x) => x?.kind === 'highlight').map((x) => ({ text: String(x.text || '').slice(0, 200), note: String(x.note || '').slice(0, 80) }));
-    try { if (later.length) sessionStorage.setItem(CARRY, JSON.stringify({ at: Date.now(), path: u.pathname, marks: later })); } catch { /* storage refused */ }
     if (u.href === location.href) return 'here';
     globalThis.GZ_CTABS?.bar?.open(u.href, { native: true }) || location.assign(u.href);
     return 'gone';
@@ -649,7 +646,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
   };
 
   // ---- on a school page's load: a carried highlight, and what fired ------------------------------------------------------
-  // The highlight an open carried here (a minute at most, this page's path only), then each reminder or watch that fired as a
+  // The highlight an open carried here (a minute at most, this tab and exact address only), then each reminder or watch that fired as a
   // card on the page: what it was, the student's words, Ask Rime (their click asks it) and Dismiss. Nothing nags: the cards
   // sit in a corner of the page until the student acts or leaves it, and nothing is shown outside the browser.
   let tray = null;
@@ -665,19 +662,18 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     no.addEventListener('click', (e) => { if (real(e)) gone(); });
     return li;
   };
-  const arrive = async ({ fired = 0 } = {}) => {
-    try {
-      const raw = sessionStorage.getItem(CARRY);
-      if (raw) {
-        sessionStorage.removeItem(CARRY);
-        const c = JSON.parse(raw);
-        if (Date.now() - c.at < 60e3 && c.path === location.pathname && Array.isArray(c.marks)) {
-          let first = null;
-          for (const m of c.marks.slice(0, 5)) first ||= mark(m.text, m.note);
-          first?.scrollIntoView?.({ block: 'center', behavior: still() ? 'auto' : 'smooth' });
-        }
+  const arrive = async ({ fired = 0, carried = false } = {}) => {
+    if (!(await alive())) return;
+    if (carried) {
+      const c = await send({ op: 'carry' });
+      if (!(await alive())) return;
+      let first = null;
+      for (const m of Array.isArray(c.marks) ? c.marks.slice(0, 5) : []) {
+        const hit = mark(m.text, m.note);
+        first ||= hit;
       }
-    } catch { /* nothing carried */ }
+      first?.scrollIntoView?.({ block: 'center', behavior: still() ? 'auto' : 'smooth' });
+    }
     if (!(fired > 0) || !(await alive())) return;
     const r = await send({ op: 'fired' });
     const list = r.type === 'end' && Array.isArray(r.fired) ? r.fired.filter((f) => f && typeof f.id === 'string' && typeof f.say === 'string' && f.say.trim()) : [];
