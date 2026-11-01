@@ -652,7 +652,8 @@ what it always did): `windowOf(m, cfg)` makes it the tuned model's window and in
 holds it, and each run sends it as `window`. A changed size is a new connection generation, so the broker's kept catalog
 goes. Settings refuses a size this computer can't hold with `ai/local/ladder.js` `windows` (its `footprint` at that size
 against half of `navigator.deviceMemory`: `memory`, or `no-f16` when only the f16 cache fits); the tier pick is unchanged.
-The engine host opens its session at 16,000 positions today, so a run over that is refused there until the host follows the size. A status and a
+The engine host opens its session at the selected size when it exceeds the default 16,000 positions; a warm-up uses the
+same size, and changing it releases the earlier session. A status and a
 warm-up use the same window as the run (the broker's `sized`), so Writer's status says 4,096 for a tuned model. `test/ai/local-window.test.js` holds `writer.review` and `syllabus.read` through the
 broker to lfm-tune's training examples (fixture: `tools/dev/local-window-fixture.js`). The system turn is the prefix kept
 warm: up to three per loaded model, as snapshots. Sampling: the request's temperature, else LFM3's GGUF defaults

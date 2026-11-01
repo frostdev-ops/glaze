@@ -37,7 +37,7 @@
 // The grammar's mask allows the end token only once the JSON is whole, so a run stops at the end token as any other.
 // Classic script; node exports (create), and in a Worker it starts itself.
 var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
-  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, rate: 16, answer: 256, spans: 2 };
+  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, maxContext: 131072, rate: 16, answer: 256, spans: 2 };
   // What the Worker loads, in order, beside this file: required ones throw at its start; optional ones until they ship.
   const IMPORTS = Object.freeze({ required: Object.freeze(['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', '../text.js', 'grammar.js', 'updates.js']),
     optional: Object.freeze(['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'ladder.js']) });
@@ -93,14 +93,15 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       } catch (e) { if (signal?.aborted) throw aborted(signal); throw fail('provider-unavailable', 'assets'); }
     };
     // The engine with model `id` (and, for pictures, its projector on the engine's device), loaded once and shared by the
-    // calls that ask together; another model releases it first.
-    const load = (id, projector = null) => {
-      const key = projector ? `${id}+${projector}` : id;
+    // calls that ask together; another model or session size releases it first.
+    const load = (id, projector = null, window) => {
+      const context = Math.max(LIMIT.context, Math.min(Number.isSafeInteger(window) && window > 0 ? window : LIMIT.context, LIMIT.maxContext));
+      const key = `${projector ? `${id}+${projector}` : id}:${context}`;
       if (loaded?.key === key) return loaded.ready;
       const retired = unload();
       const E = env.engine(), V = projector ? env.vision?.() : null;
       if (typeof E?.load !== 'function' || (projector && typeof V?.load !== 'function')) return Promise.reject(fail('provider-unavailable', 'engine'));
-      const job = { id, key, projector, control: new AbortController(), warm: [], schemas: new Map() };
+      const job = { id, key, projector, context, control: new AbortController(), warm: [], schemas: new Map() };
       job.ready = (async () => {
         await retired;
         if (job.control.signal.aborted) throw aborted(job.control.signal);
@@ -109,7 +110,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         if (projector) { try { pfile = await env.store.open(projector); } catch { throw fail('provider-unavailable', 'pictures'); } }
         const { g, tok } = await tokenized(id, job.control.signal);
         let model;
-        try { model = await E.load(g, { context: LIMIT.context, signal: job.control.signal }); }
+        try { model = await E.load(g, { context, signal: job.control.signal }); }
         catch (e) { if (job.control.signal.aborted) throw e; throw fail('provider-unavailable', ENGINE[e?.reason] || 'engine'); }
         try {
           if (job.control.signal.aborted) throw aborted(job.control.signal);
@@ -290,11 +291,11 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         const images = Array.isArray(m.images) ? m.images : [];
         if (images.length && typeof m.projector !== 'string') throw fail('request-rejected', 'unsupported');
         if (images.length && typeof env.decode !== 'function') throw fail('provider-unavailable', 'engine');
-        const job = await wait(load(m.model, images.length ? m.projector : null), signal);
+        const job = await wait(load(m.model, images.length ? m.projector : null, m.window), signal);
         const { model, tok } = job;
         const pictures = images.length ? await pixels(job, images, signal) : [];
         const head = encode(job, m.parts.slice(0, m.stable)), { rest, slots } = feed(job, m.parts.slice(m.stable), pictures);
-        const input = head.length + rest.length, room = Math.min(model.context || LIMIT.context, LIMIT.context);
+        const input = head.length + rest.length, room = Math.min(model.context || job.context, job.context);
         if (input + m.maxTokens > room) throw fail('request-rejected', 'context', { tokens: input, context: room });
         // Think mode: </think>'s id, the parts the host may feed, and the budget the window leaves.
         let think = null, close = null;
@@ -414,7 +415,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
     const warm = async (m, signal) => {
       return queued(async () => {
         if ((await env.store.status(m.model)).state !== 'ready') return { ok: false };
-        const job = await wait(load(m.model), signal);
+        const job = await wait(load(m.model, null, m.window), signal);
         await prefix(job, encode(job, m.parts), signal);
         return { ok: true };
       }, signal);
