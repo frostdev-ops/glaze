@@ -615,3 +615,24 @@ test('with the real ladder (ladder.js): a computer without an adapter, or with a
     assert.deepEqual(s.st.log.downloads, []);
   }
 });
+
+test('a span source named __proto__ remains an own data entry through the local provider', async () => {
+  const X = require('../../extension/ai/text.js'), calls = [];
+  const output = S.obj({ text: { type: 'string', span: { source: '__proto__', min: 1 } } }, ['text']);
+  const previous = globalThis.GZ_AI_TASKS;
+  globalThis.GZ_AI_TASKS = { get: (id) => id === 'writer.requirements' ? { output } : T.get(id) };
+  try {
+    setup({ here: { 'glaze-q4': 'ready' }, reply: '{"text":"safe"}',
+      grammar: { ...G, compile: (schema, V, opts) => { calls.push({ schema, opts }); return G.compile(schema, V, opts); } } });
+    const req = { ...X.request({ system: 'Copy the text.', data: [{ label: '__proto__', text: 'safe' }] }),
+      schema: S.bare(output), task: { id: 'writer.requirements', version: 2 } };
+    const r = await P.run('local', req, LOCAL.config({}));
+    assert.deepEqual(r.json, { text: 'safe' });
+    assert.ok(calls[0].opts.sources && Object.hasOwn(calls[0].opts.sources, '__proto__'));
+    assert.equal(calls[0].opts.sources.__proto__, 'safe');
+    assert.deepEqual(calls[0].schema, output);
+  } finally {
+    if (previous === undefined) delete globalThis.GZ_AI_TASKS;
+    else globalThis.GZ_AI_TASKS = previous;
+  }
+});
