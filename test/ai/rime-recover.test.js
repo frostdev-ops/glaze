@@ -145,6 +145,28 @@ test('a run that read results and then fails its check retries once with the cor
   assert.deepEqual(r.answer, { text: 'Fixed.', quotes: [] });
 });
 
+test('the corrective block is included when measuring the retry against the provider window', async () => {
+  const R = require('../../extension/ai/request.js'), measured = [];
+  let runs = 0;
+  const r = await K.episode({ question: 'Which assignments are coming up?', tools: ['assignments_list', 'schedule_list'], locale: 'en', now: SUNDAY, zone: ZONE, first: true,
+    measure: async (_task, input) => {
+      measured.push(structuredClone(input));
+      return { used: input.fix && !input.steps[0].result.digest ? 3950 : 3850, reserve: 200, window: 4096 };
+    },
+    call: async () => ({ result: SCHEDULE }),
+    run: async (_task, input) => {
+      if (++runs === 1) return { call: { name: 'assignments_list', arguments: {}, kind: 'read' }, answer: null };
+      if (runs === 2) return call;
+      if (runs === 3) throw Object.assign(R.error('check'), { why: 'ground' });
+      if (!input.steps[0].result.digest) throw R.error('size');
+      return { call: null, answer: { text: 'Fixed.', quotes: [] } };
+    } });
+  assert.equal(r.answer.text, 'Fixed.');
+  assert.equal(measured.at(-1).fix, 'ground');
+  assert.equal(r.steps[0].digested, true);
+  assert.equal(r.steps[1].digested, undefined, 'the latest result stays whole');
+});
+
 test('when the retry fails too and the results hold a list, Glaze\'s own list is the answer; with nothing read, the error keeps its code and the raw answer', async () => {
   const { r } = await loop([call, { why: 'ground', raw: 'bad' }, { why: 'number', raw: JSON.stringify(BAD.nodate) }]);
   assert.equal(r.built, true, 'Glaze wrote it');
