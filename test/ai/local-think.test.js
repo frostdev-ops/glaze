@@ -25,7 +25,7 @@ const BYTE = (() => {
 const VOCAB = (() => {
   const tokens = [...BYTE], types = tokens.map(() => 1);
   for (const [t, ty] of [['<|startoftext|>', 3], ['<|im_start|>', 3], ['<|im_end|>', 3], ['<think>', 4], ['</think>', 4]]) { tokens.push(t); types.push(ty); }
-  for (let i = 0; i < 20; i++) { tokens.push(`[PAD${i}]`); types.push(5); }
+  for (let i = 0; i < 32; i++) { tokens.push(`[PAD${i}]`); types.push(5); }
   return { tokens, types, merges: [], pre: 'lfm2', bos: tokens.indexOf('<|startoftext|>'), eos: tokens.indexOf('<|im_end|>') };
 })();
 const TOK = (() => { const t = K.load(VOCAB); for (const n of K.GLAZE_TOKENS) t.add(n); return t; })();
@@ -86,7 +86,7 @@ const MODELS = [
 const MACHINERY = { ...LOCAL.THINK, 'writer.review': 256 };
 const unref = (f, ms) => { const t = setTimeout(f, ms); t.unref?.(); return t; };
 // ms: what the host's clock moves each time it is read, so each decode takes ms: 10 ms reads as 100 tokens a second.
-const setup = ({ here = { 'glaze-q4': 'ready', 'glaze-q8': 'ready', 'lfm3-q4': 'ready' }, rates, reply = '{"text":"hello there"}', closes, gate, grammar = G, ms = 10, ladder = null, context, think = MACHINERY } = {}) => {
+const setup = ({ here = { 'glaze-q4': 'ready', 'glaze-q8': 'ready', 'lfm3-q4': 'ready' }, rates, reply = '{"text":"hello there"}', closes, gate, grammar = G, ms = 10, ladder = null, context, think = MACHINERY, scale } = {}) => {
   const eng = engine({ reply, closes, gate, context }), posted = [], runs = [], saved = [];
   let clock = 0;
   const st = {
@@ -109,7 +109,7 @@ const setup = ({ here = { 'glaze-q4': 'ready', 'glaze-q8': 'ready', 'lfm3-q4': '
   const stored = rates ? { aiLocalRates: structuredClone(rates) } : {};
   const session = { get: async (keys) => Object.fromEntries([keys].flat().map((k) => [k, stored[k]])),
     set: async (o) => { Object.assign(stored, structuredClone(o)); saved.push(structuredClone(o)); } };
-  const env = { store: st, link, gpu: () => ({}), session, ...(think && { think }) };
+  const env = { store: st, link, gpu: () => ({}), session, ...(think && { think }), ...(scale && { scale }) };
   LOCAL._env(env);
   return { eng, posted, runs, saved, env };
 };
@@ -214,6 +214,31 @@ test('think mode holds the forced close inside the engine\'s room before any pre
   const s = setup({ rates: FAST });
   assert.deepEqual((await P.run('local', { ...req, maxTokens: LOCAL.TUNED - prompt }, LOCAL.config({}))).json, { text: 'hello there' });
   assert.equal(s.eng.log.decodes.filter((d) => d.phase === 'think').length, 256);
+});
+
+// The size tables (ai/providers/local.js THINK_SIZED, ANSWER) switched on: the host still caps the reasoning and the answer by
+// the room the prompt leaves in the window, the answer keeping H.LIMIT.answer before the reasoning keeps its budget.
+test('switched on, the 4k think budget and answer reserve are capped by the room left in the window', async () => {
+  const HELP = task('study.help'), all = (v) => ({ '4k': v, '8k': v, '16k': v, '32k': v, '64k': v, '128k': v });
+  const scale = { token: true, answer: true, think: { 'agent.tools': all(true), 'study.help': all(true) } };
+  const short = setup({ rates: FAST, scale, reply: 'a'.repeat(5000) });
+  await P.run('local', request(HELP, { text: 'x' }), LOCAL.config({}));
+  assert.equal(short.runs[0].think.budget, 128);
+  assert.equal(short.runs[0].maxTokens, 512);
+  assert.ok(fed(short).includes('<|gz_task:study.help|><|gz_ctx:4k|>'));
+  assert.equal(short.eng.log.decodes.filter((d) => d.phase === 'think').length, 128, 'room for the whole budget');
+  assert.equal(short.eng.log.decodes.filter((d) => d.phase === 'answer').length, 512, 'and the whole reserve');
+  // A prompt that leaves less than both: the reasoning gives way first, the answer takes the rest, the window holds.
+  for (const n of [3500, 3700]) {
+    const s = setup({ rates: FAST, scale, reply: 'a'.repeat(5000) });
+    await P.run('local', request(HELP, { text: 'x'.repeat(n) }), LOCAL.config({}));
+    const input = s.eng.log.prefills.slice(0, -1).flat().length, close = ID.nl.length + 1;
+    const thought = s.eng.log.decodes.filter((d) => d.phase === 'think').length, answer = s.eng.log.decodes.length - thought;
+    const space = LOCAL.TUNED - input - close;
+    assert.equal(thought, Math.max(0, Math.min(128, space - H.LIMIT.answer)), `${n}: reasoning capped`);
+    assert.equal(answer, Math.min(512, space - thought), `${n}: answer capped`);
+    assert.ok(s.eng.log.prefills.flat().length + s.eng.log.decodes.length <= LOCAL.TUNED, `${n}: inside the window`);
+  }
 });
 
 test('a host think run without an optional trained window keeps reasoning inside the engine room', async () => {

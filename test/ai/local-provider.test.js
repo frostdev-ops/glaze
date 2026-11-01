@@ -32,7 +32,7 @@ const VOCAB = (() => {
   const tokens = [...BYTE], types = tokens.map(() => 1);
   for (const [a, b] of merges) { tokens.push(a + b); types.push(1); }
   for (const [t, ty] of [['<|startoftext|>', 3], ['<|im_start|>', 3], ['<|im_end|>', 3], ['<think>', 4], ['</think>', 4]]) { tokens.push(t); types.push(ty); }
-  for (let i = 0; i < 20; i++) { tokens.push(`[PAD${i}]`); types.push(5); }
+  for (let i = 0; i < 32; i++) { tokens.push(`[PAD${i}]`); types.push(5); }
   return { tokens, types, merges: merges.map((m) => m.join(' ')), pre: 'lfm2', bos: tokens.indexOf('<|startoftext|>'), eos: tokens.indexOf('<|im_end|>') };
 })();
 const TOK = (() => { const t = K.load(VOCAB); for (const n of K.GLAZE_TOKENS) t.add(n); return t; })();
