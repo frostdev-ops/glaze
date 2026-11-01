@@ -28,6 +28,11 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
   const text = (v, n) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, n) : '');
   const when = (v) => (Number.isSafeInteger(v) && v > 0 ? v : 0);
   const clock = (env) => (typeof env.now === 'function' ? env.now() : Date.now());
+  const accountOk = (v) => {
+    if (typeof v !== 'string' || v.length > 320) return false;
+    const at = v.lastIndexOf('/'), origin = v.slice(0, at);
+    try { const u = new URL(origin); return /^https?:$/.test(u.protocol) && u.origin === origin && UID.test(v.slice(at + 1)); } catch { return false; }
+  };
   const OFF = 'Reminders and watches are off in Glaze settings (AI, Ask Rime).';
 
   // ---- the store -------------------------------------------------------------------------------------------------------
@@ -137,8 +142,8 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
   const monitorOf = async (args, ctx, env) => {
     const why = shape(args);
     if (why) return { error: why };
-    const account = ctx?.account;
-    if (typeof account !== 'string' || !/^https?:\/\/[^/]+\/(\d{1,20}|_\d{1,20}_\d{1,20})$/.test(account)) return { error: ACCOUNT };
+    const account = args.account === undefined ? ctx?.account : args.account;
+    if (!accountOk(account)) return { error: ACCOUNT };
     if (args.watch === 'announcement' && /\/_\d+_\d+$/.test(account)) return { error: 'On Blackboard, Glaze reads no announcements it could watch; only Canvas\'s planner lists them.' };
     const m = { watch: args.watch, account, ...(args.course && { course: args.course }), ...(args.type && { item: { type: args.type, id: args.id } }) };
     const r = await look(env, m);
