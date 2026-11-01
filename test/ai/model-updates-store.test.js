@@ -185,3 +185,35 @@ test('a state file that is not JSON leaves the shipped catalog in force', async 
   assert.equal(c.entries.get('rime-q4').total, old.total);
   assert.deepEqual((await m.store.list()).filter((x) => x.state === 'stale'), [], 'the state file is never a stale model');
 });
+
+test('drop rechecks the version in use under both locks before deleting files', async () => {
+  const m = make();
+  await m.store.download('rime-q4');
+  await m.store.edit(() => ({ v: 1, serial: 1, models: [fresh], pins: { 'rime-q4': old }, keep: { 'rime-q4': [fresh] } }));
+  await m.store.download('rime-q4', { total: fresh.total });
+  let entered, release;
+  const held = new Promise((r) => { entered = r; });
+  const gate = new Promise((r) => { release = r; });
+  const blocker = m.locks.request('glaze-model:rime-q4', async () => { entered(); await gate; });
+  await held;
+  const dropping = m.store.drop('rime-q4', fresh.total);
+  const checked = assert.rejects(dropping, (e) => e.reason === 'in-use');
+  await settle();
+  await m.store.edit((st) => ({ ...st, pins: { 'rime-q4': fresh }, keep: { 'rime-q4': [old] } }));
+  release();
+  await blocker;
+  await checked;
+  assert.equal((await m.store.status('rime-q4')).state, 'ready');
+});
+
+test('drop reads current state even before a catalog broadcast arrives', async () => {
+  const m = make({ channel: null });
+  await m.store.download('rime-q4');
+  await m.store.edit(() => ({ v: 1, serial: 1, models: [fresh], pins: { 'rime-q4': old }, keep: { 'rime-q4': [fresh] } }));
+  await m.store.download('rime-q4', { total: fresh.total });
+  const other = twin(m);
+  await other.catalog();
+  await m.store.edit((st) => ({ ...st, pins: { 'rime-q4': fresh }, keep: { 'rime-q4': [old] } }));
+  await assert.rejects(other.drop('rime-q4', fresh.total), (e) => e.reason === 'in-use');
+  assert.equal((await m.store.status('rime-q4')).state, 'ready');
+});
