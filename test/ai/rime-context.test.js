@@ -24,16 +24,22 @@ const said = (text, quotes = []) => ({ call: null, answer: { text, quotes } });
 const call = (name, args) => ({ call: { name, arguments: args, kind: A.SPECS.find((s) => s.name === name).kind }, answer: null });
 const ACC = `${C.CANVAS}/5`;
 // count(m) → the broker's count answer for a request ({ used, window, reserve, exact }).
-const harness = ({ script = {}, level = 3, count = () => ({ used: 900, window: 4096, reserve: 768, exact: true }), counts = true, read } = {}) => {
-  const seen = { runs: [], counts: [] };
+const harness = ({ script = {}, level = 3, count = () => ({ used: 900, window: 4096, reserve: 768, exact: true }), counts = true, read, exclusive = false } = {}) => {
+  const seen = { runs: [], counts: [], cancels: [] };
   const n = {};
+  let active = null;
   const broker = (port) => port.onMessage.addListener(async (m) => {
-    if (m.op === 'count') { seen.counts.push(m); return port.postMessage({ id: m.id, type: 'end', ...count(m) }); }
+    if (m.op === 'cancel') { seen.cancels.push(m.id); if (active === m.id) active = null; return; }
+    if (m.op === 'count') { seen.counts.push(m); return port.postMessage({ id: m.id, type: 'end', ...await count(m) }); }
     if (m.op !== 'run') return;
+    if (exclusive && active !== null) return port.postMessage({ id: m.id, type: 'error', error: 'busy' });
+    active = m.id;
     seen.runs.push(m);
     n[m.task] = (n[m.task] || 0) + 1;
     const next = (script[m.task] || [])[n[m.task] - 1];
-    port.postMessage(next ? { id: m.id, type: 'end', output: typeof next === 'function' ? next(m.input) : next } : { id: m.id, type: 'error', error: 'check' });
+    const output = typeof next === 'function' ? await next(m.input) : next;
+    if (active === m.id) active = null;
+    port.postMessage(output ? { id: m.id, type: 'end', output } : { id: m.id, type: 'error', error: 'check' });
   });
   const env = {
     allowed: async () => true, broker, counts, settings: async () => ({ on: true, model: { use: 'openai', model: 'm' }, features: { ask: true } }), enabled: async () => true,
@@ -49,6 +55,25 @@ const harness = ({ script = {}, level = 3, count = () => ({ used: 900, window: 4
 };
 const turn = (question, answer) => ({ question, answer });
 const H3 = [turn('Which courses am I in?', 'You are in **BIO 1100**.'), turn('What is due in BIO 1100?', 'Nothing in what Glaze read.')];
+
+test('a new question cancels unfinished compaction before taking the broker slot, even for New chat', async () => {
+  for (const fresh of [false, true]) {
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    const h = harness({ exclusive: true, count: () => ({ used: 3500, window: 4096, reserve: 768, exact: true }),
+      script: { 'agent.tools': [said('BIO 1100.', ['BIO 1100']), said('BIO 1100.', ['BIO 1100'])], 'chat.compact': [() => gate] } });
+    try {
+      h.say({ id: 1, op: 'ask', question: "What's due this week?", history: H3 });
+      await settle();
+      const compact = h.seen.runs.find((m) => m.task === 'chat.compact');
+      assert.ok(compact, 'compaction is still running');
+      h.say({ id: 2, op: 'ask', question: "What's due next week?", ...(fresh ? {} : { history: [...H3, turn("What's due this week?", 'BIO 1100.')] }) });
+      await settle();
+      assert.ok(h.got.some((m) => m.id === 2 && m.type === 'end'), JSON.stringify(h.got));
+      assert.ok(h.seen.cancels.includes(compact.id), 'the fallback must release the real broker slot');
+    } finally { release({ text: '- Late summary', quotes: [] }); await settle(); }
+  }
+});
 
 test('each request is measured before it goes: a context event with the model\'s window and the answer\'s reserve', async () => {
   const h = harness({ script: { 'agent.tools': [call('wakes_list', {}), said('You are in BIO 1100.', ['BIO 1100'])] } });
