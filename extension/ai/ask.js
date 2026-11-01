@@ -556,13 +556,13 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         || (m.history !== undefined && !(Array.isArray(m.history) && m.history.length <= LIMIT.turns && m.history.every(turn)))
         || (m.site !== undefined && !SITES.includes(m.site)) || (m.text !== undefined && typeof m.text !== 'string') || (m.fired !== undefined && typeof m.fired !== 'string')) return fail('request');
       const history = (m.history || []).filter((h) => h.question.trim() && h.answer.trim());
+      const question = m.question.trim(), attempt = (m.attempt || '').trim();
+      if (question.length > LIMIT.question || attempt.length > LIMIT.attempt) return fail('size');
+      if (current) return fail('busy');
       if (!history.length) { CHAT.pending?.now(false); CHAT.summary = ''; CHAT.covered.clear(); } else CHAT.pending?.now();
       CHAT.gen++;
       // The turns the summary doesn't cover yet, verbatim.
       const open = history.filter((h) => !CHAT.covered.has(keyOf(h)));
-      const question = m.question.trim(), attempt = (m.attempt || '').trim();
-      if (question.length > LIMIT.question || attempt.length > LIMIT.attempt) return fail('size');
-      if (current) return fail('busy');
       const locale = LOCALES().includes(m.locale) ? m.locale : 'en';
       const control = new AbortController(), signal = control.signal;
       const zone = env.zone || Intl.DateTimeFormat().resolvedOptions().timeZone;
