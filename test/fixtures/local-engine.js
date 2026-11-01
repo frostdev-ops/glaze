@@ -1,6 +1,7 @@
 // A minimal valid lfm3 and a command-recording WebGPU double for the engine's host-side contracts.
-function model({ vocab = 8, embeddingType = 'Q6_K' } = {}) {
-  const E = 256, F = 256, tensors = new Map();
+// kinds: each layer's 'conv', 'full' or 'swa' (default one conv layer).
+function model({ vocab = 8, embeddingType = 'Q6_K', kinds = ['conv'], window = 5 } = {}) {
+  const E = 256, F = 256, H = 2, D = 128, tensors = new Map();
   const add = (name, dims, type = 'F32') => {
     const count = dims.reduce((a, b) => a * b, 1);
     const [block, size] = { F32: [1, 4], Q6_K: [256, 210], Q8_0: [32, 34] }[type];
@@ -8,14 +9,24 @@ function model({ vocab = 8, embeddingType = 'Q6_K' } = {}) {
   };
   add('token_embd.weight', [E, vocab], embeddingType);
   add('output_norm.weight', [E]);
-  for (const n of ['attn_norm', 'ffn_norm']) add(`blk.0.${n}.weight`, [E]);
-  for (const n of ['ffn_gate', 'ffn_up', 'ffn_down', 'shortconv.out_proj']) add(`blk.0.${n}.weight`, [E, F], 'Q8_0');
-  add('blk.0.shortconv.in_proj.weight', [E, 3 * E], 'Q8_0');
-  add('blk.0.shortconv.conv.weight', [3, E]);
+  kinds.forEach((kind, i) => {
+    const b = (n) => `blk.${i}.${n}.weight`;
+    for (const n of ['attn_norm', 'ffn_norm']) add(b(n), [E]);
+    for (const n of ['ffn_gate', 'ffn_up', 'ffn_down']) add(b(n), [E, F], 'Q8_0');
+    if (kind === 'conv') {
+      add(b('shortconv.out_proj'), [E, E], 'Q8_0');
+      add(b('shortconv.in_proj'), [E, 3 * E], 'Q8_0');
+      add(b('shortconv.conv'), [3, E]);
+    } else {
+      add(b('attn_q'), [E, H * D], 'Q8_0'); add(b('attn_k'), [E, D], 'Q8_0'); add(b('attn_v'), [E, D], 'Q8_0');
+      add(b('attn_output'), [H * D, E], 'Q8_0'); add(b('attn_gate'), [E, H], 'Q8_0');
+      add(b('attn_q_norm'), [D]); add(b('attn_k_norm'), [D]);
+    }
+  });
   const kv = Object.fromEntries(Object.entries({
-    block_count: 1, embedding_length: E, feed_forward_length: F,
-    'attention.head_count': 2, 'attention.head_count_kv': [0], 'attention.key_length': 128,
-    'attention.sliding_window_pattern': [false], 'attention.sliding_window': 5,
+    block_count: kinds.length, embedding_length: E, feed_forward_length: F,
+    'attention.head_count': H, 'attention.head_count_kv': kinds.map((k) => (k === 'conv' ? 0 : 1)), 'attention.key_length': D,
+    'attention.sliding_window_pattern': kinds.map((k) => k === 'swa'), 'attention.sliding_window': window,
     'attention.layer_norm_rms_epsilon': 1e-5, 'rope.freq_base_swa': 10000, 'shortconv.l_cache': 3,
   }).map(([k, v]) => [`lfm3.${k}`, v]));
   kv['general.architecture'] = 'lfm3';
