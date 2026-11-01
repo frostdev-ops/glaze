@@ -1573,6 +1573,16 @@ test("a second student whose Dashboard was filled for another gets their own fir
   assert.deepEqual(lay(r).boards.dash.filter((x) => W.course(x.id)), []);
 });
 
+test('a shared course does not use up the next student\'s first Dashboard fill', async () => {
+  const seed = W.apply(W.fresh(), { fill: 'dash', account: 'https://school.blackboard.test/_1_1', ops: [...OTHER, '_101_1'].map((id) => ({ s: 'dash', id: ckey(id), set: { on: true, size: 'l' } })) });
+  const p = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: seed } }), Promise.resolve(members()), '_2_1');
+  p.ui.sync(true); await settle();
+  for (const c of COURSES) assert.ok(p.tile(ckey(c.id)), `${c.id}: the new student gets every first card`);
+  assert.equal(on(p, 'dash', ckey('_101_1')).size, 'l', 'the shared card keeps its saved size');
+  assert.ok(lay(p).filled.includes('dash https://school.blackboard.test/_2_1'));
+  assert.ok(OTHER.every((id) => on(p, 'dash', ckey(id))), 'the first student keeps their cards');
+});
+
 test("the first Dashboard fill waits for its student's identity and their removed cards stay removed after another student visits", async () => {
   const profile = later(), p = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: W.fresh() } }), Promise.resolve(members()));
   p.c.GZ_ULTRA.page.profile = () => profile;
