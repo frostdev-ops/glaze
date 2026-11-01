@@ -50,3 +50,22 @@ test('old settings gain smart dates without hiding notifications; invalid import
     { dates: 'smart', relative: false, compact: false, encouragement: false });
   for (const dates of ['smart', 'posted', 'both']) assert.equal(D.GZ_SANITIZE({ stream: { dates } }).stream.dates, dates);
 });
+
+// The owner, 2026-11-01: students opened the course instead of the assignment, from its name in bold on top of each card
+// (Ultra's own order: course, then item). Glaze puts the item first, in bold, and the course under it.
+test('an Activity card reads item first, in bold, then its course and the rest in Ultra\'s order', () => {
+  const { cssRules, chain, winner } = require('../helpers/css-cascade.cjs');
+  const theme = cssRules('content/theme.css');
+  const details = chain('html', 'body', 'div#site-wrap', 'div.activity-stream', 'div#activity-stream', 'div.stream-item', 'div.element-card.stream-panel-activity-card', 'div.element-details.course-color-9');
+  const kid = (spec, parent = details) => Object.assign(chain(spec), { parent });
+  const order = (cls) => Number(winner(theme, kid(`div.${cls}`), 'order')?.[0] ?? 0);
+  assert.ok(order('timestamp') < order('name'), 'its date stays where it was');
+  assert.ok(order('name') < order('context'), 'the item above its course');
+  assert.equal(order('context'), order('content'), 'the course, then the rest, in Ultra\'s order');
+  assert.equal(order('context'), order('anything-else'));
+  const weight = (cls) => winner(theme, kid('a', kid(`div.${cls}`)), 'font-weight')?.[0];
+  assert.equal(winner(theme, kid('div.name'), 'font-weight')?.[0], '700');
+  assert.equal(weight('name'), '700', 'its link too');
+  assert.equal(winner(theme, kid('div.context'), 'font-weight')?.[0], '400');
+  assert.equal(weight('context'), '400');
+});
