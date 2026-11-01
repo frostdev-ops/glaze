@@ -156,7 +156,7 @@ Ask Rime runs both (below); the worker loads them with the harness (`aiFiles`). 
   assignments, an assignment, to-do, schedule, grades, a course's grades, documents, a document, a document's assignment,
   and `todo_mark_done`, the one write, which waits for the student's approval as in Agents). `SPECS.parameters` are
   Agents' `inputSchema` with shorter words (the test holds them equal). Input `{ question, tools (names), steps: [{ call,
-  result }], now, zone, locale? }`; each result is fenced data, its times in the student's zone (`readable`). Output
+  result }], now, zone, locale?, fired? }`; each result is fenced data, its times in the student's zone (`readable`). Output
   `{ call, answer }`, one null: `check` validates a call against its tool's schema and refuses one whose ids no result value or
   the question holds, a repeat, or a call after six steps; an answer's quotes must be in a result and its numbers in a
   result value, the question or the time, preserving signs and the locale's number formatting. Single-character grades
@@ -231,7 +231,10 @@ Wakes and monitors (`ai/agent/wakes.js`) live in storage.local `rimeWakes` with 
 (`todo_list`, `course_grades`) with what it read when it was made; no model runs until one fires. What fired waits until
 the student's next school page takes it (`take()`, which checks everything due first), shown inside Glaze, never as a
 notification. Safari unloads Glaze's background about 30 s after its last event, so an alarm can come late there; the
-page's `take()` still finds it. Settings → AI → Ask Rime → **Reminders and watches** (`ai.wakes`, on unless turned off):
+page's `take()` still finds it. A fired record runs agent.tools once with `fired: { what, watch?, say, at, fact? }` and
+the say as the question: a `fired` data block (its readable JSON) sits between `now` and `question`, grounds the answer as
+a result does, and is absent from every other turn. Monitor descriptions (`about`) and the approval sentences come in the
+student's language (`ctx.locale`, the i18n tables). Settings → AI → Ask Rime → **Reminders and watches** (`ai.wakes`, on unless turned off):
 off, nothing is made, checked or shown. Async reads recheck that switch before saving or delivering. Browser startup and
 switch changes reconcile the saved alarms; an existing periodic monitor alarm keeps its cadence. Expired records release
 their capacity before creation, and stored records are validated and bounded before use.
