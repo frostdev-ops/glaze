@@ -123,7 +123,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const choose = (list, cfg) => { list = tiers(list); return (cfg.tier && list.find((m) => m.tier === cfg.tier)) || list.find((m) => m.state === 'ready') || list.find((m) => m.state === 'partial') || null; };
   // The agent tools the model this cfg runs was trained on (models.json `tools`): 3 from the round that trains Ask Rime's own
   // tools; Rime r5's entries say nothing, which is 1, Agents' twelve (ai/ask.js offers it no more).
-  const levelOf = (list, cfg = {}) => { const m = choose(list, cfg); return Number.isSafeInteger(m?.tools) && m.tools > 0 ? m.tools : 1; };
+  const levelOf = (list, cfg = {}) => { const m = cfg.weights ? tiers(list).find((m) => m.id === cfg.weights) : choose(list, cfg); return Number.isSafeInteger(m?.tools) && m.tools > 0 ? m.tools : 1; };
   const toolsLevel = async (cfg = {}) => levelOf(await models(), cfg);
   // The picture download: { model, projector, size, ready } when models.json offers it, else null.
   const pictures = (list) => {

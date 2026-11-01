@@ -2555,7 +2555,11 @@ chrome.runtime.onConnect.addListener((p) => {
 // so its requests stay what it was gated on); every other model gets Rime's own tools.
 const rimeLevel = async () => {
   const sel = GZ_AI_SETTINGS.resolve(GZ_AI_SETTINGS.clean((await chrome.storage.local.get('ai')).ai), 'ask');
-  return sel?.use === 'local' ? GZ_AI_LOCAL.toolsLevel() : 3;
+  if (sel?.use !== 'local') return 3;
+  const all = (await aiEnv().vault.get('connections')) || {};
+  const { provider: _p, name: _n, ...raw } = all.local || {};
+  const cfg = GZ_AI_LOCAL.config(raw);
+  return cfg ? GZ_AI_LOCAL.toolsLevel(cfg) : 1;
 };
 // A school page's look for reminders and watches that fired (ai/agent/wakes.js peek): how many, none taken; the panel takes them.
 chrome.runtime.onMessage.addListener((m, s, reply) => {
