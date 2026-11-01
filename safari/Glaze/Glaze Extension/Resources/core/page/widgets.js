@@ -1784,16 +1784,19 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     document.addEventListener('visibilitychange', onShow);
     addEventListener('resize', onResize);
   };
+  const forgetAccount = () => {
+    identity++;
+    me = asking = null;
+    askedWho = false;
+    dashboardEdited = false;
+    teardown(true);
+    drawn = null;
+  };
+  // The Ultra store can change identity without a sidebar context (including when the sidebar is switched off).
+  document.addEventListener('glaze:ultra-refresh', (e) => { if (ultra && (e.detail?.identity || e.detail?.retire)) forgetAccount(); });
   const contextChanged = () => {
     const account = globalThis.GZ_SIDEBAR_UI?.context().accountId || '';
-    if (sideAccount && account !== sideAccount) {
-      identity++;
-      me = asking = null;
-      askedWho = false;
-      dashboardEdited = false;
-      teardown(true);
-      drawn = null;
-    }
+    if (sideAccount && account !== sideAccount) forgetAccount();
     sideAccount = account;
     if (on && W && lay) draw();
   };
