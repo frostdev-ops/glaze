@@ -20,7 +20,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     const order = [...new Set([...nativeCards.keys(), ...cards.keys()])];
     const groups = new Map();
     for (const id of order) { const c = cards.get(id); if (!c) continue; const rows = groups.get(c.term || '') || []; rows.push({ ...c, key: `course:${location.origin}/${id}` }); groups.set(c.term || '', rows); }
-    return [...groups.values()].flat();
+    return [...groups.values()].flat().filter((c) => own(c.key) !== false);
   };
   // A Look's card rules reach these cards too (looks/page/rules.js): a label stays over what is written here until that
   // changes, and what is written gets the rules back at once (on Ultra the board's changes start no pass of their own).
@@ -62,10 +62,10 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
   // Whether a board's course card is this student's: the layout is the device's, so another student who signs in here has
   // their cards in it too. own: true or false once Ultra's list of this student's courses is in (or Ultra's own page shows
   // its card), else undefined. shows:
-  // drawn on this student's boards: theirs, or, while the list is on its way, a course the page or the stored records know
-  // (another student's course has no record here, so it never shows blank and then goes). Canvas's are always shown.
+  // drawn on this student's boards only when confirmed: stored names belong to the device, so they can be another
+  // student's even while the membership list is on its way. Canvas's are always shown.
   const own = (key) => { const c = W.course(key); return !ultra || !c || c.origin !== location.origin ? true : members?.has(c.id) || nativeCards.has(c.id) || (members ? false : undefined); };
-  const shows = (key) => { const o = own(key); return o === undefined ? cards.has(W.course(key).id) : o; };
+  const shows = (key) => own(key) === true;
   // The color a card wears from its course (Ultra's slot, or a pick): its class and variables, on the board and in the
   // Course cards dialog. Only what differs is written.
   const tone = (card, id) => {

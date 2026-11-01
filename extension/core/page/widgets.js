@@ -1194,7 +1194,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     }
     const account = ultra && me ? `${location.origin}/${me.uid}` : undefined;
     if (!first && lay.filled.includes(`${board} ${account}`)) return;
-    const cards = (ultra ? C.list() : C.shown()).filter((c) => (first ? C.own(c.key) !== false : C.own(c.key) === true));
+    const cards = (ultra ? C.list().filter((c) => C.own(c.key) === true) : C.shown());
     if (cards.length) change({ fill: board, account, ops: cards.slice(0, W.COURSE_MAX).map((c) => ({ s: board, id: c.key, set: { on: true, size: 's', term: c.term || '' } })) });
   };
   // The board's Course cards button: its dialog (courses/page/coursecards.js) ticks courses on and off this board, each
