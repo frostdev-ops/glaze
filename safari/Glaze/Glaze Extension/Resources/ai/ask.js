@@ -399,9 +399,9 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     // ---- the context window ---------------------------------------------------------------------------------------------
     // measure(task, input) → { used, window, reserve, exact } for the request a run would send (the broker's count), or null.
     // env.counts: the broker answers count (background/background.js); without it nothing is measured.
-    const measure = async (task, input) => {
+    const measure = async (task, input, signal) => {
       if (env.counts !== true) return null;
-      try { const a = await broker({ op: 'count', feature: FEATURE, task, input }); return Number.isSafeInteger(a.used) && Number.isSafeInteger(a.window) ? { used: a.used, window: a.window, reserve: Number.isSafeInteger(a.reserve) ? a.reserve : 0, exact: a.exact === true } : null; }
+      try { const a = await broker({ op: 'count', feature: FEATURE, task, input }, signal); return Number.isSafeInteger(a.used) && Number.isSafeInteger(a.window) ? { used: a.used, window: a.window, reserve: Number.isSafeInteger(a.reserve) ? a.reserve : 0, exact: a.exact === true } : null; }
       catch { return null; }
     };
     // The chat's summary of its older turns (chat.compact) and the turns it covers; New chat (a question with no history)
@@ -563,7 +563,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       const run = async (task, input) => {
         if (level >= 3 && (await env.level?.().catch(() => 1) ?? 1) < 3) throw R().error('changed');
         // { id, type: 'context', task, used, window, reserve, exact }: the request about to go, against the model's window.
-        const fit = await measure(task, input);
+        const fit = await measure(task, input, signal);
         if (fit && !signal.aborted) post({ id, type: 'context', task, ...fit });
         return (await broker({ op: 'run', feature: FEATURE, task, input }, signal, keep)).output;
       };
@@ -597,7 +597,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
           if (level >= 3 && isObj(output)) void compact({ open, turn: { question, answer: [output.reply, output.followUp].filter((x) => typeof x === 'string' && x).join('\n\n') }, locale, tools: ['accounts_list'], zone }).catch(() => {});
           return;
         }
-        const res = await episode({ question, tools: r.tools, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal, ...(level >= 3 && { first: true, ...(open.length && { history: open }), ...(CHAT.summary && { summary: CHAT.summary }), measure }),
+        const res = await episode({ question, tools: r.tools, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal, ...(level >= 3 && { first: true, ...(open.length && { history: open }), ...(CHAT.summary && { summary: CHAT.summary }), measure: (task, input) => measure(task, input, signal) }),
           ...(record && { fired: { what: record.what, ...(record.watch && { watch: record.watch }), say: question, at: record.at, ...(record.fact && { fact: record.fact }) } }) });
         if (res.declined) return post({ id, type: 'end', task: r.task, declined: true });
         // The study rule on this path too: an answer about records never gives the answer to work.
