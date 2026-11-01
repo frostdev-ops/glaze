@@ -4,7 +4,10 @@
 // copy's worker is a new file, the checkout's is untouched). A synthetic Canvas school under an invented origin, every
 // other request aborted and DNS resolving nowhere. Flows: with Ask off the palette has no Ask Rime; turned on, the palette
 // opens the panel; a tutoring reply; an agent read of the to-do list; marking a to-do done with Allow, and with Don't allow;
-// Ask turned off closes the panel and takes the palette's row away. Shots: the panel at 1280 and 320 px, light and dark.
+// Ask turned off closes the panel and takes the palette's row away. Then the chat as the student sees it, on Canvas and on
+// the synthetic Ultra (test/fixtures/ultra-course.html): the empty panel, an answer revealed as it arrives, a run's tool
+// cards mid-run and after, a change waiting on Glaze's window, a failure with Try again, at 1280 and 320 px, light, dark,
+// a solid background and a right-to-left page; screenshots ask-<site>-<what>-<width>-<look>.png.
 //   glaze-remote -e TZ=UTC -o <evidence dir> -- node checks/ai/ask-check.js /out
 //   (Mac: NODE_PATH=<playwright> nice -n 10 node checks/ai/ask-check.js [evidence dir]; EXT selects the checkout)
 const { chromium } = require('playwright');
@@ -12,7 +15,8 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
 const env = require('../../tools/dev/check-env.js');
 const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
 const G = require(path.join(root, 'content/defaults.js'));
-const CANVAS = 'https://school.instructure.com', A = `${CANVAS}/5`;
+const CANVAS = 'https://school.instructure.com', A = `${CANVAS}/5`, ULTRA = 'https://bb.school.test';
+const ULTRA_HTML = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-course.html'), 'utf8');
 const MOD = process.platform === 'darwin' ? 'Meta' : 'Control';
 // The stub engine, and a way to see Glaze's content script in a tab.
 const SHIM = `
@@ -26,7 +30,9 @@ GZ_AI_PROVIDERS.add({ id: 'stub', config: (raw) => (raw && typeof raw === 'objec
     const mark = /\\[result \\d+ todo_mark_done[^\\]]*\\]\\n<<<(DATA-[0-9a-f]+)\\n([\\s\\S]*?)\\n>>>\\1/.exec(text);
     askCheck.seen.push({ task, steps: (text.match(/\\[result \\d+ /g) || []).length, ...(mark && { mark: JSON.parse(mark[2]) }) });
     if (!next) throw Object.assign(new Error('script'), { category: 'invalid-response' });
-    let out = next;
+    // { wait, out }: the answer after wait ms (a run caught mid-way for its screenshot).
+    if (next.wait) await new Promise((r) => setTimeout(r, next.wait));
+    let out = next.wait ? next.out : next;
     // { mark: title }: mark the to-do of that title done, by the type and id the last to-do list gave.
     if (next.mark) {
       const lists = [...text.matchAll(/\\[result \\d+ todo_list[^\\]]*\\]\\n<<<(DATA-[0-9a-f]+)\\n([\\s\\S]*?)\\n>>>\\1/g)];
@@ -60,7 +66,7 @@ const check = async (name, test) => {
   try { const evidence = await test(); results.push({ name, ok: true, evidence }); console.log(`ok ${name}`); }
   catch (e) { failed++; results.push({ name, ok: false, error: e.stack }); console.error(`FAIL ${name}: ${e.stack}`); }
 };
-const settingsFor = (preset) => G.GZ_SANITIZE({ preset, colors: { ...G.GZ_PRESETS.find(([n]) => n === preset)[1] }, navbar: { on: false }, footer: false,
+const settingsFor = (preset, bg = 'solid') => G.GZ_SANITIZE({ preset, colors: { ...G.GZ_PRESETS.find(([n]) => n === preset)[1] }, navbar: { on: false }, footer: false, bg: { kind: bg },
   enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), palette: true } });
 const AI = (ask) => ({ on: true, model: { use: 'custom-1', model: 'stub' }, features: { ask } });
 
@@ -75,7 +81,7 @@ const AI = (ask) => ({ on: true, model: { use: 'custom-1', model: 'stub' }, feat
       try { fs.mkdirSync(lock); held = true; } catch (e) { if (e.code !== 'EEXIST') throw e; await pause(1000); }
     }
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nask-check\n`);
-    const ext = env.staged(root, [], scratch);
+    const ext = env.staged(root, [`${ULTRA}/*`], scratch);
     // The staged files are hard links to the checkout: replace the worker's, never write through it.
     const worker0 = fs.readFileSync(path.join(ext, 'background/background.js'), 'utf8');
     fs.rmSync(path.join(ext, 'background/background.js'));
@@ -98,6 +104,13 @@ const AI = (ask) => ({ on: true, model: { use: 'custom-1', model: 'stub' }, feat
         marks.push(req.postDataJSON());
         return json({ id: 901, plannable_id: req.postDataJSON().plannable_id, marked_complete: req.postDataJSON().marked_complete, dismissed: false });
       }
+      if (u.origin === ULTRA && req.method() === 'GET') {
+        asked.push(u.pathname);
+        if (u.pathname.startsWith('/ultra')) return r.fulfill({ contentType: 'text/html', body: ULTRA_HTML });
+        if (u.pathname.endsWith('/users/me')) return json({ id: '_42_1' });
+        return json({ results: [] });
+      }
+      if (u.origin === 'https://cdn.school.test' && u.pathname.endsWith('.css')) return r.fulfill({ contentType: 'text/css', body: '' });
       if (u.origin !== CANVAS || req.method() !== 'GET') { asked.push(`refused ${req.method()} ${u.href}`); return r.abort(); }
       asked.push(u.pathname);
       if (u.pathname === '/api/v1/users/self/profile' || u.pathname === '/api/v1/users/self') return json({ id: '5', time_zone: 'UTC' });
@@ -113,7 +126,7 @@ const AI = (ask) => ({ on: true, model: { use: 'custom-1', model: 'stub' }, feat
     await worker.evaluate(async ({ settings, local }) => {
       await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings); await chrome.storage.local.set(local);
       await GZ_AI_BROKER.vault().set('connections', { 'custom-1': { provider: 'stub', model: 'stub', generation: 'g-1' } });
-    }, { settings: settingsFor('Paper'), local: { ultra: [], ai: AI(false), ...stale } });
+    }, { settings: settingsFor('Paper'), local: { ultra: [ULTRA], ai: AI(false), ...stale } });
     const script = (s) => worker.evaluate((x) => { askCheck.script = x; askCheck.seen = []; }, s);
     const seen = () => worker.evaluate(() => askCheck.seen);
     const setAi = (ai) => worker.evaluate((v) => chrome.storage.local.set({ ai: v }), ai);
@@ -140,9 +153,9 @@ const AI = (ask) => ({ on: true, model: { use: 'custom-1', model: 'stub' }, feat
       await page.press('#gz-ask-q', 'Enter');
       return n;
     };
-    const answered = async (n, label) => {
-      await until(async () => (await answers().count()) > n, label, 20000);
-      return (await answers().nth(n).textContent()).trim();
+    const answered = async (n, label, ms = 20000) => {
+      await until(async () => (await answers().count()) > n && !await answers().nth(n).getAttribute('data-streaming').then((v) => v !== null), label, ms);
+      return (await answers().nth(n).locator('.gz-ask-text').allTextContents()).join('').trim();
     };
     const approval = async () => {
       const p = await until(() => context.pages().find((x) => x.url() === APPROVE && !x.isClosed()), 'Glaze\'s approval window');
@@ -222,26 +235,138 @@ const AI = (ask) => ({ on: true, model: { use: 'custom-1', model: 'stub' }, feat
       return { text };
     });
 
-    // The panel with its conversation: 1280 and 320 px wide, light (Paper) and dark (Midnight).
+    // ---- the chat as the student sees it ------------------------------------------------------------------------------
+    // look: a preset on a background kind (gradient: the panel frosted; solid), and the page's direction; once applied.
     const shots = [];
-    for (const [preset, look] of [['Paper', 'light'], ['Midnight', 'dark']]) {
-      await check(`screenshots, ${look}`, async () => {
-        const was = await page.evaluate(() => getComputedStyle(document.getElementById('gz-ask')).backgroundColor);
-        await worker.evaluate((s) => chrome.storage.sync.set(s), settingsFor(preset));
-        if (look === 'dark') await until(() => page.evaluate((w) => getComputedStyle(document.getElementById('gz-ask')).backgroundColor !== w, was), 'the dark palette');
-        for (const [w, h] of [[1280, 860], [320, 640]]) {
-          await page.setViewportSize({ width: w, height: h });
-          await until(() => page.evaluate((x) => { const r = document.getElementById('gz-ask').getBoundingClientRect(); return r.width > 0 && r.right <= x + 0.5 && r.left >= -0.5; }, w), `the panel fits ${w} px`);
-          const file = path.join(out, `ask-${w}-${look}.png`);
-          await page.screenshot({ path: file });
-          shots.push(file);
-        }
-        await page.setViewportSize({ width: 1280, height: 860 });
-        const fit = await page.evaluate(() => { const d = document.getElementById('gz-ask'); return { width: d.getBoundingClientRect().width, overflow: d.scrollWidth > d.clientWidth + 1 }; });
-        assert.equal(fit.overflow, false);
-        return { shots: shots.slice(-2), fit };
-      });
-    }
+    const LOOKS = { light: ['Paper', 'gradient', 'ltr'], dark: ['Midnight', 'gradient', 'ltr'], solid: ['Paper', 'solid', 'ltr'], rtl: ['Paper', 'gradient', 'rtl'] };
+    const look = async (name) => {
+      const [preset, bg, dir] = LOOKS[name], ink = G.GZ_PRESETS.find(([n]) => n === preset)[1]['--gz-ink'];
+      await worker.evaluate((s) => chrome.storage.sync.set(s), settingsFor(preset, bg));
+      await until(() => page.evaluate(({ bg, ink }) => document.documentElement.getAttribute('data-gz-bg') === bg
+        && getComputedStyle(document.documentElement).getPropertyValue('--gz-ink').trim().toLowerCase() === ink.toLowerCase(), { bg, ink }), `the ${name} look`);
+      await page.evaluate((d) => { document.documentElement.dir = d; }, dir);
+    };
+    // Each width: the panel inside the window with nothing wider than it, every entrance finished (the endless effects
+    // of a run go on), then the shot.
+    const settled = () => page.evaluate(() => document.getAnimations().filter((a) => a.effect?.target?.closest?.('#gz-ask'))
+      .every((a) => a.playState !== 'running' || a.effect.getTiming().iterations === Infinity));
+    const snap = async (site, what, lk, widths = [[1280, 860], [320, 640]]) => {
+      const files = [];
+      for (const [w, h] of widths) {
+        await page.setViewportSize({ width: w, height: h });
+        await until(() => page.evaluate((x) => { const d = document.getElementById('gz-ask'), r = d?.getBoundingClientRect(); return !!r && r.width > 0 && r.right <= x + 0.5 && r.left >= -0.5 && d.scrollWidth <= d.clientWidth + 1; }, w), `the panel fits ${w} px`);
+        await until(settled, 'entrances finished');
+        const file = path.join(out, `ask-${site}-${what}-${w}-${lk}.png`);
+        await page.screenshot({ path: file });
+        files.push(file);
+      }
+      await page.setViewportSize({ width: 1280, height: 860 });
+      shots.push(...files);
+      return files;
+    };
+    const day = (d) => new Date(now + d * DAY).toISOString().slice(0, 10);
+    const fresh = async () => { await page.click('#gz-ask .gz-ask-new'); await page.locator('#gz-ask .gz-ask-empty').waitFor(); };
+    const MITOSIS = { kind: 'concept', step: null, reply: '**Mitosis** splits one cell into two matching cells. Each phase has one job:\n\n- **Prophase**: the chromosomes coil up and become visible.\n- **Metaphase**: they line up across the middle of the cell.\n- **Anaphase**: the copies are pulled toward opposite ends.\n\nPicture a zipper being pulled apart from the middle.', followUp: 'What do you think has to happen before the copies can be pulled apart?' };
+
+    await check('Canvas: the empty panel, light, dark and solid', async () => {
+      await fresh();
+      const files = [];
+      for (const lk of ['light', 'dark', 'solid']) { await look(lk); files.push(...await snap('canvas', 'empty', lk)); }
+      const starters = await page.locator('#gz-ask .gz-ask-starter').allTextContents();
+      assert.equal(starters.length, 4);
+      return { starters, files };
+    });
+
+    await check('Canvas: an answer revealed as it arrives, drawn from its markdown', async () => {
+      await page.emulateMedia({ reducedMotion: 'no-preference' });
+      await look('dark'); await look('light');
+      await until(() => page.evaluate(() => document.documentElement.getAttribute('data-gz-motion') !== 'off'), 'Glaze\'s motion on');
+      await script({ 'study.help': [MITOSIS] });
+      const n = await ask('Explain mitosis');
+      await until(() => page.evaluate(() => !!document.querySelector('#gz-ask .gz-ask-a[data-streaming]')), 'the answer arriving', 20000);
+      const mid = path.join(out, 'ask-canvas-streaming-1280-light.png');
+      await page.screenshot({ path: mid });
+      shots.push(mid);
+      const text = await answered(n, 'the answer');
+      await until(() => page.evaluate(() => !document.querySelector('#gz-ask .gz-ask-a[data-streaming]')), 'the whole answer');
+      const drawn = await page.evaluate(() => { const a = [...document.querySelectorAll('#gz-ask .gz-ask-a')].at(-1); return { strong: a.querySelectorAll('strong').length, items: a.querySelectorAll('li').length, text: a.querySelector('.gz-ask-md').textContent }; });
+      assert.equal(drawn.items, 3);
+      assert.ok(drawn.strong >= 4);
+      assert.doesNotMatch(drawn.text, /\*\*/);
+      const files = await snap('canvas', 'answer', 'light');
+      return { mid, files, drawn, text: text.slice(0, 80) };
+    });
+
+    await check('Canvas: a run\'s tool cards as it runs and after it answers', async () => {
+      await script({ 'agent.tools': [{ call: { name: 'todo_list', arguments: {} }, answer: null },
+        { wait: 6000, out: { call: { name: 'schedule_list', arguments: { from: day(0), to: day(7) } }, answer: null } },
+        { call: null, answer: { text: 'Due this week:\n\n- **Lab report**\n- **Reading response**', quotes: ['Lab report', 'Reading response'] } }] });
+      const n = await ask('What is due this week?');
+      await page.locator('#gz-ask .gz-ask-step[data-state="done"]').first().waitFor();
+      await page.locator('#gz-ask .gz-ask-busy').waitFor();
+      const during = await snap('canvas', 'running', 'light');
+      const text = await answered(n, 'the run\'s answer', 30000);
+      const cards = await page.evaluate(() => [...document.querySelectorAll('#gz-ask .gz-ask-steps')].at(-1).querySelectorAll('.gz-ask-step').length);
+      const labels = await page.locator('#gz-ask .gz-ask-steps').last().locator('.gz-ask-step-label').allTextContents();
+      assert.deepEqual(labels, ['Reading your to-do list', 'Reading your schedule']);
+      const after = await snap('canvas', 'run', 'light');
+      return { cards, labels, text, during, after };
+    });
+
+    await check('Canvas: a change waits in its card for Glaze\'s window; Don\'t allow there changes nothing', async () => {
+      await script({ 'agent.tools': [{ call: { name: 'todo_list', arguments: {} }, answer: null }, { mark: 'Reading response' }, { call: null, answer: { text: 'Marked it done.', quotes: [] } }] });
+      const n = await ask('Mark Reading response as done');
+      const win = await approval();
+      await page.locator('#gz-ask .gz-ask-step[data-kind="write"][data-state="ask"]').waitFor();
+      const card = await page.locator('#gz-ask .gz-ask-step[data-kind="write"]').last().textContent();
+      assert.match(card, /Mark a to-do done/);
+      assert.equal(await page.locator('#gz-ask .gz-ask-step[data-kind="write"] button').count(), 0, 'no answer on the page');
+      await page.bringToFront();
+      const files = await snap('canvas', 'approval', 'light');
+      await win.click('#no');
+      assert.equal(await answered(n, 'the decline'), 'Nothing was changed.');
+      assert.equal(await page.locator('#gz-ask .gz-ask-step[data-kind="write"]').last().getAttribute('data-state'), 'no');
+      return { card, files };
+    });
+
+    await check('Canvas: a failure shows with Try again', async () => {
+      await script({});
+      await ask('What is due this week?');
+      await page.locator('#gz-ask .gz-ask-err .gz-ask-retry').waitFor();
+      const said = await page.locator('#gz-ask .gz-ask-err p').textContent();
+      assert.equal(said, 'Rime couldn’t answer that. Try asking another way.');
+      const files = await snap('canvas', 'error', 'light');
+      return { said, files };
+    });
+
+    await check('Canvas: the whole conversation in dark, on a solid background and on a right-to-left page', async () => {
+      const files = [];
+      for (const lk of ['dark', 'solid', 'rtl']) { await look(lk); files.push(...await snap('canvas', 'conversation', lk)); }
+      const rtl = await page.evaluate(() => { const q = [...document.querySelectorAll('#gz-ask .gz-ask-q')].at(-1).getBoundingClientRect(), log = document.querySelector('#gz-ask .gz-ask-log').getBoundingClientRect(); return { qLeft: q.left - log.left, qRight: log.right - q.right }; });
+      assert.ok(rtl.qLeft < rtl.qRight, `a question sits on the start side's opposite, the left, right to left: ${JSON.stringify(rtl)}`);
+      await look('light');
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      return { files, rtl };
+    });
+
+    await check('Ultra: the palette opens the panel on a course page; an answer in light, dark and solid', async () => {
+      await page.keyboard.press('Escape');
+      await until(async () => (await page.locator('#gz-ask').count()) === 0, 'the panel closes');
+      await env.ultraReady(worker);
+      await page.goto(`${ULTRA}/ultra/courses/_101_1/outline`);
+      await until(() => worker.evaluate((u) => glazeIn(u), page.url().split('#')[0]).then((r) => r?.on), 'Glaze on Ultra', 20000);
+      const rows = await until(async () => { const r = await palette('Ask Rime'); if (await r.count()) return r; await closePalette(); return null; }, 'the Ask Rime row on Ultra');
+      await rows.first().click();
+      await page.locator('#gz-ask[open]').waitFor();
+      const files = [];
+      for (const lk of ['light', 'dark']) { await look(lk); files.push(...await snap('ultra', 'empty', lk)); }
+      await script({ 'study.help': [MITOSIS] });
+      const n = await ask('Explain mitosis');
+      const text = await answered(n, 'the answer on Ultra');
+      for (const lk of ['light', 'dark', 'solid']) { await look(lk); files.push(...await snap('ultra', 'answer', lk)); }
+      await look('light');
+      return { text: text.slice(0, 60), files };
+    });
 
     await check('Ask turned off closes the panel and takes the palette\'s row away', async () => {
       await setAi(AI(false));

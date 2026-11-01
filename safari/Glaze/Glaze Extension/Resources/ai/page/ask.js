@@ -183,25 +183,29 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
 
   // ---- the view ---------------------------------------------------------------------------------------------------------
   const turns = []; // [{ question, answer }] of this panel, for follow-ups; gone when it closes
-  let box = null, opener = null, current = 0, pending = null, follow = true, frame = 0;
+  let box = null, opener = null, current = 0, pending = null, follow = true, frame = 0, written = -1, sizes = null, moved = 0;
   const $ = (sel) => box?.querySelector(sel);
   const say = (s) => { const l = $('.gz-ask-say'); if (l && l.textContent !== s) l.textContent = s; };
   const log = () => $('.gz-ask-log');
 
   // The log follows its newest line while the student reads at the bottom; scrolled up, it stays, and Jump to latest shows.
+  // Only the student leaves the bottom: a scroll within a second of their wheel, touch, key or pointer on the log (moved)
+  // that ends away from it, never one the panel wrote (written) or the browser made fitting a change. A line or the log
+  // changing size (a reveal, a Look, the window), or the page coming back into view, brings the bottom back while following.
   const near = (l) => l.scrollHeight - l.scrollTop - l.clientHeight < 64;
+  const write = (l, v) => { l.scrollTop = v; written = l.scrollTop; };
   const jumpShown = () => { const j = $('.gz-ask-jump'), l = log(); if (j && l) j.hidden = follow || l.scrollHeight - l.clientHeight < 48; };
   const pin = (instant) => {
     const l = log();
     if (!l || !follow) return jumpShown();
-    if (instant || still()) { l.scrollTop = l.scrollHeight; return jumpShown(); }
+    if (instant || still()) { write(l, l.scrollHeight); return jumpShown(); }
     if (frame) return;
     const tick = () => {
       frame = 0;
       const x = log();
       if (!x || !follow) return;
       const target = Math.max(0, x.scrollHeight - x.clientHeight), d = target - x.scrollTop;
-      x.scrollTop += Math.abs(d) < 1 ? d : d * 0.3;
+      write(x, x.scrollTop + (Math.abs(d) < 1 ? d : d * 0.3));
       if (Math.abs(target - x.scrollTop) > 1) frame = requestAnimationFrame(tick);
       jumpShown();
     };
@@ -213,6 +217,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     if (!l) return li;
     l.querySelector('.gz-ask-empty')?.remove();
     li.dataset.arrive = '';
+    sizes?.observe(li);
     const busy = l.querySelector('.gz-ask-busy');
     if (busy && li !== busy) busy.before(li); else l.append(li);
     pin();
@@ -239,13 +244,20 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     });
     return b;
   };
-  // Words appearing as Rime's answer arrives: each text node grows a few characters a frame (about a second whole).
+  // Words appearing as Rime's answer arrives: each text node grows a few characters a frame (about a second whole), and a
+  // paragraph, list item or block shows once its first words do.
+  const BLOCKS = 'li, p, pre, h3, h4, h5, h6, blockquote, tr, hr';
   const reveal = (li, parts) => {
     if (still()) return;
-    const nodes = [];
+    const nodes = [], waiting = new Set();
     for (const part of parts) {
       const w = document.createTreeWalker?.(part, 4 /* NodeFilter.SHOW_TEXT */);
-      for (let n = w?.nextNode(); n; n = w.nextNode()) { nodes.push([n, n.data]); n.data = ''; }
+      for (let n = w?.nextNode(); n; n = w.nextNode()) {
+        const block = n.parentElement?.closest(BLOCKS);
+        nodes.push([n, n.data, block]);
+        n.data = '';
+        if (block && block !== nodes[0][2]) { block.hidden = true; waiting.add(block); }
+      }
     }
     const total = nodes.reduce((s, [, d]) => s + d.length, 0);
     if (!total) return;
@@ -256,13 +268,15 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
       if (!li.isConnected) return;
       let left = step;
       while (left > 0 && at < nodes.length) {
-        const [n, full] = nodes[at], take = Math.min(left, full.length - n.data.length);
+        const [n, full, block] = nodes[at], take = Math.min(left, full.length - n.data.length);
+        if (block && waiting.delete(block)) block.hidden = false;
         n.data = full.slice(0, n.data.length + take);
         left -= take;
         if (n.data.length >= full.length) at++;
       }
       pin(true);
-      if (at < nodes.length) requestAnimationFrame(tick); else delete li.dataset.streaming;
+      if (at < nodes.length) requestAnimationFrame(tick);
+      else { for (const b of waiting) b.hidden = false; delete li.dataset.streaming; }
     };
     requestAnimationFrame(tick);
   };
@@ -465,7 +479,17 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     const list = make('ol', { className: 'gz-ask-log' }, empty());
     list.setAttribute('role', 'log');
     list.setAttribute('aria-labelledby', 'gz-ask-title');
-    list.addEventListener('scroll', () => { follow = near(list); if (!follow && frame) { cancelAnimationFrame(frame); frame = 0; } jumpShown(); }, { passive: true });
+    const mine = () => { moved = Date.now(); };
+    for (const type of ['wheel', 'touchmove', 'keydown', 'pointerdown']) list.addEventListener(type, mine, { passive: true });
+    list.addEventListener('scroll', () => {
+      if (Math.abs(list.scrollTop - written) > 1) {
+        written = list.scrollTop;
+        if (near(list)) follow = true;
+        else if (Date.now() - moved < 1000) { follow = false; if (frame) { cancelAnimationFrame(frame); frame = 0; } }
+      }
+      jumpShown();
+    }, { passive: true });
+    if (typeof ResizeObserver === 'function') { sizes = new ResizeObserver(() => pin(true)); sizes.observe(list); }
     const jump = btn('gz-ask-jump', 'down', t('Jump to latest'));
     jump.hidden = true;
     jump.addEventListener('click', (e) => { if (!real(e)) return; follow = true; pin(); });
@@ -482,6 +506,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
       current = 0; pending = null; shutting = false; follow = true;
       if (frame) { try { cancelAnimationFrame(frame); } catch { /* none */ } frame = 0; }
       turns.length = 0;
+      sizes?.disconnect(); sizes = null; written = -1;
       hangUp();
       box?.remove(); box = null;
       if (opener?.isConnected) opener.focus({ preventScroll: true });
@@ -505,6 +530,8 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     if (!box || !activated()) return;
     void ask({ question: q.trim() });
   };
+
+  try { document.addEventListener('visibilitychange', () => { if (box && !document.hidden) pin(true); }); } catch { /* no document events */ }
 
   // Ask, AI or Glaze turned off: the panel goes.
   try {

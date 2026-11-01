@@ -868,7 +868,8 @@ html[data-gz-bg="solid"] #gz-ask::backdrop { backdrop-filter: none; }
 #gz-ask .gz-ask-busy .gz-ask-mark, #gz-ask .gz-ask-step-mark { position: relative; z-index: 1; display: inline-grid; place-items: center; flex: none; width: 1.4rem; height: 1.4rem; color: var(--gz-accent); background: var(--gz-surface-fill, var(--gz-surface)); border: 0; border-radius: 50%; }
 #gz-ask .gz-ask-busy .gz-ask-mark .gz-ask-icon { width: 1.1rem; height: 1.1rem; }
 #gz-ask .gz-ask-steps { position: relative; display: grid; gap: 0.15rem; padding-inline-start: 0.2rem; }
-#gz-ask .gz-ask-steps::before, #gz-ask .gz-ask-steps::after { content: ''; position: absolute; inset-inline-start: calc(0.9rem - 1px); top: 0.9rem; bottom: 0.9rem; width: 2px; border-radius: 1px; pointer-events: none; }
+/* The rail runs from the first card's mark to the last's (a mark is 1.4rem, centred in a 2.25rem card). */
+#gz-ask .gz-ask-steps::before, #gz-ask .gz-ask-steps::after { content: ''; position: absolute; inset-inline-start: calc(0.9rem - 1px); top: 1.85rem; bottom: 1.85rem; width: 2px; border-radius: 1px; pointer-events: none; }
 #gz-ask .gz-ask-steps::before { background: color-mix(in srgb, var(--gz-accent) 22%, transparent); }
 #gz-ask .gz-ask-steps::after { opacity: 0.28; background: repeating-linear-gradient(to bottom, var(--gz-accent) 0 6px, transparent 6px 20px); }
 #gz-ask .gz-ask-steps[data-running]::after { opacity: 0.6; }
@@ -879,7 +880,7 @@ html[data-gz-bg="solid"] #gz-ask::backdrop { backdrop-filter: none; }
 #gz-ask .gz-ask-step[data-state="fail"] { color: var(--gz-err, var(--gz-ink)); }
 #gz-ask .gz-ask-step[data-state="fail"] .gz-ask-step-mark { color: var(--gz-err, var(--gz-ink)); }
 #gz-ask .gz-ask-step[data-state="no"] .gz-ask-step-mark { color: var(--gz-ink-muted); }
-#gz-ask .gz-ask-step[data-kind="write"] { margin: 0.3rem 0; padding: 0.55rem 0.8rem; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border-color: var(--gz-warn, var(--gz-border-strong, var(--gz-line-strong))); border-radius: 0.75rem; }
+#gz-ask .gz-ask-step[data-kind="write"] { position: relative; z-index: 1; margin: 0.3rem 0; margin-inline-start: -0.5rem; padding: 0.55rem 0.8rem; padding-inline-start: 0.5rem; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border-color: var(--gz-warn, var(--gz-border-strong, var(--gz-line-strong))); border-radius: 0.75rem; }
 #gz-ask .gz-ask-step[data-kind="write"][data-state="done"] { border-color: var(--gz-border-line, var(--gz-line)); }
 #gz-ask .gz-ask-step[data-kind="write"][data-state="no"] { border-color: var(--gz-border-line, var(--gz-line)); color: var(--gz-ink-muted); }
 #gz-ask .gz-ask-step-note { flex-basis: 100%; padding-inline-start: 2.05rem; font-size: 12.5px; color: var(--gz-ink-muted); }
