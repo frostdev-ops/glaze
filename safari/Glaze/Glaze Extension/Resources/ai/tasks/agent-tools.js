@@ -19,7 +19,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   const T = typeof GZ_AI_TASKS !== 'undefined' ? GZ_AI_TASKS : require('../task.js');
   const X = () => (typeof GZ_AI_TEXT !== 'undefined' ? GZ_AI_TEXT : require('../text.js'));
   const LIMIT = { question: 2000, steps: 6, result: 3000, string: 1200, text: 1200, quotes: 12, quote: 300, json: 64 << 10 };
-  const HISTORY = { turns: 3, question: 300, answer: 600 };
+  const HISTORY = { turns: 3, question: 300, answer: 600, summary: 700 };
   const LANGUAGES = { en: 'English', 'pt-BR': 'Brazilian Portuguese', es: 'Spanish', fr: 'French', de: 'German', nl: 'Dutch' };
 
   // ---- the tools -----------------------------------------------------------------------------------------------------
@@ -258,13 +258,16 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     } catch { return false; }
   };
   const input = (raw) => {
-    if (!S.isObj(raw) || Object.keys(raw).some((k) => !['question', 'tools', 'steps', 'now', 'zone', 'locale', 'fired', 'first', 'help', 'history'].includes(k))) return null;
+    if (!S.isObj(raw) || Object.keys(raw).some((k) => !['question', 'tools', 'steps', 'now', 'zone', 'locale', 'fired', 'first', 'help', 'history', 'summary'].includes(k))) return null;
     // first: answer only from tool results (tools level 3: Ask Rime's tool-first rule, check() 'first' and 'ground'); help:
     // study.help's subject, for a turn that reads what the student's help question names before study help answers it.
     if ((raw.first !== undefined && raw.first !== true) || (raw.help !== undefined && !HELP.includes(raw.help))) return null;
     // history (tools level 3 only): the panel's conversation so far, [{ question, answer }], the last HISTORY.turns kept, each cut.
     if (raw.history !== undefined && (raw.first !== true || !Array.isArray(raw.history) || raw.history.length > 6
       || !raw.history.every((h) => S.isObj(h) && Object.keys(h).sort().join() === 'answer,question' && typeof h.question === 'string' && typeof h.answer === 'string'))) return null;
+    // summary (tools level 3 only): chat.compact's bullets for the turns history no longer carries.
+    if (raw.summary !== undefined && (raw.first !== true || typeof raw.summary !== 'string' || raw.summary.length > HISTORY.summary)) return null;
+    const summary = (raw.summary || '').trim();
     const history = (raw.history || []).filter((h) => h.question.trim() && h.answer.trim()).slice(-HISTORY.turns)
       .map((h) => ({ question: h.question.trim().slice(0, HISTORY.question), answer: h.answer.trim().slice(0, HISTORY.answer) }));
     const { question, tools, steps = [], now, zone, locale = 'en' } = raw;
@@ -276,7 +279,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     if (shown_.includes(null)) return null;
     const fired = Object.hasOwn(raw, 'fired') ? firedOf(raw.fired, zone) : undefined;
     if (fired === null) return null;
-    return { question: question.trim(), tools: offered(tools).map((t) => t.name), steps: steps.map((s, i) => ({ call: { name: s.call.name, arguments: s.call.arguments }, result: shown_[i] })), now, zone, locale, ...(fired && { fired }), ...(raw.first === true && { first: true }), ...(raw.help && { help: raw.help }), ...(history.length && { history }) };
+    return { question: question.trim(), tools: offered(tools).map((t) => t.name), steps: steps.map((s, i) => ({ call: { name: s.call.name, arguments: s.call.arguments }, result: shown_[i] })), now, zone, locale, ...(fired && { fired }), ...(raw.first === true && { first: true }), ...(raw.help && { help: raw.help }), ...(history.length && { history }), ...(summary && { summary }) };
   };
   const earlierText = (history) => history.map((h) => `Student: ${h.question}\nRime: ${h.answer}`).join('\n');
   const nowText = (inp) => `${local(inp.now, inp.zone, true)}, ${inp.zone}${inp.first ? `\n${windows(inp.now, inp.zone)}` : ''}`;
@@ -284,7 +287,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   const build = (inp, { text }) => text.request({
     system: `${instructions(inp.locale, inp.first === true)}\n\n<tools>\n${offered(inp.tools).map(line).join('\n')}\n</tools>`,
     context: [{ label: 'now', text: nowText(inp) }],
-    data: [...(inp.fired ? [{ label: 'fired', text: inp.fired }] : []), ...(inp.help ? [{ label: 'help', text: inp.help }] : []), ...(inp.history ? [{ label: 'earlier', text: earlierText(inp.history) }] : []), { label: 'question', text: inp.question }, ...inp.steps.flatMap((s, i) => [{ label: `call ${i + 1}`, text: JSON.stringify(s.call) }, { label: label(i, s.call.name), text: s.result }])],
+    data: [...(inp.fired ? [{ label: 'fired', text: inp.fired }] : []), ...(inp.help ? [{ label: 'help', text: inp.help }] : []), ...(inp.summary ? [{ label: 'summary', text: inp.summary }] : []), ...(inp.history ? [{ label: 'earlier', text: earlierText(inp.history) }] : []), { label: 'question', text: inp.question }, ...inp.steps.flatMap((s, i) => [{ label: `call ${i + 1}`, text: JSON.stringify(s.call) }, { label: label(i, s.call.name), text: s.result }])],
     // D4: p3dpo's answers ran to 469 tokens, LFM2.5 350M's to 497 with two cut at 512; 768 with a full think budget fits
     // the 99th-percentile prompt (3,059 tokens) in the 4,096 window.
     temperature: 0, maxTokens: 768,
@@ -298,7 +301,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // fired, a fired wake's or monitor's record, as a data block of its own before the question (absent: the turns as before).
   // help: study help's subject, a data block before the question (absent: as before).
   // window: the window's size token after the task's (format.js sizeOf; absent: none).
-  const draw = ({ head, lines, now, question, steps, fired, help, earlier, window }) => {
+  const draw = ({ head, lines, now, question, steps, fired, help, summary, earlier, window }) => {
     const name = window === undefined ? null : F().sizeOf(window);
     if (window !== undefined && !name) throw Object.assign(new Error(`agent.tools: window ${window}`), { code: 'request' });
     const size = name ? [{ special: name }] : [];
@@ -306,13 +309,13 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     const block = (kind, l, t) => [{ special: `<|${kind}|>` }, { text: `${l}\n${X().plain(t)}` }, { special: `<|/${kind}|>` }];
     return F().join([{ special: '<|startoftext|>' },
       ...turn('system', { special: '<|gz_task:agent.tools|>' }, ...size, { text: `${head}\n\n${X().TRUST}\n\n` }, { special: '<tools>' }, { text: `\n${lines}\n` }, { special: '</tools>' }),
-      ...turn('user', ...block('gz_ctx', 'now', now), { text: '\n' }, ...(fired ? [...block('gz_data', 'fired', fired), { text: '\n' }] : []), ...(help ? [...block('gz_data', 'help', help), { text: '\n' }] : []), ...(earlier ? [...block('gz_data', 'earlier', earlier), { text: '\n' }] : []), ...block('gz_data', 'question', question)),
+      ...turn('user', ...block('gz_ctx', 'now', now), { text: '\n' }, ...(fired ? [...block('gz_data', 'fired', fired), { text: '\n' }] : []), ...(help ? [...block('gz_data', 'help', help), { text: '\n' }] : []), ...(summary ? [...block('gz_data', 'summary', summary), { text: '\n' }] : []), ...(earlier ? [...block('gz_data', 'earlier', earlier), { text: '\n' }] : []), ...block('gz_data', 'question', question)),
       ...steps.flatMap((s, i) => [...turn('assistant', ...native.parts(s.call)),
         ...turn('tool', { special: '<tool_response>' }, { text: '\n' }, ...block('gz_data', label(i, s.call.name), s.result), { text: '\n' }, { special: '</tool_response>' })]),
       { special: '<|im_start|>' }, { text: 'assistant\n' }]);
   };
   const layout = (inp, { window } = {}) => draw({ head: instructions(inp.locale, inp.first === true), lines: offered(inp.tools).map(line).join('\n'), now: nowText(inp), question: inp.question, steps: inp.steps, fired: inp.fired, help: inp.help,
-    ...(inp.history && { earlier: earlierText(inp.history) }), window });
+    ...(inp.summary && { summary: inp.summary }), ...(inp.history && { earlier: earlierText(inp.history) }), window });
   // Glaze's own model gets a run's request, never its input: build()'s request read back (format.js parse) into the same
   // pieces → { parts: layout()'s, tools: the names offered }. A request build() didn't make is refused (code 'request').
   const fromRequest = (req, { window } = {}) => {
@@ -329,8 +332,10 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     const help = after[1]?.kind === 'data' && after[1].label === 'help' ? after[1].text : undefined;
     if (help !== undefined && !HELP.includes(help)) throw refuse('help');
     const helped = help === undefined ? after : [after[0], ...after.slice(2)];
-    const earlier = helped[1]?.kind === 'data' && helped[1].label === 'earlier' ? helped[1].text : undefined;
-    const [now, question, ...rest] = earlier === undefined ? helped : [helped[0], ...helped.slice(2)];
+    const summary = helped[1]?.kind === 'data' && helped[1].label === 'summary' ? helped[1].text : undefined;
+    const summed = summary === undefined ? helped : [helped[0], ...helped.slice(2)];
+    const earlier = summed[1]?.kind === 'data' && summed[1].label === 'earlier' ? summed[1].text : undefined;
+    const [now, question, ...rest] = earlier === undefined ? summed : [summed[0], ...summed.slice(2)];
     if (now?.kind !== 'ctx' || now.label !== 'now' || question?.kind !== 'data' || question.label !== 'question' || rest.length % 2 || rest.length / 2 > LIMIT.steps) throw refuse('blocks');
     const steps = [];
     for (let i = 0; i < rest.length; i += 2) {
@@ -340,7 +345,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       if (rest[i].label !== `call ${n + 1}` || !validCall(c, tools.map((t) => t.name)) || rest[i + 1].label !== label(n, c.name)) throw refuse('step');
       steps.push({ call: { name: c.name, arguments: c.arguments }, result: rest[i + 1].text });
     }
-    return { parts: draw({ head, lines, now: now.text, question: question.text, steps, fired, help, earlier, window }), tools: offered(tools.map((t) => t.name)).map((t) => t.name) };
+    return { parts: draw({ head, lines, now: now.text, question: question.text, steps, fired, help, summary, earlier, window }), tools: offered(tools.map((t) => t.name)).map((t) => t.name) };
   };
   // The answer Glaze's own model writes for an output: a native call, or the answer as compact JSON.
   const answerParts = (out) => (out.call ? native.parts(out.call) : [{ text: JSON.stringify({ text: out.answer.text, quotes: out.answer.quotes }) }]);
@@ -578,6 +583,6 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // rate: Ask Glaze (ai/ask.js) runs a question's steps as runs of their own, at most seven (six calls, then the answer): six
   // questions a minute in a tab, where the broker's default would stop the first question's seventh run.
   const task = T.add(T.define({ id: 'agent.tools', version: 1, input, build, output: OUTPUT, check, limits: { ms: 60000 }, rate: { perMinute: 6 * (LIMIT.steps + 1) } }));
-  return { task, LIMIT, SPECS, NAMES, OWN, PHRASES, AGENTS, AHEAD, HELP, rich, gradedWork, fold, LATER, moment, SYSTEM, OUTPUT, ANSWER, constraint, instructions, line, py, shown, native, fromNative, readable, layout, fromRequest, answerParts, why };
+  return { task, LIMIT, HISTORY, SPECS, NAMES, OWN, PHRASES, AGENTS, AHEAD, HELP, rich, gradedWork, fold, LATER, moment, SYSTEM, OUTPUT, ANSWER, constraint, instructions, line, py, shown, native, fromNative, readable, layout, fromRequest, answerParts, why };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_TASK_AGENT_TOOLS; else GZ_AI_TASK_AGENT_TOOLS;

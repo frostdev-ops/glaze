@@ -66,7 +66,8 @@ var GZ_AI_TASK_CHAT_COMPACT = globalThis.GZ_AI_TASK_CHAT_COMPACT || (() => {
       lines.push(`- Asked: ${q}`); quotes.push(q);
       for (const l of h.answer.split('\n')) {
         const m = ITEM.exec(l);
-        if (!m) continue;
+        // A bold name in prose ("You are in **BIO 1100**.") is an item too.
+        if (!m) { for (const [, b] of l.matchAll(/\*\*([^*\n]+)\*\*/g)) { lines.push(`- ${b.trim()}`); quotes.push(b.trim()); } continue; }
         const [, title, course, rest] = m.map((x) => (x || '').trim());
         // The date as written ("Monday, November 2, 11:59 PM"), without a trailing status ("not submitted").
         const parts = rest.replace(/[.;]$/, '').split(', ');
