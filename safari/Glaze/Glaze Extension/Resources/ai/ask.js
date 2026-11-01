@@ -454,7 +454,16 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       const fallback = () => { const inp = CC().task.input(input); if (inp) apply(CC().fallback(inp)); };
       const control = new AbortController();
       CHAT.pending = { now: (keep = true) => { if (keep) fallback(); CHAT.gen++; CHAT.pending = null; control.abort(); } };
-      try { apply((await broker({ op: 'run', feature: FEATURE, task: 'chat.compact', input }, control.signal)).output); } catch { fallback(); }
+      try {
+        const out = (await broker({ op: 'run', feature: FEATURE, task: 'chat.compact', input }, control.signal)).output;
+        // Summaries now appear on the page too. Grounded values alone can still solve a student's problem.
+        const safe = typeof out?.text === 'string' && older.every((h) => {
+          const inp = SH().task.input({ question: h.question, subject: route(h.question, { locale, level: 3 }).subject || 'math', locale,
+            ...(input.summary && { material: input.summary }) });
+          return inp && !SH().hands(out.text, inp);
+        });
+        if (safe) apply(out); else fallback();
+      } catch { fallback(); }
     };
 
     // Ask's tool calls, through Agents' one call path, as an app of Glaze's own that Ask's switch has granted every group.
