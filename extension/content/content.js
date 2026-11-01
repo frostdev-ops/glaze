@@ -1729,6 +1729,18 @@
   });
   if (on(settings)) enable();
   else early();
+  // Ask Rime on this page's load (ai/page/ask.js arrive): a highlight a place it opened carried here, and the reminders and
+  // watches that fired (the worker counts them, taking none), each a card. Top frame, Canvas and Ultra, AI and Ask on.
+  ready.then(() => {
+    if (!solo || isPreview || window.top !== window || !on(settings) || moodle) return;
+    stored('ai', (r) => {
+      const a = r?.ai;
+      if (a?.on !== true || a.features?.ask !== true) return;
+      chrome.runtime.sendMessage({ type: 'glaze:rime', op: 'peek' }).then((x) => {
+        if (on(settings) && (x?.carried || x?.fired > 0)) need('ai/page/ask.js', () => globalThis.GZ_ASK_UI).then(() => GZ_ASK_UI.arrive(x), no);
+      }, no);
+    });
+  });
   // Load parts after the theme, only when present.
   const partsIn = (m) => {
     if (solo && !isPreview && (m || lookX || globalThis.GZ_XPARTS_PAGE)) need('looks/page/lookparts.js', () => globalThis.GZ_XPARTS_PAGE).then(() => GZ_XPARTS_PAGE.read(), () => {});
@@ -1745,18 +1757,6 @@
     });
   };
   ready.then(() => modsIn(true));
-  // Ask Rime on this page's load (ai/page/ask.js arrive): a highlight a place it opened carried here, and the reminders and
-  // watches that fired (the worker counts them, taking none), each a card. Top frame, Canvas and Ultra, AI and Ask on.
-  ready.then(() => {
-    if (!solo || isPreview || window.top !== window || !on(settings) || moodle) return;
-    stored('ai', (r) => {
-      const a = r?.ai;
-      if (a?.on !== true || a.features?.ask !== true) return;
-      chrome.runtime.sendMessage({ type: 'glaze:rime', op: 'peek' }).then((x) => {
-        if (on(settings) && (x?.carried || x?.fired > 0)) need('ai/page/ask.js', () => globalThis.GZ_ASK_UI).then(() => GZ_ASK_UI.arrive(x), no);
-      }, no);
-    });
-  });
   // The preview is fed the editor's state directly, before it is saved, and ignores storage so a
   // save landing late can't undo an edit that is further along.
   if (isPreview) {
