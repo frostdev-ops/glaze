@@ -316,3 +316,13 @@ test('port: carried highlights stay in the worker and reach only their tab and e
   assert.deepEqual(await K.arrival(env, true), [{ text: 'Homework', note: 'Read this' }]);
   assert.deepEqual(await K.arrival(env, true), [], 'one delivery');
 });
+
+
+test('gate: changing to level 1 between steps never sends Rime tools or a fired block to that model', async () => {
+  const h = harness({ script: [call('places_list', {}), said('Courses.')] });
+  const read = h.env.own.read;
+  h.env.own.read = async (...args) => { const result = await read(...args); h.env.level = async () => 1; return result; };
+  h.say({ id: 61, op: 'ask', question: 'Take me to my courses', site: 'canvas' }); await settle(60);
+  assert.equal(h.seen.runs.length, 1, 'the second model must not receive the first model tools');
+  assert.equal(h.ends().at(-1).error, 'changed');
+});
