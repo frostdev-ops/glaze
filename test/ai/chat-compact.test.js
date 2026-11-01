@@ -37,7 +37,7 @@ test('check: every bullet rests on values the turns hold; no new numbers; bullet
   assert.equal(CC.why(good, inp), '');
   assert.equal(CC.why({ ...good, quotes: [...good.quotes, 'Essay 2'] }, inp), 'quote', 'a value no turn holds');
   assert.equal(CC.why({ text: `${good.text}\n- Something else entirely.`, quotes: good.quotes }, inp), 'ground', 'a bullet with no quoted value');
-  assert.equal(CC.why({ text: good.text.replace('10%', '15%'), quotes: good.quotes }, inp), 'number');
+  assert.equal(CC.why({ text: good.text.replace('lose 10% a day.', 'lose 10% a day (3 labs).'), quotes: good.quotes }, inp), 'number');
   assert.equal(CC.why({ text: 'Due Monday: Reflection Week 11.', quotes: ['Reflection Week 11'] }, inp), 'format');
   assert.equal(CC.why({ text: Array(7).fill('- Reflection Week 11').join('\n'), quotes: ['Reflection Week 11'] }, inp), 'format');
   assert.deepEqual(CC.task.check(good, inp), { text: good.text, quotes: good.quotes });
