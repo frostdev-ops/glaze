@@ -283,7 +283,7 @@ var GZ_FEEDBACK = globalThis.GZ_FEEDBACK || (() => {
   // BOOT_AGE old: from then until the page's own view is ready, Glaze's bar over the Look with one skeleton (#gz-boot), or
   // the page's instant copy once it paints, and nothing of Ultra's: its boot screen, its first view of another page (its
   // Institution page), its spinners and half-built views wait hidden (data-gz-boot, extras.css). Then one swap: the page at
-  // once, or as the copy goes (instant.js lets it go when the view is ready). A click on the way ends it for its own
+  // once, or as the copy goes with a ready view (instant.js). A click on the way ends it for its own
   // skeleton. Once a document.
   const BOOT_AGE = 15000, BOOT = '#initial-load-area';
   let booted = false;
@@ -298,21 +298,22 @@ var GZ_FEEDBACK = globalThis.GZ_FEEDBACK || (() => {
     html.setAttribute('data-gz-boot', '');
     (document.body || html).append(x.box);
     // The copy going is seen in its own mutation, so the page shows in the frame it goes.
-    x.mo = new MutationObserver(() => { if (v === x && !bootCopy(x) && !x.frame) x.frame = requestAnimationFrame(() => check(x)); });
+    x.mo = new MutationObserver(() => {
+      if (v !== x) return;
+      if (html.hasAttribute('data-gz-instant')) { x.copied = true; return; }
+      if (x.copied) { check(x); return; }
+      if (!x.frame) x.frame = requestAnimationFrame(() => check(x));
+    });
     x.mo.observe(document.body || html, { childList: true, subtree: true });
     x.mo.observe(html, { attributes: true, attributeFilter: ['data-gz-instant'] });
     // Looked at without a frame too: a frame that is hidden draws none.
     x.poll = setTimeout(function poll() { if (v !== x) return; cancelAnimationFrame(x.frame); check(x); if (v === x) x.poll = setTimeout(poll, 100); }, 100);
     x.cap = setTimeout(() => end(x), LAST);
   };
-  // The page's copy up: it shows, and the boot waits on it; gone, so is the boot.
-  const bootCopy = (x) => {
-    if (html.hasAttribute('data-gz-instant')) { x.copied = true; return true; }
-    if (x.copied) { end(x); return true; }
-    return false;
-  };
   const bootCheck = (x) => {
-    if (bootCopy(x)) return;
+    // A removed copy can also mean its switch turned off or the route changed: only a ready native view ends the boot.
+    if (html.hasAttribute('data-gz-instant')) { x.copied = true; return; }
+    x.copied = false;
     if (here() !== x.landed) Object.assign(x, { landed: here(), routedAt: performance.now(), spun: false });
     const m = front();
     if (spinnersOf(m).length) x.spun = true;

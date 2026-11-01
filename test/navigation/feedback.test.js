@@ -763,6 +763,27 @@ test('the page\'s instant copy takes the skeleton\'s place, and the boot goes wi
   assert.deepEqual(booted(s), { attr: false, box: false }, 'in the copy\'s own mutation, before the next frame');
 });
 
+test('turning instant copies off during a cold load returns to the skeleton until Ultra is ready', () => {
+  const s = site({ at: '/ultra/grades', boot: true });
+  s.sync();
+  s.ila.remove();
+  s.inner.append(s.layout);
+  s.baseMain.replaceChildren(...s.spinners());
+  const copy = s.el('div', { id: 'gz-instant' });
+  s.baseMain.append(copy);
+  s.html.setAttribute('data-gz-instant', 'grades');
+  s.flush();
+  // instant.js unpaints when enhance.instant turns off, independently of enhance.feedback.
+  s.settings.enhance.instant = false;
+  s.html.removeAttribute('data-gz-instant');
+  copy.remove();
+  s.mutated();
+  assert.deepEqual(booted(s), { attr: true, box: true }, 'Ultra is still spinning: show the skeleton again');
+  s.baseMain.replaceChildren(GRADES_VIEW(s));
+  s.flush();
+  assert.deepEqual(booted(s), { attr: false, box: false }, 'the native view is ready');
+});
+
 test('no boot on a page already built, an old document, the standby, or with the switch or Glaze off; a click or 20 s end it', () => {
   const built = site({ at: '/ultra/course' });
   built.sync();
