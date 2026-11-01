@@ -271,6 +271,13 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     return { text: plan.constraint ? JSON.stringify(native) : r.text, model: MODEL, finish: r.finish === 'stop' ? 'stop' : 'length',
       ...(R.isObj(r.usage) && Number.isSafeInteger(r.usage.input) && { usage: { input: r.usage.input, ...(Number.isSafeInteger(r.usage.output) && { output: r.usage.output }) } }) };
   };
+  // count(req, cfg) → the request's prompt tokens, counted by the host with the model's own tokenizer (host.js count).
+  const count = async (req, cfg, { signal } = {}) => {
+    if (R.images(req) > 0) return null;
+    const plan = await ready(req, cfg);
+    const r = await own().link.call('count', { model: plan.m.id, parts: plan.parts }, { signal });
+    return Number.isSafeInteger(r?.tokens) ? r.tokens : null;
+  };
   // A warm-up: the host loads the model and reads the system turn once, kept for the run that follows. Never downloads.
   const warm = async (req, cfg, { signal } = {}) => {
     if (R.images(req) > 0) return false;
@@ -301,7 +308,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     return status(cfg);
   };
 
-  const provider = { id: 'local', config, caps, status, prepare, run, warm, catalog, release, remove, accept, levelOf, toolsLevel, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
+  const provider = { id: 'local', config, caps, status, prepare, run, warm, count, catalog, release, remove, accept, levelOf, toolsLevel, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
     THINK_SIZED, ANSWER, SCALE, limits,
     _env: (e) => { env = e; preparing.text = preparing.pictures = null; broken = null; rates = null; measured.clear(); } };
   return P.add(provider);

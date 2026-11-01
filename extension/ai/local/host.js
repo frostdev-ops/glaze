@@ -394,7 +394,13 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         return { state: 'download' };
       });
     };
-    const OPS = { prepare, run, warm, remove, release: async () => { await release(); return {}; } };
+    // count: a request's prompt tokens as run would feed them (encodeWith over its parts), for Ask Rime's window accounting.
+    const count = async (m, signal) => {
+      if (!Array.isArray(m.parts)) throw fail('request-rejected', 'unsupported');
+      const job = await wait(load(m.model), signal);
+      return { tokens: encode(job, m.parts).length };
+    };
+    const OPS = { prepare, run, warm, count, remove, release: async () => { await release(); return {}; } };
 
     const handle = (m) => {
       if (!m || typeof m !== 'object') return;
