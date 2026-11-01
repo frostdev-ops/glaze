@@ -915,6 +915,11 @@ html[data-gz-bg="solid"] #gz-ask::backdrop { backdrop-filter: none; }
   #gz-ask .gz-ask-form { padding: 0.4rem 0.6rem 0.75rem; }
   #gz-ask textarea { font-size: 16px; }
 }
+/* Ultra's global button transition is important and may still have a duration when its Look ignores system motion. */
+html[data-gz-motion="off"] #gz-ask button { transition: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  #gz-ask button { transition: none !important; }
+}
 @media (prefers-reduced-motion: no-preference) {
   html:not([data-gz-motion="off"]) #gz-ask[open] { animation: gz-ask-in 0.24s var(--gz-spring, ease-out) both; }
   html:not([data-gz-motion="off"]) #gz-ask[open]::backdrop { animation: gz-ask-fade 0.2s ease-out both; }
