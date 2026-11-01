@@ -1009,6 +1009,7 @@ const ukey = (id) => `ultra:https://school.blackboard.test/${id}`;
 const cardsPage = (o = {}) => {
   const p = page({ courses: COURSES, enhance: { coursemenu: true }, ...o });
   p.c.GZ_ULTRA = { page: { profile: async () => ({ id: '_1_1' }) } };
+  p.c.GZ_TODO = require('../../extension/planner/todo.js');
   return p;
 };
 const openCards = async (p) => {
@@ -1601,6 +1602,36 @@ test('a failed Dashboard identity read can be retried on the next page pass', as
   p.ui.sync(true); await settle();
   for (const c of COURSES) assert.ok(p.tile(ckey(c.id)), 'a recovered profile read permits the first cards');
   assert.ok(lay(p).filled.includes('dash https://school.blackboard.test/_2_1'));
+});
+
+test("removing this student's last legacy card never refills it beside another student's cards", async () => {
+  const seed = W.apply(W.fresh(), { fill: 'dash', ops: [...OTHER, '_101_1'].map((id) => ({ s: 'dash', id: ckey(id), set: { on: true } })) });
+  const p = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: seed } }), Promise.resolve(members()), '_2_1');
+  p.ui.sync(true); await settle();
+  p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
+  const remove = p.tool(ckey('_101_1'), 'Remove Biology'); assert.ok(remove);
+  p.doc.fire(remove, 'click'); await settle();
+  p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
+  p.ui.sync(true); await settle();
+  assert.deepEqual(lay(p).boards.dash.filter((x) => W.course(x.id)).map((x) => W.course(x.id).id), OTHER);
+  assert.ok(lay(p).filled.includes('dash https://school.blackboard.test/_2_1'));
+});
+
+test('a Dashboard edit before identity and memberships arrive opts that student out of automatic cards across reloads', async () => {
+  const seed = W.apply(W.fresh(), { fill: 'dash', ops: OTHER.map((id) => ({ s: 'dash', id: ckey(id), set: { on: true } })) });
+  const list = later(), profile = later();
+  const p = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: seed } }), list);
+  p.c.GZ_ULTRA.page.profile = () => profile;
+  p.ui.sync(true); await settle();
+  p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
+  const remove = p.tool('timer', 'Remove Focus timer'); assert.ok(remove);
+  p.doc.fire(remove, 'click'); await settle();
+  p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
+  profile.res({ id: '_2_1' }); list.res(members()); await settle(); p.ui.sync(true); await settle();
+  assert.deepEqual(lay(p).boards.dash.filter((x) => W.course(x.id)).map((x) => W.course(x.id).id), OTHER, 'the explicit edit takes precedence over a delayed fill');
+  const q = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: p.store.widgetLayout } }), Promise.resolve(members()), '_2_1');
+  q.ui.sync(true); await settle();
+  assert.deepEqual(lay(q).boards.dash.filter((x) => W.course(x.id)).map((x) => W.course(x.id).id), OTHER, 'the opt-out is persisted for this student');
 });
 
 test("a tile's Fold, Remove and Float sit above its resize corner, which a folded tile brings up beside them", () => {
