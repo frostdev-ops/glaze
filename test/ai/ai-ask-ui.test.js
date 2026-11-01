@@ -42,7 +42,7 @@ const page = ({ ai = { on: true, model: { use: 'openai', model: 'm' }, features:
     return port;
   };
   const context = vm.createContext({
-    document: doc, window: {}, navigator: { get userActivation() { return { isActive: env.activation }; } }, setTimeout, clearTimeout, Promise, JSON, structuredClone,
+    document: doc, window: {}, navigator: { get userActivation() { return { isActive: env.activation }; } }, setTimeout, clearTimeout, Promise, JSON, structuredClone, URL,
     GZ_I18N: require('../../extension/core/i18n.js'),
     GZ_CTX: { t: (k, v) => k.replace(/\{(\w+)\}/g, (m, x) => v?.[x] ?? m), on: () => true, locale: () => lang, settings: () => D.GZ_SANITIZE({ enabled: true }) },
     chrome: { runtime: { connect, lastError: undefined }, storage: { local: { get: (k, cb) => env.read(cb) }, onChanged: { addListener: (f) => env.changed.push(f) } } },
@@ -337,10 +337,10 @@ test('follow-ups carry the conversation so far, the last three questions and ans
     await settle();
   }
   assert.equal(asked(P)[0].history, undefined);
-  assert.deepEqual(asked(P)[2].history, [{ question: 'Question 1', answer: 'Answer 1' }, { question: 'Question 2', answer: 'Answer 2\n\nWhich one?' }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(asked(P)[2].history)), [{ question: 'Question 1', answer: 'Answer 1' }, { question: 'Question 2', answer: 'Answer 2\n\nWhich one?' }]);
   P.ask('Question 5');
   await settle();
-  assert.deepEqual(asked(P)[4].history.map((h) => h.question), ['Question 2', 'Question 3', 'Question 4']);
+  assert.deepEqual([...asked(P)[4].history.map((h) => h.question)], ['Question 2', 'Question 3', 'Question 4']);
 });
 
 test('a UI action a run returns goes to the handler for its kind, only while its question runs', async () => {
@@ -401,4 +401,14 @@ test('the panel\'s sheet moves nothing with reduced motion or Glaze\'s Motion of
   }
   assert.match(sheet, /html\[data-gz-bg="solid"\] #gz-ask[^{]*\{[^}]*backdrop-filter: none/);
   assert.match(sheet, /prefers-reduced-transparency: reduce[\s\S]*#gz-ask[^{]*\{[^}]*backdrop-filter: none/);
+});
+
+test('each starter, in each language, asks what it says: the first three about the student\'s records, the last for study help', () => {
+  const K = require('../../extension/ai/ask.js');
+  const EN = ['What’s due this week?', 'How are my grades?', 'Which assignments are coming up?', 'Help me study for my next test'];
+  for (const lang of ['en', 'de', 'es', 'fr', 'nl', 'pt-BR']) {
+    const table = lang === 'en' ? null : vm.runInNewContext(read(`i18n/${lang}.js`), { globalThis: {} });
+    const tasks = EN.map((s) => K.route(table ? table[s] : s, { locale: lang }).task);
+    assert.deepEqual(tasks, ['agent.tools', 'agent.tools', 'agent.tools', 'study.help'], lang);
+  }
 });

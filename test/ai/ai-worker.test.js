@@ -160,7 +160,7 @@ test('Ask Rime in the worker: a question\'s steps run through the broker and Age
   say({ id: 1, op: 'ask', question: 'What is due this week?', locale: 'en' });
   await until(w, () => port.posted.some((m) => ['end', 'error'].includes(m.type)));
   const said = JSON.parse(JSON.stringify(port.posted)).filter((m) => m.type !== 'keepalive');
-  assert.deepEqual(said.map((m) => m.type), ['route', 'look', 'end'], JSON.stringify(said));
+  assert.deepEqual(said.map((m) => m.type), ['route', 'step', 'step', 'end'], JSON.stringify(said));
   assert.deepEqual(said.at(-1), { id: 1, type: 'end', task: 'agent.tools', answer: { text: 'Glaze has nothing to show yet.' } });
   assert.equal(sent.length, 2);
   assert.match([].concat(sent[1].messages.at(-1).content).map((c) => (typeof c === 'string' ? c : c.text)).join(''), /result 1 todo_list/, 'the tool\'s result went back as fenced data');

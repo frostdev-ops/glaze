@@ -141,8 +141,8 @@ Ask Rime runs both (below); the worker loads them with the harness (`aiFiles`). 
 125047, 125048); `glaze-plans/lfm-tune/FORMAT-new-tasks.md` gives their training layouts.
 
 - `study.help`: help with a question about coursework that never gives the answer. Input `{ question, attempt?, subject
-  (math, science, code, essay, reading, other), locale? (en, pt-BR, es, fr, de, nl), material?, context? }` (context as
-  `writer-context.js` cleans it). Output `{ kind: hint | question | concept | check-my-step, step: correct | mistake |
+  (math, science, code, essay, reading, other), locale? (en, pt-BR, es, fr, de, nl), material?, context?, history? }` (context as
+  `writer-context.js` cleans it; history, Ask Rime's conversation so far, reaches a cloud model only). Output `{ kind: hint | question | concept | check-my-step, step: correct | mistake |
   unclear | null, reply, followUp }`. `check` refuses a reply that states the answer (each locale's "the answer is…", the
   correct option, including a bare number or option letter), gives a result one step of arithmetic on the problem's numbers makes or a new equation in its
   variables, writes code with the student's own names, offers wording (`wording.js`, Feedback's rules but "for example,"),
@@ -174,10 +174,18 @@ Ask Rime runs both (below); the worker loads them with the harness (`aiFiles`). 
 Rime is Glaze's assistant; its voice comes from the fine-tune alone, so no task's instructions name it. Internal ids keep
 `ask`: the feature, `#gz-ask`, the port `glaze:ask`. Settings → AI → Ask Rime (`ask`, off by default, its own model or the
 overall one). The command palette on Canvas and
-Ultra offers **Ask Rime** while AI and Ask are on; it opens a dialog over the page (`ai/page/ask.js`, loaded on demand;
-styles beside Insights' in `core/page/apps.css`) for the student's own click or key, and every control acts only on a
-trusted event, sending also on user activation. The question goes on the port `glaze:ask` (`background/background.js`,
-the AI port's sender rules) in the page's language; nothing is kept, and Ask or AI turned off closes it.
+Ultra offers **Ask Rime** while AI and Ask are on; it opens a chat in a dialog over the page (`ai/page/ask.js`, loaded on
+demand; its sheet is `#gz-ask` in `core/page/apps.css`, in Glaze's tokens, frosted where the Look is and solid on a solid
+background) for the student's own click or key, and every control acts only on a trusted event, sending also on user
+activation. The panel: four starters while empty, the student's questions, answers drawn from their markdown as elements
+(never markup; links only to https, in a new tab) and revealed as they arrive, each tool call as a card on a rail while it
+runs, a change waiting on Glaze's approval window as a card of its own (the answer is given only in that window: the
+page's own scripts can rewrite what the panel shows), a failure with Try again, Stop, New chat and Copy. Every animation
+sits in one block gated on `prefers-reduced-motion: no-preference` and Glaze's Motion not off. The question goes on the
+port `glaze:ask` (`background/background.js`, the AI port's sender rules) in the page's language, with the last three
+questions and answers for a follow-up; nothing is kept after the panel closes, and Ask or AI turned off closes it.
+`GZ_ASK_UI.on(kind, handler)` takes the UI actions a run sends (`{ type: 'action', action: { kind, … } }`) while its
+question runs, and `run({ event, question })` asks a question the student didn't type, for their own click only.
 
 `ai/ask.js` `route(question, { attempt, locale })`: agent.tools only for a question about the student's own records (to-dos
 and due dates, grades, assignments, Writer documents: word lists in English and the student's locale) that asks for no help
@@ -191,9 +199,13 @@ the model as the tool gave it (calls.js's note, source and age left out, as agen
 `{ ok: false, error }`, and the one write, `todo_mark_done`, waits for the student in Agents' approval window, with
 Glaze's own sentence for it (the window names the asker Ask Rime); any answer but Allow ends the question with nothing changed and no further model run. The
 sender is checked again before each call. An agent answer must also pass study.help's `hands()`, so no path hands over
-work. Port: `{ id, op: 'ask', question, attempt?, locale }`, `cancel`, `status` (the broker's for `ask`); events
-`route { task }`, `look`, `approve`, `keepalive` (a local run's and the approval window's), then `end` (`output`,
-`answer { text }` or `declined: true`) or `error`.
+work. Port: `{ id, op: 'ask', question, attempt?, locale, history? }`, `cancel`, `status` (the broker's for `ask`);
+events `route { task }`, `step { n, name, kind, state, ms? }` (a call's card: `run`, then `done` or `fail`; a write `ask`
+while the approval window waits, then `done` or `no`; never its arguments or result), `approve`, `keepalive` (a local
+run's and the approval window's), then `end` (`output`, `answer { text }` or `declined: true`) or `error`. `history`
+(`[{ question, answer }]`, six at most) goes to study.help only, which shows it to a cloud model as data before the
+question and leaves a local model's request as trained; agent.tools' trained turns hold no conversation, so a follow-up
+about records starts afresh.
 
 ## Add a provider
 

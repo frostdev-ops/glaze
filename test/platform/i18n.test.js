@@ -116,6 +116,8 @@ const tableWords = [
   ...Object.values(require('../../extension/planner/gradecalc.js').ULTRA_CATS),
   // A chart Glaze doesn't draw shows its kind in a frame (documents/sheets/sheet-chart-xml.js, through documents/sheets/sheet-chart.js's t()).
   ...require('../../extension/documents/sheets/sheet-chart-xml.js').WORDS,
+  // Ask Rime's tool cards (ai/page/ask.js STEPS), shown through t() by the tool's name.
+  ...tableOf('ai/page/ask.js', 'STEPS'),
 ];
 const used = new Set([
   ...tableWords, ...writerWords,
