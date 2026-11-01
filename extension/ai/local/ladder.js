@@ -30,6 +30,8 @@ var GZ_AI_LADDER = globalThis.GZ_AI_LADDER || (() => {
   // Rime 1.7B, LFM3-1.7B's shape (C0 §6), and the engine's default session (C3's createSession: ctx 4096, chunk 128).
   const SHAPE = { vocab: 128000, embed: 2048, ffn: 7680, heads: 16, kvWidth: 4 * 128, headDim: 128, full: 6, sliding: 5, window: 256 };
   const CTX = 4096, CHUNK = 128;
+  // The context sizes Settings offers for a tuned model (Advanced, ai/providers/local.js window): 4K, the default, to 128K.
+  const WINDOWS = Object.freeze([4096, 8192, 16384, 32768, 65536, 131072]);
   // Least squares over the four C3 speeds, with the C7 bench medians (M5 Pro 175.5 GB/s, 1.2 ms; RTX 3080 Ti 410.4 GB/s,
   // 2.5 ms): predicted 113 / 76 (M5 Pro) and 126 / 102 tok/s (3080 Ti), within 10% of the measured.
   const K_OVER = 2.08, K_BW = 0.985;
@@ -44,6 +46,16 @@ var GZ_AI_LADDER = globalThis.GZ_AI_LADDER || (() => {
     const s = SHAPE, kv = (f16 ? 2 : 4) * 2 * s.kvWidth * (s.full * ctx + s.sliding * (s.window + CHUNK));
     const act = 4 * (CHUNK * (s.vocab + 4 * s.embed + 3 * s.embed + s.ffn + s.heads * s.headDim + 2 * s.kvWidth + s.heads) + s.vocab);
     return model.size + kv + act;
+  };
+
+  // Each context size for `model` on this computer: { size, refused? }, refused as pick refuses a quant ('memory', or
+  // 'no-f16' when only the f16 cache would fit) against half of deviceMemory; nothing refused when the browser doesn't say.
+  const windows = (model, { f16 = true, deviceMemory } = {}) => {
+    const budget = deviceMemory > 0 ? deviceMemory * 2 ** 30 / 2 : Infinity;
+    return WINDOWS.map((size) => {
+      if (footprint(model, { f16, ctx: size }) <= budget) return { size };
+      return { size, refused: !f16 && footprint(model, { f16: true, ctx: size }) <= budget ? 'no-f16' : 'memory' };
+    });
   };
 
   // Estimated decode tokens a second for a quant, from a bench result.
@@ -213,6 +225,6 @@ var GZ_AI_LADDER = globalThis.GZ_AI_LADDER || (() => {
     return out;
   };
 
-  return { MIN_TPS, HEADROOM, CTX, CHUNK, need, footprint, decodeSpeed, pick, bench, probe };
+  return { MIN_TPS, HEADROOM, CTX, CHUNK, WINDOWS, need, footprint, windows, decodeSpeed, pick, bench, probe };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_LADDER; else GZ_AI_LADDER;

@@ -40,7 +40,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
   const LIMIT = { parts: 20, calls: 64, context: 16000, ms: 180000 };
   const fn = (v) => typeof v === 'function';
   const CALL = /^[a-z]{1,16}$/;
-  const KEYS = ['id', 'version', 'caps', 'input', 'build', 'output', 'check', 'tools', 'limits', 'stream', 'disclose', 'rate', 'split', 'merge', 'warm', 'orchestrate'];
+  const KEYS = ['id', 'version', 'caps', 'input', 'build', 'output', 'check', 'tools', 'limits', 'stream', 'disclose', 'rate', 'split', 'merge', 'warm', 'orchestrate', 'why'];
   // rate.perMinute at most: a supersede task's runs are short and replace each other.
   const RATE = 120;
   // → the task, frozen; throws a TypeError that says what is wrong with it.
@@ -56,6 +56,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
       || ((d.stream !== undefined && typeof d.stream !== 'boolean') && 'stream')
       || ((d.disclose !== undefined && typeof d.disclose !== 'boolean') && 'disclose')
       || ((d.warm !== undefined && typeof d.warm !== 'boolean') && 'warm')
+      || ((d.why !== undefined && !fn(d.why)) && 'why')
       || ((d.rate !== undefined && (!R().isObj(d.rate) || !Object.keys(d.rate).length || Object.entries(d.rate).some(([k, v]) => (k === 'perMinute' ? !(Number.isSafeInteger(v) && v > 0 && v <= RATE) : k !== 'supersede' || typeof v !== 'boolean')))) && 'rate')
       || ((d.orchestrate !== undefined && (!fn(d.orchestrate) || d.split || d.tools || d.stream)) && 'orchestrate')
       || ((fn(d.split) !== fn(d.merge) || (d.split !== undefined && !fn(d.split))) && 'split and merge');
@@ -174,7 +175,12 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
     const merged = orchestrated === undefined ? (inputs.length > 1 ? task.merge(outputs, input) : outputs[0]) : orchestrated;
     if ((orchestrated !== undefined || inputs.length > 1) && (text ? typeof merged !== 'string' : S().validate(merged, task.output).length)) throw Object.assign(F.modelFailure({ category: 'invalid-response' }), { detail: 'merge' });
     const output = task.check(merged, input, { truncated, caps: can });
-    if (output === null || output === undefined) throw checkFailure();
+    // why(output, input): a task's own name for the rule a refused output broke; raw: that output, for the requester only.
+    if (output === null || output === undefined) {
+      let why, raw;
+      try { why = task.why?.(merged, input); raw = typeof merged === 'string' ? merged : JSON.stringify(merged); } catch { /* none */ }
+      throw Object.assign(checkFailure(), typeof why === 'string' && why && { why }, typeof raw === 'string' && { raw: raw.slice(0, 2000) });
+    }
     return { output, ...(steps.length && { steps }), meta };
   };
 

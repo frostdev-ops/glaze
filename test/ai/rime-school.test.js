@@ -22,7 +22,7 @@ const NEW = ['announcements_list', 'announcement_read', 'content_list', 'content
 const ACC = `${C.CANVAS}/5`, UL = `${C.ULTRA}/${C.ULTRA_UID}`;
 const ULTRA = C.load('ultra-search.json');
 // A Canvas topic as courses/announce.js SITES.canvas reads one (its fields only: title, author, posted_at, message, attachments).
-const TOPIC = { id: 70, title: 'Lab moved to Room 204', author: { display_name: 'Dr. Rivera' }, posted_at: '2026-10-14T15:00:00Z', message: '<p>This week we meet in <b>Room 204</b>.</p><p>Bring goggles.</p>',
+const TOPIC = { id: 70, title: 'Lab moved to Room 204', author: { id: 900, display_name: 'Dr. Rivera' }, posted_at: '2026-10-14T15:00:00Z', message: '<p>This week we meet in <b>Room 204</b>.</p><p>Bring goggles.</p>',
   attachments: [{ display_name: 'map.pdf', url: `${C.CANVAS}/files/9/download` }], read_state: 'unread', locked_for_user: false };
 // Canvas modules with their items as the notes and progress features read them (name, published, state; id, title, type, published).
 const MODULES = [{ id: 1, name: 'Week 1', published: true, items: [{ id: 11, title: 'Welcome', type: 'Page' }, { id: 12, title: 'Readings', type: 'SubHeader' }, { id: 13, title: 'Syllabus.pdf', type: 'File' },
@@ -31,9 +31,10 @@ const MODULES = [{ id: 1, name: 'Week 1', published: true, items: [{ id: 11, tit
 const TOPICS = [{ id: 81, title: 'Cell questions' }, { id: 82, title: 'Week 2 reflections' }];
 
 const tabsOf = (tabs) => { const b = H.browser(tabs); return TABS.create({ tabs: b.tabs, scripting: b.scripting, quiet: H.quiet }); };
-const canvasTab = (o = {}) => H.tab({ id: 1, url: `${C.CANVAS}/courses/25`, routes: {
+const canvasTab = ({ routes = {}, ...o } = {}) => H.tab({ id: 1, url: `${C.CANVAS}/courses/25`, routes: {
+  '/api/v1/courses/25/enrollments': [{ user_id: 900, type: 'TeacherEnrollment' }],
   '/api/v1/courses/25/discussion_topics/70': TOPIC, '/api/v1/courses/25/discussion_topics/81': { ...TOPIC, id: 81, title: 'Cell questions', message: '<p>Share one question about cells.</p>', attachments: [] },
-  '/api/v1/courses/25/modules': MODULES, '/api/v1/courses/25/discussion_topics': TOPICS, ...o.routes }, ...o });
+  '/api/v1/courses/25/modules': MODULES, '/api/v1/courses/25/discussion_topics': TOPICS, ...routes }, ...o });
 const ultraTab = (o = {}) => H.tab({ id: 2, url: `${C.ULTRA}/ultra/courses/_101_1/outline`, site: 'ultra', uid: C.ULTRA_UID, memberships: C.load('ultra-memberships.json').results, routes: {
   '/learn/api/public/v1/courses/_101_1/announcements': { results: ULTRA.announcements },
   '/learn/api/public/v1/courses/_101_1/announcements/_801_1': { ...ULTRA.announcements[0], created: '2026-10-13T12:00:00Z' },
@@ -94,12 +95,28 @@ test('content: Canvas\'s module items (no headers, unpublished or locked ones); 
   assert.match((await tool('content_read').run({ course: '_101_1', id: folder.id }, ctxFor(UL, ultra))).error, /holds no text/);
 });
 
-test('discussions: Canvas topics are listed but prompt reads fail closed without verified instructor authorship', async () => {
-  const canvas = tabsOf([canvasTab()]);
-  assert.deepEqual((await tool('discussions_list').run({ course: '25' }, ctxFor(ACC, canvas))).items, [{ id: '81', title: 'Cell questions' }, { id: '82', title: 'Week 2 reflections' }]);
+test('discussions: Canvas lists and prompt reads fail closed without verified instructor authorship', async () => {
+  const canvas = tabsOf([canvasTab({ routes: { '/api/v1/courses/25/enrollments': null } })]);
+  assert.match((await tool('discussions_list').run({ course: '25' }, ctxFor(ACC, canvas))).error, /authorship/);
   const r = await tool('discussion_read').run({ course: '25', id: '81' }, ctxFor(ACC, canvas));
   assert.equal(r.ok, false);
   assert.match(r.error, /authorship/);
+});
+
+test('Canvas discussion lists keep classmates\' titles inside the tab and return only verified staff topics', async () => {
+  const tab = canvasTab({ routes: {
+    '/api/v1/courses/25/enrollments': [{ user_id: 900, type: 'TeacherEnrollment' }, { user_id: 901, type: 'TaEnrollment' }],
+    '/api/v1/courses/25/discussion_topics': [
+      { id: 81, title: 'Teacher prompt', author: { id: 900 } },
+      { id: 82, title: 'TA prompt', user_id: 901 },
+      { id: 83, title: 'Kim Classmate: PRIVATE-TITLE-WORDS', author: { id: 77, display_name: 'Kim Classmate' } },
+      { id: 84, title: 'PRIVATE-UNKNOWN-AUTHOR' },
+    ],
+  } });
+  const r = await tool('discussions_list').run({ course: '25' }, ctxFor(ACC, tabsOf([tab])));
+  assert.deepEqual(r.items, [{ id: '81', title: 'Teacher prompt' }, { id: '82', title: 'TA prompt' }]);
+  assert.doesNotMatch(JSON.stringify(r), /Kim|Classmate|PRIVATE/);
+  assert.ok(tab.page.asked.every((req) => req.method === 'GET' && new URL(req.url).origin === C.CANVAS));
 });
 
 test('a Canvas peer-authored discussion cannot send the peer name or prompt to the worker', async () => {
@@ -111,6 +128,18 @@ test('a Canvas peer-authored discussion cannot send the peer name or prompt to t
   assert.doesNotMatch(JSON.stringify(r), /Classmate|CLASSMATE-PRIVATE-WORDS/);
   // The tab reads the topic to learn its author (as the pop-up reads it); an unverified one never leaves the tab.
   assert.match(r.error, /authorship/);
+});
+
+test('announcement_read cannot bypass Canvas discussion authorship checks with a peer topic id', async () => {
+  for (const author of [{ id: 77, display_name: 'Kim Classmate' }, { display_name: 'Kim Classmate' }]) {
+    const tab = canvasTab({ routes: { '/api/v1/courses/25/discussion_topics/83': {
+      ...TOPIC, id: 83, author, title: 'PRIVATE-PEER-TITLE', message: '<p>PRIVATE-PEER-BODY</p>',
+    } } });
+    const r = await tool('announcement_read').run({ course: '25', id: '83' }, ctxFor(ACC, tabsOf([tab])));
+    assert.equal(r.ok, false);
+    assert.match(r.error, /authorship/);
+    assert.doesNotMatch(JSON.stringify(r), /Kim|Classmate|PRIVATE/);
+  }
 });
 
 test('partial school lists preserve the source coverage instead of reporting an empty complete course', async () => {
@@ -170,7 +199,10 @@ test('syllabus date limits disclose the omitted dates', async () => {
 
 test('school tab operations discard data when the signed-in account changes during the read', async (t) => {
   for (const op of ['announcement', 'modules', 'topics', 'search']) await t.test(op, async () => {
-    const ultra = op === 'search', tab = ultra ? ultraTab() : canvasTab();
+    const ultra = op === 'search', tab = ultra ? ultraTab() : canvasTab(op === 'topics' ? { routes: {
+      '/api/v1/courses/25/enrollments': [{ user_id: 900, type: 'TeacherEnrollment' }],
+      '/api/v1/courses/25/discussion_topics': [{ id: 81, title: 'Teacher prompt', author: { id: 900 } }],
+    } } : {});
     let uid = ultra ? C.ULTRA_UID : '5';
     const fetch = tab.context.fetch;
     tab.context.fetch = async (url, init) => {

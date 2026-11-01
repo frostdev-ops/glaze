@@ -82,13 +82,14 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
   // ---- markdown: the subset a chat writes, as elements (ported from the agent chat's renderer) ------------------------------
   // Inline: code, bold, italic, strike and links: code first, so its content is literal. Words stay words: markup in them
   // is text. A link only to https, opened apart from the page; any other is its label.
-  const INLINE = /(`[^`]+`)|(\*\*[^*]+\*\*)|(__[^_]+__)|(\*[^*\n]+\*)|(_[^_\n]+_)|(~~[^~]+~~)|(\[[^\]]+\]\([^)\s]+\))/;
+  const INLINE = /(\\[\\`*_[\]~])|(`[^`]+`)|(\*\*(?:\\.|[^*\\])+\*\*)|(__(?:\\.|[^_\\])+__)|(\*(?:\\.|[^*\\\n])+\*)|(_(?:\\.|[^_\\\n])+_)|(~~(?:\\.|[^~\\])+~~)|(\[[^\]]+\]\([^)\s]+\))/;
   const inline = (text, into) => {
     let rest = text;
     for (let m; (m = INLINE.exec(rest));) {
       if (m.index > 0) into.append(rest.slice(0, m.index));
       const tok = m[0];
-      if (tok[0] === '`') into.append(make('code', { textContent: tok.slice(1, -1) }));
+      if (tok[0] === '\\') into.append(tok.slice(1));
+      else if (tok[0] === '`') into.append(make('code', { textContent: tok.slice(1, -1) }));
       else if (tok.startsWith('**') || tok.startsWith('__')) { const n = make('strong'); inline(tok.slice(2, -2), n); into.append(n); }
       else if (tok.startsWith('~~')) { const n = make('s'); inline(tok.slice(2, -2), n); into.append(n); }
       else if (tok[0] === '[') {

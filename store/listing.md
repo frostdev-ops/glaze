@@ -125,11 +125,11 @@ Puts a dot on Glaze's toolbar icon on pages that look like Canvas, Blackboard Ul
 
 ### offscreen
 
-Used only when the student chooses Rime, Glaze's own AI model, in Settings → AI and clicks Download. A hidden extension page runs that model on this computer with WebGPU, in a worker of its own, and keeps it loaded between requests; it closes after five minutes unused. It downloads the model's files from Hugging Face on that click and reads nothing from any page. The text Glaze's AI features give it stays on this computer and is never sent anywhere.
+Used only when the student chooses Rime, Glaze's own AI model, in Settings → AI and clicks Download. A hidden extension page runs that model on this computer with WebGPU, in a worker of its own, and keeps it loaded between requests; it closes after five minutes unused. It downloads the model's files from Hugging Face on that click and reads nothing from any page. While the model is downloaded, Glaze checks Hugging Face about once a day for a signed list of Rime models and downloads a newer version from there in the background, sending nothing about the student; Settings → AI → Rime → Update automatically turns this off. The text Glaze's AI features give it stays on this computer and is never sent anywhere.
 
 ### alarms
 
-Used only for Ask Rime's reminders and watches, each of which the student asks for and approves, and which can be turned off in Settings → AI → Ask Rime. An alarm wakes Glaze at the time the student chose, or every 30 minutes while a watch waits, to compare the student's own course data that Glaze already keeps on this device. Nothing is fetched or sent. What fires is shown inside Glaze on the student's next school page, never as a notification.
+Used for two things. Rime's update check: while Rime is downloaded, a daily alarm (and one a few minutes after the browser starts) checks Hugging Face for a signed list of Rime models, as described under offscreen. And Ask Rime's reminders and watches, each of which the student asks for and approves, and which can be turned off in Settings → AI → Ask Rime. An alarm wakes Glaze at the time the student chose, or every 30 minutes while a watch waits, to compare the student's own course data that Glaze already keeps on this device. For reminders and watches nothing is fetched or sent. What fires is shown inside Glaze on the student's next school page, never as a notification.
 
 ### scripting
 

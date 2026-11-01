@@ -456,7 +456,9 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
   });
   const isBlank = (doc) => doc.childCount === 1 && doc.firstChild.type.name === 'paragraph' && !doc.firstChild.content.size && !doc.firstChild.attrs.indent && !doc.firstChild.attrs.align;
   const look = (placeholder) => new Plugin({
-    props: { attributes: (state) => ({ class: isBlank(state.doc) ? 'gz-writer gz-blank' : 'gz-writer', role: 'textbox', 'aria-multiline': 'true', ...(placeholder ? { 'data-placeholder': placeholder } : {}) }) },
+    // writingsuggestions: macOS's inline predictions in Safari dropped a word's last letters and moved the caret back as
+    // the student typed fast (Safari 27); a plain contenteditable kept them all.
+    props: { attributes: (state) => ({ class: isBlank(state.doc) ? 'gz-writer gz-blank' : 'gz-writer', role: 'textbox', 'aria-multiline': 'true', writingsuggestions: 'false', ...(placeholder ? { 'data-placeholder': placeholder } : {}) }) },
   });
 
   // Whether this Tab follows an Escape, read on the editor's capture phase so a handler that takes Escape first doesn't hide

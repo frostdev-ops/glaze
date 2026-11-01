@@ -1,7 +1,7 @@
 // The AI harness's `local` provider (docs/ai-harness.md "Glaze's own model"): Glaze's own model on this computer, Rime
 // (Frostdev's fine-tune of LFM3-1.7B), run by Glaze's WebGPU engine in its host (ai/local/host.js, reached through
-// ai/local/link.js). Nothing goes over the network but the weights' download from Hugging Face, and that only from
-// Settings' Download click.
+// ai/local/link.js). Nothing goes over the network but the weights' download from Hugging Face, from Settings' Download
+// click, and, while a model is downloaded, its background updates (ai/local/updates.js).
 // status() is the worker's own and starts nothing: the browser (Safari keeps Apple Intelligence: unavailable, 'browser'),
 // WebGPU, and which model the store holds (ai/local/store.js). The model is the one with the tier Settings' Advanced
 // chose, else the one downloaded, else, at Download, the ladder's pick for this computer (host.js). prepare() downloads in
@@ -30,7 +30,9 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   // (glaze-plans/lfm-tune FORMAT.md, caps.context 4096), which a request then plans for exactly.
   const CONTEXT = 16000, TUNED = 4096, MAX_TOKENS = 1024;
   const ID = /^[a-z0-9][a-z0-9._-]{0,63}$/;
-  const windowOf = (m) => (m && !m.stock ? { window: TUNED, inputLimit: TUNED } : { window: CONTEXT, inputLimit: CONTEXT - CONTEXT / 10 });
+  // A tuned model's window is the context size Settings' Advanced keeps on the connection (cfg.window: WINDOWS), else TUNED.
+  const WINDOWS = Object.freeze([8192, 16384, 32768, 65536, 131072]);
+  const windowOf = (m, cfg = {}) => (m && !m.stock ? { window: cfg.window || TUNED, inputLimit: cfg.window || TUNED } : { window: CONTEXT, inputLimit: CONTEXT - CONTEXT / 10 });
   const LIMIT = { prepare: 240000 };
   // Tokens a task's request may reason in before its answer; 0 answers directly. A task with calls (its requests'
   // task.call, ai/task.js ask) has a row per call, and a request without one answers directly. Each row is D4's p3dpo,
@@ -95,16 +97,17 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const accept = (port) => own().link.accept(port);
 
   const config = (raw) => {
-    if (!R.isObj(raw) || Object.keys(raw).some((k) => !['model', 'tier', 'context', 'images', 'weights', 'generation'].includes(k))) return null;
+    if (!R.isObj(raw) || Object.keys(raw).some((k) => !['model', 'tier', 'context', 'images', 'weights', 'generation', 'window'].includes(k))) return null;
+    if (raw.window !== undefined && raw.window !== TUNED && !WINDOWS.includes(raw.window)) return null;
     if (raw.model !== undefined && raw.model !== MODEL) return null;
     if (raw.tier !== undefined && !(Number.isSafeInteger(raw.tier) && raw.tier >= 1 && raw.tier <= 9)) return null;
     if (raw.context !== undefined && !(Number.isSafeInteger(raw.context) && raw.context > 0)) return null;
     if (raw.images !== undefined && typeof raw.images !== 'boolean') return null;
     if (raw.weights !== undefined && !(typeof raw.weights === 'string' && ID.test(raw.weights))) return null;
     if (raw.generation !== undefined && (typeof raw.generation !== 'string' || !/^[\w-]{1,64}$/.test(raw.generation))) return null;
-    return { model: MODEL, ...(raw.tier && { tier: raw.tier }), ...(raw.context && { context: raw.context }), ...(raw.images !== undefined && { images: raw.images }), ...(raw.weights && { weights: raw.weights }), ...(raw.generation && { generation: raw.generation }) };
+    return { model: MODEL, ...(raw.tier && { tier: raw.tier }), ...(raw.context && { context: raw.context }), ...(raw.images !== undefined && { images: raw.images }), ...(raw.weights && { weights: raw.weights }), ...(raw.generation && { generation: raw.generation }), ...(WINDOWS.includes(raw.window) && { window: raw.window }) };
   };
-  const caps = (cfg) => ({ text: true, json: true, stream: true, tools: false, images: cfg.images === true, local: true, context: Math.min(cfg.context || CONTEXT, CONTEXT) });
+  const caps = (cfg) => ({ text: true, json: true, stream: true, tools: false, images: cfg.images === true, local: true, context: Math.min(cfg.context || CONTEXT, Math.max(CONTEXT, cfg.window || 0)) });
 
   // ---- reasoning ------------------------------------------------------------------------------------------------------
   let rates = null; // model id → decode tokens a second here
@@ -220,7 +223,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     }
     const m = cfg.weights ? tiers(list).find((x) => x.id === cfg.weights) : choose(list, cfg);
     if (!m || m.state !== 'ready') throw fail('provider-unavailable', 'assets');
-    const window = Math.min(cfg.context || windowOf(m).window, windowOf(m).window);
+    const window = Math.min(cfg.context || windowOf(m, cfg).window, windowOf(m, cfg).window);
     const think = await budget(req, m, window), sized = !m.stock && limits(req.task, window).size;
     return { m, window, budget: think, ...FMT().format(req, { dialect: m.stock ? 'chatml' : 'glaze', think: think > 0, ...(sized && { window }) }) };
   };
@@ -284,7 +287,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     if (R.images(req) > 0) return false;
     let plan;
     try { plan = await ready(req, cfg); } catch { return false; }
-    try { return (await own().link.call('warm', { model: plan.m.id, parts: plan.parts.slice(0, plan.stable) }, { signal }))?.ok === true; } catch { return false; }
+    try { return (await own().link.call('warm', { model: plan.m.id, parts: plan.parts.slice(0, plan.stable), ...(plan.window > CONTEXT && { window: plan.window }) }, { signal }))?.ok === true; } catch { return false; }
   };
   // vision: whether the picture download is here (the broker sets cfg.images from it for a run). context: the window of the
   // text model this cfg runs, and weights its id (the broker sets cfg.context and cfg.weights from them); pictures.context,
@@ -293,7 +296,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     let list = [];
     try { list = await models(); } catch { /* none */ }
     const m = choose(list, cfg), pics = pictures(list), vision = !preparing.pictures && !!pics?.ready;
-    return { models: [{ id: MODEL, name: NAME, json: true, tools: false, vision, context: windowOf(m), ...(m && { weights: m.id }),
+    return { models: [{ id: MODEL, name: NAME, json: true, tools: false, vision, context: windowOf(m, cfg), ...(m && { weights: m.id }),
       ...(vision && { pictures: { context: windowOf(pics.model) } }) }], source: 'live', at: Date.now() };
   };
   // A connection changed: the host lets the model go (it loads again at the next run). Starts no host.
@@ -309,7 +312,9 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     return status(cfg);
   };
 
-  const provider = { id: 'local', config, caps, status, prepare, run, warm, count, catalog, release, remove, accept, levelOf, toolsLevel, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
+  // The engine host's link, for the background model updates (ai/local/updates.js check).
+  const link = () => own().link;
+  const provider = { id: 'local', config, caps, status, prepare, run, warm, count, catalog, release, remove, accept, levelOf, toolsLevel, link, windowOf, WINDOWS, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
     THINK_SIZED, ANSWER, SCALE, limits,
     _env: (e) => { env = e; preparing.text = preparing.pictures = null; broken = null; rates = null; measured.clear(); } };
   return P.add(provider);

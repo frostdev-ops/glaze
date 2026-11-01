@@ -6,7 +6,10 @@
 //   in  { op: 'config', idle }  { op: 'detach' } (the worker's port went: runs and warm-ups stop, a download goes on)
 //       { id, op: 'prepare', tier?, part? }  { id, op: 'run', model, parts, stable, schema?, tools?, sources?, sampler,
 //       maxTokens, projector?, images?, think?, window? }  { id, op: 'warm', model, parts }  { id, op: 'remove', part? }  { id, op: 'release' }
-//       { id, op: 'cancel' }
+//       { id, op: 'cancel' }  { id, op: 'update', doc, model, glaze } (ai/local/updates.js update: a signed model list from the
+//       worker's daily check; the newer version of `model` downloads beside it, waiting while a run or warm-up is in
+//       flight, and swaps in at the next idle moment, the engine let go; a run on the model in its trial confirms it, or
+//       rolls it back on a load or engine failure and runs again on the old version when nothing of the answer was sent)
 //   tools [{ name, parameters }] (with schema; ai/tasks/agent-tools.js constraint()): the answer is either the schema's
 //   JSON or one native call to a listed tool, held by the grammar (grammar.js compile's tools). sources { [name]: text }
 //   (with schema; providers/local.js spans): the texts its span strings are held to (grammar.js compile's sources).
@@ -34,9 +37,9 @@
 // The grammar's mask allows the end token only once the JSON is whole, so a run stops at the end token as any other.
 // Classic script; node exports (create), and in a Worker it starts itself.
 var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
-  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, rate: 16, answer: 256, spans: 2 };
+  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, maxContext: 131072, rate: 16, answer: 256, spans: 2 };
   // What the Worker loads, in order, beside this file: required ones throw at its start; optional ones until they ship.
-  const IMPORTS = Object.freeze({ required: Object.freeze(['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', '../text.js', 'grammar.js']),
+  const IMPORTS = Object.freeze({ required: Object.freeze(['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', '../text.js', 'grammar.js', 'updates.js']),
     optional: Object.freeze(['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'ladder.js']) });
   // LFM3's GGUF sampling defaults (general.sampling.*: top_k 50, temp 0.1) where a request names none.
   const SAMPLER = Object.freeze({ temperature: 0.1, topK: 50 });
@@ -52,7 +55,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
   }));
   const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
-  // env: { store (ai/local/store.js), gguf (gguf.js), tokenizer (tokenizer.js), engine(), grammar(), ladder(), vision?()
+  // env: { store (ai/local/store.js), gguf (gguf.js), tokenizer (tokenizer.js), engine(), grammar(), ladder(), updates?() (updates.js), vision?()
   // (each the global or null), gpu() (navigator.gpu or null), bench?() (the ladder's bench kernel's source), decode?({ mime,
   // data }) → { width, height, data: RGBA bytes } (the picture's pixels), kernels? (vision.js's kernels' base URL),
   // post(message), setTimeout?, clearTimeout?, now? (ms) }.
@@ -62,7 +65,8 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
     let idleMs = LIMIT.idle, idleTimer = null, tickTimer = null;
     let loaded = null; // { id, key, projector, control, ready, model, tok, eos, base, vision?, warm: [{ ids, snap }] }
     let turn = Promise.resolve(); // one sequence at a time
-    const post = (m) => { try { env.post(m); } catch { /* the host's page is gone */ } };
+    const spoke = new Set(); // runs that have sent part of their answer
+    const post = (m) => { if (m?.type === 'delta') spoke.add(m.id); try { env.post(m); } catch { /* the host's page is gone */ } };
 
     // ---- idle and tick ------------------------------------------------------------------------------------------------
     const quiet = () => {
@@ -89,14 +93,15 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       } catch (e) { if (signal?.aborted) throw aborted(signal); throw fail('provider-unavailable', 'assets'); }
     };
     // The engine with model `id` (and, for pictures, its projector on the engine's device), loaded once and shared by the
-    // calls that ask together; another model releases it first.
-    const load = (id, projector = null) => {
-      const key = projector ? `${id}+${projector}` : id;
+    // calls that ask together; another model or session size releases it first.
+    const load = (id, projector = null, window) => {
+      const context = Math.max(LIMIT.context, Math.min(Number.isSafeInteger(window) && window > 0 ? window : LIMIT.context, LIMIT.maxContext));
+      const key = `${projector ? `${id}+${projector}` : id}:${context}`;
       if (loaded?.key === key) return loaded.ready;
       const retired = unload();
       const E = env.engine(), V = projector ? env.vision?.() : null;
       if (typeof E?.load !== 'function' || (projector && typeof V?.load !== 'function')) return Promise.reject(fail('provider-unavailable', 'engine'));
-      const job = { id, key, projector, control: new AbortController(), warm: [], schemas: new Map() };
+      const job = { id, key, projector, context, control: new AbortController(), warm: [], schemas: new Map() };
       job.ready = (async () => {
         await retired;
         if (job.control.signal.aborted) throw aborted(job.control.signal);
@@ -105,7 +110,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         if (projector) { try { pfile = await env.store.open(projector); } catch { throw fail('provider-unavailable', 'pictures'); } }
         const { g, tok } = await tokenized(id, job.control.signal);
         let model;
-        try { model = await E.load(g, { context: LIMIT.context, signal: job.control.signal }); }
+        try { model = await E.load(g, { context, signal: job.control.signal }); }
         catch (e) { if (job.control.signal.aborted) throw e; throw fail('provider-unavailable', ENGINE[e?.reason] || 'engine'); }
         try {
           if (job.control.signal.aborted) throw aborted(job.control.signal);
@@ -282,16 +287,15 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       flush();
       return { rest: Uint32Array.from(ids), slots };
     };
-    const run = async (m, signal) => {
-      return queued(async () => {
+    const answer = async (m, signal) => {
         const images = Array.isArray(m.images) ? m.images : [];
         if (images.length && typeof m.projector !== 'string') throw fail('request-rejected', 'unsupported');
         if (images.length && typeof env.decode !== 'function') throw fail('provider-unavailable', 'engine');
-        const job = await wait(load(m.model, images.length ? m.projector : null), signal);
+        const job = await wait(load(m.model, images.length ? m.projector : null, m.window), signal);
         const { model, tok } = job;
         const pictures = images.length ? await pixels(job, images, signal) : [];
         const head = encode(job, m.parts.slice(0, m.stable)), { rest, slots } = feed(job, m.parts.slice(m.stable), pictures);
-        const input = head.length + rest.length, room = Math.min(model.context || LIMIT.context, LIMIT.context);
+        const input = head.length + rest.length, room = Math.min(model.context || job.context, job.context);
         if (input + m.maxTokens > room) throw fail('request-rejected', 'context', { tokens: input, context: room });
         // Think mode: </think>'s id, the parts the host may feed, and the budget the window leaves.
         let think = null, close = null;
@@ -368,12 +372,50 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         if (tail) { text += tail; post({ id: m.id, type: 'delta', text: tail }); }
         const rate = thought + n >= LIMIT.rate && spent > 0 ? Math.round((thought + n) / spent * 10000) / 10 : null;
         return { text, finish, model: m.model, usage: { input, output: thought + n, thought }, ...(rate && { rate }) };
-      }, signal);
+    };
+    // A run on the model in its trial (a swapped-in update): its first good answer keeps the new version; a load or engine
+    // failure brings the old one back, and the run goes again on it unless part of its answer was already sent.
+    const run = (m, signal) => queued(async () => {
+      const U = env.updates?.(), pics = Array.isArray(m.images) && m.images.length;
+      const trial = U && !pics ? (await env.store.catalog?.().catch(() => null))?.state?.trial : null;
+      if (!trial || trial.id !== m.model) return answer(m, signal);
+      try {
+        const r = await answer(m, signal);
+        await U.settle(env.store, true).catch(() => {});
+        return r;
+      } catch (e) {
+        if (signal.aborted || !U.fault(e)) throw e;
+        await unload();
+        await U.settle(env.store, false);
+        if (spoke.has(m.id)) throw e;
+        return answer(m, signal);
+      }
+    }, signal);
+    // Resolves once no run or warm-up is in flight; throws when the signal fires or Data Saver comes on.
+    let idlers = [];
+    const busy = () => [...ops.values()].some((o) => o.kind === 'run' || o.kind === 'warm');
+    const saveData = env.saveData || (() => globalThis.navigator?.connection?.saveData === true);
+    const idle = (signal) => new Promise((resolve, reject) => {
+      const go = () => {
+        if (signal?.aborted) return reject(aborted(signal));
+        if (saveData()) return reject(Object.assign(new Error('Data Saver is on'), { reason: 'saveData' }));
+        if (!busy()) return resolve();
+        idlers.push(go);
+      };
+      signal?.addEventListener('abort', () => reject(aborted(signal)), { once: true });
+      go();
+    });
+    const update = async (m, signal) => {
+      const U = env.updates?.();
+      if (!U || !env.store.catalog) return { state: 'unavailable', reason: 'engine' };
+      return U.update({ store: env.store, key: env.key, idle, progress: (loaded) => post({ id: m.id, type: 'progress', loaded }),
+        between: (fn) => queued(async () => { await fn(); if (loaded?.id === m.model) await unload(); }) },
+      { doc: m.doc, id: m.model, glaze: m.glaze }, signal);
     };
     const warm = async (m, signal) => {
       return queued(async () => {
         if ((await env.store.status(m.model)).state !== 'ready') return { ok: false };
-        const job = await wait(load(m.model), signal);
+        const job = await wait(load(m.model, null, m.window), signal);
         await prefix(job, encode(job, m.parts), signal);
         return { ok: true };
       }, signal);
@@ -387,7 +429,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
           return { state: 'download' };
         });
       }
-      for (const o of ops.values()) if (o.kind === 'prepare') o.control.abort(new DOMException('Removed', 'AbortError'));
+      for (const o of ops.values()) if (o.kind === 'prepare' || o.kind === 'update') o.control.abort(new DOMException('Removed', 'AbortError'));
       stopSequences();
       return queued(async () => {
         await unload();
@@ -403,7 +445,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       const tok = loaded?.id === m.model && loaded.tok || (await tokenized(m.model, signal)).tok;
       return { tokens: encode({ tok }, m.parts).length };
     };
-    const OPS = { prepare, run, warm, count, remove, release: async () => { await release(); return {}; } };
+    const OPS = { prepare, run, warm, count, remove, update, release: async () => { await release(); return {}; } };
 
     const handle = (m) => {
       if (!m || typeof m !== 'object') return;
@@ -420,7 +462,11 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         (e) => post({ id: m.id, type: 'error', error: control.signal.aborted ? { category: 'cancelled' }
           : { ...(typeof e?.category === 'string' && { category: e.category }), ...(typeof e?.reason === 'string' && { reason: e.reason }), ...(typeof e?.code === 'string' && { code: e.code }),
             ...(Number.isSafeInteger(e?.tokens) && { tokens: e.tokens }), ...(Number.isSafeInteger(e?.context) && { context: e.context }) } }),
-      ).finally(() => { ops.delete(m.id); quiet(); });
+      ).finally(() => {
+        ops.delete(m.id); spoke.delete(m.id); quiet();
+        const waiting = idlers; idlers = [];
+        for (const f of waiting) f();
+      });
     };
     quiet();
     return { handle, release, get loaded() { return loaded?.id || null; } };
@@ -455,7 +501,7 @@ else if (typeof WorkerGlobalScope !== 'undefined' && globalThis instanceof Worke
   };
   const host = GZ_AI_LOCAL_HOST.create({ store: GZ_AI_STORE, gguf: GZ_AI_GGUF, tokenizer: GZ_AI_TOKENIZER, engine: () => g('GZ_AI_ENGINE'),
     vision: () => g('GZ_AI_VISION'), decode, kernels: new URL('kernels/', location.href).href,
-    grammar: () => g('GZ_AI_GRAMMAR'), ladder: () => g('GZ_AI_LADDER'), gpu: () => globalThis.navigator?.gpu || null, post: (m) => postMessage(m),
+    grammar: () => g('GZ_AI_GRAMMAR'), ladder: () => g('GZ_AI_LADDER'), updates: () => g('GZ_AI_MODEL_UPDATES'), gpu: () => globalThis.navigator?.gpu || null, post: (m) => postMessage(m),
     bench: () => fetch(new URL('kernels/bench.wgsl', location.href)).then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status))))) });
   addEventListener('message', (e) => host.handle(e.data));
 }

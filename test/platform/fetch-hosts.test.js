@@ -50,6 +50,7 @@ const SITES = {
     { at: "fetch: (u, i) => fetch(u, control ?", kind: 'via', to: 'mods/modbroker.js' },
     { at: 'fetch: (url, init) => fetch(url, init), now:', kind: 'via', to: 'mods/blocklist.js' },
     { at: 'reach: reachable, fetch: (u, i) => fetch(u, i), task:', kind: 'via', to: 'ai/broker.js' },
+    { at: 'fetch: (u, i) => fetch(u, i), host: (op, args, o) => GZ_AI_LOCAL.link()', kind: 'via', to: 'ai/local/updates.js' },
     { at: 'const channelEnv = () => ({', kind: 'asked', flow: 'a mod channel\'s relay: share.frostdev.io, or one the editor asked for (settings/editor-mods.js Read code)', guard: /reachable\(u\)/, near: 0 },
     { at: 'fetch: (url, init) => fetch(url, init),', kind: 'via', to: 'planner/gcal.js', exact: true },
     { at: 'fetch: (u, init) => fetch(u, init),', kind: 'via', to: 'background/google.js', exact: true },
@@ -74,6 +75,9 @@ const SITES = {
       why: 'the local model\'s weights on the student\'s click: huggingface.co\'s resolve URL echoes the Origin, its CDN answers *; the final host is checked (allowedHost)' },
     { at: "globalThis.fetch(new URL('/ai/local/models.json'", kind: 'extension' },
   ],
+  // Background model updates: the signed model list beside Rime's weights, once a day while a Rime model is downloaded.
+  'ai/local/updates.js': [{ at: 'const r = await env.fetch(LIST, {', kind: 'open', host: 'https://huggingface.co', hosts: ['https://huggingface.co', 'https://us.aws.cdn.hf.co'],
+    why: 'the signed Rime model list, no credentials; huggingface.co\'s resolve URL echoes the Origin, its CDN answers *; the final host is checked (allowedHost)' }],
   'ai/local/ladder.js': [{ at: "fetch(chrome.runtime.getURL('ai/local/kernels/bench.wgsl'))", kind: 'extension' }],
   // run_js's engine: its packaged WebAssembly, on the first run.
   'ai/agent/js.js': [{ at: "fetch(chrome.runtime.getURL('vendor/quickjs/quickjs.wasm'))", kind: 'extension' }],

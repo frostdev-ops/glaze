@@ -96,7 +96,7 @@ test('the Safari drop list names only packaged files, and nothing Safari loads n
   for (const f of ['ai/local/engine.js', 'ai/local/host.html', 'ai/local/host.js', 'ai/local/offscreen.js', 'ai/local/kernels/matmul.wgsl', 'ai/local/models.json']) assert.ok(dropped(f), f);
   const local = packaged.filter((f) => f.startsWith('ai/local/') && !dropped(f));
   const imported = [...read('background/background.js').matchAll(/importScripts\(([^)]*)\)/g)].flatMap((x) => [...x[1].matchAll(/'\.\.\/([^']+)'/g)].map((y) => y[1]));
-  assert.deepEqual(local.sort(), imported.filter((f) => f.startsWith('ai/local/')).sort(), 'Safari keeps exactly the ai/local files the worker imports');
+  assert.deepEqual(local.sort(), [...new Set(imported.filter((f) => f.startsWith('ai/local/')))].sort(), 'Safari keeps exactly the ai/local files the worker imports');
   assert.deepEqual(imported.filter(dropped), [], 'the worker imports nothing dropped');
   const named = [
     ...m.content_scripts.flatMap((c) => [...(c.js || []), ...(c.css || [])]), m.background.service_worker, m.action.default_popup, m.options_ui.page,
@@ -122,7 +122,7 @@ test('the Safari staging drops Glaze\'s own model\'s engine and host and keeps t
     execFileSync('unzip', ['-q', path.join(dist, `glaze-v${m.version}.zip`), '-d', stage]);
     execFileSync('sh', [path.join(__dirname, '../../tools/build/safari-manifest.sh'), path.join(stage, 'manifest.json')]);
     const staged = S.walk(stage);
-    assert.deepEqual(staged.filter((f) => f.startsWith('ai/local/')).sort(), ['ai/local/format.js', 'ai/local/link.js', 'ai/local/store.js']);
+    assert.deepEqual(staged.filter((f) => f.startsWith('ai/local/')).sort(), ['ai/local/format.js', 'ai/local/link.js', 'ai/local/store.js', 'ai/local/updates.js']);
     assert.deepEqual(staged.filter(dropped), []);
     assert.deepEqual(staged.sort(), shipped.slice().sort(), 'everything else stays');
   } finally {

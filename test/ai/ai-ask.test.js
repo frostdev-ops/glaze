@@ -204,7 +204,7 @@ test('port: a tool\'s failure is the model\'s to read; an answer that hands over
   await settle(60);
   assert.deepEqual(h.seen.runs[1].input.steps[0].result, { ok: false, error: 'Glaze has no grades yet.' });
   assert.equal(h.got.filter((m) => m.type === 'step').at(-1).step.state, 'fail', 'its card shows it failed');
-  assert.deepEqual(h.ends(), [{ id: 5, type: 'error', error: 'check' }]);
+  assert.deepEqual(h.ends(), [{ id: 5, type: 'error', error: 'check', why: 'hands', steps: 1 }]);
 });
 
 test('port: Ask turned off, a sender refused, a second question while one runs, a cancel, a bad message', async () => {
