@@ -1660,6 +1660,28 @@ test('rechecking the same Dashboard student keeps painted cards in place', async
   assert.ok(p.tile(ckey('_101_1')) === card && p.doc.getElementById('gz-dash') === grid, 'the same student keeps the same board');
 });
 
+test('a live agenda keeps its account during a pending identity refresh and storage changes', async () => {
+  const layout = W.layout({ todo: true, filled: ['dash'], boards: { dash: W.TILES.map((id) => ({ id, on: id === 'agenda' })) } });
+  const p = cardsPage({ at: 'dash', enhance: { sidebar: false }, local: { widgetLayout: layout } });
+  p.c.GZ_ULTRA.page.planned = async () => ({ items: [] });
+  p.ui.sync(true); await settle();
+  const agenda = p.tile('agenda'), grid = p.doc.getElementById('gz-dash');
+  assert.ok(agenda.querySelector('.gz-w-agenda').textContent.includes('Nothing planned or due.'));
+  const pending = later();
+  p.c.GZ_ULTRA.page.profile = () => pending;
+  p.doc.dispatchEvent({ type: 'glaze:ultra-refresh', detail: { identity: true } });
+  assert.doesNotThrow(() => p.changed({ todoCache: { newValue: null } }), 'the agenda storage listener still has its confirmed account');
+  await settle();
+  assert.ok(p.tile('agenda') === agenda && p.doc.getElementById('gz-dash') === grid, 'a pending recheck keeps the painted board');
+  pending.res({ id: '_1_1' }); await settle();
+  assert.doesNotThrow(() => p.changed({ todoCache: { newValue: null } }));
+  await settle();
+  assert.ok(p.tile('agenda') === agenda && p.doc.getElementById('gz-dash') === grid, 'the same student keeps the live agenda');
+  p.doc.dispatchEvent({ type: 'glaze:ultra-refresh', detail: { identity: true, retire: true } });
+  assert.equal(p.tile('agenda'), null, 'retirement still tears down personal tiles');
+  assert.doesNotThrow(() => p.changed({ todoCache: { newValue: null } }), 'retirement removes the old storage listener');
+});
+
 test('a failed Dashboard identity read can be retried on the next page pass', async () => {
   const seed = W.apply(W.fresh(), { fill: 'dash', ops: OTHER.map((id) => ({ s: 'dash', id: ckey(id), set: { on: true } })) });
   const p = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: seed } }), Promise.resolve(members()));
