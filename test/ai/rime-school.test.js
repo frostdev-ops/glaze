@@ -142,6 +142,14 @@ test('Ultra content reads disclose the palette reader text cap', async () => {
   assert.equal(r.truncated, true);
 });
 
+test('Ultra non-page content discloses the HTML cap even when its retained text is short', async () => {
+  const item = { ...ULTRA.contents.find((i) => i.id === '_701_1'), body: '<br>'.repeat(25000) + '<p>Instructions after the HTML cap.</p>' };
+  const tab = ultraTab({ routes: { '/learn/api/public/v1/courses/_101_1/contents': { results: [item] } } });
+  const r = await tool('content_read').run({ course: '_101_1', id: '_701_1' }, ctxFor(UL, tabsOf([tab])));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /only part/);
+});
+
 test('an incomplete Ultra search does not prove a requested item is absent', async () => {
   const page = { results: ULTRA.contents.slice(0, 1), paging: { nextPage: '/learn/api/public/v1/courses/_101_1/elsewhere?offset=200' } };
   const t = ultraTab({ routes: { '/learn/api/public/v1/courses/_101_1/contents': page } });
