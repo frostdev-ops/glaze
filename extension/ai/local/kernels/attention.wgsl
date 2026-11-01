@@ -7,6 +7,14 @@
 //   BLOCK  (a prompt step): a workgroup of 256 per query head h and block of 16 tokens; keys go in tiles of 16, loaded
 //          once into workgroup memory for the block's 16 rows. Per row the same sums in the same order: each score a
 //          dot over vec4 in order, the running max and sum per tile, the values' weighted sum key by key.
+//   FLASH  (a prompt step, with subgroups): a workgroup of 256 per key/value head and block of 64 / G tokens, G = H / Hkv
+//          the query heads that read it, so its 64 rows (G heads × the block's tokens) share each tile of 32 keys and
+//          values loaded once. Invocation li: row li / 4 (head li / 4 / (64 / G) of the G, token li / 4 mod 64 / G), quarter
+//          li mod 4: the row's scores for keys quarter, quarter + 4, … of the tile, and output dims 32·quarter ..
+//          32·quarter + 31; the query row in registers; a row's four lanes are subgroup neighbours (the engine's probe
+//          holds lane = invocation mod size), which share the tile's max and sum and each key's weight by shuffles. Each
+//          score a dot over vec4 in order, the values' weighted sum key by key in order, as BLOCK. Tiles swizzled so a
+//          warp's four keys (scores) or four dim quarters (values) fall in different banks.
 struct P { T: u32, pos: u32, H: u32, Hkv: u32, window: u32, ring: u32, scale: f32, splits: u32 }
 //#if COMBINE
 @group(0) @binding(3) var<storage, read> G: array<f32>;
@@ -15,7 +23,7 @@ struct P { T: u32, pos: u32, H: u32, Hkv: u32, window: u32, ring: u32, scale: f3
 //#else
 @group(0) @binding(0) var<storage, read> Q: array<vec4<f32>>;
 @group(0) @binding(1) var<storage, read> Kc: array<vec4<H>>;
-//#if BLOCK
+//#if BLOCK || FLASH
 @group(0) @binding(2) var<storage, read> Vc: array<vec4<H>>;
 //#else
 @group(0) @binding(2) var<storage, read> Vc: array<H>;
@@ -30,6 +38,99 @@ struct P { T: u32, pos: u32, H: u32, Hkv: u32, window: u32, ring: u32, scale: f3
 @group(0) @binding(5) var<uniform> p: P;
 
 const D = 128u;
+//#if FLASH
+const NONE = -3.4028234663852886e38; // a masked score
+var<workgroup> fk: array<vec4<H>, 1024>; // [key 32][dims / 4: 32], vec4 c of key k at c ^ (k mod 4)
+var<workgroup> fv: array<vec4<H>, 1024>; // [key 32][dims / 4: 32], vec4 d at d ^ (d / 8)
+
+@compute @workgroup_size(256)
+fn main(@builtin(local_invocation_index) li: u32, @builtin(workgroup_id) wg: vec3<u32>, @builtin(subgroup_invocation_id) lane: u32) {
+  let kh = wg.x;
+  let gq = p.H / p.Hkv;
+  let BT = 64u / gq;
+  let t0 = wg.y * BT;
+  let width = p.Hkv * D;
+  let r = li / 4u;
+  let q = li % 4u;
+  let tr = r % BT;
+  let hh = r / BT;
+  let h = kh * gq + hh;
+  let live = hh < gq && t0 + tr < p.T;
+  let rp = p.pos + t0 + tr;
+  var qv: array<vec4<f32>, 32>;
+  if (live) { for (var i = 0u; i < 32u; i++) { qv[i] = Q[((t0 + tr) * p.H + h) * 32u + i]; } }
+  var first = 0u;
+  if (p.window > 0u && p.pos + t0 + 1u > p.window) { first = p.pos + t0 + 1u - p.window; }
+  let end = p.pos + min(t0 + BT, p.T);
+  let lane0 = lane - q;
+  var m = NONE;
+  var l = 0.0;
+  var acc: array<vec4<f32>, 8>;
+  for (var j0 = first; j0 < end; j0 += 32u) {
+    workgroupBarrier();
+    for (var e = li; e < 1024u; e += 256u) {
+      let k = e / 32u;
+      let c = e % 32u;
+      let j = j0 + k;
+      var kv = vec4<H>(0.0);
+      var vv = vec4<H>(0.0);
+      if (j < end) {
+        var slot = j;
+        if (p.ring > 0u) { slot = j % p.ring; }
+        let o = (slot * width + kh * D) / 4u + c;
+        kv = Kc[o];
+        vv = Vc[o];
+      }
+      fk[k * 32u + (c ^ (k & 3u))] = kv;
+      fv[k * 32u + (c ^ (c >> 3u))] = vv;
+    }
+    workgroupBarrier();
+    var sc: array<f32, 8>;
+    var mx = m;
+    for (var i = 0u; i < 8u; i++) {
+      let k = q + 4u * i;
+      let j = j0 + k;
+      var s = NONE;
+      if (live && j <= rp && j < end && (p.window == 0u || j + p.window > rp)) {
+        var d = 0.0;
+        for (var c = 0u; c < 32u; c++) { d += dot(qv[c], vec4<f32>(fk[k * 32u + (c ^ (k & 3u))])); }
+        s = d * p.scale;
+      }
+      sc[i] = s;
+      mx = max(mx, s);
+    }
+    mx = max(mx, subgroupShuffleXor(mx, 1u));
+    mx = max(mx, subgroupShuffleXor(mx, 2u));
+    var sum = 0.0;
+    for (var i = 0u; i < 8u; i++) {
+      var e = 0.0;
+      if (sc[i] != NONE) { e = exp(sc[i] - mx); }
+      sc[i] = e;
+      sum += e;
+    }
+    sum += subgroupShuffleXor(sum, 1u);
+    sum += subgroupShuffleXor(sum, 2u);
+    let f = exp(m - mx);
+    l = l * f + sum;
+    m = mx;
+    for (var v = 0u; v < 8u; v++) { acc[v] *= f; }
+    for (var k = 0u; k < 32u; k++) {
+      let w = subgroupShuffle(sc[k / 4u], lane0 + k % 4u);
+      for (var v = 0u; v < 8u; v++) {
+        let d = q * 8u + v;
+        acc[v] += w * vec4<f32>(fv[k * 32u + (d ^ (d >> 3u))]);
+      }
+    }
+  }
+  if (live) {
+    let t = t0 + tr;
+    let g = 1.0 / (1.0 + exp(-G[t * p.H + h]));
+    let o = ((t * p.H + h) * D) / 4u + q * 8u;
+    for (var v = 0u; v < 8u; v++) { O4(o + v, acc[v] / l * g); }
+  }
+}
+fn O4(i: u32, v: vec4<f32>) { O[4u * i] = v.x; O[4u * i + 1u] = v.y; O[4u * i + 2u] = v.z; O[4u * i + 3u] = v.w; }
+//#else
 //#if BLOCK
 const BT = 16u;
 const NONE = -3.4028234663852886e38; // a masked score
@@ -220,4 +321,5 @@ fn main(@builtin(local_invocation_index) li: u32, @builtin(workgroup_id) wg: vec
 //#endif
 //#endif
 }
+//#endif
 //#endif

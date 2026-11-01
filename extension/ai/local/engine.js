@@ -198,6 +198,9 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     // BLOCK attention keeps f32 queries, H keys/values and scalar scores in workgroup memory. Smaller devices use
     // the original one-query workgroups, which fit wherever the small GEMM does.
     const blockAttention = device.limits.maxComputeWorkgroupStorageSize >= 528 * 16 + 2 * 528 * (f16 ? 8 : 16) + (256 + 16) * 4;
+    // FLASH attention (64 rows of G = H / Hkv query heads sharing each tile of 32 keys, 2 × 1024 vec4 of H) needs subgroups
+    // (decided after the probe below); opts.attention 'block' keeps BLOCK.
+    const flashFits = device.limits.maxComputeWorkgroupStorageSize >= 2 * 1024 * (f16 ? 8 : 16) && opts.attention !== 'block';
     let lost = null;
     device.lost.then((info) => { lost = info; });
     try {
@@ -293,6 +296,8 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       } catch (e) { sg = false; sgWhy = e.message; }
       if (!sg) { tpr = 32; pipes.clear(); }
     }
+
+    const flash = (Hkv) => sg && flashFits && c.nHead % Hkv === 0 && 64 % (c.nHead / Hkv) === 0;
 
     // ---- weights ----
     const E = c.nEmbd, hd = c.headDim, F = c.nFf;
@@ -502,7 +507,8 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
               const tiles = (pos) => Math.ceil((swa ? Math.min(c.window, pos + 1) : pos + 1) / 128);
               await op(list, 'attention', { SPLIT: true }, { 0: B.q, 1: s.K, 2: s.V, 6: B.apart }, (T, pos) => att(T, pos, tiles(pos)), (T, pos) => [H, 1, tiles(pos)]);
               await op(list, 'attention', { COMBINE: true }, { 3: B.g, 4: B.y, 6: B.apart }, (T, pos) => att(T, pos, tiles(pos)), () => [H, 1]);
-            } else await op(list, 'attention', { BLOCK: blockAttention }, { 0: B.q, 1: s.K, 2: s.V, 3: B.g, 4: B.y }, (T, pos) => att(T, pos, 1), (T) => [H, blockAttention ? Math.ceil(T / 16) : T]);
+            } else if (flash(Hkv)) await op(list, 'attention', { FLASH: true }, { 0: B.q, 1: s.K, 2: s.V, 3: B.g, 4: B.y }, (T, pos) => att(T, pos, 1), (T) => [Hkv, Math.ceil(T / (64 / (H / Hkv)))]);
+            else await op(list, 'attention', { BLOCK: blockAttention }, { 0: B.q, 1: s.K, 2: s.V, 3: B.g, 4: B.y }, (T, pos) => att(T, pos, 1), (T) => [H, blockAttention ? Math.ceil(T / 16) : T]);
             await mm(list, blk(i, 'attn_output'), zero, B.y, B.a, 0, at(E));
           }
           const post = byName.has(blk(i, 'post_attention_norm'));
@@ -872,7 +878,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     };
 
     return {
-      config: c, device, adapter, f16, tf32, split, subgroups: sg, subgroupsOff: sgWhy, tpr, layout, session,
+      config: c, device, adapter, f16, tf32, split, subgroups: sg, subgroupsOff: sgWhy, tpr, layout, session, flash: flash(Math.max(...c.nHeadKv)),
       get lost() { return lost; },
       destroy: () => { destroyed = true; for (const close of sessions) close(); for (const b of wbufs) b.destroy(); if (own) device.destroy?.(); },
       // For the checks: the kernels one dispatch at a time, on the engine's own pipelines and weights.
