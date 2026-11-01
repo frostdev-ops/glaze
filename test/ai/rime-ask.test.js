@@ -365,3 +365,18 @@ test('arrival peek never rewrites unchanged private highlight state', async () =
   assert.deepEqual(await K.arrival(env), []);
   assert.equal(writes, 0, 'an ordinary school page load must not write an empty handoff');
 });
+
+
+test('gate: a local provider under another connection name still gets its own tools level', async () => {
+  const source = fs.readFileSync(path.join(ROOT, 'extension/background/background.js'), 'utf8');
+  const fn = /const rimeLevel = async \(\) => \{[\s\S]*?\n\};/.exec(source)[0];
+  for (const use of ['custom-1', 'device']) {
+    const level = vm.runInNewContext(`${fn} rimeLevel`, {
+      chrome: { storage: { local: { get: async () => ({ ai: { on: true, model: { use, model: 'local' }, features: { ask: true } } }) } } },
+      GZ_AI_SETTINGS: require('../../extension/ai/settings.js'),
+      aiEnv: () => ({ vault: { get: async () => ({ [use]: { provider: 'local', tier: 2 } }) } }),
+      GZ_AI_LOCAL: { config: L.config, toolsLevel: async (cfg) => cfg?.tier === 2 ? 1 : 3 },
+    });
+    assert.equal(await level(), 1, `the provider, rather than connection id ${use}, decides`);
+  }
+});
