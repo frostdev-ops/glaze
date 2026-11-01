@@ -257,6 +257,7 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
   };
 
   const OPS = { todo, insights, assignment, mark, announcement, search, modules, topics };
+  const SCHOOL_READS = new Set(['announcement', 'search', 'modules', 'topics']);
   const jobs = new Map();
   const cancel = (id) => {
     if (jobs.has(id)) jobs.get(id)?.abort();
@@ -281,7 +282,14 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
       // GZ_CTX caches identity for a document. Cookies can change in another tab without replacing this document.
       const { j: me } = await req(x.site === 'ultra' ? '/learn/api/v1/users/me' : '/api/v1/users/self/profile', go);
       if (String(me?.id) !== a.uid || !go()) return no('profile');
-      return OPS[op](go, a);
+      const result = await OPS[op](go, a);
+      // A different tab can switch the session while a school read is in flight. Bind its returned data to a fresh
+      // identity too; the document's cached account is not proof that its requests still used this student's session.
+      if (SCHOOL_READS.has(op) && result?.ok) {
+        const { j: current } = await req(x.site === 'ultra' ? '/learn/api/v1/users/me' : '/api/v1/users/self/profile', go);
+        if (String(current?.id) !== a.uid) return no('profile');
+      }
+      return result;
     };
     try { return await Promise.race([work(), stopped]); } catch { return no(go() ? 'failed' : 'late'); }
     finally { clearTimeout(timer); ac.abort(); jobs.delete(id); }
