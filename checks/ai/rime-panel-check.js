@@ -290,6 +290,32 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
         return { text, labels, files: await snap(site, 'tool-first', '#gz-ask') };
       });
 
+      await check(`${site}: the owner's Sunday — what's due this week reads the week from today, and the answer is a markdown list with friendly dates`, async () => {
+        await openPanel();
+        await page.click('#gz-ask .gz-ask-new');
+        const canvas = site === 'canvas', acct = canvas ? A : `${ULTRA}/_42_1`, cid = canvas ? '25' : '_101_1';
+        const done = now - 2 * DAY, monday = now + DAY;
+        const items = [['11', 'Reflection Week 10', done, true], ['21', 'Reflection Week 11', monday, false], ['22', 'Behavior Change Project Step 5', monday, false], ['23', 'Lab 8 worksheet', monday, false]]
+          .map(([id, title, at, submitted]) => ({ type: 'assignment', id: canvas ? id : `_${id}_1`, cid, course: 'BIO 1100', title, at, sub: { submitted, graded: false, late: false, missing: false } }));
+        await worker.evaluate(({ acct, items, now, DAY }) => chrome.storage.local.set({ todoCache: { key: `todo:${acct}`, at: now - 36e5, start: new Date(now - 8 * DAY).toISOString(), end: new Date(now + 8 * DAY).toISOString(), teach: false, progress: null, items, grading: [], sums: {} } }), { acct, items, now, DAY });
+        const AT = require('../../extension/ai/tasks/agent-tools.js');
+        const due = JSON.parse(AT.readable({ due: monday }, 'UTC', { locale: 'en', now })).due;
+        const from = new Date(now).toISOString().slice(0, 10), to = new Date(now + 7 * DAY).toISOString().slice(0, 10);
+        const titles = ['Reflection Week 11', 'Behavior Change Project Step 5', 'Lab 8 worksheet'];
+        await script({ 'agent.tools': [{ call: { name: 'schedule_list', arguments: { from, to } }, answer: null },
+          { call: null, answer: { text: ['You have three things due soon, none handed in yet:', ...titles.map((t) => `- **${t}** (BIO 1100): ${due}, not submitted`)].join('\n'), quotes: [...titles, due] } }] });
+        try {
+          const n = await ask("What's due this week?");
+          const text = await answered(n, 'the Sunday answer');
+          const bold = await answers().nth(n).locator('.gz-ask-md ul li strong').allTextContents();
+          assert.deepEqual(bold, titles, 'a bulleted list with bold titles');
+          assert.ok(text.includes(due), `the friendly date ${due}`);
+          const runs = await seen();
+          assert.ok(runs.some((r) => /this week \d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}/.test(JSON.stringify(r))), 'the model saw the resolved windows');
+          return { text, due, files: await snap(site, 'sunday', '#gz-ask') };
+        } finally { await records(site); }
+      });
+
       await check(`${site}: a reminder that fired shows as a card on the next school page; its Ask Rime asks about it`, async () => {
         const at = Date.now() - 60e3;
         await worker.evaluate((w) => chrome.storage.local.set({ rimeWakes: { wakes: [w], monitors: [], fired: [] } }), { id: site === 'canvas' ? 'w-firedcnv' : 'w-firedult', at, say: 'Finish the lab report', made: at - DAY });
