@@ -47,7 +47,7 @@ var GZ_AI_RIME_JS = globalThis.GZ_AI_RIME_JS || (() => {
       else importScripts('../vendor/quickjs/quickjs.js');
     }
     const bytes = isNode ? require('node:fs').readFileSync(require('node:path').join(__dirname, '../..', ENGINE))
-      : await (await fetch((globalThis.chrome?.runtime || globalThis.browser.runtime).getURL(ENGINE))).arrayBuffer();
+      : await (await fetch(chrome.runtime.getURL('vendor/quickjs/quickjs.wasm'))).arrayBuffer();
     heap = new WebAssembly.Memory({ initial: 256, maximum: HEAP >> 16 });
     return globalThis.GZ_QUICKJS.load(bytes, heap);
   })().catch((e) => { loading = null; throw e; }));

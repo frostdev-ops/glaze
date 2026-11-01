@@ -22,8 +22,9 @@ const walk = (p) => {
   if (!fs.existsSync(f)) return [];
   return fs.statSync(f).isDirectory() ? fs.readdirSync(f).flatMap((x) => walk(path.posix.join(p, x))) : [p];
 };
-// Vendored engines (pdf.js, Tesseract, three.js, Lottie, Harper) load only their own files, from the extension.
-const VENDORED = /^vendor\/(pdfjs|tesseract|lottie)\/|^vendor\/harper\/(?!shared\.js$)|^vendor\/three\.min\.js$/;
+// Vendored engines (pdf.js, Tesseract, three.js, Lottie, Harper, QuickJS) load only their own files, from the extension.
+// QuickJS's loader is handed its WebAssembly's bytes (ai/agent/js.js), so its own fetch path never runs.
+const VENDORED = /^vendor\/(pdfjs|tesseract|lottie|quickjs)\/|^vendor\/harper\/(?!shared\.js$)|^vendor\/three\.min\.js$/;
 const FILES = roots.flatMap(walk).filter((f) => /\.m?js$/.test(f));
 // Each line without its comment: a comment line, or what follows ` // ` (an address's `://` has no space before it).
 const lines = (js) => js.split('\n').map((l) => (/^\s*(\/\/|\/?\*)/.test(l) ? '' : l.replace(/\s\/\/\s.*$/, '')));
@@ -74,6 +75,8 @@ const SITES = {
     { at: "globalThis.fetch(new URL('/ai/local/models.json'", kind: 'extension' },
   ],
   'ai/local/ladder.js': [{ at: "fetch(chrome.runtime.getURL('ai/local/kernels/bench.wgsl'))", kind: 'extension' }],
+  // run_js's engine: its packaged WebAssembly, on the first run.
+  'ai/agent/js.js': [{ at: "fetch(chrome.runtime.getURL('vendor/quickjs/quickjs.wasm'))", kind: 'extension' }],
   // The engine host's Worker reads the ladder's bench kernel beside it (a Worker has no chrome.runtime).
   'ai/local/host.js': [{ at: "fetch(new URL('kernels/bench.wgsl', location.href))", kind: 'extension' }],
   'ai/broker.js': [{ at: 'env.fetch(url, init)', kind: 'asked', flow: 'an AI connection\'s endpoint, asked for by Settings', in: 'ai/broker.js', guard: /if \(!await reaches\(env, use\)\) throw R\(\)\.error\('permission'\)/ }],
