@@ -679,3 +679,30 @@ test('Settings → AI → Ask Rime: Reminders and watches, on unless turned off,
   const m = JSON.parse(fs.readFileSync(path.join(ROOT, 'extension/manifest.json'), 'utf8'));
   assert.ok(m.permissions.includes('alarms'));
 });
+
+// ---- training-spec review (glaze-plans/lfm-tune/FORMAT-tools-v3.md) ------------------------------------------------------
+test('places_list names each course\'s id, so places_list with course follows it in check()', async () => {
+  const top = await tool(P.tools(), 'places_list').run({}, placesCtx('https://school.instructure.com/'));
+  assert.deepEqual(top.places.find((p) => p.place === 'course:25'), { place: 'course:25', title: 'BIO 1100', course: '25' });
+  const list = step('places_list', {}, top);
+  assert.equal(A.why(call('places_list', { course: '25' }), input('Show me BIO 1100\'s pages', [list])), '');
+});
+
+test('run_js where there is no sandbox asks for no computed number, which check() would refuse', async () => {
+  assert.doesNotMatch(J.NONE, /work it out/);
+  assert.deepEqual(await J.tools()[0].run({ code: '1' }, {}), { ok: false, error: J.NONE });
+});
+
+test('"don\'t let me forget" asks for a wake, in each language', () => {
+  for (const q of ["Don't let me forget the lab at 9 pm", 'No me dejes olvidar el laboratorio', 'Não me deixe esquecer o laboratório', "Ne me laisse pas oublier le labo", 'Lass mich das Labor nicht vergessen', 'Laat me het lab niet vergeten']) {
+    assert.equal(A.why(call('wake_create', { at: '2026-10-30 21:00', say: 'Lab' }), input(q)), '', q);
+  }
+});
+
+test('a due or submitted monitor watches an item the to-do list named, not one from assignments_list alone', () => {
+  const asg = step('assignments_list', {}, { items: [{ assignment: '88121', type: 'assignment', courseId: '25', title: 'Lab report 3' }] });
+  const todo = step('todo_list', {}, { items: [{ id: '88121', type: 'assignment', courseId: '25', title: 'Lab report 3' }] });
+  const q = 'Let me know when the lab report shows as submitted';
+  assert.equal(A.why(call('monitor_create', { watch: 'submitted', type: 'assignment', id: '88121' }), input(q, [asg])), 'monitor');
+  assert.equal(A.why(call('monitor_create', { watch: 'submitted', type: 'assignment', id: '88121' }), input(q, [todo])), '');
+});
