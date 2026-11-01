@@ -9,6 +9,7 @@ All notable changes to Glaze are documented here. The format follows
 ### Added
 
 - Chrome and Firefox: **Rime**, Glaze's own AI model by Frostdev, built on LFM3-1.7B, runs on your computer after Download in Settings → AI (1.1 to 1.8 GB, the size picked for the computer). What you give it never leaves the computer.
+- **Ask Rime** (Ctrl+K or ⌘K on Canvas and Blackboard; off until you turn it on in Settings → AI) helps with coursework through hints, questions and a check of your own step, never the answer, and answers questions about your to-dos, schedule, grades, assignments and Writer documents; marking a to-do done waits for your OK.
 
 ## [4.0.1] — 2026-10-31
 
