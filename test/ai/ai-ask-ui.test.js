@@ -470,7 +470,7 @@ test('follow-ups carry the conversation so far, the last three questions and ans
   assert.deepEqual([...asked(P)[4].history.map((h) => h.question)], ['Question 2', 'Question 3', 'Question 4']);
 });
 
-test('a UI action a run returns goes to the handler for its kind, only while its question runs', async () => {
+test('a UI action a run returns goes to the handler for its kind once the answer shows, only for its question', async () => {
   const P = page({ reply: ready });
   const got = [];
   P.ui.on('highlight', (a) => got.push(a));
@@ -480,9 +480,10 @@ test('a UI action a run returns goes to the handler for its kind, only while its
   answer(P, { type: 'action', action: { kind: 'highlight', text: 'Grades' } });
   answer(P, { type: 'action', action: { kind: 'nope' } });
   await settle();
-  assert.deepEqual(got, [{ kind: 'highlight', text: 'Grades' }]);
+  assert.deepEqual(got, [], 'nothing on the page before the answer shows');
   answer(P, { type: 'end', task: 'agent.tools', answer: { text: 'Here.' } });
   await settle();
+  assert.deepEqual(got, [{ kind: 'highlight', text: 'Grades' }]);
   P.ports.at(-1).answer({ id: asked(P)[0].id, type: 'action', action: { kind: 'highlight', text: 'late' } });
   await settle();
   assert.equal(got.length, 1, 'nothing after its end');
@@ -508,7 +509,7 @@ test('every word the panel shows is in all five translations', () => {
   assert.ok(all.length > 20);
   for (const lang of ['de', 'es', 'fr', 'nl', 'pt-BR']) {
     const file = read(`i18n/${lang}.js`);
-    const missing = all.filter((k) => !file.includes(`${JSON.stringify(k)}:`));
+    const missing = all.filter((k) => !file.includes(`${JSON.stringify(k)}:`) && !file.includes(`'${k}':`));
     assert.deepEqual(missing, [], lang);
   }
 });
@@ -549,4 +550,80 @@ test('each starter, in each language, asks what it says: the first three about t
     const tasks = EN.map((s) => K.route(table ? table[s] : s, { locale: lang }).task);
     assert.deepEqual(tasks, ['agent.tools', 'agent.tools', 'agent.tools', 'study.help'], lang);
   }
+});
+
+// ---- Rime's own tools in the panel (docs/ai-harness.md "Rime's own tools") ---------------------------------------------------
+const onCanvas = (extra) => (env, context) => {
+  context.GZ_CTX = { ...context.GZ_CTX, site: 'canvas' };
+  env.assigned = [];
+  env.session = new Map();
+  context.location = { origin: 'https://school.instructure.com', href: 'https://school.instructure.com/courses/25', pathname: '/courses/25', assign: (u) => env.assigned.push(u) };
+  context.sessionStorage = { getItem: (k) => env.session.get(k) ?? null, setItem: (k, v) => env.session.set(k, String(v)), removeItem: (k) => env.session.delete(k) };
+  extra?.(env, context);
+};
+
+test('a question carries the school site and the page\'s words; a card shows its detail when it ends', async () => {
+  const P = page({ reply: ready, setup: onCanvas((env) => { const main = env.doc.createElement('main'); main.textContent = 'Grades  Homework 6  18 / 20'; env.doc.body.append(main); }) });
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('What is 18 of 20 as a percent?');
+  await settle();
+  const sent = asked(P)[0];
+  assert.equal(sent.site, 'canvas');
+  assert.equal(sent.text, 'Grades  Homework 6  18 / 20', 'the page\'s words, never the panel\'s');
+  answer(P, { type: 'step', step: { n: 1, name: 'run_js', kind: 'read', state: 'run' } });
+  answer(P, { type: 'step', step: { n: 1, name: 'run_js', kind: 'read', state: 'done', ms: 4, detail: '90' } });
+  await settle();
+  const c = P.box().querySelector('.gz-ask-step');
+  assert.equal(c.querySelector('.gz-ask-step-label').textContent, 'Working it out');
+  assert.equal(c.querySelector('.gz-ask-step-detail').textContent, '90');
+});
+
+test('open goes to a place on this site once the answer shows, a highlight after it carried to that page; another site\'s address is never opened', async () => {
+  const P = page({ reply: ready, setup: onCanvas() });
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('Take me to my grades and show Homework 6');
+  await settle();
+  answer(P, { type: 'action', action: { kind: 'open', place: 'course:25/grades', title: 'BIO 1100 grades', url: 'https://school.instructure.com/courses/25/grades' } });
+  answer(P, { type: 'action', action: { kind: 'highlight', text: 'Homework 6', note: '18 of 20' } });
+  await settle();
+  assert.deepEqual(P.assigned, [], 'nothing moves before the answer');
+  answer(P, { type: 'end', task: 'agent.tools', answer: { text: 'Your grades page, with Homework 6 marked.' } });
+  await settle();
+  assert.deepEqual(P.assigned, ['https://school.instructure.com/courses/25/grades']);
+  assert.deepEqual(JSON.parse(P.session.get('gz-ask-carry')), { at: JSON.parse(P.session.get('gz-ask-carry')).at, path: '/courses/25/grades', marks: [{ text: 'Homework 6', note: '18 of 20' }] });
+
+  const Q = page({ reply: ready, setup: onCanvas() });
+  await Q.ui.open({ event: { isTrusted: true } });
+  Q.ask('Go');
+  await settle();
+  answer(Q, { type: 'action', action: { kind: 'open', url: 'https://evil.example/phish' } });
+  answer(Q, { type: 'end', task: 'agent.tools', answer: { text: 'Here.' } });
+  await settle();
+  assert.deepEqual(Q.assigned, []);
+});
+
+test('reminders and watches that fired show as cards on the page; Ask Rime on one asks its words with its id, for the student\'s own click', async () => {
+  const list = [{ id: 'w-abcdefgh', what: 'wake', say: 'Finish the lab report', at: 1 }, { id: 'm-abcdefgh', what: 'monitor', watch: 'grade', say: 'Tell me my new grade', at: 2 }];
+  const P = page({ setup: onCanvas(), reply: (m) => (m.op === 'status' ? { type: 'status', on: true, allowed: true, ready: true } : m.op === 'fired' ? { type: 'end', fired: list } : null) });
+  await P.ui.arrive({ fired: 0 });
+  await settle();
+  assert.equal(P.doc.getElementById('gz-ask-fired'), null, 'nothing waits: no look, no card');
+  assert.deepEqual(P.posted, []);
+  await P.ui.arrive({ fired: 2 });
+  await settle();
+  const tray = P.doc.getElementById('gz-ask-fired');
+  assert.deepEqual(tray.querySelectorAll('.gz-ask-fired-card').map((c) => [c.querySelector('.gz-ask-fired-what').textContent, c.querySelector('.gz-ask-fired-say').textContent]),
+    [['Reminder', 'Finish the lab report'], ['Something you asked Rime to watch changed', 'Tell me my new grade']]);
+  const go = tray.querySelectorAll('.gz-ask-fired-go')[0];
+  P.doc.fire(go, 'click', { trusted: false });
+  await settle();
+  assert.equal(P.box(), null, 'a page script\'s click asks nothing');
+  P.doc.fire(go, 'click');
+  await settle(20);
+  assert.ok(P.box()?.open);
+  const sent = asked(P).at(-1);
+  assert.deepEqual([sent.question, sent.fired], ['Finish the lab report', 'w-abcdefgh']);
+  assert.equal(tray.querySelectorAll('.gz-ask-fired-card').length, 1, 'the card asked is gone');
+  P.doc.fire(tray.querySelector('.gz-ask-fired-no'), 'click');
+  assert.equal(P.doc.getElementById('gz-ask-fired'), null);
 });
