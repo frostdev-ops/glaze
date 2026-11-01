@@ -102,6 +102,19 @@ test('check: place_open takes only a place places_list gave; page_highlight only
   assert.equal(A.why(call('page_highlight', { text: 'Week 9' }), input('Where is Week 9?')), '');
 });
 
+test('check: a blank highlight is not grounded text', () => {
+  assert.equal(A.why(call('page_highlight', { text: ' \n\t ' }), input('Show me the lab')), 'text');
+});
+
+test('check: a monitor course must be an id', async () => {
+  const args = { watch: 'due', type: 'assignment', id: '1', course: 'Biology' };
+  const todo = step('todo_list', {}, { items: [{ type: 'assignment', id: '1', course: 'Biology' }] });
+  assert.equal(A.why(call('monitor_create', args), input('Let me know when the lab moves', [todo])), 'arguments');
+  const store = {}, env = wakesEnv(store);
+  env.read = async () => ({ items: [{ type: 'assignment', id: '1', title: 'Lab', due: T0 + 864e5 }] });
+  assert.equal((await wtool(env, 'monitor_create').run(args, { account: ACC })).ok, false, 'a successful creation must never disappear on the next store read');
+});
+
 test('check: a wake, monitor or cancel only when the question asks for one; a wake within 60 days; a monitor\'s fields', () => {
   const at = (s) => call('wake_create', { at: s, say: 'Finish the lab' });
   assert.equal(A.why(at('2026-10-30 21:00'), input('Remind me at 9 pm to finish the lab')), '');
