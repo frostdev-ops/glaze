@@ -132,6 +132,24 @@ test('Ultra content reads disclose the palette reader text cap', async () => {
   assert.equal(r.truncated, true);
 });
 
+test('an incomplete Ultra search does not prove a requested item is absent', async () => {
+  const ctx = { account: UL, tab: async () => ({ ok: true, complete: false, items: [] }) };
+  for (const name of ['content_read', 'discussion_read']) {
+    const r = await tool(name).run({ course: '_101_1', id: '_999_1' }, ctx);
+    assert.equal(r.ok, false);
+    assert.match(r.error, /only part|incomplete/i, name);
+    assert.doesNotMatch(r.error, /^No such/);
+  }
+});
+
+test('syllabus date limits disclose the omitted dates', async () => {
+  const key = SY.key(C.CANVAS, '5', '25');
+  const rec = SY.tidy({ dates: Array.from({ length: 50 }, (_, i) => ({ title: `Reading ${i + 1}`, day: '2026-11-01', kind: 'other' })) });
+  const r = await tool('syllabus_read').run({ course: '25' }, ctxFor(ACC, null, { [key]: rec }));
+  assert.equal(r.dates.length, SC.LIMIT.items);
+  assert.deepEqual(r.more, { dates: 10 });
+});
+
 test('syllabus: what Glaze kept from an import; nothing kept says how to import; no tab, wrong ids and no account say so', async () => {
   const rec = SY.tidy({ prof: { name: 'Dr. Rivera', email: 'rivera@school.edu', office: 'Science 204' }, hours: [{ label: 'Office hours', days: ['Mon'], start: '13:00', end: '14:00' }],
     dates: [{ title: 'Midterm', day: '2026-10-20', kind: 'exam' }], scale: [['A', 90], ['B', 80]], weights: [{ name: 'Labs', weight: 30 }, { name: 'Exams', weight: 70 }], at: C.NOW });
