@@ -637,3 +637,15 @@ test('Ultra discussions only return and count messages confirmed Published', asy
   assert.deepEqual(r.mine, []);
   assert.equal(r.others, 1);
 });
+
+test('an empty Ultra discussion prompt still rejects pages beyond its one page', async () => {
+  const tab = probedTab({ routes: { '/learn/api/public/v1/courses/_101_1/discussions/_911_1': {
+    ...PROBED.discussion, topic: { ...PROBED.discussion.topic, body: '' },
+  } } });
+  const ctx = ctxFor(UL, tabsOf([tab]));
+  const first = await tool('discussion_read').run({ course: '_101_1', id: '_911_1' }, ctx);
+  assert.equal(first.pages, 1);
+  const extra = await tool('discussion_read').run({ course: '_101_1', id: '_911_1', page: 2 }, ctx);
+  assert.equal(extra.ok, false);
+  assert.match(extra.error, /1 page/);
+});
