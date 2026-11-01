@@ -401,6 +401,15 @@ test('run_js: an exhausted heap does not misclassify later user exceptions as me
   assert.equal((await run('6 * 7')).value, 42);
 });
 
+test('run_js: concurrent callers cannot reuse a module discarded by an earlier run', async () => {
+  const [greedy, thrown, after] = await Promise.all([
+    run('const a = []; while (true) a.push("x".repeat(1e6));'), run('throw null'), run('6 * 7'),
+  ]);
+  assert.equal(greedy.error, 'The code ran out of memory.');
+  assert.equal(thrown.error, 'Thrown: null');
+  assert.equal(after.value, 42);
+});
+
 test('run_js: nothing outside ECMAScript reaches the code, and each run starts from a fresh context', async () => {
   const names = ['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'importScripts', 'setTimeout', 'setInterval', 'indexedDB', 'localStorage', 'caches', 'Worker', 'postMessage',
     'navigator', 'location', 'document', 'window', 'self', 'chrome', 'browser', 'require', 'process', 'std', 'os', 'WebAssembly'];
