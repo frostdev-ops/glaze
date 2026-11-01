@@ -183,7 +183,8 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
 
   // ---- the view ---------------------------------------------------------------------------------------------------------
   const turns = []; // [{ question, answer }] of this panel, for follow-ups; gone when it closes
-  const reveals = new Map(), copyTimers = new Map();
+  const reveals = new Map(), copyTimers = new Map(), exits = new Set();
+  let exitFrame = 0;
   let box = null, opener = null, current = 0, pending = null, follow = true, frame = 0, written = -1, sizes = null, moved = 0;
   const $ = (sel) => box?.querySelector(sel);
   const say = (s) => { const l = $('.gz-ask-say'); if (l && l.textContent !== s) l.textContent = s; };
@@ -194,6 +195,9 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     reveals.clear();
     for (const id of copyTimers.values()) clearTimeout(id);
     copyTimers.clear();
+    if (exitFrame) { cancelAnimationFrame(exitFrame); exitFrame = 0; }
+    for (const effect of exits) try { effect.cancel(); } catch { /* already gone */ }
+    exits.clear();
     sizes?.disconnect();
   };
   const drop = (li) => { if (li) { sizes?.unobserve(li); li.remove(); } };
@@ -358,7 +362,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
   // Ask: the reservation before the storage read (closing invalidates it, including when a new panel has opened), then the
   // question in the conversation (unless it is a try again of one shown), the run, its end.
   const ask = async ({ question: q, attempt = '', shown = false, sent }) => {
-    if (current || pending || !box) return;
+    if (current || pending || !box || shutting) return;
     const mine = pending = { box };
     const allowed = await alive();
     if (pending !== mine || box !== mine.box || !box.open) return;
@@ -437,21 +441,39 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     if (!real(e) || !current) return;
     try { port?.postMessage({ id: current, op: 'cancel' }); } catch { /* gone */ }
   };
+  const cancelRun = () => {
+    if (current) try { port?.postMessage({ id: current, op: 'cancel' }); } catch { /* gone */ }
+    current = 0; pending = null;
+  };
   // Closing: the panel fades out (none with reduced motion or Motion off), then goes, and everything with it.
   let shutting = false;
   const shut = () => {
     const d = box;
     if (!d || shutting) return;
+    cancelRun();
     if (still() || typeof d.animate !== 'function') return d.close();
     shutting = true;
-    const done = () => { shutting = false; if (box === d) d.close(); };
+    const done = () => { if (box === d) { shutting = false; d.close(); } };
     try {
-      d.animate([{ opacity: 1 }, { opacity: 0, translate: '0 8px', scale: '0.98' }], { duration: 140, easing: 'ease-in', fill: 'forwards' }).finished.then(done, done);
-      try { d.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, fill: 'forwards', pseudoElement: '::backdrop' }); } catch { /* no backdrop animation here */ }
+      const effect = d.animate([{ opacity: 1 }, { opacity: 0, translate: '0 8px', scale: '0.98' }], { duration: 140, easing: 'ease-in', fill: 'forwards' });
+      exits.add(effect);
+      effect.finished.then(done, done);
+      try {
+        const backdrop = d.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, fill: 'forwards', pseudoElement: '::backdrop' });
+        exits.add(backdrop);
+        backdrop.finished.catch(() => {});
+      } catch { /* no backdrop animation here */ }
+      const watch = () => {
+        exitFrame = 0;
+        if (box !== d) return;
+        if (still()) return done();
+        exitFrame = requestAnimationFrame(watch);
+      };
+      exitFrame = requestAnimationFrame(watch);
     } catch { done(); }
   };
   const clear = (e) => {
-    if (!real(e) || current || pending) return;
+    if (!real(e) || current || pending || shutting) return;
     turns.length = 0;
     releaseView();
     log()?.replaceChildren(empty());
@@ -525,8 +547,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     box.addEventListener('click', (e) => { if (e.target === box && real(e)) shut(); });
     box.addEventListener('cancel', (e) => { if (!still() && real(e)) { e.preventDefault(); shut(); } });
     box.addEventListener('close', () => {
-      if (current) try { port?.postMessage({ id: current, op: 'cancel' }); } catch { /* gone */ }
-      current = 0; pending = null; shutting = false; follow = true;
+      cancelRun(); shutting = false; follow = true;
       releaseView();
       turns.length = 0;
       sizes = null; written = -1;
