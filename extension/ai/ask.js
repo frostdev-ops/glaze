@@ -411,13 +411,14 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     const compact = async ({ open, turn, locale, tools, zone }) => {
       const turns = [...open, turn];
       if (turns.length <= COMPACT.keep) return;
+      const gen = ++CHAT.gen;
       let need = turns.length > AT().HISTORY.turns;
       if (!need) {
         const fit = await measure('agent.tools', { question: turn.question, tools, steps: [], now: env.now(), zone, locale, first: true, history: turns, ...(CHAT.summary && { summary: CHAT.summary }) });
         need = !!fit && fit.used + fit.reserve > COMPACT.share * fit.window;
       }
-      if (!need) return;
-      const older = turns.slice(0, -COMPACT.keep), gen = ++CHAT.gen;
+      if (!need || gen !== CHAT.gen || closed) return;
+      const older = turns.slice(0, -COMPACT.keep);
       const input = { turns: older.slice(-CC().LIMIT.turns), ...(CHAT.summary && { summary: CHAT.summary }), locale };
       const apply = (out) => { if (gen !== CHAT.gen || !out?.text) return; CHAT.summary = out.text; for (const h of older) CHAT.covered.add(keyOf(h)); CHAT.pending = null; };
       const fallback = () => { const inp = CC().task.input(input); if (inp) apply(CC().fallback(inp)); };
@@ -546,7 +547,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         || (m.history !== undefined && !(Array.isArray(m.history) && m.history.length <= LIMIT.turns && m.history.every(turn)))
         || (m.site !== undefined && !SITES.includes(m.site)) || (m.text !== undefined && typeof m.text !== 'string') || (m.fired !== undefined && typeof m.fired !== 'string')) return fail('request');
       const history = (m.history || []).filter((h) => h.question.trim() && h.answer.trim());
-      if (!history.length) { CHAT.pending?.now(false); CHAT.summary = ''; CHAT.covered.clear(); CHAT.gen++; } else CHAT.pending?.now();
+      if (!history.length) { CHAT.pending?.now(false); CHAT.summary = ''; CHAT.covered.clear(); } else CHAT.pending?.now();
+      CHAT.gen++;
       // The turns the summary doesn't cover yet, verbatim.
       const open = history.filter((h) => !CHAT.covered.has(keyOf(h)));
       const question = m.question.trim(), attempt = (m.attempt || '').trim();
