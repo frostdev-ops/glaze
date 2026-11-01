@@ -37,6 +37,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   let fetching = null; // the planner (or summaries) request in flight, and the generation it was asked for in
   let fetchGen = -1;
   let drawn = '';
+  let viewed = ''; // what the list as drawn shows (render)
   let shown = new Map(); // key -> row, for every row the list drew
   let doneWas = null; // the done count last drawn, so a change in it pops (render)
   const open = new Set(); // rows with their details open, and "show more" groups
@@ -404,7 +405,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (!box || !L || !who) return;
     // Until the student is confirmed: the list's frame and title only, nobody's work.
     box.inert = !sure;
-    if (!sure) { if (!head.firstChild) head.append(make('h2', { id: 'gz-todo-title', textContent: t('To Do') })); body.replaceChildren(); drawn = ''; return; }
+    if (!sure) { if (!head.firstChild) head.append(make('h2', { id: 'gz-todo-title', textContent: t('To Do') })); body.replaceChildren(); drawn = viewed = ''; return; }
     if (asleep) { drawn = ''; return; }
     const now = Date.now();
     // here(): Ultra moves the list between its Courses page and a course's outline without a page load.
@@ -416,6 +417,13 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     const course = here();
     gs ||= L.gradescope(() => { drawn = ''; render(); });
     const out = L.build({ items: [...(cache?.items || []), ...gs(now, who.uid)], grading: o().teacher ? cache?.grading || [] : [], data, o: o(), now, tz: who.tz, cids: courses.cids, course, names: courses.names, sync: toSite() });
+    // Drawn again only when what it shows changed: a refresh of Ultra's kept data, another tab's answer or the echo of its
+    // own write with nothing new moves no row and takes no focus.
+    const question = gs.question(who.uid, t), remind = globalThis.GZ_REMIND_UI?.head() || [];
+    const view = JSON.stringify([sig, out, form, tools, [...open], [...shut], !!cache, cache?.complete, o().progress && cache?.sums,
+      question?.outerHTML ?? null, remind.map((e) => e.outerHTML)]);
+    if (view === viewed) return;
+    viewed = view;
     firstIds = new Map();
     shown = new Map([...out.groups.flatMap(([, l]) => l), ...out.done, ...out.graded].map((r) => [r.key, r]));
     newsShown = new Map([...out.unread, ...out.read].map((r) => [r.key, r]));
@@ -447,10 +455,10 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (scope) scope.setAttribute('aria-label', t('Courses shown'));
     head.replaceChildren(make('h2', { id: 'gz-todo-title', textContent: t('To Do') }), ...(scope ? [scope] : []),
       ...(out.count.all > 0 ? [make('span', { className: 'gz-todo-count', textContent: t('{done} of {all} done', out.count) })] : []),
-      ...(globalThis.GZ_REMIND_UI?.head() || []), add, more, // the streak and reminders (planner/page/reminders.js), when on
+      ...remind, add, more, // the streak and reminders (planner/page/reminders.js), when on
       ...(tools ? [toolRow(sessions, ics)] : []));
     const parts = [form && taskForm()];
-    parts.unshift(gs.question(who.uid, t)); // Gradescope's one-time question, when there is one
+    parts.unshift(question); // Gradescope's one-time question, when there is one
     if (cache?.complete === false) parts.push(make('p', { className: 'gz-todo-hint', textContent: t('Blackboard sent only part of your calendar, so some work may be missing.') }));
     if (!cache) parts.push(make('p', { className: 'gz-todo-empty', textContent: t('Loading…') }));
     // Never "nothing to do" when Ultra couldn't send everything (said above).
@@ -656,7 +664,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       if (known) {
         const now = await ctx.profile();
         if (g !== gen) return;
-        if (String(now?.id) !== who.uid) { body?.replaceChildren(); drawn = ''; started = start(); return; }
+        if (String(now?.id) !== who.uid) { body?.replaceChildren(); drawn = viewed = ''; started = start(); return; }
         sure = true;
         takeDraft(r?.[draftKey()]);
         render(true);
@@ -796,7 +804,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     box = null;
     who = null;
     started = null;
-    drawn = '';
+    drawn = viewed = '';
     document.removeEventListener('visibilitychange', onShow);
     removeEventListener('focus', onShow);
     removeEventListener('pagehide', keepDraft);
