@@ -711,3 +711,16 @@ test('Canvas discussion_read returns a prompt only when its author is a teacher 
   const hidden = await tool('discussion_read').run({ course: '25', id: '81' }, ctxFor(ACC, tabsOf([canvasTab({ routes: { ...routes, '/api/v1/courses/25/enrollments': () => ({ ok: false, status: 403, headers: { get: () => null }, text: async () => '{}' }) } })])));
   assert.match(hidden.error, /authorship/);
 });
+
+test('Canvas discussion previews with omitted replies do not claim complete coverage', async () => {
+  const t = canvasTab({ routes: {
+    '/api/v1/courses/25/enrollments': [{ user_id: 900, type: 'TeacherEnrollment' }],
+    '/api/v1/courses/25/discussion_topics/81': { ...TOPIC, id: 81, author: { id: 900 }, message: '<p>Discuss cells.</p>' },
+    '/api/v1/courses/25/discussion_topics/81/entries': [{ id: 1, user_id: 77, user_name: 'Kim Classmate', message: '<p>Private words</p>', has_more_replies: true,
+      recent_replies: [{ id: 2, user_id: 5, user_name: 'Student Self', message: '<p>My reply.</p>' }] }],
+  } });
+  const r = await tool('discussion_read').run({ course: '25', id: '81' }, ctxFor(ACC, tabsOf([t])));
+  assert.equal(r.complete, false, 'recent_replies contains only the most recent ten, not all replies');
+  assert.doesNotMatch(JSON.stringify(r), /Kim|Private words/);
+  assert.ok(t.page.asked.every((q) => q.method === 'GET' && new URL(q.url).origin === C.CANVAS));
+});
