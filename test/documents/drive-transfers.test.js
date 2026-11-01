@@ -2,8 +2,8 @@
 // drive-sync.js, extension/background/drive-store.js): Safari unloads the worker about 30 s after its last event and Chrome
 // stops one whose fetch waits 30 s, so a large upload goes in chunks through a resumable session whose address, offset and
 // content hash stay in storage, a large download comes by ranges into a stage that outlives the worker, and neither holds
-// back the rest of a run. Off in 4.0.1 (test/documents/drive-large.test.js): these run with the stage on (env.staged), as
-// 4.0.2 will. Each "worker" here is a fresh load of the modules over the same storage and stage; a stopped
+// back the rest of a run. These run with the stage on (env.staged), as the worker does (background/background.js); test/
+// documents/drive-large.test.js holds it off. Each "worker" here is a fresh load of the modules over the same storage and stage; a stopped
 // one is a request that never answers (test/helpers/drive-standin.cjs cut, or a fetch that hangs).
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -65,7 +65,8 @@ const fresh = () => {
   return { D: require('../../extension/documents/drive.js'), S: require('../../extension/documents/drive-sync.js'), ST: require('../../extension/background/drive-store.js') };
 };
 const EXT = { paper: '.docx', pdf: '.pdf' };
-const worker = (drive, dk, { fetch = drive.fetch, account = 'student@school.edu', snapshot = null, records = false, staged = true } = {}) => {
+// google: background/google.js's worker side (its token, account and drop) in place of a fixed token.
+const worker = (drive, dk, { fetch = drive.fetch, account = 'student@school.edu', snapshot = null, records = false, staged = true, google = null } = {}) => {
   const { D, S, ST } = fresh();
   const now = () => dk.clock.t;
   const papers = P.open(dk.store, now, { versions: () => 40, files: { own: dk.files.own } });
@@ -73,8 +74,9 @@ const worker = (drive, dk, { fetch = drive.fetch, account = 'student@school.edu'
   const settings = memory();
   const more = snapshot || records ? ST.create({ area: (n) => (n === 'notes' ? null : n === 'sync' ? settings : dk.store), store: dk.store, hash: async (s) => sha(s), now, snapshot }) : null;
   const env = {
-    drive: () => D.create({ fetch, token: async () => 'tok-1', account: async () => account, interactive: false }),
-    account: async () => account, store: dk.store,
+    drive: () => (google ? D.create({ fetch, token: (o) => google.token(o), account: () => google.account(), drop: (t) => google.drop(t), interactive: false })
+      : D.create({ fetch, token: async () => 'tok-1', account: async () => account, interactive: false })),
+    account: google ? () => google.account() : async () => account, store: dk.store,
     papers: { get: papers.get, list: papers.list, save: papers.save, trash: papers.trash, untrash: papers.untrash, keep: papers.keep },
     parts: async () => ({}),
     files: { has: async (h) => !!(await dk.files.stat(h)), put: dk.files.put },
@@ -535,4 +537,227 @@ test('a large first push whose JSON copy Drive\'s search doesn\'t show yet: one 
     if (!edit) assert.equal(drive.log.filter((x) => x.upload?.size > 5 * MiB && x.upload.type !== 'application/json').length, 1, 'the file\'s bytes sent once');
     assert.deepEqual(await moves(dk), {});
   }
+});
+
+test('with the stage on, a document past what a transfer carries stays here, marked too large, nothing sent or staged', async () => {
+  const drive = standin(), dk = disk(), key = 'doc:00000000-0000-4000-8000-00000000a030', a = worker(drive, dk);
+  // A PDF past the file store's 50 MB (as another device could never bring it), told by its record's size.
+  const ref = await dk.files.put(enc('%PDF-1.7 huge'), MIME.pdf);
+  await a.papers.save(key, { kind: 'pdf', file: { ...ref, size: 60e6 }, size: 60e6, title: 'Huge', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  assert.ok(!fileOf(drive, key, 'doc') && !fileOf(drive, key, 'file'), 'nothing of it in Drive');
+  assert.deepEqual((await dk.store.get('driveSyncLarge')).driveSyncLarge?.docs, { [key]: true });
+  assert.deepEqual(await moves(dk), {});
+});
+
+test('a worker whose stage won\'t open (IndexedDB refused) still syncs: small items as ever, a large one in one go', async () => {
+  const drive = standin(), dk = disk(), key = 'doc:00000000-0000-4000-8000-00000000a031';
+  const refused = () => { throw Object.assign(new Error('refused'), { why: 'unavailable' }); };
+  const write = dk.stage.write;
+  dk.stage.keys = dk.stage.entries = dk.stage.get = refused;
+  dk.stage.write = async (puts, dels) => (puts?.length ? refused() : write(puts, dels));
+  const a = worker(drive, dk), bytes = bytesOf(6 * MiB, 61);
+  await pdfOn(a, dk, key, bytes, 'Reader');
+  assert.ok((await a.sync.set(true)).ok);
+  assert.ok(fileOf(drive, key, 'file')?.bytes.equals(Buffer.from(bytes)), 'the 6 MB PDF in Drive, whole');
+  assert.equal(JSON.parse(fileOf(drive, key, 'doc').bytes).file, fileOf(drive, key, 'file').meta.id);
+  assert.deepEqual(await moves(dk), {});
+});
+
+test('a staged record update cannot overwrite a later change back to the original value on another device', async () => {
+  const drive = standin(), da = disk(), db = disk(da.clock), key = 'writer:sources:local|local|papers|reader';
+  const original = { at: da.clock.t, sources: [{ id: 's1', title: 'Original source' }] };
+  await da.store.set({ [key]: original });
+  const a = worker(drive, da, { records: true }), b = worker(drive, db, { records: true });
+  assert.ok((await a.sync.set(true)).ok);
+  assert.ok((await b.sync.set(true)).ok);
+  const h = sha(`local\n${key}`).slice(0, 32), id = [...drive.files.values()].find((f) => f.meta.appProperties.key === h).meta.id;
+  da.clock.t += 1000;
+  const changed = { at: da.clock.t, sources: [{ id: 's1', title: 'Earlier change', text: 'E'.repeat(6 * MiB) }] };
+  await da.store.set({ [key]: changed });
+  await a.more.stamp({ [key]: { oldValue: original, newValue: changed } }, 'local');
+  await stopped(a.sync.run({ push: true }), drive.cut(0, (e) => e.chunk && !e.chunk.status));
+  // B edits and then returns to the original content, later than A's pending change.
+  db.clock.t += 1000;
+  const temporary = { at: db.clock.t, sources: [] };
+  await db.store.set({ [key]: temporary });
+  await b.more.stamp({ [key]: { oldValue: original, newValue: temporary } }, 'local');
+  await db.store.set({ [key]: original });
+  await b.more.stamp({ [key]: { oldValue: temporary, newValue: original } }, 'local');
+  assert.ok((await b.sync.run({ push: true })).ok);
+  assert.equal(Number(drive.view(id).appProperties.at), db.clock.t, 'Drive records the later return to this value');
+  assert.ok((await worker(drive, da, { records: true }).sync.run()).ok);
+  assert.equal(JSON.parse(drive.files.get(id).bytes).value.sources[0].title, 'Original source', 'the later change wins even though its sum matches the staged aim');
+  assert.deepEqual((await da.store.get(key))[key], original);
+  assert.deepEqual(await moves(da), {});
+});
+
+test('a completed download still settles when the next worker cannot open its stage', async () => {
+  const drive = standin(), da = disk(), db = disk(da.clock), key = 'doc:00000000-0000-4000-8000-00000000a032';
+  const a = worker(drive, da), bytes = bytesOf(6 * MiB, 67);
+  await pdfOn(a, da, key, bytes, 'Reader');
+  assert.ok((await a.sync.set(true)).ok);
+  const set = db.store.set;
+  let hang;
+  const reached = new Promise((r) => { hang = r; });
+  db.store.set = async (o) => {
+    await set(o);
+    if (Object.values(o.driveSyncMoves || {}).some((t) => t.dir === 'down' && t.done)) { hang(); return new Promise(() => {}); }
+  };
+  await stopped(worker(drive, db).sync.set(true), reached);
+  db.store.set = set;
+  const keys = db.stage.keys;
+  db.stage.keys = db.stage.entries = db.stage.get = () => { throw Object.assign(new Error('refused'), { why: 'unavailable' }); };
+  const b = worker(drive, db), result = await b.sync.set(true);
+  assert.ok(result.ok, JSON.stringify(result));
+  assert.equal(sha(await db.files.read((await b.papers.get(key)).file.hash)), sha(bytes));
+  assert.deepEqual(await moves(db), {});
+  db.stage.keys = keys;
+});
+
+test('an owed replay whose saved file is denied is discarded without blocking later transfers', async () => {
+  const drive = standin(), da = disk(), db = disk(da.clock), key = 'writer:sources:local|local|papers|reader';
+  const a = worker(drive, da, { records: true });
+  await da.store.set({ [key]: { at: da.clock.t, sources: [{ id: 's1', title: 'Local', text: 'A'.repeat(6 * MiB) }] } });
+  await stopped(a.sync.set(true), drive.cut(0, (e) => e.chunk && !e.chunk.status));
+  await db.store.set({ [key]: { at: db.clock.t, sources: [{ id: 's1', title: 'Other device' }] } });
+  assert.ok((await worker(drive, db, { records: true }).sync.set(true)).ok);
+  const h = sha(`local\n${key}`).slice(0, 32), other = [...drive.files.values()].find((f) => f.meta.appProperties.key === h).meta.id;
+  const set = da.store.set;
+  let hang;
+  const reached = new Promise((r) => { hang = r; });
+  da.store.set = async (o) => {
+    await set(o);
+    if (Object.values(o.driveSyncMoves || {}).some((t) => t.due)) { hang(); return new Promise(() => {}); }
+  };
+  await stopped(worker(drive, da, { records: true }).sync.run(), reached);
+  da.store.set = set;
+  assert.equal((await moves(da))[`R:${h}`]?.owner.R, other, 'the owed replay retains the other device\'s file');
+  drive.fail(403, ERRORS.insufficientFilePermissions, (x) => x.path === `/drive/v3/files/${other}` && !x.query.alt, 10);
+  const b = worker(drive, da, { records: true }), pdf = 'doc:00000000-0000-4000-8000-00000000a033';
+  await pdfOn(b, da, pdf, bytesOf(6 * MiB, 71), 'Later reader');
+  await b.sync.touched(pdf);
+  const result = await b.sync.run({ push: true });
+  assert.ok(result.ok, JSON.stringify(result));
+  assert.ok(fileOf(drive, pdf, 'file') && fileOf(drive, pdf, 'doc'), 'the later transfer finishes despite the refused replay');
+  assert.deepEqual(await moves(da), {});
+  assert.deepEqual([...da.stage.m.keys()], []);
+});
+
+for (const mode of ['small', 'unavailable', 'restaged', 'aimed']) test({
+  small: 'a small edit after a staged commit retains the owed meeting with another device\'s file',
+  unavailable: 'an owed replay survives a failed retry while the stage cannot open',
+  restaged: 'an owed meeting survives worker shutdown while a new staged upload replaces it',
+  aimed: 'a staged create check retains a lower file already named while Drive search still hides it',
+}[mode], async () => {
+  const drive = standin(), da = disk(), db = disk(da.clock), key = 'writer:sources:local|local|papers|reader';
+  const h = sha(`local\n${key}`).slice(0, 32), b = worker(drive, db, { records: true });
+  const original = { at: db.clock.t, sources: [{ id: 's1', title: 'Original' }] };
+  await db.store.set({ [key]: original });
+  assert.ok((await b.sync.set(true)).ok);
+  const other = [...drive.files.values()].find((f) => f.meta.appProperties.key === h).meta.id;
+  // Drive's search still hides B's first upload, while its changes feed can name it.
+  const lagged = async (u, init = {}) => {
+    const r = await drive.fetch(u, init), url = new URL(String(u));
+    if ((init.method || 'GET') === 'GET' && url.pathname === '/drive/v3/files' && url.searchParams.get('q')) {
+      const j = await r.json();
+      return new Response(JSON.stringify({ ...j, files: (j.files || []).filter((f) => f.id !== other) }), { status: r.status, headers: r.headers });
+    }
+    return r;
+  };
+  const large = { at: da.clock.t, sources: [{ id: 's1', title: 'Local', text: 'A'.repeat(6 * MiB) }] };
+  await da.store.set({ [key]: large });
+  await stopped(worker(drive, da, { records: true, fetch: lagged }).sync.set(true), drive.cut(0, (e) => e.chunk && !e.chunk.status));
+  db.clock.t += 1000;
+  const remote = mode === 'aimed' ? large : { at: db.clock.t, sources: [{ id: 's1', title: 'Other device' }] };
+  await db.store.set({ [key]: remote });
+  await b.more.stamp({ [key]: { oldValue: original, newValue: remote } }, 'local');
+  assert.ok((await b.sync.run({ push: true })).ok);
+  const set = da.store.set;
+  let hang;
+  const reached = new Promise((r) => { hang = r; });
+  da.store.set = async (o) => {
+    await set(o);
+    const stop = mode === 'aimed' ? !!o[`driveSyncRec:${h}`]?.id : Object.values(o.driveSyncMoves || {}).some((t) => t.due);
+    if (stop) { hang(); return new Promise(() => {}); }
+  };
+  await stopped(worker(drive, da, { records: true, fetch: lagged }).sync.run(), reached);
+  da.store.set = set;
+  assert.equal((await moves(da))[`R:${h}`]?.owner.R, other);
+  assert.notEqual((await da.store.get(`driveSyncRec:${h}`))[`driveSyncRec:${h}`]?.id, other, 'the stopped upload committed a second file');
+  da.clock.t += 1000;
+  let latest = mode === 'aimed' ? large : { at: da.clock.t, sources: [{ id: 's1', title: 'Latest local edit', ...(mode === 'restaged' && { text: 'B'.repeat(6 * MiB) }) }] };
+  if (mode !== 'aimed') await da.store.set({ [key]: latest });
+  const a = worker(drive, da, { records: true, ...(mode === 'aimed' && { fetch: lagged }) });
+  if (mode !== 'aimed') await a.more.stamp({ [key]: { oldValue: large, newValue: latest } }, 'local');
+  if (mode === 'restaged') {
+    let stop;
+    const replaced = new Promise((r) => { stop = r; });
+    da.store.set = async (o) => {
+      await set(o);
+      if (o.driveSyncMoves && !o.driveSyncMoves[`R:${h}`]?.due) { stop(); return new Promise(() => {}); }
+    };
+    await stopped(a.sync.run({ push: true }), replaced);
+    da.store.set = set;
+    assert.equal((await moves(da))[`R:${h}`]?.owner.R, other, 'the saved meeting is never absent during replacement');
+    assert.ok((await worker(drive, da, { records: true }).sync.run({ push: true })).ok);
+  } else if (mode === 'unavailable') {
+    const keys = da.stage.keys;
+    da.stage.keys = () => { throw Object.assign(new Error('refused'), { why: 'unavailable' }); };
+    drive.offline((x) => x.path === `/drive/v3/files/${other}` && !x.query.alt);
+    assert.equal((await a.sync.run({ push: true })).why, 'network');
+    assert.equal((await moves(da))[`R:${h}`]?.owner.R, other, 'a failed replay retains its obligation even without IndexedDB');
+    da.stage.keys = keys;
+    da.clock.t = (await da.store.get('driveSync')).driveSync.wait + 1;
+    assert.ok((await worker(drive, da, { records: true }).sync.run({ push: true })).ok);
+  } else assert.ok((await a.sync.run({ push: true })).ok);
+  if (mode === 'aimed') {
+    da.clock.t += 1000;
+    latest = { at: da.clock.t, sources: [{ id: 's1', title: 'Edit after resuming the landed upload' }] };
+    await da.store.set({ [key]: latest });
+    await a.more.stamp({ [key]: { oldValue: large, newValue: latest } }, 'local');
+    assert.ok((await a.sync.run({ push: true })).ok);
+  }
+  assert.equal((await da.store.get(`driveSyncRec:${h}`))[`driveSyncRec:${h}`]?.id, other, 'the owed meeting follows the shared lower id');
+  assert.ok((await b.sync.run()).ok);
+  assert.deepEqual((await db.store.get(key))[key], latest, 'the other device receives the later edit');
+  assert.deepEqual(await moves(da), {});
+});
+
+// Safari: the token comes from the extension's handler (safari/…/GlazeGoogle.swift), which keeps the refresh token in the
+// Keychain; a worker Safari loaded again holds none, so it asks the handler, and Google's session goes on where it stood.
+test('Safari: a chunked upload Safari unloaded the worker during goes on in the next worker, with a token the handler mints and no sign-in', async () => {
+  const G = require('../../extension/background/google.js'), C = require('../../extension/background/google-config.js');
+  const valid = new Set(['tok-1']), sent = [];
+  let n = 0;
+  const handler = async (m) => {
+    sent.push(m.type);
+    if (m.type === 'google.status') return { ok: true, email: 'student@school.edu', sub: 'S1', pending: false };
+    if (m.type === 'google.token') { const token = `tok-${++n}`; valid.add(token); return { ok: true, token, expiresAt: dk.clock.t + 3599e3 }; }
+    if (m.type === 'google.drop') return { ok: true };
+    throw new Error(`no sign-in expected: ${m.type}`);
+  };
+  const drive = standin({ tokens: valid }), dk = disk(), key = 'doc:00000000-0000-4000-8000-00000000a020';
+  await dk.store.set({ google: { email: 'student@school.edu', sub: 'S1', flow: 'native', at: dk.clock.t } });
+  const google = () => G.create({ on: true, config: { ...C, native: true }, flow: 'native', storage: dk.store, native: handler, now: () => dk.clock.t,
+    fetch: async (u) => { throw new Error(`unexpected request: ${u}`); }, open: async () => {}, manifest: () => ({}), identity: () => undefined,
+    permissions: { contains: async () => false, remove: async () => true }, keep: async () => false });
+  const bytes = bytesOf(12 * MiB, 59), a = worker(drive, dk, { google: google() });
+  await pdfOn(a, dk, key, bytes, 'Field notes');
+  await stopped(a.sync.set(true), drive.cut(MiB, (e) => e.chunk && !e.chunk.status && e.chunk.from > 0));
+  assert.equal(n, 1, 'the first worker\'s requests shared one token');
+  const left = Object.values(await moves(dk));
+  assert.equal(left.length, 1, 'the upload waits, its session kept');
+  // Safari unloaded the worker; meanwhile the held token expired at Google.
+  valid.delete('tok-1');
+  dk.clock.t += 3600e3;
+  const at = drive.log.length, b = worker(drive, dk, { google: google() });
+  assert.ok((await b.sync.run()).ok);
+  assert.equal(n, 2, 'the next worker asked the handler once');
+  assert.ok(!sent.includes('google.connect') && !sent.includes('google.finish'), 'never a sign-in');
+  const sessions = drive.log.slice(at).filter((e) => e.query?.uploadType === 'resumable' && e.method !== 'PUT');
+  assert.equal(sessions.length, 0, 'the same session, not a new one');
+  assert.ok(chunks(drive, at).some((e) => e.chunk.from > 0), 'it went on from the bytes Drive kept');
+  assert.equal(sha(fileOf(drive, key, 'file').bytes), sha(bytes));
+  assert.deepEqual(await moves(dk), {});
 });

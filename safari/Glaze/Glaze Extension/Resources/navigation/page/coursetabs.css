@@ -76,11 +76,14 @@ html[data-gz-bg="solid"] #gz-ctabs::before, html[data-gz-bg="solid"] #gz-doc-too
 #gz-ctabs[data-color="theme"] .gz-ctab[class*="course-color-"][aria-selected="true"] { background: var(--gz-surface-grain, none), color-mix(in oklab, var(--gz-course) 42%, var(--gz-surface-paint, var(--gz-surface))); border-color: var(--gz-course); }
 #gz-ctabs:is([data-color="tint"], [data-color="theme"]) .gz-ctab[class*="course-color-"][aria-selected="true"]::after { background: var(--gz-course); }
 #gz-ctabs .gz-ctab-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x) { position: relative; flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--gz-ink-faint); }
+#gz-ctabs .gz-ctab-pin,
+#gz-ctabs .gz-ctab-x { position: relative; flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--gz-ink-faint); }
 /* Drawn at 20px, pressed anywhere within 24 (WCAG 2.5.8). */
-#gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x)::after { content: ""; position: absolute; inset: -2px; }
+#gz-ctabs .gz-ctab-pin::after,
+#gz-ctabs .gz-ctab-x::after { content: ""; position: absolute; inset: -2px; }
 #gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x) svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-#gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x):hover { background: color-mix(in srgb, var(--gz-ink) 14%, transparent); color: var(--gz-ink); }
+#gz-ctabs .gz-ctab-pin:hover,
+#gz-ctabs .gz-ctab-x:hover { background: color-mix(in srgb, var(--gz-ink) 14%, transparent); color: var(--gz-ink); }
 #gz-ctabs .gz-ctab:not(:hover, :focus-visible, [data-pin]) .gz-ctab-pin { display: none; }
 #gz-ctabs .gz-ctab:not(:hover, :focus-visible, [aria-selected="true"]) .gz-ctab-x { visibility: hidden; }
 #gz-ctabs .gz-ctab[data-pin] .gz-ctab-pin { color: var(--gz-accent); }
@@ -126,8 +129,13 @@ html[data-gz-motion="off"] #gz-ctabs .gz-ctab[data-loading]::before { animation:
 #gz-ctabs-frames[data-turning]::after { content: ""; position: absolute; z-index: 3; top: var(--gz-navbar-top, 0px); inset-inline: var(--gz-navbar-left, 0px) 0; height: 2px; pointer-events: none; background: linear-gradient(90deg, transparent, var(--gz-accent, #6fdcff), transparent) 0 0 / 30% 100% no-repeat; animation: gz-ctab-load 1s linear infinite, gz-ctab-beat 0.01s 0.15s both; }
 @keyframes gz-ctab-beat { from { opacity: 0; } to { opacity: 1; } }
 html[data-gz-motion="off"] #gz-ctabs-frames[data-turning]::after { animation: none; background: var(--gz-accent, #6fdcff); opacity: 0.5; }
-html[data-gz-ctab-framed] :is(#gz-float .gz-w, #gz-float[data-stack]) { z-index: 1260; }
+html[data-gz-ctab-framed] :is(#gz-float .gz-w),
+html[data-gz-ctab-framed] #gz-float[data-stack] { z-index: 1260; }
 /* What belongs to the covered page itself stays under the frame: its stickers, reading bar, document tools, a peek or menu. */
-html[data-gz-ctab-framed] :is(#gz-stickers, #gz-read, #gz-doc-tools, #gz-peek, #gz-cm) { visibility: hidden !important; }
+html[data-gz-ctab-framed] #gz-stickers,
+html[data-gz-ctab-framed] #gz-read,
+html[data-gz-ctab-framed] #gz-doc-tools,
+html[data-gz-ctab-framed] #gz-peek,
+html[data-gz-ctab-framed] #gz-cm { visibility: hidden !important; }
 /* A see-through frame (content.js data-gz-through) shows the page under it, whose own strip would show through. */
 html[data-gz-ctab-framed]:has(> body > #gz-ctabs-frames > iframe[data-gz-through]) #gz-ctabs:not([data-at="over"]) { visibility: hidden !important; }

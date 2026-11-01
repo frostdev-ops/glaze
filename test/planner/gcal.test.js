@@ -41,6 +41,50 @@ const withMock = (name, f) => test(name, async () => {
 const run = (e, cal, st, events = EVENTS, more = {}) => G.sync(e, cal, st, { src: SRC, events, from: FROM, first: FIRST, whole: true }, more);
 const writes = (mock) => mock.log.filter(([m]) => m !== 'GET');
 
+test('until: token acquisition and Retry-After cannot start writes past the deadline', async () => {
+  for (const slow of ['token', 'backoff']) {
+    let clock = 0, tokens = 0;
+    const sent = [], waits = [], saved = [];
+    const st = G.fresh();
+    const r = await run({
+      now: () => clock,
+      token: async () => { if (++tokens === 2 && slow === 'token') clock = 21000; return 'token'; },
+      drop: async () => {},
+      sleep: async (ms) => { waits.push(ms); clock += ms; },
+      fetch: async (url, init) => {
+        sent.push([init.method, clock]);
+        return init.method === 'GET' ? Response.json({ items: [], nextSyncToken: 's1' })
+          : Response.json({}, { status: 429, headers: { 'retry-after': '60' } });
+      },
+    }, 'c', st, EVENTS.slice(0, 1), { until: 20000, save: async () => saved.push(structuredClone(st)) });
+    assert.deepEqual(r, { wrote: 0, more: true });
+    assert.ok(sent.every(([, at]) => at < 20000), `${slow}: no request after expiry`);
+    if (slow === 'token') assert.deepEqual(sent.map(([method]) => method), ['GET']);
+    else assert.ok(clock <= 20000, `Retry-After was bounded: ${waits}`);
+    assert.equal(saved.at(-1).sync, 's1');
+  }
+});
+
+test('until: a stalled request is aborted and earlier writes are saved before returning more', async () => {
+  let posts = 0, aborted = false;
+  const st = G.fresh(), saved = [];
+  const r = await run({
+    token: async () => 'token', drop: async () => {}, sleep: async () => {},
+    fetch: async (url, init) => {
+      if (init.method === 'GET') return Response.json({ items: [], nextSyncToken: 's1' });
+      if (++posts === 1) return Response.json({ etag: 'first' });
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, 150);
+        init.signal?.addEventListener('abort', () => { aborted = true; clearTimeout(timer); reject(new Error('aborted')); }, { once: true });
+      });
+      return Response.json({ etag: 'late' });
+    },
+  }, 'c', st, EVENTS.slice(0, 2), { until: Date.now() + 75, save: async () => saved.push(structuredClone(st)) });
+  assert.equal(aborted, true);
+  assert.deepEqual(r, { wrote: 1, more: true });
+  assert.equal(Object.keys(saved.at(-1).map).length, 1);
+});
+
 withMock('connect makes one calendar named Glaze; the account label is its dataOwner; requests carry no cookies and follow no redirect', async (mock) => {
   const e = env(mock);
   const c = await G.connect(e, 'America/New_York');
@@ -337,6 +381,35 @@ withMock('a big first fill goes in runs of 150, and says when there is more', as
   assert.equal(mock.live(cal).length, 200);
 });
 
+// Safari unloads the worker about 30 s after the page's message (background/background.js GCAL_SAFARI_RUN): a run there
+// stops starting writes at its time and says more, and one Safari ended anyway before its last save writes nothing twice.
+withMock('until: a run stops writing at its time, saves what it wrote and says more; a run cut before its save duplicates nothing', async (mock) => {
+  const many = Array.from({ length: 40 }, (_, i) => ({ uid: `canvas.test/assignment/${100 + i}@glaze`, summary: `Quiz ${i}`, start: due + i * 6e4 }));
+  let t = 0;
+  const e = env(mock, { now: () => t });
+  const { cal } = await G.connect(e);
+  const st = G.fresh();
+  // Each write takes a second here; the run may start writes until 12 s.
+  const timed = { ...e, fetch: (u, init) => { if (init.method !== 'GET') t += 1000; return e.fetch(u, init); } };
+  const r1 = await run(timed, cal, st, many, { until: 12e3 });
+  assert.deepEqual(r1, { wrote: 12, more: true });
+  assert.equal(mock.live(cal).length, 12);
+  // Cut: Safari ends the next run after its writes but before its save (the state stays as the first run left it).
+  const saved = structuredClone(st), cut = structuredClone(st);
+  t = 0;
+  const r2 = await run(timed, cal, cut, many, { until: 20e3, save: async () => {} });
+  assert.deepEqual(r2, { wrote: 20, more: true });
+  assert.equal(mock.live(cal).length, 32);
+  // The next worker starts from what was saved: the events already in Google are updated in place, never made twice.
+  t = 0;
+  const r3 = await run(timed, cal, saved, many);
+  assert.deepEqual(r3, { wrote: 28, more: false });
+  assert.equal(mock.live(cal).length, 40, 'each event once');
+  assert.equal(new Set(mock.live(cal).map((x) => x.id)).size, 40);
+  assert.deepEqual(await run(timed, cal, saved, many), { wrote: 0, more: false }, 'in step');
+  assert.deepEqual(await run(e, cal, G.fresh(), many.slice(0, 3)).then((r) => r.more), false, 'no until: Chrome\'s runs as before');
+});
+
 test('what a page sends is checked: no uid, no times, an end before the start, or a plan on the wrong kind of event', async () => {
   for (const bad of [null, {}, { uid: 'a', start: 'soon' }, { uid: 'a', start: '2026-10-20', end: '2026-10-19' }, { uid: 'a', start: NaN }, { uid: 'x'.repeat(501), start: NOW }]) {
     assert.equal(await G.prep(SRC, bad), null, JSON.stringify(bad));
@@ -368,7 +441,9 @@ const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 
 const SWITCH = /\n {2}const ON = (?:true|false);\n/;
 const switched = (src, on) => { assert.match(src, SWITCH); return src.replace(SWITCH, `\n  const ON = ${on};\n`); };
 // failSet(patch): a storage write that fails, as a full disk or a quota does. identity.hold: what getAuthToken waits on.
-const worker = (mock, { on = true, drive = false, local = {}, sync = { enabled: true }, failSet = () => false } = {}) => {
+// safari: the worker as Safari loads it (safari-web-extension:, no identity API), its handler (handler()) answering
+// sendNativeMessage, and background/google-config.js native as given.
+const worker = (mock, { on = true, drive = false, local = {}, sync = { enabled: true }, failSet = () => false, safari = null, native = true } = {}) => {
   const store = { local, sync };
   // As chrome.storage: a read is served when it's asked (hooks.read runs after that, while the answer is on its way, as a
   // change landing then would), and every change is heard through onChanged.
@@ -406,20 +481,28 @@ const worker = (mock, { on = true, drive = false, local = {}, sync = { enabled: 
   const permissions = { contains: async () => true, remove: async () => true };
   const context = vm.createContext({
     URL, URLSearchParams, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, AbortController, crypto: globalThis.crypto, atob, btoa, navigator: {},
-    setTimeout: (f, ms) => setTimeout(f, Math.min(ms, 1)), clearTimeout,
+    // Shorten pacing/backoff, but keep the worker's 20 s deadline on the same clock as Date.now().
+    setTimeout: (f, ms) => setTimeout(f, ms >= 10000 ? ms : Math.min(ms, 1)), clearTimeout,
     fetch: (url, init) => {
       asked.push(url);
       assert.ok(url.startsWith(`${G.API}/`), `only Google Calendar's address: ${url}`);
       return fetch(url.replace(G.API, mock.api), init);
     },
-    importScripts: (...files) => { for (const f of files) vm.runInContext(f === '../planner/gcal.js' ? switched(read(`background/${f}`), on) : f === 'google.js' ? switched(read(`background/${f}`), drive) : read(`background/${f}`), context); },
+    importScripts: (...files) => {
+      for (const f of files) {
+        let src = f === '../planner/gcal.js' ? switched(read(`background/${f}`), on) : f === 'google.js' ? switched(read(`background/${f}`), drive) : read(`background/${f}`);
+        if (f === 'google-config.js') { assert.match(src, /\n {2}native: (?:true|false),\n/); src = src.replace(/\n {2}native: (?:true|false),\n/, `\n  native: ${native},\n`); }
+        vm.runInContext(src, context);
+      }
+    },
     chrome: {
-      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
+      runtime: { id: 'glaze', getURL: (f = '') => `${safari ? 'safari-web-extension' : 'chrome-extension'}://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
+        ...(safari && { sendNativeMessage: (app, m) => safari.native(app, m) }),
         onInstalled: { addListener: (f) => (listeners.installed ||= []).push(f) }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area('local', store.local), sync: area('sync', store.sync), onChanged: { addListener: (f) => heard.push(f) } },
-      identity,
+      ...(!safari && { identity }),
       permissions, // the student granted every host (Chrome)
-      tabs: { query: async () => [] },
+      tabs: { query: async () => [], create: async (o) => { (safari?.tabs || []).push(o); return { id: 9 }; } },
       scripting: {
         getRegisteredContentScripts: async () => registered,
         registerContentScripts: async (l) => { registered.push(...l); },
@@ -563,7 +646,7 @@ test('Calendar releases identity before replying so Settings cannot remove a lat
 
 test('Settings\' Calendar sign-in asks Chrome for Calendar\'s scope only', () => {
   const src = read('settings/options.js');
-  const sign = src.slice(src.indexOf('const gcalSignIn = async () => {'), src.indexOf('// Only a person\'s click or key, while the page has their activation'));
+  const sign = src.slice(src.indexOf('const gcalSignIn = async (fresh) => {'), src.indexOf('// Only a person\'s click or key, while the page has their activation'));
   assert.match(sign, /GZ_GCAL_AUTH\.token\(\{ interactive: true, scopes: \[GZ_GCAL\.SCOPE\] \}\)/);
   assert.match(sign, /const scope = GZ_GCAL\.SCOPE;/);
   assert.doesNotMatch(sign, /getManifest\(\)\.oauth2/);
@@ -903,4 +986,198 @@ withMock('worker: Drive\'s disconnect through the web client leaves Calendar its
   assert.equal(removed, 0, 'identity stays while Calendar is connected');
   assert.deepEqual([mock.revoked, w.identity.cleared], [[], 0], 'Calendar\'s grant and Chrome\'s cache untouched');
   assert.ok(!('google' in w.store.local) && w.store.local.gcal?.cal);
+});
+
+// ---- Safari: Calendar signs in through the Glaze app, with a grant of its own in the extension's handler ----
+// The handler as a stand-in (safari/Glaze/Glaze Extension/GlazeGoogle.swift): Calendar's grant and Drive's, apart.
+const handler = (mock) => {
+  const h = { sent: [], tabs: [], grants: {}, pending: {}, answered: {}, minted: 0, opened: true };
+  h.native = async (app, m) => {
+    assert.equal(app, 'io.frostdev.Glaze');
+    if (!String(m?.type).startsWith('google.')) return {}; // the Mac app's update check
+    h.sent.push(JSON.parse(JSON.stringify(m))); // out of the worker's realm
+    const f = m.feature || 'drive';
+    if (m.type === 'google.status') return { ok: true, email: h.grants[f] ? 'student@example.edu' : null, sub: h.grants[f] ? 'S1' : null, pending: !!h.pending[f] };
+    if (m.type === 'google.connect') { h.pending[f] = true; h.answered[f] = false; return { ok: true, pending: true, open: `io.frostdev.glaze-google://signin?state=s&for=${f}`, opened: h.opened }; }
+    if (m.type === 'google.finish') {
+      if (!h.pending[f]) return { ok: false, why: 'signin' };
+      if (!h.answered[f]) return { ok: false, why: 'pending' };
+      h.pending[f] = false; h.grants[f] = true;
+      return { ok: true, email: 'student@example.edu', sub: 'S1' };
+    }
+    if (m.type === 'google.token') {
+      if (!h.grants[f]) return { ok: false, why: 'signin' };
+      const token = `tok-native-${++h.minted}`;
+      mock.tokens.add(token);
+      return { ok: true, token, expiresAt: Date.now() + 3599e3 };
+    }
+    if (m.type === 'google.drop') return { ok: true };
+    if (m.type === 'google.disconnect') { const had = !!h.grants[f]; delete h.grants[f]; delete h.pending[f]; return { ok: true, had }; }
+    throw new Error(m.type);
+  };
+  return h;
+};
+const SAFARI_EDITOR = { id: 'glaze', url: 'safari-web-extension://x/options.html#gcal' };
+
+test('Safari: Calendar Disconnect must confirm native deletion, including with native sign-in switched off', async () => {
+  const h = handler({ tokens: new Set() });
+  const real = h.native;
+  let fail = true;
+  h.grants = { drive: true, calendar: true };
+  h.native = (app, m) => m.type === 'google.disconnect' && fail ? Promise.reject(new Error('native host unavailable')) : real(app, m);
+  const local = { gcal: { cal: 'c@group.calendar.google.com', gen: 'G' }, gcalSync: { gen: 'G' } };
+  const w = worker({}, { safari: h, native: false, local });
+  const bye = () => w.send({ type: 'glaze:gcal', op: 'disconnect', drop: false }, SAFARI_EDITOR);
+  assert.deepEqual(await bye(), { ok: false, error: 'network' });
+  assert.ok(local.gcal && local.gcalSync, 'the user can retry Disconnect');
+  fail = false;
+  assert.deepEqual(await bye(), { ok: true });
+  assert.deepEqual(h.grants, { drive: true });
+  assert.equal(local.gcal, undefined);
+  assert.equal(local.gcalSync, undefined);
+});
+
+withMock('Safari: Connect signs in through the Glaze app with Calendar\'s own grant, makes the calendar with the handler\'s token, syncs, and Disconnect forgets only Calendar\'s grant', async (mock) => {
+  const h = handler(mock), w = worker(mock, { safari: h });
+  h.grants.drive = true; // Drive connected on this device already
+  const op = (o, sender = SAFARI_EDITOR) => w.send({ type: 'glaze:gcal', ...o }, sender);
+  assert.deepEqual(await op({ op: 'here' }, PAGE), { ok: false, error: 'sender' }, 'Settings only');
+  assert.deepEqual(await op({ op: 'here' }), { ok: true, pending: false, signed: false });
+  assert.deepEqual(await op({ op: 'signin' }), { ok: false, error: 'pending' });
+  assert.deepEqual(await op({ op: 'here' }), { ok: true, pending: true, signed: false });
+  h.answered.calendar = true;
+  assert.deepEqual(await op({ op: 'finish' }), { ok: true });
+  assert.deepEqual(h.sent.filter((m) => m.feature !== 'calendar'), [], 'every Calendar message names its feature');
+  assert.deepEqual(h.tabs, [], 'the Mac handler opened the app itself');
+  assert.deepEqual(await op({ op: 'connect', tz: 'America/New_York' }), { ok: true });
+  const cal = w.store.local.gcal.cal;
+  assert.ok(mock.calendars.has(cal));
+  w.store.local[`todo:${SITE_SRC}`] = { tasks: [], items: { 'assignment:1': { on: '2026-10-17', sessions: [{ at: NOW + DAY, min: 50 }] } } };
+  const sync = () => w.send({ type: 'glaze:gcal', op: 'sync', src: SITE_SRC, events: EVENTS, from: FROM, first: FIRST, whole: true, consent: consentOf(w) }, { ...PAGE, url: 'https://school.instructure.com/courses/7' });
+  assert.deepEqual(await sync(), { ok: true, wrote: 5, more: false });
+  assert.equal(h.minted, 1, 'the run\'s requests share one held token');
+  assert.deepEqual(await op({ op: 'disconnect', drop: false }), { ok: true });
+  assert.deepEqual(h.sent.filter((m) => m.type === 'google.disconnect'), [{ type: 'google.disconnect', feature: 'calendar' }]);
+  assert.deepEqual({ ...h.grants }, { drive: true }, 'Drive stays connected');
+  assert.equal(w.store.local.gcal, undefined);
+  assert.deepEqual(mock.revoked, [], 'nothing revoked');
+  assert.equal(w.identity.asked, 0, 'no identity API in Safari');
+});
+
+withMock('Safari on iPhone and iPad: the sign-in opens in a tab the student taps; without the app group, or before Safari\'s sign-in is switched on, Calendar isn\'t offered', async (mock) => {
+  const h = handler(mock);
+  h.opened = false;
+  const w = worker(mock, { safari: h });
+  assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'signin' }, SAFARI_EDITOR), { ok: false, error: 'pending' });
+  assert.deepEqual(JSON.parse(JSON.stringify(h.tabs)), [{ url: 'io.frostdev.glaze-google://signin?state=s&for=calendar' }]);
+  const off = worker(mock, { safari: handler(mock), native: false });
+  assert.deepEqual(await off.send({ type: 'glaze:gcal', op: 'here' }, SAFARI_EDITOR), { ok: false, error: 'browser' });
+  assert.deepEqual(await off.send({ type: 'glaze:gcal', op: 'signin' }, SAFARI_EDITOR), { ok: false, error: 'browser' });
+  const bare = handler(mock);
+  bare.native = async () => ({ ok: false, why: 'setup' });
+  assert.deepEqual(await worker(mock, { safari: bare }).send({ type: 'glaze:gcal', op: 'here' }, SAFARI_EDITOR), { ok: false, error: 'setup' });
+  assert.deepEqual(await worker(mock).send({ type: 'glaze:gcal', op: 'here' }, EDITOR), { ok: false, error: 'browser' }, 'Chrome signs in its own way');
+});
+
+withMock('Safari: a grant Google took back stops the run with auth (Settings asks to sign in again); Google unreachable from the handler is busy', async (mock) => {
+  const h = handler(mock), w = worker(mock, { safari: h });
+  h.grants.calendar = true;
+  assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'connect' }, SAFARI_EDITOR), { ok: true });
+  const sync = () => w.send({ type: 'glaze:gcal', op: 'sync', src: SITE_SRC, events: EVENTS, from: FROM, first: FIRST, whole: true, consent: consentOf(w) }, PAGE);
+  const real = h.native;
+  h.native = async (app, m) => (m.type === 'google.token' ? { ok: false, why: 'network' } : real(app, m));
+  // A fresh worker holds no token: it asks the handler.
+  const w2 = worker(mock, { safari: h, local: w.store.local });
+  assert.deepEqual(await w2.send({ type: 'glaze:gcal', op: 'sync', src: SITE_SRC, events: EVENTS, from: FROM, first: FIRST, whole: true, consent: consentOf(w) }, PAGE), { ok: false, error: 'busy' });
+  h.native = async (app, m) => (m.type === 'google.token' ? { ok: false, why: 'revoked' } : real(app, m));
+  const w3 = worker(mock, { safari: h, local: w.store.local });
+  assert.deepEqual(await w3.send({ type: 'glaze:gcal', op: 'sync', src: SITE_SRC, events: EVENTS, from: FROM, first: FIRST, whole: true, consent: consentOf(w) }, PAGE), { ok: false, error: 'auth' });
+  assert.equal(w3.store.local.gcal.error, 'auth');
+  void sync;
+});
+
+test('Safari: the worker gives each run a time to stop writing by, well inside Safari\'s 30 s; Chrome\'s runs have none', () => {
+  const src = read('background/background.js');
+  const budget = Number(/const GCAL_SAFARI_RUN = (\d+)e3;/.exec(src)?.[1]);
+  assert.ok(budget > 0 && budget <= 25, `${budget} s`);
+  assert.match(src, /until: SAFARI \? Date\.now\(\) \+ GCAL_SAFARI_RUN : 0/);
+});
+
+test('the page asks again a minute later when Safari ended the worker before it answered, three times in a row at most', () => {
+  const src = read('planner/page/gcal.js');
+  assert.match(src, /const LOST = \/\^safari-web-extension:\/\.test\(chrome\.runtime\.getURL\?\.\(''\) \|\| ''\) \? 45e3 : 0;/);
+  assert.match(src, /if \(!chrome\.runtime\?\.id \|\| \+\+lost > 3\) return;\n\s+next = 6e4; again = true;/);
+});
+
+test('Safari: a worker channel closed without a reply retries in a minute and ignores the last-run timestamp', async () => {
+  const timers = new Map(), sent = [];
+  let id = 0;
+  const gcal = { cal: 'c', last: {} };
+  const window = {}; window.top = window;
+  vm.runInNewContext(read('planner/page/gcal.js'), {
+    window, location: { origin: 'https://canvas.test' }, Date,
+    setTimeout: (f, ms) => { timers.set(++id, { f, ms }); return id; }, clearTimeout: (n) => timers.delete(n),
+    chrome: {
+      runtime: { id: 'glaze', getURL: () => 'safari-web-extension://x/', sendMessage: async (m) => { sent.push(m); return undefined; } },
+      storage: { local: { get: async () => ({ gcal }) }, onChanged: { addListener() {} } },
+    },
+    GZ_CTX: { site: 'canvas', on: () => true, settings: () => ({ enabled: true }), profile: async () => ({ id: 3 }), need: async () => {} },
+    GZ_CAL_UI: { compose: async () => ({ events: [], recheck: async () => true }) },
+  });
+  const flush = async () => { for (let n = 0; n < 30; n++) await Promise.resolve(); };
+  await flush();
+  assert.equal(sent.length, 1);
+  gcal.last[SRC] = Date.now(); // The lost worker may have saved its timestamp before its channel closed.
+  for (let n = 0; n < 3; n++) {
+    assert.deepEqual([...timers.values()].map((t) => t.ms), [60000], 'the reply timeout is cleared and one retry is scheduled');
+    const [key, timer] = [...timers][0]; timers.delete(key); timer.f(); await flush();
+  }
+  assert.equal(sent.length, 4);
+  assert.deepEqual([...timers.values()].map((t) => t.ms), [15 * 60000], 'three rapid retries, then the normal interval');
+});
+
+// Settings' Calendar section (settings/options.js) in Safari, in a VM: the worker's answers scripted, every element a stub.
+const calendarSettings = async ({ here = { ok: true, pending: false, signed: false }, answers = {}, gcal = null } = {}) => {
+  const src = read('settings/options.js');
+  const block = src.slice(src.indexOf('  if (GZ_GCAL.ON) {'), src.indexOf('  // ---- Google Drive (background/google.js'));
+  const els = {}, sent = [], hints = [], asked = [];
+  const el = (id) => (els[id] ||= { id, hidden: true, textContent: '', value: '', checked: false, listeners: {}, focus() {}, select() {}, setAttribute() {}, showModal() {},
+    addEventListener(type, f) { (this.listeners[type] ||= []).push(f); } });
+  const chrome = {
+    runtime: { lastError: undefined, sendMessage: (m, reply) => { sent.push(structuredClone(m)); const r = m.op === 'here' ? here : (answers[m.op] || []).shift() || { ok: true }; setTimeout(() => reply(r), 0); } },
+    storage: { local: { get: (k, cb) => setTimeout(() => cb({ gcal }), 0) }, onChanged: { addListener() {} } },
+    permissions: { request: async (p) => { asked.push(p); return true; } },
+  };
+  vm.runInNewContext(block, {
+    GZ_GCAL: { ON: true, SCOPE: G.SCOPE }, GZ_GCAL_AUTH: { token: async () => { asked.push('getAuthToken'); return 'x'; } }, chrome, $: el, $$: () => [],
+    t: (s, v = {}) => s.replace(/\{(\w+)\}/g, (m, k) => (k in v ? String(v[k]) : m)), hint: (text, bad = false) => hints.push([text, bad]), when: () => 'now',
+    location: { protocol: 'safari-web-extension:' }, navigator: {}, Intl, Date,
+  });
+  const settle = () => new Promise((r) => setTimeout(r, 20));
+  await settle();
+  return { els, sent, hints, asked, settle, click: async (id) => { for (const f of el(id).listeners.click) await f({ isTrusted: true }); await settle(); } };
+};
+
+test('Settings in Safari: Calendar\'s Connect signs in through the Glaze app, waits on finish, then makes the calendar; never Chrome\'s sign-in', async () => {
+  const s = await calendarSettings({ answers: { signin: [{ ok: false, error: 'pending' }], finish: [{ ok: false, error: 'pending' }, { ok: true }], connect: [{ ok: true }] } });
+  assert.deepEqual([s.els['#gcal-other'].hidden, s.els['#gcal-off'].hidden], [true, false], 'Connect shown, not the export note');
+  await s.click('#gcal-connect');
+  assert.deepEqual(s.sent.map((m) => m.op), ['here', 'signin', 'finish', 'finish', 'connect']);
+  assert.deepEqual(s.asked, [], 'no identity permission, no getAuthToken');
+  assert.deepEqual(s.hints, [['Connected.', false]]);
+  const no = await calendarSettings({ answers: { signin: [{ ok: false, error: 'scope' }] } });
+  await no.click('#gcal-connect');
+  assert.deepEqual(no.hints, [["Glaze needs the calendar access on Google's screen. Connect again and leave it ticked.", true]]);
+  assert.ok(!no.sent.some((m) => m.op === 'connect'), 'no calendar without the grant');
+  // Back from the app to a new Settings: the sign-in finishes quietly, and Connect then makes the calendar without another.
+  const back = await calendarSettings({ here: { ok: true, pending: true, signed: false }, answers: { finish: [{ ok: true }], connect: [{ ok: true }] } });
+  await back.click('#gcal-connect');
+  assert.deepEqual(back.sent.map((m) => m.op), ['here', 'finish', 'connect']);
+  // Reconnect after Google refused the grant always signs in afresh.
+  const again = await calendarSettings({ here: { ok: true, pending: false, signed: true }, gcal: { cal: 'c@group.calendar.google.com', error: 'auth', last: {} }, answers: { signin: [{ ok: true }], retry: [{ ok: true }] } });
+  await again.click('#gcal-reconnect');
+  assert.deepEqual(again.sent.map((m) => m.op), ['here', 'signin', 'retry']);
+  // Not offered (the app group unreachable, or Safari's sign-in not switched on): the export note, nothing else.
+  const off = await calendarSettings({ here: { ok: false, error: 'browser' } });
+  assert.deepEqual([off.els['#gcal-other'].hidden, off.els['#gcal-off'].hidden, off.els['#gcal-on'].hidden], [false, true, true]);
 });

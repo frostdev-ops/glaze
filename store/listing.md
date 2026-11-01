@@ -85,16 +85,17 @@ NEW IN 4.0.1
 
 • Blackboard Ultra: course tabs open from a page that's already loaded, and start loading when you press or hover a tab (Settings › Course tabs › Open course tabs ahead of time).
 • Keep Course Content ready: an item opens over Course Content, and going back is instant, at the same place.
-• Open pages instantly: Grades, Courses, Activity and a course's Content, Announcements and Gradebook show your last visit while Blackboard loads. Show pages loading at once: a click shows at once. Glaze's bar is there at first paint, its footer and panels no longer push the page, and To Do, grades and the sidebar appear from saved data once Blackboard confirms who's signed in.
+• Open pages instantly: Grades, Courses, Activity and a course's Content, Announcements and Gradebook show your last visit while Blackboard loads. Show pages loading at once: a click shows at once. Glaze's bar is there at first paint, its footer and panels no longer push the page, and To Do, grades and the sidebar appear from saved data once Blackboard confirms who's signed in. Pages load behind one loading layout in your Look, not a grey screen and stacked spinners.
 • Load course data ahead of time, fewer requests to Blackboard and less work on slower laptops.
 • PDFs: highlight, pen, text, images, shapes and signatures, and a pages panel to move, turn, delete and add pages. A PDF keeps one copy, its latest marked-up version.
 • Attach from Documents adds your documents to a Blackboard Ultra assignment's submission. Workbooks from .xlsm export and submit as .xlsm.
 • Canvas: Open in Glaze on PDF, slide and spreadsheet files. Slides get Print with notes…, and Documents cards show a spreadsheet's charts.
 • Writer's Feedback answers in your draft's language, and its citation comments and checks work in all six languages.
 • When one of Feedback's comments fails its checks, Writer shows the rubric rating it checked instead of withholding the grade.
-• Firefox: Google Drive (Settings › Writer › Papers) opens, saves, attaches and syncs your documents. Off until you connect.
+• Firefox: Google Drive (Settings › Writer › Papers) opens, saves, attaches and syncs your documents, large files included. Off until you connect.
 • Firefox: a site whose access you took back is no longer retried.
-• Chrome: Google Calendar sync (Settings › Sharing) keeps a calendar named Glaze in your Google account up to date, and Google Drive (Settings › Writer › Papers) opens, saves, attaches and syncs your documents. Both stay off until you connect.
+• Chrome: Google Calendar sync (Settings › Sharing) keeps a calendar named Glaze in your Google account up to date, and Google Drive (Settings › Writer › Papers) opens, saves, attaches and syncs your documents, large files included. Both stay off until you connect.
+• Safari: Google Calendar sync (Settings › Sharing) keeps a calendar named Glaze in your Google account up to date, and Google Drive (Settings › Writer › Papers) opens, saves, attaches and syncs your documents, large files included. Both stay off until you connect.
 
 ## Single-purpose statement
 

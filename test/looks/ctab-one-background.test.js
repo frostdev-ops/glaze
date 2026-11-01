@@ -24,7 +24,7 @@ for (const f of ['content/extras.css', 'content/canvas.css']) {
 }
 
 test('extras.css: an Ultra course panel inside a see-through frame drops its copy of the background', () => {
-  assert.ok(has('content/extras.css', 'html[data-gz-through] :is(.panel-wrap, .bb-offcanvas-panel)::before', /content:\s*none/));
+  for (const panel of ['.panel-wrap', '.bb-offcanvas-panel']) assert.ok(has('content/extras.css', `html[data-gz-through] ${panel}::before`, /content:\s*none/), panel);
 });
 
 test('canvas.css: the page under a course frame keeps its scene showing', () => {

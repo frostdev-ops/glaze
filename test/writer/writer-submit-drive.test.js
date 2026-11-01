@@ -79,6 +79,23 @@ const settle = async (s, n = 6) => { for (let i = 0; i < n; i++) await s.flush()
 const bytes = (n, b = 7) => new Uint8Array(n).fill(b);
 const file = (id, name, mimeType, size) => ({ id, name, mimeType, ...(size != null && { size: String(size) }) });
 
+for (const cancel of [false, true]) test(`Safari Submit ${cancel ? 'stops polling when the sheet closes during the wait' : 'polls its own Picker state'}`, async () => {
+    const s = setup(), sent = [];
+    let wake;
+    s.ctx.setTimeout = (f) => { wake = f; return 1; };
+    s.ctx.chrome.runtime.sendMessage = async (m) => {
+      sent.push(m);
+      return m.op === 'pick' ? { ok: false, why: 'pending', state: 'submit-choice' } : { ok: true, files: [] };
+    };
+    await s.open(); s.builds[0].resolve(); await s.flush();
+    s.click('.gs-drive'); await s.flush();
+    assert.equal(typeof wake, 'function');
+    if (cancel) s.doc.fire(s.doc.querySelector('.gs-foot .gs-btn'), 'click');
+    wake(); await s.flush();
+    if (cancel) assert.equal(sent.length, 1, 'no stale poll can consume a later sheet choice');
+    else assert.equal(sent[1].state, 'submit-choice');
+});
+
 test('From Google Drive shows only while Drive is connected and the Picker works here', async () => {
   const off = setup({ connected: false });
   await off.open();

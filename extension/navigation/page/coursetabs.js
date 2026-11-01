@@ -1177,7 +1177,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     drop(old[0], true);
     return true;
   };
-  // A frame is shown once rendered course content has settled. A stalled initial about:blank can be retried once;
+  // A frame is shown once rendered course content has settled, and a cold one once its own view is ready (data-gz-boot,
+  // navigation/page/feedback.js): its stand-in stays till then. A stalled initial about:blank can be retried once;
   // slow native pages keep loading, with their form state intact, rather than becoming falsely ready.
   const watch = (cid, f) => {
     f.unwatch?.();
@@ -1205,7 +1206,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         d.addEventListener('scroll', scrolled, { capture: true, passive: true });
       }
       const built = doc && doc === d && doc !== f.stale && (cid === PAGE ? !/^\/courses\/\d+/.test(doc.location.pathname) : L.owns(doc.location.pathname, cid)) && (ctx.site === 'canvas' ? canvasContent(doc) : [doc.querySelector('.bb-course-navigation'), doc.querySelector('.routed-page')].some(shown))
-        && !loading(doc.body) && !doc.documentElement.matches('[data-gz-placing]') && !f.adopting;
+        && !loading(doc.body) && !doc.documentElement.matches('[data-gz-placing], [data-gz-boot]') && !f.adopting;
       if (built && now - changed > 300) {
         clean();
         f.slow = false;

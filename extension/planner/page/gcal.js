@@ -1,15 +1,18 @@
-// Google Calendar sync, a Canvas or Blackboard Ultra page's side (Chrome). background/background.js runs this file in Canvas
+// Google Calendar sync, a Canvas or Blackboard Ultra page's side (Chrome and Safari). background/background.js runs this file in Canvas
 // sites' and Ultra's top frames only while the student is connected. It works out what Export calendar (.ics) would save,
 // with the same remembered choices (planner/page/calexport.js compose), and hands the events to the worker, which writes what
 // changed to the Glaze calendar (planner/gcal.js). When: as the page opens, if this account's last run was 15 minutes ago or
 // more; every 15 minutes while the page stays open (no alarms permission: with no such page open there's nothing new to read); 10
 // seconds after Better To Do's data, the class schedule, Gradescope's work or the export's choices change; a minute
-// after a run that had more to write. Nothing shows on the page.
+// after a run that had more to write, or whose worker was gone before it answered (Safari unloads it: a run there is
+// short, and what it wrote is saved), three times in a row at most. Nothing shows on the page.
 (() => {
   if (globalThis.GZ_GCAL_PAGE || window.top !== window) return;
   globalThis.GZ_GCAL_PAGE = true;
   const EVERY = 15 * 6e4;
-  let timer = 0, busy = false, off = false, waited = 0;
+  // Safari may end the worker without answering: past this, the run counts as lost (a Safari run stops itself at 20 s).
+  const LOST = /^safari-web-extension:/.test(chrome.runtime.getURL?.('') || '') ? 45e3 : 0;
+  let timer = 0, busy = false, off = false, waited = 0, lost = 0;
   const soon = (ms, force) => { clearTimeout(timer); if (!off) timer = setTimeout(() => go(force), ms); };
   const go = async (force) => {
     if (!chrome.runtime?.id) { off = true; clearTimeout(timer); return; }
@@ -32,7 +35,17 @@
       const c = await GZ_CAL_UI.compose(null, () => ctx.on());
       if (!c || !await c.recheck()) return;
       // whole: false (Ultra couldn't send its calendar whole): the worker deletes nothing for being missing from it.
-      const r = await chrome.runtime.sendMessage({ type: 'glaze:gcal', op: 'sync', src, events: c.events, from: c.from, first: c.first, consent: c.consent, whole: c.whole !== false });
+      const sent = chrome.runtime.sendMessage({ type: 'glaze:gcal', op: 'sync', src, events: c.events, from: c.from, first: c.first, consent: c.consent, whole: c.whole !== false });
+      let r, timeout;
+      try {
+        r = await (LOST ? Promise.race([sent, new Promise((_, no) => { timeout = setTimeout(no, LOST); })]) : sent);
+        if (LOST && !r) throw new Error('worker');
+        lost = 0;
+      } catch {
+        if (!chrome.runtime?.id || ++lost > 3) return;
+        next = 6e4; again = true;
+        return;
+      } finally { clearTimeout(timeout); }
       if (r?.error === 'off') off = true;
       if (r?.more) { next = 6e4; again = true; }
     } catch { /* the site or the worker didn't answer: the next turn tries again */ } finally {

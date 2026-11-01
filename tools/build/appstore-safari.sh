@@ -44,8 +44,11 @@ fi
 archived="$stage/Glaze.xcarchive/Products/Applications/Glaze.app"
 python3 tools/build/safari-build-ids.py app "$archived"
 plutil -replace ApplicationProperties.CFBundleIdentifier -string io.frostdev.Glaze "$stage/Glaze.xcarchive/Info.plist"
+# Their app group goes back to Glaze's too (Google's sign-in meets the app there), as build-safari.sh signs it.
 for bundle in "$archived/Contents/PlugIns/Glaze Extension.appex" "$archived"; do
-  codesign --force --sign - --preserve-metadata=entitlements,flags "$bundle"
+  codesign -d --entitlements - --xml "$bundle" > "$stage/built.entitlements" 2>/dev/null
+  python3 tools/build/safari-build-ids.py entitlements "$stage/built.entitlements" "$stage/release.entitlements"
+  codesign --force --sign - --entitlements "$stage/release.entitlements" --preserve-metadata=flags "$bundle"
 done
 
 destination=upload

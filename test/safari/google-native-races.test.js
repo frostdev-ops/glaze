@@ -61,7 +61,7 @@ async function run(program, { app = false } = {}) {
     const file = path.join(temp, 'Race.swift');
     const appSource = app ? signIn.replace(/\bASWebAuthenticationSession\b/g, 'TestSession')
       .replace(/\bASWebAuthenticationPresentationContextProviding\b/g, 'TestPresentation')
-      .replace('GlazeGoogle.GroupSlot.shared()', 'testSlot') : '';
+      .replace('GlazeGoogle.GroupSlot.shared().slot', 'testSlot') : '';
     fs.writeFileSync(file, google + fixtures + (app ? sessions + appSource : '') + program);
     proc = S.run(file, [group], { flags: ['-swift-version', '5', ...S.FEATURES, '-strict-concurrency=complete', ...(app ? ['-default-isolation', 'MainActor'] : [])] });
     const result = await proc.next();
@@ -73,6 +73,77 @@ async function run(program, { app = false } = {}) {
     fs.rmSync(temp, { recursive: true, force: true });
   }
 }
+
+test('the container probe rejects a folder that can create empty files but cannot write a callback payload', { skip }, async () => {
+  const r = await run(String.raw`
+import Darwin
+// Restrict this interpreter only, after it has loaded: empty file creation still works, payload writes fail with EFBIG.
+var original = rlimit()
+precondition(getrlimit(RLIMIT_FSIZE, &original) == 0)
+var limited = original
+limited.rlim_cur = 0
+let oldSignal = signal(SIGXFSZ, SIG_IGN)
+precondition(setrlimit(RLIMIT_FSIZE, &limited) == 0)
+let found = G.GroupSlot.locate(groups: ["test"], container: { _ in slot.folder })
+let callback = slot.put(String(repeating: "s", count: 43), Data([1]))
+precondition(setrlimit(RLIMIT_FSIZE, &original) == 0)
+signal(SIGXFSZ, oldSignal)
+let left = try! FileManager.default.contentsOfDirectory(atPath: slot.folder.path)
+emit(["step": found.missing?.rawValue ?? "slot", "callback": callback,
+      "probes": left.filter { $0.hasPrefix(".google-write-") }.count])
+`);
+  assert.equal(r.callback, false, 'the callback payload really is refused by the filesystem');
+  assert.equal(r.step, 'writable', 'creating an empty file does not prove payload writes work');
+  assert.equal(r.probes, 0, 'a refused payload must not leave a probe file');
+});
+
+test('the container probe checks the atomic write used by callback files', { skip }, async () => {
+  const r = await run(String.raw`
+func acl(_ args: [String]) {
+    let chmod = Process()
+    chmod.executableURL = URL(fileURLWithPath: "/bin/chmod")
+    chmod.arguments = args + [slot.folder.path]
+    try! chmod.run()
+    chmod.waitUntilExit()
+    precondition(chmod.terminationStatus == 0)
+}
+// Plain file creation works; moving the callback's auxiliary file into place requires delete_child permission.
+acl(["+a", "everyone deny delete_child"])
+let found = G.GroupSlot.locate(groups: ["test"], container: { _ in slot.folder })
+let callback = slot.put(String(repeating: "s", count: 43), Data([1]))
+acl(["-N"])
+emit(["step": found.missing?.rawValue ?? "slot", "callback": callback])
+`);
+  assert.equal(r.callback, false, 'the callback atomic write really is refused by the ACL');
+  assert.equal(r.step, 'writable', 'the probe must exercise the same write operation as the callback');
+});
+
+test('concurrent container probes and the sweep preserve callbacks and use separate filenames', { skip }, async () => {
+  const r = await run(String.raw`
+final class Probes: @unchecked Sendable {
+    let lock = NSLock()
+    var passed = 0
+    func add(_ ok: Bool) { lock.withLock { if ok { passed += 1 } } }
+}
+let state = String(repeating: "s", count: 43), data = Data("callback".utf8)
+precondition(slot.put(state, data))
+let fm = FileManager.default, probes = Probes()
+let inFlight = slot.folder.appendingPathComponent(".google-write-" + UUID().uuidString)
+try! Data([1]).write(to: inFlight)
+try! fm.setAttributes([.modificationDate: Date.distantPast], ofItemAtPath: inFlight.path)
+let cutoff = Date().addingTimeInterval(-600)
+DispatchQueue.concurrentPerform(iterations: 32) { _ in
+    probes.add(G.GroupSlot.writable(slot.folder))
+    slot.sweep(olderThan: cutoff)
+}
+let preserved = (try? Data(contentsOf: inFlight)) == Data([1])
+try! fm.removeItem(at: inFlight)
+let callback = slot.take(state) == data
+let left = try! fm.contentsOfDirectory(atPath: slot.folder.path)
+emit(["passed": probes.passed, "inFlight": preserved, "callback": callback, "left": left])
+`);
+  assert.deepEqual(r, { passed: 32, inFlight: true, callback: true, left: [] });
+});
 
 test('a superseded Connect drops its late grant without revoking the newer connection', { skip }, async () => {
   const r = await run(String.raw`
@@ -177,7 +248,7 @@ emit(["old": oldResult, "refresh": saved?.refresh ?? "", "tokenResult": token, "
     assert.equal(r.old, 'signin');
     assert.equal(r.refresh, 'refresh-new');
     assert.equal(r.tokenResult, 'ok');
-    assert.deepEqual(r.status, { ok: true, sub: 'student', email: 'student@example.edu' });
+    assert.deepEqual(r.status, { ok: true, sub: 'student', email: 'student@example.edu', pending: false });
   });
 }
 

@@ -46,9 +46,10 @@ const rng = (seed) => {
 // Tiny transfers (o.tiny, --tiny): a transfer goes large past TINY.at bytes instead of 5 MB, in chunks and ranges of
 // TINY.step, so most documents, JSON copies, records and snapshots go through staged resumable uploads and ranged downloads.
 // Each device's drive.js and drive-sync.js are rewritten so as they load (the shipped files stay as they are), the stand-ins
-// take chunks of TINY.quantum, and an applied kill on a chunk leaves Drive part of it. In 4.0.1 Sync stages nothing (o.staged
-// off): there tiny transfers make nearly every document and many records too large to sync, which the checks then hold to
-// staying on their device, marked, with nothing staged; o.staged brings the stage back for 4.0.2's repros.
+// take chunks of TINY.quantum, and an applied kill on a chunk leaves Drive part of it. Sync stages as the worker asks
+// (background/background.js env.staged, STAGED below), unless o.staged says otherwise: with it off, tiny transfers make nearly
+// every document and many records too large to sync, which the checks then hold to staying on their device, marked, with
+// nothing staged.
 const TINY = { at: 256, step: 512, quantum: 256 };
 const SHRUNK = {
   'drive.js': [['const SMALL = 5 << 20;', `const SMALL = ${TINY.at};`], ['const STEP = { min: 256 << 10, max: 8 << 20,', `const STEP = { min: ${TINY.quantum}, max: ${TINY.step},`]],
@@ -75,11 +76,14 @@ const FIRST = [...BG_SOURCE.slice(0, BG_SOURCE.indexOf(');')).matchAll(/'([^']+\
 // What brokerIn('backup') loads (background.js BROKER_FILES.backup).
 const BACKUP_FILES = (() => { const m = /BROKER_FILES\.backup = \[([^\]]+)\]/.exec(BG_SOURCE); return m ? [...m[1].matchAll(/'([^']+\.js)'/g)].map((x) => x[1]) : []; })();
 // background.js's Drive section, as test/documents/drive-sync-background.test.js runs it.
-const SECTION = (() => {
+const SECTION_SOURCE = (() => {
   const from = BG_SOURCE.indexOf('// Sync to Google Drive (documents/drive-sync.js'), to = BG_SOURCE.indexOf('// A Download all wait owns', from);
   if (from < 0 || to < 0) throw new Error('drive-chaos: background.js\'s Drive section markers moved');
-  return new vm.Script(BG_SOURCE.slice(from, to), { filename: 'background/background.js#drive' });
+  return BG_SOURCE.slice(from, to);
 })();
+const SECTION = new vm.Script(SECTION_SOURCE, { filename: 'background/background.js#drive' });
+// Whether the worker stages transfers past one request (documents/drive-sync.js env.staged).
+const STAGED = /\n\s*staged: true,/.test(SECTION_SOURCE);
 
 // ---- in the device's context: what the worker has from the browser, over the host's disk. Run there as source, so every
 // object, array and byte array it makes is the context's own (drive.js checks bytes instanceof Uint8Array).
@@ -414,8 +418,8 @@ class Device {
     const S = this.ctx.GZ_DRIVE_SYNC, create = S.create, dev = this, gen = this.gen;
     if (S.__chaos) return;
     S.__chaos = true;
-    // Staged transfers, off in 4.0.1 (documents/drive-sync.js env.staged): on only for the runs that test them (o.staged).
-    S.create = (env) => create({ ...env, staged: dev.world.o.staged === true,
+    // Staged transfers (documents/drive-sync.js env.staged): as the worker asks, or as o.staged says.
+    S.create = (env) => create({ ...env, staged: dev.world.staged,
       sleep: (ms) => new Promise((res) => { dev.world.clock += ms; setImmediate(() => { if (dev.gen === gen && !dev.dead) res(); }); }),
       timer: (fn, ms) => { const id = ++dev.timerSeq; dev.timers.set(id, { fn, ms, gen, push: true }); return () => dev.timers.delete(id); } });
   }
@@ -674,7 +678,7 @@ const KNOWN = {
     about: 'a first push whose JSON copy Drive took but whose answer never came: the next run hears of that copy in Drive\'s changes but passes over it as another device\'s (none linked here yet), and while Drive\'s search lags makes a second one: two copies stay, and a device linked to the first never gets this one\'s later edits',
     skips: () => false,
     stops: 'net.POST',
-    repro: [{ t: 'lag', n: 3 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, kill: 142, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }],
+    repro: [{ t: 'lag', n: 3 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, upload: { method: 'POST', glaze: 'doc' }, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }],
   },
   'stale-sum': {
     fixed: true,
@@ -689,7 +693,7 @@ const KNOWN = {
     about: 'a first push whose JSON copy Drive took but whose answer never came, the document then taken and edited on another device: the first device links the copy as its own push and, holding its own older text as a change not yet sent, writes it over the other device\'s edit, which no device keeps',
     skips: () => false,
     stops: 'net.POST',
-    repro: [{ t: 'paper', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2, kill: 142, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }, { t: 'paper', k: 'edit', d: 0, pick: 0, pick2: 0, s: 4 }],
+    repro: [{ t: 'paper', k: 'new', d: 1, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 1, how: 'run', s: 2, upload: { method: 'POST', glaze: 'doc' }, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }, { t: 'paper', k: 'edit', d: 0, pick: 0, pick2: 0, s: 4 }],
   },
   'meet-stop': {
     fixed: true,
@@ -754,7 +758,7 @@ const KNOWN = {
     about: 'a first push whose file upload Drive took but whose answer never came, that orphan then put in Drive\'s trash: the next push writes a second file, and the student restoring the first leaves two visible files for the document',
     skips: () => false,
     stops: 'net.POST',
-    repro: [{ t: 'slides', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, kill: 129, apply: true }, { t: 'drive', k: 'trashDoc', pick: 0, s: 3 }, { t: 'run', d: 0, how: 'run', s: 4 },
+    repro: [{ t: 'slides', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, upload: { method: 'POST', glaze: 'file' }, apply: true }, { t: 'drive', k: 'trashDoc', pick: 0, s: 3 }, { t: 'run', d: 0, how: 'run', s: 4 },
       { t: 'drive', k: 'untrashDoc', pick: 0, s: 5 }],
   },
   'lag-duplicate': {
@@ -762,7 +766,7 @@ const KNOWN = {
     about: 'a first push whose file upload Drive took but whose answer never came, while Drive\'s search doesn\'t show it yet: the next push writes a second file, and both stay visible',
     skips: () => false,
     stops: 'net.POST',
-    repro: [{ t: 'lag', n: 6 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, kill: 127, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }],
+    repro: [{ t: 'lag', n: 6 }, { t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2, upload: { method: 'POST', glaze: 'file' }, apply: true }, { t: 'run', d: 0, how: 'run', s: 3 }],
   },
   'old-file-restored': {
     fixed: true,
@@ -801,16 +805,171 @@ const KNOWN = {
     stops: 'local.get',
     repro: [{ t: 'paper', k: 'new', d: 0, pick: 0.7293021462392062, pick2: 0.13267629174515605, s: 1511422056 }, { t: 'run', d: 0, how: 'startup', s: 1904310916, after: 'notesIdx:' }, { t: 'paper', k: 'trash', d: 0, pick: 0.391776867210865, pick2: 0.8033320291433483, s: 685288494 }, { t: 'faults', d: 0, p: 0.15, quota: false, refuse: 0 }, { t: 'run', d: 0, how: 'poke', s: 698363760 }, { t: 'paper', k: 'untrash', d: 0, pick: 0.9719573664478958, pick2: 0.019606253132224083, s: 1783675233 }, { t: 'drive', k: 'removeDoc', pick: 0.3167869916651398, s: 100762301 }, { t: 'run', d: 0, how: 'timers', s: 1428463383, kill: 120, apply: false }],
   },
-  // Open, found 2026-10-31 by tiny transfers, not yet diagnosed: a worker stopped at certain awaits of a staged first push
-  // (570, 644, 842 here, the write not applied) leaves a second visible file or JSON copy for the document.
+  // Found 2026-10-31 by tiny transfers: a worker stopped at certain awaits of a staged first push (570, 644, 842 here, the
+  // write not applied) left a second visible file or JSON copy for the document. Passing at 80be1668.
   'staged-kill-duplicate': {
-    fixed: false,
+    fixed: true,
     tiny: true,
     staged: true,
     about: 'a worker stopped at certain awaits of a first push whose uploads are staged leaves two visible files or JSON copies for one document',
     skips: () => false,
     repro: [{ t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'pdf', k: 'new', d: 0, pick: 0, pick2: 0, s: 2 }, { t: 'setting', d: 0, k: 'colors', pick: 0, s: 3 },
       { t: 'note', k: 'new', d: 0, pick: 0, pick2: 0.9, s: 4 }, { t: 'run', d: 0, how: 'run', s: 5, kill: 842, apply: false }],
+  },
+  // Found 2026-10-31 by tiny staged transfers (--tiny --staged, 12-35% of seeds failing at 80be1668).
+  'staged-answer-dropped': {
+    fixed: true,
+    tiny: true,
+    staged: true,
+    join: [0],
+    about: 'a staged upload\'s answer is let go by the run\'s last step once its owner is met again, even when that meeting stopped short of taking it (it waited on a staged read of its own copy first): the push sends its JSON copy again on every run, forever',
+    skips: () => false,
+    repro: [{ t: 'pdf', k: 'new', d: 0, pick: 0.4765420525800437, pick2: 0.22473423089832067, s: 1177548668 }, { t: 'run', d: 0, how: 'timers', s: 162333005 }, { t: 'account', d: 0, to: 'B', s: 998766516 },
+      { t: 'drive', k: 'outsidePdf', pick: 0.8306811631191522, s: 655337973 }],
+  },
+  'staged-trash-read': {
+    fixed: true,
+    tiny: true,
+    staged: true,
+    join: [0],
+    about: 'a staged download of a file in Drive\'s trash is refused as gone, and its owner asks for it again, forever: a paper restored here after an account switch, whose files are in Drive\'s trash, never reaches Drive or the other device',
+    skips: () => false,
+    repro: [{ t: 'paper', k: 'edit', d: 0, pick: 0.08711082465015352, pick2: 0.49240474589169025, s: 536242987 }, { t: 'run', d: 0, how: 'poke', s: 1470665041 }, { t: 'paper', k: 'trash', d: 0, pick: 0.6449802806600928, pick2: 0.004706502892076969, s: 113667981 },
+      { t: 'sync', d: 0, on: true, s: 1838228239 }, { t: 'account', d: 0, to: 'B', s: 863251049 }, { t: 'paper', k: 'untrash', d: 0, pick: 0.15078959637321532, pick2: 0.32049439242109656, s: 1160143866 }],
+  },
+  'staged-stale-aim': {
+    fixed: true,
+    tiny: true,
+    staged: true,
+    about: 'a push right after taking Drive\'s copy of a paper (renamed on the other device, its .docx edited outside Glaze) aims its staged copy update at the copy\'s revision from before the take: the check before sending finds the copy changed and hands it back, every run, each making a new .docx',
+    skips: () => false,
+    repro: [{ t: 'paper', k: 'new', d: 0, pick: 0.15518367243930697, pick2: 0.3982179658487439, s: 455069467 }, { t: 'run', d: 0, how: 'poke', s: 1952709425 }, { t: 'run', d: 1, how: 'poke', s: 1056797692 },
+      { t: 'paper', k: 'rename', d: 1, pick: 0.13557938113808632, pick2: 0.5521365036256611, s: 300925911 }, { t: 'run', d: 1, how: 'poke', s: 291668029 }, { t: 'drive', k: 'outsideDocx', pick: 0.19172523193992674, s: 1934268126 }],
+  },
+  'staged-record-old-data': {
+    fixed: true,
+    tiny: true,
+    staged: true,
+    devices: 3,
+    about: 'a note\'s staged record upload whose answer was lost, Glaze/Data then put in Drive\'s trash: the answer, taken after the pass over the new Data, links the note to its file in the old one, and no other device ever gets the note',
+    skips: () => false,
+    repro: [{ t: 'note', k: 'edit', d: 1, pick: 0.6947389694396406, pick2: 0.6899177110753953, s: 1137668474 }, { t: 'faults', d: 1, p: 0, quota: false, refuse: 0, cut: '\\.json$' },
+      { t: 'run', d: 1, how: 'timers', s: 1926511635 }, { t: 'drive', k: 'trashData', pick: 0.8542803057935089, s: 1654949931 }],
+  },
+  'staged-outside-loop': {
+    fixed: true,
+    tiny: true,
+    staged: true,
+    devices: 3,
+    about: 'a paper\'s staged update whose answer was lost, its .docx then edited outside Glaze: every run makes the paper a new .docx and puts it away, never settling, and the devices\' change tokens stay behind',
+    skips: () => false,
+    repro: [{ t: 'faults', d: 1, p: 0, quota: false, refuse: 0, cut: '\\.json$' }, { t: 'paper', k: 'edit', d: 1, pick: 0.5097121719736606, pick2: 0.8484496630262583, s: 1698042739 },
+      { t: 'run', d: 1, how: 'poke', s: 1184312654, inject: { at: 76, op: { t: 'note', k: 'new', d: 1, pick: 0.8628405916970223, pick2: 0.5734472328331321, s: 1302672762 } } }, { t: 'drive', k: 'outsideDocx', pick: 0.6395302484743297, s: 1862399872 }],
+  },
+  'staged-record-aim': {
+    fixed: true,
+    tiny: true,
+    staged: true,
+    devices: 3,
+    join: [0, 1],
+    about: 'a record changed on both devices, this one\'s change the later: its staged upload aims at the file as this device last agreed with it, not as it just read it, so the check before sending finds the other device\'s write and hands it back, every run: the tasks never converge',
+    skips: () => false,
+    repro: [{ t: 'task', k: 'edit', d: 1, pick: 0.6904091816395521, pick2: 0.6403046664781868, s: 1331773195 }, { t: 'run', d: 1, how: 'poke', s: 1993730222 }, { t: 'task', k: 'edit', d: 0, pick: 0.6321026624646038, pick2: 0.7485288269817829, s: 589884008 },
+      { t: 'task', k: 'edit', d: 1, pick: 0.9250958673655987, pick2: 0.4066777254920453, s: 697697893 }, { t: 'run', d: 0, how: 'poke', s: 794821635 }, { t: 'run', d: 1, how: 'timers', s: 27493958 }, { t: 'task', k: 'edit', d: 0, pick: 0.3805331971962005, pick2: 0.768940842943266, s: 311413170 }],
+  },
+  'staged-merge-aim': {
+    fixed: true,
+    tiny: true,
+    staged: true,
+    about: 'a note edited on both devices, merged field by field: the merge\'s staged upload aims at the note\'s file as last agreed, not as just read, and is handed back every run: the later text never reaches the other device',
+    skips: () => false,
+    repro: [{ t: 'note', k: 'new', d: 1, pick: 0.9103820566087961, pick2: 0.9270836934447289, s: 127026828 }, { t: 'run', d: 1, how: 'poke', s: 1094398469 }, { t: 'run', d: 0, how: 'run', s: 527955377 },
+      { t: 'note', k: 'edit', d: 0, pick: 0.1447097782511264, pick2: 0.3049026830121875, s: 1061760165 }, { t: 'note', k: 'edit', d: 1, pick: 0.5914163226261735, pick2: 0.20524716330692172, s: 1544024214 }],
+  },
+  'staged-slot-lower': {
+    fixed: true,
+    tiny: true,
+    staged: true,
+    devices: 4,
+    join: [0, 1, 2],
+    about: 'two devices\' first uploads of one record overlapping: a third device met the lower id first, its staged read then replaced by the higher id\'s, and stays on the file no other device keeps',
+    skips: () => false,
+    repro: [{ t: 'faults', d: 1, p: 0.3, quota: false, refuse: 0 }, { t: 'pet', k: 'timer', d: 1, pick: 0.34044871130026877, pick2: 0.6097072591073811, s: 1036890564 },
+      { t: 'pet', k: 'habitat', d: 0, pick: 0.8076418626587838, pick2: 0.8519927123561502, s: 1023511117 }, { t: 'run', d: 1, how: 'poke', s: 768704070 }],
+  },
+  'staged-held-file': {
+    fixed: true,
+    tiny: true,
+    staged: true,
+    join: [0],
+    about: 'a document\'s file already holding this device\'s content (its upload landed, its copy never sent before an account switch): the next push aims a new staged upload at the revision before it, which the check before sending refuses, every run: the copy never follows',
+    skips: () => false,
+    repro: [{ t: 'paper', k: 'edit', d: 0, pick: 0.08711082465015352, pick2: 0.49240474589169025, s: 536242987 }, { t: 'run', d: 0, how: 'poke', s: 1964915324 }, { t: 'paper', k: 'rename', d: 0, pick: 0.6548932138830423, pick2: 0.47761691943742335, s: 2115051321 },
+      { t: 'paper', k: 'new', d: 0, pick: 0.48847157787531614, pick2: 0.13594817533157766, s: 284901788 }, { t: 'sheet', k: 'edit', d: 0, pick: 0.2808572859503329, pick2: 0.7145665257703513, s: 104306932 },
+      { t: 'faults', d: 0, p: 0.05, quota: false, refuse: 2 }, { t: 'sync', d: 0, on: true, s: 1838228239 }, { t: 'account', d: 0, to: 'B', s: 863251049 }],
+  },
+  'staged-own-file-dropped': {
+    fixed: true,
+    tiny: true,
+    staged: true,
+    devices: 3,
+    join: [0, 1],
+    about: 'two devices each write a paper a new .docx after the old one was edited outside Glaze: the one whose copy goes second follows the other\'s file, and its own new file, its copy never sent, stays visible beside it in Glaze/ for good (found by the bar sweep, seed 9500065)',
+    skips: () => false,
+    repro: [{ t: 'paper', k: 'edit', d: 1, pick: 0.4102183519862592, pick2: 0.7268775182310492, s: 381382203 }, { t: 'run', d: 1, how: 'startup', s: 11655903 }, { t: 'paper', k: 'edit', d: 1, pick: 0.49151708907447755, pick2: 0.836380569729954, s: 262429425 },
+      { t: 'faults', d: 0, p: 0.15, quota: false, refuse: 0 }, { t: 'run', d: 0, how: 'poke', s: 1885313995 }, { t: 'drive', k: 'outsideDocx', pick: 0.6393347012344748, s: 1120477327 }, { t: 'sync', d: 0, on: true, s: 327744370 }],
+  },
+  'staged-reasked-edit': {
+    fixed: true,
+    tiny: true,
+    staged: true,
+    devices: 3,
+    join: [0, 1],
+    about: 'a worker stopped right after writing a staged upload\'s answer, its .docx then edited outside Glaze: the next worker asks the finished session again, takes the edited revision as Glaze\'s own, and the next push overwrites the edit (found by the bar sweep, seed 9500455)',
+    skips: () => false,
+    repro: [{ t: 'paper', k: 'edit', d: 0, pick: 0.7370798222254962, pick2: 0.5469275573268533, s: 47084577 }, { t: 'run', d: 0, how: 'timers', s: 1942766170, after: 'driveSyncDoc:' },
+      { t: 'drive', k: 'outsideDocx', pick: 0.605260512791574, s: 712871565 }, { t: 'paper', k: 'edit', d: 0, pick: 0.12561764963902533, pick2: 0.8504263516515493, s: 1788424472 }],
+  },
+  'staged-stale-parent': {
+    fixed: true,
+    tiny: true,
+    staged: true,
+    devices: 3,
+    join: [0, 1],
+    about: 'a record\'s staged first upload goes into the Glaze/Data it was staged for after that Data went to Drive\'s trash and was replaced: linked to its file there, no other device ever gets it (found by the bar sweep, seed 9500402)',
+    skips: () => false,
+    repro: [{ t: 'pdf', k: 'new', d: 0, pick: 0.5046410250943154, pick2: 0.5602296148426831, s: 1736712198 }, { t: 'setting', k: 'footer', d: 0, pick: 0.9339969209395349, pick2: 0.09851757227443159, s: 971247784 },
+      { t: 'setting', k: 'preset', d: 0, pick: 0.45765523659065366, pick2: 0.38037433032877743, s: 1201517812 }, { t: 'gradescope', k: 'place', d: 0, pick: 0.35789258894510567, pick2: 0.14992592576891184, s: 593080703 },
+      { t: 'faults', d: 0, p: 0.15, quota: false, refuse: 1 }, { t: 'run', d: 0, how: 'timers', s: 1157860440 }, { t: 'drive', k: 'trashData', pick: 0.8646272781770676, s: 592490877 },
+      { t: 'note', k: 'edit', d: 0, pick: 0.5276434142142534, pick2: 0.32105529750697315, s: 1516532219 }, { t: 'run', d: 0, how: 'timers', s: 614898878, after: 'driveSyncDoc:' }, { t: 'run', d: 0, how: 'run', s: 1595333163 }],
+  },
+  'staged-take-stop': {
+    fixed: true,
+    tiny: true,
+    staged: true,
+    devices: 3,
+    join: [0, 2],
+    about: 'a worker stopped while taking another device\'s PDF from its staged read (after marking it, before saving it): the next run meets the mark with no copy to read, lets the read go unused, and the PDF never comes (found by the bar sweep, seeds 9500841, 9500973)',
+    skips: () => false,
+    repro: [{ t: 'pdf', k: 'edit', d: 2, pick: 0.6396182728931308, pick2: 0.7343572643585503, s: 1870759343 }, { t: 'run', d: 2, how: 'timers', s: 963650092 }, { t: 'run', d: 0, how: 'poke', s: 1893922477, after: 'driveSyncDirty' }],
+  },
+  'staged-replay-lost': {
+    fixed: true,
+    tiny: true,
+    staged: true,
+    devices: 3,
+    join: [0, 1],
+    about: 'two devices\' first uploads of Notes\' folders overlapping, one staged: its answer written, the meeting with the other device\'s lower id that waited on it fails (Drive busy), and with the transfer already let go no run ever meets that file: the folders never converge (found by the bar sweep, seed 9500913)',
+    skips: () => false,
+    repro: [{ t: 'sheet', k: 'new', d: 0, pick: 0.0005167394410818815, pick2: 0.944620011607185, s: 463542006 }, { t: 'run', d: 0, how: 'timers', s: 1732642908 }, { t: 'folder', k: 'rename', d: 0, pick: 0.08206198690459132, pick2: 0.4447550403419882, s: 7503228 }, { t: 'slides', k: 'edit', d: 0, pick: 0.14362404658459127, pick2: 0.7645050184801221, s: 612798184 }, { t: 'time', ms: 89614943 }, { t: 'setting', k: 'preset', d: 1, pick: 0.08503693481907248, pick2: 0.6097094353754073, s: 741330601 }, { t: 'folder', k: 'new', d: 1, pick: 0.20517836906947196, pick2: 0.6513672687578946, s: 1526126662 }, { t: 'paper', k: 'edit', d: 0, pick: 0.7705752935726196, pick2: 0.7185106063261628, s: 395626547 }, { t: 'faults', d: 0, p: 0.05, quota: false, refuse: 0 }, { t: 'run', d: 0, how: 'poke', s: 409358450 }, { t: 'run', d: 1, how: 'startup', s: 2028041668 }, { t: 'run', d: 0, how: 'poke', s: 1206227927 }],
+  },
+  'staged-create-race': {
+    fixed: true,
+    tiny: true,
+    staged: true,
+    about: 'a device\'s staged new file for a record sent after another device had already made one in Glaze/Data (both putting the record back after Data went to Drive\'s trash): two files for one record, each device on its own, never converging (found by the bar sweep, seeds 9600354, 9600370, 9600431)',
+    skips: () => false,
+    repro: [{ t: 'paper', k: 'new', d: 1, pick: 0.5534558244980872, pick2: 0.6365561860147864, s: 546893804 }, { t: 'task', k: 'edit', d: 1, pick: 0.36794293369166553, pick2: 0.542712225811556, s: 1931422005 }, { t: 'task', k: 'add', d: 0, pick: 0.5595889138057828, pick2: 0.6078463774174452, s: 1529591901 }, { t: 'faults', d: 1, p: 0.3, quota: false, refuse: 0 }, { t: 'run', d: 0, how: 'timers', s: 1384711997 }, { t: 'run', d: 1, how: 'timers', s: 575414169 }, { t: 'run', d: 1, how: 'startup', s: 948841068 }, { t: 'drive', k: 'trashData', pick: 0.288371964590624, s: 52449897 }],
   },
   // Open, accepted by the owner: Settings written straight to storage.sync between the worker's compare and its write (a few
   // milliseconds) are written over by Drive's value. Found 2026-10-31 (seed 300933, 80 operations, 3 devices).
@@ -834,6 +993,7 @@ const KNOWN = {
 class World {
   constructor(seed, ops, o = {}) {
     this.seed = seed; this.ops = ops; this.o = { devices: 2, rounds: 8, reads: 24, ...o };
+    this.staged = typeof this.o.staged === 'boolean' ? this.o.staged : STAGED;
     this.clock = START; this.step = 0; this.errors = []; this.lines = []; this.rejections = []; this.soft = [];
     this.net = network(!!this.o.tiny);
     this.drive = this.net.drives[ACCOUNTS.A];
@@ -1252,13 +1412,13 @@ class World {
     const fail = [];
     const F = (inv, msg) => fail.push({ inv, msg });
     const views = this.devices.map((d) => this.view(d));
-    // Too large to sync (4.0.1, documents/drive-sync.js driveSyncLarge): what any device marks stays on its device, out of the
-    // comparisons. Nothing is staged, and with tiny transfers every live document is marked (its JSON copy alone is past one
-    // request), on every device Sync is on for.
+    // Too large to sync (documents/drive-sync.js driveSyncLarge): what any device marks stays on its device, out of the
+    // comparisons. With the stage off nothing is staged, and with tiny transfers every live document is marked (its JSON copy
+    // alone is past one request), on every device Sync is on for.
     const large = { docs: new Set(), recs: new Set() };
     for (const d of this.devices) { const m = this.get(d, 'driveSyncLarge') || {}; for (const k of Object.keys(m.docs || {})) large.docs.add(k); for (const k of Object.keys(m.recs || {})) large.recs.add(k); }
     const noteLarge = (id) => [...large.recs].some((r) => r.startsWith('notes:') && r.endsWith(`|${id}`));
-    if (!this.o.staged) {
+    if (!this.staged) {
       for (const d of this.devices) if (Object.keys(this.get(d, 'driveSyncMoves') || {}).length) F('large', `${d.name} staged a transfer: ${Object.keys(this.get(d, 'driveSyncMoves')).join(' ')}`);
       const sent = this.drive.log.filter((x) => x.query?.uploadType === 'resumable' || x.chunk || x.range);
       if (sent.length) F('large', `${sent.length} staged requests, the first ${sent[0].dev} ${sent[0].method} ${sent[0].path}`);
@@ -1427,4 +1587,4 @@ const shrink = async (seed, ops, inv, o = {}, budget = 200) => {
   return list;
 };
 
-module.exports = { TINY, rng, canon, sha, network, Device, World, generate, describe, play, shrink, KNOWN, ACCOUNTS, TOKENS, FIRST, prelude, START };
+module.exports = { TINY, STAGED, rng, canon, sha, network, Device, World, generate, describe, play, shrink, KNOWN, ACCOUNTS, TOKENS, FIRST, prelude, START };

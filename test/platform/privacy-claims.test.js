@@ -66,7 +66,7 @@ test('optional Google Drive is disclosed in both privacy texts, with its scope, 
     assert.match(limited, /\[Google API Services User Data Policy\]\(https:\/\/developers\.google\.com\/terms\/api-services-user-data-policy\), including\s+the Limited Use requirements/, file);
   }
   const google = policy.slice(policy.indexOf('## Google user data'), policy.indexOf('## Hosting'));
-  assert.match(google, /Google Drive \(Chrome, Edge, Brave and Firefox, off until you\s+connect\)/);
+  assert.match(google, SAFARI ? /Google Drive \(Chrome, Edge, Brave, Firefox and\s+Safari, off until you connect\)/ : /Google Drive \(Chrome, Edge, Brave and Firefox, off until you\s+connect\)/);
   assert.doesNotMatch(google, /Google Drive[^.]*unavailable/);
   assert.doesNotMatch(google, /Google Calendar sync[^.]*unavailable/);
   assert.match(google, /Google Drive access \(`drive\.file`/);
@@ -251,21 +251,50 @@ test('Sync to Google Drive\'s storage disclosure names the retry bookkeeping and
   for (const k of ['fails', 'wait', 'busy', 'snap', 'snapSkip']) assert.ok(state.includes(`\`${k}\``), `driveSync's ${k} named`);
 });
 
-// In 4.0.1 Sync stages nothing (documents/drive-sync.js env.staged, which background/background.js never sets): anything
-// larger than one request (over 5 MB) stays on the device, marked (driveSyncLarge), and the day's zip leaves documents' files
-// out. Both privacy texts say so, and that the stage (driveSyncMoves, glaze-drive) keeps nothing.
-test('Sync to Google Drive\'s privacy texts say items over 5 MB stay on the device and nothing is staged', () => {
-  assert.match(read('documents/drive-sync.js'), /const staging = env\.staged === true;/, 'the code: staging only when asked for');
-  assert.doesNotMatch(read('background/background.js'), /\bstaged:/, 'the code: the worker never asks for it');
+// Sync's transfers (documents/drive-sync.js env.staged, which background/background.js sets): a file over 5 MB goes in pieces
+// over several runs, its bytes waiting in glaze-drive, its session and progress in driveSyncMoves; only an item past what
+// a transfer carries (a JSON copy over MAX_JSON, a record over drive-store.js MAX) stays on the device, marked
+// (driveSyncLarge). The day's zip leaves documents' files out. Both privacy texts say so.
+test('Sync to Google Drive\'s privacy texts say large files go in pieces and only items past its ceiling stay on the device', () => {
+  assert.match(read('documents/drive-sync.js'), /const staging = env\.staged === true;/, 'the code: staging when asked for');
+  assert.match(read('background/background.js'), /\bstaged: true,/, 'the code: the worker asks for it');
+  assert.match(read('documents/drive-sync.js'), /const MAX_JSON = 64e6;/, 'the code: a JSON copy up to 64 MB');
+  assert.match(read('background/drive-store.js'), /const MAX = 32 << 20;/, 'the code: a record up to 32 MB');
   assert.match(read('background/background.js'), /GZ_BACKUP\.pack\(\{ settings, tasks: \{ tasks, pets \}, local: all, notes, version: chrome\.runtime\.getManifest\(\)\.version \}\)/, 'the code: no files in the zip');
   const stored = storedDrive();
-  assert.match(stored, /`driveSyncMoves`, with Glaze's own IndexedDB `glaze-drive`[^.]*which this version doesn't sync: it keeps nothing there/);
-  assert.doesNotMatch(stored, /resumable[- ]session address/);
+  assert.match(stored, /for a file over 5 MB on its way to or from Drive, which file it is, the SHA-256 of its\s+bytes, the address of its resumable upload session and how far it has come \(`driveSyncMoves`\)/);
+  assert.match(stored, /in Glaze's own IndexedDB `glaze-drive`, which only its background worker opens/);
+  assert.doesNotMatch(stored, /keeps nothing there/);
   const sync = policy.slice(policy.indexOf('  - **Sync to Google Drive**'), policy.indexOf('  - **Submit from Drive**'));
-  assert.doesNotMatch(sync, /in parts/);
-  assert.match(sync, /Anything over 5 MB[^.]*doesn't sync yet: it stays on this device/);
+  assert.match(sync, /A file over 5 MB[^.]*goes up or comes in in pieces/);
+  assert.match(sync, /JSON copy would be over 64 MB, or\s+a record over 32 MB, doesn't sync: it stays on this device/);
+  assert.doesNotMatch(sync, /doesn't sync yet/);
   assert.match(sync, /without their\s+files/);
   const short = read('../docs/privacy.md');
-  assert.doesNotMatch(short, /goes in parts/);
-  assert.match(short, /anything over 5 MB doesn't sync yet and stays on this device/);
+  assert.match(short, /a file over 5 MB goes up or comes in in pieces, waiting between runs in Glaze's own IndexedDB `glaze-drive`/);
+  assert.match(short, /a JSON copy over 64 MB, a record over 32 MB\) stays on this device/);
+  assert.doesNotMatch(short, /doesn't sync yet/);
+});
+
+// Calendar sync in Safari signs in through the Glaze app with a grant of its own (background/background.js gcalGrant):
+// both privacy texts and the features page say where it's offered, and the policy where its refresh token is kept.
+test('Google Calendar sync says Safari offers it while Safari\'s sign-in is on, with its refresh token in the Keychain', () => {
+  assert.match(read('background/background.js'), /nativeGrant\(\{[^]*\}, 'calendar'\)\);/, 'the code: Calendar\'s own grant in the handler');
+  const where = SAFARI ? 'Chrome and Safari, off until you connect' : 'Chrome, off until you connect';
+  for (const file of ['../PRIVACY.md', '../docs/privacy.md', '../docs/features.md']) assert.ok(read(file).includes(`Google Calendar sync (${where})`) || read(file).includes(`Google Calendar sync** (${where})`), `${file}: ${where}`);
+  const stored = policy.slice(policy.indexOf('- **Google Calendar sync** ('), policy.indexOf('- **Google Drive** ('));
+  if (SAFARI) assert.match(stored, /Calendar's refresh token[^.]*Keychain/);
+  else assert.doesNotMatch(stored, /Keychain/);
+  assert.ok(policy.includes(SAFARI ? 'Edge, Brave and Firefox don\'t offer it; Export calendar (.ics) works everywhere.' : 'Edge, Brave, Safari and Firefox don\'t offer it; Export calendar (.ics) works everywhere.'));
+});
+
+// Safari's Picker opens the picker page in a tab and comes back to documents/picked.html (background/google.js pick): the
+// policy says so while Safari offers Drive, and nothing says From Google Drive is missing there.
+test('Safari\'s From Google Drive is disclosed while Safari offers Drive: its tab, its return page and what the worker holds', () => {
+  assert.match(read('background/background.js'), /const PICKED_PAGE = 'documents\/picked\.html';/, 'the code: the return page');
+  for (const file of ['../PRIVACY.md', '../docs/privacy.md', '../docs/features.md']) assert.doesNotMatch(read(file), /From (?:Google )?Drive isn't (?:offered|there)|Safari has no picker/, file);
+  if (!SAFARI) return;
+  const picker = policy.slice(policy.indexOf('  - **The picker page**'), policy.indexOf('  - **Open from Drive**'));
+  assert.match(picker, /Safari opens the page in a tab[^.]*`documents\/picked\.html`/);
+  assert.match(picker, /session storage \(memory, never the token\)/);
 });

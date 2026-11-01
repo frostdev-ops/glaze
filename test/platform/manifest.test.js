@@ -140,6 +140,8 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
   delete expected.sandbox;
   delete expected.content_security_policy.sandbox;
   expected.web_accessible_resources = expected.web_accessible_resources.filter((e) => !e.resources.every((r) => r.startsWith('mods/')));
+  // Safari's From Google Drive comes back from the picker pages to its return page (background/google.js pick).
+  expected.web_accessible_resources.push({ resources: ['documents/picked.html'], matches: ['https://frostdev.io/*', 'https://frostdev-ops.github.io/*'] });
   // Safari's access stays as it was (the test above).
   expected.permissions = ['storage', 'scripting', 'unlimitedStorage', 'nativeMessaging'];
   expected.host_permissions = ['<all_urls>'];

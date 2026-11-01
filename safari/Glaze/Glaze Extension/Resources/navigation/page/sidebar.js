@@ -32,7 +32,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       let visible = true;
       for (let p = e; p?.tagName; p = p.parentElement) {
         const s = typeof getComputedStyle === 'function' ? getComputedStyle(p) : null;
-        if (p.hidden || s?.display === 'none' || s?.visibility === 'hidden' || s?.visibility === 'collapse' || s?.opacity === '0') { visible = false; break; }
+        // Transparent counts as hidden, except a panel fading in with the column it holds (Ultra's course opening): the
+        // column is as transparent, and its top is the header's from the first frame.
+        if (p.hidden || s?.display === 'none' || s?.visibility === 'hidden' || s?.visibility === 'collapse' || (s?.opacity === '0' && !(host && !host.own && p.contains(host.el)))) { visible = false; break; }
       }
       if (visible) bottom = Math.max(bottom, r.bottom);
     }
@@ -300,10 +302,11 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
 
   // ---- Ultra's Details & Actions, held -------------------------------------------------------------------------------
-  // A course outline's column fills its Details & Actions late (1.5–2.3 s on the owner's school): Course notes and the dock
-  // under it moved down by its height as it filled. Until Ultra has drawn it, it is held at least as tall as it was on this
-  // course last time (storage.local detailsHeight:<origin>; on a course not seen yet, the least any course here took), and
-  // This page shows from the start. The browser keeps the box (min-height), so nothing waits on a frame; the hold goes once
+  // A course outline's column fills its Details & Actions late (on a route into Content, Ultra adds it empty about 140 ms
+  // in and fills it about 330 ms later): Course notes and the dock under it moved down by its height as it filled. From
+  // when Ultra adds it until it has drawn it, it is held at least as tall as it was on this course last time (storage.local
+  // detailsHeight:<origin>; on a course not seen yet, the least any course here took), and This page shows from the start.
+  // That is before the page settles and the sidebar takes the column (place: early), since the fill is what settles it. The browser keeps the box (min-height), so nothing waits on a frame; the hold goes once
   // its own content is as tall. Nothing is guessed without a measurement. As with the panels absorbed below, Ultra's node
   // keeps its attributes and inline style: sidebar.css holds it (html[data-gz-sb-held], --gz-sb-held).
   const HELD = `detailsHeight:${location.origin}`;
@@ -337,29 +340,54 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     heightWrites = heightWrites.then(() => globalThis.navigator?.locks?.request ? navigator.locks.request(`glaze:${HELD}`, write) : write()).catch(() => {});
   };
   const flushHeight = () => { if (held) rememberHeight(held); };
+  // On a site with no height kept for any course yet, nothing can be held: Glaze's blocks under it
+  // (Course notes, the dock) aren't shown (html[data-gz-sb-unsized]) until Ultra has drawn it and it has stopped growing
+  // for 300 ms, at most 2 s, so they appear where they stay.
+  const show = (d) => {
+    if (!d.hidden) return;
+    d.hidden = false;
+    d.unsized = false;
+    clearTimeout(d.reveal); clearTimeout(d.cap);
+    // A first visit may have borrowed another course's taller height. Release that room before the blocks become
+    // visible, rather than letting the two-second save timer shrink it underneath them later.
+    letGo(d);
+    html()?.removeAttribute('data-gz-sb-unsized');
+  };
   const pauseHold = () => {
     if (!held) return;
     held.paused = true;
-    held.ro.disconnect(); clearTimeout(held.timer); clearTimeout(held.quiet);
-    held.quiet = 0;
+    held.ro.disconnect(); clearTimeout(held.timer); clearTimeout(held.quiet); clearTimeout(held.reveal); clearTimeout(held.cap);
+    held.quiet = 0; held.deadline = 0;
   };
   const unhold = () => {
     const d = held;
     if (!d) return;
     held = null;
     d.ro.disconnect(); clearTimeout(d.timer); clearTimeout(d.quiet);
+    show(d);
     letGo(d);
     // What it took this visit, for the next (a page left before Ultra finished keeps less: never too much room).
     rememberHeight(d);
   };
-  const hold = () => {
-    const el = ultra && host && !host.own && has(host.el, 'outline-actions') ? [...host.el.children].find((x) => has(x, 'js-details-and-actions')) || null : null;
+  // n: the page's column (A.native()). early: the page hasn't settled, so the column may still be the last course's: a
+  // block already drawn there, or one Ultra marks as another course's, is left for after it settles.
+  const hold = (n, early = false) => {
+    const el = ultra && n && has(n.el, 'outline-actions') ? [...n.el.children].find((x) => has(x, 'js-details-and-actions')) || null : null;
     const cid = A.courseId();
     if (held && held.el === el && held.cid === cid) { if (held.paused) held.resume(); else held.check(); return; }
+    if (early) {
+      if (!el || !cid) return;
+      const of = viewOf(n).cid;
+      // An empty block already observed for the outgoing course is still theirs until the view proves otherwise.
+      if (held?.el === el && held.cid !== cid && of !== cid) return;
+      if ((of && of !== cid) || (filled(el) && el.getBoundingClientRect().height > 0)) return;
+    }
+    // A native redraw in the same course keeps the first visit's deadline and an already completed reveal.
+    const visit = held?.cid === cid ? { unsized: held.unsized, deadline: held.deadline } : null;
     unhold();
     if (!el || !cid || typeof ResizeObserver !== 'function') return;
     const known = Object.values(heights);
-    const d = held = { el, cid, size: 0, want: heights[cid] || (known.length ? Math.min(...known) : 0), edge: 0, timer: 0, quiet: 0 };
+    const d = held = { el, cid, size: 0, want: heights[cid] || (known.length ? Math.min(...known) : 0), edge: 0, timer: 0, quiet: 0, unsized: !known.length && visit?.unsized !== false, hidden: false, reveal: 0, cap: 0, deadline: visit?.deadline || 0 };
     // Its padding and border under the content: with the box held, the content's own height is read from its last block.
     if (d.want) try { const c = getComputedStyle(el); d.edge = (parseFloat(c.paddingBlockEnd) || 0) + (parseFloat(c.borderBlockEndWidth) || 0); } catch { /* no styles to ask */ }
     const own = (box) => {
@@ -372,7 +400,13 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     d.check = () => {
       const children = [...el.children];
       if (children.length !== d.children.length || children.some((k, i) => k !== d.children[i])) observe();
-      if (!filled(el)) return;
+      const ngHide = has(el, 'ng-hide');
+      if (!filled(el) || ngHide || (d.hidden && busyView(el))) {
+        // A loading placeholder (or actions removed while reloading) cannot finish a first visit's quiet period, and rows
+        // Angular still keeps hidden (ng-hide) aren't its size yet.
+        if (d.hidden || ngHide) { clearTimeout(d.reveal); clearTimeout(d.quiet); d.quiet = 0; }
+        return;
+      }
       const box = el.getBoundingClientRect();
       if (!(box.width > 0 && box.height > 0)) return;
       const size = d.want ? own(box) : box.height;
@@ -382,9 +416,18 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       d.size = size;
       // Drawn as tall as the room: it goes, and nothing moves.
       if (d.want && size >= d.want - 0.5) letGo(d);
+      if (d.hidden) { clearTimeout(d.reveal); d.reveal = setTimeout(() => { if (ready()) show(d); }, 300); }
       // Once Ultra stops drawing it: kept for the next visit, and room it doesn't fill (smaller than last time) goes.
       clearTimeout(d.quiet);
-      d.quiet = setTimeout(() => { if (held === d && !d.paused) { rememberHeight(d); letGo(d); } }, 2000);
+      d.quiet = setTimeout(() => { if (ready()) { rememberHeight(d); show(d); letGo(d); } }, 2000);
+    };
+    // Angular's class change can precede the site's throttled pass without resizing the held box. Expiring timers
+    // must cancel that quiet period too, so showing the same rows starts a fresh one.
+    const ready = () => {
+      if (held !== d || d.paused) return false;
+      if (!has(el, 'ng-hide')) return true;
+      d.check();
+      return false;
     };
     // min-height masks content growth from the block's own ResizeObserver. Its direct content blocks must be watched
     // too: wrapping, fonts and images can resize them without a childList mutation. Rebind when Ultra swaps them.
@@ -398,12 +441,48 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     d.resume = () => {
       d.paused = false;
       if (d.want) { setVar('--gz-sb-held', `${d.want}px`); html().setAttribute('data-gz-sb-held', ''); }
+      if (d.unsized) {
+        if (!d.hidden) { d.hidden = true; html().setAttribute('data-gz-sb-unsized', ''); }
+        d.deadline ||= Date.now() + 2000;
+        d.cap = setTimeout(() => { if (held === d && !d.paused) show(d); }, Math.max(0, d.deadline - Date.now()));
+      } else show(d);
       observe();
       d.check();
       // Never drawn at all: not held for ever. Covered documents pause this deadline.
       if (d.want) d.timer = setTimeout(() => { if (held === d && !d.paused) letGo(d); }, 15000);
     };
     d.resume();
+  };
+
+  // A pass of the site's, ahead of its frame's place(): a Details & Actions Ultra has just added is held in the frame it is
+  // drawn in, with what Glaze drew under it in the same pass (Course notes).
+  const holdNow = () => {
+    if (!rec || asleep || !enabled() || !/^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname)) return;
+    const el = document.querySelector('aside.outline-actions');
+    if (el) hold({ el, page: el }, true);
+  };
+
+  // Course notes (planner/page/notes.js) puts its block in a course outline's column above the dock, in the same pass of
+  // the site's as the sidebar takes the column but at times a frame later (its script still loading). Until it is there,
+  // at most a second and once per column, the dock isn't shown (html[data-gz-sb-notes]), so it never moves down for it.
+  let notesFor = null, notesTimer = 0, notesSeen = new WeakSet();
+  const hasNotes = (col) => [...col.children].some((e) => e.id === 'gz-nt-block');
+  const awaitNotes = () => {
+    const h = html(), col = ultra && host && !host.own && has(host.el, 'outline-actions') ? host.el : null;
+    if (col !== notesFor) {
+      notesFor = col;
+      clearTimeout(notesTimer); notesTimer = 0;
+      h.removeAttribute('data-gz-sb-notes');
+      if (col && !notesSeen.has(col)) {
+        notesSeen.add(col);
+        if (ctx.settings().enhance?.notes && !hasNotes(col)) {
+          h.setAttribute('data-gz-sb-notes', '');
+          notesTimer = setTimeout(() => { notesTimer = 0; html()?.removeAttribute('data-gz-sb-notes'); }, 1000);
+          return;
+        }
+      }
+    }
+    if (h.hasAttribute('data-gz-sb-notes') && (!col || !ctx.settings().enhance?.notes || hasNotes(col))) { clearTimeout(notesTimer); notesTimer = 0; h.removeAttribute('data-gz-sb-notes'); }
   };
 
   // ---- Glaze's parts of the column -----------------------------------------------------------------------------------
@@ -498,8 +577,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // The column dressed: a native one keeps its own content where it is, with Glaze's header first and the widgets last;
   // without one (or one Glaze doesn't recognize, left as it is), Glaze's own beside the content.
   const ATTRS = ['role', 'aria-labelledby', 'aria-modal', 'aria-label'];
-  const detach = () => {
-    unhold();
+  // keep: the column is being taken again (attach), and the hold on its Details & Actions stays for hold() to keep or end.
+  const detach = (keep = false) => {
+    if (!keep) unhold();
     if (!host) return;
     lift(false);
     watchNativeScroll(null);
@@ -519,7 +599,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
   const attach = (n) => {
     closeDrawer(false);
-    detach();
+    detach(true);
     if (n) {
       host = { el: n.el, page: n.page, own: false, kind: n.kind };
       kept = ATTRS.map((k) => [k, n.el.getAttribute(k)]);
@@ -911,14 +991,15 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       : family === 'assessment' ? ['attempt', 'test'].includes(host.kind) ? host.el.parentElement : host?.el.closest('.assessment-overview-grid') : null;
   };
   let nativeScroller = null;
-  const watchNativeScroll = (root) => {
-    let next = null;
-    if (root) {
-      for (let p = host.el.parentElement; p && p !== html(); p = p.parentElement) {
-        if (/(auto|scroll|overlay)/.test(getComputedStyle(p).overflowY)) { next = p; break; }
-      }
-      next ||= document;
+  const scrollerOf = (root) => {
+    if (!root) return null;
+    for (let p = host.el.parentElement; p && p !== html(); p = p.parentElement) {
+      if (/(auto|scroll|overlay)/.test(getComputedStyle(p).overflowY)) return p;
     }
+    return document;
+  };
+  // root: the column's native root (nativeScrollRoot), or next: its scroller already found (scrollerOf).
+  const watchNativeScroll = (root, next = scrollerOf(root)) => {
     if (next === nativeScroller) return;
     nativeScroller?.removeEventListener('scroll', queueLayout);
     nativeScroller = next;
@@ -956,52 +1037,62 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     // Over a layer (A.overlay: Ultra's details column), as a standalone fallback, or set to (sidebar.open), with anything
     // to show, a drawer.
     const next = (forced || ((layer && (!reviewReady || m.mode !== 'expanded') || host.fallback || A.overlay?.() || cfg().open === 'drawer') && m.mode !== 'none')) && m.mode !== 'drawer' ? 'drawer' : m.mode;
-    if (next !== 'drawer' && drawer) closeDrawer(false);
     const w = next === 'drawer' ? Math.min(m.w || width, width) : m.w;
-    // Glaze's own column fixed at the edge (A.own) keeps the page's content clear of it, below the adapter's top.
-    setAttr(html(), 'data-gz-sb-fixed', host.own && A.own ? '' : false);
-    setAttr(html(), 'data-gz-sb-ultra', ultra ? '' : false);
     // Absolute course tools reserve room in their panel, instead of also narrowing its containing page.
     const tool = ultra && host.own && [...document.querySelectorAll('.course-content-container > .panel-wrap')].some((p) =>
       p.getBoundingClientRect().width > 0 && typeof getComputedStyle === 'function' && getComputedStyle(p).position === 'absolute');
-    setAttr(html(), 'data-gz-sb-tool', tool ? '' : false);
-    setAttr(html(), 'data-gz-sb-family', family || false);
-    setAttr(html(), 'data-gz-sb-assessment', family === 'assessment' && !host.own ? host.kind : false);
     const nativeRoot = nativeScrollRoot();
-    setAttr(html(), 'data-gz-sb-native-root', nativeRoot ? '' : false);
-    watchNativeScroll(nativeRoot);
-    setAttr(html(), 'data-gz-sb-layer', layer ? '' : false);
+    // An outline's column shows This page from when the sidebar takes it: Ultra is about to fill it, and the heading
+    // coming in above its blocks later would move them.
+    const headHidden = pageEmpty && !(ultra && !host.own && has(host.el, 'outline-actions') && next !== 'none');
+    // Everything measured below is read before any write: the browser lays the page out once, at its next frame, rather
+    // than on each read. Only when a write here can move what was measured (the column's mode, width or kind, Glaze's own
+    // column, a course tool, a layer, the edge buttons, This page or the measured offsets) is it measured again, once.
+    // That repeat also applies any corrected offsets before reading their dependents (a sticky native top, then the
+    // column's height and the bar). Merely writing the repeat's results afterwards would leave those reads stale again.
+    let g = measure(review, nativeRoot, css);
+    const h = html(), seen = (e, k) => e.getAttribute(k);
+    const geometry = () => [...GEOMETRY.map((k) => seen(h, k)), seen(host.el, 'data-gz-sb-overlay'), seen(host.el, 'data-gz-sb-page-hidden'), h.style.getPropertyValue('--gz-sidebar-w'), edge.hidden, launch.hidden, pageHead.hidden, edge.parentNode, launch.parentNode, rare(seen(h, 'data-gz-sb-family'))];
+    const offsetsNow = () => GEOMETRY_VARS.map((k) => h.style.getPropertyValue(k));
+    const was = geometry(), wasOffsets = offsetsNow();
+    // The column's end as the offsets put it (sidebar.css --gz-sb-end), before they are written.
+    const bottom = parseFloat(css?.getPropertyValue('--gz-sb-bottom')) || 0, end = (foot) => Math.max(bottom, foot);
+    const end0 = end(parseFloat(h.style.getPropertyValue('--gz-sb-foot')) || 0), top0 = parseFloat(h.style.getPropertyValue('--gz-sb-top')) || 0;
+    if (next !== 'drawer' && drawer) closeDrawer(false, false);
+    // Glaze's own column fixed at the edge (A.own) keeps the page's content clear of it, below the adapter's top.
+    setAttr(h, 'data-gz-sb-fixed', host.own && A.own ? '' : false);
+    setAttr(h, 'data-gz-sb-ultra', ultra ? '' : false);
+    setAttr(h, 'data-gz-sb-tool', tool ? '' : false);
+    setAttr(h, 'data-gz-sb-family', family || false);
+    setAttr(h, 'data-gz-sb-assessment', family === 'assessment' && !host.own ? host.kind : false);
+    setAttr(h, 'data-gz-sb-native-root', nativeRoot ? '' : false);
+    setAttr(h, 'data-gz-sb-layer', layer ? '' : false);
     setAttr(host.el, 'data-gz-sb-overlay', ultra && A.overlay() ? '' : false);
-    setAttr(html(), 'data-gz-sidebar', next);
-    setAttr(html(), 'data-gz-sidebar-open', next === 'drawer' && drawer ? '' : false);
+    setAttr(h, 'data-gz-sidebar', next);
+    setAttr(h, 'data-gz-sidebar-open', next === 'drawer' && drawer ? '' : false);
     setVar('--gz-sidebar-w', `${w}px`);
-    setVar('--gz-sb-left', `${A.left()}px`);
-    const main = document.getElementById('main');
-    const navTop = (parseFloat(css?.getPropertyValue('--gz-navbar-top')) || 0) + (parseFloat(css?.getPropertyValue('--gz-ctabs-row')) || 0);
-    // Each LMS's headers and the global navigation share this viewport: use their furthest bottom.
-    const headers = A.headers?.();
-    watchTop(headers);
-    const reviewTop = review?.layer.querySelector('[class*="headerRoot"]')?.getBoundingClientRect().bottom;
-    const top = reviewTop ?? (A.top ? Math.max(navTop, A.top(headers) ?? 0) : Math.max(navTop, Math.min(innerHeight - 100, main?.getBoundingClientRect().top || 0)));
-    setVar('--gz-sb-top', `${top}px`);
-    if (nativeRoot) {
-      const scrollRect = nativeScroller === document ? null : nativeScroller?.getBoundingClientRect();
-      setVar('--gz-sb-native-offset', `${Math.max(0, top - (scrollRect?.top || 0))}px`);
-      setVar('--gz-sb-native-top', `${Math.max(top, host.el.getBoundingClientRect().top)}px`);
-      // An attempt's Save and Submit stay over the bottom of the body that scrolls it (theme.css): the column ends above them.
-      const foot = host.kind === 'attempt' ? nativeScroller?.querySelector?.(':scope > [class*="makeStylesfooterWrapper-"]') : null;
-      const bottom = Math.min(scrollRect ? scrollRect.bottom : innerHeight, foot ? foot.getBoundingClientRect().top : Infinity);
-      setVar('--gz-sb-native-end', `${Math.max(0, innerHeight - bottom)}px`);
-    }
-    foot();
-    pageHead.hidden = pageEmpty;
+    pageHead.hidden = headHidden;
     setAttr(host.el, 'data-gz-sb-page-hidden', hidePage ? '' : false);
-    jump.hidden = cfg().jump === false || pageEmpty || !docked || !((host.page?.offsetHeight || slot?.offsetHeight || 0) > innerHeight * 0.6);
     edge.hidden = next !== 'none';
     launch.hidden = next !== 'drawer' || drawer;
-    backdrop.hidden = next !== 'drawer' || !drawer || modalAway;
     for (const b of [edge, launch]) if (b.parentNode !== document.body) document.body.append(b);
-    bars();
+    const offsets = () => {
+      setVar('--gz-sb-left', `${g.left}px`);
+      setVar('--gz-sb-top', `${g.top}px`);
+      if (g.native) for (const [k, v] of Object.entries(g.native)) setVar(k, `${v}px`);
+      setVar('--gz-sb-foot', `${g.foot}px`);
+    };
+    offsets();
+    const moved = offsetsNow().some((v, i) => v !== wasOffsets[i]);
+    // A native root's column is placed from the offsets themselves: measured again. Elsewhere new offsets only move the
+    // column's own ends: a column pinned between them (Ultra's, its own content) changes height by as much, from what was read.
+    if (geometry().some((v, i) => v !== was[i]) || (moved && nativeRoot)) g = measure(review, nativeRoot, css, setVar);
+    else if (moved && self() && g.pageH) g.pageH = Math.max(0, g.pageH - (g.top - top0) - (end(g.foot) - end0));
+    watchNativeScroll(nativeRoot, g.scroller);
+    watchTop(g.headers);
+    jump.hidden = cfg().jump === false || pageEmpty || !docked || !(g.pageH > innerHeight * 0.6);
+    backdrop.hidden = next !== 'drawer' || !drawer || modalAway;
+    if (g.bar) setVar('--gz-sb-bar', `${g.bar}px`); else h.style.removeProperty('--gz-sb-bar');
     // Keep our backdrop in the same native stacking context as a sticky discussion drawer.
     const backdropParent = nativeRoot ? host.el.parentElement : document.body;
     if (backdrop.parentNode !== backdropParent) backdropParent.append(backdrop);
@@ -1024,6 +1115,45 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       queueMicrotask(() => { if (on && active && !asleep) layout(); });
     }
     watchPeek();
+  };
+  // <html>'s attributes a layout writes that move what it measures. data-gz-sb-family only does so for its rarer kinds
+  // (rare): sidebar.css and theme.css lay out assessments and discussions, not the rest, by it.
+  const GEOMETRY = ['data-gz-sb-fixed', 'data-gz-sb-ultra', 'data-gz-sb-tool', 'data-gz-sb-assessment', 'data-gz-sb-native-root', 'data-gz-sb-layer', 'data-gz-sidebar', 'data-gz-sidebar-open'];
+  const GEOMETRY_VARS = ['--gz-sb-left', '--gz-sb-top', '--gz-sb-native-offset', '--gz-sb-native-top', '--gz-sb-native-end', '--gz-sb-foot'];
+  const rare = (f) => (['assessment', 'discussion'].includes(f) ? f : '');
+  // What a layout measures: where the content starts, the column's top under the headers, a native root's
+  // scroller and edges, Glaze's footer, the page's height in the column, and the bar under the edge buttons.
+  // The first pass is reads only. On the one repeat after a geometry change, write applies corrected offsets in the
+  // original dependency order; unchanged values do not write. css is the layout's live computed style of <html>.
+  const measure = (review, nativeRoot, css, write) => {
+    const put = (k, v) => write?.(k, `${v}px`);
+    const left = A.left();
+    put('--gz-sb-left', left);
+    const main = document.getElementById('main');
+    const navTop = (parseFloat(css?.getPropertyValue('--gz-navbar-top')) || 0) + (parseFloat(css?.getPropertyValue('--gz-ctabs-row')) || 0);
+    // Each LMS's headers and the global navigation share this viewport: use their furthest bottom.
+    const headers = A.headers?.();
+    const reviewTop = review?.layer.querySelector('[class*="headerRoot"]')?.getBoundingClientRect().bottom;
+    const top = reviewTop ?? (A.top ? Math.max(navTop, A.top(headers) ?? 0) : Math.max(navTop, Math.min(innerHeight - 100, main?.getBoundingClientRect().top || 0)));
+    put('--gz-sb-top', top);
+    const scroller = scrollerOf(nativeRoot);
+    let native = null;
+    if (nativeRoot) {
+      const scrollRect = scroller === document ? null : scroller?.getBoundingClientRect();
+      const offset = Math.max(0, top - (scrollRect?.top || 0));
+      put('--gz-sb-native-offset', offset);
+      const nativeTop = Math.max(top, host.el.getBoundingClientRect().top);
+      put('--gz-sb-native-top', nativeTop);
+      // An attempt's Save and Submit stay over the bottom of the body that scrolls it (theme.css): the column ends above them.
+      const foot = host.kind === 'attempt' ? scroller?.querySelector?.(':scope > [class*="makeStylesfooterWrapper-"]') : null;
+      const bottom = Math.min(scrollRect ? scrollRect.bottom : innerHeight, foot ? foot.getBoundingClientRect().top : Infinity);
+      const end = Math.max(0, innerHeight - bottom);
+      put('--gz-sb-native-end', end);
+      native = { '--gz-sb-native-offset': offset, '--gz-sb-native-top': nativeTop, '--gz-sb-native-end': end };
+    }
+    const foot = footOf();
+    put('--gz-sb-foot', foot);
+    return { left, headers, top, scroller, native, foot, pageH: host.page?.offsetHeight || slot?.offsetHeight || 0, bar: barOf() };
   };
   const paint = () => {
     if (!active || !host || asleep) return;
@@ -1059,6 +1189,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (!n) return !host.el.isConnected || host.own || !document.querySelector('aside.outline-actions, div.todo-panel');
     const v = viewOf(n);
     if (v.cid && cid && v.cid !== cid) return false;
+    // A course outline's column Ultra has just drawn is the new view, empty or not: taken at once, so Glaze's header and
+    // This page are in it before Ultra fills Details & Actions, and nothing under them moves when it does.
+    if (fam === 'outline' && has(n.el, 'outline-actions') && n.el !== nativeView?.el) return true;
     const body = v.content && !busyView(v.content) && (v.content !== nativeView?.content || v.child !== nativeView?.child);
     return body || (filled(n.page) && (!nativeView || n.el !== nativeView.el || v.text !== nativeView.text || v.nodes.length !== nativeView.nodes.length || v.nodes.some((e, i) => e !== nativeView.nodes[i])));
   };
@@ -1074,7 +1207,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (!enabled()) { teardown(); return; }
     const moved = fam !== family || cid !== course;
     const n = A.native();
-    if (moved && !settled(fam, cid, n)) return;
+    if (moved && !settled(fam, cid, n)) { hold(n, true); return; }
     if (moved) { family = fam; course = cid; gen++; }
     nativeView = viewOf(n);
     if (!host || !host.el.isConnected || (n ? host.el !== n.el || host.page !== n.page : !host.own)) attach(n);
@@ -1087,7 +1220,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       // Ultra's late blocks stay before the dock visually through flex order, without reinserting live media.
     }
     host.fallback = !n && !!A.standalone?.();
-    hold();
+    hold(n);
+    awaitNotes();
     const first = !active;
     active = true;
     if (first) emit('change');
@@ -1097,24 +1231,24 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
   // Glaze's footer: fixed on Ultra, at the end of the page on Canvas. Reserve Canvas's footer height even below the
   // fold, so scrolling it into view never shrinks the column under the pointer or needs another layout measurement.
-  const foot = () => {
+  const footOf = () => {
     const f = document.getElementById('gz-footer');
     const r = f?.isConnected && f.getClientRects().length ? f.getBoundingClientRect() : null;
-    setVar('--gz-sb-foot', `${r ? Math.max(0, Math.round(ultra ? innerHeight - r.top : r.height)) : 0}px`);
+    return r ? Math.max(0, Math.round(ultra ? innerHeight - r.top : r.height)) : 0;
   };
   // A bar the site fixes along the window's bottom holds its actions at its end, where the edge buttons are: Ultra's Save
   // and Submit (content.js tags them; an older test's footer Ultra places absolutely, an assignment attempt's in its flex
   // column, both untagged) and its help button,
   // Canvas's Previous and Next; the site's CSS stands them on Glaze's bar. The button showing stands above the highest one
   // under it (--gz-sb-bar). A layer the window's height is no bar.
-  const bars = () => {
+  const barOf = () => {
     const b = [launch, edge].find((x) => !x.hidden)?.getBoundingClientRect();
     let up = 0;
     if (b?.width) for (const e of document.querySelectorAll('[data-gz-fixed-bottom], .pagehelp-directive, #module_sequence_footer, footer.submit-footer.panel-footer-fixed, bb-assignment-attempt-authoring-panel [class*="makeStylesfooterWrapper-"]')) {
       const r = e.getBoundingClientRect();
       if (r.height && r.height < innerHeight / 2 && r.left < b.right && r.right > b.left && !host.el.contains(e)) up = Math.max(up, Math.round(innerHeight - r.top));
     }
-    if (up) setVar('--gz-sb-bar', `${up}px`); else html().style.removeProperty('--gz-sb-bar');
+    return up;
   };
   const queueLayout = () => { if (!active || asleep) return; cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { if (active && !asleep) layout(); }); };
   const onResize = () => { absorbInvalid(); queueLayout(); };
@@ -1243,7 +1377,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (framed) globalThis.GZ_CTABS?.drawer?.(true);
     toggle.focus();
   };
-  const closeDrawer = (restore = true) => {
+  const closeDrawer = (restore = true, relayout = true) => {
     const was = drawer;
     drawer = false;
     lift(false);
@@ -1260,7 +1394,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (framed) globalThis.GZ_CTABS?.drawer?.(false);
     closeMenu();
     if (adding && !adding.hidden) openAdd(false, false);
-    layout();
+    if (relayout) layout();
     if (restore && opener?.isConnected) opener.focus();
     opener = null;
   };
@@ -1376,6 +1510,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     document.removeEventListener('animationend', peekEnd, true);
     clearTimeout(noteTimer);
     clearTimeout(retryTimer);
+    clearTimeout(notesTimer); notesTimer = 0; notesFor = null; notesSeen = new WeakSet();
     nativeView = null; route = '';
     asleep = false;
     bare();
@@ -1390,7 +1525,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     mode = 'none';
   };
   // <html> as before the sidebar: its attributes and variables gone.
-  const SB_ATTRS = ['data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo', 'data-gz-sb-fixed', 'data-gz-sb-ultra', 'data-gz-sb-family', 'data-gz-sb-tool', 'data-gz-sb-layer',
+  const SB_ATTRS = ['data-gz-sb-unsized', 'data-gz-sb-notes', 'data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo', 'data-gz-sb-fixed', 'data-gz-sb-ultra', 'data-gz-sb-family', 'data-gz-sb-tool', 'data-gz-sb-layer',
     'data-gz-sb-style', 'data-gz-sb-surface', 'data-gz-sb-radius', 'data-gz-sb-density', 'data-gz-sb-order', 'data-gz-sb-notitle', 'data-gz-sb-native-root', 'data-gz-sb-assessment', 'data-gz-sb-peek'];
   const bare = () => {
     const h = html();
@@ -1416,7 +1551,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       if (covered()) { cover(); return; }
       if (!active) { addEventListener('resize', onResize); document.addEventListener('visibilitychange', cover); if (ultra) addEventListener('pagehide', flushHeight); }
       // Ultra's passes come with every change Angular makes: once there, they are gathered into one a frame.
-      if (ultra && active) { cancelAnimationFrame(passFrame); passFrame = requestAnimationFrame(() => { if (on && active && !asleep) place(); }); }
+      if (ultra && active) { holdNow(); cancelAnimationFrame(passFrame); passFrame = requestAnimationFrame(() => { if (on && active && !asleep) place(); }); }
       else place();
     });
   };

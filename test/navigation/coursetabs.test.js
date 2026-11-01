@@ -264,8 +264,8 @@ test('the hard tab bound holds even if every existing tab is pinned', () => {
 
 test("a strip tab's pin and close, drawn at 20px, take presses over 24 (WCAG 2.5.8)", () => {
   const css = read('navigation/page/coursetabs.css');
-  assert.match(css, /#gz-ctabs :is\(\.gz-ctab-pin, \.gz-ctab-x\) \{ position: relative;[^}]* width: 20px; height: 20px;/);
-  assert.match(css, /#gz-ctabs :is\(\.gz-ctab-pin, \.gz-ctab-x\)::after \{ content: ""; position: absolute; inset: -2px; \}/);
+  assert.match(css, /#gz-ctabs \.gz-ctab-pin,\n#gz-ctabs \.gz-ctab-x \{ position: relative;[^}]* width: 20px; height: 20px;/);
+  assert.match(css, /#gz-ctabs \.gz-ctab-pin::after,\n#gz-ctabs \.gz-ctab-x::after \{ content: ""; position: absolute; inset: -2px; \}/);
 });
 
 test('Delete leaves a pinned strip tab, as its close button, hidden while it is pinned, does', () => {

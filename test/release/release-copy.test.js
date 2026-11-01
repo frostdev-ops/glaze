@@ -54,7 +54,7 @@ const release401 = {
   nl: ['NIEUW IN 4.0.1', 'eerste beeld', 'tragere laptops', 'Instellingen › Cursustabbladen › Cursustabbladen vooraf openen', 'Cursusinhoud klaarhouden', "Pagina's meteen openen", 'Laden van pagina’s meteen tonen', 'Cursusgegevens vooraf laden'],
   'pt-BR': ['NOVO NA 4.0.1', 'primeiro desenho', 'notebooks mais lentos', 'Configurações › Abas de cursos › Abrir as abas de cursos com antecedência', 'Manter o conteúdo do curso pronto', 'Abrir páginas na hora', 'Mostrar na hora que a página está carregando', 'Carregar os dados do curso com antecedência'],
 };
-for (const [lang, expected] of Object.entries(release401)) test(`4.0.1 release notes ${lang || 'en'} name Blackboard's speed settings, Documents' new buttons, and Calendar and Drive for Chrome and Firefox only`, () => {
+for (const [lang, expected] of Object.entries(release401)) test(`4.0.1 release notes ${lang || 'en'} name Blackboard's speed settings, Documents' new buttons, and Calendar and Drive for the browsers that have them`, () => {
   const text = listing(lang), block = part(text, 'Release notes');
   const context = {};
   if (lang) vm.runInNewContext(read(`i18n/${lang}.js`), context);
@@ -63,7 +63,7 @@ for (const [lang, expected] of Object.entries(release401)) test(`4.0.1 release n
   for (const key of ['Attach from Documents', 'Open in Glaze', 'Print with notes…']) assert.ok(block.toLowerCase().includes(ui(key).toLowerCase()), key);
   assert.ok(block.includes(`${ui('Settings')} › ${ui('Writer')} › ${ui('Papers')}`), 'Google Drive by its UI path');
   for (const term of expected) assert.ok(block.toLowerCase().includes(term.toLowerCase()), term);
-  for (const line of block.split('\n').filter((l) => /Google/.test(l))) assert.match(line, /^•\s*(?:Chrome|Firefox)\s*:/, 'Google Calendar and Drive are labelled for the browsers that have them');
+  for (const line of block.split('\n').filter((l) => /Google/.test(l))) assert.match(line, /^•\s*(?:Chrome|Firefox|Safari)\s*:/, 'Google Calendar and Drive are labelled for the browsers that have them');
   assert.ok(!/\b(?:CI|audit)\b/i.test(block), 'no internal process in store copy');
 });
 

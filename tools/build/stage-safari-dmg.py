@@ -90,7 +90,8 @@ sources[0]['files'] += [bridge_app, host_app]
 app_ids = {o[k]['buildSettings'].get('PRODUCT_BUNDLE_IDENTIFIER') for k in o[app['buildConfigurationList']]['buildConfigurations']}
 require(len(app_ids) == 1, 'Mac app bundle id')
 # The app and its extension meet in this group's container (agents/agent-link.js, Safari contract).
-app_group = os.environ.get('SAFARI_TEAM_ID', '22AAZFMTV8') + '.' + app_ids.pop()
+app_id = app_ids.pop()
+app_group = os.environ.get('SAFARI_TEAM_ID', '22AAZFMTV8') + '.' + app_id
 for t in (app, extension):
     for key in o[t['buildConfigurationList']]['buildConfigurations']:
         settings = o[key]['buildSettings']
@@ -110,8 +111,11 @@ extension_entitlements = project / 'Glaze Extension/Release.entitlements'
 with extension_entitlements.open('rb') as f:
     x = plistlib.load(f)
 require(x.get('com.apple.security.app-sandbox') is True, 'extension sandbox entitlement')
+# The checked-in Mac targets carry this group already (Google's sign-in, GlazeGoogle.swift); agent access shares it.
 for path, values in ((entitlements, e), (extension_entitlements, x)):
-    require('com.apple.security.application-groups' not in values, 'app group already set')
+    # Glaze's own team's, as checked in, or already this build's team's (SAFARI_TEAM_ID).
+    require(values.get('com.apple.security.application-groups', [app_group]) in
+            ([app_group], ['22AAZFMTV8.' + app_id]), 'app group')
     values['com.apple.security.application-groups'] = [app_group]
     with path.open('wb') as f:
         plistlib.dump(values, f)

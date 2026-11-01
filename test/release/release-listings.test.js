@@ -44,13 +44,14 @@ for (const lang of LANGS) {
     assert.ok(!/\n\n/.test(firefox.notes), 'it stops at the next heading');
     assert.ok(!/^•\s*(?:Chrome|Safari)\s*:/m.test(firefox.notes), 'no other browser\'s bullet on AMO');
     assert.ok(!/^•\s*(?:Chrome|Firefox)\s*:/m.test(apple.whatsNew), 'no other browser\'s bullet on the App Store');
-    // Agents and Google Drive bullets are AMO's alone: the App Store build has neither, and Chrome has no notes field.
-    const firefoxOnly = (line) => /^•\s*Firefox\s*:/.test(line);
-    assert.equal(apple.whatsNew, firefox.notes.split('\n').filter((line) => !firefoxOnly(line)).join('\n'), 'Apple gets AMO\'s notes without their Firefox bullets');
+    // Agents bullets are AMO's alone, and each browser's Google bullet goes to its own store; Chrome has no notes field.
+    const firefoxOnly = (line) => /^•\s*Firefox\s*:/.test(line), safariOnly = (line) => /^•\s*Safari\s*:/.test(line);
+    const block = section(real(listingFile(lang)), 'Release notes').split('\n');
+    assert.equal(apple.whatsNew, [...firefox.notes.split('\n').filter((line) => !firefoxOnly(line)), ...block.filter(safariOnly)].join('\n'), 'Apple gets AMO\'s notes without their Firefox bullets, with Safari\'s');
     for (const line of firefox.notes.split('\n').filter((l) => /\bAgent(?:s|en|es)\b|Google Drive/.test(l))) assert.ok(firefoxOnly(line), `labelled Firefox on AMO: ${line.slice(0, 40)}`);
     const agents = /\bagent(?:e|s|en|es)?\b|glaze-mcp|\bMCP\b/i;
     for (const field of ['whatsNew', 'description', 'promotionalText', 'keywords']) assert.doesNotMatch(apple[field], agents, `no Agents in the App Store ${field}`);
-    assert.doesNotMatch(apple.whatsNew, /Google/, 'Safari has neither Google Calendar sync nor Google Drive');
+    for (const line of apple.whatsNew.split('\n').filter((l) => /Google/.test(l))) assert.ok(safariOnly(line), `Google on the App Store is Safari's bullet: ${line.slice(0, 40)}`);
     assert.ok(firefox.notes.length <= 3000 && apple.whatsNew.length <= 4000);
   });
 

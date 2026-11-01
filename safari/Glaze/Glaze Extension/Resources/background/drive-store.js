@@ -26,9 +26,9 @@
 // State: driveSyncRec:<h> { area, key, cat, id, lsum, rsum, at, seen } (or, for a picture a note here uses that Drive doesn't
 // have yet, { area, key, cat, id: null, want: the note's key }) and driveSyncFile:<id> 'r:<h>'; the folders and the
 // last snapshot on driveSync (data, backups, snap); a record file or the day's zip larger than one request on its way in
-// documents/drive-sync.js's transfers (driveSyncMoves 'R:<h>', 'r:<h>', 'snap'), which in 4.0.1 are off: a record file or the
-// day's zip larger than one request is never sent or brought ('large'), the record marked too large while this device holds it
-// (documents/drive-sync.js driveSyncLarge), the day's zip skipped (snapSkip 'large').
+// documents/drive-sync.js's transfers (driveSyncMoves 'R:<h>', 'r:<h>', 'snap'). A record file past MAX is never sent or
+// brought ('large'), the record marked too large while this device holds it (documents/drive-sync.js driveSyncLarge); with
+// transfers off (env.staged unset, as 4.0.1's builds ran), the same past one request, and the day's zip skipped (snapSkip 'large').
 // Classic script for the worker; module.exports for node.
 var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
   const REC = 'driveSyncRec:', FILE = 'driveSyncFile:', STAMPS = 'driveSyncStamps', STATE = 'driveSync', LARGE = 'driveSyncLarge';
@@ -426,35 +426,42 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       const next = MERGE[got.cat](value, got.value, { here: at || was.at || 0, there: got.at }), t = Math.max(at, got.at) || now();
       if (canon(next) === canon(got.value)) return take(h, got, R, was, value);
       if (canon(next) !== canon(value)) await take(h, { ...got, value: next, at: t }, R, was, value, { pending: true });
-      return push(ctx, h, got.area, got.key, got.cat, (await recOf(h)) || was, t);
+      return push(ctx, h, got.area, got.key, got.cat, (await recOf(h)) || was, t, R);
     };
     // A file up as documents/drive-sync.js up sends it (one too large for a request waits for the run's last step: 'pending'),
     // or, for a caller with no transfers (ctx.up), in one request. m: { bytes, id, meta, create, mime, info }.
-    const send = async (ctx, slot, tag, target, make, owner) => {
-      if (ctx.up) return ctx.up(slot, tag, target, make, owner);
+    const send = async (ctx, slot, tag, target, make, owner, commit = null) => {
+      if (ctx.up) return ctx.up(slot, tag, target, make, owner, commit);
       const m = await make();
       let file = null;
       if (m.id) { try { file = await ctx.D((c) => c.put({ id: m.id, meta: m.meta, mime: m.mime, bytes: m.bytes })); } catch (e) { if (e.why !== 'missing') throw e; } }
       file ||= await ctx.D((c) => c.put({ meta: m.create, mime: m.mime, bytes: m.bytes }));
       return { file, info: m.info ?? null };
     };
-    // This device's value up, at its time (or a tombstone once it is gone). One still on its way since an earlier run keeps
-    // the time it went with.
-    const push = async (ctx, h, area, key, cat, was, at) => {
-      const value = await valueOf(area, key), sum = await sumOf(area, key, value);
+    // This device's value up, at its time (or a tombstone once it is gone). One too large for a request is staged: its file's
+    // id is written into its link as Drive's answer comes (commit), and the record is held as this push left it until then
+    // (documents/drive-sync.js holds). It goes over Drive's file as this run met it (aim: its sum and revision; undefined:
+    // its sum as this device last agreed with it): another device's write since, even a change back to the same value with a
+    // newer time, sends it back to be weighed again.
+    const push = async (ctx, h, area, key, cat, was, at, aim) => {
+      const value = await valueOf(area, key), sum = await sumOf(area, key, value), link = { area, key, cat, lsum: sum, rsum: sum, at, seen: at };
+      const expect = aim !== undefined ? aim?.appProperties?.sum : was?.rsum;
       const r = await send(ctx, `R:${h}`, sum, was?.id ?? null, async () => {
         const meta = { appProperties: { glaze: 'rec', cat, key: h, sum, at: String(at) } };
-        return { bytes: new TextEncoder().encode(JSON.stringify({ glaze: 'record', v: 1, cat, area, key, at, ...(value === undefined ? { deleted: true } : { value }) })),
-          id: was?.id ?? null, meta, create: { ...meta, name: `${cat}-${h.slice(0, 12)}.json`, mimeType: JSON_TYPE, parents: [ctx.data] }, mime: JSON_TYPE, info: { at } };
-      }, { rec: h, area, key });
-      const t = Number.isFinite(r.info?.at) ? r.info.at : at;
-      await put(h, { area, key, cat, id: r.file.id, lsum: sum, rsum: sum, at: t, seen: t }, was);
+        const bytes = new TextEncoder().encode(JSON.stringify({ glaze: 'record', v: 1, cat, area, key, at, ...(value === undefined ? { deleted: true } : { value }) }));
+        if (bytes.length > MAX) throw new Fail('large');
+        return { bytes, id: was?.id ?? null, rev: was?.id && aim?.id === was.id ? aim.headRevisionId ?? null : null,
+          sum: was?.id && SUM.test(expect || '') ? expect : null, meta, create: { ...meta, name: `${cat}-${h.slice(0, 12)}.json`, mimeType: JSON_TYPE, parents: [ctx.data] }, mime: JSON_TYPE };
+      }, { rec: h, area, key }, { rec: h, link });
+      await put(h, { ...link, id: r.file.id }, was);
     };
 
     // One record, both sides. key and area: when known here; R: its file's metadata (undefined: ask Drive when known).
     const one = async (ctx, h, x) => {
       let { area, key, R } = x;
       let was = await recOf(h), left = null;
+      // Its upload on its way: held as its push left it until Drive's answer is written (documents/drive-sync.js holds).
+      if (ctx.move?.hold && await ctx.move.hold(`R:${h}`, R, was?.id || null)) throw new Fail('pending');
       // This device's record let go for another device's file (below), met as a first meeting: what it holds as synced keeps
       // the time of that change as its stamp, so it weighs as the change it was, not as one with no time (which any other
       // wins over), on this run and on any later one should this one stop first.
@@ -480,6 +487,8 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       // a second file made beside it.
       if (was?.id && R?.removed) { const other = await lookup(ctx, h); if (other && other.id !== was.id) { await leave(); R = other; } }
       const st = await stamps();
+      // A push here goes over Drive's file as this run met it: a write another device makes before it lands sends it back.
+      const over = (w, t) => push(ctx, h, area, key, cat, w, t, R && !R.removed ? R : null);
       if (!key) { // a record only Drive has, met for the first time
         if (!R || R.removed) return;
         // A picture or attachment comes with a note here that uses it (each below, x.need), never by itself: one whose note
@@ -518,24 +527,24 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       if (!was) {
         // Here only. With no time of its own (it was here before Sync was bound to this account): older than any change made
         // with one, so a later change another device hasn't pushed yet still wins over it.
-        if (!R || R.removed) { if (value !== undefined) await push(ctx, h, area, key, cat, null, at || UNTIMED); return; }
+        if (!R || R.removed) { if (value !== undefined) await over(null, at || UNTIMED); return; }
         const got = await fetchRec(ctx, R, h, owner);
         await stamp();
         if (got.sum === lsum) {
           // The same value on both sides, changed here later than Drive's: sent again with this device's time (retold below).
-          if (at > got.at && !def.view && !MERGE[cat]) return push(ctx, h, area, key, cat, { id: R.id }, at);
+          if (at > got.at && !def.view && !MERGE[cat]) return over({ id: R.id }, at);
           return put(h, { area, key, cat, id: R.id, lsum, rsum: got.sum, at: got.at, seen: Math.max(at, got.at) }, null);
         }
         // Gone here: Drive's value taken, unless this device deleted it later than that value's change (its time stamped while
         // bound, so it had the key): the deletion goes up, as a later change would.
         if (value === undefined) {
-          if (got.value !== undefined && at > got.at) return push(ctx, h, area, key, cat, { id: R.id }, at);
+          if (got.value !== undefined && at > got.at) return over({ id: R.id }, at);
           if (got.value !== undefined) await take(h, got, R, null, value); else await put(h, { area, key, cat, id: R.id, lsum, rsum: got.sum, at: got.at, seen: got.at }, null);
           return;
         }
-        if (got.value === undefined) return push(ctx, h, area, key, cat, { id: R.id }, Math.max(at, got.at + 1) || now());
+        if (got.value === undefined) return over({ id: R.id }, Math.max(at, got.at + 1) || now());
         // First meeting, both hold it: Settings by time; the rest joined as Restore joins.
-        if (cat === 'settings') { if (got.at > at) return take(h, got, R, null, value); return push(ctx, h, area, key, cat, { id: R.id }, at || now()); }
+        if (cat === 'settings') { if (got.at > at) return take(h, got, R, null, value); return over({ id: R.id }, at || now()); }
         const id = `${area}:${key}`, t = Math.max(at, got.at) || now(), mine = [];
         applying.delete(id);
         // The join's write is this layer's own: it stamps nothing, and carries the time of the latest change it holds, never
@@ -550,10 +559,10 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         const joined = await sumOf(area, key, await valueOf(area, key));
         if (joined === got.sum) return put(h, { area, key, cat, id: R.id, lsum: joined, rsum: got.sum, at: got.at, seen: Math.max(at, got.at) }, null);
         await restamp({ [id]: t }, { [id]: st[id] });
-        return push(ctx, h, area, key, cat, { id: R.id }, t);
+        return over({ id: R.id }, t);
       }
       // Its file gone or in Drive's trash: put back from here, unchanged since it last synced with the time of that change.
-      if (!R || R.removed) { if (value !== undefined) await push(ctx, h, area, key, cat, { ...was, id: null }, at || (lsum === was.lsum && was.at) || now()); else await S.remove([REC + h, ...(was.id ? [FILE + was.id] : [])]); return; }
+      if (!R || R.removed) { if (value !== undefined) await over({ ...was, id: null }, at || (lsum === was.lsum && was.at) || now()); else await S.remove([REC + h, ...(was.id ? [FILE + was.id] : [])]); return; }
       const ldirty = lsum !== was.lsum, rdirty = R.appProperties?.sum !== was.rsum;
       // The value as it was, sent again later by another device (a change back to it): retold, Drive's time for it, is weighed
       // against a change here as a change of its own. Content alone tells neither side of it.
@@ -562,7 +571,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         // A change back to the value already synced, made here later than it: sent again with its time, so an earlier change
         // another device hasn't pushed yet doesn't go up over it unseen. Only where the whole value is the record: a view
         // (the pet, Gradescope) keeps fields of this device's own, and Notes merge field by field.
-        if (at > (was.seen || 0) && at > Math.max(was.at || 0, retold) && !def.view && !MERGE[cat]) return push(ctx, h, area, key, cat, was, at);
+        if (at > (was.seen || 0) && at > Math.max(was.at || 0, retold) && !def.view && !MERGE[cat]) return over(was, at);
         if (at > (was.seen || 0) || retold) await put(h, { ...was, seen: Math.max(was.seen || 0, at), ...(retold && { at: retold }) }, was);
         return;
       }
@@ -571,12 +580,12 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         await stamp();
         // Unchanged here by content, but changed and back since it synced (where the whole value is the record): weighed by
         // time like any other change made here.
-        if (!ldirty) return at > (was.seen || 0) && at > got.at && !def.view && !MERGE[cat] ? push(ctx, h, area, key, cat, was, at) : take(h, got, R, was, value);
+        if (!ldirty) return at > (was.seen || 0) && at > got.at && !def.view && !MERGE[cat] ? over(was, at) : take(h, got, R, was, value);
         if (MERGE[cat] && got.value !== undefined && value !== undefined) return meet(ctx, h, got, R, was, value, at);
         if (got.at >= (at || 0)) return take(h, got, R, was, value);
       }
       if (at && retold > at) return take(h, await fetchRec(ctx, R, h, owner), R, was, value);
-      return push(ctx, h, area, key, cat, was, at || now());
+      return over(was, at || now());
     };
     // Whether a note here still shows this picture. A conflict copy may share its id, so losing the note that first wanted
     // it does not abandon a picture the copy still uses. No reference is kept alive by a transfer's old need flag.
@@ -792,20 +801,25 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       ctx.data = await sub(ctx, 'data', 'Data');
       if (owner.snap) return snapshot(ctx);
       if (!owner.rec) return;
-      const R = owner.R ? await ctx.D((c) => c.file(owner.R)).catch((e) => { if (e.why === 'missing') return { removed: true }; throw e; }) : undefined;
+      // The file a meeting named, as Drive has it now; one gone for good counts only when it is the record's own.
+      let R = owner.R ? await ctx.D((c) => c.file(owner.R)).catch((e) => { if (e.why === 'missing') return { id: owner.R, removed: true }; throw e; }) : undefined;
+      if (R?.removed && R.id !== (await recOf(owner.rec))?.id) R = undefined;
+      if (R?.removed) R = { removed: true };
       return each(ctx, owner.rec, { area: owner.area, key: owner.key, need: owner.need, ...(R && { R }) });
     };
     // One Drive refused as it stands: the day's snapshot skipped (snapSkip 'quota' while for want of room).
     const failed = async (owner, why, ctx) => { if (owner.snap) await ctx.state({ snapSkip: ['quota', 'large'].includes(why) ? why : null }); };
     // A staged upload may outlive a local edit or deletion before the first record link exists.
     const current = async (owner, tag) => tag === await sumOf(owner.area, owner.key, await valueOf(owner.area, owner.key));
+    // A staged upload's answer (documents/drive-sync.js commit): written into the record's link as its push writes it.
+    const commit = async (h, link, file) => put(h, { ...link, id: file.id }, await recOf(h));
     const forget = async () => {
       const keys = (await S.keys()).filter((k) => k.startsWith(REC) || k === STAMPS);
       if (keys.length) await S.remove(keys);
     };
     // Whether a change to this key is one this layer listens for.
     const watches = (area, key) => !!catOf(area, key) || (area === 'local' && NOTES_KEY.test(key));
-    return { stamp, full, changes, sweep, snapshot, replay, failed, current, forget, catOf, watches };
+    return { stamp, full, changes, sweep, snapshot, replay, failed, current, commit, forget, catOf, watches };
   };
 
   return { REC, FILE, STAMPS, CATS, SNAP, catOf, canon, clean, join, mergeNote, mergeFolders, notesArea, create };

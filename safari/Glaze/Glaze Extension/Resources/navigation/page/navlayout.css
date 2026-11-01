@@ -5,7 +5,9 @@
 [data-gz-nav-id][hidden] { display: none !important; }
 
 /* A layout's icon for a native item stands in for the item's own, which stays in the page for when the Look comes off. */
-[data-gz-nav-iconed] :is(svg:not(.gz-nav-icon), .MuiListItemIcon-root, .ic-avatar) { display: none !important; }
+[data-gz-nav-iconed] svg:not(.gz-nav-icon),
+[data-gz-nav-iconed] :where(.MuiListItemIcon-root):is(.MuiListItemIcon-root, svg:not(.gz-nav-icon)),
+[data-gz-nav-iconed] :where(.ic-avatar):is(.ic-avatar, svg:not(.gz-nav-icon)) { display: none !important; }
 .gz-nav-icon { flex: none; width: var(--gz-nav-icon, 24px); height: var(--gz-nav-icon, 24px); }
 #header .gz-nav-link > svg, .primary-navigation .gz-nav-link > svg { flex: none; width: 22px; height: 22px; }
 #header .gz-nav-link { display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; }
@@ -40,10 +42,13 @@ html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-
   }
   html[data-gz-nav-place="top"] .MuiDrawer-paper[data-gz-nav-shell]:not(#gz-nav) { inset: 0 0 auto 0 !important; border-top: 0; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); }
   html[data-gz-nav-place="dock"] .MuiDrawer-paper[data-gz-nav-shell]:not(#gz-nav) { inset: auto auto 12px 50% !important; transform: translateX(-50%); max-width: calc(100vw - 32px); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius, 12px); box-shadow: var(--gz-shadow); }
-  html[data-gz-nav-place] .MuiDrawer-paper[data-gz-nav-shell] :is(footer, [class*="makeStylesfooter"], .gz-nav-widgets) { display: none !important; }
+  html[data-gz-nav-place] .MuiDrawer-paper[data-gz-nav-shell] :where(footer):is(footer, .gz-nav-widgets),
+  html[data-gz-nav-place] .MuiDrawer-paper[data-gz-nav-shell] .gz-nav-widgets,
+  html[data-gz-nav-place] .MuiDrawer-paper[data-gz-nav-shell] [class*="makeStylesfooter"] { display: none !important; }
   html[data-gz-nav-place] .MuiDrawer-paper[data-gz-nav-shell] header { flex: none; height: 100%; }
   html[data-gz-nav-place] .MuiDrawer-paper[data-gz-nav-shell] header img { width: auto !important; height: calc(var(--gz-nav-bar) - 16px) !important; }
-  html[data-gz-nav-place] .MuiDrawer-paper[data-gz-nav-shell] :is([data-gz-nav-root], [data-gz-nav-root] ul):not(#gz-nav) { display: flex !important; flex-direction: row !important; align-items: center; height: 100%; margin: 0; padding: 0 !important; gap: 4px; }
+  html[data-gz-nav-place] .MuiDrawer-paper[data-gz-nav-shell] :where([data-gz-nav-root]):is([data-gz-nav-root], [data-gz-nav-root] ul):not(#gz-nav),
+  html[data-gz-nav-place] .MuiDrawer-paper[data-gz-nav-shell] :is([data-gz-nav-root] ul):not(#gz-nav) { display: flex !important; flex-direction: row !important; align-items: center; height: 100%; margin: 0; padding: 0 !important; gap: 4px; }
   html[data-gz-nav-place] .MuiDrawer-paper[data-gz-nav-shell] [data-gz-nav-root] li { flex: none; }
   html[data-gz-nav-place] .MuiDrawer-paper[data-gz-nav-shell] [data-gz-nav-root] a:not(#gz-nav) { width: auto !important; height: calc(var(--gz-nav-bar) - 12px) !important; white-space: nowrap; }
   html[data-gz-nav-place] .MuiDrawer-paper[data-gz-nav-shell] .gz-nav-group { padding: 0 4px 0 12px; border-inline-start: 1px solid var(--gz-border-line, var(--gz-line)); }
@@ -67,7 +72,9 @@ html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-
   html[data-gz-nav-place] #header .ic-app-header__menu-list-link { height: calc(var(--gz-nav-bar) - 6px); padding: 4px 10px; box-sizing: border-box; }
   html[data-gz-nav-place] #header .ic-app-header__logomark-container { height: 100%; }
   html[data-gz-nav-place] #header .gz-nav-group { padding: 0 4px 0 12px; border-inline-start: 1px solid var(--gz-border-line, var(--gz-line)); }
-  html[data-gz-nav-place] body:not(#gz-nav) :is(#wrapper, .ic-Layout-wrapper, .tray-with-space-for-global-nav) { margin-inline-start: 0 !important; }
+  html[data-gz-nav-place] body:not(#gz-nav) #wrapper,
+  html[data-gz-nav-place] body:not(#gz-nav) :where(.ic-Layout-wrapper):is(.ic-Layout-wrapper, #wrapper),
+  html[data-gz-nav-place] body:not(#gz-nav) :where(.tray-with-space-for-global-nav):is(.tray-with-space-for-global-nav, #wrapper) { margin-inline-start: 0 !important; }
   html[data-gz-nav-place="top"] #wrapper { padding-top: var(--gz-nav-bar); }
   html:is([data-gz-nav-place="bottom"], [data-gz-nav-place="dock"]) #wrapper { padding-bottom: calc(var(--gz-nav-bar) + 16px); }
   /* Previous and Next, fixed to the window's bottom (inline) where the bar now is: they stand on it. */

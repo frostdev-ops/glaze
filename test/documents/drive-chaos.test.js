@@ -60,21 +60,27 @@ test('a worker stopped at any await of a first push (its write landed or not) st
   assert.ok(stopped > 8, `stopped ${stopped} times`);
 });
 
-// Tiny transfers (C.TINY): past a few hundred bytes a transfer goes large. In 4.0.1 nothing is staged: nearly every document
-// and many records are too large to sync, stay on their device, marked, and the rest converge. With the stage on (staged,
-// 4.0.2's), most are sent in chunks across runs and workers and come in by range; a kill applied at a chunk leaves Drive part
-// of it.
+// Tiny transfers (C.TINY): past a few hundred bytes a transfer goes large, as the worker runs them (background/background.js
+// env.staged): nearly every document, JSON copy and record goes in chunks across runs and workers and comes in by range; a
+// kill applied at a chunk leaves Drive part of it. With the stage off (staged: false, 4.0.1's builds) nearly every document
+// and many records are too large to sync, stay on their device, marked, and the rest converge.
 for (const seed of [1, 2, 3, 4, 5]) {
   test(`tiny transfers, seed ${seed}: ${ITER} operations on ${DEVICES} devices converge with nothing lost`, async () => {
     const r = await C.play(seed, { ops: ITER, devices: DEVICES, tiny: true });
     assert.ok(r.ok, show(r));
   });
 }
+for (const seed of [1, 2]) {
+  test(`tiny transfers, the stage off, seed ${seed}: what is past one request stays on its device, marked, and the rest converge`, async () => {
+    const r = await C.play(seed, { ops: ITER, devices: DEVICES, tiny: true, staged: false });
+    assert.ok(r.ok, show(r));
+  });
+}
 
-test('tiny transfers, staged (4.0.2): a worker stopped at any await of a first push, mid-chunk too, still converges', { todo: `known: staged-kill-duplicate (${FINDINGS})` }, async () => {
+test('tiny transfers: a worker stopped at any await of a first push, mid-chunk too, still converges', async () => {
   const base = [{ t: 'paper', k: 'new', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'pdf', k: 'new', d: 0, pick: 0, pick2: 0, s: 2 }, { t: 'setting', d: 0, k: 'colors', pick: 0, s: 3 }, { t: 'note', k: 'new', d: 0, pick: 0, pick2: 0.9, s: 4 }];
   let stopped = 0, cut = 0;
-  for (let kill = 1; ; kill += 29) {
+  for (let kill = 1; ; kill += 7) {
     const r = await C.play(1, { list: [...base, { t: 'run', d: 0, how: 'run', s: 5, kill, apply: kill % 2 === 1 }], devices: 2, join: 'all', tiny: true, staged: true });
     if (!r.trace.some((l) => /killed/.test(l))) break;
     stopped++;
@@ -88,7 +94,7 @@ test('tiny transfers, staged (4.0.2): a worker stopped at any await of a first p
 // (fixed: true; drop its TODO seeds).
 for (const [name, k] of Object.entries(C.KNOWN)) {
   test(`${k.fixed ? 'fixed' : 'known'} (${name}): ${k.about}`, { todo: k.fixed ? undefined : FINDINGS }, async () => {
-    const r = await C.play(1, { list: k.repro, devices: k.devices || 2, join: k.join || 'all', tiny: !!k.tiny, staged: !!k.staged });
+    const r = await C.play(1, { list: k.repro, devices: k.devices || 2, join: k.join || 'all', tiny: !!k.tiny, ...(k.staged !== undefined && { staged: k.staged }) });
     if (k.stops) assert.ok(r.trace.some((l) => l.includes(`killed at ${k.stops}`)), `its kill lands at ${k.stops}\n${r.trace.join('\n')}`);
     assert.ok(r.ok, show(r));
   });

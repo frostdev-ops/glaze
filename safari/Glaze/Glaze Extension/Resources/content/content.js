@@ -557,6 +557,7 @@
     records = records.filter((r) => !globalThis.GZ_LIGHT?.owns(r) && !r.target.closest?.('.gz-game,.gz-game-dialog,.gz-game-world') && !(ultra && r.target.closest?.('[id^="gz-"]')));
     if (!records.length) return;
     X.lift(records);
+    const added = [];
     for (const r of records) {
       if (ultra && r.attributeName === 'aria-checked') {
         if (r.oldValue !== 'true' && r.target.getAttribute('aria-checked') === 'true' && Date.now() <= (reviewing.get(r.target) || 0)) { reviewing.delete(r.target); celebrate(r.target); }
@@ -571,9 +572,10 @@
       for (const n of r.addedNodes) {
         if (n.nodeType !== 1) continue;
         dirty.add(n);
-        if (ultra) X.gate(n); // native additions may need first-paint nav discovery
+        added.push(n);
       }
     }
+    if (ultra && added.length) X.gate(added); // native additions may need first-paint nav discovery
     // Too many separate subtrees to be worth tracking: one full pass is cheaper.
     if (dirty.size + touched.size > 500) { dirty.clear(); touched.clear(); full = true; }
     if (!timer) timer = setTimeout(flush, 150);

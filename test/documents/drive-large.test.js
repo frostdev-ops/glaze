@@ -1,7 +1,8 @@
-// Sync to Google Drive in 4.0.1: an item whose file or JSON copy is past one request (documents/drive.js SMALL, 5 MB) never
-// goes up or comes down; it stays on the device, marked too large (storage.local driveSyncLarge), and nothing is staged. A
-// document that grows past it keeps its last synced copy in Drive untouched, and syncs again once it shrinks. Nothing is
-// trashed or deleted for it. Staged transfers (test/documents/drive-transfers.test.js) come back in 4.0.2.
+// Sync to Google Drive with its stage off (env.staged unset, as 4.0.1's builds ran it): an item whose file or JSON copy is
+// past one request (documents/drive.js SMALL, 5 MB) never goes up or comes down; it stays on the device, marked too large
+// (storage.local driveSyncLarge), and nothing is staged. A document that grows past it keeps its last synced copy in Drive
+// untouched, and syncs again once it shrinks. Nothing is trashed or deleted for it. With the stage on, as the worker runs it
+// (test/documents/drive-transfers.test.js), the same holds past what a transfer carries (a JSON copy over 64 MB).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');

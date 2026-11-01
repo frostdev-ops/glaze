@@ -32,8 +32,9 @@ const size = (f) => fs.statSync(path.join(root, f)).size;
 // 794 on every site: GZ_CTX.parts(), the check for a Look that has parts, the preview hand-over and two more values of
 // defaults.js's bg.kind. Everything else about them loads on demand (looks/lookparts.js, looks/page/lookparts.js).
 // Ultra's stores (D, 2026-10-30, against a6fa9919): content-ultra.js's own identity, memberships and gradebook reads move to
-// courses/ultra.js on demand, 7 bytes fewer on Ultra.
-const FIRST_SCRIPT_BASELINE = { ultra: 225195 + 427 + 525 + 794 - 6, canvas: 201446 + 427 + 545 + 794, moodle: 172222 + 427 + 488 + 794 };
+// courses/ultra.js on demand, 7 bytes fewer on Ultra. Ultra's page-link view transition gone (perf/click-feel, against
+// 11e2a04e): 3397 bytes fewer, its three allowances included, at the same headroom.
+const FIRST_SCRIPT_BASELINE = { ultra: 225195 + 427 + 525 + 794 - 6 - 2632, canvas: 201446 + 427 + 545 + 794, moodle: 172222 + 427 + 488 + 794 };
 // Look parts put small hooks in the first script; the owner approved raising the baseline for them
 // (2026-10-16). One line per package, the bytes it added: the motion package's moment emitter ('glaze:moment', the
 // completion and new-grade call sites) and the hook that loads looks/page/motionx.js when a Look has animations, effects or a
@@ -139,10 +140,6 @@ const LOOK_OFFER = 577;
 // page/consent.js) loads on demand. Measured against a7e4bc9.
 // Review against 28b5425: detected-kind consent gating and default-port early-sheet guard included.
 const LMS_CONSENT = { ultra: 1146, canvas: 898, moodle: 898 };
-// Ultra's own Sign Out (WP-U1; the owner's audit-fix allowance, 2026-10-22): content-ultra.js's page-transition click handler
-// leaves native fragment actions and logout route/query links alone, so course tabs see the trusted click and forget their
-// pictures: 243 bytes on Ultra. Measured against immutable package base c1bdd3e.
-const ULTRA_SIGNOUT = { ultra: 243, canvas: 0, moodle: 0 };
 // LMS request discipline (WP-A1; the owner's audit-fix allowance): content-ultra.js's failure gates for /users/me and each
 // gradebook (a minute, a 401 until the page changes), the hook that reads gradebooks and paged course contents through
 // courses/ultra.js and the site's queue, on-screen cards only, and the check that keeps an incomplete or pre-paging read from
@@ -180,14 +177,10 @@ const CTAB_ONE_BG = 2218;
 // system's light/dark switch to core/motion.js's swap where a feature has loaded it, else applies them at once: 159 bytes on
 // every site. Measured against 27f83a1.
 const UI_SWAP = 159;
-// Ultra's page-link crossfade (content-ultra.js) handles the rejections of a transition the browser aborts (a resize),
-// which reached the page as errors (owner's go-ahead for the Mac session's requests, 2026-10-23): 118 bytes on Ultra.
-// Measured against bf11791.
-const ULTRA_VT_ABORT = { ultra: 118, canvas: 0, moodle: 0 };
 // Chrome rejects a skipped or timed-out crossfade's ready in the page's own world too, where a school's error tracker would
-// collect it (owner-approved raises, 2026-10-19): Ultra's page-link crossfade asks for and tells the page world's guard
-// (content-ultra.js), and content.js asks for that guard from every frame: 367 bytes on Ultra, 23 elsewhere. Against b2d3ed7.
-const VT_GUARD = { ultra: 367, canvas: 23, moodle: 23 };
+// collect it (owner-approved raises, 2026-10-19): content.js asks for the page world's guard from every frame: 23 bytes on
+// every site. Against b2d3ed7.
+const VT_GUARD = { ultra: 23, canvas: 23, moodle: 23 };
 // The Frostdev Look (a named raise, as the owner approved for first scripts on 2026-10-19): its row in GZ_LOOKS (palette, fonts,
 // shape and the topography scene, 90% surfaces) and the two names it adds to GZ_SPEC (the scene, the pointer set) in defaults.js, which
 // every site reads for per-course Looks: 408 bytes on every site. Its scene, parts and pointers load only when worn.
@@ -322,6 +315,15 @@ const NO_SHIFT = { ultra: 350 + 36, canvas: 350, moodle: 350 };
 // approval): defaults.js's enhance.feedback, its switch, 130 bytes on every site, where content.js reads every GZ_DEFAULTS key.
 // The press and the skeleton (navigation/page/feedback.js) load on demand through content/routes.js. Measured against 9e9aac17.
 const FEEDBACK = 130;
+// A calm cold load (fix/calm-cold-load, 2026-10-31; a named raise under the owner's 2026-10-19 approval): content-ultra.js arms
+// its render-blocking early sheets on a school's own Ultra host too once Glaze themed it in this tab (content.js's kept
+// first-paint settings, on), so Ultra's grey boot screen never paints before Glaze's sheet hides it: 160 bytes on Ultra, the
+// excess over its 3 bytes of headroom. The boot state itself (navigation/page/feedback.js) loads on demand. Measured against c307ae5c.
+const COLD_LOAD = { ultra: 160, canvas: 0, moodle: 0 };
+// One gate per mutation batch on Ultra (perf/click-feel, 2026-10-31; a named raise under the owner's 2026-10-19 approval):
+// content.js collects a batch's added nodes for content-ultra.js's gate, which took one node at a time and re-placed the course
+// tabs' strip for each: 61 bytes on every site, 26 more on Ultra. Measured against 11e2a04e.
+const GATE_BATCH = { ultra: 61 + 26, canvas: 61, moodle: 61 };
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what background/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;
@@ -330,7 +332,7 @@ const FIRST_SCRIPT = { ultra: entry((c) => c.js.includes('content/content-ultra.
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + (site === 'ultra' ? ULTRA_EARLY_ME : 0) + UI_SWAP + ULTRA_VT_ABORT[site] + VT_GUARD[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS + SYLLABUS_DOCS + WRITER + WRITER_SETTINGS + CTAB_PALETTE[site] + LOOK_CATALOG + COURSE_LOOKS_SYNC + BB_PREVIEWS + CANVAS_OPEN + AREA_PATHS[site] + ULTRA_PASSES[site] + CTAB_STANDBY + NAV_FIRST_PAINT[site] + INSTANT_COPIES[site] + ULTRA_STALENESS[site] + NO_SHIFT[site] + FEEDBACK;
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + (site === 'ultra' ? ULTRA_EARLY_ME : 0) + UI_SWAP + VT_GUARD[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS + SYLLABUS_DOCS + WRITER + WRITER_SETTINGS + CTAB_PALETTE[site] + LOOK_CATALOG + COURSE_LOOKS_SYNC + BB_PREVIEWS + CANVAS_OPEN + AREA_PATHS[site] + ULTRA_PASSES[site] + CTAB_STANDBY + NAV_FIRST_PAINT[site] + INSTANT_COPIES[site] + ULTRA_STALENESS[site] + NO_SHIFT[site] + FEEDBACK + GATE_BATCH[site] + COLD_LOAD[site];
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }
@@ -604,6 +606,188 @@ test('Ultra\'s :has() rules keep a small change from restyling the whole page', 
     const anchor = h.compound.replace(/:(is|where|not)\([^)]*\)/g, '');
     assert.ok(/[.#[]/.test(anchor) || !BROAD.has(anchor.trim().toLowerCase()), `${f}:${h.line} ${h.compound}:has(${h.arg}) before a combinator is tried on every ${anchor.trim() || 'element'}`);
   }
+});
+
+// ---- Rules Chrome tries on every element ------------------------------------------------------------------------------
+// Chrome files each selector of a rule under the id, class, tag or attribute of its rightmost compound and tries it only on
+// elements that have one; a compound whose only key is a multi-argument :is()/:where() (or `[class*=…]`, which every
+// classed element has) is tried on every element each style pass, and a compound left of a descendant or child combinator
+// with no key gives Chrome's ancestor filter nothing, so each candidate walks the page up. 270 such rules made a course open
+// cost 67 ms of style on the Neo profile (perf/css-cost, 2026-10-31). Write one selector per argument instead:
+//   `X :is(.a, .b)` → `X .a, X .b`;  `X :where(.a, .b)` → `X :where(.a), X :where(.b)`;  and when the arguments' specificities
+//   differ, a lower one is raised to the list's by its shortest top argument: `:is(.c, a.b)` → `:where(.c):is(.c, a.b), a.b`.
+// sidebar.css is counted, not yet rewritten.
+const SPLIT_LEFT = { 'navigation/page/sidebar.css': 15 };
+// What remains tried on every element once split (`*`, `[class*=…]`, :not(), pseudo-elements …), and the rules with a
+// [class*=…] or a :has() in those sheets: the counts may fall, never rise.
+const UNKEYED_MAX = 190, CLASS_STAR_MAX = 162, HAS_MAX = 140;
+// A CSS escape can include six hex digits and a terminating whitespace character, all part of one identifier.
+const escapeEnd = (text, at) => {
+  let j = at + 1;
+  if (!/[0-9a-f]/i.test(text[j] || '')) return Math.min(text.length, j + 1);
+  const start = j;
+  while (j - start < 6 && /[0-9a-f]/i.test(text[j] || '')) j++;
+  if (text[j] === '\r' && text[j + 1] === '\n') return j + 2;
+  return j + (/[\t\n\f\r ]/.test(text[j] || '') ? 1 : 0);
+};
+const identEnd = (text, at) => {
+  while (at < text.length) {
+    if (text[at] === '\\') at = escapeEnd(text, at);
+    else if (/[\w-]/.test(text[at]) || text.charCodeAt(at) >= 128) at++;
+    else break;
+  }
+  return at;
+};
+const cssName = (text) => text.replace(/\\([0-9a-f]{1,6})(?:\r\n|[\t\n\f\r ])?|\\([\s\S])/gi, (_, hex, c) => {
+  const n = parseInt(hex, 16);
+  return hex ? String.fromCodePoint(!n || n > 0x10ffff || n >= 0xd800 && n <= 0xdfff ? 0xfffd : n) : c;
+}).toLowerCase();
+const closeCss = (text, at) => {
+  const stack = []; let q = null;
+  for (let j = at; j < text.length; j++) {
+    const c = text[j];
+    if (c === '\\') { j = escapeEnd(text, j) - 1; continue; }
+    if (q) { if (c === q) q = null; continue; }
+    if (c === '"' || c === "'") q = c;
+    else if ('([{'.includes(c)) stack.push({ '(': ')', '[': ']', '{': '}' }[c]);
+    else if (c === stack.at(-1)) { stack.pop(); if (!stack.length) return j; }
+  }
+  return text.length;
+};
+const cssRules = (css) => {
+  // Comment markers inside strings or escaped identifiers are data.
+  let clean = '', quote = null;
+  for (let i = 0; i < css.length; i++) {
+    const c = css[i];
+    if (c === '\\') { const end = escapeEnd(css, i); clean += css.slice(i, end); i = end - 1; continue; }
+    if (quote) { clean += c; if (c === quote) quote = null; continue; }
+    if (c === '"' || c === "'") quote = c;
+    else if (c === '/' && css[i + 1] === '*') { const end = css.indexOf('*/', i + 2); i = end < 0 ? css.length : end + 1; continue; }
+    clean += c;
+  }
+  css = clean;
+  const out = [];
+  const walk = (from, to) => {
+    let start = from, q = null, depth = 0;
+    for (let i = from; i < to; i++) {
+      const c = css[i];
+      if (c === '\\') { i = escapeEnd(css, i) - 1; continue; }
+      if (q) { if (c === q) q = null; continue; }
+      if (c === '"' || c === "'") { q = c; continue; }
+      if (c === '(' || c === '[') { depth++; continue; }
+      if (c === ')' || c === ']') { depth--; continue; }
+      if (depth) continue;
+      if (c === ';' || c === '}') { start = i + 1; continue; }
+      if (c !== '{') continue;
+      const prelude = css.slice(start, i).trim(), end = closeCss(css, i);
+      // Grouping at-rules hold rules; the rest (@keyframes, @font-face …) hold none. A rule's own nested rules stay out.
+      if (prelude[0] === '@') { if (/^@(media|supports|layer|container|scope|starting-style|document)\b/i.test(prelude)) walk(i + 1, end); }
+      else out.push(prelude);
+      i = end; start = end + 1;
+    }
+  };
+  walk(0, css.length);
+  return out;
+};
+const depth0 = (text, at) => {
+  const cuts = []; let depth = 0, q = null;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '\\') { i = escapeEnd(text, i) - 1; continue; }
+    if (q) { if (c === q) q = null; continue; }
+    if (c === '"' || c === "'") q = c; else if (c === '(' || c === '[') depth++; else if (c === ')' || c === ']') depth--; else if (!depth && at(c)) cuts.push(i);
+  }
+  return cuts;
+};
+const selectorList = (text) => { const parts = []; let s = 0; for (const i of depth0(text, (c) => c === ',')) { parts.push(text.slice(s, i).trim()); s = i + 1; } parts.push(text.slice(s).trim()); return parts; };
+// [{ comb, text }] for each compound of a complex selector.
+const compoundsOf = (sel) => {
+  const t = sel.trim(), out = []; let start = 0, comb = '';
+  const cuts = depth0(t, (c) => /[\s>+~]/.test(c));
+  for (let k = 0; k < cuts.length; k++) {
+    if (cuts[k] < start) continue;
+    let j = cuts[k]; while (j < t.length && /[\s>+~]/.test(t[j])) j++;
+    out.push({ comb, text: t.slice(start, cuts[k]) }); comb = t.slice(cuts[k], j).trim() || ' '; start = j;
+  }
+  out.push({ comb, text: t.slice(start) });
+  return out.filter((p) => p.text);
+};
+// The simple selectors of a compound outside parentheses: kind, name, argument.
+const simplesOf = (comp) => {
+  const out = []; let i = 0;
+  const ident = (j) => identEnd(comp, j);
+  while (i < comp.length) {
+    const c = comp[i];
+    if (c === '*') { out.push({ kind: '*' }); i++; } else if (c === '.' || c === '#') { out.push({ kind: c }); i = ident(i + 1); } else if (c === '[') {
+      const end = closeCss(comp, i); let at = i + 1;
+      while (/\s/.test(comp[at] || '')) at++;
+      let j = comp[at] === '*' ? at + 1 : ident(at);
+      if (comp[j] === '|' && comp[j + 1] !== '=') { at = j + 1; j = ident(at); }
+      const op = /^[~|^$*]?=/.exec(comp.slice(j, end).trim())?.[0] || '';
+      out.push({ kind: '[', name: cssName(comp.slice(at, j)), op }); i = end + 1;
+    } else if (c === ':') {
+      const element = comp[i + 1] === ':', j = ident(i + (element ? 2 : 1)), name = cssName(comp.slice(i + (element ? 2 : 1), j));
+      if (comp[j] === '(') { const k = closeCss(comp, j); out.push({ kind: element ? '::' : ':', name, arg: comp.slice(j + 1, k) }); i = k + 1; } else { out.push({ kind: element ? '::' : ':', name }); i = j; }
+    } else if (/[\w-]|\\/.test(c) || comp.charCodeAt(i) >= 128) { out.push({ kind: 'tag' }); i = ident(i); } else i++;
+  }
+  return out;
+};
+const lastOf = (sel) => compoundsOf(sel).at(-1)?.text || '';
+const oneArg = (s) => (s.name === 'is' || s.name === 'where') && s.arg != null && selectorList(s.arg).length === 1;
+// Filed by Chrome: an id, class, tag or attribute (`class` only by name), or a one-argument :is()/:where() it files.
+const keyedComp = (comp) => simplesOf(comp).some((s) => ['#', '.', 'tag'].includes(s.kind) || (s.kind === '[' && !(s.name === 'class' && s.op)) || (oneArg(s) && keyedComp(lastOf(s.arg))));
+// What the ancestor filter takes from a compound: the same, `class` attributes aside.
+const hashedComp = (comp) => simplesOf(comp).some((s) => ['#', '.', 'tag'].includes(s.kind) || (s.kind === '[' && s.name !== 'class') || (oneArg(s) && hashedComp(lastOf(s.arg))));
+// Only the padding idiom :where(x):is(x, pad) suppresses a list; an unrelated, unkeyed :where() does not file it.
+const listedKeys = (comp) => {
+  const ss = simplesOf(comp);
+  return ss.some((s) => {
+    if (!['is', 'where'].includes(s.name) || s.arg == null) return false;
+    const args = selectorList(s.arg);
+    return args.length > 1 && args.some((a) => keyedComp(lastOf(a))) && !ss.some((w) => w.name === 'where' && oneArg(w) && args.includes(w.arg.trim()));
+  });
+};
+// A selector that could be split: its rightmost compound unkeyed but listing keyed arguments, or (its rightmost unkeyed) the
+// compound before a descendant or child combinator with no key of its own but a list of keyed ones.
+const splittable = (sel) => {
+  const parts = compoundsOf(sel), last = parts.at(-1);
+  if (!last || keyedComp(last.text)) return false;
+  if (listedKeys(last.text)) return true;
+  const before = parts.at(-2);
+  return !!before && /^>?$/.test(last.comb.trim()) && !hashedComp(before.text) && listedKeys(before.text);
+};
+const ultraSelectors = (f) => cssRules(read(f)).filter((s) => !s.includes('&')).flatMap(selectorList);
+test('Ultra\'s sheets file every rule they can: no list in a rule\'s rightmost part that one selector per entry would avoid', () => {
+  for (const f of ULTRA_SHEETS) {
+    const left = ultraSelectors(f).filter(splittable);
+    assert.ok(left.length <= (SPLIT_LEFT[f] || 0), `${f}: ${left.length - (SPLIT_LEFT[f] || 0)} more selectors Chrome tries on every element (one selector per argument files them):\n${left.slice(0, 5).join('\n')}`);
+  }
+});
+test('Ultra\'s sheets: rules tried on every element, [class*=…] and :has() only fall', () => {
+  const all = ULTRA_SHEETS.flatMap(ultraSelectors), rules = ULTRA_SHEETS.flatMap((f) => cssRules(read(f)));
+  const unkeyed = all.filter((s) => !keyedComp(lastOf(s))).length, classStar = rules.filter((r) => /\[class\s*\*=/.test(r)).length, has = rules.filter((r) => r.includes(':has(')).length;
+  assert.ok(unkeyed <= UNKEYED_MAX, `${unkeyed} selectors tried on every element (was ${UNKEYED_MAX}): give each a class, id, tag or attribute in its rightmost part`);
+  assert.ok(classStar <= CLASS_STAR_MAX, `${classStar} rules with a [class*=…] (was ${CLASS_STAR_MAX}): every classed element checks one`);
+  assert.ok(has <= HAS_MAX, `${has} rules with a :has() (was ${HAS_MAX})`);
+  if (unkeyed < UNKEYED_MAX || classStar < CLASS_STAR_MAX || has < HAS_MAX) console.log(`perf-budget: lower UNKEYED_MAX to ${unkeyed}, CLASS_STAR_MAX to ${classStar}, HAS_MAX to ${has}`);
+});
+test('the rule scan sees what Chrome files', () => {
+  assert.deepEqual(cssRules('a{}@media (x){b{c:d}}@keyframes k{from{e:f}}d{&:hover{}}@layer l;e,f{}'), ['a', 'b', 'd', 'e,f']);
+  for (const [sel, keyed] of [['#site-wrap .a', true], ['#site-wrap :is(.a, .b)', false], ['#site-wrap :where(.a)', true], ['x [class*="y"]', false], ['x [data-y]', true],
+    [':where(.c):is(.c, a.b)', true], [':is(.a, .b) *', false], ['a > :not(.b)', false], ['::selection', false], ['span::before', true]]) assert.equal(keyedComp(lastOf(sel)), keyed, sel);
+  for (const [sel, can] of [['#site-wrap :is(.a, .b)', true], [':is(.a, .b) *', true], [':is(.a, .b) > *', true], [':is(.a, .b) + *', false], ['.x :is(.a, .b) *', true],
+    ['#site-wrap .a', false], ['#site-wrap :is([class*="a"], [class*="b"])', false], ['#site-wrap :where(:not(a, b))', false], ['.a:is(.b, .c) *', false]]) assert.equal(splittable(sel), can, sel);
+});
+
+test('the CSS ratchet treats quoted delimiters and CSS escapes as selector data', () => {
+  assert.deepEqual(cssRules(String.raw`.a\{b{} [title="/*literal*/"]{} @media (width > 1px){.c{}}`), [String.raw`.a\{b`, '[title="/*literal*/"]', '.c']);
+  assert.equal(splittable(':is([title=")"], .a)'), true, 'a quoted parenthesis cannot close :is()');
+  assert.equal(keyedComp('[class*="]"]'), false, 'a quoted bracket cannot end an attribute');
+  assert.equal(keyedComp(String.raw`[cl\61 ss*="x"]`), false, 'an escaped class attribute is still a class attribute');
+  assert.equal(splittable(String.raw`:is(.a\), .b)`), true, 'an escaped parenthesis is part of the class');
+  assert.deepEqual(compoundsOf(String.raw`.a\31 .b > *`).map((p) => p.text), [String.raw`.a\31 .b`, '*'], 'hex escape terminator whitespace is not a combinator');
+  assert.deepEqual(selectorList(String.raw`:is([title="a,b]"], .a\,b), .c`), [String.raw`:is([title="a,b]"], .a\,b)`, '.c']);
+  assert.equal(splittable(':where(:not(.disabled)):is(.a, .b)'), true, 'an unkeyed :where() cannot hide a list from the ratchet');
 });
 
 test('review: local development policy is loaded by the worker, outside every first content script', () => {

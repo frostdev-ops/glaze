@@ -507,15 +507,15 @@ test('Disconnect stops a download even inside a large network chunk', async () =
 // The pages' part (page), run as a page runs it: drive.js in a realm with a document, the runtime's messages and ports.
 // status: the worker's answer to glaze:drive status (background.js: connected, and picker, whether Google's Picker works
 // in this browser); changed(): storage.local's google changing, which asks again.
-const pageOf = ({ files, drive, path = '/writer.html', status = { ok: true, connected: true, picker: true } }) => {
+const pageOf = ({ files, drive, path = '/writer.html', status = { ok: true, connected: true, picker: true }, google, timeout = setTimeout }) => {
   const vm = require('node:vm'), fs = require('node:fs');
   const notes = [], heard = [];
   const ctx = vm.createContext({
-    console, setTimeout, clearTimeout, setInterval, clearInterval, URLSearchParams, TextEncoder, File, atob, btoa, crypto, document: {}, location: { pathname: path },
+    console, setTimeout: timeout, clearTimeout, setInterval, clearInterval, URLSearchParams, TextEncoder, File, atob, btoa, crypto, document: {}, location: { pathname: path },
     GZ_I18N: { t: (k) => k },
     chrome: {
       runtime: {
-        sendMessage: async (m) => (m.type === 'glaze:drive' ? { ...status } : { ok: true, files }),
+        sendMessage: async (m) => (m.type === 'glaze:drive' ? { ...status } : google ? google(m) : { ok: true, files }),
         connect: () => { const [page, worker] = ports(); D.serve(worker, { drive, allowed: async () => true }); return page; },
       },
       storage: { onChanged: { addListener: (f) => heard.push(f) } }, i18n: { getUILanguage: () => 'en' },
@@ -526,6 +526,17 @@ const pageOf = ({ files, drive, path = '/writer.html', status = { ok: true, conn
   const changed = async (next) => { Object.assign(status, next); for (const f of heard) f({ google: {} }, 'local'); await settle(); };
   return { page: ctx.GZ_DRIVE.page, api: { notify: (m) => notes.push(m) }, notes, settle, changed };
 };
+
+test('Safari Documents polls with the state of its own Picker invocation', async () => {
+  const sent = [];
+  const p = pageOf({ drive: harness([]).drive, timeout: (f) => setImmediate(f), google: async (m) => {
+    sent.push(m);
+    return m.op === 'pick' ? { ok: false, why: 'pending', state: 'documents-choice' } : { ok: true, files: [] };
+  } });
+  await p.settle();
+  await p.page.items(p.api, () => {})[0].run();
+  assert.equal(sent[1].state, 'documents-choice');
+});
 
 test('the paper\'s From Google Drive brings a file under a name a file can have, which Writer\'s import takes', async () => {
   const L = require('../../extension/writer/writer-submit.js');

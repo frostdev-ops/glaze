@@ -929,7 +929,8 @@
 // ---- embedded: Documents as a page of the school's site (settings/page/settingspage.js). It shows, and the worker takes its
 // writes, only once this document claims the one-use pass Glaze's page sends it after its hello (background/background.js
 // 'glaze:papers'): a site framing this page itself gets an empty one. It talks to that page over the pass's MessageChannel:
-//   frame → page: opened { at } (this document's query once the list or a document shows), leave (Close, Escape);
+//   frame → page: opened { at } (this document's query once the list or a document shows), list (Close in a document),
+//   leave (Close on the list, Escape);
 //   page → frame: go { at } (Back or Forward to the list or a document).
 // A link to another of Documents' addresses replaces this document, so the tab's history is the page's to keep.
 if (window.top !== window) (() => {
@@ -949,12 +950,12 @@ if (window.top !== window) (() => {
   const leave = () => beforeLeave(() => port?.postMessage({ type: 'leave' }));
   // Back or Forward in the tab: where its entry says, or (here already, or nowhere Documents goes) where this is.
   const go = (at) => { if (/^(\?[^#]*)?$/.test(at) && at !== location.search) beforeLeave(() => location.replace(`papers.html${at}`)); else port?.postMessage({ type: 'opened', at: location.search }); };
-  // Close: at the end of a document's top bar, or level with the list's heading.
+  // Close: at the end of a document's top bar, where it shows the list, or level with the list's heading, where it leaves.
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'gd-btn';
   for (const [k, v] of [['background', 'var(--gz-surface)'], ['color', 'var(--gz-ink)'], ['border', '1px solid var(--gz-line-strong)'], ['flex', 'none']]) close.style.setProperty(k, v);
-  close.addEventListener('click', leave);
+  close.addEventListener('click', () => { if (root.dataset.mode) beforeLeave(() => port?.postMessage({ type: 'list' })); else leave(); });
   const align = () => {
     const h = $('heading'), main = $('list');
     if (!h || close.parentNode !== main) return;

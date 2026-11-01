@@ -14,8 +14,21 @@
      own reading width still holds its prose. */
   html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #wrapper { max-width: none; }
   [data-gz-sidebar-host] { position: relative; box-sizing: border-box; }
-  /* A course outline's Details & Actions while Ultra fills it: as tall as it was last time (navigation/page/sidebar.js hold). */
-  html[data-gz-sb-held] #site-wrap [data-gz-sidebar-host].outline-actions > .js-details-and-actions { min-height: var(--gz-sb-held) !important; box-sizing: border-box !important; }
+  /* A course outline's Details & Actions while Ultra fills it: as tall as it was last time (navigation/page/sidebar.js hold),
+     from when Ultra adds it, before the sidebar takes the column. */
+  html[data-gz-sb-held] #site-wrap aside.outline-actions > .js-details-and-actions { min-height: var(--gz-sb-held) !important; box-sizing: border-box !important; }
+  /* Angular keeps it ng-hide (display: none) while it fills: the room is an unseen box while This page is shown. */
+  html[data-gz-sb-held]:not([data-gz-sidebar="collapsed"]) #site-wrap aside.outline-actions:not([data-gz-sb-fold-page], [data-gz-sb-page-hidden], [data-gz-sb-overlay]) > .js-details-and-actions.ng-hide { display: block !important; visibility: hidden !important; }
+  /* A course outline's column Ultra has just drawn, until the sidebar takes it a pass later (navigation/page/sidebar.js
+     settled): not shown in Ultra's place first, so it never moves to the window's edge in view. */
+  html[data-gz-sb-ultra]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap aside.outline-actions:not([data-gz-sidebar-host]) { visibility: hidden; }
+  /* A course opening while the sidebar is a column fades in without rising (content/motion.css gz-in): a rise running on
+     an ancestor makes it the fixed column's containing block, and the outline's column rode the page into place. */
+  html[data-gz-sb-ultra]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap section.course.bb-offcanvas-container,
+  html[data-gz-sb-ultra]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap .course-content-container > .panel-wrap,
+  html[data-gz-sb-ultra]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap section.course-outline-content { animation-name: gz-fade; }
+  html[data-gz-sb-unsized] #site-wrap aside.outline-actions > #gz-nt-block, html[data-gz-sb-unsized] #site-wrap aside.outline-actions > #gz-sb-widgets { visibility: hidden; }
+  html[data-gz-sb-notes][data-gz-sidebar="expanded"] #site-wrap aside.outline-actions[data-gz-sidebar-host] > #gz-sb-widgets { visibility: hidden; }
   [data-gz-sidebar-host] > #right-side { width: auto !important; }
   html:not([data-gz-sidebar]) #gz-sidebar, html[data-gz-sidebar="none"] #gz-sidebar { display: none !important; }
   html[data-gz-sidebar="none"] :is(.gz-sb-resize, .gz-sb-head, .gz-sb-pagehead, #gz-sb-widgets) { display: none !important; }
@@ -153,13 +166,15 @@
 
   /* The header: the title, Jump to widgets, the menu and collapse, staying at the top while the column scrolls. */
   .gz-sb-head {
-    position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem;
+    position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: nowrap; align-items: center; gap: 0.25rem;
     margin: 0 calc(-1 * var(--gz-sb-pad)) var(--gz-sb-gap); padding: 0.6rem var(--gz-sb-pad) 0.5rem; border-bottom: 1px solid var(--gz-border-line, var(--gz-line));
     background: var(--gz-sb-head-fill); backdrop-filter: var(--gz-sb-filter);
   }
   html[data-gz-sb-notitle] .gz-sb-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  /* One row: Jump to widgets showing later takes room from the title, never a second row that moves the column under it. */
+  .gz-sb-head > .gz-sb-btn, .gz-sb-head > .gz-sb-icon { flex: none; white-space: nowrap; }
   html[data-gz-sb-notitle] .gz-sb-head { justify-content: flex-end; }
-  .gz-sb-title { flex: 1 1 6rem; min-width: 0; margin: 0; padding: 0; border: 0; font: 600 0.95rem/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); overflow-wrap: anywhere; text-transform: none; letter-spacing: 0; }
+  .gz-sb-title { flex: 1 1 6rem; min-width: 0; margin: 0; padding: 0; border: 0; font: 600 0.95rem/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: none; letter-spacing: 0; }
   :is(.gz-sb-head, #gz-sb-widgets, .gz-sb-own, .gz-sb-menu) .gz-sb-btn, .gz-sb-btn, .gz-sb-icon {
     display: inline-flex; align-items: center; justify-content: center; gap: 0.25rem; padding: 0.2rem 0.75rem; font: 600 0.8rem/1.4 var(--gz-font); color: var(--gz-ink);
     background: none; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; cursor: pointer; text-decoration: none; white-space: normal; text-align: center;

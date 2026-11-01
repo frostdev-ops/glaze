@@ -257,7 +257,10 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
         if (j && !j.done) j.ctl.abort();
         else download(fid, h3.textContent.trim());
       });
-      h3.after(b);
+      // After the folder's eye when it is there: courses/page/folders.js keeps the eye beside the heading and would move it
+      // back past this button, restyling every row a second time.
+      const eye = document.getElementById(`gz-folder-eye-${fid}`);
+      (eye?.previousElementSibling === h3 ? eye : h3).after(b);
       paintDl(fid);
     }
   };

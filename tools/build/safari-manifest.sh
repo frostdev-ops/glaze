@@ -7,6 +7,8 @@
 # Code mods need Chrome: the sandbox page, its CSP and its files go too; content.js starts code mods only where the manifest
 # has the sandbox. Declarative widgets stay (mods/page/modwidgets.js, drawn by mods/page/modui.js). The files go from a
 # staged copy, never the checkout: tools/build/safari-drop.txt lists them (code mods', and Glaze's own model's engine and host).
+# Safari's From Google Drive comes back from the picker pages to documents/picked.html in a tab (background/google.js pick),
+# so that page is web-accessible to those two origins only.
 set -eu
 dir=$(CDPATH= cd -- "$(dirname "$1")" && pwd)
 here=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
@@ -33,6 +35,9 @@ for entry in manifest.get('web_accessible_resources', []):
 manifest.pop('sandbox', None)
 manifest.get('content_security_policy', {}).pop('sandbox', None)
 manifest['web_accessible_resources'] = [e for e in ({**e, 'resources': [r for r in e['resources'] if not r.startswith('mods/')]} for e in manifest.get('web_accessible_resources', [])) if e['resources']]
+picked = {'resources': ['documents/picked.html'], 'matches': ['https://frostdev.io/*', 'https://frostdev-ops.github.io/*']}
+if picked not in manifest['web_accessible_resources']:
+    manifest['web_accessible_resources'].append(picked)
 # Safari grants sites one by one in its own settings, so it keeps 3.3.8's access: every host, Ultra's entry on /ultra
 # anywhere, and the detector (content/detect.js) on every other https page, which asks before Glaze runs there.
 manifest['host_permissions'] = ['<all_urls>']

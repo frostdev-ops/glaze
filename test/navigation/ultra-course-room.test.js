@@ -17,5 +17,5 @@ test('the course panel keeps the bar\'s room when it holds the course section, a
   const wide = css.slice(css.indexOf('@media (min-width: 900px) {\n  html[data-gz-navbar~="rail"]'));
   const rule = 'html[data-gz-navbar] .course-content-container:not(.inner-wrap > section.course *) > .panel-wrap { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }';
   assert.ok(wide.includes(rule), 'the panel pads for the rail and the top bar, beside the course section\'s rule');
-  assert.ok(wide.includes('html[data-gz-navbar] .inner-wrap > :is(section.course, .routed-page) { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important;'), 'the section\'s own rule stays');
+  assert.ok(wide.includes('html[data-gz-navbar] .inner-wrap > section.course,\n  html[data-gz-navbar] .inner-wrap > :where(.routed-page):is(.routed-page, section.course) { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important;'), 'the section\'s own rule stays');
 });

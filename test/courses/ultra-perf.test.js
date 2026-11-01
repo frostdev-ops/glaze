@@ -61,11 +61,11 @@ test('Ultra native-added-subtree hooks run synchronously before the batched pass
   const added = [], dirty = new Set(); let pass;
   const schedule = vm.runInNewContext(`${core.slice(start, end)} schedule`, {
     chrome: { runtime: { id: 'glaze' } }, observer: {}, ultra: true, dirty, touched: new Set(), full: false, timer: 0, hid: () => false,
-    X: { lift() {}, gate: (node) => added.push(node) }, flush: () => {}, setTimeout: (fn) => { pass = fn; return 1; },
+    X: { lift() {}, gate: (nodes) => added.push([...nodes]) }, flush: () => {}, setTimeout: (fn) => { pass = fn; return 1; },
   });
   const a = { nodeType: 1 }, b = { nodeType: 1 }, own = { closest: () => ({}) };
   schedule([{ type: 'childList', target: {}, addedNodes: [a] }, { type: 'childList', target: own, addedNodes: [{ nodeType: 1 }] }, { type: 'childList', target: {}, addedNodes: [b] }]);
-  assert.deepEqual(added, [a, b], 'discovery happens in the observer callback, before its timer runs');
+  assert.deepEqual(added, [[a, b]], 'discovery happens in the observer callback, before its timer runs, once for the batch');
   assert.equal(typeof pass, 'function');
 });
 
@@ -93,7 +93,7 @@ test('a lit card still sweeps native style, class and child changes', () => {
   const dirty = new Set(), touched = new Set(), added = [];
   const schedule = vm.runInNewContext(`${core.slice(start, end)} schedule`, {
     chrome: { runtime: { id: 'glaze' } }, observer: {}, ultra: true, dirty, touched, full: false, timer: 0, hid: () => false, GZ_LIGHT: light,
-    X: { lift() {}, gate: (n) => added.push(n) }, flush() {}, setTimeout: () => 1,
+    X: { lift() {}, gate: (nodes) => added.push([...nodes]) }, flush() {}, setTimeout: () => 1,
   });
   const card = { closest: () => null, getAttribute: () => 'background: white; --gz-mx: 1px; --gz-my: 2px;' };
   schedule([{ type: 'attributes', attributeName: 'style', target: card, oldValue: '--gz-mx: 1px; --gz-my: 2px;' }]);
@@ -103,7 +103,7 @@ test('a lit card still sweeps native style, class and child changes', () => {
   assert.ok(touched.has(card), 'only style records may be light-only writes');
   const child = { nodeType: 1 };
   schedule([{ type: 'childList', target: card, addedNodes: [child] }]);
-  assert.deepEqual(added, [child]);
+  assert.deepEqual(added, [[child]]);
 });
 
 test('a queued flush stays paused while hidden and rediscovers native roots on reveal', () => {
