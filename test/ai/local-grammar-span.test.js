@@ -202,3 +202,67 @@ test('no provider is sent span: a task\'s request carries its schema bare, the s
   assert.ok(!JSON.stringify(cfg.seen[0].schema).includes('"span"'));
   assert.deepEqual(cfg.seen[0].schema, S.bare(RV.OUTPUT));
 });
+
+// Feed single bytes so a rejected prefix cannot hide inside a larger token.
+const spanMatcher = (src, opts = {}, bounds = {}) => {
+  const g = G.compile(S.obj({ q: span(opts, bounds) }, ['q']), V, { sources: { src } });
+  const m = g.matcher();
+  for (const b of enc.encode('{"q":"')) m.advance(b);
+  return { g, m };
+};
+const takesSpan = (g, q) => {
+  const m = g.matcher();
+  for (const b of enc.encode(JSON.stringify({ q }))) {
+    if (!on(m.mask(), b)) { assert.throws(() => m.advance(b), RangeError); return false; }
+    m.advance(b);
+  }
+  return m.complete;
+};
+
+test('word boundaries use the first and last folded characters of compatibility forms', () => {
+  for (const src of ['ⒶSmith Alice', '℀Smith Alice', '㍿Smith Alice', 'SmithⒶ Alice', 'Smith℀ Alice']) {
+    const { g } = spanMatcher(src, { min: 1, word: true });
+    assert.ok(!WORD('Smith', src), src);
+    assert.equal(takesSpan(g, 'Smith'), false, src);
+    assert.ok(takesSpan(g, 'Alice'), src);
+    const copied = src.slice(0, src.indexOf(' '));
+    assert.ok(takesSpan(g, copied), copied);
+  }
+});
+
+test('normalization-sensitive cuts and minima agree with source(), and their prefixes stay live', () => {
+  for (const [src, bad, good, min, max] of [
+    ['각 ok', 'ᆨ', '각', 1, 3],
+    ['각 ok', '각', 'ok', 2, 3],
+    ['ㄱㅏㄱ ok', 'ㅏ', 'ㄱㅏㄱ', 1, 3],
+    ['ΟΣ alpha', 'Σ', 'ΟΣ', 1, 5],
+    ['ΑΣΑ alpha', 'ΑΣ', 'ΑΣΑ', 1, 3],
+  ]) {
+    const { g } = spanMatcher(src, { min }, { maxLength: max });
+    assert.ok(!X.source(src, { min }).has(bad), `${JSON.stringify(bad)} is dropped by check()`);
+    assert.equal(takesSpan(g, bad), false, `${JSON.stringify(bad)} must be masked`);
+    assert.ok(takesSpan(g, good), `${JSON.stringify(good)} remains copyable`);
+    const r = rng(49);
+    for (let i = 0; i < 25; i++) assert.ok(X.source(src, { min }).has(JSON.parse(walk(g, r, src)).q));
+  }
+  // With only two characters left, the sigma cannot be repaired by copying the next alpha. Reject its first UTF-8 byte.
+  const { m } = spanMatcher('ΑΣΑ ok', { min: 1 }, { maxLength: 2 });
+  for (const b of enc.encode('Α')) m.advance(b);
+  assert.equal(on(m.mask(), enc.encode('Σ')[0]), false, 'no doomed partial UTF-8 character');
+});
+
+test('span distance storage grows with the largest minimum, not the sum of every minimum', () => {
+  const fs = require('node:fs'), vm = require('node:vm');
+  const allocated = (mins) => {
+    let cells = 0;
+    class Counted extends Int32Array { constructor(n, ...rest) { super(n, ...rest); cells += this.length; } }
+    const scope = { GZ_AI_SCHEMA: S, GZ_AI_TEXT: X, TextEncoder, Int32Array: Counted };
+    vm.createContext(scope);
+    vm.runInContext(fs.readFileSync(require.resolve('../../extension/ai/local/grammar.js'), 'utf8'), scope);
+    const properties = Object.fromEntries(mins.map((min, i) => [`q${i}`, span({ min }, { maxLength: 100 })]));
+    scope.GZ_AI_GRAMMAR.compile(S.obj(properties, Object.keys(properties)), V, { sources: { src: 'abcdefghijklmnopqrstuvwxyz '.repeat(8) } });
+    return cells;
+  };
+  const largest = allocated([16]), increasing = allocated(Array.from({ length: 16 }, (_, i) => i + 1));
+  assert.ok(increasing < largest * 3, `${increasing} allocated cells versus ${largest} for the largest minimum`);
+});
