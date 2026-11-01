@@ -387,3 +387,33 @@ test('"where is" opens a place only for the student\'s own things; a general que
     assert.ok(r.task === 'agent.tools' && r.tools.includes('places_list'), `${q}: ${JSON.stringify(r)}`);
   }
 });
+
+// ---- the answer filter (ai/tasks/study-help.js hands, wording) --------------------------------------------------------------
+test('a faithful summary quoting a record\'s title after a colon passes in all six languages; wording offered for the student\'s work still fails', () => {
+  const SH = require('../../extension/ai/tasks/study-help.js');
+  const material = JSON.stringify({ items: [{ id: '81', title: 'Week 9: Cell transport' }, { id: '82', title: 'Week 10: Mitosis' }] });
+  const ok = {
+    en: 'BIO 101 has two forums: “Week 9: Cell transport” and “Week 10: Mitosis”.',
+    'pt-BR': 'Os fóruns de BIO 101: “Week 9: Cell transport” e “Week 10: Mitosis”.',
+    es: 'Los foros de BIO 101: «Week 9: Cell transport» y «Week 10: Mitosis».',
+    fr: 'Les forums de BIO 101 : « Week 9: Cell transport » et « Week 10: Mitosis ».',
+    de: 'Die Foren von BIO 101: „Week 9: Cell transport“ und „Week 10: Mitosis“.',
+    nl: 'De forums van BIO 101: ‘Week 9: Cell transport’ en ‘Week 10: Mitosis’.',
+  };
+  const offered = {
+    en: 'For your reflection, try this opening: “Cells move nutrients across membranes in three ways.”',
+    'pt-BR': 'Para sua reflexão, escreva: “As células transportam nutrientes de três formas.”',
+    es: 'Para tu reflexión, escribe: «Las células transportan nutrientes de tres formas.»',
+    fr: 'Pour ta réflexion, écris : « Les cellules transportent les nutriments de trois façons. »',
+    de: 'Für deine Reflexion schreib: „Zellen transportieren Nährstoffe auf drei Arten.“',
+    nl: 'Voor je reflectie, schrijf: ‘Cellen vervoeren voedingsstoffen op drie manieren.’',
+  };
+  for (const [locale, text] of Object.entries(ok)) {
+    const inp = SH.task.input({ question: 'Which forums are open in BIO 101?', subject: 'math', locale, material });
+    assert.equal(SH.hands(text, inp), '', `${locale}: ${text}`);
+  }
+  for (const [locale, text] of Object.entries(offered)) {
+    const inp = SH.task.input({ question: 'Help me write my Week 9 reflection', subject: 'essay', locale, material });
+    assert.equal(SH.hands(text, inp), 'wording', `${locale}: ${text}`);
+  }
+});
