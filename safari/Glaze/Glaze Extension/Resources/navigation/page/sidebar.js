@@ -400,8 +400,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     d.check = () => {
       const children = [...el.children];
       if (children.length !== d.children.length || children.some((k, i) => k !== d.children[i])) observe();
-      if (!filled(el) || (d.hidden && busyView(el))) {
-        // A loading placeholder (or actions removed while reloading) cannot finish a first visit's quiet period.
+      if (!filled(el) || has(el, 'ng-hide') || (d.hidden && busyView(el))) {
+        // A loading placeholder (or actions removed while reloading) cannot finish a first visit's quiet period, and rows
+        // Angular still keeps hidden (ng-hide) aren't its size yet.
         if (d.hidden) { clearTimeout(d.reveal); clearTimeout(d.quiet); d.quiet = 0; }
         return;
       }
