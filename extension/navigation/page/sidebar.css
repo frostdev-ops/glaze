@@ -20,6 +20,11 @@
   /* A course outline's column Ultra has just drawn, until the sidebar takes it a pass later (navigation/page/sidebar.js
      settled): not shown in Ultra's place first, so it never moves to the window's edge in view. */
   html[data-gz-sb-ultra]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap aside.outline-actions:not([data-gz-sidebar-host]) { visibility: hidden; }
+  /* A course opening while the sidebar is a column fades in without rising (content/motion.css gz-in): a rise running on
+     an ancestor makes it the fixed column's containing block, and the outline's column rode the page into place. */
+  html[data-gz-sb-ultra]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap section.course.bb-offcanvas-container,
+  html[data-gz-sb-ultra]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap .course-content-container > .panel-wrap,
+  html[data-gz-sb-ultra]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap section.course-outline-content { animation-name: gz-fade; }
   html[data-gz-sb-unsized] #site-wrap aside.outline-actions > #gz-nt-block, html[data-gz-sb-unsized] #site-wrap aside.outline-actions > #gz-sb-widgets { visibility: hidden; }
   html[data-gz-sb-notes][data-gz-sidebar="expanded"] #site-wrap aside.outline-actions[data-gz-sidebar-host] > #gz-sb-widgets { visibility: hidden; }
   [data-gz-sidebar-host] > #right-side { width: auto !important; }

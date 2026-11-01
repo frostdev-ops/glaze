@@ -32,7 +32,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       let visible = true;
       for (let p = e; p?.tagName; p = p.parentElement) {
         const s = typeof getComputedStyle === 'function' ? getComputedStyle(p) : null;
-        if (p.hidden || s?.display === 'none' || s?.visibility === 'hidden' || s?.visibility === 'collapse' || s?.opacity === '0') { visible = false; break; }
+        // Transparent counts as hidden, except a panel fading in with the column it holds (Ultra's course opening): the
+        // column is as transparent, and its top is the header's from the first frame.
+        if (p.hidden || s?.display === 'none' || s?.visibility === 'hidden' || s?.visibility === 'collapse' || (s?.opacity === '0' && !(host && !host.own && p.contains(host.el)))) { visible = false; break; }
       }
       if (visible) bottom = Math.max(bottom, r.bottom);
     }
