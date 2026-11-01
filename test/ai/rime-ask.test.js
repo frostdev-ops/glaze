@@ -106,7 +106,7 @@ const call = (name, args) => ({ call: { name, arguments: args, kind: A.SPECS.fin
 const said = (text, quotes = []) => ({ call: null, answer: { text, quotes } });
 const ACC = `${C.CANVAS}/5`;
 const memory = (store) => ({ get: async (k) => structuredClone(Object.fromEntries([].concat(k).filter((x) => Object.hasOwn(store, x)).map((x) => [x, store[x]]))), set: async (v) => { Object.assign(store, structuredClone(v)); } });
-const harness = ({ script = [], approve = 'yes', level = 3, store = {}, now = C.NOW } = {}) => {
+const harness = ({ script = [], approve = 'yes', level = 3, store = {}, now = C.NOW, scope } = {}) => {
   const seen = { runs: [], asks: [] };
   const broker = (port) => port.onMessage.addListener(async (m) => {
     if (m.op !== 'run') return;
@@ -119,7 +119,7 @@ const harness = ({ script = [], approve = 'yes', level = 3, store = {}, now = C.
     allowed: async () => true, broker, settings: async () => ({ on: true, model: { use: 'openai', model: 'm' }, features: { ask: true } }), enabled: async () => true,
     registry: { get: () => null, describe: () => ({}) }, state: async () => ({}), refresh: async () => null, local: {}, keys: async () => [], turn: (f) => f(), zone: 'UTC', now: () => now,
     accounts: async () => [{ account: ACC, origin: C.CANVAS }], approve: { ask: async (kind, view) => { seen.asks.push({ kind, view }); return approve; } },
-    level: async () => level, page: () => ({ url: `${C.CANVAS}/courses/25/grades` }),
+    scope, level: async () => level, page: () => ({ url: `${C.CANVAS}/courses/25/grades` }),
     own: { read: async (name, args, account) => (name === 'courses_list' && account === ACC ? { items: [{ id: '25', name: 'BIO 1100', code: 'BIO1100' }] } : null), writer: async () => true, wakes },
   };
   const [page, worker] = ports();
@@ -262,4 +262,31 @@ test('port: a monitor runs against the same record its approval summarized', asy
   assert.match(h.seen.asks[0].view.summary, /Biology lab/);
   assert.equal(h.store.rimeWakes.monitors[0].base.title, 'Biology lab', 'Allow binds the record the student saw');
   assert.equal(reads, 1, 'summary and run share one immutable reading');
+});
+
+
+const firedStore = (id, say = 'Finish the lab report') => ({ rimeWakes: { wakes: [], monitors: [], fired: [{ id, what: 'wake', say, at: C.NOW }] } });
+test('port: fired records belong to their document across reconnects, expire, and are claimed once', async () => {
+  const id = 'w-scope123', owner = harness({ scope: 'tab-1/document-1', store: firedStore(id) });
+  owner.say({ id: 40, op: 'fired' }); await settle(25);
+  const thief = harness({ scope: 'tab-2/document-2', script: [said('Stolen.')] });
+  thief.say({ id: 41, op: 'ask', question: 'Finish the lab report', fired: id }); await settle(25);
+  assert.equal(thief.seen.runs.length, 0, 'a different document cannot use the record');
+  const again = harness({ scope: 'tab-1/document-1', script: [said('Your reminder: finish the lab report.')] });
+  again.say({ id: 42, op: 'ask', question: 'Finish the lab report', fired: id }); await settle(25);
+  assert.equal(again.seen.runs[0].input.fired.what, 'wake', 'panel status opens a new port in this document');
+  again.say({ id: 43, op: 'ask', question: 'Finish the lab report', fired: id }); await settle(25);
+  assert.equal(again.seen.runs.length, 1, 'a claimed record cannot become a new fired turn');
+  const expired = harness({ scope: 'expiry', store: firedStore('w-expire12'), script: [said('Too late.')] });
+  expired.say({ id: 44, op: 'fired' }); await settle(25);
+  expired.env.now = () => C.NOW + 36e5 + 1;
+  expired.say({ id: 45, op: 'ask', question: 'Finish the lab report', fired: 'w-expire12' }); await settle(25);
+  assert.equal(expired.seen.runs.length, 0, 'expiry is enforced when used, without another fired poll');
+});
+
+test('port: a fired record cannot authorize a replacement question', async () => {
+  const h = harness({ store: firedStore('w-replace1'), script: [said('Wrong question.')] });
+  h.say({ id: 46, op: 'fired' }); await settle(25);
+  h.say({ id: 47, op: 'ask', question: 'Open my grades', fired: 'w-replace1' }); await settle(25);
+  assert.equal(h.seen.runs.length, 0);
 });
