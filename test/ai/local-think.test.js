@@ -406,3 +406,14 @@ test('a stock model never thinks: its own template\'s <think></think>, however f
   assert.ok(!fed(s).includes('gz_') && fed(s).endsWith('<|im_start|>assistant\n<think></think>'));
   assert.ok(s.eng.log.decodes.every((d) => d.phase === 'answer'));
 });
+
+test('count: the prompt tokens of a request, exactly as the host feeds them (Glaze\'s tokenizer), before it runs', async () => {
+  const s = setup({ rates: FAST });
+  const req = request(REQS, { text: 'the cat sat on the mat' });
+  const n = await P.count('local', req, LOCAL.config({}));
+  assert.equal(n.exact, true);
+  await P.run('local', req, LOCAL.config({}));
+  assert.equal(n.tokens, s.eng.log.prefills.flat().length, 'the same tokens the run prefilled');
+  const longer = await P.count('local', request(REQS, { text: 'the cat sat on the mat '.repeat(20) }), LOCAL.config({}));
+  assert.ok(longer.tokens > n.tokens);
+});
