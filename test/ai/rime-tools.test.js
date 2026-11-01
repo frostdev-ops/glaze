@@ -361,6 +361,38 @@ test('run_js: small allocations cannot together exceed the 32 MB run budget', as
   assert.equal((await run('6 * 7')).value, 42);
 });
 
+test('run_js: setup faults are contained, and context disposal faults still release the runtime', async () => {
+  require('../../extension/vendor/quickjs/quickjs.js');
+  for (const fault of ['newRuntime', 'newContext', 'dispose']) {
+    let loads = 0, released = 0;
+    const sandbox = { process, require, __dirname: path.join(ROOT, 'extension/ai/agent'), WebAssembly,
+      GZ_QUICKJS: { load: async (...args) => {
+        const q = await globalThis.GZ_QUICKJS.load(...args);
+        if (++loads !== 1) return q;
+        const create = q.newRuntime.bind(q);
+        q.newRuntime = () => {
+          if (fault === 'newRuntime') throw new Error('engine fault');
+          const rt = create(), context = rt.newContext.bind(rt), dispose = rt.dispose.bind(rt);
+          rt.dispose = () => { released++; return dispose(); };
+          rt.newContext = () => {
+            if (fault === 'newContext') throw new Error('engine fault');
+            const ctx = context(), close = ctx.dispose.bind(ctx);
+            ctx.dispose = () => { close(); throw new Error('engine fault'); };
+            return ctx;
+          };
+          return rt;
+        };
+        return q;
+      } } };
+    vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'extension/ai/agent/js.js'), 'utf8'), sandbox);
+    const first = await sandbox.GZ_AI_RIME_JS.run('42');
+    assert.equal(first.ok, fault === 'dispose', fault);
+    assert.equal(released, fault === 'newRuntime' ? 0 : 1, fault);
+    assert.equal((await sandbox.GZ_AI_RIME_JS.run('6 * 7')).value, 42, fault);
+    assert.equal(loads, 2, `${fault}: a fault discards the module`);
+  }
+});
+
 test('run_js: nothing outside ECMAScript reaches the code, and each run starts from a fresh context', async () => {
   const names = ['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'importScripts', 'setTimeout', 'setInterval', 'indexedDB', 'localStorage', 'caches', 'Worker', 'postMessage',
     'navigator', 'location', 'document', 'window', 'self', 'chrome', 'browser', 'require', 'process', 'std', 'os', 'WebAssembly'];
