@@ -59,10 +59,11 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const handoff = (env, change) => {
     const p = carryQueue.then(async () => {
       const now = env.now(), raw = env.session ? (await env.session.get(CARRY))[CARRY] : carried;
+      const before = JSON.stringify(Array.isArray(raw) ? raw : []);
       const list = (Array.isArray(raw) ? raw : []).filter((c) => c.until > now && c.until <= now + 60e3);
       const result = change(list);
       carried = list.slice(-100);
-      if (env.session) await env.session.set({ [CARRY]: carried });
+      if (env.session && JSON.stringify(carried) !== before) await env.session.set({ [CARRY]: carried });
       return result;
     });
     carryQueue = p.catch(() => {});
