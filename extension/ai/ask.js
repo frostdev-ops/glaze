@@ -262,7 +262,10 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const route = (question, { attempt = '', locale = 'en', level = 1, history } = {}) => {
     const last = level >= 3 && Array.isArray(history) && history.length ? history[history.length - 1] : null;
     if (last && !String(attempt).trim() && FOLLOW.test(String(question).replace(/[‘’]/g, "'"))) {
-      const again = route(`${last.question}\n${question}`, { locale, level });
+      // Follow-up-only questions carry no topic themselves. Walk back to the question that supplied their tools.
+      let previous = last, i = history.length - 1;
+      while (i > 0 && FOLLOW.test(previous.question) && route(previous.question, { locale, level }).task !== 'agent.tools') previous = history[--i];
+      const again = route(`${previous.question}\n${question}`, { locale, level });
       if (again.task === 'agent.tools') return again;
     }
     const q = String(question).replace(/[‘’]/g, "'"), work = typeof attempt === 'string' ? attempt : '';
