@@ -1702,18 +1702,32 @@ test('a Dashboard edit before identity and memberships arrive opts that student 
   assert.deepEqual(lay(q).boards.dash.filter((x) => W.course(x.id)).map((x) => W.course(x.id).id), OTHER, 'the opt-out is persisted for this student');
 });
 
-test('Reset layout preserves hidden course positions until ownership is confirmed', async () => {
+test('Reset layout resets record-known cards while membership is pending and preserves hidden courses', async () => {
   const list = later(), foreign = ckey(OTHER[0]), own = ckey('_101_1');
   const board = [foreign, own].map((id) => ({ id, on: true, x: 320, y: 80, w: 420, h: 220 }));
   const p = asStudent(cardsPage({ local: { widgetLayout: { todo: true, boards: { courses: board } } } }), list);
   p.ui.sync(true); await settle();
   p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
   p.doc.fire(p.doc.querySelector('.gz-dash-reset'), 'click'); await settle();
-  for (const id of [foreign, own]) assert.deepEqual([on(p, 'courses', id).x, on(p, 'courses', id).y, on(p, 'courses', id).w], [320, 80, 420], 'unknown ownership cannot authorize a reset');
+  assert.deepEqual([on(p, 'courses', foreign).x, on(p, 'courses', foreign).y, on(p, 'courses', foreign).w], [320, 80, 420], 'an unknown hidden course stays as saved');
+  assert.deepEqual([on(p, 'courses', own).x, on(p, 'courses', own).y, on(p, 'courses', own).w], [null, null, undefined], 'a record-known card resets while the list is pending');
   list.res(members()); await settle();
   p.doc.fire(p.doc.querySelector('.gz-dash-reset'), 'click'); await settle();
   assert.deepEqual([on(p, 'courses', foreign).x, on(p, 'courses', foreign).y, on(p, 'courses', foreign).w], [320, 80, 420]);
   assert.deepEqual([on(p, 'courses', own).x, on(p, 'courses', own).y, on(p, 'courses', own).w], [null, null, undefined]);
+});
+
+test('Reset layout resets drawn cached cards after a failed membership read', async () => {
+  const failed = []; failed.complete = false;
+  const id = ckey('_101_1'), foreign = ckey(OTHER[0]);
+  const p = asStudent(cardsPage({ local: { widgetLayout: { todo: true, widths: { courses: 1080 }, boards: { courses: [id, foreign].map((id) => ({ id, on: true, x: 320, y: 80, w: 420 })) } } } }), Promise.resolve(failed));
+  p.ui.sync(true); await settle();
+  assert.ok(p.tile(id));
+  p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
+  p.doc.fire(p.doc.querySelector('.gz-dash-reset'), 'click'); await settle();
+  assert.deepEqual([on(p, 'courses', id).x, on(p, 'courses', id).y, on(p, 'courses', id).w], [null, null, undefined]);
+  assert.equal(on(p, 'courses', foreign).x, 320);
+  assert.equal(lay(p).widths.courses, 0);
 });
 
 test('shared Ultra boards keep all saved cards but draw at most 48 courses', async () => {
