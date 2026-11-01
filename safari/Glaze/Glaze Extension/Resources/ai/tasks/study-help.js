@@ -167,6 +167,26 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
     return [...(inp.history || []).map((h) => h.question), inp.question, inp.attempt, inp.material, ctx.course, ctx.prompt, ctx.assignment?.title, ctx.assignment?.description, ctx.assignment?.instructions,
       ctx.assignment?.rubric, ...(ctx.assignment?.files || []).map((f) => f.text)].filter(Boolean);
   };
+  // A quotation copied word for word from the student's own texts (the question, their work, what Glaze read for them) cites
+  // them, as a summary of their records quotes a title: it offers no wording. Each such span, with its quote marks, gives way
+  // to a plain word before the wording rules run, so "two forums: “Week 9: Cell transport”" passes and new words in quotes
+  // after a colon still count as offered wording.
+  const QUOTES = /["“”'‘’«»‹›„‚]/u;
+  const cited = (piece, texts) => {
+    const sources = texts.map((t) => X().source(t, { min: 2 }));
+    let out = piece;
+    for (const q of WD.quotedRanges(piece, true).sort((a, b) => b.start - a.start)) {
+      const inner = q.text.trim();
+      if (inner.length < 2 || !sources.some((x) => x.has(inner))) continue;
+      let a = q.start, b = q.end;
+      for (let i = 0; i < 2 && a > 0 && !QUOTES.test(piece[a - 1] || ''); i++) a--;
+      if (QUOTES.test(piece[a - 1] || '')) a--;
+      for (let i = 0; i < 2 && b < piece.length && !QUOTES.test(piece[b] || ''); i++) b++;
+      if (QUOTES.test(piece[b] || '')) b++;
+      out = `${out.slice(0, a)}cited${out.slice(b)}`;
+    }
+    return out;
+  };
   // The answer-giving rules for one piece of text (a reply, a followUp, or Ask Glaze's answer about the student's own records,
   // ai/ask.js): '' or the rule it breaks: answer, solves, code, wording.
   const hands = (piece, inp) => {
@@ -206,7 +226,7 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
     if ([...piece.replace(FENCE, ' ').matchAll(INLINE)].map((m) => m[1]).some((l) => fresh(l) && STATEMENT.test(l) && theirName(l))) return 'code';
     if (inp.subject === 'code' && [...words_.matchAll(new RegExp(String.raw`[A-Za-z_$][\w$.]*\s*(?:[+\-*/%]?=(?!=)|\+\+|--)\s*[^\s.,;!?][^\n.;!?]*|\breturns?\s+[^\n.;!?]*[+\-*/%(][^\n.;!?]*|${CALL}`, 'g'))].some((m) => fresh(m[0]) && theirName(m[0]))) return 'code';
     // Wording for their paper: an offer.
-    if (WD.offers(words_, { examples: false })) return 'wording';
+    if (WD.offers(cited(words_, texts), { examples: false })) return 'wording';
     return '';
   };
   // → '' when the reply may go to the student, else the rule it breaks: schema, kind, answer, solves, code, wording, quote, speaks.
