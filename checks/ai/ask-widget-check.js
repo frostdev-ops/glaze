@@ -112,7 +112,7 @@ globalThis.glazeIn = async (url) => {
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 15000) => {
   const start = Date.now(); let last;
-  while (Date.now() - start < ms) { try { const v = await fn(); if (v) return v; } catch (e) { last = e; } await pause(100); }
+  while (Date.now() - start < ms) { try { const v = await fn(); if (v) return v; } catch (e) { if (e.stop) throw e; last = e; } await pause(100); }
   throw Error(`${label} timed out${last ? `: ${last.message}` : ''}`);
 };
 let total = 0, failed = 0;
@@ -169,18 +169,20 @@ const lay = (where, size) => {
         const page = { '/ultra/course': COURSES, '/ultra/institution-page': INSTITUTION }[u.pathname];
         return page ? r.fulfill({ contentType: 'text/html', body: page('ltr') }) : r.fulfill({ status: 404, body: '' });
       }
-      if (!/\.invalid$/.test(u.hostname)) refused.push(`${req.method()} ${u.href}`);
+      // The saved pages' own pictures and files are refused as any address is; a write leaving would be a finding.
+      if (req.method() !== 'GET') refused.push(`${req.method()} ${u.href}`);
       return r.abort();
     });
     const worker = context.serviceWorkers().find((w) => w.url().endsWith('/background/background.js')) || await context.waitForEvent('serviceworker');
     await worker.evaluate(async () => { await GZ_AI_BROKER.vault().set('connections', { 'custom-1': { provider: 'stub', model: 'stub', generation: 'g-1' } }); });
     const script = (s, window = 4096) => worker.evaluate(([x, w]) => { askCheck.script = x; askCheck.seen = []; askCheck.window = w; }, [s, window]);
-    const page = await context.newPage();
-    page.on('pageerror', (e) => errors.push(`page: ${e.message}`));
+    // A tab of its own per scene: the broker allows a tab's feature six runs a minute, and a scene asks several.
+    let page = null;
+    const fresh = async () => { await page?.close().catch(() => {}); page = await context.newPage(); page.on('pageerror', (e) => errors.push(`page: ${e.message}`)); };
     const shots = [];
     // One scene: settings and layout stored, the page opened, the tile's chat drawn, its box the same from its first frame.
     const scene = async ({ look = 'light', where, size, url, motion }) => {
-      await page.goto('about:blank');
+      await fresh();
       await worker.evaluate(async ([s, l]) => {
         await chrome.storage.sync.clear(); await chrome.storage.sync.set(s);
         const keep = Object.keys(await chrome.storage.local.get(null)).filter((k) => !['ultra'].includes(k));
@@ -190,7 +192,7 @@ const lay = (where, size) => {
       await page.setViewportSize({ width: 1280, height: 900 });
       await page.goto(url);
       const tile = page.locator('section.gz-w[data-tile="ask"]');
-      await tile.locator('.gz-ask-chat .gz-ask-input').waitFor({ timeout: 20000 });
+      await tile.locator('.gz-ask-chat .gz-ask-input').first().waitFor({ timeout: 20000 });
       const first = await tile.boundingBox();
       await pause(400);
       const later = await tile.boundingBox();
@@ -214,10 +216,13 @@ const lay = (where, size) => {
       await page.setViewportSize({ width: 1280, height: 900 });
     };
     const askIn = async (tile, q) => {
-      const n = await tile.locator('.gz-ask-a').count();
+      const n = await tile.locator('.gz-ask-a').count(), e = await tile.locator('.gz-ask-err').count();
       await tile.locator('.gz-ask-input').first().fill(q);
       await tile.locator('.gz-ask-input').first().press('Enter');
-      await until(async () => (await tile.locator('.gz-ask-a').count()) > n && !(await tile.locator('.gz-ask-a').nth(n).getAttribute('data-streaming').then((v) => v !== null)), `the answer to ${q}`, 20000);
+      await until(async () => {
+        if ((await tile.locator('.gz-ask-err').count()) > e) throw Object.assign(Error(`failed: ${await tile.locator('.gz-ask-err').last().textContent()}`), { stop: true });
+        return (await tile.locator('.gz-ask-a').count()) > n && !(await tile.locator('.gz-ask-a').nth(n).getAttribute('data-streaming').then((v) => v !== null));
+      }, `the answer to ${q}`, 20000);
       return (await tile.locator('.gz-ask-a').nth(n).locator('.gz-ask-text').allTextContents()).join('');
     };
     const meter = (tile) => tile.locator('.gz-ask-meter').evaluate((m) => ({ hidden: m.hidden, n: m.querySelector('.gz-ask-meter-n').textContent, band: m.dataset.band || '', label: m.getAttribute('aria-label') }));
@@ -256,9 +261,9 @@ const lay = (where, size) => {
     });
 
     await check('Canvas Dashboard: turns folded into a summary show as one line, opened to read it', async () => {
+      await scene({ where: 'cdash', size: 'l', url: `${CANVAS}/` });
       const tile = page.locator('section.gz-w[data-tile="ask"]');
-      await tile.locator('.gz-ask-new').click();
-      await script({ 'study.help': [1, 2, 3, 4].map((i) => study(`Look again at step ${i}. What changes?`)), 'chat.compact': [{ text: '- Asked about mitosis\n- **Prophase** comes first', quotes: [] }] });
+      await script({ 'study.help': ['first', 'second', 'third', 'fourth'].map((w) => study(`Look again at the ${w} phase. What changes there?`)), 'chat.compact': [{ text: '- Asked about mitosis\n- **Prophase** comes first', quotes: [] }] });
       for (const q of ['Explain mitosis', 'What is prophase?', 'What is metaphase?', 'What is anaphase?']) await askIn(tile, q);
       await tile.locator('.gz-ask-fold').waitFor({ timeout: 20000 });
       const said = await tile.locator('.gz-ask-fold summary').textContent();

@@ -433,7 +433,8 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
       m.hidden = pct === null;
       if (pct === null) return;
       m.dataset.band = exact >= METER.warn ? 'warn' : exact >= METER.warm ? 'warm' : '';
-      m.querySelector('.gz-ask-meter-v')?.setAttribute('stroke-dasharray', `${pct} 100`);
+      const v = m.querySelector('.gz-ask-meter-v');
+      if (v?.style) v.style.strokeDasharray = `${pct} 100`;
       m.querySelector('.gz-ask-meter-n').textContent = percent(pct);
       m.setAttribute('aria-label', t('{n}% of the context window used', { n: pct }));
     };
