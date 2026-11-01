@@ -419,15 +419,15 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     };
     // The chat's summary of its older turns (chat.compact) and the turns it covers; New chat (a question with no history)
     // clears it. A compaction still running when the next question comes gives way to its fallback, so asking never waits.
-    const CHAT = { summary: '', covered: new Set(), gen: 0, pending: null, tools: [], window: null };
+    const CHAT = { summary: '', covered: new Set(), gen: 0, pending: null, tools: [] };
     // The tools a level-3 run offers: the question's own; from UNION.from up, the chat's union with them.
     const offer = async (routed, input, signal) => {
-      CHAT.window ??= (await measure('agent.tools', input, signal))?.window ?? null;
-      if (!(CHAT.window >= UNION.from)) return routed;
+      const fit = await measure('agent.tools', input, signal);
+      if (signal.aborted) throw cancelled();
       let keep = [...CHAT.tools.filter((t) => !routed.includes(t)), ...routed];
       while (unionCost(keep) > UNION.budget && keep.length > routed.length) keep = keep.slice(1);
       CHAT.tools = keep;
-      return AT().NAMES.filter((n) => keep.includes(n));
+      return fit?.window >= UNION.from ? AT().NAMES.filter((n) => keep.includes(n)) : routed;
     };
     const keyOf = (h) => `${h.question.trim()}\u0000${h.answer.trim().slice(0, 200)}`;
     const compact = async ({ open, turn, locale, tools, zone }) => {
@@ -572,7 +572,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       const question = m.question.trim(), attempt = (m.attempt || '').trim();
       if (question.length > LIMIT.question || attempt.length > LIMIT.attempt) return fail('size');
       if (current) return fail('busy');
-      if (!history.length) { CHAT.pending?.now(false); CHAT.summary = ''; CHAT.covered.clear(); CHAT.tools = []; CHAT.window = null; } else CHAT.pending?.now();
+      if (!history.length) { CHAT.pending?.now(false); CHAT.summary = ''; CHAT.covered.clear(); CHAT.tools = []; } else CHAT.pending?.now();
       CHAT.gen++;
       // The turns the summary doesn't cover yet, verbatim.
       const open = history.filter((h) => !CHAT.covered.has(keyOf(h)));
