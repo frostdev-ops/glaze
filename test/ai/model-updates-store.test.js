@@ -217,3 +217,14 @@ test('drop reads current state even before a catalog broadcast arrives', async (
   await assert.rejects(other.drop('rime-q4', fresh.total), (e) => e.reason === 'in-use');
   assert.equal((await m.store.status('rime-q4')).state, 'ready');
 });
+
+test('whole-file verification cannot be skipped by an existing ready marker', async () => {
+  const liar = { ...fresh, total: 'f'.repeat(64) };
+  const m = make();
+  await m.store.download('rime-q4');
+  await m.store.edit(() => ({ v: 1, serial: 1, models: [liar], pins: { 'rime-q4': old }, keep: { 'rime-q4': [liar] } }));
+  await m.store.download('rime-q4', { total: liar.total });
+  await assert.rejects(m.store.download('rime-q4', { total: liar.total, whole: true }), (e) => e.reason === 'hash' && e.whole);
+  assert.equal((await m.store.status('rime-q4', { total: liar.total })).state, 'missing');
+  assert.equal((await m.store.status('rime-q4')).state, 'ready');
+});
