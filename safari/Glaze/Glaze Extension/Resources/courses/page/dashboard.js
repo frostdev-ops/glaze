@@ -97,6 +97,23 @@ var GZ_DASH_UI = globalThis.GZ_DASH_UI || (() => {
     // The first content settings may predate this lazy schema; the worker checks the saved opt-in before granting it.
     return s.enabled && s.enhance.dashboard && s.widgets?.land !== false && !ctx.acted() && history.length === len && GZ_WIDGETS.landing({ from, now: location.pathname, referrer: document.referrer, origin: location.origin });
   };
+  const nativeLink = () => [...document.querySelectorAll('a[href*="institution-page"]')].find((a) => { try { const u = new URL(a.getAttribute('href'), location.href); return u.origin === location.origin && u.pathname === PATH; } catch { return false; } });
+  const waitLink = (from) => {
+    const link = nativeLink();
+    if (link) return Promise.resolve(link);
+    // Ultra can route before drawing its nav. Wait for that link without reloading, polling or holding a tab forever.
+    return new Promise((resolve) => {
+      let timer = 0;
+      const stop = (link = null) => { clearTimeout(timer); observer.disconnect(); removeEventListener('pagehide', cancel); resolve(link); };
+      const cancel = () => stop();
+      const check = () => { if (!still(from)) return stop(); const link = nativeLink(); if (link) stop(link); };
+      const observer = new MutationObserver(check);
+      observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['href'] });
+      addEventListener('pagehide', cancel, { once: true });
+      timer = setTimeout(cancel, 20000);
+      check();
+    });
+  };
   const land = async (from) => {
     len = history.length;
     const s = await new Promise((res) => { try { chrome.storage.sync.get('widgets', (r) => res(chrome.runtime.lastError ? {} : r)); } catch { res({}); } });
@@ -105,13 +122,13 @@ var GZ_DASH_UI = globalThis.GZ_DASH_UI || (() => {
     if ((performance.getEntriesByType?.('navigation')[0]?.type || 'navigate') !== 'navigate') return;
     await ctx.need('core/widgets.js', () => globalThis.GZ_WIDGETS);
     if (!still(from)) return;
+    const link = await waitLink(from);
+    if (!link || !still(from)) return;
     // The worker marks this tab before it goes (in its session storage, which the page can't read): once in a tab. If it
     // can't, it doesn't go.
-    if ((await ask({ type: 'glaze:landed' }))?.first !== true || !still(from)) return;
+    if ((await ask({ type: 'glaze:landed' }))?.first !== true || !still(from) || nativeLink() !== link) return;
     pick('dash');
-    const link = [...document.querySelectorAll('a[href]')].find((a) => { try { const u = new URL(a.getAttribute('href'), location.href); return u.origin === location.origin && u.pathname === PATH; } catch { return false; } });
-    // Absolute: Ultra's <base href> is its CDN's.
-    if (link) link.click(); else location.assign(`${location.origin}${PATH}`);
+    link.click();
   };
 
   return { tabs, land, PATH };
