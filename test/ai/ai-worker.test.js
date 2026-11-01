@@ -213,7 +213,8 @@ test('Firefox\'s event page loads every file of the harness the worker would imp
   // Ask Rime runs study.help and agent.tools (ai/ask.js): the worker loads them with the harness. Its panel (ai/page/) runs
   // on the school's page, loaded on demand (background/background.js LOADABLE), never in the worker.
   for (const f of ['tasks/study-help.js', 'tasks/agent-tools.js', 'tasks/wording.js', 'ask.js']) assert.ok(named.has(`ai/${f}`), `${f} is the worker's`);
-  const page = (f) => f.split(path.sep).join('/').startsWith('page/');
+  // run_js's sandbox (ai/sandbox/) runs in its sandbox page and the panel's frame, never in the worker.
+  const page = (f) => /^(page|sandbox)\//.test(f.split(path.sep).join('/'));
   for (const f of fs.readdirSync(path.join(__dirname, '../../extension/ai'), { recursive: true }).filter((f) => f.endsWith('.js') && page(f))) assert.ok(!named.has(`ai/${f.split(path.sep).join('/')}`), `${f} stays out of the worker`);
   const shipped = fs.readdirSync(path.join(__dirname, '../../extension/ai'), { recursive: true }).filter((f) => f.endsWith('.js') && f !== 'providers/mock.js' && !host.includes(f) && !page(f)).map((f) => `ai/${f}`);
   assert.ok(shipped.length >= 14);

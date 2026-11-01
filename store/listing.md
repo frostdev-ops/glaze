@@ -127,13 +127,17 @@ Puts a dot on Glaze's toolbar icon on pages that look like Canvas, Blackboard Ul
 
 Used only when the student chooses Rime, Glaze's own AI model, in Settings → AI and clicks Download. A hidden extension page runs that model on this computer with WebGPU, in a worker of its own, and keeps it loaded between requests; it closes after five minutes unused. It downloads the model's files from Hugging Face on that click and reads nothing from any page. The text Glaze's AI features give it stays on this computer and is never sent anywhere.
 
+### alarms
+
+Used only for Ask Rime's reminders and watches, each of which the student asks for and approves, and which can be turned off in Settings → AI → Ask Rime. An alarm wakes Glaze at the time the student chose, or every 30 minutes while a watch waits, to compare the student's own course data that Glaze already keeps on this device. Nothing is fetched or sent. What fires is shown inside Glaze on the student's next school page, never as a notification.
+
 ### scripting
 
 Registers Glaze's packaged content scripts on the sites the user allowed, so later visits are themed from the start, and runs the popup's LMS check in the current tab. With All sites granted, it also registers a packaged check that reads only a page's head. All code is packaged; nothing is fetched and run. It does not inject Glaze's theme into unrelated sites.
 
 ### Web-accessible resources
 
-The theme stylesheets (theme.css, motion.css, extras.css, canvas.css, moodle.css, core/page/apps.css, looks/page/lookx.css), bundled fonts, logos, stickers, pointers and pet sprites provide the theme in the page. looks/scene.js and the bundled vendor/three.js draw animated backgrounds, and looks/scene-media.js with the bundled Lottie player (vendor/lottie/) plays a video or animation behind the page. reader.html opens a file the user imports, and reads only with a one-use pass from Glaze's worker. Chrome requires these packaged files to be web-accessible to load them into LMS pages.
+The theme stylesheets (theme.css, motion.css, extras.css, canvas.css, moodle.css, core/page/apps.css, looks/page/lookx.css), bundled fonts, logos, stickers, pointers and pet sprites provide the theme in the page. looks/scene.js and the bundled vendor/three.js draw animated backgrounds, and looks/scene-media.js with the bundled Lottie player (vendor/lottie/) plays a video or animation behind the page. reader.html opens a file the user imports, and reads only with a one-use pass from Glaze's worker. ai/sandbox/js.html is the sandbox page where Ask Rime runs a line of arithmetic or science code, hidden in the page and cut off from it. Chrome requires these packaged files to be web-accessible to load them into LMS pages.
 
 ### identity
 
@@ -145,7 +149,7 @@ Optional and off by default. Requested only when the student turns on Settings �
 
 ## Remote code (1,000 character maximum)
 
-All of Glaze's own code ships in the package. The only code not in it is user-installed mods (Chrome only): JavaScript from a mod bundle the user chooses to install from a file, link, code or the Glaze gallery, or a signed update from the same author for a mod the user follows. Glaze never downloads code of its own to run. Before installing, the user sees what the mod may read and why, and approves it. Mod code runs only in the extension's manifest sandbox page, isolated from the LMS page, with no extension APIs and no cookies. Mods that read courses, to-dos or grades run in a Worker with no page of their own and reach the network only through Glaze, to HTTPS hosts that are declared and granted. A mod without data access may have a frame UI that can contact other sites. Updates must come signed from the same author and ask again for more access, and a signed blocklist can turn off harmful mods. Firefox and Safari builds run no mod code.
+All of Glaze's own code ships in the package. Code not in it: user-installed mods (Chrome only), from a mod bundle the user installs from a file, link, code or the Glaze gallery, or a signed update from the same author; and one line of JavaScript Ask Rime's AI model writes for arithmetic (Chrome only). Glaze never downloads code of its own to run. Before installing a mod, the user sees what it may read and why, and approves it. Both run only in the extension's manifest sandbox page, isolated from the LMS page, with no extension APIs and no cookies; Ask Rime's line runs in a Worker with no network, stopped after 2 seconds. Mods that read courses, to-dos or grades run in a Worker and reach the network only through Glaze, to declared and granted HTTPS hosts. A mod without data access may have a frame UI that can contact other sites. Updates come signed from the same author and ask again for more access; a signed blocklist can turn off harmful mods. Firefox and Safari builds run neither.
 
 ## Data usage (privacy practices tab)
 

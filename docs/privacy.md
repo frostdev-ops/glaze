@@ -42,7 +42,8 @@ you goes with it. It then runs on this device, so what you give it stays there.
 [Ask Rime](../PRIVACY.md#ask-rime) (Settings → AI → Ask Rime, off by default) sends your question, and your work when
 you add it, to the model you chose for it. For a question about your own courses it also sends what Glaze reads to
 answer it: your to-dos, schedule, grades, assignments or Writer documents, as Glaze already keeps them on this device.
-Marking a to-do done waits for your OK in Glaze's window. Nothing of the conversation is kept.
+Marking a to-do done waits for your OK in Glaze's window. Nothing of the conversation is kept, except a reminder or watch
+you approve, kept on this device until it is shown or cancelled.
 
 [Agent access](../PRIVACY.md#agent-access) (Settings → AI → Agents) is off by default. Apps on this computer connect
 through a local helper: `glaze-mcp`, or the downloaded Glaze Mac app on Safari. Glaze asks you to allow each app

@@ -102,7 +102,7 @@ test('the Safari drop list names only packaged files, and nothing Safari loads n
     ...m.content_scripts.flatMap((c) => [...(c.js || []), ...(c.css || [])]), m.background.service_worker, m.action.default_popup, m.options_ui.page,
     ...m.web_accessible_resources.flatMap((w) => w.resources),
     ...JSON.parse(read('background/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"')),
-  ].filter((f) => !f.startsWith('mods/'));
+  ].filter((f) => !f.startsWith('mods/') && !f.startsWith('ai/sandbox/'));
   assert.deepEqual(named.filter((f) => dropped(f) || f.startsWith('ai/local/')), [], 'no manifest entry or on-demand script');
   for (const page of shipped.filter((f) => f.endsWith('.html'))) {
     const dir = path.posix.dirname(page);

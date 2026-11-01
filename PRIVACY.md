@@ -188,7 +188,12 @@ schedule, grades, assignments and rubrics, Writer documents, as Glaze keeps them
 open tab of your school's site), and sends what it read to that model to answer. Ask Rime's switch is that tool access:
 it needs no Agents pairing and doesn't turn agent access on. Its one change, marking a to-do done, waits for your OK in
 Glaze's window, worded by Glaze, never by the model. Nothing of the conversation is kept: it goes when the page or the
-panel closes. While the panel is open, what it shows is part of the page, as anything on screen is. Each model request leaves one row of metadata in the recent AI calls (feature, provider, model, time, size,
+panel closes. A reminder or watch you approve is the exception: Glaze keeps its time or what it watches, its few words
+of what to say, and for a watch what it last read (a due date, whether work shows as handed in, a course's grade, the
+announcements' ids and titles) in extension storage on this device, at most 20 of each, until it fires and is shown on
+your next school page or you cancel it (a watch ends after 30 days); turning off **Reminders and watches** under Ask Rime stops them.
+Code Ask Rime runs for arithmetic (Chrome only) runs in Glaze's sandbox page with no network and no access to the page or
+your data. While the panel is open, what it shows is part of the page, as anything on screen is. Each model request leaves one row of metadata in the recent AI calls (feature, provider, model, time, size,
 outcome), as for every AI feature; no question, answer or school data is in it.
 
 ## What Glaze stores
