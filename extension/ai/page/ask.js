@@ -194,7 +194,8 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     for (const el of document.body?.children || []) if (!['gz-ask', 'gz-ask-fired'].includes(el.id) && !/^(SCRIPT|STYLE|NOSCRIPT)$/.test(el.tagName)) out.push(el.innerText || el.textContent || '');
     return out.join('\n').replace(/\n{3,}/g, '\n\n').slice(0, LIMIT.text);
   };
-  // Marks the words wherever the page shows them (at most 20 places), a note as each mark's title. → the first mark, or null.
+  // Marks the words wherever the page shows them (at most 20 places), a note as each mark's title. → the first mark the
+  // student can see (a collapsed menu's isn't), else the first, or null.
   const SPOTS = 20;
   const mark = (text, note) => {
     const needle = String(text || '').trim().toLowerCase();
@@ -202,7 +203,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     const w = document.createTreeWalker(document.body, 4, { acceptNode: (n) => (n.nodeValue?.toLowerCase().includes(needle) && !n.parentElement?.closest(OURS) ? 1 : 3) });
     const nodes = [];
     for (let n = w.nextNode(); n && nodes.length < SPOTS; n = w.nextNode()) nodes.push(n);
-    let first = null;
+    const marks = [];
     for (const n of nodes) {
       const at = n.nodeValue.toLowerCase().indexOf(needle);
       const hit = n.splitText(at);
@@ -210,8 +211,9 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
       const m = make('mark', { className: 'gz-ask-spot', textContent: hit.nodeValue });
       if (note) { m.title = String(note).slice(0, 80); m.dataset.note = m.title; }
       hit.replaceWith(m);
-      first ||= m;
+      marks.push(m);
     }
+    const first = marks.find((m) => m.getClientRects?.().length > 0) || marks[0] || null;
     for (let d = first?.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true;
     return first;
   };
