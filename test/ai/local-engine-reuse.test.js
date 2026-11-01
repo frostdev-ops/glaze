@@ -175,3 +175,16 @@ test('marks over the cap thin the densest stretch: the system turn\'s end outliv
   same(await m.extend([...head, 7, 7, 7]), { reused: 20, fed: 3 });
   m.release();
 });
+
+test('decode takes the mask as a function, called once the decoded token\'s forward is on the GPU, so the grammar\'s CPU work overlaps it', async () => {
+  const h = host(), m = await h.load(model({ kinds: KINDS }), { context: 64, chunk: CHUNK });
+  await m.extend([1, 2, 3]);
+  await m.decode(greedy);
+  const before = h.submissions.length;
+  let at = null;
+  const all = new Uint32Array(1); all[0] = 0xff;
+  await m.decode({ ...greedy, mask: () => { at = h.submissions.length; return all; } });
+  assert.equal(at, before + 1, 'the pending token\'s forward was submitted before the mask was asked for');
+  await assert.rejects(m.decode({ ...greedy, mask: () => new Uint32Array(3) }), /mask: a Uint32Array of 1 words/);
+  m.release();
+});
