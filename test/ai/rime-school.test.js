@@ -114,6 +114,24 @@ test('partial school lists preserve the source coverage instead of reporting an 
   assert.equal(announcements.covers.complete, false, 'an incomplete planner cannot prove there are no announcements');
 });
 
+test('school text reads disclose body truncation and reject pages past the retained text', async () => {
+  const body = 'a'.repeat(SC.LIMIT.text + 100);
+  const t = canvasTab({ routes: { '/api/v1/courses/25/discussion_topics/70': { ...TOPIC, message: `<p>${body}</p>` } } });
+  const ctx = ctxFor(ACC, tabsOf([t]));
+  const r = await tool('announcement_read').run({ course: '25', id: '70' }, ctx);
+  assert.equal(r.truncated, true);
+  assert.equal(JSON.parse(A.readable(r, 'UTC')).truncated, true);
+  assert.equal(r.pages, Math.ceil(SC.LIMIT.text / SC.PAGE));
+  assert.equal((await tool('announcement_read').run({ course: '25', id: '70', page: r.pages + 1 }, ctx)).ok, false);
+});
+
+test('Ultra content reads disclose the palette reader text cap', async () => {
+  const item = { ...ULTRA.contents.find((i) => i.id === '_701_1'), body: 'x'.repeat(25000) };
+  const t = ultraTab({ routes: { '/learn/api/public/v1/courses/_101_1/contents': { results: [item] } } });
+  const r = await tool('content_read').run({ course: '_101_1', id: '_701_1' }, ctxFor(UL, tabsOf([t])));
+  assert.equal(r.truncated, true);
+});
+
 test('syllabus: what Glaze kept from an import; nothing kept says how to import; no tab, wrong ids and no account say so', async () => {
   const rec = SY.tidy({ prof: { name: 'Dr. Rivera', email: 'rivera@school.edu', office: 'Science 204' }, hours: [{ label: 'Office hours', days: ['Mon'], start: '13:00', end: '14:00' }],
     dates: [{ title: 'Midterm', day: '2026-10-20', kind: 'exam' }], scale: [['A', 90], ['B', 80]], weights: [{ name: 'Labs', weight: 30 }, { name: 'Exams', weight: 70 }], at: C.NOW });
