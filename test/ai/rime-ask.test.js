@@ -148,6 +148,24 @@ test('school reads require an account choice when two accounts share the school 
   assert.deepEqual(read, [ACC]);
 });
 
+test('Stop aborts an in-flight school tab read', async () => {
+  let options, finish;
+  const h = harness({ script: [call('content_list', { course: '25' })] });
+  h.env.own.tab = async (account, op, args, opts) => {
+    options = opts;
+    return new Promise((resolve) => { finish = resolve; });
+  };
+  h.say({ id: 92, op: 'ask', question: 'List course content for 25' });
+  await settle(40);
+  assert.equal(typeof finish, 'function', 'the school read started');
+  h.say({ id: 92, op: 'cancel' });
+  await settle(40);
+  try { assert.equal(options?.signal?.aborted, true, 'the tab transport receives cancellation'); }
+  finally { finish({ ok: false, error: 'late' }); }
+  await settle(20);
+  assert.ok(!h.ends().some((m) => m.type === 'end'));
+});
+
 test('port: run_js, then a place opened and words marked; each card\'s detail; the actions sent once the answer passes, before its end', async () => {
   const h = harness({ script: [call('run_js', { code: '(18 / 20 * 100).toFixed(0)' }), call('places_list', { course: '25' }), call('place_open', { place: 'course:25/grades' }),
     call('page_highlight', { text: 'Homework 6', note: '18 of 20' }), said('Homework 6 is 90%. Your grades page is open with it marked.', ['Homework 6'])] });
