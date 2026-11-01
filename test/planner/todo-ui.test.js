@@ -718,3 +718,54 @@ test('an open task form updates its course choices when confirmed courses arrive
   f.p.render(true);
   assert.equal(body.children, drawn, 'unchanged choices leave the form alone');
 });
+
+test('a kept-data refresh updates relative due labels within the same clock minute', () => {
+  const f = feature(), start = Date.parse('2026-11-01T15:00:00Z');
+  let now = start;
+  f.c.Date = class extends Date { static now() { return now; } };
+  f.p.seed({ prefs: { ...O, rel: true }, cache: { items: [{ ...item(), at: start + 150e3 }], grading: [], sums: {} } });
+  f.p.render(true);
+  const { body } = f.p.parts();
+  const due = () => elements(body).find((e) => e.className === 'gz-todo-when').textContent;
+  assert.equal(due(), 'Due in 3 minutes');
+  now += 40e3;
+  f.p.render(true);
+  assert.equal(due(), 'Due in 2 minutes');
+  const drawn = body.children;
+  now += 1000;
+  f.p.render(true);
+  assert.equal(body.children, drawn, 'a second passing without a label change leaves the DOM alone');
+});
+
+test('a kept-data refresh advances the focus session and expires its detail within the same clock minute', () => {
+  const f = feature(), start = Date.parse('2026-11-01T15:00:00Z');
+  let now = start;
+  f.c.Date = class extends Date { static now() { return now; } };
+  const sessions = [{ at: start - 280e3, min: 5 }, { at: start + 900e3, min: 30 }];
+  f.p.seed({ prefs: O, cache: { items: [{ ...item(), at: start + 36e5 }], grading: [], sums: {} }, data: { tasks: [], items: { 'assignment:3': { sessions } } } });
+  const more = { tagName: 'BUTTON', dataset: { act: 'more' }, closest: () => ({ dataset: { key: 'assignment:3' } }) };
+  f.p.onClick({ target: { closest: () => more } });
+  const { body } = f.p.parts();
+  const plan = () => elements(body).find((e) => e.className === 'gz-todo-plan').textContent;
+  assert.match(plan(), /5 min$/);
+  assert.equal(elements(body).filter((e) => e.className === 'gz-todo-gone').length, 0);
+  now += 40e3;
+  f.p.render(true);
+  assert.match(plan(), /30 min$/, 'the next focus session replaces the finished one');
+  assert.equal(elements(body).filter((e) => e.className === 'gz-todo-gone').length, 1);
+});
+
+test('a kept-data refresh updates announcement ages within the same clock minute', () => {
+  const f = feature(), start = Date.parse('2026-11-01T15:00:00Z');
+  let now = start;
+  f.c.Date = class extends Date { static now() { return now; } };
+  const ann = { type: 'announcement', id: '7', cid: '25', title: 'Lab moved', at: start - 80e3, url: '/courses/25/discussion_topics/7', read: false };
+  f.p.seed({ prefs: { ...O, rel: true }, cache: { items: [ann], grading: [], sums: {} } });
+  f.p.render(true);
+  const { body } = f.p.parts();
+  const texts = () => elements(body).map((e) => e.textContent);
+  assert.ok(texts().includes('1 minute ago'));
+  now += 40e3;
+  f.p.render(true);
+  assert.ok(texts().includes('2 minutes ago'));
+});
