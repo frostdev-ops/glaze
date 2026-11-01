@@ -30,7 +30,7 @@
 // The engine, the JSON grammar and the tier ladder are their own files (engine.js, grammar.js, ladder.js). The grammar and
 // the schema it compiles (ai/schema.js) are IMPORTS.required: a run with a schema and no grammar, or a schema it refuses, is
 // an error (provider-unavailable 'engine'; request-rejected 'unsupported'), never a run in words only. A missing engine or
-// encoder is reported ('engine'); no ladder, the smallest stock model.
+// encoder is reported ('engine'); no ladder, the smallest tier.
 // The grammar's mask allows the end token only once the JSON is whole, so a run stops at the end token as any other.
 // Classic script; node exports (create), and in a Worker it starts itself.
 var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
@@ -207,8 +207,8 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       }
       const adapter = await Promise.resolve().then(() => gpu.requestAdapter({ powerPreference: 'high-performance' })).catch(() => null);
       if (!adapter) return { reason: 'hardware' };
-      const stock = all.filter((m) => m.stock).sort((a, b) => a.tier - b.tier)[0];
-      return stock ? { id: stock.id } : { reason: 'assets' };
+      const smallest = [...all].sort((a, b) => a.tier - b.tier)[0];
+      return smallest ? { id: smallest.id } : { reason: 'assets' };
     };
     // The picture download: the projector, then its language model, one progress over both.
     const pictureFiles = async () => {

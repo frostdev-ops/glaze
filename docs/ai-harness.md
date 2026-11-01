@@ -559,7 +559,7 @@ writer.feedback's quotes, syllabus.read's and every writer.cite value use it (`t
 one), `models` the store's list. The grammar and `ai/schema.js`, which it reads as it loads, are the host's required imports
 (`IMPORTS` in `host.js`; `test/ai/local-host-worker.test.js` runs them as the Worker does): a run with a schema and no grammar
 is `provider-unavailable`, reason `engine`, never a run in words only. The others are optional until they ship: no engine is
-`unavailable`, reason `engine`; no ladder, the smallest stock model where there is an adapter.
+`unavailable`, reason `engine`; no ladder, the smallest tier where there is an adapter.
 
 The host's messages (`host.js` header): `prepare { tier?, part? }`, `run { model, parts, stable, schema?, sources?, sampler, maxTokens,
 projector?, images?, think?: { budget, close, after }, window? }`, `warm { model, parts }`, `remove { part? }`, `release`, `cancel`; it answers `progress`, `delta`, `done` or `error`, `tick` every 20 s
