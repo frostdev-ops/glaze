@@ -372,7 +372,7 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     const truncated = prompt.length > 20000 || body.length >= 100000;
     const hide = anonymous([d.topic, ...(r?.items || [])]);
     if (!r) return hide({ ok: true, title: String(d.title || '').trim().slice(0, 300), text: prompt.slice(0, 20000), files: embedded(body), gradable: d.gradable === true, at: ms(d.topic.postDate) ?? ms(d.createdDate), mine: [], others: null, complete: false, ...(truncated && { truncated: true }) });
-    const live = r.items.filter((m) => m && m.status !== 'Deleted' && m.status !== 'Draft');
+    const live = r.items.filter((m) => m?.status === 'Published');
     // reply: it answers a classmate's post rather than the prompt.
     const mine = live.filter((m) => String(m.userId) === go.uid).map((m) => ({ at: ms(m.postDate) ?? ms(m.createdDate), reply: !!m.parentId && m.parentId !== d.topic.id, text: html(unquoted(m.body)).slice(0, 2000) }));
     return hide({ ok: true, title: String(d.title || '').trim().slice(0, 300), text: prompt.slice(0, 20000), files: embedded(body), gradable: d.gradable === true,
