@@ -356,7 +356,7 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
       for await (const name of own.keys()) if (name !== tag(m) && !keep.has(name)) others.push(name);
       for (const name of others) await own.removeEntry(name, { recursive: true });
       const s = await scan(m, dir);
-      if (s.ready && s.have.every(Boolean)) { say(1); return { state: 'ready' }; }
+      if (s.ready && s.have.every(Boolean) && !whole) { say(1); return { state: 'ready' }; }
       if (s.ready) await dir.removeEntry('ready');
       for (let i = 0; i < s.have.length; i++) if (s.exists[i] && !s.have[i]) await dir.removeEntry(String(i));
       let kept = s.bytes;
