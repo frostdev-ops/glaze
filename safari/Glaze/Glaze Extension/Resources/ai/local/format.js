@@ -26,7 +26,7 @@ var GZ_AI_LOCAL_FORMAT = globalThis.GZ_AI_LOCAL_FORMAT || (() => {
   const TASKS = Object.freeze(['writer.complete', 'writer.review', 'writer.feedback', 'writer.outline', 'writer.requirements', 'writer.cite', 'writer.sources',
     'writer.decide', 'writer.image', 'syllabus.read', 'study.help', 'agent.tools']);
   // Tasks whose glaze layout is their own, not one system and one user turn: agent.tools runs tool turns
-  // (ai/tasks/agent-tools.js layout(), glaze-plans/lfm-tune/FORMAT-new-tasks.md). format() refuses them in the glaze dialect.
+  // (ai/tasks/agent-tools.js layout(), glaze-plans/lfm-tune/FORMAT-new-tasks.md). format() writes them in turns().
   const TURNS = Object.freeze(['agent.tools']);
   // The glaze dialect's assistant turn opens with its mode's prefill. In think mode the host writes CLOSE where the budget
   // ends the reasoning, and AFTER after a </think> the model wrote itself, then decodes the answer.
@@ -89,14 +89,30 @@ var GZ_AI_LOCAL_FORMAT = globalThis.GZ_AI_LOCAL_FORMAT || (() => {
     return out.filter((p) => p.special !== undefined || p.text !== '');
   };
 
-  // request (ai/request.js clean, with task and fenced) → { parts, stable, images?, think? }: stable, how many parts make the
-  // system turn, the prefix a warm session reads once; images, the pictures' { mime, data } in the order of their { image }
-  // parts (chatml with `images` only: Glaze's fine-tune reads none); think (glaze with `think` only): { close, after }.
+  const thinking = () => ({ close: CLOSE.map((p) => ({ ...p })), after: AFTER.map((p) => ({ ...p })) });
+  // A TURNS task in the glaze dialect: its own layout, read back from the request (agent-tools.js fromRequest), as FORMAT v2
+  // and lfm-tune's D4 harness (eval/d4/run.js nativeStep) write it: each earlier assistant turn opens with PREFILL.direct
+  // (the host never returns reasoning, so no turn keeps any), the turn being written with its mode's. constraint: what the
+  // host's grammar holds the turn to, the answer's schema or one native call to an offered tool (agent-tools.js constraint()).
+  const turns = (req, { think }) => {
+    const A = typeof GZ_AI_TASK_AGENT_TOOLS !== 'undefined' ? GZ_AI_TASK_AGENT_TOOLS : require('../tasks/agent-tools.js');
+    const { parts: base, tools } = A.fromRequest(req);
+    const out = [];
+    base.forEach((p, i) => { out.push(p); if (p.text === 'assistant\n' && base[i - 1]?.special === SPECIAL.start && i < base.length - 1) out.push(...PREFILL.direct); });
+    const parts = join([...out, ...PREFILL[think ? 'think' : 'direct']]);
+    return { parts, stable: parts.findIndex((p) => p.special === SPECIAL.end) + 2, constraint: A.constraint({ tools }), ...(think && { think: thinking() }) };
+  };
+
+  // request (ai/request.js clean, with task and fenced) → { parts, stable, images?, think?, constraint? }: stable, how many
+  // parts make the system turn, the prefix a warm session reads once; images, the pictures' { mime, data } in the order of
+  // their { image } parts (chatml with `images` only: Glaze's fine-tune reads none); think (glaze with `think` only):
+  // { close, after }; constraint (a TURNS task in the glaze dialect): { schema, tools } for the host in place of req.schema.
   const format = (req, { dialect = 'glaze', images = false, think = false } = {}) => {
     if (dialect !== 'glaze' && dialect !== 'chatml') throw refuse('dialect');
     if (think && dialect !== 'glaze') throw refuse('think');
     const task = req.task?.id;
-    if (dialect === 'glaze' && (!TASKS.includes(task) || TURNS.includes(task))) throw Object.assign(refuse(`task ${task}`), { code: 'caps' });
+    if (dialect === 'glaze' && !TASKS.includes(task)) throw Object.assign(refuse(`task ${task}`), { code: 'caps' });
+    if (dialect === 'glaze' && TURNS.includes(task)) return turns(req, { think });
     const { system, blocks, pictures } = parse(req, { images: images && dialect === 'chatml' });
     const schema = req.schema ? `\n\n${SAY_JSON(req.schema)}` : '';
     let head, user;
@@ -114,7 +130,7 @@ var GZ_AI_LOCAL_FORMAT = globalThis.GZ_AI_LOCAL_FORMAT || (() => {
     const top = join(head);
     return { parts: [...top, ...join([{ special: SPECIAL.start }, { text: 'user\n' }, ...user, ...tail])], stable: top.length,
       ...(pictures.length && { images: pictures.map((p) => ({ mime: p.image.mime, data: p.image.data })) }),
-      ...(think && { think: { close: CLOSE.map((p) => ({ ...p })), after: AFTER.map((p) => ({ ...p })) } }) };
+      ...(think && { think: thinking() }) };
   };
 
   return { SPECIAL, TASKS, TURNS, PREFILL, CLOSE, AFTER, SAY_JSON, LINE, parse, format, join };

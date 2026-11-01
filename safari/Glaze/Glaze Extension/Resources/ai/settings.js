@@ -14,8 +14,9 @@ var GZ_AI_SETTINGS = globalThis.GZ_AI_SETTINGS || (() => {
   const E = () => (typeof GZ_AI_ENDPOINT !== 'undefined' ? GZ_AI_ENDPOINT : require('./endpoint.js'));
   const KEY = 'ai';
   // Features that may ask, each off until the student allows it. A feature's id is the one its port messages carry.
-  // completion: the writer's ghost text; writing: its review, feedback, requirements, citations and autocorrect calls.
-  const FEATURES = ['syllabus', 'completion', 'writing'];
+  // completion: the writer's ghost text; writing: its review, feedback, requirements, citations and autocorrect calls;
+  // ask: Ask Glaze (ai/ask.js), study help and questions about the student's own courses.
+  const FEATURES = ['syllabus', 'completion', 'writing', 'ask'];
   // The providers a connection may use, as Glaze ships them (the mock is for tests and the eval only).
   const safari = (() => { try { return new URL((typeof globalThis.browser?.runtime?.getURL === 'function' ? globalThis.browser.runtime : globalThis.chrome?.runtime).getURL('')).protocol === 'safari-web-extension:'; } catch { return false; } })();
   // Glaze's own model (local) runs where Glaze's engine has a host, Chrome and Firefox; Safari keeps Apple Intelligence.

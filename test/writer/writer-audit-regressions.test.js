@@ -40,7 +40,7 @@ test('the command palette offers Documents on Ultra and Canvas while Writer is o
       for (const opens of [true, false]) {
         const sent = [];
         const apps = vm.runInNewContext(`${source.slice(start, end)} apps`, {
-          ultra, ctx: { settings: () => ({ enhance }) }, t: (key) => key, glazeCmds: () => [],
+          ultra, askOn: false, ctx: { settings: () => ({ enhance }) }, t: (key) => key, glazeCmds: () => [],
           need: async (file, ready) => { sent.push(['need', file]); return ready(); },
           GZ_SETTINGS_PAGE: { open: async (...a) => { sent.push(['open', ...a]); return opens; } },
           chrome: { runtime: { sendMessage: async (m) => sent.push(m) } },
@@ -99,7 +99,7 @@ for (const failure of ['loader', 'commands']) test(`Moodle retains Documents and
   const source = read('navigation/page/palette.js');
   const start = source.indexOf('  const commands = async () => {'), end = source.indexOf('  // Ultra\'s GPA', start);
   const commands = vm.runInNewContext(`${source.slice(start, end)} commands`, {
-    need: async () => {}, keeping: Promise.resolve(), moodle: true, go() {},
+    need: async () => {}, keeping: Promise.resolve(), asking: Promise.resolve(), moodle: true, go() {},
     moodleIn: async () => {
       if (failure === 'loader') throw Error('loader failed');
       return { commands: async () => { throw Error('commands failed'); } };

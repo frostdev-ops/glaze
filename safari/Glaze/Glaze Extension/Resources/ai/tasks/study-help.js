@@ -1,7 +1,7 @@
 // study.help (docs/ai-harness.md, Study help): Glaze helps a student with a question about their coursework and never gives
 // the answer or does the work: a hint toward their next step, guiding questions, the concept underneath with a different
 // example, or a check of their own step. Math, science, code, essays and reading, in Glaze's six locales. Defined and
-// tested; no feature runs it yet, so the worker doesn't load it (background/background.js aiFiles).
+// tested; Ask Glaze runs it (ai/ask.js).
 // input: { question, attempt?, subject, locale?, material?, context? (writer-context.js: course, assignment) }.
 // output: { kind: hint | question | concept | check-my-step, step: correct | mistake | unclear | null, reply, followUp }.
 // check() refuses (null) a reply that states the answer, does the student's step, solves the exact problem given, writes
@@ -155,45 +155,59 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
   // A result or option alone supplies an answer, with or without an introductory "the answer is".
   const BARE = new RegExp(String.raw`^\s*(?:\(?[A-E]\)?|${NUM.source}(?:\s*[/÷]\s*${NUM.source})?(?:\s*(?:%|[\p{L}°²³]+(?:[/*·^][\p{L}\d²³]+)*))?)\s*[.!]?\s*$`, 'u');
 
+  // What the student gave and the context shown with it: the texts a reply is measured against.
+  const textsOf = (inp) => {
+    const ctx = inp.context || {};
+    return [inp.question, inp.attempt, inp.material, ctx.course, ctx.prompt, ctx.assignment?.title, ctx.assignment?.description, ctx.assignment?.instructions,
+      ctx.assignment?.rubric, ...(ctx.assignment?.files || []).map((f) => f.text)].filter(Boolean);
+  };
+  // The answer-giving rules for one piece of text (a reply, a followUp, or Ask Glaze's answer about the student's own records,
+  // ai/ask.js): '' or the rule it breaks: answer, solves, code, wording.
+  const hands = (piece, inp) => {
+    const texts = textsOf(inp), own = squash(`${inp.question}\n${inp.attempt || ''}`), theirs = `${inp.question}\n${inp.attempt || ''}`;
+    const words_ = prose(piece), all = flat(piece);
+    if (BARE.test(all) || ANSWERS.some((r) => r.test(all))) return 'answer';
+    // Solving their problem: a result one step of arithmetic on its numbers gives, said of its own numbers or variables
+    // (an example's foreign number or letter on the left makes it the example's), or a new equation in its variables
+    // whose numbers all come from it.
+    const known = numbers(texts.join('\n')), problem = numbers(theirs), steps = derived(problem), vars = variables(theirs);
+    const isKnown = (n) => known.some((k) => same(k, n)), isStep = (n, d = 0) => steps.some((x) => same(x, n) || (d > 0 && same(Number(x.toFixed(Math.min(d, 12))), n)));
+    for (const m of all.matchAll(RESULT)) {
+      const r = value(m[1]), left = all.slice(0, m.index).split(/[.!?;\n=≈→⇒]/).pop();
+      const quoted = (`${left}${m[0]}`.match(EQUATION) || []).pop();
+      if ((quoted && own.includes(squash(quoted))) || (isKnown(r) && !OPS.test(left)) || !isStep(r, decimals(m[1]))) continue;
+      if (numbers(left).some((n) => !isKnown(n)) || letters(left).some((v) => !vars.has(v) && variables(left).has(v))) continue;
+      return 'solves';
+    }
+    for (const eq of equations(all)) {
+      if (own.includes(squash(eq)) || !letters(eq).some((v) => vars.has(v))) continue;
+      const nums = numbers(eq);
+      if (nums.every((n) => isKnown(n) || isStep(n))) return 'solves';
+    }
+    // Code with the student's own names, beyond quoting their code back to them: a line of a code block, a statement in
+    // a code span, or (for code questions) an assignment or call written in prose.
+    const ids = identifiers(texts.join('\n')), seen = squash(texts.join('\n'));
+    const blocks = [...piece.matchAll(FENCE)].map((m) => m[1]);
+    if (blocks.some((b) => b.split('\n').filter((l) => l.trim()).length > LIMIT.block)) return 'code';
+    const theirName = (l) => (l.match(/[A-Za-z_$][\w$]*/g) || []).some((w) => ids.has(w));
+    const fresh = (l) => l.trim() && !seen.includes(squash(l));
+    if (blocks.flatMap((b) => b.split('\n')).some((l) => fresh(l) && CODE_OP.test(l) && theirName(l))) return 'code';
+    if ([...piece.replace(FENCE, ' ').matchAll(INLINE)].map((m) => m[1]).some((l) => fresh(l) && STATEMENT.test(l) && theirName(l))) return 'code';
+    if (inp.subject === 'code' && [...words_.matchAll(new RegExp(String.raw`[A-Za-z_$][\w$.]*\s*(?:[+\-*/%]?=(?!=)|\+\+|--)\s*[^\s.,;!?][^\n.;!?]*|\breturns?\s+[^\n.;!?]*[+\-*/%(][^\n.;!?]*|${CALL}`, 'g'))].some((m) => fresh(m[0]) && theirName(m[0]))) return 'code';
+    // Wording for their paper: an offer.
+    if (WD.offers(words_, { examples: false })) return 'wording';
+    return '';
+  };
   // → '' when the reply may go to the student, else the rule it breaks: schema, kind, answer, solves, code, wording, quote, speaks.
   const why = (out, inp) => {
     if (S.validate(out, OUTPUT).length || !out.reply.trim()) return 'schema';
     if ((out.kind === 'check-my-step') !== (out.step !== null) || (out.kind === 'check-my-step' && !inp.attempt) || (out.kind === 'question' && !asks(out.reply))) return 'kind';
-    const ctx = inp.context, texts = [inp.question, inp.attempt, inp.material, ctx.course, ctx.prompt, ctx.assignment?.title, ctx.assignment?.description, ctx.assignment?.instructions,
-      ctx.assignment?.rubric, ...(ctx.assignment?.files || []).map((f) => f.text)].filter(Boolean);
-    const sources = texts.map((t) => X().source(t)), own = squash(`${inp.question}\n${inp.attempt}`), theirs = `${inp.question}\n${inp.attempt}`;
+    const texts = textsOf(inp), sources = texts.map((t) => X().source(t));
     for (const piece of [out.reply, out.followUp].filter((p) => typeof p === 'string' && p.trim())) {
-      const words_ = prose(piece), all = flat(piece);
-      if (BARE.test(all) || ANSWERS.some((r) => r.test(all))) return 'answer';
-      // Solving their problem: a result one step of arithmetic on its numbers gives, said of its own numbers or variables
-      // (an example's foreign number or letter on the left makes it the example's), or a new equation in its variables
-      // whose numbers all come from it.
-      const known = numbers(texts.join('\n')), problem = numbers(theirs), steps = derived(problem), vars = variables(theirs);
-      const isKnown = (n) => known.some((k) => same(k, n)), isStep = (n, d = 0) => steps.some((x) => same(x, n) || (d > 0 && same(Number(x.toFixed(Math.min(d, 12))), n)));
-      for (const m of all.matchAll(RESULT)) {
-        const r = value(m[1]), left = all.slice(0, m.index).split(/[.!?;\n=≈→⇒]/).pop();
-        const quoted = (`${left}${m[0]}`.match(EQUATION) || []).pop();
-        if ((quoted && own.includes(squash(quoted))) || (isKnown(r) && !OPS.test(left)) || !isStep(r, decimals(m[1]))) continue;
-        if (numbers(left).some((n) => !isKnown(n)) || letters(left).some((v) => !vars.has(v) && variables(left).has(v))) continue;
-        return 'solves';
-      }
-      for (const eq of equations(all)) {
-        if (own.includes(squash(eq)) || !letters(eq).some((v) => vars.has(v))) continue;
-        const nums = numbers(eq);
-        if (nums.every((n) => isKnown(n) || isStep(n))) return 'solves';
-      }
-      // Code with the student's own names, beyond quoting their code back to them: a line of a code block, a statement in
-      // a code span, or (for code questions) an assignment or call written in prose.
-      const ids = identifiers(texts.join('\n')), seen = squash(texts.join('\n'));
-      const blocks = [...piece.matchAll(FENCE)].map((m) => m[1]);
-      if (blocks.some((b) => b.split('\n').filter((l) => l.trim()).length > LIMIT.block)) return 'code';
-      const theirName = (l) => (l.match(/[A-Za-z_$][\w$]*/g) || []).some((w) => ids.has(w));
-      const fresh = (l) => l.trim() && !seen.includes(squash(l));
-      if (blocks.flatMap((b) => b.split('\n')).some((l) => fresh(l) && CODE_OP.test(l) && theirName(l))) return 'code';
-      if ([...piece.replace(FENCE, ' ').matchAll(INLINE)].map((m) => m[1]).some((l) => fresh(l) && STATEMENT.test(l) && theirName(l))) return 'code';
-      if (inp.subject === 'code' && [...words_.matchAll(new RegExp(String.raw`[A-Za-z_$][\w$.]*\s*(?:[+\-*/%]?=(?!=)|\+\+|--)\s*[^\s.,;!?][^\n.;!?]*|\breturns?\s+[^\n.;!?]*[+\-*/%(][^\n.;!?]*|${CALL}`, 'g'))].some((m) => fresh(m[0]) && theirName(m[0]))) return 'code';
-      // Wording for their paper: an offer, or a quotation of three words or more that no source holds.
-      if (WD.offers(words_, { examples: false })) return 'wording';
+      const rule = hands(piece, inp);
+      if (rule) return rule;
+      const words_ = prose(piece);
+      // A quotation of three words or more that no source holds is wording too.
       for (const q of WD.quotedRanges(words_, true)) if (q.text.trim().split(/\s+/).length >= 3 && !sources.some((x) => x.has(q.text))) return 'quote';
       // Essays, reading and the rest: every statement speaks to the student or about their work. A concept may explain
       // with another text, but never with a name or three words in a row from theirs.
@@ -217,6 +231,6 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
   };
 
   const task = T.add(T.define({ id: 'study.help', version: 1, input, build, output: OUTPUT, check, limits: { ms: 60000 } }));
-  return { task, LIMIT, KINDS, STEPS, SUBJECTS, LOCALES, LANGUAGES, OUTPUT, SYSTEM, system, why };
+  return { task, LIMIT, KINDS, STEPS, SUBJECTS, LOCALES, LANGUAGES, OUTPUT, SYSTEM, system, why, hands };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_TASK_STUDY_HELP; else GZ_AI_TASK_STUDY_HELP;

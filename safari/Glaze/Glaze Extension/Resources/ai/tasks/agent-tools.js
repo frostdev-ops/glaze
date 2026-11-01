@@ -1,6 +1,6 @@
 // agent.tools (docs/ai-harness.md, Agent tools): a small model on this computer answers a student's question about their
 // courses with Glaze's own Agents tools (agents/*.js), one turn at a time: each run either calls one tool or gives the final
-// answer. Defined and tested; no feature runs it yet, so the worker doesn't load it (background/background.js aiFiles).
+// answer. Ask Glaze runs it (ai/ask.js), one run a step.
 // input: { question, tools: [names from SPECS], steps: [{ call: { name, arguments }, result }], now (ms), zone (IANA),
 //   locale? }. A feature runs each call itself, through Agents' grants and the student's approval for a write
 //   (agents/calls.js), and runs the task again with the step added.
@@ -187,16 +187,40 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // The prompt Glaze's own model reads, up to its turn: FORMAT.md's system and user turns, the tools after the trust rule,
   // then each earlier step as an assistant turn (the call, natively) and a tool turn (its result, fenced as data).
   // → [{ special } | { text }], adjacent text joined (ai/local/format.js join).
-  const layout = (inp) => {
-    const F = typeof GZ_AI_LOCAL_FORMAT !== 'undefined' ? GZ_AI_LOCAL_FORMAT : require('../local/format.js');
+  const F = () => (typeof GZ_AI_LOCAL_FORMAT !== 'undefined' ? GZ_AI_LOCAL_FORMAT : require('../local/format.js'));
+  // From its pieces as text: head, the instructions; lines, the <tools> lines; now, question; steps [{ call, result }].
+  const draw = ({ head, lines, now, question, steps }) => {
     const turn = (role, ...parts) => [{ special: '<|im_start|>' }, { text: `${role}\n` }, ...parts, { special: '<|im_end|>' }, { text: '\n' }];
     const block = (kind, l, t) => [{ special: `<|${kind}|>` }, { text: `${l}\n${X().plain(t)}` }, { special: `<|/${kind}|>` }];
-    return F.join([{ special: '<|startoftext|>' },
-      ...turn('system', { special: '<|gz_task:agent.tools|>' }, { text: `${instructions(inp.locale)}\n\n${X().TRUST}\n\n` }, { special: '<tools>' }, { text: `\n${offered(inp.tools).map(line).join('\n')}\n` }, { special: '</tools>' }),
-      ...turn('user', ...block('gz_ctx', 'now', nowText(inp)), { text: '\n' }, ...block('gz_data', 'question', inp.question)),
-      ...inp.steps.flatMap((s, i) => [...turn('assistant', ...native.parts(s.call)),
+    return F().join([{ special: '<|startoftext|>' },
+      ...turn('system', { special: '<|gz_task:agent.tools|>' }, { text: `${head}\n\n${X().TRUST}\n\n` }, { special: '<tools>' }, { text: `\n${lines}\n` }, { special: '</tools>' }),
+      ...turn('user', ...block('gz_ctx', 'now', now), { text: '\n' }, ...block('gz_data', 'question', question)),
+      ...steps.flatMap((s, i) => [...turn('assistant', ...native.parts(s.call)),
         ...turn('tool', { special: '<tool_response>' }, { text: '\n' }, ...block('gz_data', label(i, s.call.name), s.result), { text: '\n' }, { special: '</tool_response>' })]),
       { special: '<|im_start|>' }, { text: 'assistant\n' }]);
+  };
+  const layout = (inp) => draw({ head: instructions(inp.locale), lines: offered(inp.tools).map(line).join('\n'), now: nowText(inp), question: inp.question, steps: inp.steps });
+  // Glaze's own model gets a run's request, never its input: build()'s request read back (format.js parse) into the same
+  // pieces → { parts: layout()'s, tools: the names offered }. A request build() didn't make is refused (code 'request').
+  const fromRequest = (req) => {
+    const refuse = (why) => Object.assign(new Error(`agent.tools: ${why}`), { code: 'request' });
+    const { system, blocks } = F().parse(req);
+    const at = system.indexOf('\n\n<tools>\n');
+    const head = system.slice(0, at), lines = system.slice(at + 10, -9);
+    if (at < 0 || !system.endsWith('\n</tools>') || !Object.keys(LANGUAGES).some((l) => instructions(l) === head)) throw refuse('system');
+    const tools = SPECS.filter((t) => lines.split('\n').includes(line(t)));
+    if (!tools.length || offered(tools.map((t) => t.name)).map(line).join('\n') !== lines) throw refuse('tools');
+    const [now, question, ...rest] = blocks;
+    if (now?.kind !== 'ctx' || now.label !== 'now' || question?.kind !== 'data' || question.label !== 'question' || rest.length % 2 || rest.length / 2 > LIMIT.steps) throw refuse('blocks');
+    const steps = [];
+    for (let i = 0; i < rest.length; i += 2) {
+      let c;
+      try { c = JSON.parse(rest[i].text); } catch { throw refuse('call'); }
+      const n = i / 2;
+      if (rest[i].label !== `call ${n + 1}` || !validCall(c, tools.map((t) => t.name)) || rest[i + 1].label !== label(n, c.name)) throw refuse('step');
+      steps.push({ call: { name: c.name, arguments: c.arguments }, result: rest[i + 1].text });
+    }
+    return { parts: draw({ head, lines, now: now.text, question: question.text, steps }), tools: offered(tools.map((t) => t.name)).map((t) => t.name) };
   };
   // The answer Glaze's own model writes for an output: a native call, or the answer as compact JSON.
   const answerParts = (out) => (out.call ? native.parts(out.call) : [{ text: JSON.stringify({ text: out.answer.text, quotes: out.answer.quotes }) }]);
@@ -260,7 +284,9 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       : { call: null, answer: { text: out.answer.text.trim(), quotes: out.answer.quotes.map((q) => q.trim()) } };
   };
 
-  const task = T.add(T.define({ id: 'agent.tools', version: 1, input, build, output: OUTPUT, check, limits: { ms: 60000 } }));
-  return { task, LIMIT, SPECS, NAMES, SYSTEM, OUTPUT, ANSWER, constraint, instructions, line, py, shown, native, fromNative, readable, layout, answerParts, why };
+  // rate: Ask Glaze (ai/ask.js) runs a question's steps as runs of their own, at most seven (six calls, then the answer): six
+  // questions a minute in a tab, where the broker's default would stop the first question's seventh run.
+  const task = T.add(T.define({ id: 'agent.tools', version: 1, input, build, output: OUTPUT, check, limits: { ms: 60000 }, rate: { perMinute: 6 * (LIMIT.steps + 1) } }));
+  return { task, LIMIT, SPECS, NAMES, SYSTEM, OUTPUT, ANSWER, constraint, instructions, line, py, shown, native, fromNative, readable, layout, fromRequest, answerParts, why };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_TASK_AGENT_TOOLS; else GZ_AI_TASK_AGENT_TOOLS;

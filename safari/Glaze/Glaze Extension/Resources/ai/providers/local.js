@@ -6,7 +6,8 @@
 // chose, else the one downloaded, else, at Download, the ladder's pick for this computer (host.js). prepare() downloads in
 // the host and answers once it is there, or `downloading` after four minutes while it goes on (its progress still reaches
 // Settings). run() writes the request as the model's tokens' parts (ai/local/format.js: the fine-tune's format, or a stock
-// model's chat template) and streams the answer. Tools: not taken. Pictures: only once the picture download (models.json's
+// model's chat template) and streams the answer; agent.tools in its own turns (format.js turns), the turn held to its answer or
+// one offered call and read back as the task's JSON. Tools: not taken. Pictures: only once the picture download (models.json's
 // role pictures and its projector; Settings' second Download, part 'pictures') is here: caps.images and the catalog's
 // vision say so, and a request with pictures runs on that model (LFM3-VL, stock: its own chat template) in the host, which
 // lets the text model go first; the text model's runs bring it back.
@@ -20,6 +21,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const P = typeof GZ_AI_PROVIDERS !== 'undefined' ? GZ_AI_PROVIDERS : require('../providers.js');
   const R = typeof GZ_AI_REQUEST !== 'undefined' ? GZ_AI_REQUEST : require('../request.js');
   const FMT = () => (typeof GZ_AI_LOCAL_FORMAT !== 'undefined' ? GZ_AI_LOCAL_FORMAT : require('../local/format.js'));
+  const AGENT = () => (typeof GZ_AI_TASK_AGENT_TOOLS !== 'undefined' ? GZ_AI_TASK_AGENT_TOOLS : require('../tasks/agent-tools.js'));
   const MODEL = 'glaze-local', NAME = 'Glaze on-device AI';
   // A stock model's window; TUNED, a Glaze-tuned model's (no `stock`): the one its training data was planned for
   // (glaze-plans/lfm-tune FORMAT.md, caps.context 4096), which a request then plans for exactly.
@@ -203,14 +205,19 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     const maxTokens = Math.min(req.maxTokens || MAX_TOKENS, CONTEXT);
     let r;
     try {
-      r = await own().link.call('run', { model: plan.m.id, parts: plan.parts, stable: plan.stable, ...(plan.images && { projector: plan.projector, images: plan.images }), ...(req.schema && { schema: req.schema }),
+      // A task in its own turns (agent.tools) is held to its answer's schema or one offered call (format.js constraint).
+      const held = plan.constraint ? { schema: plan.constraint.schema, tools: plan.constraint.tools } : req.schema && { schema: req.schema };
+      r = await own().link.call('run', { model: plan.m.id, parts: plan.parts, stable: plan.stable, ...(plan.images && { projector: plan.projector, images: plan.images }), ...held,
         ...(plan.think && { think: { budget: plan.budget, ...plan.think } }), ...(!plan.m.stock && { window: windowOf(plan.m).window }),
         sampler: { ...(req.temperature !== undefined && { temperature: req.temperature }) }, maxTokens },
       { signal, onEvent: (e) => { if (e?.type === 'delta' && typeof e.text === 'string' && e.text) onDelta?.(e.text); } });
     } catch (e) { if (signal?.aborted) throw signal.reason; throw host(e); }
     if (!R.isObj(r) || typeof r.text !== 'string') throw fail('invalid-response');
     if (!plan.projector && Number.isFinite(r.rate)) await learn(plan.m.id, r.rate);
-    return { text: r.text, model: MODEL, finish: r.finish === 'stop' ? 'stop' : 'length',
+    // Its turn in LFM3's own syntax (a native call, or the answer's JSON) read back as the task's JSON.
+    const native = plan.constraint && AGENT().fromNative(r.text);
+    if (plan.constraint && native === undefined) throw fail('invalid-response', 'native');
+    return { text: plan.constraint ? JSON.stringify(native) : r.text, model: MODEL, finish: r.finish === 'stop' ? 'stop' : 'length',
       ...(R.isObj(r.usage) && Number.isSafeInteger(r.usage.input) && { usage: { input: r.usage.input, ...(Number.isSafeInteger(r.usage.output) && { output: r.usage.output }) } }) };
   };
   // A warm-up: the host loads the model and reads the system turn once, kept for the run that follows. Never downloads.

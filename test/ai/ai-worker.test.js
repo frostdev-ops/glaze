@@ -118,6 +118,8 @@ test('a run from a page reaches only the connection\'s server, with the key, and
   assert.equal(calls.length, 2);
 });
 
+// Waits on the state, a settle at a time, up to five seconds: a loaded runner takes longer than one settle.
+const until = async (w, done, ms = 5000) => { const end = Date.now() + ms; while (!done() && Date.now() < end) await w.settle(); };
 // Ask Glaze (ai/ask.js): its panel's port, from the same senders as the AI port's; its runs go through the broker as the
 // feature ask and its tool calls through Agents' tools, with agent access itself off.
 const askWorker = (fetch) => {
@@ -130,7 +132,7 @@ test('Ask Glaze\'s port: Glaze in a page of a site it runs on may ask; a quiz, a
   live(w, lms());
   const { port, say } = w.connect('glaze:ask', lms());
   say({ id: 1, op: 'status' });
-  await w.settle();
+  await until(w, () => port.posted.length || port.hungUp);
   assert.equal(port.hungUp, false);
   assert.deepEqual(JSON.parse(JSON.stringify(port.posted[0])), { id: 1, type: 'status', on: true, allowed: true, ready: false, why: 'setup' }, 'the broker\'s status for the feature ask');
   for (const sender of [lms('/courses/1/quizzes/3'), lms('/courses/1/external_tools/9'), { ...lms(), url: 'https://evil.example.com/', origin: 'https://evil.example.com', tab: { id: 4, url: 'https://evil.example.com/' } },
@@ -138,7 +140,7 @@ test('Ask Glaze\'s port: Glaze in a page of a site it runs on may ask; a quiz, a
     live(w, sender);
     const { port: p, say: s2 } = w.connect('glaze:ask', sender);
     s2({ id: 1, op: 'ask', question: 'What is due this week?', locale: 'en' });
-    await w.settle();
+    await until(w, () => p.hungUp || p.posted.length);
     assert.equal(p.hungUp, true, sender.url);
     assert.deepEqual(p.posted, [], `${sender.url}: nothing run, nothing said`);
   }
@@ -156,7 +158,7 @@ test('Ask Glaze in the worker: a question\'s steps run through the broker and Ag
   live(w, lms());
   const { port, say } = w.connect('glaze:ask', lms());
   say({ id: 1, op: 'ask', question: 'What is due this week?', locale: 'en' });
-  for (let i = 0; i < 10 && !port.posted.some((m) => ['end', 'error'].includes(m.type)); i++) await w.settle();
+  await until(w, () => port.posted.some((m) => ['end', 'error'].includes(m.type)));
   const said = JSON.parse(JSON.stringify(port.posted)).filter((m) => m.type !== 'keepalive');
   assert.deepEqual(said.map((m) => m.type), ['route', 'look', 'end'], JSON.stringify(said));
   assert.deepEqual(said.at(-1), { id: 1, type: 'end', task: 'agent.tools', answer: { text: 'Glaze has nothing to show yet.' } });

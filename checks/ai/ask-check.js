@@ -65,7 +65,7 @@ const settingsFor = (preset) => G.GZ_SANITIZE({ preset, colors: { ...G.GZ_PRESET
 const AI = (ask) => ({ on: true, model: { use: 'custom-1', model: 'stub' }, features: { ask } });
 
 (async () => {
-  const lock = env.lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-ask-'));
   const out = path.resolve(process.argv[2] || path.join(os.tmpdir(), 'gz-ask'));
   fs.mkdirSync(out, { recursive: true });
@@ -82,7 +82,7 @@ const AI = (ask) => ({ on: true, model: { use: 'custom-1', model: 'stub' }, feat
     fs.writeFileSync(path.join(ext, 'background/background.js'), worker0 + SHIM);
     await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      ...env.chromeLaunch(), headless: true, viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC',
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking', '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-quic'],
     });
     env.noFirstRun(context);
