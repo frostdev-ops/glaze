@@ -117,14 +117,14 @@ const sum = (frames) => ({
 
 (async () => {
   let context, held = false;
-  const lock = env.lockPath(), scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-cold-')));
+  const lock = require('../../tools/dev/check-env.js').lockPath(), scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-cold-')));
   if (out) fs.mkdirSync(out, { recursive: true });
   try {
     fs.mkdirSync(lock); held = true;
     const ext = env.staged(source, [`${ORIGIN}/*`, `${BUILT_IN}/*`]);
     await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      ...env.chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 },
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'],
     });
     context.setDefaultTimeout(20000);
