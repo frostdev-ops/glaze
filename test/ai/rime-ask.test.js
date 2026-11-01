@@ -380,3 +380,26 @@ test('gate: a local provider under another connection name still gets its own to
     assert.equal(await level(), 1, `the provider, rather than connection id ${use}, decides`);
   }
 });
+
+
+test('gate: broker admission checks the actual pinned weights before sending any Rime tool request', async () => {
+  const B = require('../../extension/ai/broker.js'), P = require('../../extension/ai/providers.js');
+  const previous = globalThis.GZ_AI_PROVIDERS, seen = [];
+  const local = { ...L, config: (raw) => ({ model: L.MODEL, ...raw }),
+    catalog: async () => ({ models: [{ id: L.MODEL, json: true, tools: false, context: { window: 4096, inputLimit: 4096 }, weights: 'r5-pinned' }], source: 'live' }),
+    toolsLevel: async (cfg) => cfg.weights === 'r5-pinned' ? 1 : 3,
+    run: async (req) => { seen.push(req); return { text: JSON.stringify(said('3.2 miles is 5.15 km.', ['5.15'])), model: L.MODEL, finish: 'stop' }; } };
+  globalThis.GZ_AI_PROVIDERS = { ...P, get: (id) => id === 'local' ? local : P.get(id) };
+  const [page, worker] = ports(), got = [];
+  const env = { who: 'pinned-weights', allowed: Promise.resolve(true), enabled: async () => true,
+    settings: async () => ({ on: true, model: { use: 'local' }, features: { ask: true } }),
+    vault: { get: async () => ({ local: { provider: 'local', tier: 3 } }) }, task: async () => A.task };
+  try {
+    B.connect(worker, env);
+    page.onMessage.addListener((m) => got.push(m));
+    page.postMessage({ id: 80, op: 'run', feature: 'ask', task: 'agent.tools', input: { question: 'Convert 3.2 miles to km', tools: ['run_js'], now: C.NOW, zone: 'UTC' } });
+    await settle(60);
+    assert.equal(seen.length, 0, 'a stale catalog or a model change must never hand Rime tools to r5');
+    assert.equal(got.at(-1)?.error, 'changed');
+  } finally { page.disconnect(); globalThis.GZ_AI_PROVIDERS = previous; B._reset(); }
+});
