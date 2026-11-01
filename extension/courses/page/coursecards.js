@@ -10,6 +10,8 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
   const cards = new Map(), nativeCards = new Map(), canvasEdits = new Map(), mounted = new Set(), watched = new WeakSet();
   let retired = false;
   let identity = null, notify = () => {}, uid = '', data = {}, prefs = {}, cache = null, L = null, gs = null, gen = 0;
+  // Ultra: known memberships, whether the whole list is in, and the latest request for this identity.
+  let members = null, membersComplete = false, membership = null;
   const get = (area, keys) => new Promise((resolve) => { try { chrome.storage[area].get(keys, (r) => resolve(chrome.runtime.lastError ? null : r)); } catch { resolve(null); } });
   const live = () => { try { return !retired && !!chrome.runtime.id && ctx.on(); } catch { return false; } };
   const make = (tag, props = {}, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children.filter(Boolean)); return e; };
@@ -18,7 +20,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     const order = [...new Set([...nativeCards.keys(), ...cards.keys()])];
     const groups = new Map();
     for (const id of order) { const c = cards.get(id); if (!c) continue; const rows = groups.get(c.term || '') || []; rows.push({ ...c, key: `course:${location.origin}/${id}` }); groups.set(c.term || '', rows); }
-    return [...groups.values()].flat();
+    return [...groups.values()].flat().filter((c) => own(c.key) !== false);
   };
   // A Look's card rules reach these cards too (looks/page/rules.js): a label stays over what is written here until that
   // changes, and what is written gets the rules back at once (on Ultra the board's changes start no pass of their own).
@@ -56,7 +58,16 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     render();
     retired ||= retire;
   };
-  document.addEventListener?.('glaze:ultra-refresh', (e) => { if (ultra) clearGrades(!!e.detail?.retire); });
+  document.addEventListener?.('glaze:ultra-refresh', (e) => { if (!ultra) return; if (e.detail?.identity) { members = membership = null; membersComplete = false; } clearGrades(!!e.detail?.retire); });
+  // Whether a board's course card is this student's: the layout is the device's, so another student who signs in here has
+  // their cards in it too. own: true or false once Ultra's list of this student's courses is in (or Ultra's own page shows
+  // its card), else undefined. shows:
+  // drawn on this student's boards: theirs, or, while the list is on its way, a course this site's stored records or its
+  // page know, so the student's own cards never wait for the list (no jump on every load). Records are rewritten from the
+  // signed-in student's list, so another student's card can show only in the minutes after a switch, until the list says.
+  // Canvas's are always shown.
+  const own = (key) => { const c = W.course(key); return !ultra || !c || c.origin !== location.origin ? true : members?.has(c.id) || nativeCards.has(c.id) || (membersComplete ? false : undefined); };
+  const shows = (key) => { const o = own(key); return o === undefined ? cards.has(W.course(key).id) : o; };
   // The color a card wears from its course (Ultra's slot, or a pick): its class and variables, on the board and in the
   // Course cards dialog. Only what differs is written.
   const tone = (card, id) => {
@@ -143,10 +154,18 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
         code: text(el.querySelector('.course-id')), term: text(heading) || cards.get(id)?.term || '' });
     }
     const peek = ctx.canvasPeek();
-    watch(peek.courses, (rows) => {
+    // Asked here when nothing on the page has asked yet (Ultra's list is kept a while, so this is rarely a request).
+    const request = membership = peek.courses || ctx.myCourses?.();
+    watch(request, (rows) => {
+      if (request !== membership) return;
       for (const r of rows || []) if (/^_\d+_\d+$/.test(r.courseId)) {
         const c = r.course || {}, old = cards.get(r.courseId);
         cards.set(r.courseId, { id: r.courseId, name: c.name || old?.name || r.courseId, code: c.courseId || old?.code || '', term: c.term?.name || old?.term || '', slot: Number.isInteger(r.courseCardColorIndex) && r.courseCardColorIndex >= 0 ? String(r.courseCardColorIndex % 10 + 1) : old?.slot });
+      }
+      // A list cut short (or a failed read, an empty one marked so) can't say a course isn't the student's.
+      if (Array.isArray(rows)) {
+        membersComplete = rows.complete !== false;
+        members = new Set([...(membersComplete ? [] : members || []), ...rows.map((r) => r?.courseId).filter((id) => /^_\d+_\d+$/.test(id))]);
       }
       notify(); render();
     });
@@ -532,6 +551,6 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
 
   // Canvas: the courses its card view shows now, in its order (an empty list in its list view).
   const shown = () => [...nativeCards.keys()].map((id) => list().find((c) => c.id === id)).filter(Boolean);
-  return { sync, list, shown, title, fill, canvasEdit, picker: { open: openPicker, sync: syncPicker, close: closePicker } };
+  return { sync, list, shown, own, shows, complete: () => !ultra || membersComplete, title, fill, canvasEdit, picker: { open: openPicker, sync: syncPicker, close: closePicker } };
 })();
 GZ_COURSE_CARDS;
