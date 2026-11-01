@@ -337,7 +337,7 @@ test('run_js: through ctx.js where the sandbox is; refused cleanly where it isn\
 const { CANVAS, ULTRA } = C;
 const ACC = `${CANVAS}/5`, UL = `${ULTRA}/${C.ULTRA_UID}`;
 const T0 = C.NOW;
-const alarms = () => { const live = new Map(), log = []; return { live, log, create: async (n, o) => { live.set(n, o); log.push(['create', n, o]); }, clear: async (n) => { live.delete(n); log.push(['clear', n]); return true; } }; };
+const alarms = () => { const live = new Map(), log = []; return { live, log, getAll: async () => [...live].map(([name, o]) => ({ name, scheduledTime: o.when, periodInMinutes: o.periodInMinutes })), create: async (n, o) => { live.set(n, o); log.push(['create', n, o]); }, clear: async (n) => { live.delete(n); log.push(['clear', n]); return true; } }; };
 const memory = (store) => ({ get: async (k) => structuredClone(Object.fromEntries([].concat(k).filter((x) => Object.hasOwn(store, x)).map((x) => [x, store[x]]))), set: async (v) => { Object.assign(store, structuredClone(v)); } });
 // The worker's env: Agents' own tools read Glaze's caches for the monitor's account.
 const reader = (store) => { const all = [...ST.tools(), ...GR.tools()]; return (name, args, account) => all.find((t) => t.name === name).run(args, C.ctx(store, account)); };
@@ -397,6 +397,44 @@ test('wakes: malformed stored monitors cannot block other wakes or leak unbounde
   const [fired] = await W.take(env);
   assert.equal(fired.say.length, W.LIMIT.say);
   assert.deepEqual(store.rimeWakes.monitors, []);
+});
+
+test('wakes: rearming preserves an existing monitor cadence and removes spent wake alarms', async () => {
+  const store = {}, env = wakesEnv(store), ctx = { account: ACC, zone: 'UTC' };
+  env.read = async () => ({ items: [{ type: 'assignment', id: '1', title: 'Lab', due: T0 + 864e5 }] });
+  await wtool(env, 'monitor_create').run({ watch: 'due', type: 'assignment', id: '1' }, ctx);
+  await wtool(env, 'wake_create').run({ at: '2026-10-15 21:00', say: 'Lab' }, ctx);
+  await W.tick(env);
+  assert.equal(env.alarms.log.filter(([op, name]) => op === 'create' && name === W.TICK).length, 1, 'page activity must not push the periodic alarm back');
+  env.at(Date.UTC(2026, 9, 15, 22));
+  await W.take(env);
+  assert.equal([...env.alarms.live.keys()].some((n) => n.startsWith('gz-rime:wake:')), false);
+});
+
+test('wakes: startup and the off/on switch restore missing alarms from the stored records', async () => {
+  const store = {}, env = wakesEnv(store), events = { startup: [], installed: [], changed: [] };
+  await wtool(env, 'wake_create').run({ at: '2026-10-15 21:00', say: 'Lab' }, { zone: 'UTC' });
+  const id = store.rimeWakes.wakes[0].id;
+  env.alarms.live.clear();
+  const source = fs.readFileSync(path.join(ROOT, 'extension/background/background.js'), 'utf8');
+  const block = source.slice(source.indexOf('const rimeWakesEnv ='), source.indexOf('// The registry\'s state', source.indexOf('const rimeWakesEnv =')));
+  let enabled = true;
+  vm.runInNewContext(block, {
+    chrome: { alarms: { ...env.alarms, onAlarm: { addListener() {} } }, storage: { local: env.local, onChanged: { addListener: (f) => events.changed.push(f) } },
+      runtime: { onStartup: { addListener: (f) => events.startup.push(f) }, onInstalled: { addListener: (f) => events.installed.push(f) } } },
+    GZ_AI_RIME_WAKES: W, GZ_AI_SETTINGS: { clean: () => ({ wakes: enabled }), allowed: () => true },
+    ai() {}, glazeOn: async () => true, Date: { now: env.now },
+  });
+  assert.equal(events.startup.length, 1, 'startup must rebuild browser alarms');
+  await events.startup[0]();
+  assert.ok(env.alarms.live.has(`gz-rime:wake:${id}`));
+  enabled = false;
+  await Promise.all(events.changed.map((f) => f({ ai: {} }, 'local')));
+  assert.equal(env.alarms.live.size, 0);
+  assert.equal(store.rimeWakes.wakes.length, 1, 'turning off retains the saved wake');
+  enabled = true;
+  await Promise.all(events.changed.map((f) => f({ ai: {} }, 'local')));
+  assert.ok(env.alarms.live.has(`gz-rime:wake:${id}`));
 });
 
 test('wake_create: approved first, kept with its alarm, at most 20, refused when passed, too far off or switched off', async () => {
