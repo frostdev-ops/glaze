@@ -7,6 +7,7 @@ const { chain, cssRules, winner } = require('../helpers/css-cascade.cjs');
 // For these controls, :disabled is their own disabled attribute; a synthetic attribute stands for the pointer state.
 // Both substitutions preserve specificity and let the existing static matcher evaluate the relevant state rules.
 const theme = cssRules('content/theme.css').map(([s, b]) => [s.replace(/:disabled\b/g, '[disabled]').replace(/:hover\b/g, '[data-test-hover]'), b]);
+const apps = cssRules('core/page/apps.css').map(([s, b]) => [s.replace(/:hover\b/g, '[data-test-hover]'), b]);
 const PAGE = ['html', 'body', 'div#site-wrap'];
 const streamButton = (cls = '', attrs = {}) => Object.assign(chain(...PAGE, 'div.base-recent-activity', 'div#activity-stream.activity-stream',
   'div.activity-group', `button.js-show-more.expand.button.button--text${cls}`), { attrs });
@@ -31,4 +32,17 @@ test('Activity filter keeps its error state and floating-label ink on its surfac
     assert.match(winner(theme, label, 'background(?:-color)?')[0], /var\(--gz-surface-fill-2/);
     assert.equal(winner(theme, label, 'color')[0], error ? 'var(--gz-err)' : 'var(--gz-ink-muted)');
   }
+});
+
+test('Dashboard bar buttons keep their hover and pressed borders over their surface', () => {
+  for (const cls of ['gz-w-small', 'gz-w-btn']) {
+    const button = chain(...PAGE, 'section#gz-dash', 'div.gz-dash-bar', `button.${cls}`);
+    assert.match(winner(apps, button, 'background(?:-color)?')[0], /var\(--gz-surface-fill-2/);
+    button.attrs = { 'data-test-hover': '' };
+    assert.equal(winner(apps, button, 'border(?:-color)?')[0], cls === 'gz-w-small' ? 'var(--gz-border-strong, var(--gz-line-strong))' : 'var(--gz-accent)');
+  }
+  const edit = Object.assign(chain(...PAGE, 'section#gz-dash', 'div.gz-dash-bar', 'button.gz-w-small.gz-dash-edit'), { attrs: { 'aria-pressed': 'true' } });
+  assert.equal(winner(apps, edit, 'border(?:-color)?')[0], 'var(--gz-border-strong, var(--gz-line-strong))');
+  const main = chain(...PAGE, 'section#gz-dash', 'div.gz-dash-bar', 'button.gz-w-btn.gz-w-main');
+  assert.equal(winner(apps, main, 'background(?:-color)?')[0], 'var(--gz-accent)');
 });
