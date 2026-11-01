@@ -36,7 +36,14 @@ var GZ_STICKY_FOLD = globalThis.GZ_STICKY_FOLD || (() => {
     for (const [sel, keep] of BANDS) for (const band of document.querySelectorAll(sel)) {
       const parent = band.parentElement;
       if (!parent) continue;
-      if (!place.has(band)) place.set(band, { at: offset(band), scroller: /^(auto|scroll|overlay)$/.test(globalThis.getComputedStyle?.(parent).overflowY) });
+      if (!place.has(band)) {
+        // A resize changes the whole height too. Remeasure unfolded in this pass, then retain the previous fold state
+        // so a band inside the hysteresis range stays folded. Nothing paints between these measurements.
+        const stuck = band.hasAttribute('data-gz-stuck');
+        if (stuck) fold(band, false);
+        place.set(band, { at: offset(band), scroller: /^(auto|scroll|overlay)$/.test(globalThis.getComputedStyle?.(parent).overflowY) });
+        if (stuck) fold(band, true, keep);
+      }
       const p = place.get(band), past = band.getBoundingClientRect().top - parent.getBoundingClientRect().top + (parent.scrollTop || 0) - p.at;
       fold(band, !(p.scroller && parent.scrollTop <= 0) && past > (band.hasAttribute('data-gz-stuck') ? 0.5 : FOLD), keep);
     }
