@@ -126,7 +126,7 @@ const harness = ({ script = [], approve = 'yes', level = 3, store = {}, now = C.
   K.connect(worker, env);
   const got = [];
   page.onMessage.addListener((m) => got.push(m));
-  return { got, seen, store, wakes, say: (m) => page.postMessage(m), ends: () => got.filter((m) => ['end', 'error'].includes(m.type)), steps: () => got.filter((m) => m.type === 'step').map((m) => m.step) };
+  return { got, seen, store, wakes, env, say: (m) => page.postMessage(m), ends: () => got.filter((m) => ['end', 'error'].includes(m.type)), steps: () => got.filter((m) => m.type === 'step').map((m) => m.step) };
 };
 
 test('port: run_js, then a place opened and words marked; each card\'s detail; the actions sent once the answer passes, before its end', async () => {
@@ -233,4 +233,21 @@ test('gate: the selected tier and explicit weights decide the level, including t
     GZ_AI_LOCAL: { config: L.config, toolsLevel: async (c) => L.levelOf(list, c) },
   });
   assert.equal(await level(), 1, 'the worker must pass the configuration the broker runs');
+});
+
+
+test('port: cancellation during context loading never opens an approval', async () => {
+  let release;
+  const waiting = new Promise((r) => { release = r; });
+  const h = harness({ script: [call('wake_create', { at: '2026-10-15 21:00', say: 'Finish the lab' })] });
+  h.env.own.writer = () => waiting;
+  h.say({ id: 30, op: 'ask', question: 'Remind me at 9 pm to finish the lab' });
+  await settle(25);
+  h.say({ id: 30, op: 'cancel' });
+  await settle(15);
+  release(true);
+  await settle(30);
+  assert.deepEqual(h.seen.asks, [], 'Stop before the approval exists must not open it later');
+  assert.equal(h.store.rimeWakes, undefined);
+  assert.equal(h.ends().at(-1).error, 'cancelled');
 });
