@@ -164,13 +164,16 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
   // What the student gave and the context shown with it: the texts a reply is measured against.
   const textsOf = (inp) => {
     const ctx = inp.context || {};
-    return [inp.question, inp.attempt, inp.material, ctx.course, ctx.prompt, ctx.assignment?.title, ctx.assignment?.description, ctx.assignment?.instructions,
+    return [...(inp.history || []).map((h) => h.question), inp.question, inp.attempt, inp.material, ctx.course, ctx.prompt, ctx.assignment?.title, ctx.assignment?.description, ctx.assignment?.instructions,
       ctx.assignment?.rubric, ...(ctx.assignment?.files || []).map((f) => f.text)].filter(Boolean);
   };
   // The answer-giving rules for one piece of text (a reply, a followUp, or Ask Glaze's answer about the student's own records,
   // ai/ask.js): '' or the rule it breaks: answer, solves, code, wording.
   const hands = (piece, inp) => {
-    const texts = textsOf(inp), own = squash(`${inp.question}\n${inp.attempt || ''}`), theirs = `${inp.question}\n${inp.attempt || ''}`;
+    // A cloud follow-up can refer to the earlier problem without repeating it. Check against the student's earlier words
+    // too; the assistant's examples are not the student's problem. This does not change any model's request.
+    const theirs = [...(inp.history || []).map((h) => h.question), inp.question, inp.attempt || ''].join('\n');
+    const texts = textsOf(inp), own = squash(theirs);
     const words_ = prose(piece), all = flat(piece);
     if (BARE.test(all) || ANSWERS.some((r) => r.test(all))) return 'answer';
     // Solving their problem: a result one step of arithmetic on its numbers gives, said of its own numbers or variables
