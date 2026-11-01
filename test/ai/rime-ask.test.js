@@ -251,3 +251,15 @@ test('port: cancellation during context loading never opens an approval', async 
   assert.equal(h.store.rimeWakes, undefined);
   assert.equal(h.ends().at(-1).error, 'cancelled');
 });
+
+
+test('port: a monitor runs against the same record its approval summarized', async () => {
+  const h = harness({ script: [call('monitor_create', { watch: 'due', type: 'assignment', id: '1', say: 'Tell me when it moves' }), said('Watching the due date.')] });
+  let reads = 0;
+  h.wakes.read = async () => ({ items: [{ type: 'assignment', id: '1', due: C.NOW + 864e5, title: ++reads === 1 ? 'Biology lab' : 'History essay', course: 'BIO' }] });
+  h.say({ id: 31, op: 'ask', question: 'Let me know when the due date moves' });
+  await settle(90);
+  assert.match(h.seen.asks[0].view.summary, /Biology lab/);
+  assert.equal(h.store.rimeWakes.monitors[0].base.title, 'Biology lab', 'Allow binds the record the student saw');
+  assert.equal(reads, 1, 'summary and run share one immutable reading');
+});
