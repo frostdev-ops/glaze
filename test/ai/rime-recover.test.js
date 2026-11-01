@@ -120,6 +120,17 @@ test('marking a to-do done never makes the fallback claim it was submitted, in a
   }
 });
 
+test('the fallback requires a successful list, without treating a single read or its wrapper as a list item', () => {
+  const step = (v) => ({ result: JSON.stringify(v) });
+  for (const value of [
+    { title: 'Essay', instructions: 'Read chapters 1 and 2.' },
+    { ok: false, title: 'Read failed', items: [{ title: 'Unusable result' }] },
+    { error: 'Unavailable', items: [{ title: 'Unusable result' }] },
+    { missing: 'Open the course', items: [{ title: 'Unusable result' }] },
+  ]) assert.equal(A.listAnswer([step(value)]), null, JSON.stringify(value));
+  assert.equal(A.listAnswer([step({ title: 'Course contents', items: [{ title: 'Lab report' }] })]), 'From what Glaze read:\n- **Lab report**');
+});
+
 // ---- the step loop: the stub model's bad answer, then each recovery path -------------------------------------------------
 // outs: each agent.tools run's answer in order: an output, or { why, raw } for a check failure.
 const loop = async (outs) => {
