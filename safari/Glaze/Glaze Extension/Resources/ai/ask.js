@@ -242,7 +242,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     // its tools these topics' reads), then study.help answers with what was read; help naming nothing is study help alone.
     if (work.trim() || working) {
       const numbered = words(lists(NAMED, locale).map((n) => `(?:${n}) #?\\d+`)).test(q);
-      const named = level >= 3 && (CODE.test(q) || has(NAMED) && (PARTICULAR.test(q) || numbered)) && !on.includes('assignments') ? TOOLS.assignments : [];
+      const particular = words(lists(NAMED, locale).map((n) => `${PARTICULAR.source}[ -]+(?:[\\p{L}-]+[ -]+){0,2}(?:${n})`)).test(q);
+      const named = level >= 3 && (CODE.test(q) || particular || numbered) && !on.includes('assignments') ? TOOLS.assignments : [];
       const reads = level >= 3 ? [...on.filter((k) => READS.includes(k) && k !== 'mark').flatMap((k) => TOOLS[k]), ...own.filter((k) => READS.includes(k)).flatMap((k) => TOOLS3[k]), ...named] : [];
       return reads.length ? { task: 'study.help', subject: subject(), read: [...new Set(reads)].slice(0, LIMIT.tools - 1).concat('accounts_list') } : { task: 'study.help', subject: subject() };
     }
