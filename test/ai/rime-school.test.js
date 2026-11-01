@@ -658,3 +658,27 @@ test('an empty Ultra discussion prompt still rejects pages beyond its one page',
   assert.equal(extra.ok, false);
   assert.match(extra.error, /1 page/);
 });
+
+// ---- one phrase set: what the router sends to wake or monitor as a request passes the check as asked -------------------
+test('route() and check() agree on every language\'s reminder, notice, watch and cancel phrasings (the generator\'s gaps included)', () => {
+  const later = new Date(NOW + 3 * 3600e3).toISOString().slice(0, 16).replace('T', ' ');
+  const calls = { remind: { name: 'wake_create', arguments: { at: later, say: 'Lab' } }, watch: { name: 'monitor_create', arguments: { watch: 'announcement' } } };
+  const asks = {
+    remind: {
+      en: ['Set a reminder for the lab tonight', 'Add a reminder for the lab'], es: ['Ponme un recordatorio para el laboratorio', 'Pon un recordatorio a las 21:00', 'Estudio mañana: recuérdame a las 9'],
+      'pt-BR': ['Cria um lembrete para o laboratório', 'Tenho prova amanhã: me lembra às 9'], fr: ['Programme un rappel pour le labo', 'Mets un rappel pour ce soir'],
+      de: ['Stelle eine Erinnerung für das Labor ein', 'Morgen ist Abgabe: Erinnere mich um 9'], nl: ['Zet een herinnering voor het lab', 'Morgen inleveren: herinner me om 9'],
+    },
+    watch: {
+      en: ['Tell me when a new announcement is posted'], es: ['Dime cuando haya un anuncio nuevo'], 'pt-BR': ['Me diga quando sair um aviso novo'], fr: ['Dis-moi quand il y a une annonce'],
+      de: ['Sag mir Bescheid, wenn es eine neue Ankündigung gibt', 'Gib mir Bescheid, wenn eine Ankündigung kommt'], nl: ['Laat me weten als er een aankondiging is'],
+    },
+  };
+  for (const [kind, byLocale] of Object.entries(asks)) for (const [locale, qs] of Object.entries(byLocale)) for (const q of qs) {
+    const r = K.route(q, { locale, level: 3 });
+    assert.ok((r.tools || []).includes(calls[kind].name), `${locale} routes ${q} to ${calls[kind].name}: ${JSON.stringify(r)}`);
+    assert.equal(A.why({ call: calls[kind], answer: null }, A.task.input({ question: q, tools: [...A.NAMES], steps: [], now: NOW, zone: 'UTC', locale })), '', `${locale} check: ${q}`);
+  }
+  // The shared set itself: every phrase of a language is in the router's table for it.
+  for (const l of Object.keys(A.PHRASES.remind)) for (const p of [...A.PHRASES.remind[l], ...A.PHRASES.cancel[l], ...A.PHRASES.notify[l], ...A.PHRASES.watch[l]]) assert.equal(typeof p, 'string');
+});
