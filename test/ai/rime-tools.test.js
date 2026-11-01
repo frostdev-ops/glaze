@@ -186,6 +186,16 @@ test('places: Ultra and Moodle, from the paths Glaze already opens there', () =>
   assert.equal(m.places.find((p) => p.place === 'course:16/grades').url, 'http://localhost:8081/grade/report/user/index.php?id=16');
 });
 
+test('places: Moodle here tolerates page options while keeping course query ids distinct', () => {
+  const at = (suffix) => P.map({ site: 'moodle', url: `https://school.example/course/view.php?${suffix}`, courses: [{ id: '16', name: 'Biology' }, { id: '17', name: 'History' }] }).here;
+  assert.equal(at('id=16&section=2'), 'course:16');
+  assert.equal(at('section=2&id=17'), 'course:17');
+  assert.equal(at('id=160'), null);
+  assert.equal(at('id=16&id=17'), null, 'ambiguous query ids are not a known course');
+  const calendar = P.map({ site: 'moodle', url: 'https://school.example/calendar/view.php?view=week&time=1793404800' });
+  assert.equal(calendar.here, 'calendar');
+});
+
 test('place_open: a real place goes to the panel as an action; anything else is refused with the nearest place', async () => {
   const open = tool(P.tools(), 'place_open'), c = placesCtx('https://school.instructure.com/');
   assert.deepEqual(await open.run({ place: 'course:25/grades' }, c), { opened: 'course:25/grades', title: 'BIO 1100 grades' });
