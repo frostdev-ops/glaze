@@ -410,7 +410,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       : name === 'page_highlight' ? r?.marked : undefined);
     const own = async (c, signal) => {
       const mine = current, def = owned(signal).get(c.name), { step, ms } = card(mine, c, def.kind === 'confirm' ? 'write' : 'read');
-      const context = await F().wait(() => ownContext(c.arguments, mine), signal);
+      const context = await F().wait(() => ownContext(c.arguments, mine, signal), signal);
       if (signal?.aborted) throw cancelled();
       if (def.kind === 'confirm') {
         let summary;
@@ -431,7 +431,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       step(result?.ok === false ? 'fail' : 'done', { ms: ms(), ...(typeof more === 'string' && more && { detail: more.slice(0, 120) }) });
       return { result, ...(def.kind === 'confirm' && { asked: 'yes' }) };
     };
-    const ownContext = async (args, mine) => {
+    const ownContext = async (args, mine, signal) => {
       const page = mine?.page || {}, accounts = await env.accounts().catch(() => []);
       const here = (() => { try { return new URL(page.url).origin; } catch { return ''; } })();
       const matches = accounts.filter((a) => a.origin === here);
@@ -440,7 +440,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         courses: async () => (account ? (await env.own.read('courses_list', {}, account))?.items || [] : []),
         ui: { actions: mine?.actions || [], push: (a) => mine?.actions.push(a) },
         // The school's reads: its caches (storage.local) and, for the rest, an open tab of this account's site.
-        local: env.local, tab: account && env.own.tab ? (op, a) => env.own.tab(account, op, a) : undefined };
+        local: env.local, tab: account && env.own.tab ? (op, a) => env.own.tab(account, op, a, { signal }) : undefined };
     };
 
     // Wakes and monitors that fired, for the panel to show on this page; kept here by id (an hour) for the click that asks.
