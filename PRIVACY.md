@@ -189,8 +189,8 @@ open tab of your school's site), and, read the same way, a course's announcement
 (on Blackboard, read-only GETs to its public API, including an Ultra document's body block and a discussion's replies),
 and sends what it read to that model to answer. From a discussion it sends the prompt, whether it is graded, your own
 replies and only the number of your classmates' replies: never their names or posts. Quoted blocks in your replies are
-omitted, and participant names supplied by Blackboard are redacted from returned text. Canvas discussion prompt reads are
-refused until instructor authorship can be verified; their list remains available. For a file a page embeds it sends
+omitted, and participant names supplied by Blackboard are redacted from returned text. On Canvas a discussion's prompt is read
+only when a teacher or TA of the course wrote it (checked against the course's teacher and TA list, read once per page). For a file a page embeds it sends
 the file's name and type, never its address. Ask Rime's switch is that tool access:
 it needs no Agents pairing and doesn't turn agent access on. Its one change, marking a to-do done, waits for your OK in
 Glaze's window, worded by Glaze, never by the model. Nothing of the conversation is kept: it goes when the page or the

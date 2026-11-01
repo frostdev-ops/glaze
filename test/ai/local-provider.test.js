@@ -18,6 +18,15 @@ const L = require('../../extension/ai/local/link.js');
 const FMT = require('../../extension/ai/local/format.js');
 const LOCAL = require('../../extension/ai/providers/local.js');
 
+test('the browser provider check uses a tokenizable miniature model vocabulary', () => {
+  const source = require('node:fs').readFileSync(require.resolve('../../checks/ai/local-provider-check.js'), 'utf8');
+  const constants = source.slice(source.indexOf('const BYTE ='), source.indexOf('const gguf ='));
+  const { tokens, types } = require('node:vm').runInNewContext(`${constants}\n({ tokens: TOKENS, types: TYPES })`);
+  const tok = K.load({ tokens, types, merges: [], pre: 'lfm2' });
+  for (const special of K.GLAZE_TOKENS) tok.add(special);
+  assert.equal(tok.decode(tok.encode('ready')), 'ready');
+});
+
 // ---- a small vocabulary: the 256 bytes, a few merges, LFM3's specials, reserved rows for Glaze's own ---------------------
 const BYTE = (() => {
   const keep = [];
@@ -32,7 +41,7 @@ const VOCAB = (() => {
   const tokens = [...BYTE], types = tokens.map(() => 1);
   for (const [a, b] of merges) { tokens.push(a + b); types.push(1); }
   for (const [t, ty] of [['<|startoftext|>', 3], ['<|im_start|>', 3], ['<|im_end|>', 3], ['<think>', 4], ['</think>', 4]]) { tokens.push(t); types.push(ty); }
-  for (let i = 0; i < 20; i++) { tokens.push(`[PAD${i}]`); types.push(5); }
+  for (let i = 0; i < 32; i++) { tokens.push(`[PAD${i}]`); types.push(5); }
   return { tokens, types, merges: merges.map((m) => m.join(' ')), pre: 'lfm2', bos: tokens.indexOf('<|startoftext|>'), eos: tokens.indexOf('<|im_end|>') };
 })();
 const TOK = (() => { const t = K.load(VOCAB); for (const n of K.GLAZE_TOKENS) t.add(n); return t; })();

@@ -230,7 +230,7 @@ of them is the same, byte for byte. Every parameter is a string or an integer (t
 | `content_list` | read | `course` | Canvas: its modules' items (no headers, unpublished or locked); Ultra: what the student may see now (Ultra search's documents, folders, files, links). `{ items: [{ id, title, kind, module? }] }`. |
 | `content_read` | read | `course`, `id`, `page?` | An Ultra item's text, paged, with the names, types and sizes of the files its body embeds (`data-bbfile`: never the signed `resourceUrl`/`viewerUrl`); an Ultra document (a folder with `isBbPage`) is read from its `children`' `ultraDocumentBody` block; a body that is only a file gives `files` and a `note`. Canvas pages and files are refused: unverified, since no Canvas page, syllabus or file response has been captured yet (the local Canvas is down), and nothing is built against a guess. Canvas syllabus text is unverified the same way; `syllabus_read` gives only what an import kept there. |
 | `syllabus_read` | read | `course`, `page?` | What Glaze kept from a syllabus import (planner/syllabus.js): instructor, hours, meetings, dates, scale, weights; on Ultra also `document`: the shallowest visible document or file at most three folders down whose title names a syllabus in one of the six languages, read as `content_read` reads one; else how to import. An embedded PDF's text is not read. |
-| `discussions_list`, `discussion_read` | read | `course`; `id`, `page?` | Canvas's topics are listed, but prompt reads are refused: the current topic shape cannot establish instructor authorship, so a classmate's topic must not become a prompt sent to the model. Ultra: the list as Ultra answers it (id and title only, whatever fields are asked); one discussion's prompt (its `topic`, when available and published), `gradable`, `at`, the student's own replies (`userId` is theirs; at most 3, 300 characters each, page 1; `reply`: it answers a classmate's post, not the prompt) and `others`, the count of classmates' replies. Quoted blocks are removed from the student's replies, and participant names supplied by the topic/messages are redacted from returned text. Classmates' names and posts never leave the tab: they could otherwise reach a cloud provider. |
+| `discussions_list`, `discussion_read` | read | `course`; `id`, `page?` | Canvas: the topics are listed; a prompt is read only when its author is a teacher or TA of the course (the course's `enrollments?type[]=TeacherEnrollment&type[]=TaEnrollment`, one same-origin GET per course for the page; any failure keeps the refusal, so a classmate's topic never becomes a prompt), with the same reply rules as Ultra below (entries and their `recent_replies`; shapes from Canvas's API documentation, not yet captured live). Ultra: the list as Ultra answers it (id and title only, whatever fields are asked); one discussion's prompt (its `topic`, when available and published), `gradable`, `at`, the student's own replies (`userId` is theirs; at most 3, 300 characters each, page 1; `reply`: it answers a classmate's post, not the prompt) and `others`, the count of classmates' replies. Quoted blocks are removed from the student's replies, and participant names supplied by the topic/messages are redacted from returned text. Classmates' names and posts never leave the tab: they could otherwise reach a cloud provider. |
 
 There is no fill tool: Glaze never fills in the student's work or a site's forms.
 
@@ -272,6 +272,26 @@ In Ask Rime (`ai/ask.js`, `ai/page/ask.js`):
   what was read as its `material`. Help naming nothing, and general questions, go to study.help alone. The reads go
   through `agents/tab.js` ops (`announcement`, `search`, `modules`, `topics`) in an open tab of the account's school,
   as Agents' reads do, or Glaze's caches; with no tab open a read says so. Moodle accounts aren't read by the agent layer.
+- **The student's week, dates and the conversation at level 3** (the owner's Sunday, 2026-11-01): the `now` block adds the
+  windows a student means (today, tomorrow, this week to the coming Sunday or on a weekend the next, this weekend, next
+  week, due soon: a week), resolved on their clock; times in results are friendly and localized ("Monday, November 2,
+  11:59 PM"; the year only when it isn't now's); an answer that says nothing is due while a result lists work not handed in
+  fails (`missed`); agent.tools takes the panel's last three turns (an `earlier` block, 300/600 characters a turn), and
+  pushback or a follow-up after an answer ("that's not true", "you missed…", "what about Monday?", six languages) routes as
+  the question before it with fresh calls; the system text asks for glaze-plans' MARKDOWN.md answer format, which the
+  panel renders. Reminder, notice, watch and cancel phrasings are one table (agent-tools.js `PHRASES`) the router and the
+  check share. Level 1 is byte-identical.
+- **The context window** (ai/ask.js; the owner, 2026-11-01): before each request Ask Rime asks the broker to `count` it
+  (Glaze's own model: its tokenizer in the engine host, exactly; a cloud model: text.js's estimate) against the window the
+  provider runs with (the configured context, never an assumed 4,096), and posts `{ id, type: 'context', task, used,
+  window, reserve, exact }` to the panel (reserve: the answer's max tokens). At level 3 the panel's turns before the last
+  two fold into a summary once the next request would pass 70% of the window (or more than three turns are open):
+  `chat.compact` (ai/tasks/chat-compact.js, at most six bullets, every bullet resting on a quoted value the turns hold) runs
+  between turns with the chat's model; if it fails its check, or the next question comes first, its deterministic
+  fallback (the older questions and the items their answers named) stands. agent.tools reads it as a `summary` block
+  before `earlier`; study.help (cloud only) as the conversation's first turn. Within one run, results the model has used
+  become digests (titles, ids, dates) when the next request would overflow; the latest never does. A question with no
+  history (New chat) clears it all. Compaction scales with the window. Level 1 sends nothing new.
 - **Routing at level 3** (`TOPICS3`, six languages): announcements, content, syllabus and discussions (their reads), compute (`run_js`; a computing verb in the student's own grade math
   is no help request, but graded work still goes to study.help), navigate (`places_list`, `place_open`, `page_highlight`),
   remind (`wake_create`, `wakes_list`, `wake_cancel`) and watch (`monitor_create`, `wakes_list`, `todo_list`,
@@ -593,6 +613,13 @@ the assistant header; never think mode). A models.json entry without `stock` (Ri
 `tools/vendor/model-manifest.js` without `--stock`) reads `glaze`. `test/ai/local-format-ids.test.js` holds `glaze` to
 `glaze-plans/lfm-tune/FORMAT-v2.md` id for id: for requests each trained task builds, the ids its `train/format.js`
 `promptV2` and LFM3's tokenizer give, direct and, for a think task, think (fixture: `tools/dev/local-format-fixture.js`).
+
+Context size (round 8 format): six specials `<|gz_ctx:4k|>` … `<|gz_ctx:128k|>` (ids 125049–125054; `<|gz_task:chat.compact|>`
+is 125055; all `[PAD]` rows of LFM3's GGUFs, never produced by text) name the window a glaze-dialect request runs with, right
+after the task token: the largest size at or under it. `SCALE` in `ai/providers/local.js` turns them on with the per-size
+think budget (`THINK_SIZED`: agent.tools and study.help 128/256/512/1024 at 4K/8K/16K/32K+) and answer reserve (`ANSWER`:
+512/768/1024/1536/2048 at 4K/8K/16K/32K/64K+), each capped by the room the window leaves; all off until a model trained
+with them ships, so Rime r5's requests are unchanged.
 
 Think mode (FORMAT-v2): a Glaze-tuned model reasons before it answers for the requests `THINK` in `ai/providers/local.js`
 gives a budget (256 tokens: agent.tools only; D4 measured p3dpo thinking worse than answering directly on writer.review,

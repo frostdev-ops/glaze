@@ -23,7 +23,8 @@ GZ_AI_PROVIDERS.add({ id: 'stub', config: (raw) => (raw && typeof raw === 'objec
     const task = req.task?.id, next = (askCheck.script[task] || []).shift();
     const text = req.messages.map((m) => [].concat(m.content).map((c) => (typeof c === 'string' ? c : c.text || '')).join('')).join('\\n');
     const mark = /\\[result \\d+ todo_mark_done[^\\]]*\\]\\n<<<(DATA-[0-9a-f]+)\\n([\\s\\S]*?)\\n>>>\\1/.exec(text);
-    askCheck.seen.push({ task, steps: (text.match(/\\[result \\d+ /g) || []).length, ...(mark && { mark: JSON.parse(mark[2]) }) });
+    askCheck.seen.push({ task, steps: (text.match(/\\[result \\d+ /g) || []).length, ...(mark && { mark: JSON.parse(mark[2]) }), ...(/\\nthis week \\d{4}-\\d{2}-\\d{2} to /.test(text) && { windows: true }) });
+    askCheck.last = text;
     if (!next) throw Object.assign(new Error('script'), { category: 'invalid-response' });
     // { wait, out }: the answer after wait ms (a run caught mid-way for its screenshot).
     if (next.wait) await new Promise((r) => setTimeout(r, next.wait));
@@ -98,6 +99,8 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
     env.noFirstRun(context);
     context.setDefaultTimeout(15000);
     const asked = [], errors = [];
+    // The Sunday scene's planner on Canvas, so the page's own refresh keeps the scenario's items.
+    let sunday = null;
     await context.route('**/*', (r) => {
       const req = r.request(), u = new URL(req.url());
       if (u.protocol === 'chrome-extension:') return r.continue();
@@ -114,7 +117,7 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
       if (u.origin !== CANVAS || req.method() !== 'GET') { asked.push(`refused ${req.method()} ${u.href}`); return r.abort(); }
       asked.push(u.pathname);
       if (u.pathname === '/api/v1/users/self/profile' || u.pathname === '/api/v1/users/self') return json({ id: '5', time_zone: 'UTC' });
-      if (u.pathname === '/api/v1/planner/items') return json(PLANNER);
+      if (u.pathname === '/api/v1/planner/items') return json(sunday || PLANNER);
       if (u.pathname === '/api/v1/courses/25/discussion_topics/70') return json(TOPIC);
       if (u.pathname.startsWith('/api/v1/')) return json([]);
       if (u.pathname.endsWith('.css')) return r.fulfill({ contentType: 'text/css', body: '' });
@@ -277,7 +280,7 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
             { call: null, answer: { text: 'Your newest BIO 1100 announcement, from Dr. Rivera: the lab meets in Room 204 this week. Bring goggles.', quotes: ['Lab moved to Room 204', 'Dr. Rivera'] } }]
           : [{ call: { name: 'courses_list', arguments: {} }, answer: null }, { call: { name: 'announcements_list', arguments: { course: '_101_1' } }, answer: null },
             { call: { name: 'announcement_read', arguments: { course: '_101_1', id: '_801_1' } }, answer: null },
-            { call: null, answer: { text: 'BIO 1100\'s newest announcement: the lab meets in Room 204 this week. Bring goggles.', quotes: ['Lab moved to Room 204'] } }] });
+            { call: null, answer: { text: 'BIO 1100\'s newest announcement, “Lab moved to Room 204”: the lab meets in Room 204 this week. Bring goggles.', quotes: ['Lab moved to Room 204'] } }] });
         const n = await ask('Any new announcements in BIO 1100?');
         const text = await answered(n, 'the tool-first answer');
         const labels = await page.locator('#gz-ask .gz-ask-steps').last().locator('.gz-ask-step-label').allTextContents();
@@ -288,6 +291,34 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
         assert.ok(runs.length === labels.length + 1 && runs.every((r) => r.task === 'agent.tools'));
         assert.match(text, /Room 204/);
         return { text, labels, files: await snap(site, 'tool-first', '#gz-ask') };
+      });
+
+      await check(`${site}: the owner's Sunday — what's due this week reads the week from today, and the answer is a markdown list with friendly dates`, async () => {
+        await openPanel();
+        await page.click('#gz-ask .gz-ask-new');
+        const canvas = site === 'canvas', acct = canvas ? A : `${ULTRA}/_42_1`, cid = canvas ? '25' : '_101_1';
+        const done = now - 2 * DAY, monday = now + DAY;
+        const items = [['11', 'Reflection Week 10', done, true], ['21', 'Reflection Week 11', monday, false], ['22', 'Behavior Change Project Step 5', monday, false], ['23', 'Lab 8 worksheet', monday, false]]
+          .map(([id, title, at, submitted]) => ({ type: 'assignment', id: canvas ? id : `_${id}_1`, cid, course: 'BIO 1100', title, at, sub: { submitted, graded: false, late: false, missing: false } }));
+        if (canvas) sunday = items.map((i) => ({ plannable_type: 'assignment', plannable_id: Number(i.id), course_id: 25, context_name: 'BIO 1100', plannable_date: new Date(i.at).toISOString(),
+          html_url: `${CANVAS}/courses/25/assignments/${i.id}`, plannable: { title: i.title }, submissions: { submitted: i.sub.submitted, excused: false, graded: false, late: false, missing: false, redo_request: false } }));
+        await worker.evaluate(({ acct, items, now, DAY }) => chrome.storage.local.set({ todoCache: { key: `todo:${acct}`, at: now - 36e5, start: new Date(now - 8 * DAY).toISOString(), end: new Date(now + 8 * DAY).toISOString(), teach: false, progress: null, items, grading: [], sums: {} } }), { acct, items, now, DAY });
+        const AT = require('../../extension/ai/tasks/agent-tools.js');
+        const due = JSON.parse(AT.readable({ due: monday }, 'UTC', { locale: 'en', now })).due;
+        const from = new Date(now).toISOString().slice(0, 10), to = new Date(now + 7 * DAY).toISOString().slice(0, 10);
+        const titles = ['Reflection Week 11', 'Behavior Change Project Step 5', 'Lab 8 worksheet'];
+        await script({ 'agent.tools': [{ call: { name: 'schedule_list', arguments: { from, to } }, answer: null },
+          { call: null, answer: { text: ['You have three things due soon, none handed in yet:', ...titles.map((t) => `- **${t}** (BIO 1100): ${due}, not submitted`)].join('\n'), quotes: [...titles, due] } }] });
+        try {
+          const n = await ask("What's due this week?");
+          const text = await answered(n, 'the Sunday answer').catch(async (e) => { throw new Error(`${e.message}; last request: ${(await worker.evaluate(() => askCheck.last)).slice(-1500)}`); });
+          const bold = await answers().nth(n).locator('.gz-ask-md ul li strong').allTextContents();
+          assert.deepEqual(bold, titles, 'a bulleted list with bold titles');
+          assert.ok(text.includes(due), `the friendly date ${due}`);
+          const runs = await seen();
+          assert.ok(runs.some((r) => r.windows), 'the model saw the resolved windows');
+          return { text, due, files: await snap(site, 'sunday', '#gz-ask') };
+        } finally { sunday = null; await records(site); }
       });
 
       await check(`${site}: a reminder that fired shows as a card on the next school page; its Ask Rime asks about it`, async () => {

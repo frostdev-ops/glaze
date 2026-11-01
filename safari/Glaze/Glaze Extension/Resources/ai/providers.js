@@ -20,10 +20,11 @@ var GZ_AI_PROVIDERS = globalThis.GZ_AI_PROVIDERS || (() => {
   const R = () => (typeof GZ_AI_REQUEST !== 'undefined' ? GZ_AI_REQUEST : require('./request.js'));
   const S = () => (typeof GZ_AI_SCHEMA !== 'undefined' ? GZ_AI_SCHEMA : require('./schema.js'));
   const E = () => (typeof GZ_AI_ENDPOINT !== 'undefined' ? GZ_AI_ENDPOINT : require('./endpoint.js'));
+  const X = () => (typeof GZ_AI_TEXT !== 'undefined' ? GZ_AI_TEXT : require('./text.js'));
   const ID = /^[a-z][a-z0-9-]{0,31}$/;
   const all = new Map();
   const add = (p) => {
-    if (!p || !ID.test(p.id) || !['config', 'caps', 'status', 'run'].every((k) => typeof p[k] === 'function') || ['origin', 'warm'].some((k) => p[k] !== undefined && typeof p[k] !== 'function')) throw new TypeError('provider');
+    if (!p || !ID.test(p.id) || !['config', 'caps', 'status', 'run'].every((k) => typeof p[k] === 'function') || ['origin', 'warm', 'count'].some((k) => p[k] !== undefined && typeof p[k] !== 'function')) throw new TypeError('provider');
     if (all.has(p.id) && all.get(p.id) !== p) throw new TypeError(`provider ${p.id} is already added`);
     all.set(p.id, Object.freeze(p));
     return p;
@@ -45,6 +46,15 @@ var GZ_AI_PROVIDERS = globalThis.GZ_AI_PROVIDERS || (() => {
     const req = R().clean(request), c = req && p.config(cfg);
     if (!c) return false;
     try { return (await p.warm(req, c, { signal })) === true; } catch { return false; }
+  };
+  // count(provider, request, cfg, { signal }) → { tokens, exact }: the request's prompt tokens, the provider's own count
+  // (Glaze's own model: its tokenizer, ai/local/host.js count) when it has one, else text.js estimateTokens. Never throws.
+  const count = async (provider, request, cfg, { signal } = {}) => {
+    const p = typeof provider === 'string' ? get(provider) : provider;
+    const req = R().clean(request), c = req && p?.config(cfg);
+    if (!c) return null;
+    if (typeof p.count === 'function') { try { const n = await p.count(req, c, { signal }); if (Number.isSafeInteger(n) && n >= 0) return { tokens: n, exact: true }; } catch { /* the estimate */ } }
+    return { tokens: X().estimateTokens(req), exact: false };
   };
   // run(provider (id or object), request, cfg, { signal, onDelta, onThinking, fetch, accept }) → the result, with json when
   // the request had a schema. accept: a schema the answer is checked against in place of the request's own, which still
@@ -109,6 +119,6 @@ var GZ_AI_PROVIDERS = globalThis.GZ_AI_PROVIDERS || (() => {
     return out;
   };
 
-  return { add, get, list, caps, run, warm, ID };
+  return { add, get, list, caps, run, warm, count, ID };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_PROVIDERS; else GZ_AI_PROVIDERS;
