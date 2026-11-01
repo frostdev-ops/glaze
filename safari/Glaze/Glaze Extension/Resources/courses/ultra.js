@@ -829,7 +829,9 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     };
     const changed = (e) => {
       const el = e.target;
-      if (!page.active() || !native(el) || e.type === 'click' && !el.closest('button, [role="checkbox"], [aria-checked]')) return;
+      // A click on a control that only opens something (a folder, a learning module, a menu) writes nothing.
+      const control = e.type === 'click' && el.closest('button, [role="checkbox"], [aria-checked]');
+      if (!page.active() || !native(el) || e.type === 'click' && (!control || control.matches('[aria-expanded], [aria-haspopup]'))) return;
       writeWatch?.disconnect(); clearTimeout(writeCap);
       // Native writes may finish after the click. Ignore Glaze's own redraws and stop watching after this request window.
       writeWatch = new MutationObserver((rows) => {

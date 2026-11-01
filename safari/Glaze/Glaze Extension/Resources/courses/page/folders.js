@@ -183,12 +183,16 @@ var GZ_FOLDER_UI = globalThis.GZ_FOLDER_UI || (() => {
       if ((canvas ? /^\/(?:logout|login)(?:\/|$)/ : /\/ultra\/(?:logout|login)(?:\/|$)/).test(location.pathname)) { revoked = identity; user = ''; }
       generation++; epoch++; key = ''; data = null; loading = false; clear(); return;
     }
+    // content-ultra.js asks again with a new promise whenever Ultra's kept data is purged: what shows stays until that names
+    // another student (then their own) or no one (the page as Ultra drew it).
     if (cached && cached !== identity && cached !== revoked) {
-      identity = cached; user = ''; generation++; epoch++; key = ''; data = null; loading = false; clear();
+      identity = cached;
+      const forget = () => { if (identity !== cached) return; user = ''; generation++; epoch++; key = ''; data = null; loading = false; clear(); };
       Promise.resolve(cached).then((id) => {
-        if (identity !== cached || revoked === cached || !current() || typeof id !== 'string' || !GZ_FOLDERS.ID.test(id)) return;
-        user = id; sync(active, cached);
-      }, () => {});
+        if (identity !== cached || revoked === cached || !current()) return;
+        if (typeof id !== 'string' || !GZ_FOLDERS.ID.test(id)) return forget();
+        if (id !== user) { user = id; sync(active, cached); }
+      }, forget);
     }
     const next = expected() || '';
     if (next !== key) { generation++; epoch++; key = next; data = null; loading = false; clear(); }
