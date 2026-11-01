@@ -502,16 +502,17 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
     // A kept version's folder goes (the old one once the new has answered, or the new one rolled back); never the one in use.
     const drop = async (id, total) => {
       if (typeof id !== 'string' || !ID.test(id) || typeof total !== 'string' || !HEX.test(total)) throw fail('unknown', 'No such version');
-      const use = (await load()).entries.get(id);
-      if (use?.total === total) throw fail('in-use', 'That version is in use');
       cancel(`${id}@${total}`, removed());
-      return held(id, null, async () => {
+      return held(id, null, () => lockState(async () => {
+        catalog = null;
+        const use = (await load()).entries.get(id);
+        if (use?.total === total) throw fail('in-use', 'That version is in use');
         let own;
         try { own = await (await (await root()).getDirectoryHandle(TOP)).getDirectoryHandle(id); } catch (e) { if (gone(e)) return; throw e; }
         const names = [];
         for await (const name of own.keys()) if (name.startsWith(`${total.slice(0, 16)}-`) && (!use || name !== tag(use))) names.push(name);
         for (const name of names) await own.removeEntry(name, { recursive: true });
-      });
+      }));
     };
 
     // The state file, changed: fn(state or null) → the new state, or undefined for no change; under the origin's lock, so
