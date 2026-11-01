@@ -48,12 +48,18 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       if (Array.isArray(v)) return v.forEach(walk);
       if (!isObj(v)) return;
       const title = typeof v.title === 'string' ? v.title : typeof v.name === 'string' ? v.name : null;
-      if (title !== null) items.push({ title: title.slice(0, 120), ...(typeof v.id === 'string' && { id: v.id }), ...(typeof v.course === 'string' && { course: v.course.slice(0, 60) }),
+      if (title !== null) items.push({ title: title.slice(0, 120),
+        ...Object.fromEntries(['id', 'assignment', 'document', 'key', 'place', 'type', 'courseId', 'course'].filter((k) => typeof v[k] === 'string').map((k) => [k, v[k]])),
+        ...Object.fromEntries(['submitted', 'done', 'graded', 'complete', 'late', 'missing'].filter((k) => typeof v[k] === 'boolean').map((k) => [k, v[k]])),
         ...(Number.isFinite(v.due) && { due: v.due }), ...(Number.isFinite(v.at) && !Number.isFinite(v.due) && { at: v.at }) });
       else Object.values(v).forEach(walk);
     };
     walk(result);
-    return { digest: items.slice(0, DIGEST), ...(items.length > DIGEST && { more: items.length - DIGEST }) };
+    // Scalar calculations and failures are already short; dropping them would erase the answer's only evidence.
+    if (!items.length) return result;
+    const moreUnsubmitted = items.slice(DIGEST).filter((v) => v.submitted === false && v.done !== true && v.graded !== true && v.complete !== true).length;
+    return { ...(typeof result?.account === 'string' && { account: result.account }), digest: items.slice(0, DIGEST),
+      ...(items.length > DIGEST && { more: items.length - DIGEST }), ...(moreUnsubmitted && { moreUnsubmitted }) };
   };
   const CALLS = () => (typeof GZ_MCP_CALLS !== 'undefined' ? GZ_MCP_CALLS : require('../agents/calls.js'));
   const F = () => (typeof GZ_AI_FAILURE !== 'undefined' ? GZ_AI_FAILURE : require('./failure.js'));

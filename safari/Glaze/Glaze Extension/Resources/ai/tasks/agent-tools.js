@@ -571,7 +571,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // A result that lists an item still to hand in: not submitted, done, graded or complete.
   const open = (result) => {
     let found = false;
-    try { JSON.parse(result, (k, v) => { if (S.isObj(v) && v.submitted === false && v.done !== true && v.graded !== true && v.complete !== true) found = true; return v; }); } catch { /* none */ }
+    try { JSON.parse(result, (k, v) => { if (S.isObj(v) && (v.moreUnsubmitted > 0 || v.submitted === false && v.done !== true && v.graded !== true && v.complete !== true)) found = true; return v; }); } catch { /* none */ }
     return found;
   };
   const check = (out, inp) => {
