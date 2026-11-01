@@ -323,13 +323,25 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   const SOLVING = phrases(['homework', 'home work', 'worksheet', 'problem set', 'p-?set', 'answer key', '(?:quiz|exam|test|midterm|final) (?:question|problem)s?', '(?:problem|question|exercise|part) #?\\d+[a-z]?', '#\\d+',
     'tareas?', 'deberes', 'ejercicios? \\d+', 'problemas? \\d+', 'preguntas? \\d+', 'li[çc][ãa]o de casa', 'dever(?:es)? de casa', 'exerc[íi]cios? \\d+', 'quest[ãa]o \\d+', 'quest[õo]es \\d+',
     'devoirs?', 'exercices? \\d+', 'probl[èe]mes? \\d+', 'questions? \\d+', 'hausaufgaben?', '[üu]bungsblatt', '[üu]bungsaufgaben?', 'aufgaben? \\d+', 'huiswerk', 'opgaven? \\d+', 'vragen? \\d+', 'vraag \\d+', 'oefening(?:en)? \\d+']);
-  const PROBLEM = /(?<![\p{L}\p{N}])(?:solve for|find|evaluate|simplify|differentiate|factor(?:ise|ize)?) [a-z](?![\p{L}\p{N}])|(?<![\p{L}\p{N}])\d*[xyz] ?(?:\^|²|³|=|[+\-*/] ?\d)|= ?\d*[xyz](?![\p{L}\p{N}])/iu;
+  const PROBLEM = /(?<![\p{L}\p{N}])(?:solve for|find|evaluate|simplify|differentiate|factor(?:ise|ize)?) (?!a \p{L})[a-z](?![\p{L}\p{N}])|(?<![\p{L}\p{N}])\d*[xyz] ?(?:\^|²|³|=|[+\-*/] ?\d)|= ?\d*[xyz](?![\p{L}\p{N}])/iu;
   const ASSESSED = phrases(['quiz(?:zes)?', 'exams?', 'tests?', 'midterms?', 'finals?', 'assignments?', 'ex[aá]men(?:es|s)?', 'pruebas?', 'provas?', 'avalia[çc][ãa]o', 'contr[ôo]les?', 'klausur(?:en)?', 'pr[üu]fung(?:en)?', 'tests?', 'toets(?:en)?', 'tentamen(?:s)?']);
-  const ASK = phrases(['solve', 'calculat\\p{L}*', 'compute', 'work out', 'answer', 'integrate', 'differentiate', 'derive', 'prove', 'simplify', 'factor\\p{L}*',
+  const ASK = phrases(['solve', 'calculat\\p{L}*', 'compute', 'work out', 'answer', 'find', 'evaluate', 'integrate', 'differentiate', 'derive', 'prove', 'simplify', 'factor\\p{L}*',
     'resuelv\\p{L}*', 'resolv\\p{L}*', 'resolver', 'calcul\\p{L}*', 'r[ée]sou\\p{L}*', 'l[öo]s(?:e|en|t)', 'berechn\\p{L}*', 'rechne', 'los op', 'bereken\\p{L}*', 'reken\\p{L}*']);
-  const GRADES = phrases(['grades?', 'gpa', 'scores?', 'average', 'percent(?:age)?', 'letter grade', '(?:keep|get|pass with) an? [abcdf][+-]?', 'pass(?:ing)? the (?:class|course)', 'what do i need',
-    'notas?', 'calificaci[oó]n(?:es)?', 'promedio', 'aprobar', 'm[ée]dia', 'passar', 'moyenne', 'r[ée]ussir', 'noten?', 'durchschnitt', 'bestehen', 'punkte', 'cijfers?', 'gemiddeld\\p{L}*', 'halen']);
-  const gradedWork = (q) => SOLVING.test(q) || PROBLEM.test(q) || (ASSESSED.test(q) && ASK.test(q) && !GRADES.test(q));
+  // A grade calculation must target the student's marks. Generic words such as percent, points or score also
+  // occur inside assessment problems, so they cannot grant an exception to the work rule.
+  const GRADES = phrases([
+    '(?:my|our) (?:(?:homework|exam|test|quiz|assignment|course|overall|final|midterm|current|weighted) ){0,3}(?:grades?|gpa|scores?|average)',
+    '(?:keep|get|pass with) an? [abcdf][+-]?', 'what (?:grade|score|average) do i need',
+    '(?:mi|mis) (?:notas?|calificaci[oó]n(?:es)?|promedio|media)', '(?:promedio|media) de mis?', '(?:qu[ée] nota necesito)',
+    '(?:minha|minhas|meu|meus) (?:notas?|m[ée]dia)', '(?:nota|m[ée]dia) (?:dos? meus|das? minhas)', 'que nota preciso',
+    '(?:ma|mes|mon) (?:notes?|moyenne)', 'quelle note me',
+    'mein(?:e|en|em|er)? (?:[\\p{L}]+-)?(?:noten?|durchschnitt|punkte)', 'welche note brauche ich',
+    'mijn (?:(?:huiswerk|toets|tentamen) ){0,2}(?:cijfers?|gemiddeld\\p{L}*)', 'welk cijfer moet ik halen',
+  ]);
+  const NUMBERED = phrases(['(?:problem|question|exercise|part) #?\\d+[a-z]?', 'ejercicios? \\d+', 'problemas? \\d+', 'preguntas? \\d+',
+    'exerc[íi]cios? \\d+', 'quest[ãa]o \\d+', 'quest[õo]es \\d+', 'exercices? \\d+', 'probl[èe]mes? \\d+', 'questions? \\d+',
+    'aufgaben? \\d+', 'opgaven? \\d+', 'vragen? \\d+', 'vraag \\d+', 'oefening(?:en)? \\d+']);
+  const gradedWork = (q) => PROBLEM.test(q) || NUMBERED.test(q) || ((SOLVING.test(q) || (ASSESSED.test(q) && ASK.test(q))) && !GRADES.test(q));
   // Reminder vocabulary; the affirmative clause checks below decide whether it is a request.
   const LATER = phrases(['remind\\p{L}*', 'reminders?', 'let me know', 'tell me (?:when|if)', 'warn me', 'alert\\p{L}*', 'notify', 'ping me', 'wake', 'watch\\p{L}*', 'keep an eye', 'check (?:back|again)', 'monitor\\p{L}*', 'cancel\\p{L}*', 'stop (?:watching|reminding)',
     'recu[ée]rd(?:a|ame|amelo|ales|o)\\p{L}*', 'recordatorios?', 'av[ií]sa\\p{L}*', 'vigila\\p{L}*', 'cancela\\p{L}*', 'lembr\\p{L}*', 'lembretes?', 'me avis\\p{L}*', 'monitor\\p{L}*',
