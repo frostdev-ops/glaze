@@ -250,7 +250,7 @@ const LADDER = 'var GZ_AI_LADDER = { probe: async () => ({ adapter: {} }), pick:
       assert.equal(log.filter((l) => l.path.endsWith('/r7')).length, before);
     });
     await step('Update automatically off: a check asks nothing', async () => {
-      await settings.click('#ai-mode-advanced');
+      await settings.evaluate(() => { const r = document.getElementById('ai-mode-advanced'); r.checked = true; r.dispatchEvent(new Event('change')); });
       await settings.click('#ai-prov-local'); await settings.click('#ai-prov-local');
       const box = settings.locator('#ai-local-auto');
       await box.waitFor();
