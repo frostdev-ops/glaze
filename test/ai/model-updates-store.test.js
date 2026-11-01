@@ -239,3 +239,24 @@ test('a failed state write preserves the accepted serial and active version', as
   assert.equal(c.entries.get('rime-q4').total, old.total);
   assert.equal(c.spares.get('rime-q4')[0].total, fresh.total);
 });
+
+// The worker's daily alarm reads only this (ai/local/updates.js present): ~rime while a Rime model is downloaded, ~none once
+// none is; neither from a store older than the marks.
+const marks = (fs) => [...(fs.root.kids.get('glaze-models')?.kids.keys() || [])].filter((k) => k === '~rime' || k === '~none').sort();
+test('the store marks whether a Rime model is downloaded: on its download, its remove and any list', async () => {
+  const U = require('../../extension/ai/local/updates.js');
+  const m = make();
+  assert.deepEqual(marks(m.fs), []);
+  assert.equal(await U.present(async () => m.fs.root), false, 'no models folder: nothing to check');
+  await m.store.download('rime-q4');
+  assert.deepEqual(marks(m.fs), ['~rime']);
+  assert.equal(await U.present(async () => m.fs.root), true);
+  await m.store.remove('rime-q4');
+  assert.deepEqual(marks(m.fs), ['~none']);
+  assert.equal(await U.present(async () => m.fs.root), false);
+  // A folder from before the marks (no mark at all): unknown, so the check runs once and its list sets the mark.
+  m.fs.root.kids.get('glaze-models').kids.delete('~none');
+  assert.equal(await U.present(async () => m.fs.root), true);
+  await m.store.list();
+  assert.deepEqual(marks(m.fs), ['~none']);
+});
