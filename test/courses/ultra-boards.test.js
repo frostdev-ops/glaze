@@ -1006,7 +1006,11 @@ const COURSES = [
 ];
 const ckey = (id) => `course:https://school.blackboard.test/${id}`;
 const ukey = (id) => `ultra:https://school.blackboard.test/${id}`;
-const cardsPage = (o = {}) => page({ courses: COURSES, enhance: { coursemenu: true }, ...o });
+const cardsPage = (o = {}) => {
+  const p = page({ courses: COURSES, enhance: { coursemenu: true }, ...o });
+  p.c.GZ_ULTRA = { page: { profile: async () => ({ id: '_1_1' }) } };
+  return p;
+};
 const openCards = async (p) => {
   p.ui.sync(true);
   await settle();
@@ -1569,6 +1573,34 @@ test("a second student whose Dashboard was filled for another gets their own fir
   const r = asStudent(cardsPage({ at: 'dash', enhance: { notes: true, pet: true }, local: { widgetLayout: W.apply(own, { ops: [{ s: 'dash', id: ckey('_101_1'), remove: true }] }) } }), Promise.resolve(members()), '_2_1');
   r.ui.sync(true); await settle(); r.ui.sync(true); await settle();
   assert.deepEqual(lay(r).boards.dash.filter((x) => W.course(x.id)), []);
+});
+
+test("the first Dashboard fill waits for its student's identity and their removed cards stay removed after another student visits", async () => {
+  const profile = later(), p = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: W.fresh() } }), Promise.resolve(members()));
+  p.c.GZ_ULTRA.page.profile = () => profile;
+  p.ui.sync(true); await settle();
+  assert.deepEqual(lay(p).boards.dash.filter((x) => W.course(x.id)), [], 'no anonymous first fill');
+  profile.res({ id: '_1_1' }); await settle();
+  assert.ok(lay(p).filled.includes('dash https://school.blackboard.test/_1_1'));
+  const otherCourses = OTHER.map((id) => ({ id, name: 'Other student', term: '', slot: 1 }));
+  const q = asStudent(cardsPage({ at: 'dash', courses: otherCourses, local: { widgetLayout: p.store.widgetLayout } }), Promise.resolve(members(otherCourses)), '_2_1');
+  q.ui.sync(true); await settle();
+  const removed = W.apply(q.store.widgetLayout, { ops: COURSES.map((c) => ({ s: 'dash', id: ckey(c.id), remove: true })) });
+  const r = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: removed } }), Promise.resolve(members()), '_1_1');
+  r.ui.sync(true); await settle();
+  assert.deepEqual(lay(r).boards.dash.filter((x) => W.course(x.id)).map((x) => W.course(x.id).id), OTHER);
+});
+
+test('a failed Dashboard identity read can be retried on the next page pass', async () => {
+  const seed = W.apply(W.fresh(), { fill: 'dash', ops: OTHER.map((id) => ({ s: 'dash', id: ckey(id), set: { on: true } })) });
+  const p = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: seed } }), Promise.resolve(members()));
+  let attempts = 0;
+  p.c.GZ_ULTRA.page.profile = async () => { if (++attempts === 1) throw new Error('temporarily unavailable'); return { id: '_2_1' }; };
+  p.ui.sync(true); await settle();
+  assert.equal(attempts, 1);
+  p.ui.sync(true); await settle();
+  for (const c of COURSES) assert.ok(p.tile(ckey(c.id)), 'a recovered profile read permits the first cards');
+  assert.ok(lay(p).filled.includes('dash https://school.blackboard.test/_2_1'));
 });
 
 test("a tile's Fold, Remove and Float sit above its resize corner, which a folded tile brings up beside them", () => {
