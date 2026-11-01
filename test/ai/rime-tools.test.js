@@ -764,6 +764,24 @@ test('check: the student\'s own grade math runs; solving a graded problem does n
   for (const [l, qs] of Object.entries(refused)) for (const q of qs) assert.equal(ask(q, l), 'work', `${l}: ${q}`);
 });
 
+test('grade math targets the student\'s marks; grade vocabulary cannot excuse solving an assessment', () => {
+  const allowed = [
+    'Calculate my homework average from 70, 80, 90', 'Calculate my grade if I get 80 on assignment #3', 'Find a weighted average of my homework scores: 70, 80, 90',
+    'Calcula el promedio de mis tareas: 70, 80, 90', 'Calcule a média dos meus deveres de casa: 70, 80, 90',
+    'Calcule ma moyenne de devoirs : 12, 14, 16', 'Berechne meinen Hausaufgaben-Durchschnitt aus 70, 80 und 90',
+    'Bereken mijn gemiddelde voor huiswerk met 70, 80 en 90',
+  ];
+  const refused = [
+    'For my exam, calculate 17 * 23 as a percentage', 'For my quiz, find the probability of two heads',
+    'En mi examen, calcula el porcentaje de 17 sobre 23', 'Na minha prova, calcula a porcentagem de 17 sobre 23',
+    'Pour mon examen, calcule le pourcentage de 17 sur 23', 'Für meine Prüfung: berechne den Prozentsatz von 17 zu 23',
+    'Voor mijn toets: bereken het percentage van 17 op 23',
+    'Calculate my grade and solve problem 3 on the exam',
+  ];
+  for (const q of allowed) assert.equal(A.why(call('run_js', { code: '1+1' }), input(q)), '', q);
+  for (const q of refused) assert.equal(A.why(call('run_js', { code: '1+1' }), input(q)), 'work', q);
+});
+
 test('monitor results and approval sentences speak the student\'s language, in all six', async () => {
   const lab = C.planner({ id: 1, course: 25, name: 'BIO 1100', title: 'Lab report', at: '2026-10-16T03:59:00Z' });
   const store = { todoCache: await C.canvasPlan('5', [lab]) }, env = wakesEnv(store);
