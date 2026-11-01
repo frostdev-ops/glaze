@@ -8,9 +8,13 @@
 // (isTrusted; sending also needs the user activation a real click or key gives). What it shows is part of the page while
 // it is open, as anything on screen is; nothing is kept after it closes. Ask or AI turned off closes it. Nothing moves with
 // reduced motion or Glaze's Motion off. Loaded on demand: a second injection keeps the first.
-// For later parts: STEPS names a tool's card (any other shows its reason, else its name); on(kind, handler) takes the UI
-// actions a run sends ({ id, type: 'action', action: { kind, … } }) while its question runs; run({ event, question }) asks
-// a question the student didn't type (a wake's or a monitor's), for their own click only.
+// STEPS names a tool's card (any other shows its reason, else its name), and a card shows the worker's detail (run_js's value
+// or error, the place opened). The UI actions a run sends ({ id, type: 'action', action: { kind, … } }) wait until the
+// answer shows: open goes to the place (on this site only; a highlight after it is carried to that page in
+// sessionStorage), highlight marks the words on the page and gives the answer a Show on the page button; on(kind,
+// handler) adds a kind. arrive() is the school page's look on load (content/content.js): a carried highlight, and the
+// reminders and watches that fired, each a card on the page whose Ask Rime asks its words (run({ event, question, fired })),
+// for the student's own click only. A question carries the page's site and visible words (page_highlight's check).
 var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
   const ctx = globalThis.GZ_CTX;
   // Run in a frame's next document before its bootstrap: keep nothing, so that document's content.js loads it again.
@@ -20,7 +24,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
   const make = (tag, props = {}, ...k) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids(k)); return e; };
   const LOCALES = ['en', 'pt-BR', 'es', 'fr', 'de', 'nl'];
   // turns: questions and answers a follow-up carries (ai/ask.js takes six at most), each cut to turn characters.
-  const LIMIT = { question: 2000, attempt: 12000, turns: 3, turn: 2000, grow: 200 };
+  const LIMIT = { question: 2000, attempt: 12000, turns: 3, turn: 2000, grow: 200, text: 20000 };
   // The page's language, as the tasks take it (ai/tasks/study-help.js LOCALES): pt-PT reads Brazilian Portuguese, others English.
   const lang = () => { const tag = String(ctx.locale() || 'en'); return LOCALES.find((c) => c === tag) || LOCALES.find((c) => c.split('-')[0] === tag.split('-')[0]) || 'en'; };
   const on = (ai) => !!ai && ai.on === true && ai.features?.ask === true;
@@ -48,6 +52,8 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     assignment_read: 'Reading an assignment', todo_list: 'Reading your to-do list', schedule_list: 'Reading your schedule', grades_list: 'Reading your grades',
     course_grades: 'Reading a course’s grades', documents_list: 'Reading your documents', document_read: 'Reading a document',
     document_assignment: 'Finding a document’s assignment', todo_mark_done: 'Mark a to-do done',
+    run_js: 'Working it out', places_list: 'Finding the page', place_open: 'Opening the page', page_highlight: 'Marking it on the page',
+    wake_create: 'Set a reminder', monitor_create: 'Watch for a change', wakes_list: 'Reading your reminders', wake_cancel: 'Cancel a reminder or watch',
   };
   const stepLabel = (s) => (Object.hasOwn(STEPS, s.name) ? t(STEPS[s.name]) : typeof s.reason === 'string' && s.reason.trim() ? s.reason.trim().slice(0, 200)
     : String(s.name || '').replace(/_/g, ' ').replace(/^\p{L}/u, (c) => c.toUpperCase()));
@@ -176,9 +182,69 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
   // ---- UI actions a run sends (for tools that act on the page) ---------------------------------------------------------
   const handlers = new Map();
   const onAction = (kind, handler) => { if (typeof kind === 'string' && typeof handler === 'function') handlers.set(kind, handler); };
-  const act = (a) => {
+  const act = (a, rest) => {
     const f = a && typeof a === 'object' && typeof a.kind === 'string' ? handlers.get(a.kind) : null;
-    if (f) try { f(a); } catch { /* the handler's own failure */ }
+    if (f) try { return f(a, rest); } catch { /* the handler's own failure */ }
+    return undefined;
+  };
+  // The page's words as the student sees them, the panel's and Glaze's cards left out: what page_highlight checks against.
+  const OURS = '#gz-ask, #gz-ask-fired, script, style, noscript';
+  const pageText = () => {
+    const out = [];
+    for (const el of document.body?.children || []) if (!['gz-ask', 'gz-ask-fired'].includes(el.id) && !/^(SCRIPT|STYLE|NOSCRIPT)$/.test(el.tagName)) out.push(el.innerText || el.textContent || '');
+    return out.join('\n').replace(/\n{3,}/g, '\n\n').slice(0, LIMIT.text);
+  };
+  // Marks the words wherever the page shows them (at most 20 places), a note as each mark's title. → the first mark, or null.
+  const SPOTS = 20;
+  const mark = (text, note) => {
+    const needle = String(text || '').trim().toLowerCase();
+    if (!needle || typeof document.createTreeWalker !== 'function') return null;
+    const w = document.createTreeWalker(document.body, 4, { acceptNode: (n) => (n.nodeValue?.toLowerCase().includes(needle) && !n.parentElement?.closest(OURS) ? 1 : 3) });
+    const nodes = [];
+    for (let n = w.nextNode(); n && nodes.length < SPOTS; n = w.nextNode()) nodes.push(n);
+    let first = null;
+    for (const n of nodes) {
+      const at = n.nodeValue.toLowerCase().indexOf(needle);
+      const hit = n.splitText(at);
+      hit.splitText(needle.length);
+      const m = make('mark', { className: 'gz-ask-spot', textContent: hit.nodeValue });
+      if (note) { m.title = String(note).slice(0, 80); m.dataset.note = m.title; }
+      hit.replaceWith(m);
+      first ||= m;
+    }
+    for (let d = first?.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true;
+    return first;
+  };
+  const CARRY = 'gz-ask-carry';
+  const sameSite = (url) => { try { const u = new URL(url, location.origin); return /^https?:$/.test(u.protocol) && u.origin === location.origin ? u : null; } catch { return null; } };
+  // open: a place on this site (the course tabs open it when they run, as the palette does), else Glaze's Documents or
+  // Settings. A highlight after it goes with it, kept a minute for that page.
+  onAction('open', (a, rest) => {
+    if (a.app === 'settings') { try { Promise.resolve(chrome.runtime.sendMessage('options')).catch(() => {}); } catch { /* reloaded */ } return; }
+    if (a.app === 'documents') { try { Promise.resolve(chrome.runtime.sendMessage('papers')).catch(() => {}); } catch { /* reloaded */ } return; }
+    const u = sameSite(a.url);
+    if (!u) return;
+    const later = (rest || []).filter((x) => x?.kind === 'highlight').map((x) => ({ text: String(x.text || '').slice(0, 200), note: String(x.note || '').slice(0, 80) }));
+    try { if (later.length) sessionStorage.setItem(CARRY, JSON.stringify({ at: Date.now(), path: u.pathname, marks: later })); } catch { /* storage refused */ }
+    if (u.href === location.href) return 'here';
+    globalThis.GZ_CTABS?.bar?.open(u.href, { native: true }) || location.assign(u.href);
+    return 'gone';
+  });
+  onAction('highlight', (a) => mark(a.text, a.note));
+  // A run's actions, once its answer shows: an open that leaves the page ends them (the rest go with it).
+  const perform = (list, li) => {
+    let first = null;
+    for (let i = 0; i < list.length; i++) {
+      const r = act(list[i], list.slice(i + 1));
+      if (r === 'gone') return;
+      if (r === 'here') continue;
+      if (list[i]?.kind === 'highlight' && r) first ||= r;
+    }
+    if (first && li?.isConnected) {
+      const b = make('button', { type: 'button', className: 'gz-ask-show' }, icon('down'), make('span', { textContent: t('Show on the page') }));
+      b.addEventListener('click', (e) => { if (!real(e)) return; shut(); first.scrollIntoView?.({ block: 'center', behavior: still() ? 'auto' : 'smooth' }); });
+      li.querySelector('.gz-ask-acts')?.prepend(b);
+    }
   };
 
   // ---- the view ---------------------------------------------------------------------------------------------------------
@@ -343,6 +409,8 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     c.querySelector('.gz-ask-step-label').textContent = stepLabel(s);
     c.querySelector('.gz-ask-step-time').textContent = Number.isFinite(s.ms) && !['run', 'ask'].includes(s.state) ? seconds(s.ms) : '';
     c.querySelector('.gz-ask-step-note')?.remove();
+    c.querySelector('.gz-ask-step-detail')?.remove();
+    if (['done', 'fail'].includes(s.state) && typeof s.detail === 'string' && s.detail) c.append(make('p', { className: 'gz-ask-step-detail', textContent: s.detail.slice(0, 120), dir: 'auto' }));
     if (s.state === 'ask') c.append(make('p', { className: 'gz-ask-step-note', textContent: t('Waiting for your answer in Glaze’s window') }));
     if ([...run.cards.values()].some((x) => ['run', 'ask'].includes(x.dataset.state))) run.line.dataset.running = ''; else delete run.line.dataset.running;
     // While Glaze's window waits, its card says so: no thinking line under it.
@@ -361,7 +429,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
 
   // Ask: the reservation before the storage read (closing invalidates it, including when a new panel has opened), then the
   // question in the conversation (unless it is a try again of one shown), the run, its end.
-  const ask = async ({ question: q, attempt = '', shown = false, sent }) => {
+  const ask = async ({ question: q, attempt = '', shown = false, sent, fired }) => {
     if (current || pending || !box || shutting) return;
     const mine = pending = { box };
     const allowed = await alive();
@@ -373,14 +441,16 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     say(t('Thinking…'));
     running(true);
     busy(true);
-    const run = { line: null, cards: null }, past = history();
-    const go = send({ op: 'ask', question: q, ...(attempt && { attempt }), locale: lang(), ...(past.length && { history: past }) }, (ev) => {
+    const run = { line: null, cards: null }, past = history(), queued = [];
+    const site = ['canvas', 'ultra', 'moodle'].includes(ctx.site) ? ctx.site : undefined, words = pageText();
+    const go = send({ op: 'ask', question: q, ...(attempt && { attempt }), locale: lang(), ...(past.length && { history: past }), ...(site && { site }), ...(words && { text: words }),
+      ...(typeof fired === 'string' && { fired }) }, (ev) => {
       if (current !== go.id) return;
       if (ev.type === 'step') {
         card(run, ev.step);
         if (ev.step?.state === 'run') say(t('Reading your courses…'));
       } else if (ev.type === 'approve') say(t('Waiting for your answer in Glaze’s window'));
-      else if (ev.type === 'action') act(ev.action);
+      else if (ev.type === 'action' && ev.action && typeof ev.action === 'object') queued.push(ev.action);
     });
     current = go.id;
     const end = await go;
@@ -404,8 +474,9 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
         answer(reply, more);
         turns.push({ question: q, answer: more ? `${reply}\n\n${more}` : reply });
       } else {
-        answer(String(end.answer?.text || ''));
+        const li = answer(String(end.answer?.text || ''));
         turns.push({ question: q, answer: String(end.answer?.text || '') });
+        perform(queued, li);
       }
     } else if (['off', 'feature'].includes(end.error)) box?.close();
     else if (end.error === 'cancelled') say('');
@@ -418,7 +489,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
       retry.addEventListener('click', (e) => {
         if (!real(e) || !activated() || current || pending) return;
         drop(li);
-        ask({ question: q, attempt, shown: true });
+        ask({ question: q, attempt, shown: true, fired });
       });
     }
     $('#gz-ask-q')?.focus();
@@ -568,11 +639,53 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
   };
 
   // A question the student didn't type (a wake's or a monitor's), asked for their own click: the panel opens and asks it.
-  const run = async ({ event, question: q } = {}) => {
+  const run = async ({ event, question: q, fired } = {}) => {
     if (!real(event) || typeof q !== 'string' || !q.trim() || q.length > LIMIT.question) return;
     await open({ event });
     if (!box || !activated()) return;
-    void ask({ question: q.trim() });
+    void ask({ question: q.trim(), ...(typeof fired === 'string' && { fired }) });
+  };
+
+  // ---- on a school page's load: a carried highlight, and what fired ------------------------------------------------------
+  // The highlight an open carried here (a minute at most, this page's path only), then each reminder or watch that fired as a
+  // card on the page: what it was, the student's words, Ask Rime (their click asks it) and Dismiss. Nothing nags: the cards
+  // sit in a corner of the page until the student acts or leaves it, and nothing is shown outside the browser.
+  let tray = null;
+  const firedCard = (f) => {
+    const label = f.what === 'wake' ? t('Reminder') : t('Something you asked Rime to watch changed');
+    const go = make('button', { type: 'button', className: 'gz-ask-fired-go' }, make('span', { className: 'gz-ask-mark' }, icon('rime')), make('span', { textContent: t('Ask Rime') }));
+    const no = make('button', { type: 'button', className: 'gz-ask-fired-no', title: t('Dismiss') }, icon('close'));
+    no.setAttribute('aria-label', t('Dismiss'));
+    const li = make('li', { className: 'gz-ask-fired-card' }, make('p', { className: 'gz-ask-fired-what', textContent: label }), make('p', { className: 'gz-ask-fired-say', textContent: f.say, dir: 'auto' }),
+      make('div', { className: 'gz-ask-fired-acts' }, go, no));
+    const gone = () => { li.remove(); if (tray && !tray.querySelector('li')) { tray.remove(); tray = null; } };
+    go.addEventListener('click', (e) => { if (!real(e)) return; gone(); void run({ event: e, question: f.say, fired: f.id }); });
+    no.addEventListener('click', (e) => { if (real(e)) gone(); });
+    return li;
+  };
+  const arrive = async ({ fired = 0 } = {}) => {
+    try {
+      const raw = sessionStorage.getItem(CARRY);
+      if (raw) {
+        sessionStorage.removeItem(CARRY);
+        const c = JSON.parse(raw);
+        if (Date.now() - c.at < 60e3 && c.path === location.pathname && Array.isArray(c.marks)) {
+          let first = null;
+          for (const m of c.marks.slice(0, 5)) first ||= mark(m.text, m.note);
+          first?.scrollIntoView?.({ block: 'center', behavior: still() ? 'auto' : 'smooth' });
+        }
+      }
+    } catch { /* nothing carried */ }
+    if (!(fired > 0) || !(await alive())) return;
+    const r = await send({ op: 'fired' });
+    const list = r.type === 'end' && Array.isArray(r.fired) ? r.fired.filter((f) => f && typeof f.id === 'string' && typeof f.say === 'string' && f.say.trim()) : [];
+    if (!list.length) return;
+    if (!tray?.isConnected) {
+      tray = make('aside', { id: 'gz-ask-fired' }, make('ul', {}));
+      tray.setAttribute('aria-label', t('Ask Rime'));
+      document.body.append(tray);
+    }
+    tray.querySelector('ul').append(...list.slice(0, 5).map(firedCard));
   };
 
   try { document.addEventListener('visibilitychange', () => { if (box && !document.hidden) pin(true); }); } catch { /* no document events */ }
@@ -585,6 +698,6 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     });
   } catch { /* extension reloaded under the tab */ }
 
-  return { open, run, on: onAction, STEPS, LOCALES, lang };
+  return { open, run, arrive, on: onAction, STEPS, LOCALES, lang };
 })();
 GZ_ASK_UI;

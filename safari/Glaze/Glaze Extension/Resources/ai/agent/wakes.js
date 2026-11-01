@@ -168,6 +168,12 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
     await tick(env);
     return turn(async () => { const s = await read(env); if (!(await env.on())) return []; const out = s.fired; s.fired = []; await write(env, s); return out; });
   };
+  // How many wait to be shown, checked first, none taken: the school page's cheap look before it loads the panel.
+  const peek = async (env) => {
+    if (!(await env.on())) return 0;
+    await tick(env);
+    return turn(async () => (await read(env)).fired.length);
+  };
 
   // ---- the tools -------------------------------------------------------------------------------------------------------
   const spec = (name) => AT().SPECS.find((t) => t.name === name);
@@ -279,6 +285,6 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
     }),
   ];
   const register = (registry, env) => tools(env).map((t) => registry.add(t));
-  return { KEY, ALARM, TICK, LIMIT, WATCHES, WORDS, clean, shape, changed, tick, alarm, take, tools, register };
+  return { KEY, ALARM, TICK, LIMIT, WATCHES, WORDS, clean, shape, changed, tick, alarm, take, peek, tools, register };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_RIME_WAKES; else GZ_AI_RIME_WAKES;

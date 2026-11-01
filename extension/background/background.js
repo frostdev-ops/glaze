@@ -2548,7 +2548,20 @@ chrome.runtime.onConnect.addListener((p) => {
   const s = p.sender || {}, allowed = (what) => aiSender(s, what), core = mcpCore();
   ai(); GZ_AI_ASK.connect(p, { allowed, broker: (q) => ai().connect(q, { ...aiEnv(), who: String(s.tab?.id ?? 'none'), allowed }), settings: aiEnv().settings, enabled: glazeOn,
     registry: GZ_MCP_REGISTRY, state: mcpRead, approve: core.approve, refresh: mcpRefresh, accounts: async () => (await GZ_AI_TOOLS.get('accounts_list').run({}, mcpCtx(null))).items,
-    local: chrome.storage.local, keys: mcpKeys, now: Date.now, turn: (f) => (brokerTurn ||= GZ_CARDS.queue())(f) });
+    local: chrome.storage.local, keys: mcpKeys, now: Date.now, turn: (f) => (brokerTurn ||= GZ_CARDS.queue())(f),
+    level: rimeLevel, page: () => ({ url: s.url }), own: { read: rimeWakesEnv().read, writer: async () => GZ_SANITIZE(await chrome.storage.sync.get(null)).enhance.writer !== false, wakes: rimeWakesEnv() } });
+});
+// The tools level of Ask Rime's model (ai/ask.js route): Glaze's own model's, as models.json says it was trained (1 for Rime r5,
+// so its requests stay what it was gated on); every other model gets Rime's own tools.
+const rimeLevel = async () => {
+  const sel = GZ_AI_SETTINGS.resolve(GZ_AI_SETTINGS.clean((await chrome.storage.local.get('ai')).ai), 'ask');
+  return sel?.use === 'local' ? GZ_AI_LOCAL.toolsLevel() : 3;
+};
+// A school page's look for reminders and watches that fired (ai/agent/wakes.js peek): how many, none taken; the panel takes them.
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:rime' || m.op !== 'peek') return;
+  (async () => (await aiSender(s, { op: 'status', feature: 'ask' })) === true ? (ai(), GZ_AI_RIME_WAKES.peek(rimeWakesEnv())) : 0)().then((n) => reply({ fired: n }), () => reply({ fired: 0 }));
+  return true;
 });
 let aiVault = null, aiLocal = null, aiRevision = 0;
 chrome.storage.onChanged.addListener((changes, area) => {

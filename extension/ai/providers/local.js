@@ -121,6 +121,10 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const models = async () => (await own().store.list()).filter((m) => m.state !== 'stale');
   const tiers = (list) => list.filter((m) => !m.role);
   const choose = (list, cfg) => { list = tiers(list); return (cfg.tier && list.find((m) => m.tier === cfg.tier)) || list.find((m) => m.state === 'ready') || list.find((m) => m.state === 'partial') || null; };
+  // The agent tools the model this cfg runs was trained on (models.json `tools`): 3 from the round that trains Ask Rime's own
+  // tools; Rime r5's entries say nothing, which is 1, Agents' twelve (ai/ask.js offers it no more).
+  const levelOf = (list, cfg = {}) => { const m = choose(list, cfg); return Number.isSafeInteger(m?.tools) && m.tools > 0 ? m.tools : 1; };
+  const toolsLevel = async (cfg = {}) => levelOf(await models(), cfg);
   // The picture download: { model, projector, size, ready } when models.json offers it, else null.
   const pictures = (list) => {
     const model = list.find((m) => m.role === 'pictures'), projector = model && list.find((m) => m.role === 'projector' && m.id === model.projector);
@@ -278,7 +282,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     return status(cfg);
   };
 
-  const provider = { id: 'local', config, caps, status, prepare, run, warm, catalog, release, remove, accept, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
+  const provider = { id: 'local', config, caps, status, prepare, run, warm, catalog, release, remove, accept, levelOf, toolsLevel, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
     _env: (e) => { env = e; preparing.text = preparing.pictures = null; broken = null; rates = null; measured.clear(); } };
   return P.add(provider);
 })();
