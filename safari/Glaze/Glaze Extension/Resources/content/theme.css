@@ -1314,7 +1314,10 @@ html[data-gz-bg="solid"] :where(bb-assignment-attempt-authoring-panel [class*="m
 /* The gradebook's Current Grade pill is as wide as what it holds, at the header's end. */
 #site-wrap .student-grade__header > .student-grade__header__overallGrade { flex: 0 1 auto; margin-inline-start: auto; }
 /* Activity's Show more keeps Ultra's inset (its padding, from 40em up), under the items' text. */
-@media (min-width: 40em) { #site-wrap .activity-stream button.js-show-more { margin-inline-start: 12.5rem; } }
+@media (min-width: 40em) {
+  #site-wrap .activity-stream button.js-show-more { margin-inline-start: 12.5rem; }
+  #site-wrap .stream-panel.force-small-with-dashboard button.js-show-more { margin-inline-start: 0; }
+}
 /* A test's Grading and Description labels head their own rows: the pill on its own line above the value. */
 #site-wrap .assessment-attempt-panel .assessment-summary div.row > .settings-label { display: flex; inline-size: fit-content; margin-block: 0.75rem 0.5rem; }
 #site-wrap .discussion-board :is(discussion-refresh-button, discussion-follow-button, bb-discussion-sorting-options, discussion-reply-button) button { min-width: 2.25rem; min-height: 2.25rem; padding: 0.35rem 0.85rem; }
