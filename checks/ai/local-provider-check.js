@@ -49,7 +49,7 @@ const BYTE = (() => {
   return Array.from({ length: 256 }, (_, b) => String.fromCharCode(keep.includes(b) ? b : 256 + n++));
 })();
 const TOKENS = [...BYTE, '<|startoftext|>', '<|im_start|>', '<|im_end|>', '<think>', '</think>', ...Array.from({ length: 32 }, (_, i) => `[PAD${i}]`)];
-const TYPES = [...BYTE.map(() => 1), 3, 3, 3, 4, 4, ...Array(20).fill(5)];
+const TYPES = TOKENS.map((_, i) => i < BYTE.length ? 1 : [3, 3, 3, 4, 4][i - BYTE.length] ?? 5);
 const gguf = ({ arch = 'lfm3', tokens = TOKENS, types = TYPES } = {}) => {
   const parts = [], u32 = (v) => { const b = Buffer.alloc(4); b.writeUInt32LE(v); parts.push(b); }, i32 = (v) => { const b = Buffer.alloc(4); b.writeInt32LE(v); parts.push(b); };
   const u64 = (v) => { const b = Buffer.alloc(8); b.writeBigUInt64LE(BigInt(v)); parts.push(b); };
