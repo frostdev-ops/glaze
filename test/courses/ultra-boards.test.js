@@ -1499,17 +1499,20 @@ const asStudent = (p, list, uid = '') => {
   return p;
 };
 
-test("another student's course cards stay in the layout but never draw here, and this student's never blink while the list comes", async () => {
+test("stored course names do not prove ownership while this student's membership list is pending", async () => {
   const board = [...OTHER.map((id) => ({ id: ckey(id), on: true })), { id: ckey('_101_1'), on: true }, { id: ckey('_104_1'), on: true }];
   const list = later();
   const p = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: { todo: true, filled: ['dash'], boards: { dash: board } } } }), list);
+  // seenCourses is device-wide, and can still contain the previous student's metadata for this school.
+  p.c.GZ_CTX.courseList = () => Object.fromEntries([...COURSES, ...OTHER.map((id) => ({ id, name: 'Previous student' }))].map((c) => [c.id, { name: c.name, site: p.c.location.origin }]));
   p.ui.sync(true); await settle();
-  const bio = p.tile(ckey('_101_1'));
-  assert.ok(bio, 'a course known from the stored records draws at once');
-  for (const id of [...OTHER, '_104_1']) assert.equal(p.tile(ckey(id)), null, `${id}: no blank card while the list is on its way`);
+  for (const id of [...OTHER, '_101_1', '_104_1']) assert.equal(p.tile(ckey(id)), null, `${id}: cached names cannot identify this student's courses`);
   list.res(members([...COURSES, { id: '_104_1', name: 'Art', code: 'ART-1', term: 'Fall 2026', slot: 2 }]));
   await settle(); p.ui.sync(true); await settle();
-  assert.ok(p.tile(ckey('_101_1')) === bio, 'the same card, never taken down');
+  const bio = p.tile(ckey('_101_1'));
+  assert.ok(bio, 'a confirmed course draws');
+  p.ui.sync(true); await settle();
+  assert.ok(p.tile(ckey('_101_1')) === bio, 'a confirmed card stays mounted');
   assert.ok(p.tile(ckey('_104_1')), "this student's course without a stored record, once the list has it");
   for (const id of OTHER) assert.equal(p.tile(ckey(id)), null, `${id}: not this student's`);
   assert.deepEqual(lay(p).boards.dash.filter((x) => W.course(x.id)).map((x) => x.id), board.map((x) => x.id), 'all kept for the other student');
@@ -1521,6 +1524,19 @@ test("another student's course cards stay in the layout but never draw here, and
   q.ui.sync(true); await settle(); q.ui.sync(true); await settle();
   for (const id of OTHER) assert.ok(q.tile(ckey(id)), `${id} back for its student`);
   assert.equal(q.tile(ckey('_101_1')), null);
+});
+
+test("a fresh Dashboard and its picker exclude the previous student's cached courses", async () => {
+  const list = later();
+  const p = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: W.fresh() } }), list, '_2_1');
+  p.c.GZ_CTX.courseList = () => Object.fromEntries(OTHER.map((id) => [id, { name: 'Previous student', site: p.c.location.origin }]));
+  p.ui.sync(true); await settle();
+  assert.deepEqual(lay(p).boards.dash.filter((x) => W.course(x.id)), [], 'no first fill from unconfirmed device-wide metadata');
+  list.res(members()); await settle(); p.ui.sync(true); await settle();
+  assert.deepEqual(lay(p).boards.dash.filter((x) => W.course(x.id)).map((x) => x.id), COURSES.map((c) => ckey(c.id)));
+  const { dlg } = await openCards(p);
+  for (const id of OTHER) assert.equal(itemOf(dlg, id), undefined, 'an inaccessible course cannot be selected');
+  for (const c of COURSES) assert.ok(itemOf(dlg, c.id));
 });
 
 test("Course cards: another student's hidden cards leave this student the whole room", async () => {
