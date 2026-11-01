@@ -224,3 +224,19 @@ test('New chat (no history) clears the summary; level 1 sends neither summary no
   assert.equal(one.seen.counts.length, 0);
   assert.equal(one.got.filter((m) => m.type === 'context').length, 0);
 });
+
+test('a rejected oversized question cannot clear the accepted chat summary', async () => {
+  const summary = '- BIO 1100';
+  const h = harness({ count: () => ({ used: 3500, window: 4096, reserve: 768, exact: true }), script: {
+    'agent.tools': [said('BIO 1100.', ['BIO 1100']), said('BIO 1100.', ['BIO 1100'])],
+    'chat.compact': [{ text: summary, quotes: ['BIO 1100'] }],
+  } });
+  h.say({ id: 1, op: 'ask', question: "What's due this week?", history: H3 });
+  await settle();
+  h.say({ id: 2, op: 'ask', question: 'x'.repeat(K.LIMIT.question + 1) });
+  await settle();
+  assert.ok(h.got.some((m) => m.id === 2 && m.error === 'size'));
+  h.say({ id: 3, op: 'ask', question: 'And next week?', history: [...H3, turn("What's due this week?", 'BIO 1100.')] });
+  await settle();
+  assert.equal(h.seen.runs.filter((m) => m.task === 'agent.tools').at(-1).input.summary, summary);
+});
