@@ -337,13 +337,13 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
       } finally { clearTimeout(timer); }
     };
 
-    const write = async (dir, name, body) => {
+    const write = async (dir, name, body, { preserve = false } = {}) => {
       const h = await dir.getFileHandle(name, { create: true });
       let w;
       try { w = await h.createWritable({ keepExistingData: false }); await w.write(body); await w.close(); }
       catch (e) {
         try { await w?.abort(); } catch { /* closed */ }
-        try { await dir.removeEntry(name); } catch { /* never made */ }
+        if (!preserve) { try { await dir.removeEntry(name); } catch { /* never made */ } }
         throw e;
       }
     };
@@ -524,7 +524,7 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
       if (next === undefined) return cur;
       if (!isObj(next) || next.v !== 1) throw new TypeError('not a state');
       const top = await (await root()).getDirectoryHandle(TOP, { create: true });
-      await write(top, STATE, new TextEncoder().encode(JSON.stringify(next)));
+      await write(top, STATE, new TextEncoder().encode(JSON.stringify(next)), { preserve: true });
       catalog = null;
       tell()?.postMessage({ type: 'catalog' });
       return next;
