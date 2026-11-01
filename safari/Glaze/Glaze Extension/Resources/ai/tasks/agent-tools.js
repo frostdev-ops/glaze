@@ -78,7 +78,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     { name: 'wake_cancel', kind: 'confirm', description: 'Cancel one wake or monitor by its id from wakes_list. The student approves it first.',
       parameters: params({ id: { type: 'string', pattern: '^[wm]-[a-z0-9]{8}$', description: 'The id from wakes_list.' } }, ['id']) },
     // Reading the student's school site (ai/agent/school.js), through Glaze's own readers in an open tab of it, or its caches.
-    { name: 'announcements_list', kind: 'read', description: "A course's announcements: id, title, and at (when posted, where the site says). On Canvas without course, every course's that Glaze's to-do range holds. On Blackboard name the course.",
+    { name: 'announcements_list', kind: 'read', description: "A course's announcements: id, title and, on Canvas, at (when posted). On Canvas without course, every course's that Glaze's to-do range holds. On Blackboard name the course.",
       parameters: params({ course: COURSE("Only this course's, by its id."), account: ACCOUNT }) },
     { name: 'announcement_read', kind: 'read', description: 'One announcement: title, author, at, and its text a page at a time (about 1,000 characters).',
       parameters: params({ course: COURSE('The course id.'), id: { type: 'string', pattern: UID, description: 'The announcement id from announcements_list.' }, page: PAGE, account: ACCOUNT }, ['course', 'id']) },
@@ -396,7 +396,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   };
   // → '' or why a call to one of Rime's own tools may not go: work, place, text, time, monitor, asked.
   const ownWhy = (name, args, inp) => {
-    if (name === 'run_js') return gradedWork(fold(inp.question)) || inp.steps.some((s) => ['assignment_read', 'document_read'].includes(s.call.name)) ? 'work' : '';
+    if (name === 'run_js') return gradedWork(fold(inp.question)) || inp.steps.some((s) => ['assignment_read', 'document_read', 'announcement_read', 'content_read', 'discussion_read'].includes(s.call.name)) ? 'work' : '';
     if (name === 'place_open') return under(inp, 'places_list', ['place', 'here']).includes(args.place) ? '' : 'place';
     if (name === 'page_highlight') {
       const want = fold(args.text);

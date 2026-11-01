@@ -206,7 +206,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       de: ['syllabus', 'kursplan', 'sprechstunden?', 'gewichtung'], nl: ['syllabus', 'studiehandleiding', 'spreekuur', 'weging'],
     },
     discussions: {
-      en: ['discussions?', 'forums?', 'discussion board'], es: ['foros?', 'debates?'], 'pt-BR': ['f[óo]runs?', 'discuss[ãa]o', 'discuss[õo]es'], fr: ['forums?', 'discussions?'],
+      en: ['discussions?', 'forums?', 'discussion board'], es: ['foros?', 'debates?'], 'pt-BR': ['f[óo]rum', 'f[óo]runs', 'discuss[ãa]o', 'discuss[õo]es'], fr: ['forums?', 'discussions?'],
       de: ['diskussion\\p{L}*', 'forum\\p{L}*'], nl: ['discussies?', 'forums?'],
     },
   });
@@ -500,9 +500,12 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
           // was read as its material, under its own rules. Its reader's answer is never shown.
           let material = '';
           if (r.read) {
-            const seen = await episode({ question, tools: r.read, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal, first: true, help: r.subject });
-            if (seen.declined) return post({ id, type: 'end', task: r.task, declined: true });
-            material = seen.steps.map((st) => AT().readable(st.result, zone) || '').join('\n').slice(0, LIMIT.material);
+            // A reader that can't finish (its turn refused, too many steps) leaves study help to answer without it.
+            let seen = null;
+            try { seen = await episode({ question, tools: r.read, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal, first: true, help: r.subject }); }
+            catch (e) { if (signal.aborted || !['check', 'steps', 'refusal', 'invalid-response'].includes(R().code(e))) throw e; }
+            if (seen?.declined) return post({ id, type: 'end', task: r.task, declined: true });
+            if (seen) material = seen.steps.map((st) => AT().readable(st.result, zone) || '').join('\n').slice(0, LIMIT.material);
           }
           const output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...(history.length && { history }), ...(material && { material }) });
           return post({ id, type: 'end', task: r.task, output });
