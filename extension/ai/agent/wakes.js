@@ -11,7 +11,7 @@
 //   say, made, until, base }], fired: [{ id, what, watch?, say, at, fact? }] }, each list capped (LIMIT).
 // env: { local (storage.local: get, set), alarms (chrome.alarms: create, clear, getAll), read(name, args, account) → an Agents
 //   tool's answer (todo_list, course_grades), on() → whether the switch and Ask Rime are on, now() }.
-//   tools(env) → wake_create, monitor_create, wakes_list, wake_cancel for ai/tools.js define; ctx { account, zone }.
+//   tools(env) → wake_create, monitor_create, wakes_list, wake_cancel for ai/tools.js define; ctx { account, zone, locale }.
 //   tick(env) checks what is due and fires it; alarm(env, alarm) for the worker's alarms.onAlarm; take(env) → the fired
 //   ones, then forgets them.
 // Classic script for the worker; module.exports for node.
@@ -173,7 +173,18 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
   const spec = (name) => AT().SPECS.find((t) => t.name === name);
   const def = (name, more) => ({ name, kind: spec(name).kind, description: spec(name).description, parameters: spec(name).parameters, ...more });
   const zoneOf = (ctx) => (typeof ctx?.zone === 'string' ? ctx.zone : Intl.DateTimeFormat().resolvedOptions().timeZone);
-  const said = (ms, zone) => new Date(ms).toLocaleString('en-US', { timeZone: zone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  // What the tools say, in the student's language (ctx.locale): English is the key, each i18n/<lang>.js its translation.
+  const WORDS = ['a grade in {course}', 'a grade in that course', 'a new announcement', 'a new announcement in {course}', 'the due date of “{title}” to move', '“{title}” to show as handed in',
+    'Watch for {about} for {n} days.', 'Watch for {about} for {n} days, then: “{say}”.', 'Come back {when}: “{say}”', 'Cancel coming back {when}: “{say}”.', 'Stop watching for {about}.'];
+  const LOCALES = ['en', 'pt-BR', 'es', 'fr', 'de', 'nl'];
+  const I18N = () => (typeof GZ_I18N !== 'undefined' ? GZ_I18N : require('../../core/i18n.js'));
+  const localeOf = (ctx) => (LOCALES.includes(ctx?.locale) ? ctx.locale : 'en');
+  const tr = (key, vars, locale) => {
+    // The worker cached every catalogue at install (background/background.js); node's i18n.js loads them all.
+    if (locale !== 'en' && !globalThis.GZ_LANGS?.[locale] && typeof importScripts === 'function') try { importScripts(`../i18n/${locale}.js`); } catch { /* English */ }
+    return I18N().t(key, vars, locale);
+  };
+  const said = (ms, zone, locale) => new Date(ms).toLocaleString(locale === 'en' ? 'en-US' : locale, { timeZone: zone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   // A wake's time → ms, or why not.
   const timeOf = (args, ctx, env) => {
     const at = AT().moment(args.at, zoneOf(ctx)), now = clock(env);
@@ -193,12 +204,13 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
     const r = await look(env, m);
     return r.error ? { error: r.error } : { m: { ...m, base: r.seen } };
   };
-  const about = (m) => (m.watch === 'grade' ? `a grade in ${m.base.course || 'that course'}` : m.watch === 'announcement' ? `a new announcement${m.base.course && m.course ? ` in ${m.base.course}` : ''}`
-    : m.watch === 'due' ? `the due date of “${m.base.title}” to move` : `“${m.base.title}” to show as handed in`);
+  const about = (m, locale = 'en') => (m.watch === 'grade' ? (m.base.course ? tr('a grade in {course}', { course: m.base.course }, locale) : tr('a grade in that course', {}, locale))
+    : m.watch === 'announcement' ? (m.base.course && m.course ? tr('a new announcement in {course}', { course: m.base.course }, locale) : tr('a new announcement', {}, locale))
+      : tr(m.watch === 'due' ? 'the due date of “{title}” to move' : '“{title}” to show as handed in', { title: m.base.title }, locale));
 
   const tools = (env) => [
     def('wake_create', {
-      summarize: async (args, ctx) => { if (!(await env.on())) throw new Error(OFF); const t = timeOf(args, ctx, env); if (t.error) throw new Error(t.error); return `Come back ${said(t.at, zoneOf(ctx))}: “${text(args.say, LIMIT.say)}”`; },
+      summarize: async (args, ctx) => { if (!(await env.on())) throw new Error(OFF); const t = timeOf(args, ctx, env); if (t.error) throw new Error(t.error); return tr('Come back {when}: “{say}”', { when: said(t.at, zoneOf(ctx), localeOf(ctx)), say: text(args.say, LIMIT.say) }, localeOf(ctx)); },
       run: (args, ctx) => turn(async () => {
         if (!(await env.on())) return fail(OFF);
         const t = timeOf(args, ctx, env), say = text(args.say, LIMIT.say);
@@ -220,7 +232,8 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
         if (!(await env.on())) throw new Error(OFF);
         const r = await monitorOf(args, ctx, env);
         if (r.error) throw new Error(r.error);
-        return `Watch for ${about(r.m)} for ${LIMIT.days} days${args.say ? `, then: “${text(args.say, LIMIT.say)}”` : ''}.`;
+        const l = localeOf(ctx), vars = { about: about(r.m, l), n: LIMIT.days, say: text(args.say, LIMIT.say) };
+        return tr(args.say ? 'Watch for {about} for {n} days, then: “{say}”.' : 'Watch for {about} for {n} days.', vars, l);
       },
       run: async (args, ctx) => {
         if (!(await env.on())) return fail(OFF);
@@ -235,22 +248,22 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
           s.monitors.push(m);
           await write(env, s);
           await arm(env, s);
-          return { id: m.id, what: 'monitor', watch: m.watch, about: about(m), ...(m.say && { say: m.say }) };
+          return { id: m.id, what: 'monitor', watch: m.watch, about: about(m, localeOf(ctx)), ...(m.say && { say: m.say }) };
         });
       },
     }),
     def('wakes_list', {
-      run: async () => {
+      run: async (args, ctx) => {
         const s = await read(env);
         return { items: [...s.wakes.map((w) => ({ id: w.id, what: 'wake', at: w.at, say: w.say })),
-          ...s.monitors.filter((m) => m.until > clock(env)).map((m) => ({ id: m.id, what: 'monitor', watch: m.watch, about: about(m), ...(m.say && { say: m.say }) }))] };
+          ...s.monitors.filter((m) => m.until > clock(env)).map((m) => ({ id: m.id, what: 'monitor', watch: m.watch, about: about(m, localeOf(ctx)), ...(m.say && { say: m.say }) }))] };
       },
     }),
     def('wake_cancel', {
       summarize: async (args, ctx) => {
         const s = await read(env), w = s.wakes.find((x) => x.id === args.id), m = s.monitors.find((x) => x.id === args.id);
         if (!w && !m) throw new Error('No wake or monitor has that id; wakes_list names them.');
-        return w ? `Cancel coming back ${said(w.at, zoneOf(ctx))}: “${w.say}”.` : `Stop watching for ${about(m)}.`;
+        return w ? tr('Cancel coming back {when}: “{say}”.', { when: said(w.at, zoneOf(ctx), localeOf(ctx)), say: w.say }, localeOf(ctx)) : tr('Stop watching for {about}.', { about: about(m, localeOf(ctx)) }, localeOf(ctx));
       },
       run: (args) => turn(async () => {
         const s = await read(env), w = s.wakes.find((x) => x.id === args.id), m = s.monitors.find((x) => x.id === args.id);
@@ -265,6 +278,6 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
     }),
   ];
   const register = (registry, env) => tools(env).map((t) => registry.add(t));
-  return { KEY, ALARM, TICK, LIMIT, WATCHES, clean, shape, changed, tick, alarm, take, tools, register };
+  return { KEY, ALARM, TICK, LIMIT, WATCHES, WORDS, clean, shape, changed, tick, alarm, take, tools, register };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_RIME_WAKES; else GZ_AI_RIME_WAKES;

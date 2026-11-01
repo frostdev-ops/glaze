@@ -192,7 +192,7 @@ panel closes. A reminder or watch you approve is the exception: Glaze keeps its 
 of what to say, and for a watch what it last read (a due date, whether work shows as handed in, a course's grade, the
 announcements' ids and titles) in extension storage on this device, at most 20 of each, until it fires and is shown on
 your next school page or you cancel it (a watch ends after 30 days); turning off **Reminders and watches** under Ask Rime stops them.
-Code Ask Rime runs for arithmetic (Chrome only) runs in Glaze's sandbox page with no network and no access to the page or
+Code Ask Rime runs for arithmetic runs in Glaze's packaged JavaScript engine with no network and no access to the page or
 your data. While the panel is open, what it shows is part of the page, as anything on screen is. Each model request leaves one row of metadata in the recent AI calls (feature, provider, model, time, size,
 outcome), as for every AI feature; no question, answer or school data is in it.
 

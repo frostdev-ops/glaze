@@ -25,7 +25,7 @@ until the student has turned AI on, chosen a model for that feature and allowed 
 | `ai/tasks/syllabus-read.js` | `syllabus.read`: a syllabus's values as written, each with its quote; `planner/syllabus-ai.js` reads them with `planner/syllabus.js` and merges them into the import dialog's review. |
 | `ai/tasks/writer-*.js` | Glaze Writer's tasks (below); `writer-context.js` cleans the page's context and writes it as the request's reusable context. |
 | `ai/tasks/study-help.js`, `ai/tasks/agent-tools.js` | `study.help` and `agent.tools` (below), which Ask Rime runs. `wording.js`: the wording-offer rules they share with Feedback. |
-| `ai/agent/js.js`, `places.js`, `wakes.js`; `ai/sandbox/` | Rime's own tools (below): run_js and its sandbox page, the places map and the panel's actions, wakes and monitors. |
+| `ai/agent/js.js`, `places.js`, `wakes.js`; `vendor/quickjs/` | Rime's own tools (below): run_js and its engine, the places map and the panel's actions, wakes and monitors. |
 | `ai/ask.js`, `ai/page/ask.js` | Ask Rime (below): the routing rule, the step loop over Agents' tools and the panel's port in the worker; the panel on the school's page, loaded on demand. |
 | `ai/settings.js` | storage.local `ai`: `{ on, outline, sources, mode, model, models, tune, features }` (below), the providers Settings names (`PRESETS`), and `migrate` for an older store. Features: `syllabus`, `completion` (the writer's ghost text), `writing` (its review, feedback, requirements, citations and autocorrect calls), `ask` (Ask Rime). |
 | `ai/broker.js` | The worker's broker: the port, admission, connections (IndexedDB), Settings' config messages. |
@@ -205,7 +205,7 @@ of them is the same, byte for byte. Every parameter is a string or an integer (t
 
 | Tool | Kind | Arguments | What it does |
 | --- | --- | --- | --- |
-| `run_js` | read | `code` (one line, ≤ 1,000) | Runs in `ai/sandbox/js.html` (Chrome): a new blob Worker per run, network, scripts, storage, messaging and extension APIs taken out of its scope, the sandbox CSP (`connect-src 'none'`) under it; stopped at 2 s; value and console lines ≤ 4,000 characters, 40 lines. → `{ ok, value, logs, error?, cut? }`. Firefox and Safari have no manifest sandbox: refused with one sentence, and not to be offered there (`available`). |
+| `run_js` | read | `code` (one line, ≤ 1,000) | QuickJS in WebAssembly (`vendor/quickjs/`, pinned and rebuilt by `tools/build/vendor-quickjs.sh`), run in the extension's background in Chrome, Firefox and Safari alike under the extension pages' `'wasm-unsafe-eval'`. The code sees ECMAScript's builtins and a console, nothing else: no network, timers, storage, messaging, modules or extension APIs. A new runtime and context per run, 32 MB of memory and a 512 KB stack, interrupted at 2 s (the background is busy for at most that long); value and console lines share 4,000 characters, 40 lines. The 0.5 MB engine is fetched and compiled on the first run. → `{ ok, value, logs, error?, cut? }`. |
 | `places_list` | read | `course?` | The site's pages (Canvas: dashboard, courses, calendar, grades; Ultra: courses, calendar, grades, activity stream; Moodle: dashboard, my courses, calendar, grades), Documents (Writer on), Settings and each course; with `course`, its pages (Canvas: home, grades, assignments, announcements, modules; Ultra: outline, gradebook, announcements; Moodle: home, grades). Paths are the ones Glaze already opens or the sites' own course navigation links. → `{ site, here, places: [{ place, title }] }`. |
 | `place_open` | read | `place` | A place on the map → a ui action `{ action: 'open', place, title, url | app }`; anything else refused with the nearest place. |
 | `page_highlight` | read | `text`, `note?` | Words on this page (checked against `ctx.text` when given) or on the place just opened → `{ action: 'highlight', text, note }`. |
@@ -216,8 +216,10 @@ of them is the same, byte for byte. Every parameter is a string or an integer (t
 
 There is no fill tool: Glaze never fills in the student's work or a site's forms.
 
-`check()` adds, for these tools (`ownWhy`): `work`, run_js on a question about homework, a worksheet, a problem or question
-number or a named assessment (six languages, `HOMEWORK`) or after `assignment_read` or `document_read`; `place`, a place no places_list result
+`check()` adds, for these tools (`ownWhy`): `work`, run_js that would solve graded work: homework, a worksheet, a quiz or
+exam question, a numbered problem or pasted problem text, or an assessment named beside a verb asking for its working
+(six languages, `gradedWork`), or after `assignment_read` or `document_read`; the student's own grade math ("what do I
+need on the exam to keep a B") runs; `place`, a place no places_list result
 named; `text`, highlighted words neither the question nor a result holds; `asked`, a wake, monitor or cancel when the
 question makes no affirmative request for that action (mentions and negations do not grant one; cancellation is separate
 from creation); `time`, a wake that isn't a time on the student's clock in the next 60 days (`moment`);
@@ -235,7 +237,7 @@ switch changes reconcile the saved alarms; an existing periodic monitor alarm ke
 their capacity before creation, and stored records are validated and bounded before use.
 
 The panel's side comes with Ask Rime's new panel: it gives the tools their `ctx` (`page { site, url }`, `courses()`,
-`writer`, `text`, `ui`, `js` through `ai/sandbox/frame.js`, `zone`, `account`), performs the ui actions after the answer,
+`writer`, `text`, `ui`, `zone`, `account`, `locale`), performs the ui actions after the answer,
 shows each confirm's sentence for approval as Agents' window does for a write, and takes and shows what fired.
 
 ## Add a provider

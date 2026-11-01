@@ -75,11 +75,11 @@ if (fs.existsSync(popup)) {
   fs.writeFileSync(popup, popupJs.replace(hostAccess, '$1const hostAccess = null;'));
   if (fs.readFileSync(popup, 'utf8').includes('addHostAccessRequest')) throw new Error('popup.js still names addHostAccessRequest');
 }
-// Code mods and run_js need Chrome: no sandbox page, no sandbox CSP and none of their files. content.js starts code mods
+// Code mods need Chrome: no sandbox page, no sandbox CSP and none of its files. content.js starts code mods
 // only where the manifest has the sandbox; declarative widgets (mods/page/modwidgets.js, drawn by mods/page/modui.js) run here.
 delete m.sandbox;
 delete m.content_security_policy?.sandbox;
-m.web_accessible_resources = (m.web_accessible_resources || []).map((e) => ({ ...e, resources: e.resources.filter((r) => !r.startsWith('mods/') && !r.startsWith('ai/sandbox/')) })).filter((e) => e.resources.length);
+m.web_accessible_resources = (m.web_accessible_resources || []).map((e) => ({ ...e, resources: e.resources.filter((r) => !r.startsWith('mods/')) })).filter((e) => e.resources.length);
 // 140 (ESR) reads data_collection_permissions; 127+ grants host permissions at install. Glaze sends nothing anywhere
 // on its own: shared sessions and the Looks gallery go out only when the user starts them. Agent access gives course data to
 // an app on this computer, outside the browser, so it asks for website content when it is turned on (settings/editor-agents.js).
@@ -89,7 +89,7 @@ m.browser_specific_settings = {
 };
 fs.writeFileSync(file, JSON.stringify(m, null, 2) + '\n');
 JS
-rm -rf "$stage/mods/boot.js" "$stage/mods/host.html" "$stage/mods/host.js" "$stage/mods/page/mods.js" "$stage/ai/sandbox"
+rm -rf "$stage/mods/boot.js" "$stage/mods/host.html" "$stage/mods/host.js" "$stage/mods/page/mods.js"
 chmod -R a+rX "$stage"
 out="$(cd "$dist" && pwd)/glaze-v$version-firefox.zip"
 rm -f "$out"

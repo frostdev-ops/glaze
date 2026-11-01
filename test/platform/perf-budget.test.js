@@ -366,7 +366,9 @@ test('the detector that Safari runs on every other https page stays under 2 KB',
 // first content script, loaded on demand or in the extension's pages. Not the vendored three.js, ProseMirror, OCR engine or Harper, nor the tools,
 // tests and app wrappers around the extension, nor the share relay (server/), which runs on a server.
 const NOT_SHIPPED = new Set(['scripts', 'test', 'safari', 'store', 'assets', 'dist', 'release', 'node_modules', 'docs', 'server', 'mcp']);
-const VENDORED = new Set(['vendor/three.js', 'vendor/pm.js', 'vendor/tesseract/tesseract-core-simd-lstm.js', 'vendor/lottie/lottie_light_canvas.js', 'vendor/harper/index.js', 'vendor/harper/BinaryModule-S5UABkWQ.js', 'vendor/harper/slimBinary.js']); // pdf.js is .mjs, not scanned
+// run_js's engine (vendor/quickjs/quickjs.js, 54 KB, with its 503 KB WebAssembly): loaded by the worker only when run_js
+// runs, never by a page (owner's decision, 2026-11-01: one sandbox for all three browsers).
+const VENDORED = new Set(['vendor/quickjs/quickjs.js', 'vendor/three.js', 'vendor/pm.js', 'vendor/tesseract/tesseract-core-simd-lstm.js', 'vendor/lottie/lottie_light_canvas.js', 'vendor/harper/index.js', 'vendor/harper/BinaryModule-S5UABkWQ.js', 'vendor/harper/slimBinary.js']); // pdf.js is .mjs, not scanned
 // Only what git tracks: releases are packaged from a fresh checkout, so an untracked folder (another project's build) isn't Glaze.
 const shipped = (top) => execFileSync('git', ['ls-files', '-z', '--', '*.js'], { cwd: top, encoding: 'utf8' }).split('\0').filter((f) => {
   const parts = f.split('/');

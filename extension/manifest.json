@@ -68,8 +68,7 @@
   },
   "sandbox": {
     "pages": [
-      "mods/host.html",
-      "ai/sandbox/js.html"
+      "mods/host.html"
     ]
   },
   "options_ui": {
@@ -222,15 +221,6 @@
       "resources": [
         "mods/host.html",
         "mods/boot.js"
-      ],
-      "matches": [
-        "https://*/*"
-      ],
-      "use_dynamic_url": true
-    },
-    {
-      "resources": [
-        "ai/sandbox/js.html"
       ],
       "matches": [
         "https://*/*"

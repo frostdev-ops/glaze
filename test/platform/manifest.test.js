@@ -140,8 +140,7 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
   // Safari has no manifest sandbox (MDN: not supported on macOS or iOS), so no code mods: their page, CSP and files go.
   delete expected.sandbox;
   delete expected.content_security_policy.sandbox;
-  // run_js's sandbox page goes with them.
-  expected.web_accessible_resources = expected.web_accessible_resources.filter((e) => !e.resources.every((r) => r.startsWith('mods/') || r.startsWith('ai/sandbox/')));
+  expected.web_accessible_resources = expected.web_accessible_resources.filter((e) => !e.resources.every((r) => r.startsWith('mods/')));
   // Safari's From Google Drive comes back from the picker pages to its return page (background/google.js pick).
   expected.web_accessible_resources.push({ resources: ['documents/picked.html'], matches: ['https://frostdev.io/*', 'https://frostdev-ops.github.io/*'] });
   // Safari's access stays as it was (the test above).
@@ -159,11 +158,8 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
     // A staged copy loses the mods host's files too.
     fs.mkdirSync(path.join(dir, 'mods'));
     fs.writeFileSync(path.join(dir, 'mods', 'host.html'), '');
-    fs.mkdirSync(path.join(dir, 'ai', 'sandbox'), { recursive: true });
-    fs.writeFileSync(path.join(dir, 'ai', 'sandbox', 'js.html'), '');
     rewrite();
     assert.ok(!fs.existsSync(path.join(dir, 'mods', 'host.html')));
-    assert.ok(!fs.existsSync(path.join(dir, 'ai', 'sandbox')), 'run_js\'s sandbox goes too');
 
     // A clean Chrome manifest also gains the permission on its first conversion.
     fs.writeFileSync(file, JSON.stringify(m));
@@ -181,7 +177,7 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
 const SANDBOX_CSP = "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; media-src blob:; font-src data: blob:; worker-src blob:; frame-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'";
 test('Glaze\'s pages may compile WebAssembly for OCR; only the approved pages are frameable, with local scripts and Documents\' approved font hosts and PDF fallback', () => {
   assert.deepEqual(m.content_security_policy, { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'", sandbox: SANDBOX_CSP });
-  assert.deepEqual(m.web_accessible_resources.flatMap((w) => w.resources).filter((r) => /\.html?$/.test(r)), ['reader.html', 'writer.html', 'sharing/quick.html', 'options.html', 'papers.html', 'preview.html', 'courses/allow.html', 'mods/host.html', 'ai/sandbox/js.html']);
+  assert.deepEqual(m.web_accessible_resources.flatMap((w) => w.resources).filter((r) => /\.html?$/.test(r)), ['reader.html', 'writer.html', 'sharing/quick.html', 'options.html', 'papers.html', 'preview.html', 'courses/allow.html', 'mods/host.html']);
   // Documents is exposed as Settings is (including dynamic URLs if that group uses them). Its Look's fonts use only the
   // catalogued font endpoints; scripts and styles remain local, with no broader network or form authority.
   assert.deepEqual(m.web_accessible_resources.find((w) => w.resources.includes('papers.html')), m.web_accessible_resources.find((w) => w.resources.includes('options.html')));
@@ -202,18 +198,15 @@ test('Glaze\'s pages may compile WebAssembly for OCR; only the approved pages ar
   assert.doesNotMatch(papers, /<style\b|<script(?![^>]*\bsrc=)/);
 });
 
-test('the sandbox pages are the mods host and run_js\'s: no same-origin, no inline script, no requests, and only they and the mods\' bootstrap are exposed', () => {
-  assert.deepEqual(m.sandbox, { pages: ['mods/host.html', 'ai/sandbox/js.html'] });
+test('the mods host is the one sandbox page: no same-origin, no inline script, no requests, and only it and its bootstrap are exposed', () => {
+  assert.deepEqual(m.sandbox, { pages: ['mods/host.html'] });
   const csp = Object.fromEntries(m.content_security_policy.sandbox.split(';').map((d) => d.trim().split(/\s+/)).map(([k, ...v]) => [k, v]));
   assert.deepEqual(csp.sandbox, ['allow-scripts'], 'never allow-same-origin, forms, popups or top navigation');
   assert.deepEqual(csp['script-src'], ["'self'", "'unsafe-eval'"], "no 'unsafe-inline': boot.js is the only way a frame UI's code starts");
   for (const d of ['default-src', 'frame-src', 'connect-src']) assert.deepEqual(csp[d], ["'none'"], d);
   const war = m.web_accessible_resources.filter((w) => w.resources.some((r) => r.startsWith('mods/')));
   assert.deepEqual(war, [{ resources: ['mods/host.html', 'mods/boot.js'], matches: ['https://*/*'], use_dynamic_url: true }]);
-  for (const f of ['mods/host.html', 'mods/host.js', 'mods/boot.js', 'ai/sandbox/js.html', 'ai/sandbox/js.js', 'ai/agent/js.js']) assert.ok(fs.existsSync(path.join(__dirname, '../../extension', f)), f);
-  assert.deepEqual(m.web_accessible_resources.filter((w) => w.resources.some((r) => r.startsWith('ai/sandbox/'))), [{ resources: ['ai/sandbox/js.html'], matches: ['https://*/*'], use_dynamic_url: true }]);
-  // run_js's page loads its two scripts and nothing else, no inline script.
-  assert.equal(fs.readFileSync(path.join(__dirname, '../../extension/ai/sandbox/js.html'), 'utf8').match(/<script[^>]*>/g).join(' '), '<script src="../agent/js.js"> <script src="js.js">');
+  for (const f of ['mods/host.html', 'mods/host.js', 'mods/boot.js']) assert.ok(fs.existsSync(path.join(__dirname, '../../extension', f)), f);
 });
 
 test('every content script file exists', () => {

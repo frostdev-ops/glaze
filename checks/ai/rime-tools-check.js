@@ -1,11 +1,11 @@
 // Ask Rime's own tools in a real Chromium (docs/ai-harness.md "Rime's own tools"), headless, the extension staged with a
-// worker that names its harness for the check (the checkout's worker is untouched). run_js's sandbox: ai/sandbox/frame.js
-// put into a Canvas page's isolated world as the panel will be, framing ai/sandbox/js.html in a closed shadow root; a value,
-// console lines and errors; the 2-second stop and the output limit; no network (neither the scope nor the CSP lets a request
-// out) and no extension APIs; the page's own script can't find the frame. The places map in the worker
-// (ai/agent/places.js) on a Canvas course page and an Ultra course page served from their fixtures: the place on screen,
-// every course place a link in the site's own course navigation, an opened place's address loading that page, and a
-// highlight checked against the page's visible words. A synthetic school under invented origins; every other request aborted.
+// worker that names its harness for the check (the checkout's worker is untouched). run_js in the extension's service
+// worker as Ask Rime runs it: QuickJS's script imported after install, its WebAssembly fetched and compiled under the
+// extension pages' CSP; a value, console lines and errors; the 2-second stop, the heap cap and the output limit; nothing
+// outside ECMAScript in reach and no request leaving. The places map in the worker (ai/agent/places.js) on a Canvas course
+// page and an Ultra course page served from their fixtures: the place on screen, every course place a link in the site's
+// own course navigation, an opened place's address loading that page, and a highlight checked against the page's visible
+// words. A synthetic school under invented origins; every other request aborted.
 //   glaze-remote -e TZ=UTC -o <evidence dir> -- node checks/ai/rime-tools-check.js /out
 //   (Mac: NODE_PATH=<playwright> nice -n 10 node checks/ai/rime-tools-check.js [evidence dir]; EXT selects the checkout)
 const { chromium } = require('playwright');
@@ -22,13 +22,7 @@ globalThis.rimeCheck = {
     const r = await t.run(args, { page, courses: async () => courses, writer: true, text, ui: { actions, push: (a) => actions.push(a) } });
     return { r, actions };
   },
-  inject: async (url) => {
-    const [tab] = (await chrome.tabs.query({})).filter((x) => x.url === url);
-    await chrome.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] }, files: ['ai/sandbox/frame.js'] });
-    return tab.id;
-  },
-  run: async (tabId, codes) => (await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, args: [codes],
-    func: async (list) => { const out = []; for (const c of list) { const t = performance.now(); out.push({ ...(await GZ_AI_RIME_FRAME.run(c)), took: Math.round(performance.now() - t) }); } return out; } }))[0].result,
+  run: async (codes) => { ai(); const out = []; for (const c of codes) { const t = Date.now(); out.push({ ...(await GZ_AI_RIME_JS.run(c)), took: Date.now() - t }); } return out; },
 };
 `;
 const page = (title, body) => `<!doctype html><html lang="en"><head><title>${title}</title></head><body><main>${body}</main></body></html>`;
@@ -82,10 +76,9 @@ const check = async (name, test) => {
     tab.on('pageerror', (e) => errors.push(e.message));
 
     await tab.goto(`${CANVAS}/courses/25/grades`);
-    const tabId = await worker.evaluate((u) => rimeCheck.inject(u), tab.url());
-    const run = (codes) => worker.evaluate(([id, c]) => rimeCheck.run(id, c), [tabId, codes]);
+    const run = (codes) => worker.evaluate((c) => rimeCheck.run(c), codes);
 
-    await check('sandbox: a value, console lines and an error, from a Canvas page through frame.js', async () => {
+    await check('run_js in the service worker: a value, console lines and an error', async () => {
       const [a, b, c] = await run(['const g = [81, 92, 77]; console.log("n", g.length); (g.reduce((x, y) => x + y) / g.length).toFixed(2)', '[1, 2, 3].map((x) => x * x)', 'nope + 1']);
       assert.deepEqual([a.ok, a.value, a.logs], [true, '83.33', ['n 3']]);
       assert.deepEqual(b.value, [1, 4, 9]);
@@ -93,36 +86,34 @@ const check = async (name, test) => {
       return { a, b, c };
     });
 
-    await check('sandbox: stopped at 2 seconds, its output and code held to their limits', async () => {
-      const [loop, loud, big, long] = await run(['while (true) {}', 'for (let i = 0; i < 1e5; i++) console.log("x".repeat(400)); 1', '"y".repeat(1e6)', '1;'.repeat(600)]);
+    await check('run_js in the service worker: stopped at 2 seconds, its heap capped, its output and code held to their limits', async () => {
+      const [loop, greedy, loud, big, long] = await run(['while (true) {}', 'const a = []; while (true) a.push("x".repeat(1e6));', 'for (let i = 0; i < 1e5; i++) console.log("x".repeat(400)); 1', '"y".repeat(1e6)', '1;'.repeat(600)]);
       assert.deepEqual([loop.ok, loop.error], [false, 'Stopped after 2 seconds.']);
-      assert.ok(loop.took >= 1900 && loop.took < 3500, `took ${loop.took} ms`);
+      assert.ok(loop.took >= 1900 && loop.took < 3000, `took ${loop.took} ms`);
+      assert.deepEqual([greedy.ok, greedy.error], [false, 'The code ran out of memory.']);
+      assert.ok(greedy.took < 2000, `out of memory after ${greedy.took} ms`);
       assert.ok(loud.logs.length <= 40 && loud.logs.join('').length <= 4000 && loud.cut === true);
       assert.ok(big.value.length <= 4000 && big.cut === true);
       assert.match(long.error, /longer than 1000/);
-      // A stopped run leaves the sandbox working: each run is a Worker of its own.
       const [after] = await run(['6 * 7']);
       assert.equal(after.value, 42);
-      return { loop: loop.took, logs: loud.logs.length };
+      return { loop: loop.took, greedy: greedy.took, logs: loud.logs.length };
     });
 
-    await check('sandbox: no network by any way left, no extension APIs, and the page can\'t find the frame', async () => {
+    await check('run_js in the service worker: nothing outside ECMAScript in reach, a fresh context each run, and no request leaves', async () => {
       const before = asked.length;
-      const [scope, imp, xhr, ext] = await run([
-        "['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'importScripts', 'indexedDB', 'caches', 'Worker', 'navigator', 'postMessage'].map((k) => k + ':' + typeof self[k]).join(' ')",
-        "import('https://school.instructure.com/evil.js').then(() => 'loaded', (e) => 'blocked ' + e.name)",
-        "(() => { const all = []; for (let o = self; o; o = Object.getPrototypeOf(o)) for (const k of ['fetch', 'WebSocket', 'XMLHttpRequest', 'importScripts']) if (typeof Object.getOwnPropertyDescriptor(o, k)?.value === 'function') all.push(k); return 'functions:' + all.join(','); })()",
-        "typeof chrome + ' ' + typeof browser",
+      const names = ['fetch', 'XMLHttpRequest', 'WebSocket', 'importScripts', 'setTimeout', 'indexedDB', 'caches', 'Worker', 'navigator', 'postMessage', 'chrome', 'browser', 'self', 'WebAssembly'];
+      const [scope, imp, set, kept] = await run([
+        `${JSON.stringify(names)}.map((k) => k + ':' + typeof globalThis[k]).join(' ')`,
+        "import('https://school.instructure.com/evil.js').then(() => 'loaded', (e) => 'refused ' + e.name)",
+        'globalThis.kept = 1; 0', 'typeof kept',
       ]);
-      assert.equal(scope.value, 'fetch:undefined XMLHttpRequest:undefined WebSocket:undefined EventSource:undefined importScripts:undefined indexedDB:undefined caches:undefined Worker:undefined navigator:undefined postMessage:undefined');
-      assert.match(imp.value, /^blocked /);
-      assert.equal(xhr.value, 'functions:', 'nothing up the prototype chain either');
-      assert.equal(ext.value, 'undefined undefined');
+      assert.equal(scope.value, names.map((k) => `${k}:undefined`).join(' '));
+      assert.match(imp.value, /^refused /);
+      assert.equal(kept.value, 'undefined');
       await pause(300);
-      assert.deepEqual(asked.slice(before).filter((x) => /evil/.test(x)), [], 'the CSP stopped the import before any request');
-      const frames = await tab.evaluate(() => [...document.querySelectorAll('iframe')].map((f) => f.src));
-      assert.ok(!frames.some((s) => s.includes('sandbox')), 'a closed shadow root keeps the page out');
-      return { scope: scope.value, imp: imp.value };
+      assert.deepEqual(asked.slice(before), [], 'no request while code ran');
+      return { scope: scope.value, imp: imp.value, set: set.ok };
     });
 
     const COURSES = { canvas: [{ id: '25', name: 'BIO 1100', code: 'BIO1100-01' }, { id: '26', name: 'ENG 1100' }], ultra: [{ id: '_101_1', name: 'BIO 1100: Cell Biology' }, { id: '_102_1', name: 'ENG 1100' }] };
