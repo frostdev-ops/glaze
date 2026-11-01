@@ -437,6 +437,21 @@ test('wakes: startup and the off/on switch restore missing alarms from the store
   assert.ok(env.alarms.live.has(`gz-rime:wake:${id}`));
 });
 
+test('wakes: expired monitors and overdue wakes release capacity before concurrent creation', async () => {
+  const store = { rimeWakes: {
+    wakes: Array.from({ length: 20 }, (_, i) => ({ id: `w-${String(i).padStart(8, '0')}`, at: T0 - 1, say: 'Old wake', made: T0 - 864e5 })),
+    monitors: Array.from({ length: 20 }, (_, i) => ({ id: `m-${String(i).padStart(8, '0')}`, watch: 'due', account: ACC, item: { type: 'assignment', id: '1' }, until: T0 - 1, made: T0 - 31 * 864e5, base: { due: T0, title: 'Lab', course: '' } })),
+    fired: [],
+  } }, env = wakesEnv(store);
+  env.read = async () => ({ items: [{ type: 'assignment', id: '1', title: 'Lab', due: T0 + 864e5 }] });
+  assert.ok((await wtool(env, 'monitor_create').run({ watch: 'due', type: 'assignment', id: '1' }, { account: ACC })).id, 'expired monitors must not consume the cap');
+  const made = await Promise.all(Array.from({ length: 25 }, (_, i) => wtool(env, 'wake_create').run({ at: '2026-10-15 21:00', say: `New ${i}` }, { zone: 'UTC' })));
+  assert.equal(made.filter((r) => r.id).length, 20, 'the queue enforces the cap without losing concurrent writes');
+  assert.equal(store.rimeWakes.wakes.length, 20);
+  assert.equal(store.rimeWakes.monitors.length, 1);
+  assert.equal(store.rimeWakes.fired.length, 20, 'overdue wakes are retained for delivery');
+});
+
 test('wake_create: approved first, kept with its alarm, at most 20, refused when passed, too far off or switched off', async () => {
   const store = {}, env = wakesEnv(store), ctx = { zone: 'UTC' };
   const make_ = wtool(env, 'wake_create');
