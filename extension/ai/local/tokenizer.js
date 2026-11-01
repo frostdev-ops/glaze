@@ -130,8 +130,9 @@ var GZ_AI_TOKENIZER = globalThis.GZ_AI_TOKENIZER || (() => {
     }
     const { rank, to } = mergeTable(Array.from(v.merges || []), vocab);
     const re = new RegExp((pre.src ||= pre.js()), 'gu');
-    // Added tokens in text (specials: true): leftmost, then longest, as HF's matcher; an empty one, which HF ignores, never.
-    const matched = [...specials.keys()].filter(Boolean);
+    // Added tokens in text (specials: true): leftmost, then longest, as HF's matcher; an empty one, which HF ignores, never;
+    // nor Glaze's marker names, which a tuned GGUF gives its reserved rows: only encodeWith places those.
+    const matched = [...specials.keys()].filter((name) => name && !GLAZE_TOKENS.includes(name));
     const addedRe = matched.length ? new RegExp(matched.sort((a, b) => b.length - a.length).map((s) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')).join('|'), 'g') : null;
     // Reserved rows, in id order: the unused ones (a GGUF's [PAD…]), then any rows past the tokens. GLAZE_TOKENS[i] takes
     // the i-th, so a GGUF and a tokenizer.json with the model's rows give the same ids.
