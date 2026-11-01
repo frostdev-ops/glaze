@@ -292,6 +292,47 @@ for (const mode of ['reduced motion', 'Motion off']) test(`enabling ${mode} stop
   P.box().close();
 });
 
+const exitEffects = (P) => {
+  const effects = [];
+  P.box().animate = () => {
+    let reject;
+    const effect = { cancelled: false, finished: new Promise((resolve, no) => { reject = no; }), cancel() { this.cancelled = true; reject(new Error('cancelled')); } };
+    // A backdrop effect has no finished handler in the panel; suppress an unhandled test rejection for that effect.
+    effect.finished.catch(() => {});
+    effects.push(effect);
+    return effect;
+  };
+  return effects;
+};
+
+test('closing cancels the active question before its exit effect finishes and releases both effects on close', async () => {
+  const P = movingPage();
+  await P.ui.open({ event: { isTrusted: true } });
+  const effects = exitEffects(P);
+  P.ask('Explain mitosis'); await settle();
+  P.doc.fire(P.box().querySelector('.gz-ask-close'), 'click');
+  assert.equal(effects.length, 2, 'the dialog and its backdrop are fading');
+  assert.ok(P.posted.some((m) => m.op === 'cancel' && m.id === asked(P)[0].id), 'cancel immediately on the close click');
+  P.box().close();
+  assert.ok(effects.every((a) => a.cancelled), 'external closure leaves no live effect');
+  assert.equal(P.frames.size, 0);
+  await P.ui.open({ event: { isTrusted: true } }); await settle();
+  assert.ok(P.box()?.open, 'old exit callbacks cannot close a reopened panel');
+  P.box().close();
+});
+
+for (const mode of ['reduced motion', 'Motion off']) test(`enabling ${mode} cancels an exit effect already in progress`, async () => {
+  const P = movingPage();
+  await P.ui.open({ event: { isTrusted: true } });
+  const effects = exitEffects(P);
+  P.doc.fire(P.box().querySelector('.gz-ask-close'), 'click');
+  if (mode === 'Motion off') P.doc.root.dataset.gzMotion = 'off'; else P.reduced = true;
+  P.flushFrame(); await settle();
+  assert.equal(P.box(), null, 'close immediately once motion is disabled');
+  assert.ok(effects.every((a) => a.cancelled));
+  assert.equal(P.frames.size, 0);
+});
+
 test('the empty panel offers starters: one fills the question for the student\'s own click; New chat clears the conversation', async () => {
   const P = page({ reply: ready });
   await P.ui.open({ event: { isTrusted: true } });
