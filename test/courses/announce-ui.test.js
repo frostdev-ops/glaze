@@ -209,7 +209,7 @@ test('a read announcement isn\'t marked again; Ultra asks its public API and mar
   const u = page({ site: 'ultra', origin: U, answer: () => ({ status: 200, body: { id: '_1_1', title: 'Lab 3', body: '<p>Up</p>', created: '2026-10-12T13:00:00Z' } }) });
   u.A.open({ site: 'ultra', courseId: '_101_1', id: '_1_1', url: `${U}/ultra/courses/_101_1/announcements`, course: 'BIO' });
   await settle(10);
-  assert.deepEqual(u.asked.map((x) => `${x.method} ${x.url}`), [`GET ${U}/learn/api/public/v1/courses/_101_1/announcements/_1_1?fields=id,title,body,created,availability`]);
+  assert.deepEqual(u.asked.map((x) => `${x.method} ${x.url}`), [`GET ${U}/learn/api/public/v1/courses/_101_1/announcements/_1_1?fields=id,title,body,created,modified,availability`]);
   assert.equal(u.asked[0].init.redirect, 'error');
   assert.equal(text(u.dialog().querySelector('.body')), 'Up');
   assert.equal(text(u.dialog().querySelector('a.go')), 'Open in Blackboard');

@@ -72,7 +72,7 @@ test('Ultra: a course\'s announcements as Ultra search lists them (what the stud
   const tabs = tabsOf([ultraTab()]);
   assert.deepEqual(await tool('announcements_list').run({}, ctxFor(UL, tabs)), { ok: false, error: 'On Blackboard, name the course: courses_list gives its id.' });
   const list = await tool('announcements_list').run({ course: '_101_1' }, ctxFor(UL, tabs));
-  assert.deepEqual(list.items, [{ id: '_801_1', title: 'Lab moved' }], 'not yet open and expired ones left out');
+  assert.deepEqual(list.items, [{ id: '_801_1', title: 'Lab moved', at: null }], 'not yet open and expired ones left out');
   const one = await tool('announcement_read').run({ course: '_101_1', id: '_801_1' }, ctxFor(UL, tabs));
   assert.deepEqual([one.title, one.at, one.text], ['Lab moved', Date.parse('2026-10-13T12:00:00Z'), 'Meet in the laboratory.']);
 });
@@ -94,12 +94,10 @@ test('content: Canvas\'s module items (no headers, unpublished or locked ones); 
   assert.match((await tool('content_read').run({ course: '_101_1', id: folder.id }, ctxFor(UL, ultra))).error, /holds no text/);
 });
 
-test('discussions: Canvas\'s topics and one prompt; Ultra\'s published, available ones and a prompt', async () => {
-  const canvas = tabsOf([canvasTab()]), ultra = tabsOf([ultraTab()]);
+test('discussions: Canvas\'s topics and one prompt', async () => {
+  const canvas = tabsOf([canvasTab()]);
   assert.deepEqual((await tool('discussions_list').run({ course: '25' }, ctxFor(ACC, canvas))).items, [{ id: '81', title: 'Cell questions' }, { id: '82', title: 'Week 2 reflections' }]);
   assert.equal((await tool('discussion_read').run({ course: '25', id: '81' }, ctxFor(ACC, canvas))).text, 'Share one question about cells.');
-  assert.deepEqual((await tool('discussions_list').run({ course: '_101_1' }, ctxFor(UL, ultra))).items, [{ id: '_901_1', title: 'Cell questions' }]);
-  assert.equal((await tool('discussion_read').run({ course: '_101_1', id: '_901_1' }, ctxFor(UL, ultra))).text, 'Share laboratory safety questions.');
 });
 
 test('partial school lists preserve the source coverage instead of reporting an empty complete course', async () => {
@@ -133,13 +131,12 @@ test('Ultra content reads disclose the palette reader text cap', async () => {
 });
 
 test('an incomplete Ultra search does not prove a requested item is absent', async () => {
-  const ctx = { account: UL, tab: async () => ({ ok: true, complete: false, items: [] }) };
-  for (const name of ['content_read', 'discussion_read']) {
-    const r = await tool(name).run({ course: '_101_1', id: '_999_1' }, ctx);
-    assert.equal(r.ok, false);
-    assert.match(r.error, /only part|incomplete/i, name);
-    assert.doesNotMatch(r.error, /^No such/);
-  }
+  const page = { results: ULTRA.contents.slice(0, 1), paging: { nextPage: '/learn/api/public/v1/courses/_101_1/elsewhere?offset=200' } };
+  const t = ultraTab({ routes: { '/learn/api/public/v1/courses/_101_1/contents': page } });
+  const r = await tool('content_read').run({ course: '_101_1', id: '_999_1' }, ctxFor(UL, tabsOf([t])));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /only part/i);
+  assert.doesNotMatch(r.error, /^No such/);
 });
 
 test('syllabus date limits disclose the omitted dates', async () => {
@@ -349,9 +346,10 @@ test('pt-BR names a single forum too; run_js after reading an announcement, a co
   }
 });
 
-test('announcements_list promises a date only where the site gives one', () => {
-  const d = A.SPECS.find((s) => s.name === 'announcements_list').description;
-  assert.match(d, /on Canvas, at/);
+test('announcements_list promises a date on both sites; discussion_read promises classmates\' words never leave', () => {
+  assert.match(A.SPECS.find((s) => s.name === 'announcements_list').description, /id, title and at \(when posted\)/);
+  assert.match(A.SPECS.find((s) => s.name === 'discussion_read').description, /student's own replies and how many classmates replied, never their names or words/);
+  assert.ok(A.SPECS.find((s) => s.name === 'syllabus_read').parameters.properties.page);
 });
 
 test('port: a help turn that fails its check still lets study help answer, without what it would have read', async () => {
@@ -449,4 +447,63 @@ test('a wake, a watch and a cancel are asked for in each language\'s common ques
     ['es', '¿Qué tengo que entregar hoy?']]) {
     assert.equal(A.why(wake, A.task.input({ question: q, tools: [...A.NAMES], steps: [], now: NOW, zone: 'UTC', locale })), 'asked', `${locale}: ${q}`);
   }
+});
+
+// ---- Ultra, in the shapes probed on a real Ultra (2026-11-01; fixtures/ultra-rime-reads.json, synthetic values) ----------
+const PROBED = C.load('ultra-rime-reads.json');
+const probedTab = (o = {}) => ultraTab({ routes: {
+  '/learn/api/public/v1/courses/_101_1/announcements': PROBED.announcements, '/learn/api/public/v1/courses/_101_1/contents': PROBED.contents,
+  '/learn/api/public/v1/courses/_101_1/contents/_721_1/children': PROBED.children._721_1, '/learn/api/public/v1/courses/_101_1/contents/_723_1/children': PROBED.children._723_1,
+  '/learn/api/public/v1/courses/_101_1/discussions': PROBED.discussions, '/learn/api/public/v1/courses/_101_1/discussions/_911_1': PROBED.discussion,
+  '/learn/api/public/v1/courses/_101_1/discussions/_911_1/messages': PROBED.messages, ...o.routes } });
+
+test('Ultra announcements: in Ultra\'s order, each dated by when the student could first see it (start, else modified, else created); no drafts', async () => {
+  const r = await tool('announcements_list').run({ course: '_101_1' }, ctxFor(UL, tabsOf([probedTab()])));
+  assert.deepEqual(r.items, [
+    { id: '_811_1', title: 'Midterm review session', at: Date.parse('2026-10-20T13:00:00.000Z') },
+    { id: '_812_1', title: 'Office hours moved', at: Date.parse('2026-10-14T09:30:00.000Z') },
+    { id: '_813_1', title: 'Welcome', at: Date.parse('2026-09-01T12:00:00.000Z') }]);
+  const one = await tool('announcement_read').run({ course: '_101_1', id: '_812_1' }, ctxFor(UL, tabsOf([probedTab({ routes: {
+    '/learn/api/public/v1/courses/_101_1/announcements/_812_1': PROBED.announcements.results[1] } })])));
+  assert.equal(one.at, Date.parse('2026-10-14T09:30:00.000Z'), 'a reposted or undated one falls back to modified');
+});
+
+test('Ultra content: an Ultra document reads its body block with the names of the files it embeds, never their signed addresses', async () => {
+  const tabs = tabsOf([probedTab()]);
+  const list = await tool('content_list').run({ course: '_101_1' }, ctxFor(UL, tabs));
+  assert.deepEqual(list.items.map((i) => [i.id, i.kind]), [['_720_1', 'Folder'], ['_721_1', 'Document'], ['_722_1', 'Module'], ['_723_1', 'Document'], ['_724_1', 'Link'], ['_725_1', 'Test']], 'a course link has no place of its own (contentLink)');
+  const doc = await tool('content_read').run({ course: '_101_1', id: '_723_1' }, ctxFor(UL, tabs));
+  assert.match(doc.text, /900 words on a place that matters/);
+  assert.deepEqual(doc.files, [{ name: 'Essay rubric.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', size: 48211 }]);
+  assert.doesNotMatch(JSON.stringify(doc), /SIGNED|bbcswebdav|sessions/);
+});
+
+test('Ultra syllabus: the course\'s syllabus document wherever it sits, a page at a time; a body that is only a file names the file; imported facts stay', async () => {
+  const tabs = tabsOf([probedTab()]);
+  const r = await tool('syllabus_read').run({ course: '_101_1' }, ctxFor(UL, tabs));
+  assert.equal(r.document.title, 'ENG 1100 College Writing Syllabus');
+  assert.match(r.document.text, /full syllabus is attached/);
+  assert.deepEqual(r.document.files, [{ name: 'ENG 1100 Syllabus Fall.pdf', type: 'application/pdf' }]);
+  assert.doesNotMatch(JSON.stringify(r), /SIGNED|bbcswebdav|sessions/);
+  const bare = { results: [{ ...PROBED.children._721_1.results[0], body: PROBED.children._721_1.results[0].body.replace('<p>The full syllabus is attached.</p>', '').replace(/>ENG 1100 Syllabus Fall\.pdf</, '><') }] };
+  const only = await tool('syllabus_read').run({ course: '_101_1' }, ctxFor(UL, tabsOf([probedTab({ routes: { '/learn/api/public/v1/courses/_101_1/contents/_721_1/children': bare } })])));
+  assert.deepEqual(only.document.files, [{ name: 'ENG 1100 Syllabus Fall.pdf', type: 'application/pdf' }]);
+  assert.match(only.document.note, /attached file/);
+  const rec = SY.tidy({ weights: [{ name: 'Essays', weight: 60 }], at: C.NOW });
+  const both = await tool('syllabus_read').run({ course: '_101_1' }, ctxFor(UL, tabs, { [SY.key(C.ULTRA, C.ULTRA_UID, '_101_1')]: rec }));
+  assert.deepEqual([both.weights, both.document.id], [[{ name: 'Essays', weight: 60 }], '_721_1']);
+  const none = await tool('syllabus_read').run({ course: '_101_1' }, ctxFor(UL, tabsOf([probedTab({ routes: { '/learn/api/public/v1/courses/_101_1/contents': { results: PROBED.contents.results.filter((c) => c.id !== '_721_1') } } })])));
+  assert.match(none.missing, /no item named as a syllabus/);
+});
+
+test('Ultra discussions: the list as Ultra gives it (id and title); one gives its prompt, whether graded, the student\'s own replies and a count of classmates\' replies only', async () => {
+  const tabs = tabsOf([probedTab()]);
+  assert.deepEqual((await tool('discussions_list').run({ course: '_101_1' }, ctxFor(UL, tabs))).items, [{ id: '_911_1', title: 'Introduce yourself' }, { id: '_912_1', title: 'Thesis workshop' }]);
+  const r = await tool('discussion_read').run({ course: '_101_1', id: '_911_1' }, ctxFor(UL, tabs));
+  assert.equal(r.text, 'Tell the class your major and one book you liked.');
+  assert.equal(r.gradable, true);
+  assert.equal(r.at, Date.parse('2026-09-01T12:00:00.000Z'));
+  assert.deepEqual(r.mine, [{ at: Date.parse('2026-09-03T12:00:00.000Z'), text: 'I study nursing and liked Beloved.' }]);
+  assert.equal(r.others, 2);
+  assert.doesNotMatch(JSON.stringify(r), /CLASSMATE|Classmate|Instructor|Example/, 'no classmate\'s words or anyone\'s name');
 });
