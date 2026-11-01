@@ -13,7 +13,7 @@ const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const settle = async (n = 10) => { for (let i = 0; i < n; i++) await new Promise((r) => setTimeout(r, 0)); };
 
-const page = ({ ai = { on: true, model: { use: 'openai', model: 'm' }, features: { ask: true } }, lang = 'en', reply } = {}) => {
+const page = ({ ai = { on: true, model: { use: 'openai', model: 'm' }, features: { ask: true } }, lang = 'en', reply, setup } = {}) => {
   const doc = { activeElement: null };
   doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
   doc.fire = (target, type, { trusted = true, ...extra } = {}) => {
@@ -47,6 +47,7 @@ const page = ({ ai = { on: true, model: { use: 'openai', model: 'm' }, features:
     GZ_CTX: { t: (k, v) => k.replace(/\{(\w+)\}/g, (m, x) => v?.[x] ?? m), on: () => true, locale: () => lang, settings: () => D.GZ_SANITIZE({ enabled: true }) },
     chrome: { runtime: { connect, lastError: undefined }, storage: { local: { get: (k, cb) => env.read(cb) }, onChanged: { addListener: (f) => env.changed.push(f) } } },
   });
+  setup?.(env, context);
   env.ui = vm.runInContext(read('ai/page/ask.js'), context);
   env.context = context;
   env.box = () => doc.getElementById('gz-ask');
@@ -220,6 +221,55 @@ const ready = (m) => (m.op === 'status' ? { type: 'status', on: true, allowed: t
 const asked = (P) => P.posted.filter((m) => m.op === 'ask');
 const answer = (P, a) => P.ports.at(-1).answer({ id: asked(P).at(-1).id, ...a });
 const study = (reply, followUp = null) => ({ type: 'end', task: 'study.help', output: { kind: 'hint', step: null, reply, followUp } });
+
+// Drive browser animation frames, copy timers and resize observations without wall-clock waits.
+const movingPage = () => page({ reply: ready, setup: (P, context) => {
+  let seq = 0;
+  P.frames = new Map(); P.timers = new Map(); P.observed = new Set(); P.reduced = false;
+  P.doc.documentElement = P.doc.root;
+  context.matchMedia = () => ({ get matches() { return P.reduced; } });
+  context.requestAnimationFrame = (f) => { const id = ++seq; P.frames.set(id, f); return id; };
+  context.cancelAnimationFrame = (id) => P.frames.delete(id);
+  context.setTimeout = (f) => { const id = ++seq; P.timers.set(id, f); return id; };
+  context.clearTimeout = (id) => P.timers.delete(id);
+  context.ResizeObserver = class {
+    observe(el) { P.observed.add(el); }
+    unobserve(el) { P.observed.delete(el); }
+    disconnect() { P.observed.clear(); }
+  };
+  context.navigator.clipboard = { writeText: async () => {} };
+  P.flushFrame = () => { const next = [...P.frames.values()]; P.frames.clear(); for (const f of next) f(); };
+  P.doc.createTreeWalker = (part) => {
+    const nodes = [part, ...part.all()].flatMap((e) => e.children.filter((n) => n.nodeType === 3));
+    for (const n of nodes) Object.defineProperties(n, {
+      data: { configurable: true, get() { return this.textContent; }, set(v) { this.textContent = v; } },
+      parentElement: { configurable: true, get() { return this.parentNode; } },
+    });
+    let at = 0;
+    return { nextNode: () => nodes[at++] || null };
+  };
+} });
+
+test('closing cancels every reveal frame, and New chat releases removed rows, copy timers and resize observations', async () => {
+  const P = movingPage();
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('Explain mitosis'); await settle();
+  answer(P, study('Look at the chromosomes. '.repeat(15))); await settle();
+  assert.ok(P.frames.size > 0, 'an answer is being revealed');
+  P.box().close();
+  assert.equal(P.frames.size, 0, 'no animation frame retains the closed chat');
+  assert.equal(P.observed.size, 0);
+  P.reduced = true;
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('Explain meiosis'); await settle();
+  answer(P, study('What happens first?')); await settle();
+  P.doc.fire(P.box().querySelector('.gz-ask-copy'), 'click'); await settle();
+  assert.equal(P.timers.size, 1, 'the copy acknowledgement has a reset timer');
+  P.doc.fire(P.box().querySelector('.gz-ask-new'), 'click');
+  assert.equal(P.timers.size, 0, 'removed copy controls leave no timers');
+  assert.deepEqual([...P.observed], [P.box().querySelector('.gz-ask-log')], 'only the live log remains observed');
+  P.box().close();
+});
 
 test('the empty panel offers starters: one fills the question for the student\'s own click; New chat clears the conversation', async () => {
   const P = page({ reply: ready });
