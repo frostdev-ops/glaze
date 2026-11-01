@@ -78,11 +78,18 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
   const write = (env, s) => env.local.set({ [KEY]: s });
   const newId = (kind) => { const b = new Uint8Array(8); crypto.getRandomValues(b); return `${kind}-${[...b].map((x) => 'abcdefghijklmnopqrstuvwxyz0123456789'[x % 36]).join('')}`; };
   // The alarms the store needs: one per wake, and one every LIMIT.period minutes while a monitor waits.
-  const arm = async (env, s) => {
+  const arm = async (env, s, on = true) => {
     if (!env.alarms) return;
     try {
-      for (const w of s.wakes) await env.alarms.create(`${ALARM}wake:${w.id}`, { when: w.at });
-      if (s.monitors.length) await env.alarms.create(TICK, { periodInMinutes: LIMIT.period }); else await env.alarms.clear(TICK);
+      const live = new Map((await env.alarms.getAll?.() || []).map((a) => [a.name, a]));
+      const wanted = new Map(on ? s.wakes.map((w) => [`${ALARM}wake:${w.id}`, { when: w.at }]) : []);
+      if (on && s.monitors.length) wanted.set(TICK, { periodInMinutes: LIMIT.period });
+      for (const name of live.keys()) if (name.startsWith(ALARM) && !wanted.has(name)) await env.alarms.clear(name);
+      if (!wanted.has(TICK)) await env.alarms.clear(TICK);
+      for (const [name, options] of wanted) {
+        const old = live.get(name);
+        if (options.when !== undefined ? old?.scheduledTime !== options.when : old?.periodInMinutes !== options.periodInMinutes) await env.alarms.create(name, options);
+      }
     } catch { /* take() still finds what is due */ }
   };
 
@@ -126,7 +133,7 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
   const fire = (s, f) => { s.fired.push(f); s.fired = s.fired.slice(-LIMIT.fired); };
   // Everything due by now: wakes whose time has come, monitors whose data changed (each read once); expired monitors go.
   const tick = (env) => turn(async () => {
-    if (!(await env.on())) { if (env.alarms) try { await env.alarms.clear(TICK); } catch { /* none */ } return 0; }
+    if (!(await env.on())) { await arm(env, await read(env), false); return 0; }
     const s = await read(env), now = clock(env);
     let n = 0;
     for (const w of s.wakes.filter((x) => x.at <= now)) { fire(s, { id: w.id, what: 'wake', say: w.say, at: now }); n++; }

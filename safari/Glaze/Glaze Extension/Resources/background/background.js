@@ -2871,6 +2871,12 @@ const mcpData = async (source, account) => {
 const rimeWakesEnv = () => ({ local: chrome.storage.local, alarms: chrome.alarms, now: Date.now, read: async (name, args, account) => { mcpCore(); return GZ_AI_TOOLS.get(name).run(args, mcpCtx(account)); },
   on: async () => { const s = GZ_AI_SETTINGS.clean((await chrome.storage.local.get('ai')).ai); return s.wakes && GZ_AI_SETTINGS.allowed(s, 'ask') && await glazeOn(); } });
 chrome.alarms?.onAlarm.addListener((a) => { if (a?.name?.startsWith('gz-rime:')) { ai(); GZ_AI_RIME_WAKES.alarm(rimeWakesEnv(), a).catch(() => {}); } });
+const rimeWakesSync = () => { ai(); return GZ_AI_RIME_WAKES.tick(rimeWakesEnv()).catch(() => {}); };
+chrome.runtime.onStartup.addListener(rimeWakesSync);
+chrome.runtime.onInstalled.addListener(rimeWakesSync);
+chrome.storage.onChanged.addListener((changes, area) => {
+  if ((area === 'local' && changes.ai) || (area === 'sync' && changes.enabled)) return rimeWakesSync();
+});
 // The registry's state (agents/registry.js), read afresh for each call; mcpState is the last one read, for the list, which
 // the engine reads at once.
 const mcpRead = async () => {
