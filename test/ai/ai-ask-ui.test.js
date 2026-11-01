@@ -323,6 +323,17 @@ test('closing cancels the active question before its exit effect finishes and re
   P.box().close();
 });
 
+test('a closing dialog cannot start another question during its exit effect', async () => {
+  const P = movingPage();
+  await P.ui.open({ event: { isTrusted: true } });
+  exitEffects(P);
+  P.ask('Explain mitosis'); await settle();
+  P.doc.fire(P.box().querySelector('.gz-ask-close'), 'click');
+  P.ask('Explain meiosis'); await settle();
+  assert.equal(asked(P).length, 1, 'closing must revoke admission before the fade ends');
+  P.box().close();
+});
+
 for (const mode of ['reduced motion', 'Motion off']) test(`enabling ${mode} cancels an exit effect already in progress`, async () => {
   const P = movingPage();
   await P.ui.open({ event: { isTrusted: true } });
