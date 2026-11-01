@@ -117,7 +117,17 @@ var GZ_AI_MODEL_UPDATES = globalThis.GZ_AI_MODEL_UPDATES || (() => {
     const cat = await store.catalog(), st = cat.state, cur = cat.entries.get(m.id), next = cat.latest.get(m.id);
     if (!cur || (await store.status(m.id)).state !== 'ready') return { state: 'none' };
     if (st?.trial) return { state: 'trial' };
-    if (!next || next.total === cur.total) return { state: 'current', ...(cur.version && { version: cur.version }) };
+    if (!next || next.total === cur.total) {
+      let obsolete = [];
+      if (cat.spares.has(m.id)) await store.edit((s) => {
+        if (signal?.aborted || s?.trial || s?.serial !== st?.serial) return undefined;
+        obsolete = s.keep?.[m.id] || [];
+        const { [m.id]: _, ...keep } = s.keep || {};
+        return { ...s, keep };
+      });
+      for (const x of obsolete) await store.drop(m.id, x.total).catch(() => {});
+      return { state: 'current', ...(cur.version && { version: cur.version }) };
+    }
     await store.edit((s) => (signal?.aborted || s?.keep?.[m.id]?.some((x) => x.total === next.total) ? undefined : begin(s, next)));
     try {
       await store.download(m.id, { total: next.total, whole: true, signal, pause: ctx.idle, onProgress: ctx.progress });
