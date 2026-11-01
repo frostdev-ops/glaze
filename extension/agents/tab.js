@@ -332,6 +332,29 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     if (!go()) return no('late');
     return { ok: true, complete: r.complete, items: r.items.filter((d) => BB.test(String(d?.id)) && typeof d.title === 'string' && d.title.trim()).map((d) => ({ id: d.id, title: d.title.trim().slice(0, 300) })) };
   };
+  // A student's reply may embed a classmate's post. Drop quoted blocks before flattening the HTML, including nested or
+  // unclosed quotes, rather than laundering the quoted words into the student's own text.
+  const unquoted = (h) => {
+    h = typeof h === 'string' ? h : '';
+    let out = '', end = 0, depth = 0;
+    for (const m of h.matchAll(/<\/?blockquote\b(?:[^"'<>]|"[^"]*"|'[^']*')*>/gi)) {
+      if (!depth) out += h.slice(end, m.index);
+      depth = /^<\//.test(m[0]) ? Math.max(0, depth - 1) : depth + 1;
+      end = m.index + m[0].length;
+    }
+    return out + (depth ? '' : h.slice(end));
+  };
+  // Names supplied by the topic/messages stay in this tab, even when repeated in the prompt, a reply or a file label.
+  const anonymous = (records) => {
+    const names = new Map();
+    for (const p of records) {
+      const parts = [p?.givenName, p?.familyName].filter((s) => typeof s === 'string' && s.trim()).map((s) => s.trim());
+      if (parts.length > 1) names.set(parts.join(' '), 'iu');
+      for (const s of parts) if (!names.has(s)) names.set(s, 'u');
+    }
+    const patterns = [...names].sort((a, b) => b[0].length - a[0].length).map(([n, flags]) => new RegExp(`(?<![\\p{L}\\p{N}])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, `${flags}g`));
+    return (v) => mapRead(v, (s) => patterns.reduce((t, re) => t.replace(re, '[name omitted]'), s));
+  };
   // discussion (Ultra): one discussion's prompt (its topic), whether it's graded, and the student's own replies. Classmates'
   // replies are only counted: never their names or words.
   const discussion = async (go, a) => {
@@ -343,16 +366,17 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     if (d.available !== true || d.topic?.status !== 'Published') return no('locked');
     // Replies the student may not read leave the prompt readable, without a count.
     let r = null;
-    try { r = await reader.list(`${base}/messages`, 'id,parentId,userId,status,body,postDate,createdDate'); } catch (e) { if (!/\b(401|403|404)\b/.test(e.message)) throw e; }
+    try { r = await reader.list(`${base}/messages`, 'id,parentId,userId,givenName,familyName,status,body,postDate,createdDate'); } catch (e) { if (!/\b(401|403|404)\b/.test(e.message)) throw e; }
     if (!go()) return no('late');
     const body = typeof d.topic.body === 'string' ? d.topic.body : '', prompt = html(body);
     const truncated = prompt.length > 20000 || body.length >= 100000;
-    if (!r) return { ok: true, title: String(d.title || '').trim().slice(0, 300), text: prompt.slice(0, 20000), files: embedded(body), gradable: d.gradable === true, at: ms(d.topic.postDate) ?? ms(d.createdDate), mine: [], others: null, complete: false, ...(truncated && { truncated: true }) };
+    const hide = anonymous([d.topic, ...(r?.items || [])]);
+    if (!r) return hide({ ok: true, title: String(d.title || '').trim().slice(0, 300), text: prompt.slice(0, 20000), files: embedded(body), gradable: d.gradable === true, at: ms(d.topic.postDate) ?? ms(d.createdDate), mine: [], others: null, complete: false, ...(truncated && { truncated: true }) });
     const live = r.items.filter((m) => m && m.status !== 'Deleted' && m.status !== 'Draft');
     // reply: it answers a classmate's post rather than the prompt.
-    const mine = live.filter((m) => String(m.userId) === go.uid).map((m) => ({ at: ms(m.postDate) ?? ms(m.createdDate), reply: !!m.parentId && m.parentId !== d.topic.id, text: html(typeof m.body === 'string' ? m.body : '').slice(0, 2000) }));
-    return { ok: true, title: String(d.title || '').trim().slice(0, 300), text: prompt.slice(0, 20000), files: embedded(body), gradable: d.gradable === true,
-      at: ms(d.topic.postDate) ?? ms(d.createdDate), mine, others: live.length - mine.length, complete: r.complete, ...(truncated && { truncated: true }) };
+    const mine = live.filter((m) => String(m.userId) === go.uid).map((m) => ({ at: ms(m.postDate) ?? ms(m.createdDate), reply: !!m.parentId && m.parentId !== d.topic.id, text: html(unquoted(m.body)).slice(0, 2000) }));
+    return hide({ ok: true, title: String(d.title || '').trim().slice(0, 300), text: prompt.slice(0, 20000), files: embedded(body), gradable: d.gradable === true,
+      at: ms(d.topic.postDate) ?? ms(d.createdDate), mine, others: live.length - mine.length, complete: r.complete, ...(truncated && { truncated: true }) });
   };
   const modules = async (go, a) => {
     if (X().site !== 'canvas' || !ID.test(a.course || '')) return no('args');
@@ -376,8 +400,9 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
   const SCHOOL_READS = new Set(['announcement', 'search', 'modules', 'topics', 'document', 'syllabus', 'discussion']);
   // An address can also be an anchor's visible label, plain body text or a file's displayName. Strip it from every
   // returned string, after HTML decoding, so signed credentials never leave the tab through those alternate paths.
-  const publicRead = (v) => typeof v === 'string' ? v.replace(/(?:https?:\/\/[^\s<>"'`]*|\/\/[^\s<>"'`]*)?\/(?:bbcswebdav|sessions)\/[^\s<>"'`]*/gi, '[file address omitted]')
-    : Array.isArray(v) ? v.map(publicRead) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, publicRead(x)])) : v;
+  const mapRead = (v, convert) => typeof v === 'string' ? convert(v) : Array.isArray(v) ? v.map((x) => mapRead(x, convert))
+    : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, mapRead(x, convert)])) : v;
+  const publicRead = (v) => mapRead(v, (s) => s.replace(/(?:https?:\/\/[^\s<>"'`]*|\/\/[^\s<>"'`]*)?\/(?:bbcswebdav|sessions)\/[^\s<>"'`]*/gi, '[file address omitted]'));
   const jobs = new Map();
   const cancel = (id) => {
     if (jobs.has(id)) jobs.get(id)?.abort();
