@@ -850,7 +850,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
   }
   page.alive = (f) => { alive = f; };
 
-  return { contentLink, SEARCH_KINDS, searchItems, PEEK_FIELDS, peekItem, FILES_FIELDS, attachments, files, courses, ownDates, list, current, standing, due, work, grade, trend, slices, read, planner, excepts, page, makePage, STALE };
+  return { contentLink, SEARCH_KINDS, searchItems, visibleIn, PEEK_FIELDS, peekItem, FILES_FIELDS, attachments, files, courses, ownDates, list, current, standing, due, work, grade, trend, slices, read, planner, excepts, page, makePage, STALE };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_ULTRA; else GZ_ULTRA;

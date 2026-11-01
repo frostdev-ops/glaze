@@ -276,7 +276,8 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     if (!it.page) return { text: it.text, files: embedded(it.body), ...(it.truncated && { truncated: true }) };
     const reader = await ultra(go);
     const r = await reader.list(`/learn/api/public/v1/courses/${cid}/contents/${it.id}/children`, 'id,title,body,contentHandler.id,availability');
-    const blocks = r.items.filter((c) => c?.contentHandler?.id === 'resource/x-bb-document' && c?.availability?.available === 'Yes' && typeof c.body === 'string');
+    const visible = GZ_ULTRA.visibleIn(r.items, Date.now());
+    const blocks = r.items.filter((c) => c?.contentHandler?.id === 'resource/x-bb-document' && visible(c) !== null && typeof c.body === 'string');
     const body = blocks.map((c) => c.body).join('\n').slice(0, 100000);
     const t = html(body);
     return { text: t.slice(0, 20000), files: embedded(body), ...((t.length > 20000 || body.length >= 100000) && { truncated: true }) };
