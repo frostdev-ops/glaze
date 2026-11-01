@@ -285,7 +285,6 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       return { rest: Uint32Array.from(ids), slots };
     };
     const answer = async (m, signal) => {
-      return queued(async () => {
         const images = Array.isArray(m.images) ? m.images : [];
         if (images.length && typeof m.projector !== 'string') throw fail('request-rejected', 'unsupported');
         if (images.length && typeof env.decode !== 'function') throw fail('provider-unavailable', 'engine');
@@ -370,11 +369,10 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         if (tail) { text += tail; post({ id: m.id, type: 'delta', text: tail }); }
         const rate = thought + n >= LIMIT.rate && spent > 0 ? Math.round((thought + n) / spent * 10000) / 10 : null;
         return { text, finish, model: m.model, usage: { input, output: thought + n, thought }, ...(rate && { rate }) };
-      }, signal);
     };
     // A run on the model in its trial (a swapped-in update): its first good answer keeps the new version; a load or engine
     // failure brings the old one back, and the run goes again on it unless part of its answer was already sent.
-    const run = async (m, signal) => {
+    const run = (m, signal) => queued(async () => {
       const U = env.updates?.(), pics = Array.isArray(m.images) && m.images.length;
       const trial = U && !pics ? (await env.store.catalog?.().catch(() => null))?.state?.trial : null;
       if (!trial || trial.id !== m.model) return answer(m, signal);
@@ -384,12 +382,12 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         return r;
       } catch (e) {
         if (signal.aborted || !U.fault(e)) throw e;
-        await queued(unload);
+        await unload();
         await U.settle(env.store, false);
         if (spoke.has(m.id)) throw e;
         return answer(m, signal);
       }
-    };
+    }, signal);
     // Resolves once no run or warm-up is in flight; throws when the signal fires or Data Saver comes on.
     let idlers = [];
     const busy = () => [...ops.values()].some((o) => o.kind === 'run' || o.kind === 'warm');
