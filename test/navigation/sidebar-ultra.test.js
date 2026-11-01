@@ -995,6 +995,33 @@ test("the column's top counts the course header fading in with it: the panel at 
   assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '60px');
 });
 
+test("Details & Actions that Angular keeps ng-hide while it fills keeps its held room, unseen, and isn't measured until shown", async () => {
+  const { chain, cssRules, winner } = require('../helpers/css-cascade.cjs');
+  const details = chain('html', 'body', 'div#site-wrap', 'aside.outline-actions', 'div.js-details-and-actions.outline-action-block.ng-hide');
+  const root = details.parent.parent.parent.parent;
+  const rules = [...cssRules('content/theme.css'), ...cssRules('navigation/page/sidebar.css')];
+  root.attrs = { 'data-gz-sb-held': '' };
+  assert.equal(winner(rules, details, 'display')?.[0], 'block', 'a box for min-height to hold');
+  assert.equal(winner(rules, details, 'visibility')?.[0], 'hidden', "unseen until Angular shows it");
+  root.attrs = {};
+  assert.equal(winner(rules, details, 'display') ?? null, null, "released: Angular's own");
+  // The hold: Ultra's rows laid out while it is still ng-hide are not its size yet.
+  const HELD = `detailsHeight:${O}`;
+  const p = page({ at: 'outline', aside: 'live', stored: { ...record(), [HELD]: { _101_1: 231 } } });
+  const tick = heightTimers(p), el = p.$('.js-details-and-actions');
+  el.className += ' ng-hide';
+  el.box = { left: 1248, top: 140, width: 320, height: 0 };
+  await p.pass();
+  assert.equal(heldRoom(p), 231);
+  fillDetails(p, el, 7);
+  tick(2000);
+  await settle();
+  assert.equal(heldRoom(p), 231, 'hidden rows neither release nor settle the room');
+  el.className = el.className.replace(' ng-hide', '');
+  fillDetails(p, el, 7);
+  assert.equal(heldRoom(p), 0, 'shown as tall as the room: released');
+});
+
 // Ultra's content in Details & Actions, this tall (0: none yet, or the block hidden), in the box the browser gives it: never
 // shorter than the held height. The sidebar hears of it as it would: its ResizeObserver, and its observer on the column.
 const detailsSize = (p, height) => {
