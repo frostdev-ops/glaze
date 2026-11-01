@@ -343,6 +343,89 @@ test('a standalone paper scopes its saved outline to its own document key', asyn
 const run = async (timers) => { for (const x of timers.splice(0)) if (x.fn) await x.fn(); };
 const record = (local) => local.data[PA.KEYS.PAPER + DOC];
 
+// Documents' real departure gate, dispatching to this paper's lifecycle listeners.
+const embeddedLeave = (f, windowEvents, run) => {
+  const papers = fs.readFileSync(path.join(__dirname, '../../extension/documents/papers.js'), 'utf8');
+  const start = papers.indexOf('  const beforeLeave = '), end = papers.indexOf('  const leave = ', start);
+  Object.assign(f.sandbox, {
+    CustomEvent: class { constructor(type, { detail }) { Object.assign(this, { type, detail }); } },
+    dispatchEvent: (e) => windowEvents[e.type]?.(e),
+  });
+  const beforeLeave = vm.runInContext(`(() => { ${papers.slice(start, end)} return beforeLeave; })()`, f.sandbox);
+  beforeLeave(run);
+};
+const settled = async () => { for (let i = 0; i < 40; i++) await new Promise(setImmediate); };
+
+test('embedded paper Close saves typing before the autosave timer and waits for storage', async () => {
+  const local = memory(), windowEvents = {}, { extra } = standalone('?format=plain');
+  const f = await frame({ local, ss: session(), context: {}, windowEvents, extra });
+  let release, navigated = false;
+  const held = new Promise((r) => { release = r; }), set = local.set;
+  local.set = async (o) => { await held; return set(o); };
+  f.type('The last sentence.');
+  try {
+    embeddedLeave(f, windowEvents, () => { navigated = true; });
+    await settled();
+    assert.equal(navigated, false, 'Close must keep the paper while its save is pending');
+    release();
+    await settled();
+    assert.equal(navigated, true);
+    assert.equal(textOf(record(local).doc), 'The last sentence.');
+  } finally { release(); }
+});
+
+test('embedded paper Close drains an in-flight save and typing made during that save', async () => {
+  const local = memory(), windowEvents = {}, { extra } = standalone('?format=plain');
+  const f = await frame({ local, ss: session(), context: {}, windowEvents, extra });
+  let release, navigated = false;
+  const held = new Promise((r) => { release = r; }), set = local.set;
+  local.set = async (o) => { await held; return set(o); };
+  f.type('First.');
+  const saving = f.$.save();
+  await settled();
+  f.type(' Last.');
+  try {
+    embeddedLeave(f, windowEvents, () => { navigated = true; });
+    await settled();
+    assert.equal(navigated, false, 'the first write has not finished');
+    release();
+    await saving;
+    await settled();
+    assert.equal(navigated, true);
+    assert.equal(textOf(record(local).doc), 'First. Last.', 'Close also stores the newer edit');
+    assert.equal(f.$.dirty(), false);
+  } finally { release(); await saving; }
+});
+
+test('embedded paper Close stays after a failed save and can be retried', async () => {
+  const local = memory(), windowEvents = {}, { extra } = standalone('?format=plain');
+  const f = await frame({ local, ss: session(), context: {}, windowEvents, extra });
+  const save = f.sandbox.store.save;
+  f.sandbox.console = { error() {} };
+  f.sandbox.store.save = async () => { throw new Error('storage unavailable'); };
+  f.type('Keep this sentence.');
+  let navigated = false;
+  embeddedLeave(f, windowEvents, () => { navigated = true; });
+  await settled();
+  assert.equal(navigated, false, 'a refused write must keep the document open');
+  assert.equal(f.$.dirty(), true);
+  f.sandbox.store.save = save;
+  embeddedLeave(f, windowEvents, () => { navigated = true; });
+  await settled();
+  assert.equal(navigated, true);
+  assert.equal(textOf(record(local).doc), 'Keep this sentence.');
+});
+
+test('embedded Close on an untouched new paper leaves without saving a blank document', async () => {
+  const local = memory(), windowEvents = {}, { extra } = standalone('?format=plain');
+  const f = await frame({ local, ss: session(), context: {}, windowEvents, extra });
+  let navigated = false;
+  embeddedLeave(f, windowEvents, () => { navigated = true; });
+  await settled();
+  assert.equal(navigated, true);
+  assert.equal(record(local), undefined);
+});
+
 test('a new standalone document opens in ?format= and is saved only once written in or titled', async () => {
   for (const [search, id] of [['?paper=x&format=plain', 'plain'], ['?format=apa7', 'apa7'], ['?format=ieee', 'mla9'], ['', 'mla9']]) {
     const local = memory(), timers = [], { extra } = standalone(search);
