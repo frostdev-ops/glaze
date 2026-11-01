@@ -266,7 +266,7 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
       const id = i.key.slice(i.key.lastIndexOf(':') + 1), x = raw.get(id), handler = String(x?.contentHandler?.id || '').replace('resource/x-bb-', '');
       const page = handler === 'folder' && x?.contentHandler?.isBbPage === true;
       return { id, title: i.title, kind: page ? 'Document' : LABELS[handler] || i.kind, page, parent: typeof x?.parentId === 'string' ? x.parentId : '', body: typeof x?.body === 'string' ? x.body : '', text: i.text,
-        ...(i.text.length >= 20000 && { truncated: true }) };
+        ...((i.text.length >= 20000 || x?.body?.length > 100000) && { truncated: true }) };
     }).filter((i) => i.title !== 'ultraDocumentBody');
     return { items, complete: r.complete };
   };

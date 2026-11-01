@@ -37,6 +37,7 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
   // A read's text a page at a time with the files it embeds, or the files alone when it has no text.
   const body = (r, page) => {
     const files = filesOf(r);
+    if (!String(r.text || '').trim() && r.truncated) return { error: 'Glaze read only part of this item; its text may be in the unread part. Open it on the site.' };
     if (!String(r.text || '').trim()) return files.length ? (page > 1 ? { error: 'There is 1 page.' } : { files, note: FILED }) : null;
     const p = paged(r.text, page, r.truncated);
     return p.error ? p : { ...p, ...(files.length && { files }) };
