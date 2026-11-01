@@ -337,3 +337,15 @@ test('route: ordinary records questions do not spend a slot on arithmetic, and S
   assert.ok(r.tools.includes('run_js'));
   for (const q of ['What grade do I need on the final to keep a B?', 'What do I need on the exam to keep a B?']) assert.ok(K.route(q, { level: 3 }).tools.includes('run_js'), q);
 });
+
+
+test('arrival peek is read-only and never runs monitors, writes the store, or rearms alarms', async () => {
+  let reads = 0, writes = 0, alarms = 0;
+  const store = { rimeWakes: { wakes: [{ id: 'w-cheap123', say: 'Due now', at: C.NOW - 1, made: C.NOW - 1000 }], monitors: [], fired: [] } };
+  const env = { local: { get: async () => { reads++; return structuredClone(store); }, set: async () => { writes++; } },
+    read: async () => { throw Error('peek must not read monitor records'); }, on: async () => true, now: () => C.NOW,
+    alarms: { getAll: async () => { alarms++; return []; }, clear: async () => { alarms++; }, create: async () => { alarms++; } } };
+  assert.equal(await W.peek(env), 1, 'a due wake still causes the panel to take it');
+  assert.deepEqual({ reads, writes, alarms }, { reads: 1, writes: 0, alarms: 0 });
+  assert.equal(store.rimeWakes.wakes.length, 1, 'peek takes nothing');
+});
