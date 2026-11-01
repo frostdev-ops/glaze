@@ -108,3 +108,12 @@ test('the Worker can enforce normalization-sensitive spans using the shared text
   const bad = g.matcher();
   assert.throws(() => { for (const id of tok.encode('{"q":"ΑΣ"}')) bad.advance(id); }, /doesn't fit/);
 });
+
+test('the Worker hands op update to the model updates it loaded (ai/local/updates.js), never refusing it as unavailable', async () => {
+  const w = boot();
+  assert.equal(typeof w.scope.GZ_AI_MODEL_UPDATES?.update, 'function');
+  w.scope.GZ_AI_STORE.catalog = async () => ({ state: null, entries: new Map(), spares: new Map(), latest: new Map() });
+  w.listeners[0]({ data: { id: 1, op: 'update', doc: { list: {} }, model: 'glaze-q4', glaze: '4.0.1' } });
+  for (let i = 0; i < 50 && !w.posted.some((m) => m.id === 1 && m.type === 'done'); i++) await new Promise((r) => setTimeout(r, 2));
+  assert.deepEqual(w.posted.find((m) => m.id === 1 && m.type === 'done')?.result, { state: 'refused', reason: 'shape' });
+});

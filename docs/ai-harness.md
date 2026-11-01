@@ -230,7 +230,7 @@ of them is the same, byte for byte. Every parameter is a string or an integer (t
 | `content_list` | read | `course` | Canvas: its modules' items (no headers, unpublished or locked); Ultra: what the student may see now (Ultra search's documents, folders, files, links). `{ items: [{ id, title, kind, module? }] }`. |
 | `content_read` | read | `course`, `id`, `page?` | An Ultra item's text, paged, with the names, types and sizes of the files its body embeds (`data-bbfile`: never the signed `resourceUrl`/`viewerUrl`); an Ultra document (a folder with `isBbPage`) is read from its `children`' `ultraDocumentBody` block; a body that is only a file gives `files` and a `note`. Canvas pages and files are refused: unverified, since no Canvas page, syllabus or file response has been captured yet (the local Canvas is down), and nothing is built against a guess. Canvas syllabus text is unverified the same way; `syllabus_read` gives only what an import kept there. |
 | `syllabus_read` | read | `course`, `page?` | What Glaze kept from a syllabus import (planner/syllabus.js): instructor, hours, meetings, dates, scale, weights; on Ultra also `document`: the shallowest visible document or file at most three folders down whose title names a syllabus in one of the six languages, read as `content_read` reads one; else how to import. An embedded PDF's text is not read. |
-| `discussions_list`, `discussion_read` | read | `course`; `id`, `page?` | Canvas's topics are listed, but prompt reads are refused: the current topic shape cannot establish instructor authorship, so a classmate's topic must not become a prompt sent to the model. Ultra: the list as Ultra answers it (id and title only, whatever fields are asked); one discussion's prompt (its `topic`, when available and published), `gradable`, `at`, the student's own replies (`userId` is theirs; at most 3, 300 characters each, page 1; `reply`: it answers a classmate's post, not the prompt) and `others`, the count of classmates' replies. Quoted blocks are removed from the student's replies, and participant names supplied by the topic/messages are redacted from returned text. Classmates' names and posts never leave the tab: they could otherwise reach a cloud provider. |
+| `discussions_list`, `discussion_read` | read | `course`; `id`, `page?` | Canvas: the topics are listed; a prompt is read only when its author is a teacher or TA of the course (the course's `enrollments?type[]=TeacherEnrollment&type[]=TaEnrollment`, one same-origin GET per course for the page; any failure keeps the refusal, so a classmate's topic never becomes a prompt), with the same reply rules as Ultra below (entries and their `recent_replies`; shapes from Canvas's API documentation, not yet captured live). Ultra: the list as Ultra answers it (id and title only, whatever fields are asked); one discussion's prompt (its `topic`, when available and published), `gradable`, `at`, the student's own replies (`userId` is theirs; at most 3, 300 characters each, page 1; `reply`: it answers a classmate's post, not the prompt) and `others`, the count of classmates' replies. Quoted blocks are removed from the student's replies, and participant names supplied by the topic/messages are redacted from returned text. Classmates' names and posts never leave the tab: they could otherwise reach a cloud provider. |
 
 There is no fill tool: Glaze never fills in the student's work or a site's forms.
 
@@ -272,6 +272,29 @@ In Ask Rime (`ai/ask.js`, `ai/page/ask.js`):
   what was read as its `material`. Help naming nothing, and general questions, go to study.help alone. The reads go
   through `agents/tab.js` ops (`announcement`, `search`, `modules`, `topics`) in an open tab of the account's school,
   as Agents' reads do, or Glaze's caches; with no tab open a read says so. Moodle accounts aren't read by the agent layer.
+- **The student's week, dates and the conversation at level 3** (the owner's Sunday, 2026-11-01): the `now` block adds the
+  windows a student means (today, tomorrow, this week to the coming Sunday or on a weekend the next, this weekend, next
+  week, due soon: a week), resolved on their clock; times in results are friendly and localized ("Monday, November 2,
+  11:59 PM"; the year only when it isn't now's); an answer that says nothing is due while a result lists work not handed in
+  fails (`missed`); agent.tools takes the panel's last three turns (an `earlier` block, 300/600 characters a turn), and
+  pushback or a follow-up after an answer ("that's not true", "you missed…", "what about Monday?", six languages) routes as
+  the question before it with fresh calls; the system text asks for glaze-plans' MARKDOWN.md answer format, which the
+  panel renders. Reminder, notice, watch and cancel phrasings are one table (agent-tools.js `PHRASES`) the router and the
+  check share. Level 1 is byte-identical.
+- **The context window** (ai/ask.js; the owner, 2026-11-01): before each request Ask Rime asks the broker to `count` it
+  (Glaze's own model: its tokenizer in the engine host, exactly; a cloud model: text.js's estimate) against the window the
+  provider runs with (the configured context, never an assumed 4,096), and posts `{ id, type: 'context', task, used,
+  window, reserve, exact }` to the panel (reserve: the answer's max tokens). At level 3 the panel's turns before the last
+  two fold into a summary once the next request would pass 70% of the window (or more than three turns are open):
+  `chat.compact` (ai/tasks/chat-compact.js, at most six bullets, every bullet resting on a quoted value the turns hold) runs
+  between turns with the chat's model; if it fails its check, or the next question comes first, its deterministic
+  fallback (the older questions and the items their answers named) stands. agent.tools reads it as a `summary` block
+  before `earlier`; study.help (cloud only) as the conversation's first turn. Within one run, results the model has used
+  become digests (titles, ids, dates) when the next request would overflow; the latest never does. A question with no
+  history (New chat) clears it all. Compaction scales with the window. Level 1 sends nothing new.
+  From a 16K window up, a chat offers the union of the tools routed so far (the newest question's always, earlier ones most
+  recent first within about 2,000 tokens of `<tools>` lines), so the system turn stays cached across turns; below 16K each
+  question gets its own.
 - **Routing at level 3** (`TOPICS3`, six languages): announcements, content, syllabus and discussions (their reads), compute (`run_js`; a computing verb in the student's own grade math
   is no help request, but graded work still goes to study.help), navigate (`places_list`, `place_open`, `page_highlight`),
   remind (`wake_create`, `wakes_list`, `wake_cancel`) and watch (`monitor_create`, `wakes_list`, `todo_list`,
@@ -594,6 +617,13 @@ the assistant header; never think mode). A models.json entry without `stock` (Ri
 `glaze-plans/lfm-tune/FORMAT-v2.md` id for id: for requests each trained task builds, the ids its `train/format.js`
 `promptV2` and LFM3's tokenizer give, direct and, for a think task, think (fixture: `tools/dev/local-format-fixture.js`).
 
+Context size (round 8 format): six specials `<|gz_ctx:4k|>` … `<|gz_ctx:128k|>` (ids 125049–125054; `<|gz_task:chat.compact|>`
+is 125055; all `[PAD]` rows of LFM3's GGUFs, never produced by text) name the window a glaze-dialect request runs with, right
+after the task token: the largest size at or under it. `SCALE` in `ai/providers/local.js` turns them on with the per-size
+think budget (`THINK_SIZED`: agent.tools and study.help 128/256/512/1024 at 4K/8K/16K/32K+) and answer reserve (`ANSWER`:
+512/768/1024/1536/2048 at 4K/8K/16K/32K/64K+), each capped by the room the window leaves; all off until a model trained
+with them ships, so Rime r5's requests are unchanged.
+
 Think mode (FORMAT-v2): a Glaze-tuned model reasons before it answers for the requests `THINK` in `ai/providers/local.js`
 gives a budget (256 tokens: agent.tools only; D4 measured p3dpo thinking worse than answering directly on writer.review,
 study.help and each writer.feedback call, so they and every other task answer directly; the numbers are beside `THINK`), once this computer decodes that model at `THINK_TPS` (40 tokens a second) or faster; any other run answers directly.
@@ -616,12 +646,76 @@ second for a task that only reads pictures, `writer.image`) and `cfg.weights`, a
 only (undiscovered, missing or not ready: `provider-unavailable`, `assets`), so a request is never planned for one model and read by
 another. A catalog without a selected text model is not cached; the next run discovers a completed download or a recovered
 store read. A picture request goes to the picture model whatever the window: its own is the larger. In Advanced a feature's
-context replaces the window up to the model's own: a Glaze-tuned model never gets more than its 4,096. A status and a
+context replaces the window up to the model's own. The model's own is the context size Settings → AI → Rime's Advanced
+keeps on the `local` connection (`window`: 8K, 16K, 32K, 64K or 128K; 4K, the default, isn't stored, so a 4K run sends
+what it always did): `windowOf(m, cfg)` makes it the tuned model's window and input limit in the catalog, `caps.context`
+holds it, and each run sends it as `window`. A changed size is a new connection generation, so the broker's kept catalog
+goes. Settings refuses a size this computer can't hold with `ai/local/ladder.js` `windows` (its `footprint` at that size
+against half of `navigator.deviceMemory`: `memory`, or `no-f16` when only the f16 cache fits); the tier pick is unchanged.
+The engine host opens its session at 16,000 positions today, so a run over that is refused there until the host follows the size. A status and a
 warm-up use the same window as the run (the broker's `sized`), so Writer's status says 4,096 for a tuned model. `test/ai/local-window.test.js` holds `writer.review` and `syllabus.read` through the
 broker to lfm-tune's training examples (fixture: `tools/dev/local-window-fixture.js`). The system turn is the prefix kept
 warm: up to three per loaded model, as snapshots. Sampling: the request's temperature, else LFM3's GGUF defaults
 (temperature 0.1, top-k 50); output up to the request's `maxTokens` (1,024 by default) and refused before reading when the
 prompt and output exceed the window (`request-rejected`, `context`).
+
+### Model updates
+
+Glaze ships before Rime is final and takes newer versions without the student doing anything (`ai/local/updates.js`).
+Frostdev publishes a signed list beside the weights, `https://huggingface.co/frostdev-ops/Rime-1.7B-GGUF/resolve/main/glaze-models.json`:
+
+```json
+{ "list": { "v": 1, "serial": 2, "issued": "2026-11-20T09:00:00Z", "models": [
+    { "id": "rime-1.7b-q4_k_m", "name": "Rime 1.7B Q4_K_M", "repo": "frostdev-ops/Rime-1.7B-GGUF", "commit": "<40-hex>",
+      "file": "Rime-1.7B-Q4_K_M.gguf", "url": "https://huggingface.co/frostdev-ops/Rime-1.7B-GGUF/resolve/<commit>/Rime-1.7B-Q4_K_M.gguf",
+      "size": 1099627200, "chunk": 67108864, "sha256": ["<64-hex per 64 MB chunk>"], "total": "<64-hex>", "license": "lfm1.0",
+      "quant": "Q4_K_M", "tier": 1, "tools": 3, "minGlaze": "4.0.2", "version": "r6" } ] },
+  "sig": "<Ed25519 over utf8('glaze-models-1|' + canon(list)), base64url>" }
+```
+
+`canon` is JSON with keys sorted and no spaces. Glaze takes a list only if the signature verifies (WebCrypto Ed25519)
+against `updates.js` `KEY` (SHA-256 `070eb5374fb18fe2b5880643eb7d5c42bf517667c9d3b0c08447b338b2891e7c`), its serial is above
+the one held, and every entry is a models.json text entry with `tools`, `minGlaze` and `version`, ids and tiers once each;
+entries needing a newer Glaze or a tools level above `TOOLS` (3) are skipped. A newer version keeps its size's id (a new id
+may only add a tier models.json doesn't hold). models.json stays the starting list and the fallback; offline, or with
+Hugging Face down, everything runs on what's stored.
+
+State: `glaze-models/~updates.json` in OPFS beside the models (`store.js` `edit`, under the Web Lock `glaze-model-updates`):
+the accepted list's usable entries, `pins` (each downloaded id stays on its version until a swap), `keep` (versions kept
+beside it), `trial` and `failed`. `store.js` `compose` makes every context's catalog from models.json and that file; each
+version of an id is its own tag folder, so the old one stays while the new one downloads.
+
+Schedule and guards (`background/background.js`): the alarm `gz-models:daily` (every 1,440 minutes, made once), and
+`gz-models:start` 2 to 10 minutes after the browser starts (skipped when a check ran in the last 20 hours, unless a download
+waits to resume). A check does nothing, and asks nothing of the network, unless this browser holds a downloaded Rime model,
+`ai.updates` (Settings → AI → Rime, Advanced: **Update automatically**, on by default) is on, it isn't Safari, and Data Saver
+is off. It fetches the list without cookies or cache, verifies it, and when the model in use (Advanced's tier if
+downloaded, else the downloaded one) has a newer version, hands the list to the engine host (op `update`). The host verifies
+again, downloads the version beside the old one through the store (Range resume across restarts, per-chunk and whole-file
+SHA-256, the quota checked first: reason `quota` and the next check tries again), waiting before each chunk while a run or
+warm-up is in flight, then swaps at the next idle moment (after the runs queued before it) and lets the engine go. The old
+version stays until the new one has loaded and answered once, then goes. If the new one fails to load or run (`assets`,
+`engine`, or an engine error of its own), the old one comes back, the run goes again on it when nothing of its answer was
+sent, and that version isn't tried until a newer serial. A version whose chunk fails twice, or whose whole hash is wrong,
+is dropped the same way. The tools level follows the version in use (`levelOf` reads its entry). Settings asks `{ op:
+'updates', provider: 'local' }` → `{ auto, version?, update?: { version, progress } }`; progress events carry `part:
+'update'`. Delete removes every version and the state's pins and spares; the serial and failures stay.
+
+### Publishing a model
+
+Every publish happens only after the owner's go.
+
+1. Upload the GGUFs to `frostdev-ops/Rime-1.7B-GGUF` and note the commit.
+2. Build each size's entry: `node tools/vendor/model-manifest.js --repo frostdev-ops/Rime-1.7B-GGUF --commit <sha> --file
+   Rime-1.7B-Q4_K_M.gguf --tier 1 --tools 3 --version r6 --min-glaze 4.0.2 --out ~/glaze-models/entries.json` (once per
+   quant, into the same file; keep each size's id).
+3. Sign: `node tools/vendor/model-manifest.js --sign --entries ~/glaze-models/entries.json --key ~/.glaze-signing/models.key
+   --out ~/glaze-models/glaze-models.json`. The serial is one above the published list's (`--serial` to set it, `--offline`
+   without the fetch); it refuses a key other than `KEY`, a serial at or below the live one, and entries out of the schema.
+4. Upload `glaze-models.json` to the repo's `main`. Browsers with Rime take it within a day.
+
+The key pair was made with `--keygen ~/.glaze-signing/models.key` (mode 600, outside the repo); its private half is never
+printed, committed or logged.
 
 ### The engine, grammar and ladder the host uses
 

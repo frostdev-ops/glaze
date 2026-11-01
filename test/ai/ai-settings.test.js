@@ -31,7 +31,7 @@ const kept = (id, more = {}) => ({ provider: 'openai', base: AS.PRESETS[id].base
 // page({ ai, calls, conns, granted, device, providers, features, server }): Settings with the AI tab mounted.
 //   conns: the worker's kept connections; device(m, gesture): the device provider's worker side; server(url, init): the
 //   providers' servers.
-const page = ({ ai, calls, conns, granted = true, device, local: own, providers, features, embedded = false, save = true, shared, locks, server = SERVERS } = {}) => {
+const page = ({ ai, calls, conns, granted = true, device, local: own, providers, features, embedded = false, save = true, shared, locks, server = SERVERS, ladder, gpu, deviceMemory } = {}) => {
   const ids = new Map(), sent = [], asked = [], reads = [], onChanged = shared?.listeners || [], onMessage = [], held = new Set(), vault = new Map(), fetched = [], docOn = {};
   if (conns) vault.set('connections', structuredClone(conns));
   const data = shared?.data || { ...(ai && { ai: structuredClone(ai) }), ...(calls && { aiCalls: structuredClone(calls) }) };
@@ -91,7 +91,7 @@ const page = ({ ai, calls, conns, granted = true, device, local: own, providers,
   };
   const settings = { ...AS, ...(providers && { PROVIDERS: [...new Set([...AS.PROVIDERS, ...providers])] }), ...(features && { FEATURES: features, clean: (raw) => ({ ...AS.clean(raw), features: Object.fromEntries(features.map((f) => [f, raw?.features?.[f] === true])) }) }) };
   const window = {}; window.top = embedded ? {} : window;
-  const ctx = vm.createContext({ chrome, window, navigator: { locks }, document: doc, URL, Promise, Date, Number, Array, Object, Math, Map, Set, structuredClone, setTimeout, clearTimeout,
+  const ctx = vm.createContext({ chrome, window, navigator: { locks, ...(gpu && { gpu }), ...(deviceMemory && { deviceMemory }) }, ...(ladder && { GZ_AI_LADDER: ladder }), document: doc, URL, Promise, Date, Number, Array, Object, Math, Map, Set, structuredClone, setTimeout, clearTimeout,
     GZ_AI_FAILURE: require('../../extension/ai/failure.js'), GZ_AI_SETTINGS: settings, GZ_AI_ENDPOINT: require('../../extension/ai/endpoint.js') });
   vm.runInContext(read('core/site.js'), ctx);
   vm.runInContext(read('settings/editor-ai.js'), ctx);
@@ -137,7 +137,7 @@ test('off by default: the switch is off, only it shows, and the worker is asked 
   assert.deepEqual(p.asked, []);
   assert.deepEqual(p.data, {}, 'opening Settings writes nothing');
   assert.match(read('options.html'), /<input type="checkbox" role="switch" id="ai-on" aria-label="Use AI" data-local>/, 'the switch is not checked in the page');
-  assert.deepEqual(AS.clean(undefined), { on: false, outline: true, sources: true, wakes: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false, ask: false } });
+  assert.deepEqual(AS.clean(undefined), { on: false, outline: true, sources: true, wakes: true, updates: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false, ask: false } });
 });
 
 test('embedded Settings does not initialize AI controls or read its connections and activity', async () => {
@@ -152,7 +152,7 @@ test('embedded Settings does not initialize AI controls or read its connections 
 test('the switch, the mode and the models are kept in storage.local ai, cleaned; the features stay off until each is turned on', async () => {
   const p = await open();
   await p.change('ai-on', true);
-  assert.deepEqual(p.data.ai, { on: true, outline: true, sources: true, wakes: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false, ask: false } });
+  assert.deepEqual(p.data.ai, { on: true, outline: true, sources: true, wakes: true, updates: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false, ask: false } });
   assert.ok(shown(p.$('ai-connection')) && shown(p.$('ai-features')) && shown(p.$('ai-mode')));
   assert.equal(p.$('ai-mode-simple').checked, true);
   // The overall model first, then each feature: the gray text, Feedback, then the rest.
@@ -165,7 +165,7 @@ test('the switch, the mode and the models are kept in storage.local ai, cleaned;
   await p.change('ai-mode-advanced', true);
   assert.equal(p.data.ai.mode, 'advanced');
   await p.change('ai-on', false);
-  assert.deepEqual({ ...p.data.ai, features: p.data.ai.features.syllabus }, { on: false, outline: true, sources: true, wakes: true, mode: 'advanced', model: { use: null, model: '' }, models: {}, tune: {}, features: true }, 'off keeps the choices');
+  assert.deepEqual({ ...p.data.ai, features: p.data.ai.features.syllabus }, { on: false, outline: true, sources: true, wakes: true, updates: true, mode: 'advanced', model: { use: null, model: '' }, models: {}, tune: {}, features: true }, 'off keeps the choices');
   assert.equal(p.$('ai-connection').hidden, true);
   assert.equal(p.$('ai-mode').hidden, true);
 });
@@ -513,7 +513,7 @@ test('the owner\'s older endpoint shows as OpenRouter connected with its key, it
   const server = async (url) => (url === M.OPENROUTER ? new Response(routed, { headers: { 'content-type': 'application/json' } }) : json({ data: { label: 'x' } }));
   const p = await open({ ai: { on: true, use: 'endpoint', features: { syllabus: true, completion: true, writing: true } }, server,
     conns: { endpoint: { provider: 'openai', base: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-v4.1-flash-1017', key: OWNER, generation: 'g-1' } } });
-  assert.deepEqual(p.data.ai, { on: true, outline: true, sources: true, wakes: true, mode: 'simple', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: {}, tune: {}, features: { syllabus: true, completion: true, writing: true, ask: false } });
+  assert.deepEqual(p.data.ai, { on: true, outline: true, sources: true, wakes: true, updates: true, mode: 'simple', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: {}, tune: {}, features: { syllabus: true, completion: true, writing: true, ask: false } });
   assert.deepEqual(p.vault.get('connections'), { openrouter: { provider: 'openai', base: 'https://openrouter.ai/api/v1', key: OWNER, generation: 'g-1' } });
   assert.equal(p.card('OpenRouter').children[2].className, 'st ok');
   assert.equal(text(p.$('ai-pick-model')), 'DeepSeek: DeepSeek V4.1 Flash 1017 · OpenRouter');
@@ -891,7 +891,7 @@ test('Glaze\'s model\'s card: its state and size, Download from the click, its p
   const p = await open({ ai: { on: true }, providers: ['openai', 'device', 'local'], local, conns: { local: { provider: 'local', generation: 'g' } } });
   assert.deepEqual(sent, [], 'opening Settings asks nothing of it');
   await p.click(p.card('Rime'));
-  assert.deepEqual(sent.map((m) => m.op), ['test'], 'its state (the connection is kept)');
+  assert.deepEqual(sent.map((m) => m.op), ['test', 'updates'], 'its state (the connection is kept) and its version');
   assert.deepEqual([p.note().textContent, p.note().attrs.role], ['Needs a download · 1.1 GB', 'status']);
   assert.equal(p.button('Delete', p.$('ai-drawer')), undefined);
   assert.equal(p.$('ai-local-tier').tagName, 'DIV', 'no size choice in Simple');
@@ -921,6 +921,175 @@ test('Glaze\'s model\'s card: its state and size, Download from the click, its p
   pick.value = '2'; p.fire(pick, 'change'); await settle();
   assert.ok(sent.some((m) => m.op === 'set' && m.cfg.tier === 2 && m.gesture === true), JSON.stringify(sent));
   assert.equal(p.note().textContent, 'Needs a download · 1.8 GB');
+});
+
+test('Rime\'s card: its version, an update downloading with its progress, and Update automatically in Advanced, on by default', async () => {
+  let update = { version: 'r6', progress: 0.4 };
+  const sent = [];
+  const local = async (m) => {
+    sent.push(m.op);
+    if (m.op === 'updates') return { ok: true, auto: true, version: 'r5', ...(update && { update }) };
+    return { ok: true, state: 'ready', size: 1099627808, tier: 1, tiers: [{ tier: 1, size: 1099627808 }] };
+  };
+  const p = await open({ ai: { on: true }, providers: ['local'], local, conns: { local: { provider: 'local' } } });
+  await p.click(p.card('Rime'));
+  assert.ok(sent.includes('updates'));
+  assert.equal(p.note().textContent, 'Ready · r5 · 1.1 GB');
+  const row = () => p.$('ai-local-update');
+  assert.equal(text(row()), 'Update' + 'r6 · 40%');
+  const bar = () => p.walk(row()).length && p.walk(p.$('ai-drawer')).filter((x) => x.tagName === 'PROGRESS').at(-1);
+  assert.deepEqual([bar().value, bar().attrs['aria-label']], [0.4, 'Update']);
+  await p.progress({ provider: 'local', part: 'update', version: 'r6', loaded: 0.75 });
+  assert.equal(text(row()), 'Update' + 'r6 · 75%');
+  assert.equal(p.note().textContent, 'Ready · r5 · 1.1 GB', 'the model in use stays ready while its update downloads');
+  update = null;
+  await p.progress({ provider: 'local', part: 'update', done: true });
+  assert.equal(row().tagName, 'DIV', 'no update row once it is done');
+  assert.equal(p.$('ai-local-auto').tagName, 'DIV', 'the switch is Advanced\'s');
+  await p.change('ai-mode-advanced', true);
+  const auto = p.$('ai-local-auto');
+  assert.deepEqual([auto.tagName, auto.type, auto.checked], ['INPUT', 'checkbox', true]);
+  assert.equal(text(p.walk(p.$('ai-drawer')).find((x) => x.children.includes(auto))), 'Update automatically');
+  await p.change(auto, false);
+  assert.equal(p.data.ai.updates, false);
+  assert.equal(p.$('ai-local-auto').checked, false);
+});
+
+test('a download that ends Ready shows the version it brought', async () => {
+  let state = 'download';
+  const local = async (m) => {
+    if (m.op === 'updates') return { ok: true, auto: true, ...(state === 'ready' && { version: 'r5' }) };
+    if (m.op === 'prepare') state = 'ready';
+    return { ok: true, state, size: 1099627808, tier: 1, tiers: [{ tier: 1, size: 1099627808 }] };
+  };
+  const p = await open({ ai: { on: true }, providers: ['local'], local, conns: { local: { provider: 'local' } } });
+  await p.click(p.card('Rime'));
+  await p.click(p.button('Download', p.$('ai-drawer')));
+  await settle();
+  assert.equal(p.note().textContent, 'Ready · r5 · 1.1 GB');
+});
+
+test('Rime\'s context size in Advanced: 4K by default to 128K, sizes this computer can\'t hold refused with why, kept with the tier', async () => {
+  const sent = [];
+  const local = async (m) => {
+    sent.push({ op: m.op, ...(m.cfg && { cfg: { ...m.cfg } }) });
+    if (m.op === 'set') { kept?.set('connections', { local: { ...m.cfg } }); return { ok: true }; } // as the worker keeps it
+    if (m.op === 'updates') return { ok: true, auto: true };
+    return { ok: true, state: 'ready', size: 1099627200, tier: 3, tiers: [{ tier: 1, size: 1099627200 }, { tier: 3, size: 1427637696 }] };
+  };
+  let kept = null;
+  const ladder = require('../../extension/ai/local/ladder.js');
+  const p = await open({ ai: { on: true, mode: 'advanced' }, providers: ['local'], local, conns: { local: { provider: 'local', tier: 3 } },
+    ladder, gpu: { requestAdapter: async () => ({ features: new Set() }) }, deviceMemory: 4 });
+  kept = p.vault;
+  await p.click(p.card('Rime'));
+  await settle();
+  const pick = p.$('ai-local-window');
+  assert.deepEqual([pick.tagName, pick.attrs['aria-label']], ['SELECT', 'Context size']);
+  const opts = pick.children.map((o) => [o.value, o.textContent, o.disabled, o.selected]);
+  assert.deepEqual(opts.map((o) => o[0]), ['4096', '8192', '16384', '32768', '65536', '131072']);
+  assert.deepEqual(opts[0], ['4096', '4K', false, true], '4K, chosen by default');
+  const want = Object.fromEntries(ladder.windows({ size: 1099627200 }, { f16: false, deviceMemory: 4 }).map((w) => [String(w.size), w.refused]));
+  for (const [value, words, disabled] of opts) {
+    const why = want[value];
+    assert.equal(disabled, !!why, value);
+    assert.equal(words, why === 'memory' ? `${value / 1024}K · Too large for this computer` : why === 'no-f16' ? `${value / 1024}K · Needs a GPU with f16` : `${value / 1024}K`, value);
+  }
+  assert.ok(Object.values(want).includes('no-f16') && Object.values(want).includes('memory'), JSON.stringify(want));
+  pick.value = '8192'; p.fire(pick, 'change'); await settle();
+  assert.deepEqual(sent.filter((m) => m.op === 'set').at(-1).cfg, { provider: 'local', tier: 3, window: 8192 }, 'the tier stays');
+  const tier = p.$('ai-local-tier');
+  tier.value = '1'; p.fire(tier, 'change'); await settle();
+  assert.deepEqual(sent.filter((m) => m.op === 'set').at(-1).cfg, { provider: 'local', tier: 1, window: 8192 }, 'the size stays');
+  pick.value = '4096'; p.fire(p.$('ai-local-window'), 'change'); await settle();
+  assert.deepEqual(sent.filter((m) => m.op === 'set').at(-1).cfg, { provider: 'local', tier: 1 }, '4K is the default, never stored');
+});
+
+test('Rime context refusals use the high-performance GPU that runs the model', async () => {
+  const p = await open({ ai: { on: true, mode: 'advanced' }, providers: ['local'],
+    conns: { local: { provider: 'local', tier: 4 } }, ladder: require('../../extension/ai/local/ladder.js'), deviceMemory: 4,
+    gpu: { requestAdapter: async (opts) => ({ features: new Set(opts?.powerPreference === 'high-performance' ? ['shader-f16'] : []) }) },
+    local: async (m) => m.op === 'updates' ? { ok: true, auto: true }
+      : { ok: true, state: 'ready', size: 1846237888, tier: 4, tiers: [{ tier: 4, size: 1846237888 }] } });
+  await p.click(p.card('Rime'));
+  const size = p.$('ai-local-window').children.find((o) => o.value === '16384');
+  assert.equal(size.disabled, false, '16K fits the engine GPU at f16');
+  assert.equal(size.textContent, '16K', 'the low-power GPU cannot add a no-f16 refusal');
+});
+
+test('a late Rime memory probe cannot replace the current tier context refusals', async () => {
+  let kept, release, calls = 0, hold = false;
+  const adapter = { features: new Set() };
+  const pending = new Promise((resolve) => { release = resolve; });
+  const gpu = { requestAdapter: () => ++calls === 1 ? pending : hold ? new Promise(() => {}) : Promise.resolve(adapter) };
+  const local = async (m) => {
+    if (m.op === 'set') { kept.set('connections', { local: { ...m.cfg } }); return { ok: true }; }
+    if (m.op === 'updates') return { ok: true, auto: true };
+    const tier = kept.get('connections').local.tier;
+    return { ok: true, state: 'ready', tier, size: tier === 4 ? 1846237888 : 1099627200,
+      tiers: [{ tier: 1, size: 1099627200 }, { tier: 4, size: 1846237888 }] };
+  };
+  const p = await open({ ai: { on: true, mode: 'advanced' }, providers: ['local'], local, gpu, deviceMemory: 4,
+    conns: { local: { provider: 'local', tier: 1 } }, ladder: require('../../extension/ai/local/ladder.js') });
+  kept = p.vault;
+  await p.click(p.card('Rime'));
+  const pick = p.$('ai-local-tier');
+  pick.value = '4';
+  p.fire(pick, 'change');
+  await settle();
+  const size = () => p.$('ai-local-window').children.find((o) => o.value === '32768');
+  assert.equal(size().disabled, true, '32K does not fit the current Q8 tier');
+  assert.equal(size().textContent, '32K · Too large for this computer');
+  hold = true;
+  const before = calls;
+  release(adapter);
+  await settle();
+  assert.equal(size().disabled, true, 'the old Q4 result cannot enable 32K for Q8');
+  assert.equal(size().textContent, '32K · Too large for this computer');
+  assert.equal(calls, before, 'an old result cannot start another probe for the current tier');
+});
+
+test('Rime keeps tier and context changes made while the other choice is saving', async (t) => {
+  for (const [first, second, expected] of [
+    [['tier', '3'], ['window', '8192'], { tier: 3, window: 8192 }],
+    [['window', '8192'], ['tier', '3'], { tier: 3, window: 8192 }],
+    [['tier', '3'], ['window', '4096'], { tier: 3 }],
+    [['window', '8192'], ['tier', ''], { window: 8192 }],
+  ]) await t.test(`${first.join('=')} then ${second.join('=')}`, async () => {
+    let release, kept, writes = 0;
+    const pending = new Promise((resolve) => { release = resolve; });
+    const local = async (m) => {
+      if (m.op === 'set') {
+        if (++writes === 1) await pending;
+        kept.set('connections', { local: { ...m.cfg } });
+        return { ok: true };
+      }
+      if (m.op === 'updates') return { ok: true, auto: true };
+      return { ok: true, state: 'ready', size: 1099627200, tier: 1, tiers: [{ tier: 1, size: 1099627200 }, { tier: 3, size: 1427637696 }] };
+    };
+    const p = await open({ ai: { on: true, mode: 'advanced' }, providers: ['local'], local,
+      conns: { local: { provider: 'local', tier: 1, window: 32768 } }, ladder: require('../../extension/ai/local/ladder.js') });
+    kept = p.vault;
+    await p.click(p.card('Rime'));
+    for (const [field, value] of [first, second]) {
+      const pick = p.$(`ai-local-${field}`);
+      pick.value = value;
+      p.fire(pick, 'change');
+      await settle();
+    }
+    assert.equal(writes, 1, 'the first save is still pending');
+    release();
+    await settle();
+    assert.deepEqual(kept.get('connections').local, { provider: 'local', ...expected });
+    assert.equal(writes, 2, 'both choices are saved');
+  });
+});
+
+test('Update automatically is kept in ai settings, on unless turned off', () => {
+  assert.equal(AS.clean({}).updates, true);
+  assert.equal(AS.clean({ updates: false }).updates, false);
+  assert.equal(AS.clean({ updates: 'no' }).updates, true);
+  assert.equal(AS.DEFAULTS.updates, true);
 });
 
 for (const state of ['download', 'unavailable']) test(`old stock files have a Delete button while Rime is ${state}`, async () => {

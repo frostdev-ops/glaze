@@ -3899,5 +3899,10 @@
   "The document changed or was deleted. Remove it and pick it again. Nothing was submitted.": "Le document a été modifié ou supprimé. Retirez-le et sélectionnez-le à nouveau. Rien n’a été remis.",
   "File: {name}.": "Fichier : {name}.",
   "Use Blackboard editor to review or remove these uploads: {names}.": "Utilisez l’éditeur Blackboard pour vérifier ou supprimer ces fichiers téléversés : {names}.",
-  "Not attached": "Non joint"
+  "Not attached": "Non joint",
+  "Update automatically": "Mettre à jour automatiquement",
+  "Context size": "Taille du contexte",
+  "{n}K": "{n}K",
+  "Too large for this computer": "Trop grand pour cet ordinateur",
+  "Needs a GPU with f16": "Nécessite un GPU avec f16"
 };

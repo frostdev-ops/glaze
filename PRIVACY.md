@@ -189,8 +189,8 @@ open tab of your school's site), and, read the same way, a course's announcement
 (on Blackboard, read-only GETs to its public API, including an Ultra document's body block and a discussion's replies),
 and sends what it read to that model to answer. From a discussion it sends the prompt, whether it is graded, your own
 replies and only the number of your classmates' replies: never their names or posts. Quoted blocks in your replies are
-omitted, and participant names supplied by Blackboard are redacted from returned text. Canvas discussion prompt reads are
-refused until instructor authorship can be verified; their list remains available. For a file a page embeds it sends
+omitted, and participant names supplied by Blackboard are redacted from returned text. On Canvas a discussion's prompt is read
+only when a teacher or TA of the course wrote it (checked against the course's teacher and TA list, read once per page). For a file a page embeds it sends
 the file's name and type, never its address. Ask Rime's switch is that tool access:
 it needs no Agents pairing and doesn't turn agent access on. Its one change, marking a to-do done, waits for your OK in
 Glaze's window, worded by Glaze, never by the model. Nothing of the conversation is kept: it goes when the page or the
@@ -953,6 +953,10 @@ you import) are bundled. It makes requests in these cases:
   nothing about you, your courses or your work: only the file's address and the part of it being fetched, with the
   connection metadata, including your IP address, any download has. Each file is checked against its SHA-256 and kept in
   Glaze's storage on this device until you click Delete. Rime runs on this computer; what a feature gives it stays there.
+  While a Rime model is downloaded, Glaze checks `huggingface.co` about once a day, and a few minutes after the browser
+  starts, for Frostdev's signed list of Rime models, and downloads a newer version of your model from there and its CDN
+  in the background, checked the same way, before it replaces the old one. The check is the same request for everyone and
+  sends nothing about you; with Data Saver on it waits. **Update automatically** (Settings → AI → Rime, Advanced) turns it off.
 - **Agent access** (Settings → AI → Agents, off by default; Canvas and Blackboard Ultra). For an app you allowed, in the
   account's school tab open in this browser, signed in as you: your profile, to check whose tab it is; the planner and
   Insights reads Better To Do and Insights make; one assignment with its rubric (on Canvas

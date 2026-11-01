@@ -9,6 +9,7 @@
 //     (at the budget the host writes CLOSE itself, ai/local/host.js; after a </think> of the model's own, AFTER: nothing).
 //     test/ai/local-format-ids.test.js holds it, id for id, to what lfm-tune's train/format.js gives for each trained task
 //     (tools/dev/local-format-fixture.js writes that fixture again when the format changes).
+//     With `window`: the window's size token (SIZES, sizeOf) right after the task's, so the model knows its room.
 //   chatml: a stock model (models.json `stock: true`), whose weights never learnt Glaze's tokens: LFM3's own chat template
 //     with thinking off (`<think></think>` after the assistant header), the request's messages as the harness wrote them;
 //     never think mode.
@@ -24,7 +25,10 @@ var GZ_AI_LOCAL_FORMAT = globalThis.GZ_AI_LOCAL_FORMAT || (() => {
     ctx: ['<|gz_ctx|>', '<|/gz_ctx|>'], data: ['<|gz_data|>', '<|/gz_data|>'], vision: ['<|vision_start|>', '<|vision_end|>'] });
   // The tasks with a token of their own (ai/local/tokenizer.js GLAZE_TOKENS, in its order).
   const TASKS = Object.freeze(['writer.complete', 'writer.review', 'writer.feedback', 'writer.outline', 'writer.requirements', 'writer.cite', 'writer.sources',
-    'writer.decide', 'writer.image', 'syllabus.read', 'study.help', 'agent.tools']);
+    'writer.decide', 'writer.image', 'syllabus.read', 'study.help', 'agent.tools', 'chat.compact']);
+  // The size tokens (GLAZE_TOKENS' <|gz_ctx:…|>): a window reads as the largest size at or under it; under 4K, none.
+  const SIZES = Object.freeze([['4k', 4096], ['8k', 8192], ['16k', 16384], ['32k', 32768], ['64k', 65536], ['128k', 131072]].map((r) => Object.freeze(r)));
+  const sizeOf = (window) => { const r = Number.isFinite(window) ? SIZES.filter(([, n]) => n <= window).pop() : null; return r ? `<|gz_ctx:${r[0]}|>` : null; };
   // Tasks whose glaze layout is their own, not one system and one user turn: agent.tools runs tool turns
   // (ai/tasks/agent-tools.js layout(), glaze-plans/lfm-tune/FORMAT-new-tasks.md). format() writes them in turns().
   const TURNS = Object.freeze(['agent.tools']);
@@ -94,9 +98,9 @@ var GZ_AI_LOCAL_FORMAT = globalThis.GZ_AI_LOCAL_FORMAT || (() => {
   // and lfm-tune's D4 harness (eval/d4/run.js nativeStep) write it: each earlier assistant turn opens with PREFILL.direct
   // (the host never returns reasoning, so no turn keeps any), the turn being written with its mode's. constraint: what the
   // host's grammar holds the turn to, the answer's schema or one native call to an offered tool (agent-tools.js constraint()).
-  const turns = (req, { think }) => {
+  const turns = (req, { think, window }) => {
     const A = typeof GZ_AI_TASK_AGENT_TOOLS !== 'undefined' ? GZ_AI_TASK_AGENT_TOOLS : require('../tasks/agent-tools.js');
-    const { parts: base, tools } = A.fromRequest(req);
+    const { parts: base, tools } = A.fromRequest(req, { window });
     const out = [];
     base.forEach((p, i) => { out.push(p); if (p.text === 'assistant\n' && base[i - 1]?.special === SPECIAL.start && i < base.length - 1) out.push(...PREFILL.direct); });
     const parts = join([...out, ...PREFILL[think ? 'think' : 'direct']]);
@@ -107,17 +111,19 @@ var GZ_AI_LOCAL_FORMAT = globalThis.GZ_AI_LOCAL_FORMAT || (() => {
   // parts make the system turn, the prefix a warm session reads once; images, the pictures' { mime, data } in the order of
   // their { image } parts (chatml with `images` only: Glaze's fine-tune reads none); think (glaze with `think` only):
   // { close, after }; constraint (a TURNS task in the glaze dialect): { schema, tools } for the host in place of req.schema.
-  const format = (req, { dialect = 'glaze', images = false, think = false } = {}) => {
+  // window (glaze only): the tokens the provider runs the model in, said by its size token.
+  const format = (req, { dialect = 'glaze', images = false, think = false, window } = {}) => {
     if (dialect !== 'glaze' && dialect !== 'chatml') throw refuse('dialect');
     if (think && dialect !== 'glaze') throw refuse('think');
+    if (window !== undefined && (dialect !== 'glaze' || !sizeOf(window))) throw refuse('window');
     const task = req.task?.id;
     if (dialect === 'glaze' && !TASKS.includes(task)) throw Object.assign(refuse(`task ${task}`), { code: 'caps' });
-    if (dialect === 'glaze' && TURNS.includes(task)) return turns(req, { think });
+    if (dialect === 'glaze' && TURNS.includes(task)) return turns(req, { think, window });
     const { system, blocks, pictures } = parse(req, { images: images && dialect === 'chatml' });
     const schema = req.schema ? `\n\n${SAY_JSON(req.schema)}` : '';
     let head, user;
     if (dialect === 'glaze') {
-      head = [{ special: SPECIAL.bos }, { special: SPECIAL.start }, { text: 'system\n' }, { special: `<|gz_task:${task}|>` },
+      head = [{ special: SPECIAL.bos }, { special: SPECIAL.start }, { text: 'system\n' }, { special: `<|gz_task:${task}|>` }, ...(window !== undefined ? [{ special: sizeOf(window) }] : []),
         { text: `${system}\n\n${X().TRUST}${schema}` }, { special: SPECIAL.end }, { text: '\n' }];
       user = blocks.flatMap((b, i) => [...(i ? [{ text: '\n' }] : []), { special: SPECIAL[b.kind][0] }, { text: `${b.label}\n${b.text}` }, { special: SPECIAL[b.kind][1] }]);
     } else {
@@ -133,6 +139,6 @@ var GZ_AI_LOCAL_FORMAT = globalThis.GZ_AI_LOCAL_FORMAT || (() => {
       ...(think && { think: thinking() }) };
   };
 
-  return { SPECIAL, TASKS, TURNS, PREFILL, CLOSE, AFTER, SAY_JSON, LINE, parse, format, join };
+  return { SPECIAL, TASKS, TURNS, SIZES, sizeOf, PREFILL, CLOSE, AFTER, SAY_JSON, LINE, parse, format, join };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_LOCAL_FORMAT; else GZ_AI_LOCAL_FORMAT;

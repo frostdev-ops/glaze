@@ -2,7 +2,7 @@
 // the connections (a provider's key, an endpoint's address and key). A feature asks over a runtime port named 'glaze:ai'
 // (background/background.js checks who opened it: Glaze's own pages, or Glaze in a frame of a site it runs on, never a quiz's page).
 //   page → { id, op: 'run', feature, task, input }  { id, op: 'cancel' }  { id, op: 'status', feature }
-//          { id, op: 'confirm', confirmId, approve }  { id, op: 'warm', feature, task, input }
+//          { id, op: 'confirm', confirmId, approve }  { id, op: 'warm', feature, task, input }  { id, op: 'count', feature, task, input }
 //   worker → the run's events, each { id, type, … } (ai/loop.js: thinking, text_delta, says, note, step_start, step,
 //          pending, usage, reply), then { id, type: 'end', output?, pending?, steps?, meta } or { id, type: 'error', error,
 //          reference?, status? }. status → { id, type: 'status', on, allowed, ready?, why?, provider?, caps?, to? }. confirm →
@@ -282,6 +282,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
       if (m.op === 'run') return run(m, def);
       if (m.op === 'confirm') return confirm(m);
       if (m.op === 'warm') return warmUp(m);
+      if (m.op === 'count') return countUp(m);
       post({ id: m.id, type: 'error', error: 'request' });
     };
     const warmUp = async (m) => {
@@ -303,6 +304,28 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         const req = T().prepare(task, m.input, { provider: use.p, cfg, over: over(use) });
         done(!!req && !both.signal.aborted && await P().warm(use.p, req, cfg, { signal: both.signal }));
       } catch { done(false); } finally { mine.delete(m.id); admitted.delete(control); deadline.done(); both.done(); }
+    };
+    // count: a run's request as it would go (built for the window and model its catalog gives), measured before it is sent:
+    // → { id, type: 'end', used (its prompt tokens: the provider's count, else the estimate), exact, window (the context the
+    // provider runs with), reserve (the answer's max tokens) }, or { id, type: 'end' } when it can't be measured.
+    const countUp = async (m) => {
+      const done = (r) => post({ id: m.id, type: 'end', ...(r || {}) });
+      if (mine.has(m.id) || typeof m.feature !== 'string' || !FEATURE.test(m.feature) || typeof m.task !== 'string' || !T().ID.test(m.task)
+        || Object.keys(m).some((k) => !['id', 'op', 'feature', 'task', 'input'].includes(k))) return post({ id: m.id, type: 'error', error: 'request' });
+      let size;
+      try { size = JSON.stringify(m.input ?? null).length; } catch { return done(); }
+      if (size > LIMIT.message) return done();
+      const control = new AbortController(), deadline = F().deadline(LIMIT.catalog), both = F().anySignal([control.signal, deadline.signal]);
+      mine.set(m.id, control);
+      try {
+        const { task, use } = await F().wait(() => admit(m), both.signal);
+        admitted.set(control, use);
+        const { cfg } = sized(use, await catalog(env, use, both.signal, (env.now || Date.now)()), task);
+        const req = T().prepare(task, m.input, { provider: use.p, cfg, over: over(use) });
+        const n = req && !both.signal.aborted ? await P().count(use.p, req, cfg, { signal: both.signal }) : null;
+        const window = P().caps(use.p, use.p.config(cfg)).context;
+        done(n && window ? { used: n.tokens, exact: n.exact, window, reserve: Math.min(req.maxTokens || 1024, window) } : null);
+      } catch { done(); } finally { mine.delete(m.id); admitted.delete(control); deadline.done(); both.done(); }
     };
     // Admission: → { s, task, use } or throws a code.
     const admit = async (m) => {
@@ -538,7 +561,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
       let cfg = p.config({ ...raw, ...(!Object.hasOwn(raw, 'key') && same && before.cfg.key && { key: before.cfg.key }) });
       if (!cfg) return { ok: false, error: 'setup', note: 'Check the address, the model and the key.' };
       const { generation: __, ...settings } = cfg;
-      const sameLocal = provider !== 'local' || (before?.cfg.tier === settings.tier && before?.cfg.context === settings.context);
+      const sameLocal = provider !== 'local' || (before?.cfg.tier === settings.tier && before?.cfg.context === settings.context && before?.cfg.window === settings.window);
       const generation = same && sameLocal && before.cfg.key === settings.key && before.generation ? before.generation : E().generation();
       const older = provider === 'openai' && typeof base[m.id]?.model === 'string' ? { model: base[m.id].model } : {};
       if (!await env.vault.set(CONNECTIONS, { ...base, [m.id]: { provider, ...(name !== undefined && { name: name.trim() }), ...settings, ...older, generation } })) return { ok: false, error: 'write' };

@@ -29,6 +29,7 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
   const ERRORS = {
     none: 'The site has no such item, or it is not open to the student.', locked: 'The site keeps that one locked for now.', args: 'That id does not fit this site.',
     timeout: 'The school site took too long to answer. Try again.', profile: 'The open tab is signed in as someone else.',
+    unverified: "Glaze can't verify this Canvas prompt's authorship yet; open it on the site.",
     partial: 'Glaze read only part of the course content; the requested item may be in the unread part. Open it on the site.',
   };
   // A body that is only an embedded file: its names stand in for the text.
@@ -155,20 +156,15 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
       const w = who(ctx?.account);
       if (!w) return fail(NONE);
       if (!course(w, args.course)) return fail(ERRORS.args);
-      if (w.lms === 'ultra') {
-        // The prompt, whether it's graded, the student's own replies (first page only) and how many classmates replied:
-        // never a classmate's name or words.
-        const r = await viaTab(w, ctx, 'discussion', { course: args.course, id: args.id });
-        if (r.ok === false) return r;
-        const page = args.page || 1, got = body(r, page) || (page > 1 ? { error: 'There is 1 page.' } : { text: '', page: 1, pages: 1 });
-        if (got.error) return fail(got.error);
-        const mine = page === 1 ? (r.mine || []).slice(0, 3).map((m) => ({ at: m.at ?? null, reply: m.reply === true, text: String(m.text || '').slice(0, 300) })) : [];
-        return { account: w.account, title: r.title, ...(r.at && { at: r.at }), gradable: r.gradable === true, ...got,
-          ...(page === 1 && { mine, ...((r.mine || []).length > 3 && { mineMore: r.mine.length - 3 }), others: r.others ?? null, ...(r.complete === false && { complete: false }) }) };
-      }
-      // A Canvas topic may itself be a student's post. The popup's shape supplies neither instructor authorship nor a
-      // separate instructor prompt, so passing its author/message through would expose a classmate's name and words.
-      return fail("Glaze can't verify this Canvas prompt's authorship yet; open it on the site.");
+      // The prompt, whether it's graded, the student's own replies (first page only) and how many classmates replied:
+      // never a classmate's name or words. A Canvas topic may be a classmate's own post: only a teacher's or TA's is read.
+      const r = await viaTab(w, ctx, w.lms === 'ultra' ? 'discussion' : 'topic', { course: args.course, id: args.id });
+      if (r.ok === false) return r;
+      const page = args.page || 1, got = body(r, page) || (page > 1 ? { error: 'There is 1 page.' } : { text: '', page: 1, pages: 1 });
+      if (got.error) return fail(got.error);
+      const mine = page === 1 ? (r.mine || []).slice(0, 3).map((m) => ({ at: m.at ?? null, reply: m.reply === true, text: String(m.text || '').slice(0, 300) })) : [];
+      return { account: w.account, title: r.title, ...(r.at && { at: r.at }), gradable: r.gradable === true, ...got,
+        ...(page === 1 && { mine, ...((r.mine || []).length > 3 && { mineMore: r.mine.length - 3 }), others: r.others ?? null, ...(r.complete === false && { complete: false }) }) };
     }),
   ];
   const register = (registry) => tools().map((t) => registry.add(t));

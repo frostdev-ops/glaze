@@ -233,8 +233,11 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     };
     // Glaze's own model: its state, its size, Download, the download's progress, Delete; then its picture download the same
     // way; in Advanced, its size to use (the tier: Auto lets the ladder pick for this computer at Download).
+    // Its version beside its size once it is here; an update downloading in the background as its own row; in Advanced,
+    // Update automatically (storage.local ai updates).
     const glaze = () => {
-      const words = ours ? [localText(ours, t, pct), ...(ours.size && ours.state !== 'unavailable' ? [gb(ours.size, t)] : [])].join(' · ') : '';
+      const words = ours ? [localText(ours, t, pct), ...(ours.state === 'ready' && updates?.version ? [updates.version] : []),
+        ...(ours.size && ours.state !== 'unavailable' ? [gb(ours.size, t)] : [])].join(' · ') : '';
       const line = el('div', 'line own'), state = el('span', 'note', words);
       state.setAttribute('role', 'status');
       line.append(mark(OWN), el('b', '', label(OWN)), state);
@@ -246,6 +249,19 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         Object.assign(bar, { max: 1, value: ours.progress });
         bar.setAttribute('aria-label', label(OWN));
         parts.push(bar);
+      }
+      const next = ours?.state === 'ready' && updates?.update;
+      if (next) {
+        const row = el('div', 'line own'), note = el('span', 'note', [next.version, pct(next.progress || 0)].filter(Boolean).join(' · '));
+        row.id = 'ai-local-update';
+        note.setAttribute('role', 'status');
+        const gap = el('span');
+        gap.setAttribute('aria-hidden', 'true');
+        row.append(gap, el('b', '', t('Update')), note);
+        const bar = el('progress');
+        Object.assign(bar, { max: 1, value: next.progress || 0 });
+        bar.setAttribute('aria-label', t('Update'));
+        parts.push(row, bar);
       }
       const pics = ours?.state !== 'unavailable' && ours?.pictures;
       if (pics) {
@@ -274,6 +290,26 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         pick.disabled = ours.state === 'downloading';
         pick.addEventListener('change', () => setTier(Number(pick.value) || 0));
         parts.push(pick);
+        // The context size: 4K by default to 128K; a size this computer's memory can't hold refused, with why (the ladder's).
+        const size = el('select'), chosen = conns[OWN]?.window || 4096;
+        size.id = 'ai-local-window';
+        size.setAttribute('aria-label', t('Context size'));
+        const why = Object.fromEntries((fit?.windows || []).map((w) => [w.size, w.refused]));
+        for (const n of WINDOWS) {
+          const o = el('option', '', [t('{n}K', { n: n / 1024 }), why[n] === 'memory' ? t('Too large for this computer') : why[n] === 'no-f16' ? t('Needs a GPU with f16') : ''].filter(Boolean).join(' · '));
+          Object.assign(o, { value: String(n), selected: n === chosen, disabled: !!why[n] && n !== chosen });
+          size.append(o);
+        }
+        size.disabled = ours.state === 'downloading';
+        size.addEventListener('change', () => setWindow(Number(size.value) || 4096));
+        parts.push(size);
+        if (!fit || fit.size !== ours.size) measure(ours.size);
+        const label = el('label', 'ai-outline'), box = el('input');
+        Object.assign(box, { type: 'checkbox', id: 'ai-local-auto', checked: s.updates !== false });
+        box.setAttribute('data-local', '');
+        box.addEventListener('change', () => { const value = box.checked; write(() => ({ updates: value })); });
+        label.append(el('span', '', t('Update automatically')), box);
+        parts.push(label);
       }
       return parts;
     };
@@ -640,7 +676,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       const marks = [...HERE, ...Object.keys(CARDS), ...Object.keys(conns)].map((id) => [id, connected(id), bad(id), tested[id]?.state]);
       const lists = Object.fromEntries(Object.entries(catalogs).map(([id, x]) => [id, x.models ? x.models.length : 'loading']));
       once('providers', [s.mode, open, providers, conns, device, ours, marks], renderProviders);
-      once('drawer', [s.mode, open, said, conns[open], open === DEVICE ? device : open === OWN ? ours : null, lists[open], marks.find(([id]) => id === open)], renderDrawer);
+      once('drawer', [s.mode, open, said, conns[open], open === DEVICE ? device : open === OWN ? [ours, updates, s.updates, fit] : null, lists[open], marks.find(([id]) => id === open)], renderDrawer);
       once('features', [s, conns, providers, device, ours, picking, marks, lists], renderFeatures);
       renderCalls();
     };
@@ -693,7 +729,26 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     };
     // Glaze's own model: its status (the connection kept first, as On this device's is), Download from the click, Delete,
     // and the tier Advanced sets (the connection's).
-    let fetching = false, fetchingPics = false, localPoll = null;
+    let fetching = false, fetchingPics = false, localPoll = null, updates = null; // updates: { auto, version?, update? }
+    // The context sizes for the model's size on this computer: { size, windows } (ai/local/ladder.js windows), read once a size.
+    const WINDOWS = [4096, 8192, 16384, 32768, 65536, 131072];
+    let fit = null, measuring = null;
+    const ladder = () => globalThis.GZ_AI_LADDER || (measuring ||= new Promise((resolve, reject) => {
+      const sc = document.createElement('script');
+      Object.assign(sc, { src: 'ai/local/ladder.js', onload: () => resolve(globalThis.GZ_AI_LADDER), onerror: reject });
+      (document.head || document.body)?.append(sc);
+    }));
+    const measure = async (bytes) => {
+      if (!(bytes > 0)) return;
+      try {
+        const L = await ladder();
+        const adapter = await globalThis.navigator?.gpu?.requestAdapter?.({ powerPreference: 'high-performance' }).catch(() => null);
+        if (ours?.size !== bytes) return;
+        const f16 = !!adapter?.features?.has?.('shader-f16');
+        const next = { size: bytes, windows: L.windows({ size: bytes }, { f16, deviceMemory: globalThis.navigator?.deviceMemory }) };
+        if (JSON.stringify(next) !== JSON.stringify(fit)) { fit = next; render(); }
+      } catch { /* no ladder here: every size offered */ }
+    };
     const localResult = (r) => {
       const was = ours?.pictures;
       const keep = (st) => ({ ...st, ...(!st.tiers && ours?.tiers && { tiers: ours.tiers }), ...(!st.size && ours?.size && { size: ours.size }), ...(!st.pictures && ours?.pictures && { pictures: ours.pictures }) });
@@ -716,7 +771,13 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     const localStatus = async () => {
       if (!offers() || !await localConn()) return;
       if (fetching && ours?.state === 'downloading') return;
-      localResult(await send({ op: 'test', provider: OWN }));
+      const [r] = await Promise.all([send({ op: 'test', provider: OWN }), versions()]);
+      localResult(r);
+    };
+    // The version in use and an update's progress (the worker's ai/local/updates.js about).
+    const versions = async () => {
+      const u = await send({ op: 'updates', provider: OWN }).catch(() => null);
+      updates = u?.ok ? { version: typeof u.version === 'string' ? u.version : null, ...(u.update && { update: { version: u.update.version || null, progress: progress({ loaded: u.update.progress }) ?? 0 } }) } : null;
     };
     const fetchModel = (e) => {
       if (!e?.isTrusted || fetching || !offers() || ours?.state !== 'download') return;
@@ -726,7 +787,9 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       render();
       send({ op: 'prepare', provider: OWN }).then(async (r) => {
         fetching = false;
-        if (r.ok) localResult(r); else await localStatus();
+        if (!r.ok) return localStatus();
+        if (r.state === 'ready') await versions();
+        localResult(r);
       }, () => { fetching = false; });
     };
     const deleteModel = (e) => {
@@ -752,17 +815,38 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       busy = true;
       send({ op: 'delete', provider: OWN, part: 'pictures' }).then(localResult).finally(() => { busy = false; });
     };
-    const setTier = (tier) => {
-      if (busy) return;
-      busy = true;
-      send({ op: 'set', id: OWN, cfg: { provider: OWN, ...(tier && { tier }) } }).then(async (r) => {
-        if (!r.ok) return say(t('Could not save. Try again.'), true);
-        await load();
-        await localStatus();
-      }).finally(() => { busy = false; });
+    // The local connection: its tier and context size, each kept when the other changes (4K, the default, never stored).
+    let localWriting = null;
+    const setLocal = (patch) => {
+      const save = async () => {
+        if (busy) return;
+        busy = true;
+        // Merge after the previous save has reloaded the connection, so a second choice keeps the first.
+        const { tier, window } = { ...conns[OWN], ...patch };
+        try {
+          const r = await send({ op: 'set', id: OWN, cfg: { provider: OWN, ...(tier && { tier }), ...(window && window !== 4096 && { window }) } });
+          if (!r.ok) return say(t('Could not save. Try again.'), true);
+          await load();
+          await localStatus();
+        } finally { busy = false; }
+      };
+      const next = localWriting ? localWriting.then(save, save) : save();
+      localWriting = next;
+      const done = () => { if (localWriting === next) localWriting = null; };
+      next.then(done, done);
     };
+    const setTier = (tier) => setLocal({ tier });
+    const setWindow = (window) => setLocal({ window });
     c.runtime.onMessage?.addListener((m, sender) => {
       if (sender?.id !== c.runtime.id || m?.type !== TYPE || m.event !== 'progress' || m.provider !== OWN || !offers()) return;
+      if (m.part === 'update') {
+        if (m.done) { if (updates) delete updates.update; localStatus(); return; }
+        const u = progress(m);
+        if (u === null) return;
+        updates = { ...(updates || {}), update: { version: typeof m.version === 'string' ? m.version : updates?.update?.version || null, progress: u } };
+        render();
+        return;
+      }
       const n = progress(m);
       if (n === null) return;
       if (m.part === 'pictures') {

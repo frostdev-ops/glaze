@@ -223,7 +223,7 @@ test('Firefox\'s event page loads every file of the harness the worker would imp
   // The host's own imports, beside it: the store, the GGUF reader, the tokenizer, the schema, the text helpers (a span's
   // folding) and the grammar, then the engine's files (test/ai/local-host-worker.test.js runs them as the Worker does).
   const { IMPORTS } = require('../../extension/ai/local/host.js');
-  assert.deepEqual(IMPORTS.required, ['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', '../text.js', 'grammar.js']);
+  assert.deepEqual(IMPORTS.required, ['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', '../text.js', 'grammar.js', 'updates.js']);
   assert.deepEqual(IMPORTS.optional, ['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'ladder.js']);
   for (const f of [...IMPORTS.required, ...IMPORTS.optional]) assert.ok(fs.existsSync(path.join(__dirname, '../../extension/ai/local', f)), f);
   assert.match(fs.readFileSync(path.join(__dirname, '../../extension/ai/local/host.html'), 'utf8'), /<script src="offscreen\.js"><\/script>/);
