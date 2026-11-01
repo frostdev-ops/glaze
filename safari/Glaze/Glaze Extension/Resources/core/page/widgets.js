@@ -73,6 +73,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // The boards: which one this page is ('courses', 'dash', 'cdash' or null), the one drawn, and the Courses page's layer the
   // tiles float in (the Dashboard's tiles are in its own room, the grid).
   let board = null, drawn = null, room = null;
+  // Keep the first course slots for this visit. Late metadata cannot insert a saved card or close a hidden card's gap.
+  let courseSlots = null;
   const tiles = new Map(); // id -> { el, body, wake?, stop?, update?, context? }
   // The sidebar (navigation/page/sidebar.js) while it is on this page: then each widget has one destination for this account
   // (navigation/sidebar.js resolve), the dock, this page's board, floating or nowhere, and the layout keeps every spot it had.
@@ -140,7 +142,14 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   let flying = 0, layoutRead = 0, dashboardEdited = false;
   const declared = () => Object.fromEntries(Object.entries(MORE).map(([k, v]) => [k, { size: v.size }]));
   let rawLay; // the layout as stored, read again when the tiles declared change
-  const adopt = (raw) => { rawLay = raw; const next = W.layout(raw, MORE); if (JSON.stringify(next) !== JSON.stringify(lay)) { lay = next; draw(); } };
+  const adopt = (raw) => {
+    rawLay = raw;
+    const next = W.layout(raw, MORE);
+    if (JSON.stringify(next) !== JSON.stringify(lay)) {
+      if (board && JSON.stringify(next.boards[board]) !== JSON.stringify(lay?.boards[board])) courseSlots = null;
+      lay = next; draw();
+    }
+  };
   const change = (m) => {
     // An explicit Dashboard edit opts this student out too, even before their membership/profile reads finish.
     if (ultra && lay?.starter && !m.fill && m.ops?.some((o) => o?.s === 'dash')) {
@@ -154,6 +163,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       if (me) mark(); else who().then(mark, () => {});
     }
     layoutRead++;
+    if (m.ops?.some((o) => o?.s === board)) courseSlots = null;
     lay = W.apply(lay, m, MORE);
     draw();
     flying++;
@@ -1170,6 +1180,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // screen reader as it starts and ends; Esc ends it too.
   const setEditing = (v) => {
     if (!v) { gesture?.cancel(); globalThis.GZ_COURSE_CARDS?.picker.close(false); }
+    if (v) courseSlots = null; // an explicit edit can include cards confirmed since the first paint
     editing = v;
     const edit = bar?.querySelector('.gz-dash-edit');
     if (edit) { if (v) edit.style.minWidth = `${edit.getBoundingClientRect().width}px`; edit.setAttribute('aria-pressed', String(editing)); if (board) edit.textContent = t(editing ? 'Done' : 'Edit layout'); }
@@ -1179,8 +1190,16 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     draw();
   };
   const escape = (e) => { if (e.key === 'Escape' && editing && board) { setEditing(false); bar?.querySelector('.gz-dash-edit')?.focus(); } };
-  let loadingCourses = null, nativeShown = false, courseSpace = null;
-  const coursesChanged = () => { draw(); fillCourses(); };
+  let loadingCourses = null, nativeShown = false, courseSpace = null, coursesReady = false, coursesQueued = false;
+  const coursesChanged = () => {
+    if (coursesReady) { draw(); fillCourses(); return; }
+    // Sync primes cached records and attaches membership watchers in the same turn. Include already-resolved answers
+    // before choosing this visit's first slots, without waiting for any pending request.
+    if (!coursesQueued) {
+      coursesQueued = true;
+      Promise.resolve().then(() => { coursesQueued = false; coursesReady = true; draw(); fillCourses(); });
+    }
+  };
   const loadCourses = () => {
     if (globalThis.GZ_COURSE_CARDS || loadingCourses) return;
     loadingCourses = ctx.need('courses/page/coursecards.js', () => globalThis.GZ_COURSE_CARDS).then(() => {
@@ -1346,6 +1365,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const floatWatched = new Set();
   const teardown = (all = true) => {
     gesture?.cancel();
+    courseSlots = null;
     laid = '';
     for (const [id, x] of tiles) if (all || x.el.parentNode !== floats) { x.stop?.(); x.el.remove(); tiles.delete(id); }
     ro?.disconnect();
@@ -1503,12 +1523,20 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const host = roomEl();
     if (gesture || !board || !area || !host?.isConnected || (board === 'courses' && hidden && !editing)) return;
     const list = wanted(true).filter((x) => !x.float && !x.dock && tiles.has(x.id));
+    const gaps = [...(courseSlots?.values() || [])].filter((s) => s.dims && !list.some((x) => x.id === s.tile.id));
+    if (gaps.length) {
+      list.push(...gaps.map((s) => s.tile));
+      const order = new Map(lay.boards[board].map((x, i) => [x.id, i]));
+      list.sort((a, b) => order.get(a.id) - order.get(b.id));
+    }
     const dims = {};
     for (const x of list) {
-      const { el } = tiles.get(x.id);
+      const el = tiles.get(x.id)?.el;
+      if (!el) { dims[x.id] = courseSlots.get(x.id).dims; continue; }
       if (!el.isConnected) (stacked || board !== 'courses' ? area : room).append(el);
       if (el.offsetHeight && (!stacked || !heights.has(x.id))) heights.set(x.id, el.offsetHeight);
       dims[x.id] = { w: widthOf(x), h: heights.get(x.id) || el.offsetHeight };
+      if (courseSlots?.has(x.id)) courseSlots.get(x.id).dims = dims[x.id];
     }
     const width = host.clientWidth;
     let col = null, lines = null, side = true, courseArea = null;
@@ -1535,15 +1563,17 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     if (side && !res.stack) {
       // Measure at the final row width before positioning the next row, so wrapped content cannot overlap it at first paint.
       for (const id of res.order) {
-        const el = tiles.get(id).el, w = `${res.at[id].w}px`;
+        const el = tiles.get(id)?.el, w = `${res.at[id].w}px`;
+        if (!el) continue;
         if (el.style.width !== w) el.style.width = w;
       }
       for (const id of res.order) {
-        const h = tiles.get(id).el.offsetHeight;
+        const h = tiles.get(id)?.el.offsetHeight;
         if (h) { dims[id].h = h; heights.set(id, h); }
       }
       res = W.arrange(list, dims, width, opts);
     }
+    res.order = res.order.filter((id) => tiles.has(id));
     lastAt = res.at;
     lastW = width;
     stacked = !side || res.stack;
@@ -1582,28 +1612,31 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const placement = () => (placedAt = side ? GZ_SIDEBAR.resolve(lay, side.rec(), { site: ctx.site, board, enabled: true, allowed, dockable }) : new Map());
   const wanted = (hasGrid, floatsOnly = false) => {
     let courses = 0;
+    const C = globalThis.GZ_COURSE_CARDS;
+    if (ultra && board && hasGrid && !floatsOnly && C && coursesReady && !courseSlots) courseSlots = new Map(lay.boards[board]
+      .filter((x) => x.on && W.course(x.id) && allowed(x.id) && C.shows(x.id)).slice(0, W.COURSE_MAX).map((tile) => [tile.id, { tile }]));
     return (side ? (() => {
-    const at = placement();
-    return [
-      ...(board && hasGrid ? lay.boards[board].filter((x) => at.get(x.id)?.where === 'board' && !(boardless() && dockable(x.id))) : []),
-      ...(atTop ? pageTiles().filter((x) => at.get(x.id)?.where === 'float').map((x) => ({ ...x, float: true })) : []),
-      ...GZ_SIDEBAR.docked(side.rec()).filter((e) => at.get(e.id)?.where === 'dock')
-        .map((e) => ({ id: e.id, on: true, size: cur(e.id)?.size || MORE[e.id]?.size || 's', dock: true, fold: !!e.fold, ...(e.h && { h: e.h }) })),
-    ];
-  })() : [
-    ...(board && hasGrid ? lay.boards[board].filter((x) => !fl(x.id)) : []),
-    ...(atTop ? pageTiles().filter((x) => x.on).map((x) => ({ ...x, float: true })) : []),
-  ]).filter((x) => {
-    if (floatsOnly && !x.float) return false;
-    if (!x.on || !allowed(x.id)) return false;
-    if (W.course(x.id)) { loadCourses(); return !!globalThis.GZ_COURSE_CARDS?.shows(x.id) && courses++ < W.COURSE_MAX; }
-    if (WIDGETS[x.id] || added.has(x.id)) return true;
-    if (MORE[x.id] && !(loadingMore.get(x.id) > Date.now())) {
-      loadingMore.set(x.id, Infinity);
-      ctx.need(MORE[x.id].file, () => added.has(x.id)).then(() => { loadingMore.delete(x.id); if (on) draw(); }, () => { loadingMore.set(x.id, Date.now() + 60000); });
-    }
-    return false;
-  });
+      const at = placement();
+      return [
+        ...(board && hasGrid ? lay.boards[board].filter((x) => at.get(x.id)?.where === 'board' && !(boardless() && dockable(x.id))) : []),
+        ...(atTop ? pageTiles().filter((x) => at.get(x.id)?.where === 'float').map((x) => ({ ...x, float: true })) : []),
+        ...GZ_SIDEBAR.docked(side.rec()).filter((e) => at.get(e.id)?.where === 'dock')
+          .map((e) => ({ id: e.id, on: true, size: cur(e.id)?.size || MORE[e.id]?.size || 's', dock: true, fold: !!e.fold, ...(e.h && { h: e.h }) })),
+      ];
+    })() : [
+      ...(board && hasGrid ? lay.boards[board].filter((x) => !fl(x.id)) : []),
+      ...(atTop ? pageTiles().filter((x) => x.on).map((x) => ({ ...x, float: true })) : []),
+    ]).filter((x) => {
+      if (floatsOnly && !x.float) return false;
+      if (!x.on || !allowed(x.id)) return false;
+      if (W.course(x.id)) { loadCourses(); return !!C?.shows(x.id) && (!courseSlots || courseSlots.has(x.id)) && courses++ < W.COURSE_MAX; }
+      if (WIDGETS[x.id] || added.has(x.id)) return true;
+      if (MORE[x.id] && !(loadingMore.get(x.id) > Date.now())) {
+        loadingMore.set(x.id, Infinity);
+        ctx.need(MORE[x.id].file, () => added.has(x.id)).then(() => { loadingMore.delete(x.id); if (on) draw(); }, () => { loadingMore.set(x.id, Date.now() + 60000); });
+      }
+      return false;
+    });
   };
   // What a tile from another file is given besides its body.
   const account = () => who().then(() => ({ ...me }));
