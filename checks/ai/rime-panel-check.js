@@ -308,10 +308,10 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
         const due = JSON.parse(AT.readable({ due: monday }, 'UTC', { locale: 'en', now })).due;
         const from = new Date(now).toISOString().slice(0, 10), to = new Date(now + 7 * DAY).toISOString().slice(0, 10);
         const titles = ['Reflection Week 11', 'Behavior Change Project Step 5', 'Lab 8 worksheet'];
-        // bad: the model's answer fails its check twice (ungrounded prose, then no date), so Glaze's own list shows.
+        // bad: the model's answer fails its check twice (ungrounded prose both times), so Glaze's own list shows.
         const bad = process.env.RIME_SUNDAY_BAD === '1' || scene === 'fallback';
         await script({ 'agent.tools': bad ? [{ call: { name: 'schedule_list', arguments: { from, to } }, answer: null },
-          { call: null, answer: { text: 'You have a few assignments coming up this week.', quotes: [] } }, { call: null, answer: { text: 'Reflection Week 11 and two more are coming up.', quotes: ['Reflection Week 11'] } }]
+          { call: null, answer: { text: 'You have a few assignments coming up this week.', quotes: [] } }, { call: null, answer: { text: 'Three of them are due soon.', quotes: [] } }]
           : [{ call: { name: 'schedule_list', arguments: { from, to } }, answer: null },
           { call: null, answer: { text: ['You have three things due soon, none handed in yet:', ...titles.map((t) => `- **${t}** (BIO 1100): ${due}, not submitted`)].join('\n'), quotes: [...titles, due] } }] });
         try {
