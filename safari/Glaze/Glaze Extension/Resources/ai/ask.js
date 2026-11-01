@@ -8,8 +8,12 @@
 //     loop. run(task, input) → the task's checked output; call({ name, arguments, kind }) → { result, asked? }. A write the
 //     student didn't allow (asked isn't 'yes') ends it with no further run; a seventh call ends it as 'steps'.
 //   connect(port, env): the panel's port 'glaze:ask' (background/background.js checks its sender with the AI port's rules).
-//     page → { id, op: 'ask', question, attempt?, locale }  { id, op: 'cancel' }  { id, op: 'status' }
-//     worker → { id, type: 'route', task }, 'look' (a read starts), 'approve' (Glaze's approval window waits), 'keepalive',
+//     page → { id, op: 'ask', question, attempt?, locale, history? }  { id, op: 'cancel' }  { id, op: 'status' }
+//       history: the panel's conversation so far, [{ question, answer }] (at most six), for study.help's follow-ups (a cloud
+//       model reads it; ai/tasks/study-help.js); agent.tools' trained turns hold no conversation, so it never gets it.
+//     worker → { id, type: 'route', task }, { id, type: 'step', step: { n, name, kind, state, ms? } } as each tool call
+//       runs (state run, then done or fail; a write: ask while Glaze's approval window waits, then done or no),
+//       'approve' (Glaze's approval window waits), 'keepalive',
 //       then { id, type: 'end', task, output (study.help's) | answer: { text } | declined: true } or { id, type: 'error',
 //       error }; status → the broker's status for the feature 'ask'.
 //     Model runs go to the AI broker over a channel in the worker (env.broker(port): ai/broker.js connect with this sender's
@@ -29,7 +33,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const FEATURE = 'ask', APP = 'Ask Rime';
   // question: agent.tools' own; attempt: study.help's; tools: offered at once (training offered three to six, and Glaze's own
   // model's 4,096-token window can't hold all twelve); material: what an agent answer is measured against.
-  const LIMIT = { question: 2000, attempt: 12000, tools: 6, material: 24000, sender: 5000 };
+  const LIMIT = { question: 2000, attempt: 12000, tools: 6, material: 24000, sender: 5000, turns: 6, turn: 2000 };
   const GROUPS = ['courses', 'grades', 'assignments', 'writer'];
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
 
@@ -201,40 +205,52 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       grants: { get: async (id) => ({ id, name: APP, grants: Object.fromEntries(GROUPS.map((g) => [g, true])) }), pair: async () => null, grant: async () => null, decline: async () => null, touch: async () => null },
       approve: { ask: async (kind, view, o) => {
         if (kind !== 'action') return 'no';
+        current?.asking?.();
         post({ id: current?.id, type: 'approve' });
         asked = await env.approve.ask(kind, { ...view, app: { name: APP, exe: null } }, o);
         return asked;
       } },
     });
+    // Each call as a card in the panel: its name and kind only (never its arguments or result: the page's own scripts can
+    // read what the panel shows), how it went, and how long it took.
     const tool = async (c, signal) => {
       const ok = await allowed({ op: 'run', feature: FEATURE });
       if (ok !== true) throw R().error(R().CODES.includes(ok) ? ok : 'permission');
       asked = undefined;
-      if (c.kind !== 'write') post({ id: current?.id, type: 'look' });
+      const mine = current, kind = c.kind === 'write' ? 'write' : 'read', n = mine ? ++mine.n : 0, start = Date.now();
+      const step = (state, more) => post({ id: mine?.id, type: 'step', step: { n, name: c.name, kind, state, ...more } });
+      if (kind === 'read') step('run'); else if (mine) mine.asking = () => step('ask');
       const r = await calls.call({ name: c.name, args: c.arguments, peer: { name: APP, exe: '' }, client: { name: APP }, signal,
         progress: () => post({ id: current?.id, type: 'keepalive' }) });
-      if (r?.rpcError) throw R().error(r.rpcError.code === CALLS().OFF ? 'off' : 'tool');
-      return { result: resultOf(r), ...(c.kind === 'write' && { asked }) };
+      if (r?.rpcError) { step('fail', { ms: Date.now() - start }); throw R().error(r.rpcError.code === CALLS().OFF ? 'off' : 'tool'); }
+      if (mine) mine.asking = null;
+      const result = resultOf(r);
+      if (kind === 'write' && asked !== 'yes') step('no');
+      else step(r?.isError || result?.ok === false ? 'fail' : 'done', { ms: Date.now() - start });
+      return { result, ...(c.kind === 'write' && { asked }) };
     };
 
     const ask = async (m) => {
       const { id } = m;
       const fail = (error) => post({ id, type: 'error', error });
-      if (Object.keys(m).some((k) => !['id', 'op', 'question', 'attempt', 'locale'].includes(k)) || typeof m.question !== 'string' || !m.question.trim()
-        || (m.attempt !== undefined && typeof m.attempt !== 'string') || (m.locale !== undefined && typeof m.locale !== 'string')) return fail('request');
+      const turn = (h) => isObj(h) && Object.keys(h).sort().join() === 'answer,question' && [h.question, h.answer].every((x) => typeof x === 'string' && x.length <= LIMIT.turn);
+      if (Object.keys(m).some((k) => !['id', 'op', 'question', 'attempt', 'locale', 'history'].includes(k)) || typeof m.question !== 'string' || !m.question.trim()
+        || (m.attempt !== undefined && typeof m.attempt !== 'string') || (m.locale !== undefined && typeof m.locale !== 'string')
+        || (m.history !== undefined && !(Array.isArray(m.history) && m.history.length <= LIMIT.turns && m.history.every(turn)))) return fail('request');
+      const history = (m.history || []).filter((h) => h.question.trim() && h.answer.trim());
       const question = m.question.trim(), attempt = (m.attempt || '').trim();
       if (question.length > LIMIT.question || attempt.length > LIMIT.attempt) return fail('size');
       if (current) return fail('busy');
       const locale = LOCALES().includes(m.locale) ? m.locale : 'en';
       const control = new AbortController(), signal = control.signal;
-      current = { id, control };
+      current = { id, control, n: 0 };
       const keep = (a) => { if (a.type === 'keepalive') post({ id, type: 'keepalive' }); };
       const run = async (task, input) => (await broker({ op: 'run', feature: FEATURE, task, input }, signal, keep)).output;
       try {
         const r = route(question, { attempt, locale });
         post({ id, type: 'route', task: r.task });
         if (r.task === 'study.help') {
-          const output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale });
+          const output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...(history.length && { history }) });
           return post({ id, type: 'end', task: r.task, output });
         }
         const zone = env.zone || Intl.DateTimeFormat().resolvedOptions().timeZone;

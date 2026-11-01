@@ -2,7 +2,9 @@
 // the answer or does the work: a hint toward their next step, guiding questions, the concept underneath with a different
 // example, or a check of their own step. Math, science, code, essays and reading, in Glaze's six locales. Defined and
 // tested; Ask Glaze runs it (ai/ask.js).
-// input: { question, attempt?, subject, locale?, material?, context? (writer-context.js: course, assignment) }.
+// input: { question, attempt?, subject, locale?, material?, context? (writer-context.js: course, assignment), history? }.
+// history: Ask Rime's conversation so far, [{ question, answer }] (at most LIMIT.turns), read by a cloud model only, as data
+// before the question; Glaze's own model and the other local ones were trained without it, so their request never has it.
 // output: { kind: hint | question | concept | check-my-step, step: correct | mistake | unclear | null, reply, followUp }.
 // check() refuses (null) a reply that states the answer, does the student's step, solves the exact problem given, writes
 // code with the student's own names, offers wording for their paper (wording.js) or, for essays and reading, makes a
@@ -14,7 +16,7 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
   const W = typeof GZ_AI_WRITER !== 'undefined' ? GZ_AI_WRITER : require('./writer-context.js');
   const WD = typeof GZ_AI_WORDING !== 'undefined' ? GZ_AI_WORDING : require('./wording.js');
   const X = () => (typeof GZ_AI_TEXT !== 'undefined' ? GZ_AI_TEXT : require('../text.js'));
-  const LIMIT = { question: 4000, attempt: 12000, material: 24000, reply: 900, followUp: 240, block: 6 };
+  const LIMIT = { question: 4000, attempt: 12000, material: 24000, reply: 900, followUp: 240, block: 6, turns: 6, turn: 2000 };
   const KINDS = ['hint', 'question', 'concept', 'check-my-step'];
   const STEPS = ['correct', 'mistake', 'unclear'];
   const SUBJECTS = ['math', 'science', 'code', 'essay', 'reading', 'other'];
@@ -38,17 +40,21 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
 
   const text = (v, max) => (typeof v === 'string' && v.length <= max ? v.replace(/\r\n?/g, '\n').trim() : null);
   const input = (raw) => {
-    if (!S.isObj(raw) || Object.keys(raw).some((k) => !['question', 'attempt', 'subject', 'locale', 'material', 'context'].includes(k))) return null;
+    if (!S.isObj(raw) || Object.keys(raw).some((k) => !['question', 'attempt', 'subject', 'locale', 'material', 'context', 'history'].includes(k))) return null;
+    const history = raw.history === undefined ? [] : Array.isArray(raw.history) && raw.history.length <= LIMIT.turns
+      && raw.history.every((h) => S.isObj(h) && Object.keys(h).sort().join() === 'answer,question') ? raw.history.map((h) => ({ question: text(h.question, LIMIT.turn), answer: text(h.answer, LIMIT.turn) })) : null;
+    if (!history || history.some((h) => h.question === null || h.answer === null)) return null;
     const question = text(raw.question, LIMIT.question), attempt = raw.attempt === undefined ? '' : text(raw.attempt, LIMIT.attempt);
     const material = raw.material === undefined ? '' : text(raw.material, LIMIT.material), locale = raw.locale === undefined ? 'en' : raw.locale;
     if (!question || attempt === null || material === null || !SUBJECTS.includes(raw.subject) || !LOCALES.includes(locale)) return null;
     const context = W.clean(raw.context);
-    return context ? { question, attempt, subject: raw.subject, locale, material, context } : null;
+    return context ? { question, attempt, subject: raw.subject, locale, material, context, ...(history.length && { history }) } : null;
   };
-  const build = (inp, { text: tx }) => tx.request({
+  const earlier = (inp, caps) => (inp.history && caps?.local !== true ? [{ label: 'earlier', text: inp.history.map((h) => `Student: ${h.question}\nGlaze: ${h.answer}`).join('\n\n') }] : []);
+  const build = (inp, { text: tx, caps }) => tx.request({
     system: system(inp.locale),
     context: [...W.blocks(inp.context, { thread: false, files: true }), { label: 'subject', text: inp.subject }],
-    data: [...(inp.material ? [{ label: 'material', text: inp.material }] : []), { label: 'question', text: inp.question }, ...(inp.attempt ? [{ label: 'attempt', text: inp.attempt }] : [])],
+    data: [...(inp.material ? [{ label: 'material', text: inp.material }] : []), ...earlier(inp, caps), { label: 'question', text: inp.question }, ...(inp.attempt ? [{ label: 'attempt', text: inp.attempt }] : [])],
     temperature: 0.2, maxTokens: 600,
   });
 
@@ -158,13 +164,16 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
   // What the student gave and the context shown with it: the texts a reply is measured against.
   const textsOf = (inp) => {
     const ctx = inp.context || {};
-    return [inp.question, inp.attempt, inp.material, ctx.course, ctx.prompt, ctx.assignment?.title, ctx.assignment?.description, ctx.assignment?.instructions,
+    return [...(inp.history || []).map((h) => h.question), inp.question, inp.attempt, inp.material, ctx.course, ctx.prompt, ctx.assignment?.title, ctx.assignment?.description, ctx.assignment?.instructions,
       ctx.assignment?.rubric, ...(ctx.assignment?.files || []).map((f) => f.text)].filter(Boolean);
   };
   // The answer-giving rules for one piece of text (a reply, a followUp, or Ask Glaze's answer about the student's own records,
   // ai/ask.js): '' or the rule it breaks: answer, solves, code, wording.
   const hands = (piece, inp) => {
-    const texts = textsOf(inp), own = squash(`${inp.question}\n${inp.attempt || ''}`), theirs = `${inp.question}\n${inp.attempt || ''}`;
+    // A cloud follow-up can refer to the earlier problem without repeating it. Check against the student's earlier words
+    // too; the assistant's examples are not the student's problem. This does not change any model's request.
+    const theirs = [...(inp.history || []).map((h) => h.question), inp.question, inp.attempt || ''].join('\n');
+    const texts = textsOf(inp), own = squash(theirs);
     const words_ = prose(piece), all = flat(piece);
     if (BARE.test(all) || ANSWERS.some((r) => r.test(all))) return 'answer';
     // Solving their problem: a result one step of arithmetic on its numbers gives, said of its own numbers or variables
