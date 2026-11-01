@@ -746,7 +746,9 @@ test("Canvas course tiles: Canvas's numeric ids, on Canvas's Dashboard board onl
   assert.deepEqual(l.boards.cdash.filter((x) => W.course(x.id)).map((x) => [x.id, x.on, x.term]), [[key(27), true, 'Fall 2026']]);
   assert.ok(!l.boards.courses.some((x) => W.course(x.id)) && !l.boards.dash.some((x) => W.course(x.id)), "Canvas's never on Ultra's boards, Ultra's never on Canvas's");
   const many = Array.from({ length: W.COURSE_TOTAL + 10 }, (_, n) => ({ id: key(n + 1), on: true }));
-  assert.equal(W.layout({ boards: { cdash: many } }).boards.cdash.filter((x) => W.course(x.id)).length, W.COURSE_TOTAL);
+  const full = W.layout({ boards: { cdash: many } });
+  assert.equal(full.boards.cdash.filter((x) => W.course(x.id)).length, W.COURSE_MAX);
+  assert.equal(W.apply(full, { ops: [{ s: 'cdash', id: key(999), set: { on: true } }] }).boards.cdash.filter((x) => W.course(x.id)).length, W.COURSE_MAX, 'Canvas keeps its per-school limit on writes too');
   assert.deepEqual(W.apply(l, { ops: [{ s: 'cdash', id: key(27), remove: true }] }).boards.cdash.filter((x) => W.course(x.id)), [], 'removed');
 });
 
