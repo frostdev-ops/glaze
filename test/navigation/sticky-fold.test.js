@@ -209,6 +209,18 @@ test('resizing a folded band refreshes the height it preserves without resetting
   }
 });
 
+test('resizing while folding is off does not reuse the previous place when enabled again', () => {
+  for (const kind of ['progress', 'bar', 'bar in its scroller']) {
+    const { ui, header, scrollTo, resize, flush } = load(kind);
+    ui.sync(); scrollTo(400); ui.off();
+    scrollTo(0); resize({ inset: 40, whole: 210.8 });
+    ui.sync(); flush(); scrollTo(4);
+    assert.equal(header.hasAttribute('data-gz-stuck'), false, `${kind}: still in its resized natural place`);
+    scrollTo(400);
+    assert.equal(header.hasAttribute('data-gz-stuck'), true, `${kind}: folds past the new place`);
+  }
+});
+
 test('a course\'s bar holding Glaze\'s course strip folds as well, its strip kept', () => {
   const { ui, header, scrollTo, el } = load('bar');
   const strip = el('div', '');
