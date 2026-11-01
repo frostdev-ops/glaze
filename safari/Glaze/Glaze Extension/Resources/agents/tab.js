@@ -217,10 +217,14 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     // announce.js keeps an attachment's address only when it is this site's (core/popup.js own).
     await libs(['core/popup.js', 'GZ_POPUP_LIB'], ['courses/announce.js', 'GZ_ANNOUNCE_LIB']);
     const S = GZ_ANNOUNCE_LIB.SITES[site], r = { origin: go.origin, courseId: a.course, id: a.id };
-    const path = site === 'ultra' ? S.path(r) : S.get(r).url.slice(go.origin.length);
+    const path = site === 'ultra' ? `${S.path(r)},draft` : S.get(r).url.slice(go.origin.length);
     let j;
     try { ({ j } = await req(path, go)); } catch (e) { if (/^(401|403|404)$/.test(e.message)) return no('none'); throw e; }
     if (String(j?.id) !== a.id) return no('none');
+    if (site === 'ultra') {
+      await ultra(go);
+      if (j.draft === true || !GZ_ULTRA.searchItems(kind('Announcement'), [j], { id: a.course, name: '' }, html, Date.now(), go.origin).length) return no('locked');
+    }
     const it = S.item(j, go.origin);
     if (it.locked) return no('locked');
     return { ok: true, title: it.title, author: it.author, at: it.at, text: text(it.html), files: it.files.map((f) => f.name),
