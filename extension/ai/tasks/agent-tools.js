@@ -476,7 +476,8 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     if (inp.first) {
       const held = inp.steps.flatMap((st) => facts(st.result));
       const sources = held.map((v) => X().source(v, { min: 2 })), singles = new Set(held.map((v) => X().norm(v)));
-      if (held.length && !quotes.some((q) => [...X().norm(q)].length === 1 ? singles.has(X().norm(q)) : sources.some((s) => s.has(q)))) return 'ground';
+      const visible = X().source(text, { min: 1 });
+      if (held.length && !quotes.some((q) => visible.has(q) && ([...X().norm(q)].length === 1 ? singles.has(X().norm(q)) : sources.some((s) => s.has(q))))) return 'ground';
     }
     const sources = data.map((r) => X().source(r, { min: 2 })), singles = new Set(data.map((r) => X().norm(r)));
     if (quotes.some((q) => !q.trim() || ([...X().norm(q)].length === 1 ? !singles.has(X().norm(q)) : !sources.some((x) => x.has(q))))) return 'quote';
