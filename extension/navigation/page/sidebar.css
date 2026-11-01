@@ -17,8 +17,8 @@
   /* A course outline's Details & Actions while Ultra fills it: as tall as it was last time (navigation/page/sidebar.js hold),
      from when Ultra adds it, before the sidebar takes the column. */
   html[data-gz-sb-held] #site-wrap aside.outline-actions > .js-details-and-actions { min-height: var(--gz-sb-held) !important; box-sizing: border-box !important; }
-  /* Angular keeps it ng-hide (display: none) while it fills: the room is a box all the same, unseen until shown. */
-  html[data-gz-sb-held] #site-wrap aside.outline-actions > .js-details-and-actions.ng-hide { display: block !important; visibility: hidden !important; }
+  /* Angular keeps it ng-hide (display: none) while it fills: the room is an unseen box while This page is shown. */
+  html[data-gz-sb-held]:not([data-gz-sidebar="collapsed"]) #site-wrap aside.outline-actions:not([data-gz-sb-fold-page], [data-gz-sb-page-hidden], [data-gz-sb-overlay]) > .js-details-and-actions.ng-hide { display: block !important; visibility: hidden !important; }
   /* A course outline's column Ultra has just drawn, until the sidebar takes it a pass later (navigation/page/sidebar.js
      settled): not shown in Ultra's place first, so it never moves to the window's edge in view. */
   html[data-gz-sb-ultra]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap aside.outline-actions:not([data-gz-sidebar-host]) { visibility: hidden; }

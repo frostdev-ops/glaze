@@ -126,13 +126,13 @@ function asideWatch() {
   const sample = () => {
     const t = Math.round(performance.now() - from), row = {};
     for (const b of blocks) {
-      const e = document.querySelector(b), r = e?.checkVisibility({ visibilityProperty: true }) && e.getBoundingClientRect();
+      const e = document.querySelector(b), r = e?.checkVisibility({ visibilityProperty: true, opacityProperty: true }) && e.getBoundingClientRect();
       if (r && r.height > 0 && r.width > 0) { const top = Math.round(r.top * 10) / 10, list = tops[b]; row[b] = top; if (list.at(-1)?.top !== top) list.push({ t, top }); }
     }
     const d = document.querySelector('aside.outline-actions > .js-details-and-actions');
     Object.assign(row, { details: d ? Math.round(d.getBoundingClientRect().height) : null, held: document.documentElement.style.getPropertyValue('--gz-sb-held') && document.documentElement.hasAttribute('data-gz-sb-held') ? document.documentElement.style.getPropertyValue('--gz-sb-held') : null,
       host: d?.parentElement.getAttribute('data-gz-sidebar-host') ?? null });
-    const a = d?.parentElement.checkVisibility({ visibilityProperty: true }) && d.parentElement.getBoundingClientRect();
+    const a = d?.parentElement.checkVisibility({ visibilityProperty: true, opacityProperty: true }) && d.parentElement.getBoundingClientRect();
     if (a && a.width > 0 && a.height > 0) { row.left = Math.round(a.left * 10) / 10; row.top = Math.round(a.top * 10) / 10; }
     const key = JSON.stringify(row);
     if (key !== was && frames.length < 200) { was = key; frames.push({ t, ...row }); }
