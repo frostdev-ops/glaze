@@ -243,3 +243,17 @@ test('deleting the last model during a list fetch starts no host or weight downl
   assert.equal((await U.check(w.env)).state, 'none');
   assert.equal(w.hosted.length, 0);
 });
+
+test('an oversized unsigned list body is cancelled as soon as it crosses the byte limit', async () => {
+  const w = worker();
+  await w.store.download('rime-q4');
+  let chunks = 0, cancelled = false;
+  w.env.fetch = async () => new Response(new ReadableStream({
+    pull(c) { if (++chunks <= 20) c.enqueue(new Uint8Array(128 * 1024).fill(32)); else c.close(); },
+    cancel() { cancelled = true; },
+  }));
+  assert.equal((await U.check(w.env)).state, 'offline');
+  assert.equal(cancelled, true, 'the response is not drained into one unbounded string');
+  assert.ok(chunks <= 10, `read ${chunks} chunks before stopping`);
+  assert.equal(w.hosted.length, 0);
+});
