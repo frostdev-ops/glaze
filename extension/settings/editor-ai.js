@@ -743,6 +743,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       try {
         const L = await ladder();
         const adapter = await globalThis.navigator?.gpu?.requestAdapter?.({ powerPreference: 'high-performance' }).catch(() => null);
+        if (ours?.size !== bytes) return;
         const f16 = !!adapter?.features?.has?.('shader-f16');
         const next = { size: bytes, windows: L.windows({ size: bytes }, { f16, deviceMemory: globalThis.navigator?.deviceMemory }) };
         if (JSON.stringify(next) !== JSON.stringify(fit)) { fit = next; render(); }
