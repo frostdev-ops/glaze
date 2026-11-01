@@ -1,6 +1,7 @@
 // Ultra's sticky bands over what is read under them: a test attempt's progress band (the bar, "N of M questions
-// remaining") and a course's top bar (its header and tools). In its place each stays as it is; once it has left its place
-// it is marked data-gz-stuck and theme.css folds it into a small pill, without moving anything under it. Off with the
+// remaining") and a course's top bar (its header and tools). In its place each stays as it is; FOLD px past it, it is marked
+// data-gz-stuck and theme.css folds it into a small pill, without moving anything under it, until it is back in its place.
+// At its scroller's top it is whole: a trackpad's last pixels there, or Safari's bounce, never flip it. Off with the
 // enhance.fold setting. A page feature (content/routes.js).
 var GZ_STICKY_FOLD = globalThis.GZ_STICKY_FOLD || (() => {
   const ctx = globalThis.GZ_CTX;
@@ -10,7 +11,8 @@ var GZ_STICKY_FOLD = globalThis.GZ_STICKY_FOLD || (() => {
   // Chrome's scroll anchoring followed, scrolling the course by the fold.
   // [selector, keeps its height]
   const BANDS = [['.assessment-attempt-panel .assessment-progress-header', false], ['div.bb-course-navigation', true]];
-  let listening = false, frame = 0, place = new WeakMap();
+  const FOLD = 16;
+  let listening = false, frame = 0, place = new WeakMap(); // band → { at (its offset in its parent's content), scroller (the parent scrolls) }
   const wanted = () => ctx.on() && ctx.settings().enhance?.fold !== false;
   // How far into its parent's content the band sits in its place: read once with its sticking turned off.
   const offset = (band) => {
@@ -34,8 +36,16 @@ var GZ_STICKY_FOLD = globalThis.GZ_STICKY_FOLD || (() => {
     for (const [sel, keep] of BANDS) for (const band of document.querySelectorAll(sel)) {
       const parent = band.parentElement;
       if (!parent) continue;
-      if (!place.has(band)) place.set(band, offset(band));
-      fold(band, band.getBoundingClientRect().top - parent.getBoundingClientRect().top + (parent.scrollTop || 0) > place.get(band) + 0.5, keep);
+      if (!place.has(band)) {
+        // A resize changes the whole height too. Remeasure unfolded in this pass, then retain the previous fold state
+        // so a band inside the hysteresis range stays folded. Nothing paints between these measurements.
+        const stuck = band.hasAttribute('data-gz-stuck');
+        if (stuck) fold(band, false);
+        place.set(band, { at: offset(band), scroller: /^(auto|scroll|overlay)$/.test(globalThis.getComputedStyle?.(parent).overflowY) });
+        if (stuck) fold(band, true, keep);
+      }
+      const p = place.get(band), past = band.getBoundingClientRect().top - parent.getBoundingClientRect().top + (parent.scrollTop || 0) - p.at;
+      fold(band, !(p.scroller && parent.scrollTop <= 0) && past > (band.hasAttribute('data-gz-stuck') ? 0.5 : FOLD), keep);
     }
   };
   const later = () => { if (!frame) frame = requestAnimationFrame(check); };
@@ -43,7 +53,7 @@ var GZ_STICKY_FOLD = globalThis.GZ_STICKY_FOLD || (() => {
   const off = () => {
     cancelAnimationFrame(frame); frame = 0;
     if (listening) { document.removeEventListener('scroll', later, true); globalThis.removeEventListener('resize', resized); }
-    listening = false;
+    listening = false; place = new WeakMap();
     for (const [sel] of BANDS) for (const band of document.querySelectorAll(sel)) fold(band, false);
   };
   const sync = () => {
