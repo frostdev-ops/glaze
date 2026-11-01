@@ -7,13 +7,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-const { Worker } = require('node:worker_threads');
 const S = require('../../extension/ai/schema.js');
 const TL = require('../../extension/ai/tools.js');
 const A = require('../../extension/ai/tasks/agent-tools.js');
 const P = require('../../extension/ai/agent/places.js');
 const J = require('../../extension/ai/agent/js.js');
-const SB = require('../../extension/ai/sandbox/js.js');
 const W = require('../../extension/ai/agent/wakes.js');
 const SET = require('../../extension/ai/settings.js');
 const ST = require('../../extension/agents/tools-study.js');
@@ -240,162 +238,89 @@ test('page_highlight: words on this page, or on the place just opened; never wor
   assert.deepEqual(await mark.run({ text: 'Final exam' }, c), { marked: 'Final exam', on: 'the place just opened' });
 });
 
-// ---- run_js and the sandbox ---------------------------------------------------------------------------------------------
-// The sandbox page's Worker, as node runs one: the harness's source with self and postMessage over a worker thread.
-const SHIM = "const { parentPort } = require('node:worker_threads'); globalThis.self = globalThis; self.postMessage = (m) => parentPort.postMessage(m); parentPort.on('message', (d) => self.onmessage && self.onmessage({ data: d }));\n";
-const make = (src) => {
-  const w = new Worker(SHIM + src, { eval: true });
-  return { postMessage: (m) => w.postMessage(m), set onmessage(f) { w.on('message', (d) => f({ data: d })); }, set onerror(f) { w.on('error', (e) => f(e)); }, terminate: () => w.terminate() };
-};
-const sandbox = (code, o) => SB.run(code, { make, ...o });
+// ---- run_js: QuickJS in WebAssembly, the same engine in every browser ----------------------------------------------------
+// The engine Glaze vendors (extension/vendor/quickjs/), loaded on the first run, in node as in the extension's background.
+const run = (code, o) => J.run(code, o).then(({ ms: _, ...r }) => r);
 
-// A first-load navigation can replace the sandbox before the host transfers its port.
-// The replacement sees exactly the host's message, but cannot read the closed root's URL.
-const frameHarness = (receive) => {
-  const timers = new Map(); let serial = 0, frame;
-  const element = (tag) => ({ style: {}, setAttribute() {}, append() {}, remove() {},
-    attachShadow() { return { append(f) { frame = f; } }; },
-    addEventListener(type, f) { if (type === 'load') this.load = f; },
-    contentWindow: { postMessage(data, origin, ports) { receive(data, ports[0], frame.src); } },
-  });
-  class Channel {
-    constructor() {
-      this.port1 = { close() {}, postMessage: (data) => queueMicrotask(() => this.port2.onmessage?.({ data })) };
-      this.port2 = { close() {}, postMessage: (data) => queueMicrotask(() => this.port1.onmessage?.({ data })) };
-    }
-  }
-  const ctx = vm.createContext({
-    document: { createElement: element, documentElement: { append() { queueMicrotask(() => frame.load()); } } },
-    location: { protocol: 'https:' }, chrome: { runtime: { getManifest: () => ({ sandbox: { pages: ['ai/sandbox/js.html'] } }), getURL: (p) => `chrome-extension://glaze/${p}` } },
-    crypto, Uint8Array, btoa, MessageChannel: Channel,
-    setTimeout: (f, ms, ...args) => { const id = ++serial; timers.set(id, () => f(...args)); return id; },
-    clearTimeout: (id) => timers.delete(id),
-  });
-  vm.runInContext(fs.readFileSync(path.join(ROOT, 'extension/ai/sandbox/frame.js'), 'utf8'), ctx);
-  return { api: ctx.GZ_AI_RIME_FRAME, expire: () => { for (const f of [...timers.values()]) f(); }, timers };
-};
-
-test('sandbox frame: a first-load replacement cannot authenticate with the secret the host sends it', async () => {
-  let leaked;
-  const h = frameHarness((d, port) => {
-    leaked = d.nonce;
-    port.onmessage = ({ data }) => port.postMessage({ id: data.id, ok: true, value: 'forged', logs: [] });
-    port.postMessage({ ready: true, nonce: leaked });
-  });
-  const pending = h.api.run('40+2');
-  await new Promise(setImmediate);
-  h.expire();
-  const r = await pending;
-  assert.equal(r.ok, false, 'the replacement must not return a forged successful calculation');
-  assert.ok(leaked);
-});
-
-test('sandbox frame: concurrent runs get separate waits and release their timers and port', async () => {
-  const requests = []; let peer;
-  const h = frameHarness((d, port, url) => {
-    peer = port;
-    port.onmessage = ({ data }) => requests.push(data);
-    port.postMessage({ ready: true, nonce: new URL(url).hash.slice(1).split('.')[1] });
-  });
-  const one = h.api.run('1'), two = h.api.run('2');
-  await new Promise(setImmediate);
-  assert.equal(requests.length, 1, 'a queued run must not spend its stop budget waiting behind another Worker');
-  peer.postMessage({ id: requests[0].id, ok: true, value: 1, logs: [] });
-  assert.equal((await one).value, 1);
-  await new Promise(setImmediate);
-  assert.equal(requests.length, 2);
-  peer.postMessage({ id: requests[1].id, ok: true, value: 2, logs: [] });
-  assert.equal((await two).value, 2);
-  assert.equal(h.timers.size, 0, 'successful calls leave no timeout behind');
-});
-
-test('sandbox page: only its host secret can bind a port, and a finished Worker releases its blob', async () => {
-  let handshake, made = 0, revoked = 0;
-  const parent = {}, replies = [], secret = 'a'.repeat(32), proof = 'b'.repeat(32);
-  const port = { postMessage: (d) => replies.push(d) };
-  class PageWorker {
-    constructor() { made++; }
-    postMessage() { queueMicrotask(() => this.onmessage({ data: { ok: true, value: 42, logs: [] } })); }
-    terminate() {}
-  }
-  vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'extension/ai/sandbox/js.js'), 'utf8'), {
-    GZ_AI_RIME_JS: J, window: { parent, addEventListener: (_, f) => { handshake = f; } }, location: { hash: `#${secret}.${proof}` },
-    URL: { createObjectURL: () => 'blob:run', revokeObjectURL: () => { revoked++; } }, Blob, Worker: PageWorker, setTimeout, clearTimeout,
-  });
-  handshake({ source: parent, data: { type: 'glaze:rime-js', nonce: 'wrong' }, ports: [port] });
-  assert.equal(replies.length, 0);
-  handshake({ source: {}, data: { type: 'glaze:rime-js', nonce: secret }, ports: [port] });
-  assert.equal(replies.length, 0);
-  handshake({ source: parent, data: { type: 'glaze:rime-js', nonce: secret }, ports: [port] });
-  assert.equal(replies[0].nonce, proof);
-  port.onmessage({ data: { id: 1, code: '6*7' } });
-  await new Promise(setImmediate);
-  assert.equal(replies.at(-1).value, 42);
-  assert.equal(made, 1);
-  assert.equal(revoked, 1, 'each finished Worker releases its source URL');
-});
-
-test('sandbox: the last expression\'s value and console lines; errors as words', async () => {
-  assert.deepEqual(await sandbox('const a = [81, 92, 77]; console.log("n", a.length); (a.reduce((x, y) => x + y) / a.length).toFixed(2)').then(({ ms, ...r }) => r),
-    { ok: true, value: '83.33', logs: ['n 3'] });
-  assert.equal((await sandbox('3.2 * 1.609344')).value, 3.2 * 1.609344);
-  assert.deepEqual((await sandbox('[1, 2].map((x) => ({ x, sq: x * x }))')).value, [{ x: 1, sq: 1 }, { x: 2, sq: 4 }]);
-  const bad = await sandbox('undefinedThing + 1');
+test('run_js: the last expression\'s value and console lines; errors and promises as the browser\'s sandbox gave them', async () => {
+  assert.deepEqual(await run('const g = [81, 92, 77]; console.log("n", g.length); (g.reduce((x, y) => x + y) / g.length).toFixed(2)'), { ok: true, value: '83.33', logs: ['n 3'] });
+  assert.equal((await run('3.2 * 1.609344')).value, 3.2 * 1.609344);
+  assert.deepEqual((await run('[1, 2].map((x) => ({ x, sq: x * x }))')).value, [{ x: 1, sq: 1 }, { x: 2, sq: 4 }]);
+  assert.deepEqual((await run('console.info({ a: 1 }, [2]); console.warn(true); undefined')), { ok: true, value: 'undefined', logs: ['{"a":1} [2]', 'true'] });
+  const bad = await run('undefinedThing + 1');
   assert.equal(bad.ok, false);
-  assert.equal(bad.error, 'ReferenceError: undefinedThing is not defined');
-  assert.equal((await sandbox('Promise.resolve(6 * 7)')).value, 42);
+  assert.match(bad.error, /^ReferenceError: .*undefinedThing.* is not defined$/);
+  assert.match((await run('1 +')).error, /^SyntaxError: /);
+  assert.match((await run('throw new RangeError("too far")')).error, /^RangeError: too far$/);
+  assert.equal((await run('Promise.resolve(6 * 7)')).value, 42);
+  assert.match((await run('Promise.reject(new Error("no"))')).error, /^Error: no$/);
+  assert.match((await run('new Promise(() => {})')).error, /never settled/);
 });
 
-test('sandbox: stopped at its time, its output held to its limit, its code to its length', async () => {
-  const t = Date.now(), r = await sandbox('while (true) {}', { ms: 300 });
-  assert.deepEqual(r, { ok: false, value: null, logs: [], error: 'Stopped after 0.3 seconds.', ms: 300 });
-  assert.ok(Date.now() - t < 2000);
-  const many = await sandbox('for (let i = 0; i < 1000; i++) console.log(i); "done"');
-  assert.deepEqual([many.logs.length, many.logs[39], many.value, many.cut], [SB.LIMIT.lines, '39', 'done', true]);
-  const loud = await sandbox('for (let i = 0; i < 1000; i++) console.log("x".repeat(300)); "done"');
-  assert.ok(loud.logs.join('').length <= SB.LIMIT.output && loud.cut === true);
-  assert.ok(loud.logs.every((l) => l.length <= SB.LIMIT.line));
-  const big = await sandbox('"y".repeat(100000)');
-  assert.ok(big.value.length <= SB.LIMIT.output && big.cut === true);
-  assert.match((await sandbox('1;'.repeat(600))).error, /longer than 1000/);
+test('run_js: stopped at its time, its memory capped, value and logs sharing one output budget, its code held to its length', async () => {
+  const t = Date.now(), loop = await run('while (true) {}', { ms: 300 });
+  assert.deepEqual(loop, { ok: false, value: null, logs: [], error: 'Stopped after 0.3 seconds.' });
+  assert.ok(Date.now() - t < 2000, `${Date.now() - t} ms`);
+  assert.equal(J.LIMIT.ms, 2000);
+  const greedy = await run('const a = []; while (true) a.push("x".repeat(1e6));');
+  assert.equal(greedy.ok, false);
+  assert.match(greedy.error, /memory/i);
+  const many = await run('for (let i = 0; i < 1000; i++) console.log(i); "done"');
+  assert.deepEqual([many.logs.length, many.logs[39], many.value, many.cut], [J.LIMIT.lines, '39', 'done', true]);
+  const loud = await run('for (let i = 0; i < 1000; i++) console.log("x".repeat(300)); "done"');
+  assert.ok(loud.logs.join('').length <= J.LIMIT.output && loud.cut === true && loud.logs.every((l) => l.length <= J.LIMIT.line));
+  const big = await run('"y".repeat(100000)');
+  assert.ok(big.value.length <= J.LIMIT.output && big.cut === true);
+  const both = await run('console.log("z".repeat(450)); console.log("z".repeat(450)); "w".repeat(4000)');
+  assert.ok(both.logs.join('').length + both.value.length <= J.LIMIT.output && both.cut === true, 'one budget for both');
+  assert.match((await run('1;'.repeat(600))).error, /longer than 1000/);
+  assert.match((await run('   ')).error, /No code/);
+  // A stopped or failed run leaves the engine working.
+  assert.equal((await run('6 * 7')).value, 42);
 });
 
-test('sandbox: no network, no other scripts, no storage, no messaging and no extension APIs in its scope', async () => {
-  const r = await sandbox("['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'importScripts', 'indexedDB', 'caches', 'Worker', 'BroadcastChannel', 'navigator', 'postMessage', 'chrome', 'browser'].map((k) => k + ':' + typeof self[k]).join(' ')");
-  assert.equal(r.value, 'fetch:undefined XMLHttpRequest:undefined WebSocket:undefined EventSource:undefined importScripts:undefined indexedDB:undefined caches:undefined Worker:undefined BroadcastChannel:undefined navigator:undefined postMessage:undefined chrome:undefined browser:undefined');
-  assert.match((await sandbox('fetch("https://example.com")')).error, /TypeError: fetch is not a function/);
-  assert.match((await sandbox('self.fetch = 1; typeof fetch')).value, /undefined/, 'and it can\'t be put back');
-  // Chrome keeps fetch and the rest on WorkerGlobalScope.prototype, two prototypes up: every level is cleared.
-  const deep = await SB.run("const all = []; for (let o = self; o; o = Object.getPrototypeOf(o)) all.push(typeof Object.getOwnPropertyDescriptor(o, 'fetch')?.value, typeof Object.getOwnPropertyDescriptor(o, 'WebSocket')?.value); all.join(' ')",
-    { make: (src) => make(`{ const up = Object.create(Object.getPrototypeOf(globalThis)); up.fetch = () => 'net'; up.WebSocket = function WebSocket() {}; Object.setPrototypeOf(globalThis, Object.create(up)); }\n${src}`) });
-  assert.doesNotMatch(deep.value, /function/, deep.value);
-  // The manifest's sandbox CSP, which the page and its blob Workers live under: no connections, frames or forms.
-  const m = JSON.parse(fs.readFileSync(path.join(ROOT, 'extension/manifest.json'), 'utf8'));
-  assert.ok(m.sandbox.pages.includes('ai/sandbox/js.html'));
-  for (const d of ["connect-src 'none'", "frame-src 'none'", "form-action 'none'", "default-src 'none'"]) assert.ok(m.content_security_policy.sandbox.includes(d), d);
+test('run_js: nothing outside ECMAScript reaches the code, and each run starts from a fresh context', async () => {
+  const names = ['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'importScripts', 'setTimeout', 'setInterval', 'indexedDB', 'localStorage', 'caches', 'Worker', 'postMessage',
+    'navigator', 'location', 'document', 'window', 'self', 'chrome', 'browser', 'require', 'process', 'std', 'os', 'WebAssembly'];
+  const r = await run(`${JSON.stringify(names)}.map((k) => k + ':' + typeof globalThis[k]).join(' ')`);
+  assert.equal(r.value, names.map((k) => `${k}:undefined`).join(' '));
+  assert.match((await run('fetch("https://example.com")')).error, /^ReferenceError: .*fetch/);
+  assert.match((await run('import("https://example.com/x.js").then(() => "loaded", (e) => "refused " + e.name)')).value, /^refused /);
+  await run('globalThis.kept = 1; Object.prototype.polluted = 2; 0');
+  assert.equal((await run('typeof kept + " " + typeof ({}).polluted')).value, 'undefined undefined');
 });
 
-test('sandbox: value and logs share one output budget, including at the worker boundary', async () => {
-  const size = (r) => r.logs.join('').length + (typeof r.value === 'string' ? r.value.length : JSON.stringify(r.value).length);
-  const mixed = await sandbox('console.log("x".repeat(500)); Array(1000).fill("abc")');
-  assert.ok(size(mixed) <= J.LIMIT.output, `sandbox sent ${size(mixed)} characters`);
-  assert.equal(mixed.cut, true);
-  const raw = { ok: true, logs: Array(40).fill('x'.repeat(500)), value: { text: 'y'.repeat(5000) } };
-  const bounded = J.tidy(raw);
-  assert.ok(size(bounded) <= J.LIMIT.output, `boundary kept ${size(bounded)} characters`);
-  assert.equal(bounded.cut, true);
-});
-
-test('run_js: through ctx.js where the sandbox is; refused cleanly where it isn\'t (Firefox, Safari)', async () => {
+test('run_js: one tool and one result shape in Chrome, Firefox and Safari, with no page, frame or eval sandbox', async () => {
   const [js] = J.tools();
-  assert.deepEqual(await js.run({ code: '1 + 1' }, {}), { ok: false, error: J.NONE });
-  assert.deepEqual(await js.run({ code: '1 + 1' }, { js: async () => ({ ok: false, value: null, logs: [], error: 'unavailable' }) }), { ok: false, error: J.NONE });
-  assert.deepEqual(await js.run({ code: '(72.5 * 0.4 + 88 * 0.6).toFixed(1)' }, { js: (code) => sandbox(code) }), { ok: true, value: '81.8', logs: [] });
-  assert.deepEqual(await js.run({ code: 'x' }, { js: async () => { throw new Error('gone'); } }), { ok: false, error: 'The sandbox failed; nothing ran.' });
-  assert.deepEqual(['chrome', 'firefox', 'safari'].map(J.available), [true, false, false]);
-  // The packages for Firefox and Safari leave the sandbox out with the mods host.
-  assert.match(fs.readFileSync(path.join(ROOT, 'tools/build/package-firefox.sh'), 'utf8'), /"\$stage\/ai\/sandbox"/);
-  assert.match(fs.readFileSync(path.join(ROOT, 'tools/build/safari-drop.txt'), 'utf8'), /^ai\/sandbox\/$/m);
+  assert.deepEqual(await js.run({ code: '(72.5 * 0.4 + 88 * 0.6).toFixed(1)' }, {}), { ok: true, value: '81.8', logs: [] });
+  assert.deepEqual(await js.run({ code: 'nope' }, {}), { ok: false, value: null, logs: [], error: (await run('nope')).error });
+  assert.equal(J.NONE, undefined, 'no browser is refused');
+  for (const f of ['extension/ai/sandbox', 'extension/ai/sandbox/js.html', 'extension/ai/sandbox/frame.js']) assert.ok(!fs.existsSync(path.join(ROOT, f)), f);
+  const m = JSON.parse(fs.readFileSync(path.join(ROOT, 'extension/manifest.json'), 'utf8'));
+  assert.deepEqual(m.sandbox, { pages: ['mods/host.html'] });
+  assert.ok(!JSON.stringify(m.web_accessible_resources).includes('quickjs'), 'no page can load the engine');
+  assert.match(m.content_security_policy.extension_pages, /'wasm-unsafe-eval'/);
+  // The worker caches the engine at install (Chrome imports later only what it imported then); Firefox's event page loads
+  // the same file by name; Safari's package keeps it.
+  const bg = fs.readFileSync(path.join(ROOT, 'extension/background/background.js'), 'utf8');
+  assert.match(bg, /addEventListener\?\.\('install', \(\) => importScripts\('\.\.\/vendor\/quickjs\/quickjs\.js'\)\)/);
+  assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'tools/build/safari-drop.txt'), 'utf8'), /quickjs|ai\/sandbox/);
+  assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'tools/build/package-firefox.sh'), 'utf8'), /quickjs|ai\/sandbox/);
+});
+
+test('the vendored engine: pinned, licensed, and byte for byte what its provenance note records', () => {
+  const crypto = require('node:crypto');
+  const dir = path.join(ROOT, 'extension/vendor/quickjs');
+  const note = fs.readFileSync(path.join(dir, 'PROVENANCE.md'), 'utf8');
+  for (const pkg of ['quickjs-emscripten-core@0.32.0', '@jitl/quickjs-wasmfile-release-sync@0.32.0', '@jitl/quickjs-ffi-types@0.32.0']) assert.ok(note.includes(pkg), pkg);
+  for (const f of ['quickjs.js', 'quickjs.wasm']) {
+    const sum = crypto.createHash('sha256').update(fs.readFileSync(path.join(dir, f))).digest('hex');
+    assert.ok(note.includes(`${sum}  ${f}`), `${f} ${sum}`);
+  }
+  const license = fs.readFileSync(path.join(dir, 'quickjs.LICENSE'), 'utf8');
+  assert.match(license, /MIT/);
+  assert.match(license, /Fabrice Bellard/);
+  assert.match(license, /Jake Teton-Landis/);
 });
 
 // ---- wakes and monitors -------------------------------------------------------------------------------------------------
@@ -688,11 +613,6 @@ test('places_list names each course\'s id, so places_list with course follows it
   assert.equal(A.why(call('places_list', { course: '25' }), input('Show me BIO 1100\'s pages', [list])), '');
 });
 
-test('run_js where there is no sandbox asks for no computed number, which check() would refuse', async () => {
-  assert.doesNotMatch(J.NONE, /work it out/);
-  assert.deepEqual(await J.tools()[0].run({ code: '1' }, {}), { ok: false, error: J.NONE });
-});
-
 test('"don\'t let me forget" asks for a wake, in each language', () => {
   for (const q of ["Don't let me forget the lab at 9 pm", 'No me dejes olvidar el laboratorio', 'Não me deixe esquecer o laboratório', "Ne me laisse pas oublier le labo", 'Lass mich das Labor nicht vergessen', 'Laat me het lab niet vergeten']) {
     assert.equal(A.why(call('wake_create', { at: '2026-10-30 21:00', say: 'Lab' }), input(q)), '', q);
@@ -705,4 +625,71 @@ test('a due or submitted monitor watches an item the to-do list named, not one f
   const q = 'Let me know when the lab report shows as submitted';
   assert.equal(A.why(call('monitor_create', { watch: 'submitted', type: 'assignment', id: '88121' }), input(q, [asg])), 'monitor');
   assert.equal(A.why(call('monitor_create', { watch: 'submitted', type: 'assignment', id: '88121' }), input(q, [todo])), '');
+});
+
+// ---- owner decisions, 2026-11-01 -------------------------------------------------------------------------------------------
+test('check: the student\'s own grade math runs; solving a graded problem does not, in each of the six languages', () => {
+  const allowed = {
+    en: ['What do I need on the exam to keep a B?', 'If I get 85 on the quiz, what is my grade?', 'Calculate my grade if I score 90 on the final exam', 'What average do I need on the last two assignments to pass?'],
+    es: ['¿Qué nota necesito en el examen para mantener un 8?', 'Calcula mi promedio si saco 90 en el examen'],
+    'pt-BR': ['Que nota preciso na prova para passar?', 'Calcula minha média se eu tirar 8 na prova'],
+    fr: ['Quelle note me faut-il à l\'examen pour garder 14 de moyenne ?', 'Calcule ma moyenne si j\'ai 15 au contrôle'],
+    de: ['Welche Note brauche ich in der Klausur für eine 2?', 'Berechne meinen Durchschnitt, wenn ich in der Prüfung 80 Punkte habe'],
+    nl: ['Welk cijfer moet ik halen voor de toets om een 7 gemiddeld te houden?', 'Bereken mijn gemiddelde als ik een 6 haal voor het tentamen'],
+  };
+  const refused = {
+    en: ['Solve question 3 of my exam: 2x + 4 = 10', 'For my quiz, compute 17 * 23', 'Do my homework: 4 * 12', 'x^2 - 5x + 6 = 0', 'Solve for y: 3y + 2 = 11'],
+    es: ['Resuelve el problema 2 del examen', 'Para mi examen, calcula 17 * 23'],
+    'pt-BR': ['Resolva a questão 4 da prova', 'Na minha prova, calcula 17 * 23'],
+    fr: ['Résous l\'exercice 3 de mon devoir', 'Pour mon examen, calcule 17 * 23'],
+    de: ['Löse Aufgabe 5 der Klausur', 'Für meine Prüfung: berechne 17 * 23'],
+    nl: ['Los vraag 2 van de toets op', 'Voor mijn tentamen: bereken 17 * 23'],
+  };
+  const ask = (q, locale) => A.why(call('run_js', { code: '1 + 1' }), A.task.input({ question: q, tools: [...A.NAMES], now: NOW, zone: ZONE, locale }));
+  for (const [l, qs] of Object.entries(allowed)) for (const q of qs) assert.equal(ask(q, l), '', `${l}: ${q}`);
+  for (const [l, qs] of Object.entries(refused)) for (const q of qs) assert.equal(ask(q, l), 'work', `${l}: ${q}`);
+});
+
+test('monitor results and approval sentences speak the student\'s language, in all six', async () => {
+  const lab = C.planner({ id: 1, course: 25, name: 'BIO 1100', title: 'Lab report', at: '2026-10-16T03:59:00Z' });
+  const store = { todoCache: await C.canvasPlan('5', [lab]) }, env = wakesEnv(store);
+  const want = { en: 'the due date of “Lab report” to move', de: 'eine Verschiebung des Abgabetermins von „Lab report“', es: 'un cambio en la fecha de entrega de «Lab report»',
+    fr: 'un changement de la date de remise de « Lab report »', nl: 'een verschuiving van de inleverdatum van ‘Lab report’', 'pt-BR': 'uma mudança no prazo de “Lab report”' };
+  for (const [locale, about] of Object.entries(want)) {
+    const ctx = { account: ACC, zone: 'UTC', locale };
+    const m = await wtool(env, 'monitor_create').run({ watch: 'due', type: 'assignment', id: '1' }, ctx);
+    assert.equal(m.about, about, locale);
+    assert.ok((await wtool(env, 'monitor_create').summarize({ watch: 'due', type: 'assignment', id: '1' }, ctx)).includes(about), locale);
+    assert.equal((await wtool(env, 'wakes_list').run({}, ctx)).items.find((x) => x.id === m.id).about, about, `${locale}: listed`);
+  }
+  // Every sentence the tools say has its translation in each language's table.
+  for (const l of ['de', 'es', 'fr', 'nl', 'pt-BR']) {
+    const table = (require(`../../extension/i18n/${l}.js`), globalThis.GZ_LANGS[l]);
+    for (const key of W.WORDS) assert.ok(Object.hasOwn(table, key), `${l}: ${key}`);
+  }
+});
+
+test('a fired wake or monitor is a turn of its own: a fired block before the question, the earlier turns unchanged', () => {
+  const fired = { what: 'monitor', watch: 'grade', say: 'Tell me my new grade', at: NOW - 600e3, fact: { course: 'MATH 1350', was: 83.5, percent: 85.2 } };
+  const inp = A.task.input({ question: 'Tell me my new grade', fired, tools: ['grades_list', 'course_grades', 'wakes_list'], now: NOW, zone: ZONE });
+  assert.ok(inp);
+  assert.equal(inp.fired, '{"what":"monitor","watch":"grade","at":"2026-10-30 13:55","fact":{"course":"MATH 1350","was":83.5,"percent":85.2}}');
+  const text = A.layout(inp).map((p) => p.special ?? p.text).join('');
+  assert.match(text, /<\|im_start\|>user\n<\|gz_ctx\|>now\n[^<]+<\|\/gz_ctx\|>\n<\|gz_data\|>fired\n\{"what":"monitor"[^<]+<\|\/gz_data\|>\n<\|gz_data\|>question\nTell me my new grade<\|\/gz_data\|><\|im_end\|>/);
+  // build()'s request reads back to the same turns.
+  const req = A.task.build(inp, { text: require('../../extension/ai/text.js') });
+  assert.deepEqual(A.fromRequest(req).parts, A.layout(inp));
+  // Without fired, nothing changes: the same request and turns as before.
+  const plain = A.task.input({ question: 'Tell me my new grade', tools: ['grades_list'], now: NOW, zone: ZONE });
+  assert.equal(plain.fired, undefined);
+  assert.doesNotMatch(A.layout(plain).map((p) => p.special ?? p.text).join(''), /fired/);
+  // The fired record grounds the answer as a result does; a made-up number is still refused.
+  assert.equal(A.why({ call: null, answer: { text: 'MATH 1350 is at 85.2% now, up from 83.5%.', quotes: ['MATH 1350'] } }, inp), '');
+  assert.equal(A.why({ call: null, answer: { text: 'MATH 1350 is at 91% now.', quotes: [] } }, inp), 'number');
+  // Only a fired record's own shape is taken.
+  for (const bad of [{ ...fired, what: 'nag' }, { ...fired, extra: 1 }, { ...fired, say: '' }, { ...fired, at: 'soon' }, { what: 'wake', say: 'x' }]) {
+    assert.equal(A.task.input({ question: 'x', fired: bad, tools: ['grades_list'], now: NOW, zone: ZONE }), null, JSON.stringify(bad));
+  }
+  const wake = A.task.input({ question: 'Finish the lab', fired: { what: 'wake', say: 'Finish the lab', at: NOW }, tools: ['todo_list'], now: NOW, zone: ZONE });
+  assert.equal(wake.fired, '{"what":"wake","at":"2026-10-30 14:05"}');
 });
