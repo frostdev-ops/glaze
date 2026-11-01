@@ -346,12 +346,12 @@ async function pass(scheme) {
       await pics.getByRole('button', { name: 'Delete', exact: true }).click();
       await picNote.filter({ hasText: /^Needs a download · 1\.5 GB$/ }).waitFor();
       await note.filter({ hasText: /^Ready · 1\.1 GB$/ }).waitFor();
-      assert.deepEqual(await page.evaluate(async () => { const top = await (await navigator.storage.getDirectory()).getDirectoryHandle('glaze-models'); const out = []; for await (const [k, h] of top.entries()) if (h.kind === 'directory') out.push(k); return out.sort(); }), ['lfm3-1.7b-q4_k_m']);
+      assert.deepEqual(await page.evaluate(async () => { const top = await (await navigator.storage.getDirectory()).getDirectoryHandle('glaze-models'); const out = []; for await (const [k, h] of top.entries()) if (h.kind === 'directory') out.push(k); return out.sort(); }), ['rime-1.7b-q4_k_m']);
 
       await page.locator('label', { hasText: 'Advanced' }).click();
       const tier = page.locator('#ai-local-tier');
       await tier.waitFor();
-      assert.deepEqual(await tier.locator('option').allTextContents(), ['Auto', '1.1 GB', '1.3 GB', '1.4 GB', '1.8 GB']);
+      assert.deepEqual(await tier.locator('option').allTextContents(), ['Auto', '1.1 GB', '1.4 GB', '1.8 GB']);
       assert.equal(await tier.getAttribute('aria-label'), 'Model size');
       await both('tier');
       await page.locator('label', { hasText: 'Simple' }).click();
@@ -359,7 +359,7 @@ async function pass(scheme) {
       await page.getByRole('button', { name: 'Delete', exact: true }).click();
       await note.filter({ hasText: /^Needs a download/ }).waitFor();
       await picNote.filter({ hasText: /^Needs a download · 1\.5 GB$/ }).waitFor();
-      assert.equal(await page.evaluate(async () => { try { await (await (await navigator.storage.getDirectory()).getDirectoryHandle('glaze-models')).getDirectoryHandle('lfm3-1.7b-q4_k_m'); return 'kept'; } catch (e) { return e.name; } }), 'NotFoundError');
+      assert.equal(await page.evaluate(async () => { try { await (await (await navigator.storage.getDirectory()).getDirectoryHandle('glaze-models')).getDirectoryHandle('rime-1.7b-q4_k_m'); return 'kept'; } catch (e) { return e.name; } }), 'NotFoundError');
       await card.click();
     });
 

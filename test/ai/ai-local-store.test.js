@@ -381,6 +381,23 @@ test('the shipped manifest is well formed and pinned', () => {
   }
 });
 
+test('the shipped text models are Rime\'s published files, pinned to their commit', () => {
+  const M = require('../../extension/ai/local/models.json');
+  const COMMIT = '1d945ca0420ca0952c641b8dfed789c4a13bff0f';
+  const want = [
+    ['rime-1.7b-q4_k_m', 'Rime 1.7B Q4_K_M', 'Rime-1.7B-Q4_K_M.gguf', 1099627200, 'cdf235cba2228d58148a245846b3bad4324c626936f7981496a45d0b837ecea2'],
+    ['rime-1.7b-q6_k', 'Rime 1.7B Q6_K', 'Rime-1.7B-Q6_K.gguf', 1427637696, '1414d3501009228a4f332a49d91e0599da74275cca49b2ed98dd57a7bade3688'],
+    ['rime-1.7b-q8_0', 'Rime 1.7B Q8_0', 'Rime-1.7B-Q8_0.gguf', 1846237888, '7520da22275730692ff54bf88dbd25309bc89fb8c9a7803dc7e18c02bda40999'],
+  ];
+  const text = M.models.filter((m) => !m.role);
+  assert.deepEqual(text.map((m) => [m.id, m.name, m.file, m.size, m.total]), want);
+  for (const m of text) {
+    assert.equal(m.repo, 'frostdev-ops/Rime-1.7B-GGUF');
+    assert.equal(m.commit, COMMIT);
+    assert.equal(m.license, 'lfm1.0');
+  }
+});
+
 test('a download asked for just before a remove is cancelled, not restarted once the catalog loads', async () => {
   const { store, fetch } = make();
   const p = store.download('tiny-q4');

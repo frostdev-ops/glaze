@@ -136,18 +136,19 @@ test('the real tasks\' requests reach the local provider with their own task and
   assert.ok(calls.size, 'Feedback\'s requests name their kind (writer-feedback-flow.test.js runs every kind)');
 });
 
-test('models.json marks the stock models; a model without `stock` (the coming fine-tune) reads Glaze\'s format', async () => {
-  // Every model shipped today is LiquidAI's own: its chat template, not FORMAT.md.
-  for (const m of SHIPPED.models) if (m.role !== 'projector') assert.equal(m.stock, true, m.id);
-  // A Glaze-tuned entry as tools/vendor/model-manifest.js writes it without --stock (test-only: the fine-tune isn't
-  // published), listed by the real store with no `stock`, beside a shipped one that keeps it.
-  const tuned = { ...SHIPPED.models[0], id: 'glaze-lfm3-1.7b-q4_k_m', name: 'Glaze LFM3 1.7B Q4_K_M', tier: 5 };
-  delete tuned.stock;
+test('models.json: the text models are Rime, read in Glaze\'s format (no `stock`); the picture model stays stock', async () => {
+  const text = SHIPPED.models.filter((m) => !m.role);
+  assert.deepEqual(text.map((m) => m.id), ['rime-1.7b-q4_k_m', 'rime-1.7b-q6_k', 'rime-1.7b-q8_0']);
+  for (const m of text) assert.equal('stock' in m, false, m.id);
+  assert.equal(SHIPPED.models.find((m) => m.role === 'pictures').stock, true);
+  // A stock text entry as tools/vendor/model-manifest.js writes it with --stock, listed by the real store beside Rime:
+  // it keeps `stock`, Rime has none.
+  const stock = { ...text[0], id: 'lfm3-1.7b-q4_k_m', name: 'LFM3 1.7B Q4_K_M', stock: true };
   const gone = async () => { throw Object.assign(new Error('missing'), { name: 'NotFoundError' }); };
-  const store = STORE.create({ models: [SHIPPED.models[0], tuned], root: async () => ({ getDirectoryHandle: gone }), locks: null, channel: null });
+  const store = STORE.create({ models: [stock, text[0]], root: async () => ({ getDirectoryHandle: gone }), locks: null, channel: null });
   const listed = await store.list();
-  assert.equal(listed.find((m) => m.id === SHIPPED.models[0].id).stock, true);
-  assert.equal('stock' in listed.find((m) => m.id === tuned.id), false);
+  assert.equal(listed.find((m) => m.id === stock.id).stock, true);
+  assert.equal('stock' in listed.find((m) => m.id === text[0].id), false);
   // The provider picks the dialect by it.
   const c = cases.find((x) => x.task === 'writer.decide');
   for (const [m, dialect] of [[{ ...listed[0], state: 'ready' }, 'chatml'], [{ ...listed[1], state: 'ready' }, 'glaze']]) {
