@@ -629,9 +629,10 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     for (const st of steps || []) { try { walk(JSON.parse(st.result)); } catch { /* not a result */ } }
     if (!items.length) return null;
     const status = (v) => (typeof v.submitted !== 'boolean' ? '' : v.graded ? w[3] : v.missing ? w[5] : v.late ? w[4] : v.submitted ? w[1] : w[2]);
+    const literal = (s) => s.replace(/\s+/g, ' ').trim().replace(/[\\`*_[\]~]/g, '\\$&');
     const lines = items.slice(0, 12).map((v) => {
-      const when = typeof v.due === 'string' ? v.due : typeof v.at === 'string' ? v.at : '', tail = [when, status(v)].filter(Boolean).join(', ');
-      return `- **${v.title.trim()}**${typeof v.course === 'string' && v.course ? ` (${v.course})` : ''}${tail ? `: ${tail}` : ''}`;
+      const when = typeof v.due === 'string' ? literal(v.due) : typeof v.at === 'string' ? literal(v.at) : '', tail = [when, status(v)].filter(Boolean).join(', ');
+      return `- **${literal(v.title)}**${typeof v.course === 'string' && v.course ? ` (${literal(v.course)})` : ''}${tail ? `: ${tail}` : ''}`;
     });
     return [w[0], ...lines, ...(items.length > 12 ? [`- … ${items.length - 12}`] : [])].join('\n');
   };
