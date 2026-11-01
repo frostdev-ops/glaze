@@ -964,6 +964,37 @@ test("the sidebar's header keeps one row when Jump to widgets appears later, so 
   assert.equal(winner(rules, title, 'text-overflow')?.[0], 'ellipsis', 'a long custom title fits the room left by Jump to widgets');
 });
 
+test("a course's Content fades in without rising while Glaze's sidebar is a column, so the column it holds is placed against the window from the start", () => {
+  const { chain, cssRules, winner } = require('../helpers/css-cascade.cjs');
+  const content = chain('html', 'body', 'div#site-wrap', 'section.course-outline-content.route-view-container');
+  const root = content.parent.parent.parent;
+  const rules = [...cssRules('content/motion.css'), ...cssRules('navigation/page/sidebar.css')];
+  for (const mode of ['expanded', 'collapsed']) {
+    root.attrs = { 'data-gz-sb-ultra': '', 'data-gz-sidebar': mode };
+    // A rise (translate) running on an ancestor makes it the fixed column's containing block: the column follows the page.
+    assert.equal(winner(rules, content, 'animation-name')?.[0], 'gz-fade', mode);
+  }
+  root.attrs = { 'data-gz-sb-ultra': '', 'data-gz-sidebar': 'drawer' };
+  assert.notEqual(winner(rules, content, 'animation-name')?.[0], 'gz-fade', "a drawer leaves Glaze's entrance as it is");
+});
+
+test("the column's top counts the course header fading in with it: the panel at opacity 0 holds both", async () => {
+  const p = page({ at: 'outline', aside: 'live', stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  p.$('.js-details-and-actions').box = { left: 1248, top: 140, width: 320, height: 0 };
+  const panel = p.$('.panel-wrap'), style = p.c.getComputedStyle;
+  p.c.getComputedStyle = (e) => ({ ...style(e), opacity: e === panel ? '0' : '1' });
+  await p.pass();
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '60px', 'under the course header from the first frame, not where it goes once the header is opaque');
+  // A header fading out in another panel, without the column, still counts for nothing.
+  const old = p.el('div', 'course-content-container', p.el('div', 'panel-wrap', p.el('div', 'bb-course-navigation', 'Old course')));
+  p.$('#main-content-inner').append(old);
+  const gone = old.firstElementChild;
+  old.querySelector('.bb-course-navigation').box = { left: 200, top: 0, width: 1400, height: 300 };
+  p.c.getComputedStyle = (e) => ({ ...style(e), opacity: e === panel || e === gone ? '0' : '1' });
+  await p.resize(1600);
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '60px');
+});
+
 // Ultra's content in Details & Actions, this tall (0: none yet, or the block hidden), in the box the browser gives it: never
 // shorter than the held height. The sidebar hears of it as it would: its ResizeObserver, and its observer on the column.
 const detailsSize = (p, height) => {
