@@ -162,7 +162,7 @@ const fixedHost = (kv, reply) => {
     engine: () => ({ load: async () => {
       const tok = K.load(kv), output = [...tok.encodeWith(reply)];
       let i = 0;
-      return { context: 16000, release() {}, snapshot: async () => ({ pos: 0, drop() {} }), restore: async () => {},
+      return { context: 16000, release() {}, snapshot: async () => ({ pos: 0, drop() {} }), restore: async () => { i = 0; },
         prefill: async (list, { snapshot } = {}) => { i = 0; return snapshot ? { pos: list.length, drop() {} } : undefined; },
         decode: async ({ mask }) => { const id = output[i++] ?? tok.eos; assert.ok(allowed(mask, id)); decodes.push(id); return id; } };
     } }),
@@ -187,6 +187,20 @@ test('the host preserves native tool tags when the tokenizer marks them as contr
   assert.equal(end?.type, 'done', JSON.stringify(end));
   assert.equal(end.result.text, reply.map((p) => p.special ?? p.text).join(''));
   assert.deepEqual(A.fromNative(end.result.text), { call: { name: 'assignment_read', arguments: { course: '5521', assignment: '88121' } }, answer: null });
+});
+
+for (const invalidFirst of [false, true]) test(`the host separates absent tools from null in its grammar cache (invalid first: ${invalidFirst})`, async (t) => {
+  const h = fixedHost(BYTES, [{ text: '{"text":"x","quotes":[]}' }]);
+  t.after(() => h.host.release());
+  for (const invalid of invalidFirst ? [true, false] : [false, true]) {
+    const before = h.decodes.length;
+    const end = await h.run({ schema: A.ANSWER, ...(invalid && { tools: null }) });
+    assert.equal(end?.type, invalid ? 'error' : 'done', JSON.stringify(end));
+    if (invalid) {
+      assert.equal(end.error.reason, 'unsupported');
+      assert.equal(h.decodes.length, before, 'invalid tools refused before decoding');
+    } else assert.deepEqual(JSON.parse(end.result.text), { text: 'x', quotes: [] });
+  }
 });
 
 test('the host runs a turn under the constraint: the D4 call with a parameter its tool doesn\'t take comes out a call it does', async () => {
