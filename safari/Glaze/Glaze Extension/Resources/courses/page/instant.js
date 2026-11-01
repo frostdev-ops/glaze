@@ -107,7 +107,8 @@ var GZ_INSTANT = globalThis.GZ_INSTANT || (() => {
     const go = () => {
       if (x.copy !== box) return;
       // What it shows in the copy's place is there at once: Glaze's entrances on it (motion.css) end where they would.
-      for (const a of main(x)?.getAnimations?.({ subtree: true }) || []) if (/^gz-/.test(a.animationName) && Number.isFinite(a.effect?.getComputedTiming().endTime)) a.finish();
+      for (let root = main(x), subtree = true; root && root !== document.body; root = root.parentElement, subtree = false)
+        for (const a of root.getAnimations?.({ subtree }) || []) if (/^gz-/.test(a.animationName) && Number.isFinite(a.effect?.getComputedTiming().endTime)) a.finish();
       unhook(x);
       html.removeAttribute('data-gz-instant');
       toTop(false);
