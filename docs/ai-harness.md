@@ -191,7 +191,7 @@ question runs, and `run({ event, question })` asks a question the student didn't
 `ai/ask.js` `route(question, { attempt, locale })`: agent.tools only for a question about the student's own records (to-dos
 and due dates, grades, assignments, Writer documents: word lists in English and the student's locale) that asks for no help
 with work and comes with no attempt; else study.help, its subject by symbols and words (code, math, science, essay,
-reading, other). agent.tools gets the tools its topics need, at most six (the 4,096-token window of Glaze's own model
+reading, other); at tools level 3 also Rime's own topics (below). agent.tools gets the tools its topics need, at most six (the 4,096-token window of Glaze's own model
 holds no more, and training offered three to six). `episode()` runs agent.tools, runs each call, appends the step and
 runs again; a seventh call ends it as `steps`. Model runs go to the broker over a channel in the worker, as the feature
 `ask` and this sender's: admission, rates and the call record are the broker's. Tool calls go through `agents/calls.js`
@@ -251,9 +251,31 @@ off, nothing is made, checked or shown. Async reads recheck that switch before s
 switch changes reconcile the saved alarms; an existing periodic monitor alarm keeps its cadence. Expired records release
 their capacity before creation, and stored records are validated and bounded before use.
 
-The panel's side comes with Ask Rime's new panel: it gives the tools their `ctx` (`page { site, url }`, `courses()`,
-`writer`, `text`, `ui`, `zone`, `account`, `locale`), performs the ui actions after the answer,
-shows each confirm's sentence for approval as Agents' window does for a write, and takes and shows what fired.
+In Ask Rime (`ai/ask.js`, `ai/page/ask.js`):
+
+- **The gate.** Rime's own tools go only to a model trained on them: a local model's models.json entry says `tools: 3`
+  (`ai/providers/local.js` `toolsLevel`, the entry the provider runs); Rime r5's entries say nothing, so Ask Rime offers it
+  Agents' twelve as before, and its routing, tools and requests are byte for byte the chat port's (test/ai/rime-ask.test.js
+  compares them with that router). Every other model (an endpoint, Chrome's, Apple's) gets level 3.
+- **Routing at level 3** (`TOPICS3`, six languages): compute (`run_js`; a computing verb in the student's own grade math
+  is no help request, but graded work still goes to study.help), navigate (`places_list`, `place_open`, `page_highlight`),
+  remind (`wake_create`, `wakes_list`, `wake_cancel`) and watch (`monitor_create`, `wakes_list`, `todo_list`,
+  `grades_list`), their tools before records' ones in the six.
+- **The call path.** Rime's tools run in the worker, never through `agents/calls.js`, with their `ctx`: the account (the
+  call's, else the one on this school's site Glaze read last), zone, locale, the page (its site from the panel, its address
+  from the sender), its courses, Writer's switch, the page's visible words (the question carries them, at most 20,000
+  characters) and the actions list. A confirm tool asks Glaze's approval window with its own `summarize()` sentence; any
+  answer but Allow ends the question with nothing done and no further model run.
+- **Cards and actions.** A card shows run_js's value or error, the place opened and the words marked (`detail`). The
+  actions (`open`, `highlight`) reach the panel just before the answer's end and run once the answer shows: open goes to a
+  place on this site only (or Documents, Settings), a highlight after it carried to that page in sessionStorage for a
+  minute; highlight marks the words (`mark.gz-ask-spot`, never in Glaze's own panel or cards) and gives the answer a Show
+  on the page button. There is no fill.
+- **Fired reminders and watches.** On each Canvas or Ultra page with AI and Ask on, `content/content.js` asks the worker
+  how many fired (`glaze:rime` peek; with Reminders and watches off, none) and loads the panel only for one or for a carried
+  highlight. The panel takes them (`fired` on the port) and shows each as a card in a corner of the page: what it was, the
+  student's words, Ask Rime and Dismiss. Ask Rime, the student's own click, runs `run({ question: say, fired: id })`; at
+  level 3 that is agent.tools' fired turn with the tools what it watched needs (`routeFired`), else the say as any question.
 
 ## Add a provider
 
