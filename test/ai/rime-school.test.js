@@ -94,10 +94,23 @@ test('content: Canvas\'s module items (no headers, unpublished or locked ones); 
   assert.match((await tool('content_read').run({ course: '_101_1', id: folder.id }, ctxFor(UL, ultra))).error, /holds no text/);
 });
 
-test('discussions: Canvas\'s topics and one prompt', async () => {
+test('discussions: Canvas topics are listed but prompt reads fail closed without verified instructor authorship', async () => {
   const canvas = tabsOf([canvasTab()]);
   assert.deepEqual((await tool('discussions_list').run({ course: '25' }, ctxFor(ACC, canvas))).items, [{ id: '81', title: 'Cell questions' }, { id: '82', title: 'Week 2 reflections' }]);
-  assert.equal((await tool('discussion_read').run({ course: '25', id: '81' }, ctxFor(ACC, canvas))).text, 'Share one question about cells.');
+  const r = await tool('discussion_read').run({ course: '25', id: '81' }, ctxFor(ACC, canvas));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /authorship/);
+});
+
+test('a Canvas peer-authored discussion cannot send the peer name or prompt to the worker', async () => {
+  const tab = canvasTab({ routes: { '/api/v1/courses/25/discussion_topics/81': {
+    ...TOPIC, id: 81, author: { display_name: 'Classmate One' }, message: '<p>CLASSMATE-PRIVATE-WORDS</p>',
+  } } });
+  const r = await tool('discussion_read').run({ course: '25', id: '81' }, ctxFor(ACC, tabsOf([tab])));
+  assert.equal(r.ok, false);
+  assert.doesNotMatch(JSON.stringify(r), /Classmate|CLASSMATE-PRIVATE-WORDS/);
+  // The tab reads the topic to learn its author (as the pop-up reads it); an unverified one never leaves the tab.
+  assert.match(r.error, /authorship/);
 });
 
 test('partial school lists preserve the source coverage instead of reporting an empty complete course', async () => {
@@ -128,6 +141,14 @@ test('Ultra content reads disclose the palette reader text cap', async () => {
   const t = ultraTab({ routes: { '/learn/api/public/v1/courses/_101_1/contents': { results: [item] } } });
   const r = await tool('content_read').run({ course: '_101_1', id: '_701_1' }, ctxFor(UL, tabsOf([t])));
   assert.equal(r.truncated, true);
+});
+
+test('Ultra non-page content discloses the HTML cap even when its retained text is short', async () => {
+  const item = { ...ULTRA.contents.find((i) => i.id === '_701_1'), body: '<br>'.repeat(25000) + '<p>Instructions after the HTML cap.</p>' };
+  const tab = ultraTab({ routes: { '/learn/api/public/v1/courses/_101_1/contents': { results: [item] } } });
+  const r = await tool('content_read').run({ course: '_101_1', id: '_701_1' }, ctxFor(UL, tabsOf([tab])));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /only part/);
 });
 
 test('an incomplete Ultra search does not prove a requested item is absent', async () => {
@@ -226,6 +247,12 @@ test('check, tool first: an answer with no result behind it fails; results that 
 test('tool-first grounding requires a factual quote rather than an account metadata quote', () => {
   const list = step('announcements_list', {}, { account: ACC, items: [{ id: '70', title: 'Lab moved' }] });
   assert.equal(A.why(answer('The lab moved.', [ACC]), inputOf('Any announcements?', [list], { first: true })), 'ground');
+});
+
+test('tool-first grounding requires the factual quote in the visible answer, not only its hidden quotes list', () => {
+  const list = step('discussions_list', { course: '25' }, { items: [{ id: '81', title: 'Thesis workshop' }] });
+  assert.equal(A.why(answer('There are no open discussions.', ['Thesis workshop']), inputOf('Which discussions are open?', [list], { first: true })), 'ground');
+  assert.equal(A.why(answer('An open discussion: Thesis workshop.', ['Thesis workshop']), inputOf('Which discussions are open?', [list], { first: true })), '');
 });
 
 test('tool-first grounding accepts boolean facts and does not require quotes of timing or an empty course id', () => {
@@ -416,6 +443,26 @@ test('a faithful summary quoting a record\'s title after a colon passes in all s
   }
 });
 
+test('a copied citation cannot hide an explicit offer of wording for the student', () => {
+  const SH = require('../../extension/ai/tasks/study-help.js');
+  const material = 'Cells move nutrients across membranes.';
+  for (const [locale, prefix] of [['en', 'For your reflection, write'], ['en', 'Try this opening:'],
+    ['es', 'Para tu reflexión, escribe:'], ['pt-BR', 'Para sua reflexão, escreva:'],
+    ['fr', 'Pour ta réflexion, écris :'], ['de', 'Für deine Reflexion schreib:'], ['nl', 'Voor je reflectie, schrijf:']]) {
+    const inp = SH.task.input({ question: 'Help me write my reflection', subject: 'essay', locale, material });
+    assert.equal(SH.hands(`${prefix} “${material}”`, inp), 'wording', `${locale}: ${prefix}`);
+  }
+});
+
+test('multiword writing suggestions before copied citations remain offers in all six languages', () => {
+  const SH = require('../../extension/ai/tasks/study-help.js'), material = 'Cells move nutrients across membranes.';
+  for (const [locale, lead] of [['en', 'Use this opening:'], ['es', 'Usa esta apertura:'], ['pt-BR', 'Use esta abertura:'],
+    ['fr', 'Utilise cette introduction :'], ['de', 'Verwende diesen Einstieg:'], ['nl', 'Gebruik deze opening:']]) {
+    const inp = SH.task.input({ question: 'Help me write my reflection', subject: 'essay', locale, material });
+    assert.equal(SH.hands(`${lead} “${material}”`, inp), 'wording', locale);
+  }
+});
+
 // ---- direct requests: the question forms the router accepts pass the check too (the D4 agent's finding) ----------------------
 test('a wake, a watch and a cancel are asked for in each language\'s common question and imperative forms; mentions still ask for nothing', () => {
   const later = new Date(NOW + 3 * 3600e3).toISOString().slice(0, 16).replace('T', ' ');
@@ -449,6 +496,15 @@ test('a wake, a watch and a cancel are asked for in each language\'s common ques
   }
 });
 
+test('recall questions and quoted commands do not authorize reminders', () => {
+  const wake = { call: { name: 'wake_create', arguments: { at: '2026-10-30 22:05', say: 'Lab' } }, answer: null };
+  for (const q of ['Kannst du erklären wie Menschen erinnern?', 'Kun je uitleggen hoe mensen dingen herinneren?',
+    'Kun je me uitleggen hoe mensen dingen herinneren?', 'Tu peux rappeler ce que dit le syllabus ?',
+    '¿Puedes recordar lo que dice el programa?', 'Você pode lembrar o que diz o programa?', '“Remind me tonight about the lab”']) {
+    assert.equal(A.why(wake, inputOf(q)), 'asked', q);
+  }
+});
+
 // ---- Ultra, in the shapes probed on a real Ultra (2026-11-01; fixtures/ultra-rime-reads.json, synthetic values) ----------
 const PROBED = C.load('ultra-rime-reads.json');
 const probedTab = (o = {}) => ultraTab({ routes: {
@@ -456,6 +512,21 @@ const probedTab = (o = {}) => ultraTab({ routes: {
   '/learn/api/public/v1/courses/_101_1/contents/_721_1/children': PROBED.children._721_1, '/learn/api/public/v1/courses/_101_1/contents/_723_1/children': PROBED.children._723_1,
   '/learn/api/public/v1/courses/_101_1/discussions': PROBED.discussions, '/learn/api/public/v1/courses/_101_1/discussions/_911_1': PROBED.discussion,
   '/learn/api/public/v1/courses/_101_1/discussions/_911_1/messages': PROBED.messages, ...o.routes } });
+
+test('direct Ultra announcement reads enforce the same release and draft rules as the list', async (t) => {
+  const original = PROBED.announcements.results[0];
+  for (const [label, patch] of [
+    ['draft', { draft: true }],
+    ['future', { availability: { duration: { type: 'DateRange', start: '2099-01-01T00:00:00Z', end: null } } }],
+    ['expired', { availability: { duration: { type: 'DateRange', start: null, end: '2000-01-01T00:00:00Z' } } }],
+  ]) await t.test(label, async () => {
+    const tab = probedTab({ routes: { '/learn/api/public/v1/courses/_101_1/announcements/_811_1': { ...original, ...patch } } });
+    const r = await tool('announcement_read').run({ course: '_101_1', id: '_811_1' }, ctxFor(UL, tabsOf([tab])));
+    assert.equal(r.ok, false);
+    assert.doesNotMatch(JSON.stringify(r), /Review is Thursday/);
+    assert.ok(tab.page.asked.every((q) => q.method === 'GET' && new URL(q.url).origin === C.ULTRA && q.redirect === 'error'));
+  });
+});
 
 test('Ultra announcements: in Ultra\'s order, each dated by when the student could first see it (start, else modified, else created); no drafts', async () => {
   const r = await tool('announcements_list').run({ course: '_101_1' }, ctxFor(UL, tabsOf([probedTab()])));
@@ -476,6 +547,53 @@ test('Ultra content: an Ultra document reads its body block with the names of th
   assert.match(doc.text, /900 words on a place that matters/);
   assert.deepEqual(doc.files, [{ name: 'Essay rubric.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', size: 48211 }]);
   assert.doesNotMatch(JSON.stringify(doc), /SIGNED|bbcswebdav|sessions/);
+});
+
+test('Ultra document body blocks use visibleIn, including adaptive release and unknown availability', async (t) => {
+  const block = PROBED.children._723_1.results[0];
+  for (const [label, availability] of [
+    ['future', { available: 'Yes', adaptiveRelease: { start: '2099-01-01T00:00:00Z' } }],
+    ['expired', { available: 'Yes', adaptiveRelease: { end: '2000-01-01T00:00:00Z' } }],
+    ['unknown', { available: 'Yes' }],
+  ]) await t.test(label, async () => {
+    const tab = probedTab({ routes: { '/learn/api/public/v1/courses/_101_1/contents/_723_1/children': { results: [{ ...block, availability }] } } });
+    const r = await tool('content_read').run({ course: '_101_1', id: '_723_1' }, ctxFor(UL, tabsOf([tab])));
+    assert.equal(r.ok, false);
+    assert.doesNotMatch(JSON.stringify(r), /900 words|Essay rubric/);
+  });
+});
+
+test('signed file addresses never leave school reads even as visible text or embedded metadata', async () => {
+  const signed = `${C.ULTRA}/bbcswebdav/xid-456_1?sig=SIGNED-SECRET`, session = '/sessions/7/a1b2c3/file.pdf?sig=SIGNED-SECRET';
+  const tab = probedTab({ routes: {
+    '/learn/api/public/v1/courses/_101_1/contents/_723_1/children': { results: [{ ...PROBED.children._723_1.results[0],
+      body: `<p>Read the rubric: ${signed}</p><a data-bbfile='{&quot;displayName&quot;:&quot;${session}&quot;,&quot;mimeType&quot;:&quot;application/pdf&quot;}'>Rubric</a>` }] },
+    '/learn/api/public/v1/courses/_101_1/announcements/_811_1': { ...PROBED.announcements.results[0], body: `<p>${session}</p>` },
+    '/learn/api/public/v1/courses/_101_1/discussions/_911_1': { ...PROBED.discussion, topic: { ...PROBED.discussion.topic, body: `<p>${signed}</p>` } },
+  } });
+  const tabs = tabsOf([tab]);
+  for (const [op, id] of [['document', '_723_1'], ['announcement', '_811_1'], ['discussion', '_911_1']]) {
+    const r = await tabs.run(UL, op, { course: '_101_1', id });
+    assert.equal(r.ok, true, op);
+    assert.doesNotMatch(JSON.stringify(r), /bbcswebdav|\/sessions\/|SIGNED-SECRET/, op);
+  }
+});
+
+test('Ultra unread document pages disclose truncation', async () => {
+  const partial = probedTab({ routes: { '/learn/api/public/v1/courses/_101_1/contents/_723_1/children': {
+    ...PROBED.children._723_1, paging: { nextPage: '/learn/api/public/v1/courses/_101_1/contents/_723_1/children?offset=200' },
+  } } });
+  const doc = await tool('content_read').run({ course: '_101_1', id: '_723_1' }, ctxFor(UL, tabsOf([partial])));
+  assert.match(doc.text, /900 words/);
+  assert.equal(doc.truncated, true, 'the child reader stopped before the rest of the document');
+});
+
+test('Ultra discussion text caps disclose truncation', async () => {
+  const long = probedTab({ routes: { '/learn/api/public/v1/courses/_101_1/discussions/_911_1': {
+    ...PROBED.discussion, topic: { ...PROBED.discussion.topic, body: 'x'.repeat(25000) },
+  } } });
+  const discussion = await tool('discussion_read').run({ course: '_101_1', id: '_911_1' }, ctxFor(UL, tabsOf([long])));
+  assert.equal(discussion.truncated, true, 'the prompt text cap is smaller than the HTML cap');
 });
 
 test('Ultra syllabus: the course\'s syllabus document wherever it sits, a page at a time; a body that is only a file names the file; imported facts stay', async () => {
@@ -506,4 +624,103 @@ test('Ultra discussions: the list as Ultra gives it (id and title); one gives it
   assert.deepEqual(r.mine, [{ at: Date.parse('2026-09-03T12:00:00.000Z'), reply: false, text: 'I study nursing and liked Beloved.' }], 'an answer to the prompt, not a reply to a classmate');
   assert.equal(r.others, 2);
   assert.doesNotMatch(JSON.stringify(r), /CLASSMATE|Classmate|Instructor|Example/, 'no classmate\'s words or anyone\'s name');
+});
+
+test('Ultra discussion privacy also covers names and peer blockquotes embedded in the student\'s own reply', async () => {
+  const messages = structuredClone(PROBED.messages);
+  messages.results[1].body = `<p>Thanks, Classmate One. I am Student Self.</p><blockquote><p>CLASSMATE-PRIVATE-WORDS</p><blockquote>More quoted words.</blockquote><p>CLASSMATE-PRIVATE-WORDS after a nested quote.</p></blockquote><p>I study nursing.</p>`;
+  const discussion = { ...PROBED.discussion, topic: { ...PROBED.discussion.topic, body: '<p>Instructor Example asks: describe your major.</p>' } };
+  const tab = probedTab({ routes: { '/learn/api/public/v1/courses/_101_1/discussions/_911_1': discussion,
+    '/learn/api/public/v1/courses/_101_1/discussions/_911_1/messages': messages } });
+  const r = await tabsOf([tab]).run(UL, 'discussion', { course: '_101_1', id: '_911_1' });
+  assert.equal(r.ok, true);
+  assert.match(r.mine[0].text, /I study nursing/);
+  assert.doesNotMatch(JSON.stringify(r), /CLASSMATE-PRIVATE-WORDS|More quoted words|Classmate One|Student Self|Instructor Example/);
+});
+
+test('Ultra discussions only return and count messages confirmed Published', async () => {
+  const messages = structuredClone(PROBED.messages);
+  delete messages.results[0].status;
+  delete messages.results[1].status;
+  const tab = probedTab({ routes: { '/learn/api/public/v1/courses/_101_1/discussions/_911_1/messages': messages } });
+  const r = await tool('discussion_read').run({ course: '_101_1', id: '_911_1' }, ctxFor(UL, tabsOf([tab])));
+  assert.deepEqual(r.mine, []);
+  assert.equal(r.others, 1);
+});
+
+test('an empty Ultra discussion prompt still rejects pages beyond its one page', async () => {
+  const tab = probedTab({ routes: { '/learn/api/public/v1/courses/_101_1/discussions/_911_1': {
+    ...PROBED.discussion, topic: { ...PROBED.discussion.topic, body: '' },
+  } } });
+  const ctx = ctxFor(UL, tabsOf([tab]));
+  const first = await tool('discussion_read').run({ course: '_101_1', id: '_911_1' }, ctx);
+  assert.equal(first.pages, 1);
+  const extra = await tool('discussion_read').run({ course: '_101_1', id: '_911_1', page: 2 }, ctx);
+  assert.equal(extra.ok, false);
+  assert.match(extra.error, /1 page/);
+});
+
+// ---- one phrase set: what the router sends to wake or monitor as a request passes the check as asked -------------------
+test('route() and check() agree on every language\'s reminder, notice, watch and cancel phrasings (the generator\'s gaps included)', () => {
+  const later = new Date(NOW + 3 * 3600e3).toISOString().slice(0, 16).replace('T', ' ');
+  const calls = { remind: { name: 'wake_create', arguments: { at: later, say: 'Lab' } }, watch: { name: 'monitor_create', arguments: { watch: 'announcement' } } };
+  const asks = {
+    remind: {
+      en: ['Set a reminder for the lab tonight', 'Add a reminder for the lab'], es: ['Ponme un recordatorio para el laboratorio', 'Pon un recordatorio a las 21:00', 'Estudio mañana: recuérdame a las 9'],
+      'pt-BR': ['Cria um lembrete para o laboratório', 'Tenho prova amanhã: me lembra às 9'], fr: ['Programme un rappel pour le labo', 'Mets un rappel pour ce soir'],
+      de: ['Stelle eine Erinnerung für das Labor ein', 'Morgen ist Abgabe: Erinnere mich um 9'], nl: ['Zet een herinnering voor het lab', 'Morgen inleveren: herinner me om 9'],
+    },
+    watch: {
+      en: ['Tell me when a new announcement is posted'], es: ['Dime cuando haya un anuncio nuevo'], 'pt-BR': ['Me diga quando sair um aviso novo'], fr: ['Dis-moi quand il y a une annonce'],
+      de: ['Sag mir Bescheid, wenn es eine neue Ankündigung gibt', 'Gib mir Bescheid, wenn eine Ankündigung kommt'], nl: ['Laat me weten als er een aankondiging is'],
+    },
+  };
+  for (const [kind, byLocale] of Object.entries(asks)) for (const [locale, qs] of Object.entries(byLocale)) for (const q of qs) {
+    const r = K.route(q, { locale, level: 3 });
+    assert.ok((r.tools || []).includes(calls[kind].name), `${locale} routes ${q} to ${calls[kind].name}: ${JSON.stringify(r)}`);
+    assert.equal(A.why({ call: calls[kind], answer: null }, A.task.input({ question: q, tools: [...A.NAMES], steps: [], now: NOW, zone: 'UTC', locale })), '', `${locale} check: ${q}`);
+  }
+  // The shared set itself: every phrase of a language is in the router's table for it.
+  for (const l of Object.keys(A.PHRASES.remind)) for (const p of [...A.PHRASES.remind[l], ...A.PHRASES.cancel[l], ...A.PHRASES.notify[l], ...A.PHRASES.watch[l]]) assert.equal(typeof p, 'string');
+});
+
+// ---- Canvas discussion prompts: only a teacher's or TA's, checked against the course's enrollments -------------------
+// Shapes from Canvas's API documentation (enrollments: id, user_id, type; topics: author.id/display_name, assignment_id;
+// entries: id, user_id, user_name, message, created_at, deleted?, recent_replies) — not yet captured live.
+test('Canvas discussion_read returns a prompt only when its author is a teacher or TA of the course; names omitted, the student\'s own replies, classmates counted', async () => {
+  const staff = [{ id: 1, user_id: 900, type: 'TeacherEnrollment', enrollment_state: 'active' }, { id: 2, user_id: 901, type: 'TaEnrollment', enrollment_state: 'active' }];
+  const prompt = { id: 81, title: 'Cell questions', author: { id: 900, display_name: 'Dana Rivera' }, user_name: 'Dana Rivera', posted_at: '2026-10-14T15:00:00Z', assignment_id: 55,
+    message: '<p>Share one question about cells. Dana Rivera will answer on Friday.</p>', attachments: [], locked_for_user: false, published: true };
+  const entries = [
+    { id: 1, user_id: 5, user_name: 'Student Self', message: '<p>Why do cells divide?</p>', created_at: '2026-10-15T10:00:00Z', recent_replies: [] },
+    { id: 2, user_id: 77, user_name: 'Kim Classmate', message: '<p>KIM-PRIVATE words.</p>', created_at: '2026-10-15T11:00:00Z',
+      recent_replies: [{ id: 3, user_id: 5, user_name: 'Student Self', message: '<p>Good point, Kim Classmate.</p>', created_at: '2026-10-15T12:00:00Z', parent_id: 2 }] },
+    { id: 4, user_id: 78, user_name: 'Gone', message: '', deleted: true, created_at: '2026-10-15T13:00:00Z', recent_replies: [] },
+  ];
+  const routes = { '/api/v1/courses/25/discussion_topics/81': prompt, '/api/v1/courses/25/enrollments': staff, '/api/v1/courses/25/discussion_topics/81/entries': entries };
+  const r = await tool('discussion_read').run({ course: '25', id: '81' }, ctxFor(ACC, tabsOf([canvasTab({ routes })])));
+  assert.equal(r.title, 'Cell questions');
+  assert.equal(r.text, 'Share one question about cells. [name omitted] will answer on Friday.');
+  assert.equal(r.gradable, true);
+  assert.deepEqual(r.mine, [{ at: Date.parse('2026-10-15T10:00:00Z'), reply: false, text: 'Why do cells divide?' }, { at: Date.parse('2026-10-15T12:00:00Z'), reply: true, text: 'Good point, [name omitted].' }]);
+  assert.equal(r.others, 1);
+  assert.doesNotMatch(JSON.stringify(r), /Dana|Rivera|Kim|KIM-PRIVATE/);
+  // A classmate's topic, or no readable staff list: the refusal.
+  const peer = await tool('discussion_read').run({ course: '25', id: '81' }, ctxFor(ACC, tabsOf([canvasTab({ routes: { ...routes, '/api/v1/courses/25/discussion_topics/81': { ...prompt, author: { id: 77, display_name: 'Kim Classmate' } } } })])));
+  assert.match(peer.error, /authorship/);
+  const hidden = await tool('discussion_read').run({ course: '25', id: '81' }, ctxFor(ACC, tabsOf([canvasTab({ routes: { ...routes, '/api/v1/courses/25/enrollments': () => ({ ok: false, status: 403, headers: { get: () => null }, text: async () => '{}' }) } })])));
+  assert.match(hidden.error, /authorship/);
+});
+
+test('Canvas discussion previews with omitted replies do not claim complete coverage', async () => {
+  const t = canvasTab({ routes: {
+    '/api/v1/courses/25/enrollments': [{ user_id: 900, type: 'TeacherEnrollment' }],
+    '/api/v1/courses/25/discussion_topics/81': { ...TOPIC, id: 81, author: { id: 900 }, message: '<p>Discuss cells.</p>' },
+    '/api/v1/courses/25/discussion_topics/81/entries': [{ id: 1, user_id: 77, user_name: 'Kim Classmate', message: '<p>Private words</p>', has_more_replies: true,
+      recent_replies: [{ id: 2, user_id: 5, user_name: 'Student Self', message: '<p>My reply.</p>' }] }],
+  } });
+  const r = await tool('discussion_read').run({ course: '25', id: '81' }, ctxFor(ACC, tabsOf([t])));
+  assert.equal(r.complete, false, 'recent_replies contains only the most recent ten, not all replies');
+  assert.doesNotMatch(JSON.stringify(r), /Kim|Private words/);
+  assert.ok(t.page.asked.every((q) => q.method === 'GET' && new URL(q.url).origin === C.CANVAS));
 });

@@ -84,6 +84,14 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       was.control.abort(new DOMException('Released', 'AbortError'));
       return was.ready.then((job) => { for (const w of job.warm) { try { w.snap.drop?.(); } catch { /* gone */ } } try { job.base?.drop?.(); } catch { /* gone */ } try { job.vision?.release(); } catch { /* gone */ } try { job.model.release(); } catch { /* gone */ } }, () => {});
     };
+    const tokenized = async (id, signal) => {
+      try {
+        const file = await wait(env.store.open(id), signal), g = await wait(env.gguf.open(file), signal);
+        const tok = env.tokenizer.fromGGUF(g.kv);
+        for (const name of env.tokenizer.GLAZE_TOKENS) { try { tok.add(name); } catch { break; } }
+        return { g, tok };
+      } catch (e) { if (signal?.aborted) throw aborted(signal); throw fail('provider-unavailable', 'assets'); }
+    };
     // The engine with model `id` (and, for pictures, its projector on the engine's device), loaded once and shared by the
     // calls that ask together; another model releases it first.
     const load = (id, projector = null) => {
@@ -97,15 +105,9 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         await retired;
         if (job.control.signal.aborted) throw aborted(job.control.signal);
         // The projector first: one that isn't here says so before the language model loads.
-        let file, pfile;
+        let pfile;
         if (projector) { try { pfile = await env.store.open(projector); } catch { throw fail('provider-unavailable', 'pictures'); } }
-        try { file = await env.store.open(id); } catch { throw fail('provider-unavailable', 'assets'); }
-        let g, tok;
-        try {
-          g = await env.gguf.open(file);
-          tok = env.tokenizer.fromGGUF(g.kv);
-        } catch { throw fail('provider-unavailable', 'assets'); }
-        for (const name of env.tokenizer.GLAZE_TOKENS) { try { tok.add(name); } catch { break; } }
+        const { g, tok } = await tokenized(id, job.control.signal);
         let model;
         try { model = await E.load(g, { context: LIMIT.context, signal: job.control.signal }); }
         catch (e) { if (job.control.signal.aborted) throw e; throw fail('provider-unavailable', ENGINE[e?.reason] || 'engine'); }
@@ -435,7 +437,14 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         return { state: 'download' };
       });
     };
-    const OPS = { prepare, run, warm, remove, update, release: async () => { await release(); return {}; } };
+    // count: a request's prompt tokens as run would feed them (encodeWith over its parts), for Ask Rime's window accounting.
+    const count = async (m, signal) => {
+      if (!Array.isArray(m.parts)) throw fail('request-rejected', 'unsupported');
+      // Counting must not replace or release a GPU model another feature is using.
+      const tok = loaded?.id === m.model && loaded.tok || (await tokenized(m.model, signal)).tok;
+      return { tokens: encode({ tok }, m.parts).length };
+    };
+    const OPS = { prepare, run, warm, count, remove, update, release: async () => { await release(); return {}; } };
 
     const handle = (m) => {
       if (!m || typeof m !== 'object') return;

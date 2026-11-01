@@ -29,6 +29,7 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
   const ERRORS = {
     none: 'The site has no such item, or it is not open to the student.', locked: 'The site keeps that one locked for now.', args: 'That id does not fit this site.',
     timeout: 'The school site took too long to answer. Try again.', profile: 'The open tab is signed in as someone else.',
+    unverified: "Glaze can't verify this Canvas prompt's authorship yet; open it on the site.",
     partial: 'Glaze read only part of the course content; the requested item may be in the unread part. Open it on the site.',
   };
   // A body that is only an embedded file: its names stand in for the text.
@@ -37,6 +38,7 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
   // A read's text a page at a time with the files it embeds, or the files alone when it has no text.
   const body = (r, page) => {
     const files = filesOf(r);
+    if (!String(r.text || '').trim() && r.truncated) return { error: 'Glaze read only part of this item; its text may be in the unread part. Open it on the site.' };
     if (!String(r.text || '').trim()) return files.length ? (page > 1 ? { error: 'There is 1 page.' } : { files, note: FILED }) : null;
     const p = paged(r.text, page, r.truncated);
     return p.error ? p : { ...p, ...(files.length && { files }) };
@@ -154,21 +156,15 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
       const w = who(ctx?.account);
       if (!w) return fail(NONE);
       if (!course(w, args.course)) return fail(ERRORS.args);
-      if (w.lms === 'ultra') {
-        // The prompt, whether it's graded, the student's own replies (first page only) and how many classmates replied:
-        // never a classmate's name or words.
-        const r = await viaTab(w, ctx, 'discussion', { course: args.course, id: args.id });
-        if (r.ok === false) return r;
-        const page = args.page || 1, got = body(r, page) || { text: '', page: 1, pages: 1 };
-        if (got.error) return fail(got.error);
-        const mine = page === 1 ? (r.mine || []).slice(0, 3).map((m) => ({ at: m.at ?? null, reply: m.reply === true, text: String(m.text || '').slice(0, 300) })) : [];
-        return { account: w.account, title: r.title, ...(r.at && { at: r.at }), gradable: r.gradable === true, ...got,
-          ...(page === 1 && { mine, ...((r.mine || []).length > 3 && { mineMore: r.mine.length - 3 }), others: r.others ?? null, ...(r.complete === false && { complete: false }) }) };
-      }
-      const r = await viaTab(w, ctx, 'announcement', { course: args.course, id: args.id });
+      // The prompt, whether it's graded, the student's own replies (first page only) and how many classmates replied:
+      // never a classmate's name or words. A Canvas topic may be a classmate's own post: only a teacher's or TA's is read.
+      const r = await viaTab(w, ctx, w.lms === 'ultra' ? 'discussion' : 'topic', { course: args.course, id: args.id });
       if (r.ok === false) return r;
-      const p = paged(r.text, args.page || 1, r.truncated);
-      return p.error ? fail(p.error) : { account: w.account, title: r.title, ...(r.author && { author: r.author }), ...(r.at && { at: r.at }), ...p };
+      const page = args.page || 1, got = body(r, page) || (page > 1 ? { error: 'There is 1 page.' } : { text: '', page: 1, pages: 1 });
+      if (got.error) return fail(got.error);
+      const mine = page === 1 ? (r.mine || []).slice(0, 3).map((m) => ({ at: m.at ?? null, reply: m.reply === true, text: String(m.text || '').slice(0, 300) })) : [];
+      return { account: w.account, title: r.title, ...(r.at && { at: r.at }), gradable: r.gradable === true, ...got,
+        ...(page === 1 && { mine, ...((r.mine || []).length > 3 && { mineMore: r.mine.length - 3 }), others: r.others ?? null, ...(r.complete === false && { complete: false }) }) };
     }),
   ];
   const register = (registry) => tools().map((t) => registry.add(t));

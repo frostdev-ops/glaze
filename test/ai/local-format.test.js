@@ -36,7 +36,7 @@ test('the fine-tune\'s format, part by part: the task token first, the trust rul
   assert.ok(!JSON.stringify(parts).includes('DATA-00112233aabb'), 'no random fence');
   // Every special a part names is one Glaze's tokenizer has (GLAZE_TOKENS) or LFM3's own.
   for (const p of parts) if (p.special) assert.ok(K.GLAZE_TOKENS.includes(p.special) || ['<|startoftext|>', '<|im_start|>', '<|im_end|>', '<think>', '</think>'].includes(p.special), p.special);
-  assert.deepEqual(F.TASKS, K.GLAZE_TOKENS.slice(4).map((t) => t.slice(10, -2)), 'a token for each task, in the tokenizer\'s order');
+  assert.deepEqual(F.TASKS, K.GLAZE_TOKENS.filter((t) => t.startsWith('<|gz_task:')).map((t) => t.slice(10, -2)), 'a token for each task, in the tokenizer\'s order');
 });
 
 test('a stock model: its own chat template with the harness\'s messages as written, thinking off', () => {

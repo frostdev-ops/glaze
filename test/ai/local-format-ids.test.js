@@ -21,9 +21,9 @@ const tok = require('../helpers/local-vocab.cjs')(require('../fixtures/ai/local-
 for (const f of ['syllabus-read', 'writer-complete', 'writer-review', 'writer-feedback', 'writer-outline', 'writer-requirements', 'writer-cite', 'writer-decide']) require(`../../extension/ai/tasks/${f}.js`);
 
 // The tasks FORMAT.md v1 trains: every task with a token but writer.image (pictures need LFM3-VL) and the two its addendum
-// adds (FORMAT-new-tasks.md: study.help, agent.tools), whose cases come once train/format.js has their tokens; until then
+// adds (FORMAT-new-tasks.md: study.help, agent.tools), and chat.compact, whose cases come once train/format.js has their tokens; until then
 // ai-study-help.test.js and ai-agent-tools.test.js hold their layouts.
-const TRAINED = F.TASKS.filter((t) => !['writer.image', 'study.help', 'agent.tools'].includes(t));
+const TRAINED = F.TASKS.filter((t) => !['writer.image', 'study.help', 'agent.tools', 'chat.compact'].includes(t));
 const SPECIAL = { added: 124893, bos: 124894, start: 124899, end: 124900 }; // added: LFM3's first added token (<|pad|>)
 // A case as a request: what ai/text.js request() makes of its arguments, an instruction the task appended to the system
 // message after it (writer.feedback's repairs), the schema and the task as ai/task.js adds them.

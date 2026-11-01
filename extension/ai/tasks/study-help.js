@@ -174,7 +174,7 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
   const QUOTES = /["“”'‘’«»‹›„‚]/u;
   const cited = (piece, texts) => {
     const sources = texts.map((t) => X().source(t, { min: 2 }));
-    let out = piece;
+    let out = piece, cues = piece;
     for (const q of WD.quotedRanges(piece, true).sort((a, b) => b.start - a.start)) {
       const inner = q.text.trim();
       if (inner.length < 2 || !sources.some((x) => x.has(inner))) continue;
@@ -183,9 +183,14 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
       if (QUOTES.test(piece[a - 1] || '')) a--;
       for (let i = 0; i < 2 && b < piece.length && !QUOTES.test(piece[b] || ''); i++) b++;
       if (QUOTES.test(piece[b] || '')) b++;
+      // Keep quotation marks in a second copy so "write/use <quote>" remains an offer. Remove only the generic
+      // colon-before-a-citation cue there; the cited words themselves must not act as instructions either.
+      const lead = cues.slice(0, a).replace(/:\s*$/u, ' ');
+      cues = `${lead}${piece[a]}cited${piece[b - 1]}${cues.slice(b)}`;
       out = `${out.slice(0, a)}cited${out.slice(b)}`;
     }
-    return out;
+    const directive = /(?<![\p{L}\p{N}])(?:try|use|write|say|escribe|escriba|usa|prueba|pruebe|di|diga|escreva|tente|experimente|écris|écrivez|essaie|essayez|utilise|utilisez|schreib(?:e)?|verwende|benutze|versuch(?:e)?|schrijf|gebruik|probeer)(?![\p{L}\p{N}])[^.!?;"“”'‘’«»‹›„‚]{0,80}["“‘'«»‹›„‚]/iu;
+    return WD.offers(cues, { examples: false }) || directive.test(cues) ? piece : out;
   };
   // The answer-giving rules for one piece of text (a reply, a followUp, or Ask Glaze's answer about the student's own records,
   // ai/ask.js): '' or the rule it breaks: answer, solves, code, wording.

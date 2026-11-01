@@ -217,10 +217,14 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     // announce.js keeps an attachment's address only when it is this site's (core/popup.js own).
     await libs(['core/popup.js', 'GZ_POPUP_LIB'], ['courses/announce.js', 'GZ_ANNOUNCE_LIB']);
     const S = GZ_ANNOUNCE_LIB.SITES[site], r = { origin: go.origin, courseId: a.course, id: a.id };
-    const path = site === 'ultra' ? S.path(r) : S.get(r).url.slice(go.origin.length);
+    const path = site === 'ultra' ? `${S.path(r)},draft` : S.get(r).url.slice(go.origin.length);
     let j;
     try { ({ j } = await req(path, go)); } catch (e) { if (/^(401|403|404)$/.test(e.message)) return no('none'); throw e; }
     if (String(j?.id) !== a.id) return no('none');
+    if (site === 'ultra') {
+      await ultra(go);
+      if (j.draft === true || !GZ_ULTRA.searchItems(kind('Announcement'), [j], { id: a.course, name: '' }, html, Date.now(), go.origin).length) return no('locked');
+    }
     const it = S.item(j, go.origin);
     if (it.locked) return no('locked');
     return { ok: true, title: it.title, author: it.author, at: it.at, text: text(it.html), files: it.files.map((f) => f.name),
@@ -262,7 +266,7 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
       const id = i.key.slice(i.key.lastIndexOf(':') + 1), x = raw.get(id), handler = String(x?.contentHandler?.id || '').replace('resource/x-bb-', '');
       const page = handler === 'folder' && x?.contentHandler?.isBbPage === true;
       return { id, title: i.title, kind: page ? 'Document' : LABELS[handler] || i.kind, page, parent: typeof x?.parentId === 'string' ? x.parentId : '', body: typeof x?.body === 'string' ? x.body : '', text: i.text,
-        ...(i.text.length >= 20000 && { truncated: true }) };
+        ...((i.text.length >= 20000 || x?.body?.length > 100000) && { truncated: true }) };
     }).filter((i) => i.title !== 'ultraDocumentBody');
     return { items, complete: r.complete };
   };
@@ -272,10 +276,11 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     if (!it.page) return { text: it.text, files: embedded(it.body), ...(it.truncated && { truncated: true }) };
     const reader = await ultra(go);
     const r = await reader.list(`/learn/api/public/v1/courses/${cid}/contents/${it.id}/children`, 'id,title,body,contentHandler.id,availability');
-    const blocks = r.items.filter((c) => c?.contentHandler?.id === 'resource/x-bb-document' && c?.availability?.available === 'Yes' && typeof c.body === 'string');
+    const visible = GZ_ULTRA.visibleIn(r.items, Date.now());
+    const blocks = r.items.filter((c) => c?.contentHandler?.id === 'resource/x-bb-document' && visible(c) !== null && typeof c.body === 'string');
     const body = blocks.map((c) => c.body).join('\n').slice(0, 100000);
     const t = html(body);
-    return { text: t.slice(0, 20000), files: embedded(body), ...((t.length > 20000 || body.length >= 100000) && { truncated: true }) };
+    return { text: t.slice(0, 20000), files: embedded(body), ...((!r.complete || t.length > 20000 || body.length >= 100000) && { truncated: true }) };
   };
   const search = async (go, a) => {
     const x = X();
@@ -327,6 +332,29 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     if (!go()) return no('late');
     return { ok: true, complete: r.complete, items: r.items.filter((d) => BB.test(String(d?.id)) && typeof d.title === 'string' && d.title.trim()).map((d) => ({ id: d.id, title: d.title.trim().slice(0, 300) })) };
   };
+  // A student's reply may embed a classmate's post. Drop quoted blocks before flattening the HTML, including nested or
+  // unclosed quotes, rather than laundering the quoted words into the student's own text.
+  const unquoted = (h) => {
+    h = typeof h === 'string' ? h : '';
+    let out = '', end = 0, depth = 0;
+    for (const m of h.matchAll(/<\/?blockquote\b(?:[^"'<>]|"[^"]*"|'[^']*')*>/gi)) {
+      if (!depth) out += h.slice(end, m.index);
+      depth = /^<\//.test(m[0]) ? Math.max(0, depth - 1) : depth + 1;
+      end = m.index + m[0].length;
+    }
+    return out + (depth ? '' : h.slice(end));
+  };
+  // Names supplied by the topic/messages stay in this tab, even when repeated in the prompt, a reply or a file label.
+  const anonymous = (records) => {
+    const names = new Map();
+    for (const p of records) {
+      const parts = [p?.givenName, p?.familyName].filter((s) => typeof s === 'string' && s.trim()).map((s) => s.trim());
+      if (parts.length > 1) names.set(parts.join(' '), 'iu');
+      for (const s of parts) if (!names.has(s)) names.set(s, 'u');
+    }
+    const patterns = [...names].sort((a, b) => b[0].length - a[0].length).map(([n, flags]) => new RegExp(`(?<![\\p{L}\\p{N}])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, `${flags}g`));
+    return (v) => mapRead(v, (s) => patterns.reduce((t, re) => t.replace(re, '[name omitted]'), s));
+  };
   // discussion (Ultra): one discussion's prompt (its topic), whether it's graded, and the student's own replies. Classmates'
   // replies are only counted: never their names or words.
   const discussion = async (go, a) => {
@@ -338,15 +366,17 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     if (d.available !== true || d.topic?.status !== 'Published') return no('locked');
     // Replies the student may not read leave the prompt readable, without a count.
     let r = null;
-    try { r = await reader.list(`${base}/messages`, 'id,parentId,userId,status,body,postDate,createdDate'); } catch (e) { if (!/\b(401|403|404)\b/.test(e.message)) throw e; }
+    try { r = await reader.list(`${base}/messages`, 'id,parentId,userId,givenName,familyName,status,body,postDate,createdDate'); } catch (e) { if (!/\b(401|403|404)\b/.test(e.message)) throw e; }
     if (!go()) return no('late');
-    if (!r) return { ok: true, title: String(d.title || '').trim().slice(0, 300), text: html(typeof d.topic.body === 'string' ? d.topic.body : '').slice(0, 20000), files: embedded(d.topic.body), gradable: d.gradable === true, at: ms(d.topic.postDate) ?? ms(d.createdDate), mine: [], others: null, complete: false };
-    const live = r.items.filter((m) => m && m.status !== 'Deleted' && m.status !== 'Draft');
+    const body = typeof d.topic.body === 'string' ? d.topic.body : '', prompt = html(body);
+    const truncated = prompt.length > 20000 || body.length >= 100000;
+    const hide = anonymous([d.topic, ...(r?.items || [])]);
+    if (!r) return hide({ ok: true, title: String(d.title || '').trim().slice(0, 300), text: prompt.slice(0, 20000), files: embedded(body), gradable: d.gradable === true, at: ms(d.topic.postDate) ?? ms(d.createdDate), mine: [], others: null, complete: false, ...(truncated && { truncated: true }) });
+    const live = r.items.filter((m) => m?.status === 'Published');
     // reply: it answers a classmate's post rather than the prompt.
-    const mine = live.filter((m) => String(m.userId) === go.uid).map((m) => ({ at: ms(m.postDate) ?? ms(m.createdDate), reply: !!m.parentId && m.parentId !== d.topic.id, text: html(typeof m.body === 'string' ? m.body : '').slice(0, 2000) }));
-    const body = typeof d.topic.body === 'string' ? d.topic.body : '';
-    return { ok: true, title: String(d.title || '').trim().slice(0, 300), text: html(body).slice(0, 20000), files: embedded(body), gradable: d.gradable === true,
-      at: ms(d.topic.postDate) ?? ms(d.createdDate), mine, others: live.length - mine.length, complete: r.complete, ...(body.length >= 100000 && { truncated: true }) };
+    const mine = live.filter((m) => String(m.userId) === go.uid).map((m) => ({ at: ms(m.postDate) ?? ms(m.createdDate), reply: !!m.parentId && m.parentId !== d.topic.id, text: html(unquoted(m.body)).slice(0, 2000) }));
+    return hide({ ok: true, title: String(d.title || '').trim().slice(0, 300), text: prompt.slice(0, 20000), files: embedded(body), gradable: d.gradable === true,
+      at: ms(d.topic.postDate) ?? ms(d.createdDate), mine, others: live.length - mine.length, complete: r.complete, ...(truncated && { truncated: true }) });
   };
   const modules = async (go, a) => {
     if (X().site !== 'canvas' || !ID.test(a.course || '')) return no('args');
@@ -366,8 +396,45 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     return { ok: true, complete: !rows.more, items: rows.filter((t) => t && ID.test(String(t.id)) && typeof t.title === 'string').map((t) => ({ id: String(t.id), title: t.title.slice(0, 300) })) };
   };
 
-  const OPS = { todo, insights, assignment, mark, announcement, search, modules, topics, document: doc1, syllabus, discussion };
-  const SCHOOL_READS = new Set(['announcement', 'search', 'modules', 'topics', 'document', 'syllabus', 'discussion']);
+  // topic (Canvas): one discussion's prompt, only when a teacher or TA of the course wrote it (the course's enrollments, read
+  // once per course for this page); else 'unverified'. Like Ultra's: names omitted, the student's own replies, classmates'
+  // replies counted. Shapes from Canvas's API documentation, not yet captured live.
+  const STAFF = new Map();
+  const staff = (go, c) => {
+    if (!STAFF.has(c)) {
+      STAFF.set(c, pages(`/api/v1/courses/${c}/enrollments?type[]=TeacherEnrollment&type[]=TaEnrollment&per_page=100`, go, 4)
+        .then((rows) => (rows.more ? null : new Set(rows.filter((e) => e && ['TeacherEnrollment', 'TaEnrollment'].includes(e.type) && ID.test(String(e.user_id))).map((e) => String(e.user_id)))))
+        .catch(() => null).then((v) => { if (!v) STAFF.delete(c); return v; }));
+    }
+    return STAFF.get(c);
+  };
+  const person = (name) => { const t = typeof name === 'string' ? name.trim() : ''; const i = t.indexOf(' '); return i > 0 ? { givenName: t.slice(0, i), familyName: t.slice(i + 1) } : { givenName: t }; };
+  const topic = async (go, a) => {
+    if (X().site !== 'canvas' || !ID.test(a.course || '') || !ID.test(a.id || '')) return no('args');
+    let j;
+    try { ({ j } = await req(`/api/v1/courses/${a.course}/discussion_topics/${a.id}`, go)); } catch (e) { if (/^(401|403|404)$/.test(e.message)) return no('none'); throw e; }
+    if (String(j?.id) !== a.id) return no('none');
+    if (j.locked_for_user === true || j.published === false) return no('locked');
+    const author = String(j.author?.id ?? j.user_id ?? ''), set = await staff(go, a.course);
+    if (!set || !ID.test(author) || !set.has(author)) return no('unverified');
+    let rows = null;
+    try { rows = await pages(`/api/v1/courses/${a.course}/discussion_topics/${a.id}/entries?per_page=100`, go, 4); } catch (e) { if (!/^(401|403|404)$/.test(e.message)) throw e; }
+    if (!go()) return no('late');
+    const flat = (rows || []).flatMap((e) => [e, ...(Array.isArray(e?.recent_replies) ? e.recent_replies.map((x) => ({ ...x, parent: true })) : [])]).filter((e) => e && e.deleted !== true);
+    const hide = anonymous([person(j.author?.display_name), person(j.user_name), ...flat.map((e) => person(e.user_name))]);
+    const body = typeof j.message === 'string' ? j.message : '', prompt = text(body);
+    const mine = flat.filter((e) => String(e.user_id) === go.uid).map((e) => ({ at: Date.parse(e.created_at) || null, reply: e.parent === true || e.parent_id != null, text: text(unquoted(typeof e.message === 'string' ? e.message : '')).slice(0, 2000) }));
+    return hide({ ok: true, title: String(j.title || '').trim().slice(0, 300), text: prompt.slice(0, 20000), files: (Array.isArray(j.attachments) ? j.attachments : []).map((f) => ({ name: String(f?.display_name || f?.filename || '').slice(0, 200) })).filter((f) => f.name),
+      gradable: j.assignment_id != null || !!j.assignment, at: Date.parse(j.posted_at) || null, mine, others: rows ? flat.length - mine.length : null, complete: !!rows && !rows.more && !rows.some((e) => e?.has_more_replies === true),
+      ...(prompt.length > 20000 && { truncated: true }) });
+  };
+  const OPS = { todo, insights, assignment, mark, announcement, search, modules, topics, document: doc1, syllabus, discussion, topic };
+  const SCHOOL_READS = new Set(['announcement', 'search', 'modules', 'topics', 'document', 'syllabus', 'discussion', 'topic']);
+  // An address can also be an anchor's visible label, plain body text or a file's displayName. Strip it from every
+  // returned string, after HTML decoding, so signed credentials never leave the tab through those alternate paths.
+  const mapRead = (v, convert) => typeof v === 'string' ? convert(v) : Array.isArray(v) ? v.map((x) => mapRead(x, convert))
+    : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, mapRead(x, convert)])) : v;
+  const publicRead = (v) => mapRead(v, (s) => s.replace(/(?:https?:\/\/[^\s<>"'`]*|\/\/[^\s<>"'`]*)?\/(?:bbcswebdav|sessions)\/[^\s<>"'`]*/gi, '[file address omitted]'));
   const jobs = new Map();
   const cancel = (id) => {
     if (jobs.has(id)) jobs.get(id)?.abort();
@@ -399,7 +466,7 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
         const { j: current } = await req(x.site === 'ultra' ? '/learn/api/v1/users/me' : '/api/v1/users/self/profile', go);
         if (String(current?.id) !== a.uid) return no('profile');
       }
-      return result;
+      return SCHOOL_READS.has(op) ? publicRead(result) : result;
     };
     try { return await Promise.race([work(), stopped]); } catch { return no(go() ? 'failed' : 'late'); }
     finally { clearTimeout(timer); ac.abort(); jobs.delete(id); }
