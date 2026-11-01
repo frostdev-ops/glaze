@@ -31,7 +31,8 @@
       "total": "cdf235cba2228d58148a245846b3bad4324c626936f7981496a45d0b837ecea2",
       "license": "lfm1.0",
       "quant": "Q4_K_M",
-      "tier": 1
+      "tier": 1,
+      "tools": 3
     },
     {
       "id": "rime-1.7b-q6_k",
@@ -69,7 +70,8 @@
       "total": "1414d3501009228a4f332a49d91e0599da74275cca49b2ed98dd57a7bade3688",
       "license": "lfm1.0",
       "quant": "Q6_K",
-      "tier": 3
+      "tier": 3,
+      "tools": 3
     },
     {
       "id": "rime-1.7b-q8_0",
@@ -113,7 +115,8 @@
       "total": "7520da22275730692ff54bf88dbd25309bc89fb8c9a7803dc7e18c02bda40999",
       "license": "lfm1.0",
       "quant": "Q8_0",
-      "tier": 4
+      "tier": 4,
+      "tools": 3
     },
     {
       "id": "lfm3-vl-2b-q4_k_m",
