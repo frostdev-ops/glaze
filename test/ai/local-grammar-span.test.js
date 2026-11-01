@@ -213,7 +213,7 @@ const spanMatcher = (src, opts = {}, bounds = {}) => {
 const takesSpan = (g, q) => {
   const m = g.matcher();
   for (const b of enc.encode(JSON.stringify({ q }))) {
-    if (!on(m.mask(), b)) { assert.throws(() => m.advance(b), RangeError); return false; }
+    if (!on(m.mask(), b)) { assert.throws(() => m.advance(b), { name: 'RangeError' }); return false; }
     m.advance(b);
   }
   return m.complete;
@@ -265,4 +265,38 @@ test('span distance storage grows with the largest minimum, not the sum of every
   };
   const largest = allocated([16]), increasing = allocated(Array.from({ length: 16 }, (_, i) => i + 1));
   assert.ok(increasing < largest * 3, `${increasing} allocated cells versus ${largest} for the largest minimum`);
+});
+
+test('a lone surrogate separates words without making the following word uncopyable', () => {
+  const { g } = spanMatcher('\ud800John Alice', { min: 1, word: true });
+  assert.ok(takesSpan(g, 'John'), 'a word after an uncopyable surrogate');
+  assert.ok(!takesSpan(g, '\ud800John'), 'the surrogate itself stays uncopyable');
+});
+
+test('lone surrogates count toward the source storage limit', () => {
+  const fs = require('node:fs'), vm = require('node:vm');
+  let largest = 0;
+  class Counted extends Int32Array { constructor(n, ...rest) { super(n, ...rest); largest = Math.max(largest, this.length); } }
+  const scope = { GZ_AI_SCHEMA: S, GZ_AI_TEXT: X, TextEncoder, Int32Array: Counted };
+  vm.createContext(scope);
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/ai/local/grammar.js'), 'utf8'), scope);
+  scope.GZ_AI_GRAMMAR.LIMIT.source = 32;
+  for (const [src, word] of [['\ud800'.repeat(64), false], ['\ud800'.repeat(20), true]]) {
+    largest = 0;
+    const schema = S.obj({ q: span({ word }) }, ['q']);
+    const free = scope.GZ_AI_GRAMMAR.compile(schema, V, { sources: { src } });
+    assert.ok(largest <= 32, `${largest} cells allocated for a source already over the limit`);
+    assert.ok(takesSpan(free, 'free'), 'an oversized source falls back to a string');
+  }
+});
+
+test('bare() reflects schema edits without leaking newly added span keywords to providers', () => {
+  const schema = S.obj({ q: S.str('quote') }, ['q']);
+  assert.equal(S.bare(schema), schema);
+  schema.properties.q.span = { source: 'src', min: 1 };
+  assert.ok(!JSON.stringify(S.bare(schema)).includes('"span"'));
+  schema.properties.q.maxLength = 9;
+  assert.equal(S.bare(schema).properties.q.maxLength, 9);
+  delete schema.properties.q.span;
+  assert.equal(S.bare(schema), schema);
 });

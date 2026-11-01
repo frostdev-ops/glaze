@@ -96,3 +96,15 @@ test('a run in that Worker with a schema is held to it: every answer token maske
   assert.equal(end.result.finish, 'stop');
   assert.ok(decodes.length > 0 && decodes.every((d) => d.masked && d.ok), 'every token under the grammar\'s mask');
 });
+
+test('the Worker can enforce normalization-sensitive spans using the shared text folding', () => {
+  const w = boot(), G = w.scope.GZ_AI_GRAMMAR;
+  const tok = w.scope.GZ_AI_TOKENIZER.fromGGUF(VOCAB), V = G.vocab(tok.byteStrings(), { eos: [tok.eos] });
+  const schema = { type: 'object', properties: { q: { type: 'string', maxLength: 3, span: { source: 'draft', min: 1 } } }, required: ['q'], additionalProperties: false };
+  const g = G.compile(schema, V, { sources: { draft: 'ΑΣΑ ok' } });
+  const good = g.matcher();
+  for (const id of tok.encode('{"q":"ΑΣΑ"}')) good.advance(id);
+  assert.ok(good.complete);
+  const bad = g.matcher();
+  assert.throws(() => { for (const id of tok.encode('{"q":"ΑΣ"}')) bad.advance(id); }, /doesn't fit/);
+});
