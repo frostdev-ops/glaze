@@ -145,6 +145,17 @@ test('reveal(\'ask\') brings a shown tile to the student and focuses its chat; f
   assert.equal(p.ui.reveal('pet'), false, 'another tile, not drawn');
 });
 
+test('reveal declines a tile inside hidden widgets so the palette can open the dialog', async () => {
+  const p = page();
+  p.ui.sync(true);
+  await settle();
+  const hide = p.doc.querySelector('.gz-dash-hide');
+  for (const l of hide.listeners.filter((x) => x.type === 'click')) l.f({ target: hide, isTrusted: true, preventDefault() {}, stopPropagation() {} });
+  assert.ok(p.tile()?.closest('[hidden]'), 'the Courses page keeps its hidden widgets mounted');
+  assert.equal(p.ui.reveal('ask'), false, 'a hidden ancestor makes the chat unavailable to the palette');
+  assert.equal(p.mounts[0].focused, 0);
+});
+
 test('⌘K\'s Ask Rime row reveals the tile first and opens the dialog only where it isn\'t; both files load on demand', () => {
   const src = read('navigation/page/palette.js');
   assert.match(src, /run: \(e\) => e\?\.isTrusted && \(globalThis\.GZ_WIDGETS_UI\?\.reveal\?\.\('ask'\) \|\| need\('ai\/page\/ask\.js'/);
