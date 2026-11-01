@@ -463,7 +463,8 @@ is replayed. The host page's CSP: `default-src 'none'; script-src 'self' 'wasm-u
 `downloading` while its prepare runs. The model: the tier Settings' Advanced keeps on the `local` connection (`{ provider:
 'local', tier }`), if the catalog still offers it; otherwise Auto: the one downloaded (ready, then partial), else at Download
 the ladder's pick. Settings' ops:
-`test { provider: 'local' }` → `{ ok, state, reason?, size, tier, tiers: [{ tier, size }], progress? }`; `prepare` from the
+`test { provider: 'local' }` → `{ ok, state, reason?, size, tier, tiers: [{ tier, size }], progress?, stale? }`; `stale: true`
+means files from a replaced catalog remain, and Settings offers Delete even before Download or when the model is unavailable. `prepare` from the
 Download click (progress events as the device's; it answers `downloading` after four minutes while the download goes on in
 the host); `delete { provider: 'local' }` removes every downloaded model and ends a download. A failed download answers
 `download` with reason `quota` or `network`, so Download stays.

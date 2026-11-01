@@ -239,7 +239,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       state.setAttribute('role', 'status');
       line.append(mark(OWN), el('b', '', label(OWN)), state);
       if (ours?.state === 'download') line.append(button('primary', t('Download'), fetchModel));
-      if (ours && (ours.state === 'downloading' || (ours.state === 'ready'))) line.append(button('', t('Delete'), deleteModel));
+      if (ours && (ours.stale || ours.state === 'downloading' || ours.state === 'ready')) line.append(button('', t('Delete'), deleteModel));
       const parts = [line];
       if (ours?.state === 'downloading' && typeof ours.progress === 'number') {
         const bar = el('progress');
@@ -696,7 +696,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     const localResult = (r) => {
       const was = ours?.pictures;
       const keep = (st) => ({ ...st, ...(!st.tiers && ours?.tiers && { tiers: ours.tiers }), ...(!st.size && ours?.size && { size: ours.size }), ...(!st.pictures && ours?.pictures && { pictures: ours.pictures }) });
-      ours = r.ok ? keep({ state: r.state, ...['reason', 'size', 'tier', 'tiers', 'progress', 'pictures'].reduce((o, k) => (r[k] === undefined ? o : { ...o, [k]: r[k] }), {}) })
+      ours = r.ok ? keep({ state: r.state, ...['reason', 'size', 'tier', 'tiers', 'progress', 'pictures', 'stale'].reduce((o, k) => (r[k] === undefined ? o : { ...o, [k]: r[k] }), {}) })
         : { state: 'unavailable', reason: r.error };
       // The picture download's own answer is the newer while its Download waits for the worker.
       if (fetchingPics && ours.pictures && ours.pictures.state !== 'downloading') ours.pictures = { ...ours.pictures, state: 'downloading', ...(typeof was?.progress === 'number' && { progress: was.progress }) };
