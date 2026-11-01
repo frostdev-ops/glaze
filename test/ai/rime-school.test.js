@@ -338,3 +338,44 @@ test('port: help with a named piece of work reads it with the tools, then study.
   assert.match(runs[2].input.material, /Lab report 3/);
   assert.deepEqual(got.filter((m) => m.type === 'end').map((m) => [m.task, m.output?.reply]), [['study.help', 'Start with the hypothesis the instructions ask for.']]);
 });
+
+// ---- the training-spec review's findings (glaze-plans/lfm-tune/FORMAT-tools-v3.md, round 4) -------------------------------
+test('pt-BR names a single forum too; run_js after reading an announcement, a content page or a discussion is graded work\'s rule too', () => {
+  const r = K.route('O que diz o fórum de BIO?', { locale: 'pt-BR', level: 3 });
+  assert.ok(r.task === 'agent.tools' && r.tools.includes('discussions_list'), JSON.stringify(r));
+  for (const name of ['announcement_read', 'content_read', 'discussion_read']) {
+    const read = step(name, { course: '25', id: '70' }, { account: ACC, title: 'Problem set 4', text: 'Compute 17 * 23 and show your work.', page: 1, pages: 1 });
+    assert.equal(A.why({ call: { name: 'run_js', arguments: { code: '17 * 23' } }, answer: null }, inputOf('What does it ask?', [read])), 'work', name);
+  }
+});
+
+test('announcements_list promises a date only where the site gives one', () => {
+  const d = A.SPECS.find((s) => s.name === 'announcements_list').description;
+  assert.match(d, /on Canvas, at/);
+});
+
+test('port: a help turn that fails its check still lets study help answer, without what it would have read', async () => {
+  const [page, worker] = (() => {
+    const side = () => ({ on: [], gone: [] });
+    const a = side(), b = side();
+    const end = (me, other) => ({ postMessage: (m) => { const c = structuredClone(m); setTimeout(() => other.on.forEach((f) => f(c)), 0); }, onMessage: { addListener: (f) => me.on.push(f) }, onDisconnect: { addListener: (f) => me.gone.push(f) }, disconnect() {} });
+    return [end(a, b), end(b, a)];
+  })();
+  const runs = [];
+  const broker = (port) => port.onMessage.addListener((m) => {
+    if (m.op !== 'run') return;
+    runs.push(m);
+    port.postMessage(m.task === 'agent.tools' ? { id: m.id, type: 'error', error: 'check' } : { id: m.id, type: 'end', output: { kind: 'hint', step: null, reply: 'Start with what the lab asks you to measure.', followUp: null } });
+  });
+  K.connect(worker, { allowed: async () => true, broker, settings: async () => ({ on: true, model: { use: 'openai', model: 'm' }, features: { ask: true } }), enabled: async () => true,
+    registry: { get: () => null, describe: () => ({}) }, state: async () => ({}), refresh: async () => null, local: {}, keys: async () => [], turn: (f) => f(), zone: 'UTC', now: () => NOW,
+    accounts: async () => [{ account: ACC, origin: C.CANVAS }], approve: { ask: async () => 'no' }, level: async () => 3, page: () => ({ url: `${C.CANVAS}/` }),
+    own: { read: async () => null, writer: async () => true, wakes: { local: C.area({}), alarms: null, read: async () => null, on: async () => true, now: () => NOW } } });
+  const got = [];
+  page.onMessage.addListener((m) => got.push(m));
+  page.postMessage({ id: 1, op: 'ask', question: 'Help me start Lab report 3', locale: 'en' });
+  await settle();
+  assert.deepEqual(runs.map((r) => r.task), ['agent.tools', 'study.help']);
+  assert.equal(runs[1].input.material, undefined);
+  assert.deepEqual(got.filter((m) => ['end', 'error'].includes(m.type)).map((m) => [m.type, m.output?.reply]), [['end', 'Start with what the lab asks you to measure.']]);
+});
