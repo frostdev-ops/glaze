@@ -493,6 +493,20 @@ test('Ultra content: an Ultra document reads its body block with the names of th
   assert.doesNotMatch(JSON.stringify(doc), /SIGNED|bbcswebdav|sessions/);
 });
 
+test('Ultra document body blocks use visibleIn, including adaptive release and unknown availability', async (t) => {
+  const block = PROBED.children._723_1.results[0];
+  for (const [label, availability] of [
+    ['future', { available: 'Yes', adaptiveRelease: { start: '2099-01-01T00:00:00Z' } }],
+    ['expired', { available: 'Yes', adaptiveRelease: { end: '2000-01-01T00:00:00Z' } }],
+    ['unknown', { available: 'Yes' }],
+  ]) await t.test(label, async () => {
+    const tab = probedTab({ routes: { '/learn/api/public/v1/courses/_101_1/contents/_723_1/children': { results: [{ ...block, availability }] } } });
+    const r = await tool('content_read').run({ course: '_101_1', id: '_723_1' }, ctxFor(UL, tabsOf([tab])));
+    assert.equal(r.ok, false);
+    assert.doesNotMatch(JSON.stringify(r), /900 words|Essay rubric/);
+  });
+});
+
 test('Ultra syllabus: the course\'s syllabus document wherever it sits, a page at a time; a body that is only a file names the file; imported facts stay', async () => {
   const tabs = tabsOf([probedTab()]);
   const r = await tool('syllabus_read').run({ course: '_101_1' }, ctxFor(UL, tabs));
