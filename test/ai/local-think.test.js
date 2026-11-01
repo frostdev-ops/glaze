@@ -417,3 +417,20 @@ test('count: the prompt tokens of a request, exactly as the host feeds them (Gla
   const longer = await P.count('local', request(REQS, { text: 'the cat sat on the mat '.repeat(20) }), LOCAL.config({}));
   assert.ok(longer.tokens > n.tokens);
 });
+
+test('counting another model cannot unload a model while it is decoding', async () => {
+  let release, entered;
+  const gate = new Promise((r) => { release = r; }), started = new Promise((r) => { entered = r; });
+  const s = setup({ rates: FAST, think: null, gate: async (_signal, n) => { if (n === 1) { entered(); await gate; } } });
+  const run = P.run('local', request(REQS, { text: 'the cat' }), LOCAL.config({ weights: 'glaze-q4' }));
+  // Observe rejection too, so a count-triggered cancellation is reported by the assertion below.
+  const ended = run.then((v) => ({ v }), (error) => ({ error }));
+  try {
+    await started;
+    const n = await P.count('local', request(REQS, { text: 'the dog' }), LOCAL.config({ weights: 'glaze-q8' }));
+    assert.equal(n.exact, true);
+    assert.equal(s.eng.log.loads, 1, 'count needs the tokenizer, not a GPU model replacement');
+  } finally { release(); }
+  const result = await ended;
+  assert.ok(!result.error, String(result.error));
+});
