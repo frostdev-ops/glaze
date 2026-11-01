@@ -186,7 +186,7 @@ var GZ_AI_MODEL_UPDATES = globalThis.GZ_AI_MODEL_UPDATES || (() => {
     const controller = new AbortController(), target = (r.ok ? r.list.models : st?.models || []).find((m) => m.id === slot.id) || cat.latest.get(slot.id);
     job = { controller, version: target?.version || null, progress: 0 };
     try {
-      const out = await env.host('update', { doc, id: slot.id, glaze: env.glaze }, { signal: controller.signal, onEvent: (e) => {
+      const out = await env.host('update', { doc, model: slot.id, glaze: env.glaze }, { signal: controller.signal, onEvent: (e) => {
         if (e?.type !== 'progress' || !Number.isFinite(e.loaded)) return;
         job.progress = Math.min(1, Math.max(0, e.loaded));
         say(env, { loaded: job.progress, ...(job.version && { version: job.version }) });

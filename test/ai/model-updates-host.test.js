@@ -74,7 +74,7 @@ const setup = (opts = {}) => {
   return { fs, hf, store, host, log, posted, call, run, text, hold: () => { let open; gate = new Promise((r) => { open = r; }); return () => { gate = null; open(); }; } };
 };
 const ready = async (t) => { assert.equal((await t.store.download('rime-q4')).state, 'ready'); };
-const update = (t, doc, glaze = '4.0.1') => t.call('update', { doc, id: 'rime-q4', glaze });
+const update = (t, doc, glaze = '4.0.1') => t.call('update', { doc, model: 'rime-q4', glaze });
 const tags = (fs) => [...fs.root.kids.get('glaze-models').kids.get('rime-q4').kids.keys()].sort();
 
 test('a newer version downloads beside the one in use, verified, and swaps in: the engine let go, the next run on it, the old version kept until it answers', async () => {

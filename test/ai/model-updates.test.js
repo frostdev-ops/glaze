@@ -142,7 +142,7 @@ test('with a model downloaded, the check fetches the signed list without credent
   assert.equal(w.calls[0].init.cache, 'no-store');
   assert.equal(w.hosted.length, 1);
   assert.equal(w.hosted[0].op, 'update');
-  assert.equal(w.hosted[0].args.id, 'rime-q4');
+  assert.equal(w.hosted[0].args.model, 'rime-q4');
   assert.equal(w.hosted[0].args.glaze, '4.0.1');
   assert.deepEqual(w.hosted[0].args.doc, sign(listOf(3)));
   assert.ok(w.said.some((m) => m.part === 'update' && m.loaded === 0.5), 'progress reaches Settings');

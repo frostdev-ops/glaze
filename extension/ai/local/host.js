@@ -6,7 +6,10 @@
 //   in  { op: 'config', idle }  { op: 'detach' } (the worker's port went: runs and warm-ups stop, a download goes on)
 //       { id, op: 'prepare', tier?, part? }  { id, op: 'run', model, parts, stable, schema?, tools?, sources?, sampler,
 //       maxTokens, projector?, images?, think?, window? }  { id, op: 'warm', model, parts }  { id, op: 'remove', part? }  { id, op: 'release' }
-//       { id, op: 'cancel' }
+//       { id, op: 'cancel' }  { id, op: 'update', doc, model, glaze } (ai/local/updates.js update: a signed model list from the
+//       worker's daily check; the newer version of `model` downloads beside it, waiting while a run or warm-up is in
+//       flight, and swaps in at the next idle moment, the engine let go; a run on the model in its trial confirms it, or
+//       rolls it back on a load or engine failure and runs again on the old version when nothing of the answer was sent)
 //   tools [{ name, parameters }] (with schema; ai/tasks/agent-tools.js constraint()): the answer is either the schema's
 //   JSON or one native call to a listed tool, held by the grammar (grammar.js compile's tools). sources { [name]: text }
 //   (with schema; providers/local.js spans): the texts its span strings are held to (grammar.js compile's sources).
@@ -37,7 +40,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
   const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, rate: 16, answer: 256, spans: 2 };
   // What the Worker loads, in order, beside this file: required ones throw at its start; optional ones until they ship.
   const IMPORTS = Object.freeze({ required: Object.freeze(['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', '../text.js', 'grammar.js']),
-    optional: Object.freeze(['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'ladder.js']) });
+    optional: Object.freeze(['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'ladder.js', 'updates.js']) });
   // LFM3's GGUF sampling defaults (general.sampling.*: top_k 50, temp 0.1) where a request names none.
   const SAMPLER = Object.freeze({ temperature: 0.1, topK: 50 });
   const fail = (category, reason, extra = {}) => Object.assign(new Error(`${category}: ${reason}`), { category, reason, ...extra });
@@ -62,7 +65,8 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
     let idleMs = LIMIT.idle, idleTimer = null, tickTimer = null;
     let loaded = null; // { id, key, projector, control, ready, model, tok, eos, base, vision?, warm: [{ ids, snap }] }
     let turn = Promise.resolve(); // one sequence at a time
-    const post = (m) => { try { env.post(m); } catch { /* the host's page is gone */ } };
+    const spoke = new Set(); // runs that have sent part of their answer
+    const post = (m) => { if (m?.type === 'delta') spoke.add(m.id); try { env.post(m); } catch { /* the host's page is gone */ } };
 
     // ---- idle and tick ------------------------------------------------------------------------------------------------
     const quiet = () => {
@@ -280,7 +284,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       flush();
       return { rest: Uint32Array.from(ids), slots };
     };
-    const run = async (m, signal) => {
+    const answer = async (m, signal) => {
       return queued(async () => {
         const images = Array.isArray(m.images) ? m.images : [];
         if (images.length && typeof m.projector !== 'string') throw fail('request-rejected', 'unsupported');
@@ -368,6 +372,45 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         return { text, finish, model: m.model, usage: { input, output: thought + n, thought }, ...(rate && { rate }) };
       }, signal);
     };
+    // A run on the model in its trial (a swapped-in update): its first good answer keeps the new version; a load or engine
+    // failure brings the old one back, and the run goes again on it unless part of its answer was already sent.
+    const run = async (m, signal) => {
+      const U = env.updates?.(), pics = Array.isArray(m.images) && m.images.length;
+      const trial = U && !pics ? (await env.store.catalog?.().catch(() => null))?.state?.trial : null;
+      if (!trial || trial.id !== m.model) return answer(m, signal);
+      try {
+        const r = await answer(m, signal);
+        await U.settle(env.store, true).catch(() => {});
+        return r;
+      } catch (e) {
+        if (signal.aborted || !U.fault(e)) throw e;
+        await queued(unload);
+        await U.settle(env.store, false);
+        if (spoke.has(m.id)) throw e;
+        return answer(m, signal);
+      }
+    };
+    // Resolves once no run or warm-up is in flight; throws when the signal fires or Data Saver comes on.
+    let idlers = [];
+    const busy = () => [...ops.values()].some((o) => o.kind === 'run' || o.kind === 'warm');
+    const saveData = env.saveData || (() => globalThis.navigator?.connection?.saveData === true);
+    const idle = (signal) => new Promise((resolve, reject) => {
+      const go = () => {
+        if (signal?.aborted) return reject(aborted(signal));
+        if (saveData()) return reject(Object.assign(new Error('Data Saver is on'), { reason: 'saveData' }));
+        if (!busy()) return resolve();
+        idlers.push(go);
+      };
+      signal?.addEventListener('abort', () => reject(aborted(signal)), { once: true });
+      go();
+    });
+    const update = async (m, signal) => {
+      const U = env.updates?.();
+      if (!U || !env.store.catalog) return { state: 'unavailable', reason: 'engine' };
+      return U.update({ store: env.store, key: env.key, idle, progress: (loaded) => post({ id: m.id, type: 'progress', loaded }),
+        between: (fn) => queued(async () => { await fn(); if (loaded?.id === m.model) await unload(); }) },
+      { doc: m.doc, id: m.model, glaze: m.glaze }, signal);
+    };
     const warm = async (m, signal) => {
       return queued(async () => {
         if ((await env.store.status(m.model)).state !== 'ready') return { ok: false };
@@ -385,7 +428,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
           return { state: 'download' };
         });
       }
-      for (const o of ops.values()) if (o.kind === 'prepare') o.control.abort(new DOMException('Removed', 'AbortError'));
+      for (const o of ops.values()) if (o.kind === 'prepare' || o.kind === 'update') o.control.abort(new DOMException('Removed', 'AbortError'));
       stopSequences();
       return queued(async () => {
         await unload();
@@ -394,7 +437,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         return { state: 'download' };
       });
     };
-    const OPS = { prepare, run, warm, remove, release: async () => { await release(); return {}; } };
+    const OPS = { prepare, run, warm, remove, update, release: async () => { await release(); return {}; } };
 
     const handle = (m) => {
       if (!m || typeof m !== 'object') return;
@@ -411,7 +454,11 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         (e) => post({ id: m.id, type: 'error', error: control.signal.aborted ? { category: 'cancelled' }
           : { ...(typeof e?.category === 'string' && { category: e.category }), ...(typeof e?.reason === 'string' && { reason: e.reason }), ...(typeof e?.code === 'string' && { code: e.code }),
             ...(Number.isSafeInteger(e?.tokens) && { tokens: e.tokens }), ...(Number.isSafeInteger(e?.context) && { context: e.context }) } }),
-      ).finally(() => { ops.delete(m.id); quiet(); });
+      ).finally(() => {
+        ops.delete(m.id); spoke.delete(m.id); quiet();
+        const waiting = idlers; idlers = [];
+        for (const f of waiting) f();
+      });
     };
     quiet();
     return { handle, release, get loaded() { return loaded?.id || null; } };
