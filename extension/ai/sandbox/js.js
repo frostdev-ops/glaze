@@ -14,11 +14,13 @@ var GZ_AI_RIME_SANDBOX = globalThis.GZ_AI_RIME_SANDBOX || (() => {
   // The Worker's whole script, sent as source: it uses nothing from around it.
   function harness(LIMIT) {
     const post = self.postMessage.bind(self), now = () => performance.now();
-    // Nothing that reaches out, loads code or keeps anything: gone from the scope before the student's code runs.
+    // Nothing that reaches out, loads code or keeps anything: gone from the scope, and from every prototype above it (Chrome
+    // keeps fetch and the rest on WorkerGlobalScope.prototype), before the code runs.
+    const levels = [];
+    for (let o = self; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) levels.push(o);
     for (const k of ['fetch', 'XMLHttpRequest', 'WebSocket', 'WebSocketStream', 'WebTransport', 'EventSource', 'importScripts', 'indexedDB', 'caches', 'Worker', 'SharedWorker',
       'BroadcastChannel', 'MessageChannel', 'Request', 'Response', 'Headers', 'navigator', 'location', 'postMessage', 'close', 'chrome', 'browser', 'FileReaderSync', 'OffscreenCanvas', 'storage', 'cookieStore']) {
-      try { Object.defineProperty(self, k, { value: undefined, writable: false, configurable: false }); } catch { /* not ours to take */ }
-      try { Object.defineProperty(Object.getPrototypeOf(self), k, { value: undefined, writable: false, configurable: false }); } catch { /* not there */ }
+      for (const o of levels) if (o === self || Object.getOwnPropertyDescriptor(o, k)) try { Object.defineProperty(o, k, { value: undefined, writable: false, configurable: false }); } catch { /* not ours to take */ }
     }
     const show = (v, depth = 0) => {
       if (typeof v === 'string') return v;
