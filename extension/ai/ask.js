@@ -185,7 +185,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     });
 
     // Ask's tool calls, through Agents' one call path, as an app of Glaze's own that Ask's switch has granted every group.
-    const live = async () => SET().allowed(SET().clean(await env.settings()), FEATURE) && (await env.enabled()) === true;
+    const live = async () => SET().allowed(SET().clean(await env.settings()), FEATURE) && (await env.enabled()) === true
+      && await env.allowed({ op: 'run', feature: FEATURE }) === true;
     let asked; // the student's answer to the current call's change, from Agents' approval window
     const calls = CALLS().create({
       registry: env.registry, state: env.state, refresh: env.refresh, accounts: env.accounts, local: env.local, keys: env.keys, now: env.now, turn: env.turn,

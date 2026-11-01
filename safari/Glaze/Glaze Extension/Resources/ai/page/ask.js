@@ -62,7 +62,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
 
   // ---- the view ---------------------------------------------------------------------------------------------------------
   const turns = []; // [{ who: 'you' | 'glaze', text, follow? }], this page's only
-  let box = null, opener = null, current = 0;
+  let box = null, opener = null, current = 0, pending = null;
   const $ = (sel) => box?.querySelector(sel);
   const say = (s) => { const l = $('.gz-ask-say'); if (l && l.textContent !== s) l.textContent = s; };
   const item = (turn) => {
@@ -86,12 +86,18 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!real(e) || !activated() || current || !box) return;
+    if (!real(e) || !activated() || current || pending || !box) return;
     const q = $('#gz-ask-q'), work = $('#gz-ask-work'), question = q.value.trim(), attempt = work.hidden ? '' : work.value.trim();
     if (!question) return q.focus();
-    if (!await alive()) return box?.close();
+    // Reserve before the storage read. Closing invalidates this reservation, including when a new panel has opened.
+    const mine = pending = { box }, questionValue = q.value, workValue = work.value;
+    const allowed = await alive();
+    if (pending !== mine || box !== mine.box || !box.open) return;
+    pending = null;
+    if (!allowed) return box.close();
     add({ who: 'you', text: attempt ? `${question}\n\n${attempt}` : question });
-    q.value = ''; work.value = '';
+    if (q.value === questionValue) q.value = '';
+    if (work.value === workValue) work.value = '';
     say(t('Thinking…'));
     running(true);
     const run = send({ op: 'ask', question, ...(attempt && { attempt }), locale: lang() }, (ev) => {
@@ -153,7 +159,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     box.addEventListener('click', (e) => { if (e.target === box && real(e)) box.close(); });
     box.addEventListener('close', () => {
       if (current) try { port?.postMessage({ id: current, op: 'cancel' }); } catch { /* gone */ }
-      current = 0;
+      current = 0; pending = null;
       hangUp();
       box?.remove(); box = null;
       if (opener?.isConnected) opener.focus({ preventScroll: true });
@@ -164,8 +170,9 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     log.scrollTop = log.scrollHeight;
     q.focus();
     // Where a run would stand now: no model chosen, or one not ready, said at once.
-    const st = await send({ op: 'status' });
-    if (!box) return;
+    const dialog = box, status = send({ op: 'status' });
+    const st = await status;
+    if (box !== dialog || seq !== status.id) return;
     if (st.type === 'status' && st.allowed === false) return box.close();
     if (st.type === 'status' && st.ready === false) say(said(st.why));
   };
