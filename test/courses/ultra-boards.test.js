@@ -1616,6 +1616,17 @@ test('a Dashboard identity refresh uses the new student even with the sidebar of
   assert.ok(lay(p).filled.includes('dash https://school.blackboard.test/_2_1'));
 });
 
+test('rechecking the same Dashboard student keeps painted cards in place', async () => {
+  const p = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: { todo: true, filled: ['dash'], boards: { dash: [{ id: ckey('_101_1'), on: true }] } } } }), Promise.resolve(members()), '_2_1');
+  p.ui.sync(true); await settle(); await p.ui.who();
+  const card = p.tile(ckey('_101_1')), grid = p.doc.getElementById('gz-dash');
+  assert.ok(card);
+  p.doc.dispatchEvent({ type: 'glaze:ultra-refresh', detail: { identity: true } });
+  assert.ok(p.tile(ckey('_101_1')) === card, 'a refresh is not evidence that the student changed');
+  p.ui.sync(true); await settle();
+  assert.ok(p.tile(ckey('_101_1')) === card && p.doc.getElementById('gz-dash') === grid, 'the same student keeps the same board');
+});
+
 test('a failed Dashboard identity read can be retried on the next page pass', async () => {
   const seed = W.apply(W.fresh(), { fill: 'dash', ops: OTHER.map((id) => ({ s: 'dash', id: ckey(id), set: { on: true } })) });
   const p = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: seed } }), Promise.resolve(members()));
