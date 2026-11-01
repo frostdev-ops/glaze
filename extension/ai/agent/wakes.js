@@ -131,13 +131,18 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
 
   // ---- firing ----------------------------------------------------------------------------------------------------------
   const fire = (s, f) => { s.fired.push(f); s.fired = s.fired.slice(-LIMIT.fired); };
+  const settle = (s, now) => {
+    const due = s.wakes.filter((w) => w.at <= now);
+    for (const w of due) fire(s, { id: w.id, what: 'wake', say: w.say, at: now });
+    s.wakes = s.wakes.filter((w) => w.at > now);
+    s.monitors = s.monitors.filter((m) => m.until > now);
+    return due.length;
+  };
   // Everything due by now: wakes whose time has come, monitors whose data changed (each read once); expired monitors go.
   const tick = (env) => turn(async () => {
     if (!(await env.on())) { await arm(env, await read(env), false); return 0; }
     const s = await read(env), now = clock(env);
-    let n = 0;
-    for (const w of s.wakes.filter((x) => x.at <= now)) { fire(s, { id: w.id, what: 'wake', say: w.say, at: now }); n++; }
-    s.wakes = s.wakes.filter((x) => x.at > now);
+    let n = settle(s, now);
     const keep = [];
     for (const m of s.monitors) {
       if (!(await env.on())) return 0;
@@ -196,6 +201,7 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
         if (!say) return fail('Say what to do then.');
         const s = await read(env);
         if (!(await env.on())) return fail(OFF);
+        settle(s, clock(env));
         if (s.wakes.length >= LIMIT.wakes) return fail(`${LIMIT.wakes} wakes are waiting already; cancel one first (wakes_list).`);
         const w = { id: newId('w'), at: t.at, say, made: clock(env) };
         s.wakes.push(w);
@@ -218,6 +224,7 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
         return turn(async () => {
           const s = await read(env);
           if (!(await env.on())) return fail(OFF);
+          settle(s, clock(env));
           if (s.monitors.length >= LIMIT.monitors) return fail(`${LIMIT.monitors} monitors are watching already; cancel one first (wakes_list).`);
           const m = { id: newId('m'), ...r.m, say: text(args.say, LIMIT.say), made: clock(env), until: clock(env) + LIMIT.days * DAY };
           s.monitors.push(m);
