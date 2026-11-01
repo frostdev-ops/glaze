@@ -330,7 +330,11 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     const tool = async (c, signal) => {
       const ok = await allowed({ op: 'run', feature: FEATURE });
       if (ok !== true) throw R().error(R().CODES.includes(ok) ? ok : 'permission');
-      if (AT().OWN.includes(c.name)) return own(c, signal);
+      if (AT().OWN.includes(c.name)) {
+        if ((await env.level?.().catch(() => 1) ?? 1) < 3) throw R().error('changed');
+        if (signal?.aborted) throw cancelled();
+        return own(c, signal);
+      }
       asked = undefined;
       const mine = current, kind = c.kind === 'write' ? 'write' : 'read', { step, ms } = card(mine, c, kind);
       if (kind === 'read') step('run'); else if (mine) mine.asking = () => step('ask');
@@ -424,9 +428,14 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       const zone = env.zone || Intl.DateTimeFormat().resolvedOptions().timeZone;
       current = { id, control, n: 0, locale, zone, actions: [], text: (m.text || '').slice(0, LIMIT.text), page: { site: m.site, url: env.page?.()?.url } };
       const keep = (a) => { if (a.type === 'keepalive') post({ id, type: 'keepalive' }); };
-      const run = async (task, input) => (await broker({ op: 'run', feature: FEATURE, task, input }, signal, keep)).output;
+      let level = 1;
+      const run = async (task, input) => {
+        if (level >= 3 && (await env.level?.().catch(() => 1) ?? 1) < 3) throw R().error('changed');
+        return (await broker({ op: 'run', feature: FEATURE, task, input }, signal, keep)).output;
+      };
       try {
-        const level = await env.level?.().catch(() => 1) ?? 1;
+        level = await env.level?.().catch(() => 1) ?? 1;
+        if (signal.aborted) throw cancelled();
         // A fired record the student asked about: its own turn for a model trained on it; else the say as any question.
         prune(env.now());
         const kept = m.fired !== undefined ? KEPT.get(firedKey(m.fired))?.record : undefined;
