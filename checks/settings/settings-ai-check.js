@@ -115,7 +115,7 @@ async function pass(scheme) {
       await page.locator('#ai-providers .ai-prov', { hasText: 'OpenRouter' }).locator('.st.ok').waitFor();
       const s = await stored();
       assert.deepEqual(s.ai.model, { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' });
-      assert.deepEqual(s.ai.features, { syllabus: true, completion: true, writing: true });
+      assert.deepEqual(s.ai.features, { syllabus: true, completion: true, writing: true, ask: false });
       assert.deepEqual(Object.keys(s.get.connections).sort(), ['openrouter']);
       assert.ok(!JSON.stringify(s).includes(KEY), 'the key never comes back');
       await page.locator('#ai-pick-model').getByText('DeepSeek V4.1 Flash 1017').waitFor();
