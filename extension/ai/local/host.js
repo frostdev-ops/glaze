@@ -55,7 +55,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
   }));
   const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
-  // env: { store (ai/local/store.js), gguf (gguf.js), tokenizer (tokenizer.js), engine(), grammar(), ladder(), vision?()
+  // env: { store (ai/local/store.js), gguf (gguf.js), tokenizer (tokenizer.js), engine(), grammar(), ladder(), updates?() (updates.js), vision?()
   // (each the global or null), gpu() (navigator.gpu or null), bench?() (the ladder's bench kernel's source), decode?({ mime,
   // data }) → { width, height, data: RGBA bytes } (the picture's pixels), kernels? (vision.js's kernels' base URL),
   // post(message), setTimeout?, clearTimeout?, now? (ms) }.
@@ -493,7 +493,7 @@ else if (typeof WorkerGlobalScope !== 'undefined' && globalThis instanceof Worke
   };
   const host = GZ_AI_LOCAL_HOST.create({ store: GZ_AI_STORE, gguf: GZ_AI_GGUF, tokenizer: GZ_AI_TOKENIZER, engine: () => g('GZ_AI_ENGINE'),
     vision: () => g('GZ_AI_VISION'), decode, kernels: new URL('kernels/', location.href).href,
-    grammar: () => g('GZ_AI_GRAMMAR'), ladder: () => g('GZ_AI_LADDER'), gpu: () => globalThis.navigator?.gpu || null, post: (m) => postMessage(m),
+    grammar: () => g('GZ_AI_GRAMMAR'), ladder: () => g('GZ_AI_LADDER'), updates: () => g('GZ_AI_MODEL_UPDATES'), gpu: () => globalThis.navigator?.gpu || null, post: (m) => postMessage(m),
     bench: () => fetch(new URL('kernels/bench.wgsl', location.href)).then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status))))) });
   addEventListener('message', (e) => host.handle(e.data));
 }

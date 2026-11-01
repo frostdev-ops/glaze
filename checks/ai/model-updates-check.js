@@ -195,8 +195,9 @@ const LADDER = 'var GZ_AI_LADDER = { probe: async () => ({ adapter: {} }), pick:
     });
     await step('check → download → verify → swap: the signed list fetched without cookies, r6 downloads beside r5 with its progress shown, then swaps in', async () => {
       const before = log.length;
-      const running = check();
-      const shown = await until(async () => { const n = await updateNote(); return /^r6 · \d+%$/.test(n) && n; }, 'the update row', 30000);
+      let early = null;
+      const running = check().then((r) => { early = r; return r; });
+      const shown = await until(async () => { if (early && early.state !== 'swapped') throw Error(`the check ended ${JSON.stringify(early)}`); const n = await updateNote(); return /^r6 · \d+%$/.test(n) && n; }, 'the update row', 30000);
       evidence.updateRow = shown;
       await settings.screenshot({ path: path.join(out, 'card-updating.png') });
       const mid = await opfs(settings);
