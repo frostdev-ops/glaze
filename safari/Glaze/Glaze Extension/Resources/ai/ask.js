@@ -603,11 +603,12 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         if (r.task === 'study.help') {
           // Help naming the student's records (level 3): agent.tools' help turn reads them; study.help then helps with what
           // was read as its material, under its own rules. Its reader's answer is never shown.
-          let material = '';
+          let material = '', tools = ['accounts_list'];
           if (r.read) {
+            tools = await offer(r.read, { question, tools: r.read, steps: [], now: env.now(), zone, locale, first: true, help: r.subject }, signal);
             // A reader that can't finish (its turn refused, too many steps) leaves study help to answer without it.
             let seen = null;
-            try { seen = await episode({ question, tools: r.read, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal, first: true, help: r.subject }); }
+            try { seen = await episode({ question, tools, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal, first: true, help: r.subject }); }
             catch (e) { if (signal.aborted || !['check', 'steps', 'refusal', 'invalid-response'].includes(R().code(e))) throw e; }
             if (seen?.declined) return post({ id, type: 'end', task: r.task, declined: true });
             if (seen) material = seen.steps.map((st) => AT().readable(st.result, zone) || '').join('\n').slice(0, LIMIT.material);
@@ -616,7 +617,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
           const past = level >= 3 ? [...(CHAT.summary ? [{ question: 'Earlier in this chat', answer: CHAT.summary }] : []), ...open].slice(-LIMIT.turns) : history;
           const output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...(past.length && { history: past }), ...(material && { material }) });
           post({ id, type: 'end', task: r.task, output });
-          if (level >= 3 && isObj(output)) void compact({ open, turn: { question, answer: [output.reply, output.followUp].filter((x) => typeof x === 'string' && x).join('\n\n') }, locale, tools: ['accounts_list'], zone }).catch(() => {});
+          if (level >= 3 && isObj(output)) void compact({ open, turn: { question, answer: [output.reply, output.followUp].filter((x) => typeof x === 'string' && x).join('\n\n') }, locale, tools, zone }).catch(() => {});
           return;
         }
         const tools = level >= 3 ? await offer(r.tools, { question, tools: r.tools, steps: [], now: env.now(), zone, locale, first: true }, signal) : r.tools;
