@@ -3781,7 +3781,7 @@
   "Don't allow": "Niet toestaan",
   "Unnamed app": "Naamloze app",
   "Glaze restarted before you answered.": "Glaze is opnieuw gestart voordat je antwoordde.",
-  "Glaze on-device AI": "Lokale AI van Glaze",
+  "Rime": "Rime",
   "Model size": "Modelgrootte",
   "Auto": "Automatisch",
   "{n} GB": "{n} GB",

@@ -31,7 +31,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
 
   const featureName = (id, t) => ({ syllabus: t('Syllabus import'), completion: t('Tab completion'), writing: t('Feedback'), ask: t('Ask Rime') }[id] || id);
   // A connection's name: a provider's, an endpoint's own (names: the kept connections), the model on this device's.
-  const providerName = (id, t, names = {}) => (CARDS[id] ? CARDS[id][0] : id === DEVICE ? t('Chrome on-device AI') : id === APPLE ? t('Apple Intelligence') : id === OWN ? t('Glaze on-device AI')
+  const providerName = (id, t, names = {}) => (CARDS[id] ? CARDS[id][0] : id === DEVICE ? t('Chrome on-device AI') : id === APPLE ? t('Apple Intelligence') : id === OWN ? t('Rime')
     : typeof names[id]?.name === 'string' ? names[id].name : t('Endpoint'));
   const effortName = (e, t) => ({ none: t('Off'), minimal: t('Minimal'), low: t('Low'), medium: t('Medium'), high: t('High') }[e] || e);
   // A call's or a test's end, in a word or two: its state, else its failure category.

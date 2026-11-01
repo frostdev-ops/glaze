@@ -51,7 +51,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   // The pause Advanced's tuning set for the gray text (Settings → AI, ai/settings.js TUNE), else the adaptive one.
   const wait = (s, score) => { const p = s?.mode === 'advanced' ? s.tune?.completion?.pause : undefined; return Number.isSafeInteger(p) && p >= 100 && p <= 2000 ? p : pause(score); };
   // The connection's name on the chip.
-  const providerName = (st, t) => (st?.provider === 'device' ? t('Chrome on-device AI') : st?.provider === 'apple' ? t('Apple Intelligence') : st?.provider === 'local' ? t('Glaze on-device AI') : st?.to || t('Endpoint'));
+  const providerName = (st, t) => (st?.provider === 'device' ? t('Chrome on-device AI') : st?.provider === 'apple' ? t('Apple Intelligence') : st?.provider === 'local' ? t('Rime') : st?.to || t('Endpoint'));
   // The models on this computer (ai/settings.js HERE): no model id, and a status that can change without the student.
   const HERE = ['device', 'apple', 'local'];
   const api = { fits, sentence, tailText, nextWord, consume, pause, wait, learn, providerName };

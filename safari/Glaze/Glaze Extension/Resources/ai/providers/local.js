@@ -1,6 +1,7 @@
-// The AI harness's `local` provider (docs/ai-harness.md "Glaze's own model"): Glaze's own LFM3 model on this computer,
-// run by Glaze's WebGPU engine in its host (ai/local/host.js, reached through ai/local/link.js). Nothing goes over the
-// network but the weights' download from Hugging Face, and that only from Settings' Download click.
+// The AI harness's `local` provider (docs/ai-harness.md "Glaze's own model"): Glaze's own model on this computer, Rime
+// (Frostdev's fine-tune of LFM3-1.7B), run by Glaze's WebGPU engine in its host (ai/local/host.js, reached through
+// ai/local/link.js). Nothing goes over the network but the weights' download from Hugging Face, and that only from
+// Settings' Download click.
 // status() is the worker's own and starts nothing: the browser (Safari keeps Apple Intelligence: unavailable, 'browser'),
 // WebGPU, and which model the store holds (ai/local/store.js). The model is the one with the tier Settings' Advanced
 // chose, else the one downloaded, else, at Download, the ladder's pick for this computer (host.js). prepare() downloads in
@@ -24,7 +25,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const AGENT = () => (typeof GZ_AI_TASK_AGENT_TOOLS !== 'undefined' ? GZ_AI_TASK_AGENT_TOOLS : require('../tasks/agent-tools.js'));
   const TASKS = () => (typeof GZ_AI_TASKS !== 'undefined' ? GZ_AI_TASKS : require('../task.js'));
   const SCHEMA = () => (typeof GZ_AI_SCHEMA !== 'undefined' ? GZ_AI_SCHEMA : require('../schema.js'));
-  const MODEL = 'glaze-local', NAME = 'Glaze on-device AI';
+  const MODEL = 'glaze-local', NAME = 'Rime';
   // A stock model's window; TUNED, a Glaze-tuned model's (no `stock`): the one its training data was planned for
   // (glaze-plans/lfm-tune FORMAT.md, caps.context 4096), which a request then plans for exactly.
   const CONTEXT = 16000, TUNED = 4096, MAX_TOKENS = 1024;

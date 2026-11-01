@@ -3781,7 +3781,7 @@
   "Don't allow": "Nicht erlauben",
   "Unnamed app": "Unbenannte App",
   "Glaze restarted before you answered.": "Glaze wurde neu gestartet, bevor du geantwortet hast.",
-  "Glaze on-device AI": "Lokale KI von Glaze",
+  "Rime": "Rime",
   "Model size": "Modellgröße",
   "Auto": "Automatisch",
   "{n} GB": "{n} GB",
