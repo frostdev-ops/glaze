@@ -228,3 +228,14 @@ test('whole-file verification cannot be skipped by an existing ready marker', as
   assert.equal((await m.store.status('rime-q4', { total: liar.total })).state, 'missing');
   assert.equal((await m.store.status('rime-q4')).state, 'ready');
 });
+
+test('a failed state write preserves the accepted serial and active version', async () => {
+  const m = make({ channel: null });
+  await m.store.edit(() => ({ v: 1, serial: 5, models: [fresh], pins: { 'rime-q4': old }, keep: { 'rime-q4': [fresh] } }));
+  m.fs.disk.quota = m.fs.disk.used;
+  await assert.rejects(m.store.edit((st) => ({ ...st, serial: 6, extra: 'x'.repeat(1024) })), (e) => e.name === 'QuotaExceededError');
+  const c = await twin(m).catalog();
+  assert.equal(c.state?.serial, 5, 'quota failure must not erase replay protection');
+  assert.equal(c.entries.get('rime-q4').total, old.total);
+  assert.equal(c.spares.get('rime-q4')[0].total, fresh.total);
+});
