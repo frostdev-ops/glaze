@@ -54,7 +54,7 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
     if (!isObj(cache) || cache.key !== `todo:${w.account}` || !Array.isArray(cache.items)) return { account: w.account, at: null, items: [], missing: `Open the Dashboard at ${w.origin}, signed in as this account, so Glaze reads its announcements.` };
     const items = cache.items.filter((i) => isObj(i) && i.type === 'announcement' && UID.test(String(i.id)) && (!c || String(i.cid) === c))
       .sort((a, b) => (b.at || 0) - (a.at || 0)).map((i) => ({ id: String(i.id), title: String(i.title || ''), course: String(i.course || ''), courseId: String(i.cid || ''), at: i.at || null, read: i.read === true }));
-    return { account: w.account, at: cache.at || null, covers: { from: Date.parse(cache.start) || null, to: Date.parse(cache.end) || null }, ...capped(items) };
+    return { account: w.account, at: cache.at || null, covers: { from: Date.parse(cache.start) || null, to: Date.parse(cache.end) || null, complete: cache.complete !== false }, ...capped(items) };
   };
 
   const tools = () => [

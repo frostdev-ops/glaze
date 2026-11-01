@@ -241,7 +241,10 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     let rows;
     try { rows = await pages(`/api/v1/courses/${a.course}/modules?include[]=items&per_page=100`, go, 20); } catch (e) { if (/^(401|403|404)$/.test(e.message)) return no('none'); throw e; }
     const open = rows.filter((m) => m && m.published !== false && m.state !== 'locked');
-    return { ok: true, complete: !rows.more, items: open.flatMap((m) => (Array.isArray(m.items) ? m.items : []).filter((i) => i && i.type !== 'SubHeader' && i.published !== false && ID.test(String(i.id)))
+    // Canvas can omit a large module's inline items despite include[]=items. Stay within Glaze's existing read path and
+    // report that gap, rather than treating the omitted module as an empty one.
+    const whole = open.every((m) => Array.isArray(m.items) && !(m.items_count > m.items.length) || m.items_count === 0);
+    return { ok: true, complete: !rows.more && whole, items: open.flatMap((m) => (Array.isArray(m.items) ? m.items : []).filter((i) => i && i.type !== 'SubHeader' && i.published !== false && ID.test(String(i.id)))
       .map((i) => ({ id: String(i.id), title: typeof i.title === 'string' ? i.title.slice(0, 300) : '', kind: String(i.type || '').replace('ExternalUrl', 'Link').replace('ExternalTool', 'Link'), module: typeof m.name === 'string' ? m.name.slice(0, 200) : '' }))) };
   };
   const topics = async (go, a) => {
