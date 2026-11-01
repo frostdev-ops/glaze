@@ -142,7 +142,8 @@ test('a feed in small steps pauses between them, and a cancel lands within a ste
   const before = h.submissions.length;
   await m.extend(Array.from({ length: 12 }, (_, i) => i % 8), { step: 2, pace: async () => { paces++; } });
   assert.equal(h.submissions.length - before >= 6, true);
-  assert.equal(paces, 5);
+  // After every step, the last too: the next submission starts on an idle GPU.
+  assert.equal(paces, 6);
   const c = new AbortController(), why = new Error('typed');
   const at = m.pos;
   await assert.rejects(m.extend([...Array.from({ length: 12 }, (_, i) => i % 8), ...Array.from({ length: 20 }, () => 3)], { step: 2, signal: c.signal, pace: async () => { c.abort(why); } }), (e) => e === why);
