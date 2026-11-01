@@ -336,3 +336,59 @@ test('the page host follows the measured phone bar and disconnects every layout 
   assert.ok(observers.length === 2 && observers.every((o) => o.disconnected), 'both mutation and resize observers are torn down');
   assert.equal(on.resize, undefined);
 });
+
+test("Close in a document shows Documents' list: back over the document's entry when the list is under it, else in its place", async () => {
+  const { El } = require('../stand-in-dom.js');
+  const doc = { activeElement: null }, html = new El('html', doc), body = new El('body', doc);
+  doc.root = html; html.append(body);
+  Object.assign(doc, { documentElement: html, body, createElement: (tag) => new El(tag, doc), getElementById: () => null });
+  const on = {}, ports = [], history = tabHistory(on);
+  const page = vm.runInContext(read('settings/page/settingspage.js'), vm.createContext({ document: doc, matchMedia: () => ({ matches: true }), CSS: { escape: String }, crypto, MessageChannel,
+    history, addEventListener: (type, f) => { on[type] = f; }, removeEventListener: (type) => { delete on[type]; },
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, sendMessage: async () => ({ ok: true }) } } }));
+  // The frame's document: its hello gets a channel; what the page tells it comes back in `told`.
+  const frame = async () => {
+    const f = body.querySelector('#gz-settings-page').shadowForTest.children[0];
+    f.contentWindow = { postMessage: (m, origin, transfer) => { if (transfer?.[0]) ports.push(transfer[0]); } };
+    on.message({ source: f.contentWindow, origin: 'chrome-extension://glaze', data: { type: 'glaze:papers:hello' } });
+    await tick();
+    const port = ports.at(-1), told = [];
+    port.onmessage = ({ data }) => told.push(data);
+    return { told, say: async (m) => { port.postMessage(m); await tick(); } };
+  };
+  try {
+    await page.open('', 'papers');
+    let f = await frame();
+    await f.say({ type: 'opened', at: '' });
+    await f.say({ type: 'opened', at: '?paper=doc%3Aabc' });
+    assert.deepEqual([history.entries.length, history.at], [3, 2]);
+    await f.say({ type: 'list' });
+    assert.equal(page.showing(), 'papers', 'Documents stays open');
+    assert.deepEqual([history.at, history.state.gzSettings, history.state.gzPage, history.state.gzAt], [1, 1, 'papers', undefined], 'back at the list\'s entry');
+    assert.deepEqual(f.told.at(-1), { type: 'go', at: '' });
+    f = await frame();
+    await f.say({ type: 'opened', at: '' });
+    assert.deepEqual([history.entries.length, history.at], [3, 1], 'the list adds no entry');
+    // Close on the list then leaves, back where the tab was.
+    await f.say({ type: 'leave' });
+    assert.deepEqual([page.showing(), history.at], ['', 0]);
+
+    // A document reached from another document (a link in the frame): the list takes its entry's place.
+    await page.open('', 'papers');
+    f = await frame();
+    await f.say({ type: 'opened', at: '' });
+    await f.say({ type: 'opened', at: '?paper=doc%3Aabc' });
+    await f.say({ type: 'opened', at: '?paper=doc%3Adef' });
+    assert.deepEqual([history.entries.length, history.at], [4, 3]);
+    await f.say({ type: 'list' });
+    assert.deepEqual([history.entries.length, history.at, history.state.gzSettings, history.state.gzPage, history.state.gzAt], [4, 3, 3, 'papers', undefined]);
+    assert.deepEqual(f.told.at(-1), { type: 'go', at: '' });
+    f = await frame();
+    await f.say({ type: 'opened', at: '' });
+    assert.deepEqual([history.entries.length, history.at], [4, 3], 'the list adds no entry');
+    await f.say({ type: 'leave' });
+    assert.deepEqual([page.showing(), history.at], ['', 0]);
+  } finally {
+    for (const p of ports) p.close();
+  }
+});
