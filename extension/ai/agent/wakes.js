@@ -146,13 +146,16 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
     const keep = [];
     for (const m of s.monitors) {
       if (!(await env.on())) return 0;
-      if (m.until <= now) continue;
-      const r = await look(env, m), fact = r.seen ? changed(m, r.seen) : null;
+      if (m.until <= clock(env)) continue;
+      const r = await look(env, m);
+      if (m.until <= clock(env)) continue;
+      const fact = r.seen ? changed(m, r.seen) : null;
       if (m.watch === 'grade' && m.base.at === null && r.seen) m.base.at = r.seen.at;
-      if (fact) { fire(s, { id: m.id, what: 'monitor', watch: m.watch, say: m.say, at: now, fact }); n++; } else keep.push(m);
+      if (fact) { fire(s, { id: m.id, what: 'monitor', watch: m.watch, say: m.say, at: clock(env), fact }); n++; } else keep.push(m);
     }
     s.monitors = keep;
     if (!(await env.on())) return 0;
+    n += settle(s, clock(env));
     await write(env, s);
     await arm(env, s);
     return n;
@@ -239,7 +242,7 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
       run: async () => {
         const s = await read(env);
         return { items: [...s.wakes.map((w) => ({ id: w.id, what: 'wake', at: w.at, say: w.say })),
-          ...s.monitors.map((m) => ({ id: m.id, what: 'monitor', watch: m.watch, about: about(m), ...(m.say && { say: m.say }) }))] };
+          ...s.monitors.filter((m) => m.until > clock(env)).map((m) => ({ id: m.id, what: 'monitor', watch: m.watch, about: about(m), ...(m.say && { say: m.say }) }))] };
       },
     }),
     def('wake_cancel', {
