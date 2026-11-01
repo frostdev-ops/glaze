@@ -29,7 +29,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const FEATURE = 'ask', APP = 'Ask Glaze';
   // question: agent.tools' own; attempt: study.help's; tools: offered at once (training offered three to six, and Glaze's own
   // model's 4,096-token window can't hold all twelve); material: what an agent answer is measured against.
-  const LIMIT = { question: 2000, attempt: 12000, tools: 6, material: 24000 };
+  const LIMIT = { question: 2000, attempt: 12000, tools: 6, material: 24000, sender: 5000 };
   const GROUPS = ['courses', 'grades', 'assignments', 'writer'];
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
 
@@ -157,6 +157,12 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
 
   const connect = (port, env) => {
     let closed = false, current = null, seq = 0;
+    // The same bound as the AI broker: a stalled renderer must not park every later message, including Stop.
+    const allowed = (what) => {
+      let timer;
+      return Promise.race([Promise.resolve().then(() => env.allowed(what)).catch(() => false),
+        new Promise((resolve) => { timer = setTimeout(resolve, LIMIT.sender, 'timeout'); })]).finally(() => clearTimeout(timer));
+    };
     const waits = new Map(); // a broker message id → its handler
     const [mine, theirs] = channel();
     const post = (m) => { if (closed) return; try { port.postMessage(m); } catch { close(); } };
@@ -187,7 +193,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
 
     // Ask's tool calls, through Agents' one call path, as an app of Glaze's own that Ask's switch has granted every group.
     const live = async () => SET().allowed(SET().clean(await env.settings()), FEATURE) && (await env.enabled()) === true
-      && await env.allowed({ op: 'run', feature: FEATURE }) === true;
+      && await allowed({ op: 'run', feature: FEATURE }) === true;
     let asked; // the student's answer to the current call's change, from Agents' approval window
     const calls = CALLS().create({
       registry: env.registry, state: env.state, refresh: env.refresh, accounts: env.accounts, local: env.local, keys: env.keys, now: env.now, turn: env.turn,
@@ -201,7 +207,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       } },
     });
     const tool = async (c, signal) => {
-      if (await env.allowed({ op: 'run', feature: FEATURE }) !== true) throw R().error('permission');
+      const ok = await allowed({ op: 'run', feature: FEATURE });
+      if (ok !== true) throw R().error(R().CODES.includes(ok) ? ok : 'permission');
       asked = undefined;
       if (c.kind !== 'write') post({ id: current?.id, type: 'look' });
       const r = await calls.call({ name: c.name, args: c.arguments, peer: { name: APP, exe: '' }, client: { name: APP }, signal,
@@ -251,7 +258,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     port.onMessage.addListener((m) => {
       order = order.then(async () => {
         if (closed) return;
-        const ok = await Promise.resolve().then(() => env.allowed({ op: isObj(m) && typeof m.op === 'string' ? m.op : '', feature: FEATURE })).catch(() => false);
+        const ok = await allowed({ op: isObj(m) && typeof m.op === 'string' ? m.op : '', feature: FEATURE });
         if (ok === false || ok === undefined || ok === null) return close();
         if (!isObj(m) || !Number.isSafeInteger(m.id) || m.id < 0) return post({ id: null, type: 'error', error: 'request' });
         if (ok !== true && m.op !== 'cancel') return post({ id: m.id, type: 'error', error: R().CODES.includes(ok) ? ok : 'permission' });
