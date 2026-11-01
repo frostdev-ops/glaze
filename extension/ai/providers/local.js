@@ -139,6 +139,8 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   // whether pictures can be read now.
   const status = async (cfg) => {
     const no = where();
+    // Safari's package carries no models.json (tools/build/safari-drop.txt): nothing to list or delete there.
+    if (safari()) return { state: 'unavailable', reason: no };
     let list;
     try { list = await own().store.list(); } catch { return { state: 'unavailable', reason: no || 'failed' }; }
     // A replaced catalog can leave gigabytes here. Delete must remain reachable before another download, even without GPU support.
