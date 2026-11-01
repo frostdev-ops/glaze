@@ -712,6 +712,7 @@ test('the context meter shows the share of the window the request takes, as a ri
   ctx(300);
   await settle();
   assert.deepEqual(meterOf(P), { hidden: false, n: '30%', band: '', label: '30% of the context window used', text: '30%' }, 'no word beside the number');
+  assert.equal(P.box().querySelector('.gz-ask-meter-v').style.strokeDasharray, '30 100', 'the ring\'s arc set inline: the sheet\'s own dasharray would win over an attribute');
   for (const [used, band] of [[690, ''], [700, 'warm'], [899, 'warm'], [900, 'warn'], [1500, 'warn']]) {
     ctx(used);
     await settle();
