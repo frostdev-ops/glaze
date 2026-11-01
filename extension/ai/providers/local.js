@@ -128,8 +128,8 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     try { await own().session?.set({ [RATES]: Object.fromEntries(r), [MEASURED]: [...measured] }); } catch { /* kept in memory */ }
   };
   // The tokens this request reasons in on model m: its task's budget, for a Glaze-tuned model this computer runs fast enough.
-  const budget = async (req, m) => {
-    const b = m.stock ? 0 : limits(req.task, windowOf(m).window).think;
+  const budget = async (req, m, window) => {
+    const b = m.stock ? 0 : limits(req.task, window).think;
     return b && (await known()).get(m.id) >= THINK_TPS ? b : 0;
   };
 
@@ -220,8 +220,9 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     }
     const m = cfg.weights ? tiers(list).find((x) => x.id === cfg.weights) : choose(list, cfg);
     if (!m || m.state !== 'ready') throw fail('provider-unavailable', 'assets');
-    const think = await budget(req, m), window = windowOf(m).window, sized = !m.stock && limits(req.task, window).size;
-    return { m, budget: think, ...FMT().format(req, { dialect: m.stock ? 'chatml' : 'glaze', think: think > 0, ...(sized && { window }) }) };
+    const window = Math.min(cfg.context || windowOf(m).window, windowOf(m).window);
+    const think = await budget(req, m, window), sized = !m.stock && limits(req.task, window).size;
+    return { m, window, budget: think, ...FMT().format(req, { dialect: m.stock ? 'chatml' : 'glaze', think: think > 0, ...(sized && { window }) }) };
   };
   const host = (e) => {
     if (e?.category === 'cancelled') return e;
@@ -252,14 +253,14 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     let plan;
     try { plan = await ready(req, cfg); } catch (e) { if (e?.code) throw refuse(e.code, e.message); throw e; }
     if (signal?.aborted) throw signal.reason;
-    const maxTokens = plan.projector || plan.m.stock ? Math.min(req.maxTokens || MAX_TOKENS, CONTEXT) : limits(req.task, windowOf(plan.m).window, { maxTokens: req.maxTokens }).maxTokens;
+    const maxTokens = plan.projector || plan.m.stock ? Math.min(req.maxTokens || MAX_TOKENS, CONTEXT) : limits(req.task, plan.window, { maxTokens: req.maxTokens }).maxTokens;
     let r;
     try {
       // A task in its own turns (agent.tools) is held to its answer's schema or one offered call (format.js constraint); a
       // span to words of its source (spans).
       const held = plan.constraint ? { schema: plan.constraint.schema, tools: plan.constraint.tools } : req.schema && (spans(req) || { schema: req.schema });
       r = await own().link.call('run', { model: plan.m.id, parts: plan.parts, stable: plan.stable, ...(plan.images && { projector: plan.projector, images: plan.images }), ...held,
-        ...(plan.think && { think: { budget: plan.budget, ...plan.think } }), ...(!plan.m.stock && { window: windowOf(plan.m).window }),
+        ...(plan.think && { think: { budget: plan.budget, ...plan.think } }), ...(!plan.m.stock && { window: plan.window }),
         sampler: { ...(req.temperature !== undefined && { temperature: req.temperature }) }, maxTokens },
       { signal, onEvent: (e) => { if (e?.type === 'delta' && typeof e.text === 'string' && e.text) onDelta?.(e.text); } });
     } catch (e) { if (signal?.aborted) throw signal.reason; throw host(e); }
