@@ -210,7 +210,7 @@ about records starts afresh.
 
 ## Rime's own tools
 
-Eight tools Ask Rime alone offers (`agent-tools.js` `OWN`), in the same `<tools>` lines and native calls as Agents' twelve,
+Fifteen tools Ask Rime alone offers (`agent-tools.js` `OWN`), in the same `<tools>` lines and native calls as Agents' twelve,
 so Rime can be trained on them (`glaze-plans/lfm-tune/FORMAT-tools-v3.md`). They have no Agents group, so no app sees them.
 Their rules live in their descriptions; the instructions Rime was trained on are unchanged, and a request that offers none
 of them is the same, byte for byte. Every parameter is a string or an integer (the native grammar holds no other).
@@ -225,6 +225,12 @@ of them is the same, byte for byte. Every parameter is a string or an integer (t
 | `monitor_create` | confirm | `watch` (grade, announcement, due, submitted), `course?`, `type?`, `id?`, `say?`, `account?` | Watches the student's own data for 30 days, 20 at once: due and submitted an item of the to-do list, grade a course in Insights (a new graded point or percent), announcement Canvas's planner (refused on Blackboard). |
 | `wakes_list` | read | | What waits: `{ items: [{ id, what, at | watch, about, say }] }`. |
 | `wake_cancel` | confirm | `id` | Cancels one. |
+| `announcements_list` | read | `course?`, `account?` | Canvas: the to-do list's announcements (storage.local todoCache, its range: `covers`), every course or one; Ultra: one course's, as Ultra search lists them (needs `course`). → `{ items: [{ id, title, … }], more? }`. |
+| `announcement_read` | read | `course`, `id`, `page?` | One, as Glaze's pop-up reads it (courses/announce.js; Canvas's topic, Ultra's public announcement), never the read mark: `{ title, author?, at, text, page, pages, files? }`. |
+| `content_list` | read | `course` | Canvas: its modules' items (no headers, unpublished or locked); Ultra: what the student may see now (Ultra search's documents, folders, files, links). `{ items: [{ id, title, kind, module? }] }`. |
+| `content_read` | read | `course`, `id`, `page?` | An Ultra document's text, paged; Canvas pages and files are refused until a reader exists. |
+| `syllabus_read` | read | `course` | What Glaze kept from a syllabus import (planner/syllabus.js): instructor, hours, meetings, dates, scale, weights; else how to import. |
+| `discussions_list`, `discussion_read` | read | `course`; `id`, `page?` | Canvas's topics (the list palette search asks for) and one prompt (the topic read); Ultra's published, available ones and a prompt (Ultra search). |
 
 There is no fill tool: Glaze never fills in the student's work or a site's forms.
 
@@ -257,7 +263,15 @@ In Ask Rime (`ai/ask.js`, `ai/page/ask.js`):
   (`ai/providers/local.js` `toolsLevel`, the entry the provider runs); Rime r5's entries say nothing, so Ask Rime offers it
   Agents' twelve as before, and its routing, tools and requests are byte for byte the chat port's (test/ai/rime-ask.test.js
   compares them with that router). Every other model (an endpoint, Chrome's, Apple's) gets level 3.
-- **Routing at level 3** (`TOPICS3`, six languages): compute (`run_js`; a computing verb in the student's own grade math
+- **Tool first at level 3.** Every agent.tools run carries `first`: `check()` refuses an answer with no tool result
+  behind it (`first`) and, where any result holds facts (`rich`), an answer quoting none of them (`ground`); an empty or
+  failed result holds none, so the answer says only that. Help with work that names the student's records (a course code,
+  a lab report, an essay, an assignment, or a records topic) first runs agent.tools' help turn (`help`: study.help's
+  subject as a data block before the question; route's `read` tools), whose answer is never shown, then study.help with
+  what was read as its `material`. Help naming nothing, and general questions, go to study.help alone. The reads go
+  through `agents/tab.js` ops (`announcement`, `search`, `modules`, `topics`) in an open tab of the account's school,
+  as Agents' reads do, or Glaze's caches; with no tab open a read says so. Moodle accounts aren't read by the agent layer.
+- **Routing at level 3** (`TOPICS3`, six languages): announcements, content, syllabus and discussions (their reads), compute (`run_js`; a computing verb in the student's own grade math
   is no help request, but graded work still goes to study.help), navigate (`places_list`, `place_open`, `page_highlight`),
   remind (`wake_create`, `wakes_list`, `wake_cancel`) and watch (`monitor_create`, `wakes_list`, `todo_list`,
   `grades_list`), their tools before records' ones in the six.
