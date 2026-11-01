@@ -188,7 +188,7 @@ schedule, grades, assignments and rubrics, Writer documents, as Glaze keeps them
 open tab of your school's site), and sends what it read to that model to answer. Ask Glaze's switch is that tool access:
 it needs no Agents pairing and doesn't turn agent access on. Its one change, marking a to-do done, waits for your OK in
 Glaze's window, worded by Glaze, never by the model. Nothing of the conversation is kept: it goes when the page or the
-panel closes. Each model request leaves one row of metadata in the recent AI calls (feature, provider, model, time, size,
+panel closes. While the panel is open, what it shows is part of the page, as anything on screen is. Each model request leaves one row of metadata in the recent AI calls (feature, provider, model, time, size,
 outcome), as for every AI feature; no question, answer or school data is in it.
 
 ## What Glaze stores
