@@ -282,7 +282,9 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     return status(cfg);
   };
 
-  const provider = { id: 'local', config, caps, status, prepare, run, warm, catalog, release, remove, accept, levelOf, toolsLevel, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
+  // The engine host's link, for the background model updates (ai/local/updates.js check).
+  const link = () => own().link;
+  const provider = { id: 'local', config, caps, status, prepare, run, warm, catalog, release, remove, accept, levelOf, toolsLevel, link, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
     _env: (e) => { env = e; preparing.text = preparing.pictures = null; broken = null; rates = null; measured.clear(); } };
   return P.add(provider);
 })();

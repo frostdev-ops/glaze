@@ -39,8 +39,8 @@
 var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
   const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, rate: 16, answer: 256, spans: 2 };
   // What the Worker loads, in order, beside this file: required ones throw at its start; optional ones until they ship.
-  const IMPORTS = Object.freeze({ required: Object.freeze(['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', '../text.js', 'grammar.js']),
-    optional: Object.freeze(['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'ladder.js', 'updates.js']) });
+  const IMPORTS = Object.freeze({ required: Object.freeze(['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', '../text.js', 'grammar.js', 'updates.js']),
+    optional: Object.freeze(['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'ladder.js']) });
   // LFM3's GGUF sampling defaults (general.sampling.*: top_k 50, temp 0.1) where a request names none.
   const SAMPLER = Object.freeze({ temperature: 0.1, topK: 50 });
   const fail = (category, reason, extra = {}) => Object.assign(new Error(`${category}: ${reason}`), { category, reason, ...extra });
