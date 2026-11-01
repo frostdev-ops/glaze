@@ -91,7 +91,8 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
       const r = await viaTab(w, ctx, 'search', { course: args.course, kind: 'contents' });
       if (r.ok === false) return r;
       const it = r.items.find((i) => i.id === args.id);
-      if (!it) return fail('No such item in this course for the student now; content_list names them.');
+      if (!it) return fail(r.complete === false ? 'Glaze read only part of the course content; the requested item may be in the unread part. Open it on the site.'
+        : 'No such item in this course for the student now; content_list names them.');
       if (!it.text) return fail(`“${it.title}” holds no text Glaze can read (a ${it.kind.toLowerCase()}); open it on the site.`);
       const p = paged(it.text, args.page || 1, it.truncated);
       return p.error ? fail(p.error) : { account: w.account, title: it.title, kind: it.kind, ...p };
@@ -106,7 +107,8 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
       const list = (v) => (Array.isArray(v) ? v : []);
       return { account: w.account, course: args.course, at: rec.at || null, ...(Object.keys(prof).length && { instructor: prof }),
         hours: list(rec.hours), meetings: list(rec.meetings), dates: list(rec.dates).slice(0, LIMIT.items).map(({ title, day, kind }) => ({ title, day, kind })),
-        scale: list(rec.scale).map(([letter, min]) => ({ letter, min })), weights: list(rec.weights) };
+        scale: list(rec.scale).map(([letter, min]) => ({ letter, min })), weights: list(rec.weights),
+        ...(list(rec.dates).length > LIMIT.items && { more: { dates: rec.dates.length - LIMIT.items } }) };
     }),
     def('discussions_list', async (args, ctx) => {
       const w = who(ctx?.account);
@@ -124,7 +126,8 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
         const r = await viaTab(w, ctx, 'search', { course: args.course, kind: 'discussions' });
         if (r.ok === false) return r;
         const it = r.items.find((i) => i.id === args.id);
-        if (!it) return fail('No such discussion in this course for the student now; discussions_list names them.');
+        if (!it) return fail(r.complete === false ? 'Glaze read only part of the discussions; the requested discussion may be in the unread part. Open it on the site.'
+          : 'No such discussion in this course for the student now; discussions_list names them.');
         ({ title, text, truncated } = it);
       } else {
         const r = await viaTab(w, ctx, 'announcement', { course: args.course, id: args.id });
