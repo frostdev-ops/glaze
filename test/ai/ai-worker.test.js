@@ -220,10 +220,10 @@ test('Firefox\'s event page loads every file of the harness the worker would imp
   for (const f of shipped) assert.ok(named.has(f), `${f} is named in an importScripts call`);
   for (const f of host) assert.ok(!named.has(`ai/${f}`), `${f} stays out of the worker`);
   assert.ok(!named.has('ai/providers/mock.js'), 'the mock is for tests and the eval');
-  // The host's own imports, beside it: the store, the GGUF reader, the tokenizer, the schema and the grammar, then the
-  // engine's files (test/ai/local-host-worker.test.js runs them as the Worker does).
+  // The host's own imports, beside it: the store, the GGUF reader, the tokenizer, the schema, the text helpers (a span's
+  // folding) and the grammar, then the engine's files (test/ai/local-host-worker.test.js runs them as the Worker does).
   const { IMPORTS } = require('../../extension/ai/local/host.js');
-  assert.deepEqual(IMPORTS.required, ['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', 'grammar.js']);
+  assert.deepEqual(IMPORTS.required, ['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', '../text.js', 'grammar.js']);
   assert.deepEqual(IMPORTS.optional, ['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'ladder.js']);
   for (const f of [...IMPORTS.required, ...IMPORTS.optional]) assert.ok(fs.existsSync(path.join(__dirname, '../../extension/ai/local', f)), f);
   assert.match(fs.readFileSync(path.join(__dirname, '../../extension/ai/local/host.html'), 'utf8'), /<script src="offscreen\.js"><\/script>/);
