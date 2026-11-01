@@ -1190,8 +1190,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     if (!first) {
       const here = lay.boards[board].filter((x) => W.course(x.id)?.origin === location.origin);
       if (!here.length || here.some((x) => C.own(x.id) !== false)) return;
-      if (!me) { if (!askedWho) { askedWho = true; who().then(() => { if (on) fillCourses(); }, () => {}); } return; }
     }
+    if (ultra && !me) { if (!askedWho) { askedWho = true; who().then(() => { askedWho = false; if (on) fillCourses(); }, () => { askedWho = false; }); } return; }
     const account = ultra && me ? `${location.origin}/${me.uid}` : undefined;
     if (!first && lay.filled.includes(`${board} ${account}`)) return;
     const cards = (ultra ? C.list().filter((c) => C.own(c.key) === true) : C.shown());
