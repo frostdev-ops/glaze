@@ -100,8 +100,9 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     if (work.trim() || has(WORK) || !on.length) return { task: 'study.help', subject: subjectOf(`${q}\n${work}`) };
     if (on.includes('mark') && !on.includes('todo')) on.push('todo');
     const tools = Object.keys(TOOLS).filter((k) => on.includes(k)).flatMap((k) => TOOLS[k]);
-    if (on.some((k) => ACCOUNTS.includes(k))) tools.push('accounts_list');
-    return { task: 'agent.tools', tools: [...new Set(tools)].slice(0, LIMIT.tools) };
+    const accounts = on.some((k) => ACCOUNTS.includes(k));
+    // Multiple topics may fill the window. Keep discovery available so a student with two accounts can still choose one.
+    return { task: 'agent.tools', tools: [...new Set(tools)].slice(0, LIMIT.tools - (accounts ? 1 : 0)).concat(accounts ? ['accounts_list'] : []) };
   };
 
   // ---- the step loop ---------------------------------------------------------------------------------------------------

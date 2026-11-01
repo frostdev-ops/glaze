@@ -144,10 +144,12 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     const halt = make('button', { type: 'button', className: 'gz-ask-stop', textContent: t('Stop'), hidden: true });
     halt.addEventListener('click', stop);
     const go = make('button', { type: 'submit', className: 'gz-ask-send', textContent: t('Ask') });
+    go.addEventListener('click', submit);
     const form = make('form', { className: 'gz-ask-form' }, q, work, make('div', { className: 'gz-ask-row' }, more, make('span', { className: 'gz-ask-gap' }), halt, go));
-    form.addEventListener('submit', submit);
+    // requestSubmit() also creates a trusted SubmitEvent. Only the student's click or key may ask.
+    form.addEventListener('submit', (e) => e.preventDefault());
     // Enter sends; Shift+Enter is a new line.
-    q.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (real(e)) form.requestSubmit(); } });
+    q.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) submit(e); });
     const log = make('ol', { className: 'gz-ask-log', hidden: !turns.length }, ...turns.map(item));
     log.setAttribute('role', 'log');
     log.setAttribute('aria-labelledby', 'gz-ask-title');
