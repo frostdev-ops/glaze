@@ -104,7 +104,7 @@ const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, d
   };
   c.globalThis = c;
   const src = read('planner/page/todo.js').replace('  return { sync, add, cmds, mount, unmount, suspend, resume };', `  return { sync, add, cmds, mount, unmount, suspend, resume, probe: {
-    refresh, keepDraft, onStore, onChange, onShow, onSubmit, onClick, form: (x) => { form = x; }, formNow: () => form, save, rowOf, render, get: () => ({ data, cache, fetching, note: line?.textContent, box, dead, who }),
+    refresh, keepDraft, onStore, onChange, onShow, onSubmit, onClick, form: (x) => { form = x; }, formNow: () => form, save, rowOf, render, get: () => ({ data, cache, fetching, note: line?.textContent, box, dead, who }), parts: () => ({ head, body }),
     seed(x) { L = GZ_TODO; who = { uid: '3', tz: 'America/New_York' }; sure = true; key = 'todo:https://canvas.test/3'; prefs = { ...x.prefs };
       data = x.data || { tasks: [], items: {} }; cache = x.cache || null; started = Promise.resolve(); courses = { cids: null, names: {}, list: [] };
       box = new E('section'); head = new E(); line = new E('p'); body = new E(); },
@@ -664,4 +664,21 @@ test('an announcement opens through GZ_ANNOUNCE for a plain click; Ctrl, Cmd, Sh
   assert.equal(typeof r.from, 'function', 'focus goes back to the link as drawn after the list redraws');
   r.onRead();
   assert.equal(f.p.get().cache.items[0].read, true, 'read once Canvas has it');
+});
+
+// 2026-11-01, a real course: the list rebuilt its header and every row on each refresh of Ultra's kept data and each other
+// tab's To Do answer, though nothing in it changed.
+test('a forced redraw with nothing new leaves the list as drawn; a change still redraws it', () => {
+  const f = feature();
+  f.p.seed({ prefs: O, cache: { key: 'todo:https://canvas.test/3', at: Date.now(), items: [item()], grading: [], sums: {} } });
+  f.p.render(true);
+  const { head, body } = f.p.parts();
+  const h = head.children, b = body.children;
+  assert.ok(h.length && b.length);
+  f.p.render(true);
+  assert.equal(head.children, h, 'the header as it was');
+  assert.equal(body.children, b, 'the rows as they were');
+  f.p.get().cache.items.push(T.slim({ plannable_type: 'assignment', plannable_id: 4, course_id: 25, plannable_date: new Date(Date.now() + 72e5).toISOString(), plannable: { title: 'Lab' } }));
+  f.p.render(true);
+  assert.notEqual(body.children, b, 'a new item is drawn');
 });
