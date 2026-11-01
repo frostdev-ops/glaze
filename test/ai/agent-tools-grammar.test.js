@@ -140,6 +140,27 @@ test('a pattern the grammar can\'t hold leaves it inexact; the patterns Glaze wr
   assert.throws(() => G.compile(A.constraint(ALL).schema, plain, { tools: A.constraint(ALL).tools }), /marks/, 'calls need the tool tags\' ids');
 });
 
+test('tool argument schemas with unsupported root constraints are refused instead of silently ignored', () => {
+  const { schema, tools } = A.constraint(ALL), tool = tools.find((t) => t.name === 'assignment_read');
+  for (const root of [
+    { type: 'string' }, { type: ['array', 'null'] },
+    { const: { course: '5521', assignment: '88121' } },
+    { enum: [{ course: '5521', assignment: '88121' }] },
+    { anyOf: [{ properties: { course: { const: '5521' } } }] },
+  ]) {
+    const parameters = { ...tool.parameters, ...root };
+    assert.ok(S.clean(parameters));
+    assert.throws(() => G.compile(schema, V, { tools: [{ ...tool, parameters }] }), /parameters|schema/, JSON.stringify(root));
+  }
+  // These roots still admit exactly the object arguments the grammar writes.
+  for (const type of [undefined, 'object', ['object', 'null']]) {
+    const parameters = { ...tool.parameters };
+    if (type === undefined) delete parameters.type; else parameters.type = type;
+    const g = G.compile(schema, V, { tools: [{ ...tool, parameters }] });
+    assert.equal(walk(g, ids(native('assignment_read', { course: '5521', assignment: '88121' }))), '');
+  }
+});
+
 // ---- the engine host takes the constraint ------------------------------------------------------------------------------
 const HERE = path.join(__dirname, '../../extension/ai/local');
 const BYTES = (() => {
