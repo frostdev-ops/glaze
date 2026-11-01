@@ -34,7 +34,7 @@ for entry in manifest.get('web_accessible_resources', []):
     entry.pop('use_dynamic_url', None)
 manifest.pop('sandbox', None)
 manifest.get('content_security_policy', {}).pop('sandbox', None)
-manifest['web_accessible_resources'] = [e for e in ({**e, 'resources': [r for r in e['resources'] if not r.startswith('mods/')]} for e in manifest.get('web_accessible_resources', [])) if e['resources']]
+manifest['web_accessible_resources'] = [e for e in ({**e, 'resources': [r for r in e['resources'] if not r.startswith(('mods/', 'ai/sandbox/'))]} for e in manifest.get('web_accessible_resources', [])) if e['resources']]
 picked = {'resources': ['documents/picked.html'], 'matches': ['https://frostdev.io/*', 'https://frostdev-ops.github.io/*']}
 if picked not in manifest['web_accessible_resources']:
     manifest['web_accessible_resources'].append(picked)

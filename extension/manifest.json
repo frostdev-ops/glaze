@@ -11,7 +11,8 @@
     "unlimitedStorage",
     "activeTab",
     "declarativeContent",
-    "offscreen"
+    "offscreen",
+    "alarms"
   ],
   "optional_permissions": [
     "identity",
@@ -67,7 +68,8 @@
   },
   "sandbox": {
     "pages": [
-      "mods/host.html"
+      "mods/host.html",
+      "ai/sandbox/js.html"
     ]
   },
   "options_ui": {
@@ -220,6 +222,15 @@
       "resources": [
         "mods/host.html",
         "mods/boot.js"
+      ],
+      "matches": [
+        "https://*/*"
+      ],
+      "use_dynamic_url": true
+    },
+    {
+      "resources": [
+        "ai/sandbox/js.html"
       ],
       "matches": [
         "https://*/*"

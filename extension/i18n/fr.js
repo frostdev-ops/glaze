@@ -3732,6 +3732,7 @@
   "The model returned an outline that did not match the document’s structure.": "Le modèle a renvoyé un plan qui ne correspondait pas à la structure du document.",
   "The provider is unavailable and did not report a specific reason.": "Le fournisseur est indisponible et n’a pas indiqué de raison précise.",
   "AI source extraction": "Extraction des sources par IA",
+  "Reminders and watches": "Rappels et surveillances",
   "Reading sources…": "Lecture des sources…",
   "AI source extraction failed. Imported sources remain available.": "L’extraction des sources par IA a échoué. Les sources importées restent disponibles.",
   "Review source": "Vérifier la source",

@@ -5,6 +5,8 @@ mods/boot.js
 mods/host.html
 mods/host.js
 mods/page/mods.js
+# run_js's sandbox (ai/sandbox/) needs one too.
+ai/sandbox/
 # Glaze's own model is unavailable in Safari (ai/settings.js PROVIDERS): its engine, kernels and host go. The worker imports
 # ai/local/store.js, format.js and link.js on every browser, so they stay.
 ai/local/engine.js
