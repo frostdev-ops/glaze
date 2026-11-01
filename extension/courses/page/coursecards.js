@@ -10,8 +10,8 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
   const cards = new Map(), nativeCards = new Map(), canvasEdits = new Map(), mounted = new Set(), watched = new WeakSet();
   let retired = false;
   let identity = null, notify = () => {}, uid = '', data = {}, prefs = {}, cache = null, L = null, gs = null, gen = 0;
-  // Ultra: the signed-in student's courses (ids), once its whole membership list is in; null until then.
-  let members = null;
+  // Ultra: known memberships, whether the whole list is in, and the latest request for this identity.
+  let members = null, membersComplete = false, membership = null;
   const get = (area, keys) => new Promise((resolve) => { try { chrome.storage[area].get(keys, (r) => resolve(chrome.runtime.lastError ? null : r)); } catch { resolve(null); } });
   const live = () => { try { return !retired && !!chrome.runtime.id && ctx.on(); } catch { return false; } };
   const make = (tag, props = {}, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children.filter(Boolean)); return e; };
@@ -58,13 +58,13 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     render();
     retired ||= retire;
   };
-  document.addEventListener?.('glaze:ultra-refresh', (e) => { if (!ultra) return; if (e.detail?.identity) members = null; clearGrades(!!e.detail?.retire); });
+  document.addEventListener?.('glaze:ultra-refresh', (e) => { if (!ultra) return; if (e.detail?.identity) { members = membership = null; membersComplete = false; } clearGrades(!!e.detail?.retire); });
   // Whether a board's course card is this student's: the layout is the device's, so another student who signs in here has
   // their cards in it too. own: true or false once Ultra's list of this student's courses is in (or Ultra's own page shows
   // its card), else undefined. shows:
   // drawn on this student's boards only when confirmed: stored names belong to the device, so they can be another
   // student's even while the membership list is on its way. Canvas's are always shown.
-  const own = (key) => { const c = W.course(key); return !ultra || !c || c.origin !== location.origin ? true : members?.has(c.id) || nativeCards.has(c.id) || (members ? false : undefined); };
+  const own = (key) => { const c = W.course(key); return !ultra || !c || c.origin !== location.origin ? true : members?.has(c.id) || nativeCards.has(c.id) || (membersComplete ? false : undefined); };
   const shows = (key) => own(key) === true;
   // The color a card wears from its course (Ultra's slot, or a pick): its class and variables, on the board and in the
   // Course cards dialog. Only what differs is written.
@@ -153,13 +153,18 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     }
     const peek = ctx.canvasPeek();
     // Asked here when nothing on the page has asked yet (Ultra's list is kept a while, so this is rarely a request).
-    watch(peek.courses || ctx.myCourses?.(), (rows) => {
+    const request = membership = peek.courses || ctx.myCourses?.();
+    watch(request, (rows) => {
+      if (request !== membership) return;
       for (const r of rows || []) if (/^_\d+_\d+$/.test(r.courseId)) {
         const c = r.course || {}, old = cards.get(r.courseId);
         cards.set(r.courseId, { id: r.courseId, name: c.name || old?.name || r.courseId, code: c.courseId || old?.code || '', term: c.term?.name || old?.term || '', slot: Number.isInteger(r.courseCardColorIndex) && r.courseCardColorIndex >= 0 ? String(r.courseCardColorIndex % 10 + 1) : old?.slot });
       }
       // A list cut short (or a failed read, an empty one marked so) can't say a course isn't the student's.
-      if (Array.isArray(rows) && rows.complete !== false) members = new Set(rows.map((r) => r?.courseId).filter((id) => /^_\d+_\d+$/.test(id)));
+      if (Array.isArray(rows)) {
+        membersComplete = rows.complete !== false;
+        members = new Set([...(membersComplete ? [] : members || []), ...rows.map((r) => r?.courseId).filter((id) => /^_\d+_\d+$/.test(id))]);
+      }
       notify(); render();
     });
     if (identity !== peek.me) { identity = peek.me; gen++; uid = ''; cache = null; data = {}; }
