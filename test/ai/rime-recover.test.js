@@ -67,6 +67,18 @@ test('Glaze\'s own list from the results: a lead sentence and one bullet per ite
   assert.equal(A.listAnswer([{ call: STEP.call, result: '{"account":"x","items":[]}' }], { locale: 'en' }), null);
 });
 
+test('the fallback keeps distinct same-title assignments, deduplicating only the same item in the same account and course', () => {
+  const step = (account, items) => ({ call: { name: 'assignments_list', arguments: {} }, result: JSON.stringify({ account, items }) });
+  const item = { assignment: '_21_1', type: 'assignment', courseId: '_101_1', course: 'ENG 1100', title: 'Homework 1' };
+  const text = A.listAnswer([
+    step(ACC, [item, { ...item, assignment: '_22_1' }, { ...item, courseId: '_102_1', course: 'BIO 1100' }]),
+    step(ACC, [item]),
+    step('https://bb.example.edu/_43_1', [item]),
+  ]);
+  assert.equal(text.split('\n').filter((l) => l.startsWith('- ')).length, 4);
+  assert.match(text, /\*\*Homework 1\*\* \(BIO 1100\)/);
+});
+
 // ---- the step loop: the stub model's bad answer, then each recovery path -------------------------------------------------
 // outs: each agent.tools run's answer in order: an output, or { why, raw } for a check failure.
 const loop = async (outs) => {
