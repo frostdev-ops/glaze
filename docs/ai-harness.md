@@ -281,6 +281,10 @@ In Ask Rime (`ai/ask.js`, `ai/page/ask.js`):
   the question before it with fresh calls; the system text asks for glaze-plans' MARKDOWN.md answer format, which the
   panel renders. Reminder, notice, watch and cancel phrasings are one table (agent-tools.js `PHRASES`) the router and the
   check share. Level 1 is byte-identical.
+- **Known limit, Canvas announcements and discussion prompts:** both are read only when a teacher or TA of the course wrote
+  them (the course's enrollments). A course that hides its People list from students shows Glaze no teachers, so there
+  `announcement_read` and `discussion_read` refuse ("Glaze can't verify…") until a probe of a real Canvas shows a field that
+  marks an announcement on its own.
 - **The context window** (ai/ask.js; the owner, 2026-11-01): before each request Ask Rime asks the broker to `count` it
   (Glaze's own model: its tokenizer in the engine host, exactly; a cloud model: text.js's estimate) against the window the
   provider runs with (the configured context, never an assumed 4,096), and posts `{ id, type: 'context', task, used,
