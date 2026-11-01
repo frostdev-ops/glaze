@@ -272,6 +272,15 @@ In Ask Rime (`ai/ask.js`, `ai/page/ask.js`):
   what was read as its `material`. Help naming nothing, and general questions, go to study.help alone. The reads go
   through `agents/tab.js` ops (`announcement`, `search`, `modules`, `topics`) in an open tab of the account's school,
   as Agents' reads do, or Glaze's caches; with no tab open a read says so. Moodle accounts aren't read by the agent layer.
+- **The student's week, dates and the conversation at level 3** (the owner's Sunday, 2026-11-01): the `now` block adds the
+  windows a student means (today, tomorrow, this week to the coming Sunday or on a weekend the next, this weekend, next
+  week, due soon: a week), resolved on their clock; times in results are friendly and localized ("Monday, November 2,
+  11:59 PM"; the year only when it isn't now's); an answer that says nothing is due while a result lists work not handed in
+  fails (`missed`); agent.tools takes the panel's last three turns (an `earlier` block, 300/600 characters a turn), and
+  pushback or a follow-up after an answer ("that's not true", "you missed…", "what about Monday?", six languages) routes as
+  the question before it with fresh calls; the system text asks for glaze-plans' MARKDOWN.md answer format, which the
+  panel renders. Reminder, notice, watch and cancel phrasings are one table (agent-tools.js `PHRASES`) the router and the
+  check share. Level 1 is byte-identical.
 - **Routing at level 3** (`TOPICS3`, six languages): announcements, content, syllabus and discussions (their reads), compute (`run_js`; a computing verb in the student's own grade math
   is no help request, but graded work still goes to study.help), navigate (`places_list`, `place_open`, `page_highlight`),
   remind (`wake_create`, `wakes_list`, `wake_cancel`) and watch (`monitor_create`, `wakes_list`, `todo_list`,
