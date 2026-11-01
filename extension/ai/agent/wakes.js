@@ -101,11 +101,13 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
     s.wakes = s.wakes.filter((x) => x.at > now);
     const keep = [];
     for (const m of s.monitors) {
+      if (!(await env.on())) return 0;
       if (m.until <= now) continue;
       const r = await look(env, m), fact = r.seen ? changed(m, r.seen) : null;
       if (fact) { fire(s, { id: m.id, what: 'monitor', watch: m.watch, say: m.say, at: now, fact }); n++; } else keep.push(m);
     }
     s.monitors = keep;
+    if (!(await env.on())) return 0;
     await write(env, s);
     await arm(env, s);
     return n;
@@ -115,7 +117,7 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
   const take = async (env) => {
     if (!(await env.on())) return [];
     await tick(env);
-    return turn(async () => { const s = await read(env), out = s.fired; s.fired = []; await write(env, s); return out; });
+    return turn(async () => { const s = await read(env); if (!(await env.on())) return []; const out = s.fired; s.fired = []; await write(env, s); return out; });
   };
 
   // ---- the tools -------------------------------------------------------------------------------------------------------
@@ -154,6 +156,7 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
         if (t.error) return fail(t.error);
         if (!say) return fail('Say what to do then.');
         const s = await read(env);
+        if (!(await env.on())) return fail(OFF);
         if (s.wakes.length >= LIMIT.wakes) return fail(`${LIMIT.wakes} wakes are waiting already; cancel one first (wakes_list).`);
         const w = { id: newId('w'), at: t.at, say, made: clock(env) };
         s.wakes.push(w);
@@ -175,6 +178,7 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
         if (r.error) return fail(r.error);
         return turn(async () => {
           const s = await read(env);
+          if (!(await env.on())) return fail(OFF);
           if (s.monitors.length >= LIMIT.monitors) return fail(`${LIMIT.monitors} monitors are watching already; cancel one first (wakes_list).`);
           const m = { id: newId('m'), ...r.m, say: text(args.say, LIMIT.say), made: clock(env), until: clock(env) + LIMIT.days * DAY };
           s.monitors.push(m);
