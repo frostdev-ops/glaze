@@ -2796,7 +2796,11 @@ const modelUpdatesEnv = () => ({ store: GZ_AI_STORE, settings: async () => GZ_AI
   fetch: (u, i) => fetch(u, i), host: (op, args, o) => GZ_AI_LOCAL.link().call(op, args, o), local: chrome.storage.local, now: Date.now,
   glaze: chrome.runtime.getManifest().version, saveData: () => globalThis.navigator?.connection?.saveData === true,
   say: (m) => chrome.runtime.sendMessage?.(m)?.catch?.(() => {}), safari: SAFARI || !GZ_AI_SETTINGS.PROVIDERS.includes('local') });
-chrome.alarms?.onAlarm.addListener((a) => { if (!SAFARI && a?.name?.startsWith('gz-models:')) { ai(); GZ_AI_MODEL_UPDATES.alarm(modelUpdatesEnv(), a)?.catch(() => {}); } });
+// The alarm loads updates.js alone and stops there unless the store's mark says a Rime model is downloaded here.
+chrome.alarms?.onAlarm.addListener((a) => { if (SAFARI || !a?.name?.startsWith('gz-models:')) return;
+  if (typeof GZ_AI_MODEL_UPDATES === 'undefined') importScripts('../ai/local/updates.js');
+  GZ_AI_MODEL_UPDATES.present().then((here) => { if (!here) return null; ai(); return GZ_AI_MODEL_UPDATES.alarm(modelUpdatesEnv(), a); }).catch(() => {});
+});
 // Scheduling loads updates.js alone, never the whole harness, at every browser start.
 const modelUpdatesPlan = (startup) => () => { if (SAFARI) return; if (typeof GZ_AI_MODEL_UPDATES === 'undefined') importScripts('../ai/local/updates.js'); GZ_AI_MODEL_UPDATES.schedule({ alarms: chrome.alarms }, { startup }).catch(() => {}); };
 chrome.runtime.onStartup.addListener(modelUpdatesPlan(true));

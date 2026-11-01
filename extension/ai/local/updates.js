@@ -157,6 +157,16 @@ var GZ_AI_MODEL_UPDATES = globalThis.GZ_AI_MODEL_UPDATES || (() => {
   };
 
   // ---- the worker's side -----------------------------------------------------------------------------------------------
+  // Whether a check may have anything to do, from the store's marks alone (store.js ~rime, ~none): a folder of models from
+  // before the marks counts, so its first check runs and its list sets them. Loads and reads nothing else.
+  const present = async (root = () => navigator.storage.getDirectory()) => {
+    let top;
+    try { top = await (await root()).getDirectoryHandle('glaze-models'); } catch { return false; }
+    try { await top.getFileHandle('~rime'); return true; } catch { /* not marked */ }
+    try { await top.getFileHandle('~none'); return false; } catch { /* not marked */ }
+    for await (const k of top.keys()) if (!k.startsWith('~')) return true;
+    return false;
+  };
   let job = null; // the update running: { controller, version, progress }
   let checking = null;
   const stop = () => { checking?.abort(Object.assign(new Error('Update automatically is off'), { reason: 'stopped' })); };
@@ -257,6 +267,6 @@ var GZ_AI_MODEL_UPDATES = globalThis.GZ_AI_MODEL_UPDATES || (() => {
   };
 
   return { KEY, URL: LIST, TOOLS, DAILY, START, KEPT, canon, fingerprint, compare, clean, verify, usable, accept, begin, swap, confirm, rollback, reject, fault, update, settle,
-    check, schedule, alarm, about, stop, inUse };
+    check, schedule, alarm, about, stop, inUse, present };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_MODEL_UPDATES; else GZ_AI_MODEL_UPDATES;

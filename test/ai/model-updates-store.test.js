@@ -255,8 +255,9 @@ test('the store marks whether a Rime model is downloaded: on its download, its r
   assert.deepEqual(marks(m.fs), ['~none']);
   assert.equal(await U.present(async () => m.fs.root), false);
   // A folder from before the marks (no mark at all): unknown, so the check runs once and its list sets the mark.
-  m.fs.root.kids.get('glaze-models').kids.delete('~none');
+  await m.store.download('rime-q4');
+  for (const k of marks(m.fs)) m.fs.root.kids.get('glaze-models').kids.delete(k);
   assert.equal(await U.present(async () => m.fs.root), true);
   await m.store.list();
-  assert.deepEqual(marks(m.fs), ['~none']);
+  assert.deepEqual(marks(m.fs), ['~rime']);
 });

@@ -20,7 +20,7 @@ const run = async (folder) => {
     SAFARI: false, fetch: () => { throw new Error('no request'); },
     navigator: { storage: { getDirectory: async () => dir(folder ? { 'glaze-models': { dir: folder } } : {}) } },
     importScripts: (...f) => { imported.push(...f); vm.runInContext(fs.readFileSync(path.join(ROOT, 'extension/background', f[0]), 'utf8'), ctx); },
-    ai: () => { harness++; ctx.GZ_AI_MODEL_UPDATES.alarm = async (env, a) => { checks.push(a.name); }; },
+    ai: () => { harness++; Object.assign(ctx, { GZ_AI_STORE: {}, GZ_AI_LOCAL: {}, GZ_AI_SETTINGS: { PROVIDERS: ['local'] } }); ctx.GZ_AI_MODEL_UPDATES.alarm = async (env, a) => { checks.push(a.name); }; },
     chrome: { alarms: { onAlarm: { addListener: (f) => listeners.push(f) } }, runtime: { onStartup: { addListener() {} }, onInstalled: { addListener() {} }, getManifest: () => ({ version: '4.0.1' }) },
       storage: { local: {}, onChanged: { addListener() {} } } },
     crypto: globalThis.crypto, TextEncoder, atob, setTimeout, clearTimeout, Promise, Object, Array, Number, String, Map, Set, JSON, Math, Error, Uint8Array, DataView, Uint32Array,

@@ -18,6 +18,10 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
   const ID = /^[a-z0-9][a-z0-9._-]{0,63}$/;
   const STALL = 60000; // no bytes for this long: the network is gone
   const STATE = '~updates.json', STATE_LOCK = 'glaze-model-updates'; // never an id: ID starts with a letter or digit
+  // Empty marks beside the models: ~rime while a Rime model (a text model, not stock) is downloaded, ~none once none is. The
+  // worker's daily update alarm reads them alone (ai/local/updates.js present) before it loads anything else.
+  const RIME = '~rime', NONE = '~none';
+  const rime = (m) => !m.role && !m.stock;
   const SHOW = 1 << 20; // progress at most once a MB, or a sixteenth of a smaller chunk
 
   const fail = (reason, message, extra) => Object.assign(new Error(message), { reason, ...extra });
@@ -291,6 +295,17 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
       });
     };
 
+    // The mark, made true to `on` (an empty file; nothing written when it already says so).
+    const mark = async (on) => {
+      try {
+        const top = await (await root()).getDirectoryHandle(TOP, { create: true });
+        const [want, other] = on ? [RIME, NONE] : [NONE, RIME];
+        try { await top.getFileHandle(want); } catch (e) { if (!gone(e)) throw e; await top.getFileHandle(want, { create: true }); }
+        try { await top.removeEntry(other); } catch (e) { if (!gone(e)) throw e; }
+      } catch { /* the next list sets it */ }
+    };
+    const anyRime = async () => { for (const m of (await load()).entries.values()) if (rime(m) && (await status(m.id)).state === 'ready') return true; return false; };
+
     const room = async () => {
       let e = null;
       try { e = await estimate(); } catch { /* unknown */ }
@@ -394,6 +409,7 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
         }
       }
       await dir.getFileHandle('ready', { create: true });
+      if (rime(m)) await mark(true);
       say(1);
       return { state: 'ready' };
     };
@@ -491,6 +507,7 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
         for (const name of old) await top.removeEntry(name);
         try { await top.removeEntry(id, { recursive: true }); } catch (e) { if (!gone(e)) throw e; }
       });
+      await mark(await anyRime().catch(() => false));
       // Its versions are gone: the state forgets them (a download takes the newest again); the serial and failures stay.
       await edit((st) => {
         if (!st || !(st.pins?.[id] || st.keep?.[id] || st.trial?.id === id)) return undefined;
@@ -554,6 +571,7 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
           if (bytes) out.push({ id: name, state: 'stale', bytes });
         }
       }
+      await mark(out.some((m) => rime(m) && m.state === 'ready'));
       return out;
     };
 
