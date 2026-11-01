@@ -1270,7 +1270,9 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const edit = button(t('Edit layout'), () => setEditing(!editing), { className: 'gz-w-small gz-dash-edit' });
     edit.setAttribute('aria-pressed', 'false');
     const reset = board && button(t('Reset layout'), () => {
-      change({ ops: lay.boards[board].filter((x) => !W.course(x.id) || (W.course(x.id).origin === location.origin && globalThis.GZ_COURSE_CARDS?.own(x.id) === true)).map((x) => ({ s: board, id: x.id, set: { x: null, y: null, r: false, z: 0, fold: false, w: null, h: null } })), widths: { [board]: 0 } });
+      const ops = lay.boards[board].filter((x) => !W.course(x.id) || (W.course(x.id).origin === location.origin && globalThis.GZ_COURSE_CARDS?.own(x.id) === true)).map((x) => ({ s: board, id: x.id, set: { x: null, y: null, r: false, z: 0, fold: false, w: null, h: null } }));
+      // Shared course sets can exceed one message's 64 operations. Keep each patch within the worker's limit.
+      for (let i = 0; i < ops.length || i === 0; i += 64) change({ ops: ops.slice(i, i + 64), ...(i === 0 && { widths: { [board]: 0 } }) });
       say(t('Layout reset.'));
     }, { className: 'gz-w-small gz-dash-reset', hidden: true });
     const hubBtn = button(t('What Glaze can do'), () => hub(), { className: 'gz-w-small' });
