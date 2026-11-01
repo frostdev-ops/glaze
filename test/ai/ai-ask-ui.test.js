@@ -638,3 +638,27 @@ test('arrival ignores carried highlights forged by school scripts in sessionStor
   await P.ui.arrive();
   assert.equal(walks, 0, 'page storage must not authorize extension annotations or scrolling');
 });
+
+
+test('every fired record gets a card, including a monitor without custom words; disabling reminders removes the tray', async () => {
+  const list = Array.from({ length: 7 }, (_, i) => ({ id: `m-record0${i}`, what: 'monitor', watch: 'grade', say: i ? `Grade ${i}` : '', at: 1 }));
+  const P = page({ setup: onCanvas(), reply: (m) => m.op === 'fired' ? { type: 'end', fired: list } : ready(m) });
+  await P.ui.arrive({ fired: 7 }); await settle();
+  const tray = P.doc.getElementById('gz-ask-fired');
+  assert.equal(tray.querySelectorAll('.gz-ask-fired-card').length, 7, 'taking all records must not silently discard any');
+  P.doc.fire(tray.querySelector('.gz-ask-fired-go'), 'click'); await settle(20);
+  assert.equal(asked(P)[0].fired, 'm-record00', 'a monitor without a custom say can still be asked about');
+  P.setAi({ ...P.store.ai, wakes: false });
+  assert.equal(P.doc.getElementById('gz-ask-fired'), null, 'the reminders switch applies even with a panel open');
+  P.box()?.close();
+});
+
+test('a fired response arriving after Ask is disabled never restores its tray', async () => {
+  const P = page({ setup: onCanvas(), reply: ready });
+  const arriving = P.ui.arrive({ fired: 1 }); await settle();
+  const request = P.posted.find((m) => m.op === 'fired');
+  P.setAi({ on: false, features: { ask: false } });
+  P.ports.at(-1).answer({ id: request.id, type: 'end', fired: [{ id: 'w-late1234', what: 'wake', say: 'Late reminder' }] });
+  await arriving;
+  assert.equal(P.doc.getElementById('gz-ask-fired'), null);
+});
