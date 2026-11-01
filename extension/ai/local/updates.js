@@ -146,7 +146,8 @@ var GZ_AI_MODEL_UPDATES = globalThis.GZ_AI_MODEL_UPDATES || (() => {
 
   // ---- the worker's side -----------------------------------------------------------------------------------------------
   let job = null; // the update running: { controller, version, progress }
-  const stop = () => { job?.controller.abort(Object.assign(new Error('Update automatically is off'), { reason: 'stopped' })); };
+  let checking = null;
+  const stop = () => { checking?.abort(Object.assign(new Error('Update automatically is off'), { reason: 'stopped' })); };
   // The Rime model in use: the downloaded one with Advanced's tier, else the first downloaded.
   const inUse = (list, tier) => {
     const text = list.filter((m) => !m.role && !m.stock && m.state === 'ready');
@@ -154,19 +155,24 @@ var GZ_AI_MODEL_UPDATES = globalThis.GZ_AI_MODEL_UPDATES || (() => {
   };
   const say = (env, m) => { try { env.say?.({ type: 'glaze:ai-config', event: 'progress', provider: 'local', part: 'update', ...m }); } catch { /* no page listening */ } };
   // The list, fetched as the weights are: no cookies, no cache, the final host Hugging Face's, at most CAP bytes.
-  const fetchList = async (env) => {
+  const fetchList = async (env, signal) => {
     const t = new AbortController(), timer = setTimeout(() => t.abort(), TIMEOUT);
+    const stop = () => t.abort(signal.reason);
+    signal.addEventListener('abort', stop, { once: true });
+    if (signal.aborted) stop();
     try {
       const r = await env.fetch(LIST, { credentials: 'omit', cache: 'no-store', redirect: 'follow', referrerPolicy: 'no-referrer', mode: 'cors', signal: t.signal });
       if (!r.ok || (r.url && !ST().allowedHost(r.url))) return null;
       const text = await r.text();
       return text.length > CAP ? null : JSON.parse(text);
-    } finally { clearTimeout(timer); }
+    } finally { clearTimeout(timer); signal.removeEventListener('abort', stop); }
   };
   // env: { store, settings(), tier(), fetch, host(op, args, { signal, onEvent }), local (storage area), now(), glaze, saveData(),
   // say(message), safari, key? }. reason: 'daily' | 'start' | 'now'. → { state, reason?, version? }.
   let running = null;
   const check = (env, { reason = 'daily' } = {}) => (running ||= (async () => {
+    const controller = new AbortController();
+    checking = controller;
     if (env.safari) return { state: 'off' };
     if ((await env.settings())?.updates === false) return { state: 'off' };
     const list = await env.store.list();
@@ -178,12 +184,18 @@ var GZ_AI_MODEL_UPDATES = globalThis.GZ_AI_MODEL_UPDATES || (() => {
     if (reason === 'start' && Number.isFinite(kept.checked) && now - kept.checked < RECENT && !pending) return { state: 'recent' };
     const note = (o) => env.local.set({ [KEPT]: { ...kept, checked: now, ...o } }).catch?.(() => {});
     let doc;
-    try { doc = await fetchList(env); } catch { doc = null; }
+    if (controller.signal.aborted) return { state: 'stopped' };
+    try { doc = await fetchList(env, controller.signal); } catch { doc = null; }
+    if (controller.signal.aborted) return { state: 'stopped' };
     if (!doc) { await note({ result: 'offline' }); return { state: 'offline' }; }
     const r = await verify(doc, { key: env.key, serial: st?.serial || 0 });
     if (!r.ok && r.error !== 'replay') { await note({ result: r.error }); return { state: 'refused', reason: r.error }; }
     if (!r.ok && !pending && cat.latest.get(slot.id)?.total === cat.entries.get(slot.id)?.total) { await note({ result: 'current' }); return { state: 'current' }; }
-    const controller = new AbortController(), target = (r.ok ? r.list.models : st?.models || []).find((m) => m.id === slot.id) || cat.latest.get(slot.id);
+    if ((await env.settings())?.updates === false) return { state: 'off' };
+    if (!(await env.store.list()).some((m) => m.id === slot.id && m.state === 'ready')) return { state: 'none' };
+    if (env.saveData?.()) return { state: 'paused', reason: 'saveData' };
+    if (controller.signal.aborted) return { state: 'stopped' };
+    const target = (r.ok ? r.list.models : st?.models || []).find((m) => m.id === slot.id) || cat.latest.get(slot.id);
     job = { controller, version: target?.version || null, progress: 0 };
     try {
       const out = await env.host('update', { doc, model: slot.id, glaze: env.glaze }, { signal: controller.signal, onEvent: (e) => {
@@ -202,7 +214,7 @@ var GZ_AI_MODEL_UPDATES = globalThis.GZ_AI_MODEL_UPDATES || (() => {
       job = null;
       say(env, { done: true });
     }
-  })().finally(() => { running = null; }));
+  })().finally(() => { running = null; checking = null; }));
 
   // The daily alarm, made once (its time kept); at browser start, a check 2 to 10 minutes later.
   const schedule = async ({ alarms, random = Math.random }, { startup = false } = {}) => {
