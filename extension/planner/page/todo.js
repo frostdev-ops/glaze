@@ -425,7 +425,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       r.at !== null && when(r, now), planText(r, now),
       open.has(r.key) && (r.local.sessions || []).map((x) => [when({ at: x.at }, now), x.at + x.min * 6e4 <= now]),
     ]);
-    const view = JSON.stringify([sig, out, form, form && courses.list.map((c) => [String(c.id), c.name]), tools, [...open], [...shut], !!cache, cache?.complete, o().progress && cache?.sums,
+    const view = JSON.stringify([prefs, lang(), course, mounted?.scope, out, form, form && courses.list.map((c) => [String(c.id), c.name]), tools, [...open], [...shut], !!cache, cache?.complete, o().progress && cache?.sums,
       question?.outerHTML ?? null, remind.map((e) => e.outerHTML), times, [...out.unread, ...out.read].map((r) => when(r, now)[o().rel ? 'rel' : 'abs'])]);
     if (view === viewed) return;
     viewed = view;
