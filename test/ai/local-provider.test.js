@@ -297,6 +297,29 @@ test('a JSON run: the schema said in words and held by the grammar\'s masks, its
   assert.equal(compiled.length, 1, 'a schema compiles once per model');
 });
 
+test('a task with spans: the host compiles its own schema with the text of the block each span names; the prompt says it bare', async () => {
+  const RV = require('../../extension/ai/tasks/writer-review.js');
+  const X = require('../../extension/ai/text.js');
+  const calls = [];
+  const grammar = { ...G, compile: (schema, V, opts) => { calls.push({ schema, opts }); return G.compile(schema, V, opts); } };
+  const draft = 'The pavemetns were cracked.\r\nAgain.';
+  const answer = { issues: [{ quote: 'pavemetns', before: 'The', after: 'were', kind: 'spelling', message: 'Spelling.', suggestions: [] }] };
+  const s = setup({ here: { 'glaze-q4': 'ready' }, reply: JSON.stringify(answer), grammar });
+  const req = (text, part) => ({ ...RV.task.build(part ? { ...RV.task.input({ text }), part: 2, parts: 3 } : RV.task.input({ text }), { text: X }), schema: S.bare(RV.OUTPUT), task: { id: 'writer.review', version: 2 } });
+  const r = await P.run('local', req(draft), LOCAL.config({}));
+  assert.deepEqual(r.json, answer);
+  assert.equal(s.eng.log.refused, undefined);
+  assert.deepEqual(calls[0].schema, RV.OUTPUT, 'the task\'s own schema, spans and all');
+  assert.deepEqual(calls[0].opts, { sources: { draft: X.plain(draft) } }, 'the draft as the model reads it');
+  assert.ok(TOK.decode(s.eng.log.prefills[0], { specials: true }).includes(`\n\n${FMT.SAY_JSON(S.bare(RV.OUTPUT))}<|im_end|>`), 'the schema in words, bare');
+  // A split part's block ("draft part 2 of 3"), and a request whose schema isn't the task's: no spans.
+  await P.run('local', req('The pavemetns were cracked, again.', true), LOCAL.config({}));
+  assert.deepEqual(calls[1].opts, { sources: { draft: 'The pavemetns were cracked, again.' } });
+  await P.run('local', { ...req(draft), schema: SCHEMA }, LOCAL.config({})).catch(() => {}); // the reply doesn't fit it
+  assert.deepEqual([calls[2].schema, calls[2].opts], [SCHEMA, {}]);
+  assert.equal(calls.length, 3);
+});
+
 // D4 (glaze-plans/lfm-tune/reports/d4-r1.md): the host's Worker never loaded the grammar, and every run went in words only.
 test('a schema is never run in words only: no grammar, or one that refuses the schema, is an error before the model reads anything', async () => {
   const refuses = { vocab: () => ({}), compile: () => { throw new TypeError('grammar: pattern'); } };

@@ -44,10 +44,11 @@ var GZ_AI_TASK_WRITER_FEEDBACK = globalThis.GZ_AI_TASK_WRITER_FEEDBACK || (() =>
       criterion: str('The rubric criterion\'s id in square brackets without them, or, with no rubric, the requirement\'s words copied from the instructions, description or an attached file'),
       status: { enum: STATUS },
       comment: str('One or two short sentences to the student: what the draft does, and what is missing'),
+      // Words of the draft (schema.js span), as check() anchors them.
       quotes: { type: 'array', maxItems: LIMIT.quotes, items: S.obj({
-        quote: str('A passage of the draft that shows it, copied character for character'),
-        before: str('The one to four words just before it, copied'),
-        after: str('The one to four words just after it, copied'),
+        quote: { ...str('A passage of the draft that shows it, copied character for character'), span: { source: 'draft', min: 8 } },
+        before: { ...str('The one to four words just before it, copied'), span: { source: 'draft' } },
+        after: { ...str('The one to four words just after it, copied'), span: { source: 'draft' } },
       }, ['quote', 'before', 'after']) },
       level: { type: ['string', 'null'], maxLength: LIMIT.size, description: 'The rubric level the draft reaches on this criterion, by the name the rubric gives it; null with no rubric levels or when you cannot tell' },
       score: { type: ['number', 'null'], minimum: 0, description: 'When grading is requested, estimated points earned for this criterion using its supplied points scale; null when no scale is supplied' },

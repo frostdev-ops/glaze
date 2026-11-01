@@ -545,19 +545,23 @@ model.release()                                 // frees every GPU resource; the
 ```
 
 `ai/local/grammar.js` (`GZ_AI_GRAMMAR`): per model `vocab(tokenizer.byteStrings(), { eos: [id], marks })` (`marks`, the
-ids of LFM3's tool tags, `TOOL_MARKS`), per schema `compile(schema, vocab, { tools? })` (a refusal: `request-rejected`,
+ids of LFM3's tool tags, `TOOL_MARKS`), per schema `compile(schema, vocab, { tools?, sources? })` (a refusal: `request-rejected`,
 reason `unsupported`), per run `matcher()` with `mask()`, `advance(id)`, `complete`, `done`; the mask allows the end token
 only once the JSON is whole, so a run stops at the end token. What it lets through `validate()` accepts, an anchored ASCII
 `pattern` included (one it can't hold leaves `exact: false`). A run's `tools` (`agent.tools`' `constraint(input)`) make the
 answer either that JSON or one native call to a listed tool, each parameter held to its own schema, so a turn the engine
-writes is one `fromNative()` reads and `OUTPUT` takes; `test/ai/agent-tools-grammar.test.js` holds it. `ai/local/ladder.js`
+writes is one `fromNative()` reads and `OUTPUT` takes; `test/ai/agent-tools-grammar.test.js` holds it. A string with
+`span: { source, min?, word? }` (`ai/schema.js`) is held to words of `compile`'s `sources[source]`, cut where `ai/text.js`
+folds them alike: `providers/local.js` finds the task's own schema by `task.id` (a request carries it `bare()`, so no
+provider is sent the keyword) and passes the data block of that label as the model reads it; writer.review's and
+writer.feedback's quotes, syllabus.read's and every writer.cite value use it (`test/ai/local-grammar-span.test.js`). `ai/local/ladder.js`
 (`GZ_AI_LADDER`): `pick({ adapter, models }) → { id } | { reason }`, `adapter` the Worker's `requestAdapter()` (null without
 one), `models` the store's list. The grammar and `ai/schema.js`, which it reads as it loads, are the host's required imports
 (`IMPORTS` in `host.js`; `test/ai/local-host-worker.test.js` runs them as the Worker does): a run with a schema and no grammar
 is `provider-unavailable`, reason `engine`, never a run in words only. The others are optional until they ship: no engine is
 `unavailable`, reason `engine`; no ladder, the smallest stock model where there is an adapter.
 
-The host's messages (`host.js` header): `prepare { tier?, part? }`, `run { model, parts, stable, schema?, sampler, maxTokens,
+The host's messages (`host.js` header): `prepare { tier?, part? }`, `run { model, parts, stable, schema?, sources?, sampler, maxTokens,
 projector?, images?, think?: { budget, close, after }, window? }`, `warm { model, parts }`, `remove { part? }`, `release`, `cancel`; it answers `progress`, `delta`, `done` or `error`, `tick` every 20 s
 while anything is in flight, and `idle`.
 

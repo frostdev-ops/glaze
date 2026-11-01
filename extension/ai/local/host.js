@@ -4,11 +4,12 @@
 // warm-up or a run with the same instructions starts after them. Chrome starts it from an offscreen document
 // (ai/local/offscreen.js), Firefox from the background event page (ai/local/link.js); both pass messages to it as they are.
 //   in  { op: 'config', idle }  { op: 'detach' } (the worker's port went: runs and warm-ups stop, a download goes on)
-//       { id, op: 'prepare', tier?, part? }  { id, op: 'run', model, parts, stable, schema?, tools?, sampler, maxTokens,
-//       projector?, images?, think?, window? }  { id, op: 'warm', model, parts }  { id, op: 'remove', part? }  { id, op: 'release' }
+//       { id, op: 'prepare', tier?, part? }  { id, op: 'run', model, parts, stable, schema?, tools?, sources?, sampler,
+//       maxTokens, projector?, images?, think?, window? }  { id, op: 'warm', model, parts }  { id, op: 'remove', part? }  { id, op: 'release' }
 //       { id, op: 'cancel' }
 //   tools [{ name, parameters }] (with schema; ai/tasks/agent-tools.js constraint()): the answer is either the schema's
-//   JSON or one native call to a listed tool, held by the grammar (grammar.js compile's tools).
+//   JSON or one native call to a listed tool, held by the grammar (grammar.js compile's tools). sources { [name]: text }
+//   (with schema; providers/local.js spans): the texts its span strings are held to (grammar.js compile's sources).
 //   think { budget, close, after } (parts ending in format.js's think prefill): the model reasons first, unmasked but for
 //   text tokens and </think>, until it writes </think> (then `after` is fed) or `budget` tokens (then `close` is fed, which
 //   ends with </think>); then the answer, with the grammar's mask as any run. The reasoning is never decoded to text, posted
@@ -33,7 +34,7 @@
 // The grammar's mask allows the end token only once the JSON is whole, so a run stops at the end token as any other.
 // Classic script; node exports (create), and in a Worker it starts itself.
 var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
-  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, rate: 16, answer: 256 };
+  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, rate: 16, answer: 256, spans: 2 };
   // What the Worker loads, in order, beside this file: required ones throw at its start; optional ones until they ship.
   const IMPORTS = Object.freeze({ required: Object.freeze(['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', 'grammar.js']),
     optional: Object.freeze(['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'ladder.js']) });
@@ -150,17 +151,24 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
     // The JSON grammar's matcher for a schema (grammar.js), with tools a turn that may instead call one of them in LFM3's
     // own syntax: its vocabulary once per model (with the tool tags' ids, where the model has them), each schema compiled
     // once. No grammar, or no vocabulary: provider-unavailable 'engine'; a schema or tools it refuses (tools on a model
-    // without the tags): request-rejected 'unsupported'.
-    const matcher = (job, schema, tools) => {
+    // without the tags): request-rejected 'unsupported'. With sources, the last LIMIT.spans compiled are kept (each holds
+    // its texts' automata).
+    const matcher = (job, schema, tools, sources) => {
       const G = env.grammar();
       if (typeof G?.vocab !== 'function' || typeof G.compile !== 'function') throw fail('provider-unavailable', 'engine');
       try {
         const marks = Array.isArray(G.TOOL_MARKS) ? Object.fromEntries(G.TOOL_MARKS.map((n) => [n, job.tok.id(n)])) : {};
         job.vocab ||= G.vocab(job.tok.byteStrings(), { eos: [job.eos], marks: Object.values(marks).every(Number.isInteger) ? marks : {} });
       } catch { throw fail('provider-unavailable', 'engine'); }
-      const key = JSON.stringify(tools === undefined ? [schema] : [schema, tools]);
-      if (!job.schemas.has(key)) { let g = null; try { g = G.compile(schema, job.vocab, tools === undefined ? {} : { tools }); } catch { /* refused */ } job.schemas.set(key, g); if (job.schemas.size > 32) job.schemas.delete(job.schemas.keys().next().value); }
-      const g = job.schemas.get(key);
+      const kept = sources === undefined ? job.schemas : (job.spans ||= new Map()), most = sources === undefined ? 32 : LIMIT.spans;
+      const key = JSON.stringify([schema, ...(tools !== undefined || sources !== undefined ? [tools ?? null] : []), ...(sources !== undefined ? [sources] : [])]);
+      if (!kept.has(key)) {
+        let g = null;
+        try { g = G.compile(schema, job.vocab, { ...(tools !== undefined && { tools }), ...(sources !== undefined && { sources }) }); } catch { /* refused */ }
+        kept.set(key, g);
+        if (kept.size > most) kept.delete(kept.keys().next().value);
+      }
+      const g = kept.get(key);
       if (!g) throw fail('request-rejected', 'unsupported');
       return g.matcher();
     };
@@ -305,7 +313,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         // A trained window is optional; the physical engine limit still holds beside the reserved answer and close.
         if (think) think.budget = Math.min(think.budget, room - input - answer - think.close.length);
         if (m.tools !== undefined && !m.schema) throw fail('request-rejected', 'unsupported');
-        const grammar = m.schema ? matcher(job, m.schema, m.tools) : null;
+        const grammar = m.schema ? matcher(job, m.schema, m.tools, m.sources) : null;
         await prefix(job, head, signal);
         // Each picture encoded on the engine's device, fed in place of its placeholders, and its buffer freed at once.
         const encoded = [];

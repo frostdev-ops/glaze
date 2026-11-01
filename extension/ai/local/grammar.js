@@ -19,7 +19,14 @@
 //   - pattern: an anchored one (^…$) over printable ASCII other than " and \ (literals, \d, classes, groups, |, ?, *, +,
 //     {m,n}) runs as a DFA, held with min/maxLength (a string at most 1,024 characters); any other pattern is not
 //     enforced: such a grammar has exact: false, and the caller runs validate();
-//   - a value with no schema (an extra key's, an array's without items) nests at most LIMIT.depth deep.
+//   - a value with no schema (an extra key's, an array's without items) nests at most LIMIT.depth deep;
+//   - span (ai/schema.js), with compile's sources: { [source]: its text }: a string that decodes to bytes of that text,
+//     written as JSON.stringify writes them (\" \\ \b \f \n \r \t, other controls \u00xx, the rest raw), cut where
+//     ai/text.js folds both sides alike: it starts on a character that isn't a combining mark and ends before one that
+//     isn't, holds at least min characters that fold to something (none of white space, marks, zero-width ones), and with
+//     word starts after and ends before a character that isn't a letter or a digit (or an end), as writer-cite.js asks.
+//     Held with maxLength (and minLength, as that many such characters). A span with a pattern, or whose source isn't
+//     given or holds no such span, is an ordinary string.
 // compile(schema, V, { tools }): the turn of a model that calls tools in LFM3's own syntax (ai/tasks/agent-tools.js
 // native): either the JSON as above, or one call to a listed tool,
 //   <tool_call>\n<function=NAME>\n(<parameter=KEY>\nVALUE\n</parameter>\n)*</function>\n</tool_call>
@@ -28,11 +35,12 @@
 // their ids (vocab()'s marks, TOOL_MARKS), each read as a byte no text has (0xF8 on).
 // Speed: a trie over the vocabulary's bytes is walked against the state. Inside a string, where most steps are, the
 // tokens that stay in it come from a table per string state, shared by every schema on the vocabulary, and only those
-// that close it are walked on. Masks are cached by state, counters capped past the longest token so repeats hit.
+// that close it are walked on. Masks are cached by state, counters capped past the longest token so repeats hit. A span
+// walks the trie with its source's suffix automaton, so a mask visits only tokens that continue a span.
 // Classic script; node exports.
 var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
   const S = typeof GZ_AI_SCHEMA !== 'undefined' ? GZ_AI_SCHEMA : require('../schema.js');
-  const LIMIT = { digits: 15, fraction: 6, depth: 16, cache: 128, pattern: 1024, nfa: 4000, dfa: 512, optional: 6 };
+  const LIMIT = { digits: 15, fraction: 6, depth: 16, cache: 128, pattern: 1024, nfa: 4000, dfa: 512, optional: 6, source: 1 << 20 };
   const enc = new TextEncoder();
   const fail = (what) => { throw new TypeError(`grammar: ${what}`); };
 
@@ -169,6 +177,153 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
       }
     }
     return (tables[d] = { ids: Int32Array.from(ids), ends: Int32Array.from(ends), lens: Int32Array.from(lens), cn: Int32Array.from(cn), ck: Int32Array.from(ck) });
+  };
+
+  // ---- spans of a source ---------------------------------------------------------------------------------------------
+  // The source as bytes T: its UTF-8, a lone surrogate SEP (no answer byte), and with word MK at the start and after each
+  // character that isn't a letter or a digit, which the decoder writes there too, so an occurrence's start is in its string.
+  // Per byte of T: LEAD starts a character; END, VIS, CM, NW end one that is any, folds to something, is a combining mark,
+  // isn't a letter or digit (a mark or a character norm() drops counts as one, so MK never parts what folding joins); MST,
+  // NWS start a mark, a non-word character; GOOD: a span may end after it.
+  const SEP = 0xff, MK = 0xfe, INF = 0x3fffffff;
+  const LEAD = 1, END = 2, VIS = 4, CM = 8, NW = 16, MST = 32, NWS = 64, GOOD = 128;
+  const kinds = new Map();
+  const kindOf = (cp) => {
+    let k = kinds.get(cp);
+    if (k !== undefined) return k;
+    const c = String.fromCodePoint(cp), mark = /\p{M}/u.test(c), gone = /[\u00ad\u200b-\u200d\u2060\ufeff]/u.test(c);
+    k = (mark ? CM : 0) | (mark || gone || /[\p{L}\p{N}]/u.test(c) ? 0 : NW) | (mark || gone || /\s/u.test(c) ? 0 : VIS);
+    if (kinds.size < 65536) kinds.set(cp, k);
+    return k;
+  };
+  // → the suffix automaton of T { go(st, b) (-1: none), len, link, fp (an end of st's first occurrence), head/eNx/eB/eTo
+  // (st's edges), flags, word, start, n }, or null past LIMIT.source.
+  const automaton = (text, word) => {
+    const T = [], F = [];
+    if (word) { T.push(MK); F.push(0); }
+    for (const ch of text) {
+      const cp = ch.codePointAt(0);
+      if (cp >= 0xd800 && cp <= 0xdfff) { T.push(SEP); F.push(LEAD | NWS); continue; }
+      const k = kindOf(cp), bs = cp < 0x80 ? [cp] : cp < 0x800 ? [0xc0 | (cp >> 6), 0x80 | (cp & 63)]
+        : cp < 0x10000 ? [0xe0 | (cp >> 12), 0x80 | ((cp >> 6) & 63), 0x80 | (cp & 63)] : [0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 63), 0x80 | ((cp >> 6) & 63), 0x80 | (cp & 63)];
+      bs.forEach((b, i) => { T.push(b); F.push((i ? 0 : LEAD | (k & CM ? MST : 0) | (k & NW ? NWS : 0)) | (i === bs.length - 1 ? END | (k & (VIS | CM | NW)) : 0)); });
+      if (word && k & NW) { T.push(MK); F.push(0); }
+      if (T.length > LIMIT.source) return null;
+    }
+    const N = T.length, flags = Uint8Array.from(F);
+    for (let e = 0; e < N; e++) {
+      const at = word ? T[e] === MK || (flags[e] & (END | NW)) === END : (flags[e] & END) !== 0, j = e + 1;
+      if (at && (j >= N || T[j] === SEP || (!(flags[j] & MST) && (!word || flags[j] & NWS)))) flags[e] |= GOOD;
+    }
+    const cap = 2 * N + 2, ecap = 3 * N + 8, bits = 32 - Math.clz32(2 * ecap), size = 1 << bits, mask = size - 1;
+    const len = new Int32Array(cap), link = new Int32Array(cap), fp = new Int32Array(cap), head = new Int32Array(cap).fill(-1);
+    const eSt = new Int32Array(ecap), eB = new Uint8Array(ecap), eTo = new Int32Array(ecap), eNx = new Int32Array(ecap), H = new Int32Array(size);
+    const slot = (st, b) => {
+      for (let h = (Math.imul(st * 256 + b, 0x9e3779b1) >>> (32 - bits)) & mask; ; h = (h + 1) & mask) { const e = H[h] - 1; if (e < 0 || (eSt[e] === st && eB[e] === b)) return h; }
+    };
+    const go = (st, b) => { const e = H[slot(st, b)] - 1; return e < 0 ? -1 : eTo[e]; };
+    let n = 1, ne = 0, last = 0;
+    const put = (st, b, to) => { const h = slot(st, b); let e = H[h] - 1; if (e < 0) { e = ne++; eSt[e] = st; eB[e] = b; eNx[e] = head[st]; head[st] = e; H[h] = e + 1; } eTo[e] = to; };
+    link[0] = -1;
+    const prim = new Int32Array(N);
+    for (let i = 0; i < N; i++) {
+      const c = T[i], cur = n++;
+      len[cur] = len[last] + 1; fp[cur] = i;
+      let p = last;
+      while (p !== -1 && go(p, c) < 0) { put(p, c, cur); p = link[p]; }
+      if (p === -1) link[cur] = 0;
+      else {
+        const q = go(p, c);
+        if (len[p] + 1 === len[q]) link[cur] = q;
+        else {
+          const cl = n++;
+          len[cl] = len[p] + 1; link[cl] = link[q]; fp[cl] = fp[q];
+          for (let e = head[q]; e >= 0; e = eNx[e]) put(cl, eB[e], eTo[e]);
+          while (p !== -1 && go(p, c) === q) { put(p, c, cl); p = link[p]; }
+          link[q] = link[cur] = cl;
+        }
+      }
+      prim[i] = last = cur;
+    }
+    return { go, len, link, fp, head, eNx, eB, eTo, flags, T, prim, n, word, start: word ? go(0, MK) : 0, D: [] };
+  };
+  // D[v][st] up to v = k: the fewest characters more, from any end of st's strings in T, to a GOOD end with v more visible
+  // characters (INF: none). Per byte backwards, then the least over each state's suffix-link subtree.
+  const distances = (A, k) => {
+    if (A.D.length > k) return A.D;
+    const { T, flags, prim, len, link, n } = A, N = T.length, D = Array.from({ length: k + 1 }, () => new Int32Array(n).fill(INF));
+    let nx = new Int32Array(k + 1).fill(INF), cur = new Int32Array(k + 1);
+    for (let e = N - 1; e >= 0; e--) {
+      const j = e + 1, ok = j < N && T[j] !== SEP, c = ok && flags[j] & LEAD ? 1 : 0, g = ok && flags[j] & VIS ? 1 : 0;
+      for (let v = 0; v <= k; v++) cur[v] = v === 0 && flags[e] & GOOD ? 0 : ok ? Math.min(INF, c + nx[v > g ? v - g : 0]) : INF;
+      for (let v = 0; v <= k; v++) D[v][prim[e]] = cur[v];
+      [nx, cur] = [cur, nx];
+    }
+    const by = new Int32Array(N + 2), order = new Int32Array(n);
+    for (let s = 0; s < n; s++) by[len[s] + 1]++;
+    for (let l = 1; l < by.length; l++) by[l] += by[l - 1];
+    for (let s = 0; s < n; s++) order[by[len[s]]++] = s;
+    for (let i = n - 1; i > 0; i--) { const s = order[i], p = link[s]; for (let v = 0; v <= k; v++) if (D[v][s] < D[v][p]) D[v][p] = D[v][s]; }
+    return (A.D = D);
+  };
+  // One answer byte b in a span's state (s: 0 between characters, 1–3 continuation bytes to come, 4 after \, 5–7 after \u,
+  // \u0, \u00, 8 after \u00h; st its automaton state; r characters left; v visible ones still needed; f: none yet):
+  // → 0 refused, 1 taken (the state after it in Z), 2 the close.
+  const Z = { s: 0, h: 0, st: 0, r: 0, v: 0, f: 0 };
+  // A decoded byte d into st, `more` continuation bytes after it in its character, r already counting it.
+  const feed = (n, st, r, v, f, d, more) => {
+    const A = n.a;
+    let t = A.go(st, d);
+    if (t < 0) return 0;
+    if (more === 0) {
+      const fl = A.flags[A.fp[t]];
+      if (f && fl & CM) return 0;
+      f = 0;
+      if (fl & VIS && v > 0) v--;
+      if (A.word && fl & NW && (t = A.go(t, MK)) < 0) return 0;
+      if (n.D[v][t] > r) return 0;
+    } else if (f ? !firstLive(n, t, more) : n.D[v][t] > r) return 0;
+    Z.s = more; Z.h = 0; Z.st = t; Z.r = r; Z.v = v; Z.f = f;
+    return 1;
+  };
+  // Mid-way through the first character: some end of it is no mark and leaves a span within maxLength (kept per state, as
+  // r and v are the node's own there).
+  const firstLive = (n, t, more) => {
+    const memo = (n.first ||= new Int8Array(n.a.n));
+    if (memo[t]) return memo[t] === 1;
+    const A = n.a, r = n.max - 1;
+    let ok = false;
+    if (more === 0) {
+      const fl = A.flags[A.fp[t]], v = fl & VIS && n.min > 0 ? n.min - 1 : n.min, u = A.word && fl & NW ? A.go(t, MK) : t;
+      ok = !(fl & CM) && u >= 0 && n.D[v][u] <= r;
+    } else for (let e = A.head[t]; e >= 0 && !ok; e = A.eNx[e]) ok = (A.eB[e] & 0xc0) === 0x80 && firstLive(n, A.eTo[e], more - 1);
+    memo[t] = ok ? 1 : 2;
+    return ok;
+  };
+  const SHORT = { 0x22: 0x22, 0x5c: 0x5c, 0x62: 8, 0x66: 12, 0x6e: 10, 0x72: 13, 0x74: 9 };
+  const short = (d) => d === 8 || d === 9 || d === 10 || d === 12 || d === 13;
+  // Some byte an escape in state s can still decode to goes on.
+  const escLive = (n, s, h, st, r, v, f) => {
+    if (r < 1) return false;
+    if (s === 4 && (feed(n, st, r - 1, v, f, 0x22, 0) || feed(n, st, r - 1, v, f, 0x5c, 0))) return true;
+    for (let d = s === 8 ? h * 16 : 0, z = s === 8 ? d + 16 : 32; d < z; d++) if ((s === 4 || !short(d)) && feed(n, st, r - 1, v, f, d, 0)) return true;
+    return false;
+  };
+  const esc = (s, h, st, r, v, f) => { Z.s = s; Z.h = h; Z.st = st; Z.r = r; Z.v = v; Z.f = f; return 1; };
+  const spanStep = (n, s, h, st, r, v, f, b) => {
+    if (s === 0) {
+      if (b === 0x22) return v === 0 && (f || n.D[0][st] === 0) ? 2 : 0;
+      if (b === 0x5c) return escLive(n, 4, 0, st, r, v, f) ? esc(4, 0, st, r, v, f) : 0;
+      if (b < 0x20 || (b >= 0x80 && b < 0xc2) || b > 0xf4 || r < 1) return 0;
+      return feed(n, st, r - 1, v, f, b, b < 0x80 ? 0 : b < 0xe0 ? 1 : b < 0xf0 ? 2 : 3);
+    }
+    if (s <= 3) return (b & 0xc0) === 0x80 ? feed(n, st, r, v, f, b, s - 1) : 0;
+    let d = -1;
+    if (s === 4) { if (b === 0x75) return escLive(n, 5, 0, st, r, v, f) ? esc(5, 0, st, r, v, f) : 0; d = SHORT[b] ?? -1; }
+    else if (s === 5 || s === 6) { if (b === 0x30) return escLive(n, s + 1, 0, st, r, v, f) ? esc(s + 1, 0, st, r, v, f) : 0; }
+    else if (s === 7) { if (b === 0x30 || b === 0x31) return escLive(n, 8, b - 0x30, st, r, v, f) ? esc(8, b - 0x30, st, r, v, f) : 0; }
+    else { const x = b >= 0x30 && b <= 0x39 ? b - 0x30 : b >= 0x61 && b <= 0x66 ? b - 0x57 : -1; if (x >= 0 && !short(h * 16 + x)) d = h * 16 + x; }
+    return d < 0 || r < 1 ? 0 : feed(n, st, r - 1, v, f, d, 0);
   };
 
   // ---- numbers -------------------------------------------------------------------------------------------------------
@@ -350,8 +505,9 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
   };
 
   // ---- the schema → nodes --------------------------------------------------------------------------------------------
-  // S string {min, max, raw}; P pattern string {dfa, min, max, B, soon, raw}; N number {int, sc, lo, hi}; L literals (a
-  // byte trie); O object {props, reqAfter, extra, names}; A array {items, min, max}; Q a sequence {items}; U alternatives.
+  // S string {min, max, raw}; P pattern string {dfa, min, max, B, soon, raw}; C span {a (automaton), D, min (visible
+  // characters), max}; N number {int, sc, lo, hi}; L literals (a byte trie); O object {props, reqAfter, extra, names}; A
+  // array {items, min, max}; Q a sequence {items}; U alternatives.
   // null: nothing fits. raw: a native call's value, no quotes, ended by a line feed.
   const trie = (list) => {
     const kids = [new Map()], term = [-1];
@@ -389,10 +545,11 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
     return out;
   };
 
-  const compile = (schema, V, { tools } = {}) => {
+  const compile = (schema, V, { tools, sources } = {}) => {
     if (!V || !V.first) fail('compile needs a vocab()');
     if (!S.clean(schema)) fail('the schema is outside ai/schema.js\'s subset');
     if (tools !== undefined && (!Array.isArray(tools) || !tools.length || tools.length > 32)) fail('tools');
+    if (sources !== undefined && (!S.isObj(sources) || Object.values(sources).some((t) => typeof t !== 'string'))) fail('sources');
     if (tools && TOOL_MARKS.some((n) => !V.marks?.has(n))) fail('tool calls need the marks of LFM3\'s tool tags (vocab() marks)');
     let ids = 0, exact = true;
     const mk = (o) => { o.id = ids++; return o; };
@@ -409,6 +566,20 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
       return soon[0][min] <= B ? mk({ k: 'P', dfa, min, max: Math.min(max, B), soon, raw }) : null;
     };
     const seq = (items) => (items.includes(null) ? null : mk({ k: 'Q', items }));
+    // → a C node, or undefined when the span can't be held (no such source, too long, or no span of it fits).
+    const autos = new Map();
+    const copy = (s) => {
+      const { source, min: least = 0, word = false } = s.span, text = sources && Object.hasOwn(sources, source) ? sources[source] : undefined;
+      const min = Math.max(least, s.minLength ?? 0), max = Math.min(s.maxLength ?? INF - 1, INF - 1);
+      if (text === undefined || min > 64) return undefined;
+      const k = `${word ? 1 : 0}${source}`;
+      if (!autos.has(k)) autos.set(k, automaton(text, word));
+      const a = autos.get(k);
+      if (!a) return undefined;
+      const n = { k: 'C', a, D: distances(a, min), min, max };
+      if (min > 0 && !Array.from({ length: 256 }, (_, b) => spanStep(n, 0, 0, a.start, max, min, 1, b)).some((x) => x === 1)) return undefined;
+      return mk(n);
+    };
     const num = (int, min, max) => {
       const sc = int ? 1n : P10(LIMIT.fraction);
       const n = mk({ k: 'N', int, sc, lo: min === undefined ? null : scaled(min, sc, true), hi: max === undefined ? null : scaled(max, sc, false) });
@@ -457,6 +628,7 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
         case 'null': return lit([enc.encode('null')]);
         case 'boolean': return lit([enc.encode('true'), enc.encode('false')]);
         case 'string': {
+          if (s.span !== undefined && s.pattern === undefined) { const c = copy(s); if (c) return c; }
           if (s.pattern !== undefined) { const p = pat(s.pattern, s.minLength ?? 0, s.maxLength ?? Infinity); if (p !== undefined) return p; exact = false; }
           return str(s.minLength ?? 0, s.maxLength ?? Infinity);
         }
@@ -526,6 +698,7 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
   // A configuration is a stack of frames, top first, each { k, n (its node), up, … }; the set of live ones is the state.
   // The parent (up) of a value's frame is already in its after-the-value state, so finishing a value is returning up.
   //   S { s: -1 before the quote, else the string state; r code points left; q still needed }
+  //   C { s: -1 before the quote, else spanStep's s, h, st, r, v, f }
   //   N { p: the text so far }                L { t: trie node }
   //   O { ph: -1 before {, 0 after {, 1 after a value, 2 in a key (t: key trie node), 3 after a comma; i: next property;
   //       x: past the declared properties, into extra keys }
@@ -547,6 +720,7 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
       case 'U': for (const a of n.alts) start(a, up, out); break;
       case 'S': out.push({ k: 'S', n, s: n.raw ? 0 : -1, r: n.max, q: n.min, up }); break;
       case 'P': out.push({ k: 'P', n, s: n.raw ? 0 : -1, len: 0, up }); break;
+      case 'C': out.push({ k: 'C', n, s: -1, h: 0, st: n.a.start, r: n.max, v: n.min, f: 1, up }); break;
       case 'Q': start(n.items[0], { k: 'Q', n, i: 1, up }, out); break;
       case 'N': out.push({ k: 'N', n, p: '', up }); break;
       case 'L': out.push({ k: 'L', n, t: 0, up }); break;
@@ -571,6 +745,13 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
         if (b === (n.raw ? 0x0a : 0x22)) { if (n.dfa.acc[c.s] && c.len >= n.min) out.push(c.up); return; }
         const t = n.dfa.next[c.s][b], len = c.len + 1;
         if (t >= 0 && len <= n.max && n.soon[t][Math.max(0, n.min - len)] <= n.max - len) out.push({ k: 'P', n, s: t, len, up: c.up });
+        return;
+      }
+      case 'C': {
+        if (c.s < 0) { if (b === 0x22) out.push({ k: 'C', n: c.n, s: 0, h: 0, st: c.st, r: c.r, v: c.v, f: c.f, up: c.up }); return; }
+        const t = spanStep(c.n, c.s, c.h, c.st, c.r, c.v, c.f, b);
+        if (t === 2) out.push(c.up);
+        else if (t === 1) out.push({ k: 'C', n: c.n, s: Z.s, h: Z.h, st: Z.st, r: Z.r, v: Z.v, f: Z.f, up: c.up });
         return;
       }
       case 'Q': {
@@ -655,6 +836,7 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
       switch (c.k) {
         case 'S': s = `S${c.n.id},${c.s},${cl(c.r, cap)},${cl(Math.max(c.q, 0), cap)}`; break;
         case 'P': s = `P${c.n.id},${c.s},${c.len}`; break;
+        case 'C': s = `C${c.n.id},${c.s},${c.h},${c.st},${c.r},${c.v},${c.f}`; break;
         case 'Q': s = `Q${c.n.id},${c.i}`; break;
         case 'N': s = `N${c.n.id},${c.p}`; break;
         case 'L': s = `L${c.n.id},${c.t}`; break;
@@ -706,9 +888,15 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
     // closes at a line feed, which thousands of tokens hold).
     let closing = new Map(), closingOld = new Map();
     // The first bytes what follows a value takes: a close node's subtree is walked only where one of them starts it.
+    let opened = new Map();
     const opens = (up) => {
-      const f = new Uint8Array(256);
+      const k = key(up, true);
+      let f = opened.get(k);
+      if (f) return f;
+      f = new Uint8Array(256);
       for (let b = 0; b < 256; b++) if (stepSet([up], b).length) f[b] = 1;
+      if (opened.size >= LIMIT.cache) opened = new Map();
+      opened.set(k, f);
       return f;
     };
     const onward = (nd, f) => { for (let c = first[nd]; c >= 0; c = next[c]) if (f[byte[c]]) return true; return false; };
@@ -736,6 +924,45 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
       const { ids, ks } = closers(c, T);
       for (let i = 0; i < ids.length; i++) if (ks[i] <= r && ks[i] >= c.q) { const t = ids[i]; m[t >>> 5] |= 1 << (t & 31); }
     };
+    // The tokens through trie node nd, whose last byte closes a span, that go on into what follows it (up).
+    const spanClosers = (nd, up) => {
+      const k = `c${nd}/${key(up, true)}`;
+      let out = closing.get(k) || closingOld.get(k);
+      if (out) return out;
+      const ids = [];
+      for (let t = tok[nd]; t >= 0; t = tokNext[t]) ids.push(t);
+      if (first[nd] >= 0 && onward(nd, opens(up))) walk([up], nd, null, ids);
+      out = Int32Array.from(ids);
+      if (closing.size >= LIMIT.cache) { closingOld = closing; closing = new Map(); }
+      closing.set(k, out);
+      return out;
+    };
+    // Inside a span: the trie walked with the span's state, a branch dropped where the source has no such bytes or what
+    // follows could no longer finish; kept apart from its parent (a span starts alike in every item of a list), with the
+    // trie nodes where a token closes it, whose tokens are walked on from the parent (spanClosers).
+    let inner = new Map(), innerOld = new Map();
+    const spanMask = (c, m) => {
+      const n = c.n, k = `${n.id},${c.s},${c.h},${c.st},${c.r},${c.v},${c.f}`;
+      let w = inner.get(k) || innerOld.get(k);
+      if (!w) {
+        const own = new Uint32Array(V.words), closes = [], stack = [0, c.s, c.h, c.st, c.r, c.v, c.f];
+        while (stack.length) {
+          const f = stack.pop(), v = stack.pop(), r = stack.pop(), st = stack.pop(), h = stack.pop(), s = stack.pop(), nd = stack.pop();
+          for (let ch = first[nd]; ch >= 0; ch = next[ch]) {
+            const t = spanStep(n, s, h, st, r, v, f, byte[ch]);
+            if (t === 0) continue;
+            if (t === 2) { closes.push(ch); continue; }
+            for (let x = tok[ch]; x >= 0; x = tokNext[x]) own[x >>> 5] |= 1 << (x & 31);
+            if (first[ch] >= 0) stack.push(ch, Z.s, Z.h, Z.st, Z.r, Z.v, Z.f);
+          }
+        }
+        w = { own, closes };
+        if (inner.size >= LIMIT.cache) { innerOld = inner; inner = new Map(); }
+        inner.set(k, w);
+      }
+      for (let i = 0; i < m.length; i++) m[i] |= w.own[i];
+      for (const ch of w.closes) { const ids = spanClosers(ch, c.up); for (let i = 0; i < ids.length; i++) { const x = ids[i]; m[x >>> 5] |= 1 << (x & 31); } }
+    };
     // Inside a pattern string: the tokens that stay in it while it can still finish within its lengths, then those that
     // close it where its DFA accepts, walked on from its parent.
     const patMask = (c, m) => {
@@ -754,7 +981,7 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
       if (m) return m;
       m = new Uint32Array(V.words);
       const rest = [];
-      for (const c of set) { if (c.k === 'S' && c.s >= 0) strMask(c, m); else if (c.k === 'P' && c.s >= 0) patMask(c, m); else rest.push(c); }
+      for (const c of set) { if (c.k === 'S' && c.s >= 0) strMask(c, m); else if (c.k === 'P' && c.s >= 0) patMask(c, m); else if (c.k === 'C' && c.s >= 0) spanMask(c, m); else rest.push(c); }
       if (rest.length) walk(rest, 0, m);
       if (set.some(accepting)) for (const e of V.eos) m[e >>> 5] |= 1 << (e & 31);
       if (cache.size >= LIMIT.cache) { older = cache; cache = new Map(); }

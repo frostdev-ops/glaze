@@ -22,6 +22,8 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const R = typeof GZ_AI_REQUEST !== 'undefined' ? GZ_AI_REQUEST : require('../request.js');
   const FMT = () => (typeof GZ_AI_LOCAL_FORMAT !== 'undefined' ? GZ_AI_LOCAL_FORMAT : require('../local/format.js'));
   const AGENT = () => (typeof GZ_AI_TASK_AGENT_TOOLS !== 'undefined' ? GZ_AI_TASK_AGENT_TOOLS : require('../tasks/agent-tools.js'));
+  const TASKS = () => (typeof GZ_AI_TASKS !== 'undefined' ? GZ_AI_TASKS : require('../task.js'));
+  const SCHEMA = () => (typeof GZ_AI_SCHEMA !== 'undefined' ? GZ_AI_SCHEMA : require('../schema.js'));
   const MODEL = 'glaze-local', NAME = 'Glaze on-device AI';
   // A stock model's window; TUNED, a Glaze-tuned model's (no `stock`): the one its training data was planned for
   // (glaze-plans/lfm-tune FORMAT.md, caps.context 4096), which a request then plans for exactly.
@@ -197,6 +199,21 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     return fail(typeof e?.category === 'string' ? e.category : 'provider-unavailable', typeof e?.reason === 'string' ? e.reason : 'unknown',
       { ...(Number.isSafeInteger(e?.tokens) && { tokens: e.tokens }), ...(Number.isSafeInteger(e?.context) && { context: e.context }) });
   };
+  // The task's own schema with its spans (ai/schema.js span; a request carries it bare) and the text of each data block a
+  // span names (its label, or a split part's "<label> part …"), as the model reads it: { schema, sources }, or null when the
+  // request's schema isn't the task's or no such block is there.
+  const spans = (req) => {
+    const S = SCHEMA(), out = req.schema && req.task && TASKS().get(req.task.id)?.output;
+    if (!S.isObj(out) || S.bare(out) === out || JSON.stringify(S.bare(out)) !== JSON.stringify(req.schema)) return null;
+    const names = new Set();
+    const walk = (s) => { if (!S.isObj(s)) return; if (S.isObj(s.span)) names.add(s.span.source); Object.values(s.properties || {}).forEach(walk); walk(s.items); (s.anyOf || []).forEach(walk); };
+    walk(out);
+    let blocks;
+    try { blocks = FMT().parse(req, { images: true }).blocks.filter((b) => b.kind === 'data'); } catch { return null; }
+    const sources = {};
+    for (const n of names) { const hit = blocks.filter((b) => b.label === n || b.label.startsWith(`${n} part `)); if (hit.length === 1) sources[n] = hit[0].text; }
+    return Object.keys(sources).length ? { schema: out, sources } : null;
+  };
   const run = async (req, cfg, { signal, onDelta } = {}) => {
     if (req.tools || req.messages.some((m) => m.role === 'tool' || m.toolCalls)) throw refuse('caps', 'Glaze\'s own model does not take tool calls.');
     let plan;
@@ -205,8 +222,9 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     const maxTokens = Math.min(req.maxTokens || MAX_TOKENS, CONTEXT);
     let r;
     try {
-      // A task in its own turns (agent.tools) is held to its answer's schema or one offered call (format.js constraint).
-      const held = plan.constraint ? { schema: plan.constraint.schema, tools: plan.constraint.tools } : req.schema && { schema: req.schema };
+      // A task in its own turns (agent.tools) is held to its answer's schema or one offered call (format.js constraint); a
+      // span to words of its source (spans).
+      const held = plan.constraint ? { schema: plan.constraint.schema, tools: plan.constraint.tools } : req.schema && (spans(req) || { schema: req.schema });
       r = await own().link.call('run', { model: plan.m.id, parts: plan.parts, stable: plan.stable, ...(plan.images && { projector: plan.projector, images: plan.images }), ...held,
         ...(plan.think && { think: { budget: plan.budget, ...plan.think } }), ...(!plan.m.stock && { window: windowOf(plan.m).window }),
         sampler: { ...(req.temperature !== undefined && { temperature: req.temperature }) }, maxTokens },

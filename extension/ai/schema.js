@@ -2,7 +2,10 @@
 // and the check every model answer goes through, whatever a provider promised. clean(schema) takes a schema only when every
 // keyword is one validate() reads, so nothing a task or a tool declares is quietly ignored: type (one or a list), properties,
 // required, additionalProperties (a boolean), items, enum, const, anyOf, minLength, maxLength, pattern, minimum, maximum,
-// minItems, maxItems, and the words title and description. Classic script for the worker; module.exports for node.
+// minItems, maxItems, and the words title and description. span: { source, min?, word? } marks a string a task's check()
+// keeps only as words copied from one of its data blocks (source: the block's label, or a split part's "<label> part …"):
+// Glaze's own model is held to such a span (ai/local/grammar.js), validate() ignores it, and bare() takes it out of what
+// a provider is sent (ai/task.js). Classic script for the worker; module.exports for node.
 var GZ_AI_SCHEMA = globalThis.GZ_AI_SCHEMA || (() => {
   // A plain object, from this realm or another (a message from a page, a test's): no class instance.
   const isObj = (o) => { if (!o || typeof o !== 'object' || Array.isArray(o)) return false; const p = Object.getPrototypeOf(o); return p === null || Object.getPrototypeOf(p) === null; };
@@ -24,6 +27,8 @@ var GZ_AI_SCHEMA = globalThis.GZ_AI_SCHEMA || (() => {
     minimum: Number.isFinite, maximum: Number.isFinite,
     pattern: (v) => { if (!text(v, LIMIT.pattern)) return false; try { new RegExp(v, 'u'); return true; } catch { return false; } },
     title: (v) => text(v, 200), description: (v) => text(v),
+    span: (v) => isObj(v) && Object.keys(v).every((k) => ['source', 'min', 'word'].includes(k)) && typeof v.source === 'string' && /^[\w .:/-]{1,40}$/.test(v.source)
+      && (v.min === undefined || (count(v.min) && v.min <= 64)) && (v.word === undefined || typeof v.word === 'boolean'),
   };
   // → the schema (the same object), or null when it uses anything outside the subset, nests past LIMIT.depth, or is too big.
   const clean = (schema) => {
@@ -97,6 +102,22 @@ var GZ_AI_SCHEMA = globalThis.GZ_AI_SCHEMA || (() => {
     };
     return isObj(schema) && schema.type === 'object' && node(schema);
   };
+  // The schema without span keywords: the same object when it has none, else a copy (kept, so a task's is made once).
+  const bared = new WeakMap();
+  const bare = (s) => {
+    if (!isObj(s)) return s;
+    if (bared.has(s)) return bared.get(s);
+    const out = { ...s };
+    delete out.span;
+    if (isObj(s.properties)) out.properties = Object.fromEntries(Object.entries(s.properties).map(([k, v]) => [k, bare(v)]));
+    if (s.items !== undefined) out.items = bare(s.items);
+    if (Array.isArray(s.anyOf)) out.anyOf = s.anyOf.map(bare);
+    const same = Object.keys(out).length === Object.keys(s).length && Object.keys(s).every((k) => out[k] === s[k]
+      || (k === 'properties' && Object.keys(s.properties).every((p) => out.properties[p] === s.properties[p])) || (k === 'anyOf' && s.anyOf.every((a, i) => out.anyOf[i] === a)));
+    const r = same ? s : out;
+    bared.set(s, r);
+    return r;
+  };
   // A model's JSON answer, read as Rimeward's askJson (src/lib/agent/oneshot.ts, MIT) reads one: from the first { to the last
   // }, so a fence or a sentence around it is tolerated, and it must be an object. undefined otherwise.
   const parse = (t) => {
@@ -110,6 +131,6 @@ var GZ_AI_SCHEMA = globalThis.GZ_AI_SCHEMA || (() => {
   const str = (description) => ({ type: 'string', description });
   const num = (description) => ({ type: 'number', description });
   const bool = (description) => ({ type: 'boolean', description });
-  return { LIMIT, TYPES, clean, validate, strict, parse, obj, str, num, bool, isObj };
+  return { LIMIT, TYPES, clean, validate, strict, bare, parse, obj, str, num, bool, isObj };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_SCHEMA; else GZ_AI_SCHEMA;

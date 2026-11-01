@@ -19,15 +19,17 @@ var GZ_AI_TASK_SYLLABUS = globalThis.GZ_AI_TASK_SYLLABUS || (() => {
   const maybe = (description, maxLength = LIMIT.value) => ({ type: ['string', 'null'], description, maxLength });
   const str = (description, maxLength = LIMIT.value) => ({ ...S.str(description), maxLength });
   const QUOTE = 'The exact words of the syllabus this came from, copied character for character';
-  const said = S.obj({ text: maybe('As the syllabus writes it'), quote: maybe(QUOTE, LIMIT.quote) }, ['text', 'quote']);
-  const slot = S.obj({ label: maybe('Its label as written (Lecture, Lab, TA office hours)'), when: str('The days and times as written'), where: maybe('The room as written'), quote: str(QUOTE, LIMIT.quote) }, ['label', 'when', 'where', 'quote']);
+  // A quote is words of the syllabus (schema.js span), at least three characters as check()'s source().has counts them.
+  const quoted = (s) => ({ ...s, span: { source: 'syllabus', min: 3 } });
+  const said = S.obj({ text: maybe('As the syllabus writes it'), quote: quoted(maybe(QUOTE, LIMIT.quote)) }, ['text', 'quote']);
+  const slot = S.obj({ label: maybe('Its label as written (Lecture, Lab, TA office hours)'), when: str('The days and times as written'), where: maybe('The room as written'), quote: quoted(str(QUOTE, LIMIT.quote)) }, ['label', 'when', 'where', 'quote']);
   const OUTPUT = S.obj({
-    prof: S.obj({ name: said, email: said, office: said, note: S.obj({ text: maybe('Office hours given only in words, as written'), quote: maybe(QUOTE, LIMIT.quote) }, ['text', 'quote']) }, ['name', 'email', 'office', 'note']),
+    prof: S.obj({ name: said, email: said, office: said, note: S.obj({ text: maybe('Office hours given only in words, as written'), quote: quoted(maybe(QUOTE, LIMIT.quote)) }, ['text', 'quote']) }, ['name', 'email', 'office', 'note']),
     hours: { type: 'array', maxItems: LIMIT.hours, description: 'Office hours with a day and a time', items: slot },
     meetings: { type: 'array', maxItems: LIMIT.meetings, description: 'When the class meets: lectures, labs, sections', items: slot },
-    scale: { type: 'array', maxItems: LIMIT.scale, description: 'Letter grades and their ranges', items: S.obj({ letter: str('A, B+, …', 2), range: str('Its range as written'), quote: str(QUOTE, LIMIT.quote) }, ['letter', 'range', 'quote']) },
-    weights: { type: 'array', maxItems: LIMIT.weights, description: 'How much each category counts', items: S.obj({ name: str('The category'), weight: str('Its share as written'), quote: str(QUOTE, LIMIT.quote) }, ['name', 'weight', 'quote']) },
-    dates: { type: 'array', maxItems: LIMIT.dates, description: 'Every exam and every deadline, one per item', items: S.obj({ title: str('What it is'), kind: { enum: KINDS }, when: str('The date as written, or its week and day'), quote: str(QUOTE, LIMIT.quote) }, ['title', 'kind', 'when', 'quote']) },
+    scale: { type: 'array', maxItems: LIMIT.scale, description: 'Letter grades and their ranges', items: S.obj({ letter: str('A, B+, …', 2), range: str('Its range as written'), quote: quoted(str(QUOTE, LIMIT.quote)) }, ['letter', 'range', 'quote']) },
+    weights: { type: 'array', maxItems: LIMIT.weights, description: 'How much each category counts', items: S.obj({ name: str('The category'), weight: str('Its share as written'), quote: quoted(str(QUOTE, LIMIT.quote)) }, ['name', 'weight', 'quote']) },
+    dates: { type: 'array', maxItems: LIMIT.dates, description: 'Every exam and every deadline, one per item', items: S.obj({ title: str('What it is'), kind: { enum: KINDS }, when: str('The date as written, or its week and day'), quote: quoted(str(QUOTE, LIMIT.quote)) }, ['title', 'kind', 'when', 'quote']) },
     week1: said,
   }, ['prof', 'hours', 'meetings', 'scale', 'weights', 'dates', 'week1']);
 
