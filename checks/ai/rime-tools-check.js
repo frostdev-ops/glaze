@@ -42,7 +42,7 @@ const check = async (name, test) => {
 };
 
 (async () => {
-  const lock = env.lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-rime-'));
   const out = path.resolve(process.argv[2] || path.join(os.tmpdir(), 'gz-rime-tools'));
   fs.mkdirSync(out, { recursive: true });
@@ -59,7 +59,7 @@ const check = async (name, test) => {
     fs.writeFileSync(path.join(ext, 'background/background.js'), worker0 + SHIM);
     await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      ...env.chromeLaunch(), headless: true, viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC',
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking', '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-quic'],
     });
     env.noFirstRun(context);
