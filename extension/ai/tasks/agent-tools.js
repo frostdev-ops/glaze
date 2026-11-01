@@ -320,9 +320,9 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     });
   };
   // Ground against values, never JSON keys. Results have already been bounded and serialized by input().
-  const values = (results) => {
+  const values = (results, booleans = false) => {
     const out = [];
-    const walk = (v) => { if (Array.isArray(v)) v.forEach(walk); else if (S.isObj(v)) Object.values(v).forEach(walk); else if (typeof v === 'string' || typeof v === 'number') out.push(v); };
+    const walk = (v) => { if (Array.isArray(v)) v.forEach(walk); else if (S.isObj(v)) Object.values(v).forEach(walk); else if (typeof v === 'string' || typeof v === 'number' || booleans && typeof v === 'boolean') out.push(v); };
     results.forEach((r) => walk(JSON.parse(r)));
     return out;
   };
@@ -419,16 +419,23 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // study.help's subjects (ai/tasks/study-help.js SUBJECTS), a help turn's block.
   const HELP = ['math', 'science', 'code', 'essay', 'reading', 'other'];
   // A result that holds something: not a failure, nothing missing, and some words beyond who and when.
-  const META = new Set(['account', 'at', 'site', 'here', 'covers', 'from', 'to', 'complete', 'page', 'pages', 'ok', 'more']);
-  const rich = (r) => {
+  const META = new Set(['account', 'at', 'site', 'here', 'covers', 'from', 'to', 'complete', 'page', 'pages', 'ok', 'more', 'ms', 'cut', 'truncated']);
+  const facts = (r) => {
     let v;
-    try { v = JSON.parse(r); } catch { return false; }
-    if (!S.isObj(v) || v.ok === false || v.error != null || typeof v.missing === 'string') return false;
-    let found = false;
-    const walk = (x, k) => { if (found) return; if (Array.isArray(x)) x.forEach((y) => walk(y)); else if (S.isObj(x)) for (const [kk, y] of Object.entries(x)) { if (!META.has(kk)) walk(y, kk); } else if ((typeof x === 'string' && x.trim().length >= 2) || typeof x === 'number') found = true; };
+    try { v = JSON.parse(r); } catch { return []; }
+    if (!S.isObj(v) || v.ok === false || v.error != null || typeof v.missing === 'string') return [];
+    const found = [];
+    const walk = (x) => {
+      if (Array.isArray(x)) x.forEach(walk);
+      else if (S.isObj(x)) for (const [k, y] of Object.entries(x)) {
+        if (!META.has(k) && !(k === 'course' && !S.isObj(y))) walk(y);
+      }
+      else if (typeof x === 'string' && x.trim() || typeof x === 'number' || typeof x === 'boolean') found.push(String(x));
+    };
     walk(v);
     return found;
   };
+  const rich = (r) => facts(r).length > 0;
   // → '' when the output may be used, else why not: schema, one, tool, arguments, id, repeat, steps, quote, number; for
   // Rime's own tools also work, place, text, time, monitor, asked (ownWhy); with first or help, first (an answer with no
   // result behind it) and ground (results that hold facts, an answer quoting none).
@@ -436,7 +443,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     if (S.validate(out, OUTPUT).length) return 'schema';
     if ((out.call === null) === (out.answer === null)) return 'one';
     const results = [...(inp.fired ? [inp.fired] : []), ...inp.steps.map((s) => s.result)];
-    const data = values(results);
+    const data = values(results, inp.first === true);
     if (out.call) {
       const { name, arguments: args } = out.call;
       if (!inp.tools.includes(name)) return 'tool';
@@ -456,7 +463,11 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     // Tool first: an answer about the student's school stands on results Glaze read for it, never on nothing; facts from a
     // result that holds any are quoted (empty and failed results hold none, so the answer says only that).
     if ((inp.first || inp.help) && !inp.steps.length && !inp.fired) return 'first';
-    if (inp.first && !quotes.length && inp.steps.some((st) => rich(st.result))) return 'ground';
+    if (inp.first) {
+      const held = inp.steps.flatMap((st) => facts(st.result));
+      const sources = held.map((v) => X().source(v, { min: 2 })), singles = new Set(held.map((v) => X().norm(v)));
+      if (held.length && !quotes.some((q) => [...X().norm(q)].length === 1 ? singles.has(X().norm(q)) : sources.some((s) => s.has(q)))) return 'ground';
+    }
     const sources = data.map((r) => X().source(r, { min: 2 })), singles = new Set(data.map((r) => X().norm(r)));
     if (quotes.some((q) => !q.trim() || ([...X().norm(q)].length === 1 ? !singles.has(X().norm(q)) : !sources.some((x) => x.has(q))))) return 'quote';
     // Every number the reply says is in a result, the question or the time; or an hour of a result on a 12-hour clock,
