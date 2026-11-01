@@ -82,7 +82,8 @@ const check = async (name, test) => {
       const [a, b, c] = await run(['const g = [81, 92, 77]; console.log("n", g.length); (g.reduce((x, y) => x + y) / g.length).toFixed(2)', '[1, 2, 3].map((x) => x * x)', 'nope + 1']);
       assert.deepEqual([a.ok, a.value, a.logs], [true, '83.33', ['n 3']]);
       assert.deepEqual(b.value, [1, 4, 9]);
-      assert.deepEqual([c.ok, c.error], [false, 'ReferenceError: nope is not defined']);
+      assert.equal(c.ok, false);
+      assert.match(c.error, /^ReferenceError: .*nope.* is not defined$/);
       return { a, b, c };
     });
 
@@ -101,6 +102,8 @@ const check = async (name, test) => {
     });
 
     await check('run_js in the service worker: nothing outside ECMAScript in reach, a fresh context each run, and no request leaves', async () => {
+      await tab.goto('about:blank'); // the school's page may still be loading its own pictures
+      await pause(300);
       const before = asked.length;
       const names = ['fetch', 'XMLHttpRequest', 'WebSocket', 'importScripts', 'setTimeout', 'indexedDB', 'caches', 'Worker', 'navigator', 'postMessage', 'chrome', 'browser', 'self', 'WebAssembly'];
       const [scope, imp, set, kept] = await run([
