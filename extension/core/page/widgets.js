@@ -1210,7 +1210,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     if (keep) { change({ fill: board, account, ops: [] }); return; }
     if (ultra && !C.complete()) return;
     const cards = (ultra ? C.list().filter((c) => C.own(c.key) === true) : C.shown());
-    if (cards.length) change({ fill: board, account, ops: cards.slice(0, W.COURSE_MAX).map((c) => ({ s: board, id: c.key, set: { on: true, size: 's', term: c.term || '' } })) });
+    const room = Math.min(W.COURSE_MAX, W.COURSE_TOTAL - lay.boards[board].filter((x) => W.course(x.id)).length);
+    if (cards.length && room > 0) change({ fill: board, account, ops: cards.slice(0, room).map((c) => ({ s: board, id: c.key, set: { on: true, size: 's', term: c.term || '' } })) });
   };
   // The board's Course cards button: its dialog (courses/page/coursecards.js) ticks courses on and off this board, each
   // tick or Select all one change, with the cards new to it placed in the board's free room (arrange). It asks the

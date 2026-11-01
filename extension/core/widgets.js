@@ -387,8 +387,10 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
       if (!l.starter || (marked && l.filled.includes(mark))) return l;
       if (l.filled.includes(m.fill)) {
         if (!marked) return l;
-        l = { ...l, filled: [...l.filled, mark] };
         ops = ops.filter((o) => o?.s === m.fill && course(o.id) && !l.boards[m.fill].some((x) => x.id === o.id));
+        // Another tab may have used the last stored room after the page counted it. No cards added means no fill used.
+        if (ops.some((o) => o.set) && l.boards[m.fill].filter((x) => course(x.id)).length >= COURSE_TOTAL) return l;
+        l = { ...l, filled: [...l.filled, mark] };
       } else {
         l = { ...l, filled: [...l.filled, m.fill, ...(marked ? [mark] : [])] };
         if (l.boards[m.fill].some((x) => x.on && x.id !== 'todo' && !(l.starter && STARTER.includes(x.id)))) return l;
