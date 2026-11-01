@@ -81,8 +81,8 @@ const MODELS = [
   { id: 'glaze-q8', name: 'Glaze Q8', size: 1800000000, quant: 'Q8_0', tier: 2, license: 'lfm1.0' },
   { id: 'lfm3-q4', name: 'LFM3 Q4', size: 1100000000, quant: 'Q4_K_M', tier: 3, license: 'lfm1.0', stock: true },
 ];
-// The think machinery runs on a stub writer.review the table gives a budget: LOCAL.THINK's own thinker, agent.tools, runs
-// in turns of its own (test/ai/local-agent-turns.test.js). setup({ think: null }) runs LOCAL.THINK as it ships.
+// The think machinery runs on a stub writer.review the table gives a budget (agent.tools' turns think in
+// test/ai/local-agent-turns.test.js). setup({ think: null }) runs LOCAL.THINK as it ships.
 const MACHINERY = { ...LOCAL.THINK, 'writer.review': 256 };
 const unref = (f, ms) => { const t = setTimeout(f, ms); t.unref?.(); return t; };
 // ms: what the host's clock moves each time it is read, so each decode takes ms: 10 ms reads as 100 tokens a second.
@@ -341,7 +341,7 @@ test('the policy: a task the table names thinks on a fast enough tier; other tas
   assert.equal(mode(s), 'think');
 });
 
-test('think per call, as D4 measured p3dpo: agent.tools thinks; writer.review, study.help and each writer.feedback call answer directly', async () => {
+test('as D4 gated r5, every task answers directly: agent.tools, writer.review, study.help and each writer.feedback call', async () => {
   const FEEDBACK = task('writer.feedback'), HELP = task('study.help');
   const s = setup({ rates: FAST, think: null });
   const asked = async (t, call) => {
@@ -352,10 +352,10 @@ test('think per call, as D4 measured p3dpo: agent.tools thinks; writer.review, s
   for (const call of ['decide', 'explain', 'summary', 'scan', undefined, 'constructor']) assert.equal(await asked(FEEDBACK, call), 'direct', String(call));
   for (const t of [REVIEW, HELP, REQS]) assert.equal(await asked(t), 'direct', t.id);
   // agent.tools runs in its own turns (format.js turns), its row read as for any task.
-  assert.equal(LOCAL.thinkFor({ id: 'agent.tools' }), 256);
-  assert.equal(LOCAL.thinkFor({ id: 'agent.tools', call: 'decide' }), 256, 'a task without calls keeps its own budget');
+  assert.equal(LOCAL.thinkFor({ id: 'agent.tools' }), 0);
+  assert.equal(LOCAL.thinkFor({ id: 'agent.tools', call: 'decide' }), 0, 'a task without calls keeps its own row');
   assert.deepEqual(LOCAL.THINK['writer.feedback'], { decide: 0, explain: 0, summary: 0, scan: 0 });
-  assert.deepEqual(Object.entries(LOCAL.THINK).filter(([, b]) => (typeof b === 'number' ? b : Math.max(...Object.values(b))) > 0).map(([t]) => t), ['agent.tools']);
+  assert.deepEqual(Object.entries(LOCAL.THINK).filter(([, b]) => (typeof b === 'number' ? b : Math.max(...Object.values(b))) > 0).map(([t]) => t), []);
 });
 
 test('a per-call table thinks per call: a call with a budget thinks, another call and a request without one answer directly', async () => {

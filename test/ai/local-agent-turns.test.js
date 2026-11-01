@@ -1,6 +1,6 @@
 // agent.tools on Glaze's own model (ai/providers/local.js): the provider writes a run's request in the task's own turns
 // (ai/local/format.js, FORMAT v2's prefills), holds the turn to the answer or one offered call (agent-tools.js constraint(),
-// the host's grammar), thinks for THINK's budget on a Glaze-tuned model this computer decodes fast enough, and reads a native
+// the host's grammar), thinks for a table's budget on a Glaze-tuned model this computer decodes fast enough, and reads a native
 // call back as the task's JSON. A stock model reads the harness's messages, held to the task's schema. The link to the host
 // is a stand-in that records what each run sends.
 const test = require('node:test');
@@ -18,23 +18,24 @@ const MODELS = [
   { id: 'lfm3-q4', tier: 3, size: 1, state: 'ready', stock: true },
 ];
 
-const setup = ({ reply, rate = 100 } = {}) => {
+// THINKS: a table that gives agent.tools a budget, for the think machinery; LOCAL.THINK as it ships answers directly.
+const THINKS = { ...LOCAL.THINK, 'agent.tools': 256 };
+const setup = ({ reply, rate = 100, think = THINKS } = {}) => {
   const runs = [];
   const link = { kind: 'offscreen', up: true, call: async (op, payload) => { if (op !== 'run') return {}; runs.push(payload); return { text: reply, finish: 'stop', usage: { input: 10, output: 5 } }; } };
   const session = { get: async () => ({ aiLocalRates: { 'glaze-q4': rate, 'lfm3-q4': rate }, aiLocalMeasured: [] }), set: async () => {} };
-  LOCAL._env({ store: { list: async () => MODELS }, link, gpu: () => ({}), session });
+  LOCAL._env({ store: { list: async () => MODELS }, link, gpu: () => ({}), session, think });
   return runs;
 };
 const run = (weights, input = raw()) => T.run(A.task, input, { provider: LOCAL, cfg: { model: 'glaze-local', weights } });
 
-test('a tuned model: the task\'s turns, the answer or one offered call, THINK\'s budget; a native call comes back as the task\'s JSON', async () => {
+test('a tuned model: the task\'s turns, the answer or one offered call, the table\'s budget; a native call comes back as the task\'s JSON', async () => {
   const runs = setup({ reply: A.native.text({ name: 'todo_list', arguments: { days: 7 } }) });
   const out = await run('glaze-q4');
   assert.deepEqual(out.output, { call: { name: 'todo_list', arguments: { days: 7 }, kind: 'read' }, answer: null });
   const [sent] = runs, inp = A.task.input(raw());
   assert.deepEqual(sent.schema, A.ANSWER, 'the answer\'s schema, not the task\'s');
   assert.deepEqual(sent.tools, A.constraint(inp).tools, 'one call to an offered tool');
-  assert.equal(sent.think.budget, LOCAL.THINK['agent.tools']);
   assert.equal(sent.think.budget, 256);
   assert.deepEqual(sent.parts.slice(0, sent.stable), A.layout(inp).slice(0, sent.stable));
   assert.ok(sent.parts.map((p) => p.special ?? p.text).join('').endsWith('<|im_start|>assistant\n<think>\n'), 'think mode\'s prefill');
@@ -51,6 +52,14 @@ test('an answer in the task\'s JSON passes through; history steps are earlier ca
   assert.equal(sent.think, undefined, 'below THINK_TPS: direct');
   assert.ok(text.includes('<|im_start|>assistant\n<think></think><tool_call>'), 'the history\'s call opens with an empty think block');
   assert.ok(text.endsWith('<|im_start|>assistant\n<think></think>'));
+});
+
+test('as shipped, agent.tools answers directly on a fast computer (D4: r5 thinking ties stock on writes)', async () => {
+  const runs = setup({ reply: A.native.text({ name: 'todo_list', arguments: { days: 7 } }), think: null });
+  await run('glaze-q4');
+  const [sent] = runs;
+  assert.equal(sent.think, undefined);
+  assert.ok(sent.parts.map((p) => p.special ?? p.text).join('').endsWith('<|im_start|>assistant\n<think></think>'), 'direct mode\'s prefill');
 });
 
 test('words that are neither a call nor the answer are an invalid response, never guessed at', async () => {
