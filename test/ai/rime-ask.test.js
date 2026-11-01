@@ -106,7 +106,7 @@ const call = (name, args) => ({ call: { name, arguments: args, kind: A.SPECS.fin
 const said = (text, quotes = []) => ({ call: null, answer: { text, quotes } });
 const ACC = `${C.CANVAS}/5`;
 const memory = (store) => ({ get: async (k) => structuredClone(Object.fromEntries([].concat(k).filter((x) => Object.hasOwn(store, x)).map((x) => [x, store[x]]))), set: async (v) => { Object.assign(store, structuredClone(v)); } });
-const harness = ({ script = [], approve = 'yes', level = 3, store = {}, now = C.NOW, scope } = {}) => {
+const harness = ({ script = [], approve = 'yes', level = 3, store = {}, now = C.NOW, scope, tab } = {}) => {
   const seen = { runs: [], asks: [] };
   const broker = (port) => port.onMessage.addListener(async (m) => {
     if (m.op !== 'run') return;
@@ -119,7 +119,7 @@ const harness = ({ script = [], approve = 'yes', level = 3, store = {}, now = C.
     allowed: async () => true, broker, settings: async () => ({ on: true, model: { use: 'openai', model: 'm' }, features: { ask: true } }), enabled: async () => true,
     registry: { get: () => null, describe: () => ({}) }, state: async () => ({}), refresh: async () => null, local: {}, keys: async () => [], turn: (f) => f(), zone: 'UTC', now: () => now,
     accounts: async () => [{ account: ACC, origin: C.CANVAS }], approve: { ask: async (kind, view) => { seen.asks.push({ kind, view }); return approve; } },
-    scope, level: async () => level, page: () => ({ url: `${C.CANVAS}/courses/25/grades` }),
+    scope, tab, level: async () => level, page: () => ({ url: `${C.CANVAS}/courses/25/grades` }),
     own: { read: async (name, args, account) => (name === 'courses_list' && account === ACC ? { items: [{ id: '25', name: 'BIO 1100', code: 'BIO1100' }] } : null), writer: async () => true, wakes },
   };
   const [page, worker] = ports();
@@ -300,4 +300,19 @@ test('port: own tools never fall back to another school account', async () => {
   h.say({ id: 50, op: 'ask', question: 'Take me to my courses', site: 'canvas' }); await settle(50);
   assert.deepEqual(reads, [], 'an unseen school has no inferred account');
   assert.ok(!JSON.stringify(h.seen.runs).includes('Private other-school course'));
+});
+
+
+test('port: carried highlights stay in the worker and reach only their tab and exact destination once', async () => {
+  const url = `${C.CANVAS}/courses/25/grades?view=all`;
+  const h = harness({ tab: 71, script: [call('place_open', { place: 'grades' }), call('page_highlight', { text: 'Homework', note: 'Read this' }), said('Grades are open.')] });
+  // Use a real action-producing call, then inspect the extension-owned handoff.
+  h.say({ id: 60, op: 'ask', question: 'Take me to my grades', site: 'canvas' }); await settle(80);
+  const dest = `${C.CANVAS}/grades`;
+  const env = { ...h.env, page: () => ({ url: dest }) };
+  assert.equal((await K.arrival({ ...env, tab: 72 })).length, 0, 'other tabs get nothing');
+  assert.equal((await K.arrival({ ...env, page: () => ({ url: `${dest}?other=1` }) })).length, 0, 'query parameters identify the destination too');
+  assert.equal((await K.arrival({ ...env, page: () => ({ url: 'https://evil.example/grades' }) })).length, 0);
+  assert.deepEqual(await K.arrival(env, true), [{ text: 'Homework', note: 'Read this' }]);
+  assert.deepEqual(await K.arrival(env, true), [], 'one delivery');
 });
