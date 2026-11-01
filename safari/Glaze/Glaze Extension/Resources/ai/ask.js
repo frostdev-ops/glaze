@@ -311,12 +311,22 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     // and the UI actions the panel performs after the answer. A confirm tool asks in Glaze's approval window, with the tool's
     // own sentence (summarize), never the model's; anything but Allow ends the question with nothing done.
     const TITLES = { wake_create: 'Set a reminder', monitor_create: 'Watch for a change', wake_cancel: 'Cancel a reminder or watch' };
-    let defs = null;
-    const owned = () => (defs ||= new Map([...JS().tools(), ...PLACES().tools(), ...WAKES().tools(env.own.wakes)].map((d) => [d.name, TL().define(d)])));
+    const owned = (signal) => {
+      // Approval and execution use one reading, even if another tab refreshes the cache while the window waits.
+      const reads = new Map(), wakes = env.own.wakes;
+      const snapshot = { ...wakes, on: async () => !signal?.aborted && await wakes.on() && !signal?.aborted,
+        read: async (name, args, account) => {
+          if (signal?.aborted) throw cancelled();
+          const key = JSON.stringify([name, args, account]);
+          if (!reads.has(key)) reads.set(key, Promise.resolve(wakes.read(name, args, account)).then(structuredClone));
+          return structuredClone(await reads.get(key));
+        } };
+      return new Map([...JS().tools(), ...PLACES().tools(), ...WAKES().tools(snapshot)].map((d) => [d.name, TL().define(d)]));
+    };
     const detail = (name, r) => (name === 'run_js' ? (r?.ok ? (typeof r.value === 'string' ? r.value : JSON.stringify(r.value)) : r?.error) : name === 'place_open' ? r?.title
       : name === 'page_highlight' ? r?.marked : undefined);
     const own = async (c, signal) => {
-      const mine = current, def = owned().get(c.name), { step, ms } = card(mine, c, def.kind === 'confirm' ? 'write' : 'read');
+      const mine = current, def = owned(signal).get(c.name), { step, ms } = card(mine, c, def.kind === 'confirm' ? 'write' : 'read');
       const context = await F().wait(() => ownContext(c.arguments, mine), signal);
       if (signal?.aborted) throw cancelled();
       if (def.kind === 'confirm') {
