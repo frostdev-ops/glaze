@@ -214,3 +214,28 @@ test('Delete during an update stops it and forgets the update\'s state for that 
   assert.deepEqual(st.keep, {});
   assert.equal(st.serial, 3);
 });
+
+test('a run queued during a swap settles the version it actually runs', async () => {
+  for (const next of [fresh, broken]) {
+    const t = setup();
+    await ready(t);
+    const edit = t.store.edit;
+    let entered, proceed;
+    const swapping = new Promise((r) => { entered = r; });
+    const gate = new Promise((r) => { proceed = r; });
+    t.store.edit = (fn) => edit(async (st) => {
+      const out = await fn(st);
+      if (out?.trial && !st?.trial) { entered(); await gate; }
+      return out;
+    });
+    const u = update(t, sign(listOf(3, [next])));
+    await swapping;
+    const r = t.run();
+    await settle();
+    proceed();
+    assert.equal((await u.done).result.state, 'swapped');
+    assert.equal((await r.done).type, 'done', 'a broken trial rolls back and answers');
+    assert.equal(t.text(r.id), next === fresh ? 'answer from NEW!' : 'answer from OLD!');
+    assert.equal((await t.store.catalog()).state.trial, null, 'the version that answered was settled');
+  }
+});
