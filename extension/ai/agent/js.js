@@ -61,17 +61,17 @@ var GZ_AI_RIME_JS = globalThis.GZ_AI_RIME_JS || (() => {
     let Q;
     try { Q = await engine(); } catch { return fail('Glaze could not start its code engine; nothing ran.'); }
     const t0 = Date.now(), deadline = t0 + ms;
-    let stopped = false;
-    const rt = Q.newRuntime();
-    rt.setMemoryLimit(LIMIT.memory);
-    rt.setMaxStackSize(LIMIT.stack);
-    rt.setInterruptHandler(() => (Date.now() > deadline ? (stopped = true) : false));
-    const vm = rt.newContext();
+    let stopped = false, rt, vm;
     const logs = [], handles = new Set();
     const own = (h) => { handles.add(h); return h; };
     let size = 0, cut = false;
     const end = (out) => tidy({ ...(stopped || Date.now() > deadline ? fail(`Stopped after ${ms / 1000} seconds.`) : out), logs, cut, ms: Date.now() - t0 });
     try {
+      rt = Q.newRuntime();
+      rt.setMemoryLimit(LIMIT.memory);
+      rt.setMaxStackSize(LIMIT.stack);
+      rt.setInterruptHandler(() => (Date.now() > deadline ? (stopped = true) : false));
+      vm = rt.newContext();
       // Capture the guest's serializers before the code can replace its builtins. Only a bounded string crosses into
       // the host, including for console arguments; getters and toJSON still run under the runtime's interrupt.
       const serializer = vm.evalCode(`(() => {
@@ -92,12 +92,12 @@ var GZ_AI_RIME_JS = globalThis.GZ_AI_RIME_JS || (() => {
       const display = own(serializer.value);
       const read = (h, limit, error = false) => {
         const n = vm.newNumber(limit);
-        const r = vm.callFunction(display, vm.undefined, h, n, error ? vm.true : vm.false);
-        n.dispose();
+        let r;
         try {
+          r = vm.callFunction(display, vm.undefined, h, n, error ? vm.true : vm.false);
           if (r.error) throw new Error(full() ? 'memory' : 'serialization');
           return vm.getString(r.value);
-        } finally { (r.error || r.value).dispose(); }
+        } finally { n.dispose(); (r?.error || r?.value)?.dispose(); }
       };
       const error = (h) => {
         const s = read(h, LIMIT.line, true);
@@ -146,7 +146,10 @@ var GZ_AI_RIME_JS = globalThis.GZ_AI_RIME_JS || (() => {
       const out = String(e?.message || e);
       return end(fail(/memory/i.test(out) ? 'The code ran out of memory.' : 'The code engine failed.'));
     } finally {
-      try { for (const h of handles) if (h.alive) h.dispose(); vm.dispose(); rt.dispose(); } catch { loading = null; }
+      // Each cleanup is independent: a broken handle or context must not skip the runtime's disposal.
+      for (const resource of [...handles, vm, rt]) {
+        try { if (resource?.alive) resource.dispose(); } catch { loading = null; }
+      }
     }
   };
 
