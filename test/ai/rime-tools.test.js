@@ -620,6 +620,19 @@ test('monitor announcement: a new one in Canvas\'s planner; on Blackboard refuse
   assert.deepEqual(store.rimeWakes.monitors, []);
 });
 
+test('monitors: expiry during a data read suppresses a late change and expired watches are not listed', async () => {
+  const store = {}, env = wakesEnv(store), args = { watch: 'due', type: 'assignment', id: '1' };
+  env.read = async () => ({ items: [{ type: 'assignment', id: '1', title: 'Lab', due: T0 + 864e5 }] });
+  await wtool(env, 'monitor_create').run(args, { account: ACC });
+  const saved = structuredClone(store.rimeWakes);
+  env.read = async () => { env.at(T0 + 31 * 864e5); return { items: [{ type: 'assignment', id: '1', title: 'Lab', due: T0 + 2 * 864e5 }] }; };
+  assert.equal(await W.tick(env), 0, 'the watch expired while the data read was pending');
+  assert.deepEqual(await W.take(env), []);
+  assert.equal(store.rimeWakes.monitors.length, 0);
+  store.rimeWakes = saved;
+  assert.deepEqual((await wtool(env, 'wakes_list').run()).items, []);
+});
+
 test('wakes_list and wake_cancel: what waits, by id; a cancel approved first, its alarm cleared; monitors capped at 20', async () => {
   const store = { todoCache: await C.canvasPlan('5', [C.planner({ id: 1, title: 'Lab report', at: '2026-10-16T03:59:00Z' })]) }, env = wakesEnv(store), ctx = { account: ACC, zone: 'UTC' };
   const w = await wtool(env, 'wake_create').run({ at: '2026-10-15 21:00', say: 'Finish the lab' }, ctx);
