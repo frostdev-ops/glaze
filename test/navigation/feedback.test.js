@@ -40,7 +40,7 @@ const TOOLS = [['outline', 'outline', 'Content'], ['calendar', 'calendar', 'Cale
 
 // The top page of an Ultra site: the base page (its main area with the Courses list), on a course's page the course over it
 // (its tabs and tool area), Glaze's bar (an open shadow root) and the course-tab strip.
-const site = ({ at = `/ultra/courses/${COURSE}/outline`, feedback = true, on = true, name = '' } = {}) => {
+const site = ({ at = `/ultra/courses/${COURSE}/outline`, feedback = true, on = true, name = '', boot = false } = {}) => {
   const doc = {}, el = make(doc);
   doc.root = new El('#root', doc);
   const html = el('html'), body = el('body');
@@ -105,6 +105,15 @@ const site = ({ at = `/ultra/courses/${COURSE}/outline`, feedback = true, on = t
   strip.append(stripTab);
   body.prepend(host);
   body.append(strip);
+  // A cold load (boot): Ultra's boot screen in the body and nothing of its app drawn yet; the test draws it (layout, openCourse).
+  const layout = inner.firstElementChild;
+  let ila = null;
+  if (boot) {
+    ila = el('div', { id: 'initial-load-area', class: 'mode-light' }, el('div', { class: 'spinner scale-bounce-in bb-secondary-color-2' }));
+    layout.remove();
+    course.section?.remove();
+    body.prepend(ila);
+  }
 
   // Boxes: the base page's main area and a course's tool area at their places; the skeleton where its transform puts it.
   doc.boxOf = (e) => {
@@ -160,7 +169,7 @@ const site = ({ at = `/ultra/courses/${COURSE}/outline`, feedback = true, on = t
     now = end;
   };
   const skel = () => html.querySelector('#gz-skel');
-  return { c, doc, el, html, body, baseMain, course, openCourse, VIEW, spinners, bar, host, strip, stripTab, location, go, settings, state, events,
+  return { c, doc, el, html, body, baseMain, inner, layout, ila, course, openCourse, VIEW, spinners, bar, host, strip, stripTab, location, go, settings, state, events,
     fire, tap, mutated, frame, flush, tick, skel, sync: () => c.GZ_FEEDBACK.sync(), pressed: (e) => e.hasAttribute('data-gz-press') };
 };
 
@@ -644,8 +653,8 @@ test('its switch: on by default, in Blackboard\'s Dashboard section, short and t
 
 test('still under reduced motion', () => {
   const css = read('content/extras.css');
-  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{ #gz-skel > \* \{ animation: none; \} \}/);
-  assert.match(css, /html\[data-gz-motion="off"\] #gz-skel > \* \{ animation: none; \}/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{ #gz-skel > \*, #gz-boot > div \{ animation: none; \} \}/);
+  assert.match(css, /html\[data-gz-motion="off"\] #gz-skel > \*, html\[data-gz-motion="off"\] #gz-boot > div \{ animation: none; \}/);
 });
 
 test('pressed indicators remain visible when forced colors remove fills and shadows', () => {
@@ -663,4 +672,250 @@ test('pressed indicators remain visible when forced colors remove fills and shad
   const native = after(cssRules('content/extras.css'));
   assert.equal(winner(native, link, 'forced-color-adjust')?.[0], 'none');
   assert.equal(winner(native, link, 'background')?.[0], 'Highlight');
+});
+
+// ---- a cold load ----
+const GRADES_VIEW = (s) => s.el('section', { class: 'route-view-container' }, s.el('bb-base-grades-student', {}, s.el('div', { class: 'element-card tile base-grades-course-tile active-course' }, 'Course One')));
+const IP_VIEW = (s) => s.el('section', { class: 'institution-page-container route-view-container' }, s.el('section', { id: 'gz-dash' }, s.el('div', { class: 'gz-dash-grid' }, 'Widgets')));
+const booted = (s) => ({ attr: s.html.hasAttribute('data-gz-boot'), box: !!s.html.querySelector('#gz-boot') });
+
+test('a cold load shows one skeleton from its first sync until the page\'s own view is ready, Ultra\'s first view of another page included', () => {
+  const s = site({ at: '/ultra/grades', boot: true });
+  s.sync();
+  const box = s.html.querySelector('#gz-boot');
+  assert.ok(box, 'drawn at the first sync');
+  assert.equal(box.parentNode, s.body);
+  assert.equal(box.attrs['aria-hidden'], 'true');
+  assert.equal(box.inert, true);
+  assert.equal(box.dataset.shape, 'tiles', 'the page\'s shape');
+  assert.ok(s.html.hasAttribute('data-gz-boot'), 'Ultra\'s app waits hidden under it');
+  assert.equal(s.skel(), null, 'not a click\'s skeleton');
+  // Ultra boots: its boot screen fades, its shell comes in with the Institution page first, no spinners, content in.
+  s.ila.setAttribute('class', 'mode-light fade-out');
+  s.baseMain.replaceChildren(IP_VIEW(s));
+  s.inner.append(s.layout);
+  s.flush();
+  s.tick(5000);
+  s.flush();
+  assert.deepEqual(booted(s), { attr: true, box: true }, 'another page\'s view is not this page\'s');
+  // Its route: spinners, then the Grades tiles.
+  s.ila.remove();
+  s.baseMain.replaceChildren(...s.spinners());
+  s.flush();
+  assert.deepEqual(booted(s), { attr: true, box: true });
+  s.baseMain.replaceChildren(GRADES_VIEW(s));
+  s.mutated();
+  s.frame();
+  assert.deepEqual(booted(s), { attr: false, box: false }, 'one swap: the page and its view at once');
+});
+
+test('a cold course page waits for its own view; a generic page for its spinners to come and go, or 3 s of content', () => {
+  const s = site({ boot: true });
+  s.sync();
+  assert.equal(s.html.querySelector('#gz-boot').dataset.shape, 'rows');
+  s.ila.remove();
+  s.inner.append(s.layout);
+  s.openCourse('outline', null);
+  s.course.tools.append(...s.spinners());
+  s.flush();
+  s.tick(5000);
+  s.flush();
+  assert.equal(booted(s).attr, true, 'spinners hold it');
+  s.course.tools.replaceChildren(s.VIEW.outline());
+  s.flush();
+  assert.equal(booted(s).attr, false, 'Course Content\'s items');
+  for (const spun of [true, false]) {
+    const g = site({ at: '/ultra/calendar', boot: true });
+    g.sync();
+    assert.equal(g.html.querySelector('#gz-boot').dataset.shape, 'generic');
+    g.ila.remove();
+    g.inner.append(g.layout);
+    if (spun) { g.baseMain.replaceChildren(...g.spinners()); g.flush(); }
+    g.baseMain.replaceChildren(g.el('section', { class: 'route-view-container' }, g.el('h1', {}, 'Calendar')));
+    g.flush();
+    if (spun) { assert.equal(booted(g).attr, false, 'its spinners came and went'); continue; }
+    assert.equal(booted(g).attr, true, 'content with no spinners seen yet: not yet');
+    g.tick(3100);
+    g.flush();
+    assert.equal(booted(g).attr, false, '3 s on');
+  }
+});
+
+test('a cold course load cannot settle on the base page or another course with the same tool', async (t) => {
+  const target = '_102_1';
+  for (const view of ['base page', 'another course']) await t.test(view, () => {
+    const s = site({ at: `/ultra/courses/${target}/outline`, boot: true });
+    s.sync();
+    s.ila.remove();
+    s.inner.append(s.layout);
+    if (view === 'another course') s.openCourse('outline', s.VIEW.outline()); // links still belong to _101_1
+    s.flush();
+    s.tick(3100);
+    s.flush();
+    assert.deepEqual(booted(s), { attr: true, box: true }, `${view} is not the requested course`);
+    s.openCourse('outline', s.VIEW.outline());
+    for (const a of Object.values(s.course.links)) a.setAttribute('href', a.getAttribute('href').replace(COURSE, target));
+    s.flush();
+    assert.deepEqual(booted(s), { attr: false, box: false }, 'the requested course is ready');
+  });
+});
+
+test('a cold routed assessment waits for its own body, then reveals it without waiting for the cap', async (t) => {
+  for (const outside of [false, true]) await t.test(outside ? 'beside site-wrap' : 'inside site-wrap', () => {
+    const s = site({ at: `/ultra/courses/${COURSE}/assessment/_201_1/overview`, boot: true });
+    s.sync();
+    s.ila.remove();
+    s.inner.append(s.layout);
+    s.baseMain.replaceChildren(IP_VIEW(s));
+    const content = s.el('learning-module-panel-view', { class: 'routed-page-body' }, ...s.spinners());
+    const page = s.el('section', { class: 'assessment-overview-modern-panel routed-page route-view-container bb-offcanvas-container' }, content);
+    let finished = false;
+    page.getAnimations = () => [{ animationName: 'gz-in', effect: { getComputedTiming: () => ({ endTime: 450 }) }, finish() { finished = true; } }];
+    (outside ? s.body : s.inner).append(page);
+    s.flush();
+    s.tick(5000);
+    assert.deepEqual(booted(s), { attr: true, box: true }, 'the assessment is still loading');
+    content.replaceChildren(s.el('h1', {}, 'Assessment'), s.el('p', {}, 'Instructions'));
+    s.flush();
+    assert.deepEqual(booted(s), { attr: false, box: false }, 'the routed view is ready despite the Institution page underneath');
+    if (outside) assert.equal(finished, true, 'the routed page outside site-wrap also finishes its entrance');
+  });
+});
+
+test('a cold boot also hides a full routed page mounted beside site-wrap', () => {
+  const rules = cssRules('content/extras.css');
+  const html = { tag: 'html', id: '', cls: [], attrs: { 'data-gz-boot': '' }, parent: null };
+  const body = { tag: 'body', id: '', cls: [], attrs: {}, parent: html };
+  const page = { tag: 'section', id: '', cls: ['routed-page', 'bb-offcanvas-container'], attrs: {}, parent: body };
+  assert.equal(winner(rules, page, 'visibility')?.[0], 'hidden', 'native content and spinners stay behind the boot skeleton');
+});
+
+test('the page\'s instant copy takes the skeleton\'s place, and the boot goes with the copy, in the same frame', () => {
+  const s = site({ at: '/ultra/grades', boot: true });
+  s.sync();
+  s.ila.remove();
+  s.inner.append(s.layout);
+  const copy = s.el('div', { id: 'gz-instant' });
+  s.baseMain.append(copy);
+  s.html.setAttribute('data-gz-instant', 'grades');
+  s.mutated();
+  assert.deepEqual(booted(s), { attr: true, box: true }, 'the copy shows in the boot (extras.css hides the skeleton under it)');
+  // Ultra's view is in under the copy: the copy decides when it goes.
+  s.baseMain.append(GRADES_VIEW(s));
+  s.flush();
+  s.tick(5000);
+  s.flush();
+  assert.equal(booted(s).attr, true, 'never Ultra\'s view beside the copy');
+  s.html.removeAttribute('data-gz-instant');
+  copy.remove();
+  s.mutated();
+  assert.deepEqual(booted(s), { attr: false, box: false }, 'in the copy\'s own mutation, before the next frame');
+});
+
+test('turning instant copies off during a cold load returns to the skeleton until Ultra is ready', () => {
+  const s = site({ at: '/ultra/grades', boot: true });
+  s.sync();
+  s.ila.remove();
+  s.inner.append(s.layout);
+  s.baseMain.replaceChildren(...s.spinners());
+  const copy = s.el('div', { id: 'gz-instant' });
+  s.baseMain.append(copy);
+  s.html.setAttribute('data-gz-instant', 'grades');
+  s.flush();
+  // instant.js unpaints when enhance.instant turns off, independently of enhance.feedback.
+  s.settings.enhance.instant = false;
+  s.html.removeAttribute('data-gz-instant');
+  copy.remove();
+  s.mutated();
+  assert.deepEqual(booted(s), { attr: true, box: true }, 'Ultra is still spinning: show the skeleton again');
+  s.baseMain.replaceChildren(GRADES_VIEW(s));
+  s.flush();
+  assert.deepEqual(booted(s), { attr: false, box: false }, 'the native view is ready');
+});
+
+test('no boot on a page already built, an old document, the standby, or with the switch or Glaze off; a click or 20 s end it', () => {
+  const built = site({ at: '/ultra/course' });
+  built.sync();
+  assert.deepEqual(booted(built), { attr: false, box: false }, 'no boot screen and a main area: built');
+  const old = site({ at: '/ultra/grades', boot: true });
+  old.tick(16000);
+  old.sync();
+  assert.deepEqual(booted(old), { attr: false, box: false }, 'a document 16 s old');
+  for (const o of [{ name: 'gz-ctab:standby' }, { feedback: false }, { on: false }]) {
+    const s = site({ at: '/ultra/grades', boot: true, ...o });
+    s.sync();
+    assert.deepEqual(booted(s), { attr: false, box: false }, JSON.stringify(o));
+  }
+  const capped = site({ at: '/ultra/grades', boot: true });
+  capped.sync();
+  capped.tick(20000);
+  assert.deepEqual(booted(capped), { attr: false, box: false }, '20 s at most');
+  const off = site({ at: '/ultra/grades', boot: true });
+  off.sync();
+  off.settings.enhance.feedback = false;
+  off.tick(100);
+  assert.deepEqual(booted(off), { attr: false, box: false }, 'the switch turned off: gone at the next look');
+  const once = site({ at: '/ultra/grades', boot: true });
+  once.sync();
+  once.tick(20000);
+  once.sync();
+  assert.deepEqual(booted(once), { attr: false, box: false }, 'once a document');
+  const clicked = site({ boot: true });
+  clicked.sync();
+  clicked.ila.remove();
+  clicked.inner.append(clicked.layout);
+  clicked.openCourse('outline', clicked.VIEW.outline());
+  clicked.tap(clicked.course.links.announcement);
+  assert.deepEqual(booted(clicked), { attr: false, box: false }, 'a click on the way: its own skeleton');
+  assert.ok(clicked.skel());
+});
+
+test('a cold load hides Ultra\'s boot screen and its app, never Glaze\'s bar or the copy; the copy goes at once', () => {
+  const rules = cssRules('content/extras.css');
+  const node = (tag, cls = [], attrs = {}, parent = null, id = '') => ({ tag, id, cls, attrs, parent });
+  // Hidden from the moment the sheet is in (render-blocking at first paint where Glaze arms it early), back as it was once
+  // the settings applied (data-gz-font) say the switch is off.
+  const on = node('html', [], { 'data-gz-font': 'inter', 'data-gz-enhance-feedback': '' }), early = node('html'), off = node('html', [], { 'data-gz-font': 'inter' });
+  for (const [html, want, what] of [[on, 'hidden', 'on'], [early, 'hidden', 'before the settings'], [off, null, 'the switch off']]) {
+    const ila = node('div', ['mode-light'], {}, node('body', [], {}, html), 'initial-load-area');
+    assert.equal(winner(rules, ila, 'visibility')?.[0] ?? null, want, `Ultra's boot screen, ${what}`);
+    assert.equal(winner(rules, ila, 'display'), null, 'by visibility: its own fade and removal still run');
+  }
+  const html = node('html', [], { 'data-gz-boot': '', 'data-gz-enhance-feedback': '' }), body = node('body', [], {}, html), wrap = node('div', [], {}, body, 'site-wrap');
+  assert.equal(winner(rules, wrap, 'visibility')[0], 'hidden', 'Ultra\'s app waits hidden, keeping its layout');
+  assert.equal(winner(rules, node('div', ['bb-offcanvas-container'], {}, node('main', [], {}, wrap), 'gz-instant'), 'visibility')[0], 'visible', 'the copy shows');
+  const frameHtml = node('html', [], { 'data-gz-boot': '', 'data-gz-instant-frame': '' });
+  assert.equal(winner(rules, node('div', [], {}, node('body', [], {}, frameHtml), 'site-wrap'), 'visibility')[0], 'hidden', 'in a tab\'s frame too');
+  for (const id of ['gz-navbar', 'gz-sidebar', 'gz-ctabs-frames']) assert.equal(winner(rules, node('div', [], {}, body, id), 'visibility'), null, id);
+  const box = node('div', [], {}, body, 'gz-boot');
+  for (const [prop, want] of [['position', 'fixed'], ['pointer-events', 'none'], ['display', 'flex']]) assert.equal(winner(rules, box, prop)?.[0], want, prop);
+  assert.match(winner(rules, box, 'top')[0], /var\(--gz-navbar-top/, 'below Glaze\'s bar');
+  assert.match(winner(rules, box, 'right')[0], /var\(--gz-sb-room/, 'beside the sidebar');
+  for (const a of ['data-gz-instant', 'data-gz-ctab-framed']) assert.equal(winner(rules, node('div', [], {}, node('body', [], {}, node('html', [], { 'data-gz-boot': '', [a]: '' })), 'gz-boot'), 'display')[0], 'none', `under ${a}`);
+  const copy = node('div', [], { 'data-out': '' }, node('main', [], {}, node('html')), 'gz-instant');
+  assert.equal(winner(rules, copy, 'opacity')[0], '0');
+  assert.equal(winner(rules, copy, 'transition')?.[0] ?? 'none', 'none', 'no cross-fade over Ultra\'s view');
+});
+
+test('the page shows at once in the boot\'s place: Glaze\'s finite entrances under it end, nothing else', () => {
+  const s = site({ at: '/ultra/grades', boot: true });
+  const anims = [['gz-in', 300], ['gz-rise', 400], ['gz-drift', Infinity], ['ultra-own', 300]].map(([animationName, endTime]) => ({ animationName, done: false,
+    effect: { getComputedTiming: () => ({ endTime }) }, finish() { if (!Number.isFinite(endTime)) throw Error('InvalidStateError'); this.done = true; } }));
+  const wrap = s.html.querySelector('#site-wrap');
+  wrap.getAnimations = (o) => (o?.subtree ? anims : []);
+  s.sync();
+  s.ila.remove();
+  s.inner.append(s.layout);
+  s.baseMain.replaceChildren(GRADES_VIEW(s));
+  s.flush();
+  assert.equal(booted(s).attr, false);
+  assert.deepEqual(anims.map((a) => [a.animationName, a.done]), [['gz-in', true], ['gz-rise', true], ['gz-drift', false], ['ultra-own', false]]);
+});
+
+test('with feedback off Ultra retains control of its boot screen visibility', () => {
+  const rules = cssRules('content/extras.css');
+  const html = { tag: 'html', id: '', cls: [], attrs: { 'data-gz-font': 'inter' }, parent: null };
+  const body = { tag: 'body', id: '', cls: [], attrs: {}, parent: html };
+  const ila = { tag: 'div', id: 'initial-load-area', cls: ['mode-light', 'fade-out'], attrs: {}, parent: body };
+  assert.equal(winner(rules, ila, 'visibility'), null, 'Glaze must not override native hidden visibility with visible !important');
 });

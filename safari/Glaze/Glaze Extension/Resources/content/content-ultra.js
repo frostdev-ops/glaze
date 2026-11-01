@@ -782,8 +782,9 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   };
 });
 
-// Known Ultra entry: arm before asynchronous head detection lets the parser reach <body>.
-if (/html/.test(document.contentType) && !document.body && GZ_BUILT_IN('ultra', location) && /^\/ultra(?:\/|$)/.test(location.pathname) && !GZ_SITE_ULTRA.sheets) {
+// Known Ultra entry (or a school's own host themed in this tab, content.js KEPT): arm before asynchronous head detection
+// lets the parser reach <body>.
+if (/html/.test(document.contentType) && !document.body && (GZ_BUILT_IN('ultra', location) || (() => { try { return /^{"enabled":true/.test(sessionStorage['gz-settings']); } catch {} })()) && /^\/ultra(?:\/|$)/.test(location.pathname) && !GZ_SITE_ULTRA.sheets) {
   GZ_SITE_ULTRA.sheets = ['content/theme.css', 'content/motion.css', 'content/extras.css', 'core/page/apps.css'].map((f) => {
     const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = chrome.runtime.getURL(f);
     l.setAttribute('blocking', 'render');

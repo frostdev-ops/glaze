@@ -221,8 +221,10 @@ const site = ({ path = '/ultra/grades', local = {}, last = '_900_1', instant = t
   // Ultra's view goes in, and the page looks at it in its next frame.
   const fill = (f) => { const p = parse(fixture(f), doc); main.replaceChildren(...p.querySelector('main').children); };
   const frame1 = async () => { for (const o of observers.filter((x) => x.on)) o.f([]); for (const f of frames.splice(0)) f(); await settle(); for (const f of frames.splice(0)) f(); await settle(); };
+  const mutated = () => { for (const o of observers.filter((x) => x.on)) o.f([]); };
+  const frameOnce = () => { for (const f of frames.splice(0)) f(); };
   const copy = () => main.querySelector('#gz-instant');
-  return { c, doc, html, main, base, local, settings, location, sent, idle, timers, answer, fail, fill, frame1, copy, events, toTop, around,
+  return { c, doc, html, main, base, local, settings, location, sent, idle, timers, answer, fail, fill, frame1, mutated, frameOnce, copy, events, toTop, around,
     changed: (ch, area) => { for (const f of changes) f(ch, area); },
     tell: (data, source = around) => { for (const f of events.get('message') || []) f({ source, origin: ORIGIN, data }); },
     sync: (on = instant, ready = Promise.resolve()) => c.GZ_INSTANT.sync(on, () => who, ready) };
@@ -1100,4 +1102,70 @@ test('one switch for every copy: "Open pages instantly", said in every language'
     assert.doesNotMatch(read(`i18n/${f}`), /Open Grades, Courses and Activity instantly/, f);
   }
   assert.equal(D.GZ_SANITIZE({}).enhance.instant, true, 'the same key, on by default');
+});
+
+test('Ultra putting its ready view in place of the copy swaps it out in that frame, never a frame of neither', async () => {
+  const p = site({ local: stored('_900_1', 'grades', 'ultra-instant-grades.html') });
+  p.sync();
+  p.answer('_900_1');
+  await settle();
+  const box = p.copy();
+  assert.ok(box, 'painted');
+  // Ultra replaces its main area's children, the copy with them, by its ready view.
+  p.fill('ultra-instant-grades.html');
+  assert.equal(box.isConnected, false);
+  p.mutated();
+  p.frameOnce();
+  await settle();
+  assert.equal(p.html.dataset.gzInstant, undefined, 'its view shows in the frame it came in, as the copy already went with the old view');
+  // Still in place (Ultra's view in beside it): it waits for the view's layout, a frame on.
+  const q = site({ local: stored('_900_1', 'grades', 'ultra-instant-grades.html') });
+  q.sync();
+  q.answer('_900_1');
+  await settle();
+  const kept = q.copy();
+  const view = parse(fixture('ultra-instant-grades.html'), q.doc).querySelector('main');
+  q.main.append(...view.children);
+  q.mutated();
+  q.frameOnce();
+  await settle();
+  assert.equal(q.html.dataset.gzInstant, 'grades', 'the copy over it until the view has laid out');
+  assert.equal(kept.isConnected, true);
+  q.frameOnce();
+  await settle();
+  assert.equal(q.html.dataset.gzInstant, undefined);
+});
+
+test('what shows in the copy\'s place is there at once: Glaze\'s finite entrances in the main area end', async () => {
+  const p = site({ local: stored('_900_1', 'grades', 'ultra-instant-grades.html') });
+  p.sync();
+  p.answer('_900_1');
+  await settle();
+  const anims = [['gz-in', 300], ['gz-drift', Infinity], ['ultra-own', 300]].map(([animationName, endTime]) => ({ animationName, done: false,
+    effect: { getComputedTiming: () => ({ endTime }) }, finish() { if (!Number.isFinite(endTime)) throw Error('InvalidStateError'); this.done = true; } }));
+  p.main.getAnimations = (o) => (o?.subtree ? anims : []);
+  p.fill('ultra-instant-grades.html');
+  await p.frame1();
+  assert.equal(p.html.dataset.gzInstant, undefined);
+  assert.deepEqual(anims.map((a) => [a.animationName, a.done]), [['gz-in', true], ['gz-drift', false], ['ultra-own', false]]);
+});
+
+test('a course copy also finishes the entrance on the course container surrounding its main area', async () => {
+  for (const replaced of [true, false]) {
+    const p = site({ path: COURSE.outline[0], local: courseStored('_900_1', 'outline', '_101_1') });
+    p.sync();
+    p.answer('_900_1');
+    await settle();
+    assert.ok(p.copy());
+    const container = p.main.parentElement;
+    assert.match(container.className, /route-view-container/, 'motion.css animates this ancestor');
+    const entrance = { animationName: 'gz-in', done: false, effect: { getComputedTiming: () => ({ endTime: 450 }) }, finish() { this.done = true; } };
+    container.getAnimations = () => [entrance];
+    p.base.getAnimations = () => { throw Error('the unrelated base page must keep its animations'); };
+    if (replaced) p.fill(COURSE.outline[1]);
+    else p.main.append(...parse(fixture(COURSE.outline[1]), p.doc).querySelector('main').children);
+    await p.frame1();
+    assert.equal(p.copy(), null);
+    assert.equal(entrance.done, true, `the course is fully visible when its ${replaced ? 'replaced' : 'connected'} copy goes`);
+  }
 });
