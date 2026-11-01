@@ -199,6 +199,19 @@ test('route at level 3: announcements, content, the syllabus and discussions rea
   assert.deepEqual(K.route('Help me start Lab report 3'), OLD.route('Help me start Lab report 3'));
 });
 
+test('ordinary study terms do not trigger school record reads', () => {
+  for (const q of ['What is a Python module?', 'Explain Python modules', 'Explain reading comprehension',
+    'What are atomic weights?', 'What is a discussion forum?', 'Explain essay structure', 'Help me write an essay', 'Explain project management', 'What is the news?']) {
+    const r = K.route(q, { level: 3 });
+    assert.equal(r.task, 'study.help', q);
+    assert.equal(r.read, undefined, `${q}: no school records named`);
+    assert.deepEqual(K.route(q), OLD.route(q), `${q}: level 1 unchanged`);
+  }
+  for (const q of ['Help me start my essay', 'Help me start Lab report 3', 'Help with the assignment', 'Explain the syllabus']) {
+    assert.ok(K.route(q, { level: 3 }).read?.length, q);
+  }
+});
+
 // ---- the help flow on the port ------------------------------------------------------------------------------------------
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const settle = async (n = 120) => { for (let i = 0; i < n; i++) await tick(); };
