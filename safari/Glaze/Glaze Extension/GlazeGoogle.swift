@@ -354,12 +354,16 @@ nonisolated enum GlazeGoogle {
         private func file(_ state: String) -> URL? { validState(state) ? folder.appendingPathComponent("google-\(state).json") : nil }
         func put(_ state: String, _ data: Data) -> Bool {
             guard let f = file(state) else { return false }
+            return Self.write(data, to: f)
+        }
+        /// Callback files and the readiness probe must exercise the same atomic write and iOS protection class.
+        private static func write(_ data: Data, to file: URL) -> Bool {
             #if os(iOS)
             let options: Data.WritingOptions = [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
             #else
             let options: Data.WritingOptions = [.atomic]
             #endif
-            return (try? data.write(to: f, options: options)) != nil
+            return (try? data.write(to: file, options: options)) != nil
         }
         func take(_ state: String) -> Data? {
             guard let f = file(state), let d = try? Data(contentsOf: f) else { return nil }
@@ -399,12 +403,11 @@ nonisolated enum GlazeGoogle {
             guard writable(folder) else { return (nil, .writable) }
             return (GroupSlot(folder: folder), nil)
         }
-        /// A file written in folder and removed again.
+        /// A nonempty atomic write, like put: creating an empty file alone can succeed when payload writes fail.
         static func writable(_ folder: URL) -> Bool {
             let probe = folder.appendingPathComponent(".google-write-\(UUID().uuidString)")
-            guard (try? Data().write(to: probe)) != nil else { return false }
-            try? FileManager.default.removeItem(at: probe)
-            return true
+            defer { try? FileManager.default.removeItem(at: probe) }
+            return write(Data([0]), to: probe)
         }
     }
 
