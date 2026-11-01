@@ -12,19 +12,22 @@ var GZ_AI_RIME_FRAME = globalThis.GZ_AI_RIME_FRAME || (() => {
   const nonce = () => { const b = new Uint8Array(24); crypto.getRandomValues(b); return btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
   const drop = () => { if (!host) return; for (const [, w] of host.waiting) w({ ok: false, value: null, logs: [], error: 'The sandbox closed.' }); host.mount.remove(); host = null; };
   const start = () => {
-    const mount = document.createElement('div'), frame = document.createElement('iframe'), { port1, port2 } = new MessageChannel(), n = nonce();
+    const mount = document.createElement('div'), frame = document.createElement('iframe'), { port1, port2 } = new MessageChannel(), n = nonce(), proof = nonce();
     mount.style.cssText = 'position:fixed;width:0;height:0;overflow:hidden;border:0;';
     frame.style.cssText = 'width:0;height:0;border:0;';
     frame.setAttribute('aria-hidden', 'true');
     frame.tabIndex = -1;
     // In an extension page there is no page to hide from; in a school's page, a closed shadow root keeps its script out.
     (location.protocol.endsWith('-extension:') ? mount : mount.attachShadow({ mode: 'closed' })).append(frame);
-    const h = { mount, port: port1, waiting: new Map(), loads: 0 };
+    const h = { mount, port: port1, waiting: new Map(), loads: 0, authenticated: false };
     let ready;
     h.ready = new Promise((r) => { ready = r; });
     port1.onmessage = (e) => {
       const d = e.data || {};
-      if (d.ready === true) return ready(true);
+      // Only the sandbox that read the second secret from its URL can answer. A replacement document sees n in
+      // the transfer but never proof; neither secret is broadcast through the school's window messages.
+      if (d.ready === true) { if (d.nonce === proof) { h.authenticated = true; ready(true); } return; }
+      if (!h.authenticated) return;
       const w = h.waiting.get(d.id);
       if (w) { h.waiting.delete(d.id); w(d); }
     };
@@ -32,7 +35,7 @@ var GZ_AI_RIME_FRAME = globalThis.GZ_AI_RIME_FRAME || (() => {
       if (++h.loads === 1) frame.contentWindow.postMessage({ type: 'glaze:rime-js', nonce: n }, '*', [port2]);
       else if (host === h) drop();
     });
-    frame.src = `${api().getURL(PAGE)}#${n}`;
+    frame.src = `${api().getURL(PAGE)}#${n}.${proof}`;
     document.documentElement.append(mount);
     return h;
   };

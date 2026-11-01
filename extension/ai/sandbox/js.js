@@ -80,8 +80,8 @@ var GZ_AI_RIME_SANDBOX = globalThis.GZ_AI_RIME_SANDBOX || (() => {
     w.postMessage({ code });
   });
   // The page: one handshake from the parent with this address's nonce, then runs over its port, one at a time.
-  if (typeof window !== 'undefined' && typeof location !== 'undefined' && /^#[A-Za-z0-9_-]{20,64}$/.test(location.hash)) {
-    const want = location.hash.slice(1);
+  if (typeof window !== 'undefined' && typeof location !== 'undefined' && /^#[A-Za-z0-9_-]{32}\.[A-Za-z0-9_-]{32}$/.test(location.hash)) {
+    const [want, proof] = location.hash.slice(1).split('.');
     let port = null, busy = Promise.resolve();
     const make = (src) => new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
     window.addEventListener('message', (e) => {
@@ -92,7 +92,7 @@ var GZ_AI_RIME_SANDBOX = globalThis.GZ_AI_RIME_SANDBOX || (() => {
         if (!Number.isSafeInteger(id)) return;
         busy = busy.then(() => run(code, { make })).then((r) => port.postMessage({ id, ...r }));
       };
-      port.postMessage({ ready: true });
+      port.postMessage({ ready: true, nonce: proof });
     });
   }
   return { LIMIT, harness, source, run, tidy };
