@@ -326,3 +326,14 @@ test('gate: changing to level 1 between steps never sends Rime tools or a fired 
   assert.equal(h.seen.runs.length, 1, 'the second model must not receive the first model tools');
   assert.equal(h.ends().at(-1).error, 'changed');
 });
+
+
+test('route: ordinary records questions do not spend a slot on arithmetic, and Spanish computing verbs are allowed', () => {
+  for (const question of ['What grade did I get in BIO?', 'What score is posted for my lab?', 'What do I need to submit this week?']) {
+    assert.deepEqual(K.route(question, { level: 3 }), OLD.route(question), question);
+  }
+  const r = K.route('Calcula el promedio de 7, 8 y 9', { level: 3, locale: 'es' });
+  assert.equal(r.task, 'agent.tools');
+  assert.ok(r.tools.includes('run_js'));
+  for (const q of ['What grade do I need on the final to keep a B?', 'What do I need on the exam to keep a B?']) assert.ok(K.route(q, { level: 3 }).tools.includes('run_js'), q);
+});
