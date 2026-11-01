@@ -22,7 +22,8 @@ const LANGS = globalThis.GZ_LANGS;
 const files = fs.readdirSync(path.join(root, 'i18n'));
 const squash = (s) => s.replace(/\s+/g, ' ').trim();
 // The code Glaze ships to a browser (not the catalogues, which every key appears in, nor the tests).
-const NOT_CODE = /^(vendor|ai|i18n|_locales|assets|fonts|icons)\/|^mods\/(boot|host)\./;
+// ai/ shows its words through the model, apart from Ask Rime's tools (ai/agent/), whose sentences the student reads.
+const NOT_CODE = /^(vendor|i18n|_locales|assets|fonts|icons)\/|^ai\/(?!agent\/)|^mods\/(boot|host)\./;
 const CODE = fs.readdirSync(root, { recursive: true }).map((f) => f.split(path.sep).join('/')).filter((f) => /\.(js|html)$/.test(f) && !NOT_CODE.test(f)).sort();
 // Preserve quoted URLs while dropping comments; literal tables are evidence for dynamic callers, not proof of reachability.
 const withoutComments = (js) => js.replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (m, q) => q ? m : ' ');
@@ -116,6 +117,8 @@ const tableWords = [
   ...Object.values(require('../../extension/planner/gradecalc.js').ULTRA_CATS),
   // A chart Glaze doesn't draw shows its kind in a frame (documents/sheets/sheet-chart-xml.js, through documents/sheets/sheet-chart.js's t()).
   ...require('../../extension/documents/sheets/sheet-chart-xml.js').WORDS,
+  // Ask Rime's tool cards (ai/page/ask.js STEPS), shown through t() by the tool's name.
+  ...tableOf('ai/page/ask.js', 'STEPS'),
 ];
 const used = new Set([
   ...tableWords, ...writerWords,

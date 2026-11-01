@@ -59,8 +59,8 @@ test('host access: each LMS\'s own hosts, Glaze\'s gallery and share relay; any 
 
 // Agent access's on switch asks for native messaging (the glaze-mcp helper); Google Calendar sync asks for identity.
 // offscreen: Glaze's own model's engine host (ai/local/host.html); no permission warning.
-test('Chrome adds only activeTab, declarativeContent and offscreen to its permissions; native messaging and identity are asked for when used', () => {
-  assert.deepEqual(m.permissions, ['storage', 'scripting', 'unlimitedStorage', 'activeTab', 'declarativeContent', 'offscreen']); // notes are never cleared for space (owner, 2026-10-15)
+test('Chrome adds only activeTab, declarativeContent, offscreen and alarms (Ask Rime\'s wakes) to its permissions; native messaging and identity are asked for when used', () => {
+  assert.deepEqual(m.permissions, ['storage', 'scripting', 'unlimitedStorage', 'activeTab', 'declarativeContent', 'offscreen', 'alarms']); // notes are never cleared for space (owner, 2026-10-15)
   assert.deepEqual(m.optional_permissions, ['identity', 'nativeMessaging']);
 });
 
@@ -92,7 +92,8 @@ test('the built-in hosts are the manifest\'s, in one place', () => {
 
 test('Safari keeps 3.3.8\'s access: every host, Ultra on /ultra anywhere and the detector; MoodleCloud\'s entry may stay', () => {
   const now = safari(m), then = safari(V338_NOW);
-  for (const k of ['permissions', 'optional_permissions', 'host_permissions', 'optional_host_permissions']) assert.deepEqual(now[k], then[k], k);
+  for (const k of ['permissions', 'optional_permissions', 'host_permissions', 'optional_host_permissions']) assert.deepEqual(k === 'permissions' ? now[k].filter((p) => p !== 'alarms') : now[k], then[k], k);
+  assert.ok(now.permissions.includes('alarms'), 'Ask Rime\'s wakes, which prompt for nothing');
   const detector = now.content_scripts.find((c) => c.js.includes('content/detect.js'));
   assert.ok(detector.exclude_matches.includes('https://*.moodlecloud.com/*'), 'MoodleCloud has its own entry, so the detector leaves it alone');
   const as338 = now.content_scripts.filter((c) => !c.matches.includes('https://*.moodlecloud.com/*'))
@@ -143,7 +144,7 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
   // Safari's From Google Drive comes back from the picker pages to its return page (background/google.js pick).
   expected.web_accessible_resources.push({ resources: ['documents/picked.html'], matches: ['https://frostdev.io/*', 'https://frostdev-ops.github.io/*'] });
   // Safari's access stays as it was (the test above).
-  expected.permissions = ['storage', 'scripting', 'unlimitedStorage', 'nativeMessaging'];
+  expected.permissions = ['storage', 'scripting', 'unlimitedStorage', 'alarms', 'nativeMessaging'];
   expected.host_permissions = ['<all_urls>'];
   delete expected.optional_host_permissions;
   expected.content_scripts = safari(m).content_scripts;
@@ -164,7 +165,7 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
     fs.writeFileSync(file, JSON.stringify(m));
     rewrite();
     const clean = JSON.parse(fs.readFileSync(file, 'utf8'));
-    assert.deepEqual([clean.permissions, clean.optional_permissions], [['storage', 'scripting', 'unlimitedStorage', 'nativeMessaging'], undefined]);
+    assert.deepEqual([clean.permissions, clean.optional_permissions], [['storage', 'scripting', 'unlimitedStorage', 'alarms', 'nativeMessaging'], undefined]);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

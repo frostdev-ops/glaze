@@ -185,10 +185,19 @@ go to the model you chose for Ask Rime (its own, else your overall model), as ev
 below): with a model on this device nothing leaves your computer; with a provider or an endpoint it goes to that host
 only. For a question about your own courses, Glaze reads what it needs with the same tools as Agents (your to-dos and
 schedule, grades, assignments and rubrics, Writer documents, as Glaze keeps them on this device, refreshed through an
-open tab of your school's site), and sends what it read to that model to answer. Ask Rime's switch is that tool access:
+open tab of your school's site), and, read the same way, a course's announcements, content, syllabus and discussions
+(on Blackboard, read-only GETs to its public API, including an Ultra document's body block and a discussion's replies),
+and sends what it read to that model to answer. From a discussion it sends the prompt, whether it is graded, your own
+replies and only the number of your classmates' replies: never their names or posts. For a file a page embeds it sends
+the file's name and type, never its address. Ask Rime's switch is that tool access:
 it needs no Agents pairing and doesn't turn agent access on. Its one change, marking a to-do done, waits for your OK in
 Glaze's window, worded by Glaze, never by the model. Nothing of the conversation is kept: it goes when the page or the
-panel closes. While the panel is open, what it shows is part of the page, as anything on screen is. Each model request leaves one row of metadata in the recent AI calls (feature, provider, model, time, size,
+panel closes. A reminder or watch you approve is the exception: Glaze keeps its time or what it watches, its few words
+of what to say, and for a watch what it last read (a due date, whether work shows as handed in, a course's grade, the
+announcements' ids and titles) in extension storage on this device, at most 20 of each, until it fires and is shown on
+your next school page or you cancel it (a watch ends after 30 days); turning off **Reminders and watches** under Ask Rime stops them.
+Code Ask Rime runs for arithmetic runs in Glaze's packaged JavaScript engine with no network and no access to the page or
+your data. While the panel is open, what it shows is part of the page, as anything on screen is. Each model request leaves one row of metadata in the recent AI calls (feature, provider, model, time, size,
 outcome), as for every AI feature; no question, answer or school data is in it.
 
 ## What Glaze stores

@@ -2536,8 +2536,10 @@ const loadInto = (m, sender, files, reply) => {
 // tab's own Glaze has said the attempt is an assignment (aiWriter). The connections live in the worker's own store; only
 // Settings' top frame reads and writes them ('glaze:ai-config'), and never sees a key it kept. Every file by name, in the one call: Firefox's package loads what the
 // worker's importScripts calls name (scripts/package-firefox.sh). A task (ai/tasks/<id>.js) goes in this list too.
-const aiFiles = () => importScripts('../writer/writer-sources.js', '../writer/writer-cite.js', '../ai/schema.js', '../ai/request.js', '../ai/stream.js', '../ai/failure.js', '../ai/endpoint.js', '../ai/text.js', '../ai/visual-cache.js', '../ai/models.js', '../ai/providers.js', '../ai/providers/openai.js', '../ai/providers/device.js', '../ai/providers/apple.js', '../ai/local/store.js', '../ai/local/format.js', '../ai/local/link.js', '../ai/providers/local.js', '../ai/tools.js', '../ai/loop.js', '../ai/task.js', '../ai/tasks/syllabus-read.js', '../ai/tasks/writer-context.js', '../ai/tasks/writer-complete.js', '../ai/tasks/writer-review.js', '../ai/tasks/writer-image.js', '../ai/tasks/writer-feedback.js', '../ai/tasks/writer-outline.js', '../ai/tasks/writer-requirements.js', '../ai/tasks/writer-cite.js', '../ai/tasks/writer-decide.js', '../ai/tasks/wording.js', '../ai/tasks/study-help.js', '../ai/tasks/agent-tools.js', '../ai/settings.js', '../ai/broker.js', '../ai/ask.js');
+const aiFiles = () => importScripts('../writer/writer-sources.js', '../writer/writer-cite.js', '../ai/schema.js', '../ai/request.js', '../ai/stream.js', '../ai/failure.js', '../ai/endpoint.js', '../ai/text.js', '../ai/visual-cache.js', '../ai/models.js', '../ai/providers.js', '../ai/providers/openai.js', '../ai/providers/device.js', '../ai/providers/apple.js', '../ai/local/store.js', '../ai/local/format.js', '../ai/local/link.js', '../ai/providers/local.js', '../ai/tools.js', '../ai/loop.js', '../ai/task.js', '../ai/tasks/syllabus-read.js', '../ai/tasks/writer-context.js', '../ai/tasks/writer-complete.js', '../ai/tasks/writer-review.js', '../ai/tasks/writer-image.js', '../ai/tasks/writer-feedback.js', '../ai/tasks/writer-outline.js', '../ai/tasks/writer-requirements.js', '../ai/tasks/writer-cite.js', '../ai/tasks/writer-decide.js', '../ai/tasks/wording.js', '../ai/tasks/study-help.js', '../ai/tasks/agent-tools.js', '../ai/agent/js.js', '../ai/agent/places.js', '../ai/agent/wakes.js', '../ai/agent/school.js', '../ai/settings.js', '../ai/broker.js', '../ai/ask.js');
 globalThis.addEventListener?.('install', aiFiles);
+// run_js's engine (ai/agent/js.js), cached here so the worker may import it on its first run; its WebAssembly loads then.
+globalThis.addEventListener?.('install', () => importScripts('../vendor/quickjs/quickjs.js'));
 const ai = () => { if (typeof GZ_AI_BROKER === 'undefined') aiFiles(); return GZ_AI_BROKER; };
 // Ask Rime (ai/ask.js): its panel's port, from the AI port's senders. Its model runs go through the broker as this sender's;
 // its tool calls through agents/calls.js with Agents' tools and approval window (mcpCore: the native link stays off).
@@ -2546,7 +2548,33 @@ chrome.runtime.onConnect.addListener((p) => {
   const s = p.sender || {}, allowed = (what) => aiSender(s, what), core = mcpCore();
   ai(); GZ_AI_ASK.connect(p, { allowed, broker: (q) => ai().connect(q, { ...aiEnv(), who: String(s.tab?.id ?? 'none'), allowed }), settings: aiEnv().settings, enabled: glazeOn,
     registry: GZ_MCP_REGISTRY, state: mcpRead, approve: core.approve, refresh: mcpRefresh, accounts: async () => (await GZ_AI_TOOLS.get('accounts_list').run({}, mcpCtx(null))).items,
-    local: chrome.storage.local, keys: mcpKeys, now: Date.now, turn: (f) => (brokerTurn ||= GZ_CARDS.queue())(f) });
+    local: chrome.storage.local, keys: mcpKeys, now: Date.now, turn: (f) => (brokerTurn ||= GZ_CARDS.queue())(f),
+    ...rimePage(s), scope: `${s.tab?.id}|${s.documentId || `${s.frameId}|${s.url}`}`, level: rimeLevel, page: () => ({ url: s.url }), own: { read: rimeWakesEnv().read, tab: (account, op, args, options) => { mcpCore(); return mcpTabs().run(account, op, args, options); }, writer: async () => GZ_SANITIZE(await chrome.storage.sync.get(null)).enhance.writer !== false, wakes: rimeWakesEnv() } });
+});
+// The tools level of Ask Rime's model (ai/ask.js route): Glaze's own model's, as models.json says it was trained (1 for Rime r5,
+// so its requests stay what it was gated on); every other model gets Rime's own tools.
+const rimeLevel = async () => {
+  const sel = GZ_AI_SETTINGS.resolve(GZ_AI_SETTINGS.clean((await chrome.storage.local.get('ai')).ai), 'ask');
+  const all = (await aiEnv().vault.get('connections')) || {};
+  const rec = all[sel?.use] || (sel?.use === 'local' ? { provider: 'local' } : null);
+  if (rec?.provider !== 'local' || !GZ_AI_SETTINGS.PROVIDERS.includes('local')) return 3;
+  const { provider: _p, name: _n, ...raw } = rec;
+  const cfg = GZ_AI_LOCAL.config(raw);
+  return cfg ? GZ_AI_LOCAL.toolsLevel(cfg) : 1;
+};
+const rimePage = (s) => ({ tab: s.tab?.id, session: chrome.storage.session, now: Date.now, page: () => ({ url: s.url }) });
+// A school page's look for reminders and watches that fired (ai/agent/wakes.js peek): how many, none taken; the panel takes them.
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:rime' || m.op !== 'peek') return;
+  (async () => {
+    if (await aiSender(s, { op: 'status', feature: 'ask' }) !== true || !await glazeOn()) return {};
+    const a = (await chrome.storage.local.get('ai')).ai;
+    if (a?.on !== true || a.features?.ask !== true) return {};
+    ai();
+    if (!GZ_AI_SETTINGS.allowed(GZ_AI_SETTINGS.clean(a), 'ask')) return {};
+    return { fired: await GZ_AI_RIME_WAKES.peek(rimeWakesEnv()), carried: (await GZ_AI_ASK.arrival(rimePage(s))).length > 0 };
+  })().then(reply, () => reply({}));
+  return true;
 });
 let aiVault = null, aiLocal = null, aiRevision = 0;
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -2865,6 +2893,18 @@ const mcpData = async (source, account) => {
   const r = Object.hasOwn(MCP_SOURCES, source) ? await GZ_AI_TOOLS.get(MCP_SOURCES[source])?.run({}, mcpCtx(account)) : null;
   return Array.isArray(r?.items) ? { at: r.at ?? null, items: r.items, ...(typeof r.missing === 'string' && { missing: r.missing }) } : { at: null, items: [] };
 };
+// Ask Rime's wakes and monitors (ai/agent/wakes.js): an alarm wakes the worker to check what is due, a monitor reading what
+// Glaze's own tool reads for its account; with Reminders and watches or Ask Rime off nothing is checked. What fired waits
+// for the student's next school page (the panel takes it, in integration).
+const rimeWakesEnv = () => ({ local: chrome.storage.local, alarms: chrome.alarms, now: Date.now, read: async (name, args, account) => { mcpCore(); return GZ_AI_TOOLS.get(name).run(args, mcpCtx(account)); },
+  on: async () => { const s = GZ_AI_SETTINGS.clean((await chrome.storage.local.get('ai')).ai); return s.wakes && GZ_AI_SETTINGS.allowed(s, 'ask') && await glazeOn(); } });
+chrome.alarms?.onAlarm.addListener((a) => { if (a?.name?.startsWith('gz-rime:')) { ai(); GZ_AI_RIME_WAKES.alarm(rimeWakesEnv(), a).catch(() => {}); } });
+const rimeWakesSync = () => { ai(); return GZ_AI_RIME_WAKES.tick(rimeWakesEnv()).catch(() => {}); };
+chrome.runtime.onStartup.addListener(rimeWakesSync);
+chrome.runtime.onInstalled.addListener(rimeWakesSync);
+chrome.storage.onChanged.addListener((changes, area) => {
+  if ((area === 'local' && changes.ai) || (area === 'sync' && changes.enabled)) return rimeWakesSync();
+});
 // The registry's state (agents/registry.js), read afresh for each call; mcpState is the last one read, for the list, which
 // the engine reads at once.
 const mcpRead = async () => {

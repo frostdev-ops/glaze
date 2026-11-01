@@ -59,12 +59,12 @@ var GZ_ANNOUNCE_LIB = globalThis.GZ_ANNOUNCE_LIB || (() => {
     // (readStatus, its private list) has no write Glaze can confirm, so nothing is marked here.
     ultra: {
       name: 'Blackboard', peek: true,
-      path: (r) => `/learn/api/public/v1/courses/${r.courseId}/announcements/${r.id}?fields=id,title,body,created,availability`,
+      path: (r) => `/learn/api/public/v1/courses/${r.courseId}/announcements/${r.id}?fields=id,title,body,created,modified,availability`,
       item: (j, origin) => {
         const b = j?.body;
         const html = typeof b === 'string' ? b : str(b?.displayText, 2 << 20) || str(b?.rawText, 2 << 20);
         return {
-          title: str(j?.title).trim(), author: '', at: ms(j?.availability?.duration?.start) ?? ms(j?.created) ?? ms(j?.createdDate),
+          title: str(j?.title).trim(), author: '', at: ms(j?.availability?.duration?.start) ?? ms(j?.modified) ?? ms(j?.created) ?? ms(j?.createdDate),
           html: html.slice(0, 2 << 20).replaceAll('@X@EmbeddedFile.requestUrlStub@X@', `${origin}/`), files: [],
           unread: typeof j?.readStatus?.isRead === 'boolean' ? !j.readStatus.isRead : null, locked: false,
         };

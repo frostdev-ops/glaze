@@ -7,7 +7,10 @@
 // output: { call: { name, arguments, kind } | null, answer: { text, quotes } | null }, exactly one of them.
 // check() refuses a call whose arguments its tool's schema refuses, whose ids (account, course, assignment, document, type,
 // id) neither the question nor a result holds, that repeats an earlier call or comes after the last step; and an answer
-// whose quotes no result holds or whose numbers neither the results, the question nor the time do.
+// whose quotes no result holds or whose numbers neither the results, the question nor the time do. Rime's own tools (OWN)
+// have rules of their own (ownWhy): no run_js on graded work, a place only from places_list, highlighted words only from
+// the question or a result, a wake in the next 60 days, a monitor's fields for what it watches, and a wake, monitor or
+// cancel only when the question asks for one.
 // Glaze's own model reads it in LFM3's own tool syntax (layout(), native): the tools as <tools> JSON lines in the system turn,
 // a call as <tool_call><function=…><parameter=…>, each result in a tool turn as <tool_response> around a fenced data block
 // (glaze-plans/lfm-tune/FORMAT-new-tasks.md). Classic script; module.exports for node.
@@ -24,6 +27,10 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // them equal apart from descriptions. Times in results are the student's local time (readable()).
   const ISO = String.raw`^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(Z|([+-])(\d{2}):(\d{2}))?)?$`;
   const UID = String.raw`^(\d{1,20}|_\d{1,20}_\d{1,20})$`;
+  // A moment on the student's own clock, as results show one (2026-10-31 21:00), or with a T.
+  // A page of a long text (ai/agent/school.js PAGE characters).
+  const PAGE = { type: 'integer', minimum: 1, maximum: 1000, description: 'Which page, from 1.' };
+  const LOCAL_TIME = String.raw`^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})$`;
   const ACCOUNT = { type: 'string', minLength: 1, maxLength: 320, description: 'The account id from accounts_list; only when Glaze holds more than one.' };
   const DOCUMENT = { type: 'string', minLength: 1, maxLength: 320, description: 'The document key from documents_list.' };
   const COURSE = (description) => ({ type: 'string', minLength: 1, maxLength: 40, description });
@@ -51,8 +58,46 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       parameters: { type: 'object', properties: { document: DOCUMENT }, additionalProperties: false, required: ['document'] } },
     { name: 'todo_mark_done', kind: 'write', description: 'Mark one to-do item done, by its type and id from todo_list. Glaze asks the student first.',
       parameters: params({ type: { type: 'string', pattern: '^[a-z_]{1,40}$', description: "The item's type." }, id: { type: 'string', pattern: UID, description: "The item's id." }, account: ACCOUNT }, ['type', 'id']) },
+    // Ask Rime's own tools (docs/ai-harness.md "Rime's own tools"), run by ai/agent/*.js, never offered to Agents' apps.
+    // Their rules are in their descriptions, so the instructions Rime was trained on stay as they were.
+    { name: 'run_js', kind: 'read', description: 'Run one line of JavaScript to work something out: arithmetic, unit conversions, statistics, dates, a small table. The last expression is the result; console.log adds lines. Round with toFixed to the digits you will say. No network, page or storage; it stops after 2 seconds. Never to work out a homework, quiz or exam problem.',
+      parameters: params({ code: { type: 'string', minLength: 1, maxLength: 1000, description: 'One line, as (72.5 * 0.4 + 88 * 0.6).toFixed(1)' } }, ['code']) },
+    { name: 'places_list', kind: 'read', description: "The places on the student's school site that Glaze can open: place (the id place_open takes) and title; here is the place on screen now. Without course: the site's own pages, Glaze's Documents and Settings, and each course. With course: that course's pages.",
+      parameters: params({ course: COURSE("Only this course's pages, by its id.") }) },
+    { name: 'place_open', kind: 'read', description: "Open a place from places_list on the student's screen. Only a place places_list named.",
+      parameters: params({ place: { type: 'string', minLength: 1, maxLength: 80, pattern: '^[a-z][a-z0-9_:/-]{0,79}$', description: 'The place, as places_list names it.' } }, ['place']) },
+    { name: 'page_highlight', kind: 'read', description: 'Mark words on the page the student sees, or on the place just opened, with a short note beside them. The words come from the question or a result.',
+      parameters: params({ text: { type: 'string', minLength: 1, maxLength: 200, description: 'The exact words to mark.' }, note: { type: 'string', minLength: 1, maxLength: 80, description: 'A few words shown beside them.' } }, ['text']) },
+    { name: 'wake_create', kind: 'confirm', description: "Come back at a time the student asks for, with what to say or do then. Rime shows it inside Glaze on their next school page after that time, never as a notification. The student approves it first.",
+      parameters: params({ at: { type: 'string', pattern: LOCAL_TIME, description: "When, in the student's local time, as 2026-10-31 21:00." }, say: { type: 'string', minLength: 1, maxLength: 200, description: 'What to say or do then, in a few words.' } }, ['at', 'say']) },
+    { name: 'monitor_create', kind: 'confirm', description: "Watch the student's own course data and come back when it changes. watch: grade (a grade posts in a course), announcement (a new one), due (an item's due date moves), submitted (an item shows as handed in). due and submitted take the item's type and id from todo_list; grade takes the course. Glaze checks it itself; Rime shows it on their next school page. The student approves it first.",
+      parameters: params({ watch: { type: 'string', pattern: '^(grade|announcement|due|submitted)$', description: 'grade, announcement, due or submitted.' }, course: { ...COURSE('The course id from grades_list, courses_list or todo_list.'), pattern: UID },
+        type: { type: 'string', pattern: '^[a-z_]{1,40}$', description: "The item's type." }, id: { type: 'string', pattern: UID, description: "The item's id." },
+        say: { type: 'string', minLength: 1, maxLength: 200, description: 'What to say or do when it changes, in a few words.' }, account: ACCOUNT }, ['watch']) },
+    { name: 'wakes_list', kind: 'read', description: "The student's wakes and monitors still waiting: id (what wake_cancel takes), what (wake or monitor), at or watch, say.", parameters: params({}) },
+    { name: 'wake_cancel', kind: 'confirm', description: 'Cancel one wake or monitor by its id from wakes_list. The student approves it first.',
+      parameters: params({ id: { type: 'string', pattern: '^[wm]-[a-z0-9]{8}$', description: 'The id from wakes_list.' } }, ['id']) },
+    // Reading the student's school site (ai/agent/school.js), through Glaze's own readers in an open tab of it, or its caches.
+    { name: 'announcements_list', kind: 'read', description: "A course's announcements: id, title and at (when posted). On Canvas without course, every course's that Glaze's to-do range holds. On Blackboard name the course.",
+      parameters: params({ course: COURSE("Only this course's, by its id."), account: ACCOUNT }) },
+    { name: 'announcement_read', kind: 'read', description: 'One announcement: title, author, at, and its text a page at a time (about 1,000 characters).',
+      parameters: params({ course: COURSE('The course id.'), id: { type: 'string', pattern: UID, description: 'The announcement id from announcements_list.' }, page: PAGE, account: ACCOUNT }, ['course', 'id']) },
+    { name: 'content_list', kind: 'read', description: "A course's content as its site lists it: id, title, kind (Page, File, Assignment, Quiz, Discussion, Link, Document, Folder, Module, Test) and module.",
+      parameters: params({ course: COURSE('The course id.'), account: ACCOUNT }, ['course']) },
+    { name: 'content_read', kind: 'read', description: "One content item's text, a page at a time (about 1,000 characters), and the names of files it holds: a Blackboard document. Glaze can't read Canvas pages or files yet.",
+      parameters: params({ course: COURSE('The course id.'), id: { type: 'string', pattern: UID, description: 'The id from content_list.' }, page: PAGE, account: ACCOUNT }, ['course', 'id']) },
+    { name: 'syllabus_read', kind: 'read', description: "A course's syllabus: what Glaze took from it when the student imported it (instructor, office hours, class meetings, dates, grading scale, grade weights) and, on Blackboard, the syllabus document's text a page at a time.",
+      parameters: params({ course: COURSE('The course id.'), page: PAGE, account: ACCOUNT }, ['course']) },
+    { name: 'discussions_list', kind: 'read', description: "A course's discussions: id and title.",
+      parameters: params({ course: COURSE('The course id.'), account: ACCOUNT }, ['course']) },
+    { name: 'discussion_read', kind: 'read', description: "One discussion's prompt as text, a page at a time (about 1,000 characters). On Blackboard also whether it is graded, the student's own replies and how many classmates replied, never their names or words.",
+      parameters: params({ course: COURSE('The course id.'), id: { type: 'string', pattern: UID, description: 'The discussion id from discussions_list.' }, page: PAGE, account: ACCOUNT }, ['course', 'id']) },
   ].map((t) => Object.freeze(t)));
   const NAMES = SPECS.map((t) => t.name);
+  // Agents' tools (agents/*.js) and Ask Rime's own.
+  const OWN = Object.freeze(['run_js', 'places_list', 'place_open', 'page_highlight', 'wake_create', 'monitor_create', 'wakes_list', 'wake_cancel',
+    'announcements_list', 'announcement_read', 'content_list', 'content_read', 'syllabus_read', 'discussions_list', 'discussion_read']);
+  const AGENTS = Object.freeze(NAMES.filter((n) => !OWN.includes(n)));
   const spec = (name) => SPECS.find((t) => t.name === name) || null;
   // Arguments that name something: they must come from the question or a result, never be made up.
   const IDS = ['account', 'course', 'assignment', 'document', 'type', 'id'];
@@ -162,8 +207,34 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // A history step may carry check()'s derived kind. It is checked here, then omitted from the native call.
   const validCall = (c, names) => S.isObj(c) && Object.keys(c).filter((k) => k !== 'kind').sort().join() === 'arguments,name' && names.includes(c.name)
     && (!Object.hasOwn(c, 'kind') || c.kind === spec(c.name).kind) && S.isObj(c.arguments) && !S.validate(c.arguments, spec(c.name).parameters).length;
+  // A wake or monitor that fired (ai/agent/wakes.js take()): its own record as the model reads it, before the question (the
+  // record's say). → the readable JSON, or null when it isn't one.
+  const WATCHES = ['grade', 'announcement', 'due', 'submitted'];
+  const stamp = (at) => Number.isSafeInteger(at) && at > 0 && at <= 8640000000000000;
+  const firedShape = (f) => S.isObj(f) && ['wake', 'monitor'].includes(f.what)
+    && (f.what === 'monitor' ? WATCHES.includes(f.watch) : f.watch === undefined)
+    && (f.fact === undefined || S.isObj(f.fact));
+  const firedOf = (f, zone) => {
+    if (!firedShape(f) || Object.keys(f).some((k) => !['id', 'what', 'watch', 'say', 'at', 'fact'].includes(k))) return null;
+    if (typeof f.say !== 'string' || (f.what === 'wake' && !f.say.trim()) || f.say.length > 200 || !stamp(f.at)
+      || (f.id !== undefined && (typeof f.id !== 'string' || !/^[wm]-[a-z0-9]{8}$/.test(f.id) || f.id[0] !== f.what[0]))) return null;
+    return readable({ what: f.what, ...(f.watch && { watch: f.watch }), at: f.at, ...(f.fact && { fact: f.fact }) }, zone);
+  };
+  // Requests carry the already-readable record, without its storage id or say. Accept only a bounded record input()
+  // could have written; a block with the right label alone is not evidence of a fired event.
+  const firedText = (text) => {
+    try {
+      const f = JSON.parse(text);
+      if (!firedShape(f) || Object.keys(f).some((k) => !['what', 'watch', 'at', 'fact'].includes(k))) return false;
+      if (typeof f.at === 'string' ? moment(f.at, 'UTC') === null : !stamp(f.at) || (f.at > 1e11 && f.at < 1e14)) return false;
+      return readable(f, 'UTC') === text;
+    } catch { return false; }
+  };
   const input = (raw) => {
-    if (!S.isObj(raw) || Object.keys(raw).some((k) => !['question', 'tools', 'steps', 'now', 'zone', 'locale'].includes(k))) return null;
+    if (!S.isObj(raw) || Object.keys(raw).some((k) => !['question', 'tools', 'steps', 'now', 'zone', 'locale', 'fired', 'first', 'help'].includes(k))) return null;
+    // first: answer only from tool results (tools level 3: Ask Rime's tool-first rule, check() 'first' and 'ground'); help:
+    // study.help's subject, for a turn that reads what the student's help question names before study help answers it.
+    if ((raw.first !== undefined && raw.first !== true) || (raw.help !== undefined && !HELP.includes(raw.help))) return null;
     const { question, tools, steps = [], now, zone, locale = 'en' } = raw;
     if (typeof question !== 'string' || !question.trim() || question.length > LIMIT.question || !Array.isArray(tools) || !tools.length || new Set(tools).size !== tools.length
       || !tools.every((n) => NAMES.includes(n)) || !Array.isArray(steps) || steps.length > LIMIT.steps || !Number.isSafeInteger(now) || now <= 0 || now > 8640000000000000 || typeof zone !== 'string' || !zoneOk(zone)
@@ -171,14 +242,16 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     if (!steps.every((s) => S.isObj(s) && Object.keys(s).sort().join() === 'call,result' && validCall(s.call, tools))) return null;
     const shown_ = steps.map((s) => readable(s.result, zone));
     if (shown_.includes(null)) return null;
-    return { question: question.trim(), tools: offered(tools).map((t) => t.name), steps: steps.map((s, i) => ({ call: { name: s.call.name, arguments: s.call.arguments }, result: shown_[i] })), now, zone, locale };
+    const fired = Object.hasOwn(raw, 'fired') ? firedOf(raw.fired, zone) : undefined;
+    if (fired === null) return null;
+    return { question: question.trim(), tools: offered(tools).map((t) => t.name), steps: steps.map((s, i) => ({ call: { name: s.call.name, arguments: s.call.arguments }, result: shown_[i] })), now, zone, locale, ...(fired && { fired }), ...(raw.first === true && { first: true }), ...(raw.help && { help: raw.help }) };
   };
   const nowText = (inp) => `${local(inp.now, inp.zone, true)}, ${inp.zone}`;
   const label = (i, name) => `result ${i + 1} ${name}`;
   const build = (inp, { text }) => text.request({
     system: `${instructions(inp.locale)}\n\n<tools>\n${offered(inp.tools).map(line).join('\n')}\n</tools>`,
     context: [{ label: 'now', text: nowText(inp) }],
-    data: [{ label: 'question', text: inp.question }, ...inp.steps.flatMap((s, i) => [{ label: `call ${i + 1}`, text: JSON.stringify(s.call) }, { label: label(i, s.call.name), text: s.result }])],
+    data: [...(inp.fired ? [{ label: 'fired', text: inp.fired }] : []), ...(inp.help ? [{ label: 'help', text: inp.help }] : []), { label: 'question', text: inp.question }, ...inp.steps.flatMap((s, i) => [{ label: `call ${i + 1}`, text: JSON.stringify(s.call) }, { label: label(i, s.call.name), text: s.result }])],
     // D4: p3dpo's answers ran to 469 tokens, LFM2.5 350M's to 497 with two cut at 512; 768 with a full think budget fits
     // the 99th-percentile prompt (3,059 tokens) in the 4,096 window.
     temperature: 0, maxTokens: 768,
@@ -188,18 +261,20 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // then each earlier step as an assistant turn (the call, natively) and a tool turn (its result, fenced as data).
   // → [{ special } | { text }], adjacent text joined (ai/local/format.js join).
   const F = () => (typeof GZ_AI_LOCAL_FORMAT !== 'undefined' ? GZ_AI_LOCAL_FORMAT : require('../local/format.js'));
-  // From its pieces as text: head, the instructions; lines, the <tools> lines; now, question; steps [{ call, result }].
-  const draw = ({ head, lines, now, question, steps }) => {
+  // From its pieces as text: head, the instructions; lines, the <tools> lines; now, question; steps [{ call, result }];
+  // fired, a fired wake's or monitor's record, as a data block of its own before the question (absent: the turns as before).
+  // help: study help's subject, a data block before the question (absent: as before).
+  const draw = ({ head, lines, now, question, steps, fired, help }) => {
     const turn = (role, ...parts) => [{ special: '<|im_start|>' }, { text: `${role}\n` }, ...parts, { special: '<|im_end|>' }, { text: '\n' }];
     const block = (kind, l, t) => [{ special: `<|${kind}|>` }, { text: `${l}\n${X().plain(t)}` }, { special: `<|/${kind}|>` }];
     return F().join([{ special: '<|startoftext|>' },
       ...turn('system', { special: '<|gz_task:agent.tools|>' }, { text: `${head}\n\n${X().TRUST}\n\n` }, { special: '<tools>' }, { text: `\n${lines}\n` }, { special: '</tools>' }),
-      ...turn('user', ...block('gz_ctx', 'now', now), { text: '\n' }, ...block('gz_data', 'question', question)),
+      ...turn('user', ...block('gz_ctx', 'now', now), { text: '\n' }, ...(fired ? [...block('gz_data', 'fired', fired), { text: '\n' }] : []), ...(help ? [...block('gz_data', 'help', help), { text: '\n' }] : []), ...block('gz_data', 'question', question)),
       ...steps.flatMap((s, i) => [...turn('assistant', ...native.parts(s.call)),
         ...turn('tool', { special: '<tool_response>' }, { text: '\n' }, ...block('gz_data', label(i, s.call.name), s.result), { text: '\n' }, { special: '</tool_response>' })]),
       { special: '<|im_start|>' }, { text: 'assistant\n' }]);
   };
-  const layout = (inp) => draw({ head: instructions(inp.locale), lines: offered(inp.tools).map(line).join('\n'), now: nowText(inp), question: inp.question, steps: inp.steps });
+  const layout = (inp) => draw({ head: instructions(inp.locale), lines: offered(inp.tools).map(line).join('\n'), now: nowText(inp), question: inp.question, steps: inp.steps, fired: inp.fired, help: inp.help });
   // Glaze's own model gets a run's request, never its input: build()'s request read back (format.js parse) into the same
   // pieces → { parts: layout()'s, tools: the names offered }. A request build() didn't make is refused (code 'request').
   const fromRequest = (req) => {
@@ -210,7 +285,12 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     if (at < 0 || !system.endsWith('\n</tools>') || !Object.keys(LANGUAGES).some((l) => instructions(l) === head)) throw refuse('system');
     const tools = SPECS.filter((t) => lines.split('\n').includes(line(t)));
     if (!tools.length || offered(tools.map((t) => t.name)).map(line).join('\n') !== lines) throw refuse('tools');
-    const [now, question, ...rest] = blocks;
+    const fired = blocks[1]?.kind === 'data' && blocks[1].label === 'fired' ? blocks[1].text : undefined;
+    if (fired !== undefined && !firedText(fired)) throw refuse('fired');
+    const after = fired === undefined ? blocks : [blocks[0], ...blocks.slice(2)];
+    const help = after[1]?.kind === 'data' && after[1].label === 'help' ? after[1].text : undefined;
+    if (help !== undefined && !HELP.includes(help)) throw refuse('help');
+    const [now, question, ...rest] = help === undefined ? after : [after[0], ...after.slice(2)];
     if (now?.kind !== 'ctx' || now.label !== 'now' || question?.kind !== 'data' || question.label !== 'question' || rest.length % 2 || rest.length / 2 > LIMIT.steps) throw refuse('blocks');
     const steps = [];
     for (let i = 0; i < rest.length; i += 2) {
@@ -220,7 +300,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       if (rest[i].label !== `call ${n + 1}` || !validCall(c, tools.map((t) => t.name)) || rest[i + 1].label !== label(n, c.name)) throw refuse('step');
       steps.push({ call: { name: c.name, arguments: c.arguments }, result: rest[i + 1].text });
     }
-    return { parts: draw({ head, lines, now: now.text, question: question.text, steps }), tools: offered(tools.map((t) => t.name)).map((t) => t.name) };
+    return { parts: draw({ head, lines, now: now.text, question: question.text, steps, fired, help }), tools: offered(tools.map((t) => t.name)).map((t) => t.name) };
   };
   // The answer Glaze's own model writes for an output: a native call, or the answer as compact JSON.
   const answerParts = (out) => (out.call ? native.parts(out.call) : [{ text: JSON.stringify({ text: out.answer.text, quotes: out.answer.quotes }) }]);
@@ -240,18 +320,136 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     });
   };
   // Ground against values, never JSON keys. Results have already been bounded and serialized by input().
-  const values = (results) => {
+  const values = (results, booleans = false) => {
     const out = [];
-    const walk = (v) => { if (Array.isArray(v)) v.forEach(walk); else if (S.isObj(v)) Object.values(v).forEach(walk); else if (typeof v === 'string' || typeof v === 'number') out.push(v); };
+    const walk = (v) => { if (Array.isArray(v)) v.forEach(walk); else if (S.isObj(v)) Object.values(v).forEach(walk); else if (typeof v === 'string' || typeof v === 'number' || booleans && typeof v === 'boolean') out.push(v); };
     results.forEach((r) => walk(JSON.parse(r)));
     return out;
   };
-  // → '' when the output may be used, else why not: schema, one, tool, arguments, id, repeat, steps, quote, number.
+  // ---- Rime's own tools' rules ---------------------------------------------------------------------------------------
+  // A moment on the student's clock (LOCAL_TIME) → ms, or null when it isn't one there (a date that doesn't exist, an hour
+  // a clock change skips).
+  const moment = (text, zone) => {
+    const m = new RegExp(LOCAL_TIME).exec(String(text));
+    if (!m) return null;
+    const [y, mo, d, h, mi] = m.slice(1).map(Number), guess = Date.UTC(y, mo - 1, d, h, mi);
+    const off = (ms) => { const p = Object.fromEntries(clock(zone).formatToParts(new Date(ms)).map((x) => [x.type, x.value])); return Date.UTC(+p.year, p.month - 1, +p.day, +p.hour, +p.minute) - Math.floor(ms / 6e4) * 6e4; };
+    let t = guess - off(guess);
+    t = guess - off(t);
+    return local(t, zone) === `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}` ? t : null;
+  };
+  // How far ahead a wake may be set (ai/agent/wakes.js holds the same).
+  const AHEAD = 60 * 864e5;
+  const phrases = (list) => new RegExp(`(?<![\\p{L}\\p{N}])(?:${list.join('|')})(?![\\p{L}\\p{N}])`, 'iu');
+  // run_js never solves graded work (study.help's rule; Ask Rime routes such help there). It keys on solving: a problem from
+  // homework, a worksheet, a quiz or exam question, a numbered problem, or pasted problem text (SOLVING, PROBLEM); or an
+  // assessment named beside a verb that asks for its working (ASSESSED with ASK), unless the question is about the
+  // student's own grades (GRADES): "what do I need on the exam to keep a B" is their own grade math.
+  const SOLVING = phrases(['homework', 'home work', 'worksheet', 'problem set', 'p-?set', 'answer key', '(?:quiz|exam|test|midterm|final) (?:question|problem)s?', '(?:problem|question|exercise|part) #?\\d+[a-z]?', '#\\d+',
+    'tareas?', 'deberes', 'ejercicios? \\d+', 'problemas? \\d+', 'preguntas? \\d+', 'li[çc][ãa]o de casa', 'dever(?:es)? de casa', 'exerc[íi]cios? \\d+', 'quest[ãa]o \\d+', 'quest[õo]es \\d+',
+    'devoirs?', 'exercices? \\d+', 'probl[èe]mes? \\d+', 'questions? \\d+', 'hausaufgaben?', '[üu]bungsblatt', '[üu]bungsaufgaben?', 'aufgaben? \\d+', 'huiswerk', 'opgaven? \\d+', 'vragen? \\d+', 'vraag \\d+', 'oefening(?:en)? \\d+']);
+  const PROBLEM = /(?<![\p{L}\p{N}])(?:solve for|find|evaluate|simplify|differentiate|factor(?:ise|ize)?) (?!a \p{L})[a-z](?![\p{L}\p{N}])|(?<![\p{L}\p{N}])\d*[xyz] ?(?:\^|²|³|=|[+\-*/] ?\d)|= ?\d*[xyz](?![\p{L}\p{N}])/iu;
+  const ASSESSED = phrases(['quiz(?:zes)?', 'exams?', 'tests?', 'midterms?', 'finals?', 'assignments?', 'ex[aá]men(?:es|s)?', 'pruebas?', 'provas?', 'avalia[çc][ãa]o', 'contr[ôo]les?', 'klausur(?:en)?', 'pr[üu]fung(?:en)?', 'tests?', 'toets(?:en)?', 'tentamen(?:s)?']);
+  const ASK = phrases(['solve', 'calculat\\p{L}*', 'compute', 'work out', 'answer', 'find', 'evaluate', 'integrate', 'differentiate', 'derive', 'prove', 'simplify', 'factor\\p{L}*',
+    'resuelv\\p{L}*', 'resolv\\p{L}*', 'resolver', 'calcul\\p{L}*', 'r[ée]sou\\p{L}*', 'l[öo]s(?:e|en|t)', 'berechn\\p{L}*', 'rechne', 'los op', 'bereken\\p{L}*', 'reken\\p{L}*']);
+  // A grade calculation must target the student's marks. Generic words such as percent, points or score also
+  // occur inside assessment problems, so they cannot grant an exception to the work rule.
+  const GRADES = phrases([
+    '(?:my|our) (?:(?:homework|exam|test|quiz|assignment|course|overall|final|midterm|current|weighted) ){0,3}(?:grades?|gpa|scores?|average)',
+    '(?:keep|get|pass with) an? [abcdf][+-]?', 'what (?:grade|score|average) do i need',
+    '(?:mi|mis) (?:notas?|calificaci[oó]n(?:es)?|promedio|media)', '(?:promedio|media) de mis?', '(?:qu[ée] nota necesito)',
+    '(?:minha|minhas|meu|meus) (?:notas?|m[ée]dia)', '(?:nota|m[ée]dia) (?:dos? meus|das? minhas)', 'que nota preciso',
+    '(?:ma|mes|mon) (?:notes?|moyenne)', 'quelle note me',
+    'mein(?:e|en|em|er)? (?:[\\p{L}]+-)?(?:noten?|durchschnitt|punkte)', 'welche note brauche ich',
+    'mijn (?:(?:huiswerk|toets|tentamen) ){0,2}(?:cijfers?|gemiddeld\\p{L}*)', 'welk cijfer moet ik halen',
+  ]);
+  const NUMBERED = phrases(['(?:problem|question|exercise|part) #?\\d+[a-z]?', 'ejercicios? \\d+', 'problemas? \\d+', 'preguntas? \\d+',
+    'exerc[íi]cios? \\d+', 'quest[ãa]o \\d+', 'quest[õo]es \\d+', 'exercices? \\d+', 'probl[èe]mes? \\d+', 'questions? \\d+',
+    'aufgaben? \\d+', 'opgaven? \\d+', 'vragen? \\d+', 'vraag \\d+', 'oefening(?:en)? \\d+']);
+  const GRADE_PREFIX = /^(?:(?:the|a|an|weighted|overall|current|average|mean|of|el|la|los|las|promedio|de|o|os|as|m[ée]dia|ponderada|le|les|moyenne|pond[ée]r[ée]e|den|dem|der|gewichteten?|het|een|gewogen|gemiddelde) )*$/u;
+  const gradeMath = (q) => GRADES.test(q) && [...q.matchAll(new RegExp(ASK.source, 'giu'))].every((m) => {
+    const tail = q.slice(m.index + m[0].length).trimStart(), target = GRADES.exec(tail);
+    if (target && GRADE_PREFIX.test(tail.slice(0, target.index))) return true;
+    // Also allow an explicit heading such as "My homework average: calculate ...".
+    const before = q.slice(0, m.index), prior = [...before.matchAll(new RegExp(GRADES.source, 'giu'))].at(-1);
+    return !!prior && /^[\s:;,]*$/.test(before.slice(prior.index + prior[0].length));
+  });
+  const gradedWork = (q) => PROBLEM.test(q) || NUMBERED.test(q) || ((SOLVING.test(q) || (ASSESSED.test(q) && ASK.test(q))) && !gradeMath(q));
+  // Reminder vocabulary; the affirmative clause checks below decide whether it is a request.
+  const LATER = phrases(['remind\\p{L}*', 'reminders?', 'let me know', 'tell me (?:when|if)', 'warn me', 'alert\\p{L}*', 'notify', 'ping me', 'wake', 'watch\\p{L}*', 'keep an eye', 'check (?:back|again)', 'monitor\\p{L}*', 'cancel\\p{L}*', 'stop (?:watching|reminding)',
+    'recu[ée]rd(?:a|ame|amelo|ales|o)\\p{L}*', 'recordatorios?', 'av[ií]sa\\p{L}*', 'vigila\\p{L}*', 'cancela\\p{L}*', 'lembr\\p{L}*', 'lembretes?', 'me avis\\p{L}*', 'monitor\\p{L}*',
+    'rappel\\p{L}*', 'pr[ée]viens?-moi', 'dis-moi quand', 'surveill\\p{L}*', 'annul\\p{L}*', 'erinner\\p{L}*', 'sag mir', 'benachrichtig\\p{L}*', '[üu]berwach\\p{L}*', 'beobacht\\p{L}*', 'storn\\p{L}*', 'abbrech\\p{L}*', 'l[öo]sch\\p{L}*',
+    'herinner\\p{L}*', 'laat (?:me )?weten', 'waarschuw\\p{L}*', 'houd in de gaten', 'annuleer\\p{L}*', 'stop\\p{L}*']);
+  const fold = (s) => String(s).normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+  // A mention (or a negated request) is not permission. Match an affirmative action at the start of a clause: an imperative,
+  // a polite question ("can you…", "tu peux me…", "kannst du mich … erinnern") or a want; cancelling is separate from
+  // creating. Romance questions put the infinitive right after the modal and its pronoun; German and Dutch put it last; a reflexive there ("kun je je … herinneren") is remembering, not a request.
+  const ROMANCE = "(?:(?:me|te) )?(?:puedes|podr[ií]as|puede|podr[ií]a|pode|poderia|consegue|voc[êe] (?:pode|poderia|consegue)|tu peux|vous pouvez|peux-tu|pouvez-vous|tu pourrais|vous pourriez|pourrais-tu|pourriez-vous|est-ce que (?:tu peux|vous pouvez))(?: (?:me|m['’]|nous|lo|la|los|las|os|as))? ";
+  const GERMANIC = "(?:kannst du|k[öo]nntest du|k[öo]nnen sie|k[öo]nnten sie|w[üu]rdest du|kun je|kan je|kunt u|wil je|zou je)(?: (?!(?:nicht|niet|kein\\p{L}*|geen|nie|nooit|dich|sich|je|zich)(?![\\p{L}]))[^\\s.!?;]+){0,10}? ";
+  const request = (verbs, romance, germanic) => new RegExp(`(?:^|[.!?;,]\\s+)[¿¡"“«]?(?:(?:please|por favor|por gentileza|s['’]il (?:te|vous) pla[îi]t|bitte|alsjeblieft)[, ]+)?(?:(?:(?:can|could|would|will) you(?: please)? |i (?:want|would like) you to |(?:puedes|podr[ií]as|pode|voc[êe] pode|peux-tu|pouvez-vous|kannst du|k[öo]nntest du|k[öo]nnen sie|kun je|kan je|wil je) )?(?:${verbs})|${ROMANCE}(?:${romance})|${GERMANIC}(?:${germanic}))(?![\\p{L}\\p{N}])`, 'iu');
+  const CREATE_REQUEST = request("(?:don'?t|do not) let me forget|no me dejes olvidar|n[ãa]o me deixe esquecer|ne me laisse pas oublier|lass mich [\\p{L} ]{0,30}nicht vergessen|laat me [\\p{L} ]{0,30}niet vergeten|" + 'remind me|(?:set|create|schedule) (?:me )?(?:a |an |the )?reminders?|i (?:want|need|would like) (?:a )?reminder|let me know|tell me (?:when|if)|warn me|alert me|notify me|ping me|wake me|check (?:back|again)|recu[ée]rdame|av[ií]same|(?:me )?lembre(?:-me)?|me avis\\p{L}*|avise-me|rappelle-moi|rappelez-moi|pr[ée]viens?-moi|dis-moi quand|erinnere mich|sag mir|benachrichtig\\p{L}*|herinner m(?:e|ij)|laat (?:me )?weten|waarschuw me|me recuerdas|me avisas|(?:voc[êe] )?me lembr[ae]|lembr[ae]-me|tu me rappelles|tu me pr[ée]viens|erinner(?:e)? mich',
+    'recordar(?:me)?|avisar(?:me)?|lembrar|avisar|rappeler|pr[ée]venir|dire quand', 'erinnern|benachrichtigen|bescheid (?:sagen|geben)|herinneren|laten weten|waarschuwen');
+  const MONITOR_REQUEST = request('watch|monitor|(?:set up|create) (?:a )?(?:watch|monitor)|keep an eye|vigila\\p{L}*|monitore\\p{L}*|surveill\\p{L}*|[üu]berwach\\p{L}*|beobacht\\p{L}*|houd in de gaten',
+    'vigilar|monitorear|monitorar|vigiar|surveiller', '[üu]berwachen|beobachten|in de gaten houden');
+  const CANCEL_REQUEST = request('cancel|stop (?:watching|reminding)|cancela\\p{L}*|annul\\p{L}*|storn\\p{L}*|abbrech\\p{L}*|l[öo]sch\\p{L}*',
+    'cancelar|annuler', 'stornieren|abbrechen|l[öo]schen|annuleren');
+  // The values under one key in the results of one tool's steps.
+  const under = (inp, name, keys) => {
+    const out = [];
+    const walk = (v) => { if (Array.isArray(v)) v.forEach(walk); else if (S.isObj(v)) for (const [k, x] of Object.entries(v)) { if (keys.includes(k) && typeof x === 'string') out.push(x); walk(x); } };
+    for (const s of inp.steps) if (s.call.name === name) { try { walk(JSON.parse(s.result)); } catch { /* input() wrote it */ } }
+    return out;
+  };
+  // → '' or why a call to one of Rime's own tools may not go: work, place, text, time, monitor, asked.
+  const ownWhy = (name, args, inp) => {
+    if (name === 'run_js') return gradedWork(fold(inp.question)) || inp.steps.some((s) => ['assignment_read', 'document_read', 'announcement_read', 'content_read', 'discussion_read'].includes(s.call.name)) ? 'work' : '';
+    if (name === 'place_open') return under(inp, 'places_list', ['place', 'here']).includes(args.place) ? '' : 'place';
+    if (name === 'page_highlight') {
+      const want = fold(args.text);
+      return want && (fold(inp.question).includes(want) || values([...(inp.fired ? [inp.fired] : []), ...inp.steps.map((s) => s.result)]).some((v) => typeof v === 'string' && fold(v).includes(want))) ? '' : 'text';
+    }
+    if (['wake_create', 'monitor_create', 'wake_cancel'].includes(name)) {
+      const q = fold(inp.question);
+      if (name === 'wake_cancel' ? !CANCEL_REQUEST.test(q) : !(CREATE_REQUEST.test(q) || (name === 'monitor_create' && MONITOR_REQUEST.test(q)))) return 'asked';
+    }
+    if (name === 'wake_create') { const at = moment(args.at, inp.zone); return at !== null && at > inp.now && at - inp.now <= AHEAD ? '' : 'time'; }
+    if (name === 'monitor_create') {
+      const item = args.type !== undefined || args.id !== undefined;
+      // due and submitted watch the to-do list: their item comes from a to-do list or schedule result.
+      return ['due', 'submitted'].includes(args.watch) ? (args.type !== undefined && args.id !== undefined && [...under(inp, 'todo_list', ['id']), ...under(inp, 'schedule_list', ['id'])].includes(args.id) ? '' : 'monitor')
+        : item || (args.watch === 'grade' && args.course === undefined) ? 'monitor' : '';
+    }
+    return '';
+  };
+
+  // study.help's subjects (ai/tasks/study-help.js SUBJECTS), a help turn's block.
+  const HELP = ['math', 'science', 'code', 'essay', 'reading', 'other'];
+  // A result that holds something: not a failure, nothing missing, and some words beyond who and when.
+  const META = new Set(['account', 'at', 'site', 'here', 'covers', 'from', 'to', 'complete', 'page', 'pages', 'ok', 'more', 'ms', 'cut', 'truncated']);
+  const facts = (r) => {
+    let v;
+    try { v = JSON.parse(r); } catch { return []; }
+    if (!S.isObj(v) || v.ok === false || v.error != null || typeof v.missing === 'string') return [];
+    const found = [];
+    const walk = (x) => {
+      if (Array.isArray(x)) x.forEach(walk);
+      else if (S.isObj(x)) for (const [k, y] of Object.entries(x)) {
+        if (!META.has(k) && !(k === 'course' && !S.isObj(y))) walk(y);
+      }
+      else if (typeof x === 'string' && x.trim() || typeof x === 'number' || typeof x === 'boolean') found.push(String(x));
+    };
+    walk(v);
+    return found;
+  };
+  const rich = (r) => facts(r).length > 0;
+  // → '' when the output may be used, else why not: schema, one, tool, arguments, id, repeat, steps, quote, number; for
+  // Rime's own tools also work, place, text, time, monitor, asked (ownWhy); with first or help, first (an answer with no
+  // result behind it) and ground (results that hold facts, an answer quoting none).
   const why = (out, inp) => {
     if (S.validate(out, OUTPUT).length) return 'schema';
     if ((out.call === null) === (out.answer === null)) return 'one';
-    const results = inp.steps.map((s) => s.result);
-    const data = values(results);
+    const results = [...(inp.fired ? [inp.fired] : []), ...inp.steps.map((s) => s.result)];
+    const data = values(results, inp.first === true);
     if (out.call) {
       const { name, arguments: args } = out.call;
       if (!inp.tools.includes(name)) return 'tool';
@@ -264,10 +462,18 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       }
       if (inp.steps.some((s) => JSON.stringify(canon(s.call)) === JSON.stringify(canon(out.call)))) return 'repeat';
       if (inp.steps.length >= LIMIT.steps) return 'steps';
-      return '';
+      return OWN.includes(name) ? ownWhy(name, args, inp) : '';
     }
     const { text, quotes } = out.answer;
     if (!text.trim()) return 'schema';
+    // Tool first: an answer about the student's school stands on results Glaze read for it, never on nothing; facts from a
+    // result that holds any are quoted (empty and failed results hold none, so the answer says only that).
+    if ((inp.first || inp.help) && !inp.steps.length && !inp.fired) return 'first';
+    if (inp.first) {
+      const held = inp.steps.flatMap((st) => facts(st.result));
+      const sources = held.map((v) => X().source(v, { min: 2 })), singles = new Set(held.map((v) => X().norm(v)));
+      if (held.length && !quotes.some((q) => [...X().norm(q)].length === 1 ? singles.has(X().norm(q)) : sources.some((s) => s.has(q)))) return 'ground';
+    }
     const sources = data.map((r) => X().source(r, { min: 2 })), singles = new Set(data.map((r) => X().norm(r)));
     if (quotes.some((q) => !q.trim() || ([...X().norm(q)].length === 1 ? !singles.has(X().norm(q)) : !sources.some((x) => x.has(q))))) return 'quote';
     // Every number the reply says is in a result, the question or the time; or an hour of a result on a 12-hour clock,
@@ -287,6 +493,6 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // rate: Ask Glaze (ai/ask.js) runs a question's steps as runs of their own, at most seven (six calls, then the answer): six
   // questions a minute in a tab, where the broker's default would stop the first question's seventh run.
   const task = T.add(T.define({ id: 'agent.tools', version: 1, input, build, output: OUTPUT, check, limits: { ms: 60000 }, rate: { perMinute: 6 * (LIMIT.steps + 1) } }));
-  return { task, LIMIT, SPECS, NAMES, SYSTEM, OUTPUT, ANSWER, constraint, instructions, line, py, shown, native, fromNative, readable, layout, fromRequest, answerParts, why };
+  return { task, LIMIT, SPECS, NAMES, OWN, AGENTS, AHEAD, HELP, rich, gradedWork, fold, LATER, moment, SYSTEM, OUTPUT, ANSWER, constraint, instructions, line, py, shown, native, fromNative, readable, layout, fromRequest, answerParts, why };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_TASK_AGENT_TOOLS; else GZ_AI_TASK_AGENT_TOOLS;

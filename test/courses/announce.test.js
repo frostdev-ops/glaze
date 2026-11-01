@@ -108,7 +108,7 @@ test('Canvas: the topic as Canvas sends it, its read state, and the read mark on
 test('Ultra: the public announcement, its embedded files on this site, no author and no read mark', () => {
   const U = 'https://lms.example.edu';
   const r = A.ref({ site: 'ultra', courseId: '_101_1', id: '_1001_1', url: '/ultra/courses/_101_1/announcements' }, U);
-  assert.equal(A.SITES.ultra.path(r), '/learn/api/public/v1/courses/_101_1/announcements/_1001_1?fields=id,title,body,created,availability');
+  assert.equal(A.SITES.ultra.path(r), '/learn/api/public/v1/courses/_101_1/announcements/_1001_1?fields=id,title,body,created,modified,availability');
   const it = A.SITES.ultra.item({ id: '_1001_1', title: 'Lab 3 is up', created: '2026-10-12T13:00:00.000Z',
     body: '<p>See <img src="@X@EmbeddedFile.requestUrlStub@X@bbcswebdav/xid-1_1" alt="lab"></p><img src="https://cdn.evil.example/a.png">' }, U);
   assert.equal(it.author, '');

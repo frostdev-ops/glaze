@@ -519,9 +519,12 @@ test('the setting defaults on, is a boolean, and has one owning control', () => 
   assert.equal(html.match(/data-key="mods\.blocklist"/g).length, 1);
 });
 
-test('the manifest asks for no alarms and nothing new: the check rides on events that already happen', () => {
+test('the blocklist check asks for no alarms and nothing new: it rides on events that already happen', () => {
   const m = require('../../extension/manifest.json');
-  assert.ok(!(m.permissions || []).includes('alarms'));
+  // The manifest's alarms are Ask Rime's wakes and monitors alone (ai/agent/wakes.js), named gz-rime:.
+  const bg = fs.readFileSync(require.resolve('../../extension/background/background.js'), 'utf8');
+  assert.deepEqual(bg.split('\n').filter((l) => l.includes('chrome.alarms')).map((l) => /gz-rime:|^const rimeWakesEnv/.test(l)), [true, true]);
+  assert.ok((m.permissions || []).includes('alarms'));
   assert.ok(m.host_permissions.includes('https://frostdev.io/*'), 'the blocklist\'s host is held from the start');
   assert.ok(!/alarms|setInterval/.test(fs.readFileSync(require.resolve('../../extension/mods/blocklist.js'), 'utf8').replace(/\/\/.*$/gm, '')));
 });

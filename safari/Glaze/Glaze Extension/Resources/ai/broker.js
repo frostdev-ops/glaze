@@ -350,6 +350,13 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         // connection change: a task that may carry pictures reads its catalog again; others (the gray text) keep theirs.
         const list = await catalog(env, use, control.signal, now(), use.p.id === 'local' && (task.caps.images === true || task.id === 'writer.feedback'));
         const { chosen, cfg } = sized(use, list, task);
+        // Ask's outer router can race a model change or this broker's cached catalog. Check the pinned weights before
+        // any Rime tool or fired turn reaches the model, including requests on the ordinary AI port.
+        if (task.id === 'agent.tools' && use.p.id === 'local') {
+          const agent = typeof GZ_AI_TASK_AGENT_TOOLS !== 'undefined' ? GZ_AI_TASK_AGENT_TOOLS : require('./tasks/agent-tools.js');
+          const own = m.input?.fired !== undefined || (Array.isArray(m.input?.tools) && m.input.tools.some((n) => agent.OWN.includes(n)));
+          if (own && (!use.p.toolsLevel || await use.p.toolsLevel(cfg) < 3)) throw R().error('changed');
+        }
         const takes = use.p.id === 'openai' ? M().efforts(use.cfg.base, use.cfg.model, list?.models.find((x) => x.id === use.cfg.model)) : [];
         if (rate ? often(`${env.who}|${m.feature}|${m.task}`, now(), rate.perMinute || LIMIT.perMinute, '|rated') : often(key, now())) throw R().error('often');
         if (control.signal.aborted) throw Object.assign(R().error('cancelled'), { category: 'cancelled' });

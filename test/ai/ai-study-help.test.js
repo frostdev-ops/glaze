@@ -268,3 +268,40 @@ test('hands(): the answer-giving rules alone, for a text that is not a tutor\'s 
   assert.equal(why(i, 'hint', 'The answer is x = 5.'), 'answer');
   assert.equal(why(inp({ question: 'Why does the river matter in Beloved?', subject: 'reading' }), 'hint', 'The river stands for memory in the novel and the town.'), 'speaks');
 });
+
+// Follow-ups in Ask Rime: the conversation so far goes to a cloud model as data before the question. Glaze's own model was
+// trained without it, so a local model's request is exactly as before (FORMAT-new-tasks.md).
+test('history: a cloud model reads the conversation so far as data; a local model\'s request is unchanged', () => {
+  const X = require('../../extension/ai/text.js');
+  const history = [{ question: 'Explain mitosis', answer: 'What happens to the chromosomes first?' }];
+  const i = inp({ question: 'And then?', history });
+  assert.deepEqual(i.history, history);
+  const plain = inp({ question: 'And then?' });
+  assert.deepEqual(plain.history, undefined, 'none given, none kept');
+  const fix = (r) => JSON.parse(JSON.stringify(r).replace(/DATA-[0-9a-f]+/g, 'DATA'));
+  const local = fix(H.task.build(i, { text: X, caps: { local: true } })), before = fix(H.task.build(plain, { text: X, caps: { local: true } }));
+  assert.deepEqual(local, before);
+  const cloud = H.task.build(i, { text: X, caps: { text: true } });
+  const words = JSON.stringify(cloud);
+  assert.match(words, /earlier/);
+  assert.ok(words.indexOf('Explain mitosis') > -1 && words.indexOf('Explain mitosis') < words.indexOf('And then?'), 'before the question');
+  assert.deepEqual(fix(H.task.build(plain, { text: X, caps: { text: true } })), before, 'no history: the same request everywhere');
+  for (const bad of ['x', [{ question: 'a' }], Array(7).fill({ question: 'a', answer: 'b' }), [{ question: 'a', answer: 'b'.repeat(2001) }], [{ question: 'a', answer: 'b', x: 1 }]]) {
+    assert.equal(inp({ question: 'q', history: bad }), null, JSON.stringify(bad).slice(0, 40));
+  }
+});
+
+test('history: follow-up replies are checked against the earlier student problem, never the assistant example', () => {
+  for (const [question, bad, good] of [
+    [MATH.question, 'So x = 5.', 'Look at the +5. Which operation undoes it?'],
+    [CODE.question, 'Change it to `return sum(nums) / len(nums)`.', 'What should you divide the sum by?'],
+    [GATSBY.question, 'Gatsby wants Daisy.', 'What does Gatsby want most?'],
+  ]) {
+    const i = inp({ question: 'And then?', subject: 'other', history: [{ question, answer: 'Think about your next step.' }] });
+    assert.equal(H.task.check(out('concept', bad), i), null, bad);
+    assert.ok(H.task.check(out('hint', good), i), good);
+    assert.equal(H.task.check(out('hint', good, null, `${bad} What next?`), i), null, 'the follow-up is checked too');
+  }
+  const example = inp({ question: 'And then?', history: [{ question: MATH.question, answer: 'Think of 2y + 4 = 10.' }] });
+  assert.ok(H.task.check(out('concept', 'In 2y + 4 = 10, removing 4 gives 2y = 6. Which operation would undo the addition in yours?'), example), 'an assistant example does not become the student problem');
+});

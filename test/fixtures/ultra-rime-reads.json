@@ -1,0 +1,318 @@
+{
+ "_note": "Glaze test fixture: Blackboard Ultra public API answers in the shapes probed on a real Ultra (2026-11-01: announcements, contents and an Ultra document's children, discussions, one discussion, its messages); every value synthetic.",
+ "announcements": {
+  "results": [
+   {
+    "id": "_811_1",
+    "title": "Midterm review session",
+    "body": "<p>Review is Thursday in Room 12.</p>",
+    "draft": false,
+    "position": 1,
+    "created": "2025-10-02T14:00:00.000Z",
+    "modified": "2026-10-20T13:00:00.000Z",
+    "creator": "_5_1",
+    "creatorUserId": "_5_1",
+    "availability": {
+     "duration": {
+      "type": "Permanent",
+      "start": "2026-10-20T13:00:00.000Z",
+      "end": null
+     }
+    }
+   },
+   {
+    "id": "_812_1",
+    "title": "Office hours moved",
+    "body": "<p>Office hours are Monday this week.</p>",
+    "draft": false,
+    "position": 2,
+    "created": "2026-10-14T09:00:00.000Z",
+    "modified": "2026-10-14T09:30:00.000Z",
+    "creator": "_5_1",
+    "creatorUserId": "_5_1",
+    "availability": {
+     "duration": {
+      "type": "Permanent",
+      "start": null,
+      "end": null
+     }
+    }
+   },
+   {
+    "id": "_813_1",
+    "title": "Welcome",
+    "body": "<p>Welcome to the course.</p>",
+    "draft": false,
+    "position": 3,
+    "created": "2026-09-01T12:00:00.000Z",
+    "modified": "2026-09-01T12:00:00.000Z",
+    "creator": "_5_1",
+    "creatorUserId": "_5_1",
+    "availability": {
+     "duration": {
+      "type": "Permanent",
+      "start": "2026-09-01T12:00:00.000Z",
+      "end": null
+     }
+    }
+   },
+   {
+    "id": "_814_1",
+    "title": "Draft notice",
+    "body": "<p>Not ready.</p>",
+    "draft": true,
+    "position": 4,
+    "created": "2026-10-21T12:00:00.000Z",
+    "modified": "2026-10-21T12:00:00.000Z",
+    "creator": "_5_1",
+    "creatorUserId": "_5_1",
+    "availability": {
+     "duration": {
+      "type": "Permanent",
+      "start": "2026-10-21T12:00:00.000Z",
+      "end": null
+     }
+    }
+   }
+  ]
+ },
+ "contents": {
+  "results": [
+   {
+    "id": "_720_1",
+    "title": "Start Here",
+    "availability": {
+     "available": "Yes",
+     "adaptiveRelease": {}
+    },
+    "contentHandler": {
+     "id": "resource/x-bb-folder"
+    }
+   },
+   {
+    "id": "_721_1",
+    "parentId": "_720_1",
+    "title": "ENG 1100 College Writing Syllabus",
+    "availability": {
+     "available": "Yes",
+     "adaptiveRelease": {}
+    },
+    "contentHandler": {
+     "id": "resource/x-bb-folder",
+     "isBbPage": true
+    }
+   },
+   {
+    "id": "_722_1",
+    "title": "Week 1",
+    "availability": {
+     "available": "Yes",
+     "adaptiveRelease": {}
+    },
+    "contentHandler": {
+     "id": "resource/x-bb-lesson"
+    }
+   },
+   {
+    "id": "_723_1",
+    "parentId": "_722_1",
+    "title": "Essay 1 guidelines",
+    "availability": {
+     "available": "Yes",
+     "adaptiveRelease": {}
+    },
+    "contentHandler": {
+     "id": "resource/x-bb-folder",
+     "isBbPage": true
+    }
+   },
+   {
+    "id": "_724_1",
+    "parentId": "_722_1",
+    "title": "Purdue OWL",
+    "availability": {
+     "available": "Yes",
+     "adaptiveRelease": {}
+    },
+    "contentHandler": {
+     "id": "resource/x-bb-externallink",
+     "url": "https://owl.example.com/"
+    }
+   },
+   {
+    "id": "_725_1",
+    "parentId": "_722_1",
+    "title": "Quiz 1",
+    "availability": {
+     "available": "Yes",
+     "adaptiveRelease": {}
+    },
+    "contentHandler": {
+     "id": "resource/x-bb-asmt-test-link",
+     "assessmentId": "_31_1",
+     "gradeColumnId": "_41_1"
+    },
+    "body": "<p>Ten questions on chapter 1.</p>"
+   },
+   {
+    "id": "_726_1",
+    "parentId": "_722_1",
+    "title": "Library guide",
+    "availability": {
+     "available": "Yes",
+     "adaptiveRelease": {}
+    },
+    "contentHandler": {
+     "id": "resource/x-bb-courselink"
+    }
+   }
+  ]
+ },
+ "children": {
+  "_721_1": {
+   "results": [
+    {
+     "id": "_731_1",
+     "title": "ultraDocumentBody",
+     "contentHandler": {
+      "id": "resource/x-bb-document"
+     },
+     "body": "<p>The full syllabus is attached.</p><p><a href=\"/bbcswebdav/xid-123_1?sig=SIGNED-SECRET\" data-bbfile=\"{&quot;linkName&quot;: &quot;ENG 1100 Syllabus Fall.pdf&quot;, &quot;fileName&quot;: &quot;ENG 1100 Syllabus Fall.pdf&quot;, &quot;displayName&quot;: &quot;ENG 1100 Syllabus Fall.pdf&quot;, &quot;alternativeText&quot;: &quot;ENG 1100 Syllabus Fall.pdf&quot;, &quot;mimeType&quot;: &quot;application/pdf&quot;, &quot;render&quot;: &quot;inline&quot;, &quot;resourceUrl&quot;: &quot;/sessions/7/a1b2c3/syllabus.pdf?sig=SIGNED-SECRET&quot;, &quot;viewerUrl&quot;: &quot;/bbcswebdav/xid-123_1?sig=SIGNED-SECRET&exp=1&quot;}\">ENG 1100 Syllabus Fall.pdf</a></p>",
+     "created": "2026-08-20T12:00:00.000Z",
+     "modified": "2026-08-21T12:00:00.000Z",
+     "position": 0,
+     "availability": {
+      "available": "Yes",
+      "allowGuests": true,
+      "adaptiveRelease": {}
+     },
+     "links": [
+      {
+       "href": "/ultra/redirect?redirectType=nautilus&courseId=_101_1&contentId=_731_1&parentId=_721_1",
+       "rel": "alternate",
+       "title": "User Interface View",
+       "type": "text/html"
+      }
+     ]
+    }
+   ]
+  },
+  "_723_1": {
+   "results": [
+    {
+     "id": "_733_1",
+     "title": "ultraDocumentBody",
+     "contentHandler": {
+      "id": "resource/x-bb-document"
+     },
+     "body": "<p>Write 900 words on a place that matters to you. Use MLA 9.</p><p><a href=\"/bbcswebdav/xid-456_1?sig=SIGNED-SECRET\" data-bbfile=\"{&quot;linkName&quot;: &quot;Essay rubric.docx&quot;, &quot;fileName&quot;: &quot;Essay rubric.docx&quot;, &quot;displayName&quot;: &quot;Essay rubric.docx&quot;, &quot;mimeType&quot;: &quot;application/vnd.openxmlformats-officedocument.wordprocessingml.document&quot;, &quot;fileSize&quot;: 48211, &quot;render&quot;: &quot;inline&quot;, &quot;resourceUrl&quot;: &quot;/bbcswebdav/xid-456_1?sig=SIGNED-SECRET&quot;, &quot;viewerUrl&quot;: &quot;/bbcswebdav/xid-456_1?sig=SIGNED-SECRET&view=1&quot;}\">Essay rubric.docx</a></p>",
+     "created": "2026-08-20T12:00:00.000Z",
+     "modified": "2026-08-21T12:00:00.000Z",
+     "position": 0,
+     "availability": {
+      "available": "Yes",
+      "allowGuests": true,
+      "adaptiveRelease": {}
+     },
+     "links": [
+      {
+       "href": "/ultra/redirect?redirectType=nautilus&courseId=_101_1&contentId=_733_1&parentId=_723_1",
+       "rel": "alternate",
+       "title": "User Interface View",
+       "type": "text/html"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "discussions": {
+  "results": [
+   {
+    "id": "_911_1",
+    "title": "Introduce yourself"
+   },
+   {
+    "id": "_912_1",
+    "title": "Thesis workshop"
+   }
+  ]
+ },
+ "discussion": {
+  "id": "_911_1",
+  "title": "Introduce yourself",
+  "available": true,
+  "gradable": true,
+  "gradebookColumnId": "_51_1",
+  "groupDiscussion": false,
+  "createdDate": "2026-09-01T12:00:00.000Z",
+  "modifiedDate": "2026-09-02T12:00:00.000Z",
+  "topic": {
+   "id": "_921_1",
+   "discussionId": "_911_1",
+   "userId": "_5_1",
+   "givenName": "Instructor",
+   "familyName": "Example",
+   "status": "Published",
+   "body": "<p>Tell the class your major and one book you liked.</p>",
+   "postDate": "2026-09-01T12:00:00.000Z",
+   "editDate": null,
+   "isRead": true
+  }
+ },
+ "messages": {
+  "results": [
+   {
+    "id": "_931_1",
+    "discussionId": "_911_1",
+    "parentId": "_921_1",
+    "threadId": "_931_1",
+    "userId": "_6_1",
+    "groupId": null,
+    "givenName": "Classmate",
+    "familyName": "One",
+    "status": "Published",
+    "body": "<p>CLASSMATE-PRIVATE-WORDS about biology.</p>",
+    "postDate": "2026-09-02T12:00:00.000Z",
+    "editDate": null,
+    "createdDate": "2026-09-02T12:00:00.000Z",
+    "modifiedDate": "2026-09-02T12:00:00.000Z",
+    "isRead": true
+   },
+   {
+    "id": "_932_1",
+    "discussionId": "_911_1",
+    "parentId": "_921_1",
+    "threadId": "_932_1",
+    "userId": "_900_1",
+    "groupId": null,
+    "givenName": "Student",
+    "familyName": "Self",
+    "status": "Published",
+    "body": "<p>I study nursing and liked Beloved.</p>",
+    "postDate": "2026-09-03T12:00:00.000Z",
+    "editDate": null,
+    "createdDate": "2026-09-03T12:00:00.000Z",
+    "modifiedDate": "2026-09-03T12:00:00.000Z",
+    "isRead": true
+   },
+   {
+    "id": "_933_1",
+    "discussionId": "_911_1",
+    "parentId": "_931_1",
+    "threadId": "_931_1",
+    "userId": "_7_1",
+    "groupId": null,
+    "givenName": "Classmate",
+    "familyName": "Two",
+    "status": "Published",
+    "body": "<p>CLASSMATE-PRIVATE-WORDS reply.</p>",
+    "postDate": "2026-09-04T12:00:00.000Z",
+    "editDate": null,
+    "createdDate": "2026-09-04T12:00:00.000Z",
+    "modifiedDate": "2026-09-04T12:00:00.000Z",
+    "isRead": false
+   }
+  ]
+ }
+}

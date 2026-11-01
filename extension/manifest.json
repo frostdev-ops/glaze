@@ -11,7 +11,8 @@
     "unlimitedStorage",
     "activeTab",
     "declarativeContent",
-    "offscreen"
+    "offscreen",
+    "alarms"
   ],
   "optional_permissions": [
     "identity",

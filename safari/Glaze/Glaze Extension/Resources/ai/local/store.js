@@ -374,8 +374,8 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
       const cat = await load();
       const out = [];
       for (const m of cat.values()) {
-        const { id, name, size, quant, tier, license, stock, role, projector } = m;
-        out.push({ id, name, size, quant, tier, license, ...(stock && { stock }), ...(role && { role }), ...(projector && { projector }), ...(await status(id)) });
+        const { id, name, size, quant, tier, license, stock, role, projector, tools } = m;
+        out.push({ id, name, size, quant, tier, license, ...(stock && { stock }), ...(role && { role }), ...(projector && { projector }), ...(Number.isSafeInteger(tools) && { tools }), ...(await status(id)) });
       }
       let top = null;
       try { top = await (await root()).getDirectoryHandle(TOP); } catch (e) { if (!gone(e)) throw e; }

@@ -327,6 +327,9 @@ const GATE_BATCH = { ultra: 61 + 26, canvas: 61, moodle: 61 };
 // The opt-in landing waits at Ultra's bare address until Ultra has gone on (a named raise under the owner's 2026-10-19
 // approval, 2026-11-01): content-ultra.js's check and its line of why, 166 bytes on Ultra. Measured against 34b6c95ec.
 const LANDING_WAIT = { ultra: 166, canvas: 0, moodle: 0 };
+// Ask Rime on a school page's load (content.js, owner-approved named allowance, 2026-11-01): one storage read and, with Ask on,
+// the worker's count of reminders and watches that fired and its private handoff; the panel loads only when needed.
+const RIME_ARRIVE = { ultra: 711, canvas: 595, moodle: 595 };
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what background/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;
@@ -335,7 +338,7 @@ const FIRST_SCRIPT = { ultra: entry((c) => c.js.includes('content/content-ultra.
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + (site === 'ultra' ? ULTRA_EARLY_ME : 0) + UI_SWAP + VT_GUARD[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS + SYLLABUS_DOCS + WRITER + WRITER_SETTINGS + CTAB_PALETTE[site] + LOOK_CATALOG + COURSE_LOOKS_SYNC + BB_PREVIEWS + CANVAS_OPEN + AREA_PATHS[site] + ULTRA_PASSES[site] + CTAB_STANDBY + NAV_FIRST_PAINT[site] + INSTANT_COPIES[site] + ULTRA_STALENESS[site] + NO_SHIFT[site] + FEEDBACK + GATE_BATCH[site] + COLD_LOAD[site] + LANDING_WAIT[site];
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + (site === 'ultra' ? ULTRA_EARLY_ME : 0) + UI_SWAP + VT_GUARD[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS + SYLLABUS_DOCS + WRITER + WRITER_SETTINGS + CTAB_PALETTE[site] + LOOK_CATALOG + COURSE_LOOKS_SYNC + BB_PREVIEWS + CANVAS_OPEN + AREA_PATHS[site] + ULTRA_PASSES[site] + CTAB_STANDBY + NAV_FIRST_PAINT[site] + INSTANT_COPIES[site] + ULTRA_STALENESS[site] + NO_SHIFT[site] + FEEDBACK + GATE_BATCH[site] + COLD_LOAD[site] + LANDING_WAIT[site] + RIME_ARRIVE[site];
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }
@@ -366,7 +369,9 @@ test('the detector that Safari runs on every other https page stays under 2 KB',
 // first content script, loaded on demand or in the extension's pages. Not the vendored three.js, ProseMirror, OCR engine or Harper, nor the tools,
 // tests and app wrappers around the extension, nor the share relay (server/), which runs on a server.
 const NOT_SHIPPED = new Set(['scripts', 'test', 'safari', 'store', 'assets', 'dist', 'release', 'node_modules', 'docs', 'server', 'mcp']);
-const VENDORED = new Set(['vendor/three.js', 'vendor/pm.js', 'vendor/tesseract/tesseract-core-simd-lstm.js', 'vendor/lottie/lottie_light_canvas.js', 'vendor/harper/index.js', 'vendor/harper/BinaryModule-S5UABkWQ.js', 'vendor/harper/slimBinary.js']); // pdf.js is .mjs, not scanned
+// run_js's engine (vendor/quickjs/quickjs.js, 54 KB, with its 503 KB WebAssembly): loaded by the worker only when run_js
+// runs, never by a page (owner's decision, 2026-11-01: one sandbox for all three browsers).
+const VENDORED = new Set(['vendor/quickjs/quickjs.js', 'vendor/three.js', 'vendor/pm.js', 'vendor/tesseract/tesseract-core-simd-lstm.js', 'vendor/lottie/lottie_light_canvas.js', 'vendor/harper/index.js', 'vendor/harper/BinaryModule-S5UABkWQ.js', 'vendor/harper/slimBinary.js']); // pdf.js is .mjs, not scanned
 // Only what git tracks: releases are packaged from a fresh checkout, so an untracked folder (another project's build) isn't Glaze.
 const shipped = (top) => execFileSync('git', ['ls-files', '-z', '--', '*.js'], { cwd: top, encoding: 'utf8' }).split('\0').filter((f) => {
   const parts = f.split('/');

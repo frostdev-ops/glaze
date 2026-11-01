@@ -36,14 +36,17 @@ test('each tool is an Agents tool of the same kind, its parameters Agents\' inpu
   require('../../extension/agents/tools-assign.js').register(reg, {});
   require('../../extension/agents/writer.js').register(reg, { papers: async () => [], bridge: async () => null });
   const bare = (s) => (Array.isArray(s) ? s.map(bare) : s && typeof s === 'object' ? Object.fromEntries(Object.entries(s).filter(([k]) => k !== 'description').map(([k, v]) => [k, bare(v)])) : s);
-  for (const t of A.SPECS) {
+  for (const t of A.SPECS.filter((s) => A.AGENTS.includes(s.name))) {
     const theirs = reg.get(t.name);
     assert.ok(theirs, `${t.name} is an Agents tool`);
     assert.equal(t.kind, theirs.kind, t.name);
     assert.deepEqual(bare(t.parameters), bare(REG.describe(theirs).inputSchema), t.name);
     assert.ok(S.clean(t.parameters), t.name);
   }
-  assert.deepEqual(A.SPECS.filter((t) => t.kind !== 'read').map((t) => t.name), ['todo_mark_done'], 'the one write: Agents asks the student first');
+  assert.deepEqual(A.SPECS.filter((t) => t.kind !== 'read' && A.AGENTS.includes(t.name)).map((t) => t.name), ['todo_mark_done'], 'the one write: Agents asks the student first');
+  // Ask Rime's own tools (ai/agent/*.js) are none of Agents': no app is offered them.
+  assert.deepEqual(A.OWN.filter((n) => reg.get(n)), []);
+  assert.deepEqual([...A.AGENTS, ...A.OWN].sort(), [...A.NAMES].sort());
   assert.ok(!A.NAMES.some((n) => ['citation_insert', 'fix_apply', 'document_issues'].includes(n)), 'nothing that needs a Writer page open');
 });
 
