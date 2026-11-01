@@ -153,6 +153,42 @@ const BYTES = (() => {
   return { tokens, types, merges: [], pre: 'lfm2', bos: tokens.indexOf('<|startoftext|>'), eos: tokens.indexOf('<|im_end|>') };
 })();
 
+const fixedHost = (kv, reply) => {
+  const posted = [], decodes = [];
+  const host = H.create({
+    store: { status: async () => ({ state: 'ready' }), open: async () => ({ size: 1 }) },
+    gguf: { open: async () => ({ kv }) }, tokenizer: K, grammar: () => G, ladder: () => null,
+    gpu: () => ({ requestAdapter: async () => ({}) }),
+    engine: () => ({ load: async () => {
+      const tok = K.load(kv), output = [...tok.encodeWith(reply)];
+      let i = 0;
+      return { context: 16000, release() {}, snapshot: async () => ({ pos: 0, drop() {} }), restore: async () => {},
+        prefill: async (list, { snapshot } = {}) => { i = 0; return snapshot ? { pos: list.length, drop() {} } : undefined; },
+        decode: async ({ mask }) => { const id = output[i++] ?? tok.eos; assert.ok(allowed(mask, id)); decodes.push(id); return id; } };
+    } }),
+    setTimeout: (f, ms) => { const t = setTimeout(f, ms); t.unref?.(); return t; }, now: () => 0,
+    post: (m) => posted.push(structuredClone(m)),
+  });
+  let id = 0;
+  return { host, decodes, async run(constraint) {
+    const request = ++id;
+    await host.handle({ id: request, op: 'run', model: 'glaze-q4', parts: [{ text: 'Answer.' }], stable: 1,
+      sampler: {}, maxTokens: 128, ...constraint });
+    return posted.find((m) => m.id === request && ['done', 'error'].includes(m.type));
+  } };
+};
+
+test('the host preserves native tool tags when the tokenizer marks them as control tokens', async (t) => {
+  const kv = { ...BYTES, types: BYTES.types.map((ty, i) => G.TOOL_MARKS.includes(BYTES.tokens[i]) ? K.TYPES.control : ty) };
+  const reply = native('assignment_read', { course: '5521', assignment: '88121' });
+  const h = fixedHost(kv, reply);
+  t.after(() => h.host.release());
+  const end = await h.run(A.constraint(ALL));
+  assert.equal(end?.type, 'done', JSON.stringify(end));
+  assert.equal(end.result.text, reply.map((p) => p.special ?? p.text).join(''));
+  assert.deepEqual(A.fromNative(end.result.text), { call: { name: 'assignment_read', arguments: { course: '5521', assignment: '88121' } }, answer: null });
+});
+
 test('the host runs a turn under the constraint: the D4 call with a parameter its tool doesn\'t take comes out a call it does', async () => {
   const posted = [], decodes = [];
   const store = { list: async () => [{ id: 'glaze-q4', tier: 1, size: 1, state: 'ready' }], status: async () => ({ state: 'ready' }), open: async (id) => ({ id, size: 1, read: async () => new Uint8Array(0) }) };
