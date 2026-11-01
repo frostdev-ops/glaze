@@ -608,7 +608,7 @@ chrome.runtime.onConnect.addListener((p) => {
 // tabs' changes never undo each other (B7b).
 BROKER.widgetLayout = {
   allow: async (m, s) => {
-    if (!Array.isArray(m.ops) || m.ops.length > 64) return false;
+    if (!Array.isArray(m.ops) || m.ops.length > (['cdash', 'dash'].includes(m.fill) ? 128 : 64)) return false;
     if (fromEditor(s)) return true;
     const canvas = s.frameId === 0 && (await fromCanvas(s));
     const site = canvas || (ultraPage(s) && (await fromUltra(s)));

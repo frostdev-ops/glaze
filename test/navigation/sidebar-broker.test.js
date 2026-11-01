@@ -329,6 +329,23 @@ test('a new install marks its layout fresh, an update does not, and the mark giv
   assert.ok(!('sidebarFresh' in old.store.local.widgetLayout));
 });
 
+test('the layout broker accepts up to 128 fill operations and keeps ordinary edits at 64', async () => {
+  const key = (n) => `course:${ULTRA}/_${n}_1`;
+  const rows = Array.from({ length: W.COURSE_TOTAL }, (_, n) => ({ id: key(n + 1), on: true }));
+  const layout = W.layout({ ...W.fresh(), filled: ['dash'], boards: { dash: rows } });
+  const drops = rows.slice(0, 48).map((x) => ({ s: 'dash', id: x.id, remove: true }));
+  const adds = Array.from({ length: 48 }, (_, n) => ({ s: 'dash', id: key(900 + n), set: { on: true } }));
+  const w = worker({ local: { widgetLayout: layout } });
+  const msg = { type: 'glaze:widgetLayout', fill: 'dash', account: `${ULTRA}/_9_1`, ops: [...drops, ...adds, ...drops.slice(0, 32)] };
+  assert.equal(msg.ops.length, 128);
+  assert.equal((await w.send(msg, UP)).ok, true);
+  for (const x of adds) assert.ok(w.store.local.widgetLayout.boards.dash.some((t) => t.id === x.id));
+  const before = structuredClone(w.store.local.widgetLayout);
+  assert.equal((await w.send({ ...msg, ops: [...msg.ops, drops[0]] }, UP)).ok, false, '129 fill operations are rejected');
+  assert.equal((await w.send({ ...msg, fill: undefined, ops: msg.ops.slice(0, 65) }, UP)).ok, false, '65 ordinary operations are rejected');
+  assert.deepEqual(w.store.local.widgetLayout, before);
+});
+
 test('fresh Dashboard auto-fill commits through the worker on each site, with site and surface boundaries intact', async () => {
   for (const [sender, origin, board, id] of [[CP, CANVAS, 'cdash', '1'], [UP, ULTRA, 'dash', '_1_1']]) {
     const w = worker();

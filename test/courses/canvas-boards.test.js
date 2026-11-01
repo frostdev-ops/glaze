@@ -114,6 +114,16 @@ test('Canvas Edit layout: body drag, threshold, guides, Alt, arrow keys, focus a
   assert.deepEqual([q.tile('notes').style.left, q.tile('notes').style.top], ['53px', '477px']);
 });
 
+test('Canvas Reset layout resets saved courses before the card reader loads', async () => {
+  const id = 'course:https://board.instructure.com/27';
+  const p = page({ raw: { todo: true, canvasTodo: true, filled: ['cdash'], boards: { cdash: [...only().tiles, { id, on: true, x: 300, y: 120, w: 420, h: 220 }] } } });
+  await settle();
+  assert.equal(p.c.GZ_COURSE_CARDS, undefined, 'the lazy card reader has not loaded');
+  p.edit();
+  p.doc.fire(p.doc.querySelector('.gz-dash-reset'), 'click'); await settle();
+  assert.deepEqual([p.board(id).x, p.board(id).y, p.board(id).w, p.board(id).h], [null, null, undefined, undefined]);
+});
+
 test('Canvas corner: pointer and keys resize, folded width resize keeps height, double-click restores own size', async () => {
   const p = page(); await settle(); p.edit();
   const n = p.tile('notes'), body = n.querySelector('.gz-w-body'), corner = n.querySelector('.gz-w-resize'), b = n.getBoundingClientRect();
