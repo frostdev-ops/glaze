@@ -341,7 +341,15 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   const NUMBERED = phrases(['(?:problem|question|exercise|part) #?\\d+[a-z]?', 'ejercicios? \\d+', 'problemas? \\d+', 'preguntas? \\d+',
     'exerc[íi]cios? \\d+', 'quest[ãa]o \\d+', 'quest[õo]es \\d+', 'exercices? \\d+', 'probl[èe]mes? \\d+', 'questions? \\d+',
     'aufgaben? \\d+', 'opgaven? \\d+', 'vragen? \\d+', 'vraag \\d+', 'oefening(?:en)? \\d+']);
-  const gradedWork = (q) => PROBLEM.test(q) || NUMBERED.test(q) || ((SOLVING.test(q) || (ASSESSED.test(q) && ASK.test(q))) && !GRADES.test(q));
+  const GRADE_PREFIX = /^(?:(?:the|a|an|weighted|overall|current|average|mean|of|el|la|los|las|promedio|de|o|os|as|m[ée]dia|ponderada|le|les|moyenne|pond[ée]r[ée]e|den|dem|der|gewichteten?|het|een|gewogen|gemiddelde) )*$/u;
+  const gradeMath = (q) => GRADES.test(q) && [...q.matchAll(new RegExp(ASK.source, 'giu'))].every((m) => {
+    const tail = q.slice(m.index + m[0].length).trimStart(), target = GRADES.exec(tail);
+    if (target && GRADE_PREFIX.test(tail.slice(0, target.index))) return true;
+    // Also allow an explicit heading such as "My homework average: calculate ...".
+    const before = q.slice(0, m.index), prior = [...before.matchAll(new RegExp(GRADES.source, 'giu'))].at(-1);
+    return !!prior && /^[\s:;,]*$/.test(before.slice(prior.index + prior[0].length));
+  });
+  const gradedWork = (q) => PROBLEM.test(q) || NUMBERED.test(q) || ((SOLVING.test(q) || (ASSESSED.test(q) && ASK.test(q))) && !gradeMath(q));
   // Reminder vocabulary; the affirmative clause checks below decide whether it is a request.
   const LATER = phrases(['remind\\p{L}*', 'reminders?', 'let me know', 'tell me (?:when|if)', 'warn me', 'alert\\p{L}*', 'notify', 'ping me', 'wake', 'watch\\p{L}*', 'keep an eye', 'check (?:back|again)', 'monitor\\p{L}*', 'cancel\\p{L}*', 'stop (?:watching|reminding)',
     'recu[ée]rd(?:a|ame|amelo|ales|o)\\p{L}*', 'recordatorios?', 'av[ií]sa\\p{L}*', 'vigila\\p{L}*', 'cancela\\p{L}*', 'lembr\\p{L}*', 'lembretes?', 'me avis\\p{L}*', 'monitor\\p{L}*',
