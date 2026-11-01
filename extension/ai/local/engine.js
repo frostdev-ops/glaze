@@ -21,6 +21,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
   const SLOT = 256; // bytes per op's uniforms (minUniformBufferOffsetAlignment)
   const CAP = 2 ** 30; // bytes per weight buffer
   const up = (n, a) => Math.ceil(n / a) * a;
+  const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
   // ---- pure parts --------------------------------------------------------------------------------------------------------
   // `//#if A || B && !C`, `//#else`, `//#endif` lines keep or drop the lines between them.
@@ -589,8 +590,9 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       // embeds: [{ at, tokens, buffer }]: the rows at positions at .. at + tokens − 1 of this feed come from buffer (a
       // GPUBuffer on this device with COPY_SRC, tokens × embedding_length f32, as a vision encoder writes them) instead of the
       // token embedding: one ordinary position each, causal.
-      // step: at most this many tokens a submission (≤ chunk); pace: after each submission's work is done, awaited before the
-      // next (a low-priority feed lets the page paint and a cancel land between small steps).
+      // step: at most this many tokens a submission (≤ chunk), or a function giving it before each; pace(ms, tokens): after
+      // each submission's work is done (ms: from its submit until then, for that many tokens), awaited before the next (a low-priority feed lets the
+      // page paint and a cancel land between small steps, and sizes the next step from this one's time).
       const forward = async (tokens, { logits = 'last', argmax = false, topK: k = 0, onRows, profile = false, signal, embeds = [], step = chunk, pace = null } = {}) => {
         if (life.closed()) fail('session destroyed');
         if (lost) fail(`device lost: ${lost.message}`);
@@ -599,9 +601,9 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         if (pos + tokens.length > ctx) fail(`context of ${ctx} positions is full`);
         for (const id of tokens) if (!Number.isInteger(id) || id < 0 || id >= V) fail(`token ${id}`);
         if (!Number.isInteger(k) || k < 0 || k > 64) fail('topK: 0 or an integer from 1 to 64');
-        if (!Number.isInteger(step) || step < 1) fail('step: a positive integer');
+        const size = () => { const n = typeof step === 'function' ? step() : step; if (!Number.isInteger(n) || n < 1) fail('step: a positive integer'); return Math.min(n, chunk); };
+        if (typeof step !== 'function') size();
         if (pace !== null && typeof pace !== 'function') fail('pace: a function');
-        const per = Math.min(step, chunk);
         for (const e of embeds) {
           if (!Number.isInteger(e?.at) || !Number.isInteger(e.tokens) || e.at < 0 || e.tokens < 1 || e.at + e.tokens > tokens.length) fail('embeds: at and tokens inside the feed');
           if (!(e.buffer instanceof GPUBuffer) || e.buffer.size < e.tokens * E * 4 || !(e.buffer.usage & S.COPY_SRC)) fail(`embeds: a GPUBuffer with COPY_SRC of at least ${E * 4} bytes a token`);
@@ -611,7 +613,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         try {
           const rows = logits === 'all' && !onRows ? new Float32Array(tokens.length * V) : null;
           let res = { logits: null, id: null, top: null };
-          for (let i = 0; i < tokens.length; i += per) {
+          for (let i = 0, per = size(); i < tokens.length; i += per, per = size()) {
             if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
             if (lost) fail(`device lost: ${lost.message}`, 'lost');
             const part = tokens.slice(i, i + per), T = part.length, lastChunk = i + per >= tokens.length;
@@ -647,11 +649,13 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
               pass.end();
             }
             device.queue.submit([enc.finish()]);
+            const sent = now();
             pos += T;
             if (times) (res.profile ||= []).push(...await times());
             // With a signal, each chunk's work finishes before the next is checked: a cancel takes effect within a chunk.
-            if ((signal || pace) && !lastChunk) await device.queue.onSubmittedWorkDone();
-            if (pace && !lastChunk) await pace();
+            // A paced feed waits after its last chunk too: the next submission (a decode, the next feed) starts on an idle GPU.
+            if (pace || (signal && !lastChunk)) await device.queue.onSubmittedWorkDone();
+            if (pace) await pace(now() - sent, T);
             if (logits === 'all') {
               const got = new Float32Array(await read(all, 0, T * V * 4));
               if (onRows) onRows(i, got, T); else rows.set(got, i * V);

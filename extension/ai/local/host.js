@@ -16,9 +16,9 @@
 //   (the history, while the student types); a run arriving stops a warm-up between steps and keeps what it read. After a
 //   think run, the host reads the answer back as the next request will hold it (the turn's empty think block, the answer,
 //   the end token) while nothing else waits. window: the engine's room grows to it, up to LIMIT.most; without one,
-//   LIMIT.context. priority 'low' (and writer.complete's task token): the prompt goes in steps of LIMIT.step tokens, each
-//   finished on the GPU and followed by a yield, and decode yields between tokens, so typing paints and a cancel lands
-//   within a step.
+//   LIMIT.context. priority 'low' (and writer.complete's task token): the prompt goes in steps of about LIMIT.busy ms of GPU
+//   work each (sized from the last), each finished and followed by a yield, and decode yields between tokens, so typing
+//   paints and a cancel lands within a step.
 //   tools [{ name, parameters }] (with schema; ai/tasks/agent-tools.js constraint()): the answer is either the schema's
 //   JSON or one native call to a listed tool, held by the grammar (grammar.js compile's tools). sources { [name]: text }
 //   (with schema; providers/local.js spans): the texts its span strings are held to (grammar.js compile's sources).
@@ -46,7 +46,7 @@
 // The grammar's mask allows the end token only once the JSON is whole, so a run stops at the end token as any other.
 // Classic script; node exports (create), and in a Worker it starts itself.
 var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
-  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, most: 131072, first: 8192, step: 48, background: 128, spacing: 2048, rate: 16, answer: 256, spans: 2 };
+  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, most: 131072, first: 8192, step: 8, busy: 25, background: 128, spacing: 2048, rate: 16, answer: 256, spans: 2 };
   // What the Worker loads, in order, beside this file: required ones throw at its start; optional ones until they ship.
   const IMPORTS = Object.freeze({ required: Object.freeze(['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', '../text.js', 'grammar.js', 'updates.js']),
     optional: Object.freeze(['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'ladder.js']) });
@@ -356,10 +356,16 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         if (m.tools !== undefined && !m.schema) throw fail('request-rejected', 'unsupported');
         const grammar = m.schema ? matcher(job, m.schema, m.tools, m.sources) : null;
         if (grows) await model.reserve(input + (close?.length || 0) + (think?.budget || 0) + answer, room).catch((e) => { throw e?.reason === 'memory' ? fail('provider-unavailable', 'hardware') : e; });
-        // Low priority (writer.complete, or the request says so): small steps, each done on the GPU and followed by a yield.
+        // Low priority (writer.complete, or the request says so): small steps, each done on the GPU and followed by a yield,
+        // the first LIMIT.step tokens and each next sized to take about LIMIT.busy ms from the last one's time.
         const low = m.priority === 'low' || head.includes(tok.id('<|gz_task:writer.complete|>'));
         const yieldNow = () => new Promise((r) => later(r, 0));
-        const pacing = low ? { step: LIMIT.step, pace: yieldNow } : {};
+        let steps = LIMIT.step;
+        const pacing = !low ? {} : { step: () => steps, pace: async (ms, tokens) => {
+          // From this step's ms a token; at most four times the last step, so one slow reading can't stall a frame.
+          if (ms > 0 && tokens > 0) steps = Math.max(1, Math.min(512, 4 * steps, Math.floor(LIMIT.busy * tokens / ms)));
+          await yieldNow();
+        } };
         const read = await prefix(job, head, signal, pacing);
         const ids = keeps ? [...head, ...rest] : null;
         let cached = 0;
