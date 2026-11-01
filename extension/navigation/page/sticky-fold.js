@@ -53,7 +53,7 @@ var GZ_STICKY_FOLD = globalThis.GZ_STICKY_FOLD || (() => {
   const off = () => {
     cancelAnimationFrame(frame); frame = 0;
     if (listening) { document.removeEventListener('scroll', later, true); globalThis.removeEventListener('resize', resized); }
-    listening = false;
+    listening = false; place = new WeakMap();
     for (const [sel] of BANDS) for (const band of document.querySelectorAll(sel)) fold(band, false);
   };
   const sync = () => {
