@@ -37,7 +37,7 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
   // COURSE_TOTAL of all, so another student's on this device, or another school's, stay for them.
   const COURSE_MAX = 48, COURSE_TOTAL = 384;
   // filled's per-student marks: '<board> <site>/<student id>', the newest FILLED_MARKS.
-  const FILLED_MARK = /^(cdash|dash) (https:\/\/[a-z0-9.-]+(:\d+)?|http:\/\/localhost(:\d+)?)\/(_\d+_\d+|\d{1,20})$/, FILLED_MARKS = 16;
+  const FILLED_MARK = /^(cdash|dash) (https:\/\/[a-z0-9.-]+(:\d+)?|http:\/\/localhost(:\d+)?)\/(_\d+_\d+|\d{1,20})$/, FILLED_MARKS = 64;
   // A course card's tile: course:<site>/<course id>, Ultra's _1_1 ids or Canvas's numbers (canvas). Sites are https, but
   // for a development build's local Canvas (http://localhost, which a store build never runs on).
   const course = (key) => {
