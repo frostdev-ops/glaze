@@ -1,4 +1,4 @@
-// Ask Glaze (docs/ai-harness.md "Ask Glaze"), in the worker: the student asks in a panel over the page (ai/page/ask.js) and
+// Ask Rime (docs/ai-harness.md "Ask Rime"), Glaze's assistant, in the worker: the student asks in a panel over the page (ai/page/ask.js) and
 // Glaze either helps with their coursework (study.help, which never hands over the answer) or answers from their own
 // records with Agents' tools (agent.tools), one tool call a turn.
 //   route(question, { attempt, locale }) → { task: 'study.help', subject } | { task: 'agent.tools', tools }: agent.tools only
@@ -26,7 +26,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const AT = () => (typeof GZ_AI_TASK_AGENT_TOOLS !== 'undefined' ? GZ_AI_TASK_AGENT_TOOLS : require('./tasks/agent-tools.js'));
   const SH = () => (typeof GZ_AI_TASK_STUDY_HELP !== 'undefined' ? GZ_AI_TASK_STUDY_HELP : require('./tasks/study-help.js'));
   const CALLS = () => (typeof GZ_MCP_CALLS !== 'undefined' ? GZ_MCP_CALLS : require('../agents/calls.js'));
-  const FEATURE = 'ask', APP = 'Ask Glaze';
+  const FEATURE = 'ask', APP = 'Ask Rime';
   // question: agent.tools' own; attempt: study.help's; tools: offered at once (training offered three to six, and Glaze's own
   // model's 4,096-token window can't hold all twelve); material: what an agent answer is measured against.
   const LIMIT = { question: 2000, attempt: 12000, tools: 6, material: 24000, sender: 5000 };

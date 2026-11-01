@@ -1,4 +1,4 @@
-// Ask Glaze (ai/ask.js): the routing rule between study.help and agent.tools, the step loop over Agents' tools (six steps at
+// Ask Rime (ai/ask.js): the routing rule between study.help and agent.tools, the step loop over Agents' tools (six steps at
 // most, the student's approval for the one write, a decline that stops), and the panel's port: model runs over the AI
 // broker's own protocol (a stand-in broker here), tool calls through the real agents/calls.js with stand-in tools and
 // approval window, and the study rule held on the agent path too.
@@ -180,7 +180,7 @@ test('port: an agent question runs its steps through agents/calls.js; results as
   assert.deepEqual(third.input.steps[1].result, { account: TODO.account, at: null, ok: true, marked: '1' });
   assert.equal(second.input.zone, 'UTC');
   assert.equal(second.input.now, 1e12);
-  assert.deepEqual(h.seen.asks.map((a) => [a.kind, a.view.summary, a.view.app.name]), [['action', 'Mark item 1 done.', 'Ask Glaze']]);
+  assert.deepEqual(h.seen.asks.map((a) => [a.kind, a.view.summary, a.view.app.name]), [['action', 'Mark item 1 done.', 'Ask Rime']]);
   assert.deepEqual(h.wrote, [{ type: 'assignment', id: '1' }], 'run once, after the yes');
 });
 

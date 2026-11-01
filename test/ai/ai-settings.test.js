@@ -156,7 +156,7 @@ test('the switch, the mode and the models are kept in storage.local ai, cleaned;
   assert.ok(shown(p.$('ai-connection')) && shown(p.$('ai-features')) && shown(p.$('ai-mode')));
   assert.equal(p.$('ai-mode-simple').checked, true);
   // The overall model first, then each feature: the gray text, Feedback, then the rest.
-  assert.deepEqual(p.$('ai-feature-list').children.map((w) => text(w.children[0].children[0])), ['Default', 'Tab completion', 'Feedback', 'Syllabus import', 'Ask Glaze']);
+  assert.deepEqual(p.$('ai-feature-list').children.map((w) => text(w.children[0].children[0])), ['Default', 'Tab completion', 'Feedback', 'Syllabus import', 'Ask Rime']);
   assert.equal(p.$('ai-feature-syllabus').checked, false, 'off until the student turns it on');
   p.$('ai-feature-syllabus').focus();
   await p.change('ai-feature-syllabus', true);

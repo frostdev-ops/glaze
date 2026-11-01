@@ -29,7 +29,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
   // An address, a host or a reference kept in its own direction inside a sentence (right-to-left pages).
   const iso = (s) => `⁨${s}⁩`;
 
-  const featureName = (id, t) => ({ syllabus: t('Syllabus import'), completion: t('Tab completion'), writing: t('Feedback'), ask: t('Ask Glaze') }[id] || id);
+  const featureName = (id, t) => ({ syllabus: t('Syllabus import'), completion: t('Tab completion'), writing: t('Feedback'), ask: t('Ask Rime') }[id] || id);
   // A connection's name: a provider's, an endpoint's own (names: the kept connections), the model on this device's.
   const providerName = (id, t, names = {}) => (CARDS[id] ? CARDS[id][0] : id === DEVICE ? t('Chrome on-device AI') : id === APPLE ? t('Apple Intelligence') : id === OWN ? t('Glaze on-device AI')
     : typeof names[id]?.name === 'string' ? names[id].name : t('Endpoint'));

@@ -177,15 +177,15 @@ collection, because agent access passes what Glaze read from your school's site 
 the same Firefox prompt as `nativeMessaging`, in the click that turns Agents on, and gives both back when you turn it
 off.
 
-## Ask Glaze
+## Ask Rime
 
-Ask Glaze is off by default; **Settings → AI → Ask Glaze** turns it on, with AI on and a model chosen. It opens from the
+Ask Rime is off by default; **Settings → AI → Ask Rime** turns it on, with AI on and a model chosen. It opens from the
 command palette on Canvas and Blackboard, only for your own click or key. Your question, and your work when you add it,
-go to the model you chose for Ask Glaze (its own, else your overall model), as every AI feature's text does (AI reading,
+go to the model you chose for Ask Rime (its own, else your overall model), as every AI feature's text does (AI reading,
 below): with a model on this device nothing leaves your computer; with a provider or an endpoint it goes to that host
 only. For a question about your own courses, Glaze reads what it needs with the same tools as Agents (your to-dos and
 schedule, grades, assignments and rubrics, Writer documents, as Glaze keeps them on this device, refreshed through an
-open tab of your school's site), and sends what it read to that model to answer. Ask Glaze's switch is that tool access:
+open tab of your school's site), and sends what it read to that model to answer. Ask Rime's switch is that tool access:
 it needs no Agents pairing and doesn't turn agent access on. Its one change, marking a to-do done, waits for your OK in
 Glaze's window, worded by Glaze, never by the model. Nothing of the conversation is kept: it goes when the page or the
 panel closes. While the panel is open, what it shows is part of the page, as anything on screen is. Each model request leaves one row of metadata in the recent AI calls (feature, provider, model, time, size,

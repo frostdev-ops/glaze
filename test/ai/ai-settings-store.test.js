@@ -97,7 +97,7 @@ test('every preset is https, at its own host, with a key page', () => {
   assert.equal(A.kind('custom-1'), 'custom');
 });
 
-test('Ask Glaze is a feature like the others: last, off until the student turns it on, its own model or the overall one', () => {
+test('Ask Rime is a feature like the others: last, off until the student turns it on, its own model or the overall one', () => {
   assert.deepEqual(A.FEATURES, ['syllabus', 'completion', 'writing', 'ask']);
   assert.equal(A.DEFAULTS.features.ask, false);
   assert.equal(A.clean({ features: { ask: 'yes' } }).features.ask, false);

@@ -2539,7 +2539,7 @@ const loadInto = (m, sender, files, reply) => {
 const aiFiles = () => importScripts('../writer/writer-sources.js', '../writer/writer-cite.js', '../ai/schema.js', '../ai/request.js', '../ai/stream.js', '../ai/failure.js', '../ai/endpoint.js', '../ai/text.js', '../ai/visual-cache.js', '../ai/models.js', '../ai/providers.js', '../ai/providers/openai.js', '../ai/providers/device.js', '../ai/providers/apple.js', '../ai/local/store.js', '../ai/local/format.js', '../ai/local/link.js', '../ai/providers/local.js', '../ai/tools.js', '../ai/loop.js', '../ai/task.js', '../ai/tasks/syllabus-read.js', '../ai/tasks/writer-context.js', '../ai/tasks/writer-complete.js', '../ai/tasks/writer-review.js', '../ai/tasks/writer-image.js', '../ai/tasks/writer-feedback.js', '../ai/tasks/writer-outline.js', '../ai/tasks/writer-requirements.js', '../ai/tasks/writer-cite.js', '../ai/tasks/writer-decide.js', '../ai/tasks/wording.js', '../ai/tasks/study-help.js', '../ai/tasks/agent-tools.js', '../ai/settings.js', '../ai/broker.js', '../ai/ask.js');
 globalThis.addEventListener?.('install', aiFiles);
 const ai = () => { if (typeof GZ_AI_BROKER === 'undefined') aiFiles(); return GZ_AI_BROKER; };
-// Ask Glaze (ai/ask.js): its panel's port, from the AI port's senders. Its model runs go through the broker as this sender's;
+// Ask Rime (ai/ask.js): its panel's port, from the AI port's senders. Its model runs go through the broker as this sender's;
 // its tool calls through agents/calls.js with Agents' tools and approval window (mcpCore: the native link stays off).
 chrome.runtime.onConnect.addListener((p) => {
   if (p.name !== 'glaze:ask') return;

@@ -1,4 +1,4 @@
-// Ask Glaze's panel (ai/page/ask.js) on a stand-in page: it opens and asks only for the student's own click or key, sends the
+// Ask Rime's panel (ai/page/ask.js) on a stand-in page: it opens and asks only for the student's own click or key, sends the
 // question on the port 'glaze:ask' in the page's language, shows the answer as text, says why a run didn't finish, closes
 // when Ask or AI goes off, and the command palette offers it only while AI and Ask are on.
 const test = require('node:test');
@@ -112,9 +112,9 @@ test('your work goes with the question as the attempt; an agent answer and a dec
   assert.equal(P.posted.find((m) => m.op === 'ask').attempt, '3x = 25');
   P.ask('Mark my lab report done'); await settle();
   P.ask('What is due?'); await settle();
-  assert.equal(P.say(), 'Choose a model for Ask Glaze in Settings → AI.');
+  assert.equal(P.say(), 'Choose a model for Ask Rime in Settings → AI.');
   P.ask('What is due?'); await settle();
-  assert.equal(P.say(), 'Glaze couldn’t answer that. Try asking another way.');
+  assert.equal(P.say(), 'Rime couldn’t answer that. Try asking another way.');
   assert.deepEqual(P.turns().filter(([c]) => c === 'gz-ask-a').map(([, t]) => t), ['Lab report is due Friday.', 'Nothing was changed.']);
 });
 
@@ -139,10 +139,10 @@ test('Stop cancels the run in flight; Ask or AI turned off closes the panel and 
   assert.equal(P.ports.at(-1).hungUp, true);
 });
 
-test('the command palette offers Ask Glaze only while AI and Ask are on, and opens it only for the student\'s own choice', () => {
+test('the command palette offers Ask Rime only while AI and Ask are on, and opens it only for the student\'s own choice', () => {
   const src = read('navigation/page/palette.js');
   assert.match(src, /askOn = r\?\.ai\?\.on === true && r\.ai\.features\?\.ask === true/);
-  assert.match(src, /\.\.\.\(askOn \? \[\{ label: t\('Ask Glaze'\), hint: 'Glaze', group: 'Glaze', run: \(e\) => e\?\.isTrusted && need\('ai\/page\/ask\.js'/);
+  assert.match(src, /\.\.\.\(askOn \? \[\{ label: t\('Ask Rime'\), hint: 'Glaze', group: 'Glaze', run: \(e\) => e\?\.isTrusted && need\('ai\/page\/ask\.js'/);
   assert.match(src, /await Promise\.all\(\[keeping, asking\]\)/, 'read before the commands are built');
   const loadable = read('background/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1];
   assert.ok(loadable.includes("'ai/page/ask.js'"));
@@ -195,7 +195,7 @@ test('an opening status that arrives after a question cannot replace its result 
   P.ports[0].answer({ id: status.id, type: 'status', ready: false, why: 'size' });
   await opened;
   assert.equal(P.say(), message);
-  assert.equal(message, 'Choose a model for Ask Glaze in Settings → AI.');
+  assert.equal(message, 'Choose a model for Ask Rime in Settings → AI.');
 });
 
 test('a script-requested form submit cannot spend another page click’s user activation', async () => {

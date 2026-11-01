@@ -254,7 +254,7 @@ for (const kind of ['hint', 'concept']) test(`a short ${kind} still cannot answe
   assert.equal(why(inp(GATSBY), kind, 'Good. What does Gatsby want most?'), '');
 });
 
-// Ask Glaze (ai/ask.js) holds an answer about the student's own records to the same rule: hands() is why()'s answer-giving
+// Ask Rime (ai/ask.js) holds an answer about the student's own records to the same rule: hands() is why()'s answer-giving
 // rules for one piece of text (the answer, their problem solved, their code written, wording offered), without the rules
 // about how a tutor speaks, which a sentence about a due date would break.
 test('hands(): the answer-giving rules alone, for a text that is not a tutor\'s reply', () => {

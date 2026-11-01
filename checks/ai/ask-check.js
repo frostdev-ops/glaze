@@ -1,8 +1,8 @@
-// Ask Glaze in a real Chromium (ai/page/ask.js, ai/ask.js), headless, in a staged copy of the extension whose worker carries a
+// Ask Rime in a real Chromium (ai/page/ask.js, ai/ask.js), headless, in a staged copy of the extension whose worker carries a
 // stub engine: a provider registered under the id 'stub' that answers each task from the check's script, so the real broker,
 // the real tasks' checks, the step loop, agents/calls.js with Agents' real tools and Glaze's approval window all run (the
 // copy's worker is a new file, the checkout's is untouched). A synthetic Canvas school under an invented origin, every
-// other request aborted and DNS resolving nowhere. Flows: with Ask off the palette has no Ask Glaze; turned on, the palette
+// other request aborted and DNS resolving nowhere. Flows: with Ask off the palette has no Ask Rime; turned on, the palette
 // opens the panel; a tutoring reply; an agent read of the to-do list; marking a to-do done with Allow, and with Don't allow;
 // Ask turned off closes the panel and takes the palette's row away. Shots: the panel at 1280 and 320 px, light and dark.
 //   glaze-remote -e TZ=UTC -o <evidence dir> -- node checks/ai/ask-check.js /out
@@ -122,7 +122,7 @@ const AI = (ask) => ({ on: true, model: { use: 'custom-1', model: 'stub' }, feat
     page.on('pageerror', (e) => errors.push(`page: ${e.message}`));
     await page.goto(`${CANVAS}/`);
     await until(() => worker.evaluate((u) => glazeIn(u), page.url().split('#')[0]).then((r) => r?.on), 'Glaze on the page');
-    // The command palette's rows for a search, once its commands have loaded, as the student sees them: the Ask Glaze rows.
+    // The command palette's rows for a search, once its commands have loaded, as the student sees them: the Ask Rime rows.
     const palette = async (query) => {
       await page.bringToFront();
       await page.keyboard.press(`${MOD}+k`);
@@ -130,7 +130,7 @@ const AI = (ask) => ({ on: true, model: { use: 'custom-1', model: 'stub' }, feat
       await input.waitFor({ state: 'visible' });
       await input.fill(query);
       await until(() => page.evaluate(() => { const l = [...document.querySelectorAll('#gz-cmd li')]; return l.length > 0 && !l.some((x) => x.classList.contains('gz-cmd-empty') && /Loading/.test(x.textContent)); }), 'the palette\'s rows');
-      return page.locator('#gz-cmd li[role="option"]').filter({ has: page.locator('span', { hasText: /^Ask Glaze$/ }) });
+      return page.locator('#gz-cmd li[role="option"]').filter({ has: page.locator('span', { hasText: /^Ask Rime$/ }) });
     };
     const closePalette = async () => { if (await page.locator('#gz-cmd input').isVisible().catch(() => false)) await page.keyboard.press('Escape'); };
     const answers = () => page.locator('#gz-ask .gz-ask-a');
@@ -152,8 +152,8 @@ const AI = (ask) => ({ on: true, model: { use: 'custom-1', model: 'stub' }, feat
       return p;
     };
 
-    await check('with Ask off, the palette offers no Ask Glaze', async () => {
-      const rows = await palette('Ask Glaze');
+    await check('with Ask off, the palette offers no Ask Rime', async () => {
+      const rows = await palette('Ask Rime');
       const count = await rows.count();
       await closePalette();
       assert.equal(count, 0);
@@ -162,13 +162,13 @@ const AI = (ask) => ({ on: true, model: { use: 'custom-1', model: 'stub' }, feat
     });
 
     await setAi(AI(true));
-    await check('turned on, the palette\'s Ask Glaze opens the panel, its question focused', async () => {
-      const rows = await until(async () => { const r = await palette('Ask Glaze'); if (await r.count()) return r; await closePalette(); return null; }, 'the Ask Glaze row');
+    await check('turned on, the palette\'s Ask Rime opens the panel, its question focused', async () => {
+      const rows = await until(async () => { const r = await palette('Ask Rime'); if (await r.count()) return r; await closePalette(); return null; }, 'the Ask Rime row');
       await rows.first().click();
       await page.locator('#gz-ask[open]').waitFor();
       await until(() => page.evaluate(() => document.activeElement?.id === 'gz-ask-q'), 'focus in the question');
       const name = await page.evaluate(() => document.getElementById(document.getElementById('gz-ask').getAttribute('aria-labelledby'))?.textContent);
-      assert.equal(name, 'Ask Glaze');
+      assert.equal(name, 'Ask Rime');
       return { name };
     });
 
@@ -246,7 +246,7 @@ const AI = (ask) => ({ on: true, model: { use: 'custom-1', model: 'stub' }, feat
     await check('Ask turned off closes the panel and takes the palette\'s row away', async () => {
       await setAi(AI(false));
       await until(async () => (await page.locator('#gz-ask').count()) === 0, 'the panel closes');
-      const rows = await palette('Ask Glaze');
+      const rows = await palette('Ask Rime');
       const count = await rows.count();
       await closePalette();
       assert.equal(count, 0);

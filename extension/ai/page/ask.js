@@ -1,5 +1,5 @@
-// Ask Glaze's panel (docs/ai-harness.md "Ask Glaze"), loaded on demand on Canvas and Blackboard Ultra: the command palette's
-// "Ask Glaze" opens it (open({ event })) while AI and Ask are on (storage.local ai, ai/settings.js). A dialog over the page,
+// Ask Rime's panel (docs/ai-harness.md "Ask Rime"), loaded on demand on Canvas and Blackboard Ultra: the command palette's
+// "Ask Rime" opens it (open({ event })) while AI and Ask are on (storage.local ai, ai/settings.js). A dialog over the page,
 // as Notes and Insights are (core/page/apps.css #gz-ask). The worker (ai/ask.js, port 'glaze:ask') answers with study help
 // or from the student's own records, and Glaze's approval window asks before any change. It opens and asks only for the
 // student's own click or key (isTrusted; sending also needs the user activation a real click or key gives). What it shows
@@ -23,11 +23,11 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
   const focused = () => { let a = document.activeElement; while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement; return a; };
   // What each code the worker gives says (off and feature close the panel instead), each through t() as written.
   const said = (code) => {
-    if (code === 'setup') return t('Choose a model for Ask Glaze in Settings → AI.');
+    if (code === 'setup') return t('Choose a model for Ask Rime in Settings → AI.');
     if (code === 'permission') return t('Glaze can’t reach your AI provider. Check Settings → AI.');
     if (['busy', 'often'].includes(code)) return t('One question at a time. Try again in a moment.');
     if (['download', 'downloading', 'unavailable', 'provider-unavailable'].includes(code)) return t('The AI model isn’t ready. Check Settings → AI.');
-    if (['check', 'refusal', 'steps', 'invalid-response'].includes(code)) return t('Glaze couldn’t answer that. Try asking another way.');
+    if (['check', 'refusal', 'steps', 'invalid-response'].includes(code)) return t('Rime couldn’t answer that. Try asking another way.');
     if (code === 'size') return t('That question is too long.');
     return t('Something went wrong. Try again.');
   };
@@ -154,7 +154,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     log.setAttribute('role', 'log');
     log.setAttribute('aria-labelledby', 'gz-ask-title');
     box = make('dialog', { id: 'gz-ask' },
-      make('header', { className: 'gz-ask-head' }, make('h2', { id: 'gz-ask-title', tabIndex: -1, textContent: t('Ask Glaze') }), close),
+      make('header', { className: 'gz-ask-head' }, make('h2', { id: 'gz-ask-title', tabIndex: -1, textContent: t('Ask Rime') }), close),
       log, make('p', { className: 'gz-ask-say' }), form);
     box.querySelector('.gz-ask-say').setAttribute('role', 'status');
     box.setAttribute('aria-labelledby', 'gz-ask-title');

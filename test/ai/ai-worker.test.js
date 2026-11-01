@@ -120,14 +120,14 @@ test('a run from a page reaches only the connection\'s server, with the key, and
 
 // Waits on the state, a settle at a time, up to five seconds: a loaded runner takes longer than one settle.
 const until = async (w, done, ms = 5000) => { const end = Date.now() + ms; while (!done() && Date.now() < end) await w.settle(); };
-// Ask Glaze (ai/ask.js): its panel's port, from the same senders as the AI port's; its runs go through the broker as the
+// Ask Rime (ai/ask.js): its panel's port, from the same senders as the AI port's; its runs go through the broker as the
 // feature ask and its tool calls through Agents' tools, with agent access itself off.
 const askWorker = (fetch) => {
   const w = make(fetch);
   w.store.local.ai = { on: true, model: { use: 'main', model: 'gpt-x' }, features: { ask: true } };
   return w;
 };
-test('Ask Glaze\'s port: Glaze in a page of a site it runs on may ask; a quiz, a tool, another site may not', async () => {
+test('Ask Rime\'s port: Glaze in a page of a site it runs on may ask; a quiz, a tool, another site may not', async () => {
   const w = askWorker();
   live(w, lms());
   const { port, say } = w.connect('glaze:ask', lms());
@@ -146,7 +146,7 @@ test('Ask Glaze\'s port: Glaze in a page of a site it runs on may ask; a quiz, a
   }
 });
 
-test('Ask Glaze in the worker: a question\'s steps run through the broker and Agents\' tools, with agent access off', async () => {
+test('Ask Rime in the worker: a question\'s steps run through the broker and Agents\' tools, with agent access off', async () => {
   const replies = ['{"call":{"name":"todo_list","arguments":{}},"answer":null}', '{"call":null,"answer":{"text":"Glaze has nothing to show yet.","quotes":[]}}'];
   const sent = [];
   const w = askWorker(async (url, init) => {
@@ -210,7 +210,7 @@ test('Firefox\'s event page loads every file of the harness the worker would imp
   // files itself, and the worker never does.
   const host = ['local/host.js', 'local/offscreen.js', 'local/tokenizer.js', 'local/gguf.js', 'local/quant.js', 'local/reference.js', 'local/engine.js', 'local/grammar.js', 'local/ladder.js', 'local/vision-reference.js', 'local/vision.js'];
   for (const f of ['ai/local/store.js', 'ai/local/format.js', 'ai/local/link.js', 'ai/providers/local.js']) assert.ok(named.has(f), f);
-  // Ask Glaze runs study.help and agent.tools (ai/ask.js): the worker loads them with the harness. Its panel (ai/page/) runs
+  // Ask Rime runs study.help and agent.tools (ai/ask.js): the worker loads them with the harness. Its panel (ai/page/) runs
   // on the school's page, loaded on demand (background/background.js LOADABLE), never in the worker.
   for (const f of ['tasks/study-help.js', 'tasks/agent-tools.js', 'tasks/wording.js', 'ask.js']) assert.ok(named.has(`ai/${f}`), `${f} is the worker's`);
   const page = (f) => f.split(path.sep).join('/').startsWith('page/');

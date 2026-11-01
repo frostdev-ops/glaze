@@ -24,9 +24,9 @@ until the student has turned AI on, chosen a model for that feature and allowed 
 | `ai/task.js` | Task definitions and `run`. Tasks live in `ai/tasks/<id>.js`. |
 | `ai/tasks/syllabus-read.js` | `syllabus.read`: a syllabus's values as written, each with its quote; `planner/syllabus-ai.js` reads them with `planner/syllabus.js` and merges them into the import dialog's review. |
 | `ai/tasks/writer-*.js` | Glaze Writer's tasks (below); `writer-context.js` cleans the page's context and writes it as the request's reusable context. |
-| `ai/tasks/study-help.js`, `ai/tasks/agent-tools.js` | `study.help` and `agent.tools` (below), which Ask Glaze runs. `wording.js`: the wording-offer rules they share with Feedback. |
-| `ai/ask.js`, `ai/page/ask.js` | Ask Glaze (below): the routing rule, the step loop over Agents' tools and the panel's port in the worker; the panel on the school's page, loaded on demand. |
-| `ai/settings.js` | storage.local `ai`: `{ on, outline, sources, mode, model, models, tune, features }` (below), the providers Settings names (`PRESETS`), and `migrate` for an older store. Features: `syllabus`, `completion` (the writer's ghost text), `writing` (its review, feedback, requirements, citations and autocorrect calls), `ask` (Ask Glaze). |
+| `ai/tasks/study-help.js`, `ai/tasks/agent-tools.js` | `study.help` and `agent.tools` (below), which Ask Rime runs. `wording.js`: the wording-offer rules they share with Feedback. |
+| `ai/ask.js`, `ai/page/ask.js` | Ask Rime (below): the routing rule, the step loop over Agents' tools and the panel's port in the worker; the panel on the school's page, loaded on demand. |
+| `ai/settings.js` | storage.local `ai`: `{ on, outline, sources, mode, model, models, tune, features }` (below), the providers Settings names (`PRESETS`), and `migrate` for an older store. Features: `syllabus`, `completion` (the writer's ghost text), `writing` (its review, feedback, requirements, citations and autocorrect calls), `ask` (Ask Rime). |
 | `ai/broker.js` | The worker's broker: the port, admission, connections (IndexedDB), Settings' config messages. |
 
 ## Chrome's built-in model
@@ -137,7 +137,7 @@ assignment; confirm: insert a citation, apply a fix). `agents/writer.js` exposes
 
 ## Study help and agent tools
 
-Ask Glaze runs both (below); the worker loads them with the harness (`aiFiles`). Both have a token in `GLAZE_TOKENS` (ids
+Ask Rime runs both (below); the worker loads them with the harness (`aiFiles`). Both have a token in `GLAZE_TOKENS` (ids
 125047, 125048); `glaze-plans/lfm-tune/FORMAT-new-tasks.md` gives their training layouts.
 
 - `study.help`: help with a question about coursework that never gives the answer. Input `{ question, attempt?, subject
@@ -161,7 +161,7 @@ Ask Glaze runs both (below); the worker loads them with the harness (`aiFiles`).
   result value, the question or the time, preserving signs and the locale's number formatting. Single-character grades
   and scores are valid quotes when they are whole values. History accepts the checked call (including its derived `kind`)
   and normalizes it to `{ name, arguments }`. Unserializable or oversized results, results deeper than 12 levels and
-  clocks outside JavaScript's Date range are refused as input. Ask Glaze runs each call through Agents' call path and runs the task again
+  clocks outside JavaScript's Date range are refused as input. Ask Rime runs each call through Agents' call path and runs the task again
   with the step added (`rate.perMinute` 42: six questions of seven runs a minute in a tab). Glaze's model reads it in LFM3's
   own tool syntax (`layout`, `native`): `ai/local/format.js` writes a run's request in those turns (`fromRequest` reads
   build()'s request back into `layout()`'s parts), each earlier assistant turn opened by FORMAT v2's direct prefill and the
@@ -169,10 +169,12 @@ Ask Glaze runs both (below); the worker loads them with the harness (`aiFiles`).
   offered tool (`constraint()`), and the provider reads a native call back as the task's JSON. A stock model reads the
   harness's messages, held to the task's schema.
 
-## Ask Glaze
+## Ask Rime
 
-Settings → AI → Ask Glaze (`ask`, off by default, its own model or the overall one). The command palette on Canvas and
-Ultra offers **Ask Glaze** while AI and Ask are on; it opens a dialog over the page (`ai/page/ask.js`, loaded on demand;
+Rime is Glaze's assistant; its voice comes from the fine-tune alone, so no task's instructions name it. Internal ids keep
+`ask`: the feature, `#gz-ask`, the port `glaze:ask`. Settings → AI → Ask Rime (`ask`, off by default, its own model or the
+overall one). The command palette on Canvas and
+Ultra offers **Ask Rime** while AI and Ask are on; it opens a dialog over the page (`ai/page/ask.js`, loaded on demand;
 styles beside Insights' in `core/page/apps.css`) for the student's own click or key, and every control acts only on a
 trusted event, sending also on user activation. The question goes on the port `glaze:ask` (`background/background.js`,
 the AI port's sender rules) in the page's language; nothing is kept, and Ask or AI turned off closes it.
@@ -187,7 +189,7 @@ runs again; a seventh call ends it as `steps`. Model runs go to the broker over 
 with Agents' tools (`mcpCore`; the native link stays off): Ask's switch is the grant of Agents' groups, a result reaches
 the model as the tool gave it (calls.js's note, source and age left out, as agent.tools was trained), a failure as
 `{ ok: false, error }`, and the one write, `todo_mark_done`, waits for the student in Agents' approval window, with
-Glaze's own sentence for it; any answer but Allow ends the question with nothing changed and no further model run. The
+Glaze's own sentence for it (the window names the asker Ask Rime); any answer but Allow ends the question with nothing changed and no further model run. The
 sender is checked again before each call. An agent answer must also pass study.help's `hands()`, so no path hands over
 work. Port: `{ id, op: 'ask', question, attempt?, locale }`, `cancel`, `status` (the broker's for `ask`); events
 `route { task }`, `look`, `approve`, `keepalive` (a local run's and the approval window's), then `end` (`output`,
