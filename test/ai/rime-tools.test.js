@@ -150,7 +150,10 @@ test('places: Ultra and Moodle, from the paths Glaze already opens there', () =>
   const u = P.map({ site: 'ultra', url: 'https://lms.example.edu/ultra/courses/_101_1/outline/edit', courses: [{ id: '_101_1', name: 'BIO 1100: Biology I' }, { id: '42', name: 'not an Ultra id' }] });
   assert.equal(u.here, 'course:_101_1');
   assert.deepEqual(u.places.map((p) => [p.place, new URL(p.url || 'x:/').pathname]), [['courses', '/ultra/course'], ['calendar', '/ultra/calendar'], ['grades', '/ultra/grades'], ['stream', '/ultra/stream'],
-    ['settings', '/'], ['course:_101_1', '/ultra/courses/_101_1/outline'], ['course:_101_1/announcements', '/ultra/courses/_101_1/announcements']]);
+    ['settings', '/'], ['course:_101_1', '/ultra/courses/_101_1/outline'], ['course:_101_1/grades', '/ultra/courses/_101_1/grades'], ['course:_101_1/announcements', '/ultra/courses/_101_1/announcements']]);
+  // Every one of them is a link in Ultra's own course navigation (test/fixtures/ultra-instant-outline.html).
+  const html = fs.readFileSync(path.join(ROOT, 'test/fixtures/ultra-instant-outline.html'), 'utf8');
+  for (const p of u.places.filter((x) => x.course)) assert.ok(html.includes(`href="${new URL(p.url).pathname}"`), p.place);
   const m = P.map({ site: 'moodle', url: 'http://localhost:8081/course/view.php?id=16', courses: [{ id: '16', name: 'Biology' }] });
   assert.equal(m.here, 'course:16');
   assert.equal(m.places.find((p) => p.place === 'course:16/grades').url, 'http://localhost:8081/grade/report/user/index.php?id=16');
