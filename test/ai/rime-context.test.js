@@ -155,8 +155,8 @@ test('within one run, results the model has used become digests when the next re
   const big = { account: ACC, items: Array.from({ length: 30 }, (_, i) => ({ id: String(i + 1), title: `Item ${i + 1}`, course: 'BIO 1100', due: C.NOW + i * 36e5, url: 'x'.repeat(200) })) };
   const h = harness({ count: (m) => ({ used: (m.input.steps?.length || 0) >= 2 ? 5000 : 1000, window: 4096, reserve: 768, exact: true }),
     read: async () => big,
-    script: { 'agent.tools': [call('wakes_list', {}), call('places_list', {}), said('BIO 1100.', ['BIO 1100'])] } });
-  h.say({ id: 1, op: 'ask', question: "What's due this week?" });
+    script: { 'agent.tools': [call('places_list', {}), call('wakes_list', {}), said('BIO 1100.', ['BIO 1100'])] } });
+  h.say({ id: 1, op: 'ask', question: "What's due this week?", site: 'canvas' });
   await settle(120);
   const last = h.seen.runs.filter((r) => r.task === 'agent.tools').at(-1).input;
   assert.ok(last.steps[0].result.digest, JSON.stringify(last.steps[0].result).slice(0, 200));
@@ -175,7 +175,7 @@ test('digests retain the item identity and submission facts used by tool and mis
       if (runs === 2) return call('wakes_list', {});
       const inp = A.task.input(raw);
       assert.equal(A.why(said('Nothing is due; Lab report.', ['Lab report']), inp), 'missed');
-      assert.equal(A.why(call('monitor_create', { watch: 'due', type: 'assignment', id: '181' }), inp), '');
+      assert.equal(A.why({ call: { name: 'monitor_create', arguments: { watch: 'due', type: 'assignment', id: '181' } }, answer: null }, inp), '');
       return said('Lab report.', ['Lab report']);
     } });
 });
@@ -190,6 +190,19 @@ test('compacting an older scalar result retains its calculation value', async ()
       if (runs === 2) return call('wakes_list', {});
       assert.equal(A.why(said('5.15 km.', ['5.15']), A.task.input(raw)), '');
       return said('5.15 km.', ['5.15']);
+    } });
+});
+
+test('a digest still guards against missed work beyond its retained item titles', async () => {
+  let runs = 0;
+  await K.episode({ question: 'What is due?', tools: [...A.NAMES], locale: 'en', now: C.NOW, zone: 'UTC', first: true,
+    measure: async () => ({ used: 5000, window: 4096, reserve: 768 }),
+    call: async ({ name }) => ({ result: name === 'todo_list' ? { items: Array.from({ length: 13 }, (_, i) => ({ title: `Lab ${i}`, submitted: i !== 12 })) } : { items: [] } }),
+    run: async (_task, raw) => {
+      if (++runs === 1) return call('todo_list', {});
+      if (runs === 2) return call('wakes_list', {});
+      assert.equal(A.why(said('Nothing is due; Lab 0.', ['Lab 0']), A.task.input(raw)), 'missed');
+      return said('Lab 0.', ['Lab 0']);
     } });
 });
 
