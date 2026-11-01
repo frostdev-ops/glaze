@@ -19,7 +19,8 @@ const GR = require('../../extension/agents/tools-grades.js');
 const C = require('../helpers/mcp-caches.cjs');
 
 const ROOT = path.join(__dirname, '..', '..');
-const OWN = ['run_js', 'places_list', 'place_open', 'page_highlight', 'wake_create', 'monitor_create', 'wakes_list', 'wake_cancel'];
+const OWN = ['run_js', 'places_list', 'place_open', 'page_highlight', 'wake_create', 'monitor_create', 'wakes_list', 'wake_cancel',
+  'announcements_list', 'announcement_read', 'content_list', 'content_read', 'syllabus_read', 'discussions_list', 'discussion_read'];
 const NOW = Date.UTC(2026, 9, 30, 19, 5); // Friday 2026-10-30 14:05 in Chicago
 const ZONE = 'America/Chicago';
 const step = (name, args, result) => ({ call: { name, arguments: args }, result });
@@ -31,9 +32,10 @@ test('Rime\'s own tools are agent.tools tools with the kinds and schemas Glaze s
   assert.deepEqual(A.OWN, OWN);
   for (const n of OWN) assert.ok(A.NAMES.includes(n), n);
   const kinds = Object.fromEntries(A.SPECS.filter((t) => OWN.includes(t.name)).map((t) => [t.name, t.kind]));
-  assert.deepEqual(kinds, { run_js: 'read', places_list: 'read', place_open: 'read', page_highlight: 'read', wake_create: 'confirm', monitor_create: 'confirm', wakes_list: 'read', wake_cancel: 'confirm' });
+  assert.deepEqual(kinds, { run_js: 'read', places_list: 'read', place_open: 'read', page_highlight: 'read', wake_create: 'confirm', monitor_create: 'confirm', wakes_list: 'read', wake_cancel: 'confirm',
+    announcements_list: 'read', announcement_read: 'read', content_list: 'read', content_read: 'read', syllabus_read: 'read', discussions_list: 'read', discussion_read: 'read' });
   const env = { local: C.area({}), alarms: null, read: async () => null, on: async () => true, now: () => NOW };
-  const defs = [...J.tools(), ...P.tools(), ...W.tools(env)];
+  const defs = [...J.tools(), ...P.tools(), ...W.tools(env), ...require('../../extension/ai/agent/school.js').tools()];
   assert.deepEqual(defs.map((d) => d.name).sort(), [...OWN].sort());
   for (const d of defs) {
     const t = TL.define(d), s = A.SPECS.find((x) => x.name === d.name);
