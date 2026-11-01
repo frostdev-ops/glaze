@@ -97,7 +97,12 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       return r;
     };
     const forget = () => { epoch++; held = null; };
-    const drop = async (token) => { if (held?.token === token) held = null; await ask({ type: 'google.drop', token }); };
+    const drop = async (token) => {
+      // A mint already awaiting the handler can still answer with this refused token after its replacement arrives.
+      epoch++;
+      if (held?.token === token) held = null;
+      await ask({ type: 'google.drop', token });
+    };
     const disconnect = async () => {
       forget();
       const r = await ask({ type: 'google.disconnect' });
