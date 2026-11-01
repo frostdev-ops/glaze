@@ -102,6 +102,18 @@ test('discussions: Canvas\'s topics and one prompt; Ultra\'s published, availabl
   assert.equal((await tool('discussion_read').run({ course: '_101_1', id: '_901_1' }, ctxFor(UL, ultra))).text, 'Share laboratory safety questions.');
 });
 
+test('partial school lists preserve the source coverage instead of reporting an empty complete course', async () => {
+  const t = canvasTab({ routes: { '/api/v1/courses/25/modules': [{ id: 1, name: 'Large module', items_count: 50 }] } });
+  const content = await tool('content_list').run({ course: '25' }, ctxFor(ACC, tabsOf([t])));
+  assert.equal(content.complete, false, 'Canvas may omit inline items from large modules');
+  assert.deepEqual(content.items, []);
+  assert.ok(t.page.asked.every((r) => r.method === 'GET' && !r.url.includes('/modules/1/items')), 'no additional endpoint');
+  const cache = await C.canvasPlan('5', []);
+  cache.complete = false;
+  const announcements = await tool('announcements_list').run({}, ctxFor(ACC, null, { todoCache: cache }));
+  assert.equal(announcements.covers.complete, false, 'an incomplete planner cannot prove there are no announcements');
+});
+
 test('syllabus: what Glaze kept from an import; nothing kept says how to import; no tab, wrong ids and no account say so', async () => {
   const rec = SY.tidy({ prof: { name: 'Dr. Rivera', email: 'rivera@school.edu', office: 'Science 204' }, hours: [{ label: 'Office hours', days: ['Mon'], start: '13:00', end: '14:00' }],
     dates: [{ title: 'Midterm', day: '2026-10-20', kind: 'exam' }], scale: [['A', 90], ['B', 80]], weights: [{ name: 'Labs', weight: 30 }, { name: 'Exams', weight: 70 }], at: C.NOW });
