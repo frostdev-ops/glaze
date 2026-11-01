@@ -1648,6 +1648,19 @@ test('Reset layout preserves hidden course positions until ownership is confirme
   assert.deepEqual([on(p, 'courses', own).x, on(p, 'courses', own).y, on(p, 'courses', own).w], [null, null, undefined]);
 });
 
+test('Reset layout reaches every confirmed card on a shared board larger than one layout message', async () => {
+  // Different students' saved course sets can overlap this student's larger membership list.
+  const courses = Array.from({ length: 80 }, (_, n) => ({ id: `_${500 + n}_1`, name: `Course ${n}`, term: '', slot: 1 }));
+  const board = courses.map((c) => ({ id: ckey(c.id), on: true, x: 320, y: 80, w: 420 }));
+  const p = asStudent(cardsPage({ courses, local: { widgetLayout: { todo: true, boards: { courses: board } } } }), Promise.resolve(members(courses)));
+  p.ui.sync(true); await settle();
+  assert.equal(lay(p).boards.courses.filter((x) => W.course(x.id)).length, courses.length);
+  p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
+  p.doc.fire(p.doc.querySelector('.gz-dash-reset'), 'click'); await settle();
+  for (const c of courses) assert.equal(on(p, 'courses', ckey(c.id)).x, null, `${c.id} reset too`);
+  assert.ok(layoutSends(p).every((m) => m.ops.length <= 64), 'every reset message fits the production broker');
+});
+
 test("a tile's Fold, Remove and Float sit above its resize corner, which a folded tile brings up beside them", () => {
   // Both are positioned children of the tile, the corner last; its 24px reach covered a folded tile's Unfold.
   const css = read('core/page/apps.css').replace(/\/\*[\s\S]*?\*\//g, '');
