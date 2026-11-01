@@ -168,11 +168,14 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
     await tick(env);
     return turn(async () => { const s = await read(env); if (!(await env.on())) return []; const out = s.fired; s.fired = []; await write(env, s); return out; });
   };
-  // How many wait to be shown, checked first, none taken: the school page's cheap look before it loads the panel.
+  // How many wait to be shown, including due wakes; no monitor reads, writes or alarm changes: the school page's cheap look before it loads the panel.
   const peek = async (env) => {
     if (!(await env.on())) return 0;
-    await tick(env);
-    return turn(async () => (await read(env)).fired.length);
+    return turn(async () => {
+      const s = await read(env);
+      if (!(await env.on())) return 0;
+      return Math.min(LIMIT.fired, s.fired.length + s.wakes.filter((w) => w.at <= clock(env)).length);
+    });
   };
 
   // ---- the tools -------------------------------------------------------------------------------------------------------
