@@ -262,7 +262,7 @@ var GZ_FEEDBACK = globalThis.GZ_FEEDBACK || (() => {
   const settle = (root) => { for (const a of root?.getAnimations?.({ subtree: true }) || []) if (/^gz-/.test(a.animationName) && Number.isFinite(a.effect?.getComputedTiming().endTime)) a.finish(); };
   const end = (x = v) => {
     if (!x) return;
-    if (v === x) { v = null; html.removeAttribute(x.boot ? 'data-gz-boot' : 'data-gz-skel'); if (x.boot) settle(document.getElementById('site-wrap')); }
+    if (v === x) { v = null; html.removeAttribute(x.boot ? 'data-gz-boot' : 'data-gz-skel'); if (x.boot) for (const root of document.querySelectorAll('#site-wrap, body > .routed-page.bb-offcanvas-container')) settle(root); }
     x.mo?.disconnect();
     x.ro?.disconnect();
     clearTimeout(x.cap);
@@ -315,7 +315,9 @@ var GZ_FEEDBACK = globalThis.GZ_FEEDBACK || (() => {
     if (html.hasAttribute('data-gz-instant')) { x.copied = true; return; }
     x.copied = false;
     if (here() !== x.landed) Object.assign(x, { landed: here(), routedAt: performance.now(), spun: false });
-    const m = front();
+    // Full routed views (assessments, attempts and documents) can have no main, and can sit beside site-wrap.
+    const m = [...document.querySelectorAll('.routed-page.bb-offcanvas-container')]
+      .filter((e) => shown(e) && !ours(e) && !e.closest('.peek, .peek-panel__content-wrapper, .ms-Panel-main') && !e.querySelector('.bb-course-navigation')).pop() || front();
     // These course tools must belong to the requested course, not the base page or a course Ultra is leaving.
     const course = /^\/ultra\/courses\/(_\d+_\d+)\//.exec(location.pathname)?.[1];
     if (course && pageOf(location.pathname)[2]) {

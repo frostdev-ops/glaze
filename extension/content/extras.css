@@ -661,7 +661,8 @@ html[data-gz-instant-frame] #site-wrap { visibility: visible !important; }
    the Look and one skeleton in the main area's place, or the page's instant copy over its main area. */
 html:not([data-gz-font]) #initial-load-area,
 html[data-gz-enhance-feedback] #initial-load-area { visibility: hidden !important; }
-html[data-gz-boot] #site-wrap { visibility: hidden !important; }
+html[data-gz-boot] #site-wrap,
+html[data-gz-boot] > body > .routed-page.bb-offcanvas-container { visibility: hidden !important; }
 html[data-gz-boot] #gz-instant { visibility: visible !important; }
 #gz-boot { position: fixed; top: calc(var(--gz-navbar-top, 0px) + 24px); right: calc(var(--gz-sb-room, 0px) + 24px); bottom: 0; left: calc(var(--gz-navbar-left, 0px) + 24px); }
 html[data-gz-instant] #gz-boot, html[data-gz-ctab-framed] #gz-boot { display: none; }

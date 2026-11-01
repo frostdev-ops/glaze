@@ -760,6 +760,36 @@ test('a cold course load cannot settle on the base page or another course with t
   });
 });
 
+test('a cold routed assessment waits for its own body, then reveals it without waiting for the cap', async (t) => {
+  for (const outside of [false, true]) await t.test(outside ? 'beside site-wrap' : 'inside site-wrap', () => {
+    const s = site({ at: `/ultra/courses/${COURSE}/assessment/_201_1/overview`, boot: true });
+    s.sync();
+    s.ila.remove();
+    s.inner.append(s.layout);
+    s.baseMain.replaceChildren(IP_VIEW(s));
+    const content = s.el('learning-module-panel-view', { class: 'routed-page-body' }, ...s.spinners());
+    const page = s.el('section', { class: 'assessment-overview-modern-panel routed-page route-view-container bb-offcanvas-container' }, content);
+    let finished = false;
+    page.getAnimations = () => [{ animationName: 'gz-in', effect: { getComputedTiming: () => ({ endTime: 450 }) }, finish() { finished = true; } }];
+    (outside ? s.body : s.inner).append(page);
+    s.flush();
+    s.tick(5000);
+    assert.deepEqual(booted(s), { attr: true, box: true }, 'the assessment is still loading');
+    content.replaceChildren(s.el('h1', {}, 'Assessment'), s.el('p', {}, 'Instructions'));
+    s.flush();
+    assert.deepEqual(booted(s), { attr: false, box: false }, 'the routed view is ready despite the Institution page underneath');
+    if (outside) assert.equal(finished, true, 'the routed page outside site-wrap also finishes its entrance');
+  });
+});
+
+test('a cold boot also hides a full routed page mounted beside site-wrap', () => {
+  const rules = cssRules('content/extras.css');
+  const html = { tag: 'html', id: '', cls: [], attrs: { 'data-gz-boot': '' }, parent: null };
+  const body = { tag: 'body', id: '', cls: [], attrs: {}, parent: html };
+  const page = { tag: 'section', id: '', cls: ['routed-page', 'bb-offcanvas-container'], attrs: {}, parent: body };
+  assert.equal(winner(rules, page, 'visibility')?.[0], 'hidden', 'native content and spinners stay behind the boot skeleton');
+});
+
 test('the page\'s instant copy takes the skeleton\'s place, and the boot goes with the copy, in the same frame', () => {
   const s = site({ at: '/ultra/grades', boot: true });
   s.sync();
