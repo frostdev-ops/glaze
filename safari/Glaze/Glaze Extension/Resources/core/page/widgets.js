@@ -1212,6 +1212,14 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // Ultra: once per student on this device. A Dashboard filled for another student, with only their cards on it, gets
   // this student's first cards once their course list is in (marked '<board> <site>/<id>', core/widgets.js apply).
   let askedWho = false;
+  // Board order is age. Only a complete membership answer can identify another student's cards at this school.
+  const foreignCourses = (rows) => ultra ? rows.filter((x) => W.course(x.id)?.origin === location.origin && globalThis.GZ_COURSE_CARDS?.own(x.id) === false) : [];
+  const courseDrops = (b, keys) => {
+    const rows = lay.boards[b], present = new Set(rows.map((x) => x.id)), wanted = new Set(keys);
+    const added = [...wanted].filter((id) => !present.has(id)).length;
+    const short = Math.max(0, rows.filter((x) => W.course(x.id)).length + added - W.COURSE_TOTAL);
+    return foreignCourses(rows).filter((x) => !wanted.has(x.id)).slice(0, short).map((x) => ({ s: b, id: x.id, remove: true }));
+  };
   const fillCourses = () => {
     if (!['cdash', 'dash'].includes(board) || !on || !lay?.starter || editing || flying) return;
     const first = !lay.filled.includes(board), C = globalThis.GZ_COURSE_CARDS;
@@ -1232,8 +1240,10 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     if (keep) { change({ fill: board, account, ops: [] }); return; }
     if (ultra && !C.complete()) return;
     const cards = (ultra ? C.list().filter((c) => C.own(c.key) === true) : C.shown());
-    const room = Math.min(W.COURSE_MAX, W.COURSE_TOTAL - lay.boards[board].filter((x) => W.course(x.id)).length);
-    if (cards.length && room > 0) change({ fill: board, account, ops: cards.slice(0, room).map((c) => ({ s: board, id: c.key, set: { on: true, size: 's', term: c.term || '' } })) });
+    const rows = lay.boards[board], present = new Set(rows.map((x) => x.id));
+    let room = Math.min(W.COURSE_MAX, W.COURSE_TOTAL - rows.filter((x) => W.course(x.id)).length + foreignCourses(rows).length);
+    const selected = ultra ? cards.slice(0, W.COURSE_MAX).filter((c) => present.has(c.key) || room-- > 0) : cards.slice(0, room);
+    if (selected.length) change({ fill: board, account, ops: [...courseDrops(board, selected.map((c) => c.key)), ...selected.map((c) => ({ s: board, id: c.key, set: { on: true, size: 's', term: c.term || '' } }))] });
   };
   // The board's Course cards button: its dialog (courses/page/coursecards.js) ticks courses on and off this board, each
   // tick or Select all one change, with the cards new to it placed in the board's free room (arrange). It asks the
@@ -1245,7 +1255,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const rows = () => (board === b && lay.boards[b]) || [];
     // Another student's cards (hidden here) take none of this student's room; all of them count against what is stored.
     const here = (x) => W.course(x.id)?.origin === location.origin && C.own(x.id) !== false;
-    const room = () => Math.max(0, Math.min(W.COURSE_MAX - rows().filter(here).length, W.COURSE_TOTAL - rows().filter((x) => W.course(x.id)).length));
+    const room = () => Math.max(0, Math.min(W.COURSE_MAX - rows().filter(here).length, W.COURSE_TOTAL - rows().filter((x) => W.course(x.id)).length + foreignCourses(rows()).length));
     const open = button(t('+ Course cards'), () => C.picker.open({
       board: b,
       has: (key) => rows().some((x) => x.id === key),
@@ -1256,7 +1266,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         if (board !== b) return;
         if (on) nativeShown = false; // the cards show, not Ultra's list
         const terms = new Map(C.list().map((c) => [c.key, c.term]));
-        change({ ops: keys.map((id) => (on ? { s: b, id, set: { on: true, size: 's', term: terms.get(id) || '' } } : { s: b, id, remove: true })) });
+        const ops = [...(on ? courseDrops(b, keys) : []), ...keys.map((id) => (on ? { s: b, id, set: { on: true, size: 's', term: terms.get(id) || '' } } : { s: b, id, remove: true }))];
+        for (let i = 0; i < ops.length; i += 64) change({ ops: ops.slice(i, i + 64) });
       },
       back: () => grid?.querySelector('.gz-course-open'),
     }), { className: 'gz-w-small gz-course-open' });

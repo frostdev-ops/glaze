@@ -381,15 +381,21 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     // account: the student it is for ('<site>/<id>'). A board already filled for another student on this device gets this
     // one's first cards once, beside the other's, never over a card already on it.
     const mark = BOARDS.includes(m?.fill) && typeof m.account === 'string' ? `${m.fill} ${m.account}` : '';
-    let ops = Array.isArray(m?.ops) ? m.ops.slice(0, 64) : [];
+    const limit = ['cdash', 'dash'].includes(m?.fill) ? 128 : 64;
+    let ops = Array.isArray(m?.ops) ? m.ops.slice(0, limit) : [];
     if (BOARDS.includes(m?.fill)) {
       const marked = FILLED_MARK.test(mark);
       if (!l.starter || (marked && l.filled.includes(mark))) return l;
       if (l.filled.includes(m.fill)) {
         if (!marked) return l;
-        ops = ops.filter((o) => o?.s === m.fill && course(o.id) && !l.boards[m.fill].some((x) => x.id === o.id));
-        // Another tab may have used the last stored room after the page counted it. No cards added means no fill used.
-        if (ops.some((o) => o.set) && l.boards[m.fill].filter((x) => course(x.id)).length >= COURSE_TOTAL) return l;
+        const present = new Set(l.boards[m.fill].filter((x) => course(x.id)).map((x) => x.id));
+        ops = ops.filter((o) => o?.s === m.fill && course(o.id) && (o.remove === true ? present.has(o.id) : !present.has(o.id)));
+        const drops = new Set(ops.filter((o) => o.remove === true).map((o) => o.id));
+        const adds = new Set(ops.filter((o) => o.remove !== true && o.set).map((o) => o.id));
+        // Recount queued drops too: another tab may have removed one and used its room already. A partial fill must
+        // neither discard more cards nor consume the student's mark.
+        if (present.size - drops.size + adds.size > COURSE_TOTAL) return l;
+        ops.sort((a, b) => Number(b.remove === true) - Number(a.remove === true));
         l = { ...l, filled: [...l.filled, mark] };
       } else {
         l = { ...l, filled: [...l.filled, m.fill, ...(marked ? [mark] : [])] };
