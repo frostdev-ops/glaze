@@ -309,7 +309,9 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     const block = (kind, l, t) => [{ special: `<|${kind}|>` }, { text: `${l}\n${X().plain(t)}` }, { special: `<|/${kind}|>` }];
     return F().join([{ special: '<|startoftext|>' },
       ...turn('system', { special: '<|gz_task:agent.tools|>' }, ...size, { text: `${head}\n\n${X().TRUST}\n\n` }, { special: '<tools>' }, { text: `\n${lines}\n` }, { special: '</tools>' }),
-      ...turn('user', ...block('gz_ctx', 'now', now), { text: '\n' }, ...(fired ? [...block('gz_data', 'fired', fired), { text: '\n' }] : []), ...(help ? [...block('gz_data', 'help', help), { text: '\n' }] : []), ...(summary ? [...block('gz_data', 'summary', summary), { text: '\n' }] : []), ...(earlier ? [...block('gz_data', 'earlier', earlier), { text: '\n' }] : []), ...block('gz_data', 'question', question)),
+      // Stable first, for the engine's prefix reuse: the summary and earlier turns (append-only), then what changes every turn.
+      ...turn('user', ...(summary ? [...block('gz_data', 'summary', summary), { text: '\n' }] : []), ...(earlier ? [...block('gz_data', 'earlier', earlier), { text: '\n' }] : []),
+        ...block('gz_ctx', 'now', now), { text: '\n' }, ...(fired ? [...block('gz_data', 'fired', fired), { text: '\n' }] : []), ...(help ? [...block('gz_data', 'help', help), { text: '\n' }] : []), ...block('gz_data', 'question', question)),
       ...steps.flatMap((s, i) => [...turn('assistant', ...native.parts(s.call)),
         ...turn('tool', { special: '<tool_response>' }, { text: '\n' }, ...block('gz_data', label(i, s.call.name), s.result), { text: '\n' }, { special: '</tool_response>' })]),
       { special: '<|im_start|>' }, { text: 'assistant\n' }]);

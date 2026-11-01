@@ -96,7 +96,7 @@ test('level 3: agent.tools gets the conversation, bounded, as an earlier block; 
   const inp = inputOf("I don't think that's true.", [], { history });
   assert.deepEqual(inp.history, history);
   const t = text(A.layout(inp));
-  assert.match(t, /<\|gz_data\|>earlier\nStudent: What's due this week\?\nRime: Nothing is due this week\.<\|\/gz_data\|>\n<\|gz_data\|>question\nI don't think that's true\./);
+  assert.match(t, /<\|gz_data\|>earlier\nStudent: What's due this week\?\nRime: Nothing is due this week\.<\|\/gz_data\|>\n<\|gz_ctx\|>now\n[\s\S]*<\|gz_data\|>question\nI don't think that's true\./);
   const X = require('../../extension/ai/text.js');
   const req = require('../../extension/ai/request.js').clean({ ...A.task.build(inp, { text: X }), schema: A.OUTPUT, task: { id: 'agent.tools', version: 1 } });
   assert.equal(text(A.fromRequest(req).parts), t);
