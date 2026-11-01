@@ -80,17 +80,17 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     // Reading the student's school site (ai/agent/school.js), through Glaze's own readers in an open tab of it, or its caches.
     { name: 'announcements_list', kind: 'read', description: "A course's announcements: id, title, and at (when posted, where the site says). On Canvas without course, every course's that Glaze's to-do range holds. On Blackboard name the course.",
       parameters: params({ course: COURSE("Only this course's, by its id."), account: ACCOUNT }) },
-    { name: 'announcement_read', kind: 'read', description: 'One announcement: title, author, at, and its text a page at a time (about 2,500 characters).',
+    { name: 'announcement_read', kind: 'read', description: 'One announcement: title, author, at, and its text a page at a time (about 1,000 characters).',
       parameters: params({ course: COURSE('The course id.'), id: { type: 'string', pattern: UID, description: 'The announcement id from announcements_list.' }, page: PAGE, account: ACCOUNT }, ['course', 'id']) },
     { name: 'content_list', kind: 'read', description: "A course's content as its site lists it: id, title, kind (Page, File, Assignment, Quiz, Discussion, Link, Document, Folder, Module, Test) and module.",
       parameters: params({ course: COURSE('The course id.'), account: ACCOUNT }, ['course']) },
-    { name: 'content_read', kind: 'read', description: "One content item's text, a page at a time (about 2,500 characters): a Blackboard document. Glaze can't read Canvas pages or files yet.",
+    { name: 'content_read', kind: 'read', description: "One content item's text, a page at a time (about 1,000 characters): a Blackboard document. Glaze can't read Canvas pages or files yet.",
       parameters: params({ course: COURSE('The course id.'), id: { type: 'string', pattern: UID, description: 'The id from content_list.' }, page: PAGE, account: ACCOUNT }, ['course', 'id']) },
     { name: 'syllabus_read', kind: 'read', description: "What Glaze took from a course's syllabus when the student imported it: instructor, office hours, class meetings, dates, grading scale and grade weights.",
       parameters: params({ course: COURSE('The course id.'), account: ACCOUNT }, ['course']) },
     { name: 'discussions_list', kind: 'read', description: "A course's discussions: id and title.",
       parameters: params({ course: COURSE('The course id.'), account: ACCOUNT }, ['course']) },
-    { name: 'discussion_read', kind: 'read', description: "One discussion's prompt as text, a page at a time (about 2,500 characters).",
+    { name: 'discussion_read', kind: 'read', description: "One discussion's prompt as text, a page at a time (about 1,000 characters).",
       parameters: params({ course: COURSE('The course id.'), id: { type: 'string', pattern: UID, description: 'The discussion id from discussions_list.' }, page: PAGE, account: ACCOUNT }, ['course', 'id']) },
   ].map((t) => Object.freeze(t)));
   const NAMES = SPECS.map((t) => t.name);

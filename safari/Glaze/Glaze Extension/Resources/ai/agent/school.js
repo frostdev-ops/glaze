@@ -10,7 +10,8 @@
 var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
   const AT = () => (typeof GZ_AI_TASK_AGENT_TOOLS !== 'undefined' ? GZ_AI_TASK_AGENT_TOOLS : require('../tasks/agent-tools.js'));
   const LIMIT = { items: 40, text: 200000 };
-  const PAGE = 2500;
+  // Stay below agent.tools' per-string limit so formatting never skips part of a page.
+  const PAGE = 1000;
   const UID = /^(\d{1,20}|_\d{1,20}_\d{1,20})$/;
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
   const fail = (error) => ({ ok: false, error });
