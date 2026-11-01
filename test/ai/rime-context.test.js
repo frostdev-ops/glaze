@@ -75,6 +75,22 @@ test('a new question cancels unfinished compaction before taking the broker slot
   }
 });
 
+test('a delayed compaction count cannot start old-chat work after New chat', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const fit = { used: 3500, window: 8192, reserve: 768, exact: true };
+  const h = harness({ count: (m) => m.input.history?.length === 3 ? gate : fit,
+    script: { 'agent.tools': [said('BIO 1100.', ['BIO 1100']), said('BIO 1100.', ['BIO 1100'])], 'chat.compact': [{ text: '- Old chat', quotes: [] }] } });
+  h.say({ id: 1, op: 'ask', question: "What's due this week?", history: H3 });
+  await settle();
+  assert.ok(h.seen.counts.some((m) => m.input.history?.length === 3));
+  h.say({ id: 2, op: 'ask', question: "What's due next week?" });
+  await settle();
+  release({ ...fit, used: 7000 });
+  await settle();
+  assert.equal(h.seen.runs.filter((m) => m.task === 'chat.compact').length, 0, 'the old generation was invalidated while measuring');
+});
+
 test('each request is measured before it goes: a context event with the model\'s window and the answer\'s reserve', async () => {
   const h = harness({ script: { 'agent.tools': [call('wakes_list', {}), said('You are in BIO 1100.', ['BIO 1100'])] } });
   h.say({ id: 1, op: 'ask', question: "What's due this week?" });
