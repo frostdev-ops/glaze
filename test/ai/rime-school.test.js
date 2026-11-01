@@ -123,6 +123,18 @@ const step = (name, args, result) => ({ call: { name, arguments: args }, result 
 const inputOf = (question, steps = [], more = {}) => A.task.input({ question, tools: [...A.NAMES], steps, now: NOW, zone: 'UTC', ...more });
 const answer = (text, quotes = []) => ({ call: null, answer: { text, quotes } });
 
+test('school text pages survive the agent result formatter without losing characters between pages', async () => {
+  const body = 'a'.repeat(1400) + 'The lab now meets in Science Hall.' + 'b'.repeat(1800);
+  const ctx = { account: ACC, tab: async () => ({ ok: true, title: 'Lab', text: body, files: [], at: null }) };
+  const first = await tool('announcement_read').run({ course: '25', id: '70' }, ctx);
+  const pages = [];
+  for (let page = 1; page <= first.pages; page++) {
+    const result = await tool('announcement_read').run({ course: '25', id: '70', page }, ctx);
+    pages.push(JSON.parse(A.readable(result, 'UTC')).text);
+  }
+  assert.equal(pages.join(''), body);
+});
+
 test('check, tool first: an answer with no result behind it fails; results that hold facts must be quoted; an empty or failed result is said plainly', () => {
   assert.equal(A.why(answer('You have three announcements.'), inputOf('Any new announcements?', [], { first: true })), 'first');
   assert.equal(A.why(answer('You have three announcements.'), inputOf('Any new announcements?')), '', 'without first, as before (Rime r5)');
