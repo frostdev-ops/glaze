@@ -50,7 +50,7 @@ const planner = (id, title, days) => ({ plannable_type: 'assignment', plannable_
 const PLANNER = [planner(1, 'Lab report', 2), planner(2, 'Reading response', 5),
   { ...planner(70, 'Lab moved to Room 204', -1), plannable_type: 'announcement', html_url: `${CANVAS}/courses/25/discussion_topics/70`, submissions: false, plannable: { title: 'Lab moved to Room 204', read_state: 'unread' } }];
 // The announcement as Canvas's topic and Ultra's public announcement answer (the fields Glaze's pop-up reads).
-const TOPIC = { id: 70, title: 'Lab moved to Room 204', author: { display_name: 'Dr. Rivera' }, posted_at: new Date(now - DAY).toISOString(), message: '<p>This week the lab meets in <b>Room 204</b>. Bring goggles.</p>', attachments: [], read_state: 'unread' };
+const TOPIC = { id: 70, title: 'Lab moved to Room 204', author: { id: 900, display_name: 'Dr. Rivera' }, posted_at: new Date(now - DAY).toISOString(), message: '<p>This week the lab meets in <b>Room 204</b>. Bring goggles.</p>', attachments: [], read_state: 'unread' };
 const ULTRA_NEWS = [{ id: '_801_1', title: 'Lab moved to Room 204', body: '<p>This week the lab meets in Room 204. Bring goggles.</p>', availability: { duration: { type: 'Permanent' } } }];
 const DASH = '<!doctype html><html lang="en"><head><title>Dashboard</title><link rel="stylesheet" href="/dist/brandable_css/check.css"></head><body><div id="application" class="ic-app"><main id="content"><h1>Dashboard</h1><p>Biology, history and the week ahead.</p></main></div></body></html>';
 const ASSIGNMENTS = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Assignments</title><link rel="stylesheet" href="/dist/brandable_css/check.css"></head><body><div id="application" class="ic-app"><main id="content"><h1>Assignments: BIO 1100</h1>'
@@ -119,6 +119,8 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
       if (u.pathname === '/api/v1/users/self/profile' || u.pathname === '/api/v1/users/self') return json({ id: '5', time_zone: 'UTC' });
       if (u.pathname === '/api/v1/planner/items') return json(sunday || PLANNER);
       if (u.pathname === '/api/v1/courses/25/discussion_topics/70') return json(TOPIC);
+      // The course's teachers (agents/tab.js staff): a topic is read only when one of them wrote it.
+      if (u.pathname === '/api/v1/courses/25/enrollments') return json([{ id: 1, user_id: 900, type: 'TeacherEnrollment', enrollment_state: 'active' }]);
       if (u.pathname.startsWith('/api/v1/')) return json([]);
       if (u.pathname.endsWith('.css')) return r.fulfill({ contentType: 'text/css', body: '' });
       return r.fulfill({ contentType: 'text/html', body: u.pathname === '/courses/25/assignments' ? ASSIGNMENTS : DASH });
