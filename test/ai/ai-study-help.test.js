@@ -253,3 +253,18 @@ for (const kind of ['hint', 'concept']) test(`a short ${kind} still cannot answe
   assert.equal(why(inp(GATSBY), kind, 'Gatsby wants Daisy.'), 'speaks');
   assert.equal(why(inp(GATSBY), kind, 'Good. What does Gatsby want most?'), '');
 });
+
+// Ask Glaze (ai/ask.js) holds an answer about the student's own records to the same rule: hands() is why()'s answer-giving
+// rules for one piece of text (the answer, their problem solved, their code written, wording offered), without the rules
+// about how a tutor speaks, which a sentence about a due date would break.
+test('hands(): the answer-giving rules alone, for a text that is not a tutor\'s reply', () => {
+  const i = inp({ question: 'What is due in MATH 110 this week, and can you solve 3x + 5 = 20?', material: '{"items":[{"title":"HW 4","due":"2026-11-02 23:59","course":"MATH 110"}]}' });
+  assert.equal(H.hands('HW 4 for MATH 110 is due Monday at 23:59.', i), '');
+  assert.equal(H.hands('You have 1 item due: HW 4, due 2026-11-02 23:59.', i), '');
+  assert.equal(H.hands('The answer is x = 5.', i), 'answer');
+  assert.equal(H.hands('Subtract 5 from both sides: 3x = 15.', i), 'solves');
+  assert.equal(H.hands('Here is a sentence you could use: "Morrison shows memory as a place."', inp({ question: 'Help with my essay', subject: 'essay' })), 'wording');
+  // why() is unchanged: the same refusals, in the same order.
+  assert.equal(why(i, 'hint', 'The answer is x = 5.'), 'answer');
+  assert.equal(why(inp({ question: 'Why does the river matter in Beloved?', subject: 'reading' }), 'hint', 'The river stands for memory in the novel and the town.'), 'speaks');
+});
