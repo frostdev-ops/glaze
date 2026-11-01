@@ -199,6 +199,17 @@ test('school text pages survive the agent result formatter without losing charac
   assert.equal(pages.join(''), body);
 });
 
+test('school pages fit the serialized result budget even for heavily escaped text', () => {
+  const body = '\u0000'.repeat(1700) + 'Final lab instructions.';
+  const first = SC.paged(body), held = [];
+  for (let page = 1; page <= first.pages; page++) {
+    const shown = A.readable({ account: ACC, title: 'Lab', ...SC.paged(body, page) }, 'UTC');
+    assert.ok(shown, `page ${page} fits the model result budget`);
+    held.push(JSON.parse(shown).text);
+  }
+  assert.equal(held.join(''), body);
+});
+
 test('check, tool first: an answer with no result behind it fails; results that hold facts must be quoted; an empty or failed result is said plainly', () => {
   assert.equal(A.why(answer('You have three announcements.'), inputOf('Any new announcements?', [], { first: true })), 'first');
   assert.equal(A.why(answer('You have three announcements.'), inputOf('Any new announcements?')), '', 'without first, as before (Rime r5)');
