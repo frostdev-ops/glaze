@@ -5,11 +5,20 @@
 // (ai/local/offscreen.js), Firefox from the background event page (ai/local/link.js); both pass messages to it as they are.
 //   in  { op: 'config', idle }  { op: 'detach' } (the worker's port went: runs and warm-ups stop, a download goes on)
 //       { id, op: 'prepare', tier?, part? }  { id, op: 'run', model, parts, stable, schema?, tools?, sources?, sampler,
-//       maxTokens, projector?, images?, think?, window? }  { id, op: 'warm', model, parts }  { id, op: 'remove', part? }  { id, op: 'release' }
-//       { id, op: 'cancel' }  { id, op: 'update', doc, model, glaze } (ai/local/updates.js update: a signed model list from the
+//       maxTokens, projector?, images?, think?, window?, priority? }  { id, op: 'warm', model, parts, stable? }  { id, op: 'remove', part? }
+//       { id, op: 'release' }  { id, op: 'cancel' }  { id, op: 'update', doc, model, glaze } (ai/local/updates.js update: a signed model list from the
 //       worker's daily check; the newer version of `model` downloads beside it, waiting while a run or warm-up is in
 //       flight, and swaps in at the next idle moment, the engine let go; a run on the model in its trial confirms it, or
 //       rolls it back on a load or engine failure and runs again on the old version when nothing of the answer was sent)
+//   One sequence stays on the GPU between requests (engine.js extend): a run or warm-up feeds only what follows the longest
+//   prefix the model already holds, from the latest mark inside it (marks at the system turn's end, each context or data
+//   block, the last turn's opening and the prompt's end). A warm-up with `stable` reads its parts past the system turn too
+//   (the history, while the student types); a run arriving stops a warm-up between steps and keeps what it read. After a
+//   think run, the host reads the answer back as the next request will hold it (the turn's empty think block, the answer,
+//   the end token) while nothing else waits. window: the engine's room grows to it, up to LIMIT.most; without one,
+//   LIMIT.context. priority 'low' (and writer.complete's task token): the prompt goes in steps of LIMIT.step tokens, each
+//   finished on the GPU and followed by a yield, and decode yields between tokens, so typing paints and a cancel lands
+//   within a step.
 //   tools [{ name, parameters }] (with schema; ai/tasks/agent-tools.js constraint()): the answer is either the schema's
 //   JSON or one native call to a listed tool, held by the grammar (grammar.js compile's tools). sources { [name]: text }
 //   (with schema; providers/local.js spans): the texts its span strings are held to (grammar.js compile's sources).
@@ -37,7 +46,7 @@
 // The grammar's mask allows the end token only once the JSON is whole, so a run stops at the end token as any other.
 // Classic script; node exports (create), and in a Worker it starts itself.
 var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
-  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, rate: 16, answer: 256, spans: 2 };
+  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, most: 131072, first: 8192, step: 48, background: 128, spacing: 2048, rate: 16, answer: 256, spans: 2 };
   // What the Worker loads, in order, beside this file: required ones throw at its start; optional ones until they ship.
   const IMPORTS = Object.freeze({ required: Object.freeze(['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', '../text.js', 'grammar.js', 'updates.js']),
     optional: Object.freeze(['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'ladder.js']) });
@@ -109,7 +118,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         if (projector) { try { pfile = await env.store.open(projector); } catch { throw fail('provider-unavailable', 'pictures'); } }
         const { g, tok } = await tokenized(id, job.control.signal);
         let model;
-        try { model = await E.load(g, { context: LIMIT.context, signal: job.control.signal }); }
+        try { model = await E.load(g, { context: LIMIT.first, signal: job.control.signal }); }
         catch (e) { if (job.control.signal.aborted) throw e; throw fail('provider-unavailable', ENGINE[e?.reason] || 'engine'); }
         try {
           if (job.control.signal.aborted) throw aborted(job.control.signal);
@@ -139,20 +148,42 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       turn = run.catch(() => {});
       return run;
     };
+    let ahead = null; // the read-ahead after a think run: its AbortController
     const stopSequences = () => {
       for (const o of ops.values()) if (o.kind === 'run' || o.kind === 'warm') o.control.abort(new DOMException('Released', 'AbortError'));
+      ahead?.abort(new DOMException('Released', 'AbortError'));
     };
     // Retire requests immediately, but let their pending engine calls settle before freeing GPU resources.
     const release = () => { stopSequences(); return queued(unload); };
-    // The model at the end of `head` (the system turn): a kept snapshot of it, else read from the start and kept.
-    const prefix = async (job, head, signal) => {
+    // The model at the end of `head` (the system turn): already held (an engine that keeps its sequence), a kept snapshot
+    // of it, else read (from the latest mark it shares, or the start) and kept. → the tokens it fed.
+    const prefix = async (job, head, signal, pacing = {}) => {
+      const keeps = typeof job.model.extend === 'function';
+      if (keeps && job.model.common(head) === head.length) return 0;
       const at = job.warm.findIndex((w) => same(w.ids, head));
-      if (at >= 0) { const [w] = job.warm.splice(at, 1); job.warm.push(w); await job.model.restore(w.snap); return; }
-      await job.model.restore(job.base);
-      const snap = await job.model.prefill(head, { snapshot: true, signal });
-      if (!snap) return;
-      job.warm.push({ ids: head, snap });
+      if (at >= 0) { const [w] = job.warm.splice(at, 1); job.warm.push(w); await job.model.restore(w.snap); return 0; }
+      let snap, fed = head.length;
+      if (keeps) {
+        fed = (await job.model.extend(head, { signal, ...pacing })).fed;
+        snap = await job.model.snapshot().catch((e) => { if (e?.reason === 'memory') return null; throw e; });
+      } else {
+        await job.model.restore(job.base);
+        snap = await job.model.prefill(head, { snapshot: true, signal });
+      }
+      if (snap) job.warm.push({ ids: head, snap });
       while (job.warm.length > LIMIT.warm) { try { job.warm.shift().snap.drop?.(); } catch { /* gone */ } }
+      return fed;
+    };
+    // Where a later request may part from this one: the system turn's end, each context or data block's start and end, each
+    // turn's, a think prefill's start, and every LIMIT.spacing tokens of a long feed.
+    const stops = (job, ids, from) => {
+      const id = (names) => names.map((n) => job.tok.id(n)).filter(Number.isInteger);
+      const opens = id(['<|im_start|>', '<|gz_ctx|>', '<|gz_data|>', '<think>']), ends = id(['<|im_end|>', '<|/gz_ctx|>', '<|/gz_data|>']);
+      const out = [from];
+      for (let i = from; i < ids.length; i++) { if (opens.includes(ids[i])) out.push(i); if (ends.includes(ids[i])) out.push(i + 1); }
+      for (let p = from + LIMIT.spacing; p < ids.length; p += LIMIT.spacing) out.push(p);
+      // The latest few matter most: older ones are inside what the next request shares anyway.
+      return [from, ...[...new Set(out)].filter((p) => p > from).sort((a, b) => a - b).slice(-12)];
     };
     // The JSON grammar's matcher for a schema (grammar.js), with tools a turn that may instead call one of them in LFM3's
     // own syntax: its vocabulary once per model (with the tool tags' ids, where the model has them), each schema compiled
@@ -294,7 +325,10 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         const { model, tok } = job;
         const pictures = images.length ? await pixels(job, images, signal) : [];
         const head = encode(job, m.parts.slice(0, m.stable)), { rest, slots } = feed(job, m.parts.slice(m.stable), pictures);
-        const input = head.length + rest.length, room = Math.min(model.context || LIMIT.context, LIMIT.context);
+        // An engine that grows its session takes the window as its room (at least LIMIT.context, at most LIMIT.most).
+        const grows = typeof model.reserve === 'function', keeps = grows && typeof model.extend === 'function' && !slots.length;
+        const input = head.length + rest.length, room = grows ? Math.min(Math.max(LIMIT.context, Number.isSafeInteger(m.window) && m.window > 0 ? m.window : 0), LIMIT.most)
+          : Math.min(model.context || LIMIT.context, LIMIT.context);
         if (input + m.maxTokens > room) throw fail('request-rejected', 'context', { tokens: input, context: room });
         // Think mode: </think>'s id, the parts the host may feed, and the budget the window leaves.
         let think = null, close = null;
@@ -321,7 +355,14 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         if (think) think.budget = Math.min(think.budget, room - input - answer - think.close.length);
         if (m.tools !== undefined && !m.schema) throw fail('request-rejected', 'unsupported');
         const grammar = m.schema ? matcher(job, m.schema, m.tools, m.sources) : null;
-        await prefix(job, head, signal);
+        if (grows) await model.reserve(input + (close?.length || 0) + (think?.budget || 0) + answer, room).catch((e) => { throw e?.reason === 'memory' ? fail('provider-unavailable', 'hardware') : e; });
+        // Low priority (writer.complete, or the request says so): small steps, each done on the GPU and followed by a yield.
+        const low = m.priority === 'low' || head.includes(tok.id('<|gz_task:writer.complete|>'));
+        const yieldNow = () => new Promise((r) => later(r, 0));
+        const pacing = low ? { step: LIMIT.step, pace: yieldNow } : {};
+        const read = await prefix(job, head, signal, pacing);
+        const ids = keeps ? [...head, ...rest] : null;
+        let cached = 0;
         // Each picture encoded on the engine's device, fed in place of its placeholders, and its buffer freed at once.
         const encoded = [];
         try {
@@ -332,7 +373,8 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
             if (r.tokens !== s.pic.tokens) throw fail('provider-unavailable', 'engine');
             s.pic.data = null;
           }
-          if (rest.length) await model.prefill(rest, { signal, ...(slots.length && { embeds: slots.map((s, i) => ({ at: s.at, tokens: encoded[i].tokens, buffer: encoded[i].buffer })) }) });
+          if (keeps) cached = ids.length - read - (await model.extend(ids, { at: stops(job, ids, head.length), signal, ...pacing })).fed;
+          else if (rest.length) await model.prefill(rest, { signal, ...pacing, ...(slots.length && { embeds: slots.map((s, i) => ({ at: s.at, tokens: encoded[i].tokens, buffer: encoded[i].buffer })) }) });
         } finally { for (const r of encoded) { try { r.drop?.(); } catch { /* gone */ } } }
         const sampler = { ...SAMPLER, ...m.sampler };
         let spent = 0; // ms in decode, for the rate
@@ -340,6 +382,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
           if (signal.aborted) throw aborted(signal);
           const t = now(), id = await model.decode({ sampler, ...(mask && { mask }), signal });
           spent += now() - t;
+          if (low) await yieldNow();
           if (signal.aborted) throw aborted(signal);
           return id;
         };
@@ -359,9 +402,11 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         // A tool turn's grammar admits its tag ids; keep their text even when the tokenizer calls them control tokens.
         const dec = tok.decoder({ specials: m.tools !== undefined });
         let text = '', n = 0, finish = 'length';
+        const said = [];
         while (n < answer) {
           const id = await step(grammar ? grammar.mask() : null);
           n++;
+          said.push(id);
           if (id === job.eos) { finish = 'stop'; break; }
           grammar?.advance(id);
           const d = dec.push(id);
@@ -370,7 +415,12 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         const tail = dec.end();
         if (tail) { text += tail; post({ id: m.id, type: 'delta', text: tail }); }
         const rate = thought + n >= LIMIT.rate && spent > 0 ? Math.round((thought + n) / spent * 10000) / 10 : null;
-        return { text, finish, model: m.model, usage: { input, output: thought + n, thought }, ...(rate && { rate }) };
+        // A think run's answer, read back as the next request holds it: the turn's empty think block, the answer, the end.
+        if (keeps && think && finish === 'stop') {
+          const open = ids.lastIndexOf(tok.id('<think>'));
+          if (open >= 0) readAhead(job, [...ids.slice(0, open), ids[open], think.end, ...said]);
+        }
+        return { text, finish, model: m.model, usage: { input, output: thought + n, thought, ...(keeps && { cached }) }, ...(rate && { rate }) };
     };
     // A run on the model in its trial (a swapped-in update): its first good answer keeps the new version; a load or engine
     // failure brings the old one back, and the run goes again on it unless part of its answer was already sent.
@@ -411,11 +461,28 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         between: (fn) => queued(async () => { await fn(); if (loaded?.id === m.model) await unload(); }) },
       { doc: m.doc, id: m.model, glaze: m.glaze }, signal);
     };
+    // After the run (queued behind it), while nothing else waits; the next request stops it between steps.
+    const readAhead = (job, ids) => {
+      const control = new AbortController();
+      ahead?.abort(new DOMException('Replaced', 'AbortError'));
+      ahead = control;
+      queued(async () => {
+        if (loaded !== job) return;
+        await job.model.extend(ids, { at: [ids.length], signal: control.signal, step: LIMIT.background });
+      }, control.signal).catch(() => {}).finally(() => { if (ahead === control) ahead = null; });
+    };
+    // The system turn (parts, or its first `stable`), kept; with stable the rest is read on after it in the live sequence.
     const warm = async (m, signal) => {
       return queued(async () => {
         if ((await env.store.status(m.model)).state !== 'ready') return { ok: false };
         const job = await wait(load(m.model), signal);
-        await prefix(job, encode(job, m.parts), signal);
+        const stable = Number.isSafeInteger(m.stable) && m.stable > 0 && m.stable < m.parts.length ? m.stable : m.parts.length;
+        const head = encode(job, m.parts.slice(0, stable)), pacing = { step: LIMIT.background };
+        await prefix(job, head, signal, pacing);
+        if (stable < m.parts.length && typeof job.model.extend === 'function') {
+          const ids = [...head, ...encode(job, m.parts.slice(stable))];
+          await job.model.extend(ids, { at: stops(job, ids, head.length), signal, ...pacing });
+        }
         return { ok: true };
       }, signal);
     };
@@ -453,6 +520,11 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       if (m.op === 'cancel') { ops.get(m.id)?.control.abort(new DOMException('Cancelled', 'AbortError')); return; }
       const op = Object.hasOwn(OPS, m.op) ? OPS[m.op] : null;
       if (!op || ops.has(m.id) || m.id === undefined) return post({ id: m.id, type: 'error', error: { code: 'request' } });
+      // A run outranks a warm-up and a read-ahead: they stop between steps, keeping what they read.
+      if (m.op === 'run') {
+        for (const o of ops.values()) if (o.kind === 'warm') o.control.abort(new DOMException('Superseded', 'AbortError'));
+        ahead?.abort(new DOMException('Superseded', 'AbortError'));
+      }
       const control = new AbortController();
       ops.set(m.id, { control, kind: m.op, ...((m.part === 'pictures' || (m.op === 'run' && Array.isArray(m.images) && m.images.length)) && { part: 'pictures' }) });
       quiet();
