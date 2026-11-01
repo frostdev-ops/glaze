@@ -815,17 +815,27 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       send({ op: 'delete', provider: OWN, part: 'pictures' }).then(localResult).finally(() => { busy = false; });
     };
     // The local connection: its tier and context size, each kept when the other changes (4K, the default, never stored).
-    const setLocal = (tier, window) => {
-      if (busy) return;
-      busy = true;
-      send({ op: 'set', id: OWN, cfg: { provider: OWN, ...(tier && { tier }), ...(window && window !== 4096 && { window }) } }).then(async (r) => {
-        if (!r.ok) return say(t('Could not save. Try again.'), true);
-        await load();
-        await localStatus();
-      }).finally(() => { busy = false; });
+    let localWriting = null;
+    const setLocal = (patch) => {
+      const save = async () => {
+        if (busy) return;
+        busy = true;
+        // Merge after the previous save has reloaded the connection, so a second choice keeps the first.
+        const { tier, window } = { ...conns[OWN], ...patch };
+        try {
+          const r = await send({ op: 'set', id: OWN, cfg: { provider: OWN, ...(tier && { tier }), ...(window && window !== 4096 && { window }) } });
+          if (!r.ok) return say(t('Could not save. Try again.'), true);
+          await load();
+          await localStatus();
+        } finally { busy = false; }
+      };
+      const next = localWriting ? localWriting.then(save, save) : save();
+      localWriting = next;
+      const done = () => { if (localWriting === next) localWriting = null; };
+      next.then(done, done);
     };
-    const setTier = (tier) => setLocal(tier, conns[OWN]?.window);
-    const setWindow = (window) => setLocal(conns[OWN]?.tier, window);
+    const setTier = (tier) => setLocal({ tier });
+    const setWindow = (window) => setLocal({ window });
     c.runtime.onMessage?.addListener((m, sender) => {
       if (sender?.id !== c.runtime.id || m?.type !== TYPE || m.event !== 'progress' || m.provider !== OWN || !offers()) return;
       if (m.part === 'update') {
