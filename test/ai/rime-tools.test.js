@@ -270,6 +270,51 @@ test('sandbox frame: a first-load replacement cannot authenticate with the secre
   assert.ok(leaked);
 });
 
+test('sandbox frame: concurrent runs get separate waits and release their timers and port', async () => {
+  const requests = []; let peer, closed = 0;
+  const h = frameHarness((d, port, url) => {
+    peer = port;
+    port.onmessage = ({ data }) => requests.push(data);
+    port.postMessage({ ready: true, nonce: new URL(url).hash.slice(1).split('.')[1] });
+  });
+  const one = h.api.run('1'), two = h.api.run('2');
+  await new Promise(setImmediate);
+  assert.equal(requests.length, 1, 'a queued run must not spend its stop budget waiting behind another Worker');
+  peer.postMessage({ id: requests[0].id, ok: true, value: 1, logs: [] });
+  assert.equal((await one).value, 1);
+  await new Promise(setImmediate);
+  assert.equal(requests.length, 2);
+  peer.postMessage({ id: requests[1].id, ok: true, value: 2, logs: [] });
+  assert.equal((await two).value, 2);
+  assert.equal(h.timers.size, 0, 'successful calls leave no timeout behind');
+});
+
+test('sandbox page: only its host secret can bind a port, and a finished Worker releases its blob', async () => {
+  let handshake, made = 0, revoked = 0;
+  const parent = {}, replies = [], secret = 'a'.repeat(32), proof = 'b'.repeat(32);
+  const port = { postMessage: (d) => replies.push(d) };
+  class PageWorker {
+    constructor() { made++; }
+    postMessage() { queueMicrotask(() => this.onmessage({ data: { ok: true, value: 42, logs: [] } })); }
+    terminate() {}
+  }
+  vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'extension/ai/sandbox/js.js'), 'utf8'), {
+    GZ_AI_RIME_JS: J, window: { parent, addEventListener: (_, f) => { handshake = f; } }, location: { hash: `#${secret}.${proof}` },
+    URL: { createObjectURL: () => 'blob:run', revokeObjectURL: () => { revoked++; } }, Blob, Worker: PageWorker, setTimeout, clearTimeout,
+  });
+  handshake({ source: parent, data: { type: 'glaze:rime-js', nonce: 'wrong' }, ports: [port] });
+  assert.equal(replies.length, 0);
+  handshake({ source: {}, data: { type: 'glaze:rime-js', nonce: secret }, ports: [port] });
+  assert.equal(replies.length, 0);
+  handshake({ source: parent, data: { type: 'glaze:rime-js', nonce: secret }, ports: [port] });
+  assert.equal(replies[0].nonce, proof);
+  port.onmessage({ data: { id: 1, code: '6*7' } });
+  await new Promise(setImmediate);
+  assert.equal(replies.at(-1).value, 42);
+  assert.equal(made, 1);
+  assert.equal(revoked, 1, 'each finished Worker releases its source URL');
+});
+
 test('sandbox: the last expression\'s value and console lines; errors as words', async () => {
   assert.deepEqual(await sandbox('const a = [81, 92, 77]; console.log("n", a.length); (a.reduce((x, y) => x + y) / a.length).toFixed(2)').then(({ ms, ...r }) => r),
     { ok: true, value: '83.33', logs: ['n 3'] });
