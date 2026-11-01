@@ -171,7 +171,7 @@ test('prepare downloads in the host with progress, once for callers that ask tog
   assert.equal(s.workers.length, 1);
   assert.equal(s.workers[0].url, 'moz-extension://x/ai/local/host.js');
   assert.deepEqual((await LOCAL.status(LOCAL.config({}))).state, 'ready');
-  // No ladder yet: the smallest stock model where there is an adapter; none without one.
+  // No ladder yet: the smallest tier where there is an adapter; none without one.
   const t = setup();
   await LOCAL.prepare(LOCAL.config({}));
   assert.deepEqual(t.st.log.downloads, ['lfm3-q4']);
@@ -185,6 +185,19 @@ test('prepare downloads in the host with progress, once for callers that ask tog
   const w = setup({ ladder: { pick: async () => ({ id: 'lfm3-q4' }) } });
   await LOCAL.prepare(LOCAL.config({ tier: 3 }));
   assert.deepEqual(w.st.log.downloads, ['glaze-q4']);
+});
+
+test('no ladder, a catalog of Glaze-tuned models only (Rime, no `stock`): the smallest tier downloads', async () => {
+  const kept = MODELS.splice(0, MODELS.length,
+    { id: 'rime-q8', name: 'Rime Q8', size: 1800000000, quant: 'Q8_0', tier: 4, license: 'lfm1.0' },
+    { id: 'rime-q4', name: 'Rime Q4', size: 1100000000, quant: 'Q4_K_M', tier: 1, license: 'lfm1.0' },
+    { id: 'vl-q4', name: 'VL Q4', size: 1000000000, quant: 'Q4_K_M', license: 'lfm1.0', stock: true, role: 'pictures', projector: 'mmproj' },
+    { id: 'rime-q6', name: 'Rime Q6', size: 1400000000, quant: 'Q6_K', tier: 3, license: 'lfm1.0' });
+  try {
+    const t = setup();
+    assert.deepEqual(await LOCAL.prepare(LOCAL.config({})), { state: 'ready' });
+    assert.deepEqual(t.st.log.downloads, ['rime-q4']);
+  } finally { MODELS.splice(0, MODELS.length, ...kept); }
 });
 
 test('a download that outlasts the request answers downloading and goes on; status says downloading with its progress', async () => {
