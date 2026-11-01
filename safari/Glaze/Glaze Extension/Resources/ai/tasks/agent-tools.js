@@ -90,7 +90,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       parameters: params({ course: COURSE('The course id.'), page: PAGE, account: ACCOUNT }, ['course']) },
     { name: 'discussions_list', kind: 'read', description: "A course's discussions: id and title.",
       parameters: params({ course: COURSE('The course id.'), account: ACCOUNT }, ['course']) },
-    { name: 'discussion_read', kind: 'read', description: "One discussion's prompt as text, a page at a time (about 1,000 characters). On Blackboard also whether it is graded, the student's own replies and how many classmates replied, never their names or words.",
+    { name: 'discussion_read', kind: 'read', description: "A Blackboard prompt, paged (1,000 characters), whether graded, the student's own replies and how many classmates replied, never their names or words. Canvas prompts are refused until their authorship can be verified.",
       parameters: params({ course: COURSE('The course id.'), id: { type: 'string', pattern: UID, description: 'The discussion id from discussions_list.' }, page: PAGE, account: ACCOUNT }, ['course', 'id']) },
   ].map((t) => Object.freeze(t)));
   const NAMES = SPECS.map((t) => t.name);

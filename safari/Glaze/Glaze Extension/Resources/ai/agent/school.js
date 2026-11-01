@@ -165,10 +165,9 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
         return { account: w.account, title: r.title, ...(r.at && { at: r.at }), gradable: r.gradable === true, ...got,
           ...(page === 1 && { mine, ...((r.mine || []).length > 3 && { mineMore: r.mine.length - 3 }), others: r.others ?? null, ...(r.complete === false && { complete: false }) }) };
       }
-      const r = await viaTab(w, ctx, 'announcement', { course: args.course, id: args.id });
-      if (r.ok === false) return r;
-      const p = paged(r.text, args.page || 1, r.truncated);
-      return p.error ? fail(p.error) : { account: w.account, title: r.title, ...(r.author && { author: r.author }), ...(r.at && { at: r.at }), ...p };
+      // A Canvas topic may itself be a student's post. The popup's shape supplies neither instructor authorship nor a
+      // separate instructor prompt, so passing its author/message through would expose a classmate's name and words.
+      return fail("Glaze can't verify this Canvas prompt's authorship yet; open it on the site.");
     }),
   ];
   const register = (registry) => tools().map((t) => registry.add(t));
