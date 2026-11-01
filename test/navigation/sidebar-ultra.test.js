@@ -964,6 +964,82 @@ test("the sidebar's header keeps one row when Jump to widgets appears later, so 
   assert.equal(winner(rules, title, 'text-overflow')?.[0], 'ellipsis', 'a long custom title fits the room left by Jump to widgets');
 });
 
+test("a course's Content fades in without rising while Glaze's sidebar is a column, so the column it holds is placed against the window from the start", () => {
+  const { chain, cssRules, winner } = require('../helpers/css-cascade.cjs');
+  const content = chain('html', 'body', 'div#site-wrap', 'section.course-outline-content.route-view-container');
+  const root = content.parent.parent.parent;
+  const rules = [...cssRules('content/motion.css'), ...cssRules('navigation/page/sidebar.css')];
+  for (const mode of ['expanded', 'collapsed']) {
+    root.attrs = { 'data-gz-sb-ultra': '', 'data-gz-sidebar': mode };
+    // A rise (translate) running on an ancestor makes it the fixed column's containing block: the column follows the page.
+    assert.equal(winner(rules, content, 'animation-name')?.[0], 'gz-fade', mode);
+  }
+  root.attrs = { 'data-gz-sb-ultra': '', 'data-gz-sidebar': 'drawer' };
+  assert.notEqual(winner(rules, content, 'animation-name')?.[0], 'gz-fade', "a drawer leaves Glaze's entrance as it is");
+});
+
+test("the column's top counts the course header fading in with it: the panel at opacity 0 holds both", async () => {
+  const p = page({ at: 'outline', aside: 'live', stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  p.$('.js-details-and-actions').box = { left: 1248, top: 140, width: 320, height: 0 };
+  const panel = p.$('.panel-wrap'), style = p.c.getComputedStyle;
+  p.c.getComputedStyle = (e) => ({ ...style(e), opacity: e === panel ? '0' : '1' });
+  await p.pass();
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '60px', 'under the course header from the first frame, not where it goes once the header is opaque');
+  // A header fading out in another panel, without the column, still counts for nothing.
+  const old = p.el('div', 'course-content-container', p.el('div', 'panel-wrap', p.el('div', 'bb-course-navigation', 'Old course')));
+  p.$('#main-content-inner').append(old);
+  const gone = old.firstElementChild;
+  old.querySelector('.bb-course-navigation').box = { left: 200, top: 0, width: 1400, height: 300 };
+  p.c.getComputedStyle = (e) => ({ ...style(e), opacity: e === panel || e === gone ? '0' : '1' });
+  await p.resize(1600);
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-top'), '60px');
+});
+
+test("Details & Actions that Angular keeps ng-hide while it fills keeps its held room, unseen, and isn't measured until shown", async () => {
+  const { chain, cssRules, winner } = require('../helpers/css-cascade.cjs');
+  const details = chain('html', 'body', 'div#site-wrap', 'aside.outline-actions', 'div.js-details-and-actions.outline-action-block.ng-hide');
+  const root = details.parent.parent.parent.parent;
+  const rules = [...cssRules('content/theme.css'), ...cssRules('navigation/page/sidebar.css')];
+  root.attrs = { 'data-gz-sb-held': '' };
+  assert.equal(winner(rules, details, 'display')?.[0], 'block', 'a box for min-height to hold');
+  assert.equal(winner(rules, details, 'visibility')?.[0], 'hidden', "unseen until Angular shows it");
+  root.attrs = {};
+  assert.equal(winner(rules, details, 'display') ?? null, null, "released: Angular's own");
+  // The hold: Ultra's rows laid out while it is still ng-hide are not its size yet.
+  const HELD = `detailsHeight:${O}`;
+  const p = page({ at: 'outline', aside: 'live', stored: { ...record(), [HELD]: { _101_1: 231 } } });
+  const tick = heightTimers(p), el = p.$('.js-details-and-actions');
+  el.className += ' ng-hide';
+  el.box = { left: 1248, top: 140, width: 320, height: 0 };
+  await p.pass();
+  assert.equal(heldRoom(p), 231);
+  fillDetails(p, el, 7);
+  tick(2000);
+  await settle();
+  assert.equal(heldRoom(p), 231, 'hidden rows neither release nor settle the room');
+  el.className = el.className.replace(' ng-hide', '');
+  fillDetails(p, el, 7);
+  assert.equal(heldRoom(p), 0, 'shown as tall as the room: released');
+});
+
+test('the held ng-hide Details box respects folded, hidden and overlaid This page and a collapsed sidebar', () => {
+  const { chain, cssRules, winner } = require('../helpers/css-cascade.cjs');
+  const details = chain('html', 'body', 'div#site-wrap', 'aside.outline-actions', 'div.js-details-and-actions.outline-action-block.ng-hide');
+  const aside = details.parent, root = aside.parent.parent.parent;
+  const rules = cssRules('navigation/page/sidebar.css');
+  const host = { 'data-gz-sidebar-host': 'native', 'data-gz-sb-self': '' };
+  root.attrs = { 'data-gz-sb-held': '', 'data-gz-sidebar': 'expanded' };
+  aside.attrs = host;
+  assert.equal(winner(rules, details, 'display')?.[0], 'block', 'shown This page keeps the unseen reservation');
+  for (const state of ['data-gz-sb-fold-page', 'data-gz-sb-page-hidden', 'data-gz-sb-overlay']) {
+    aside.attrs = { ...host, [state]: '' };
+    assert.equal(winner(rules, details, 'display')?.[0], 'none', `${state}: the reservation cannot put a blank block above the dock`);
+  }
+  aside.attrs = host;
+  root.attrs['data-gz-sidebar'] = 'collapsed';
+  assert.equal(winner(rules, details, 'display')?.[0], 'none', 'collapsed: only the sidebar header has a box');
+});
+
 // Ultra's content in Details & Actions, this tall (0: none yet, or the block hidden), in the box the browser gives it: never
 // shorter than the held height. The sidebar hears of it as it would: its ResizeObserver, and its observer on the column.
 const detailsSize = (p, height) => {
@@ -1007,6 +1083,51 @@ const fillDetails = (p, details, n) => {
   for (const ro of p.sizes.filter((r) => r.targets.includes(details))) ro.f([{ target: details }]);
 };
 const heldRoom = (p) => (p.doc.root.dataset.gzSbHeld != null && parseFloat(p.doc.root.style.getPropertyValue('--gz-sb-held'))) || 0;
+
+test('Angular hiding partially filled Details cancels settling until the shown rows settle again', async (t) => {
+  for (const sitePass of [false, true]) await t.test(`site pass before the timer: ${sitePass}`, async () => {
+    const HELD = `detailsHeight:${O}`;
+    const p = page({ aside: 'live', stored: { ...record(), [HELD]: { _101_1: 231 } } });
+    const tick = heightTimers(p), details = p.$('.js-details-and-actions');
+    detailsSize(p, 0);
+    await p.pass();
+    fillDetails(p, details, 2);
+    tick(100);
+    details.className += ' ng-hide';
+    if (sitePass) await p.pass();
+    tick(1900);
+    await settle();
+    assert.equal(heldRoom(p), 231, 'hidden partial rows cannot release the reservation on their old timer');
+    assert.equal(p.store[HELD]._101_1, 231, 'the last shown height survives while Angular is filling');
+    details.className = details.className.replace(' ng-hide', '');
+    await p.pass();
+    tick(1999);
+    assert.equal(heldRoom(p), 231, 'the same rows need a fresh quiet period after being shown');
+    tick(1);
+    await settle();
+    assert.equal(heldRoom(p), 0);
+    assert.equal(p.store[HELD]._101_1, 66);
+  });
+});
+
+test('Angular hiding Details just before its first-visit reveal waits for shown rows', async () => {
+  const p = page({ aside: 'live', stored: record() });
+  const tick = heightTimers(p), details = p.$('.js-details-and-actions');
+  detailsSize(p, 0);
+  await p.pass();
+  fillDetails(p, details, 2);
+  tick(100);
+  details.className += ' ng-hide';
+  // The site's attribute pass is throttled: the reveal can run before it sees ng-hide.
+  tick(200);
+  assert.equal(p.doc.root.hasAttribute('data-gz-sb-unsized'), true, 'hidden rows cannot finish the reveal timer');
+  details.className = details.className.replace(' ng-hide', '');
+  await p.pass();
+  tick(299);
+  assert.equal(p.doc.root.hasAttribute('data-gz-sb-unsized'), true);
+  tick(1);
+  assert.equal(p.doc.root.hasAttribute('data-gz-sb-unsized'), false);
+});
 
 test("Details & Actions added empty on a route into a course is held from when Ultra adds it, and filling it releases the hold", async () => {
   const HELD = `detailsHeight:${O}`;

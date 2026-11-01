@@ -35,6 +35,7 @@ const NEO_VIEWPORT = { width: 1280, height: 800 }, NEO_SCALE = 2;
 // PERF_WIDTH: a wider window than the device's, in CSS pixels. At 1280 Glaze's sidebar is a closed drawer beside the synthetic
 // outline (its page starts at 472 px); from about 1560 it is the outline's right column, as on the owner's Mac.
 const WIDTH = Number(process.env.PERF_WIDTH) || 0;
+// PERF_REQUIRE_STILL_ASIDE runs with motion on, as the owner has it: Glaze's page entrance plays as Ultra opens a course.
 const stillAside = !!process.env.PERF_REQUIRE_STILL_ASIDE;
 // Pins this process to 6 cores, so the browsers it launches inherit them; null where taskset is missing (macOS).
 const pinCores = () => { try { execFileSync('taskset', ['-a', '-cp', '0-5', String(process.pid)], { stdio: 'ignore' }); return '0-5'; } catch { return null; } };
@@ -98,12 +99,13 @@ const rows = (kind, n) => Array.from({ length: n }, (_, i) => kind === 'outline'
 // The outline's right column as the owner's Course Content had it (2026-10-31, structure only, synthetic text): Faculty and
 // the schedule hidden and empty, Details & Actions there but empty until Ultra fills it (DETAILS_FILL).
 const ASIDE = '<aside class="js-course-info-skip-link-target outline-actions"><bb-course-instructors class="outline-action-block block-display top-block" style="display:none"></bb-course-instructors>'
-  + '<div class="js-details-and-actions outline-action-block"></div><bb-course-schedule class="conditional-block react-container" style="display:none"></bb-course-schedule></aside>';
+  + '<div class="js-details-and-actions outline-action-block ng-hide" ng-show="ready"></div><bb-course-schedule class="conditional-block react-container" style="display:none"></bb-course-schedule></aside>';
 // A route into Content as live (2026-10-31, Courses → course and Calendar → Content): ms after the click Ultra draws the
 // course with Details & Actions empty and Content still loading (OUTLINE_AT), fills Details & Actions with its seven 33 px
 // rows (231 px) about 330 ms later, and Content's list comes after that, so the page settles for Glaze with the fill.
 const OUTLINE_AT = 140, DETAILS_FILL = [[OUTLINE_AT + 250, 2], [OUTLINE_AT + 330, 7]], OUTLINE_ROWS_AT = OUTLINE_AT + 460;
-const outlineRows = () => rows('outline', 240);
+// Content's list arrives with the course's banner above it (live: Ultra draws the banner and the progress bar late).
+const outlineRows = () => `<div class="course-banner"></div>${rows('outline', 240)}`;
 // A course as live (live-shapes-2026-10-31.md): Ultra's course panel over the page, the window wide, Content's grid with the
 // outline beside its right column, which stock Ultra draws at the window's right edge.
 const coursePanel = () => '<section class="course bb-offcanvas-container route-view-container"><h1 elementtiming="title">outline</h1><div class="course-content-container"><div class="panel-wrap"><div class="bb-course-navigation">Course</div>'
@@ -112,7 +114,7 @@ const coursePanel = () => '<section class="course bb-offcanvas-container route-v
 const routeBody = (kind) => kind === 'outline' ? coursePanel() : `<section class="route-view-container"><h1 elementtiming="title">${kind}</h1>${kind === 'course'
   ? `<div class="courses-panel"><div class="course-org-list">${Array.from({ length: 24 }, (_, i) => `<article class="element-card course-element-card" data-course-id="_${101 + i}_1"><div class="course-banner"></div><div class="element-details"><h4 class="course-title"><span class="js-course-title-element">Course ${i}</span></h4><div class="course-status">Open</div></div></article>`).join('')}</div></div><div class="todo-panel js-todo-panel-skip-link-target"><bb-todo class="react-container">Due soon</bb-todo></div>`
   : rows(kind, 30)}</section>`;
-const fixture = `<!doctype html><html lang="en"><head><base href="//ultra-cdn.invalid/ultra/uiv4001.0.0-rel/"><meta charset="utf-8"><title>Ultra performance fixture</title><style>body{margin:0;font:14px sans-serif}nav{position:fixed;width:200px}main{margin-left:200px}.native-row,.content-list-item{padding:4px;border-bottom:1px solid #ddd}.course.bb-offcanvas-container{position:fixed;inset:0;overflow:auto;background:#fff;z-index:10}.course-outline-grid{display:grid;grid-template-columns:minmax(0,1fr) 330px;align-items:start}.outline-actions{display:flex;flex-direction:column}</style></head><body><div id="site-wrap"><nav id="base_tools"><a href="/ultra/institution-page"><span>Institution Page</span></a><a href="/ultra/course">Courses</a></nav><main id="main-content"><div id="main-content-inner">${routeBody('stream')}</div></main></div><aside id="gz-perf-own"></aside></body></html>`;
+const fixture = `<!doctype html><html lang="en"><head><base href="//ultra-cdn.invalid/ultra/uiv4001.0.0-rel/"><meta charset="utf-8"><title>Ultra performance fixture</title><style>.ng-hide:not(.ng-hide-animate){display:none!important}body{margin:0;font:14px sans-serif}nav{position:fixed;width:200px}main{margin-left:200px}.native-row,.content-list-item{padding:4px;border-bottom:1px solid #ddd}.course.bb-offcanvas-container{position:fixed;inset:0;overflow:auto;background:#fff;z-index:10}.bb-course-navigation{height:106px;box-sizing:border-box}.course-banner{height:140px}.course-outline-grid{display:grid;grid-template-columns:minmax(0,1fr) 330px;align-items:start}.outline-actions{display:flex;flex-direction:column}</style></head><body><div id="site-wrap"><nav id="base_tools"><a href="/ultra/institution-page"><span>Institution Page</span></a><a href="/ultra/course">Courses</a></nav><main id="main-content"><div id="main-content-inner">${routeBody('stream')}</div></main></div><aside id="gz-perf-own"></aside></body></html>`;
 
 // Glaze's blocks in the outline's right column, from the route on: each one's top while shown, and the layout shift they
 // take part in (aside, below).
@@ -124,13 +126,13 @@ function asideWatch() {
   const sample = () => {
     const t = Math.round(performance.now() - from), row = {};
     for (const b of blocks) {
-      const e = document.querySelector(b), r = e?.checkVisibility({ visibilityProperty: true }) && e.getBoundingClientRect();
+      const e = document.querySelector(b), r = e?.checkVisibility({ visibilityProperty: true, opacityProperty: true }) && e.getBoundingClientRect();
       if (r && r.height > 0 && r.width > 0) { const top = Math.round(r.top * 10) / 10, list = tops[b]; row[b] = top; if (list.at(-1)?.top !== top) list.push({ t, top }); }
     }
     const d = document.querySelector('aside.outline-actions > .js-details-and-actions');
     Object.assign(row, { details: d ? Math.round(d.getBoundingClientRect().height) : null, held: document.documentElement.style.getPropertyValue('--gz-sb-held') && document.documentElement.hasAttribute('data-gz-sb-held') ? document.documentElement.style.getPropertyValue('--gz-sb-held') : null,
       host: d?.parentElement.getAttribute('data-gz-sidebar-host') ?? null });
-    const a = d?.parentElement.checkVisibility({ visibilityProperty: true }) && d.parentElement.getBoundingClientRect();
+    const a = d?.parentElement.checkVisibility({ visibilityProperty: true, opacityProperty: true }) && d.parentElement.getBoundingClientRect();
     if (a && a.width > 0 && a.height > 0) { row.left = Math.round(a.left * 10) / 10; row.top = Math.round(a.top * 10) / 10; }
     const key = JSON.stringify(row);
     if (key !== was && frames.length < 200) { was = key; frames.push({ t, ...row }); }
@@ -164,7 +166,8 @@ async function settle(page, change) {
         await new Promise((r) => setTimeout(r, outlineAt));
         inserted = performance.now();
         document.getElementById('main-content-inner').innerHTML = body;
-        for (const [ms, n] of fill) setTimeout(() => { const d = document.querySelector('.js-details-and-actions'); if (d) d.innerHTML = Array.from({ length: n }, (_, i) => `<div style="height:33px;box-sizing:border-box">Action ${i + 1}</div>`).join(''); }, ms - outlineAt);
+        // Live, Angular keeps it ng-hide (display: none) while it fills, and shows it with its last rows.
+        for (const [ms, n] of fill) setTimeout(() => { const d = document.querySelector('.js-details-and-actions'); if (d) { d.innerHTML = Array.from({ length: n }, (_, i) => `<div style="height:33px;box-sizing:border-box">Action ${i + 1}</div>`).join(''); if (n === fill.at(-1)[1]) d.classList.remove('ng-hide'); } }, ms - outlineAt);
         setTimeout(() => { const c = document.querySelector('.course-outline-content .outline-column'); if (c) c.innerHTML = rowsHtml; }, rowsAt - outlineAt);
       } else document.getElementById('main-content-inner').innerHTML = body;
     } else if (change === 'own') {
@@ -499,7 +502,7 @@ if (require.main === module) (async () => {
       const profile = path.join(scratch, instrumented ? 'instrumented-profile' : glaze === 'off' ? 'plain-off-profile' : 'plain-profile');
       await require('../../tools/dev/wait-for-browser.js')();
       context = await chromium.launchPersistentContext(profile, {
-        ...chromeLaunch, headless: true, viewport: { ...(neo ? NEO_VIEWPORT : { width: 1280, height: 900 }), ...(WIDTH && { width: WIDTH }) }, ...(neo && { deviceScaleFactor: NEO_SCALE }), reducedMotion: 'reduce',
+        ...chromeLaunch, headless: true, viewport: { ...(neo ? NEO_VIEWPORT : { width: 1280, height: 900 }), ...(WIDTH && { width: WIDTH }) }, ...(neo && { deviceScaleFactor: NEO_SCALE }), reducedMotion: stillAside ? 'no-preference' : 'reduce',
         args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--renderer-process-limit=1', '--disable-background-networking'],
       });
       context.setDefaultTimeout(10000);

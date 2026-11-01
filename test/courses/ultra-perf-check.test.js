@@ -97,6 +97,33 @@ test('the aside sampler records the visible column position before Glaze blocks 
   assert.equal(frames[1].top, 100, 'its vertical position counts before Course notes and the dock exist');
 });
 
+test('the motion-on aside sampler ignores fully transparent columns and blocks until their first visible frame', () => {
+  let sample, opacity = 0, top = 108;
+  const visible = ({ opacityProperty }) => !opacityProperty || opacity > 0;
+  const column = { checkVisibility: visible, getAttribute: () => 'native',
+    getBoundingClientRect: () => ({ left: 1376, top, width: 330, height: 700 }) };
+  const details = { parentElement: column, getBoundingClientRect: () => ({ height: 231 }) };
+  const notes = { checkVisibility: visible, getBoundingClientRect: () => ({ top: top + 300, width: 330, height: 100 }) };
+  const dock = { checkVisibility: visible, getBoundingClientRect: () => ({ top: top + 500, width: 330, height: 100 }) };
+  const start = source.indexOf('function asideWatch()'), end = source.indexOf('\nasync function settle(', start);
+  const stop = vm.runInNewContext(`${source.slice(start, end)}\nasideWatch();`, {
+    document: { querySelector: (s) => s.endsWith('.js-details-and-actions') ? details : s.endsWith('#gz-nt-block') ? notes : dock,
+      documentElement: { style: { getPropertyValue: () => '' }, hasAttribute: () => false } },
+    performance: { now: () => 200 },
+    requestAnimationFrame: (fn) => { sample = fn; return 1; }, cancelAnimationFrame() {},
+    PerformanceObserver: class { observe() {} takeRecords() { return []; } disconnect() {} },
+  });
+  sample();
+  opacity = 0.01; top = 106;
+  sample();
+  const frames = JSON.parse(JSON.stringify(stop().frames));
+  for (const key of ['left', 'top', 'aside.outline-actions > #gz-nt-block', 'aside.outline-actions > #gz-sb-widgets']) {
+    assert.equal(frames[0][key], undefined, `${key}: an opacity-zero ancestor has no visible position`);
+    assert.equal(typeof frames[1][key], 'number', `${key}: even a partly faded-in column counts`);
+  }
+  assert.doesNotThrow(() => requireStillAside(frames), 'an invisible placement correction is not a visible move');
+});
+
 test('the still-aside requirement catches Details growth during sidebar adoption', () => {
   const notes = 'aside.outline-actions > #gz-nt-block', dock = 'aside.outline-actions > #gz-sb-widgets';
   assert.throws(() => requireStillAside([

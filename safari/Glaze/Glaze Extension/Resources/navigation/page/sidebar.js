@@ -32,7 +32,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       let visible = true;
       for (let p = e; p?.tagName; p = p.parentElement) {
         const s = typeof getComputedStyle === 'function' ? getComputedStyle(p) : null;
-        if (p.hidden || s?.display === 'none' || s?.visibility === 'hidden' || s?.visibility === 'collapse' || s?.opacity === '0') { visible = false; break; }
+        // Transparent counts as hidden, except a panel fading in with the column it holds (Ultra's course opening): the
+        // column is as transparent, and its top is the header's from the first frame.
+        if (p.hidden || s?.display === 'none' || s?.visibility === 'hidden' || s?.visibility === 'collapse' || (s?.opacity === '0' && !(host && !host.own && p.contains(host.el)))) { visible = false; break; }
       }
       if (visible) bottom = Math.max(bottom, r.bottom);
     }
@@ -398,9 +400,11 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     d.check = () => {
       const children = [...el.children];
       if (children.length !== d.children.length || children.some((k, i) => k !== d.children[i])) observe();
-      if (!filled(el) || (d.hidden && busyView(el))) {
-        // A loading placeholder (or actions removed while reloading) cannot finish a first visit's quiet period.
-        if (d.hidden) { clearTimeout(d.reveal); clearTimeout(d.quiet); d.quiet = 0; }
+      const ngHide = has(el, 'ng-hide');
+      if (!filled(el) || ngHide || (d.hidden && busyView(el))) {
+        // A loading placeholder (or actions removed while reloading) cannot finish a first visit's quiet period, and rows
+        // Angular still keeps hidden (ng-hide) aren't its size yet.
+        if (d.hidden || ngHide) { clearTimeout(d.reveal); clearTimeout(d.quiet); d.quiet = 0; }
         return;
       }
       const box = el.getBoundingClientRect();
@@ -412,10 +416,18 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       d.size = size;
       // Drawn as tall as the room: it goes, and nothing moves.
       if (d.want && size >= d.want - 0.5) letGo(d);
-      if (d.hidden) { clearTimeout(d.reveal); d.reveal = setTimeout(() => { if (held === d && !d.paused) show(d); }, 300); }
+      if (d.hidden) { clearTimeout(d.reveal); d.reveal = setTimeout(() => { if (ready()) show(d); }, 300); }
       // Once Ultra stops drawing it: kept for the next visit, and room it doesn't fill (smaller than last time) goes.
       clearTimeout(d.quiet);
-      d.quiet = setTimeout(() => { if (held === d && !d.paused) { rememberHeight(d); show(d); letGo(d); } }, 2000);
+      d.quiet = setTimeout(() => { if (ready()) { rememberHeight(d); show(d); letGo(d); } }, 2000);
+    };
+    // Angular's class change can precede the site's throttled pass without resizing the held box. Expiring timers
+    // must cancel that quiet period too, so showing the same rows starts a fresh one.
+    const ready = () => {
+      if (held !== d || d.paused) return false;
+      if (!has(el, 'ng-hide')) return true;
+      d.check();
+      return false;
     };
     // min-height masks content growth from the block's own ResizeObserver. Its direct content blocks must be watched
     // too: wrapping, fonts and images can resize them without a childList mutation. Rebind when Ultra swaps them.

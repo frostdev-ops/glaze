@@ -17,9 +17,16 @@
   /* A course outline's Details & Actions while Ultra fills it: as tall as it was last time (navigation/page/sidebar.js hold),
      from when Ultra adds it, before the sidebar takes the column. */
   html[data-gz-sb-held] #site-wrap aside.outline-actions > .js-details-and-actions { min-height: var(--gz-sb-held) !important; box-sizing: border-box !important; }
+  /* Angular keeps it ng-hide (display: none) while it fills: the room is an unseen box while This page is shown. */
+  html[data-gz-sb-held]:not([data-gz-sidebar="collapsed"]) #site-wrap aside.outline-actions:not([data-gz-sb-fold-page], [data-gz-sb-page-hidden], [data-gz-sb-overlay]) > .js-details-and-actions.ng-hide { display: block !important; visibility: hidden !important; }
   /* A course outline's column Ultra has just drawn, until the sidebar takes it a pass later (navigation/page/sidebar.js
      settled): not shown in Ultra's place first, so it never moves to the window's edge in view. */
   html[data-gz-sb-ultra]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap aside.outline-actions:not([data-gz-sidebar-host]) { visibility: hidden; }
+  /* A course opening while the sidebar is a column fades in without rising (content/motion.css gz-in): a rise running on
+     an ancestor makes it the fixed column's containing block, and the outline's column rode the page into place. */
+  html[data-gz-sb-ultra]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap section.course.bb-offcanvas-container,
+  html[data-gz-sb-ultra]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap .course-content-container > .panel-wrap,
+  html[data-gz-sb-ultra]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap section.course-outline-content { animation-name: gz-fade; }
   html[data-gz-sb-unsized] #site-wrap aside.outline-actions > #gz-nt-block, html[data-gz-sb-unsized] #site-wrap aside.outline-actions > #gz-sb-widgets { visibility: hidden; }
   html[data-gz-sb-notes][data-gz-sidebar="expanded"] #site-wrap aside.outline-actions[data-gz-sidebar-host] > #gz-sb-widgets { visibility: hidden; }
   [data-gz-sidebar-host] > #right-side { width: auto !important; }
