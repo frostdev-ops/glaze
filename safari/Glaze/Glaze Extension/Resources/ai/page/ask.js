@@ -232,7 +232,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
   onAction('highlight', (a) => mark(a.text, a.note));
   // A run's actions, once its answer shows: an open that leaves the page ends them (the rest go with it).
   const perform = (list, li) => {
-    if (li?.dataset.streaming !== undefined) { afterReveal.set(li, list); return; }
+    if (li?.dataset.streaming !== undefined) { afterReveal.set(li, { list, epoch: actionEpoch }); return; }
     let first = null;
     for (let i = 0; i < list.length; i++) {
       const r = act(list[i], list.slice(i + 1));
@@ -250,7 +250,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
   // ---- the view ---------------------------------------------------------------------------------------------------------
   const turns = []; // [{ question, answer }] of this panel, for follow-ups; gone when it closes
   const afterReveal = new Map(), reveals = new Map(), copyTimers = new Map(), exits = new Set();
-  let exitFrame = 0;
+  let exitFrame = 0, actionEpoch = 0;
   let box = null, opener = null, current = 0, pending = null, follow = true, frame = 0, written = -1, sizes = null, moved = 0;
   const $ = (sel) => box?.querySelector(sel);
   const say = (s) => { const l = $('.gz-ask-say'); if (l && l.textContent !== s) l.textContent = s; };
@@ -367,7 +367,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
         const actions = afterReveal.get(li);
         afterReveal.delete(li);
         // The completed answer gets a paint before navigation can leave it. releaseView cancels this frame too.
-        if (actions) reveals.set(li, requestAnimationFrame(() => { reveals.delete(li); if (li.isConnected && box?.open) perform(actions, li); }));
+        if (actions) reveals.set(li, requestAnimationFrame(() => { reveals.delete(li); if (li.isConnected && box?.open && actions.epoch === actionEpoch) perform(actions.list, li); }));
       }
     };
     reveals.set(li, requestAnimationFrame(tick));
@@ -440,6 +440,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
   const ask = async ({ question: q, attempt = '', shown = false, sent, fired }) => {
     if (current || pending || !box || shutting) return;
     const mine = pending = { box };
+    actionEpoch++; afterReveal.clear();
     const allowed = await alive();
     if (pending !== mine || box !== mine.box || !box.open) return;
     pending = null;
