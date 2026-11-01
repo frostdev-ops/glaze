@@ -280,7 +280,7 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     const blocks = r.items.filter((c) => c?.contentHandler?.id === 'resource/x-bb-document' && visible(c) !== null && typeof c.body === 'string');
     const body = blocks.map((c) => c.body).join('\n').slice(0, 100000);
     const t = html(body);
-    return { text: t.slice(0, 20000), files: embedded(body), ...((t.length > 20000 || body.length >= 100000) && { truncated: true }) };
+    return { text: t.slice(0, 20000), files: embedded(body), ...((!r.complete || t.length > 20000 || body.length >= 100000) && { truncated: true }) };
   };
   const search = async (go, a) => {
     const x = X();
@@ -345,13 +345,14 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     let r = null;
     try { r = await reader.list(`${base}/messages`, 'id,parentId,userId,status,body,postDate,createdDate'); } catch (e) { if (!/\b(401|403|404)\b/.test(e.message)) throw e; }
     if (!go()) return no('late');
-    if (!r) return { ok: true, title: String(d.title || '').trim().slice(0, 300), text: html(typeof d.topic.body === 'string' ? d.topic.body : '').slice(0, 20000), files: embedded(d.topic.body), gradable: d.gradable === true, at: ms(d.topic.postDate) ?? ms(d.createdDate), mine: [], others: null, complete: false };
+    const body = typeof d.topic.body === 'string' ? d.topic.body : '', prompt = html(body);
+    const truncated = prompt.length > 20000 || body.length >= 100000;
+    if (!r) return { ok: true, title: String(d.title || '').trim().slice(0, 300), text: prompt.slice(0, 20000), files: embedded(body), gradable: d.gradable === true, at: ms(d.topic.postDate) ?? ms(d.createdDate), mine: [], others: null, complete: false, ...(truncated && { truncated: true }) };
     const live = r.items.filter((m) => m && m.status !== 'Deleted' && m.status !== 'Draft');
     // reply: it answers a classmate's post rather than the prompt.
     const mine = live.filter((m) => String(m.userId) === go.uid).map((m) => ({ at: ms(m.postDate) ?? ms(m.createdDate), reply: !!m.parentId && m.parentId !== d.topic.id, text: html(typeof m.body === 'string' ? m.body : '').slice(0, 2000) }));
-    const body = typeof d.topic.body === 'string' ? d.topic.body : '';
-    return { ok: true, title: String(d.title || '').trim().slice(0, 300), text: html(body).slice(0, 20000), files: embedded(body), gradable: d.gradable === true,
-      at: ms(d.topic.postDate) ?? ms(d.createdDate), mine, others: live.length - mine.length, complete: r.complete, ...(body.length >= 100000 && { truncated: true }) };
+    return { ok: true, title: String(d.title || '').trim().slice(0, 300), text: prompt.slice(0, 20000), files: embedded(body), gradable: d.gradable === true,
+      at: ms(d.topic.postDate) ?? ms(d.createdDate), mine, others: live.length - mine.length, complete: r.complete, ...(truncated && { truncated: true }) };
   };
   const modules = async (go, a) => {
     if (X().site !== 'canvas' || !ID.test(a.course || '')) return no('args');
