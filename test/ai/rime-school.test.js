@@ -460,6 +460,15 @@ test('a wake, a watch and a cancel are asked for in each language\'s common ques
   }
 });
 
+test('recall questions and quoted commands do not authorize reminders', () => {
+  const wake = { call: { name: 'wake_create', arguments: { at: '2026-10-30 22:05', say: 'Lab' } }, answer: null };
+  for (const q of ['Kannst du erklären wie Menschen erinnern?', 'Kun je uitleggen hoe mensen dingen herinneren?',
+    'Kun je me uitleggen hoe mensen dingen herinneren?', 'Tu peux rappeler ce que dit le syllabus ?',
+    '¿Puedes recordar lo que dice el programa?', 'Você pode lembrar o que diz o programa?', '“Remind me tonight about the lab”']) {
+    assert.equal(A.why(wake, inputOf(q)), 'asked', q);
+  }
+});
+
 // ---- Ultra, in the shapes probed on a real Ultra (2026-11-01; fixtures/ultra-rime-reads.json, synthetic values) ----------
 const PROBED = C.load('ultra-rime-reads.json');
 const probedTab = (o = {}) => ultraTab({ routes: {
