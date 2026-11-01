@@ -101,33 +101,37 @@ const tinyModel = () => {
   const rnd = () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   const C = { E: 256, H: 2, Hkv: 1, hd: 128, ff: 512, V: 1000, window: 5, L: 3, kinds: ['conv', 'full', 'conv', 'swa', 'conv', 'full'], eps: 1e-5 };
   // A binary16 scale near 2^(e − 15), e in [lo, hi].
-  const half = (lo, hi) => ((lo + Math.floor(rnd() * (hi - lo + 1))) << 10) | Math.floor(rnd() * 1024);
+  const half = (lo, hi) => { lo = Math.max(1, lo); hi = Math.max(lo, hi); return ((lo + Math.floor(rnd() * (hi - lo + 1))) << 10) | Math.floor(rnd() * 1024); };
+  // shift: scales 2^shift times smaller. The short convolution multiplies three of in_proj's outputs (C ⊙ conv(B ⊙ x)),
+  // so at the other matrices' scales its output reached 8.8e5 by layer 4, past f16's 65,504: the f16 path (Metal) read
+  // infinities into its GEMM tiles. in_proj takes shift 3, and ffn_gate and ffn_up (whose product SwiGLU takes) shift 1,
+  // keeping every value under 2^14 (test/ai/local-engine-check.test.js). Exponents stay at 1 or more: normal halves.
   const BLOCK = { Q8_0: [8, 32, 34], Q4_K: [12, 256, 144], Q5_K: [13, 256, 176], Q6_K: [14, 256, 210] };
-  const quantized = (type, rows, cols) => {
+  const quantized = (type, rows, cols, shift = 0) => {
     const [id, per, size] = BLOCK[type], n = (rows * cols) / per, b = new Uint8Array(n * size);
     for (let i = 0; i < b.length; i++) b[i] = Math.floor(rnd() * 256);
     const dv = new DataView(b.buffer);
     for (let k = 0; k < n; k++) {
       const o = k * size;
-      if (type === 'Q8_0') dv.setUint16(o, half(4, 7), true);
-      else if (type === 'Q6_K') dv.setUint16(o + 208, half(1, 3), true);
-      else { dv.setUint16(o, half(2, 5), true); dv.setUint16(o + 2, half(2, 5), true); }
+      if (type === 'Q8_0') dv.setUint16(o, half(4 - shift, 7 - shift), true);
+      else if (type === 'Q6_K') dv.setUint16(o + 208, half(1 - shift, 3 - shift), true);
+      else { dv.setUint16(o, half(2 - shift, 5 - shift), true); dv.setUint16(o + 2, half(2 - shift, 5 - shift), true); }
     }
     return { id, dims: [cols, rows], data: b };
   };
   const f32 = (dims, s, base = 0) => ({ id: 0, dims, data: new Uint8Array(Float32Array.from({ length: dims.reduce((a, b) => a * b, 1) }, () => base + s * (2 * rnd() - 1)).buffer) });
   const types = ['Q4_K', 'Q5_K', 'Q6_K', 'Q8_0'];
   let ti = 0;
-  const q = (rows, cols) => quantized(types[ti++ % 4], rows, cols);
+  const q = (rows, cols, shift) => quantized(types[ti++ % 4], rows, cols, shift);
   const T = { 'token_embd.weight': quantized('Q6_K', C.V, C.E), 'output_norm.weight': f32([C.E], 0.2, 1), 'rope_freqs.weight': { id: 0, dims: [C.hd / 2], data: new Uint8Array(Float32Array.from({ length: C.hd / 2 }, (_, i) => (i < C.hd / 4 ? 1 : 1e30)).buffer) } };
   C.kinds.forEach((k, i) => {
     const b = (n) => `blk.${i}.${n}.weight`;
     const gt = types[i % 4];
     Object.assign(T, {
       [b('attn_norm')]: f32([C.E], 0.2, 1), [b('ffn_norm')]: f32([C.E], 0.2, 1), [b('post_attention_norm')]: f32([C.E], 0.2, 1), [b('post_ffw_norm')]: f32([C.E], 0.2, 1),
-      [b('ffn_gate')]: quantized(gt, C.ff, C.E), [b('ffn_up')]: quantized(gt, C.ff, C.E), [b('ffn_down')]: q(C.E, C.ff),
+      [b('ffn_gate')]: quantized(gt, C.ff, C.E, 1), [b('ffn_up')]: quantized(gt, C.ff, C.E, 1), [b('ffn_down')]: q(C.E, C.ff),
     });
-    if (k === 'conv') Object.assign(T, { [b('shortconv.conv')]: f32([C.L, C.E], 0.6), [b('shortconv.in_proj')]: q(3 * C.E, C.E), [b('shortconv.out_proj')]: q(C.E, C.E) });
+    if (k === 'conv') Object.assign(T, { [b('shortconv.conv')]: f32([C.L, C.E], 0.6), [b('shortconv.in_proj')]: q(3 * C.E, C.E, 3), [b('shortconv.out_proj')]: q(C.E, C.E) });
     else Object.assign(T, {
       [b('attn_q')]: q(C.H * C.hd, C.E), [b('attn_k')]: q(C.Hkv * C.hd, C.E), [b('attn_v')]: q(C.Hkv * C.hd, C.E), [b('attn_output')]: q(C.E, C.H * C.hd),
       [b('attn_gate')]: quantized('Q8_0', C.H, C.E), [b('attn_q_norm')]: f32([C.hd], 0.2, 1), [b('attn_k_norm')]: f32([C.hd], 0.2, 1),
@@ -791,7 +795,10 @@ function pageLib() {
       if (id !== undefined && id === argmax(gv)) argOk++;
     }
     const rel = maxAbs / maxRef;
-    const pass = k.pass && rel < 1e-4 && top1 === decided && argOk === 12;
+    // f32: the reference's logits within 1e-4 of their scale. f16 (Metal): every layer's GEMM tiles and the key/value cache
+    // round to 2^-11, so the logits land within a few 1e-3 (M5 Pro: 8.8e-3 on the tiny models): 3e-2, and the same top-1
+    // and argmax.
+    const pass = k.pass && rel < (e.f16 ? 3e-2 : 1e-4) && top1 === decided && argOk === 12;
     log(`${pass ? 'ok  ' : 'FAIL'} tiny model: 20-token prompt in chunks of 8 and 12 decode steps, logits max|Δ| ${maxAbs.toExponential(2)} (rel ${rel.toExponential(2)}), top-1 ${top1}/${decided} where the reference's top two differ, GPU argmax ${argOk}/12`);
     gpu.destroy(); e.destroy();
     const api = await apiChecks(o, await open('tiny'));
