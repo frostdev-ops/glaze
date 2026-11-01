@@ -165,12 +165,12 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       nl: ['omreken\\p{L}*', 'reken .{1,30} om', 'gemiddelde van', 'hoeveel dagen', 'welk cijfer moet ik halen', 'procent van', 'mijn gemiddelde', 'mijn cijfer als'],
     },
     navigate: {
-      en: ['take me to', 'go to', 'open (?:my|the)', 'where (?:is|are|can i find)', 'show me where', 'navigate to', 'bring me to'],
-      es: ['ll[eé]vame a', 've a', 'abre (?:mi|mis|la|el|los|las)', 'd[oó]nde (?:est[aá]n?|encuentro)'],
-      'pt-BR': ['me leve (?:para|at[ée])', 'v[aá] para', 'abr[ae] (?:a|o|as|os|minha|meu|minhas|meus)', 'onde (?:est[aá]o?|fica|encontro)'],
-      fr: ['emm[eè]ne-moi', 'va (?:à|a|aux|au|sur)', 'ouvre (?:ma|mon|mes|la|le|les)', 'o[uù] (?:est|sont|trouver)'],
-      de: ['bring mich zu', 'geh(?:e)? zu', '[öo]ffne (?:meine?n?|die|den|das)', 'wo (?:ist|sind|finde ich)'],
-      nl: ['breng me naar', 'ga naar', 'open (?:mijn|de|het)', 'waar (?:is|zijn|vind ik)'],
+      en: ['take me to', 'go to', 'open (?:my|the)', 'where (?:is|are) (?:my|our)', 'where (?:is|are) the (?:grades?|assignments?|syllabus|announcements?|modules?|calendar|courses?|documents?|settings|discussions?)', 'where can i find', 'show me where', 'navigate to', 'bring me to'],
+      es: ['ll[eé]vame a', 've a', 'abre (?:mi|mis|la|el|los|las)', 'd[oó]nde (?:est[aá]n? (?:mis?|el|la|los|las) (?:notas?|tareas?|calendario|cursos?|anuncios?|programa)|est[aá]n? mis?|encuentro)'],
+      'pt-BR': ['me leve (?:para|at[ée])', 'v[aá] para', 'abr[ae] (?:a|o|as|os|minha|meu|minhas|meus)', 'onde (?:est[aá]o? (?:a |o |as |os )?(?:minha|meu|minhas|meus)|fica (?:a |o )?(?:minha|meu)|encontro)'],
+      fr: ['emm[eè]ne-moi', 'va (?:à|a|aux|au|sur)', 'ouvre (?:ma|mon|mes|la|le|les)', 'o[uù] (?:est|sont) (?:ma|mon|mes)', 'o[uù] trouver'],
+      de: ['bring mich zu', 'geh(?:e)? zu', '[öo]ffne (?:meine?n?|die|den|das)', 'wo (?:ist|sind) (?:meine?n?|mein)', 'wo finde ich'],
+      nl: ['breng me naar', 'ga naar', 'open (?:mijn|de|het)', 'waar (?:is|zijn) mijn', 'waar vind ik'],
     },
     remind: {
       en: ['remind\\p{L}*', 'reminders?', 'wake me', "(?:don'?t|do not) let me forget", 'cancel\\p{L}*'],
