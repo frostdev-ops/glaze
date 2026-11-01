@@ -615,15 +615,16 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   };
   const listAnswer = (steps, { locale = 'en' } = {}) => {
     const w = LIST[locale] || LIST.en, items = [], seen = new Set();
-    const walk = (v) => {
-      if (Array.isArray(v)) return v.forEach(walk);
+    const walk = (v, account = '') => {
+      if (Array.isArray(v)) return v.forEach((x) => walk(x, account));
       if (!S.isObj(v)) return;
+      account = v.account ?? account;
       if (typeof v.title === 'string' && v.title.trim()) {
-        const key = `${v.id ?? ''}|${v.title}`;
+        const key = JSON.stringify([account, v.courseId ?? v.course ?? '', v.type ?? '', v.id ?? v.assignment ?? v.key ?? '', v.title]);
         if (!seen.has(key)) { seen.add(key); items.push(v); }
         return;
       }
-      Object.values(v).forEach(walk);
+      Object.values(v).forEach((x) => walk(x, account));
     };
     for (const st of steps || []) { try { walk(JSON.parse(st.result)); } catch { /* not a result */ } }
     if (!items.length) return null;
