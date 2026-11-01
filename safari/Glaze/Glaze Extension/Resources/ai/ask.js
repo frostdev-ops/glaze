@@ -174,7 +174,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     },
     remind: {
       en: ['remind\\p{L}*', 'reminders?', 'wake me', "(?:don'?t|do not) let me forget", 'cancel\\p{L}*'],
-      es: ['recu[eé]rd\\p{L}*', 'recordatorios?', 'no me dejes olvidar', 'cancela\\p{L}*'],
+      es: ['recu[eé]rd\\p{L}*', 'recordar\\p{L}*', 'recordatorios?', 'no me dejes olvidar', 'cancela\\p{L}*'],
       'pt-BR': ['lembr\\p{L}*', 'lembretes?', 'n[ãa]o me deixe esquecer', 'cancel\\p{L}*'],
       fr: ['rappel\\p{L}*', 'ne me laisse pas oublier', 'annul\\p{L}*'],
       de: ['erinner\\p{L}*', 'nicht vergessen', 'storn\\p{L}*', 'l[öo]sch\\p{L}*'],
@@ -186,7 +186,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       'pt-BR': ['me avis\\p{L}*', 'avise-me', 'monitor\\p{L}*', 'me diga quando'],
       fr: ['pr[ée]viens-moi', 'dis-moi quand', 'surveill\\p{L}*'],
       de: ['sag mir,? wenn', 'benachrichtig\\p{L}*', '[üu]berwach\\p{L}*', 'beobacht\\p{L}*'],
-      nl: ['laat (?:me )?weten', 'houd in de gaten', 'waarschuw\\p{L}*'],
+      nl: ['laat (?:me )?weten', 'houd in de gaten', 'in de gaten (?:te )?houden', 'waarschuw\\p{L}*'],
     },
   };
   // The school's other records, read through Glaze's own readers (ai/agent/school.js).

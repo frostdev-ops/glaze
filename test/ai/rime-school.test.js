@@ -437,10 +437,16 @@ test('a wake, a watch and a cancel are asked for in each language\'s common ques
     for (const q of w) assert.equal(A.why(wake, A.task.input({ question: q, tools: [...A.NAMES], steps: [], now: NOW, zone: 'UTC', locale })), '', `${locale} wake: ${q}`);
     for (const q of m) assert.equal(A.why(watch, A.task.input({ question: q, tools: [...A.NAMES], steps: [], now: NOW, zone: 'UTC', locale })), '', `${locale} watch: ${q}`);
     for (const q of c) assert.equal(A.why(cancel, A.task.input({ question: q, tools: [...A.NAMES], steps: [listed], now: NOW, zone: 'UTC', locale })), '', `${locale} cancel: ${q}`);
+    // The router sends each one to the tool the check then lets through.
+    const routed = (q, tool) => assert.ok((require('../../extension/ai/ask.js').route(q, { locale, level: 3 }).tools || []).includes(tool), `${locale} routes ${q} to ${tool}`);
+    for (const q of w) routed(q, 'wake_create');
+    for (const q of m) routed(q, 'monitor_create');
+    for (const q of c) routed(q, 'wake_cancel');
   }
   // Nobody asked: a mention, a question about one, or a negation.
   for (const [locale, q] of [['en', 'What is due tonight?'], ['en', 'Did you remind me yesterday?'], ['en', "Don't remind me about the lab"], ['pt-BR', 'O lembrete de ontem funcionou?'],
-    ['fr', 'Ne me rappelle pas le labo'], ['de', 'Erinnerst du dich an das Labor?'], ['nl', 'Herinner je je het lab nog?'], ['es', '¿Qué tengo que entregar hoy?']]) {
+    ['fr', 'Ne me rappelle pas le labo'], ['de', 'Erinnerst du dich an das Labor?'], ['nl', 'Herinner je je het lab nog?'], ['nl', 'Kun je je het lab nog herinneren?'], ['de', 'Kannst du dich an das Labor erinnern?'], ['de', 'Kannst du mich nicht erinnern?'], ['pt-BR', 'Você lembra do laboratório?'], ['fr', 'Tu te rappelles le labo ?'],
+    ['es', '¿Qué tengo que entregar hoy?']]) {
     assert.equal(A.why(wake, A.task.input({ question: q, tools: [...A.NAMES], steps: [], now: NOW, zone: 'UTC', locale })), 'asked', `${locale}: ${q}`);
   }
 });
