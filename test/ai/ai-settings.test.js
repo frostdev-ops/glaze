@@ -137,7 +137,7 @@ test('off by default: the switch is off, only it shows, and the worker is asked 
   assert.deepEqual(p.asked, []);
   assert.deepEqual(p.data, {}, 'opening Settings writes nothing');
   assert.match(read('options.html'), /<input type="checkbox" role="switch" id="ai-on" aria-label="Use AI" data-local>/, 'the switch is not checked in the page');
-  assert.deepEqual(AS.clean(undefined), { on: false, outline: true, sources: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false } });
+  assert.deepEqual(AS.clean(undefined), { on: false, outline: true, sources: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false, ask: false } });
 });
 
 test('embedded Settings does not initialize AI controls or read its connections and activity', async () => {
@@ -152,15 +152,15 @@ test('embedded Settings does not initialize AI controls or read its connections 
 test('the switch, the mode and the models are kept in storage.local ai, cleaned; the features stay off until each is turned on', async () => {
   const p = await open();
   await p.change('ai-on', true);
-  assert.deepEqual(p.data.ai, { on: true, outline: true, sources: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false } });
+  assert.deepEqual(p.data.ai, { on: true, outline: true, sources: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false, ask: false } });
   assert.ok(shown(p.$('ai-connection')) && shown(p.$('ai-features')) && shown(p.$('ai-mode')));
   assert.equal(p.$('ai-mode-simple').checked, true);
   // The overall model first, then each feature: the gray text, Feedback, then the rest.
-  assert.deepEqual(p.$('ai-feature-list').children.map((w) => text(w.children[0].children[0])), ['Default', 'Tab completion', 'Feedback', 'Syllabus import']);
+  assert.deepEqual(p.$('ai-feature-list').children.map((w) => text(w.children[0].children[0])), ['Default', 'Tab completion', 'Feedback', 'Syllabus import', 'Ask Glaze']);
   assert.equal(p.$('ai-feature-syllabus').checked, false, 'off until the student turns it on');
   p.$('ai-feature-syllabus').focus();
   await p.change('ai-feature-syllabus', true);
-  assert.deepEqual(p.data.ai.features, { syllabus: true, completion: false, writing: false });
+  assert.deepEqual(p.data.ai.features, { syllabus: true, completion: false, writing: false, ask: false });
   assert.equal(p.doc.activeElement, p.$('ai-feature-syllabus'), 'the row drawn again keeps the focus on its switch');
   await p.change('ai-mode-advanced', true);
   assert.equal(p.data.ai.mode, 'advanced');
@@ -175,8 +175,8 @@ test('features turned on in quick succession are all kept: no switch is written 
   const boxes = AS.FEATURES.map((f) => p.$(`ai-feature-${f}`));
   for (const b of boxes) { b.checked = true; p.fire(b, 'change'); }
   await settle();
-  assert.deepEqual(p.data.ai.features, { syllabus: true, completion: true, writing: true });
-  assert.deepEqual(AS.FEATURES.map((f) => p.$(`ai-feature-${f}`).checked), [true, true, true]);
+  assert.deepEqual(p.data.ai.features, { syllabus: true, completion: true, writing: true, ask: true });
+  assert.deepEqual(AS.FEATURES.map((f) => p.$(`ai-feature-${f}`).checked), [true, true, true, true]);
 });
 
 test('AI outline defaults on under Feedback and can be opted out independently', async () => {
@@ -513,12 +513,12 @@ test('the owner\'s older endpoint shows as OpenRouter connected with its key, it
   const server = async (url) => (url === M.OPENROUTER ? new Response(routed, { headers: { 'content-type': 'application/json' } }) : json({ data: { label: 'x' } }));
   const p = await open({ ai: { on: true, use: 'endpoint', features: { syllabus: true, completion: true, writing: true } }, server,
     conns: { endpoint: { provider: 'openai', base: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-v4.1-flash-1017', key: OWNER, generation: 'g-1' } } });
-  assert.deepEqual(p.data.ai, { on: true, outline: true, sources: true, mode: 'simple', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: {}, tune: {}, features: { syllabus: true, completion: true, writing: true } });
+  assert.deepEqual(p.data.ai, { on: true, outline: true, sources: true, mode: 'simple', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: {}, tune: {}, features: { syllabus: true, completion: true, writing: true, ask: false } });
   assert.deepEqual(p.vault.get('connections'), { openrouter: { provider: 'openai', base: 'https://openrouter.ai/api/v1', key: OWNER, generation: 'g-1' } });
   assert.equal(p.card('OpenRouter').children[2].className, 'st ok');
   assert.equal(text(p.$('ai-pick-model')), 'DeepSeek: DeepSeek V4.1 Flash 1017 · OpenRouter');
   assert.deepEqual(p.stops('model').map(text), ['Off', 'Low', 'High'], 'the efforts its catalog lists');
-  assert.deepEqual(AS.FEATURES.map((f) => text(p.$(`ai-pick-${f}`))), ['Same as default', 'Same as default', 'Same as default']);
+  assert.deepEqual(AS.FEATURES.map((f) => text(p.$(`ai-pick-${f}`))), ['Same as default', 'Same as default', 'Same as default', 'Same as default']);
   assert.ok(!p.all().some((x) => String(x).includes(OWNER)));
   await p.click(p.card('OpenRouter'));
   assert.ok(p.walk(p.$('ai-drawer')).some((x) => x.textContent === 'sk-o••••0000'));
@@ -795,7 +795,7 @@ test('two Settings tabs preserve simultaneous feature changes in the same extens
   first.checked = true; last.checked = true;
   a.fire(first, 'change'); b.fire(last, 'change');
   await settle();
-  assert.deepEqual(shared.data.ai.features, { syllabus: true, completion: false, writing: true });
+  assert.deepEqual(shared.data.ai.features, { syllabus: true, completion: false, writing: true, ask: false });
   assert.equal(a.$('ai-feature-syllabus').checked, true); assert.equal(b.$('ai-feature-writing').checked, true);
 });
 

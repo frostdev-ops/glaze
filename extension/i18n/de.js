@@ -1224,6 +1224,7 @@
   "These courses come to {credits} credits, a total your transcript doesn't show: check for a course Glaze missed.": "Diese Kurse ergeben {credits} Credits, eine Summe, die dein Zeugnis nicht zeigt: Prüfe, ob Glaze einen Kurs übersehen hat.",
   "There's no way there with the work left in your courses.": "Mit der verbleibenden Arbeit in deinen Kursen gibt es keinen Weg dorthin.",
   "Syllabus import": "Syllabus-Import",
+  "Ask Glaze": "Glaze fragen",
   "Apple Intelligence": "Apple Intelligence",
   "Apple Intelligence is off": "Apple Intelligence ist aus",
   "Apple Intelligence isn’t capable enough for Feedback and will likely fail.": "Apple Intelligence ist für Feedback nicht leistungsfähig genug und wird wahrscheinlich scheitern.",

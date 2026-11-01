@@ -943,7 +943,7 @@ test('the owner\'s older endpoint runs as OpenRouter at once, and Settings\' fir
   assert.equal(vault.get('connections').endpoint.model, 'deepseek/deepseek-v4.1-flash-1017', 'a run writes nothing back');
   const got = await B.config({ op: 'get' }, e);
   assert.deepEqual(order.filter((k) => ['ai', 'connections'].includes(k)), ['ai', 'connections']);
-  assert.deepEqual(local.data.ai, { on: true, outline: true, sources: true, mode: 'simple', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: {}, tune: {}, features: { syllabus: true, completion: true, writing: true } });
+  assert.deepEqual(local.data.ai, { on: true, outline: true, sources: true, mode: 'simple', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: {}, tune: {}, features: { syllabus: true, completion: true, writing: true, ask: false } });
   assert.deepEqual(vault.get('connections'), { openrouter: { provider: 'openai', base: OR, key: OWNER, generation: 'g-1' }, device: { provider: 'device', generation: 'g-2' } });
   assert.ok(got.connections.openrouter && !got.connections.endpoint);
   assert.equal(got.connections.openrouter.key, E.mask(OWNER));

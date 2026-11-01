@@ -1224,6 +1224,7 @@
   "These courses come to {credits} credits, a total your transcript doesn't show: check for a course Glaze missed.": "Deze vakken komen op {credits} studiepunten, een totaal dat je cijferlijst niet toont: kijk of Glaze een vak heeft gemist.",
   "There's no way there with the work left in your courses.": "Met het werk dat nog over is in je vakken kom je er niet.",
   "Syllabus import": "Syllabus importeren",
+  "Ask Glaze": "Vraag het Glaze",
   "Apple Intelligence": "Apple Intelligence",
   "Apple Intelligence is off": "Apple Intelligence staat uit",
   "Apple Intelligence isn’t capable enough for Feedback and will likely fail.": "Apple Intelligence is niet krachtig genoeg voor Feedback en zal waarschijnlijk mislukken.",

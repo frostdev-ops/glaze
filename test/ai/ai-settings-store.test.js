@@ -6,7 +6,7 @@ const A = require('../../extension/ai/settings.js');
 const R = require('../../extension/ai/request.js');
 
 const KEY = 'sk-or-v1-0000synthetic0000000000000000000000000000000000000000000000';
-const OFF = { syllabus: false, completion: false, writing: false };
+const OFF = { syllabus: false, completion: false, writing: false, ask: false };
 
 test('clean gives every part at its default, and keeps only what fits', () => {
   assert.deepEqual(A.clean(), { on: false, outline: true, sources: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: OFF });
@@ -18,7 +18,7 @@ test('clean gives every part at its default, and keeps only what fits', () => {
   assert.deepEqual(s, { on: true, outline: true, sources: true, mode: 'advanced', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017', effort: 'low' },
     models: { completion: { use: 'groq', model: 'llama-3.3-70b-versatile', effort: 'none' } },
     tune: { completion: { temperature: 0.2, maxTokens: 32, context: 2000, timeoutMs: 4000, pause: 350 } },
-    features: { syllabus: false, completion: true, writing: false } });
+    features: { syllabus: false, completion: true, writing: false, ask: false } });
   assert.deepEqual(A.clean({ model: { use: 'openai', model: ' gpt-5', effort: 'max' } }).model, { use: 'openai', model: '' }, 'a model id as typed, an effort Glaze knows');
   assert.deepEqual(A.clean({ model: { use: 'apple' } }).model, { use: 'device', model: '' }, 'Apple Intelligence is On this device');
   assert.deepEqual(A.EFFORTS, R.EFFORTS);
@@ -57,7 +57,7 @@ test('the owner\'s endpoint on OpenRouter becomes the OpenRouter provider with t
   const m = A.migrate(settings, connections);
   assert.deepEqual(m.connections, { openrouter: { provider: 'openai', base: 'https://openrouter.ai/api/v1', key: KEY, generation: 'g-1' }, device: { provider: 'device', generation: 'g-2' } });
   assert.deepEqual(m.settings, { on: true, outline: true, sources: true, mode: 'simple', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: {}, tune: {},
-    features: { syllabus: true, completion: true, writing: true } });
+    features: { syllabus: true, completion: true, writing: true, ask: false } });
   assert.deepEqual(m.changed, { settings: true, connections: true });
   // Read again as written back: nothing more to do.
   const again = A.migrate(m.settings, m.connections);
@@ -95,4 +95,15 @@ test('every preset is https, at its own host, with a key page', () => {
   }
   assert.equal(A.kind('device'), 'device');
   assert.equal(A.kind('custom-1'), 'custom');
+});
+
+test('Ask Glaze is a feature like the others: last, off until the student turns it on, its own model or the overall one', () => {
+  assert.deepEqual(A.FEATURES, ['syllabus', 'completion', 'writing', 'ask']);
+  assert.equal(A.DEFAULTS.features.ask, false);
+  assert.equal(A.clean({ features: { ask: 'yes' } }).features.ask, false);
+  const s = A.clean({ on: true, model: { use: 'openai', model: 'gpt-5' }, features: { ask: true } });
+  assert.equal(A.allowed(s, 'ask'), true);
+  assert.equal(A.allowed({ ...s, on: false }, 'ask'), false, 'AI off');
+  assert.equal(A.allowed(A.clean({ on: true, model: { use: 'openai', model: 'gpt-5' } }), 'ask'), false, 'Ask off');
+  assert.deepEqual(A.resolve(A.clean({ ...s, models: { ask: { use: 'local', model: '' } } }), 'ask'), { use: 'local', model: '' });
 });
