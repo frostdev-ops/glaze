@@ -19,14 +19,14 @@ test('the sizes are 4K to 128K, and each is refused by the memory its footprint 
   const at = (model, o) => Object.fromEntries(LADDER.windows(model, o).map((w) => [w.size, w.refused || 'ok']));
   // No deviceMemory said (Firefox): nothing refused.
   assert.deepEqual(at(Q8, { f16: false }), { 4096: 'ok', 8192: 'ok', 16384: 'ok', 32768: 'ok', 65536: 'ok', 131072: 'ok' });
-  // 8 GB: a 4 GiB budget.
-  const budget = 4 * 2 ** 30;
-  const w8 = at(Q4, { f16: true, deviceMemory: 8 });
+  // 4 GB: a 2 GiB budget.
+  const budget = 2 * 2 ** 30;
+  const w8 = at(Q4, { f16: true, deviceMemory: 4 });
   for (const size of LADDER.WINDOWS) assert.equal(w8[size], LADDER.footprint(Q4, { ctx: size }) > budget ? 'memory' : 'ok', String(size));
   assert.equal(w8[4096], 'ok');
   assert.equal(w8[131072], 'memory');
   // Without shader-f16 a size only f16 would fit is 'no-f16'.
-  const nof16 = at(Q4, { f16: false, deviceMemory: 8 });
+  const nof16 = at(Q4, { f16: false, deviceMemory: 4 });
   const both = LADDER.WINDOWS.filter((size) => LADDER.footprint(Q4, { ctx: size, f16: false }) > budget && LADDER.footprint(Q4, { ctx: size }) <= budget);
   assert.ok(both.length > 0);
   for (const size of both) assert.equal(nof16[size], 'no-f16', String(size));
@@ -42,7 +42,8 @@ const setup = () => {
   LOCAL._env({ store: { list: async () => [MODEL] }, link, gpu: () => ({}), session: null });
   return calls;
 };
-const req = () => X.request({ system: 'Copy the text.', data: [{ label: 'note', text: 'hello' }] });
+const R = require('../../extension/ai/request.js');
+const req = () => ({ ...R.clean(X.request({ system: 'Copy the text.', data: [{ label: 'note', text: 'hello' }] })), task: { id: 'writer.complete', version: 1 } });
 
 test('the size is kept on the local connection: 8K to 128K, 4K or none the default', () => {
   assert.equal(LOCAL.config({ window: 32768 }).window, 32768);

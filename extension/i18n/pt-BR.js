@@ -3900,5 +3900,9 @@
   "File: {name}.": "Arquivo: {name}.",
   "Use Blackboard editor to review or remove these uploads: {names}.": "Use o editor do Blackboard para revisar ou remover estes arquivos enviados: {names}.",
   "Not attached": "Não anexado",
-  "Update automatically": "Atualizar automaticamente"
+  "Update automatically": "Atualizar automaticamente",
+  "Context size": "Tamanho do contexto",
+  "{n}K": "{n}K",
+  "Too large for this computer": "Grande demais para este computador",
+  "Needs a GPU with f16": "Requer uma GPU com f16"
 };

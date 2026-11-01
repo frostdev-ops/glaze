@@ -972,14 +972,16 @@ test('a download that ends Ready shows the version it brought', async () => {
 test('Rime\'s context size in Advanced: 4K by default to 128K, sizes this computer can\'t hold refused with why, kept with the tier', async () => {
   const sent = [];
   const local = async (m) => {
-    sent.push({ op: m.op, ...(m.cfg && { cfg: m.cfg }) });
-    if (m.op === 'set') return { ok: true };
+    sent.push({ op: m.op, ...(m.cfg && { cfg: { ...m.cfg } }) });
+    if (m.op === 'set') { kept?.set('connections', { local: { ...m.cfg } }); return { ok: true }; } // as the worker keeps it
     if (m.op === 'updates') return { ok: true, auto: true };
     return { ok: true, state: 'ready', size: 1099627200, tier: 3, tiers: [{ tier: 1, size: 1099627200 }, { tier: 3, size: 1427637696 }] };
   };
+  let kept = null;
   const ladder = require('../../extension/ai/local/ladder.js');
   const p = await open({ ai: { on: true, mode: 'advanced' }, providers: ['local'], local, conns: { local: { provider: 'local', tier: 3 } },
-    ladder, gpu: { requestAdapter: async () => ({ features: new Set() }) }, deviceMemory: 8 });
+    ladder, gpu: { requestAdapter: async () => ({ features: new Set() }) }, deviceMemory: 4 });
+  kept = p.vault;
   await p.click(p.card('Rime'));
   await settle();
   const pick = p.$('ai-local-window');
@@ -987,7 +989,7 @@ test('Rime\'s context size in Advanced: 4K by default to 128K, sizes this comput
   const opts = pick.children.map((o) => [o.value, o.textContent, o.disabled, o.selected]);
   assert.deepEqual(opts.map((o) => o[0]), ['4096', '8192', '16384', '32768', '65536', '131072']);
   assert.deepEqual(opts[0], ['4096', '4K', false, true], '4K, chosen by default');
-  const want = Object.fromEntries(ladder.windows({ size: 1099627200 }, { f16: false, deviceMemory: 8 }).map((w) => [String(w.size), w.refused]));
+  const want = Object.fromEntries(ladder.windows({ size: 1099627200 }, { f16: false, deviceMemory: 4 }).map((w) => [String(w.size), w.refused]));
   for (const [value, words, disabled] of opts) {
     const why = want[value];
     assert.equal(disabled, !!why, value);

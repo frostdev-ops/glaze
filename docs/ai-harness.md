@@ -616,7 +616,13 @@ second for a task that only reads pictures, `writer.image`) and `cfg.weights`, a
 only (undiscovered, missing or not ready: `provider-unavailable`, `assets`), so a request is never planned for one model and read by
 another. A catalog without a selected text model is not cached; the next run discovers a completed download or a recovered
 store read. A picture request goes to the picture model whatever the window: its own is the larger. In Advanced a feature's
-context replaces the window up to the model's own: a Glaze-tuned model never gets more than its 4,096. A status and a
+context replaces the window up to the model's own. The model's own is the context size Settings → AI → Rime's Advanced
+keeps on the `local` connection (`window`: 8K, 16K, 32K, 64K or 128K; 4K, the default, isn't stored, so a 4K run sends
+what it always did): `windowOf(m, cfg)` makes it the tuned model's window and input limit in the catalog, `caps.context`
+holds it, and each run sends it as `window`. A changed size is a new connection generation, so the broker's kept catalog
+goes. Settings refuses a size this computer can't hold with `ai/local/ladder.js` `windows` (its `footprint` at that size
+against half of `navigator.deviceMemory`: `memory`, or `no-f16` when only the f16 cache fits); the tier pick is unchanged.
+The engine host opens its session at 16,000 positions today, so a run over that is refused there until the host follows the size. A status and a
 warm-up use the same window as the run (the broker's `sized`), so Writer's status says 4,096 for a tuned model. `test/ai/local-window.test.js` holds `writer.review` and `syllabus.read` through the
 broker to lfm-tune's training examples (fixture: `tools/dev/local-window-fixture.js`). The system turn is the prefix kept
 warm: up to three per loaded model, as snapshots. Sampling: the request's temperature, else LFM3's GGUF defaults

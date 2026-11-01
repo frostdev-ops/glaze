@@ -3900,5 +3900,9 @@
   "File: {name}.": "Bestand: {name}.",
   "Use Blackboard editor to review or remove these uploads: {names}.": "Gebruik de Blackboard-editor om deze uploads te controleren of te verwijderen: {names}.",
   "Not attached": "Niet bijgevoegd",
-  "Update automatically": "Automatisch bijwerken"
+  "Update automatically": "Automatisch bijwerken",
+  "Context size": "Contextgrootte",
+  "{n}K": "{n}K",
+  "Too large for this computer": "Te groot voor deze computer",
+  "Needs a GPU with f16": "Vereist een GPU met f16"
 };

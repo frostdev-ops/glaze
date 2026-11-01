@@ -290,6 +290,20 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         pick.disabled = ours.state === 'downloading';
         pick.addEventListener('change', () => setTier(Number(pick.value) || 0));
         parts.push(pick);
+        // The context size: 4K by default to 128K; a size this computer's memory can't hold refused, with why (the ladder's).
+        const size = el('select'), chosen = conns[OWN]?.window || 4096;
+        size.id = 'ai-local-window';
+        size.setAttribute('aria-label', t('Context size'));
+        const why = Object.fromEntries((fit?.windows || []).map((w) => [w.size, w.refused]));
+        for (const n of WINDOWS) {
+          const o = el('option', '', [t('{n}K', { n: n / 1024 }), why[n] === 'memory' ? t('Too large for this computer') : why[n] === 'no-f16' ? t('Needs a GPU with f16') : ''].filter(Boolean).join(' · '));
+          Object.assign(o, { value: String(n), selected: n === chosen, disabled: !!why[n] && n !== chosen });
+          size.append(o);
+        }
+        size.disabled = ours.state === 'downloading';
+        size.addEventListener('change', () => setWindow(Number(size.value) || 4096));
+        parts.push(size);
+        if (!fit || fit.size !== ours.size) measure(ours.size);
         const label = el('label', 'ai-outline'), box = el('input');
         Object.assign(box, { type: 'checkbox', id: 'ai-local-auto', checked: s.updates !== false });
         box.setAttribute('data-local', '');
@@ -662,7 +676,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       const marks = [...HERE, ...Object.keys(CARDS), ...Object.keys(conns)].map((id) => [id, connected(id), bad(id), tested[id]?.state]);
       const lists = Object.fromEntries(Object.entries(catalogs).map(([id, x]) => [id, x.models ? x.models.length : 'loading']));
       once('providers', [s.mode, open, providers, conns, device, ours, marks], renderProviders);
-      once('drawer', [s.mode, open, said, conns[open], open === DEVICE ? device : open === OWN ? [ours, updates, s.updates] : null, lists[open], marks.find(([id]) => id === open)], renderDrawer);
+      once('drawer', [s.mode, open, said, conns[open], open === DEVICE ? device : open === OWN ? [ours, updates, s.updates, fit] : null, lists[open], marks.find(([id]) => id === open)], renderDrawer);
       once('features', [s, conns, providers, device, ours, picking, marks, lists], renderFeatures);
       renderCalls();
     };
@@ -716,6 +730,24 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     // Glaze's own model: its status (the connection kept first, as On this device's is), Download from the click, Delete,
     // and the tier Advanced sets (the connection's).
     let fetching = false, fetchingPics = false, localPoll = null, updates = null; // updates: { auto, version?, update? }
+    // The context sizes for the model's size on this computer: { size, windows } (ai/local/ladder.js windows), read once a size.
+    const WINDOWS = [4096, 8192, 16384, 32768, 65536, 131072];
+    let fit = null, measuring = null;
+    const ladder = () => globalThis.GZ_AI_LADDER || (measuring ||= new Promise((resolve, reject) => {
+      const sc = document.createElement('script');
+      Object.assign(sc, { src: 'ai/local/ladder.js', onload: () => resolve(globalThis.GZ_AI_LADDER), onerror: reject });
+      (document.head || document.body)?.append(sc);
+    }));
+    const measure = async (bytes) => {
+      if (!(bytes > 0)) return;
+      try {
+        const L = await ladder();
+        const adapter = await globalThis.navigator?.gpu?.requestAdapter?.().catch(() => null);
+        const f16 = !!adapter?.features?.has?.('shader-f16');
+        const next = { size: bytes, windows: L.windows({ size: bytes }, { f16, deviceMemory: globalThis.navigator?.deviceMemory }) };
+        if (JSON.stringify(next) !== JSON.stringify(fit)) { fit = next; render(); }
+      } catch { /* no ladder here: every size offered */ }
+    };
     const localResult = (r) => {
       const was = ours?.pictures;
       const keep = (st) => ({ ...st, ...(!st.tiers && ours?.tiers && { tiers: ours.tiers }), ...(!st.size && ours?.size && { size: ours.size }), ...(!st.pictures && ours?.pictures && { pictures: ours.pictures }) });
@@ -782,15 +814,18 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       busy = true;
       send({ op: 'delete', provider: OWN, part: 'pictures' }).then(localResult).finally(() => { busy = false; });
     };
-    const setTier = (tier) => {
+    // The local connection: its tier and context size, each kept when the other changes (4K, the default, never stored).
+    const setLocal = (tier, window) => {
       if (busy) return;
       busy = true;
-      send({ op: 'set', id: OWN, cfg: { provider: OWN, ...(tier && { tier }) } }).then(async (r) => {
+      send({ op: 'set', id: OWN, cfg: { provider: OWN, ...(tier && { tier }), ...(window && window !== 4096 && { window }) } }).then(async (r) => {
         if (!r.ok) return say(t('Could not save. Try again.'), true);
         await load();
         await localStatus();
       }).finally(() => { busy = false; });
     };
+    const setTier = (tier) => setLocal(tier, conns[OWN]?.window);
+    const setWindow = (window) => setLocal(conns[OWN]?.tier, window);
     c.runtime.onMessage?.addListener((m, sender) => {
       if (sender?.id !== c.runtime.id || m?.type !== TYPE || m.event !== 'progress' || m.provider !== OWN || !offers()) return;
       if (m.part === 'update') {
