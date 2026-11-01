@@ -49,8 +49,9 @@ var GZ_AI_RIME_PLACES = globalThis.GZ_AI_RIME_PLACES || (() => {
       places.push({ place: `course:${id}`, title: name, url: at(S.home(id)), course: id });
       for (const [k, word, path] of S.course) places.push({ place: `course:${id}/${k}`, title: `${name} ${word}`, url: at(path(id)), course: id });
     }
-    // The place on screen: the longest path the page is at or under (a path with a query only exactly).
-    const here = places.filter((p) => p.url).map((p) => ({ p, v: new URL(p.url) })).filter(({ v }) => (v.search ? v.pathname + v.search === u.pathname + u.search
+    // The place on screen: the longest path the page is at or under. Query ids identify Moodle courses; extra
+    // presentation options do not change the place, nor does the calendar's day/week/month view.
+    const here = places.filter((p) => p.url).map((p) => ({ p, v: new URL(p.url) })).filter(({ p, v }) => (v.search ? v.pathname === u.pathname && [...v.searchParams].every(([k, value]) => p.place === 'calendar' || (u.searchParams.has(k) && u.searchParams.getAll(k).every((x) => x === value)))
       : v.pathname === '/' ? u.pathname === '/' : u.pathname === v.pathname || u.pathname.startsWith(`${v.pathname.replace(/\/$/, '')}/`)))
       .sort((a, b) => b.v.pathname.length + b.v.search.length - a.v.pathname.length - a.v.search.length)[0]?.p.place || null;
     return { site, origin: u.origin, here, places };
