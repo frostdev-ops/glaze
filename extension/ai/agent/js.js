@@ -55,7 +55,7 @@ var GZ_AI_RIME_JS = globalThis.GZ_AI_RIME_JS || (() => {
   const full = () => !!heap && heap.buffer.byteLength >= HEAP * 0.9;
   const fail = (error, ms) => ({ ok: false, value: null, logs: [], error, ...(ms !== undefined && { ms }) });
 
-  const run = async (code, { ms = LIMIT.ms } = {}) => {
+  const execute = async (code, { ms = LIMIT.ms } = {}) => {
     if (typeof code !== 'string' || !code.trim()) return fail('No code to run.');
     if (code.length > LIMIT.code) return fail(`The code is longer than ${LIMIT.code} characters.`);
     let Q;
@@ -157,6 +157,15 @@ var GZ_AI_RIME_JS = globalThis.GZ_AI_RIME_JS || (() => {
       // an ordinary exception in a fresh context look like an allocation failure.
       if (full()) loading = null;
     }
+  };
+
+  // Keep engine acquisition inside the same turn as execution and cleanup. Callers awaiting one shared load must not
+  // retain that module after another caller faults it and drops the cache.
+  let queue = Promise.resolve();
+  const run = (code, options) => {
+    const turn = queue.then(() => execute(code, options));
+    queue = turn.catch(() => {});
+    return turn;
   };
 
   const spec = () => AT().SPECS.find((t) => t.name === 'run_js');
