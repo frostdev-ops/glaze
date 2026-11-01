@@ -369,11 +369,11 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         if (typeof use.p.prepare === 'function') stopKeepAlive = keepAlive(m.id, control.signal);
         row.provider = shown(use);
         if (use.p.id === 'openai') row.model = use.cfg.model;
-        else if (use.p.id === 'local' && typeof use.cfg.weights === 'string') row.model = use.cfg.weights;
         // Glaze's own picture download may finish in its host after Settings' prepare answered (four minutes), with no
         // connection change: a task that may carry pictures reads its catalog again; others (the gray text) keep theirs.
         const list = await catalog(env, use, control.signal, now(), use.p.id === 'local' && (task.caps.images === true || task.id === 'writer.feedback'));
         const { chosen, cfg } = sized(use, list, task);
+        if (use.p.id === 'local' && typeof cfg.weights === 'string') row.model = cfg.weights;
         // Ask's outer router can race a model change or this broker's cached catalog. Check the pinned weights before
         // any Rime tool or fired turn reaches the model, including requests on the ordinary AI port.
         if (task.id === 'agent.tools' && use.p.id === 'local') {
