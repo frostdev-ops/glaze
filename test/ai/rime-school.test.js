@@ -94,10 +94,22 @@ test('content: Canvas\'s module items (no headers, unpublished or locked ones); 
   assert.match((await tool('content_read').run({ course: '_101_1', id: folder.id }, ctxFor(UL, ultra))).error, /holds no text/);
 });
 
-test('discussions: Canvas\'s topics and one prompt', async () => {
+test('discussions: Canvas topics are listed but prompt reads fail closed without verified instructor authorship', async () => {
   const canvas = tabsOf([canvasTab()]);
   assert.deepEqual((await tool('discussions_list').run({ course: '25' }, ctxFor(ACC, canvas))).items, [{ id: '81', title: 'Cell questions' }, { id: '82', title: 'Week 2 reflections' }]);
-  assert.equal((await tool('discussion_read').run({ course: '25', id: '81' }, ctxFor(ACC, canvas))).text, 'Share one question about cells.');
+  const r = await tool('discussion_read').run({ course: '25', id: '81' }, ctxFor(ACC, canvas));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /authorship/);
+});
+
+test('a Canvas peer-authored discussion cannot send the peer name or prompt to the worker', async () => {
+  const tab = canvasTab({ routes: { '/api/v1/courses/25/discussion_topics/81': {
+    ...TOPIC, id: 81, author: { display_name: 'Classmate One' }, message: '<p>CLASSMATE-PRIVATE-WORDS</p>',
+  } } });
+  const r = await tool('discussion_read').run({ course: '25', id: '81' }, ctxFor(ACC, tabsOf([tab])));
+  assert.equal(r.ok, false);
+  assert.doesNotMatch(JSON.stringify(r), /Classmate|CLASSMATE-PRIVATE-WORDS/);
+  assert.ok(!tab.page.asked.some((q) => new URL(q.url).pathname.endsWith('/discussion_topics/81')), 'unverified text stays at the school');
 });
 
 test('partial school lists preserve the source coverage instead of reporting an empty complete course', async () => {
