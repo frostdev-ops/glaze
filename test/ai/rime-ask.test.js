@@ -349,3 +349,11 @@ test('arrival peek is read-only and never runs monitors, writes the store, or re
   assert.deepEqual({ reads, writes, alarms }, { reads: 1, writes: 0, alarms: 0 });
   assert.equal(store.rimeWakes.wakes.length, 1, 'peek takes nothing');
 });
+
+
+test('port: a fired-store read failure ends the request instead of leaving the panel waiting', async () => {
+  const h = harness();
+  h.wakes.local.get = async () => { throw Error('storage unavailable'); };
+  h.say({ id: 62, op: 'fired' }); await settle(40);
+  assert.deepEqual(h.ends().map((m) => [m.id, m.type]), [[62, 'error']]);
+});
