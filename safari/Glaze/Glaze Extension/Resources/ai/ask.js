@@ -480,7 +480,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         if (m.op === 'cancel') { if (current?.id === m.id) current.control.abort(); return; }
         if (m.op === 'status') return void status(m);
         if (m.op === 'ask') return void ask(m);
-        if (m.op === 'fired') return void fired(m);
+        if (m.op === 'fired') return void fired(m).catch((e) => post({ id: m.id, type: 'error', error: R().code(e) }));
         if (m.op === 'carry') return void (async () => post({ id: m.id, type: 'end', marks: await live() ? await arrival(env, true) : [] }))().catch(() => post({ id: m.id, type: 'end', marks: [] }));
         post({ id: m.id, type: 'error', error: 'request' });
       }).catch(() => {});
