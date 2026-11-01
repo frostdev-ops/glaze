@@ -72,7 +72,13 @@ const load = (kind = 'progress') => {
   const scrollTo = (y) => { state.scroll = y; for (const l of listeners.filter((x) => x.type === 'scroll')) l.f({ type: 'scroll', target: scroller }); flush(); };
   const stretchTo = (y) => { state.stretch = y; for (const l of listeners.filter((x) => x.type === 'scroll')) l.f({ type: 'scroll', target: scroller }); flush(); };
   const resize = (layout) => { Object.assign(state, layout); for (const l of listeners.filter((x) => x.type === 'resize')) l.f(); flush(); };
-  return { c, ui, header, listeners, scrollTo, stretchTo, resize, flush, el };
+  const moveTo = (inset) => {
+    const next = el('div', 'panel-wrap');
+    parent.before(next); next.append(header); parent = scroller = next;
+    Object.defineProperty(scroller, 'scrollTop', { get: () => state.scroll });
+    state.inset = inset;
+  };
+  return { c, ui, header, listeners, scrollTo, stretchTo, resize, flush, el, moveTo };
 };
 
 test('in its place the band stays whole; scrolled under, it folds and gives the fold back below', () => {
@@ -219,6 +225,20 @@ test('resizing while folding is off does not reuse the previous place when enabl
     scrollTo(400);
     assert.equal(header.hasAttribute('data-gz-stuck'), true, `${kind}: folds past the new place`);
   }
+});
+
+test('a reused course bar measures its new parent before applying the fold threshold', () => {
+  const { ui, header, moveTo, scrollTo, flush } = load('bar');
+  ui.sync(); flush();
+  moveTo(40);
+  ui.sync(); flush();
+  assert.equal(header.hasAttribute('data-gz-stuck'), false, 'whole at the new scroller top');
+  scrollTo(45);
+  assert.equal(header.hasAttribute('data-gz-stuck'), false, 'only 5 pixels past its new place');
+  scrollTo(80);
+  assert.equal(header.hasAttribute('data-gz-stuck'), true, 'folded past its new place');
+  scrollTo(0);
+  assert.equal(header.hasAttribute('data-gz-stuck'), false);
 });
 
 test('a course\'s bar holding Glaze\'s course strip folds as well, its strip kept', () => {

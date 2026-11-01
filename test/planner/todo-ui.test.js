@@ -684,6 +684,19 @@ test('a forced redraw with nothing new leaves the list as drawn; a change still 
   assert.notEqual(body.children, b, 'a new item is drawn');
 });
 
+test('a clock minute passing leaves an unchanged To Do view in place', () => {
+  const f = feature();
+  let now = Date.parse('2026-11-01T15:00:00Z');
+  f.c.Date = class extends Date { static now() { return now; } };
+  f.p.seed({ prefs: O, cache: { items: [{ ...item(), at: null }], grading: [], sums: {} } });
+  f.p.render(true);
+  const { head, body } = f.p.parts(), h = head.children, b = body.children;
+  now += 60e3;
+  f.p.render(true);
+  assert.equal(head.children, h, 'the header still shows the same content');
+  assert.equal(body.children, b, 'the undated work still shows the same content');
+});
+
 for (const isTrusted of [false, true]) {
   test(`a rejected native control change restores what is stored (${isTrusted ? 'refused save' : 'scripted event'})`, async () => {
     const f = feature({ setOk: false });

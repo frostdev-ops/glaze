@@ -9,7 +9,7 @@ const { El } = require('../stand-in-dom.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 
-const page = (at) => {
+const page = (at, hold = null) => {
   const doc = { activeElement: null, fire() {} };
   doc.root = new El('html', doc);
   const body = new El('body', doc);
@@ -28,7 +28,7 @@ const page = (at) => {
   vm.runInContext(read('content/content-ultra.js'), ctx);
   // Only the landing's file answers; anything else the pass asks for never comes.
   const need = (file, ready) => {
-    if (file === 'courses/page/dashboard.js') { ctx.GZ_DASH_UI = { land: (f) => landed.push(f) }; return Promise.resolve(ready()); }
+    if (file === 'courses/page/dashboard.js') { ctx.GZ_DASH_UI = { land: (f) => landed.push(f) }; return hold || Promise.resolve(ready()); }
     return new Promise(() => {});
   };
   const I = { C: {}, html: doc.root, isPreview: false, solo: true, tabFrame: '', need, t: (x) => x, locale: () => 'en', api: () => new Promise(() => {}),
@@ -56,4 +56,16 @@ test('loaded at Ultra\'s stream, the landing is asked for at the first pass', as
   const p = page('/ultra/stream');
   await p.pass();
   assert.deepEqual(p.landed, ['/ultra/stream']);
+});
+
+test('a resolved sign-in deep link cannot become a landing while the Dashboard library loads', async () => {
+  let release;
+  const p = page('/ultra', new Promise((r) => { release = r; }));
+  await p.pass();
+  p.location.pathname = '/ultra/calendar';
+  await p.pass();
+  p.location.pathname = '/ultra/stream';
+  release();
+  await p.pass();
+  assert.deepEqual(p.landed, [], 'the deep link already ended the initial landing opportunity');
 });
