@@ -662,3 +662,23 @@ test('a fired response arriving after Ask is disabled never restores its tray', 
   await arriving;
   assert.equal(P.doc.getElementById('gz-ask-fired'), null);
 });
+
+
+test('navigation waits until the checked answer has finished revealing and is cancelled by closing', async () => {
+  const P = movingPage(), performed = [];
+  P.ui.on('open', () => performed.push(P.box().querySelector('.gz-ask-md').textContent));
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('Take me to my grades'); await settle();
+  answer(P, { type: 'action', action: { kind: 'open' } });
+  const text = 'Your grades page is ready. '.repeat(3);
+  answer(P, { type: 'end', task: 'agent.tools', answer: { text } }); await settle();
+  assert.deepEqual(performed, [], 'navigation must not leave before the answer is visible');
+  for (let i = 0; i < 100 && P.frames.size; i++) P.flushFrame();
+  assert.deepEqual(performed, [text]);
+  P.ask('Open grades again'); await settle();
+  answer(P, { type: 'action', action: { kind: 'open' } });
+  answer(P, { type: 'end', task: 'agent.tools', answer: { text } }); await settle();
+  P.box().close();
+  for (let i = 0; i < 100 && P.frames.size; i++) P.flushFrame();
+  assert.equal(performed.length, 1, 'closing cancels actions queued behind a reveal');
+});
