@@ -6,6 +6,10 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Chrome and Firefox: **Rime**, Glaze's own AI model by Frostdev, built on LFM3-1.7B, runs on your computer after Download in Settings → AI (1.1 to 1.8 GB, the size picked for the computer). What you give it never leaves the computer.
+
 ## [4.0.1] — 2026-10-31
 
 ### Added

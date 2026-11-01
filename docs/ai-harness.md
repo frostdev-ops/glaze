@@ -16,7 +16,7 @@ until the student has turned AI on, chosen a model for that feature and allowed 
 | `ai/providers.js` | The provider registry and `run`, the one way to call a model. |
 | `ai/providers/openai.js` | Any Chat Completions server. A request's `effort` goes as OpenRouter's `reasoning.effort` there and as `reasoning_effort` elsewhere; a model that refuses it gets the next level up (none, minimal, low), then none at all, remembered an hour for that model. `mock.js` is for tests and evals only; the worker never loads it. |
 | `ai/providers/device.js` | Chrome's Prompt API (Chrome 138+), in the worker itself. Chrome chooses its built-in model; Glaze retains `gemini-nano` as its compatibility id. Unavailable elsewhere. |
-| `ai/providers/local.js` | Glaze's own model on this computer (LFM3, Glaze's WebGPU engine), Chrome and Firefox; unavailable in Safari. Below. |
+| `ai/providers/local.js` | Glaze's own model on this computer (Rime, Frostdev's fine-tune of LFM3-1.7B, on Glaze's WebGPU engine), Chrome and Firefox; unavailable in Safari. Below. |
 | `ai/local/` | Its formatter (`format.js`), the link to its engine host (`link.js`), the host (`host.js`, `host.html`, `offscreen.js`), the store, GGUF reader, tokenizer, engine, picture encoder (`vision.js`), grammar and ladder. |
 | `ai/providers/apple.js` | Safari only: Apple's Foundation Models on this device, through the extension's native handler, `GlazeAI.swift`. One reply per request; no tools, no streaming. |
 | `ai/tools.js` | Tool definitions, `aiTools` (adds the required `reason`), `invokeReadTool`. |
@@ -441,8 +441,9 @@ If the system refuses token counting, the request retains its output ceiling and
 
 ## Glaze's own model
 
-`ai/providers/local.js` (`local`, Settings' **Glaze on-device AI**) runs LiquidAI's LFM3 from `ai/local/models.json` on
-Glaze's WebGPU engine. caps: `{ text, json, stream, local: true, tools: false, images, context }` (`context`, the window
+`ai/providers/local.js` (`local`, Settings' **Rime**) runs Rime, Frostdev's fine-tune of LiquidAI's LFM3-1.7B
+(`frostdev-ops/Rime-1.7B-GGUF`: Q4_K_M, Q6_K and Q8_0 at tiers 1, 3 and 4, tier 2 kept for a Q5_K_M), from
+`ai/local/models.json` on Glaze's WebGPU engine. caps: `{ text, json, stream, local: true, tools: false, images, context }` (`context`, the window
 below; `images` below), so `writer.complete`'s brief path and Feedback's local orchestration apply. Settings, `ai/settings.js`
 `HERE` and `writer-ai.js` treat `device`, `apple` and `local` alike as models on this computer: no model id, no key.
 
@@ -489,7 +490,7 @@ out. Dialects: `glaze` (the fine-tune; agent.tools in its own turns, above: `<|s
 words}]<|im_end|>\n<|im_start|>user\n<|gz_ctx|>label\ntext<|/gz_ctx|>\n…<|gz_data|>label\ntext<|/gz_data|><|im_end|>\n<|im_start|>
 assistant\n` and the mode's prefill: direct `<think></think>`, think `<think>\n`), and `chatml` for a `stock: true` model,
 whose weights never learnt Glaze's tokens (the harness's messages as written, the schema in words, `<think></think>` after
-the assistant header; never think mode). A models.json entry without `stock` (the fine-tune, once published;
+the assistant header; never think mode). A models.json entry without `stock` (Rime;
 `tools/vendor/model-manifest.js` without `--stock`) reads `glaze`. `test/ai/local-format-ids.test.js` holds `glaze` to
 `glaze-plans/lfm-tune/FORMAT-v2.md` id for id: for requests each trained task builds, the ids its `train/format.js`
 `promptV2` and LFM3's tokenizer give, direct and, for a think task, think (fixture: `tools/dev/local-format-fixture.js`).

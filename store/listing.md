@@ -125,7 +125,7 @@ Puts a dot on Glaze's toolbar icon on pages that look like Canvas, Blackboard Ul
 
 ### offscreen
 
-Used only when the student chooses Glaze's own AI model in Settings → AI and clicks Download. A hidden extension page runs that model on this computer with WebGPU, in a worker of its own, and keeps it loaded between requests; it closes after five minutes unused. It downloads the model's files from Hugging Face on that click and reads nothing from any page. The text Glaze's AI features give it stays on this computer and is never sent anywhere.
+Used only when the student chooses Rime, Glaze's own AI model, in Settings → AI and clicks Download. A hidden extension page runs that model on this computer with WebGPU, in a worker of its own, and keeps it loaded between requests; it closes after five minutes unused. It downloads the model's files from Hugging Face on that click and reads nothing from any page. The text Glaze's AI features give it stays on this computer and is never sent anywhere.
 
 ### scripting
 

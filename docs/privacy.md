@@ -1,6 +1,6 @@
 # Privacy summary
 
-_Last updated: 2026-10-31_
+_Last updated: 2026-11-01_
 
 A plain-language summary. The full policy is [PRIVACY.md](../PRIVACY.md).
 
@@ -34,6 +34,10 @@ lookup goes out only when you click Look up: a DOI to `doi.org` (or Crossref and
 Settings → AI, to the model you chose for it: Tab completion sends the text around the caret, the course, prompt
 or assignment, and in a discussion your classmates' posts with their names; Feedback sends your draft with the
 assignment's instructions and rubric. Nothing goes to AI from a test.
+
+[Rime](../PRIVACY.md#network-requests), Glaze's own model (Frostdev's, built on LFM3-1.7B; Chrome and
+Firefox), downloads from `huggingface.co` and its CDN only when you click Download in Settings → AI, and nothing about
+you goes with it. It then runs on this device, so what you give it stays there.
 
 [Ask Rime](../PRIVACY.md#ask-rime) (Settings → AI → Ask Rime, off by default) sends your question, and your work when
 you add it, to the model you chose for it. For a question about your own courses it also sends what Glaze reads to

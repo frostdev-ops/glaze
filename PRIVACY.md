@@ -1,6 +1,6 @@
 # Privacy Policy — Glaze
 
-_Last updated: 2026-10-31_
+_Last updated: 2026-11-01_
 
 ## User-installed mods
 
@@ -925,13 +925,19 @@ you import) are bundled. It makes requests in these cases:
   exception is AI reading below, which you turn on yourself.
 - **AI reading** (Settings → AI, off by default; Canvas and Blackboard). Only when AI is on, a connection is set up and
   you allow a feature (Syllabus import first), that feature can ask the AI to read for it. With a model on this device
-  (Chrome's built-in model, or Apple Intelligence through Glaze's Safari app) nothing leaves your computer. With an
+  (Chrome's built-in model, Rime, or Apple Intelligence through Glaze's Safari app) nothing leaves your computer. With an
   provider or an endpoint, the syllabus text (and its pictures, when the model reads pictures) goes to the provider you
   chose for it, or the address you entered, and only after the import dialog has shown that host; Glaze asks the browser
   for permission to reach that one host when you click Connect (or save or test an endpoint). The key is sent only there,
   over https (or to your own computer). Glaze never chooses a provider, runs no server for AI, and never uses AI on quiz
   or test pages. AI answers are only
   suggestions in the review, marked Check this; nothing is kept until you save.
+- **Rime** (Settings → AI, Chrome and Firefox; not until you click Download). Glaze's own model, Frostdev's Rime, built
+  on Liquid AI's LFM3-1.7B. Download fetches its file from `huggingface.co`, which hands the request to Hugging Face's
+  CDN (`*.hf.co`); **Picture reading**'s Download fetches its two files the same way. These requests carry no cookies and
+  nothing about you, your courses or your work: only the file's address and the part of it being fetched, with the
+  connection metadata, including your IP address, any download has. Each file is checked against its SHA-256 and kept in
+  Glaze's storage on this device until you click Delete. Rime runs on this computer; what a feature gives it stays there.
 - **Agent access** (Settings → AI → Agents, off by default; Canvas and Blackboard Ultra). For an app you allowed, in the
   account's school tab open in this browser, signed in as you: your profile, to check whose tab it is; the planner and
   Insights reads Better To Do and Insights make; one assignment with its rubric (on Canvas
