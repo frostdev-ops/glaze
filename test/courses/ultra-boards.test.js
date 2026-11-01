@@ -108,6 +108,7 @@ const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, 
     document: doc, location: { origin: 'https://school.blackboard.test', pathname: where || { courses: '/ultra/course', dash: '/ultra/institution-page', outline: '/ultra/courses/_1_1/outline' }[at], href: 'https://school.blackboard.test/ultra', assign: (u) => clicks.push(`assign ${u}`) },
     innerWidth: width, innerHeight: 900, addEventListener() {}, removeEventListener() {},
     ResizeObserver: class { observe() {} unobserve() {} disconnect() {} }, requestAnimationFrame: () => 0, cancelAnimationFrame() {},
+    MutationObserver: class { constructor(f) { this.f = f; c.landingObserver = this; } observe() { this.watching = true; } disconnect() { this.watching = false; } },
     performance: { getEntriesByType: () => [{ type: nav }] },
     history: { length: history },
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_WIDGETS: W,
@@ -936,9 +937,43 @@ test('landing works before the lazy widgets schema reaches content settings, and
   delete p.settings.widgets;
   p.doc.querySelector('a').attrs.href = 'https://other.test/ultra/institution-page';
   vm.runInContext(read('courses/page/dashboard.js'), p.c);
-  await p.c.GZ_DASH_UI.land('/ultra');
+  const going = p.c.GZ_DASH_UI.land('/ultra');
   await settle();
-  assert.deepEqual(p.clicks, ['assign https://school.blackboard.test/ultra/institution-page']);
+  assert.deepEqual(p.clicks, [], 'a missing native link never reloads the document');
+  assert.ok(!p.sent.some((m) => m.type === 'glaze:landed'), 'the tab is not consumed before its link exists');
+  p.doc.querySelector('a').attrs.href = '/ultra/institution-page';
+  p.c.landingObserver?.f();
+  await going;
+  assert.deepEqual(p.clicks, ['/ultra/institution-page'], 'once the native link arrives');
+  assert.equal(p.c.landingObserver?.watching, false, 'the observer is released after navigation');
+});
+
+test('waiting for a native landing link ends on navigation, interaction, disable, expiry or pagehide', async () => {
+  for (const stop of ['route', 'interaction', 'disabled', 'expiry', 'pagehide']) {
+    const p = page({ sync: { widgets: { land: true } }, path: '/ultra/stream' });
+    p.doc.querySelector('a').remove();
+    let expire, hidden;
+    p.c.setTimeout = (f) => { expire = f; return 1; };
+    p.c.clearTimeout = () => { expire = null; };
+    p.c.addEventListener = (type, f) => { if (type === 'pagehide') hidden = f; };
+    p.c.removeEventListener = (type) => { if (type === 'pagehide') hidden = null; };
+    vm.runInContext(read('courses/page/dashboard.js'), p.c);
+    const going = p.c.GZ_DASH_UI.land('/ultra');
+    await settle();
+    assert.deepEqual(p.clicks, [], `${stop}: no document reload while waiting`);
+    assert.equal(p.c.landingObserver?.watching, true);
+    if (stop === 'route') p.c.location.pathname = '/ultra/calendar';
+    if (stop === 'interaction') p.c.GZ_CTX.acted = () => true;
+    if (stop === 'disabled') p.settings.enabled = false;
+    if (stop === 'expiry') expire();
+    else if (stop === 'pagehide') hidden();
+    else p.c.landingObserver.f();
+    await going;
+    assert.equal(p.c.landingObserver.watching, false, `${stop}: observer removed`);
+    assert.equal(expire, null, `${stop}: timer removed`);
+    assert.equal(hidden, null, `${stop}: listener removed`);
+    assert.ok(!p.sent.some((m) => m.type === 'glaze:landed'), `${stop}: tab still unconsumed`);
+  }
 });
 
 
