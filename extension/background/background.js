@@ -2549,7 +2549,7 @@ chrome.runtime.onConnect.addListener((p) => {
   ai(); GZ_AI_ASK.connect(p, { allowed, broker: (q) => ai().connect(q, { ...aiEnv(), who: String(s.tab?.id ?? 'none'), allowed }), settings: aiEnv().settings, enabled: glazeOn,
     registry: GZ_MCP_REGISTRY, state: mcpRead, approve: core.approve, refresh: mcpRefresh, accounts: async () => (await GZ_AI_TOOLS.get('accounts_list').run({}, mcpCtx(null))).items,
     local: chrome.storage.local, keys: mcpKeys, now: Date.now, turn: (f) => (brokerTurn ||= GZ_CARDS.queue())(f),
-    level: rimeLevel, page: () => ({ url: s.url }), own: { read: rimeWakesEnv().read, writer: async () => GZ_SANITIZE(await chrome.storage.sync.get(null)).enhance.writer !== false, wakes: rimeWakesEnv() } });
+    scope: `${s.tab?.id}|${s.documentId || `${s.frameId}|${s.url}`}`, level: rimeLevel, page: () => ({ url: s.url }), own: { read: rimeWakesEnv().read, writer: async () => GZ_SANITIZE(await chrome.storage.sync.get(null)).enhance.writer !== false, wakes: rimeWakesEnv() } });
 });
 // The tools level of Ask Rime's model (ai/ask.js route): Glaze's own model's, as models.json says it was trained (1 for Rime r5,
 // so its requests stay what it was gated on); every other model gets Rime's own tools.

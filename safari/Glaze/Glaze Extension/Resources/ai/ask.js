@@ -44,6 +44,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const SITES = ['canvas', 'ultra', 'moodle'];
   // Fired records the panel was shown, by id, until the click that asks about one (or an hour).
   const KEPT = new Map();
+  let scopes = 0;
+  const prune = (now) => { for (const [k, v] of KEPT) if (v.until <= now) KEPT.delete(k); };
   const FEATURE = 'ask', APP = 'Ask Rime';
   // question: agent.tools' own; attempt: study.help's; tools: offered at once (training offered three to six, and Glaze's own
   // model's 4,096-token window can't hold all twelve); material: what an agent answer is measured against.
@@ -230,6 +232,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
 
   const connect = (port, env) => {
     let closed = false, current = null, seq = 0;
+    const scope = typeof env.scope === 'string' ? `page:${env.scope}` : `port:${++scopes}`;
+    const firedKey = (id) => `${scope}|${id}`;
     // The same bound as the AI broker: a stalled renderer must not park every later message, including Stop.
     const allowed = (what) => {
       let timer;
@@ -362,8 +366,9 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       if (!(await env.own.wakes.on())) return post({ id: m.id, type: 'end', fired: [] });
       const list = await WAKES().take(env.own.wakes);
       const now = env.now();
-      for (const [k, v] of KEPT) if (v.until < now) KEPT.delete(k);
-      for (const f of list) KEPT.set(f.id, { record: f, until: now + 36e5 });
+      prune(now);
+      for (const f of list) KEPT.set(firedKey(f.id), { record: f, until: now + 36e5 });
+      while (KEPT.size > 200) KEPT.delete(KEPT.keys().next().value);
       post({ id: m.id, type: 'end', fired: list.map((f) => ({ id: f.id, what: f.what, ...(f.watch && { watch: f.watch }), say: f.say || '', at: f.at })) });
     };
 
@@ -388,8 +393,11 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       try {
         const level = await env.level?.().catch(() => 1) ?? 1;
         // A fired record the student asked about: its own turn for a model trained on it; else the say as any question.
-        const kept = m.fired !== undefined ? KEPT.get(m.fired)?.record : undefined;
+        prune(env.now());
+        const kept = m.fired !== undefined ? KEPT.get(firedKey(m.fired))?.record : undefined;
+        if (level >= 3 && m.fired !== undefined && (!kept || (kept.say && kept.say !== question))) throw R().error('request');
         const record = kept && level >= 3 ? kept : undefined;
+        if (record) KEPT.delete(firedKey(m.fired));
         const r = record ? routeFired(record) : route(question, { attempt, locale, level });
         post({ id, type: 'route', task: r.task });
         if (r.task === 'study.help') {
@@ -403,7 +411,6 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         const material = res.steps.map((s) => AT().readable(s.result, zone) || '').join('\n').slice(0, LIMIT.material);
         const inp = SH().task.input({ question, subject: 'math', locale, ...(material && { material }) });
         if (!inp || SH().hands(res.answer.text, inp)) throw R().error('check');
-        if (record) KEPT.delete(m.fired);
         // What the tools asked of the page (open, highlight), for the panel to perform once it shows the answer.
         for (const a of current.actions) { const { action, ...rest } = a; post({ id, type: 'action', action: { kind: action, ...rest } }); }
         post({ id, type: 'end', task: r.task, answer: { text: res.answer.text } });
