@@ -507,6 +507,22 @@ test('Ultra document body blocks use visibleIn, including adaptive release and u
   });
 });
 
+test('signed file addresses never leave school reads even as visible text or embedded metadata', async () => {
+  const signed = `${C.ULTRA}/bbcswebdav/xid-456_1?sig=SIGNED-SECRET`, session = '/sessions/7/a1b2c3/file.pdf?sig=SIGNED-SECRET';
+  const tab = probedTab({ routes: {
+    '/learn/api/public/v1/courses/_101_1/contents/_723_1/children': { results: [{ ...PROBED.children._723_1.results[0],
+      body: `<p>Read the rubric: ${signed}</p><a data-bbfile='{&quot;displayName&quot;:&quot;${session}&quot;,&quot;mimeType&quot;:&quot;application/pdf&quot;}'>Rubric</a>` }] },
+    '/learn/api/public/v1/courses/_101_1/announcements/_811_1': { ...PROBED.announcements.results[0], body: `<p>${session}</p>` },
+    '/learn/api/public/v1/courses/_101_1/discussions/_911_1': { ...PROBED.discussion, topic: { ...PROBED.discussion.topic, body: `<p>${signed}</p>` } },
+  } });
+  const tabs = tabsOf([tab]);
+  for (const [op, id] of [['document', '_723_1'], ['announcement', '_811_1'], ['discussion', '_911_1']]) {
+    const r = await tabs.run(UL, op, { course: '_101_1', id });
+    assert.equal(r.ok, true, op);
+    assert.doesNotMatch(JSON.stringify(r), /bbcswebdav|\/sessions\/|SIGNED-SECRET/, op);
+  }
+});
+
 test('Ultra syllabus: the course\'s syllabus document wherever it sits, a page at a time; a body that is only a file names the file; imported facts stay', async () => {
   const tabs = tabsOf([probedTab()]);
   const r = await tool('syllabus_read').run({ course: '_101_1' }, ctxFor(UL, tabs));
