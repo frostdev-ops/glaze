@@ -374,6 +374,21 @@ test('tool steps show as cards while they run; a write waits in an inline card f
   assert.equal(cards().length, 3, 'the steps stay in the conversation');
 });
 
+for (const error of ['cancelled', 'connection-lost']) test(`a run ending with ${error} settles its running and approval cards`, async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('Mark my lab report done'); await settle();
+  answer(P, { type: 'step', step: { n: 1, name: 'todo_list', kind: 'read', state: 'run' } });
+  answer(P, { type: 'step', step: { n: 2, name: 'todo_mark_done', kind: 'write', state: 'ask' } });
+  answer(P, { type: 'error', error }); await settle();
+  const cards = P.box().querySelectorAll('.gz-ask-step');
+  assert.equal(cards.length, 2, 'keep the run in the conversation');
+  assert.ok(cards.every((c) => !['run', 'ask'].includes(c.dataset.state)), 'no card claims the ended run is still active');
+  assert.equal(P.box().querySelector('.gz-ask-step-note'), null, 'an ended run is not waiting in the approval window');
+  assert.equal(P.box().querySelector('.gz-ask-busy'), null);
+  P.box().close();
+});
+
 test('a failure shows in the conversation with Try again, which asks the same question again for the student\'s own click', async () => {
   const P = page({ reply: ready });
   await P.ui.open({ event: { isTrusted: true } });
