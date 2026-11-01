@@ -827,7 +827,7 @@ test('a cold load hides Ultra\'s boot screen and its app, never Glaze\'s bar or 
   // Hidden from the moment the sheet is in (render-blocking at first paint where Glaze arms it early), back as it was once
   // the settings applied (data-gz-font) say the switch is off.
   const on = node('html', [], { 'data-gz-font': 'inter', 'data-gz-enhance-feedback': '' }), early = node('html'), off = node('html', [], { 'data-gz-font': 'inter' });
-  for (const [html, want, what] of [[on, 'hidden', 'on'], [early, 'hidden', 'before the settings'], [off, 'visible', 'the switch off']]) {
+  for (const [html, want, what] of [[on, 'hidden', 'on'], [early, 'hidden', 'before the settings'], [off, null, 'the switch off']]) {
     const ila = node('div', ['mode-light'], {}, node('body', [], {}, html), 'initial-load-area');
     assert.equal(winner(rules, ila, 'visibility')?.[0] ?? null, want, `Ultra's boot screen, ${what}`);
     assert.equal(winner(rules, ila, 'display'), null, 'by visibility: its own fade and removal still run');
@@ -861,4 +861,12 @@ test('the page shows at once in the boot\'s place: Glaze\'s finite entrances und
   s.flush();
   assert.equal(booted(s).attr, false);
   assert.deepEqual(anims.map((a) => [a.animationName, a.done]), [['gz-in', true], ['gz-rise', true], ['gz-drift', false], ['ultra-own', false]]);
+});
+
+test('with feedback off Ultra retains control of its boot screen visibility', () => {
+  const rules = cssRules('content/extras.css');
+  const html = { tag: 'html', id: '', cls: [], attrs: { 'data-gz-font': 'inter' }, parent: null };
+  const body = { tag: 'body', id: '', cls: [], attrs: {}, parent: html };
+  const ila = { tag: 'div', id: 'initial-load-area', cls: ['mode-light', 'fade-out'], attrs: {}, parent: body };
+  assert.equal(winner(rules, ila, 'visibility'), null, 'Glaze must not override native hidden visibility with visible !important');
 });
