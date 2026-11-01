@@ -291,7 +291,7 @@ test('sandbox frame: a first-load replacement cannot authenticate with the secre
 });
 
 test('sandbox frame: concurrent runs get separate waits and release their timers and port', async () => {
-  const requests = []; let peer, closed = 0;
+  const requests = []; let peer;
   const h = frameHarness((d, port, url) => {
     peer = port;
     port.onmessage = ({ data }) => requests.push(data);
