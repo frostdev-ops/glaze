@@ -192,16 +192,16 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   // The school's other records, read through Glaze's own readers (ai/agent/school.js).
   Object.assign(TOPICS3, {
     announcements: {
-      en: ['announcements?', 'news', 'what did (?:my )?(?:professor|teacher|instructor) (?:say|post)'], es: ['anuncios?', 'avisos?'], 'pt-BR': ['an[úu]ncios?', 'avisos?', 'comunicados?'],
+      en: ['announcements?', '(?:course|class) news', 'what did (?:my )?(?:professor|teacher|instructor) (?:say|post)'], es: ['anuncios?', 'avisos?'], 'pt-BR': ['an[úu]ncios?', 'avisos?', 'comunicados?'],
       fr: ['annonces?'], de: ['ank[üu]ndigung\\p{L}*', 'mitteilung\\p{L}*', 'neuigkeiten'], nl: ['aankondiging\\p{L}*', 'mededeling\\p{L}*'],
     },
     content: {
-      en: ['modules?', 'course (?:content|materials?)', 'lecture notes', 'slides', 'readings?', 'week \\d+'], es: ['m[óo]dulos?', 'contenido', 'materiales?', 'apuntes', 'diapositivas'],
+      en: ['modules?', 'course (?:content|materials?)', 'lecture notes', 'slides', 'readings', '(?:my|the|assigned) reading', 'week \\d+'], es: ['m[óo]dulos?', 'contenido', 'materiales?', 'apuntes', 'diapositivas'],
       'pt-BR': ['m[óo]dulos?', 'conte[úu]do', 'materiais?', 'apostilas?'], fr: ['modules?', 'contenu', 'supports? de cours', 'diapos'],
       de: ['module?', 'kursinhalt\\p{L}*', 'materialien', 'folien', 'skript'], nl: ['modules?', 'lesmateriaal', 'inhoud', 'slides'],
     },
     syllabus: {
-      en: ['syllabus', 'office hours', 'grading (?:policy|scale)', 'grade weights?', 'weights?'], es: ['programa del curso', 's[íi]labo', 'horario de (?:atenci[óo]n|tutor[íi]as)', 'ponderaci[óo]n'],
+      en: ['syllabus', 'office hours', 'grading (?:policy|scale)', 'grade weights?'], es: ['programa del curso', 's[íi]labo', 'horario de (?:atenci[óo]n|tutor[íi]as)', 'ponderaci[óo]n'],
       'pt-BR': ['plano de ensino', 'ementa', 'hor[áa]rio de atendimento', 'pesos?'], fr: ['syllabus', 'plan de cours', 'permanences?', 'pond[ée]ration'],
       de: ['syllabus', 'kursplan', 'sprechstunden?', 'gewichtung'], nl: ['syllabus', 'studiehandleiding', 'spreekuur', 'weging'],
     },
@@ -221,13 +221,19 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const CODE = /(?<![\p{L}\p{N}])[A-Z]{2,5}[ -]?\d{3,4}[A-Z]?(?![\p{L}\p{N}])/u;
   // The topics that read the student's records, which a help question naming one reads first (route's read).
   const READS = ['todo', 'grades', 'assignments', 'documents', 'announcements', 'content', 'syllabus', 'discussions'];
+  const PARTICULAR = /\b(?:my|our|the|this|that|mi|mis|nuestro|este|minha?|meus?|esse|este|mon|ma|mes|ce|cet|cette|mein\p{L}*|unser\p{L}*|dies\p{L}*|mijn|ons|onze|deze|dit)\b/iu;
+  const SCHOOL_WORDS = /\b(?:course|class|lecture|school|cours|curso|aula|kurs|les|college)\b/iu;
+  const DEFINITION = /\b(?:what (?:is|are) (?:an? )|define (?:an? )?)/iu;
   // WORK's computing verbs, which a compute question that isn't graded work may use: "Calculate my grade if…".
   const COMPUTING = ['calculat\\p{L}*', 'calcula\\p{L}*', 'calcul\\p{L}*', 'berechn\\p{L}*', 'bereken\\p{L}*'];
   const route = (question, { attempt = '', locale = 'en', level = 1 } = {}) => {
     const q = String(question).replace(/[‘’]/g, "'"), work = typeof attempt === 'string' ? attempt : '';
     const has = (table) => words(lists(table, locale)).test(q);
     const on = Object.keys(TOPICS).filter((k) => has(TOPICS[k]));
-    const own = level >= 3 ? Object.keys(TOPICS3).filter((k) => has(TOPICS3[k])) : [];
+    const school = CODE.test(q) || SCHOOL_WORDS.test(q) || /\b(?:my|our)\b/iu.test(q);
+    const own = level >= 3 ? Object.keys(TOPICS3).filter((k) => has(TOPICS3[k])
+      && (!READS.includes(k) || school || !DEFINITION.test(q))
+      && (k !== 'content' || school || subjectOf(q) !== 'code')) : [];
     // A compute question's own computing verb is no help request, unless it would work out graded work.
     const computing = own.includes('compute') && !AT().gradedWork(AT().fold(q));
     const working = computing ? words(lists(WORK, locale).filter((w) => !COMPUTING.includes(w))).test(q) : has(WORK);
@@ -235,7 +241,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     // Tool first (level 3): help with work that names the student's records reads them first (read: agent.tools' help turn,
     // its tools these topics' reads), then study.help answers with what was read; help naming nothing is study help alone.
     if (work.trim() || working) {
-      const named = level >= 3 && (has(NAMED) || CODE.test(q)) && !on.includes('assignments') ? TOOLS.assignments : [];
+      const numbered = words(lists(NAMED, locale).map((n) => `(?:${n}) #?\\d+`)).test(q);
+      const named = level >= 3 && (CODE.test(q) || has(NAMED) && (PARTICULAR.test(q) || numbered)) && !on.includes('assignments') ? TOOLS.assignments : [];
       const reads = level >= 3 ? [...on.filter((k) => READS.includes(k) && k !== 'mark').flatMap((k) => TOOLS[k]), ...own.filter((k) => READS.includes(k)).flatMap((k) => TOOLS3[k]), ...named] : [];
       return reads.length ? { task: 'study.help', subject: subject(), read: [...new Set(reads)].slice(0, LIMIT.tools - 1).concat('accounts_list') } : { task: 'study.help', subject: subject() };
     }
