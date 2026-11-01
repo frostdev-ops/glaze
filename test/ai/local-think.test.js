@@ -81,8 +81,8 @@ const MODELS = [
   { id: 'glaze-q8', name: 'Glaze Q8', size: 1800000000, quant: 'Q8_0', tier: 2, license: 'lfm1.0' },
   { id: 'lfm3-q4', name: 'LFM3 Q4', size: 1100000000, quant: 'Q4_K_M', tier: 3, license: 'lfm1.0', stock: true },
 ];
-// The think machinery runs on a stub writer.review the table gives a budget: LOCAL.THINK's own thinker, agent.tools, has a
-// layout of its own that format() refuses. setup({ think: null }) runs LOCAL.THINK as it ships.
+// The think machinery runs on a stub writer.review the table gives a budget: LOCAL.THINK's own thinker, agent.tools, runs
+// in turns of its own (test/ai/local-agent-turns.test.js). setup({ think: null }) runs LOCAL.THINK as it ships.
 const MACHINERY = { ...LOCAL.THINK, 'writer.review': 256 };
 const unref = (f, ms) => { const t = setTimeout(f, ms); t.unref?.(); return t; };
 // ms: what the host's clock moves each time it is read, so each decode takes ms: 10 ms reads as 100 tokens a second.
@@ -351,7 +351,7 @@ test('think per call, as D4 measured p3dpo: agent.tools thinks; writer.review, s
   };
   for (const call of ['decide', 'explain', 'summary', 'scan', undefined, 'constructor']) assert.equal(await asked(FEEDBACK, call), 'direct', String(call));
   for (const t of [REVIEW, HELP, REQS]) assert.equal(await asked(t), 'direct', t.id);
-  // agent.tools runs its own layout (format() refuses it), so its row is read as the D4 harness reads it.
+  // agent.tools runs in its own turns (format.js turns), its row read as for any task.
   assert.equal(LOCAL.thinkFor({ id: 'agent.tools' }), 256);
   assert.equal(LOCAL.thinkFor({ id: 'agent.tools', call: 'decide' }), 256, 'a task without calls keeps its own budget');
   assert.deepEqual(LOCAL.THINK['writer.feedback'], { decide: 0, explain: 0, summary: 0, scan: 0 });
