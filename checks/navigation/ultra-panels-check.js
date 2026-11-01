@@ -1,6 +1,6 @@
 // The site's own panels under Glaze navigation, headless, in the editor's previews (Ultra's, Canvas's and Moodle's real content
 // scripts and bar on their mock pages). A panel the site opens at the window's top or edge (Ultra's side panels: Notification
-// Settings, an item's details; a MUI drawer; Canvas's trays; Moodle's drawers) keeps its title, Close and actions in reach
+// Settings, an item's details; a course's full panel; a MUI drawer; Canvas's trays; Moodle's drawers) keeps its title, Close and actions in reach
 // with the bar at the top and as a rail, and the pet and its Return home pill step aside while one is open.
 // The panels are built here with the markup and the position, z-index and size Ultra, Canvas and Moodle give them.
 //   NODE_PATH=/path/to/node_modules nice -n 15 node checks/navigation/ultra-panels-check.js [screenshots directory]
@@ -39,6 +39,18 @@ const DRAWER = (side) => `<div class="MuiModal-root MuiDrawer-root MuiDrawer-mod
   <div class="MuiPaper-root MuiDrawer-paper MuiDrawer-paperAnchor${side === 'right' ? 'Right' : 'Left'}" role="dialog" style="position:fixed;top:0;${side}:0;height:100%;width:420px;background:#fff;display:flex;flex-direction:column;z-index:1200">
     <header style="display:flex;justify-content:space-between;padding:16px"><h2 id="check-title" style="margin:0">Messages</h2><button id="check-close" aria-label="Close" type="button" style="width:40px;height:40px">×</button></header>
     <div style="flex:1"></div><footer style="padding:16px"><button type="button" id="check-save">Send</button></footer></div></div>`;
+// A course's full panel (a conversation in Messages), in the course's page, which the footer already shortened: its wrapper
+// absolute and the panel's height, its Reply at the bottom (measured in Ultra, 2026-11-01).
+const FULL = `<div class="bb-offcanvas-container" id="check-layer" style="position:absolute;top:0;left:0;right:0;height:calc(100vh - var(--gz-footer-h, 0px));z-index:1010">
+  <div class="bb-offcanvas-panel bb-offcanvas-right full active" role="dialog" aria-labelledby="check-title" style="position:absolute;top:0;bottom:0;left:36px;right:0;background:#fff">
+    <div class="bb-offcanvas-panel-wrap" style="position:absolute;top:0;bottom:0;left:0;right:0;height:100%;max-height:100vh">
+      <div class="bb-close-offset"><button class="bb-close" id="check-close" aria-label="Close" type="button" style="position:absolute;z-index:2;top:10px;left:-20px;width:40px;height:40px">×</button></div>
+      <div class="side-panel-content" style="position:relative;height:100%;box-sizing:border-box;padding:30px 0">
+        <div class="message-panel panel-wrap" style="position:absolute;inset:0;min-height:0;display:flex;flex-direction:column">
+          <header class="panel-header simple-header" style="padding:24px 30px"><h1 id="check-title" style="margin:0;font-size:24px">All students</h1></header>
+          <div class="panel-content" style="flex:1;overflow:hidden"></div>
+          <div class="message-reply-container" style="padding:16px 30px"><button type="button" id="check-save">Reply</button></div>
+        </div></div></div></div></div>`;
 // Canvas's tray (#nav-tray-portal, InstUI's Tray at the window's start edge) and Moodle's block drawer.
 const TRAY = `<div id="check-layer" style="position:fixed;top:0;bottom:0;left:0;width:448px;background:#fff;z-index:9999" role="dialog"><div class="navigation-tray-container"><button id="check-close" aria-label="Close" type="button" style="position:absolute;top:8px;right:8px;width:40px;height:40px">×</button><div class="tray-with-space-for-global-nav"><h2 id="check-title" style="margin:0;padding:24px">Courses</h2></div><button type="button" id="check-save" style="position:absolute;bottom:16px;left:100px">All courses</button></div></div>`;
 const MOODLE_DRAWER = `<div id="theme_boost-drawers-blocks" class="drawer drawer-right show d-print-none" role="dialog" style="position:fixed;top:60px;right:0;width:315px;height:calc(100vh - 60px);background:#fff;z-index:1020"><div class="drawerheader" style="display:flex;justify-content:space-between;padding:8px"><h2 id="check-title" style="margin:0">Blocks</h2><button id="check-close" class="drawertoggle" aria-label="Close block drawer" type="button" style="width:40px;height:40px">×</button></div><button type="button" id="check-save" style="position:absolute;bottom:16px;left:16px">Add a block</button></div>`;
@@ -104,6 +116,8 @@ const MOODLE_DRAWER = `<div id="theme_boost-drawers-blocks" class="drawer drawer
     ok(back, 'Ultra: the pet and Return home come back once the panel closes');
     await open(DRAWER('right'));
     await verdict('Ultra top bar, a MUI drawer', 'ultra-top-drawer-right');
+    await open(FULL);
+    await verdict('Ultra top bar, a course\'s full panel (Messages)', 'ultra-top-full-panel');
     // MUI top/bottom sheets have automatic height, determined by their content. A fixed test height masks stretching.
     for (const footer of [true, false]) {
       await page.evaluate((on) => document.documentElement.toggleAttribute('data-gz-footer', on), footer);

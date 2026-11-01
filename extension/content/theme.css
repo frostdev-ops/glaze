@@ -1941,9 +1941,10 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
   /* Keep the layer over its backdrop and the page underneath; only its absolute content wrapper clears the bar. */
   html[data-gz-navbar] .bb-offcanvas-panel.screen:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main, .bb-offcanvas-panel.screen) *) > .bb-offcanvas-panel-wrap { inset-inline-start: var(--gz-navbar-left) !important; top: var(--gz-navbar-top) !important; width: auto !important; }
   /* Legacy full panels (announcements, roster and other course tools) have a native 36px inset that ignores the course's padding.
-     Keep its background full-width and move just the content clear of the current rail or top bar. */
+     Keep its background full-width and move just the content clear of the current rail or top bar. Its native height is the
+     panel's: moved down, its bottom (Messages' Reply) went past the window. */
   html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) { inset-inline: 0 !important; width: auto !important; }
-  html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap { inset-inline-start: var(--gz-navbar-left) !important; top: var(--gz-navbar-top) !important; width: auto !important; }
+  html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap { inset-inline-start: var(--gz-navbar-left) !important; top: var(--gz-navbar-top) !important; width: auto !important; height: auto !important; }
   html[data-gz-navbar] #gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left); top: var(--gz-navbar-top); }
   /* Side panels (Ultra's peek: Notification Settings, an item's details) and MUI's temporary drawers open at the window's top
      and edge: the top bar covered their title and Close, and a rail one on its side. They start below the bar and beside the
