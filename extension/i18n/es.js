@@ -3899,5 +3899,6 @@
   "The document changed or was deleted. Remove it and pick it again. Nothing was submitted.": "El documento cambió o se eliminó. Quítalo y vuelve a seleccionarlo. No se entregó nada.",
   "File: {name}.": "Archivo: {name}.",
   "Use Blackboard editor to review or remove these uploads: {names}.": "Usa el editor de Blackboard para revisar o quitar estos archivos subidos: {names}.",
-  "Not attached": "No adjuntado"
+  "Not attached": "No adjuntado",
+  "Update automatically": "Actualizar automáticamente"
 };
