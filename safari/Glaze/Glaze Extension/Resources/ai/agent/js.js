@@ -12,9 +12,11 @@ var GZ_AI_RIME_JS = globalThis.GZ_AI_RIME_JS || (() => {
   const AT = () => (typeof GZ_AI_TASK_AGENT_TOOLS !== 'undefined' ? GZ_AI_TASK_AGENT_TOOLS : require('../tasks/agent-tools.js'));
   // code: characters; ms: how long a run may take; output: characters of value and lines together; lines, line: console's;
   // memory, stack: bytes one run may allocate at once and recurse into; heap: the engine's whole WebAssembly memory, in 64 KB
-  // pages (QuickJS can't total what a run holds in this build, so the heap's own maximum is the cap that holds).
+  // pages. This build undercounts allocations, so the engine heap also stays within the run's memory budget (including
+  // engine overhead), below the absolute heap cap. The native allocator limit alone cannot bound many small allocations.
   const LIMIT = { code: 1000, ms: 2000, output: 4000, lines: 40, line: 500, memory: 32 << 20, stack: 512 << 10, heap: 64 << 20 };
   const ENGINE = 'vendor/quickjs/quickjs.wasm';
+  const HEAP = Math.min(LIMIT.memory, LIMIT.heap);
   const isNode = typeof process !== 'undefined' && !!process.versions?.node && typeof require === 'function' && typeof importScripts !== 'function';
   // An answer held to the limits: its own keys only, value and logs out of one budget.
   const tidy = (r) => {
@@ -46,11 +48,11 @@ var GZ_AI_RIME_JS = globalThis.GZ_AI_RIME_JS || (() => {
     }
     const bytes = isNode ? require('node:fs').readFileSync(require('node:path').join(__dirname, '../..', ENGINE))
       : await (await fetch((globalThis.chrome?.runtime || globalThis.browser.runtime).getURL(ENGINE))).arrayBuffer();
-    heap = new WebAssembly.Memory({ initial: 256, maximum: LIMIT.heap >> 16 });
+    heap = new WebAssembly.Memory({ initial: 256, maximum: HEAP >> 16 });
     return globalThis.GZ_QUICKJS.load(bytes, heap);
   })().catch((e) => { loading = null; throw e; }));
 
-  const full = () => !!heap && heap.buffer.byteLength >= LIMIT.heap * 0.9;
+  const full = () => !!heap && heap.buffer.byteLength >= HEAP * 0.9;
   const fail = (error, ms) => ({ ok: false, value: null, logs: [], error, ...(ms !== undefined && { ms }) });
 
   const run = async (code, { ms = LIMIT.ms } = {}) => {
