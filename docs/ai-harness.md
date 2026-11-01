@@ -25,6 +25,7 @@ until the student has turned AI on, chosen a model for that feature and allowed 
 | `ai/tasks/syllabus-read.js` | `syllabus.read`: a syllabus's values as written, each with its quote; `planner/syllabus-ai.js` reads them with `planner/syllabus.js` and merges them into the import dialog's review. |
 | `ai/tasks/writer-*.js` | Glaze Writer's tasks (below); `writer-context.js` cleans the page's context and writes it as the request's reusable context. |
 | `ai/tasks/study-help.js`, `ai/tasks/agent-tools.js` | `study.help` and `agent.tools` (below), which Ask Rime runs. `wording.js`: the wording-offer rules they share with Feedback. |
+| `ai/agent/js.js`, `places.js`, `wakes.js`; `ai/sandbox/` | Rime's own tools (below): run_js and its sandbox page, the places map and the panel's actions, wakes and monitors. |
 | `ai/ask.js`, `ai/page/ask.js` | Ask Rime (below): the routing rule, the step loop over Agents' tools and the panel's port in the worker; the panel on the school's page, loaded on demand. |
 | `ai/settings.js` | storage.local `ai`: `{ on, outline, sources, mode, model, models, tune, features }` (below), the providers Settings names (`PRESETS`), and `migrate` for an older store. Features: `syllabus`, `completion` (the writer's ghost text), `writing` (its review, feedback, requirements, citations and autocorrect calls), `ask` (Ask Rime). |
 | `ai/broker.js` | The worker's broker: the port, admission, connections (IndexedDB), Settings' config messages. |
@@ -151,7 +152,7 @@ Ask Rime runs both (below); the worker loads them with the harness (`aiFiles`). 
   (answer, solves, code, wording) for a text that isn't a tutor's reply. Symbolic rearrangements count as steps too; a number merely
   appearing in the attempt does not excuse a new result. Quotations may come from any context block shown to the model,
   including the discussion prompt.
-- `agent.tools`: one turn of a small model's tool loop over twelve of Agents' tools (`SPECS`: accounts, courses,
+- `agent.tools`: one turn of a small model's tool loop over twelve of Agents' tools and eight of Rime's own (below) (`SPECS`: accounts, courses,
   assignments, an assignment, to-do, schedule, grades, a course's grades, documents, a document, a document's assignment,
   and `todo_mark_done`, the one write, which waits for the student's approval as in Agents). `SPECS.parameters` are
   Agents' `inputSchema` with shorter words (the test holds them equal). Input `{ question, tools (names), steps: [{ call,
@@ -194,6 +195,45 @@ sender is checked again before each call. An agent answer must also pass study.h
 work. Port: `{ id, op: 'ask', question, attempt?, locale }`, `cancel`, `status` (the broker's for `ask`); events
 `route { task }`, `look`, `approve`, `keepalive` (a local run's and the approval window's), then `end` (`output`,
 `answer { text }` or `declined: true`) or `error`.
+
+## Rime's own tools
+
+Eight tools Ask Rime alone offers (`agent-tools.js` `OWN`), in the same `<tools>` lines and native calls as Agents' twelve,
+so Rime can be trained on them (`glaze-plans/lfm-tune/FORMAT-tools-v3.md`). They have no Agents group, so no app sees them.
+Their rules live in their descriptions; the instructions Rime was trained on are unchanged, and a request that offers none
+of them is the same, byte for byte. Every parameter is a string or an integer (the native grammar holds no other).
+
+| Tool | Kind | Arguments | What it does |
+| --- | --- | --- | --- |
+| `run_js` | read | `code` (one line, ≤ 1,000) | Runs in `ai/sandbox/js.html` (Chrome): a new blob Worker per run, network, scripts, storage, messaging and extension APIs taken out of its scope, the sandbox CSP (`connect-src 'none'`) under it; stopped at 2 s; value and console lines ≤ 4,000 characters, 40 lines. → `{ ok, value, logs, error?, cut? }`. Firefox and Safari have no manifest sandbox: refused with one sentence, and not to be offered there (`available`). |
+| `places_list` | read | `course?` | The site's pages (Canvas: dashboard, courses, calendar, grades; Ultra: courses, calendar, grades, activity stream; Moodle: dashboard, my courses, calendar, grades), Documents (Writer on), Settings and each course; with `course`, its pages (Canvas: home, grades, assignments, announcements, modules; Ultra: outline, gradebook, announcements; Moodle: home, grades). Paths are the ones Glaze already opens or the sites' own course navigation links. → `{ site, here, places: [{ place, title }] }`. |
+| `place_open` | read | `place` | A place on the map → a ui action `{ action: 'open', place, title, url | app }`; anything else refused with the nearest place. |
+| `page_highlight` | read | `text`, `note?` | Words on this page (checked against `ctx.text` when given) or on the place just opened → `{ action: 'highlight', text, note }`. |
+| `wake_create` | confirm | `at` (local, 2026-10-31 21:00), `say` | Comes back at that time, at most 60 days ahead, 20 at once. |
+| `monitor_create` | confirm | `watch` (grade, announcement, due, submitted), `course?`, `type?`, `id?`, `say?`, `account?` | Watches the student's own data for 30 days, 20 at once: due and submitted an item of the to-do list, grade a course in Insights (a new graded point or percent), announcement Canvas's planner (refused on Blackboard). |
+| `wakes_list` | read | | What waits: `{ items: [{ id, what, at | watch, about, say }] }`. |
+| `wake_cancel` | confirm | `id` | Cancels one. |
+
+There is no fill tool: Glaze never fills in the student's work or a site's forms.
+
+`check()` adds, for these tools (`ownWhy`): `work`, run_js on a question about homework, a worksheet, a problem or question
+number (six languages, `HOMEWORK`) or after `assignment_read` or `document_read`; `place`, a place no places_list result
+named; `text`, highlighted words neither the question nor a result holds; `asked`, a wake, monitor or cancel when the
+question asks for none (`LATER`); `time`, a wake that isn't a time on the student's clock in the next 60 days (`moment`);
+`monitor`, a monitor's fields that don't fit what it watches. An answer after run_js still passes study.help's `hands()`
+in Ask Rime.
+
+Wakes and monitors (`ai/agent/wakes.js`) live in storage.local `rimeWakes` with their alarms (`gz-rime:wake:<id>`, and
+`gz-rime:tick` every 30 minutes while a monitor waits). A monitor compares what Agents' own tool reads for its account
+(`todo_list`, `course_grades`) with what it read when it was made; no model runs until one fires. What fired waits until
+the student's next school page takes it (`take()`, which checks everything due first), shown inside Glaze, never as a
+notification. Safari unloads Glaze's background about 30 s after its last event, so an alarm can come late there; the
+page's `take()` still finds it. Settings → AI → Ask Rime → **Reminders and watches** (`ai.wakes`, on unless turned off):
+off, nothing is made, checked or shown.
+
+The panel's side comes with Ask Rime's new panel: it gives the tools their `ctx` (`page { site, url }`, `courses()`,
+`writer`, `text`, `ui`, `js` through `ai/sandbox/frame.js`, `zone`, `account`), performs the ui actions after the answer,
+shows each confirm's sentence for approval as Agents' window does for a write, and takes and shows what fired.
 
 ## Add a provider
 
