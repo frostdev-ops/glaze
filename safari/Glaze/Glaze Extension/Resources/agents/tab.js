@@ -226,17 +226,126 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     return { ok: true, title: it.title, author: it.author, at: it.at, text: text(it.html), files: it.files.map((f) => f.name),
       ...(it.html.length > LIMIT.text && { truncated: true }) };
   };
+  // Ultra's reads go through courses/ultra.js's reader and search's rule for what the student may see now (searchItems), asked
+  // with a few more of the public API's fields: an announcement's position and dates, an Ultra document's isBbPage.
+  const ultra = async (go) => {
+    await libs(['courses/ultra.js', 'GZ_ULTRA'], ['core/doctext.js', 'GZ_DOCTEXT']);
+    return GZ_ULTRA.read({ origin: go.origin, signal: go.signal, live: go, maxPages: 5 });
+  };
+  const html = (h) => GZ_DOCTEXT.html(h);
+  const kind = (name) => GZ_ULTRA.SEARCH_KINDS.find((y) => y.kind === name);
+  const ms = (v) => { const t = Date.parse(v); return Number.isFinite(t) ? t : null; };
+  // The files an Ultra body embeds (<a data-bbfile>): each one's name, type and size from data-bbfile, never its address,
+  // which is signed and expires.
+  const embedded = (h) => {
+    const out = [];
+    for (const [tag] of String(h || '').matchAll(/<a\s(?:[^"'<>]|"[^"]*"|'[^']*')*>/gi)) {
+      const m = tag.match(/\sdata-bbfile\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
+      if (!m) continue;
+      let f;
+      try { f = JSON.parse((m[1] ?? m[2]).replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, char)); } catch { continue; }
+      const pick = (v, n) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, n) : '');
+      const name = pick(f?.displayName, 200) || pick(f?.linkName, 200) || pick(f?.fileName, 200) || pick(f?.alternativeText, 200);
+      if (!name || out.length >= 20) continue;
+      out.push({ name, ...(pick(f.mimeType, 100) && { type: pick(f.mimeType, 100) }), ...(Number.isFinite(f.fileSize) && f.fileSize >= 0 && { size: f.fileSize }) });
+    }
+    return out;
+  };
+  // A course's content the student may see now, each with its text and parent; an Ultra document (a folder the API marks
+  // isBbPage) is a Document. Its body block (ultraDocumentBody) is read with the document, never listed on its own.
+  const LABELS = { document: 'Document', folder: 'Folder', lesson: 'Module', 'asmt-test-link': 'Test', file: 'File' };
+  const contents = async (go, cid) => {
+    const reader = await ultra(go), k = kind('Document');
+    const r = await reader.list(`/learn/api/public/v1/courses/${cid}/contents`, `${k.fields},contentHandler.isBbPage`, true);
+    const raw = new Map(r.items.map((x) => [x?.id, x]));
+    const items = GZ_ULTRA.searchItems(k, r.items, { id: cid, name: '' }, html, Date.now(), go.origin).map((i) => {
+      const id = i.key.slice(i.key.lastIndexOf(':') + 1), x = raw.get(id), handler = String(x?.contentHandler?.id || '').replace('resource/x-bb-', '');
+      const page = handler === 'folder' && x?.contentHandler?.isBbPage === true;
+      return { id, title: i.title, kind: page ? 'Document' : LABELS[handler] || i.kind, page, parent: typeof x?.parentId === 'string' ? x.parentId : '', body: typeof x?.body === 'string' ? x.body : '', text: i.text,
+        ...(i.text.length >= 20000 && { truncated: true }) };
+    }).filter((i) => i.title !== 'ultraDocumentBody');
+    return { items, complete: r.complete };
+  };
+  // One content item as the student sees it: an Ultra document's body block(s), or the item's own body. → its text and the
+  // names of the files it embeds.
+  const read1 = async (go, cid, it) => {
+    if (!it.page) return { text: it.text, files: embedded(it.body), ...(it.truncated && { truncated: true }) };
+    const reader = await ultra(go);
+    const r = await reader.list(`/learn/api/public/v1/courses/${cid}/contents/${it.id}/children`, 'id,title,body,contentHandler.id,availability');
+    const blocks = r.items.filter((c) => c?.contentHandler?.id === 'resource/x-bb-document' && c?.availability?.available === 'Yes' && typeof c.body === 'string');
+    const body = blocks.map((c) => c.body).join('\n').slice(0, 100000);
+    const t = html(body);
+    return { text: t.slice(0, 20000), files: embedded(body), ...((t.length > 20000 || body.length >= 100000) && { truncated: true }) };
+  };
   const search = async (go, a) => {
     const x = X();
     if (x.site !== 'ultra' || !BB.test(a.course || '') || !Object.hasOwn(KINDS, a.kind)) return no('args');
-    await libs(['courses/ultra.js', 'GZ_ULTRA'], ['core/doctext.js', 'GZ_DOCTEXT']);
-    const reader = GZ_ULTRA.read({ origin: go.origin, signal: go.signal, live: go, maxPages: 5 });
-    const k = GZ_ULTRA.SEARCH_KINDS.find((y) => y.kind === KINDS[a.kind]);
-    // Each item's text as palette search reads it (core/doctext.js).
-    const list = await reader.search({ id: a.course, name: '' }, k, (html) => GZ_DOCTEXT.html(html));
+    if (a.kind === 'contents') {
+      const r = await contents(go, a.course);
+      if (!go()) return no('late');
+      return { ok: true, complete: r.complete, items: r.items.map(({ id, title, kind: k, text: t, truncated }) => ({ id, title, kind: k, text: t, ...(truncated && { truncated }) })) };
+    }
+    if (a.kind === 'discussions') return discussions(go, a);
+    // Announcements, newest first as Ultra orders them (position 1 is the top), each with the day the student could first
+    // see it: its availability's start (a reposted one keeps an older created), else modified, else created.
+    const reader = await ultra(go), k = kind('Announcement');
+    const r = await reader.list(`/learn/api/public/v1/courses/${a.course}/announcements`, `${k.fields},position,created,modified,draft`);
+    const raw = new Map(r.items.map((y) => [y?.id, y]));
+    const list = GZ_ULTRA.searchItems(k, r.items.filter((y) => y?.draft !== true), { id: a.course, name: '' }, html, Date.now(), go.origin);
     if (!go()) return no('late');
-    return { ok: true, complete: list.complete !== false, items: list.map((i) => ({ id: i.key.slice(i.key.lastIndexOf(':') + 1), title: i.title, kind: i.kind, text: i.text,
-      ...(i.text.length >= 20000 && { truncated: true }) })) };
+    const items = list.map((i) => {
+      const id = i.key.slice(i.key.lastIndexOf(':') + 1), y = raw.get(id);
+      return { id, title: i.title, kind: i.kind, at: ms(y?.availability?.duration?.start) ?? ms(y?.modified) ?? ms(y?.created), position: Number.isInteger(y?.position) ? y.position : Infinity, text: i.text };
+    }).sort((p, q) => p.position - q.position || (q.at || 0) - (p.at || 0)).map(({ position, ...i }) => i);
+    return { ok: true, complete: r.complete, items };
+  };
+  // document (Ultra): one content item the student may see now, read whole.
+  const doc1 = async (go, a) => {
+    if (X().site !== 'ultra' || !BB.test(a.course || '') || !BB.test(a.id || '')) return no('args');
+    const r = await contents(go, a.course), it = r.items.find((i) => i.id === a.id);
+    if (!it) return r.complete ? no('none') : no('partial');
+    const got = await read1(go, a.course, it);
+    return go() ? { ok: true, title: it.title, kind: it.kind, ...got } : no('late');
+  };
+  // syllabus (Ultra): no fixed place, so the shallowest document or file the student may see whose title names a syllabus,
+  // at most three folders down. → { found: false } or the item, read whole.
+  const SYLLABUS = /(?:^|[^\p{L}])(?:syllab(?:us|i)|s[íi]labo|plan de estudios|programa (?:del curso|de la asignatura|da disciplina)|plano de ensino|ementa|plan de cours|programme du cours|lehrplan|kursplan|kursbeschreibung|studiewijzer|studiehandleiding|cursusplan)(?![\p{L}])/iu;
+  const syllabus = async (go, a) => {
+    if (X().site !== 'ultra' || !BB.test(a.course || '')) return no('args');
+    const r = await contents(go, a.course), by = new Map(r.items.map((i) => [i.id, i]));
+    const depth = (i) => { let d = 0; for (let p = by.get(i.parent); p && d < 9; p = by.get(p.parent)) d++; return d; };
+    const it = r.items.filter((i) => ['Document', 'File'].includes(i.kind) && SYLLABUS.test(i.title) && depth(i) <= 3).sort((p, q) => depth(p) - depth(q))[0];
+    if (!it) return go() ? { ok: true, found: false, complete: r.complete } : no('late');
+    const got = it.kind === 'File' ? { text: '', files: [{ name: it.title }] } : await read1(go, a.course, it);
+    return go() ? { ok: true, found: true, id: it.id, title: it.title, ...got } : no('late');
+  };
+  // discussions (Ultra): the course's discussions; Ultra's list answers id and title only, whatever fields are asked.
+  const discussions = async (go, a) => {
+    if (X().site !== 'ultra' || !BB.test(a.course || '')) return no('args');
+    const reader = await ultra(go);
+    const r = await reader.list(`/learn/api/public/v1/courses/${a.course}/discussions`, 'id,title');
+    if (!go()) return no('late');
+    return { ok: true, complete: r.complete, items: r.items.filter((d) => BB.test(String(d?.id)) && typeof d.title === 'string' && d.title.trim()).map((d) => ({ id: d.id, title: d.title.trim().slice(0, 300) })) };
+  };
+  // discussion (Ultra): one discussion's prompt (its topic), whether it's graded, and the student's own replies. Classmates'
+  // replies are only counted: never their names or words.
+  const discussion = async (go, a) => {
+    if (X().site !== 'ultra' || !BB.test(a.course || '') || !BB.test(a.id || '')) return no('args');
+    const reader = await ultra(go), base = `/learn/api/public/v1/courses/${a.course}/discussions/${a.id}`;
+    let d;
+    try { d = await reader.get(`${base}?fields=id,title,available,gradable,createdDate,modifiedDate,topic`); } catch (e) { if (/\b(401|403|404)\b/.test(e.message)) return no('none'); throw e; }
+    if (d?.id !== a.id) return no('none');
+    if (d.available !== true || d.topic?.status !== 'Published') return no('locked');
+    // Replies the student may not read leave the prompt readable, without a count.
+    let r = null;
+    try { r = await reader.list(`${base}/messages`, 'id,userId,status,body,postDate,createdDate'); } catch (e) { if (!/\b(401|403|404)\b/.test(e.message)) throw e; }
+    if (!go()) return no('late');
+    if (!r) return { ok: true, title: String(d.title || '').trim().slice(0, 300), text: html(typeof d.topic.body === 'string' ? d.topic.body : '').slice(0, 20000), files: embedded(d.topic.body), gradable: d.gradable === true, at: ms(d.topic.postDate) ?? ms(d.createdDate), mine: [], others: null, complete: false };
+    const live = r.items.filter((m) => m && m.status !== 'Deleted' && m.status !== 'Draft');
+    const mine = live.filter((m) => String(m.userId) === go.uid).map((m) => ({ at: ms(m.postDate) ?? ms(m.createdDate), text: html(typeof m.body === 'string' ? m.body : '').slice(0, 2000) }));
+    const body = typeof d.topic.body === 'string' ? d.topic.body : '';
+    return { ok: true, title: String(d.title || '').trim().slice(0, 300), text: html(body).slice(0, 20000), files: embedded(body), gradable: d.gradable === true,
+      at: ms(d.topic.postDate) ?? ms(d.createdDate), mine, others: live.length - mine.length, complete: r.complete, ...(body.length >= 100000 && { truncated: true }) };
   };
   const modules = async (go, a) => {
     if (X().site !== 'canvas' || !ID.test(a.course || '')) return no('args');
@@ -256,8 +365,8 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     return { ok: true, complete: !rows.more, items: rows.filter((t) => t && ID.test(String(t.id)) && typeof t.title === 'string').map((t) => ({ id: String(t.id), title: t.title.slice(0, 300) })) };
   };
 
-  const OPS = { todo, insights, assignment, mark, announcement, search, modules, topics };
-  const SCHOOL_READS = new Set(['announcement', 'search', 'modules', 'topics']);
+  const OPS = { todo, insights, assignment, mark, announcement, search, modules, topics, document: doc1, syllabus, discussion };
+  const SCHOOL_READS = new Set(['announcement', 'search', 'modules', 'topics', 'document', 'syllabus', 'discussion']);
   const jobs = new Map();
   const cancel = (id) => {
     if (jobs.has(id)) jobs.get(id)?.abort();

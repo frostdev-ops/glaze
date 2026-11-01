@@ -2,8 +2,10 @@
 // its syllabus as Glaze imported it, and its discussions, each read the way Glaze's own features read them. Canvas's
 // announcements across courses come from the to-do list Glaze keeps (storage.local todoCache, planner items of type
 // announcement); everything else is read in an open tab of the student's school, signed in as this account (agents/tab.js
-// ops announcement, search, modules, topics), and a syllabus from what Glaze kept when the student imported it
-// (planner/syllabus.js syllabus:<origin>/<uid>/<course>). Canvas and Blackboard Ultra: the agent layer reads no Moodle account.
+// ops announcement, search, modules, topics, document, syllabus, discussion), and a syllabus from what Glaze kept when the
+// student imported it (planner/syllabus.js syllabus:<origin>/<uid>/<course>) and, on Blackboard, the course's syllabus
+// document. A Blackboard discussion gives its prompt and the student's own replies; classmates' replies are only counted.
+// Embedded files are named, never their signed addresses. Canvas and Blackboard Ultra: the agent layer reads no Moodle account.
 // Text comes a page at a time (PAGE characters); lists are capped (LIMIT.items) and say whether they were read whole.
 // ctx: { account, local (storage.local's get), tab(op, args) → the tab's answer or null when no tab of the school is open }.
 // Classic script for the worker; module.exports for node.
@@ -27,6 +29,17 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
   const ERRORS = {
     none: 'The site has no such item, or it is not open to the student.', locked: 'The site keeps that one locked for now.', args: 'That id does not fit this site.',
     timeout: 'The school site took too long to answer. Try again.', profile: 'The open tab is signed in as someone else.',
+    partial: 'Glaze read only part of the course content; the requested item may be in the unread part. Open it on the site.',
+  };
+  // A body that is only an embedded file: its names stand in for the text.
+  const FILED = 'The text is in the attached file; Glaze names it but can\'t read it. Open it on the site.';
+  const filesOf = (r) => (Array.isArray(r.files) ? r.files.slice(0, 10) : []);
+  // A read's text a page at a time with the files it embeds, or the files alone when it has no text.
+  const body = (r, page) => {
+    const files = filesOf(r);
+    if (!String(r.text || '').trim()) return files.length ? (page > 1 ? { error: 'There is 1 page.' } : { files, note: FILED }) : null;
+    const p = paged(r.text, page, r.truncated);
+    return p.error ? p : { ...p, ...(files.length && { files }) };
   };
   // The tab's answer, or why there is none.
   const viaTab = async (w, ctx, op, args) => {
@@ -75,7 +88,7 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
       if (w.lms === 'canvas') return planned(w, ctx, args.course);
       if (!args.course) return fail('On Blackboard, name the course: courses_list gives its id.');
       const r = await viaTab(w, ctx, 'search', { course: args.course, kind: 'announcements' });
-      return r.ok === false ? r : { account: w.account, complete: r.complete, ...capped(r.items.map((i) => ({ id: i.id, title: i.title }))) };
+      return r.ok === false ? r : { account: w.account, complete: r.complete, ...capped(r.items.map((i) => ({ id: i.id, title: i.title, at: i.at ?? null }))) };
     }),
     def('announcement_read', async (args, ctx) => {
       const w = who(ctx?.account);
@@ -98,27 +111,37 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
       if (!w) return fail(NONE);
       if (w.lms !== 'ultra') return fail("Glaze can't read Canvas pages or files yet; open the item on the site.");
       if (!course(w, args.course)) return fail(ERRORS.args);
-      const r = await viaTab(w, ctx, 'search', { course: args.course, kind: 'contents' });
-      if (r.ok === false) return r;
-      const it = r.items.find((i) => i.id === args.id);
-      if (!it) return fail(r.complete === false ? 'Glaze read only part of the course content; the requested item may be in the unread part. Open it on the site.'
-        : 'No such item in this course for the student now; content_list names them.');
-      if (!it.text) return fail(`“${it.title}” holds no text Glaze can read (a ${it.kind.toLowerCase()}); open it on the site.`);
-      const p = paged(it.text, args.page || 1, it.truncated);
-      return p.error ? fail(p.error) : { account: w.account, title: it.title, kind: it.kind, ...p };
+      const r = await viaTab(w, ctx, 'document', { course: args.course, id: args.id });
+      if (r.ok === false) return r.error === ERRORS.none ? fail('No such item in this course for the student now; content_list names them.') : r;
+      const got = body(r, args.page || 1);
+      if (!got) return fail(`“${r.title}” holds no text Glaze can read (a ${String(r.kind).toLowerCase()}); open it on the site.`);
+      return got.error ? fail(got.error) : { account: w.account, title: r.title, kind: r.kind, ...got };
     }),
     def('syllabus_read', async (args, ctx) => {
       const w = who(ctx?.account);
       if (!w) return fail(NONE);
       if (!course(w, args.course)) return fail(ERRORS.args);
       const key = `syllabus:${w.account}/${args.course}`, rec = (await ctx.local.get(key))?.[key];
-      if (!isObj(rec) || rec.deleted) return { account: w.account, course: args.course, at: null, missing: "Glaze holds nothing from this course's syllabus. Import it with Glaze's Syllabus import, from the course's page." };
+      const kept = isObj(rec) && !rec.deleted;
+      // On Blackboard the syllabus is a document in the course, wherever the instructor put it: its text, a page at a time.
+      let doc = null, looked = '';
+      if (w.lms === 'ultra') {
+        const r = await viaTab(w, ctx, 'syllabus', { course: args.course });
+        if (r.ok === false) looked = r.error;
+        else if (r.found) {
+          const got = body(r, args.page || 1);
+          if (got?.error) return fail(got.error);
+          doc = { id: r.id, title: r.title, ...(got || { note: "It holds no text Glaze can read; open it on the site." }) };
+        } else looked = r.complete === false ? 'Glaze read only part of the course content and found no syllabus there.' : 'The course has no item named as a syllabus.';
+      }
+      if (!kept && !doc) return { account: w.account, course: args.course, at: null, missing: `Glaze holds nothing from this course's syllabus. Import it with Glaze's Syllabus import, from the course's page.${looked ? ` ${looked}` : ''}` };
+      if (!kept) return { account: w.account, course: args.course, at: null, document: doc };
       const prof = isObj(rec.prof) ? Object.fromEntries(Object.entries(rec.prof).filter(([, v]) => typeof v === 'string' && v)) : {};
       const list = (v) => (Array.isArray(v) ? v : []);
       return { account: w.account, course: args.course, at: rec.at || null, ...(Object.keys(prof).length && { instructor: prof }),
         hours: list(rec.hours), meetings: list(rec.meetings), dates: list(rec.dates).slice(0, LIMIT.items).map(({ title, day, kind }) => ({ title, day, kind })),
         scale: list(rec.scale).map(([letter, min]) => ({ letter, min })), weights: list(rec.weights),
-        ...(list(rec.dates).length > LIMIT.items && { more: { dates: rec.dates.length - LIMIT.items } }) };
+        ...(list(rec.dates).length > LIMIT.items && { more: { dates: rec.dates.length - LIMIT.items } }), ...(doc && { document: doc }) };
     }),
     def('discussions_list', async (args, ctx) => {
       const w = who(ctx?.account);
@@ -131,21 +154,21 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
       const w = who(ctx?.account);
       if (!w) return fail(NONE);
       if (!course(w, args.course)) return fail(ERRORS.args);
-      let title, text, at, author, truncated;
       if (w.lms === 'ultra') {
-        const r = await viaTab(w, ctx, 'search', { course: args.course, kind: 'discussions' });
+        // The prompt, whether it's graded, the student's own replies (first page only) and how many classmates replied:
+        // never a classmate's name or words.
+        const r = await viaTab(w, ctx, 'discussion', { course: args.course, id: args.id });
         if (r.ok === false) return r;
-        const it = r.items.find((i) => i.id === args.id);
-        if (!it) return fail(r.complete === false ? 'Glaze read only part of the discussions; the requested discussion may be in the unread part. Open it on the site.'
-          : 'No such discussion in this course for the student now; discussions_list names them.');
-        ({ title, text, truncated } = it);
-      } else {
-        const r = await viaTab(w, ctx, 'announcement', { course: args.course, id: args.id });
-        if (r.ok === false) return r;
-        ({ title, text, at, author, truncated } = r);
+        const page = args.page || 1, got = body(r, page) || { text: '', page: 1, pages: 1 };
+        if (got.error) return fail(got.error);
+        const mine = page === 1 ? (r.mine || []).slice(0, 3).map((m) => ({ at: m.at ?? null, text: String(m.text || '').slice(0, 300) })) : [];
+        return { account: w.account, title: r.title, ...(r.at && { at: r.at }), gradable: r.gradable === true, ...got,
+          ...(page === 1 && { mine, ...((r.mine || []).length > 3 && { mineMore: r.mine.length - 3 }), others: r.others ?? null, ...(r.complete === false && { complete: false }) }) };
       }
-      const p = paged(text, args.page || 1, truncated);
-      return p.error ? fail(p.error) : { account: w.account, title, ...(author && { author }), ...(at && { at }), ...p };
+      const r = await viaTab(w, ctx, 'announcement', { course: args.course, id: args.id });
+      if (r.ok === false) return r;
+      const p = paged(r.text, args.page || 1, r.truncated);
+      return p.error ? fail(p.error) : { account: w.account, title: r.title, ...(r.author && { author: r.author }), ...(r.at && { at: r.at }), ...p };
     }),
   ];
   const register = (registry) => tools().map((t) => registry.add(t));

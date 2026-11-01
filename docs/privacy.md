@@ -41,7 +41,9 @@ you goes with it. It then runs on this device, so what you give it stays there.
 
 [Ask Rime](../PRIVACY.md#ask-rime) (Settings → AI → Ask Rime, off by default) sends your question, and your work when
 you add it, to the model you chose for it. For a question about your own courses it also sends what Glaze reads to
-answer it: your to-dos, schedule, grades, assignments or Writer documents, as Glaze already keeps them on this device.
+answer it: your to-dos, schedule, grades, assignments or Writer documents, as Glaze already keeps them on this device,
+and a course's announcements, content, syllabus and discussions. From a discussion it sends the prompt and your own
+replies, and only the number of your classmates' replies, never their names or posts.
 Marking a to-do done waits for your OK in Glaze's window. Nothing of the conversation is kept, except a reminder or watch
 you approve, kept on this device until it is shown or cancelled.
 

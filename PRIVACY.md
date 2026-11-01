@@ -185,7 +185,11 @@ go to the model you chose for Ask Rime (its own, else your overall model), as ev
 below): with a model on this device nothing leaves your computer; with a provider or an endpoint it goes to that host
 only. For a question about your own courses, Glaze reads what it needs with the same tools as Agents (your to-dos and
 schedule, grades, assignments and rubrics, Writer documents, as Glaze keeps them on this device, refreshed through an
-open tab of your school's site), and sends what it read to that model to answer. Ask Rime's switch is that tool access:
+open tab of your school's site), and, read the same way, a course's announcements, content, syllabus and discussions
+(on Blackboard, read-only GETs to its public API, including an Ultra document's body block and a discussion's replies),
+and sends what it read to that model to answer. From a discussion it sends the prompt, whether it is graded, your own
+replies and only the number of your classmates' replies: never their names or posts. For a file a page embeds it sends
+the file's name and type, never its address. Ask Rime's switch is that tool access:
 it needs no Agents pairing and doesn't turn agent access on. Its one change, marking a to-do done, waits for your OK in
 Glaze's window, worded by Glaze, never by the model. Nothing of the conversation is kept: it goes when the page or the
 panel closes. A reminder or watch you approve is the exception: Glaze keeps its time or what it watches, its few words
