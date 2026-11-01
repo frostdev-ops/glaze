@@ -1,6 +1,6 @@
 // agent.tools (docs/ai-harness.md, Agent tools): a small model on this computer answers a student's question about their
 // courses with Glaze's own Agents tools (agents/*.js), one turn at a time: each run either calls one tool or gives the final
-// answer. Defined and tested; no feature runs it yet, so the worker doesn't load it (background/background.js aiFiles).
+// answer. Ask Glaze runs it (ai/ask.js), one run a step.
 // input: { question, tools: [names from SPECS], steps: [{ call: { name, arguments }, result }], now (ms), zone (IANA),
 //   locale? }. A feature runs each call itself, through Agents' grants and the student's approval for a write
 //   (agents/calls.js), and runs the task again with the step added.
@@ -284,7 +284,9 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       : { call: null, answer: { text: out.answer.text.trim(), quotes: out.answer.quotes.map((q) => q.trim()) } };
   };
 
-  const task = T.add(T.define({ id: 'agent.tools', version: 1, input, build, output: OUTPUT, check, limits: { ms: 60000 } }));
+  // rate: Ask Glaze (ai/ask.js) runs a question's steps as runs of their own, at most seven (six calls, then the answer): six
+  // questions a minute in a tab, where the broker's default would stop the first question's seventh run.
+  const task = T.add(T.define({ id: 'agent.tools', version: 1, input, build, output: OUTPUT, check, limits: { ms: 60000 }, rate: { perMinute: 6 * (LIMIT.steps + 1) } }));
   return { task, LIMIT, SPECS, NAMES, SYSTEM, OUTPUT, ANSWER, constraint, instructions, line, py, shown, native, fromNative, readable, layout, fromRequest, answerParts, why };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_TASK_AGENT_TOOLS; else GZ_AI_TASK_AGENT_TOOLS;

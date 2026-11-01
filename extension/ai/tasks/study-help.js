@@ -1,7 +1,7 @@
 // study.help (docs/ai-harness.md, Study help): Glaze helps a student with a question about their coursework and never gives
 // the answer or does the work: a hint toward their next step, guiding questions, the concept underneath with a different
 // example, or a check of their own step. Math, science, code, essays and reading, in Glaze's six locales. Defined and
-// tested; no feature runs it yet, so the worker doesn't load it (background/background.js aiFiles).
+// tested; Ask Glaze runs it (ai/ask.js).
 // input: { question, attempt?, subject, locale?, material?, context? (writer-context.js: course, assignment) }.
 // output: { kind: hint | question | concept | check-my-step, step: correct | mistake | unclear | null, reply, followUp }.
 // check() refuses (null) a reply that states the answer, does the student's step, solves the exact problem given, writes
