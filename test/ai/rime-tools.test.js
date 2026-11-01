@@ -355,6 +355,17 @@ test('wakes: switching off during a monitor baseline read prevents its creation'
   assert.equal(store.rimeWakes?.monitors?.length || 0, 0);
 });
 
+test('monitor_create: an explicit account owns both the baseline and subsequent reads', async () => {
+  const store = {}, env = wakesEnv(store), accounts = [], other = `${CANVAS}/77`;
+  env.read = async (name, args, account) => { accounts.push(account); return { items: [{ type: 'assignment', id: '1', title: 'Lab', due: T0 + 864e5 }] }; };
+  const mk = wtool(env, 'monitor_create');
+  assert.ok((await mk.run({ watch: 'due', type: 'assignment', id: '1', account: other }, { account: ACC })).id);
+  await W.tick(env);
+  assert.deepEqual(accounts, [other, other]);
+  assert.equal(store.rimeWakes.monitors[0].account, other);
+  assert.equal((await mk.run({ watch: 'due', type: 'assignment', id: '1', account: 'https://school.example@evil.example/77' }, { account: ACC })).ok, false);
+});
+
 test('wakes: switching off during a tick preserves pending records and suppresses delivery', async () => {
   const store = {}, env = wakesEnv(store), entered = deferred(), resume = deferred();
   env.read = async () => ({ items: [{ type: 'assignment', id: '1', title: 'Lab', due: T0 + 864e5 }] });
