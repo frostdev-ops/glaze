@@ -635,7 +635,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         if (signal.aborted) throw cancelled();
         for (const a of current.actions) { const { action, ...rest } = a; post({ id, type: 'action', action: { kind: action, ...rest } }); }
         post({ id, type: 'end', task: r.task, answer: { text: res.answer.text } });
-        if (level >= 3) void compact({ open, turn: { question, answer: res.answer.text }, locale, tools: r.tools, zone }).catch(() => {});
+        if (level >= 3) void compact({ open, turn: { question, answer: res.answer.text }, locale, tools, zone }).catch(() => {});
       } catch (e) {
         fail(signal.aborted ? 'cancelled' : R().code(e));
       } finally { if (current?.control === control) current = null; }
