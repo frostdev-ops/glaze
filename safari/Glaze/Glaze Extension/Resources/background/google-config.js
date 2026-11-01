@@ -18,8 +18,9 @@ var GZ_GOOGLE_CONFIG = globalThis.GZ_GOOGLE_CONFIG || {
   // The Picker's browser API key and the Cloud project number (Picker setAppId, which lets drive.file open what's picked).
   apiKey: 'AIzaSyAJaEwp76_apj8iixjxdeqGcrYNDJuRg-A',
   appId: '1071735898350',
-  // Safari: true once the owner has signed in through the app in real Safari (background/google.js native).
-  native: false,
+  // Safari: Drive's and Calendar sync's sign-in through the Glaze app (background/google.js native), on since the owner's
+  // sign-in in real Safari.
+  native: true,
   scopes: ['https://www.googleapis.com/auth/drive.file', 'openid', 'email'],
   // The picker page, then its copy: Glaze works without frostdev.io.
   picker: ['https://frostdev.io/glaze/drive-picker/', 'https://frostdev-ops.github.io/glaze-drive-picker/'],

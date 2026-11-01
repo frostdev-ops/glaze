@@ -66,7 +66,7 @@ test('optional Google Drive is disclosed in both privacy texts, with its scope, 
     assert.match(limited, /\[Google API Services User Data Policy\]\(https:\/\/developers\.google\.com\/terms\/api-services-user-data-policy\), including\s+the Limited Use requirements/, file);
   }
   const google = policy.slice(policy.indexOf('## Google user data'), policy.indexOf('## Hosting'));
-  assert.match(google, /Google Drive \(Chrome, Edge, Brave and Firefox, off until you\s+connect\)/);
+  assert.match(google, SAFARI ? /Google Drive \(Chrome, Edge, Brave, Firefox and\s+Safari, off until you connect\)/ : /Google Drive \(Chrome, Edge, Brave and Firefox, off until you\s+connect\)/);
   assert.doesNotMatch(google, /Google Drive[^.]*unavailable/);
   assert.doesNotMatch(google, /Google Calendar sync[^.]*unavailable/);
   assert.match(google, /Google Drive access \(`drive\.file`/);
@@ -274,4 +274,27 @@ test('Sync to Google Drive\'s privacy texts say large files go in pieces and onl
   assert.match(short, /a file over 5 MB goes up or comes in in pieces, waiting between runs in Glaze's own IndexedDB `glaze-drive`/);
   assert.match(short, /a JSON copy over 64 MB, a record over 32 MB\) stays on this device/);
   assert.doesNotMatch(short, /doesn't sync yet/);
+});
+
+// Calendar sync in Safari signs in through the Glaze app with a grant of its own (background/background.js gcalGrant):
+// both privacy texts and the features page say where it's offered, and the policy where its refresh token is kept.
+test('Google Calendar sync says Safari offers it while Safari\'s sign-in is on, with its refresh token in the Keychain', () => {
+  assert.match(read('background/background.js'), /nativeGrant\(\{[^]*\}, 'calendar'\)\);/, 'the code: Calendar\'s own grant in the handler');
+  const where = SAFARI ? 'Chrome and Safari, off until you connect' : 'Chrome, off until you connect';
+  for (const file of ['../PRIVACY.md', '../docs/privacy.md', '../docs/features.md']) assert.ok(read(file).includes(`Google Calendar sync (${where})`) || read(file).includes(`Google Calendar sync** (${where})`), `${file}: ${where}`);
+  const stored = policy.slice(policy.indexOf('- **Google Calendar sync** ('), policy.indexOf('- **Google Drive** ('));
+  if (SAFARI) assert.match(stored, /Calendar's refresh token[^.]*Keychain/);
+  else assert.doesNotMatch(stored, /Keychain/);
+  assert.ok(policy.includes(SAFARI ? 'Edge, Brave and Firefox don\'t offer it; Export calendar (.ics) works everywhere.' : 'Edge, Brave, Safari and Firefox don\'t offer it; Export calendar (.ics) works everywhere.'));
+});
+
+// Safari's Picker opens the picker page in a tab and comes back to documents/picked.html (background/google.js pick): the
+// policy says so while Safari offers Drive, and nothing says From Google Drive is missing there.
+test('Safari\'s From Google Drive is disclosed while Safari offers Drive: its tab, its return page and what the worker holds', () => {
+  assert.match(read('background/background.js'), /const PICKED_PAGE = 'documents\/picked\.html';/, 'the code: the return page');
+  for (const file of ['../PRIVACY.md', '../docs/privacy.md', '../docs/features.md']) assert.doesNotMatch(read(file), /From (?:Google )?Drive isn't (?:offered|there)|Safari has no picker/, file);
+  if (!SAFARI) return;
+  const picker = policy.slice(policy.indexOf('  - **The picker page**'), policy.indexOf('  - **Open from Drive**'));
+  assert.match(picker, /Safari opens the page in a tab[^.]*`documents\/picked\.html`/);
+  assert.match(picker, /session storage \(memory, never the token\)/);
 });
