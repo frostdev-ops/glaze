@@ -6,6 +6,9 @@
    a floating tile is fixed over the page. Tiles take the GPA panel's look. Motion only while Glaze's motion is on. */
 #gz-dash { margin: 0 0 calc(1.25rem * var(--gz-space)); font-size: 0.875rem; color: var(--gz-ink); }
 #gz-dash .gz-dash-bar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.4rem; margin-bottom: 0.4rem; }
+/* Over the page's background (in a header they sit on its surface). */
+#gz-dash > :where(.gz-dash-bar) > .gz-w-small:not(.gz-w-main),
+#gz-dash > :where(.gz-dash-bar) > .gz-w-btn:not(.gz-w-main) { background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border-color: var(--gz-border-line, var(--gz-line)); }
 /* Editing keeps the toolbar footprint; Add goes below the room so it cannot push the tiles. */
 .gz-dash-edit { box-sizing: border-box; }
 :is(#gz-dash, #gz-toolbar) .gz-dash-reset[hidden] { visibility: hidden; display: inline-flex !important; }
@@ -472,7 +475,8 @@ html[data-gz-dash]:not([data-gz-dash="ip"]) institution-page-home { display: non
 #gz-todo .gz-todo-n,
 #gz-todo :is(.gz-todo-meta > *) { unicode-bidi: plaintext; }
 #gz-todo .gz-todo-item:is(.gz-todo-news, .gz-todo-grade) { grid-template-columns: minmax(0, 1fr); }
-#gz-todo input[type="checkbox"] { width: 1.05rem; height: 1.05rem; margin: 0.1rem 0 0; accent-color: var(--gz-accent); cursor: pointer; }
+/* Native ticks: opacity 1 against Ultra's rule that hides every checkbox and radio (here and below). */
+#gz-todo input[type="checkbox"] { width: 1.05rem; height: 1.05rem; margin: 0.1rem 0 0; opacity: 1; accent-color: var(--gz-accent); cursor: pointer; }
 #gz-todo .gz-todo-title {
   display: block; padding: 0; border: 0; background: none; text-align: start; cursor: pointer;
   color: var(--gz-ink); font-weight: 600; overflow-wrap: anywhere; text-decoration: none;
@@ -602,7 +606,7 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 #gz-ics .gz-ics-desc { font-size: 12px; color: var(--gz-ink-muted); }
 #gz-ics fieldset { display: grid; gap: 0.35rem; margin: 0; padding: 0; border: 0; }
 #gz-ics .gz-ics-check { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
-#gz-ics input[type="checkbox"] { margin: 0; accent-color: var(--gz-accent); }
+#gz-ics input[type="checkbox"] { margin: 0; opacity: 1; accent-color: var(--gz-accent); }
 #gz-ics .gz-ics-range { display: flex; align-items: center; gap: 0.5rem; }
 #gz-ics select { width: auto; margin: 0; padding: 0.2rem 0.4rem; height: auto; font: inherit; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm); }
 #gz-ics .gz-ics-row { display: flex; gap: 0.5rem; }
@@ -625,7 +629,7 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 #gz-rm .gz-rm-set { display: grid; gap: 0.35rem; }
 #gz-rm .gz-rm-check { display: grid; grid-template-columns: auto 1fr; column-gap: 0.5rem; align-items: start; cursor: pointer; }
 #gz-rm .gz-rm-check small { grid-column: 2; font-size: 12px; color: var(--gz-ink-muted); }
-#gz-rm input[type="checkbox"] { margin: 0.15rem 0 0; accent-color: var(--gz-accent); }
+#gz-rm input[type="checkbox"] { margin: 0.15rem 0 0; opacity: 1; accent-color: var(--gz-accent); }
 #gz-rm fieldset { display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem; min-width: 0; margin: 0 0 0 1.5rem; padding: 0; border: 0; }
 #gz-rm legend { float: left; width: 100%; margin: 0; padding: 0; border: 0; font-size: 12px; line-height: 1.45; color: var(--gz-ink-muted); }
 #gz-rm .gz-rm-pick { display: flex; align-items: center; gap: 0.5rem; margin-inline-start: 1.5rem; color: var(--gz-ink-muted); }
@@ -653,7 +657,7 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 }
 :is(#application, #site-wrap) #gz-calc input[type="number"] { text-align: end; }
 :is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) input[aria-invalid="true"] { border-color: var(--gz-err); }
-:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) input[type="checkbox"] { margin: 0; accent-color: var(--gz-accent); }
+:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) input[type="checkbox"] { margin: 0; opacity: 1; accent-color: var(--gz-accent); }
 :is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) .gz-calc-note,
 :is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) .gz-gpa-note { margin: 0.3rem 0 0.5rem; color: var(--gz-ink-muted); }
 :is(#application, #site-wrap) #gz-gpa .gz-gpa-note:empty { display: none; }
@@ -845,7 +849,7 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 }
 #gz-syl-dlg textarea { resize: vertical; }
 #gz-syl-dlg [aria-invalid="true"] { border-color: var(--gz-err); outline: 1px solid var(--gz-err); }
-#gz-syl-dlg input[type="checkbox"] { margin: 0; accent-color: var(--gz-accent); }
+#gz-syl-dlg input[type="checkbox"] { margin: 0; opacity: 1; accent-color: var(--gz-accent); }
 #gz-syl-dlg .gz-syl-conf { padding: 0 0.45rem; font-size: 11px; font-weight: 600; border-radius: 999px; color: var(--gz-ink-muted); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); }
 #gz-syl-dlg .gz-syl-check { color: var(--gz-ink); background: color-mix(in srgb, var(--gz-warn) 30%, transparent); }
 #gz-syl-dlg .gz-syl-src { font-style: italic; overflow-wrap: anywhere; }
@@ -1006,7 +1010,7 @@ html:is([data-gz-yield],[data-gz-settings]) .gz-game-home{visibility:hidden!impo
 .gz-game-supply small{color:var(--gz-ink-muted,#526273);font-size:10px}
 .gz-game-supply:disabled{opacity:.5;cursor:default}
 .gz-game-hint{font-size:.8em;color:var(--gz-ink-muted,#526273)}
-.gz-game input[type="checkbox"]{justify-self:end;width:18px;height:18px;accent-color:var(--gz-accent,#16837b)}
+.gz-game input[type="checkbox"]{justify-self:end;width:18px;height:18px;opacity:1;accent-color:var(--gz-accent,#16837b)}
 .gz-game-dialog{position:fixed;inset:6vh 24px auto auto;margin:0;z-index:2147482990;box-shadow:0 16px 70px #17233345;width:min(440px,calc(100vw - 48px));box-sizing:border-box}
 html:not([data-gz-motion="off"]) .gz-game-actor[data-reaction="xp"] .gz-game-avatar{animation:gz-pet-xp .7s ease-out 2}
 html:not([data-gz-motion="off"]) .gz-game-actor[data-reaction="level-up"] .gz-game-avatar{animation:gz-pet-level .8s ease-in-out 2}
