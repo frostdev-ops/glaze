@@ -52,6 +52,8 @@ const SCHEMAS = {
   'writer.outline': tasks.outline.OUTPUT, 'writer.outline.role': tasks.outline.ROLE, 'writer.outline.label': tasks.outline.LABEL,
   'writer.requirements': tasks.requirements.OUTPUT, 'writer.review': tasks.review.OUTPUT, 'writer.image': tasks.image.SCHEMA,
   'writer.feedback': tasks.feedback.OUTPUT, ...feedbackLocal(),
+  'study.help': require('../../extension/ai/tasks/study-help.js').OUTPUT,
+  'agent.tools.answer': require('../../extension/ai/tasks/agent-tools.js').OUTPUT.properties.answer.anyOf[1],
 };
 
 // ---- the vocabulary -------------------------------------------------------------------------------------------------
@@ -387,10 +389,14 @@ test('mask traversal handles long tokens without using the JavaScript call stack
   }
 });
 
-test('pattern is not enforced: the grammar says so, and still writes strings', () => {
+test('an anchored ASCII pattern is held exactly; one the grammar can\'t hold leaves it inexact and still writes strings', () => {
   const g = G.compile({ type: 'string', pattern: '^[a-z]+$' }, V);
-  assert.equal(g.exact, false);
+  assert.equal(g.exact, true);
   assert.ok(takes({ type: 'string', pattern: '^[a-z]+$' }, '"abc"'));
+  assert.ok(!takes({ type: 'string', pattern: '^[a-z]+$' }, '"aBc"'));
+  assert.ok(!takes({ type: 'string', pattern: '^[a-z]+$', maxLength: 2 }, '"abc"'), 'with maxLength beside it');
+  assert.equal(G.compile({ type: 'string', pattern: '^\\w+$' }, V).exact, false);
+  assert.ok(takes({ type: 'string', pattern: '^\\w+$' }, '"abc"'));
   assert.equal(G.compile({ enum: ['ab'], pattern: '^a' }, V).exact, true, 'enum values are checked against the pattern');
 });
 
