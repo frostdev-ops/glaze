@@ -99,6 +99,8 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
     env.noFirstRun(context);
     context.setDefaultTimeout(15000);
     const asked = [], errors = [];
+    // The Sunday scene's planner on Canvas, so the page's own refresh keeps the scenario's items.
+    let sunday = null;
     await context.route('**/*', (r) => {
       const req = r.request(), u = new URL(req.url());
       if (u.protocol === 'chrome-extension:') return r.continue();
@@ -115,7 +117,7 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
       if (u.origin !== CANVAS || req.method() !== 'GET') { asked.push(`refused ${req.method()} ${u.href}`); return r.abort(); }
       asked.push(u.pathname);
       if (u.pathname === '/api/v1/users/self/profile' || u.pathname === '/api/v1/users/self') return json({ id: '5', time_zone: 'UTC' });
-      if (u.pathname === '/api/v1/planner/items') return json(PLANNER);
+      if (u.pathname === '/api/v1/planner/items') return json(sunday || PLANNER);
       if (u.pathname === '/api/v1/courses/25/discussion_topics/70') return json(TOPIC);
       if (u.pathname.startsWith('/api/v1/')) return json([]);
       if (u.pathname.endsWith('.css')) return r.fulfill({ contentType: 'text/css', body: '' });
@@ -298,6 +300,8 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
         const done = now - 2 * DAY, monday = now + DAY;
         const items = [['11', 'Reflection Week 10', done, true], ['21', 'Reflection Week 11', monday, false], ['22', 'Behavior Change Project Step 5', monday, false], ['23', 'Lab 8 worksheet', monday, false]]
           .map(([id, title, at, submitted]) => ({ type: 'assignment', id: canvas ? id : `_${id}_1`, cid, course: 'BIO 1100', title, at, sub: { submitted, graded: false, late: false, missing: false } }));
+        if (canvas) sunday = items.map((i) => ({ plannable_type: 'assignment', plannable_id: Number(i.id), course_id: 25, context_name: 'BIO 1100', plannable_date: new Date(i.at).toISOString(),
+          html_url: `${CANVAS}/courses/25/assignments/${i.id}`, plannable: { title: i.title }, submissions: { submitted: i.sub.submitted, excused: false, graded: false, late: false, missing: false, redo_request: false } }));
         await worker.evaluate(({ acct, items, now, DAY }) => chrome.storage.local.set({ todoCache: { key: `todo:${acct}`, at: now - 36e5, start: new Date(now - 8 * DAY).toISOString(), end: new Date(now + 8 * DAY).toISOString(), teach: false, progress: null, items, grading: [], sums: {} } }), { acct, items, now, DAY });
         const AT = require('../../extension/ai/tasks/agent-tools.js');
         const due = JSON.parse(AT.readable({ due: monday }, 'UTC', { locale: 'en', now })).due;
@@ -314,7 +318,7 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
           const runs = await seen();
           assert.ok(runs.some((r) => r.windows), 'the model saw the resolved windows');
           return { text, due, files: await snap(site, 'sunday', '#gz-ask') };
-        } finally { await records(site); }
+        } finally { sunday = null; await records(site); }
       });
 
       await check(`${site}: a reminder that fired shows as a card on the next school page; its Ask Rime asks about it`, async () => {
