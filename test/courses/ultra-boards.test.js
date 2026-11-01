@@ -1661,6 +1661,19 @@ test('Reset layout reaches every confirmed card on a shared board larger than on
   assert.ok(layoutSends(p).every((m) => m.ops.length <= 64), 'every reset message fits the production broker');
 });
 
+test('a partial membership list cannot consume the first Dashboard fill before the remaining courses arrive', async () => {
+  const partial = members(COURSES.slice(0, 1)); partial.complete = false;
+  const p = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: W.fresh() } }), Promise.resolve(partial), '_2_1');
+  p.c.GZ_CTX.courseList = () => ({});
+  p.ui.sync(true); await settle();
+  assert.equal(lay(p).filled.includes('dash'), false, 'a truncated list cannot use up the one-time fill');
+  assert.deepEqual(lay(p).boards.dash.filter((x) => W.course(x.id)), []);
+  asStudent(p, Promise.resolve(members()), '_2_1');
+  p.ui.sync(true); await settle();
+  assert.deepEqual(lay(p).boards.dash.filter((x) => W.course(x.id)).map((x) => x.id), COURSES.map((c) => ckey(c.id)));
+  assert.ok(lay(p).filled.includes('dash https://school.blackboard.test/_2_1'));
+});
+
 test("a tile's Fold, Remove and Float sit above its resize corner, which a folded tile brings up beside them", () => {
   // Both are positioned children of the tile, the corner last; its 24px reach covered a folded tile's Unfold.
   const css = read('core/page/apps.css').replace(/\/\*[\s\S]*?\*\//g, '');
