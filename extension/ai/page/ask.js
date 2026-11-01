@@ -214,6 +214,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
       frame = 0;
       const x = log();
       if (!x || !follow) return;
+      if (still()) { write(x, x.scrollHeight); return jumpShown(); }
       const target = Math.max(0, x.scrollHeight - x.clientHeight), d = target - x.scrollTop;
       write(x, x.scrollTop + (Math.abs(d) < 1 ? d : d * 0.3));
       if (Math.abs(target - x.scrollTop) > 1) frame = requestAnimationFrame(tick);
@@ -279,7 +280,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     const tick = () => {
       reveals.delete(li);
       if (!li.isConnected) return;
-      let left = step;
+      let left = still() ? total : step;
       while (left > 0 && at < nodes.length) {
         const [n, full, block] = nodes[at], take = Math.min(left, full.length - n.data.length);
         if (block && waiting.delete(block)) block.hidden = false;
