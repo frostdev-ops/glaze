@@ -341,7 +341,8 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
           if (fed.length) await model.prefill(fed, { signal });
           if (signal.aborted) throw aborted(signal);
         }
-        const dec = tok.decoder();
+        // A tool turn's grammar admits its tag ids; keep their text even when the tokenizer calls them control tokens.
+        const dec = tok.decoder({ specials: m.tools !== undefined });
         let text = '', n = 0, finish = 'length';
         while (n < answer) {
           const id = await step(grammar ? grammar.mask() : null);
