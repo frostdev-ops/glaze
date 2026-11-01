@@ -842,6 +842,14 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     addEventListener('beforeunload', (e) => { if (dirty && (!sessionSafe || failing)) { e.preventDefault(); e.returnValue = ''; } });
     addEventListener('pagehide', () => { clearTimeout(changed.sources); sourcesPanel?.pause(); if (dirty) save(); });
     document.addEventListener('visibilitychange', () => { if (document.hidden && dirty) save(); });
+    // Documents keeps this frame until its queued writes and the latest typing have reached storage.
+    addEventListener('glaze:papers:beforeleave', (e) => e.detail.wait((async () => {
+      await loading;
+      if (replacing) await replacing;
+      await saves;
+      while (dirty && !parked) { if (!await save()) return false; }
+      return true;
+    })()));
 
     // The document as a whole: on load a fresh state (no undo past it); otherwise one undoable step. The old document's
     // format issues go first: the Checks pane redraws during the dispatch, and their ranges can lie past the new end.

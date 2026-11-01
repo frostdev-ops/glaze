@@ -2,8 +2,8 @@
 // saved Ultra, Canvas and Moodle pages under invented school origins, Glaze's bar holding its Documents, Search and Settings
 // items. The bar's Documents opens it beside the bar, marked where you are, the page under it out of reach; a document opens
 // in the same frame and Back returns to the list (the tab's history one entry per document, the page told no key); typing
-// there, a delete to Trash and its Undo, the Trash's Restore and Delete forever, an import and two exports work from the frame; Escape, Close, Settings and Search leave or
-// take its place, back to the entry it opened from; Ctrl+K opens it the same way; Writer's AI completes a sentence in a
+// there, a delete to Trash and its Undo, the Trash's Restore and Delete forever, an import and two exports work from the frame; Close in a document shows the list again in
+// the frame; Escape, the list's Close, Settings and Search leave or take its place, back to the entry it opened from; Ctrl+K opens it the same way; Writer's AI completes a sentence in a
 // document opened there (the worker's broker on a stand-in for Chrome's Prompt API, as checks/documents/documents-ai-check.js); a
 // frame of papers.html the page makes itself stays blank and the worker refuses its writes; the popup still opens a tab.
 // All other requests abort.
@@ -159,6 +159,13 @@ const check = async (name, test) => {
       return true;
     }, 'the phone bar at 640', 30000);
     const openFromBar = async (p) => { await item(p, 'glaze:documents').click(); await until(() => hosted(p), 'the page host'); return shown(p); };
+    // Close in a document: the list in the same frame. Close there: Documents leaves.
+    const closeDoc = async (p) => {
+      await framed(p).locator('.gp-top > .gd-btn').click();
+      await until(() => framed(p) && !new URL(framed(p).url()).search, 'the list in the frame after Close');
+      return shown(p);
+    };
+    const leaveFromDoc = async (p) => { const g = await closeDoc(p); await g.locator('#list > .gd-btn').click(); await closed(p); };
 
     await page.goto(`${ULTRA}/ultra/course`);
     await until(() => item(page, 'glaze:documents').count(), 'the bar with its Documents item', 20000);
@@ -272,18 +279,26 @@ const check = async (name, test) => {
       assert.ok(u.every(([, inert, op]) => !inert && op === '1'), JSON.stringify(u));
       assert.equal(await item(page, 'glaze:documents').getAttribute('aria-current'), null);
     });
-    await check('ultra: Close in a document leaves past both entries', async () => {
+    await check('ultra: Close in a document shows the list in the same frame, back at the list\'s entry; Back then leaves', async () => {
       f = await openFromBar(page);
+      const listed = await page.evaluate(() => history.length);
       await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).click();
       f = await shown(page);
-      await f.locator('.gp-top > .gd-btn').click();
+      assert.equal(await page.evaluate(() => history.length), listed + 1, 'one entry for the document');
+      f = await closeDoc(page);
+      assert.ok(await hosted(page), 'Documents stays open');
+      assert.equal(await item(page, 'glaze:documents').getAttribute('aria-current'), 'page');
+      assert.equal(page.frames().filter((x) => x.url().startsWith(PAPERS)).length, 1, 'one frame');
+      assert.equal(await f.locator('#list > .gd-btn').innerText(), 'Close');
+      // The tab stepped back over the document's entry (kept as Forward), so no entry is added and one Back leaves.
+      assert.equal(await page.evaluate(() => history.length), listed + 1, 'no entry added');
+      await back(page);
       await closed(page);
       await atMark(page);
-      // One more Back leaves the page as it would without Documents: nothing of the frame's left in the history.
-      length = await page.evaluate(() => history.length);
     });
     await check('ultra: PDF Close waits for the filled file to reach storage', async () => {
       const key = PA.newKey(), bytes = require('../../tools/fidelity/pdf-fixtures.js').acroform();
+      let entries = 0;
       await worker.evaluate(async ({ key, file, size }) => {
         const index = (await chrome.storage.local.get('writerPapers')).writerPapers || [];
         const rec = { key, kind: 'pdf', title: 'PDF close check', named: true, file, size, pages: 3, revision: 1, updated: Date.now() };
@@ -302,18 +317,20 @@ const check = async (name, test) => {
         await field.fill('Katherine Johnson');
         await field.press('Tab');
         await until(() => worker.evaluate(() => globalThis.pdfCheckHeld), 'the PDF storage write held');
+        entries = await page.evaluate(() => history.length);
         await f.locator('.gp-top > .gd-btn').click();
-        assert.ok(await hosted(page), 'Close keeps the frame until its pending save finishes');
+        assert.ok(await f.evaluate(() => new URLSearchParams(location.search).has('pdf') && document.documentElement.dataset.mode === 'pdf'), 'Close keeps the document until its pending save finishes');
       } finally {
         await worker.evaluate(() => { chrome.storage.local.set = globalThis.pdfCheckSet; globalThis.pdfCheckRelease?.(); delete globalThis.pdfCheckSet; delete globalThis.pdfCheckRelease; delete globalThis.pdfCheckHeld; });
       }
-      await closed(page);
-      f = await openFromBar(page);
+      await until(() => framed(page) && !new URL(framed(page).url()).search, 'the list once the save finished');
+      f = await shown(page);
+      assert.equal(await page.evaluate(() => history.length), entries, 'no entry added');
       await f.locator(`.gd-card[data-key="${key}"] .gd-title`).click();
       f = await shown(page);
       assert.equal(await f.locator('.annotationLayer input').first().inputValue(), 'Katherine Johnson');
-      await f.locator('.gp-top > .gd-btn').click();
-      await closed(page);
+      await leaveFromDoc(page);
+      await atMark(page);
       // Keep the original Word-only scenarios' document inventory.
       await worker.evaluate(async (key) => {
         const index = (await chrome.storage.local.get('writerPapers')).writerPapers || [];
@@ -404,8 +421,7 @@ const check = async (name, test) => {
         await until(() => f.evaluate((text) => { let t = null; GZ_WRITER_FRAME.editor().view.state.doc.descendants((n) => { if (t === null && n.isTextblock && n.textContent.startsWith(text)) t = n.textContent; }); return t; }, LAST).then((t) => t === `${LAST} it${GHOST}`), 'Tab takes it');
         assert.ok((await (await sw()).evaluate(() => globalThis.__lm?.prompts || [])).includes('writer.complete'), 'the worker\'s model was asked writer.complete');
         await until(async () => JSON.stringify((await record(AI_KEY))?.doc).includes('rearranges the present.'), 'saved through the worker');
-        await f.locator('.gp-top > .gd-btn').click();
-        await closed(page);
+        await leaveFromDoc(page);
         await atMark(page);
       } finally {
         await (await sw()).evaluate(() => chrome.storage.local.remove('ai'));
@@ -466,8 +482,7 @@ const check = async (name, test) => {
         await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).click();
         f = await shown(page);
         await until(() => f.evaluate(() => !!globalThis.GZ_WRITER_PAPER?.current() && document.querySelector('.ProseMirror')?.isContentEditable === true), 'the document loaded and editable after a slow claim');
-        await f.locator('.gp-top > .gd-btn').click();
-        await closed(page);
+        await leaveFromDoc(page);
         await atMark(page);
       } finally {
         await live.evaluate(() => { if (globalThis.__claimSet) chrome.storage.session.set = globalThis.__claimSet; });
@@ -504,8 +519,7 @@ const check = async (name, test) => {
       await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).click();
       f = await shown(page);
       await shoot(page, f, 'inpage-ultra-doc-640');
-      await f.locator('.gp-top > .gd-btn').click();
-      await closed(page);
+      await leaveFromDoc(page);
       await page.locator('#gz-navbar .tabs .more').click();
       await item(page, 'glaze:settings').click();
       await until(() => framed(page, `${base}/options.html`), 'Settings at 640');
