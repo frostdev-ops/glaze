@@ -2,10 +2,10 @@
 // a course's Course Content, Announcements and Gradebook there or in that course's tab frame (navigation/page/coursetabs.js):
 // the student's last view (courses/instant.js) paints inert over Ultra's main area once /users/me confirms the student it
 // was kept for, while Ultra's own view builds hidden beneath it, keeping its layout; the moment Ultra's view is ready (its
-// markers) it shows and the copy fades out over it, or goes at once under reduced motion. Gone at once on a route change,
-// with the switch off, when Ultra shows an error or nothing, or 20 s on with no ready view. Kept again (storage.local, per
-// site and student, and course, purged by background/background.js) once Ultra's view is ready and as the page goes; a course
-// page's only whole. Classic script, loaded on demand (content-ultra.js syncInstant); a second injection keeps the first.
+// markers) it shows and the copy goes in the same frame, never fading over it. Gone at once on a route change, with the
+// switch off, when Ultra shows an error or nothing, or 20 s on with no ready view. Kept again (storage.local, per site and
+// student, and course, purged by background/background.js) once Ultra's view is ready and as the page goes; a course page's
+// only whole. Classic script, loaded on demand (content-ultra.js syncInstant); a second injection keeps the first.
 // sync(on, me, settled).
 var GZ_INSTANT = globalThis.GZ_INSTANT || (() => {
   const ctx = globalThis.GZ_CTX;
@@ -99,12 +99,15 @@ var GZ_INSTANT = globalThis.GZ_INSTANT || (() => {
     html.removeAttribute('data-gz-instant');
     toTop(false);
   };
-  // Ultra's view is ready: once it has laid out (the next frame) it shows, and the copy fades out over it.
+  // Ultra's view is ready: once it has laid out (the next frame) it shows, and the copy goes. Where Ultra put its view in place
+  // of the copy, the copy is gone already: the view shows in this frame.
   const swap = (x) => {
     const box = x.copy;
     if (!box) return;
-    requestAnimationFrame(() => {
+    const go = () => {
       if (x.copy !== box) return;
+      // What it shows in the copy's place is there at once: Glaze's entrances on it (motion.css) end where they would.
+      for (const a of main(x)?.getAnimations?.({ subtree: true }) || []) if (/^gz-/.test(a.animationName) && Number.isFinite(a.effect?.getComputedTiming().endTime)) a.finish();
       unhook(x);
       html.removeAttribute('data-gz-instant');
       toTop(false);
@@ -113,7 +116,8 @@ var GZ_INSTANT = globalThis.GZ_INSTANT || (() => {
       const remove = () => { box.remove(); if (x.copy === box) x.copy = null; };
       if (!fades.length) remove();
       else Promise.all(fades.map((a) => a.finished)).then(remove, remove);
-    });
+    };
+    if (box.isConnected) requestAnimationFrame(go); else go();
   };
 
   // ---- keeping ----

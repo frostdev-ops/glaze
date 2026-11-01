@@ -588,21 +588,21 @@ html[data-gz-hide-tab-achievements] .bb-ui-navigation-list-horizontal li:has(> a
    What a click is on looks current from the press: a course's tab gets the current tab's bar, which steps back meanwhile, and
    a course card its edge. The page it opens shows a skeleton in the Look's surfaces over the main area, laid over it by
    transform as the instant copies are, so nothing moves; Ultra's view and its spinners wait hidden under it, keeping their
-   layout, until the view is ready. Still under reduced motion. */
+   layout, until the view is ready. A cold load shows the same skeleton (#gz-boot, below). Still under reduced motion. */
 #site-wrap .js-course-navigation a[data-gz-press] { position: relative; }
 #site-wrap .js-course-navigation a[data-gz-press]::after { content: ""; position: absolute; left: 10%; right: 10%; bottom: 0; height: 3px; border-radius: min(3px, var(--gz-radius)) min(3px, var(--gz-radius)) 0 0; background: var(--gz-accent); }
 #site-wrap .js-course-navigation[data-gz-pressing] a[aria-current="page"]:not([data-gz-press])::after { opacity: 0; }
 #site-wrap article.course-element-card[data-gz-press] { outline: 2px solid var(--gz-accent) !important; outline-offset: 2px; }
-#gz-skel { position: absolute; top: 0; left: 0; z-index: 1; display: flex; flex-direction: column; gap: 12px; box-sizing: border-box; overflow: hidden; pointer-events: none; }
-#gz-skel > * { flex: none; height: 64px; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); animation: gz-skel 1.2s ease-in-out infinite alternate; }
-#gz-skel > .h { width: min(40%, 320px); height: 32px; }
-#gz-skel[data-shape="tiles"] { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); grid-template-rows: 32px; grid-auto-rows: 180px; align-content: start; }
-#gz-skel[data-shape="tiles"] > * { height: auto; }
-#gz-skel[data-shape="tiles"] > .h { grid-column: 1 / -1; }
-#gz-skel[data-shape="generic"] > :not(.h) { height: 140px; }
+#gz-skel, #gz-boot { position: absolute; top: 0; left: 0; z-index: 1; display: flex; flex-direction: column; gap: 12px; box-sizing: border-box; overflow: hidden; pointer-events: none; }
+#gz-skel > *, #gz-boot > div { flex: none; height: 64px; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); animation: gz-skel 1.2s ease-in-out infinite alternate; }
+#gz-skel > .h, #gz-boot > .h { width: min(40%, 320px); height: 32px; }
+#gz-skel[data-shape="tiles"], #gz-boot[data-shape="tiles"] { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); grid-template-rows: 32px; grid-auto-rows: 180px; align-content: start; }
+#gz-skel[data-shape="tiles"] > *, #gz-boot[data-shape="tiles"] > div { height: auto; }
+#gz-skel[data-shape="tiles"] > .h, #gz-boot[data-shape="tiles"] > .h { grid-column: 1 / -1; }
+#gz-skel[data-shape="generic"] > :not(.h), #gz-boot[data-shape="generic"] > div:not(.h) { height: 140px; }
 @keyframes gz-skel { to { opacity: .55; } }
-html[data-gz-motion="off"] #gz-skel > * { animation: none; }
-@media (prefers-reduced-motion: reduce) { #gz-skel > * { animation: none; } }
+html[data-gz-motion="off"] #gz-skel > *, html[data-gz-motion="off"] #gz-boot > div { animation: none; }
+@media (prefers-reduced-motion: reduce) { #gz-skel > *, #gz-boot > div { animation: none; } }
 @media screen and (forced-colors: active) {
   #site-wrap .js-course-navigation a[data-gz-press]::after { forced-color-adjust: none; background: Highlight; }
 }
@@ -647,12 +647,21 @@ html[data-gz-ctab-framed] #site-wrap :where(.MuiSnackbar-root):is(.MuiSnackbar-r
 
 /* Ultra's instant copies (courses/page/instant.js): the student's last view of Grades, Courses or Activity, or of a course's
    Course Content, Announcements or Gradebook, inert over the main area (a course's own on its pages), a little subdued, while
-   Ultra's own view builds hidden beneath it, keeping its layout; it fades out once that's ready (at once under reduced
-   motion). In a course tab's frame on screen, its page shows under the copy even while the page around has it as hidden. */
-#gz-instant { position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none; opacity: .85; filter: saturate(.8); transition: opacity .15s ease-out; }
+   Ultra's own view builds hidden beneath it, keeping its layout; it goes at once when that's ready, never fading over it.
+   In a course tab's frame on screen, its page shows under the copy even while the page around has it as hidden. */
+#gz-instant { position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none; opacity: .85; filter: saturate(.8); }
 #gz-instant[data-out] { opacity: 0; }
 html[data-gz-instant] main.bb-offcanvas-container > :not([id^="gz-"]),
 html[data-gz-instant] main.course-main-content > :not([id^="gz-"]) { visibility: hidden !important; }
 html[data-gz-instant-frame] #site-wrap { visibility: visible !important; }
-html[data-gz-motion="off"] #gz-instant { transition: none; }
-@media (prefers-reduced-motion: reduce) { #gz-instant { transition: none; } }
+
+/* A cold load (navigation/page/feedback.js boot): Ultra's boot screen (its grey cover and spinner) never shows once this sheet
+   is in (back as it was once the settings say the switch is off), by visibility so its own fade and removal still run; from the page's first sync until its view is ready, Ultra's
+   app waits hidden, keeping its layout (its first view of another page, its spinners, half-built views), under Glaze's bar,
+   the Look and one skeleton in the main area's place, or the page's instant copy over its main area. */
+#initial-load-area { visibility: hidden !important; }
+html[data-gz-font]:not([data-gz-enhance-feedback]) #initial-load-area { visibility: visible !important; }
+html[data-gz-boot] #site-wrap { visibility: hidden !important; }
+html[data-gz-boot] #gz-instant { visibility: visible !important; }
+#gz-boot { position: fixed; top: calc(var(--gz-navbar-top, 0px) + 24px); right: calc(var(--gz-sb-room, 0px) + 24px); bottom: 0; left: calc(var(--gz-navbar-left, 0px) + 24px); }
+html[data-gz-instant] #gz-boot, html[data-gz-ctab-framed] #gz-boot { display: none; }
