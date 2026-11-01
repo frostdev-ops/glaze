@@ -129,6 +129,25 @@ const harness = ({ script = [], approve = 'yes', level = 3, store = {}, now = C.
   return { got, seen, store, wakes, env, say: (m) => page.postMessage(m), ends: () => got.filter((m) => ['end', 'error'].includes(m.type)), steps: () => got.filter((m) => m.type === 'step').map((m) => m.step) };
 };
 
+test('school reads require an account choice when two accounts share the school origin', async () => {
+  const other = `${C.CANVAS}/6`, read = [];
+  const h = harness({ script: [call('content_list', { course: '25' }), said('Choose the school account.')] });
+  h.env.accounts = async () => [{ account: other, origin: C.CANVAS }, { account: ACC, origin: C.CANVAS }];
+  h.env.own.tab = async (account) => { read.push(account); return { ok: true, complete: true, items: [] }; };
+  h.say({ id: 90, op: 'ask', question: 'List my course content for course 25' });
+  await settle(80);
+  assert.deepEqual(read, [], 'no account is silently selected by recency');
+  assert.equal(h.seen.runs[1].input.steps[0].result.ok, false);
+  assert.match(h.seen.runs[1].input.steps[0].result.error, /account/);
+
+  const explicit = harness({ script: [call('content_list', { course: '25', account: ACC }), said('No course content was returned.')] });
+  explicit.env.accounts = h.env.accounts;
+  explicit.env.own.tab = h.env.own.tab;
+  explicit.say({ id: 91, op: 'ask', question: `List course content for 25 on ${ACC}` });
+  await settle(80);
+  assert.deepEqual(read, [ACC]);
+});
+
 test('port: run_js, then a place opened and words marked; each card\'s detail; the actions sent once the answer passes, before its end', async () => {
   const h = harness({ script: [call('run_js', { code: '(18 / 20 * 100).toFixed(0)' }), call('places_list', { course: '25' }), call('place_open', { place: 'course:25/grades' }),
     call('page_highlight', { text: 'Homework 6', note: '18 of 20' }), said('Homework 6 is 90%. Your grades page is open with it marked.', ['Homework 6'])] });
