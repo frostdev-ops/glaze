@@ -83,7 +83,14 @@ var GZ_AI_RIME_SANDBOX = globalThis.GZ_AI_RIME_SANDBOX || (() => {
   if (typeof window !== 'undefined' && typeof location !== 'undefined' && /^#[A-Za-z0-9_-]{32}\.[A-Za-z0-9_-]{32}$/.test(location.hash)) {
     const [want, proof] = location.hash.slice(1).split('.');
     let port = null, busy = Promise.resolve();
-    const make = (src) => new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+    const make = (src) => {
+      const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+      try {
+        const w = new Worker(url), terminate = w.terminate.bind(w);
+        w.terminate = () => { URL.revokeObjectURL(url); terminate(); };
+        return w;
+      } catch (e) { URL.revokeObjectURL(url); throw e; }
+    };
     window.addEventListener('message', (e) => {
       if (port || e.source !== window.parent || e.data?.type !== 'glaze:rime-js' || e.data.nonce !== want || !e.ports?.[0]) return;
       port = e.ports[0];

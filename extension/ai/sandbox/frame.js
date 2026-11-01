@@ -8,9 +8,19 @@ var GZ_AI_RIME_FRAME = globalThis.GZ_AI_RIME_FRAME || (() => {
   const PAGE = 'ai/sandbox/js.html', WAIT = 1500, MS = 2000;
   const api = () => globalThis.chrome?.runtime || globalThis.browser?.runtime;
   const available = () => { try { return (api().getManifest().sandbox?.pages || []).includes(PAGE); } catch { return false; } };
-  let host = null, seq = 0;
+  let host = null, seq = 0, queue = Promise.resolve();
   const nonce = () => { const b = new Uint8Array(24); crypto.getRandomValues(b); return btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
-  const drop = () => { if (!host) return; for (const [, w] of host.waiting) w({ ok: false, value: null, logs: [], error: 'The sandbox closed.' }); host.mount.remove(); host = null; };
+  const drop = () => {
+    if (!host) return;
+    const h = host; host = null;
+    h.finishReady(false);
+    for (const [, w] of h.waiting) w({ ok: false, value: null, logs: [], error: 'The sandbox closed.' });
+    h.waiting.clear(); h.port.close(); h.mount.remove();
+  };
+  const wait = (promise, ms, fallback) => new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    promise.then((r) => { clearTimeout(timer); resolve(r); });
+  });
   const start = () => {
     const mount = document.createElement('div'), frame = document.createElement('iframe'), { port1, port2 } = new MessageChannel(), n = nonce(), proof = nonce();
     mount.style.cssText = 'position:fixed;width:0;height:0;overflow:hidden;border:0;';
@@ -22,6 +32,7 @@ var GZ_AI_RIME_FRAME = globalThis.GZ_AI_RIME_FRAME || (() => {
     const h = { mount, port: port1, waiting: new Map(), loads: 0, authenticated: false };
     let ready;
     h.ready = new Promise((r) => { ready = r; });
+    h.finishReady = ready;
     port1.onmessage = (e) => {
       const d = e.data || {};
       // Only the sandbox that read the second secret from its URL can answer. A replacement document sees n in
@@ -39,17 +50,19 @@ var GZ_AI_RIME_FRAME = globalThis.GZ_AI_RIME_FRAME || (() => {
     document.documentElement.append(mount);
     return h;
   };
-  const run = async (code) => {
+  const runOne = async (code) => {
     if (!available()) return { ok: false, value: null, logs: [], error: 'unavailable' };
     if (!host) host = start();
     const h = host, id = ++seq;
-    const late = (ms) => new Promise((r) => setTimeout(r, ms, { ok: false, value: null, logs: [], error: 'The sandbox did not answer.' }));
-    if (await Promise.race([h.ready, late(5000)]) !== true) { if (host === h) drop(); return { ok: false, value: null, logs: [], error: 'The sandbox did not start.' }; }
+    if (await wait(h.ready, 5000, false) !== true || host !== h) { if (host === h) drop(); return { ok: false, value: null, logs: [], error: 'The sandbox did not start.' }; }
     const answer = new Promise((r) => h.waiting.set(id, r));
-    h.port.postMessage({ id, code });
-    const r = await Promise.race([answer, late(MS + WAIT)]);
+    try { h.port.postMessage({ id, code }); } catch { if (host === h) drop(); }
+    const timeout = { ok: false, value: null, logs: [], error: 'The sandbox did not answer.' };
+    const r = await wait(answer, MS + WAIT, timeout);
     h.waiting.delete(id);
+    if (r === timeout && host === h) drop();
     return r;
   };
+  const run = (code) => { const p = queue.then(() => runOne(code)); queue = p.catch(() => {}); return p; };
   return { PAGE, available, run, stop: drop };
 })();
