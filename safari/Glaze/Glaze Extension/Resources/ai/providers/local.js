@@ -34,7 +34,8 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   // Tokens a task's request may reason in before its answer; 0 answers directly. A task with calls (its requests'
   // task.call, ai/task.js ask) has a row per call, and a request without one answers directly. Each row is D4's p3dpo,
   // think against direct at Q4_K_M / Q5_K_M / Q6_K / Q8_0 (glaze-plans/lfm-tune/reports/d4-p3dpo.md "Think versus direct"):
-  // agent.tools: thinks; check() 87→92, 97→95, 95→98, 93→98 %, facts in answer 79→84, 88→84, 87→87, 84→85 %.
+  // agent.tools: direct. p3dpo gained from thought (check() 87→92, 97→95, 95→98, 93→98 %), but r5 thinking ties stock on
+  // writes right (58 of 60) at every quant, a strict-gate fail, where direct passes (59; reports/d4-r5-copy-gate.md).
   // study.help: direct; step judged right 70→60, 67→59, 70→64, 71→76 % (Q5_K_M think fails the gate on it).
   // writer.review: direct; planted errors found 88→81, 89→87, 87→85, 88→85 %.
   // writer.feedback decide: direct; status in expected set 93→83, 84→79, 93→86, 91→86 %.
@@ -43,7 +44,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   // writer.feedback scan: direct; its 49 think-mode training examples (lfm-tune FORMAT-v2) are too few to trust.
   // The rest never trained thought (FORMAT-v2 THINK_TASKS).
   const THINK = Object.freeze({ 'writer.feedback': Object.freeze({ decide: 0, explain: 0, summary: 0, scan: 0 }),
-    'writer.review': 0, 'study.help': 0, 'agent.tools': 256,
+    'writer.review': 0, 'study.help': 0, 'agent.tools': 0,
     'writer.complete': 0, 'writer.outline': 0, 'writer.requirements': 0, 'writer.cite': 0, 'writer.sources': 0, 'writer.decide': 0,
     'syllabus.read': 0, 'writer.image': 0 });
   // table: THINK, or a test's own (_env's think).
