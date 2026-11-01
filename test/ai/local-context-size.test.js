@@ -78,6 +78,37 @@ test('a run sends the chosen size as its window; 4K sends exactly what it sent b
   assert.equal(plain.window, 4096);
 });
 
+test('a warm-up sends the chosen window so the following large-context run reuses its session', async () => {
+  const calls = setup();
+  await LOCAL.warm(req(), LOCAL.config({ window: 32768, context: 32768 }), {});
+  assert.equal(calls.at(-1).op, 'warm');
+  assert.equal(calls.at(-1).args.window, 32768);
+});
+
+test('the host allocates and enforces the selected large window, reloading when its size changes', async () => {
+  const H = require('../../extension/ai/local/host.js'), loads = [], posted = [];
+  const tok = { eos: 0, encodeWith: (parts) => new Uint32Array(parts.reduce((n, p) => n + (p.text?.length || 1), 0)), decoder: () => ({ push: () => '', end: () => '' }) };
+  const host = H.create({ store: { open: async () => ({}), status: async () => ({ state: 'ready' }) }, gguf: { open: async () => ({ kv: {} }) },
+    tokenizer: { GLAZE_TOKENS: [], fromGGUF: () => tok }, grammar: () => null, gpu: () => ({}), ladder: () => null,
+    setTimeout: (f, ms) => { const timer = setTimeout(f, ms); timer.unref(); return timer; }, post: (m) => posted.push(m),
+    engine: () => ({ load: async (_g, { context }) => {
+      loads.push(context);
+      return { context, snapshot: async () => ({}), restore: async () => {}, prefill: async () => ({}), decode: async () => 0, release: () => {} };
+    } }) });
+  const run = (id, window, length) => host.handle({ id, op: 'run', model: 'rime-q4', parts: [{ text: 'x'.repeat(length) }], stable: 0, maxTokens: 32, sampler: {}, ...(window && { window }) });
+  try {
+    await host.handle({ id: 1, op: 'warm', model: 'rime-q4', parts: [{ text: 'system' }], window: 32768 });
+    await run(2, 32768, 20000);
+    assert.equal(posted.find((m) => m.id === 2 && ['done', 'error'].includes(m.type))?.type, 'done', JSON.stringify(posted));
+    assert.deepEqual(loads, [32768], 'the warm-up and run share the correctly sized engine');
+    await run(3, 65536, 50000);
+    assert.equal(posted.find((m) => m.id === 3 && ['done', 'error'].includes(m.type))?.type, 'done');
+    assert.deepEqual(loads, [32768, 65536]);
+    await run(4, undefined, 100);
+    assert.deepEqual(loads, [32768, 65536, H.LIMIT.context], 'returning to the default releases the larger session');
+  } finally { await host.release(); }
+});
+
 test('a changed size is a new connection generation: the broker\'s kept catalog and window go', async () => {
   const vault = new Map([['connections', { local: { provider: 'local', generation: 'g1' } }]]);
   const env = { vault: { get: async (k) => structuredClone(vault.get(k)), set: async (k, v) => { vault.set(k, structuredClone(v)); return true; }, remove: async (k) => vault.delete(k) },
