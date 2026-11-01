@@ -39,9 +39,19 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
   };
   // A page of a text, from 1: { text, page, pages }, or why not.
   const paged = (text, page = 1, truncated = false) => {
-    const t = String(text || '').slice(0, LIMIT.text), pages = Math.max(1, Math.ceil(t.length / PAGE));
+    const t = String(text || '').slice(0, LIMIT.text), chunks = [];
+    let part = '', size = 0;
+    // Escaped control characters can take six JSON characters each. Leave room for the record's metadata inside
+    // agent.tools' total result limit, as well as keeping each string below its own limit. Keep surrogate pairs whole.
+    for (const c of t) {
+      const n = JSON.stringify(c).length - 2;
+      if (part && (part.length + c.length > PAGE || size + n > 1500)) { chunks.push(part); part = ''; size = 0; }
+      part += c; size += n;
+    }
+    chunks.push(part);
+    const pages = chunks.length;
     if (page > pages) return { error: `There are ${pages} pages.` };
-    return { text: t.slice((page - 1) * PAGE, page * PAGE), page, pages, ...((truncated || String(text || '').length > LIMIT.text) && { truncated: true }) };
+    return { text: chunks[page - 1], page, pages, ...((truncated || String(text || '').length > LIMIT.text) && { truncated: true }) };
   };
   const capped = (items) => ({ items: items.slice(0, LIMIT.items), ...(items.length > LIMIT.items && { more: items.length - LIMIT.items }) });
   const spec = (name) => AT().SPECS.find((t) => t.name === name);
