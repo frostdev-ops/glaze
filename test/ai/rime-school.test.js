@@ -607,3 +607,15 @@ test('Ultra discussions: the list as Ultra gives it (id and title); one gives it
   assert.equal(r.others, 2);
   assert.doesNotMatch(JSON.stringify(r), /CLASSMATE|Classmate|Instructor|Example/, 'no classmate\'s words or anyone\'s name');
 });
+
+test('Ultra discussion privacy also covers names and peer blockquotes embedded in the student\'s own reply', async () => {
+  const messages = structuredClone(PROBED.messages);
+  messages.results[1].body = `<p>Thanks, Classmate One. I am Student Self.</p><blockquote><p>CLASSMATE-PRIVATE-WORDS</p><blockquote>More quoted words.</blockquote><p>CLASSMATE-PRIVATE-WORDS after a nested quote.</p></blockquote><p>I study nursing.</p>`;
+  const discussion = { ...PROBED.discussion, topic: { ...PROBED.discussion.topic, body: '<p>Instructor Example asks: describe your major.</p>' } };
+  const tab = probedTab({ routes: { '/learn/api/public/v1/courses/_101_1/discussions/_911_1': discussion,
+    '/learn/api/public/v1/courses/_101_1/discussions/_911_1/messages': messages } });
+  const r = await tabsOf([tab]).run(UL, 'discussion', { course: '_101_1', id: '_911_1' });
+  assert.equal(r.ok, true);
+  assert.match(r.mine[0].text, /I study nursing/);
+  assert.doesNotMatch(JSON.stringify(r), /CLASSMATE-PRIVATE-WORDS|More quoted words|Classmate One|Student Self|Instructor Example/);
+});
