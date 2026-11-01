@@ -92,12 +92,13 @@ var GZ_AI_RIME_JS = globalThis.GZ_AI_RIME_JS || (() => {
       if (r.error) { const e = vm.dump(r.error); r.error.dispose(); return end(stopped ? fail(`Stopped after ${ms / 1000} seconds.`) : { ok: false, value: null, error: errorOf(e) }); }
       let h = r.value;
       // A promise: its jobs run until it settles or the time is up. getPromiseState of anything else is that value itself.
-      if (vm.getPromiseState(h).notAPromise !== true) {
-        while (vm.getPromiseState(h).type === 'pending' && rt.hasPendingJob() && Date.now() <= deadline) {
+      let st = vm.getPromiseState(h);
+      if (st.notAPromise !== true) {
+        while (st.type === 'pending' && rt.hasPendingJob() && Date.now() <= deadline) {
           const j = rt.executePendingJobs();
           if (j.error) { const e = vm.dump(j.error); j.error.dispose(); h.dispose(); return end(stopped ? fail(`Stopped after ${ms / 1000} seconds.`) : { ok: false, value: null, error: errorOf(e) }); }
+          st = vm.getPromiseState(h);
         }
-        const st = vm.getPromiseState(h);
         h.dispose();
         if (st.type === 'pending') return end(stopped || Date.now() > deadline ? fail(`Stopped after ${ms / 1000} seconds.`) : { ok: false, value: null, error: "The code's promise never settled." });
         if (st.type === 'rejected') { const e = vm.dump(st.error); st.error.dispose(); return end({ ok: false, value: null, error: errorOf(e) }); }
