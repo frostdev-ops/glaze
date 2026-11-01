@@ -1271,7 +1271,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     nativeShown = false;
   };
   const nativeCourses = (want, away) => {
-    const selected = (board === 'courses' || board === 'cdash') && want.some((x) => W.course(x.id));
+    const selected = (board === 'courses' || board === 'cdash') && (want.some((x) => W.course(x.id)) || (ultra && courseSlots?.size > 0));
     const cardsOn = selected && !away && !nativeShown;
     // Canvas's own cards (the card view) step aside as Ultra's list does.
     document.documentElement?.toggleAttribute('data-gz-course-tiles', cardsOn);
