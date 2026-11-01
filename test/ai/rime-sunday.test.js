@@ -126,3 +126,13 @@ test('level 3: pushback and follow-ups go back to agent.tools with the earlier q
   // A new study question after a records answer stays study help.
   assert.equal(K.route('What is mitosis?', { locale: 'en', level: 3, history }).task, 'study.help');
 });
+
+test('level 3: an answer may say a friendly time\'s hour on either clock ("9:00 PM" as 21:00, "21:00" as 9 PM)', () => {
+  const at = Date.parse('2026-11-02T21:00:00-05:00');
+  const step = { call: { name: 'wake_create', arguments: { at: '2026-11-02 21:00', say: 'Finish the lab report' } }, result: { id: 'w-abcd1234', what: 'wake', at, say: 'Finish the lab report' } };
+  const inp = inputOf('Remind me tomorrow at 9 pm to finish the lab report', [step]);
+  assert.match(inp.steps[0].result, /"at":"Monday, November 2, 9:00 PM"/);
+  assert.equal(A.why({ call: null, answer: { text: 'I will remind you tomorrow at 21:00 to finish the lab report.', quotes: ['Finish the lab report'] } }, inp), '');
+  const de = A.task.input({ question: 'Erinnere mich morgen um 21 Uhr', tools: [...A.NAMES], steps: [step], now: SUNDAY, zone: ZONE, locale: 'de', first: true });
+  assert.equal(A.why({ call: null, answer: { text: 'Ich erinnere dich morgen um 9 Uhr abends: Finish the lab report.', quotes: ['Finish the lab report'] } }, de), '');
+});
