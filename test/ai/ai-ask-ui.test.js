@@ -799,3 +799,19 @@ test('the chat mounts in a tile with its own port and conversation, no ids, its 
   assert.ok(P.ports.filter((p) => p.posted.includes(sent))[0].hungUp, 'its port with it');
   assert.ok(P.box()?.open, 'the dialog untouched');
 });
+
+test('a tile answer preserves focus after the student moves to the host page', async () => {
+  const P = page({ reply: ready });
+  const host = P.doc.createElement('div'), other = P.doc.createElement('textarea');
+  P.doc.body.append(host, other);
+  const chat = P.context.GZ_ASK_CHAT.mount(host, { variant: 'tile' });
+  await settle();
+  const input = chat.root.querySelector('.gz-ask-input');
+  input.value = 'Explain mitosis';
+  input.focus();
+  P.doc.fire(input, 'keydown', { key: 'Enter' }); await settle();
+  other.focus();
+  answer(P, study('What happens to the chromosomes?')); await settle();
+  assert.equal(P.doc.activeElement, other, 'the answer must not steal focus from another editor');
+  chat.stop();
+});
