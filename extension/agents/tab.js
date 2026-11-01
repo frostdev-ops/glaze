@@ -224,6 +224,10 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     if (site === 'ultra') {
       await ultra(go);
       if (j.draft === true || !GZ_ULTRA.searchItems(kind('Announcement'), [j], { id: a.course, name: '' }, html, Date.now(), go.origin).length) return no('locked');
+    } else {
+      // Canvas announcements use the discussion-topic endpoint. A peer's topic id must not bypass topic()'s boundary.
+      const set = await staff(go, a.course);
+      if (!set || !set.has(String(j.author?.id ?? j.user_id ?? ''))) return no('unverified');
     }
     const it = S.item(j, go.origin);
     if (it.locked) return no('locked');

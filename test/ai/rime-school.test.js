@@ -31,10 +31,10 @@ const MODULES = [{ id: 1, name: 'Week 1', published: true, items: [{ id: 11, tit
 const TOPICS = [{ id: 81, title: 'Cell questions' }, { id: 82, title: 'Week 2 reflections' }];
 
 const tabsOf = (tabs) => { const b = H.browser(tabs); return TABS.create({ tabs: b.tabs, scripting: b.scripting, quiet: H.quiet }); };
-const canvasTab = (o = {}) => H.tab({ id: 1, url: `${C.CANVAS}/courses/25`, routes: {
+const canvasTab = ({ routes = {}, ...o } = {}) => H.tab({ id: 1, url: `${C.CANVAS}/courses/25`, routes: {
   '/api/v1/courses/25/enrollments': [{ user_id: 900, type: 'TeacherEnrollment' }],
   '/api/v1/courses/25/discussion_topics/70': TOPIC, '/api/v1/courses/25/discussion_topics/81': { ...TOPIC, id: 81, title: 'Cell questions', message: '<p>Share one question about cells.</p>', attachments: [] },
-  '/api/v1/courses/25/modules': MODULES, '/api/v1/courses/25/discussion_topics': TOPICS, ...o.routes }, ...o });
+  '/api/v1/courses/25/modules': MODULES, '/api/v1/courses/25/discussion_topics': TOPICS, ...routes }, ...o });
 const ultraTab = (o = {}) => H.tab({ id: 2, url: `${C.ULTRA}/ultra/courses/_101_1/outline`, site: 'ultra', uid: C.ULTRA_UID, memberships: C.load('ultra-memberships.json').results, routes: {
   '/learn/api/public/v1/courses/_101_1/announcements': { results: ULTRA.announcements },
   '/learn/api/public/v1/courses/_101_1/announcements/_801_1': { ...ULTRA.announcements[0], created: '2026-10-13T12:00:00Z' },
