@@ -513,9 +513,13 @@ model.release()                                 // frees every GPU resource; the
 // (the provider says webgpu | hardware | engine | assets).
 ```
 
-`ai/local/grammar.js` (`GZ_AI_GRAMMAR`): per model `vocab(tokenizer.byteStrings(), { eos: [id] })`, per schema
-`compile(schema, vocab)` (a refusal: `request-rejected`, reason `unsupported`), per run `matcher()` with `mask()`, `advance(id)`, `complete`,
-`done`; the mask allows the end token only once the JSON is whole, so a run stops at the end token. `ai/local/ladder.js`
+`ai/local/grammar.js` (`GZ_AI_GRAMMAR`): per model `vocab(tokenizer.byteStrings(), { eos: [id], marks })` (`marks`, the
+ids of LFM3's tool tags, `TOOL_MARKS`), per schema `compile(schema, vocab, { tools? })` (a refusal: `request-rejected`,
+reason `unsupported`), per run `matcher()` with `mask()`, `advance(id)`, `complete`, `done`; the mask allows the end token
+only once the JSON is whole, so a run stops at the end token. What it lets through `validate()` accepts, an anchored ASCII
+`pattern` included (one it can't hold leaves `exact: false`). A run's `tools` (`agent.tools`' `constraint(input)`) make the
+answer either that JSON or one native call to a listed tool, each parameter held to its own schema, so a turn the engine
+writes is one `fromNative()` reads and `OUTPUT` takes; `test/ai/agent-tools-grammar.test.js` holds it. `ai/local/ladder.js`
 (`GZ_AI_LADDER`): `pick({ adapter, models }) → { id } | { reason }`, `adapter` the Worker's `requestAdapter()` (null without
 one), `models` the store's list. The grammar and `ai/schema.js`, which it reads as it loads, are the host's required imports
 (`IMPORTS` in `host.js`; `test/ai/local-host-worker.test.js` runs them as the Worker does): a run with a schema and no grammar

@@ -4,9 +4,11 @@
 // warm-up or a run with the same instructions starts after them. Chrome starts it from an offscreen document
 // (ai/local/offscreen.js), Firefox from the background event page (ai/local/link.js); both pass messages to it as they are.
 //   in  { op: 'config', idle }  { op: 'detach' } (the worker's port went: runs and warm-ups stop, a download goes on)
-//       { id, op: 'prepare', tier?, part? }  { id, op: 'run', model, parts, stable, schema?, sampler, maxTokens, projector?,
-//       images?, think?, window? }  { id, op: 'warm', model, parts }  { id, op: 'remove', part? }  { id, op: 'release' }
+//       { id, op: 'prepare', tier?, part? }  { id, op: 'run', model, parts, stable, schema?, tools?, sampler, maxTokens,
+//       projector?, images?, think?, window? }  { id, op: 'warm', model, parts }  { id, op: 'remove', part? }  { id, op: 'release' }
 //       { id, op: 'cancel' }
+//   tools [{ name, parameters }] (with schema; ai/tasks/agent-tools.js constraint()): the answer is either the schema's
+//   JSON or one native call to a listed tool, held by the grammar (grammar.js compile's tools).
 //   think { budget, close, after } (parts ending in format.js's think prefill): the model reasons first, unmasked but for
 //   text tokens and </think>, until it writes </think> (then `after` is fed) or `budget` tokens (then `close` is fed, which
 //   ends with </think>); then the answer, with the grammar's mask as any run. The reasoning is never decoded to text, posted
@@ -145,14 +147,19 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       job.warm.push({ ids: head, snap });
       while (job.warm.length > LIMIT.warm) { try { job.warm.shift().snap.drop?.(); } catch { /* gone */ } }
     };
-    // The JSON grammar's matcher for a schema (grammar.js): its vocabulary once per model, each schema compiled once. No
-    // grammar, or no vocabulary: provider-unavailable 'engine'; a schema it refuses: request-rejected 'unsupported'.
-    const matcher = (job, schema) => {
+    // The JSON grammar's matcher for a schema (grammar.js), with tools a turn that may instead call one of them in LFM3's
+    // own syntax: its vocabulary once per model (with the tool tags' ids, where the model has them), each schema compiled
+    // once. No grammar, or no vocabulary: provider-unavailable 'engine'; a schema or tools it refuses (tools on a model
+    // without the tags): request-rejected 'unsupported'.
+    const matcher = (job, schema, tools) => {
       const G = env.grammar();
       if (typeof G?.vocab !== 'function' || typeof G.compile !== 'function') throw fail('provider-unavailable', 'engine');
-      try { job.vocab ||= G.vocab(job.tok.byteStrings(), { eos: [job.eos] }); } catch { throw fail('provider-unavailable', 'engine'); }
-      const key = JSON.stringify(schema);
-      if (!job.schemas.has(key)) { let g = null; try { g = G.compile(schema, job.vocab); } catch { /* refused */ } job.schemas.set(key, g); if (job.schemas.size > 32) job.schemas.delete(job.schemas.keys().next().value); }
+      try {
+        const marks = Array.isArray(G.TOOL_MARKS) ? Object.fromEntries(G.TOOL_MARKS.map((n) => [n, job.tok.id(n)])) : {};
+        job.vocab ||= G.vocab(job.tok.byteStrings(), { eos: [job.eos], marks: Object.values(marks).every(Number.isInteger) ? marks : {} });
+      } catch { throw fail('provider-unavailable', 'engine'); }
+      const key = JSON.stringify([schema, tools ?? null]);
+      if (!job.schemas.has(key)) { let g = null; try { g = G.compile(schema, job.vocab, tools === undefined ? {} : { tools }); } catch { /* refused */ } job.schemas.set(key, g); if (job.schemas.size > 32) job.schemas.delete(job.schemas.keys().next().value); }
       const g = job.schemas.get(key);
       if (!g) throw fail('request-rejected', 'unsupported');
       return g.matcher();
@@ -297,7 +304,8 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         }
         // A trained window is optional; the physical engine limit still holds beside the reserved answer and close.
         if (think) think.budget = Math.min(think.budget, room - input - answer - think.close.length);
-        const grammar = m.schema ? matcher(job, m.schema) : null;
+        if (m.tools !== undefined && !m.schema) throw fail('request-rejected', 'unsupported');
+        const grammar = m.schema ? matcher(job, m.schema, m.tools) : null;
         await prefix(job, head, signal);
         // Each picture encoded on the engine's device, fed in place of its placeholders, and its buffer freed at once.
         const encoded = [];

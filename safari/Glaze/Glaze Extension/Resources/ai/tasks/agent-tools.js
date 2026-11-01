@@ -152,6 +152,12 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     }, ['text', 'quotes'])] },
   }, ['call', 'answer']);
 
+  const ANSWER = OUTPUT.properties.answer.anyOf[1];
+  // What Glaze's own model may write for a turn: the answer's JSON or one native call to an offered tool, as the engine
+  // host's run takes it ({ schema, tools }: ai/local/grammar.js compile's tools), so a turn the grammar lets through is one
+  // fromNative() reads and OUTPUT holds.
+  const constraint = (inp) => ({ schema: ANSWER, tools: offered(inp.tools).map((t) => ({ name: t.name, parameters: t.parameters })) });
+
   const zoneOk = (z) => { try { clock(z); return true; } catch { return false; } };
   // A history step may carry check()'s derived kind. It is checked here, then omitted from the native call.
   const validCall = (c, names) => S.isObj(c) && Object.keys(c).filter((k) => k !== 'kind').sort().join() === 'arguments,name' && names.includes(c.name)
@@ -255,6 +261,6 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   };
 
   const task = T.add(T.define({ id: 'agent.tools', version: 1, input, build, output: OUTPUT, check, limits: { ms: 60000 } }));
-  return { task, LIMIT, SPECS, NAMES, SYSTEM, OUTPUT, instructions, line, py, shown, native, fromNative, readable, layout, answerParts, why };
+  return { task, LIMIT, SPECS, NAMES, SYSTEM, OUTPUT, ANSWER, constraint, instructions, line, py, shown, native, fromNative, readable, layout, answerParts, why };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_TASK_AGENT_TOOLS; else GZ_AI_TASK_AGENT_TOOLS;

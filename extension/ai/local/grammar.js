@@ -16,15 +16,23 @@
 //     only as a \uD8xx\uDCxx pair; min/maxLength in code points, as validate() counts them;
 //   - enum and const as JSON.stringify spells each value, a value kept only if it passes the whole schema;
 //   - anyOf: each alternative merged with the keywords beside it (disjoint ones; type intersects; others are refused);
-//   - pattern is not enforced (no task uses one): such a grammar has exact: false, and the caller runs validate();
+//   - pattern: an anchored one (^…$) over printable ASCII other than " and \ (literals, \d, classes, groups, |, ?, *, +,
+//     {m,n}) runs as a DFA, held with min/maxLength (a string at most 1,024 characters); any other pattern is not
+//     enforced: such a grammar has exact: false, and the caller runs validate();
 //   - a value with no schema (an extra key's, an array's without items) nests at most LIMIT.depth deep.
+// compile(schema, V, { tools }): the turn of a model that calls tools in LFM3's own syntax (ai/tasks/agent-tools.js
+// native): either the JSON as above, or one call to a listed tool,
+//   <tool_call>\n<function=NAME>\n(<parameter=KEY>\nVALUE\n</parameter>\n)*</function>\n</tool_call>
+// its parameters in their schema's order, required ones always, each at most once, a string VALUE one line of raw text
+// (no escapes) held to its length and pattern, an integer to its bounds. The tags are the model's own tokens: V needs
+// their ids (vocab()'s marks, TOOL_MARKS), each read as a byte no text has (0xF8 on).
 // Speed: a trie over the vocabulary's bytes is walked against the state. Inside a string, where most steps are, the
 // tokens that stay in it come from a table per string state, shared by every schema on the vocabulary, and only those
 // that close it are walked on. Masks are cached by state, counters capped past the longest token so repeats hit.
 // Classic script; node exports.
 var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
   const S = typeof GZ_AI_SCHEMA !== 'undefined' ? GZ_AI_SCHEMA : require('../schema.js');
-  const LIMIT = { digits: 15, fraction: 6, depth: 16, cache: 128 };
+  const LIMIT = { digits: 15, fraction: 6, depth: 16, cache: 128, pattern: 1024, nfa: 4000, dfa: 512, optional: 6 };
   const enc = new TextEncoder();
   const fail = (what) => { throw new TypeError(`grammar: ${what}`); };
 
@@ -47,14 +55,29 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
   on(9, HEX, 10); on(9, ch('dD'), 11); on(10, HEX, 12); on(11, ch('01234567'), 12); on(11, ch('89abAB'), 13);
   on(12, HEX, 14); on(13, HEX, 15); on(14, HEX, 0); on(15, HEX, 16);
   on(16, ch('\\'), 17); on(17, ch('u'), 18); on(18, ch('dD'), 19); on(19, ch('cdefCDEF'), 20); on(20, HEX, 21); on(21, HEX, 0);
+  // Raw text (a native call's string value): the same characters, " and \ plain, no escapes, ended (CLOSE) by a line feed.
+  const RSTEP = STEP.slice(0, 8 * 256), RCNT = CNT.slice(0, 8 * 256);
+  RSTEP[0x22] = 0; RCNT[0x22] = 1; RSTEP[0x5c] = 0; RCNT[0x5c] = 1; RSTEP[0x0a] = CLOSE;
+  // LFM3's tool-call tags, in the order vocab()'s marks give them bytes 0xF8 on.
+  const TOOL_MARKS = Object.freeze(['<tool_call>', '</tool_call>', '<function=', '</function>', '<parameter=', '</parameter>']);
+  const MARK = 0xf8;
 
   // ---- the vocabulary ------------------------------------------------------------------------------------------------
   // byteStrings: each id's bytes (null or empty: never text). A trie in preorder arrays: first child, next sibling, the
   // byte into the node, the first id ending there and the next id with the same bytes.
-  const vocab = (byteStrings, { eos = [] } = {}) => {
-    const size = byteStrings.length, bytes = Array.from(byteStrings, (b) => (b && b.length ? Uint8Array.from(b) : null));
+  // marks: { name: id } of tokens with no text a grammar places by name (TOOL_MARKS), each read as the byte MARK + its
+  // index; text tokens holding such a byte (no UTF-8 does) are left out.
+  const vocab = (byteStrings, { eos = [], marks = {} } = {}) => {
+    const size = byteStrings.length, bytes = Array.from(byteStrings, (b) => (b && b.length && !b.some((x) => x >= MARK) ? Uint8Array.from(b) : null));
     const ends = new Set([].concat(eos).filter((e) => e != null));
     for (const e of ends) if (!Number.isInteger(e) || e < 0 || e >= size) fail(`end token ${e}`);
+    const names = Object.keys(marks || {}), markOf = new Map();
+    if (names.length > 0x100 - MARK) fail('marks');
+    names.forEach((n, k) => {
+      const id = marks[n];
+      if (!Number.isInteger(id) || id < 0 || id >= size || ends.has(id) || [...markOf.values()].some((m) => bytes[id]?.[0] === m)) fail(`mark ${n}`);
+      bytes[id] = Uint8Array.of(MARK + k); markOf.set(n, MARK + k);
+    });
     const ids = [];
     // advance() always treats an end id as control, even if its vocabulary entry has text bytes.
     for (let i = 0; i < size; i++) if (bytes[i] && !ends.has(i)) ids.push(i);
@@ -94,24 +117,25 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
     return {
       size, words: (size + 31) >>> 5, bytes, eos: ends, nodes, longest, CAP: longest + 1,
       first: first.subarray(0, nodes), next: next.subarray(0, nodes), byte: byte.subarray(0, nodes), tok: tok.subarray(0, nodes), tokNext,
-      tables: new Array(MICRO),
+      tables: new Array(MICRO), raws: new Array(8), marks: markOf, pats: new Map(),
     };
   };
 
   // Per string state, from the trie's root: the tokens that stay inside the string (ids by the code points they add,
   // and all of them as a mask), and the trie nodes where a token closes it, with the code points before the quote.
-  const strTable = (V, e) => {
-    if (V.tables[e]) return V.tables[e];
+  const strTable = (V, e, raw = false) => {
+    const tables = raw ? V.raws : V.tables, stepT = raw ? RSTEP : STEP, cntT = raw ? RCNT : CNT;
+    if (tables[e]) return tables[e];
     const { first, next, byte, tok, tokNext } = V;
     const inner = [], cnts = [], cn = [], cc = [];
     const stack = [0, e, 0];
     while (stack.length) {
       const k = stack.pop(), s = stack.pop(), nd = stack.pop();
       for (let c = first[nd]; c >= 0; c = next[c]) {
-        const i = s * 256 + byte[c], to = STEP[i];
+        const i = s * 256 + byte[c], to = stepT[i];
         if (to === FAIL) continue;
         if (to === CLOSE) { cn.push(c); cc.push(k); continue; }
-        const nk = k + CNT[i];
+        const nk = k + cntT[i];
         for (let t = tok[c]; t >= 0; t = tokNext[t]) { inner.push(t); cnts.push(nk); }
         if (first[c] >= 0) stack.push(c, to, nk);
       }
@@ -122,7 +146,29 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
     for (let k = 1; k < at.length; k++) at[k] += at[k - 1];
     const ids = new Int32Array(inner.length), cnt = new Int32Array(inner.length), all = new Uint32Array(V.words);
     inner.forEach((t, i) => { const j = at[cnts[i]]++; ids[j] = t; cnt[j] = cnts[i]; all[t >>> 5] |= 1 << (t & 31); });
-    return (V.tables[e] = { ids, cnt, top, all, cn: Int32Array.from(cn), cc: Int32Array.from(cc) });
+    return (tables[e] = { ids, cnt, top, all, cn: Int32Array.from(cn), cc: Int32Array.from(cc) });
+  };
+
+  // Per DFA state d, from the trie's root: the tokens whose bytes all stay in the pattern (each with its end state and
+  // length), and the trie nodes where a token reaches the close (a quote, or raw text's line feed) after k characters in
+  // state e. Kept on the DFA (once per vocabulary: V.pats).
+  const patTable = (V, dfa, d, raw) => {
+    const tables = (dfa.tables ||= { json: [], raw: [] })[raw ? 'raw' : 'json'];
+    if (tables[d]) return tables[d];
+    const { first, next, byte, tok, tokNext } = V, close = raw ? 0x0a : 0x22;
+    const ids = [], ends = [], lens = [], cn = [], ck = [], ce = [];
+    const stack = [0, d, 0];
+    while (stack.length) {
+      const k = stack.pop(), s = stack.pop(), nd = stack.pop();
+      for (let c = first[nd]; c >= 0; c = next[c]) {
+        if (byte[c] === close) { if (dfa.acc[s]) { cn.push(c); ck.push(k); ce.push(s); } continue; }
+        const to = dfa.next[s][byte[c]];
+        if (to < 0) continue;
+        for (let t = tok[c]; t >= 0; t = tokNext[t]) { ids.push(t); ends.push(to); lens.push(k + 1); }
+        if (first[c] >= 0) stack.push(c, to, k + 1);
+      }
+    }
+    return (tables[d] = { ids: Int32Array.from(ids), ends: Int32Array.from(ends), lens: Int32Array.from(lens), cn: Int32Array.from(cn), ck: Int32Array.from(ck) });
   };
 
   // ---- numbers -------------------------------------------------------------------------------------------------------
@@ -178,9 +224,135 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
     return feasible(n, q) ? q : null;
   };
 
+
+  // ---- patterns ------------------------------------------------------------------------------------------------------
+  // An anchored pattern (^…$) over printable ASCII other than " and \ (so its characters are their own bytes in a JSON
+  // string and in raw text) → a DFA { next: [Int32Array(256)] (-1: none), acc, n }; null for anything else: other
+  // characters, ., lookarounds, backreferences, \w, \s, a negated class, or more than LIMIT.dfa states.
+  const PRINT = (b) => b >= 0x20 && b < 0x7f && b !== 0x22 && b !== 0x5c;
+  const regex = (src) => {
+    if (typeof src !== 'string' || src[0] !== '^' || src.length < 2 || src[src.length - 1] !== '$' || src[src.length - 2] === '\\') return null;
+    const end = src.length - 1;
+    let i = 1;
+    const setOf = (f) => { const t = new Uint8Array(256); for (let b = 0; b < 256; b++) if (f(b)) t[b] = 1; return t; };
+    const one = (c) => { const b = c.charCodeAt(0); return b > 0x7e ? null : setOf((x) => x === b); };
+    const DIGIT = setOf((b) => b >= 0x30 && b <= 0x39);
+    const esc = () => { const c = src[i++]; return c === 'd' ? DIGIT : c !== undefined && '\\^$.|?*+()[]{}/-'.includes(c) ? one(c) : null; };
+    const cls = () => {
+      if (src[i] === '^' || src[i] === ']') return null;
+      const t = new Uint8Array(256);
+      while (i < end && src[i] !== ']') {
+        let lo;
+        if (src[i] === '\\') { i++; const e = esc(); if (!e) return null; if (e === DIGIT) { DIGIT.forEach((v, b) => { if (v) t[b] = 1; }); continue; } lo = e.indexOf(1); }
+        else { lo = src.charCodeAt(i++); if (lo > 0x7e) return null; }
+        if (src[i] === '-' && i + 1 < end && src[i + 1] !== ']') {
+          i++;
+          let hi;
+          if (src[i] === '\\') { i++; const e = esc(); if (!e || e === DIGIT) return null; hi = e.indexOf(1); } else hi = src.charCodeAt(i++);
+          if (hi < lo || hi > 0x7e) return null;
+          for (let b = lo; b <= hi; b++) t[b] = 1;
+        } else t[lo] = 1;
+      }
+      if (src[i] !== ']') return null;
+      i++;
+      return t;
+    };
+    const atom = () => {
+      const c = src[i];
+      if (c === '(') {
+        i++;
+        if (src.startsWith('?:', i)) i += 2; else if (src[i] === '?') return null;
+        const x = alt();
+        if (!x || src[i] !== ')') return null;
+        i++;
+        return x;
+      }
+      if (c === '[') { i++; const t = cls(); return t && { t: 'set', s: t }; }
+      if (c === '\\') { i++; const t = esc(); return t && { t: 'set', s: t }; }
+      if (c === undefined || '|)?*+{}.^$]'.includes(c)) return null;
+      i++;
+      const t = one(c);
+      return t && { t: 'set', s: t };
+    };
+    const piece = () => {
+      let x = atom();
+      while (x) {
+        let min, max;
+        const c = src[i];
+        if (c === '?') { min = 0; max = 1; i++; } else if (c === '*') { min = 0; max = Infinity; i++; } else if (c === '+') { min = 1; max = Infinity; i++; }
+        else if (c === '{') {
+          const m = /^\{(\d{1,3})(,(\d{0,3}))?\}/.exec(src.slice(i, end));
+          if (!m) return null;
+          min = Number(m[1]); max = m[2] ? (m[3] === '' ? Infinity : Number(m[3])) : min;
+          if (max < min) return null;
+          i += m[0].length;
+        } else return x;
+        if (src[i] === '?') i++; // lazy: the same strings match
+        x = { t: 'rep', x, min, max };
+      }
+      return null;
+    };
+    const cat = () => { const a = []; while (i < end && src[i] !== '|' && src[i] !== ')') { const x = piece(); if (!x) return null; a.push(x); } return { t: 'cat', a }; };
+    function alt() { const a = [cat()]; while (src[i] === '|') { i++; a.push(cat()); } return a.includes(null) ? null : { t: 'alt', a }; }
+    const ast = alt();
+    if (!ast || i !== end) return null;
+    // Thompson's construction, then subsets.
+    const N = [];
+    const st = () => { if (N.length > LIMIT.nfa) throw new RangeError('nfa'); N.push({ e: [], on: [] }); return N.length - 1; };
+    const build = (x, from) => {
+      switch (x.t) {
+        case 'set': { const to = st(); N[from].on.push([x.s, to]); return to; }
+        case 'cat': return x.a.reduce((f, y) => build(y, f), from);
+        case 'alt': { const to = st(); for (const y of x.a) { const a = st(); N[from].e.push(a); N[build(y, a)].e.push(to); } return to; }
+        default: {
+          let f = from;
+          for (let k = 0; k < x.min; k++) f = build(x.x, f);
+          if (x.max === Infinity) { const loop = st(); N[f].e.push(loop); N[build(x.x, loop)].e.push(loop); return loop; }
+          const to = st();
+          N[f].e.push(to);
+          for (let k = x.min; k < x.max; k++) { f = build(x.x, f); N[f].e.push(to); }
+          return to;
+        }
+      }
+    };
+    let start, fin;
+    try { start = st(); fin = build(ast, start); } catch { return null; }
+    for (const n of N) for (const [t] of n.on) for (let b = 0; b < 256; b++) if (t[b] && !PRINT(b)) return null;
+    const closure = (list) => {
+      const seen = new Set(list), todo = [...list];
+      while (todo.length) for (const t of N[todo.pop()].e) if (!seen.has(t)) { seen.add(t); todo.push(t); }
+      return [...seen].sort((a, b) => a - b);
+    };
+    const index = new Map(), sets = [], next = [], acc = [];
+    const id = (set) => { const k = set.join(); if (!index.has(k)) { index.set(k, sets.length); sets.push(set); acc.push(set.includes(fin)); } return index.get(k); };
+    id(closure([start]));
+    for (let d = 0; d < sets.length; d++) {
+      if (sets.length > LIMIT.dfa) return null;
+      const row = new Int32Array(256).fill(-1);
+      for (let b = 0x20; b < 0x7f; b++) {
+        if (!PRINT(b)) continue;
+        const to = [];
+        for (const n of sets[d]) for (const [t, x] of N[n].on) if (t[b]) to.push(x);
+        if (to.length) row[b] = id(closure(to));
+      }
+      next.push(row);
+    }
+    return { next, acc, n: sets.length };
+  };
+  // A pattern held with lengths: soon[d][L], the fewest characters ≥ L that finish from state d (B + 1: none), B the
+  // longest string written (maxLength, at most LIMIT.pattern).
+  const lengths = (dfa, max) => {
+    const B = Math.min(max, LIMIT.pattern), can = Array.from({ length: dfa.n }, (_, d) => { const a = new Uint8Array(B + 1); a[0] = dfa.acc[d] ? 1 : 0; return a; });
+    const succ = dfa.next.map((row) => [...new Set(row.filter((t) => t >= 0))]);
+    for (let L = 1; L <= B; L++) for (let d = 0; d < dfa.n; d++) if (succ[d].some((t) => can[t][L - 1])) can[d][L] = 1;
+    const soon = can.map((a) => { const o = new Int16Array(B + 2).fill(B + 1); for (let L = B; L >= 0; L--) o[L] = a[L] ? L : o[L + 1]; return o; });
+    return { B, soon };
+  };
+
   // ---- the schema → nodes --------------------------------------------------------------------------------------------
-  // S string {min, max}; N number {int, sc, lo, hi}; L literals (a byte trie); O object {props, reqAfter, extra, names};
-  // A array {items, min, max}; U alternatives. null: nothing fits.
+  // S string {min, max, raw}; P pattern string {dfa, min, max, B, soon, raw}; N number {int, sc, lo, hi}; L literals (a
+  // byte trie); O object {props, reqAfter, extra, names}; A array {items, min, max}; Q a sequence {items}; U alternatives.
+  // null: nothing fits. raw: a native call's value, no quotes, ended by a line feed.
   const trie = (list) => {
     const kids = [new Map()], term = [-1];
     list.forEach((bs, v) => {
@@ -217,14 +389,26 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
     return out;
   };
 
-  const compile = (schema, V) => {
+  const compile = (schema, V, { tools } = {}) => {
     if (!V || !V.first) fail('compile needs a vocab()');
     if (!S.clean(schema)) fail('the schema is outside ai/schema.js\'s subset');
+    if (tools !== undefined && (!Array.isArray(tools) || !tools.length || tools.length > 32)) fail('tools');
+    if (tools && TOOL_MARKS.some((n) => !V.marks?.has(n))) fail('tool calls need the marks of LFM3\'s tool tags (vocab() marks)');
     let ids = 0, exact = true;
     const mk = (o) => { o.id = ids++; return o; };
     const union = (alts) => { const a = alts.flatMap((x) => (!x ? [] : x.k === 'U' ? x.alts : [x])); return !a.length ? null : a.length === 1 ? a[0] : mk({ k: 'U', alts: a }); };
     const lit = (list) => (list.length ? mk({ k: 'L', ...trie(list) }) : null);
-    const str = (min, max) => (min > max ? null : mk({ k: 'S', min, max }));
+    const str = (min, max, raw = false) => (min > max ? null : mk({ k: 'S', min, max, raw }));
+    // → a P node, null when nothing fits, undefined when the pattern can't be held.
+    const pat = (src, min, max, raw = false) => {
+      // The DFA once per vocabulary (V.pats), so its tables below are built once per model.
+      if (!V.pats.has(src)) V.pats.set(src, regex(src));
+      const dfa = V.pats.get(src);
+      if (!dfa) return undefined;
+      const { B, soon } = lengths(dfa, max);
+      return soon[0][min] <= B ? mk({ k: 'P', dfa, min, max: Math.min(max, B), soon, raw }) : null;
+    };
+    const seq = (items) => (items.includes(null) ? null : mk({ k: 'Q', items }));
     const num = (int, min, max) => {
       const sc = int ? 1n : P10(LIMIT.fraction);
       const n = mk({ k: 'N', int, sc, lo: min === undefined ? null : scaled(min, sc, true), hi: max === undefined ? null : scaled(max, sc, false) });
@@ -272,7 +456,10 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
       switch (t) {
         case 'null': return lit([enc.encode('null')]);
         case 'boolean': return lit([enc.encode('true'), enc.encode('false')]);
-        case 'string': if (s.pattern !== undefined) exact = false; return str(s.minLength ?? 0, s.maxLength ?? Infinity);
+        case 'string': {
+          if (s.pattern !== undefined) { const p = pat(s.pattern, s.minLength ?? 0, s.maxLength ?? Infinity); if (p !== undefined) return p; exact = false; }
+          return str(s.minLength ?? 0, s.maxLength ?? Infinity);
+        }
         case 'number': case 'integer': return num(t === 'integer', s.minimum, s.maximum);
         case 'array': {
           const items = s.items !== undefined ? node(s.items, d + 1) : any(d + 1), min = s.minItems ?? 0, max = items ? s.maxItems ?? Infinity : 0;
@@ -298,7 +485,36 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
       }
       return null;
     };
-    const root = node(schema, 0);
+    // One call to tool t, as the comment at the top writes it: an alternative for each set of its optional parameters.
+    const bytesOf = (...xs) => Uint8Array.from(xs.flatMap((x) => (typeof x === 'string' ? [...enc.encode(x)] : [V.marks.get(x.mark)])));
+    const call = (t) => {
+      if (!S.isObj(t) || typeof t.name !== 'string' || !/^[a-z][a-z0-9_]{0,63}$/.test(t.name) || !S.isObj(t.parameters) || !S.clean(t.parameters)) fail('a tool is { name, parameters }');
+      const own = t.parameters.properties || {}, req = new Set(t.parameters.required || []);
+      for (const k of req) if (!Object.hasOwn(own, k)) fail(`${t.name}: required ${k} has no schema`);
+      const params = [];
+      for (const [k, p] of Object.entries(own)) {
+        if (!/^[a-z][a-z0-9_]*$/.test(k) || p.enum !== undefined || p.const !== undefined || p.anyOf !== undefined) fail(`${t.name}: parameter ${k}`);
+        const types = [].concat(p.type || []);
+        let value, close;
+        if (types.length === 1 && types[0] === 'string') {
+          const min = p.minLength ?? 0, max = p.maxLength ?? Infinity;
+          value = p.pattern !== undefined ? pat(p.pattern, min, max, true) : undefined;
+          if (value === undefined) { if (p.pattern !== undefined) exact = false; value = str(min, max, true); }
+          close = bytesOf({ mark: '</parameter>' }, '\n');
+        } else if (types.length === 1 && types[0] === 'integer') { value = num(true, p.minimum, p.maximum); close = bytesOf('\n', { mark: '</parameter>' }, '\n'); }
+        else fail(`${t.name}: parameter ${k} is neither a string nor an integer`);
+        const n = value && seq([lit([bytesOf({ mark: '<parameter=' }, `${k}>\n`)]), value, lit([close])]);
+        if (!n && req.has(k)) return null;
+        if (n) params.push({ n, req: req.has(k) });
+      }
+      const optional = params.filter((x) => !x.req);
+      if (optional.length > LIMIT.optional) fail(`${t.name}: more than ${LIMIT.optional} optional parameters`);
+      const head = lit([bytesOf({ mark: '<tool_call>' }, '\n', { mark: '<function=' }, `${t.name}>\n`)]), tail = lit([bytesOf({ mark: '</function>' }, '\n', { mark: '</tool_call>' })]);
+      const alts = [];
+      for (let bits = 0; bits < 1 << optional.length; bits++) alts.push(seq([head, ...params.filter((x) => x.req || (bits >> optional.indexOf(x)) & 1).map((x) => x.n), tail]));
+      return union(alts);
+    };
+    const root = union([node(schema, 0), ...(tools || []).map(call)]);
     if (!root) fail('no JSON value fits the schema');
     return grammar(root, V, exact);
   };
@@ -326,7 +542,9 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
   const start = (n, up, out) => {
     switch (n.k) {
       case 'U': for (const a of n.alts) start(a, up, out); break;
-      case 'S': out.push({ k: 'S', n, s: -1, r: n.max, q: n.min, up }); break;
+      case 'S': out.push({ k: 'S', n, s: n.raw ? 0 : -1, r: n.max, q: n.min, up }); break;
+      case 'P': out.push({ k: 'P', n, s: n.raw ? 0 : -1, len: 0, up }); break;
+      case 'Q': start(n.items[0], { k: 'Q', n, i: 1, up }, out); break;
       case 'N': out.push({ k: 'N', n, p: '', up }); break;
       case 'L': out.push({ k: 'L', n, t: 0, up }); break;
       case 'O': out.push({ k: 'O', n, ph: -1, i: 0, t: 0, x: 0, up }); break;
@@ -337,11 +555,26 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
     switch (c.k) {
       case 'S': {
         if (c.s < 0) { if (b === 0x22) out.push({ k: 'S', n: c.n, s: 0, r: c.r, q: c.q, up: c.up }); return; }
-        const i = c.s * 256 + b, to = STEP[i];
+        const i = c.s * 256 + b, to = (c.n.raw ? RSTEP : STEP)[i];
         if (to === CLOSE) { if (c.q <= 0) out.push(c.up); return; }
         if (to === FAIL) return;
-        if (!CNT[i]) out.push({ k: 'S', n: c.n, s: to, r: c.r, q: c.q, up: c.up });
+        if (!(c.n.raw ? RCNT : CNT)[i]) out.push({ k: 'S', n: c.n, s: to, r: c.r, q: c.q, up: c.up });
         else if (c.r >= 1) out.push({ k: 'S', n: c.n, s: to, r: c.r - 1, q: c.q - 1, up: c.up });
+        return;
+      }
+      case 'P': {
+        const n = c.n;
+        if (c.s < 0) { if (b === 0x22) out.push({ k: 'P', n, s: 0, len: 0, up: c.up }); return; }
+        if (b === (n.raw ? 0x0a : 0x22)) { if (n.dfa.acc[c.s] && c.len >= n.min) out.push(c.up); return; }
+        const t = n.dfa.next[c.s][b], len = c.len + 1;
+        if (t >= 0 && len <= n.max && n.soon[t][Math.max(0, n.min - len)] <= n.max - len) out.push({ k: 'P', n, s: t, len, up: c.up });
+        return;
+      }
+      case 'Q': {
+        if (c.i === c.n.items.length) { step(c.up, b, out); return; }
+        const first = [];
+        start(c.n.items[c.i], { k: 'Q', n: c.n, i: c.i + 1, up: c.up }, first);
+        for (const f of first) step(f, b, out);
         return;
       }
       case 'N': {
@@ -403,7 +636,8 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
       }
     }
   };
-  const accepting = (c) => c === DONE || (c.k === 'N' ? numDone(c.n, c.p) && accepting(c.up) : c.k === 'L' && c.n.term[c.t] >= 0 && accepting(c.up));
+  const accepting = (c) => c === DONE || (c.k === 'N' ? numDone(c.n, c.p) && accepting(c.up) : c.k === 'L' ? c.n.term[c.t] >= 0 && accepting(c.up)
+    : c.k === 'Q' && c.i === c.n.items.length && accepting(c.up));
 
   const grammar = (root, V, exact) => {
     const { first, next, byte, tok, tokNext, CAP } = V;
@@ -417,6 +651,8 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
       let s;
       switch (c.k) {
         case 'S': s = `S${c.n.id},${c.s},${cl(c.r, cap)},${cl(Math.max(c.q, 0), cap)}`; break;
+        case 'P': s = `P${c.n.id},${c.s},${c.len}`; break;
+        case 'Q': s = `Q${c.n.id},${c.i}`; break;
         case 'N': s = `N${c.n.id},${c.p}`; break;
         case 'L': s = `L${c.n.id},${c.t}`; break;
         case 'O': s = `O${c.n.id},${c.ph},${c.i},${c.t},${c.x}`; break;
@@ -427,14 +663,29 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
       if (cap) c.K = s; else c.k0 = s;
       return s;
     };
-    const stepSet = (set, b) => {
+    // A sequence's frame between items is replaced by its next item's start (or, past its last, by its parent), so a
+    // string that begins an item is a string frame when its mask is made, on its table, not walked over the trie.
+    const settle = (list) => {
+      if (!list.some((c) => c.k === 'Q')) return list;
       const out = [];
-      for (const c of set) step(c, b, out);
+      const put = (c) => {
+        if (c.k !== 'Q') { out.push(c); return; }
+        if (c.i === c.n.items.length) { put(c.up); return; }
+        const started = [];
+        start(c.n.items[c.i], { k: 'Q', n: c.n, i: c.i + 1, up: c.up }, started);
+        started.forEach(put);
+      };
+      list.forEach(put);
+      return out;
+    };
+    const stepSet = (set, b) => {
+      const out = settle((() => { const o = []; for (const c of set) step(c, b, o); return o; })());
       if (out.length < 2) return out;
       const seen = new Set();
       return out.filter((c) => { const k = key(c, false); if (seen.has(k)) return false; seen.add(k); return true; });
     };
-    const walk = (set, nd, m) => {
+    // Each token from trie node nd on that the configurations take: into mask m, or, with ids, onto that list.
+    const walk = (set, nd, m, ids = null) => {
       // Token byte length is independent of JSON nesting depth and may exceed the call stack.
       const stack = [set, nd];
       while (stack.length) {
@@ -442,24 +693,56 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
         for (let c = first[at]; c >= 0; c = next[c]) {
           const ns = stepSet(states, byte[c]);
           if (!ns.length) continue;
-          for (let t = tok[c]; t >= 0; t = tokNext[t]) m[t >>> 5] |= 1 << (t & 31);
+          for (let t = tok[c]; t >= 0; t = tokNext[t]) { if (ids) ids.push(t); else m[t >>> 5] |= 1 << (t & 31); }
           if (first[c] >= 0) stack.push(ns, c);
         }
       }
     };
+    // The tokens that close a string in state e and go on into what follows it (up), each with the code points it adds
+    // before the close: walked once per (e, up) and kept, since they don't depend on the counters (a native call's value
+    // closes at a line feed, which thousands of tokens hold).
+    let closing = new Map(), closingOld = new Map();
+    // The first bytes what follows a value takes: a close node's subtree is walked only where one of them starts it.
+    const opens = (up) => {
+      const f = new Uint8Array(256);
+      for (let b = 0; b < 256; b++) if (stepSet([up], b).length) f[b] = 1;
+      return f;
+    };
+    const onward = (nd, f) => { for (let c = first[nd]; c >= 0; c = next[c]) if (f[byte[c]]) return true; return false; };
+    const closers = (c, T, pattern = false) => {
+      const k = `${pattern ? 'p' : ''}${c.n.raw ? 'r' : 's'}${pattern ? c.n.id : ''},${c.s}/${key(c.up, true)}`;
+      let out = closing.get(k) || closingOld.get(k);
+      if (out) return out;
+      const ids = [], ks = [], up = [c.up], f = opens(c.up), nodes = pattern ? T.cn : T.cn, counts = pattern ? T.ck : T.cc;
+      for (let g = 0; g < nodes.length; g++) {
+        const nd = nodes[g], before = ids.length;
+        for (let t = tok[nd]; t >= 0; t = tokNext[t]) ids.push(t);
+        if (first[nd] >= 0 && onward(nd, f)) walk(up, nd, null, ids);
+        for (let i = before; i < ids.length; i++) ks.push(counts[g]);
+      }
+      out = { ids: Int32Array.from(ids), ks: Int32Array.from(ks) };
+      if (closing.size >= LIMIT.cache) { closingOld = closing; closing = new Map(); }
+      closing.set(k, out);
+      return out;
+    };
     // Inside a string: the tokens that stay in it, by the table, then those that close it, walked on from its parent.
     const strMask = (c, m) => {
-      const T = strTable(V, c.s), r = c.r;
+      const T = strTable(V, c.s, c.n.raw), r = c.r;
       if (r >= T.top) for (let w = 0; w < m.length; w++) m[w] |= T.all[w];
       else for (let k = 0; k < T.ids.length && T.cnt[k] <= r; k++) { const t = T.ids[k]; m[t >>> 5] |= 1 << (t & 31); }
-      const up = [c.up];
-      for (let g = 0; g < T.cn.length; g++) {
-        const k = T.cc[g];
-        if (k > r || k < c.q) continue;
-        const nd = T.cn[g];
-        for (let t = tok[nd]; t >= 0; t = tokNext[t]) m[t >>> 5] |= 1 << (t & 31);
-        if (first[nd] >= 0) walk(up, nd, m);
+      const { ids, ks } = closers(c, T);
+      for (let i = 0; i < ids.length; i++) if (ks[i] <= r && ks[i] >= c.q) { const t = ids[i]; m[t >>> 5] |= 1 << (t & 31); }
+    };
+    // Inside a pattern string: the tokens that stay in it while it can still finish within its lengths, then those that
+    // close it where its DFA accepts, walked on from its parent.
+    const patMask = (c, m) => {
+      const n = c.n, T = patTable(V, n.dfa, c.s, n.raw), rem = n.max - c.len;
+      for (let i = 0; i < T.ids.length; i++) {
+        const k = T.lens[i];
+        if (k <= rem && n.soon[T.ends[i]][Math.max(0, n.min - c.len - k)] <= rem - k) { const t = T.ids[i]; m[t >>> 5] |= 1 << (t & 31); }
       }
+      const { ids, ks } = closers(c, T, true);
+      for (let i = 0; i < ids.length; i++) if (ks[i] <= rem && c.len + ks[i] >= n.min) { const t = ids[i]; m[t >>> 5] |= 1 << (t & 31); }
     };
     let cache = new Map(), older = new Map();
     const maskOf = (set) => {
@@ -468,7 +751,7 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
       if (m) return m;
       m = new Uint32Array(V.words);
       const rest = [];
-      for (const c of set) { if (c.k === 'S' && c.s >= 0) strMask(c, m); else rest.push(c); }
+      for (const c of set) { if (c.k === 'S' && c.s >= 0) strMask(c, m); else if (c.k === 'P' && c.s >= 0) patMask(c, m); else rest.push(c); }
       if (rest.length) walk(rest, 0, m);
       if (set.some(accepting)) for (const e of V.eos) m[e >>> 5] |= 1 << (e & 31);
       if (cache.size >= LIMIT.cache) { older = cache; cache = new Map(); }
@@ -498,10 +781,10 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
     });
     return {
       exact,
-      matcher() { const set = []; start(root, DONE, set); return matcher(set, false); },
+      matcher() { const set = []; start(root, DONE, set); return matcher(settle(set), false); },
     };
   };
 
-  return { LIMIT, vocab, compile };
+  return { LIMIT, TOOL_MARKS, vocab, compile };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_GRAMMAR; else GZ_AI_GRAMMAR;

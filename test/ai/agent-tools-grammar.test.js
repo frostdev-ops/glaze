@@ -15,7 +15,8 @@ const vocab = require('../helpers/local-vocab.cjs');
 
 const TOK = vocab(require('../fixtures/ai/local-format/vocab.json'));
 const MARKS = Object.fromEntries(G.TOOL_MARKS.map((n) => [n, TOK.id(n)]));
-const V = G.vocab(TOK.byteStrings(), { eos: [TOK.eos], marks: MARKS });
+const EOS = TOK.id('<|im_end|>');
+const V = G.vocab(TOK.byteStrings(), { eos: [EOS], marks: MARKS });
 const NOW = Date.UTC(2026, 9, 30, 19, 5);
 const ALL = A.task.input({ question: 'What is due?', tools: [...A.NAMES], now: NOW, zone: 'America/Chicago' });
 const grammarFor = (inp) => { const c = A.constraint(inp); return G.compile(c.schema, V, { tools: c.tools }); };
@@ -30,7 +31,7 @@ const walk = (g, list) => {
     if (!allowed(m.mask(), id)) return `refused at token ${i} (${JSON.stringify(TOK.decode([id], { specials: true }))})`;
     m.advance(id);
   }
-  return m.complete && allowed(m.mask(), TOK.eos) ? '' : 'not whole';
+  return m.complete && allowed(m.mask(), EOS) ? '' : 'not whole';
 };
 
 test('the turn grammar takes every valid answer and call, and is exact: no pattern left to validate()', () => {
@@ -88,9 +89,9 @@ test('whatever the mask lets the model write is a turn agent.tools takes: random
       const mask = m.mask(), list = [];
       for (let i = 0; i < V.size; i++) if (allowed(mask, i)) list.push(i);
       assert.ok(list.length, 'never a dead end');
-      const id = list.includes(TOK.eos) && rnd() < 0.6 ? TOK.eos : list[Math.floor(rnd() * list.length)];
+      const id = list.includes(EOS) && rnd() < 0.6 ? EOS : list[Math.floor(rnd() * list.length)];
       m.advance(id);
-      if (id !== TOK.eos) out.push(id);
+      if (id !== EOS) out.push(id);
     }
     assert.ok(m.done, `walk ${w} ended`);
     const text = TOK.decode(out, { specials: true }), turn = A.fromNative(text);
@@ -103,8 +104,34 @@ test('whatever the mask lets the model write is a turn agent.tools takes: random
   assert.ok(seen.size >= 8, `walks reached ${[...seen].join(', ')}`);
 });
 
+test('the turn\'s mask is exactly the tokens that advance, in calls, raw values, patterns and the answer alike', () => {
+  let seed = 5;
+  const rnd = () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const text = [];
+  for (let i = 0; i < V.size; i++) if (V.bytes[i]) text.push(i);
+  // Walks along real turns, so the states checked sit inside each kind of value.
+  const turns = [ids(native('todo_mark_done', { type: 'planner_note', id: '_12_34', account: 'https://canvas.northfield.edu/4821' })),
+    ids(native('schedule_list', { from: '2026-10-31', to: '2026-11-07T23:59:00-05:00' })), ids(native('document_read', { page: 12, document: 'doc-0ad45655a1' })),
+    ids(`{"text":"Due \\"Friday\\".","quotes":["Lab report 3","2026-10-31 23:59"]}`)];
+  for (const turn of turns) {
+    const m = grammarFor(ALL).matcher();
+    for (const id of turn) {
+      if (rnd() < 0.35) {
+        const mask = m.mask(), some = new Set(text.filter((t) => allowed(mask, t)));
+        while (some.size < 3000) some.add(text[Math.floor(rnd() * text.length)]);
+        for (const t of some) {
+          let ok = true;
+          try { m.fork().advance(t); } catch { ok = false; }
+          assert.equal(allowed(mask, t), ok, `token ${t} ${JSON.stringify(TOK.decode([t], { specials: true }))}`);
+        }
+      }
+      m.advance(id);
+    }
+  }
+});
+
 test('a pattern the grammar can\'t hold leaves it inexact; the patterns Glaze writes are held exactly, in JSON strings too', () => {
-  const plain = G.vocab(TOK.byteStrings(), { eos: [TOK.eos] });
+  const plain = G.vocab(TOK.byteStrings(), { eos: [EOS] });
   assert.equal(G.compile({ type: 'string', pattern: '\\w+' }, plain).exact, false);
   assert.equal(G.compile({ type: 'string', pattern: 'abc' }, plain).exact, false, 'unanchored');
   const g = G.compile(S.obj({ id: { type: 'string', pattern: '^(\\d{1,20}|_\\d{1,20}_\\d{1,20})$' } }, ['id']), plain);
@@ -131,7 +158,8 @@ test('the host runs a turn under the constraint: the D4 call with a parameter it
   const store = { list: async () => [{ id: 'glaze-q4', tier: 1, size: 1, state: 'ready' }], status: async () => ({ state: 'ready' }), open: async (id) => ({ id, size: 1, read: async () => new Uint8Array(0) }) };
   const E = { load: async (g) => {
     const tok = K.load(g.kv);
-    const reply = [...tok.encodeWith([...native('documents_list', { from: 0 }).slice(0, -3), { special: '<parameter=' }, { text: 'page>\n0\n' }, { special: '</parameter>' }, { text: '\n' }, ...native('documents_list', {}).slice(-3)])];
+    // (A model without the tool tags has no such reply.)
+    const reply = tok.id('<tool_call>') === undefined ? [] : [...tok.encodeWith([...native('documents_list', { from: 0 }).slice(0, -3), { special: '<parameter=' }, { text: 'page>\n0\n' }, { special: '</parameter>' }, { text: '\n' }, ...native('documents_list', {}).slice(-3)])];
     let i = 0;
     return { context: 16000, release() {}, snapshot: async () => ({ pos: 0, drop() {} }), restore: async () => {},
       prefill: async (list, { snapshot } = {}) => { i = 0; return snapshot ? { pos: list.length, drop() {} } : undefined; },
