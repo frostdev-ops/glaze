@@ -549,6 +549,6 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
 
   // Canvas: the courses its card view shows now, in its order (an empty list in its list view).
   const shown = () => [...nativeCards.keys()].map((id) => list().find((c) => c.id === id)).filter(Boolean);
-  return { sync, list, shown, own, shows, title, fill, canvasEdit, picker: { open: openPicker, sync: syncPicker, close: closePicker } };
+  return { sync, list, shown, own, shows, complete: () => !ultra || membersComplete, title, fill, canvasEdit, picker: { open: openPicker, sync: syncPicker, close: closePicker } };
 })();
 GZ_COURSE_CARDS;
