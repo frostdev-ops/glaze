@@ -390,13 +390,40 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // Germanic verb-final matching cross an explanatory subordinate clause.
   const REMIND_ROMANCE = `(?:me ${ROMANCE_MODAL} |${ROMANCE_MODAL} (?:(?:me|nous) |m['’] ?|(?=(?:recordarme|avisarme)(?![\\p{L}]))))`;
   const GERMANIC = "(?:kannst du|k[öo]nntest du|k[öo]nnen sie|k[öo]nnten sie|w[üu]rdest du|kun je|kan je|kunt u|wil je|zou je)(?: (?!(?:nicht|niet|kein\\p{L}*|geen|nie|nooit|dich|sich|je|zich|erkl[äa]ren|uitleggen|wie|hoe)(?![\\p{L}]))[^\\s.!?;]+){0,10}? ";
-  const request = (verbs, romance, germanic, remind = false) => new RegExp(`(?:^|[.!?;,]\\s+)[¿¡]?(?:(?:please|por favor|por gentileza|s['’]il (?:te|vous) pla[îi]t|bitte|alsjeblieft)[, ]+)?(?:(?:(?:can|could|would|will) you(?: please)? |i (?:want|would like) you to |(?:puedes|podr[ií]as|pode|voc[êe] pode|peux-tu|pouvez-vous|kannst du|k[öo]nntest du|k[öo]nnen sie|kun je|kan je|wil je) )?(?:${verbs})|${remind ? REMIND_ROMANCE : ROMANCE}(?:${romance})|${remind ? '(?=[^.!?;]*\\b(?:mich|mir|me|mij)\\b)' : ''}${GERMANIC}(?:${germanic}))(?![\\p{L}\\p{N}])`, 'iu');
-  const CREATE_REQUEST = request("(?:don'?t|do not) let me forget|no me dejes olvidar|n[ãa]o me deixe esquecer|ne me laisse pas oublier|lass mich [\\p{L} ]{0,30}nicht vergessen|laat me [\\p{L} ]{0,30}niet vergeten|" + 'remind me|(?:set|create|schedule) (?:me )?(?:a |an |the )?reminders?|i (?:want|need|would like) (?:a )?reminder|let me know|tell me (?:when|if)|warn me|alert me|notify me|ping me|wake me|check (?:back|again)|recu[ée]rdame|av[ií]same|(?:me )?lembre(?:-me)?|me avis\\p{L}*|avise-me|rappelle-moi|rappelez-moi|pr[ée]viens?-moi|dis-moi quand|erinnere mich|sag mir|benachrichtig\\p{L}*|herinner m(?:e|ij)|laat (?:me )?weten|waarschuw me|me recuerdas|me avisas|(?:voc[êe] )?me lembr[ae]|lembr[ae]-me|tu me rappelles|tu me pr[ée]viens|erinner(?:e)? mich',
+  const request = (verbs, romance, germanic, remind = false) => new RegExp(`(?:^|[.!?;,:]\\s+)[¿¡]?(?:(?:please|por favor|por gentileza|s['’]il (?:te|vous) pla[îi]t|bitte|alsjeblieft)[, ]+)?(?:(?:(?:can|could|would|will) you(?: please)? |i (?:want|would like) you to |(?:puedes|podr[ií]as|pode|voc[êe] pode|peux-tu|pouvez-vous|kannst du|k[öo]nntest du|k[öo]nnen sie|kun je|kan je|wil je) )?(?:${verbs})|${remind ? REMIND_ROMANCE : ROMANCE}(?:${romance})|${remind ? '(?=[^.!?;]*\\b(?:mich|mir|me|mij)\\b)' : ''}${GERMANIC}(?:${germanic}))(?![\\p{L}\\p{N}])`, 'iu');
+  // The ways each language asks for a reminder, a notice, a watch or a cancel, one set the router (ai/ask.js TOPICS3 remind
+  // and watch) and this check share: whatever the router sends to these tools as a request passes as asked.
+  const PHRASES = {
+    remind: {
+      en: ["(?:don'?t|do not) let me forget", 'remind me', '(?:set|create|schedule|add|make) (?:me )?(?:a |an |the )?reminders?', 'i (?:want|need|would like) (?:a )?reminder', 'ping me', 'wake me', 'check (?:back|again)'],
+      es: ['no me dejes olvidar', 'recu[ée]rdame', 'me recuerdas', 'pon(?:me)? (?:un )?recordatorio', 'cr[ée]a(?:me)? un recordatorio'],
+      'pt-BR': ['n[ãa]o me deixe esquecer', '(?:me )?lembre(?:-me)?', '(?:voc[êe] )?me lembr[ae]', 'lembr[ae]-me', 'cri[ae](?:-me)? um lembrete', 'coloque um lembrete', 'p[õo]e um lembrete'],
+      fr: ['ne me laisse pas oublier', 'rappelle-moi', 'rappelez-moi', 'tu me rappelles', 'programme(?:z)? un rappel', 'mets(?:-moi)? un rappel', 'mettez un rappel', 'cr[ée]e(?:z)? un rappel'],
+      de: ['lass mich [\\p{L} ]{0,30}nicht vergessen', 'erinner(?:e)? mich', 'stell(?:e)? (?:mir )?eine erinnerung', 'erstell(?:e)? (?:mir )?eine erinnerung'],
+      nl: ['laat me [\\p{L} ]{0,30}niet vergeten', 'herinner m(?:e|ij)', 'zet (?:een )?herinnering', 'maak (?:een )?herinnering'],
+    },
+    notify: {
+      en: ['let me know', 'tell me (?:when|if)', 'warn me', 'alert me', 'notify me'],
+      es: ['av[ií]same', 'me avisas', 'dime cu[aá]ndo'],
+      'pt-BR': ['me avis\\p{L}*', 'avise-me', 'me diga quando'],
+      fr: ['pr[ée]viens?-moi', 'tu me pr[ée]viens', 'dis-moi quand'],
+      de: ['sag mir(?:,? wenn| bescheid)', 'gib mir bescheid', 'benachrichtig\\p{L}*'],
+      nl: ['laat (?:me )?weten', 'waarschuw me'],
+    },
+    watch: {
+      en: ['watch', 'monitor', '(?:set up|create) (?:a )?(?:watch|monitor)', 'keep an eye'],
+      es: ['vigila\\p{L}*', 'monitore\\p{L}*'], 'pt-BR': ['monitore\\p{L}*', 'vigie'], fr: ['surveill\\p{L}*'], de: ['[üu]berwach\\p{L}*', 'beobacht\\p{L}*'], nl: ['houd in de gaten'],
+    },
+    cancel: {
+      en: ['cancel', 'stop (?:watching|reminding)', 'delete (?:my|the|that) (?:reminder|watch)'], es: ['cancela\\p{L}*', 'borra (?:el|mi) recordatorio'], 'pt-BR': ['cancel[ae]\\p{L}*', 'apague (?:o|meu) lembrete'],
+      fr: ['annul\\p{L}*', 'supprime(?:z)? (?:le|mon) rappel'], de: ['storn\\p{L}*', 'abbrech\\p{L}*', 'l[öo]sch\\p{L}*'], nl: ['annul\\p{L}*', 'verwijder (?:de|mijn) herinnering'],
+    },
+  };
+  const every = (...kinds) => kinds.flatMap((k) => Object.values(PHRASES[k]).flat()).join('|');
+  const CREATE_REQUEST = request(every('remind', 'notify'),
     'recordar(?:me)?|avisar(?:me)?|lembrar|avisar|rappeler|pr[ée]venir|dire quand', 'erinnern|benachrichtigen|bescheid (?:sagen|geben)|herinneren|laten weten|waarschuwen', true);
-  const MONITOR_REQUEST = request('watch|monitor|(?:set up|create) (?:a )?(?:watch|monitor)|keep an eye|vigila\\p{L}*|monitore\\p{L}*|surveill\\p{L}*|[üu]berwach\\p{L}*|beobacht\\p{L}*|houd in de gaten',
-    'vigilar|monitorear|monitorar|vigiar|surveiller', '[üu]berwachen|beobachten|in de gaten houden');
-  const CANCEL_REQUEST = request('cancel|stop (?:watching|reminding)|cancela\\p{L}*|annul\\p{L}*|storn\\p{L}*|abbrech\\p{L}*|l[öo]sch\\p{L}*',
-    'cancelar|annuler', 'stornieren|abbrechen|l[öo]schen|annuleren');
+  const MONITOR_REQUEST = request(every('watch'), 'vigilar|monitorear|monitorar|vigiar|surveiller', '[üu]berwachen|beobachten|in de gaten houden');
+  const CANCEL_REQUEST = request(every('cancel'), 'cancelar|annuler', 'stornieren|abbrechen|l[öo]schen|annuleren');
   // The values under one key in the results of one tool's steps.
   const under = (inp, name, keys) => {
     const out = [];
@@ -498,6 +525,6 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // rate: Ask Glaze (ai/ask.js) runs a question's steps as runs of their own, at most seven (six calls, then the answer): six
   // questions a minute in a tab, where the broker's default would stop the first question's seventh run.
   const task = T.add(T.define({ id: 'agent.tools', version: 1, input, build, output: OUTPUT, check, limits: { ms: 60000 }, rate: { perMinute: 6 * (LIMIT.steps + 1) } }));
-  return { task, LIMIT, SPECS, NAMES, OWN, AGENTS, AHEAD, HELP, rich, gradedWork, fold, LATER, moment, SYSTEM, OUTPUT, ANSWER, constraint, instructions, line, py, shown, native, fromNative, readable, layout, fromRequest, answerParts, why };
+  return { task, LIMIT, SPECS, NAMES, OWN, PHRASES, AGENTS, AHEAD, HELP, rich, gradedWork, fold, LATER, moment, SYSTEM, OUTPUT, ANSWER, constraint, instructions, line, py, shown, native, fromNative, readable, layout, fromRequest, answerParts, why };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_TASK_AGENT_TOOLS; else GZ_AI_TASK_AGENT_TOOLS;

@@ -150,6 +150,9 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     return compiled.get(key);
   };
   const lists = (table, locale) => [...table.en, ...(locale !== 'en' && Array.isArray(table[locale]) ? table[locale] : [])];
+  // remind and watch also take every request phrase agent.tools' check takes as asked (agent-tools.js PHRASES), so the two agree.
+  const SHARED = { remind: ['remind', 'cancel'], watch: ['notify', 'watch'] };
+  const own3 = (k) => (SHARED[k] ? Object.fromEntries(Object.keys(TOPICS3[k]).map((l) => [l, [...TOPICS3[k][l], ...SHARED[k].flatMap((p) => AT().PHRASES[p][l] || [])]])) : TOPICS3[k]);
   const subjectOf = (text) => SUBJECTS.find(([, symbols, list]) => symbols?.test(text) || words(list).test(text))?.[0] || 'other';
   // Rime's own tools (agent-tools.js OWN) for a model trained on them, tools level 3 (env.level(): a local model's models.json
   // `tools`, round 3 on; every other provider): computing, opening a place, reminders and watches. At level 1 (Rime r5) the
@@ -231,7 +234,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     const has = (table) => words(lists(table, locale)).test(q);
     const on = Object.keys(TOPICS).filter((k) => has(TOPICS[k]));
     const school = CODE.test(q) || SCHOOL_WORDS.test(q) || /\b(?:my|our)\b/iu.test(q);
-    const own = level >= 3 ? Object.keys(TOPICS3).filter((k) => has(TOPICS3[k])
+    const own = level >= 3 ? Object.keys(TOPICS3).filter((k) => has(own3(k))
       && (!READS.includes(k) || school || !DEFINITION.test(q))
       && (k !== 'content' || school || subjectOf(q) !== 'code')) : [];
     // A compute question's own computing verb is no help request, unless it would work out graded work.
