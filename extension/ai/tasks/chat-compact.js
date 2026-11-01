@@ -80,7 +80,7 @@ var GZ_AI_TASK_CHAT_COMPACT = globalThis.GZ_AI_TASK_CHAT_COMPACT || (() => {
     let keep = lines;
     while (keep.length > LIMIT.lines || keep.join('\n').length > LIMIT.summary) keep = keep.slice(1);
     const text = keep.join('\n');
-    return { text, quotes: [...new Set(quotes)].filter((q) => q && X().source(text, { min: 2 }).has(q)).slice(-LIMIT.quotes) };
+    return { text, quotes: [...new Set(quotes.map((q) => q.slice(0, LIMIT.quote)))].filter((q) => q && X().source(text, { min: 2 }).has(q)).slice(-LIMIT.quotes) };
   };
 
   const task = T.add(T.define({ id: 'chat.compact', version: 1, input, build, output: OUTPUT, check, limits: { ms: 30000 } }));
