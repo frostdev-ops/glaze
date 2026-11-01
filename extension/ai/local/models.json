@@ -32,7 +32,8 @@
       "license": "lfm1.0",
       "quant": "Q4_K_M",
       "tier": 1,
-      "tools": 3
+      "tools": 3,
+      "version": "r5"
     },
     {
       "id": "rime-1.7b-q6_k",
@@ -71,7 +72,8 @@
       "license": "lfm1.0",
       "quant": "Q6_K",
       "tier": 3,
-      "tools": 3
+      "tools": 3,
+      "version": "r5"
     },
     {
       "id": "rime-1.7b-q8_0",
@@ -116,7 +118,8 @@
       "license": "lfm1.0",
       "quant": "Q8_0",
       "tier": 4,
-      "tools": 3
+      "tools": 3,
+      "version": "r5"
     },
     {
       "id": "lfm3-vl-2b-q4_k_m",

@@ -7,7 +7,6 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const crypto = require('node:crypto');
 const L = require('../../tools/vendor/model-list.js');
 const U = require('../../extension/ai/local/updates.js');
 const { entry, bytes } = require('../helpers/model-store-fakes.cjs');
@@ -55,5 +54,4 @@ test('the serial defaults to one above the live list', () => {
 test('the shipped models.json says each Rime size\'s version', () => {
   const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '../../extension/ai/local/models.json'), 'utf8'));
   for (const m of doc.models.filter((x) => !x.role && !x.stock)) assert.equal(m.version, 'r5', m.id);
-  assert.ok(crypto.createHash('sha256'));
 });
