@@ -281,6 +281,17 @@ In Ask Rime (`ai/ask.js`, `ai/page/ask.js`):
   the question before it with fresh calls; the system text asks for glaze-plans' MARKDOWN.md answer format, which the
   panel renders. Reminder, notice, watch and cancel phrasings are one table (agent-tools.js `PHRASES`) the router and the
   check share. Level 1 is byte-identical.
+- **The context window** (ai/ask.js; the owner, 2026-11-01): before each request Ask Rime asks the broker to `count` it
+  (Glaze's own model: its tokenizer in the engine host, exactly; a cloud model: text.js's estimate) against the window the
+  provider runs with (the configured context, never an assumed 4,096), and posts `{ id, type: 'context', task, used,
+  window, reserve, exact }` to the panel (reserve: the answer's max tokens). At level 3 the panel's turns before the last
+  two fold into a summary once the next request would pass 70% of the window (or more than three turns are open):
+  `chat.compact` (ai/tasks/chat-compact.js, at most six bullets, every bullet resting on a quoted value the turns hold) runs
+  between turns with the chat's model; if it fails its check, or the next question comes first, its deterministic
+  fallback (the older questions and the items their answers named) stands. agent.tools reads it as a `summary` block
+  before `earlier`; study.help (cloud only) as the conversation's first turn. Within one run, results the model has used
+  become digests (titles, ids, dates) when the next request would overflow; the latest never does. A question with no
+  history (New chat) clears it all. Compaction scales with the window. Level 1 sends nothing new.
 - **Routing at level 3** (`TOPICS3`, six languages): announcements, content, syllabus and discussions (their reads), compute (`run_js`; a computing verb in the student's own grade math
   is no help request, but graded work still goes to study.help), navigate (`places_list`, `place_open`, `page_highlight`),
   remind (`wake_create`, `wakes_list`, `wake_cancel`) and watch (`monitor_create`, `wakes_list`, `todo_list`,
