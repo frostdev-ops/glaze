@@ -425,7 +425,7 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     const body = typeof j.message === 'string' ? j.message : '', prompt = text(body);
     const mine = flat.filter((e) => String(e.user_id) === go.uid).map((e) => ({ at: Date.parse(e.created_at) || null, reply: e.parent === true || e.parent_id != null, text: text(unquoted(typeof e.message === 'string' ? e.message : '')).slice(0, 2000) }));
     return hide({ ok: true, title: String(j.title || '').trim().slice(0, 300), text: prompt.slice(0, 20000), files: (Array.isArray(j.attachments) ? j.attachments : []).map((f) => ({ name: String(f?.display_name || f?.filename || '').slice(0, 200) })).filter((f) => f.name),
-      gradable: j.assignment_id != null || !!j.assignment, at: Date.parse(j.posted_at) || null, mine, others: rows ? flat.length - mine.length : null, complete: !!rows && !rows.more,
+      gradable: j.assignment_id != null || !!j.assignment, at: Date.parse(j.posted_at) || null, mine, others: rows ? flat.length - mine.length : null, complete: !!rows && !rows.more && !rows.some((e) => e?.has_more_replies === true),
       ...(prompt.length > 20000 && { truncated: true }) });
   };
   const OPS = { todo, insights, assignment, mark, announcement, search, modules, topics, document: doc1, syllabus, discussion, topic };
