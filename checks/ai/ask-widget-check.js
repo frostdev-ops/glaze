@@ -128,6 +128,14 @@ const settingsFor = (look, motion = 'normal') => {
   return G.GZ_SANITIZE({ preset, colors: { ...G.GZ_PRESETS.find(([n]) => n === preset)[1] }, bg: { kind: bg }, motion: { level: motion, followSystem: false }, footer: false,
     navbar: { ...G.GZ_DEFAULTS.navbar, on: false }, enhance: { ...G.GZ_DEFAULTS.enhance, notes: true, widgets: true, dashboard: true, todo: false, pet: false, sidebar: false, palette: true } });
 };
+// The planner's two items due this week, in Canvas's shape, for the to-do list a run reads.
+const DAY = 864e5, NOW = Date.now();
+const planner = (id, title, days) => ({ plannable_type: 'assignment', plannable_id: id, course_id: 25, context_name: 'BIO 1100', plannable_date: new Date(NOW + days * DAY).toISOString(),
+  html_url: `${CANVAS}/courses/25/assignments/${id}`, plannable: { title }, submissions: { submitted: false, excused: false, graded: false, late: false, missing: false, redo_request: false }, planner_override: null });
+const PLANNER = [planner(1, 'Lab report', 2), planner(2, 'Reading response', 5)];
+// Better To Do's copy of the student's to-dos, an hour old, as checks/ai/ask-check.js keeps it: the to-do list reads it fresh.
+const STALE = { todoCache: { key: `todo:${CANVAS}/${CUID}`, at: NOW - 36e5, start: new Date(NOW - 8 * DAY).toISOString(), end: new Date(NOW + 8 * DAY).toISOString(), teach: true, progress: true,
+  items: [{ type: 'assignment', id: '9', cid: '25', course: 'BIO 1100', title: 'Old', at: NOW }], grading: [], sums: {} } };
 const AI = { on: true, model: { use: 'custom-1', model: 'stub' }, features: { ask: true } };
 // Layouts: the tile on a board (Canvas's cdash, Ultra's dash) or floating (Canvas's tiles, Ultra's pages), the rest off.
 const MORE = { ask: { size: 'l' } };
@@ -163,6 +171,7 @@ const lay = (where, size) => {
       const req = r.request(), u = new URL(req.url());
       if (u.protocol === 'chrome-extension:') return r.continue();
       const json = (b) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(b) });
+      if (u.origin === CANVAS && req.method() === 'GET' && u.pathname === '/api/v1/planner/items') return json(PLANNER);
       if (u.origin === CANVAS && req.method() === 'GET') return u.pathname.startsWith('/api/v1/') ? json(canvasApi(u)) : r.fulfill({ contentType: 'text/html', body: CANVAS_DASH });
       if (u.origin === O && req.method() === 'GET') {
         if (u.pathname.startsWith('/learn/api/')) return json(api(u));
@@ -187,7 +196,7 @@ const lay = (where, size) => {
         await chrome.storage.sync.clear(); await chrome.storage.sync.set(s);
         const keep = Object.keys(await chrome.storage.local.get(null)).filter((k) => !['ultra'].includes(k));
         await chrome.storage.local.remove(keep); await chrome.storage.local.set(l);
-      }, [settingsFor(look, motion), { ultra: [O], ai: AI, widgetLayout: lay(where, size) }]);
+      }, [settingsFor(look, motion), { ultra: [O], ai: AI, widgetLayout: lay(where, size), ...STALE }]);
       await env.ultraReady(worker);
       await page.setViewportSize({ width: 1280, height: 900 });
       await page.goto(url);
@@ -275,6 +284,28 @@ const lay = (where, size) => {
       const file = path.join(out, 'ask-widget-canvas-board-l-fold-light-1280.png');
       await page.screenshot({ path: file }); shots.push(file);
       return { said, inside: inside.slice(0, 80) };
+    });
+
+    await check('Canvas Dashboard: a failure opens to its rule, steps and raw answer; Glaze\'s own list answer reads as any', async () => {
+      await scene({ where: 'cdash', size: 'l', url: `${CANVAS}/` });
+      const tile = page.locator('section.gz-w[data-tile="ask"]');
+      const bad = { call: null, answer: { text: 'You have 42 things due.', quotes: [] } };
+      await script({ 'agent.tools': [bad] });
+      await tile.locator('.gz-ask-input').first().fill('What is due this week?');
+      await tile.locator('.gz-ask-input').first().press('Enter');
+      const why = tile.locator('.gz-ask-err details.gz-ask-why');
+      await why.waitFor({ timeout: 20000 });
+      await why.locator('summary').click();
+      const detail = { code: await why.locator('summary').textContent(), raw: await why.locator('pre').textContent().catch(() => '') };
+      assert.match(detail.code, /^check: \w+/);
+      await snap('canvas-board-l-error-detail-light', [1280, 320]);
+      await script({ 'agent.tools': [{ call: { name: 'todo_list', arguments: {} }, answer: null }, bad, bad] });
+      const text = await askIn(tile, 'What is due this week?');
+      const built = await tile.locator('.gz-ask-a').last().evaluate((li) => ({ built: li.dataset.built !== undefined, items: [...li.querySelectorAll('.gz-ask-md li')].map((x) => x.textContent) }));
+      assert.ok(built.built, 'Glaze built it');
+      assert.ok(built.items.length >= 1, 'a list, one item a line');
+      await snap('canvas-board-l-built-answer-light', [1280, 320]);
+      return { detail, text: text.slice(0, 80), built };
     });
 
     await check('⌘K\'s Ask Rime focuses the tile where it is shown, no dialog; folded, the dialog opens', async () => {
