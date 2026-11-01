@@ -11,7 +11,8 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
   let retired = false;
   let identity = null, notify = () => {}, uid = '', data = {}, prefs = {}, cache = null, L = null, gs = null, gen = 0;
   // Ultra: known memberships, whether the whole list is in, and the latest request for this identity.
-  let members = null, membersComplete = false, membership = null;
+  let members = null, membersComplete = false, membership = null, membershipRetry = null;
+  const stopMembershipRetry = () => { if (membershipRetry !== null) clearTimeout(membershipRetry); membershipRetry = null; };
   const get = (area, keys) => new Promise((resolve) => { try { chrome.storage[area].get(keys, (r) => resolve(chrome.runtime.lastError ? null : r)); } catch { resolve(null); } });
   const live = () => { try { return !retired && !!chrome.runtime.id && ctx.on(); } catch { return false; } };
   const make = (tag, props = {}, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children.filter(Boolean)); return e; };
@@ -58,7 +59,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     render();
     retired ||= retire;
   };
-  document.addEventListener?.('glaze:ultra-refresh', (e) => { if (!ultra) return; if (e.detail?.identity) { members = membership = null; membersComplete = false; } clearGrades(!!e.detail?.retire); });
+  document.addEventListener?.('glaze:ultra-refresh', (e) => { if (!ultra) return; if (e.detail?.identity || e.detail?.retire) { stopMembershipRetry(); members = membership = null; membersComplete = false; } clearGrades(!!e.detail?.retire); });
   // Whether a board's course card is this student's: the layout is the device's, so another student who signs in here has
   // their cards in it too. own: true or false once Ultra's list of this student's courses is in (or Ultra's own page shows
   // its card), else undefined. shows:
@@ -154,8 +155,10 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
         code: text(el.querySelector('.course-id')), term: text(heading) || cards.get(id)?.term || '' });
     }
     const peek = ctx.canvasPeek();
-    // Asked here when nothing on the page has asked yet (Ultra's list is kept a while, so this is rarely a request).
-    const request = membership = peek.courses || ctx.myCourses?.();
+    // The reader owns expiry and failure gates; a peek can retain a failed promise past its retry time.
+    const request = typeof ctx.myCourses === 'function' ? ctx.myCourses() : peek.courses;
+    if (request !== membership) stopMembershipRetry();
+    membership = request;
     watch(request, (rows) => {
       if (request !== membership) return;
       for (const r of rows || []) if (/^_\d+_\d+$/.test(r.courseId)) {
@@ -166,6 +169,13 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       if (Array.isArray(rows)) {
         membersComplete = rows.complete !== false;
         members = new Set([...(membersComplete ? [] : members || []), ...rows.map((r) => r?.courseId).filter((id) => /^_\d+_\d+$/.test(id))]);
+        stopMembershipRetry();
+        if (!membersComplete) membershipRetry = setTimeout(() => {
+          membershipRetry = null;
+          if (!live() || request !== membership) return;
+          watched.delete(request);
+          sync();
+        }, 61000);
       }
       notify(); render();
     });

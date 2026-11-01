@@ -37,7 +37,7 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
   // COURSE_TOTAL of all, so another student's on this device, or another school's, stay for them.
   const COURSE_MAX = 48, COURSE_TOTAL = 384;
   // filled's per-student marks: '<board> <site>/<student id>', the newest FILLED_MARKS.
-  const FILLED_MARK = /^(cdash|dash) (https:\/\/[a-z0-9.-]+(:\d+)?|http:\/\/localhost(:\d+)?)\/(_\d+_\d+|\d{1,20})$/, FILLED_MARKS = 16;
+  const FILLED_MARK = /^(cdash|dash) (https:\/\/[a-z0-9.-]+(:\d+)?|http:\/\/localhost(:\d+)?)\/(_\d+_\d+|\d{1,20})$/, FILLED_MARKS = 64;
   // A course card's tile: course:<site>/<course id>, Ultra's _1_1 ids or Canvas's numbers (canvas). Sites are https, but
   // for a development build's local Canvas (http://localhost, which a store build never runs on).
   const course = (key) => {
@@ -106,11 +106,11 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     const start = { cdash: tiles.map((x) => ({ id: x.id, on: x.on && !x.float, size: x.size })), courses: tiles.map((x) => ({ id: x.id, on: x.on, size: 's' })), dash: TILES.map((id) => ({ id, on: starts.includes(id) || id === 'todo' })) };
     const boards = Object.fromEntries(BOARDS.map((b) => {
       const list = Array.isArray(raw?.boards?.[b]) ? raw.boards[b] : start[b];
-      const courses = [];
+      const courses = [], counts = new Map();
       for (const x of list) {
         const c = course(x?.id);
-        if (!c || c.canvas !== (b === 'cdash') || courses.includes(x.id) || courses.length >= COURSE_TOTAL) continue;
-        courses.push(x.id);
+        if (!c || c.canvas !== (b === 'cdash') || courses.includes(x.id) || courses.length >= COURSE_TOTAL || (c.canvas && (counts.get(c.origin) || 0) >= COURSE_MAX)) continue;
+        courses.push(x.id); counts.set(c.origin, (counts.get(c.origin) || 0) + 1);
       }
       const empty = Array.isArray(raw?.boards?.[b]) && !raw.boards[b].length;
       return [b, each(list, [...ids, ...courses], (x) => btile(x, more, empty ? [] : starts))];
@@ -381,15 +381,21 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     // account: the student it is for ('<site>/<id>'). A board already filled for another student on this device gets this
     // one's first cards once, beside the other's, never over a card already on it.
     const mark = BOARDS.includes(m?.fill) && typeof m.account === 'string' ? `${m.fill} ${m.account}` : '';
-    let ops = Array.isArray(m?.ops) ? m.ops.slice(0, 64) : [];
+    const limit = ['cdash', 'dash'].includes(m?.fill) ? 128 : 64;
+    let ops = Array.isArray(m?.ops) ? m.ops.slice(0, limit) : [];
     if (BOARDS.includes(m?.fill)) {
       const marked = FILLED_MARK.test(mark);
       if (!l.starter || (marked && l.filled.includes(mark))) return l;
       if (l.filled.includes(m.fill)) {
         if (!marked) return l;
-        ops = ops.filter((o) => o?.s === m.fill && course(o.id) && !l.boards[m.fill].some((x) => x.id === o.id));
-        // Another tab may have used the last stored room after the page counted it. No cards added means no fill used.
-        if (ops.some((o) => o.set) && l.boards[m.fill].filter((x) => course(x.id)).length >= COURSE_TOTAL) return l;
+        const present = new Set(l.boards[m.fill].filter((x) => course(x.id)).map((x) => x.id));
+        ops = ops.filter((o) => o?.s === m.fill && course(o.id) && (o.remove === true ? present.has(o.id) : !present.has(o.id)));
+        const drops = new Set(ops.filter((o) => o.remove === true).map((o) => o.id));
+        const adds = new Set(ops.filter((o) => o.remove !== true && o.set).map((o) => o.id));
+        // Recount queued drops too: another tab may have removed one and used its room already. A partial fill must
+        // neither discard more cards nor consume the student's mark.
+        if (present.size - drops.size + adds.size > COURSE_TOTAL) return l;
+        ops.sort((a, b) => Number(b.remove === true) - Number(a.remove === true));
         l = { ...l, filled: [...l.filled, mark] };
       } else {
         l = { ...l, filled: [...l.filled, m.fill, ...(marked ? [mark] : [])] };
@@ -411,7 +417,8 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
         if (course(o.id).canvas ? o.s !== 'cdash' : !['courses', 'dash'].includes(o.s)) continue;
         const rows = l.boards[o.s];
         if (o.remove === true) { l = { ...l, boards: { ...l.boards, [o.s]: rows.filter((x) => x.id !== o.id) } }; continue; }
-        if (!rows.some((x) => x.id === o.id) && o.set && rows.filter((x) => course(x.id)).length < COURSE_TOTAL)
+        if (!rows.some((x) => x.id === o.id) && o.set && rows.filter((x) => course(x.id)).length < COURSE_TOTAL
+          && (!course(o.id).canvas || rows.filter((x) => course(x.id)?.origin === course(o.id).origin).length < COURSE_MAX))
           l = { ...l, boards: { ...l.boards, [o.s]: [...rows, btile({ id: o.id, ...patch }, more)] } };
       }
       if (o.set) l = bset(l, o.s, o.id, patch, more);

@@ -11,6 +11,15 @@ const OFFERED = SAFARI ? 'Chrome, Edge, Brave, Firefox and Safari, off until you
 const STORED = `- **Google Drive** (${OFFERED}):`, NETWORK = `- **Google Drive** (${OFFERED}). The requests`;
 const storedDrive = () => { const at = policy.indexOf(STORED); assert.ok(at > 0, STORED); return policy.slice(at, policy.indexOf('- **Gradescope in To Do**', at)); };
 
+test('widget privacy covers student fill marks, shared-device card limits and layout exports', () => {
+  const defaults = policy.slice(policy.indexOf('- **Fresh-install defaults**'), policy.indexOf('- **Blackboard navigation:**'));
+  const widgets = policy.slice(policy.indexOf('- **Dashboard notes and widgets**'), policy.indexOf('- **Notes**'));
+  assert.match(defaults, /`filled`[^.]*board[^.]*school address[^.]*Blackboard user id[^.]*newest 64/);
+  assert.match(widgets, /48[^.]*per student[^.]*school[^.]*board[^.]*384[^.]*per board/);
+  assert.match(widgets, /oldest cards[^.]*school[^.]*known[^.]*other students[^.]*browser/);
+  assert.match(widgets, /marks[^.]*other students' cards[^.]*this device[^.]*`widgetLayout`[^.]*Backup[^.]*Google Drive sync[^.]*rest of the layout/);
+});
+
 test('media policy bounds container cleanup and preserves the local-only legacy exception', () => {
   assert.match(policy, /removed from the file’s container/);
   assert.match(policy, /saved before 3\.3\.5[^.]*not shared/);

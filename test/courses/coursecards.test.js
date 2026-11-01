@@ -8,6 +8,15 @@ const W = require('../../extension/core/widgets.js');
 const { El } = require('../stand-in-dom.js');
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(setImmediate); };
 const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
+const clock = () => {
+  let now = 0, id = 0;
+  const pending = new Map();
+  return { pending, now: () => now,
+    setTimeout: (f, ms) => { pending.set(++id, { f, at: now + ms }); return id; },
+    clearTimeout: (id) => pending.delete(id),
+    advance: async (ms) => { now += ms; for (const [id, job] of [...pending]) if (job.at <= now) { pending.delete(id); job.f(); } await settle(); },
+  };
+};
 const page = ({ more = {}, ctxMore = {} } = {}) => {
   let writes = 0, enabled = true, color = { color: '#ffe12b', own: true }, peek = { me: null, courses: null, books: new Map() };
   const reads = [], renders = [], waiting = [], local = {}, listeners = [], events = new Map();
@@ -19,7 +28,7 @@ const page = ({ more = {}, ctxMore = {} } = {}) => {
   const settings = D.GZ_SANITIZE({ enhance: { cardTasks: true, overall: true, coursemenu: true } });
   const ctx = { site: 'ultra', on: () => enabled, t: (s) => s, locale: () => 'en', nickOf: () => '', courseList: () => ({ _101_1: { name: 'Biology', site: 'https://bb.test', slot: '3' } }), courseColors: () => ({ _101_1: color }), canvasPeek: () => peek, settings: () => settings,
     need: (file) => { assert.ok(['planner/todo.js', 'courses/page/cards.js', 'courses/page/cardtasks.js'].includes(file), `unexpected reader ${file}`); return file === 'courses/page/cardtasks.js' ? new Promise((r) => waiting.push(r)) : Promise.resolve(); }, ...ctxMore };
-  const c = { GZ_CTX: ctx, GZ_WIDGETS: W, GZ_SANITIZE: D.GZ_SANITIZE, GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_TODO: { clean: (v) => v || {}, gradescope: () => () => [] }, GZ_CARD_UI: { paint() {} }, GZ_CARD_TASKS: { render: (...args) => renders.push(args) }, document: doc, location: { origin: 'https://bb.test' }, chrome: { runtime: { id: 'x' }, storage: { local: { get: (keys, cb) => reads.push(() => cb(local)) }, sync: { get: (keys, cb) => cb({}) }, onChanged: { addListener: (f) => listeners.push(f) } } }, URL, console, ...more };
+  const c = { GZ_CTX: ctx, GZ_WIDGETS: W, GZ_SANITIZE: D.GZ_SANITIZE, GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_TODO: { clean: (v) => v || {}, gradescope: () => () => [] }, GZ_CARD_UI: { paint() {} }, GZ_CARD_TASKS: { render: (...args) => renders.push(args) }, document: doc, location: { origin: 'https://bb.test' }, chrome: { runtime: { id: 'x' }, storage: { local: { get: (keys, cb) => reads.push(() => cb(local)) }, sync: { get: (keys, cb) => cb({}) }, onChanged: { addListener: (f) => listeners.push(f) } } }, URL, console, setTimeout: () => 0, clearTimeout() {}, ...more };
   const ui = vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/courses/page/coursecards.js'), 'utf8'), c);
   ui.sync();
   const mount = (body = doc.createElement('div')) => ui.fill(body, { id: 'course:https://bb.test/_101_1', term: () => '' });
@@ -35,6 +44,57 @@ test('a partial membership list confirms the courses it contains without rejecti
   assert.equal(p.ui.shows('course:https://bb.test/_101_1'), true);
   assert.equal(p.ui.own('course:https://bb.test/_999_1'), undefined, 'an omitted course remains unknown');
   assert.equal(p.ui.shows('course:https://bb.test/_999_1'), false);
+});
+
+test('membership sync asks the retry-aware reader before a stale peek promise', async () => {
+  const time = clock(), failed = []; failed.complete = false;
+  let reads = 0;
+  const p = page({ more: time, ctxMore: {
+    canvasPeek: () => ({ me: null, courses: Promise.resolve(failed), books: new Map() }),
+    myCourses: () => { reads++; return Promise.resolve([{ courseId: '_202_1', course: { name: 'History' } }]); },
+  } });
+  await settle();
+  assert.equal(reads, 1);
+  assert.equal(p.ui.complete(), true);
+  assert.equal(p.ui.own('course:https://bb.test/_202_1'), true);
+  assert.equal(time.pending.size, 0, 'a complete list needs no retry');
+});
+
+test('a failed or interrupted membership read retries after its failure gate without another page pass', async () => {
+  for (const partial of [false, true]) {
+    const time = clock(), failed = partial ? [{ courseId: '_101_1' }] : []; failed.complete = false;
+    const kept = Promise.resolve(failed), recovered = Promise.resolve([{ courseId: '_101_1' }, { courseId: '_202_1' }]);
+    let reads = 0;
+    const p = page({ more: time, ctxMore: { myCourses: () => { reads++; return time.now() < 60000 ? kept : recovered; } } });
+    await settle();
+    assert.equal(p.ui.complete(), false);
+    assert.equal(time.pending.size, 1, 'one retry for this request');
+    await time.advance(60000);
+    assert.equal(reads, 1, 'the failure gate has time to expire');
+    await time.advance(1000);
+    assert.equal(reads, 2);
+    assert.equal(p.ui.complete(), true);
+    assert.equal(p.ui.own('course:https://bb.test/_202_1'), true);
+    await time.advance(61000);
+    assert.equal(reads, 2, 'success ends the retry');
+  }
+});
+
+test('membership retries cannot revive a replaced request, a retired identity or a disabled page', async () => {
+  for (const action of ['replace', 'identity', 'retire', 'disabled']) {
+    const time = clock(), failed = []; failed.complete = false;
+    let request = Promise.resolve(failed), reads = 0;
+    const p = page({ more: time, ctxMore: { myCourses: () => { reads++; return request; } } });
+    await settle();
+    assert.equal(time.pending.size, 1);
+    if (action === 'replace') { request = deferred().promise; p.ui.sync(); }
+    else if (action === 'disabled') p.setEnabled(false);
+    else p.refresh({ [action]: true });
+    const before = reads;
+    await time.advance(61000);
+    assert.equal(reads, before, action);
+    assert.equal(time.pending.size, 0, 'no orphaned retry remains');
+  }
 });
 
 test("a membership answer from before an identity refresh cannot replace the current student's courses", async () => {

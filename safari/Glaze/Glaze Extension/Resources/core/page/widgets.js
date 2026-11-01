@@ -73,6 +73,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // The boards: which one this page is ('courses', 'dash', 'cdash' or null), the one drawn, and the Courses page's layer the
   // tiles float in (the Dashboard's tiles are in its own room, the grid).
   let board = null, drawn = null, room = null;
+  // Keep the first course slots for this visit. Late metadata cannot insert a saved card or close a hidden card's gap.
+  let courseSlots = null;
   const tiles = new Map(); // id -> { el, body, wake?, stop?, update?, context? }
   // The sidebar (navigation/page/sidebar.js) while it is on this page: then each widget has one destination for this account
   // (navigation/sidebar.js resolve), the dock, this page's board, floating or nowhere, and the layout keeps every spot it had.
@@ -140,7 +142,14 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   let flying = 0, layoutRead = 0, dashboardEdited = false;
   const declared = () => Object.fromEntries(Object.entries(MORE).map(([k, v]) => [k, { size: v.size }]));
   let rawLay; // the layout as stored, read again when the tiles declared change
-  const adopt = (raw) => { rawLay = raw; const next = W.layout(raw, MORE); if (JSON.stringify(next) !== JSON.stringify(lay)) { lay = next; draw(); } };
+  const adopt = (raw) => {
+    rawLay = raw;
+    const next = W.layout(raw, MORE);
+    if (JSON.stringify(next) !== JSON.stringify(lay)) {
+      if (board && JSON.stringify(next.boards[board]) !== JSON.stringify(lay?.boards[board])) courseSlots = null;
+      lay = next; draw();
+    }
+  };
   const change = (m) => {
     // An explicit Dashboard edit opts this student out too, even before their membership/profile reads finish.
     if (ultra && lay?.starter && !m.fill && m.ops?.some((o) => o?.s === 'dash')) {
@@ -154,6 +163,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       if (me) mark(); else who().then(mark, () => {});
     }
     layoutRead++;
+    if (m.ops?.some((o) => o?.s === board)) courseSlots = null;
     lay = W.apply(lay, m, MORE);
     draw();
     flying++;
@@ -1170,6 +1180,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // screen reader as it starts and ends; Esc ends it too.
   const setEditing = (v) => {
     if (!v) { gesture?.cancel(); globalThis.GZ_COURSE_CARDS?.picker.close(false); }
+    if (v) courseSlots = null; // an explicit edit can include cards confirmed since the first paint
     editing = v;
     const edit = bar?.querySelector('.gz-dash-edit');
     if (edit) { if (v) edit.style.minWidth = `${edit.getBoundingClientRect().width}px`; edit.setAttribute('aria-pressed', String(editing)); if (board) edit.textContent = t(editing ? 'Done' : 'Edit layout'); }
@@ -1179,8 +1190,16 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     draw();
   };
   const escape = (e) => { if (e.key === 'Escape' && editing && board) { setEditing(false); bar?.querySelector('.gz-dash-edit')?.focus(); } };
-  let loadingCourses = null, nativeShown = false, courseSpace = null;
-  const coursesChanged = () => { draw(); fillCourses(); };
+  let loadingCourses = null, nativeShown = false, courseSpace = null, coursesReady = false, coursesQueued = false;
+  const coursesChanged = () => {
+    if (coursesReady) { draw(); fillCourses(); return; }
+    // Sync primes cached records and attaches membership watchers in the same turn. Include already-resolved answers
+    // before choosing this visit's first slots, without waiting for any pending request.
+    if (!coursesQueued) {
+      coursesQueued = true;
+      Promise.resolve().then(() => { coursesQueued = false; coursesReady = true; draw(); fillCourses(); });
+    }
+  };
   const loadCourses = () => {
     if (globalThis.GZ_COURSE_CARDS || loadingCourses) return;
     loadingCourses = ctx.need('courses/page/coursecards.js', () => globalThis.GZ_COURSE_CARDS).then(() => {
@@ -1193,6 +1212,14 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // Ultra: once per student on this device. A Dashboard filled for another student, with only their cards on it, gets
   // this student's first cards once their course list is in (marked '<board> <site>/<id>', core/widgets.js apply).
   let askedWho = false;
+  // Board order is age. Only a complete membership answer can identify another student's cards at this school.
+  const foreignCourses = (rows) => ultra ? rows.filter((x) => W.course(x.id)?.origin === location.origin && globalThis.GZ_COURSE_CARDS?.own(x.id) === false) : [];
+  const courseDrops = (b, keys) => {
+    const rows = lay.boards[b], present = new Set(rows.map((x) => x.id)), wanted = new Set(keys);
+    const added = [...wanted].filter((id) => !present.has(id)).length;
+    const short = Math.max(0, rows.filter((x) => W.course(x.id)).length + added - W.COURSE_TOTAL);
+    return foreignCourses(rows).filter((x) => !wanted.has(x.id)).slice(0, short).map((x) => ({ s: b, id: x.id, remove: true }));
+  };
   const fillCourses = () => {
     if (!['cdash', 'dash'].includes(board) || !on || !lay?.starter || editing || flying) return;
     const first = !lay.filled.includes(board), C = globalThis.GZ_COURSE_CARDS;
@@ -1201,8 +1228,11 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     let keep = ultra && dashboardEdited;
     if (!first) {
       const here = lay.boards[board].filter((x) => W.course(x.id)?.origin === location.origin);
-      keep ||= here.some((x) => C.own(x.id) === true);
-      if (!keep && (!here.length || here.some((x) => C.own(x.id) !== false))) return;
+      // Only a legacy unmarked board needs inference. A shared course on a board marked for someone else is not
+      // evidence that this student already had their first fill.
+      const legacy = !lay.filled.some((f) => f.startsWith(`${board} `));
+      keep ||= legacy && here.some((x) => C.own(x.id) === true);
+      if (legacy && !keep && (!here.length || here.some((x) => C.own(x.id) !== false))) return;
     }
     if (ultra && !me) { if (!askedWho) { askedWho = true; who().then(() => { askedWho = false; if (on) fillCourses(); }, () => { askedWho = false; }); } return; }
     const account = ultra && me ? `${location.origin}/${me.uid}` : undefined;
@@ -1210,8 +1240,10 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     if (keep) { change({ fill: board, account, ops: [] }); return; }
     if (ultra && !C.complete()) return;
     const cards = (ultra ? C.list().filter((c) => C.own(c.key) === true) : C.shown());
-    const room = Math.min(W.COURSE_MAX, W.COURSE_TOTAL - lay.boards[board].filter((x) => W.course(x.id)).length);
-    if (cards.length && room > 0) change({ fill: board, account, ops: cards.slice(0, room).map((c) => ({ s: board, id: c.key, set: { on: true, size: 's', term: c.term || '' } })) });
+    const rows = lay.boards[board], present = new Set(rows.map((x) => x.id));
+    let room = Math.min(W.COURSE_MAX, W.COURSE_TOTAL - rows.filter((x) => W.course(x.id)).length + foreignCourses(rows).length);
+    const selected = ultra ? cards.slice(0, W.COURSE_MAX).filter((c) => present.has(c.key) || room-- > 0) : cards.slice(0, room);
+    if (selected.length) change({ fill: board, account, ops: [...courseDrops(board, selected.map((c) => c.key)), ...selected.map((c) => ({ s: board, id: c.key, set: { on: true, size: 's', term: c.term || '' } }))] });
   };
   // The board's Course cards button: its dialog (courses/page/coursecards.js) ticks courses on and off this board, each
   // tick or Select all one change, with the cards new to it placed in the board's free room (arrange). It asks the
@@ -1223,7 +1255,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const rows = () => (board === b && lay.boards[b]) || [];
     // Another student's cards (hidden here) take none of this student's room; all of them count against what is stored.
     const here = (x) => W.course(x.id)?.origin === location.origin && C.own(x.id) !== false;
-    const room = () => Math.max(0, Math.min(W.COURSE_MAX - rows().filter(here).length, W.COURSE_TOTAL - rows().filter((x) => W.course(x.id)).length));
+    const room = () => Math.max(0, Math.min(W.COURSE_MAX - rows().filter(here).length, W.COURSE_TOTAL - rows().filter((x) => W.course(x.id)).length + foreignCourses(rows()).length));
     const open = button(t('+ Course cards'), () => C.picker.open({
       board: b,
       has: (key) => rows().some((x) => x.id === key),
@@ -1234,7 +1266,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         if (board !== b) return;
         if (on) nativeShown = false; // the cards show, not Ultra's list
         const terms = new Map(C.list().map((c) => [c.key, c.term]));
-        change({ ops: keys.map((id) => (on ? { s: b, id, set: { on: true, size: 's', term: terms.get(id) || '' } } : { s: b, id, remove: true })) });
+        const ops = [...(on ? courseDrops(b, keys) : []), ...keys.map((id) => (on ? { s: b, id, set: { on: true, size: 's', term: terms.get(id) || '' } } : { s: b, id, remove: true }))];
+        for (let i = 0; i < ops.length; i += 64) change({ ops: ops.slice(i, i + 64) });
       },
       back: () => grid?.querySelector('.gz-course-open'),
     }), { className: 'gz-w-small gz-course-open' });
@@ -1249,7 +1282,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     nativeShown = false;
   };
   const nativeCourses = (want, away) => {
-    const selected = (board === 'courses' || board === 'cdash') && want.some((x) => W.course(x.id));
+    const selected = (board === 'courses' || board === 'cdash') && (want.some((x) => W.course(x.id)) || (ultra && courseSlots?.size > 0));
     const cardsOn = selected && !away && !nativeShown;
     // Canvas's own cards (the card view) step aside as Ultra's list does.
     document.documentElement?.toggleAttribute('data-gz-course-tiles', cardsOn);
@@ -1272,7 +1305,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const edit = button(t('Edit layout'), () => setEditing(!editing), { className: 'gz-w-small gz-dash-edit' });
     edit.setAttribute('aria-pressed', 'false');
     const reset = board && button(t('Reset layout'), () => {
-      const ops = lay.boards[board].filter((x) => !W.course(x.id) || (W.course(x.id).origin === location.origin && globalThis.GZ_COURSE_CARDS?.own(x.id) === true)).map((x) => ({ s: board, id: x.id, set: { x: null, y: null, r: false, z: 0, fold: false, w: null, h: null } }));
+      const ops = lay.boards[board].filter((x) => !W.course(x.id) || (W.course(x.id).origin === location.origin && (!ultra || globalThis.GZ_COURSE_CARDS?.shows(x.id)))).map((x) => ({ s: board, id: x.id, set: { x: null, y: null, r: false, z: 0, fold: false, w: null, h: null } }));
       // Shared course sets can exceed one message's 64 operations. Keep each patch within the worker's limit.
       for (let i = 0; i < ops.length || i === 0; i += 64) change({ ops: ops.slice(i, i + 64), ...(i === 0 && { widths: { [board]: 0 } }) });
       say(t('Layout reset.'));
@@ -1343,6 +1376,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const floatWatched = new Set();
   const teardown = (all = true) => {
     gesture?.cancel();
+    courseSlots = null;
     laid = '';
     for (const [id, x] of tiles) if (all || x.el.parentNode !== floats) { x.stop?.(); x.el.remove(); tiles.delete(id); }
     ro?.disconnect();
@@ -1500,12 +1534,20 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const host = roomEl();
     if (gesture || !board || !area || !host?.isConnected || (board === 'courses' && hidden && !editing)) return;
     const list = wanted(true).filter((x) => !x.float && !x.dock && tiles.has(x.id));
+    const gaps = [...(courseSlots?.values() || [])].filter((s) => s.dims && !list.some((x) => x.id === s.tile.id));
+    if (gaps.length) {
+      list.push(...gaps.map((s) => s.tile));
+      const order = new Map(lay.boards[board].map((x, i) => [x.id, i]));
+      list.sort((a, b) => order.get(a.id) - order.get(b.id));
+    }
     const dims = {};
     for (const x of list) {
-      const { el } = tiles.get(x.id);
+      const el = tiles.get(x.id)?.el;
+      if (!el) { dims[x.id] = courseSlots.get(x.id).dims; continue; }
       if (!el.isConnected) (stacked || board !== 'courses' ? area : room).append(el);
       if (el.offsetHeight && (!stacked || !heights.has(x.id))) heights.set(x.id, el.offsetHeight);
       dims[x.id] = { w: widthOf(x), h: heights.get(x.id) || el.offsetHeight };
+      if (courseSlots?.has(x.id)) courseSlots.get(x.id).dims = dims[x.id];
     }
     const width = host.clientWidth;
     let col = null, lines = null, side = true, courseArea = null;
@@ -1532,15 +1574,17 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     if (side && !res.stack) {
       // Measure at the final row width before positioning the next row, so wrapped content cannot overlap it at first paint.
       for (const id of res.order) {
-        const el = tiles.get(id).el, w = `${res.at[id].w}px`;
+        const el = tiles.get(id)?.el, w = `${res.at[id].w}px`;
+        if (!el) continue;
         if (el.style.width !== w) el.style.width = w;
       }
       for (const id of res.order) {
-        const h = tiles.get(id).el.offsetHeight;
+        const h = tiles.get(id)?.el.offsetHeight;
         if (h) { dims[id].h = h; heights.set(id, h); }
       }
       res = W.arrange(list, dims, width, opts);
     }
+    res.order = res.order.filter((id) => tiles.has(id));
     lastAt = res.at;
     lastW = width;
     stacked = !side || res.stack;
@@ -1577,28 +1621,34 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // frame Canvas's pages outside a course open in (the Dashboard over a course page), the page around has the floats.
   // With the sidebar, each in its one destination (navigation/sidebar.js resolve), and the dock's in the dock's order.
   const placement = () => (placedAt = side ? GZ_SIDEBAR.resolve(lay, side.rec(), { site: ctx.site, board, enabled: true, allowed, dockable }) : new Map());
-  const wanted = (hasGrid, floatsOnly = false) => (side ? (() => {
-    const at = placement();
-    return [
-      ...(board && hasGrid ? lay.boards[board].filter((x) => at.get(x.id)?.where === 'board' && !(boardless() && dockable(x.id))) : []),
-      ...(atTop ? pageTiles().filter((x) => at.get(x.id)?.where === 'float').map((x) => ({ ...x, float: true })) : []),
-      ...GZ_SIDEBAR.docked(side.rec()).filter((e) => at.get(e.id)?.where === 'dock')
-        .map((e) => ({ id: e.id, on: true, size: cur(e.id)?.size || MORE[e.id]?.size || 's', dock: true, fold: !!e.fold, ...(e.h && { h: e.h }) })),
-    ];
-  })() : [
-    ...(board && hasGrid ? lay.boards[board].filter((x) => !fl(x.id)) : []),
-    ...(atTop ? pageTiles().filter((x) => x.on).map((x) => ({ ...x, float: true })) : []),
-  ]).filter((x) => {
-    if (floatsOnly && !x.float) return false;
-    if (!x.on || !allowed(x.id)) return false;
-    if (W.course(x.id)) { loadCourses(); return !!globalThis.GZ_COURSE_CARDS?.shows(x.id); }
-    if (WIDGETS[x.id] || added.has(x.id)) return true;
-    if (MORE[x.id] && !(loadingMore.get(x.id) > Date.now())) {
-      loadingMore.set(x.id, Infinity);
-      ctx.need(MORE[x.id].file, () => added.has(x.id)).then(() => { loadingMore.delete(x.id); if (on) draw(); }, () => { loadingMore.set(x.id, Date.now() + 60000); });
-    }
-    return false;
-  });
+  const wanted = (hasGrid, floatsOnly = false) => {
+    let courses = 0;
+    const C = globalThis.GZ_COURSE_CARDS;
+    if (ultra && board && hasGrid && !floatsOnly && C && coursesReady && !courseSlots) courseSlots = new Map(lay.boards[board]
+      .filter((x) => x.on && W.course(x.id) && allowed(x.id) && C.shows(x.id)).slice(0, W.COURSE_MAX).map((tile) => [tile.id, { tile }]));
+    return (side ? (() => {
+      const at = placement();
+      return [
+        ...(board && hasGrid ? lay.boards[board].filter((x) => at.get(x.id)?.where === 'board' && !(boardless() && dockable(x.id))) : []),
+        ...(atTop ? pageTiles().filter((x) => at.get(x.id)?.where === 'float').map((x) => ({ ...x, float: true })) : []),
+        ...GZ_SIDEBAR.docked(side.rec()).filter((e) => at.get(e.id)?.where === 'dock')
+          .map((e) => ({ id: e.id, on: true, size: cur(e.id)?.size || MORE[e.id]?.size || 's', dock: true, fold: !!e.fold, ...(e.h && { h: e.h }) })),
+      ];
+    })() : [
+      ...(board && hasGrid ? lay.boards[board].filter((x) => !fl(x.id)) : []),
+      ...(atTop ? pageTiles().filter((x) => x.on).map((x) => ({ ...x, float: true })) : []),
+    ]).filter((x) => {
+      if (floatsOnly && !x.float) return false;
+      if (!x.on || !allowed(x.id)) return false;
+      if (W.course(x.id)) { loadCourses(); return !!C?.shows(x.id) && (!courseSlots || courseSlots.has(x.id)) && courses++ < W.COURSE_MAX; }
+      if (WIDGETS[x.id] || added.has(x.id)) return true;
+      if (MORE[x.id] && !(loadingMore.get(x.id) > Date.now())) {
+        loadingMore.set(x.id, Infinity);
+        ctx.need(MORE[x.id].file, () => added.has(x.id)).then(() => { loadingMore.delete(x.id); if (on) draw(); }, () => { loadingMore.set(x.id, Date.now() + 60000); });
+      }
+      return false;
+    });
+  };
   // What a tile from another file is given besides its body.
   const account = () => who().then(() => ({ ...me }));
   // surface(): where it shows now ('dock', 'float' or 'board'): no page, account or LMS data with it, so mods get it too.
@@ -1778,16 +1828,30 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     document.addEventListener('visibilitychange', onShow);
     addEventListener('resize', onResize);
   };
+  const forgetAccount = (destroy = true) => {
+    identity++;
+    asking = null;
+    askedWho = false;
+    if (destroy) { me = null; dashboardEdited = false; teardown(true); drawn = null; }
+  };
+  // The Ultra store can change identity without a sidebar context (including when the sidebar is switched off).
+  // An ordinary refresh also rechecks the same student: retain the painted board and its confirmed account until a
+  // different id is confirmed. Live tiles still read that account during storage changes and painting.
+  document.addEventListener('glaze:ultra-refresh', (e) => {
+    if (!ultra || !(e.detail?.identity || e.detail?.retire)) return;
+    const before = me;
+    forgetAccount(!!e.detail?.retire);
+    const n = identity;
+    if (before && !e.detail?.retire) who().then(() => {
+      if (n !== identity || before.uid === me?.uid) return;
+      dashboardEdited = false;
+      teardown(true); drawn = null;
+      if (on && W && lay) { draw(); fillCourses(); }
+    }, () => {});
+  });
   const contextChanged = () => {
     const account = globalThis.GZ_SIDEBAR_UI?.context().accountId || '';
-    if (sideAccount && account !== sideAccount) {
-      identity++;
-      me = asking = null;
-      askedWho = false;
-      dashboardEdited = false;
-      teardown(true);
-      drawn = null;
-    }
+    if (sideAccount && account !== sideAccount) forgetAccount();
     sideAccount = account;
     if (on && W && lay) draw();
   };
