@@ -162,3 +162,16 @@ test('marks stay within their cap; the start is never dropped', async () => {
   m.release();
   assert.ok(h.buffers.every((b) => b.destroyed), 'release frees every mark');
 });
+
+test('marks over the cap thin the densest stretch: the system turn\'s end outlives two requests\' worth of block marks', async () => {
+  const h = host(), m = await h.load(model({ kinds: KINDS }), { context: 256, chunk: CHUNK });
+  const head = Array.from({ length: 20 }, (_, i) => i % 8);
+  await m.extend(head);
+  const one = [...head, ...Array.from({ length: 30 }, (_, i) => (i * 3) % 8)];
+  await m.extend(one, { at: Array.from({ length: 12 }, (_, i) => 21 + 2 * i) });
+  const two = [...one, ...Array.from({ length: 30 }, (_, i) => (i * 5) % 8)];
+  await m.extend(two, { at: Array.from({ length: 12 }, (_, i) => 51 + 2 * i) });
+  // Differs right after the system turn.
+  same(await m.extend([...head, 7, 7, 7]), { reused: 20, fed: 3 });
+  m.release();
+});
