@@ -1017,6 +1017,8 @@ const openCards = async (p) => {
   await settle();
   return { btn, dlg: p.doc.getElementById('gz-ccm') };
 };
+// The student's course list not in yet (Ultra's membership list still on its way): a saved card can't be called someone else's.
+const listPending = (p) => { p.c.GZ_CTX.canvasPeek = () => ({ me: null, books: new Map(), courses: new Promise(() => {}) }); return p; };
 const itemOf = (dlg, id) => dlg.querySelectorAll('li.gz-ccm-item').find((li) => li.querySelector('article').dataset.courseId === id);
 const tick = (box, on) => { box.checked = on; box.dispatchEvent({ type: 'change', target: box }); };
 const layoutSends = (p) => JSON.parse(JSON.stringify(p.sent.filter((m) => m.type === 'glaze:widgetLayout'))); // out of the page's realm
@@ -1107,7 +1109,7 @@ test('Course cards: a tick, Select all and Select none are one layout change eac
   assert.deepEqual(lay(p).boards.dash.filter((x) => W.course(x.id)), [], "the Dashboard's board untouched");
   // A board with room for one more: Select all adds one, the rest can't be ticked, and it says so.
   const full = W.layout({ todo: true, boards: { courses: Array.from({ length: W.COURSE_MAX - 1 }, (_, i) => ({ id: ckey(`_${500 + i}_1`), on: true })) } });
-  const r = cardsPage({ local: { widgetLayout: full } });
+  const r = listPending(cardsPage({ local: { widgetLayout: full } }));
   const { dlg: d2 } = await openCards(r);
   assert.equal(d2.querySelector('.gz-ccm-count').textContent, `On this board: 47. Room for 1 more.`);
   r.doc.fire(buttonIn(d2.querySelector('.gz-ccm-tools'), 'Select all'), 'click');
@@ -1269,7 +1271,7 @@ test('Course cards: leaving the board closes its stacked editor and a pending op
 
 test('Course cards: the count includes saved courses not yet listed, and another tab updates ticks', async () => {
   const layout = W.layout({ todo: true, boards: { courses: [{ id: ckey('_999_1'), on: true }] } });
-  const p = cardsPage({ local: { widgetLayout: layout } });
+  const p = listPending(cardsPage({ local: { widgetLayout: layout } }));
   const { dlg } = await openCards(p);
   assert.equal(dlg.querySelector('.gz-ccm-count').textContent, 'On this board: 1. Room for 47 more.');
   p.store.widgetLayout = W.apply(layout, { ops: [{ s: 'courses', id: ckey('_101_1'), set: { on: true } }] });
@@ -1401,7 +1403,7 @@ test('Course cards: Style waits for the shared card editor to load', async () =>
 
 test('Course cards: an existing disabled course can be re-enabled at the saved-record limit', async () => {
   const board = [{ id: ckey('_101_1'), on: false }, ...Array.from({ length: 47 }, (_, i) => ({ id: ckey(`_${500 + i}_1`), on: true }))];
-  const p = cardsPage({ local: { widgetLayout: { todo: true, boards: { courses: board } } } });
+  const p = listPending(cardsPage({ local: { widgetLayout: { todo: true, boards: { courses: board } } } }));
   const { dlg } = await openCards(p);
   assert.equal(input(itemOf(dlg, '_101_1'), 'checkbox').disabled, false, 'this record already fits');
   assert.equal(input(itemOf(dlg, '_102_1'), 'checkbox').disabled, true, 'a new record does not fit');
@@ -1484,6 +1486,73 @@ test('a fresh first Dashboard fills when delayed course metadata arrives without
   await settle();
   for (const c of COURSES) assert.ok(p.tile(ckey(c.id)), c.id);
   assert.ok(p.store.widgetLayout.filled.includes('dash'));
+});
+
+// Two students on one device, one Blackboard: the board's layout is the device's, so the first student's course cards
+// are in it when the second signs in (seen live, 2026-11-01: blank "Course card" tiles on the second student's Dashboard).
+const OTHER = ['_901_1', '_902_1']; // the first student's courses, none of them the second's
+const members = (rows = COURSES) => rows.map((c) => ({ courseId: c.id, courseCardColorIndex: c.slot - 1, course: { name: c.name, courseId: c.code, term: { name: c.term } } }));
+// uid: who Ultra says is signed in (its profile), for a board's first cards; a test that needs no fill leaves it out.
+const asStudent = (p, list, uid = '') => {
+  p.c.GZ_CTX.canvasPeek = () => ({ me: null, books: new Map(), courses: list });
+  if (uid) p.c.GZ_ULTRA = { page: { profile: async () => ({ id: uid }) } };
+  return p;
+};
+
+test("another student's course cards stay in the layout but never draw here, and this student's never blink while the list comes", async () => {
+  const board = [...OTHER.map((id) => ({ id: ckey(id), on: true })), { id: ckey('_101_1'), on: true }, { id: ckey('_104_1'), on: true }];
+  const list = later();
+  const p = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: { todo: true, filled: ['dash'], boards: { dash: board } } } }), list);
+  p.ui.sync(true); await settle();
+  const bio = p.tile(ckey('_101_1'));
+  assert.ok(bio, 'a course known from the stored records draws at once');
+  for (const id of [...OTHER, '_104_1']) assert.equal(p.tile(ckey(id)), null, `${id}: no blank card while the list is on its way`);
+  list.res(members([...COURSES, { id: '_104_1', name: 'Art', code: 'ART-1', term: 'Fall 2026', slot: 2 }]));
+  await settle(); p.ui.sync(true); await settle();
+  assert.ok(p.tile(ckey('_101_1')) === bio, 'the same card, never taken down');
+  assert.ok(p.tile(ckey('_104_1')), "this student's course without a stored record, once the list has it");
+  for (const id of OTHER) assert.equal(p.tile(ckey(id)), null, `${id}: not this student's`);
+  assert.deepEqual(lay(p).boards.dash.filter((x) => W.course(x.id)).map((x) => x.id), board.map((x) => x.id), 'all kept for the other student');
+  const away = p.wrote.filter((w) => w.widgetLayout).map((w) => w.widgetLayout.boards.dash.filter((x) => OTHER.includes(W.course(x.id)?.id)).length);
+  assert.ok(away.every((n) => n === OTHER.length), 'never removed from the store');
+  // The other student signs back in: their cards are theirs again.
+  const q = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: p.store.widgetLayout } }), Promise.resolve(members(OTHER.map((id, i) => ({ id, name: `Other ${i}`, code: '', term: '', slot: 1 })))));
+  q.c.GZ_CTX.courseList = () => ({});
+  q.ui.sync(true); await settle(); q.ui.sync(true); await settle();
+  for (const id of OTHER) assert.ok(q.tile(ckey(id)), `${id} back for its student`);
+  assert.equal(q.tile(ckey('_101_1')), null);
+});
+
+test("Course cards: another student's hidden cards leave this student the whole room", async () => {
+  const board = Array.from({ length: W.COURSE_MAX }, (_, i) => ({ id: ckey(`_${500 + i}_1`), on: true }));
+  const p = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: { todo: true, filled: ['dash'], boards: { dash: board } } } }), Promise.resolve(members()));
+  const { dlg } = await openCards(p);
+  assert.equal(dlg.querySelector('.gz-ccm-count').textContent, `On this board: 0. Room for ${W.COURSE_MAX} more.`);
+  p.doc.fire(buttonIn(dlg.querySelector('.gz-ccm-tools'), 'Select all'), 'click'); await settle();
+  for (const c of COURSES) assert.ok(p.tile(ckey(c.id)), `${c.id} on the board`);
+  assert.equal(lay(p).boards.dash.filter((x) => W.course(x.id)).length, W.COURSE_MAX + COURSES.length, "the other student's all kept");
+  assert.equal(dlg.querySelector('.gz-ccm-count').textContent, `On this board: ${COURSES.length}. Room for ${W.COURSE_MAX - COURSES.length} more.`);
+});
+
+test("a second student whose Dashboard was filled for another gets their own first course cards, once", async () => {
+  const seed = W.apply(W.fresh(), { fill: 'dash', ops: OTHER.map((id) => ({ s: 'dash', id: ckey(id), set: { on: true, size: 's' } })) });
+  assert.deepEqual(seed.filled, ['dash'], 'filled before accounts were marked');
+  const p = asStudent(cardsPage({ at: 'dash', enhance: { notes: true, pet: true }, local: { widgetLayout: seed } }), Promise.resolve(members()), '_2_1');
+  p.ui.sync(true); await settle(); p.ui.sync(true); await settle();
+  for (const c of COURSES) assert.ok(p.tile(ckey(c.id)), `${c.id}: this student's first cards`);
+  for (const id of OTHER) assert.equal(p.tile(ckey(id)), null);
+  assert.deepEqual(lay(p).boards.dash.filter((x) => W.course(x.id)).map((x) => W.course(x.id).id), [...OTHER, ...COURSES.map((c) => c.id)]);
+  assert.ok(p.store.widgetLayout.filled.includes('dash https://school.blackboard.test/_2_1'));
+  // Removed by this student: never filled again.
+  p.store.widgetLayout = W.apply(p.store.widgetLayout, { ops: COURSES.map((c) => ({ s: 'dash', id: ckey(c.id), remove: true })) });
+  const q = asStudent(cardsPage({ at: 'dash', enhance: { notes: true, pet: true }, local: { widgetLayout: p.store.widgetLayout } }), Promise.resolve(members()), '_2_1');
+  q.ui.sync(true); await settle(); q.ui.sync(true); await settle();
+  for (const c of COURSES) assert.equal(q.tile(ckey(c.id)), null, `${c.id} stays removed`);
+  // A filled board this student emptied themselves (no one else's cards on it) stays empty too.
+  const own = W.apply(W.fresh(), { fill: 'dash', ops: [{ s: 'dash', id: ckey('_101_1'), set: { on: true } }] });
+  const r = asStudent(cardsPage({ at: 'dash', enhance: { notes: true, pet: true }, local: { widgetLayout: W.apply(own, { ops: [{ s: 'dash', id: ckey('_101_1'), remove: true }] }) } }), Promise.resolve(members()), '_2_1');
+  r.ui.sync(true); await settle(); r.ui.sync(true); await settle();
+  assert.deepEqual(lay(r).boards.dash.filter((x) => W.course(x.id)), []);
 });
 
 test("a tile's Fold, Remove and Float sit above its resize corner, which a folded tile brings up beside them", () => {
