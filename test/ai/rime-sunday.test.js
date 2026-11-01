@@ -147,3 +147,22 @@ test('level 3: an answer may say a friendly time\'s hour on either clock ("9:00 
   const de = A.task.input({ question: 'Erinnere mich morgen um 21 Uhr', tools: [...A.NAMES], steps: [step], now: SUNDAY, zone: ZONE, locale: 'de', first: true });
   assert.equal(A.why({ call: null, answer: { text: 'Ich erinnere dich morgen um 9 Uhr abends: Finish the lab report.', quotes: ['Finish the lab report'] } }, de), '');
 });
+
+test('KV reuse: each step extends the run\'s request exactly; a later turn shares everything up to its now block (summary and earlier turns come first)', () => {
+  const tools = ['schedule_list', 'todo_list', 'accounts_list'];
+  const flat = (inp) => text(A.layout(inp));
+  const t1 = (steps) => A.task.input({ question: "What's due this week?", tools, steps, now: SUNDAY, zone: ZONE, locale: 'en', first: true });
+  const s1 = { call: { name: 'schedule_list', arguments: { from: '2026-11-01', to: '2026-11-08' } }, result: { items: [{ title: 'Lab 8 worksheet', due: Date.parse('2026-11-02T23:59:00-05:00'), submitted: false }] } };
+  const s2 = { call: { name: 'todo_list', arguments: {} }, result: { items: [] } };
+  const a = flat(t1([])), b = flat(t1([s1])), c = flat(t1([s1, s2]));
+  assert.ok(b.startsWith(a) && c.startsWith(b), 'within a run, append-only');
+  const history = [{ question: "What's due this week?", answer: 'Monday: **Lab 8 worksheet**.' }];
+  const later = (h, q, more = {}) => flat(A.task.input({ question: q, tools, steps: [], now: SUNDAY + 3600e3, zone: ZONE, locale: 'en', first: true, history: h, ...more }));
+  const t2 = later(history, "I don't think that's true."), t3 = later([...history, { question: "I don't think that's true.", answer: 'You are right: **Lab 8 worksheet** is due Monday.' }], 'And next week?');
+  const nowAt = (s) => s.indexOf('<|gz_ctx|>now');
+  assert.ok(nowAt(t2) > t2.indexOf('<|gz_data|>earlier'), 'earlier turns before now');
+  const shared = (x, y) => { let i = 0; while (i < x.length && x[i] === y[i]) i++; return i; };
+  assert.ok(shared(t2, t3) > t2.indexOf("Rime: Monday: **Lab 8 worksheet**."), 'the first turn\'s text is shared byte for byte');
+  const withSummary = later(history, 'And next week?', { summary: '- Asked: grades in ENG1001.' });
+  assert.ok(withSummary.indexOf('<|gz_data|>summary') < withSummary.indexOf('<|gz_data|>earlier') && withSummary.indexOf('<|gz_data|>earlier') < nowAt(withSummary));
+});
