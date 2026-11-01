@@ -131,6 +131,40 @@ test('the fallback requires a successful list, without treating a single read or
   assert.equal(A.listAnswer([step({ title: 'Course contents', items: [{ title: 'Lab report' }] })]), 'From what Glaze read:\n- **Lab report**');
 });
 
+test('fallback list fields render literally, with one bullet per item even when titles contain markdown and newlines', async () => {
+  const { El } = require('../stand-in-dom.js'), vm = require('node:vm'), fs = require('node:fs');
+  const title = 'Review **stars** [Open](https://untrusted.example/)\n- Injected', course = 'BIO _1100_';
+  const text = A.listAnswer([{ result: JSON.stringify({ items: [{ title, course }] }) }]);
+  const doc = { activeElement: null };
+  doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
+  doc.createElement = (tag) => new El(tag, doc);
+  doc.createElementNS = (_ns, tag) => doc.createElement(tag);
+  doc.getElementById = (id) => doc.root.all().find((el) => el.id === id) || null;
+  doc.querySelector = (s) => doc.root.querySelector(s);
+  const ai = { on: true, features: { ask: true } }, listeners = [];
+  const port = { onMessage: { addListener: (f) => listeners.push(f) }, onDisconnect: { addListener: () => {} }, disconnect: () => {}, postMessage: (m) => {
+    const answer = m.op === 'status' ? { type: 'status', on: true, allowed: true, ready: true }
+      : { type: 'end', task: 'agent.tools', answer: { text, built: true } };
+    setTimeout(() => listeners.forEach((f) => f({ id: m.id, ...answer })), 0);
+  } };
+  const ui = vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname, '../../extension/ai/page/ask.js'), 'utf8'), {
+    document: doc, window: {}, navigator: { userActivation: { isActive: true } }, setTimeout, clearTimeout, URL, structuredClone,
+    GZ_CTX: { t: (k) => k, on: () => true, locale: () => 'en', settings: () => ({ enabled: true }) },
+    chrome: { runtime: { connect: () => port }, storage: { local: { get: (_k, cb) => cb({ ai }) }, onChanged: { addListener: () => {} } } },
+  });
+  try {
+    await ui.run({ event: { isTrusted: true }, question: 'Which assignments are coming up?' });
+    for (let n = 0; n < 30 && !doc.querySelector('.gz-ask-a'); n++) await new Promise((r) => setTimeout(r, 2));
+    const answer = doc.querySelector('.gz-ask-a');
+    assert.ok(answer);
+    const items = answer.querySelectorAll('ul li');
+    assert.equal(items.length, 1, text);
+    assert.equal(items[0].querySelector('strong').textContent, title.replace(/\s+/g, ' '));
+    assert.ok(items[0].textContent.includes(course));
+    assert.equal(items[0].querySelectorAll('a, em, code').length, 0, 'result fields create no links or inline markup');
+  } finally { doc.getElementById('gz-ask')?.close(); }
+});
+
 // ---- the step loop: the stub model's bad answer, then each recovery path -------------------------------------------------
 // outs: each agent.tools run's answer in order: an output, or { why, raw } for a check failure.
 const loop = async (outs) => {
