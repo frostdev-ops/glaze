@@ -923,6 +923,45 @@ test('Glaze\'s model\'s card: its state and size, Download from the click, its p
   assert.equal(p.note().textContent, 'Needs a download · 1.8 GB');
 });
 
+test('Rime\'s card: its version, an update downloading with its progress, and Update automatically in Advanced, on by default', async () => {
+  let update = { version: 'r6', progress: 0.4 };
+  const sent = [];
+  const local = async (m) => {
+    sent.push(m.op);
+    if (m.op === 'updates') return { ok: true, auto: true, version: 'r5', ...(update && { update }) };
+    return { ok: true, state: 'ready', size: 1099627808, tier: 1, tiers: [{ tier: 1, size: 1099627808 }] };
+  };
+  const p = await open({ ai: { on: true }, providers: ['local'], local, conns: { local: { provider: 'local' } } });
+  await p.click(p.card('Rime'));
+  assert.ok(sent.includes('updates'));
+  assert.equal(p.note().textContent, 'Ready · r5 · 1.1 GB');
+  const row = () => p.$('ai-local-update');
+  assert.equal(text(row()), 'Update' + 'r6 · 40%');
+  const bar = () => p.walk(row()).length && p.walk(p.$('ai-drawer')).filter((x) => x.tagName === 'PROGRESS').at(-1);
+  assert.deepEqual([bar().value, bar().attrs['aria-label']], [0.4, 'Update']);
+  await p.progress({ provider: 'local', part: 'update', version: 'r6', loaded: 0.75 });
+  assert.equal(text(row()), 'Update' + 'r6 · 75%');
+  assert.equal(p.note().textContent, 'Ready · r5 · 1.1 GB', 'the model in use stays ready while its update downloads');
+  update = null;
+  await p.progress({ provider: 'local', part: 'update', done: true });
+  assert.equal(row().tagName, 'DIV', 'no update row once it is done');
+  assert.equal(p.$('ai-local-auto').tagName, 'DIV', 'the switch is Advanced\'s');
+  await p.change('ai-mode-advanced', true);
+  const auto = p.$('ai-local-auto');
+  assert.deepEqual([auto.tagName, auto.type, auto.checked], ['INPUT', 'checkbox', true]);
+  assert.equal(text(p.walk(p.$('ai-drawer')).find((x) => x.children.includes(auto))), 'Update automatically');
+  await p.change(auto, false);
+  assert.equal(p.data.ai.updates, false);
+  assert.equal(p.$('ai-local-auto').checked, false);
+});
+
+test('Update automatically is kept in ai settings, on unless turned off', () => {
+  assert.equal(AS.clean({}).updates, true);
+  assert.equal(AS.clean({ updates: false }).updates, false);
+  assert.equal(AS.clean({ updates: 'no' }).updates, true);
+  assert.equal(AS.DEFAULTS.updates, true);
+});
+
 for (const state of ['download', 'unavailable']) test(`old stock files have a Delete button while Rime is ${state}`, async () => {
   let stale = true, deleted = 0;
   const local = async (m) => {
