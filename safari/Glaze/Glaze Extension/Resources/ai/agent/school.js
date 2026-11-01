@@ -160,7 +160,7 @@ var GZ_AI_RIME_SCHOOL = globalThis.GZ_AI_RIME_SCHOOL || (() => {
         // never a classmate's name or words.
         const r = await viaTab(w, ctx, 'discussion', { course: args.course, id: args.id });
         if (r.ok === false) return r;
-        const page = args.page || 1, got = body(r, page) || { text: '', page: 1, pages: 1 };
+        const page = args.page || 1, got = body(r, page) || (page > 1 ? { error: 'There is 1 page.' } : { text: '', page: 1, pages: 1 });
         if (got.error) return fail(got.error);
         const mine = page === 1 ? (r.mine || []).slice(0, 3).map((m) => ({ at: m.at ?? null, reply: m.reply === true, text: String(m.text || '').slice(0, 300) })) : [];
         return { account: w.account, title: r.title, ...(r.at && { at: r.at }), gradable: r.gradable === true, ...got,
