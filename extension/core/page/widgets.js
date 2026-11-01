@@ -1201,8 +1201,11 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     let keep = ultra && dashboardEdited;
     if (!first) {
       const here = lay.boards[board].filter((x) => W.course(x.id)?.origin === location.origin);
-      keep ||= here.some((x) => C.own(x.id) === true);
-      if (!keep && (!here.length || here.some((x) => C.own(x.id) !== false))) return;
+      // Only a legacy unmarked board needs inference. A shared course on a board marked for someone else is not
+      // evidence that this student already had their first fill.
+      const legacy = !lay.filled.some((f) => f.startsWith(`${board} `));
+      keep ||= legacy && here.some((x) => C.own(x.id) === true);
+      if (legacy && !keep && (!here.length || here.some((x) => C.own(x.id) !== false))) return;
     }
     if (ultra && !me) { if (!askedWho) { askedWho = true; who().then(() => { askedWho = false; if (on) fillCourses(); }, () => { askedWho = false; }); } return; }
     const account = ultra && me ? `${location.origin}/${me.uid}` : undefined;
