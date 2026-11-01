@@ -504,7 +504,8 @@ for (const now of ['2026-10-29T14:00:00Z', '2026-10-30T03:51:00Z', '2026-10-30T0
 
 
 test('NEW-1: W11 persists calculated day even when start and best do not change', async () => {
-  const w = world(5 * 864e5);
+  // A fixed clock away from a DST change: on the day New York falls back (2026-11-01) 24 hours later is still that day.
+  const w = world(5 * 864e5, { at: Date.parse('2026-10-29T14:00:00Z') });
   const today = T.dayOf(w.now(), 'America/New_York');
   w.box[KEY] = { streak: { start: today - 20, best: 100, asOf: today - 1 } };
   const a = w.tab({ enhance: { remind: false, streak: true } });
