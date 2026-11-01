@@ -273,7 +273,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
     // memo: the worker's summary of the turns it folded and how many of turns it covers; sentFrom: the first turn the last
     // question carried; base: the chat's own share of the window, read from a first question's context.
     const memo = { summary: '', folded: 0 };
-    let sentFrom = 0, lastAsk = 0, base = null;
+    let sentFrom = 0, lastAsk = 0, base = null, accepting = true;
     const port = channel((a) => { if (a?.type === 'summary' && a.id === lastAsk) folded(a); });
     const root = make('div', { className: 'gz-ask-chat' });
     root.dataset.variant = variant;
@@ -513,7 +513,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
     // Ask: the reservation before the storage read (stopping invalidates it), then the question in the conversation (unless
     // it is a try again of one shown), the run, its end.
     const ask = async ({ question: q, attempt = '', shown: again = false, sent, fired }) => {
-      if (current || pending || !alive_) return;
+      if (current || pending || !alive_ || !accepting) return;
       const mine = pending = {};
       actionEpoch++; afterReveal.clear();
       const allowed = await alive();
@@ -592,11 +592,14 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
       } });
     };
     const cancelRun = () => {
+      accepting = false;
+      root.inert = true;
+      actionEpoch++; afterReveal.clear();
       if (current) port.post({ id: current, op: 'cancel' });
       current = 0; pending = null;
     };
     const clear = (e) => {
-      if (!real(e) || current || pending || !alive_) return;
+      if (!real(e) || current || pending || !alive_ || !accepting) return;
       lastAsk = 0; sentFrom = 0;
       port.hangUp();
       turns.length = 0;
