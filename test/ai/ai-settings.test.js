@@ -137,7 +137,7 @@ test('off by default: the switch is off, only it shows, and the worker is asked 
   assert.deepEqual(p.asked, []);
   assert.deepEqual(p.data, {}, 'opening Settings writes nothing');
   assert.match(read('options.html'), /<input type="checkbox" role="switch" id="ai-on" aria-label="Use AI" data-local>/, 'the switch is not checked in the page');
-  assert.deepEqual(AS.clean(undefined), { on: false, outline: true, sources: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false, ask: false } });
+  assert.deepEqual(AS.clean(undefined), { on: false, outline: true, sources: true, wakes: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false, ask: false } });
 });
 
 test('embedded Settings does not initialize AI controls or read its connections and activity', async () => {
@@ -152,7 +152,7 @@ test('embedded Settings does not initialize AI controls or read its connections 
 test('the switch, the mode and the models are kept in storage.local ai, cleaned; the features stay off until each is turned on', async () => {
   const p = await open();
   await p.change('ai-on', true);
-  assert.deepEqual(p.data.ai, { on: true, outline: true, sources: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false, ask: false } });
+  assert.deepEqual(p.data.ai, { on: true, outline: true, sources: true, wakes: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false, ask: false } });
   assert.ok(shown(p.$('ai-connection')) && shown(p.$('ai-features')) && shown(p.$('ai-mode')));
   assert.equal(p.$('ai-mode-simple').checked, true);
   // The overall model first, then each feature: the gray text, Feedback, then the rest.
@@ -165,7 +165,7 @@ test('the switch, the mode and the models are kept in storage.local ai, cleaned;
   await p.change('ai-mode-advanced', true);
   assert.equal(p.data.ai.mode, 'advanced');
   await p.change('ai-on', false);
-  assert.deepEqual({ ...p.data.ai, features: p.data.ai.features.syllabus }, { on: false, outline: true, sources: true, mode: 'advanced', model: { use: null, model: '' }, models: {}, tune: {}, features: true }, 'off keeps the choices');
+  assert.deepEqual({ ...p.data.ai, features: p.data.ai.features.syllabus }, { on: false, outline: true, sources: true, wakes: true, mode: 'advanced', model: { use: null, model: '' }, models: {}, tune: {}, features: true }, 'off keeps the choices');
   assert.equal(p.$('ai-connection').hidden, true);
   assert.equal(p.$('ai-mode').hidden, true);
 });
@@ -513,7 +513,7 @@ test('the owner\'s older endpoint shows as OpenRouter connected with its key, it
   const server = async (url) => (url === M.OPENROUTER ? new Response(routed, { headers: { 'content-type': 'application/json' } }) : json({ data: { label: 'x' } }));
   const p = await open({ ai: { on: true, use: 'endpoint', features: { syllabus: true, completion: true, writing: true } }, server,
     conns: { endpoint: { provider: 'openai', base: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-v4.1-flash-1017', key: OWNER, generation: 'g-1' } } });
-  assert.deepEqual(p.data.ai, { on: true, outline: true, sources: true, mode: 'simple', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: {}, tune: {}, features: { syllabus: true, completion: true, writing: true, ask: false } });
+  assert.deepEqual(p.data.ai, { on: true, outline: true, sources: true, wakes: true, mode: 'simple', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: {}, tune: {}, features: { syllabus: true, completion: true, writing: true, ask: false } });
   assert.deepEqual(p.vault.get('connections'), { openrouter: { provider: 'openai', base: 'https://openrouter.ai/api/v1', key: OWNER, generation: 'g-1' } });
   assert.equal(p.card('OpenRouter').children[2].className, 'st ok');
   assert.equal(text(p.$('ai-pick-model')), 'DeepSeek: DeepSeek V4.1 Flash 1017 · OpenRouter');
