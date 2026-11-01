@@ -21,9 +21,9 @@ const old = entry(OLD, { version: 'r5', tools: 3 });
 const fresh = entry(NEW, { commit: 'b'.repeat(40), version: 'r6', tools: 3, minGlaze: '4.0.1' });
 const listOf = (serial, models = [fresh]) => ({ v: 1, serial, issued: '2026-11-01T00:00:00Z', models });
 
-test('the bundled public key is a raw Ed25519 key, and its fingerprint is its SHA-256', () => {
+test('the bundled public key is a raw Ed25519 key, and its fingerprint is its SHA-256', async () => {
   assert.match(U.KEY, /^[\w-]{43}$/);
-  assert.equal(U.fingerprint(), crypto.createHash('sha256').update(Buffer.from(U.KEY, 'base64url')).digest('hex'));
+  assert.equal(await U.fingerprint(), crypto.createHash('sha256').update(Buffer.from(U.KEY, 'base64url')).digest('hex'));
   assert.equal(U.URL, 'https://huggingface.co/frostdev-ops/Rime-1.7B-GGUF/resolve/main/glaze-models.json');
 });
 
