@@ -82,6 +82,14 @@ test('check: run_js never works graded work, in each of the six languages, nor a
   assert.equal(A.why(call('run_js', { code: '2.5/58.44/0.25' }), input('What does lab report 3 ask?', [read], [...OWN, 'assignment_read'])), 'work');
 });
 
+test('check: unnumbered assessments and spaced problem references still forbid calculation', () => {
+  for (const q of ['For my quiz, solve 2 + 2', 'My exam asks me to integrate x squared', 'Solve this assignment: 2 + 2',
+    'Calculate problem\n3: 9 * 4', 'En mi examen, calcula 2 + 2', 'Na minha prova, calcula 2 + 2',
+    'Pour mon examen, calcule 2 + 2', 'Für meine Klausur: berechne 2 + 2', 'Voor mijn toets: bereken 2 + 2']) {
+    assert.equal(A.why(call('run_js', { code: '2+2' }), input(q)), 'work', q);
+  }
+});
+
 test('check: place_open takes only a place places_list gave; page_highlight only words the question or a result holds', () => {
   const list = step('places_list', {}, { site: 'canvas', here: 'dashboard', places: [{ place: 'grades', title: 'Grades' }, { place: 'course:25', title: 'BIO 1100' }] });
   assert.equal(A.why(call('place_open', { place: 'grades' }), input('Take me to my grades', [list])), '');
