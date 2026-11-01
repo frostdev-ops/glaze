@@ -235,3 +235,16 @@ test('an episode\'s seven runs fit agent.tools\' own rate: six questions a minut
   assert.deepEqual(A.task.rate, { perMinute: 6 * (A.LIMIT.steps + 1) });
   assert.equal(A.task.rate.supersede, undefined, 'a newer question never cancels a step in flight');
 });
+
+
+test('port: losing sender authority while the approval is open prevents the write', async () => {
+  let permitted = true;
+  const h = harness({ allowed: () => permitted, approve: () => { permitted = false; return 'yes'; },
+    script: { 'agent.tools': [asks('todo_list'), asks('todo_mark_done', { type: 'assignment', id: '1' }, 'write'), said('Done.')] } });
+  h.say({ id: 20, op: 'ask', question: 'Mark my Lab report done', locale: 'en' });
+  await settle(60);
+  assert.equal(h.seen.asks.length, 1, 'the sender was allowed when approval opened');
+  assert.deepEqual(h.wrote, [], 'navigation or lost site access revokes the pending change');
+  assert.equal(h.seen.runs.length, 2, 'no model run after losing authority');
+  assert.equal(h.ends().at(-1)?.type, 'error');
+});

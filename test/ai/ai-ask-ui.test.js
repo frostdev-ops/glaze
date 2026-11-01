@@ -30,6 +30,7 @@ const page = ({ ai = { on: true, model: { use: 'openai', model: 'm' }, features:
   doc.getElementById = (x) => doc.root.all().find((e) => e.id === x) || null;
   doc.querySelector = (s) => doc.root.querySelector(s);
   const env = { doc, posted: [], ports: [], changed: [], activation: true, store: { ai }, reply: reply || ((m) => (m.op === 'status' ? { type: 'status', on: true, allowed: true, ready: true } : null)) };
+  env.read = (cb) => cb({ ai: structuredClone(env.store.ai) });
   const connect = ({ name }) => {
     const on = [], gone = [];
     const port = { name, posted: [], hungUp: false, onMessage: { addListener: (f) => on.push(f) }, onDisconnect: { addListener: (f) => gone.push(f) },
@@ -43,7 +44,7 @@ const page = ({ ai = { on: true, model: { use: 'openai', model: 'm' }, features:
     document: doc, window: {}, navigator: { get userActivation() { return { isActive: env.activation }; } }, setTimeout, clearTimeout, Promise, JSON, structuredClone,
     GZ_I18N: require('../../extension/core/i18n.js'),
     GZ_CTX: { t: (k, v) => k.replace(/\{(\w+)\}/g, (m, x) => v?.[x] ?? m), on: () => true, locale: () => lang, settings: () => D.GZ_SANITIZE({ enabled: true }) },
-    chrome: { runtime: { connect, lastError: undefined }, storage: { local: { get: (k, cb) => cb({ ai: structuredClone(env.store.ai) }) }, onChanged: { addListener: (f) => env.changed.push(f) } } },
+    chrome: { runtime: { connect, lastError: undefined }, storage: { local: { get: (k, cb) => env.read(cb) }, onChanged: { addListener: (f) => env.changed.push(f) } } },
   });
   env.ui = vm.runInContext(read('ai/page/ask.js'), context);
   env.context = context;
@@ -145,4 +146,54 @@ test('the command palette offers Ask Glaze only while AI and Ask are on, and ope
   assert.match(src, /await Promise\.all\(\[keeping, asking\]\)/, 'read before the commands are built');
   const loadable = read('background/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1];
   assert.ok(loadable.includes("'ai/page/ask.js'"));
+});
+
+
+test('a slow settings read admits only one submission and keeps text typed while it waits', async () => {
+  const P = page();
+  await P.ui.open({ event: { isTrusted: true } });
+  const reads = [];
+  P.read = (cb) => reads.push(cb);
+  P.ask('What is due?');
+  P.ask('What is due?');
+  P.q().value = 'My next question';
+  reads.forEach((cb) => cb({ ai: P.store.ai }));
+  await settle();
+  assert.equal(P.posted.filter((m) => m.op === 'ask').length, 1);
+  assert.equal(P.turns().filter(([who]) => who === 'gz-ask-q').length, 1);
+  assert.equal(P.q().value, 'My next question');
+});
+
+test('closing during the settings read invalidates that submission, including after reopening', async () => {
+  const P = page();
+  await P.ui.open({ event: { isTrusted: true } });
+  let release;
+  P.read = (cb) => { release = cb; };
+  P.ask('What is due?');
+  P.box().close();
+  P.read = (cb) => cb({ ai: P.store.ai });
+  await P.ui.open({ event: { isTrusted: true } });
+  P.q().value = 'A new question';
+  release({ ai: P.store.ai });
+  await settle();
+  assert.equal(P.posted.filter((m) => m.op === 'ask').length, 0);
+  assert.deepEqual(P.turns(), []);
+  assert.equal(P.q().value, 'A new question');
+});
+
+test('an opening status that arrives after a question cannot replace its result status', async () => {
+  const P = page({ reply: () => null });
+  const opened = P.ui.open({ event: { isTrusted: true } });
+  await settle();
+  const status = P.posted.find((m) => m.op === 'status');
+  P.ask('What is due?');
+  await settle();
+  const ask = P.posted.find((m) => m.op === 'ask');
+  P.ports.at(-1).answer({ id: ask.id, type: 'error', error: 'setup' });
+  await settle();
+  const message = P.say();
+  P.ports[0].answer({ id: status.id, type: 'status', ready: false, why: 'size' });
+  await opened;
+  assert.equal(P.say(), message);
+  assert.equal(message, 'Choose a model for Ask Glaze in Settings → AI.');
 });
