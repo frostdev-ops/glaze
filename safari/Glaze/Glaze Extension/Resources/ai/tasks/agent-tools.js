@@ -289,7 +289,8 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   const AHEAD = 60 * 864e5;
   const phrases = (list) => new RegExp(`(?<![\\p{L}\\p{N}])(?:${list.join('|')})(?![\\p{L}\\p{N}])`, 'iu');
   // A question about graded work itself: run_js never works it out (study.help's rule; Ask Rime routes such help there).
-  const HOMEWORK = phrases(['homework', 'home work', 'worksheet', 'problem set', 'p-?set', 'answer key', '(?:quiz|exam|test|midterm|final) (?:question|problem)s?', '(?:problem|question|exercise|part) #?\\d+[a-z]?', '#\\d+',
+  const HOMEWORK = phrases(['homework', 'home work', 'worksheet', 'problem set', 'p-?set', 'answer key', 'quizzes|quiz|exams?|assignments?|midterms?', '(?:my|this|our) test', '(?:quiz|exam|test|midterm|final) (?:question|problem)s?', '(?:problem|question|exercise|part) #?\\d+[a-z]?', '#\\d+',
+    'ex[aá]men(?:es|s)?|provas?|avalia[çc][ãa]o|klausur(?:en)?|pr[üu]fung(?:en)?|toets(?:en)?|tentamen(?:s)?',
     'tareas?', 'deberes', 'ejercicios? \\d+', 'problemas? \\d+', 'preguntas? \\d+', 'li[çc][ãa]o de casa', 'dever(?:es)? de casa', 'exerc[íi]cios? \\d+', 'quest[ãa]o \\d+', 'quest[õo]es',
     'devoirs?', 'exercices? \\d+', 'probl[èe]mes? \\d+', 'questions? \\d+', 'hausaufgaben?', '[üu]bungsblatt', '[üu]bungsaufgaben?', 'aufgaben? \\d+', 'huiswerk', 'opgaven? \\d+', 'vragen? \\d+', 'oefening(?:en)? \\d+']);
   // A question that asks to be reminded, watched for or to cancel one: the only questions a wake or monitor answers.
@@ -307,7 +308,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   };
   // → '' or why a call to one of Rime's own tools may not go: work, place, text, time, monitor, asked.
   const ownWhy = (name, args, inp) => {
-    if (name === 'run_js') return HOMEWORK.test(inp.question) || inp.steps.some((s) => ['assignment_read', 'document_read'].includes(s.call.name)) ? 'work' : '';
+    if (name === 'run_js') return HOMEWORK.test(fold(inp.question)) || inp.steps.some((s) => ['assignment_read', 'document_read'].includes(s.call.name)) ? 'work' : '';
     if (name === 'place_open') return under(inp, 'places_list', ['place', 'here']).includes(args.place) ? '' : 'place';
     if (name === 'page_highlight') {
       const want = fold(args.text);
