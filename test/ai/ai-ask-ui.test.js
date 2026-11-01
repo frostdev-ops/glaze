@@ -146,7 +146,7 @@ test('Stop cancels the run in flight; Ask or AI turned off closes the panel and 
 test('the command palette offers Ask Rime only while AI and Ask are on, and opens it only for the student\'s own choice', () => {
   const src = read('navigation/page/palette.js');
   assert.match(src, /askOn = r\?\.ai\?\.on === true && r\.ai\.features\?\.ask === true/);
-  assert.match(src, /\.\.\.\(askOn \? \[\{ label: t\('Ask Rime'\), hint: 'Glaze', group: 'Glaze', run: \(e\) => e\?\.isTrusted && need\('ai\/page\/ask\.js'/);
+  assert.match(src, /\.\.\.\(askOn \? \[\{ label: t\('Ask Rime'\), hint: 'Glaze', group: 'Glaze', run: \(e\) => e\?\.isTrusted && \(globalThis\.GZ_WIDGETS_UI\?\.reveal\?\.\('ask'\) \|\| need\('ai\/page\/ask\.js'/);
   assert.match(src, /await Promise\.all\(\[keeping, asking\]\)/, 'read before the commands are built');
   const loadable = read('background/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1];
   assert.ok(loadable.includes("'ai/page/ask.js'"));

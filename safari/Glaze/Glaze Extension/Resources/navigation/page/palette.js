@@ -107,8 +107,9 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   // Glaze's own commands, and every extra with its switch (core/page/widgets.js), whether or not the widgets are on.
   const apps = (cid) => [
     ...documents(),
-    // Ask Rime opens only for the student's own click or Enter on its row, as Notes does.
-    ...(askOn ? [{ label: t('Ask Rime'), hint: 'Glaze', group: 'Glaze', run: (e) => e?.isTrusted && need('ai/page/ask.js', () => globalThis.GZ_ASK_UI).then(() => GZ_ASK_UI.open({ event: e }), () => {}) }] : []),
+    // Ask Rime opens only for the student's own click or Enter on its row, as Notes does: its widget where one is shown on
+    // this page (core/page/widgets.js reveal), else the dialog.
+    ...(askOn ? [{ label: t('Ask Rime'), hint: 'Glaze', group: 'Glaze', run: (e) => e?.isTrusted && (globalThis.GZ_WIDGETS_UI?.reveal?.('ask') || need('ai/page/ask.js', () => globalThis.GZ_ASK_UI).then(() => GZ_ASK_UI.open({ event: e }), () => {})) }] : []),
     ...(ctx.settings().enhance.pet ? [{ label: t('Pet habitat'), hint: 'Glaze', group: 'Glaze', run: () => need('core/page/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => need('pet/page/pet.js', () => globalThis.GZ_PET_UI)).then(() => GZ_PET_UI.open(), () => {}) }] : []),
     ...(ctx.settings().enhance.notes ? [
       { label: t('Notes'), hint: 'Glaze', group: 'Glaze', run: (e) => notes({ event: e }) },

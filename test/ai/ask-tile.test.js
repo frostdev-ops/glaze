@@ -81,11 +81,11 @@ for (const site of ['ultra', 'canvas']) {
   });
 
   test(`${site}: with AI or Ask Rime off the tile is neither drawn nor loaded; turned on it comes, turned off it goes and its chat stops`, async () => {
-    for (const ai of [AI(false, true), AI(true, false), undefined]) {
+    for (const ai of [AI(false, true), AI(true, false), null]) {
       const p = page({ site, local: ONLY_ASK(ai) });
       p.ui.sync(true);
       await settle();
-      assert.equal(p.tile(), null, JSON.stringify(ai));
+      assert.equal(p.tile(), null, String(JSON.stringify(ai)));
       assert.ok(!p.loads.includes('ai/page/ask-tile.js'), 'never loaded');
     }
     const p = page({ site, local: ONLY_ASK(AI(true, false)) });

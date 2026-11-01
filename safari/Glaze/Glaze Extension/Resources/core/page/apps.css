@@ -1333,3 +1333,12 @@ html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="stretch"] .gz-gam
   .gz-w[data-tile="todo"] #gz-todo .gz-todo-head button,
   .gz-w[data-tile="todo"] #gz-todo .gz-todo-head a { padding-inline: 0.4rem; }
 }
+/* Ask Rime as a widget (ai/page/ask-tile.js): the chat in a tile's body, its own block apart from #gz-ask's dialog. The
+   body is the chat's height by the tile's size until the student drags its corner (the widget system sets that height
+   inline); the log scrolls inside it. */
+.gz-w[data-tile="ask"] .gz-w-body { display: flex; flex-direction: column; min-height: 0; padding: 0; overflow: hidden; }
+.gz-w[data-tile="ask"][data-size="s"] .gz-w-body { height: 320px; }
+.gz-w[data-tile="ask"][data-size="m"] .gz-w-body { height: 420px; }
+.gz-w[data-tile="ask"][data-size="l"] .gz-w-body { height: 560px; }
+.gz-w[data-tile="ask"][data-fold] .gz-w-body { height: 0; }
+/* end Ask Rime as a widget */

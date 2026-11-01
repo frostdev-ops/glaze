@@ -18,7 +18,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const NAMES = { notes: 'Notes', agenda: 'Agenda', timer: 'Focus timer', quotes: 'Quote', music: 'Music', breathe: 'Breathe', buddy: 'Study buddy', todo: 'To Do', settings: 'Glaze settings' };
   // Tiles other files add, the same on both sites: { id: { file, name (an English key for t()), size } }. This file
   // loads the file (need) while its tile is on, and the file calls register(id, fill). Off until the student adds it.
-  const MORE = { pet: { file: 'pet/page/pet.js', name: 'Pet habitat', size: 'm' } };
+  // ask: Ask Rime's chat (ai/page/ask-tile.js), only while AI and Ask Rime are on (askOn, storage.local ai).
+  const MORE = { pet: { file: 'pet/page/pet.js', name: 'Pet habitat', size: 'm' }, ask: { file: 'ai/page/ask-tile.js', name: 'Ask Rime', size: 'l' } };
   // Mods' tiles join MORE while their mod runs on this page (declare, from mods/page/mods.js and mods/page/modwidgets.js), with no file to load.
   const modTiles = new Set();
   const loadingMore = new Map(); // id -> retry time, Infinity while loading
@@ -132,6 +133,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // Better To Do's tile: on either site's boards, with its own switch and one copy of the list.
   // The Dashboard is its own switch: its widgets need no other, but the notes and the pet keep theirs.
   const allowed = (id) => {
+    if (id === 'ask' && !askOn) return false;
     if (W?.course(id)) return !!board && W.course(id).origin === location.origin && W.course(id).canvas === !ultra;
     const e = ctx.settings().enhance;
     return id === 'todo' ? (!!board || !!side) && e.todo : id === 'pet' ? e.pet : id === 'notes' ? e.notes : e.widgets || (ultra && (board === 'dash' || (e.dashboard && fl(id))));
@@ -140,6 +142,9 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // is stored then, so another tab's change made since is kept. While changes are on their way, the stored layout that
   // comes back is the worker's answer to the last one; one that couldn't be saved is put back as stored.
   let flying = 0, layoutRead = 0, dashboardEdited = false;
+  // AI and Ask Rime on (storage.local ai, ai/settings.js): read with the layout, then as it changes.
+  let askOn = false;
+  const asks = (ai) => !!ai && ai.on === true && ai.features?.ask === true;
   const declared = () => Object.fromEntries(Object.entries(MORE).map(([k, v]) => [k, { size: v.size }]));
   let rawLay; // the layout as stored, read again when the tiles declared change
   const adopt = (raw) => {
@@ -1789,6 +1794,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     if (a === 'sync' && ch.card) readPrefs().then(() => { cancelAnimationFrame(frame0); frame0 = requestAnimationFrame(() => { if (on && board && !asleep) layoutBoard(); }); });
     // Another tab's change (this tab's own come back as the worker's answer).
     if (a === 'local' && ch.widgetLayout) { layoutRead++; if (!flying && lay) adopt(ch.widgetLayout.newValue); }
+    if (a === 'local' && ch.ai && asks(ch.ai.newValue) !== askOn) { askOn = !askOn; if (on && lay) draw(); }
   };
   const onShow = () => cover();
   const onResize = () => { if (!on || !lay) return; if (board && !asleep) layoutBoard(); placeFloats(); };
@@ -1816,8 +1822,9 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const start = async () => {
     await ctx.need('core/widgets.js', () => globalThis.GZ_WIDGETS);
     W = globalThis.GZ_WIDGETS;
-    const [r] = await Promise.all([get('local', ['widgetLayout', 'widgetsHidden']), readPrefs()]);
+    const [r] = await Promise.all([get('local', ['widgetLayout', 'widgetsHidden', 'ai']), readPrefs()]);
     rawLay = r.widgetLayout;
+    askOn = asks(r.ai);
     declare(globalThis.GZ_MODS?.tiles() || {});
     declare(globalThis.GZ_MODWIDGETS?.tiles() || {}, 'plain');
     lay = W.layout(r.widgetLayout, MORE);
@@ -1955,7 +1962,16 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const at = placement();
     return [...new Set([...W.TILES, ...Object.keys(MORE)])].filter((id) => dockable(id) && allowed(id)).map((id) => ({ id, name: t(nameOf(id)), where: at.get(id)?.where || 'off' }));
   };
-  return { sync, held, cover, hub: open, register, declare, who: account, avatar, catalog };
+  // A tile shown on this page, brought to the student (⌘K's Ask Rime): scrolled into view and its focus() called. → false
+  // when it isn't drawn here, is folded, or the page is hidden, so the caller does what it would without it.
+  const reveal = (id) => {
+    const x = on && tiles.get(id);
+    if (!x?.el?.isConnected || x.el.hasAttribute('data-fold') || !shown(x.el)) return false;
+    x.el.scrollIntoView?.({ block: 'nearest', behavior: 'auto' });
+    x.focus?.();
+    return true;
+  };
+  return { sync, held, cover, hub: open, register, declare, who: account, avatar, catalog, reveal };
 })();
 
 GZ_WIDGETS_UI;
