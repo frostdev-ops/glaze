@@ -561,6 +561,8 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     const el = e.target;
     const k = el.closest('[data-key]')?.dataset.key;
     if (!k || !['done', 'step', 'on'].includes(el.dataset.act)) return;
+    // The browser already changed the control; even an unchanged or refused answer must restore stored state.
+    viewed = '';
     // A change a script made (not the student's tick or pick) writes nothing, here or to Canvas: the list is redrawn as it was.
     if (!human(e)) { render(true); return; }
     if (el.dataset.act === 'done') { const r = rowOf(el); if (r) mark(r, el); return; }
