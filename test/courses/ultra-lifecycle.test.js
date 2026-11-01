@@ -7,7 +7,7 @@ const settle = async () => { for (let n = 0; n < 10; n++) await new Promise(setI
 const page = () => {
   const events = {}, timers = new Map(), observers = [], sent = [], storage = [], asked = [];
   let now = Date.now(), serial = 0;
-  const main = {}, control = { nodeType: 1, closest: (q) => q === 'main' ? main : /button/.test(q) ? control : null };
+  const main = {}, control = { nodeType: 1, closest: (q) => q === 'main' ? main : /button/.test(q) ? control : null, matches: () => false };
   const doc = { visibilityState: 'visible', documentElement: { hasAttribute: () => false }, addEventListener: (t, f) => (events[t] ||= []).push(f), dispatchEvent() {} };
   const c = vm.createContext({ GZ_PAGE: require('../../extension/core/page.js'), GZ_COURSES: require('../../extension/content/defaults.js').GZ_COURSES, location: { origin: 'https://school.blackboard.com' }, document: doc, URL, Intl, Date: class extends Date { static now() { return now; } },
     setTimeout: (f, ms) => { timers.set(++serial, { f, ms }); return serial; }, clearTimeout: (id) => timers.delete(id), addEventListener: (t, f) => (events[t] ||= []).push(f),
@@ -40,4 +40,16 @@ test('native write completion invalidates again after its delayed DOM answer', a
   watcher.f([{ type: 'attributes', target: p.control, attributeName: 'aria-checked' }]);
   p.run(300); await settle();
   assert.equal(p.sent.filter((m) => m.op === 'invalidate').length, 2);
+});
+
+// Opening a folder or a learning module, or a menu, writes nothing: it purged every tab's kept Ultra data, and each Glaze part
+// on the page redrew as the data came back (2026-11-01, a real course: the outline jumped under its folder's controls).
+test('a click that only opens a folder, a module or a menu is no write', async () => {
+  for (const attr of ['aria-expanded', 'aria-haspopup']) {
+    const p = page();
+    const toggle = { nodeType: 1, closest: (q) => q === 'main' ? p.main : /button/.test(q) ? toggle : null, matches: (q) => q.includes(`[${attr}]`) };
+    p.fire('click', toggle); p.run(300); await settle();
+    assert.equal(p.sent.filter((m) => m.op === 'invalidate').length, 0, attr);
+    assert.ok(!p.observers.some((o) => o.target === p.main), `${attr}: nothing watched`);
+  }
 });
