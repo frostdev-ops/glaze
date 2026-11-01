@@ -1514,21 +1514,39 @@ test("another student's course cards stay in the layout but never draw here, and
   p.ui.sync(true); await settle();
   const bio = p.tile(ckey('_101_1'));
   assert.ok(bio, 'a course known from the stored records draws at once');
+  const position = [bio.style.left, bio.style.top, bio.style.width];
   for (const id of [...OTHER, '_104_1']) assert.equal(p.tile(ckey(id)), null, `${id}: no blank card while the list is on its way`);
   list.res(members([...COURSES, { id: '_104_1', name: 'Art', code: 'ART-1', term: 'Fall 2026', slot: 2 }]));
   await settle(); p.ui.sync(true); await settle();
   assert.ok(p.tile(ckey('_101_1')) === bio, 'the same card, never taken down');
-  assert.ok(p.tile(ckey('_104_1')), "this student's course without a stored record, once the list has it");
+  assert.equal(p.tile(ckey('_104_1')), null, 'an uncached saved card waits for the next board visit instead of appearing late');
+  assert.deepEqual([bio.style.left, bio.style.top, bio.style.width], position, 'the late list never resizes or moves the painted card');
   for (const id of OTHER) assert.equal(p.tile(ckey(id)), null, `${id}: not this student's`);
   assert.deepEqual(lay(p).boards.dash.filter((x) => W.course(x.id)).map((x) => x.id), board.map((x) => x.id), 'all kept for the other student');
   const away = p.wrote.filter((w) => w.widgetLayout).map((w) => w.widgetLayout.boards.dash.filter((x) => OTHER.includes(W.course(x.id)?.id)).length);
   assert.ok(away.every((n) => n === OTHER.length), 'never removed from the store');
+  p.c.location.pathname = '/ultra/courses/_101_1/outline'; p.ui.sync(true); await settle();
+  p.c.location.pathname = '/ultra/institution-page'; p.ui.sync(true); await settle();
+  assert.ok(p.tile(ckey('_104_1')), 'the confirmed card draws on the next visit');
   // The other student signs back in: their cards are theirs again.
   const q = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: p.store.widgetLayout } }), Promise.resolve(members(OTHER.map((id, i) => ({ id, name: `Other ${i}`, code: '', term: '', slot: 1 })))));
   q.c.GZ_CTX.courseList = () => ({});
   q.ui.sync(true); await settle(); q.ui.sync(true); await settle();
   for (const id of OTHER) assert.ok(q.tile(ckey(id)), `${id} back for its student`);
   assert.equal(q.tile(ckey('_101_1')), null);
+});
+
+test('hiding cached foreign cards does not move or resize the remaining cards', async () => {
+  const list = later(), board = [...OTHER, '_101_1'].map((id) => ({ id: ckey(id), on: true }));
+  const courses = [...COURSES, ...OTHER.map((id) => ({ id, name: 'Previous student', term: '', slot: 1 }))];
+  const p = asStudent(cardsPage({ at: 'dash', courses, local: { widgetLayout: { todo: true, filled: ['dash'], boards: { dash: board } } } }), list);
+  p.ui.sync(true); await settle();
+  const bio = p.tile(ckey('_101_1')), position = [bio.style.left, bio.style.top, bio.style.width], height = p.grid().style.height;
+  assert.ok(OTHER.every((id) => p.tile(ckey(id))), 'cached cards draw immediately while ownership is unknown');
+  list.res(members()); await settle();
+  assert.ok(OTHER.every((id) => !p.tile(ckey(id))), 'foreign cards disappear as soon as ownership is known');
+  assert.deepEqual([bio.style.left, bio.style.top, bio.style.width], position, 'the remaining card keeps its painted slot');
+  assert.equal(p.grid().style.height, height, 'content below the board stays in place too');
 });
 
 test("a fresh Dashboard and its picker exclude the previous student's cached courses", async () => {
