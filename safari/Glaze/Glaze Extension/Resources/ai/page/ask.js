@@ -384,7 +384,14 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     current = 0;
     running(false);
     busy(false);
-    if (run.line) delete run.line.dataset.running;
+    if (run.line) {
+      delete run.line.dataset.running;
+      for (const c of run.cards.values()) if (['run', 'ask'].includes(c.dataset.state)) {
+        c.dataset.state = end.error === 'cancelled' ? 'no' : 'fail';
+        c.querySelector('.gz-ask-step-mark').replaceChildren(icon(MARK[c.dataset.state]));
+        c.querySelector('.gz-ask-step-note')?.remove();
+      }
+    }
     if (end.type === 'end') {
       say('');
       if (end.declined) answer(t('Nothing was changed.'));
