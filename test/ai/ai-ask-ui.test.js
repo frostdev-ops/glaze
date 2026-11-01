@@ -756,6 +756,22 @@ test('turns the worker folded show as one line where they were, opened to read t
   assert.equal(asked(P).at(-1).summary, undefined, 'a new chat carries nothing');
 });
 
+test('New chat rejects a delayed summary from the conversation it cleared', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('Old question'); await settle();
+  answer(P, study('Old answer')); await settle();
+  const oldPort = P.ports.at(-1), oldId = asked(P).at(-1).id;
+  P.doc.fire(P.box().querySelector('.gz-ask-new'), 'click');
+  oldPort.answer({ id: oldId, type: 'summary', text: '- Old conversation', turns: 1 });
+  P.ask('New question'); await settle();
+  answer(P, study('New answer')); await settle();
+  P.ask('New follow-up'); await settle();
+  assert.equal(asked(P).at(-1).summary, undefined, 'no old summary can enter the new conversation');
+  assert.deepEqual([...asked(P).at(-1).history.map((h) => h.question)], ['New question']);
+  P.box().close();
+});
+
 test('the chat mounts in a tile with its own port and conversation, no ids, its meter and New chat in its head, beside the dialog', async () => {
   const P = page({ reply: ready });
   const host = P.doc.createElement('div');
