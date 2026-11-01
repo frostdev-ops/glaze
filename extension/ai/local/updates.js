@@ -128,7 +128,9 @@ var GZ_AI_MODEL_UPDATES = globalThis.GZ_AI_MODEL_UPDATES || (() => {
       for (const x of obsolete) await store.drop(m.id, x.total).catch(() => {});
       return { state: 'current', ...(cur.version && { version: cur.version }) };
     }
-    await store.edit((s) => (signal?.aborted || s?.keep?.[m.id]?.some((x) => x.total === next.total) ? undefined : begin(s, next)));
+    const begun = await store.edit((s) => (signal?.aborted || s?.trial || s?.serial !== st?.serial || s.pins?.[m.id]?.total !== cur.total
+      || s.keep?.[m.id]?.some((x) => x.total === next.total) ? undefined : begin(s, next)));
+    if (begun?.trial) return { state: 'trial' };
     try {
       await store.download(m.id, { total: next.total, whole: true, signal, pause: ctx.idle, onProgress: ctx.progress });
     } catch (e) {
@@ -139,7 +141,7 @@ var GZ_AI_MODEL_UPDATES = globalThis.GZ_AI_MODEL_UPDATES || (() => {
     await ctx.between(async () => {
       if (signal?.aborted) return;
       await store.edit((s) => {
-        if (signal?.aborted || !s?.keep?.[m.id]?.some((x) => x.total === next.total) || s.pins?.[m.id]?.total !== cur.total) return undefined; // removed meanwhile
+        if (signal?.aborted || s?.trial || s?.serial !== st?.serial || !s?.keep?.[m.id]?.some((x) => x.total === next.total) || s.pins?.[m.id]?.total !== cur.total) return undefined; // removed meanwhile
         swapped = true;
         return swap(s, m.id, next, cur);
       });
