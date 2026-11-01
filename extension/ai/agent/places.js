@@ -1,8 +1,8 @@
 // Ask Rime's places (docs/ai-harness.md "Rime's own tools"): a map of the student's school site that Glaze knows the way to,
 // and the panel's actions on it. The paths are the ones Glaze already opens: the command palette's site pages
 // (navigation/page/palette.js), the widgets' places and course homes (mods/page/modwidgets.js PLACE, COURSE), a Canvas
-// course's own navigation (the course pages' links), Ultra's course announcements (courses/ultra.js) and Moodle's user
-// report (courses/moodle.js). Nothing is guessed: a place not on the map is refused with the nearest one.
+// course's own navigation and an Ultra course's (their pages' links; test/fixtures/canvas-course-grades.html,
+// ultra-instant-outline.html) and Moodle's user report (courses/moodle.js). Nothing is guessed: a place not on the map is refused with the nearest one.
 //   map({ site, url, courses, writer }) → { site, origin, here, places: [{ place, title, url? | app? }] }: site 'canvas',
 //     'ultra' or 'moodle'; url the page the student is on; courses [{ id, name, code }] (courses_list's); writer whether
 //     Glaze Writer is on (Documents). A course's own pages only with course (list(map, course)).
@@ -22,7 +22,7 @@ var GZ_AI_RIME_PLACES = globalThis.GZ_AI_RIME_PLACES || (() => {
         ['announcements', 'announcements', (id) => `/courses/${id}/announcements`], ['modules', 'modules', (id) => `/courses/${id}/modules`]] },
     ultra: { pages: [['courses', 'Courses', '/ultra/course'], ['calendar', 'Calendar', '/ultra/calendar'], ['grades', 'Grades', '/ultra/grades'], ['stream', 'Activity stream', '/ultra/stream']],
       id: /^_\d{1,20}_\d{1,20}$/, home: (id) => `/ultra/courses/${id}/outline`,
-      course: [['announcements', 'announcements', (id) => `/ultra/courses/${id}/announcements`]] },
+      course: [['grades', 'grades', (id) => `/ultra/courses/${id}/grades`], ['announcements', 'announcements', (id) => `/ultra/courses/${id}/announcements`]] },
     moodle: { pages: [['dashboard', 'Dashboard', '/my/'], ['courses', 'My courses', '/my/courses.php'], ['calendar', 'Calendar', '/calendar/view.php?view=month'], ['grades', 'Grades', '/grade/report/overview/index.php']],
       id: /^\d{1,20}$/, home: (id) => `/course/view.php?id=${id}`,
       course: [['grades', 'grades', (id) => `/grade/report/user/index.php?id=${id}`]] },
