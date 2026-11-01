@@ -1634,6 +1634,20 @@ test('a Dashboard edit before identity and memberships arrive opts that student 
   assert.deepEqual(lay(q).boards.dash.filter((x) => W.course(x.id)).map((x) => W.course(x.id).id), OTHER, 'the opt-out is persisted for this student');
 });
 
+test('Reset layout preserves hidden course positions until ownership is confirmed', async () => {
+  const list = later(), foreign = ckey(OTHER[0]), own = ckey('_101_1');
+  const board = [foreign, own].map((id) => ({ id, on: true, x: 320, y: 80, w: 420, h: 220 }));
+  const p = asStudent(cardsPage({ local: { widgetLayout: { todo: true, boards: { courses: board } } } }), list);
+  p.ui.sync(true); await settle();
+  p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
+  p.doc.fire(p.doc.querySelector('.gz-dash-reset'), 'click'); await settle();
+  for (const id of [foreign, own]) assert.deepEqual([on(p, 'courses', id).x, on(p, 'courses', id).y, on(p, 'courses', id).w], [320, 80, 420], 'unknown ownership cannot authorize a reset');
+  list.res(members()); await settle();
+  p.doc.fire(p.doc.querySelector('.gz-dash-reset'), 'click'); await settle();
+  assert.deepEqual([on(p, 'courses', foreign).x, on(p, 'courses', foreign).y, on(p, 'courses', foreign).w], [320, 80, 420]);
+  assert.deepEqual([on(p, 'courses', own).x, on(p, 'courses', own).y, on(p, 'courses', own).w], [null, null, undefined]);
+});
+
 test("a tile's Fold, Remove and Float sit above its resize corner, which a folded tile brings up beside them", () => {
   // Both are positioned children of the tile, the corner last; its 24px reach covered a folded tile's Unfold.
   const css = read('core/page/apps.css').replace(/\/\*[\s\S]*?\*\//g, '');
