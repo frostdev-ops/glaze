@@ -383,6 +383,22 @@ test('wakes: switching off during a tick preserves pending records and suppresse
   assert.equal(store.rimeWakes.fired.length, 1, 'off during take must not consume a waiting message');
 });
 
+test('wakes: malformed stored monitors cannot block other wakes or leak unbounded records', async () => {
+  const store = { rimeWakes: {
+    wakes: [{ id: 'w-abcdefgh', at: T0 - 1, say: 'x'.repeat(1000), made: T0 - 1000 }],
+    monitors: [
+      { id: 'm-abcdefgh', watch: 'due', account: ACC, until: T0 + 864e5 },
+      { id: 'm-bcdefghi', watch: 'announcement', account: ACC, until: T0 + 864e5, base: {} },
+      { id: 'm-cdefghij', watch: 'submitted', account: ACC, until: T0 + 864e5, item: null, base: { submitted: false } },
+    ], fired: [],
+  } }, env = wakesEnv(store);
+  assert.deepEqual((await wtool(env, 'wakes_list').run()).items.map((x) => x.id), ['w-abcdefgh']);
+  assert.equal(await W.tick(env), 1);
+  const [fired] = await W.take(env);
+  assert.equal(fired.say.length, W.LIMIT.say);
+  assert.deepEqual(store.rimeWakes.monitors, []);
+});
+
 test('wake_create: approved first, kept with its alarm, at most 20, refused when passed, too far off or switched off', async () => {
   const store = {}, env = wakesEnv(store), ctx = { zone: 'UTC' };
   const make_ = wtool(env, 'wake_create');
@@ -422,7 +438,7 @@ test('a wake fires once its time comes, by its alarm or when the next school pag
   assert.equal(store.rimeWakes.wakes.length, 1, 'kept for when it is on again');
   // The store keeps what fits, at most 20 fired.
   const s = W.clean({ wakes: [{ id: 'w-bad', at: 1, say: 'x' }, { id: 'w-abcdefgh', at: 5, say: '' }], monitors: [{ id: 'm-abcdefgh', watch: 'weather', account: ACC, until: 9 }],
-    fired: Array.from({ length: 30 }, (_, i) => ({ id: `w-${String(i).padStart(8, '0')}`, what: 'wake' })) });
+    fired: Array.from({ length: 30 }, (_, i) => ({ id: `w-${String(i).padStart(8, '0')}`, what: 'wake', at: T0, say: 'Lab' })) });
   assert.deepEqual([s.wakes.length, s.monitors.length, s.fired.length, s.fired[0].id], [0, 0, 20, 'w-00000010']);
 });
 
