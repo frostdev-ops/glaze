@@ -62,10 +62,12 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
   // Whether a board's course card is this student's: the layout is the device's, so another student who signs in here has
   // their cards in it too. own: true or false once Ultra's list of this student's courses is in (or Ultra's own page shows
   // its card), else undefined. shows:
-  // drawn on this student's boards only when confirmed: stored names belong to the device, so they can be another
-  // student's even while the membership list is on its way. Canvas's are always shown.
+  // drawn on this student's boards: theirs, or, while the list is on its way, a course this site's stored records or its
+  // page know, so the student's own cards never wait for the list (no jump on every load). Records are rewritten from the
+  // signed-in student's list, so another student's card can show only in the minutes after a switch, until the list says.
+  // Canvas's are always shown.
   const own = (key) => { const c = W.course(key); return !ultra || !c || c.origin !== location.origin ? true : members?.has(c.id) || nativeCards.has(c.id) || (membersComplete ? false : undefined); };
-  const shows = (key) => own(key) === true;
+  const shows = (key) => { const o = own(key); return o === undefined ? cards.has(W.course(key).id) : o; };
   // The color a card wears from its course (Ultra's slot, or a pick): its class and variables, on the board and in the
   // Course cards dialog. Only what differs is written.
   const tone = (card, id) => {
