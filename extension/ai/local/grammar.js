@@ -489,6 +489,9 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
     const bytesOf = (...xs) => Uint8Array.from(xs.flatMap((x) => (typeof x === 'string' ? [...enc.encode(x)] : [V.marks.get(x.mark)])));
     const call = (t) => {
       if (!S.isObj(t) || typeof t.name !== 'string' || !/^[a-z][a-z0-9_]{0,63}$/.test(t.name) || !S.isObj(t.parameters) || !S.clean(t.parameters)) fail('a tool is { name, parameters }');
+      // Calls write object arguments from the properties below; other root constraints are not compiled by this path.
+      if ((t.parameters.type !== undefined && ![].concat(t.parameters.type).includes('object')) || t.parameters.const !== undefined
+        || t.parameters.enum !== undefined || t.parameters.anyOf !== undefined) fail(`${t.name}: unsupported parameters schema`);
       const own = t.parameters.properties || {}, req = new Set(t.parameters.required || []);
       for (const k of req) if (!Object.hasOwn(own, k)) fail(`${t.name}: required ${k} has no schema`);
       const params = [];
