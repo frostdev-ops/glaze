@@ -12,7 +12,7 @@
 //  grants (feature): each its own sign-in, scope, refresh token and Disconnect; neither reads the other's. Messages
 //  (sendNativeMessage, type google.*, each with feature: 'drive' (the default) or 'calendar'):
 //    { type: 'google.status' } → { ok: true, email, sub (null until connected), pending (a sign-in under way) } |
-//      { ok: false, why: 'setup' }
+//      { ok: false, why: 'setup', step?: 'entitlement' | 'container' | 'writable' (which part of the app group is missing) }
 //    { type: 'google.connect', hint? } → { ok: true, pending: true, open, opened }: open is the app's sign-in URL; opened,
 //      whether this extension opened it (macOS); if not, the worker opens it in a tab for the student to tap (iOS)
 //    { type: 'google.finish', wait? } → { ok: true, email, sub } | { ok: false, why: 'pending' (ask again) | 'cancel' |
@@ -44,6 +44,9 @@ nonisolated enum GlazeGoogle {
     static let pendingFor: TimeInterval = 600, early: TimeInterval = 60, maxWait: TimeInterval = 20
 
     enum Fail: String, Error { case signin, account, network, revoked, cancel, state, scope, auth, setup, pending, request }
+    /// Why there's no app group container (a setup reply's step): no single group in the entitlement, no container for it,
+    /// or one where no file can be written.
+    enum Missing: String, Sendable { case entitlement, container, writable }
 
     /// What a grant is for: Drive (drive.file) or Calendar sync (calendar.app.created), each with openid and email for the
     /// account it binds to. No include_granted_scopes: a grant's tokens carry its own feature's scope alone.
@@ -195,15 +198,18 @@ nonisolated enum GlazeGoogle {
         private func refreshKey(_ f: Feature, _ profile: String) -> String { f.prefix + "refresh." + profile }
         private func pendingKey(_ f: Feature, _ profile: String) -> String { f.prefix + "pending." + profile }
 
-        init(vault: Vault, slot: Slot?, transport: Transport, now: @escaping @Sendable () -> Date = { Date() }) {
-            self.vault = vault; self.slot = slot; self.transport = transport; self.now = now
+        /// Why slot is nil, for setup replies.
+        nonisolated let missing: Missing?
+
+        init(vault: Vault, slot: Slot?, transport: Transport, now: @escaping @Sendable () -> Date = { Date() }, missing: Missing? = nil) {
+            self.vault = vault; self.slot = slot; self.transport = transport; self.now = now; self.missing = missing
         }
 
         private func load<T: Decodable>(_ type: T.Type, _ key: String) -> T? { vault.read(key).flatMap { try? JSONDecoder().decode(T.self, from: $0) } }
         private func store<T: Encodable>(_ value: T, _ key: String) -> Bool { (try? JSONEncoder().encode(value)).map { vault.write(key, $0) } ?? false }
 
         func status(profile: String, feature f: Feature = .drive) -> [String: any Sendable] {
-            guard slot != nil else { return ["ok": false, "why": Fail.setup.rawValue] }
+            guard slot != nil else { return ["ok": false, "why": Fail.setup.rawValue].merging(missing.map { ["step": $0.rawValue] } ?? [:]) { a, _ in a } }
             let s = load(Saved.self, refreshKey(f, profile))
             let p = load(Pending.self, pendingKey(f, profile))
             let pending = p.map { now().timeIntervalSince1970 - $0.at < pendingFor } ?? false
@@ -348,12 +354,16 @@ nonisolated enum GlazeGoogle {
         private func file(_ state: String) -> URL? { validState(state) ? folder.appendingPathComponent("google-\(state).json") : nil }
         func put(_ state: String, _ data: Data) -> Bool {
             guard let f = file(state) else { return false }
+            return Self.write(data, to: f)
+        }
+        /// Callback files and the readiness probe must exercise the same atomic write and iOS protection class.
+        private static func write(_ data: Data, to file: URL) -> Bool {
             #if os(iOS)
             let options: Data.WritingOptions = [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
             #else
             let options: Data.WritingOptions = [.atomic]
             #endif
-            return (try? data.write(to: f, options: options)) != nil
+            return (try? data.write(to: file, options: options)) != nil
         }
         func take(_ state: String) -> Data? {
             guard let f = file(state), let d = try? Data(contentsOf: f) else { return nil }
@@ -371,20 +381,33 @@ nonisolated enum GlazeGoogle {
             }
         }
         /// The app group's container: macOS, from this process's own entitlement (<team>.io.frostdev.Glaze, both Mac builds); iOS,
-        /// group.<app's bundle id>. nil without one, or if it can't be written.
-        static func shared() -> GroupSlot? {
+        /// group.<app's bundle id>. Without one, which step failed (Missing).
+        static func shared() -> (slot: GroupSlot?, missing: Missing?) {
             #if os(macOS)
-            guard let task = SecTaskCreateFromSelf(nil),
-                  let groups = SecTaskCopyValueForEntitlement(task, "com.apple.security.application-groups" as CFString, nil) as? [String],
-                  groups.count == 1 else { return nil }
-            let group = groups[0]
+            let task = SecTaskCreateFromSelf(nil)
+            let groups = task.flatMap { SecTaskCopyValueForEntitlement($0, "com.apple.security.application-groups" as CFString, nil) } as? [String]
             #else
             let id = Bundle.main.bundleIdentifier ?? ""
-            let group = "group." + (id.hasSuffix(".Extension") ? String(id.dropLast(".Extension".count)) : id)
+            let groups: [String]? = ["group." + (id.hasSuffix(".Extension") ? String(id.dropLast(".Extension".count)) : id)]
             #endif
-            guard let folder = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group),
-                  FileManager.default.isWritableFile(atPath: folder.path) else { return nil }
-            return GroupSlot(folder: folder)
+            return locate(groups: groups) { FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: $0) }
+        }
+        /// The container of the one group in groups, once a file can be written there. Not isWritableFile: under the App
+        /// Sandbox, access(2) answers EPERM for the group container even where writing works (measured on macOS 27.0.1: a
+        /// sandboxed process of team 22AAZFMTV8 with the group wrote, read back and removed a file there while
+        /// isWritableFile said false), which left Safari's Google sign-in answering setup.
+        static func locate(groups: [String]?, container: (String) -> URL?, writable: (URL) -> Bool = GroupSlot.writable) -> (slot: GroupSlot?, missing: Missing?) {
+            guard let groups, groups.count == 1 else { return (nil, .entitlement) }
+            guard let folder = container(groups[0]) else { return (nil, .container) }
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            guard writable(folder) else { return (nil, .writable) }
+            return (GroupSlot(folder: folder), nil)
+        }
+        /// A nonempty atomic write, like put: creating an empty file alone can succeed when payload writes fail.
+        static func writable(_ folder: URL) -> Bool {
+            let probe = folder.appendingPathComponent(".google-write-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: probe) }
+            return write(Data([0]), to: probe)
         }
     }
 
@@ -442,11 +465,16 @@ nonisolated enum GlazeGoogle {
         }
     }
 
-    static let engine = Engine(vault: Keychain(), slot: GroupSlot.shared(), transport: HTTP())
+    static let engine: Engine = {
+        let found = GroupSlot.shared()
+        return Engine(vault: Keychain(), slot: found.slot, transport: HTTP(), missing: found.missing)
+    }()
 
     /// The reply to r. open: opens the app's sign-in URL where this process can (macOS), answering whether it did.
     static func reply(to r: Request, engine: Engine = engine, open: @Sendable (URL) async -> Bool = { _ in false }) async -> [String: any Sendable] {
-        let fail = { (f: Fail) -> [String: any Sendable] in ["ok": false, "why": f.rawValue] }
+        let fail = { (f: Fail) -> [String: any Sendable] in
+            ["ok": false, "why": f.rawValue].merging(f == .setup ? engine.missing.map { ["step": $0.rawValue] } ?? [:] : [:]) { a, _ in a }
+        }
         guard let f = r.feature else { return fail(.request) }
         do {
             switch r.type {

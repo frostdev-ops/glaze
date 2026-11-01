@@ -30,7 +30,7 @@ final class GlazeGoogleSignIn: NSObject, ASWebAuthenticationPresentationContextP
     @discardableResult
     func open(_ url: URL, done: @escaping @MainActor () -> Void = {}) -> Bool {
         guard url.scheme?.lowercased() == GlazeGoogle.appScheme else { return false }
-        guard let s = GlazeGoogle.signIn(from: url), let slot = GlazeGoogle.GroupSlot.shared() else { done(); return true }
+        guard let s = GlazeGoogle.signIn(from: url), let slot = GlazeGoogle.GroupSlot.shared().slot else { done(); return true }
         if let old = active { complete(old.id, ["error": "cancel"], cancel: true) }
         let id = UUID()
         let session = ASWebAuthenticationSession(url: GlazeGoogle.authURL(s), callbackURLScheme: GlazeGoogle.callbackScheme) { [weak self] url, error in
