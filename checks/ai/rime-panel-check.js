@@ -46,7 +46,11 @@ globalThis.glazeIn = async (url) => {
 const now = Date.now(), DAY = 864e5;
 const planner = (id, title, days) => ({ plannable_type: 'assignment', plannable_id: id, course_id: 25, context_name: 'BIO 1100', plannable_date: new Date(now + days * DAY).toISOString(),
   html_url: `${CANVAS}/courses/25/assignments/${id}`, plannable: { title }, submissions: { submitted: false, excused: false, graded: false, late: false, missing: false, redo_request: false }, planner_override: null });
-const PLANNER = [planner(1, 'Lab report', 2), planner(2, 'Reading response', 5)];
+const PLANNER = [planner(1, 'Lab report', 2), planner(2, 'Reading response', 5),
+  { ...planner(70, 'Lab moved to Room 204', -1), plannable_type: 'announcement', html_url: `${CANVAS}/courses/25/discussion_topics/70`, submissions: false, plannable: { title: 'Lab moved to Room 204', read_state: 'unread' } }];
+// The announcement as Canvas's topic and Ultra's public announcement answer (the fields Glaze's pop-up reads).
+const TOPIC = { id: 70, title: 'Lab moved to Room 204', author: { display_name: 'Dr. Rivera' }, posted_at: new Date(now - DAY).toISOString(), message: '<p>This week the lab meets in <b>Room 204</b>. Bring goggles.</p>', attachments: [], read_state: 'unread' };
+const ULTRA_NEWS = [{ id: '_801_1', title: 'Lab moved to Room 204', body: '<p>This week the lab meets in Room 204. Bring goggles.</p>', availability: { duration: { type: 'Permanent' } } }];
 const DASH = '<!doctype html><html lang="en"><head><title>Dashboard</title><link rel="stylesheet" href="/dist/brandable_css/check.css"></head><body><div id="application" class="ic-app"><main id="content"><h1>Dashboard</h1><p>Biology, history and the week ahead.</p></main></div></body></html>';
 const ASSIGNMENTS = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Assignments</title><link rel="stylesheet" href="/dist/brandable_css/check.css"></head><body><div id="application" class="ic-app"><main id="content"><h1>Assignments: BIO 1100</h1>'
   + '<ul class="ig-list"><li><a href="/courses/25/assignments/1">Lab report</a><p>Due in 2 days · 20 pts</p></li><li><a href="/courses/25/assignments/2">Reading response</a><p>Due in 5 days · 10 pts</p></li>'
@@ -102,6 +106,8 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
         asked.push(u.pathname);
         if (u.pathname.startsWith('/ultra')) return r.fulfill({ contentType: 'text/html', body: ULTRA_HTML });
         if (u.pathname.endsWith('/users/me')) return json({ id: '_42_1' });
+        if (u.pathname === '/learn/api/public/v1/courses/_101_1/announcements') return json({ results: ULTRA_NEWS });
+        if (u.pathname === '/learn/api/public/v1/courses/_101_1/announcements/_801_1') return json({ ...ULTRA_NEWS[0], created: new Date(now - DAY).toISOString() });
         return json({ results: [] });
       }
       if (u.origin === 'https://cdn.school.test' && u.pathname.endsWith('.css')) return r.fulfill({ contentType: 'text/css', body: '' });
@@ -109,6 +115,7 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
       asked.push(u.pathname);
       if (u.pathname === '/api/v1/users/self/profile' || u.pathname === '/api/v1/users/self') return json({ id: '5', time_zone: 'UTC' });
       if (u.pathname === '/api/v1/planner/items') return json(PLANNER);
+      if (u.pathname === '/api/v1/courses/25/discussion_topics/70') return json(TOPIC);
       if (u.pathname.startsWith('/api/v1/')) return json([]);
       if (u.pathname.endsWith('.css')) return r.fulfill({ contentType: 'text/css', body: '' });
       return r.fulfill({ contentType: 'text/html', body: u.pathname === '/courses/25/assignments' ? ASSIGNMENTS : DASH });
@@ -116,11 +123,18 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
     const worker = context.serviceWorkers().find((w) => w.url().endsWith('/background/background.js')) || await context.waitForEvent('serviceworker');
     const base = `chrome-extension://${new URL(worker.url()).host}`, APPROVE = `${base}/agents/approve.html`;
     const plan = { todoCache: { key: `todo:${A}`, at: now - 36e5, start: new Date(now - 8 * DAY).toISOString(), end: new Date(now + 8 * DAY).toISOString(), teach: true, progress: true,
-      items: [{ type: 'assignment', id: '1', cid: '25', course: 'BIO 1100', title: 'Lab report', at: now + 2 * DAY }], grading: [], sums: {} } };
+      items: [{ type: 'assignment', id: '1', cid: '25', course: 'BIO 1100', title: 'Lab report', at: now + 2 * DAY },
+        { type: 'announcement', id: '70', cid: '25', course: 'BIO 1100', title: 'Lab moved to Room 204', at: now - DAY, read: false }], grading: [], sums: {} } };
     await worker.evaluate(async ({ settings, local }) => {
       await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings); await chrome.storage.local.set(local);
       await GZ_AI_BROKER.vault().set('connections', { 'custom-1': { provider: 'stub', model: 'stub', generation: 'g-1' } });
-    }, { settings: settingsFor('Paper'), local: { ultra: [ULTRA], ai: AI, ...plan } });
+    }, { settings: settingsFor('Paper'), local: { ultra: [ULTRA], ai: AI, ...plan,
+    } });
+    // Each school's own records while its scenes run, so Glaze holds one account at a time (with two, Agents' tools want it named).
+    const ULTRA_REC = { term: 't', name: 'Fall', from: now - 60 * DAY, to: now + 60 * DAY, at: now - 36e5, courses: [{ id: '_101_1', name: 'BIO 1100', q: false, more: false, items: [], trend: [[now - 7 * DAY, 88]], gp: '' }] };
+    const records = (site) => worker.evaluate(({ site, plan, rec, key }) => (site === 'canvas'
+      ? chrome.storage.local.remove(key).then(() => chrome.storage.local.set(plan)) : chrome.storage.local.remove('todoCache').then(() => chrome.storage.local.set({ [key]: rec }))),
+    { site, plan, rec: ULTRA_REC, key: `insights:${ULTRA}/_42_1` });
     const script = (s) => worker.evaluate((x) => { askCheck.script = x; askCheck.seen = []; }, s);
     const seen = () => worker.evaluate(() => askCheck.seen);
 
@@ -177,7 +191,12 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
       return n;
     };
     const answered = async (n, label) => {
-      await until(async () => (await answers().count()) > n && !await answers().nth(n).getAttribute('data-streaming').then((v) => v !== null), label, 20000);
+      try { await until(async () => (await answers().count()) > n && !await answers().nth(n).getAttribute('data-streaming').then((v) => v !== null), label, 20000); }
+      catch (e) {
+        const err = await page.locator('#gz-ask .gz-ask-err p, #gz-ask .gz-ask-say').allTextContents().catch(() => []);
+        const steps = await page.locator('#gz-ask .gz-ask-step').evaluateAll((l) => l.map((c) => `${c.querySelector('.gz-ask-step-label')?.textContent}:${c.dataset.state}:${c.querySelector('.gz-ask-step-detail')?.textContent || ''}`)).catch(() => []);
+        throw new Error(`${e.message}; panel: ${JSON.stringify(err)}; cards: ${JSON.stringify(steps)}; model saw: ${JSON.stringify(await seen().catch(() => null))}`);
+      }
       return (await answers().nth(n).locator('.gz-ask-text').allTextContents()).join('').trim();
     };
     const approval = async () => {
@@ -194,6 +213,7 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
     for (const site of ['canvas', 'ultra']) {
       const HOME = site === 'canvas' ? `${CANVAS}/` : `${ULTRA}/ultra/courses/_101_1/outline`;
       if (site === 'ultra') await env.ultraReady(worker);
+      await records(site);
       await goto(HOME);
 
       await check(`${site}: run_js's card shows the value it worked out, and the answer uses it`, async () => {
@@ -248,6 +268,28 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
         return { url: page.url(), marked, files: await snap(site, 'navigate-highlight', canvas ? 'mark.gz-ask-spot' : 'p mark.gz-ask-spot') };
       });
 
+      await check(`${site}: a question about the student's announcements reads them with the tools first, card by card, then answers from them`, async () => {
+        await openPanel();
+        await page.click('#gz-ask .gz-ask-new');
+        const canvas = site === 'canvas';
+        await script({ 'agent.tools': canvas
+          ? [{ call: { name: 'announcements_list', arguments: {} }, answer: null }, { call: { name: 'announcement_read', arguments: { course: '25', id: '70' } }, answer: null },
+            { call: null, answer: { text: 'Your newest BIO 1100 announcement, from Dr. Rivera: the lab meets in Room 204 this week. Bring goggles.', quotes: ['Lab moved to Room 204', 'Dr. Rivera'] } }]
+          : [{ call: { name: 'courses_list', arguments: {} }, answer: null }, { call: { name: 'announcements_list', arguments: { course: '_101_1' } }, answer: null },
+            { call: { name: 'announcement_read', arguments: { course: '_101_1', id: '_801_1' } }, answer: null },
+            { call: null, answer: { text: 'BIO 1100\'s newest announcement: the lab meets in Room 204 this week. Bring goggles.', quotes: ['Lab moved to Room 204'] } }] });
+        const n = await ask('Any new announcements in BIO 1100?');
+        const text = await answered(n, 'the tool-first answer');
+        const labels = await page.locator('#gz-ask .gz-ask-steps').last().locator('.gz-ask-step-label').allTextContents();
+        const states = await page.locator('#gz-ask .gz-ask-steps').last().locator('.gz-ask-step').evaluateAll((l) => l.map((c) => c.dataset.state));
+        assert.deepEqual(labels, canvas ? ['Reading announcements', 'Reading an announcement'] : ['Reading your courses', 'Reading announcements', 'Reading an announcement']);
+        assert.ok(states.every((x) => x === 'done'), JSON.stringify(states));
+        const runs = await seen();
+        assert.ok(runs.length === labels.length + 1 && runs.every((r) => r.task === 'agent.tools'));
+        assert.match(text, /Room 204/);
+        return { text, labels, files: await snap(site, 'tool-first', '#gz-ask') };
+      });
+
       await check(`${site}: a reminder that fired shows as a card on the next school page; its Ask Rime asks about it`, async () => {
         const at = Date.now() - 60e3;
         await worker.evaluate((w) => chrome.storage.local.set({ rimeWakes: { wakes: [w], monitors: [], fired: [] } }), { id: site === 'canvas' ? 'w-firedcnv' : 'w-firedult', at, say: 'Finish the lab report', made: at - DAY });
@@ -255,7 +297,10 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
         await until(() => page.locator('#gz-ask-fired .gz-ask-fired-card').count(), 'the fired card', 20000);
         assert.equal(await page.locator('#gz-ask-fired .gz-ask-fired-say').first().textContent(), 'Finish the lab report');
         const files = await snap(site, 'fired', '#gz-ask-fired');
-        await script({ 'agent.tools': [{ call: { name: 'todo_list', arguments: {} }, answer: null }, { call: null, answer: { text: 'Your reminder: finish the lab report. Lab report is due soon.', quotes: ['Lab report'] } }] });
+        // On Ultra Glaze has read no to-do list yet: the answer says so, as the tool-first rule asks, and guesses nothing.
+        await script({ 'agent.tools': [{ call: { name: 'todo_list', arguments: {} }, answer: null }, { call: null, answer: site === 'canvas'
+          ? { text: 'Your reminder: finish the lab report. Lab report is due soon.', quotes: ['Lab report'] }
+          : { text: 'Your reminder: finish the lab report. Glaze has not read your Blackboard to-do list yet, so open Courses once and ask again.', quotes: [] } }] });
         await page.click('#gz-ask-fired .gz-ask-fired-go');
         await page.locator('#gz-ask[open]').waitFor();
         const text = await answered(0, 'the fired reminder\'s answer');
