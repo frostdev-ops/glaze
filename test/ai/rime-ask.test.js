@@ -290,3 +290,14 @@ test('port: a fired record cannot authorize a replacement question', async () =>
   h.say({ id: 47, op: 'ask', question: 'Open my grades', fired: 'w-replace1' }); await settle(25);
   assert.equal(h.seen.runs.length, 0);
 });
+
+
+test('port: own tools never fall back to another school account', async () => {
+  const h = harness({ script: [call('places_list', {}), said('No cached courses on this site.')] });
+  h.env.accounts = async () => [{ account: 'https://another.school/5', origin: 'https://another.school' }];
+  const reads = [];
+  h.env.own.read = async (...args) => { reads.push(args); return { items: [{ id: '25', name: 'Private other-school course' }] }; };
+  h.say({ id: 50, op: 'ask', question: 'Take me to my courses', site: 'canvas' }); await settle(50);
+  assert.deepEqual(reads, [], 'an unseen school has no inferred account');
+  assert.ok(!JSON.stringify(h.seen.runs).includes('Private other-school course'));
+});
