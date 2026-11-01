@@ -46,7 +46,7 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
         : typeof b.submitted === 'boolean' ? { submitted: b.submitted, title, course } : null;
     }
     if (m.item !== undefined) return null;
-    if (m.watch === 'grade') return UID.test(m.course) && (b.percent === null || Number.isFinite(b.percent)) && Number.isSafeInteger(b.points) && b.points >= 0 ? { percent: b.percent, points: b.points, course } : null;
+    if (m.watch === 'grade') return UID.test(m.course) && (b.percent === null || Number.isFinite(b.percent)) && Number.isSafeInteger(b.points) && b.points >= 0 ? { percent: b.percent, points: b.points, at: when(b.at) || null, course } : null;
     if (!Array.isArray(b.ids) || !b.ids.every((id) => typeof id === 'string' && UID.test(id)) || !isObj(b.titles)) return null;
     const ids = [...new Set(b.ids)].slice(0, 500);
     return { ids, titles: Object.fromEntries(ids.map((id) => [id, text(b.titles[id], 300)])), course };
@@ -102,7 +102,7 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
     // Insights keeps the course's grade after each graded piece of work (trend), not each score: a new point or a new
     // percent is a grade posted.
     grade: { tool: 'course_grades', args: (m) => ({ course: m.course }), see: (r) => (isObj(r?.course) && r.course.lettersOnly !== true
-      ? { percent: Number.isFinite(r.course.percent) ? r.course.percent : null, points: Array.isArray(r.trend) ? r.trend.length : 0, course: text(r.course.name, 120) } : null) },
+      ? { percent: Number.isFinite(r.course.percent) ? r.course.percent : null, points: Array.isArray(r.trend) ? r.trend.length : 0, at: when(r.course.at) || null, course: text(r.course.name, 120) } : null) },
     announcement: { tool: 'todo_list', args: (m) => (m.course ? { course: m.course } : {}), see: (r) => (Array.isArray(r?.items)
       ? { ids: items(r).filter((i) => i.type === 'announcement').map((i) => i.id), titles: Object.fromEntries(items(r).filter((i) => i.type === 'announcement').map((i) => [i.id, text(i.title, 300)])), course: items(r).find((i) => i.type === 'announcement')?.course || '' } : null) },
   };
@@ -120,7 +120,7 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
     const b = m.base;
     if (m.watch === 'due') return now.due !== b.due ? { title: now.title, course: now.course, from: b.due, due: now.due } : null;
     if (m.watch === 'submitted') return now.submitted && !b.submitted ? { title: now.title, course: now.course, submitted: true } : null;
-    if (m.watch === 'grade') return now.points > b.points || now.percent !== b.percent ? { course: now.course, was: b.percent, percent: now.percent } : null;
+    if (m.watch === 'grade') return now.points > b.points || now.percent !== b.percent || (b.at !== null && now.at !== null && now.at !== b.at) ? { course: now.course, was: b.percent, percent: now.percent } : null;
     const fresh = now.ids.filter((id) => !b.ids.includes(id));
     return fresh.length ? { course: m.course ? now.course : '', titles: fresh.slice(0, LIMIT.titles).map((id) => now.titles[id] || '') } : null;
   };
@@ -148,6 +148,7 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
       if (!(await env.on())) return 0;
       if (m.until <= now) continue;
       const r = await look(env, m), fact = r.seen ? changed(m, r.seen) : null;
+      if (m.watch === 'grade' && m.base.at === null && r.seen) m.base.at = r.seen.at;
       if (fact) { fire(s, { id: m.id, what: 'monitor', watch: m.watch, say: m.say, at: now, fact }); n++; } else keep.push(m);
     }
     s.monitors = keep;
