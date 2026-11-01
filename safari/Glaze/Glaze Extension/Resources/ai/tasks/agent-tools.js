@@ -302,7 +302,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // A mention (or a negated request) is not permission. Match an affirmative action at the start of a clause, with
   // the usual polite prefixes, and keep cancellation separate from creation.
   const request = (verbs) => new RegExp(`(?:^|[.!?;,]\\s+)[¿¡"“«]?(?:(?:please|por favor|por gentileza|s['’]il (?:te|vous) pla[îi]t|bitte|alsjeblieft)[, ]+)?(?:(?:can|could|would|will) you(?: please)? |i (?:want|would like) you to |(?:puedes|podr[ií]as|pode|voc[êe] pode|peux-tu|pouvez-vous|kannst du|k[öo]nntest du|k[öo]nnen sie|kun je|kan je|wil je) )?(?:${verbs})(?![\\p{L}\\p{N}])`, 'iu');
-  const CREATE_REQUEST = request('remind me|(?:set|create|schedule) (?:me )?(?:a |an |the )?reminders?|i (?:want|need|would like) (?:a )?reminder|let me know|tell me (?:when|if)|warn me|alert me|notify me|ping me|wake me|check (?:back|again)|recu[ée]rdame|av[ií]same|(?:me )?lembre(?:-me)?|me avis\\p{L}*|avise-me|rappelle-moi|rappelez-moi|pr[ée]viens?-moi|dis-moi quand|erinnere mich|sag mir|benachrichtig\\p{L}*|herinner me|laat (?:me )?weten|waarschuw me');
+  const CREATE_REQUEST = request("(?:don'?t|do not) let me forget|no me dejes olvidar|n[ãa]o me deixe esquecer|ne me laisse pas oublier|lass mich [\\p{L} ]{0,30}nicht vergessen|laat me [\\p{L} ]{0,30}niet vergeten|" + 'remind me|(?:set|create|schedule) (?:me )?(?:a |an |the )?reminders?|i (?:want|need|would like) (?:a )?reminder|let me know|tell me (?:when|if)|warn me|alert me|notify me|ping me|wake me|check (?:back|again)|recu[ée]rdame|av[ií]same|(?:me )?lembre(?:-me)?|me avis\\p{L}*|avise-me|rappelle-moi|rappelez-moi|pr[ée]viens?-moi|dis-moi quand|erinnere mich|sag mir|benachrichtig\\p{L}*|herinner me|laat (?:me )?weten|waarschuw me');
   const MONITOR_REQUEST = request('watch|monitor|(?:set up|create) (?:a )?(?:watch|monitor)|keep an eye|vigila\\p{L}*|monitore\\p{L}*|surveill\\p{L}*|[üu]berwach\\p{L}*|beobacht\\p{L}*|houd in de gaten');
   const CANCEL_REQUEST = request('cancel|stop (?:watching|reminding)|cancela\\p{L}*|annul\\p{L}*|storn\\p{L}*|abbrech\\p{L}*|l[öo]sch\\p{L}*');
   // The values under one key in the results of one tool's steps.
@@ -327,7 +327,8 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     if (name === 'wake_create') { const at = moment(args.at, inp.zone); return at !== null && at > inp.now && at - inp.now <= AHEAD ? '' : 'time'; }
     if (name === 'monitor_create') {
       const item = args.type !== undefined || args.id !== undefined;
-      return ['due', 'submitted'].includes(args.watch) ? (args.type !== undefined && args.id !== undefined ? '' : 'monitor')
+      // due and submitted watch the to-do list: their item comes from a to-do list or schedule result.
+      return ['due', 'submitted'].includes(args.watch) ? (args.type !== undefined && args.id !== undefined && [...under(inp, 'todo_list', ['id']), ...under(inp, 'schedule_list', ['id'])].includes(args.id) ? '' : 'monitor')
         : item || (args.watch === 'grade' && args.course === undefined) ? 'monitor' : '';
     }
     return '';

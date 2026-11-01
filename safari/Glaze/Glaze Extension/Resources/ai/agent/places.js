@@ -59,7 +59,8 @@ var GZ_AI_RIME_PLACES = globalThis.GZ_AI_RIME_PLACES || (() => {
   // What places_list answers: without course the site's pages, Glaze's and each course's home; with it that course's.
   const list = (m, course) => {
     const keep = course === undefined ? m.places.filter((p) => !p.course || !p.place.includes('/')) : m.places.filter((p) => p.course === course);
-    return keep.slice(0, LIMIT.places).map(({ place, title }) => ({ place, title }));
+    // A course's id beside its home in the top list, so places_list with course can follow it.
+    return keep.slice(0, LIMIT.places).map(({ place, title, course: c }) => ({ place, title, ...(c && course === undefined && { course: c }) }));
   };
   const words = (s) => String(s).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   // The nearest place to a name that isn't one: the most words in common with its id and title, then the shortest.

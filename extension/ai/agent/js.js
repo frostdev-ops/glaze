@@ -27,7 +27,7 @@ var GZ_AI_RIME_JS = globalThis.GZ_AI_RIME_JS || (() => {
     if (shown.length > left) { value = shown.slice(0, left); cut = true; }
     return { ok: o.ok === true, value, logs, ...(typeof o.error === 'string' && { error: o.error.slice(0, LIMIT.line) }), ...(cut && { cut: true }), ...(Number.isFinite(o.ms) && { ms: o.ms }) };
   };
-  const NONE = "Glaze can run code only in Chrome; work it out step by step instead.";
+  const NONE = "Glaze can run code only in Chrome; say which steps to take instead.";
   // Where the sandbox exists: a manifest sandbox page, Chrome's alone.
   const available = (browser) => browser === 'chrome';
   const spec = () => AT().SPECS.find((t) => t.name === 'run_js');
