@@ -104,7 +104,7 @@ const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, d
   };
   c.globalThis = c;
   const src = read('planner/page/todo.js').replace('  return { sync, add, cmds, mount, unmount, suspend, resume };', `  return { sync, add, cmds, mount, unmount, suspend, resume, probe: {
-    refresh, keepDraft, onStore, onChange, onShow, onSubmit, onClick, form: (x) => { form = x; }, formNow: () => form, save, rowOf, render, get: () => ({ data, cache, fetching, note: line?.textContent, box, dead, who }), parts: () => ({ head, body }),
+    refresh, keepDraft, onStore, onChange, onShow, onSubmit, onClick, coursesIn, form: (x) => { form = x; }, formNow: () => form, save, rowOf, render, get: () => ({ data, cache, fetching, note: line?.textContent, box, dead, who }), parts: () => ({ head, body }),
     seed(x) { L = GZ_TODO; who = { uid: '3', tz: 'America/New_York' }; sure = true; key = 'todo:https://canvas.test/3'; prefs = { ...x.prefs };
       data = x.data || { tasks: [], items: {} }; cache = x.cache || null; started = Promise.resolve(); courses = { cids: null, names: {}, list: [] };
       box = new E('section'); head = new E(); line = new E('p'); body = new E(); },
@@ -699,3 +699,22 @@ for (const isTrusted of [false, true]) {
     assert.deepEqual({ ...f.p.get().data.items }, {});
   });
 }
+
+test('an open task form updates its course choices when confirmed courses arrive or are renamed', () => {
+  const f = feature();
+  f.p.seed({ prefs: O, cache: { items: [], grading: [], sums: {} } });
+  f.p.form({ cid: '' });
+  f.p.render(true);
+  const { body } = f.p.parts();
+  const choices = () => elements(body).filter((e) => e.tagName === 'OPTION').map((e) => e.textContent);
+  assert.deepEqual(choices(), ['No course']);
+  f.p.coursesIn([{ id: '25', name: 'Biology' }]);
+  f.p.render(true);
+  assert.deepEqual(choices(), ['No course', 'Biology'], 'courses can arrive after the list has drawn');
+  f.p.coursesIn([{ id: '25', name: 'Biology II' }, { id: '26', name: 'Chemistry' }]);
+  f.p.render(true);
+  assert.deepEqual(choices(), ['No course', 'Biology II', 'Chemistry']);
+  const drawn = body.children;
+  f.p.render(true);
+  assert.equal(body.children, drawn, 'unchanged choices leave the form alone');
+});
