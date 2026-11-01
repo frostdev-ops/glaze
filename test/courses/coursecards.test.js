@@ -10,12 +10,12 @@ const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(setI
 const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
 const page = ({ more = {}, ctxMore = {} } = {}) => {
   let writes = 0, enabled = true, color = { color: '#ffe12b', own: true }, peek = { me: null, courses: null, books: new Map() };
-  const reads = [], renders = [], waiting = [], local = {}, listeners = [];
+  const reads = [], renders = [], waiting = [], local = {}, listeners = [], events = new Map();
   const doc = { createElement: (tag) => {
     const el = new El(tag, doc), props = {};
     el.style = { getPropertyValue: (k) => props[k] || '', setProperty: (k, v) => { props[k] = String(v); writes++; }, removeProperty: (k) => { delete props[k]; writes++; } };
     return el;
-  }, querySelectorAll: () => [] };
+  }, querySelectorAll: () => [], addEventListener: (name, f) => events.set(name, f) };
   const settings = D.GZ_SANITIZE({ enhance: { cardTasks: true, overall: true, coursemenu: true } });
   const ctx = { site: 'ultra', on: () => enabled, t: (s) => s, locale: () => 'en', nickOf: () => '', courseList: () => ({ _101_1: { name: 'Biology', site: 'https://bb.test', slot: '3' } }), courseColors: () => ({ _101_1: color }), canvasPeek: () => peek, settings: () => settings,
     need: (file) => { assert.ok(['planner/todo.js', 'courses/page/cards.js', 'courses/page/cardtasks.js'].includes(file), `unexpected reader ${file}`); return file === 'courses/page/cardtasks.js' ? new Promise((r) => waiting.push(r)) : Promise.resolve(); }, ...ctxMore };
@@ -24,8 +24,30 @@ const page = ({ more = {}, ctxMore = {} } = {}) => {
   ui.sync();
   const mount = (body = doc.createElement('div')) => ui.fill(body, { id: 'course:https://bb.test/_101_1', term: () => '' });
   const body = doc.createElement('div'), tile = mount(body);
-  return { ui, body, tile, mount, local, renders, waiting, reads, setPeek: (p) => { peek = p; ui.sync(); }, setColor: (v) => { color = v; tile.update(); }, answer: () => { while (reads.length) reads.shift()(); }, writes: () => writes, setEnabled: (v) => { enabled = v; }, settings, listeners };
+  return { ui, body, tile, mount, local, renders, waiting, reads, refresh: (detail) => events.get('glaze:ultra-refresh')({ detail }), setPeek: (p) => { peek = p; ui.sync(); }, setColor: (v) => { color = v; tile.update(); }, answer: () => { while (reads.length) reads.shift()(); }, writes: () => writes, setEnabled: (v) => { enabled = v; }, settings, listeners };
 };
+
+test('a partial membership list confirms the courses it contains without rejecting courses it missed', async () => {
+  const p = page(), rows = [{ courseId: '_101_1', course: { name: 'Biology' } }];
+  rows.complete = false;
+  p.setPeek({ me: null, courses: Promise.resolve(rows), books: new Map() }); await settle();
+  assert.equal(p.ui.own('course:https://bb.test/_101_1'), true, 'a returned membership is positive evidence');
+  assert.equal(p.ui.shows('course:https://bb.test/_101_1'), true);
+  assert.equal(p.ui.own('course:https://bb.test/_999_1'), undefined, 'an omitted course remains unknown');
+  assert.equal(p.ui.shows('course:https://bb.test/_999_1'), false);
+});
+
+test("a membership answer from before an identity refresh cannot replace the current student's courses", async () => {
+  const p = page(), old = deferred(), current = deferred();
+  p.setPeek({ me: null, courses: old.promise, books: new Map() });
+  p.refresh({ identity: true });
+  p.setPeek({ me: null, courses: current.promise, books: new Map() });
+  current.resolve([{ courseId: '_202_1', course: { name: 'History' } }]); await settle();
+  old.resolve([{ courseId: '_101_1', course: { name: 'Biology' } }]); await settle();
+  assert.equal(p.ui.own('course:https://bb.test/_202_1'), true);
+  assert.equal(p.ui.shows('course:https://bb.test/_101_1'), false);
+  assert.deepEqual(Array.from(p.ui.list(), (c) => c.id), ['_202_1']);
+});
 
 test('board cards retain the native slot and clear a removed per-course colour override', async () => {
   const p = page(); await settle();
