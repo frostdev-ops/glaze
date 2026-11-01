@@ -192,11 +192,25 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // A wake or monitor that fired (ai/agent/wakes.js take()): its own record as the model reads it, before the question (the
   // record's say). → the readable JSON, or null when it isn't one.
   const WATCHES = ['grade', 'announcement', 'due', 'submitted'];
+  const stamp = (at) => Number.isSafeInteger(at) && at > 0 && at <= 8640000000000000;
+  const firedShape = (f) => S.isObj(f) && ['wake', 'monitor'].includes(f.what)
+    && (f.what === 'monitor' ? WATCHES.includes(f.watch) : f.watch === undefined)
+    && (f.fact === undefined || S.isObj(f.fact));
   const firedOf = (f, zone) => {
-    if (!S.isObj(f) || Object.keys(f).some((k) => !['what', 'watch', 'say', 'at', 'fact'].includes(k))) return null;
-    if (!['wake', 'monitor'].includes(f.what) || typeof f.say !== 'string' || !f.say.trim() || f.say.length > 200 || !Number.isSafeInteger(f.at) || f.at <= 0
-      || (f.what === 'monitor' ? !WATCHES.includes(f.watch) : f.watch !== undefined) || (f.fact !== undefined && !S.isObj(f.fact))) return null;
+    if (!firedShape(f) || Object.keys(f).some((k) => !['id', 'what', 'watch', 'say', 'at', 'fact'].includes(k))) return null;
+    if (typeof f.say !== 'string' || (f.what === 'wake' && !f.say.trim()) || f.say.length > 200 || !stamp(f.at)
+      || (f.id !== undefined && (typeof f.id !== 'string' || !/^[wm]-[a-z0-9]{8}$/.test(f.id) || f.id[0] !== f.what[0]))) return null;
     return readable({ what: f.what, ...(f.watch && { watch: f.watch }), at: f.at, ...(f.fact && { fact: f.fact }) }, zone);
+  };
+  // Requests carry the already-readable record, without its storage id or say. Accept only a bounded record input()
+  // could have written; a block with the right label alone is not evidence of a fired event.
+  const firedText = (text) => {
+    try {
+      const f = JSON.parse(text);
+      if (!firedShape(f) || Object.keys(f).some((k) => !['what', 'watch', 'at', 'fact'].includes(k))) return false;
+      if (typeof f.at === 'string' ? moment(f.at, 'UTC') === null : !stamp(f.at) || (f.at > 1e11 && f.at < 1e14)) return false;
+      return readable(f, 'UTC') === text;
+    } catch { return false; }
   };
   const input = (raw) => {
     if (!S.isObj(raw) || Object.keys(raw).some((k) => !['question', 'tools', 'steps', 'now', 'zone', 'locale', 'fired'].includes(k))) return null;
@@ -250,6 +264,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     const tools = SPECS.filter((t) => lines.split('\n').includes(line(t)));
     if (!tools.length || offered(tools.map((t) => t.name)).map(line).join('\n') !== lines) throw refuse('tools');
     const fired = blocks[1]?.kind === 'data' && blocks[1].label === 'fired' ? blocks[1].text : undefined;
+    if (fired !== undefined && !firedText(fired)) throw refuse('fired');
     const [now, question, ...rest] = fired === undefined ? blocks : [blocks[0], ...blocks.slice(2)];
     if (now?.kind !== 'ctx' || now.label !== 'now' || question?.kind !== 'data' || question.label !== 'question' || rest.length % 2 || rest.length / 2 > LIMIT.steps) throw refuse('blocks');
     const steps = [];

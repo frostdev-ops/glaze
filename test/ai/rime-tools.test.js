@@ -821,7 +821,7 @@ test('a fired wake or monitor is a turn of its own: a fired block before the que
   assert.equal(A.why({ call: null, answer: { text: 'MATH 1350 is at 85.2% now, up from 83.5%.', quotes: ['MATH 1350'] } }, inp), '');
   assert.equal(A.why({ call: null, answer: { text: 'MATH 1350 is at 91% now.', quotes: [] } }, inp), 'number');
   // Only a fired record's own shape is taken.
-  for (const bad of [{ ...fired, what: 'nag' }, { ...fired, extra: 1 }, { ...fired, say: '' }, { ...fired, at: 'soon' }, { what: 'wake', say: 'x' }]) {
+  for (const bad of [{ ...fired, what: 'nag' }, { ...fired, extra: 1 }, { ...fired, say: 42 }, { ...fired, at: 'soon' }, { what: 'wake', say: 'x' }]) {
     assert.equal(A.task.input({ question: 'x', fired: bad, tools: ['grades_list'], now: NOW, zone: ZONE }), null, JSON.stringify(bad));
   }
   const wake = A.task.input({ question: 'Finish the lab', fired: { what: 'wake', say: 'Finish the lab', at: NOW }, tools: ['todo_list'], now: NOW, zone: ZONE });
