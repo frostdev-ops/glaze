@@ -523,6 +523,23 @@ test('signed file addresses never leave school reads even as visible text or emb
   }
 });
 
+test('Ultra unread document pages disclose truncation', async () => {
+  const partial = probedTab({ routes: { '/learn/api/public/v1/courses/_101_1/contents/_723_1/children': {
+    ...PROBED.children._723_1, paging: { nextPage: '/learn/api/public/v1/courses/_101_1/contents/_723_1/children?offset=200' },
+  } } });
+  const doc = await tool('content_read').run({ course: '_101_1', id: '_723_1' }, ctxFor(UL, tabsOf([partial])));
+  assert.match(doc.text, /900 words/);
+  assert.equal(doc.truncated, true, 'the child reader stopped before the rest of the document');
+});
+
+test('Ultra discussion text caps disclose truncation', async () => {
+  const long = probedTab({ routes: { '/learn/api/public/v1/courses/_101_1/discussions/_911_1': {
+    ...PROBED.discussion, topic: { ...PROBED.discussion.topic, body: 'x'.repeat(25000) },
+  } } });
+  const discussion = await tool('discussion_read').run({ course: '_101_1', id: '_911_1' }, ctxFor(UL, tabsOf([long])));
+  assert.equal(discussion.truncated, true, 'the prompt text cap is smaller than the HTML cap');
+});
+
 test('Ultra syllabus: the course\'s syllabus document wherever it sits, a page at a time; a body that is only a file names the file; imported facts stay', async () => {
   const tabs = tabsOf([probedTab()]);
   const r = await tool('syllabus_read').run({ course: '_101_1' }, ctxFor(UL, tabs));
