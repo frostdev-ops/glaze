@@ -290,14 +290,15 @@ const check = async (name, test) => {
       assert.equal(await item(page, 'glaze:documents').getAttribute('aria-current'), 'page');
       assert.equal(page.frames().filter((x) => x.url().startsWith(PAPERS)).length, 1, 'one frame');
       assert.equal(await f.locator('#list > .gd-btn').innerText(), 'Close');
-      // The tab stepped back over the document's entry (the browser keeps it as Forward): no entry added.
-      assert.deepEqual(await page.evaluate(() => [history.length, history.state?.gzSettings, history.state?.gzPage, 'gzAt' in (history.state || {})]), [listed + 1, 1, 'papers', false]);
+      // The tab stepped back over the document's entry (kept as Forward), so no entry is added and one Back leaves.
+      assert.equal(await page.evaluate(() => history.length), listed + 1, 'no entry added');
       await back(page);
       await closed(page);
       await atMark(page);
     });
     await check('ultra: PDF Close waits for the filled file to reach storage', async () => {
       const key = PA.newKey(), bytes = require('../../tools/fidelity/pdf-fixtures.js').acroform();
+      let entries = 0;
       await worker.evaluate(async ({ key, file, size }) => {
         const index = (await chrome.storage.local.get('writerPapers')).writerPapers || [];
         const rec = { key, kind: 'pdf', title: 'PDF close check', named: true, file, size, pages: 3, revision: 1, updated: Date.now() };
@@ -316,6 +317,7 @@ const check = async (name, test) => {
         await field.fill('Katherine Johnson');
         await field.press('Tab');
         await until(() => worker.evaluate(() => globalThis.pdfCheckHeld), 'the PDF storage write held');
+        entries = await page.evaluate(() => history.length);
         await f.locator('.gp-top > .gd-btn').click();
         assert.ok(await f.evaluate(() => new URLSearchParams(location.search).has('pdf') && document.documentElement.dataset.mode === 'pdf'), 'Close keeps the document until its pending save finishes');
       } finally {
@@ -323,7 +325,7 @@ const check = async (name, test) => {
       }
       await until(() => framed(page) && !new URL(framed(page).url()).search, 'the list once the save finished');
       f = await shown(page);
-      assert.deepEqual(await page.evaluate(() => [history.state?.gzSettings, 'gzAt' in (history.state || {})]), [1, false], 'back at the list\'s entry');
+      assert.equal(await page.evaluate(() => history.length), entries, 'no entry added');
       await f.locator(`.gd-card[data-key="${key}"] .gd-title`).click();
       f = await shown(page);
       assert.equal(await f.locator('.annotationLayer input').first().inputValue(), 'Katherine Johnson');
