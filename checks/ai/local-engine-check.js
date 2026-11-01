@@ -502,6 +502,11 @@ function pageLib() {
           // The prompt path: 16 tokens a workgroup.
           await k.dispatch('attention', { BLOCK: true }, { 0: qb, 1: Kb, 2: Vb, 3: gb, 4: ob }, k.PARAMS.attention({ T: T2, pos, H, Hkv, window, ring, scale: 1 / Math.sqrt(D) }), [H, Math.ceil(T2 / 16)]);
           runs.push([', blocks of 16', await rd(ob, T2 * H * D)]);
+          if (e.subgroups) {
+            // FLASH: 64 rows (4 heads × 16 tokens) a workgroup per key/value head.
+            await k.dispatch('attention', { FLASH: true }, { 0: qb, 1: Kb, 2: Vb, 3: gb, 4: ob }, k.PARAMS.attention({ T: T2, pos, H, Hkv, window, ring, scale: 1 / Math.sqrt(D) }), [Hkv, Math.ceil(T2 / (64 / (H / Hkv)))]);
+            runs.push([', flash', await rd(ob, T2 * H * D)]);
+          }
         }
         if (T2 === 1) {
           // The decode path: a workgroup per head and tile of keys, then merged.
