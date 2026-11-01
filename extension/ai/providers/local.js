@@ -210,8 +210,10 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     walk(out);
     let blocks;
     try { blocks = FMT().parse(req, { images: true }).blocks.filter((b) => b.kind === 'data'); } catch { return null; }
-    const sources = {};
-    for (const n of names) { const hit = blocks.filter((b) => b.label === n || b.label.startsWith(`${n} part `)); if (hit.length === 1) sources[n] = hit[0].text; }
+    const sources = Object.fromEntries([...names].flatMap((n) => {
+      const hit = blocks.filter((b) => b.label === n || b.label.startsWith(`${n} part `));
+      return hit.length === 1 ? [[n, hit[0].text]] : [];
+    }));
     return Object.keys(sources).length ? { schema: out, sources } : null;
   };
   const run = async (req, cfg, { signal, onDelta } = {}) => {
