@@ -8,6 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const Module = require('node:module');
+const vm = require('node:vm');
 const { execFileSync } = require('node:child_process');
 const TL = require('../../extension/ai/tools.js');
 const A = require('../../extension/ai/tasks/agent-tools.js');
@@ -214,4 +215,22 @@ test('grade math with an assignment named "Homework" runs, in each of the six la
   }
   // Doing the homework itself is still refused.
   assert.equal(A.why({ call: { name: 'run_js', arguments: { code: '4 * 12' } }, answer: null }, A.task.input({ question: 'Do my homework: 4 * 12', tools: [...A.NAMES], now: C.NOW, zone: 'UTC' })), 'work');
+});
+
+
+test('gate: the selected tier and explicit weights decide the level, including the worker vault configuration', async () => {
+  const list = [{ id: 'new', tier: 1, tools: 3, state: 'ready' }, { id: 'r5', tier: 2, state: 'ready' }];
+  assert.equal(L.levelOf(list, { weights: 'r5' }), 1);
+  assert.equal(L.levelOf(list, { tier: 2 }), 1);
+  assert.equal(L.levelOf(list, { weights: 'missing' }), 1);
+  const source = fs.readFileSync(path.join(ROOT, 'extension/background/background.js'), 'utf8');
+  const fn = /const rimeLevel = async \(\) => \{[\s\S]*?\n\};/.exec(source)[0];
+  const cfg = { provider: 'local', tier: 2, weights: 'r5' };
+  const level = vm.runInNewContext(`${fn} rimeLevel`, {
+    chrome: { storage: { local: { get: async () => ({ ai: { on: true, model: { use: 'local' }, features: { ask: true } } }) } } },
+    GZ_AI_SETTINGS: require('../../extension/ai/settings.js'),
+    aiEnv: () => ({ vault: { get: async () => ({ local: cfg }) } }),
+    GZ_AI_LOCAL: { config: L.config, toolsLevel: async (c) => L.levelOf(list, c) },
+  });
+  assert.equal(await level(), 1, 'the worker must pass the configuration the broker runs');
 });
