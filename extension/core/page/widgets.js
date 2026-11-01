@@ -1976,6 +1976,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const reveal = (id) => {
     const x = on && tiles.get(id);
     if (!x?.el?.isConnected || x.el.hasAttribute('data-fold') || !shown(x.el)) return false;
+    if (x.body.inert || x.body.closest('[hidden], [inert], [aria-hidden="true"]') || x.el.getClientRects?.().length === 0
+      || (typeof getComputedStyle === 'function' && getComputedStyle(x.el).visibility !== 'visible')) return false;
     x.el.scrollIntoView?.({ block: 'nearest', behavior: 'auto' });
     x.focus?.();
     return true;
