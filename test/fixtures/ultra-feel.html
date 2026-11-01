@@ -7,7 +7,10 @@
      (glaze-plans/perf-ultra/0b/live-shapes-2026-10-31.md), with invented text. As there, a route change leaves the old view
      until four div.spinner.bb-secondary-color-2 take its place 35 ms on, and the view fills later (window.__delay, 600 ms by
      default). Where its tab marks move and when the course comes in are approximations: on the route change, and with the
-     spinners. Its <base href> is a CDN, as Ultra's is. -->
+     spinners. Its <base href> is a CDN, as Ultra's is. With Ultra's boot screen first in its body (div#initial-load-area, as a
+     cold load has it live: checks/navigation/ultra-cold-load-check.js puts it there) it boots as live: nothing of the app for
+     window.__boot ms (700 by default), then its Institution page first, under the boot screen fading out and going, and the
+     address's own page 200 ms on, through its spinners. -->
 <base href="//ultra-cdn.invalid/ultra/uiv4001.0.0-rel/">
 <title>Blackboard Learn</title>
 <style>
@@ -162,7 +165,19 @@
     render(false);
   });
   window.addEventListener('popstate', () => render(false));
-  render(true);
+  const ila = document.getElementById('initial-load-area');
+  if (!ila) render(true);
+  else {
+    window.__loading = true;
+    const at = location.pathname;
+    setTimeout(() => {
+      base.innerHTML = '<section class="institution-page-container route-view-container"><div class="base-header"><h1 id="main-heading">Institution Page</h1></div>'
+        + '<div class="ip-banner" style="height: 180px; background: #f4f4f4; color: #222">Welcome to the invented school</div>' + times(3, (n) => `<div class="element-card">Notice ${n}</div>`) + '</section>';
+      ila.className += ' fade-out';
+      setTimeout(() => ila.remove(), 400);
+      setTimeout(() => { if (at === '/ultra/institution-page') { window.__loading = false; return; } render(false); }, 200);
+    }, window.__boot ?? 700);
+  }
 })();
 </script>
 </body></html>

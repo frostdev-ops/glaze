@@ -803,10 +803,12 @@ test('no boot on a page already built, an old document, the standby, or with the
 test('a cold load hides Ultra\'s boot screen and its app, never Glaze\'s bar or the copy; the copy goes at once', () => {
   const rules = cssRules('content/extras.css');
   const node = (tag, cls = [], attrs = {}, parent = null, id = '') => ({ tag, id, cls, attrs, parent });
-  const on = node('html', [], { 'data-gz-enhance-feedback': '' }), off = node('html');
-  for (const [html, want] of [[on, 'hidden'], [off, null]]) {
+  // Hidden from the moment the sheet is in (render-blocking at first paint where Glaze arms it early), back as it was once
+  // the settings applied (data-gz-font) say the switch is off.
+  const on = node('html', [], { 'data-gz-font': 'inter', 'data-gz-enhance-feedback': '' }), early = node('html'), off = node('html', [], { 'data-gz-font': 'inter' });
+  for (const [html, want, what] of [[on, 'hidden', 'on'], [early, 'hidden', 'before the settings'], [off, 'visible', 'the switch off']]) {
     const ila = node('div', ['mode-light'], {}, node('body', [], {}, html), 'initial-load-area');
-    assert.equal(winner(rules, ila, 'visibility')?.[0] ?? null, want, `Ultra's boot screen, the switch ${want ? 'on' : 'off'}`);
+    assert.equal(winner(rules, ila, 'visibility')?.[0] ?? null, want, `Ultra's boot screen, ${what}`);
     assert.equal(winner(rules, ila, 'display'), null, 'by visibility: its own fade and removal still run');
   }
   const html = node('html', [], { 'data-gz-boot': '', 'data-gz-enhance-feedback': '' }), body = node('body', [], {}, html), wrap = node('div', [], {}, body, 'site-wrap');
@@ -823,4 +825,19 @@ test('a cold load hides Ultra\'s boot screen and its app, never Glaze\'s bar or 
   const copy = node('div', [], { 'data-out': '' }, node('main', [], {}, node('html')), 'gz-instant');
   assert.equal(winner(rules, copy, 'opacity')[0], '0');
   assert.equal(winner(rules, copy, 'transition')?.[0] ?? 'none', 'none', 'no cross-fade over Ultra\'s view');
+});
+
+test('the page shows at once in the boot\'s place: Glaze\'s finite entrances under it end, nothing else', () => {
+  const s = site({ at: '/ultra/grades', boot: true });
+  const anims = [['gz-in', 300], ['gz-rise', 400], ['gz-drift', Infinity], ['ultra-own', 300]].map(([animationName, endTime]) => ({ animationName, done: false,
+    effect: { getComputedTiming: () => ({ endTime }) }, finish() { if (!Number.isFinite(endTime)) throw Error('InvalidStateError'); this.done = true; } }));
+  const wrap = s.html.querySelector('#site-wrap');
+  wrap.getAnimations = (o) => (o?.subtree ? anims : []);
+  s.sync();
+  s.ila.remove();
+  s.inner.append(s.layout);
+  s.baseMain.replaceChildren(GRADES_VIEW(s));
+  s.flush();
+  assert.equal(booted(s).attr, false);
+  assert.deepEqual(anims.map((a) => [a.animationName, a.done]), [['gz-in', true], ['gz-rise', true], ['gz-drift', false], ['ultra-own', false]]);
 });

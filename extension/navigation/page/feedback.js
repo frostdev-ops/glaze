@@ -257,9 +257,12 @@ var GZ_FEEDBACK = globalThis.GZ_FEEDBACK || (() => {
     x.wait = setTimeout(() => { if (v === x && !x.routed && here() === x.at) end(x); }, WAIT);
     return x;
   };
+  // The page shown at once in the skeleton's or copy's place: Glaze's entrances on what came in under it (fading up from
+  // nothing, motion.css) end where they would, so no frame shows neither.
+  const settle = (root) => { for (const a of root?.getAnimations?.({ subtree: true }) || []) if (/^gz-/.test(a.animationName) && Number.isFinite(a.effect?.getComputedTiming().endTime)) a.finish(); };
   const end = (x = v) => {
     if (!x) return;
-    if (v === x) { v = null; html.removeAttribute(x.boot ? 'data-gz-boot' : 'data-gz-skel'); }
+    if (v === x) { v = null; html.removeAttribute(x.boot ? 'data-gz-boot' : 'data-gz-skel'); if (x.boot) settle(document.getElementById('site-wrap')); }
     x.mo?.disconnect();
     x.ro?.disconnect();
     clearTimeout(x.cap);

@@ -656,10 +656,11 @@ html[data-gz-instant] main.course-main-content > :not([id^="gz-"]) { visibility:
 html[data-gz-instant-frame] #site-wrap { visibility: visible !important; }
 
 /* A cold load (navigation/page/feedback.js boot): Ultra's boot screen (its grey cover and spinner) never shows once this sheet
-   is in, by visibility so its own fade and removal still run; from the page's first sync until its view is ready, Ultra's
+   is in (back as it was once the settings say the switch is off), by visibility so its own fade and removal still run; from the page's first sync until its view is ready, Ultra's
    app waits hidden, keeping its layout (its first view of another page, its spinners, half-built views), under Glaze's bar,
    the Look and one skeleton in the main area's place, or the page's instant copy over its main area. */
-html[data-gz-enhance-feedback] #initial-load-area { visibility: hidden !important; }
+#initial-load-area { visibility: hidden !important; }
+html[data-gz-font]:not([data-gz-enhance-feedback]) #initial-load-area { visibility: visible !important; }
 html[data-gz-boot] #site-wrap { visibility: hidden !important; }
 html[data-gz-boot] #gz-instant { visibility: visible !important; }
 #gz-boot { position: fixed; top: calc(var(--gz-navbar-top, 0px) + 24px); right: calc(var(--gz-sb-room, 0px) + 24px); bottom: 0; left: calc(var(--gz-navbar-left, 0px) + 24px); }
