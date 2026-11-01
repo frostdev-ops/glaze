@@ -1,5 +1,7 @@
-// The local model's hardware ladder: which LFM3 1.7B quant (ai/local/models.json, tiers 1–4) this machine downloads
-// and runs. pick() is the decision, pure; probe() gathers its input in a page with WebGPU, bench() included.
+// The local model's hardware ladder: which quant of Rime 1.7B (ai/local/models.json) this machine downloads and runs.
+// A tier ranks a quant by size, smallest 1: Q4_K_M 1, Q6_K 3, Q8_0 4; 2 is kept for a Q5_K_M, so one can be added
+// without moving the others (a student's Advanced choice is saved as its tier). pick() is the decision, pure; probe()
+// gathers its input in a page with WebGPU, bench() included.
 //
 // Refused, the whole machine: no WebGPU adapter; a fallback adapter (isFallbackAdapter, or SwiftShader by name: a CPU
 // emulation); maxBufferSize or maxStorageBufferBindingSize below need(). The engine keeps every buffer under 2 GiB and
@@ -17,15 +19,15 @@
 // a fixed part (dispatches, small kernels, the token's readback) plus the file's bytes over the rate the GPU streams
 // them: t = K_OVER · overheadMs + size / (K_BW · bandwidth). bench() measures both on the machine: `bandwidth`, bytes a
 // second through its GEMV over packed 8-bit weights; `overheadMs`, a chain of DISPATCHES tiny dispatches with a readback.
-// K_OVER and K_BW relate those to the engine's own decode, fitted to its measured speeds (C3, decode 128 tokens with
-// readback): RTX 3080 Ti Q4_K_M 133.2 / Q8_0 100.0 tok/s; M5 Pro Q4_K_M 103.3 / Q8_0 78.9 tok/s. Assumed, not measured:
-// Q5_K and Q6_K cost what their bytes say; f32 vs f16 is ignored (Q4_K_M on the M5 Pro: 101.4 vs 103.3 tok/s); the
+// K_OVER and K_BW relate those to the engine's own decode, fitted to its measured speeds on stock LFM3-1.7B (Rime's
+// shape, its files within 608 bytes; C3, decode 128 tokens with readback): RTX 3080 Ti Q4_K_M 133.2 / Q8_0 100.0 tok/s; M5 Pro Q4_K_M 103.3 / Q8_0 78.9 tok/s. Assumed, not measured:
+// Q6_K (and a Q5_K) costs what its bytes say; f32 vs f16 is ignored (Q4_K_M on the M5 Pro: 101.4 vs 103.3 tok/s); the
 // engine without subgroups (Firefox) is no slower than with them.
 // Classic script; node exports.
 var GZ_AI_LADDER = globalThis.GZ_AI_LADDER || (() => {
   const MIN_TPS = 15;
   const HEADROOM = 1.2;
-  // LFM3 1.7B (C0 §6) and the engine's default session (C3's createSession: ctx 4096, chunk 128).
+  // Rime 1.7B, LFM3-1.7B's shape (C0 §6), and the engine's default session (C3's createSession: ctx 4096, chunk 128).
   const SHAPE = { vocab: 128000, embed: 2048, ffn: 7680, heads: 16, kvWidth: 4 * 128, headDim: 128, full: 6, sliding: 5, window: 256 };
   const CTX = 4096, CHUNK = 128;
   // Least squares over the four C3 speeds, with the C7 bench medians (M5 Pro 175.5 GB/s, 1.2 ms; RTX 3080 Ti 410.4 GB/s,
