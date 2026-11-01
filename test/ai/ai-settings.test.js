@@ -1005,6 +1005,42 @@ test('Rime\'s context size in Advanced: 4K by default to 128K, sizes this comput
   assert.deepEqual(sent.filter((m) => m.op === 'set').at(-1).cfg, { provider: 'local', tier: 1 }, '4K is the default, never stored');
 });
 
+test('Rime keeps tier and context changes made while the other choice is saving', async (t) => {
+  for (const [first, second, expected] of [
+    [['tier', '3'], ['window', '8192'], { tier: 3, window: 8192 }],
+    [['window', '8192'], ['tier', '3'], { tier: 3, window: 8192 }],
+    [['tier', '3'], ['window', '4096'], { tier: 3 }],
+    [['window', '8192'], ['tier', ''], { window: 8192 }],
+  ]) await t.test(`${first.join('=')} then ${second.join('=')}`, async () => {
+    let release, kept, writes = 0;
+    const pending = new Promise((resolve) => { release = resolve; });
+    const local = async (m) => {
+      if (m.op === 'set') {
+        if (++writes === 1) await pending;
+        kept.set('connections', { local: { ...m.cfg } });
+        return { ok: true };
+      }
+      if (m.op === 'updates') return { ok: true, auto: true };
+      return { ok: true, state: 'ready', size: 1099627200, tier: 1, tiers: [{ tier: 1, size: 1099627200 }, { tier: 3, size: 1427637696 }] };
+    };
+    const p = await open({ ai: { on: true, mode: 'advanced' }, providers: ['local'], local,
+      conns: { local: { provider: 'local', tier: 1, window: 32768 } }, ladder: require('../../extension/ai/local/ladder.js') });
+    kept = p.vault;
+    await p.click(p.card('Rime'));
+    for (const [field, value] of [first, second]) {
+      const pick = p.$(`ai-local-${field}`);
+      pick.value = value;
+      p.fire(pick, 'change');
+      await settle();
+    }
+    assert.equal(writes, 1, 'the first save is still pending');
+    release();
+    await settle();
+    assert.deepEqual(kept.get('connections').local, { provider: 'local', ...expected });
+    assert.equal(writes, 2, 'both choices are saved');
+  });
+});
+
 test('Update automatically is kept in ai settings, on unless turned off', () => {
   assert.equal(AS.clean({}).updates, true);
   assert.equal(AS.clean({ updates: false }).updates, false);
