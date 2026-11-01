@@ -682,3 +682,31 @@ test('route() and check() agree on every language\'s reminder, notice, watch and
   // The shared set itself: every phrase of a language is in the router's table for it.
   for (const l of Object.keys(A.PHRASES.remind)) for (const p of [...A.PHRASES.remind[l], ...A.PHRASES.cancel[l], ...A.PHRASES.notify[l], ...A.PHRASES.watch[l]]) assert.equal(typeof p, 'string');
 });
+
+// ---- Canvas discussion prompts: only a teacher's or TA's, checked against the course's enrollments -------------------
+// Shapes from Canvas's API documentation (enrollments: id, user_id, type; topics: author.id/display_name, assignment_id;
+// entries: id, user_id, user_name, message, created_at, deleted?, recent_replies) — not yet captured live.
+test('Canvas discussion_read returns a prompt only when its author is a teacher or TA of the course; names omitted, the student\'s own replies, classmates counted', async () => {
+  const staff = [{ id: 1, user_id: 900, type: 'TeacherEnrollment', enrollment_state: 'active' }, { id: 2, user_id: 901, type: 'TaEnrollment', enrollment_state: 'active' }];
+  const prompt = { id: 81, title: 'Cell questions', author: { id: 900, display_name: 'Dana Rivera' }, user_name: 'Dana Rivera', posted_at: '2026-10-14T15:00:00Z', assignment_id: 55,
+    message: '<p>Share one question about cells. Dana Rivera will answer on Friday.</p>', attachments: [], locked_for_user: false, published: true };
+  const entries = [
+    { id: 1, user_id: 5, user_name: 'Student Self', message: '<p>Why do cells divide?</p>', created_at: '2026-10-15T10:00:00Z', recent_replies: [] },
+    { id: 2, user_id: 77, user_name: 'Kim Classmate', message: '<p>KIM-PRIVATE words.</p>', created_at: '2026-10-15T11:00:00Z',
+      recent_replies: [{ id: 3, user_id: 5, user_name: 'Student Self', message: '<p>Good point, Kim Classmate.</p>', created_at: '2026-10-15T12:00:00Z', parent_id: 2 }] },
+    { id: 4, user_id: 78, user_name: 'Gone', message: '', deleted: true, created_at: '2026-10-15T13:00:00Z', recent_replies: [] },
+  ];
+  const routes = { '/api/v1/courses/25/discussion_topics/81': prompt, '/api/v1/courses/25/enrollments': staff, '/api/v1/courses/25/discussion_topics/81/entries': entries };
+  const r = await tool('discussion_read').run({ course: '25', id: '81' }, ctxFor(ACC, tabsOf([canvasTab({ routes })])));
+  assert.equal(r.title, 'Cell questions');
+  assert.equal(r.text, 'Share one question about cells. [name omitted] will answer on Friday.');
+  assert.equal(r.gradable, true);
+  assert.deepEqual(r.mine, [{ at: Date.parse('2026-10-15T10:00:00Z'), reply: false, text: 'Why do cells divide?' }, { at: Date.parse('2026-10-15T12:00:00Z'), reply: true, text: 'Good point, [name omitted].' }]);
+  assert.equal(r.others, 1);
+  assert.doesNotMatch(JSON.stringify(r), /Dana|Rivera|Kim|KIM-PRIVATE/);
+  // A classmate's topic, or no readable staff list: the refusal.
+  const peer = await tool('discussion_read').run({ course: '25', id: '81' }, ctxFor(ACC, tabsOf([canvasTab({ routes: { ...routes, '/api/v1/courses/25/discussion_topics/81': { ...prompt, author: { id: 77, display_name: 'Kim Classmate' } } } })])));
+  assert.match(peer.error, /authorship/);
+  const hidden = await tool('discussion_read').run({ course: '25', id: '81' }, ctxFor(ACC, tabsOf([canvasTab({ routes: { ...routes, '/api/v1/courses/25/enrollments': () => ({ ok: false, status: 403, headers: { get: () => null }, text: async () => '{}' }) } })])));
+  assert.match(hidden.error, /authorship/);
+});
