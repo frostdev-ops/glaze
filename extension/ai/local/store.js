@@ -72,8 +72,14 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
       entries.set(m.id, freeze(m));
       tiers.set(m.tier, m.id);
     }
-    const latest = new Map(entries);
-    for (const [id, m] of Object.entries(isObj(st.pins) ? st.pins : {})) if (text(m) && m.id === id && fits(m) && (entries.has(id) ? entries.get(id).tier === m.tier : !tiers.has(m.tier))) entries.set(id, freeze(m));
+    const latest = new Map(entries), offered = new Set(entries.keys());
+    for (const id of base.keys()) if (entries.get(id) === base.get(id)) offered.delete(id);
+    for (const [id, m] of Object.entries(isObj(st.pins) ? st.pins : {})) {
+      if (!text(m) || m.id !== id || !fits(m) || !(entries.has(id) ? entries.get(id).tier === m.tier : !tiers.has(m.tier))) continue;
+      entries.set(id, freeze(m));
+      // The list's version is the one to run; without one, a model stays on its version (never back to models.json's).
+      if (!offered.has(id)) latest.set(id, entries.get(id));
+    }
     for (const [id, list] of Object.entries(isObj(st.keep) ? st.keep : {})) {
       const use = entries.get(id);
       if (!use || !Array.isArray(list)) continue;
