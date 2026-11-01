@@ -26,7 +26,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
   const LOCALES = ['en', 'pt-BR', 'es', 'fr', 'de', 'nl'];
   // turns: questions and answers a follow-up carries (ai/ask.js takes six at most), each cut to turn characters.
   // summary: the worker's summary of folded turns, carried back with a later question.
-  const LIMIT = { question: 2000, attempt: 12000, turns: 3, turn: 2000, grow: 200, text: 20000, summary: 700 };
+  const LIMIT = { question: 2000, attempt: 12000, turns: 3, turn: 2000, grow: 200, text: 20000, summary: 700, raw: 2000 };
   // The page's language, as the tasks take it (ai/tasks/study-help.js LOCALES): pt-PT reads Brazilian Portuguese, others English.
   const lang = () => { const tag = String(ctx.locale() || 'en'); return LOCALES.find((c) => c === tag) || LOCALES.find((c) => c.split('-')[0] === tag.split('-')[0]) || 'en'; };
   const on = (ai) => !!ai && ai.on === true && ai.features?.ask === true;
@@ -423,6 +423,15 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
       return li;
     };
     const note = (text, cls = 'gz-ask-note') => put(make('li', { className: cls }, icon('warn'), make('p', { textContent: text })));
+    // Why a question failed, or what Glaze built its own answer from: the rule's code (the worker's error and its why) and the
+    // steps run, opened to the model's raw answer, as text. No why, steps or raw answer: nothing drawn.
+    const whyOf = ({ error, why, steps, raw } = {}) => {
+      const code = [error, why].filter((x) => typeof x === 'string' && x).map((x) => x.slice(0, 40)).join(': ');
+      const n = Number.isSafeInteger(steps) && steps >= 0 ? steps : null, words = typeof raw === 'string' ? raw.slice(0, LIMIT.raw) : '';
+      if (!(typeof why === 'string' && why) && n === null && !words) return null;
+      return make('details', { className: 'gz-ask-why' }, make('summary', { textContent: [code, n].filter((x) => x !== '' && x !== null).join(' · ') }),
+        words ? make('pre', { dir: 'ltr', textContent: words }) : null);
+    };
 
     // ---- the context meter, and the turns folded into a summary ----------------------------------------------------------
     // The share of the model's window the request about to go takes (the worker's { used, window }), as a ring and its
@@ -561,6 +570,12 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
           turns.push({ question: q, answer: more ? `${reply}\n\n${more}` : reply, li });
         } else {
           const li = answer(String(end.answer?.text || ''));
+          // Glaze's own answer (built from the results), drawn as any is, its detail under it.
+          if (end.answer?.built === true) {
+            li.dataset.built = '';
+            const why = whyOf(end.answer);
+            if (why) li.querySelector('.gz-ask-acts')?.before(why);
+          }
           turns.push({ question: q, answer: String(end.answer?.text || ''), li });
           perform(queued, li);
         }
@@ -572,6 +587,8 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
         const retry = make('button', { type: 'button', className: 'gz-ask-retry' }, icon('retry'), make('span', { textContent: t('Try again') }));
         const li = note(text, 'gz-ask-err');
         li.append(retry);
+        const why = whyOf(end);
+        if (why) li.append(why);
         retry.addEventListener('click', (e) => {
           if (!real(e) || !activated() || current || pending) return;
           drop(li);
