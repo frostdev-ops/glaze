@@ -357,3 +357,11 @@ test('port: a fired-store read failure ends the request instead of leaving the p
   h.say({ id: 62, op: 'fired' }); await settle(40);
   assert.deepEqual(h.ends().map((m) => [m.id, m.type]), [[62, 'error']]);
 });
+
+
+test('arrival peek never rewrites unchanged private highlight state', async () => {
+  let writes = 0;
+  const env = { tab: 88, now: () => C.NOW, page: () => ({ url: `${C.CANVAS}/grades` }), session: { get: async () => ({}), set: async () => { writes++; } } };
+  assert.deepEqual(await K.arrival(env), []);
+  assert.equal(writes, 0, 'an ordinary school page load must not write an empty handoff');
+});
