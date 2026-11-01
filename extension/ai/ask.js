@@ -229,7 +229,22 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const DEFINITION = /\b(?:what (?:is|are) (?:an? )|define (?:an? )?)/iu;
   // WORK's computing verbs, which a compute question that isn't graded work may use: "Calculate my grade if…".
   const COMPUTING = ['calculat\\p{L}*', 'calcula\\p{L}*', 'calcul\\p{L}*', 'berechn\\p{L}*', 'bereken\\p{L}*'];
-  const route = (question, { attempt = '', locale = 'en', level = 1 } = {}) => {
+  // Tools level 3: pushback on the last answer, or a follow-up to it ("that's not true", "you missed…", "what about Monday?"),
+  // in six languages. With a conversation, such a turn routes as the question before it did, with fresh tool calls.
+  const FOLLOW = new RegExp(`(?:^|[^\\p{L}])(?:${[
+    "(?:i )?don'?t think (?:that'?s|that is|it'?s|so)|that'?s (?:not|wrong|incorrect)|(?:that|this|it) (?:is|was) (?:not (?:true|right|correct)|wrong)|not true|you (?:missed|forgot|left out)|are you sure|what about|how about|and (?:next|this|tomorrow|today|on|for|what)|check again|look again",
+    'no creo que sea|eso no es (?:verdad|cierto|correcto)|no es (?:verdad|cierto)|te (?:falt[óo]|olvidaste)|qu[ée] (?:pasa|hay) con|y (?:el|la|los|las|para|qu[ée]|ma[ñn]ana|la pr[óo]xima)|est[áa]s segur[oa]|incorrecto|revisa (?:otra vez|de nuevo)',
+    'acho que (?:isso )?n[ãa]o|isso n[ãa]o (?:[ée]|est[áa])|n[ãa]o (?:[ée]|est[áa]) (?:certo|verdade|correto)|voc[êe] esqueceu|faltou|e quanto|e (?:a|o|na|no|para|amanh[ãa]|semana que vem)|tem certeza|errado',
+    "je ne (?:pense|crois) pas|ce n'est pas (?:vrai|juste|correct)|c'est faux|tu as oubli[ée]|et (?:pour|la|le|lundi|demain|la semaine)|tu es s[ûu]re?|v[ée]rifie (?:encore|[àa] nouveau)",
+    'das stimmt (?:nicht|so nicht)|das ist (?:falsch|nicht richtig)|du hast [\\p{L} ]{0,30}vergessen|bist du sicher|was ist mit|und (?:n[äa]chste|morgen|montag|f[üu]r)|falsch',
+    'dat klopt niet|dat is (?:niet waar|fout)|je bent [\\p{L} ]{0,30}vergeten|weet je het zeker|hoe zit het met|en (?:volgende|morgen|maandag|voor)|fout',
+  ].join('|')})(?![\\p{L}])`, 'iu');
+  const route = (question, { attempt = '', locale = 'en', level = 1, history } = {}) => {
+    const last = level >= 3 && Array.isArray(history) && history.length ? history[history.length - 1] : null;
+    if (last && !String(attempt).trim() && FOLLOW.test(String(question).replace(/[‘’]/g, "'"))) {
+      const again = route(`${last.question}\n${question}`, { locale, level });
+      if (again.task === 'agent.tools') return again;
+    }
     const q = String(question).replace(/[‘’]/g, "'"), work = typeof attempt === 'string' ? attempt : '';
     const has = (table) => words(lists(table, locale)).test(q);
     const on = Object.keys(TOPICS).filter((k) => has(TOPICS[k]));
@@ -268,11 +283,11 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
 
   // ---- the step loop ---------------------------------------------------------------------------------------------------
   const cancelled = () => Object.assign(R().error('cancelled'), { category: 'cancelled' });
-  const episode = async ({ question, tools, locale, now, zone, run, call, signal, fired, first, help }) => {
+  const episode = async ({ question, tools, locale, now, zone, run, call, signal, fired, first, help, history }) => {
     const steps = [];
     for (;;) {
       if (signal?.aborted) throw cancelled();
-      const out = await run('agent.tools', { question, tools, steps: steps.map((s) => ({ call: s.call, result: s.result })), now, zone, locale, ...(fired && { fired }), ...(first && { first: true }), ...(help && { help }) });
+      const out = await run('agent.tools', { question, tools, steps: steps.map((s) => ({ call: s.call, result: s.result })), now, zone, locale, ...(fired && { fired }), ...(first && { first: true }), ...(help && { help }), ...(first && history?.length && { history }) });
       if (signal?.aborted) throw cancelled();
       if (out?.answer) return { answer: out.answer, steps };
       if (!isObj(out?.call)) throw R().error('check');
@@ -496,7 +511,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         if (level >= 3 && m.fired !== undefined && (!kept || (kept.say && kept.say !== question))) throw R().error('request');
         const record = kept && level >= 3 ? kept : undefined;
         if (record) KEPT.delete(firedKey(m.fired));
-        const r = record ? routeFired(record) : route(question, { attempt, locale, level });
+        const r = record ? routeFired(record) : route(question, { attempt, locale, level, ...(level >= 3 && history.length && { history }) });
         post({ id, type: 'route', task: r.task });
         if (r.task === 'study.help') {
           // Help naming the student's records (level 3): agent.tools' help turn reads them; study.help then helps with what
@@ -513,11 +528,13 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
           const output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...(history.length && { history }), ...(material && { material }) });
           return post({ id, type: 'end', task: r.task, output });
         }
-        const res = await episode({ question, tools: r.tools, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal, ...(level >= 3 && { first: true }),
+        const res = await episode({ question, tools: r.tools, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal, ...(level >= 3 && { first: true, ...(history.length && { history }) }),
           ...(record && { fired: { what: record.what, ...(record.watch && { watch: record.watch }), say: question, at: record.at, ...(record.fact && { fact: record.fact }) } }) });
         if (res.declined) return post({ id, type: 'end', task: r.task, declined: true });
         // The study rule on this path too: an answer about records never gives the answer to work.
-        const material = res.steps.map((s) => AT().readable(s.result, zone) || '').join('\n').slice(0, LIMIT.material);
+        // The results as the model read them (friendly dates at level 3), so the answer's copied values are in the material.
+        const how = level >= 3 ? { locale, now: env.now() } : undefined;
+        const material = res.steps.map((s) => AT().readable(s.result, zone, how) || '').join('\n').slice(0, LIMIT.material);
         const inp = SH().task.input({ question, subject: 'math', locale, ...(material && { material }) });
         if (!inp || SH().hands(res.answer.text, inp)) throw R().error('check');
         // What the tools asked of the page (open, highlight), for the panel to perform once it shows the answer.

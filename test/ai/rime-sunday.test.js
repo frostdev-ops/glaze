@@ -88,7 +88,7 @@ test('level 3: the system text asks for MARKDOWN.md\'s answer format; level 1\'s
   const three = sys(inputOf('x?')), one = sys(A.task.input({ question: 'x?', tools: [...A.NAMES], steps: [], now: SUNDAY, zone: ZONE, locale: 'en' }));
   assert.ok(three.includes('- **title** (course): friendly date, status'), three);
   assert.ok(three.includes('the windows in now'), three);
-  assert.ok(!one.includes('**title**') && one.startsWith(A.SYSTEM));
+  assert.ok(!one.includes('**title**') && one.includes(`${A.SYSTEM}\nReply in English.`));
 });
 
 test('level 3: agent.tools gets the conversation, bounded, as an earlier block; build() and fromRequest() keep it', () => {
@@ -97,7 +97,8 @@ test('level 3: agent.tools gets the conversation, bounded, as an earlier block; 
   assert.deepEqual(inp.history, history);
   const t = text(A.layout(inp));
   assert.match(t, /<\|gz_data\|>earlier\nStudent: What's due this week\?\nRime: Nothing is due this week\.<\|\/gz_data\|>\n<\|gz_data\|>question\nI don't think that's true\./);
-  const req = A.task.build(inp, { text: require('../../extension/ai/text.js') });
+  const X = require('../../extension/ai/text.js');
+  const req = require('../../extension/ai/request.js').clean({ ...A.task.build(inp, { text: X }), schema: A.OUTPUT, task: { id: 'agent.tools', version: 1 } });
   assert.equal(text(A.fromRequest(req).parts), t);
   // Bounded: at most three turns, each cut.
   const long = Array.from({ length: 6 }, (_, i) => ({ question: `q${i} ${'x'.repeat(900)}`, answer: `a${i} ${'y'.repeat(900)}` }));
