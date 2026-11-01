@@ -12,11 +12,20 @@ var GZ_AI_RIME_JS = globalThis.GZ_AI_RIME_JS || (() => {
   // An answer held to the limits: its own keys only. The sandbox page sends it so, and the worker checks it again.
   const tidy = (r) => {
     const o = r && typeof r === 'object' ? r : {};
-    const logs = Array.isArray(o.logs) ? o.logs.filter((l) => typeof l === 'string').slice(0, LIMIT.lines).map((l) => l.slice(0, LIMIT.line)) : [];
+    const logs = [];
+    let left = LIMIT.output, cut = o.cut === true;
+    for (const l of Array.isArray(o.logs) ? o.logs : []) {
+      if (typeof l !== 'string') continue;
+      if (logs.length >= LIMIT.lines || left === 0) { cut = true; continue; }
+      const line = l.slice(0, Math.min(LIMIT.line, left));
+      cut ||= line.length < l.length;
+      logs.push(line); left -= line.length;
+    }
     let value;
     try { value = ['string', 'number', 'boolean'].includes(typeof o.value) || o.value === null ? o.value : JSON.parse(JSON.stringify(o.value ?? null)); } catch { value = null; }
-    if (JSON.stringify(value).length > LIMIT.output) value = JSON.stringify(value).slice(0, LIMIT.output);
-    return { ok: o.ok === true, value, logs, ...(typeof o.error === 'string' && { error: o.error.slice(0, LIMIT.line) }), ...(o.cut === true && { cut: true }), ...(Number.isFinite(o.ms) && { ms: o.ms }) };
+    const shown = typeof value === 'string' ? value : JSON.stringify(value);
+    if (shown.length > left) { value = shown.slice(0, left); cut = true; }
+    return { ok: o.ok === true, value, logs, ...(typeof o.error === 'string' && { error: o.error.slice(0, LIMIT.line) }), ...(cut && { cut: true }), ...(Number.isFinite(o.ms) && { ms: o.ms }) };
   };
   const NONE = "Glaze can run code only in Chrome; work it out step by step instead.";
   // Where the sandbox exists: a manifest sandbox page, Chrome's alone.

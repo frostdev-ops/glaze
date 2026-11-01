@@ -50,7 +50,8 @@ var GZ_AI_RIME_SANDBOX = globalThis.GZ_AI_RIME_SANDBOX || (() => {
       const t0 = now();
       const done = (r) => {
         let value = r.value;
-        if (typeof value === 'string' && value.length > Math.max(0, LIMIT.output - size)) { value = value.slice(0, Math.max(0, LIMIT.output - size)); cut = true; }
+        const shown = typeof value === 'string' ? value : JSON.stringify(value);
+        if (shown.length > LIMIT.output - size) { value = shown.slice(0, LIMIT.output - size); cut = true; }
         post({ ...r, value, logs, ...(cut && { cut: true }), ms: Math.round(now() - t0) });
       };
       try {
