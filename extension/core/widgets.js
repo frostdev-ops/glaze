@@ -420,10 +420,12 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
   const DASH = { path: '/ultra/institution-page', name: 'Dashboard' };
   // Whether a page Ultra opened (from: its address when it loaded) is its start page right after sign-in, to go on to
   // the Dashboard once: Ultra's bare address, or its stream or Courses page opened from a sign-in page of the same site;
-  // and the student is still there (now). A page asked for by address, bookmark or link is left alone.
+  // and the student is still there (now). A page asked for by address, bookmark or link is left alone. From the bare
+  // address only once Ultra has gone on (now): to its stream or Courses page, never to the page sign-in was asked for, and
+  // the Dashboard comes by Ultra's own link instead of a second load of the page.
   const START = /^\/ultra(?:\/(?:stream|course))?\/?$/;
   const landing = ({ from, now, referrer = '', origin }) => {
-    if (!START.test(from) || !START.test(now)) return false;
+    if (!START.test(from) || !START.test(now) || /^\/ultra\/?$/.test(now)) return false;
     if (/^\/ultra\/?$/.test(from)) return true;
     try { const r = new URL(referrer); return r.origin === origin && /^\/(?:webapps\/(?:login|bb-auth-provider)|auth-saml)\b/.test(r.pathname); } catch { return false; }
   };

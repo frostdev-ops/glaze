@@ -510,8 +510,12 @@ test('spots, the Courses column kept clear, and the stacking order', () => {
 test("landing: only Ultra's start page right after sign-in, never a page the student asked for", () => {
   const o = 'https://school.blackboard.test';
   const go = (from, now, referrer = '') => W.landing({ from, now, referrer, origin: o });
-  assert.equal(go('/ultra', '/ultra'), true, "Ultra's bare address, as sign-in leaves it");
-  assert.equal(go('/ultra/', '/ultra/stream'), true, 'and after Ultra moved on to its own start page');
+  // 2026-11-01: from the bare address it went to the Dashboard by a second load of the page, before Ultra had gone on to
+  // the page it was opening.
+  assert.equal(go('/ultra', '/ultra'), false, "Ultra's bare address, as sign-in leaves it: not until Ultra has gone on");
+  assert.equal(go('/ultra/', '/ultra/stream'), true, 'once Ultra moved on to its own start page');
+  assert.equal(go('/ultra', '/ultra/course'), true);
+  assert.equal(go('/ultra', '/ultra/courses/_7_1/outline'), false, 'the page sign-in was asked for');
   assert.equal(go('/ultra/stream', '/ultra/stream', `${o}/webapps/login/`), true, 'its stream, from the sign-in page');
   assert.equal(go('/ultra/course', '/ultra/course', `${o}/auth-saml/saml/SSO`), true, 'its Courses page, from single sign-on');
   assert.equal(go('/ultra/stream', '/ultra/stream'), false, 'a bookmark or a typed address');
