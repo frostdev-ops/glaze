@@ -577,7 +577,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
           ask({ question: q, attempt, shown: true, fired });
         });
       }
-      if (alive_ && root.isConnected) q_.focus();
+      if (alive_ && root.isConnected && (dialog || root.contains(focused()))) q_.focus();
     };
 
     const submit = async (e) => {
