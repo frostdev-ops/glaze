@@ -343,6 +343,34 @@ const memory = (store) => ({ get: async (k) => structuredClone(Object.fromEntrie
 const reader = (store) => { const all = [...ST.tools(), ...GR.tools()]; return (name, args, account) => all.find((t) => t.name === name).run(args, C.ctx(store, account)); };
 const wakesEnv = (store, o = {}) => { let now = o.now ?? T0, on = o.on ?? true; const a = alarms(); return { local: memory(store), alarms: a, read: reader(store), on: async () => on, now: () => now, at: (t) => { now = t; }, off: () => { on = false; } }; };
 const wtool = (env, name) => W.tools(env).find((t) => t.name === name);
+const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
+
+test('wakes: switching off during a monitor baseline read prevents its creation', async () => {
+  const store = {}, env = wakesEnv(store), entered = deferred(), resume = deferred();
+  env.read = async () => { entered.resolve(); await resume.promise; return { items: [{ type: 'assignment', id: '1', title: 'Lab', due: T0 + 864e5 }] }; };
+  const pending = wtool(env, 'monitor_create').run({ watch: 'due', type: 'assignment', id: '1' }, { account: ACC });
+  await entered.promise;
+  env.off(); resume.resolve();
+  assert.equal((await pending).ok, false);
+  assert.equal(store.rimeWakes?.monitors?.length || 0, 0);
+});
+
+test('wakes: switching off during a tick preserves pending records and suppresses delivery', async () => {
+  const store = {}, env = wakesEnv(store), entered = deferred(), resume = deferred();
+  env.read = async () => ({ items: [{ type: 'assignment', id: '1', title: 'Lab', due: T0 + 864e5 }] });
+  await wtool(env, 'monitor_create').run({ watch: 'due', type: 'assignment', id: '1' }, { account: ACC });
+  env.read = async () => { entered.resolve(); await resume.promise; return { items: [{ type: 'assignment', id: '1', title: 'Lab', due: T0 + 2 * 864e5 }] }; };
+  const before = structuredClone(store.rimeWakes), pending = W.tick(env);
+  await entered.promise;
+  env.off(); resume.resolve();
+  assert.equal(await pending, 0);
+  assert.deepEqual(store.rimeWakes, before);
+  store.rimeWakes.fired = [{ id: 'w-abcdefgh', what: 'wake', say: 'Lab', at: T0 }];
+  let checks = 0;
+  env.on = async () => ++checks === 1;
+  assert.deepEqual(await W.take(env), []);
+  assert.equal(store.rimeWakes.fired.length, 1, 'off during take must not consume a waiting message');
+});
 
 test('wake_create: approved first, kept with its alarm, at most 20, refused when passed, too far off or switched off', async () => {
   const store = {}, env = wakesEnv(store), ctx = { zone: 'UTC' };
