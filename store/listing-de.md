@@ -87,3 +87,4 @@ NEU IN 4.0.1
 • Firefox: Google Drive (Einstellungen › Writer › Arbeiten) öffnet, speichert, hängt an und synchronisiert deine Dokumente, auch große Dateien. Aus, bis du dich verbindest.
 • Firefox: Eine Website, der du den Zugriff entzogen hast, wird nicht mehr erneut angefragt.
 • Chrome: Google Kalender-Synchronisierung (Einstellungen › Teilen) hält einen Kalender namens Glaze in deinem Google-Konto aktuell, und Google Drive (Einstellungen › Writer › Arbeiten) öffnet, speichert, hängt an und synchronisiert deine Dokumente, auch große Dateien. Beides bleibt aus, bis du dich verbindest.
+• Safari: Google Kalender-Synchronisierung (Einstellungen › Teilen) hält einen Kalender namens Glaze in deinem Google-Konto aktuell, und Google Drive (Einstellungen › Writer › Arbeiten) öffnet, speichert, hängt an und synchronisiert deine Dokumente, auch große Dateien. Beides bleibt aus, bis du dich verbindest.

@@ -87,3 +87,4 @@ NIEUW IN 4.0.1
 • Firefox: Google Drive (Instellingen › Writer › Werkstukken) opent, bewaart, voegt bij en synchroniseert je documenten, ook grote bestanden. Uit tot je verbinding maakt.
 • Firefox: een site waarvan je de toegang hebt ingetrokken, wordt niet meer opnieuw geprobeerd.
 • Chrome: Synchronisatie met Google Agenda (Instellingen › Delen) houdt een agenda met de naam Glaze in je Google-account bij, en Google Drive (Instellingen › Writer › Werkstukken) opent, bewaart, voegt bij en synchroniseert je documenten, ook grote bestanden. Beide blijven uit tot je verbinding maakt.
+• Safari: Synchronisatie met Google Agenda (Instellingen › Delen) houdt een agenda met de naam Glaze in je Google-account bij, en Google Drive (Instellingen › Writer › Werkstukken) opent, bewaart, voegt bij en synchroniseert je documenten, ook grote bestanden. Beide blijven uit tot je verbinding maakt.

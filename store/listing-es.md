@@ -87,3 +87,4 @@ NOVEDADES DE 4.0.1
 • Firefox: Google Drive (Ajustes › Writer › Trabajos) abre, guarda, adjunta y sincroniza tus documentos, también archivos grandes. Desactivado hasta que te conectes.
 • Firefox: un sitio al que retiraste el acceso ya no se vuelve a intentar.
 • Chrome: Sincronización con Google Calendar (Ajustes › Compartir) mantiene al día un calendario llamado Glaze en tu cuenta de Google, y Google Drive (Ajustes › Writer › Trabajos) abre, guarda, adjunta y sincroniza tus documentos, también archivos grandes. Ambos siguen desactivados hasta que te conectes.
+• Safari: Sincronización con Google Calendar (Ajustes › Compartir) mantiene al día un calendario llamado Glaze en tu cuenta de Google, y Google Drive (Ajustes › Writer › Trabajos) abre, guarda, adjunta y sincroniza tus documentos, también archivos grandes. Ambos siguen desactivados hasta que te conectes.

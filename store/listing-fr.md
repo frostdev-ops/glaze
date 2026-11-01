@@ -87,3 +87,4 @@ NOUVEAUTÉS DE LA VERSION 4.0.1
 • Firefox : Google Drive (Réglages › Writer › Travaux) ouvre, enregistre, joint et synchronise vos documents, gros fichiers compris. Désactivé tant que vous ne vous connectez pas.
 • Firefox : un site dont vous avez retiré l’accès n’est plus sollicité à nouveau.
 • Chrome : Synchronisation avec Google Agenda (Réglages › Partage) tient à jour un agenda nommé Glaze dans votre compte Google, et Google Drive (Réglages › Writer › Travaux) ouvre, enregistre, joint et synchronise vos documents, gros fichiers compris. Les deux restent désactivés tant que vous ne vous connectez pas.
+• Safari : Synchronisation avec Google Agenda (Réglages › Partage) tient à jour un agenda nommé Glaze dans votre compte Google, et Google Drive (Réglages › Writer › Travaux) ouvre, enregistre, joint et synchronise vos documents, gros fichiers compris. Les deux restent désactivés tant que vous ne vous connectez pas.

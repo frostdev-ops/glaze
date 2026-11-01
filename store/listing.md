@@ -95,6 +95,7 @@ NEW IN 4.0.1
 • Firefox: Google Drive (Settings › Writer › Papers) opens, saves, attaches and syncs your documents, large files included. Off until you connect.
 • Firefox: a site whose access you took back is no longer retried.
 • Chrome: Google Calendar sync (Settings › Sharing) keeps a calendar named Glaze in your Google account up to date, and Google Drive (Settings › Writer › Papers) opens, saves, attaches and syncs your documents, large files included. Both stay off until you connect.
+• Safari: Google Calendar sync (Settings › Sharing) keeps a calendar named Glaze in your Google account up to date, and Google Drive (Settings › Writer › Papers) opens, saves, attaches and syncs your documents, large files included. Both stay off until you connect.
 
 ## Single-purpose statement
 
