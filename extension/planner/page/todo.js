@@ -420,7 +420,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     // Drawn again only when what it shows changed: a refresh of Ultra's kept data, another tab's answer or the echo of its
     // own write with nothing new moves no row and takes no focus.
     const question = gs.question(who.uid, t), remind = globalThis.GZ_REMIND_UI?.head() || [];
-    const view = JSON.stringify([sig, out, form, tools, [...open], [...shut], !!cache, cache?.complete, o().progress && cache?.sums,
+    const view = JSON.stringify([sig, out, form, form && courses.list.map((c) => [String(c.id), c.name]), tools, [...open], [...shut], !!cache, cache?.complete, o().progress && cache?.sums,
       question?.outerHTML ?? null, remind.map((e) => e.outerHTML)]);
     if (view === viewed) return;
     viewed = view;
