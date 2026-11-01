@@ -79,7 +79,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   // question: agent.tools' own; attempt: study.help's; tools: offered at once (training offered three to six, and Glaze's own
   // model's 4,096-token window can't hold all twelve); material: what an agent answer is measured against.
   // text: the page's visible words a question may carry, for page_highlight's check.
-  const LIMIT = { question: 2000, attempt: 12000, tools: 6, material: 24000, sender: 5000, turns: 6, turn: 2000, text: 20000, summary: 4000 };
+  const LIMIT = { question: 2000, attempt: 12000, tools: 6, material: 24000, sender: 5000, turns: 6, turn: 2000, text: 20000, summary: 700 };
   const GROUPS = ['courses', 'grades', 'assignments', 'writer'];
   // Navigation handoffs live only in the extension. Page sessionStorage is controlled by school scripts.
   const CARRY = 'rimeCarry';

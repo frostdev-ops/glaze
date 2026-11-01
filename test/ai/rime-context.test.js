@@ -280,7 +280,7 @@ test('a question on a new port carries the chat\'s summary: the next request has
   h.say({ id: 1, op: 'ask', question: 'And next week?', history: H3.slice(1), summary });
   await settle(120);
   assert.equal(h.seen.runs.filter((r) => r.task === 'agent.tools').at(-1).input.summary, summary);
-  for (const [id, bad] of [[2, 5], [3, 'x'.repeat(4001)]]) h.say({ id, op: 'ask', question: 'And next week?', history: H3, summary: bad });
+  for (const [id, bad] of [[2, 5], [3, 'x'.repeat(701)]]) h.say({ id, op: 'ask', question: 'And next week?', history: H3, summary: bad });
   await settle(60);
   assert.deepEqual(h.got.filter((m) => m.id >= 2 && m.type === 'error').map((m) => [m.id, m.error]), [[2, 'request'], [3, 'request']]);
 });
