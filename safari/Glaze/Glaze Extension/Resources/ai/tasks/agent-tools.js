@@ -69,7 +69,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     { name: 'wake_create', kind: 'confirm', description: "Come back at a time the student asks for, with what to say or do then. Rime shows it inside Glaze on their next school page after that time, never as a notification. The student approves it first.",
       parameters: params({ at: { type: 'string', pattern: LOCAL_TIME, description: "When, in the student's local time, as 2026-10-31 21:00." }, say: { type: 'string', minLength: 1, maxLength: 200, description: 'What to say or do then, in a few words.' } }, ['at', 'say']) },
     { name: 'monitor_create', kind: 'confirm', description: "Watch the student's own course data and come back when it changes. watch: grade (a grade posts in a course), announcement (a new one), due (an item's due date moves), submitted (an item shows as handed in). due and submitted take the item's type and id from todo_list; grade takes the course. Glaze checks it itself; Rime shows it on their next school page. The student approves it first.",
-      parameters: params({ watch: { type: 'string', pattern: '^(grade|announcement|due|submitted)$', description: 'grade, announcement, due or submitted.' }, course: COURSE('The course id from grades_list, courses_list or todo_list.'),
+      parameters: params({ watch: { type: 'string', pattern: '^(grade|announcement|due|submitted)$', description: 'grade, announcement, due or submitted.' }, course: { ...COURSE('The course id from grades_list, courses_list or todo_list.'), pattern: UID },
         type: { type: 'string', pattern: '^[a-z_]{1,40}$', description: "The item's type." }, id: { type: 'string', pattern: UID, description: "The item's id." },
         say: { type: 'string', minLength: 1, maxLength: 200, description: 'What to say or do when it changes, in a few words.' }, account: ACCOUNT }, ['watch']) },
     { name: 'wakes_list', kind: 'read', description: "The student's wakes and monitors still waiting: id (what wake_cancel takes), what (wake or monitor), at or watch, say.", parameters: params({}) },
@@ -293,7 +293,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     'ex[aá]men(?:es|s)?|provas?|avalia[çc][ãa]o|klausur(?:en)?|pr[üu]fung(?:en)?|toets(?:en)?|tentamen(?:s)?',
     'tareas?', 'deberes', 'ejercicios? \\d+', 'problemas? \\d+', 'preguntas? \\d+', 'li[çc][ãa]o de casa', 'dever(?:es)? de casa', 'exerc[íi]cios? \\d+', 'quest[ãa]o \\d+', 'quest[õo]es',
     'devoirs?', 'exercices? \\d+', 'probl[èe]mes? \\d+', 'questions? \\d+', 'hausaufgaben?', '[üu]bungsblatt', '[üu]bungsaufgaben?', 'aufgaben? \\d+', 'huiswerk', 'opgaven? \\d+', 'vragen? \\d+', 'oefening(?:en)? \\d+']);
-  // A question that asks to be reminded, watched for or to cancel one: the only questions a wake or monitor answers.
+  // Reminder vocabulary; the affirmative clause checks below decide whether it is a request.
   const LATER = phrases(['remind\\p{L}*', 'reminders?', 'let me know', 'tell me (?:when|if)', 'warn me', 'alert\\p{L}*', 'notify', 'ping me', 'wake', 'watch\\p{L}*', 'keep an eye', 'check (?:back|again)', 'monitor\\p{L}*', 'cancel\\p{L}*', 'stop (?:watching|reminding)',
     'recu[ée]rd(?:a|ame|amelo|ales|o)\\p{L}*', 'recordatorios?', 'av[ií]sa\\p{L}*', 'vigila\\p{L}*', 'cancela\\p{L}*', 'lembr\\p{L}*', 'lembretes?', 'me avis\\p{L}*', 'monitor\\p{L}*',
     'rappel\\p{L}*', 'pr[ée]viens?-moi', 'dis-moi quand', 'surveill\\p{L}*', 'annul\\p{L}*', 'erinner\\p{L}*', 'sag mir', 'benachrichtig\\p{L}*', '[üu]berwach\\p{L}*', 'beobacht\\p{L}*', 'storn\\p{L}*', 'abbrech\\p{L}*', 'l[öo]sch\\p{L}*',
@@ -318,7 +318,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     if (name === 'place_open') return under(inp, 'places_list', ['place', 'here']).includes(args.place) ? '' : 'place';
     if (name === 'page_highlight') {
       const want = fold(args.text);
-      return fold(inp.question).includes(want) || values(inp.steps.map((s) => s.result)).some((v) => typeof v === 'string' && fold(v).includes(want)) ? '' : 'text';
+      return want && (fold(inp.question).includes(want) || values(inp.steps.map((s) => s.result)).some((v) => typeof v === 'string' && fold(v).includes(want))) ? '' : 'text';
     }
     if (['wake_create', 'monitor_create', 'wake_cancel'].includes(name)) {
       const q = fold(inp.question);

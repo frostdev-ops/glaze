@@ -9,7 +9,7 @@
 // alarm may come late there; take() checks everything due before it answers, so nothing is lost, only shown later.
 // storage.local rimeWakes: { wakes: [{ id, at, say, made }], monitors: [{ id, watch, account, course?, item?: { type, id },
 //   say, made, until, base }], fired: [{ id, what, watch?, say, at, fact? }] }, each list capped (LIMIT).
-// env: { local (storage.local: get, set), alarms (chrome.alarms: create, clear), read(name, args, account) → an Agents
+// env: { local (storage.local: get, set), alarms (chrome.alarms: create, clear, getAll), read(name, args, account) → an Agents
 //   tool's answer (todo_list, course_grades), on() → whether the switch and Ask Rime are on, now() }.
 //   tools(env) → wake_create, monitor_create, wakes_list, wake_cancel for ai/tools.js define; ctx { account, zone }.
 //   tick(env) checks what is due and fires it; alarm(env, alarm) for the worker's alarms.onAlarm; take(env) → the fired
@@ -41,7 +41,7 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
     if (!isObj(b)) return null;
     const course = text(b.course, 120), title = text(b.title, 300);
     if (['due', 'submitted'].includes(m.watch)) {
-      if (!isObj(m.item) || !TYPE.test(m.item.type) || !UID.test(m.item.id)) return null;
+      if (!isObj(m.item) || typeof m.item.type !== 'string' || !TYPE.test(m.item.type) || typeof m.item.id !== 'string' || !UID.test(m.item.id)) return null;
       return m.watch === 'due' ? (b.due === null || when(b.due) ? { due: b.due, title, course } : null)
         : typeof b.submitted === 'boolean' ? { submitted: b.submitted, title, course } : null;
     }
@@ -126,6 +126,7 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
   };
   // A monitor's arguments as the tool and check() hold them → '' or what is wrong.
   const shape = (a) => (!WATCHES.includes(a.watch) ? 'watch is grade, announcement, due or submitted.'
+    : a.course !== undefined && (typeof a.course !== 'string' || !UID.test(a.course)) ? 'course takes the course id.'
     : ['due', 'submitted'].includes(a.watch) ? (TYPE.test(a.type || '') && UID.test(a.id || '') ? '' : `${a.watch} takes the item's type and id from todo_list.`)
       : a.type !== undefined || a.id !== undefined ? `${a.watch} takes no item.` : a.watch === 'grade' && !UID.test(a.course || '') ? 'grade takes the course id.' : '');
 

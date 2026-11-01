@@ -217,9 +217,10 @@ of them is the same, byte for byte. Every parameter is a string or an integer (t
 There is no fill tool: Glaze never fills in the student's work or a site's forms.
 
 `check()` adds, for these tools (`ownWhy`): `work`, run_js on a question about homework, a worksheet, a problem or question
-number (six languages, `HOMEWORK`) or after `assignment_read` or `document_read`; `place`, a place no places_list result
+number or a named assessment (six languages, `HOMEWORK`) or after `assignment_read` or `document_read`; `place`, a place no places_list result
 named; `text`, highlighted words neither the question nor a result holds; `asked`, a wake, monitor or cancel when the
-question asks for none (`LATER`); `time`, a wake that isn't a time on the student's clock in the next 60 days (`moment`);
+question makes no affirmative request for that action (mentions and negations do not grant one; cancellation is separate
+from creation); `time`, a wake that isn't a time on the student's clock in the next 60 days (`moment`);
 `monitor`, a monitor's fields that don't fit what it watches. An answer after run_js still passes study.help's `hands()`
 in Ask Rime.
 
@@ -229,7 +230,9 @@ Wakes and monitors (`ai/agent/wakes.js`) live in storage.local `rimeWakes` with 
 the student's next school page takes it (`take()`, which checks everything due first), shown inside Glaze, never as a
 notification. Safari unloads Glaze's background about 30 s after its last event, so an alarm can come late there; the
 page's `take()` still finds it. Settings → AI → Ask Rime → **Reminders and watches** (`ai.wakes`, on unless turned off):
-off, nothing is made, checked or shown.
+off, nothing is made, checked or shown. Async reads recheck that switch before saving or delivering. Browser startup and
+switch changes reconcile the saved alarms; an existing periodic monitor alarm keeps its cadence. Expired records release
+their capacity before creation, and stored records are validated and bounded before use.
 
 The panel's side comes with Ask Rime's new panel: it gives the tools their `ctx` (`page { site, url }`, `courses()`,
 `writer`, `text`, `ui`, `js` through `ai/sandbox/frame.js`, `zone`, `account`), performs the ui actions after the answer,
