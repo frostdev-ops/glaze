@@ -548,3 +548,16 @@ test('Canvas frames reserve the footer height while its native document lays out
     visible = false; lay(); assert.equal(host.style.bottom, '0px');
   }
 });
+
+test('an Ultra frame still booting cold is not ready until its own view is (data-gz-boot), so its stand-in stays till then', () => {
+  const p = loadingFrame();
+  const d = p.built();
+  let boot = true;
+  d.documentElement = { matches: (s) => s.split(',').some((x) => x.trim() === '[data-gz-boot]' ? boot : false) };
+  p.document(d);
+  p.watch(); p.step(301); p.step(301);
+  assert.equal(p.f.ready, false, 'Glaze\'s boot state in the frame holds the stand-in');
+  boot = false;
+  p.step(301); p.step(301);
+  assert.equal(p.f.ready, true, 'the frame\'s view is ready: shown');
+});
