@@ -320,7 +320,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     const steps = [];
     let fix, fixed = false;
     const inputOf = () => ({ question, tools, steps: steps.map((s) => ({ call: s.call, result: s.result })), now, zone, locale, ...(fired && { fired }), ...(first && { first: true }), ...(help && { help }),
-      ...(first && history?.length && { history }), ...(first && summary && { summary }) });
+      ...(first && history?.length && { history }), ...(first && summary && { summary }), ...(fix && { fix }) });
     for (;;) {
       if (signal?.aborted) throw cancelled();
       // Results that would overflow the window: those the model has used become digests, the latest never.
@@ -331,7 +331,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       // An answer that fails its check after results came back gets one corrective turn naming the rule (FIX); if that fails
       // too, Glaze's own list from the results (built), when they hold one. The error says why (its code, the steps, the raw).
       let out;
-      try { out = await run('agent.tools', { ...inputOf(), ...(fix && { fix }) }); }
+      try { out = await run('agent.tools', inputOf()); }
       catch (e) {
         if (signal?.aborted) throw e;
         const failed = R().code(e) === 'check' && first && steps.length;
