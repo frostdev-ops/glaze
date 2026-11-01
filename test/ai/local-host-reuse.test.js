@@ -71,21 +71,23 @@ test('a follow-up feeds only what it adds to the held prompt, and says how much 
   assert.equal(first.usage.input, n1);
   assert.equal(first.usage.cached, 0);
   s.fed.length = 0;
-  const parts = ['earlier\nStudent: what is due?', 'question\nWhat is due this week?', 'tool\n{"items":[]}'];
-  const second = await s.call(req(parts));
-  const n2 = TOK.encodeWith([...SYS, ...user(parts)]).length;
-  // Shared: everything up to the end of the question block (its closing tag, then the new block's opening).
-  assert.ok(second.usage.cached >= n1 - 16, `reused ${second.usage.cached} of ${n1}`);
+  // The next step: the same prompt, the model's call, its result in a tool turn, the assistant again.
+  const parts = [...SYS, ...user(['earlier\nStudent: what is due?', 'question\nWhat is due this week?']), { text: '{"call":"todo_list"}' }, { special: '<|im_end|>' }, { text: '\n' },
+    { special: '<|im_start|>' }, { text: 'tool\n{"items":[]}' }, { special: '<|im_end|>' }, { text: '\n' }, { special: '<|im_start|>' }, { text: 'assistant\n' }, { special: '<think>' }, { special: '</think>' }];
+  const second = await s.call({ ...req([]), parts });
+  const n2 = TOK.encodeWith(parts).length;
+  // Shared: the whole first prompt.
+  assert.ok(second.usage.cached >= n1, `reused ${second.usage.cached} of ${n1}`);
   assert.ok(count(s.fed) <= n2 - second.usage.cached + 2, `fed ${count(s.fed)} for ${n2 - second.usage.cached} new`);
 });
 
-test('a history that differs inside a block rewinds to that block\'s opening, not the start', async () => {
+test('a history that differs inside a block rewinds to the system turn\'s end, not the start', async () => {
   const s = setup();
   await s.call(req(['earlier\nStudent: q1\nRime: a1', 'now\n15:00', 'question\nq2']));
   s.fed.length = 0;
   const r = await s.call(req(['earlier\nStudent: q1\nRime: a1\nStudent: q2\nRime: a2', 'now\n15:02', 'question\nq3']));
   const sys = TOK.encodeWith(SYS).length;
-  assert.ok(r.usage.cached > sys, `reused ${r.usage.cached}, the system turn is ${sys}`);
+  assert.ok(r.usage.cached >= sys, `reused ${r.usage.cached}, the system turn is ${sys}`);
   assert.equal(count(s.fed) <= r.usage.input - r.usage.cached + 2, true);
 });
 

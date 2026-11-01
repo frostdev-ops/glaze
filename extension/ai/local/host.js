@@ -11,8 +11,8 @@
 //       flight, and swaps in at the next idle moment, the engine let go; a run on the model in its trial confirms it, or
 //       rolls it back on a load or engine failure and runs again on the old version when nothing of the answer was sent)
 //   One sequence stays on the GPU between requests (engine.js extend): a run or warm-up feeds only what follows the longest
-//   prefix the model already holds, from the latest mark inside it (marks at the system turn's end, each context or data
-//   block, the last turn's opening and the prompt's end). A warm-up with `stable` reads its parts past the system turn too
+//   prefix the model already holds, from the latest mark inside it (marks at the system turn's end, a think prefill's
+//   start, every LIMIT.spacing tokens and the prompt's end). A warm-up with `stable` reads its parts past the system turn too
 //   (the history, while the student types); a run arriving stops a warm-up between steps and keeps what it read. After a
 //   think run, the host reads the answer back as the next request will hold it (the turn's empty think block, the answer,
 //   the end token) while nothing else waits. window: the engine's room grows to it, up to LIMIT.most; without one,
@@ -174,16 +174,15 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       while (job.warm.length > LIMIT.warm) { try { job.warm.shift().snap.drop?.(); } catch { /* gone */ } }
       return fed;
     };
-    // Where a later request may part from this one: the system turn's end, each context or data block's start and end, each
-    // turn's, a think prefill's start, and every LIMIT.spacing tokens of a long feed.
+    // Where a later request may part from this one, as marks: the system turn's end, a think prefill's start (the next turn
+    // holds an empty think block there), and every LIMIT.spacing tokens of a long feed. Each mark splits the feed into
+    // another forward pass, which reads every weight again (about a 30-token prefill's time), so block edges get none.
     const stops = (job, ids, from) => {
-      const id = (names) => names.map((n) => job.tok.id(n)).filter(Number.isInteger);
-      const opens = id(['<|im_start|>', '<|gz_ctx|>', '<|gz_data|>', '<think>']), ends = id(['<|im_end|>', '<|/gz_ctx|>', '<|/gz_data|>']);
-      const out = [from];
-      for (let i = from; i < ids.length; i++) { if (opens.includes(ids[i])) out.push(i); if (ends.includes(ids[i])) out.push(i + 1); }
+      const out = [from], think = job.tok.id('<think>');
+      const open = Number.isInteger(think) ? ids.lastIndexOf(think) : -1;
+      if (open > from) out.push(open);
       for (let p = from + LIMIT.spacing; p < ids.length; p += LIMIT.spacing) out.push(p);
-      // The latest few matter most: older ones are inside what the next request shares anyway.
-      return [from, ...[...new Set(out)].filter((p) => p > from).sort((a, b) => a - b).slice(-16)];
+      return [...new Set(out)].sort((a, b) => a - b);
     };
     // The JSON grammar's matcher for a schema (grammar.js), with tools a turn that may instead call one of them in LFM3's
     // own syntax: its vocabulary once per model (with the tool tags' ids, where the model has them), each schema compiled
