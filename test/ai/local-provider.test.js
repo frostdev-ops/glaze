@@ -298,6 +298,36 @@ test('Delete prevents a pending hardware choice from starting a new download', a
   assert.equal((await LOCAL.status(LOCAL.config({}))).state, 'download');
 });
 
+test('replaced stock files remain deletable before Rime is downloaded, with or without a running host', async () => {
+  for (const host of [false, true]) {
+    const s = setup();
+    let stale = [{ id: 'lfm3-1.7b-q5_k_m', state: 'stale', bytes: 1258663200 }];
+    s.st.list = async () => [...require('../../extension/ai/local/models.json').models.map((m) => ({ ...m, state: 'missing' })), ...stale];
+    const remove = s.st.remove;
+    s.st.remove = async (id) => { await remove(id); stale = stale.filter((m) => m.id !== id); };
+    if (host) await s.link.call('release');
+    const e = env();
+    const st = await B.config({ op: 'test', provider: 'local' }, e);
+    assert.equal(st.state, 'download');
+    assert.equal(st.stale, true, 'Settings must know there are old files to delete');
+    assert.deepEqual(await B.config({ op: 'delete', provider: 'local' }, e).then((r) => [r.state, r.stale]), ['download', undefined]);
+    assert.ok(s.st.log.removed.includes('lfm3-1.7b-q5_k_m'));
+    assert.deepEqual(s.st.log.downloads, [], 'freeing old storage never downloads another model');
+  }
+});
+
+test('replaced stock files can be deleted even when WebGPU is unavailable', async () => {
+  const s = setup({ gpu: null });
+  let stale = [{ id: 'lfm3-1.7b-q4_k_m', state: 'stale', bytes: 1099627808 }];
+  s.st.list = async () => stale;
+  s.st.remove = async (id) => { s.st.log.removed.push(id); stale = []; };
+  const e = env();
+  assert.deepEqual(await B.config({ op: 'test', provider: 'local' }, e), { ok: true, state: 'unavailable', reason: 'webgpu', stale: true });
+  await B.config({ op: 'delete', provider: 'local' }, e);
+  assert.deepEqual(s.st.log.removed, ['lfm3-1.7b-q4_k_m']);
+  assert.equal(s.workers.length, 0);
+});
+
 test('a run: the request as the fine-tune\'s parts, tokenized in the host, the answer streamed and finished at the end token', async () => {
   const s = setup({ here: { 'glaze-q4': 'ready' }, reply: 'Hello world.' });
   const deltas = [];

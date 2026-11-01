@@ -923,6 +923,22 @@ test('Glaze\'s model\'s card: its state and size, Download from the click, its p
   assert.equal(p.note().textContent, 'Needs a download · 1.8 GB');
 });
 
+for (const state of ['download', 'unavailable']) test(`old stock files have a Delete button while Rime is ${state}`, async () => {
+  let stale = true, deleted = 0;
+  const local = async (m) => {
+    if (m.op === 'delete') { stale = false; deleted++; }
+    return { ok: true, state, ...(state === 'unavailable' && { reason: 'webgpu' }), ...(stale && { stale: true }) };
+  };
+  const p = await open({ ai: { on: true }, providers: ['local'], local, conns: { local: { provider: 'local' } } });
+  await p.click(p.card('Rime'));
+  const remove = p.button('Delete', p.$('ai-drawer'));
+  assert.ok(remove, 'old weights must be removable without downloading Rime first');
+  await p.click(remove);
+  assert.equal(deleted, 1);
+  assert.equal(p.button('Delete', p.$('ai-drawer')), undefined, 'the button clears when the old files are gone');
+  assert.ok(!p.ops().includes('prepare'));
+});
+
 test('long local downloads leave Downloading after completion or failure without another progress event', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   for (const terminal of ['ready', 'download']) {
