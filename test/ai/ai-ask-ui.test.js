@@ -682,3 +682,17 @@ test('navigation waits until the checked answer has finished revealing and is ca
   for (let i = 0; i < 100 && P.frames.size; i++) P.flushFrame();
   assert.equal(performed.length, 1, 'closing cancels actions queued behind a reveal');
 });
+
+
+test('a new question cancels navigation waiting behind the preceding answer reveal', async () => {
+  const P = movingPage(), performed = [];
+  P.ui.on('open', () => performed.push('open'));
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('Open grades'); await settle();
+  answer(P, { type: 'action', action: { kind: 'open' } });
+  answer(P, { type: 'end', task: 'agent.tools', answer: { text: 'Your grades are ready. '.repeat(3) } }); await settle();
+  P.ask('Wait, what is due?'); await settle();
+  for (let i = 0; i < 100 && P.frames.size; i++) P.flushFrame();
+  assert.deepEqual(performed, [], 'an earlier action must not navigate away during a new question');
+  P.box().close();
+});
