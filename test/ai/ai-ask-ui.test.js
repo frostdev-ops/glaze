@@ -480,13 +480,24 @@ test('the panel\'s sheet moves nothing with reduced motion or Glaze\'s Motion of
   const motion = /@media \(prefers-reduced-motion: no-preference\) \{([\s\S]*)\}\s*$/.exec(sheet.trim());
   assert.ok(motion, 'one motion block, last');
   const rest = sheet.trim().slice(0, motion.index);
-  assert.doesNotMatch(rest.replace(/animation(?:-name)?:\s*none/g, ''), /animation|transition|@keyframes/, 'nothing moves outside the motion block');
+  assert.doesNotMatch(rest.replace(/(?:animation(?:-name)?|transition):\s*none/g, ''), /animation|transition|@keyframes/, 'nothing moves outside the motion block');
   for (const [, selectors] of motion[1].matchAll(/(?:^|\})\s*([^{}@]+?)\s*\{/g)) {
     if (/^(from|to|\d+%)/.test(selectors)) continue;
     for (const sel of selectors.split(',')) assert.match(sel.trim(), /^html:not\(\[data-gz-motion="off"\]\) /, sel);
   }
   assert.match(sheet, /html\[data-gz-bg="solid"\] #gz-ask[^{]*\{[^}]*backdrop-filter: none/);
   assert.match(sheet, /prefers-reduced-transparency: reduce[\s\S]*#gz-ask[^{]*\{[^}]*backdrop-filter: none/);
+});
+
+test('the panel suppresses the host sheet\'s important button transitions when motion is disabled', () => {
+  assert.match(read('content/theme.css'), /button, \.MuiButtonBase-root\s*\{[^}]*transition:[^}]*!important/, 'Ultra gives every button an important transition');
+  const css = read('core/page/apps.css');
+  // A gated animation rule alone cannot reset an unrelated transition from the host page.
+  const off = /html\[data-gz-motion="off"\][^{]*#gz-ask button[^{}]*\{([^}]*)\}/.exec(css)?.[1] || '';
+  const reduce = /@media \(prefers-reduced-motion: reduce\)\s*\{\s*#gz-ask button\s*\{([^}]*)\}/.exec(css)?.[1] || '';
+  for (const [mode, declarations] of [['Motion off', off], ['reduced motion', reduce]]) {
+    assert.match(declarations, /transition:\s*none\s*!important/, mode);
+  }
 });
 
 test('each starter, in each language, asks what it says: the first three about the student\'s records, the last for study help', () => {
