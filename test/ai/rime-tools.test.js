@@ -124,6 +124,24 @@ test('check: a wake, monitor or cancel only when the question asks for one; a wa
   assert.equal(A.why(call('wake_cancel', { id: 'w-zzzz9999' }), input('Cancel my lab reminder', [listed])), 'id');
 });
 
+test('check: reminder mentions, negations and cancellation requests do not authorize creation', () => {
+  const listed = [step('wakes_list', {}, { items: [{ id: 'w-abcd1234', what: 'wake', say: 'Lab' }] })];
+  const wake = call('wake_create', { at: '2026-10-31 21:00', say: 'Lab' });
+  const monitor = call('monitor_create', { watch: 'announcement' });
+  const cancel = call('wake_cancel', { id: 'w-abcd1234' });
+  for (const q of ['What does the reminder switch do?', 'Show my reminders', 'Do not remind me tonight',
+    "Please don't watch for announcements", 'I do not want you to remind me', 'What are you watching?', 'How do I cancel a reminder?']) {
+    for (const c of [wake, monitor, cancel]) assert.equal(A.why(c, input(q, listed)), 'asked', `${q}: ${c.call.name}`);
+  }
+  assert.equal(A.why(wake, input('Cancel my lab reminder', listed)), 'asked');
+  assert.equal(A.why(monitor, input('Stop watching announcements', listed)), 'asked');
+  assert.equal(A.why(cancel, input('Remind me to cancel the lab', listed)), 'asked');
+  for (const q of ['Please remind me tonight', 'Could you remind me tonight?', 'Recuérdame esta noche', 'Lembre-me hoje',
+    'Rappelle-moi ce soir', 'Erinnere mich heute Abend', 'Herinner me vanavond']) assert.equal(A.why(wake, input(q)), '', q);
+  for (const q of ['Watch for announcements', 'Let me know when an announcement posts']) assert.equal(A.why(monitor, input(q)), '', q);
+  assert.equal(A.why(cancel, input('Cancel my lab reminder', listed)), '');
+});
+
 test('moment: a time on the student\'s clock, through clock changes; an hour a change skips is none', () => {
   assert.equal(A.moment('2026-10-30 21:00', ZONE), Date.UTC(2026, 9, 31, 2, 0));
   assert.equal(A.moment('2026-11-02 21:00', ZONE), Date.UTC(2026, 10, 3, 3, 0), 'after the change back to CST');
