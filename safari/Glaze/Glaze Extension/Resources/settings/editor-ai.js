@@ -601,7 +601,8 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
           pick.setAttribute('aria-describedby', warn.id);
           wrap.append(warn);
         }
-        if (row === 'writing') for (const [setting, text] of [['outline', 'AI outline'], ['sources', 'AI source extraction']]) {
+        const subs = row === 'writing' ? [['outline', 'AI outline'], ['sources', 'AI source extraction']] : row === 'ask' ? [['wakes', 'Reminders and watches']] : [];
+        for (const [setting, text] of subs) {
           const label = el('label', 'ai-outline'), box = el('input');
           Object.assign(box, { type: 'checkbox', id: `ai-${setting}`, checked: s[setting] !== false });
           box.setAttribute('data-local', '');

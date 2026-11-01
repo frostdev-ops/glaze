@@ -222,6 +222,10 @@ test('sandbox: no network, no other scripts, no storage, no messaging and no ext
   assert.equal(r.value, 'fetch:undefined XMLHttpRequest:undefined WebSocket:undefined EventSource:undefined importScripts:undefined indexedDB:undefined caches:undefined Worker:undefined BroadcastChannel:undefined navigator:undefined postMessage:undefined chrome:undefined browser:undefined');
   assert.match((await sandbox('fetch("https://example.com")')).error, /TypeError: fetch is not a function/);
   assert.match((await sandbox('self.fetch = 1; typeof fetch')).value, /undefined/, 'and it can\'t be put back');
+  // Chrome keeps fetch and the rest on WorkerGlobalScope.prototype, two prototypes up: every level is cleared.
+  const deep = await SB.run("const all = []; for (let o = self; o; o = Object.getPrototypeOf(o)) all.push(typeof Object.getOwnPropertyDescriptor(o, 'fetch')?.value, typeof Object.getOwnPropertyDescriptor(o, 'WebSocket')?.value); all.join(' ')",
+    { make: (src) => make(`{ const up = Object.create(Object.getPrototypeOf(globalThis)); up.fetch = () => 'net'; up.WebSocket = function WebSocket() {}; Object.setPrototypeOf(globalThis, Object.create(up)); }\n${src}`) });
+  assert.doesNotMatch(deep.value, /function/, deep.value);
   // The manifest's sandbox CSP, which the page and its blob Workers live under: no connections, frames or forms.
   const m = JSON.parse(fs.readFileSync(path.join(ROOT, 'extension/manifest.json'), 'utf8'));
   assert.ok(m.sandbox.pages.includes('ai/sandbox/js.html'));

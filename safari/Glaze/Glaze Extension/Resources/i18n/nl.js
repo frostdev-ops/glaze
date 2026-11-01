@@ -3732,6 +3732,7 @@
   "The model returned an outline that did not match the document’s structure.": "Het model gaf een overzicht dat niet overeenkwam met de documentstructuur.",
   "The provider is unavailable and did not report a specific reason.": "De aanbieder is niet beschikbaar en heeft geen specifieke reden gemeld.",
   "AI source extraction": "Bronnen met AI ophalen",
+  "Reminders and watches": "Herinneringen en meldingen",
   "Reading sources…": "Bronnen lezen…",
   "AI source extraction failed. Imported sources remain available.": "Het ophalen van bronnen met AI is mislukt. Geïmporteerde bronnen blijven beschikbaar.",
   "Review source": "Bron controleren",

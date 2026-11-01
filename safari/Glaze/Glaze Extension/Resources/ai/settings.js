@@ -7,7 +7,8 @@
 // (absent: the overall one); tune: a feature's { temperature?, maxTokens?, context?, timeoutMs?, pause? } (TUNE);
 // features: which of Glaze's features may ask (FEATURES). The connections themselves are in the worker's own store
 // (ai/broker.js vault), never here: any page's script can read storage.local. Not in defaults.js, which every page's
-// first script loads. outline defaults on once AI and its Feedback model are configured, with its own opt-out.
+// first script loads. outline defaults on once AI and its Feedback model are configured, with its own opt-out. wakes: Ask
+// Rime's reminders and watches (ai/agent/wakes.js) may be made, checked and shown; on unless turned off.
 // clean() gives what is stored with anything that doesn't fit at its default, as GZ_SANITIZE does.
 // Classic script for the worker and Settings; node exports.
 var GZ_AI_SETTINGS = globalThis.GZ_AI_SETTINGS || (() => {
@@ -45,7 +46,7 @@ var GZ_AI_SETTINGS = globalThis.GZ_AI_SETTINGS || (() => {
   const TUNE = Object.freeze({ temperature: [0, 2], maxTokens: [16, 32768], context: [1000, 2000000], timeoutMs: [1000, 300000], pause: [100, 2000] });
   const MODEL = /^[^\p{Cc}\p{Bidi_Control}]{1,200}$/u;
   const NONE = Object.freeze({ use: null, model: '' });
-  const DEFAULTS = Object.freeze({ on: false, outline: true, sources: true, mode: 'simple', model: NONE, models: Object.freeze({}), tune: Object.freeze({}), features: Object.freeze(Object.fromEntries(FEATURES.map((f) => [f, false]))) });
+  const DEFAULTS = Object.freeze({ on: false, outline: true, sources: true, wakes: true, mode: 'simple', model: NONE, models: Object.freeze({}), tune: Object.freeze({}), features: Object.freeze(Object.fromEntries(FEATURES.map((f) => [f, false]))) });
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
   // A selection: { use, model, effort? }; Apple Intelligence was its own choice and is On this device now (ai/broker.js
   // onDevice).
@@ -66,7 +67,7 @@ var GZ_AI_SETTINGS = globalThis.GZ_AI_SETTINGS || (() => {
     // model's now, its model filled in from it (migrate).
     const model = pick(Object.hasOwn(r, 'model') ? r.model : { use: r.use });
     return {
-      on: r.on === true, outline: r.outline !== false, sources: r.sources !== false, mode: r.mode === 'advanced' ? 'advanced' : 'simple', model,
+      on: r.on === true, outline: r.outline !== false, sources: r.sources !== false, wakes: r.wakes !== false, mode: r.mode === 'advanced' ? 'advanced' : 'simple', model,
       models: Object.fromEntries(FEATURES.map((k) => [k, pick(own[k])]).filter(([, s]) => s.use)),
       tune: Object.fromEntries(FEATURES.map((k) => [k, tuned(tune[k], k)]).filter(([, t]) => Object.keys(t).length)),
       features: Object.fromEntries(FEATURES.map((k) => [k, f[k] === true])),
