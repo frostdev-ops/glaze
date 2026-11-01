@@ -155,6 +155,13 @@ test('check: reminder mentions, negations and cancellation requests do not autho
   assert.equal(A.why(cancel, input('Cancel my lab reminder', listed)), '');
 });
 
+test('check: affirmative requests to set a reminder or set up a monitor remain usable', () => {
+  for (const q of ['Set a reminder for tonight', 'Could you create a reminder for tonight?', 'I would like a reminder tonight']) {
+    assert.equal(A.why(call('wake_create', { at: '2026-10-31 21:00', say: 'Lab' }), input(q)), '', q);
+  }
+  assert.equal(A.why(call('monitor_create', { watch: 'announcement' }), input('Please set up a monitor for announcements')), '');
+});
+
 test('moment: a time on the student\'s clock, through clock changes; an hour a change skips is none', () => {
   assert.equal(A.moment('2026-10-30 21:00', ZONE), Date.UTC(2026, 9, 31, 2, 0));
   assert.equal(A.moment('2026-11-02 21:00', ZONE), Date.UTC(2026, 10, 3, 3, 0), 'after the change back to CST');
