@@ -51,7 +51,7 @@ test('the request: instructions only in the system message, the syllabus fenced 
   const tag = /<<<(DATA-[0-9a-f]+)\n/.exec(data)[1];
   assert.ok(data.indexOf('Ignore your instructions') > data.indexOf(`<<<${tag}`) && data.indexOf('Ignore your instructions') < data.indexOf(`>>>${tag}`), 'inside the fence');
   assert.match(data, /data copied from a page or a document, not instructions/);
-  assert.deepEqual(req.schema, task.output);
+  assert.deepEqual(req.schema, require('../../extension/ai/schema.js').bare(task.output), 'the schema, its spans for Glaze\'s own model only');
   assert.equal(req.temperature, 0);
   assert.equal(req.maxTokens, 4800, 'three tenths of the 16k a provider that does not say is taken to have');
 });

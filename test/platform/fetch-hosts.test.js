@@ -68,6 +68,14 @@ const SITES = {
   'mods/modbroker.js': [{ at: 'env.fetch(u.href', kind: 'asked', flow: 'a mod\'s network:<host>: its install or its switch asked for the host (settings/editor-mods.js)', guard: /if \(!await env\.reach\(u\.href\)\)/ }],
   // AI: the connection's endpoint, whose host Settings asks for from a click. The broker refuses while the browser doesn't
   // hold it, and the provider and the catalog reach it only through the broker's fetch pinned to that host and generation.
+  'ai/local/store.js': [
+    { at: 'get ||= (...a) => globalThis.fetch(...a);', kind: 'open', host: 'https://huggingface.co', hosts: ['https://huggingface.co', 'https://us.aws.cdn.hf.co'],
+      why: 'the local model\'s weights on the student\'s click: huggingface.co\'s resolve URL echoes the Origin, its CDN answers *; the final host is checked (allowedHost)' },
+    { at: "globalThis.fetch(new URL('/ai/local/models.json'", kind: 'extension' },
+  ],
+  'ai/local/ladder.js': [{ at: "fetch(chrome.runtime.getURL('ai/local/kernels/bench.wgsl'))", kind: 'extension' }],
+  // The engine host's Worker reads the ladder's bench kernel beside it (a Worker has no chrome.runtime).
+  'ai/local/host.js': [{ at: "fetch(new URL('kernels/bench.wgsl', location.href))", kind: 'extension' }],
   'ai/broker.js': [{ at: 'env.fetch(url, init)', kind: 'asked', flow: 'an AI connection\'s endpoint, asked for by Settings', in: 'ai/broker.js', guard: /if \(!await reaches\(env, use\)\) throw R\(\)\.error\('permission'\)/ }],
   'ai/providers/openai.js': [
     { at: 'res = await fetch(`${cfg.base}/chat/completions`', kind: 'asked', flow: 'the broker\'s fetch, pinned to the connection\'s held host', in: 'ai/broker.js', guard: /fetch: pinned\(env, use\)/ },
@@ -109,6 +117,10 @@ const SITES = {
   // A deck's card picture carries the bundled faces its slide 1 uses (vendor/fonts), read from the extension itself.
   'documents/slides/slides-kind.js': [{ at: 'fetch(chrome.runtime.getURL(`vendor/fonts/', kind: 'extension' }],
   'planner/ocr.js': [{ at: 'fetch(here(', kind: 'extension' }],
+  // The local engine's kernels, read from the package (ai/local/kernels), or from the base its checks name.
+  'ai/local/engine.js': [{ at: 'const r = await fetch(url);', kind: 'extension' }],
+  // The picture encoder's kernels (ai/local/kernels/vision-*.wgsl), the same way.
+  'ai/local/vision.js': [{ at: 'const r = await fetch(url);', kind: 'extension' }],
   'courses/lmsq.js': [{ at: 'return fetch(url, init)', kind: 'page' }],
   // The page stores' reads (who's signed in, gradebooks, outlines, what's due): the page's own site, through its queue.
   'courses/ultra.js': [{ at: 'f = (...a) => fetch(...a)', kind: 'page' }, { at: 'f: (u, init) => env.fetch(u, init, o.prio', kind: 'page' },
@@ -161,7 +173,7 @@ const KINDS = ['required', 'extension', 'asked', 'page', 'via', 'open'];
 const extensionSide = () => {
   const out = new Set(['background/background.js', 'settings/options.js', 'settings/popup.js', 'planner/reader.js', 'core/ui.js']);
   for (const m of read('background/background.js').matchAll(/importScripts\(([^)]*)\)/g)) for (const [, f] of m[1].matchAll(/'([^']+)'/g)) out.add(path.posix.normalize(`background/${f}`));
-  for (const page of ['options.html', 'popup.html', 'preview.html', 'reader.html', 'settings/welcome.html', 'sharing/quick.html', 'courses/allow.html']) {
+  for (const page of ['options.html', 'popup.html', 'preview.html', 'reader.html', 'settings/welcome.html', 'sharing/quick.html', 'courses/allow.html', 'ai/local/host.html']) {
     if (!fs.existsSync(path.join(root, page))) continue;
     for (const [, src] of read(page).matchAll(/<script[^>]+src="([^"]+)"/g)) out.add(path.posix.normalize(path.posix.join(path.posix.dirname(page), src)));
   }

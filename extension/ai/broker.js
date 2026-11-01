@@ -87,12 +87,14 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   const using = async (s, feature, all) => {
     const sel = A().resolve(s, feature);
     if (!sel || !E().ID.test(sel.use)) return null;
-    const conn = sel.use === 'device' ? await onDevice(all) : usable(sel.use, all[sel.use]);
+    const conn = await connection(sel.use, all);
     if (conn?.p.id === 'openai' && !sel.model) return null;
     const tune = A().tuning(s, feature);
     const cfg = conn && conn.p.config({ ...conn.cfg, ...(conn.p.id === 'openai' && { model: sel.model }), ...(tune.context && { context: tune.context }) });
     return cfg ? { ...conn, cfg, sel, tune } : null;
   };
+  // A connection by its id: On this device resolved (onDevice), Glaze's own model ('local') kept or not, any other as kept.
+  const connection = async (id, all) => (id === 'device' ? onDevice(all) : id === 'local' ? usable('local', all.local || { provider: 'local' }) : usable(id, all[id]));
   // A row's provider: an endpoint's connection id ('openrouter', one the student added), or the provider of a model on this
   // computer.
   const shown = (use) => (use.p.id === 'openai' ? use.id : use.p.id);
@@ -116,7 +118,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   // On this device is Settings' one choice, whichever model it resolves to.
   const named = async (env, feature) => {
     try {
-      const { s, all } = await view(env), sel = A().resolve(s, feature), use = sel && sel.use !== 'device' && usable(sel.use, all[sel.use]);
+      const { s, all } = await view(env), sel = A().resolve(s, feature), use = sel && sel.use !== 'device' && await connection(sel.use, all);
       return sel?.use === 'device' ? 'device' : use ? shown(use) : '';
     } catch { return ''; }
   };
@@ -143,16 +145,38 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   // worker's one) and connection generation for LIMIT.listed, so a run asks for it once an hour, not every time.
   const listed = new WeakMap(); // env.vault → Map(`${id}|${generation}` → { at, list })
   const unlist = (env, id) => { for (const k of listed.get(env.vault)?.keys() || []) if (k.startsWith(`${id}|`)) listed.get(env.vault).delete(k); };
-  const catalog = async (env, use, signal, now = Date.now()) => {
+  // fresh: read it again whatever is kept (Glaze's own model for a task that may carry pictures, below).
+  const catalog = async (env, use, signal, now = Date.now(), fresh = false) => {
     if (!use.p.catalog) return null;
     if (!listed.has(env.vault)) listed.set(env.vault, new Map());
     const kept = listed.get(env.vault), k = `${use.id}|${use.generation || ''}`, was = kept.get(k);
-    if (was && now - was.at < LIMIT.listed) return was.list;
+    if (!fresh && was && now - was.at < LIMIT.listed) return was.list;
     const t = F().deadline(LIMIT.catalog), s = F().anySignal([signal, t.signal]);
     let list;
     try { list = await F().wait(() => use.p.catalog(use.cfg, { fetch: pinned(env, use), cache: cache(env), signal: s.signal }), s.signal); } catch { list = null; } finally { t.done(); s.done(); }
-    if (!signal?.aborted) { kept.set(k, { at: now, list }); if (kept.size > 16) kept.delete(kept.keys().next().value); }
+    // No selected local text model yet: a download or a recovered store read must be discovered on the next run.
+    if (!signal?.aborted && (use.p.id !== 'local' || list?.models.some((m) => typeof m.weights === 'string'))) {
+      kept.set(k, { at: now, list }); if (kept.size > 16) kept.delete(kept.keys().next().value);
+    } else if (use.p.id === 'local') kept.delete(k);
     return list;
+  };
+
+  // The cfg a task runs with on a connection, given its catalog: → { chosen (M().select's), cfg }. Glaze's own model: the
+  // window of the text model its catalog chose, which then runs the text requests (weights); a task that only reads pictures
+  // plans for the picture model's. Advanced's context replaces the window, but never past that model's own (a Glaze-tuned
+  // model's trained 4,096; a stock one's 16,000, which its caps hold anyway). Throws as select does, or 'pictures'/'assets'.
+  const sized = (use, list, task) => {
+    const pics = task.caps?.images === true;
+    const chosen = M().select(use.cfg.model, list, { tools: !!task.tools, images: pics });
+    const known = list?.models.find((x) => x.id === chosen.model), planned = (pics && known?.pictures?.context?.inputLimit) || chosen.caps.context;
+    if (use.p.id === 'local' && (pics ? !known?.pictures?.context?.inputLimit : typeof known?.weights !== 'string')) {
+      throw F().modelFailure({ category: 'provider-unavailable', reason: pics ? 'pictures' : 'assets' });
+    }
+    const ceiling = use.p.id === 'local' ? (pics ? known.pictures.context : known.context)?.window : undefined;
+    const context = use.cfg.context ? (Number.isSafeInteger(ceiling) && ceiling > 0 ? Math.min(use.cfg.context, ceiling) : use.cfg.context) : planned;
+    const cfg = { ...use.cfg, ...(context && { context }), ...(chosen.caps.images !== undefined && use.cfg.images === undefined && { images: chosen.caps.images }),
+      ...(typeof known?.weights === 'string' && { weights: known.weights }) };
+    return { chosen, cfg };
   };
 
   // ---- limits shared by every port ------------------------------------------------------------------------------------
@@ -197,8 +221,10 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     let closed = false;
     const close = () => { if (closed) return; closed = true; for (const c of mine.values()) c.abort(new DOMException('Closed', 'AbortError')); mine.clear(); confirms.clear(); };
     const post = (m) => { if (closed) return; try { port.postMessage(m); } catch { close(); } };
-    // Prompt API work can be silent past Chrome's 30-second worker idle cutoff. An open port alone does not keep it
-    // alive (Chrome 114+); messages do. Keep only an admitted device run alive, within its existing task deadline.
+    // A model on this computer can be silent past Chrome's 30-second worker idle cutoff (the Prompt API's, and Glaze's own
+    // engine reading a long prompt). An open port alone does not keep it alive (Chrome 114+); messages do. Keep only an
+    // admitted run on a model that downloads to this computer (a provider with prepare: device, local) alive, within its
+    // existing task deadline.
     const keepAlive = (id, signal) => {
       let timer;
       const stop = () => { clearTimeout(timer); signal.removeEventListener('abort', stop); };
@@ -269,9 +295,14 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
       mine.set(m.id, control);
       try {
         const { task, use } = await F().wait(() => admit(m), both.signal);
-        const req = task.warm === true && typeof use.p.warm === 'function' && T().prepare(task, m.input, { provider: use.p, cfg: use.cfg, over: over(use) });
-        done(!!req && await P().warm(use.p, req, use.cfg, { signal: both.signal }));
-      } catch { done(false); } finally { mine.delete(m.id); deadline.done(); both.done(); }
+        if (task.warm !== true || typeof use.p.warm !== 'function') return done(false);
+        // A connection changed while it reads the catalog ends it (revoke), as it ends a run.
+        admitted.set(control, use);
+        // Built as the run's would be: for the window and model its catalog gives (sized).
+        const { cfg } = sized(use, await catalog(env, use, both.signal, (env.now || Date.now)()), task);
+        const req = T().prepare(task, m.input, { provider: use.p, cfg, over: over(use) });
+        done(!!req && !both.signal.aborted && await P().warm(use.p, req, cfg, { signal: both.signal }));
+      } catch { done(false); } finally { mine.delete(m.id); admitted.delete(control); deadline.done(); both.done(); }
     };
     // Admission: → { s, task, use } or throws a code.
     const admit = async (m) => {
@@ -312,13 +343,14 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         try { accepted = await F().wait(() => admit(m), signal.signal); } finally { admission.done(); signal.done(); }
         const { task, use } = accepted;
         admitted.set(control, use);
-        if (use.p.id === 'device') stopKeepAlive = keepAlive(m.id, control.signal);
+        if (typeof use.p.prepare === 'function') stopKeepAlive = keepAlive(m.id, control.signal);
         row.provider = shown(use);
         if (use.p.id === 'openai') row.model = use.cfg.model;
-        const list = await catalog(env, use, control.signal, now());
-        const chosen = M().select(use.cfg.model, list, { tools: !!task.tools, images: !!task.caps.images });
+        // Glaze's own picture download may finish in its host after Settings' prepare answered (four minutes), with no
+        // connection change: a task that may carry pictures reads its catalog again; others (the gray text) keep theirs.
+        const list = await catalog(env, use, control.signal, now(), use.p.id === 'local' && (task.caps.images === true || task.id === 'writer.feedback'));
+        const { chosen, cfg } = sized(use, list, task);
         const takes = use.p.id === 'openai' ? M().efforts(use.cfg.base, use.cfg.model, list?.models.find((x) => x.id === use.cfg.model)) : [];
-        const cfg = { ...use.cfg, ...(chosen.caps.context && !use.cfg.context && { context: chosen.caps.context }), ...(chosen.caps.images !== undefined && use.cfg.images === undefined && { images: chosen.caps.images }) };
         if (rate ? often(`${env.who}|${m.feature}|${m.task}`, now(), rate.perMinute || LIMIT.perMinute, '|rated') : often(key, now())) throw R().error('often');
         if (control.signal.aborted) throw Object.assign(R().error('cancelled'), { category: 'cancelled' });
         const remember = (id) => { const parked = confirms.get(id); if (parked) Object.assign(parked, { runId: m.id, feature: m.feature, task: m.task, to: m.to, use }); };
@@ -408,8 +440,11 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     // A stable writing configuration identity contains only model selection and tuning, never the connection cfg.
     const identity = m.feature === 'writing' ? JSON.stringify([use.p.id, use.id, use.cfg.model || '', use.generation || '',
       Object.keys(use.tune).sort().map((key) => [key, use.tune[key]]), use.sel.effort || '']) : undefined;
+    // Glaze's own model: the window its text model runs with (sized; its catalog reads only this computer's store).
+    let cfg = use.cfg;
+    if (ready && use.p.id === 'local') { try { cfg = sized(use, await catalog(env, use, undefined, (env.now || Date.now)()), {}).cfg; } catch { /* its caps' */ } }
     return { on, allowed: true, ready, ...(why && { why }), ...(reason && { reason }), provider: use.p.id,
-      caps: { ...P().caps(use.p, use.cfg), ...(typeof images === 'boolean' && { images }) }, ...(identity && { identity }), ...(use.p.origin && { to: dest(use) }) };
+      caps: { ...P().caps(use.p, cfg), ...(typeof images === 'boolean' && { images }) }, ...(identity && { identity }), ...(use.p.origin && { to: dest(use) }) };
   };
 
   // ---- Settings' connections (background/background.js 'glaze:ai-config', from options.html's top frame only) ------------------
@@ -429,16 +464,29 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   //     downloaded and loaded; meanwhile env.say({ type: 'glaze:ai-config', event: 'progress', provider, loaded: 0..1 }).
   //     Not queued: a download takes minutes. Its one-time message channel holds the worker until the reply (the
   //     provider's four-minute deadline is below Chrome's five-minute limit). A crash still needs Settings' next 'test'.
+  //     Glaze's own model (provider 'local'): 'test' also says its picture download (pictures: { state, size, progress? });
+  //     'prepare' and 'delete' with part: 'pictures' fetch or remove that download only, its progress events with part.
   const local = (m, env) => {
     const p = typeof m.provider === 'string' && A().PROVIDERS.includes(m.provider) ? P().get(m.provider) : null;
     const cfg = p && typeof p.prepare === 'function' && p.config({});
-    if (!cfg) return Promise.resolve({ ok: false, error: 'setup' });
-    const done = (st) => ({ ok: true, state: ['ready', 'download', 'downloading', 'unavailable'].includes(st?.state) ? st.state : 'unavailable', ...(typeof st?.reason === 'string' && { reason: st.reason }) });
+    if (!cfg || (m.part !== undefined && (m.part !== 'pictures' || p.id !== 'local' || m.op === 'test'))) return Promise.resolve({ ok: false, error: 'setup' });
+    const part = m.part === 'pictures' ? { part: 'pictures' } : {};
+    // Glaze's own model also says its size, tier and the tiers there are (Settings' card), and how far a download is.
+    const n = (v) => Number.isSafeInteger(v) && v > 0;
+    const done = (st) => ({ ok: true, state: ['ready', 'download', 'downloading', 'unavailable'].includes(st?.state) ? st.state : 'unavailable', ...(typeof st?.reason === 'string' && { reason: st.reason }),
+      ...(st?.stale === true && { stale: true }),
+      ...(n(st?.size) && { size: st.size }), ...(n(st?.tier) && { tier: st.tier }), ...(Number.isFinite(st?.progress) && { progress: Math.min(1, Math.max(0, st.progress)) }),
+      ...(Array.isArray(st?.tiers) && { tiers: st.tiers.filter((x) => n(x?.tier) && n(x?.size)).map((x) => ({ tier: x.tier, size: x.size })) }),
+      ...(isObj(st?.pictures) && ['ready', 'download', 'downloading'].includes(st.pictures.state) && n(st.pictures.size) && { pictures: { state: st.pictures.state, size: st.pictures.size,
+        ...(Number.isFinite(st.pictures.progress) && { progress: Math.min(1, Math.max(0, st.pictures.progress)) }) } }) });
     const failed = () => ({ ok: true, state: 'unavailable', reason: 'failed' });
-    if (m.op === 'test') return p.status(cfg, {}).then(done, failed);
-    // A model just downloaded may take more than the catalog kept from before said.
-    return p.prepare(cfg, { onProgress: (loaded) => { try { env.say?.({ type: 'glaze:ai-config', event: 'progress', provider: p.id, loaded }); } catch { /* no page listening */ } } })
-      .then(done, failed).finally(() => { if (env.vault) listed.delete(env.vault); });
+    // The kept connection's settings (Glaze's own model's tier), as a run would take them.
+    const kept = async () => { const rec = env.vault ? (await stored(env).catch(() => ({})))[p.id] : null; const c = isObj(rec) && rec.provider === p.id && p.config((({ provider: _, ...r }) => r)(rec)); return c || cfg; };
+    if (m.op === 'test') return kept().then((c) => p.status(c, {})).then(done, failed);
+    if (m.op === 'delete') return typeof p.remove === 'function' ? kept().then((c) => p.remove(c, part)).then(done, failed).finally(() => revoke(p.id, env)) : Promise.resolve({ ok: false, error: 'setup' });
+    // A model just downloaded may take more than the catalog kept from before said (pictures, too).
+    return kept().then((c) => p.prepare(c, { ...part, onProgress: (loaded) => { try { env.say?.({ type: 'glaze:ai-config', event: 'progress', provider: p.id, ...part, loaded }); } catch { /* no page listening */ } } })
+      .then(done, failed)).finally(() => { if (env.vault) listed.delete(env.vault); });
   };
   let turn = Promise.resolve();
   const queued = (f) => { const next = turn.then(f, f); turn = next.catch(() => {}); return next; };
@@ -456,7 +504,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     return typeof m === 'boolean' ? m : env.vault.set(CONNECTIONS, m.connections);
   };
   const NAME = /^[^\p{Cc}\p{Bidi_Control}]{1,40}$/u;
-  const config = (m, env) => ((m?.op === 'prepare' || m?.op === 'test') && m.id === undefined ? local(m, env) : queued(async () => {
+  const config = (m, env) => (['prepare', 'test', 'delete'].includes(m?.op) && m.id === undefined ? local(m, env) : queued(async () => {
     // What a write keeps: until the store is in its shape, an older connection as it is, its model too.
     const done = await upgrade(env).catch(() => false), kept = await stored(env), all = A().migrate(undefined, kept).connections, base = done ? all : kept;
     if (m?.op === 'get') {
@@ -483,14 +531,15 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
       let cfg = p.config({ ...raw, ...(!Object.hasOwn(raw, 'key') && same && before.cfg.key && { key: before.cfg.key }) });
       if (!cfg) return { ok: false, error: 'setup', note: 'Check the address, the model and the key.' };
       const { generation: __, ...settings } = cfg;
-      const generation = same && before.cfg.key === settings.key && before.generation ? before.generation : E().generation();
+      const sameLocal = provider !== 'local' || (before?.cfg.tier === settings.tier && before?.cfg.context === settings.context);
+      const generation = same && sameLocal && before.cfg.key === settings.key && before.generation ? before.generation : E().generation();
       const older = provider === 'openai' && typeof base[m.id]?.model === 'string' ? { model: base[m.id].model } : {};
       if (!await env.vault.set(CONNECTIONS, { ...base, [m.id]: { provider, ...(name !== undefined && { name: name.trim() }), ...settings, ...older, generation } })) return { ok: false, error: 'write' };
       if (before?.generation !== generation) revoke(m.id, env);
       return { ok: true, ...(p.origin && { origin: p.origin(cfg) }) };
     }
     if (m.op === 'remove') { const { [m.id]: _, ...rest } = base; const ok = await env.vault.set(CONNECTIONS, rest); if (ok) revoke(m.id, env); return { ok }; }
-    const use = m.id === 'device' ? await onDevice(all) : usable(m.id, all[m.id]);
+    const use = await connection(m.id, all);
     if (!use) return { ok: false, error: 'setup' };
     if (m.op === 'test') {
       if (!await reaches(env, use)) return { ok: true, state: 'unavailable', reason: 'permission' };

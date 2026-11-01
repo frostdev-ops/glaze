@@ -4,13 +4,17 @@
 # carries other companies' trademarks, so Safari keeps the plain name Glaze. Safari has no
 # identity API, so Google Calendar sync's oauth2 key and optional identity permission go (S3 §4). Safari requires
 # nativeMessaging (the Mac app's updates), so agent access's optional copy goes too.
-# Code mods need Chrome: the sandbox page, its CSP and its files (mods/host.*, mods/boot.js, mods/page/mods.js) go too;
-# content.js starts code mods only where the manifest has the sandbox. Declarative widgets stay (mods/page/modwidgets.js,
-# drawn by mods/page/modui.js). Safari's From Google Drive comes back from the picker pages to documents/picked.html in a
-# tab (background/google.js pick), so that page is web-accessible to those two origins only.
+# Code mods need Chrome: the sandbox page, its CSP and its files go too; content.js starts code mods only where the manifest
+# has the sandbox. Declarative widgets stay (mods/page/modwidgets.js, drawn by mods/page/modui.js). The files go from a
+# staged copy, never the checkout: tools/build/safari-drop.txt lists them (code mods', and Glaze's own model's engine and host).
+# Safari's From Google Drive comes back from the picker pages to documents/picked.html in a tab (background/google.js pick),
+# so that page is web-accessible to those two origins only.
 set -eu
 dir=$(CDPATH= cd -- "$(dirname "$1")" && pwd)
-[ "$dir" = "$(CDPATH= cd -- "$(dirname "$0")/../../extension" && pwd)" ] || rm -rf "$dir/mods/boot.js" "$dir/mods/host.html" "$dir/mods/host.js" "$dir/mods/page/mods.js" # a staged copy, never the checkout
+here=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+if [ "$dir" != "$(CDPATH= cd -- "$here/../../extension" && pwd)" ]; then
+  grep -v '^#' "$here/safari-drop.txt" | while IFS= read -r f; do [ -z "$f" ] || rm -rf "$dir/$f"; done
+fi
 python3 - "$1" <<'PY'
 import json, sys
 path = sys.argv[1]
@@ -38,7 +42,8 @@ if picked not in manifest['web_accessible_resources']:
 # anywhere, and the detector (content/detect.js) on every other https page, which asks before Glaze runs there.
 manifest['host_permissions'] = ['<all_urls>']
 manifest.pop('optional_host_permissions', None)
-manifest['permissions'] = [p for p in manifest['permissions'] if p not in ('activeTab', 'declarativeContent')]
+# Safari has no offscreen documents, and keeps Apple Intelligence instead of Glaze's own model (ai/providers/local.js).
+manifest['permissions'] = [p for p in manifest['permissions'] if p not in ('activeTab', 'declarativeContent', 'offscreen')]
 scripts = manifest['content_scripts']
 for i, entry in enumerate(scripts):
     if 'content/content-ultra.js' in entry['js']:

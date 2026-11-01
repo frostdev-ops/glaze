@@ -688,7 +688,7 @@ test('Feedback on a known test gives the assignments-only reason instead of chec
 });
 
 test('an unavailable on-device provider does not claim this computer can never run it', async () => {
-  for (const [provider, name] of [['device', 'Chrome on-device AI'], ['apple', 'Apple Intelligence']]) {
+  for (const [provider, name] of [['device', 'Chrome on-device AI'], ['apple', 'Apple Intelligence'], ['local', 'Rime']]) {
     const f = frame({ answer: () => ({ allowed: true, ready: false, why: 'unavailable', provider }) }); await f.start();
     assert.ok(f.pane().textContent.startsWith(`${name} is unavailable. Choose another model in Settings → AI.`));
   }

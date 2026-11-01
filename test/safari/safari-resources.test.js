@@ -14,9 +14,12 @@ const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const m = require('../../extension/manifest.json');
 // The paths package.sh zips (as test/release/package.test.js reads them), and every file under them.
 const roots = read('../tools/build/package.sh').match(/^zip -q -r -X "\$OUT" ([\s\S]*?)-x /m)[1].replace(/\\\n/g, ' ').trim().split(/\s+/);
-// Code mods' sandbox files (mods/host.*, mods/boot.js, mods/page/mods.js) are Chrome's alone: tools/build/safari-manifest.sh drops them from the staged copy, as Safari
-// has no manifest sandbox.
-const shipped = roots.flatMap((r) => (fs.statSync(path.join(root, r)).isDirectory() ? S.walk(path.join(root, r), `${r}/`) : [r])).filter((f) => !['mods/boot.js', 'mods/host.html', 'mods/host.js', 'mods/page/mods.js'].includes(f));
+// What Safari never carries (tools/build/safari-drop.txt): code mods' sandbox files, as Safari has no manifest sandbox, and
+// Glaze's own model's engine and host; tools/build/safari-manifest.sh drops them from every staged copy.
+const DROP = fs.readFileSync(path.join(__dirname, '../../tools/build/safari-drop.txt'), 'utf8').split('\n').filter((l) => l && !l.startsWith('#'));
+const dropped = (f) => DROP.some((d) => (d.endsWith('/') ? f.startsWith(d) : f === d));
+const packaged = roots.flatMap((r) => (fs.statSync(path.join(root, r)).isDirectory() ? S.walk(path.join(root, r), `${r}/`) : [r]));
+const shipped = packaged.filter((f) => !dropped(f));
 
 test('the parser reads both extension targets, and what each leaves out', () => {
   const sets = S.bundled();
@@ -84,4 +87,46 @@ test('the Safari staging drops code mods\' sandbox and keeps everything else bun
     const check = src.indexOf('safari-resources.js');
     assert.ok(check === -1 || check > rewrite, `${f}: before its resource check`);
   }
+});
+
+// Glaze's own model is unavailable in Safari (ai/settings.js PROVIDERS has no 'local'), so its engine, kernels and host stay
+// out; the worker's own imports of ai/local (store, format, link) stay, and nothing Safari loads names a dropped file.
+test('the Safari drop list names only packaged files, and nothing Safari loads names one', () => {
+  for (const d of DROP) assert.ok(packaged.some((f) => (d.endsWith('/') ? f.startsWith(d) : f === d)), `${d} is in the Chrome package`);
+  for (const f of ['ai/local/engine.js', 'ai/local/host.html', 'ai/local/host.js', 'ai/local/offscreen.js', 'ai/local/kernels/matmul.wgsl', 'ai/local/models.json']) assert.ok(dropped(f), f);
+  const local = packaged.filter((f) => f.startsWith('ai/local/') && !dropped(f));
+  const imported = [...read('background/background.js').matchAll(/importScripts\(([^)]*)\)/g)].flatMap((x) => [...x[1].matchAll(/'\.\.\/([^']+)'/g)].map((y) => y[1]));
+  assert.deepEqual(local.sort(), imported.filter((f) => f.startsWith('ai/local/')).sort(), 'Safari keeps exactly the ai/local files the worker imports');
+  assert.deepEqual(imported.filter(dropped), [], 'the worker imports nothing dropped');
+  const named = [
+    ...m.content_scripts.flatMap((c) => [...(c.js || []), ...(c.css || [])]), m.background.service_worker, m.action.default_popup, m.options_ui.page,
+    ...m.web_accessible_resources.flatMap((w) => w.resources),
+    ...JSON.parse(read('background/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"')),
+  ].filter((f) => !f.startsWith('mods/'));
+  assert.deepEqual(named.filter((f) => dropped(f) || f.startsWith('ai/local/')), [], 'no manifest entry or on-demand script');
+  for (const page of shipped.filter((f) => f.endsWith('.html'))) {
+    const dir = path.posix.dirname(page);
+    const srcs = [...read(page).matchAll(/<(?:script|link)\b[^>]*\b(?:src|href)="([^"#?]+)"/g)].map((x) => path.posix.normalize(x[1].startsWith('/') ? x[1].slice(1) : path.posix.join(dir, x[1])));
+    assert.deepEqual(srcs.filter(dropped), [], `${page} loads nothing dropped`);
+  }
+  for (const f of shipped.filter((x) => x.endsWith('.js') && !x.startsWith('ai/local/') && x !== 'ai/providers/local.js' && x !== 'background/background.js')) {
+    assert.ok(!/importScripts\([^)]*ai\/local\/|new Worker\([^)]*ai\/local\//.test(read(f)), `${f} starts nothing in ai/local`);
+  }
+});
+
+test('the Safari staging drops Glaze\'s own model\'s engine and host and keeps the worker\'s imports', () => {
+  const dist = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-safari-stage-'));
+  try {
+    execFileSync('bash', ['../tools/build/package.sh'], { cwd: root, env: { ...process.env, DIST: dist }, stdio: 'pipe' });
+    const stage = path.join(dist, 'Resources');
+    execFileSync('unzip', ['-q', path.join(dist, `glaze-v${m.version}.zip`), '-d', stage]);
+    execFileSync('sh', [path.join(__dirname, '../../tools/build/safari-manifest.sh'), path.join(stage, 'manifest.json')]);
+    const staged = S.walk(stage);
+    assert.deepEqual(staged.filter((f) => f.startsWith('ai/local/')).sort(), ['ai/local/format.js', 'ai/local/link.js', 'ai/local/store.js']);
+    assert.deepEqual(staged.filter(dropped), []);
+    assert.deepEqual(staged.sort(), shipped.slice().sort(), 'everything else stays');
+  } finally {
+    fs.rmSync(dist, { recursive: true, force: true });
+  }
+  assert.ok(fs.existsSync(path.join(root, 'ai/local/engine.js')) && fs.existsSync(path.join(root, 'mods/host.html')), 'the checkout keeps its files');
 });

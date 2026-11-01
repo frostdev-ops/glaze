@@ -1,6 +1,6 @@
 # Privacy Policy — Glaze
 
-_Last updated: 2026-10-31_
+_Last updated: 2026-11-01_
 
 ## User-installed mods
 
@@ -176,6 +176,20 @@ On Firefox, Glaze's listing declares that it collects no data, with website cont
 collection, because agent access passes what Glaze read from your school's site to another program. Glaze asks for it in
 the same Firefox prompt as `nativeMessaging`, in the click that turns Agents on, and gives both back when you turn it
 off.
+
+## Ask Rime
+
+Ask Rime is off by default; **Settings → AI → Ask Rime** turns it on, with AI on and a model chosen. It opens from the
+command palette on Canvas and Blackboard, only for your own click or key. Your question, and your work when you add it,
+go to the model you chose for Ask Rime (its own, else your overall model), as every AI feature's text does (AI reading,
+below): with a model on this device nothing leaves your computer; with a provider or an endpoint it goes to that host
+only. For a question about your own courses, Glaze reads what it needs with the same tools as Agents (your to-dos and
+schedule, grades, assignments and rubrics, Writer documents, as Glaze keeps them on this device, refreshed through an
+open tab of your school's site), and sends what it read to that model to answer. Ask Rime's switch is that tool access:
+it needs no Agents pairing and doesn't turn agent access on. Its one change, marking a to-do done, waits for your OK in
+Glaze's window, worded by Glaze, never by the model. Nothing of the conversation is kept: it goes when the page or the
+panel closes. While the panel is open, what it shows is part of the page, as anything on screen is. Each model request leaves one row of metadata in the recent AI calls (feature, provider, model, time, size,
+outcome), as for every AI feature; no question, answer or school data is in it.
 
 ## What Glaze stores
 
@@ -915,13 +929,19 @@ you import) are bundled. It makes requests in these cases:
   exception is AI reading below, which you turn on yourself.
 - **AI reading** (Settings → AI, off by default; Canvas and Blackboard). Only when AI is on, a connection is set up and
   you allow a feature (Syllabus import first), that feature can ask the AI to read for it. With a model on this device
-  (Chrome's built-in model, or Apple Intelligence through Glaze's Safari app) nothing leaves your computer. With an
+  (Chrome's built-in model, Rime, or Apple Intelligence through Glaze's Safari app) nothing leaves your computer. With an
   provider or an endpoint, the syllabus text (and its pictures, when the model reads pictures) goes to the provider you
   chose for it, or the address you entered, and only after the import dialog has shown that host; Glaze asks the browser
   for permission to reach that one host when you click Connect (or save or test an endpoint). The key is sent only there,
   over https (or to your own computer). Glaze never chooses a provider, runs no server for AI, and never uses AI on quiz
   or test pages. AI answers are only
   suggestions in the review, marked Check this; nothing is kept until you save.
+- **Rime** (Settings → AI, Chrome and Firefox; not until you click Download). Glaze's own model, Frostdev's Rime, built
+  on Liquid AI's LFM3-1.7B. Download fetches its file from `huggingface.co`, which hands the request to Hugging Face's
+  CDN (`*.hf.co`); **Picture reading**'s Download fetches its two files the same way. These requests carry no cookies and
+  nothing about you, your courses or your work: only the file's address and the part of it being fetched, with the
+  connection metadata, including your IP address, any download has. Each file is checked against its SHA-256 and kept in
+  Glaze's storage on this device until you click Delete. Rime runs on this computer; what a feature gives it stays there.
 - **Agent access** (Settings → AI → Agents, off by default; Canvas and Blackboard Ultra). For an app you allowed, in the
   account's school tab open in this browser, signed in as you: your profile, to check whose tab it is; the planner and
   Insights reads Better To Do and Insights make; one assignment with its rubric (on Canvas

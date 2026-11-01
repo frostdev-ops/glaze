@@ -5,7 +5,8 @@
 //   input(raw) → the input cleaned, or null (refused: raw came from a page),
 //   build(input, { caps, text, fence }) → a request without its schema (ai/text.js request() fences the data),
 //   output: the answer's JSON Schema (an object at the root; ai/schema.js), or 'text': the model's words as they are
-//     (no schema; an answer cut off at maxTokens comes back as far as it got, meta.truncated),
+//     (no schema; an answer cut off at maxTokens comes back as far as it got, meta.truncated); a request carries it
+//     bare (schema.js bare(): no span), and Glaze's own model finds its spans by the task's id (providers/local.js),
 //   check(output, input, { truncated }) → the output cleaned (grounded, in range), or null (refused); a text task's output
 //     is the text,
 //   tools?: [names] (ai/tools.js; run through ai/loop.js), limits?: { steps (rounds), ms, tokens, maxTokens },
@@ -18,8 +19,12 @@
 //   split?(input, { budget, text }) → [input] and merge([output], input) → output: a long input in parts, each its own
 //     request, put back together before check. budget: tokens a part's data may take on this provider.
 //   orchestrate?(input, { caps, text, ask, fits, signal, limits }) → a raw output, or undefined for the ordinary run.
-//     Trusted task code only. ask(request, { output?, check?, accept? }) uses this run's provider, deadline and accounting
-//     (accept: providers.js run's, a looser schema the answer is checked against); it never retries. Calls are sequential and bounded by limits.calls (at most LIMIT.calls). fits reserves output room.
+//     Trusted task code only. ask(request, { output?, check?, accept?, call? }) uses this run's provider, deadline and
+//     accounting (accept: providers.js run's, a looser schema the answer is checked against); it never retries. Calls are
+//     sequential and bounded by limits.calls (at most LIMIT.calls). fits reserves output room.
+//     ask's call: the orchestration's own kind of request (CALL, e.g. writer.feedback's decide, explain, summary, scan),
+//     on the request's task info beside id and version, which no provider sends; Glaze's own model reads it
+//     (ai/providers/local.js THINK).
 // A run emits ai/loop.js's events (thinking, text_delta, says, step_start, step, pending, usage, reply) and a note
 // { part, parts } as each part starts. A tool that waits for the student ends the run with `pending` and no output.
 // Classic script for the worker; module.exports for node.
@@ -34,6 +39,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
   // parts: most requests one run makes; context: tokens assumed when a provider doesn't say; ms: a whole run's default.
   const LIMIT = { parts: 20, calls: 64, context: 16000, ms: 180000 };
   const fn = (v) => typeof v === 'function';
+  const CALL = /^[a-z]{1,16}$/;
   const KEYS = ['id', 'version', 'caps', 'input', 'build', 'output', 'check', 'tools', 'limits', 'stream', 'disclose', 'rate', 'split', 'merge', 'warm', 'orchestrate'];
   // rate.perMinute at most: a supersede task's runs are short and replace each other.
   const RATE = 120;
@@ -95,8 +101,8 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
     const outputs = [], steps = [], usage = { input: 0, output: 0 };
     let rounds = 0, finish = 'stop', pending, orchestrated, calls = 0, inFlight = false, active = true, releaseImages;
     const checkFailure = () => Object.assign(Q.error('check'), ['writer.outline', 'writer.feedback'].includes(task.id) ? { reason: task.id.slice(7) } : {});
-    const requestOf = (built, output = task.output, maxTokensCap) => {
-      const request = mine({ ...built, ...(output !== 'text' && { schema: output }), ...(task.limits.maxTokens && built.maxTokens === undefined && { maxTokens: task.limits.maxTokens }) }, over);
+    const requestOf = (built, output = task.output, maxTokensCap, call) => {
+      const request = mine({ ...built, ...(output !== 'text' && { schema: S().bare(output) }), ...(task.limits.maxTokens && built.maxTokens === undefined && { maxTokens: task.limits.maxTokens }), task: { ...own(task), ...(call && { call }) } }, over);
       if (Number.isSafeInteger(maxTokensCap) && maxTokensCap > 0 && maxTokensCap <= Q.LIMIT.maxTokens) request.maxTokens = Math.min(request.maxTokens || maxTokensCap, maxTokensCap);
       return request;
     };
@@ -105,8 +111,9 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
       const pictures = (request.messages || []).flatMap((m) => Array.isArray(m.content) ? m.content : []).filter((c) => c.type === 'image').length;
       return X().estimateTokens(request) + (request.maxTokens || 1024) + pictures * 1024 + Math.max(128, Math.ceil(context * 0.08)) <= context;
     };
-    const ask = async (built, { output = task.output, check, note, maxTokensCap, accept } = {}) => {
+    const ask = async (built, { output = task.output, check, note, maxTokensCap, call, accept } = {}) => {
       if (!active) throw Q.error('limit', 'finished');
+      if (call !== undefined && !(typeof call === 'string' && CALL.test(call))) throw Q.error('input', 'call');
       if (both.signal.aborted) throw both.signal.reason;
       if (inFlight || calls >= (task.limits.calls || LIMIT.parts)) throw Q.error('limit', 'calls');
       if (!Q.isObj(built) || (output !== 'text' && S().clean(output)?.type !== 'object')) throw Q.error('input', 'build');
@@ -114,7 +121,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
       inFlight = true; calls++;
       emit({ type: 'note', part: calls, parts: task.limits.calls || LIMIT.parts, ...(Q.isObj(note) && ['evidence', 'criterion', 'summary'].includes(note.stage) && Number.isSafeInteger(note.part) && Number.isSafeInteger(note.parts) && note.part > 0 && note.part <= note.parts ? { stage: note.stage, part: note.part, parts: note.parts } : {}) });
       try {
-        const request = requestOf(built, output, maxTokensCap);
+        const request = requestOf(built, output, maxTokensCap, call);
         const res = await L().run({ request, tools: [], call: (r, o) => P().run(p, r, c, { ...o, fetch, ...(accept && { accept }) }), policy, rounds: task.limits.steps, limits, headless, stream: false, signal: both.signal, emit, ctx, confirms });
         steps.push(...res.steps); rounds += res.rounds;
         usage.input += res.usage?.input || 0; usage.output += res.usage?.output || 0;
@@ -143,7 +150,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
         if (inputs.length > 1) emit({ type: 'note', part: i + 1, parts: inputs.length });
         const built = task.build(part, { caps: can, text: X(), fence: X().fence() });
         if (!Q.isObj(built)) throw Q.error('input', 'build');
-        const request = mine({ ...built, ...(!text && { schema: task.output }), ...(task.limits.maxTokens && built.maxTokens === undefined && { maxTokens: task.limits.maxTokens }) }, over);
+        const request = mine({ ...built, ...(!text && { schema: S().bare(task.output) }), ...(task.limits.maxTokens && built.maxTokens === undefined && { maxTokens: task.limits.maxTokens }), task: own(task) }, over);
         const call = (r, o) => P().run(p, r, c, { ...o, fetch });
         const res = await L().run({ request, tools: kit, call, policy, rounds: task.limits.steps, limits, headless, stream: task.stream, signal: both.signal, emit, ctx, confirms });
         steps.push(...res.steps);
@@ -171,14 +178,16 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
     return { output, ...(steps.length && { steps }), meta };
   };
 
+  // The task a request is for, as ai/request.js keeps it: Glaze's own model reads its token by it (ai/local/format.js).
+  const own = (task) => ({ id: task.id, version: task.version });
   // The student's settings a request takes: only those Glaze knows, as ai/request.js cleans them.
-  const own = (over) => Object.fromEntries(['effort', 'temperature', 'maxTokens', 'timeoutMs'].filter((k) => R().isObj(over) && over[k] !== undefined).map((k) => [k, over[k]]));
+  const theirs = (over) => Object.fromEntries(['effort', 'temperature', 'maxTokens', 'timeoutMs'].filter((k) => R().isObj(over) && over[k] !== undefined).map((k) => [k, over[k]]));
   // Reasoning counts against a request's output (OpenRouter's docs: an effort takes about a tenth to four fifths of
   // max_tokens; one too small thinks it all away and answers nothing). An effort the student set above the task's own gets
   // the room that effort thinks in beside the answer's own, unless the student set the output too.
   const ROOM = { none: 0, minimal: 1024, low: 2048, medium: 4096, high: 8192 };
   const mine = (request, over) => {
-    const out = { ...request, ...own(over) }, more = (ROOM[out.effort] ?? 0) - (ROOM[request.effort || 'none'] ?? 0);
+    const out = { ...request, ...theirs(over) }, more = (ROOM[out.effort] ?? 0) - (ROOM[request.effort || 'none'] ?? 0);
     if (more > 0 && over?.maxTokens === undefined && Number.isSafeInteger(request.maxTokens)) out.maxTokens = Math.min(R().LIMIT.maxTokens, request.maxTokens + more);
     return out;
   };
@@ -191,7 +200,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
     const input = task.input(raw);
     if (input === null || input === undefined) return null;
     const built = task.build(input, { caps: P().caps(p, c), text: X(), fence: X().fence() });
-    return R().isObj(built) ? mine({ ...built, ...(task.output !== 'text' && { schema: task.output }) }, over) : null;
+    return R().isObj(built) ? mine({ ...built, ...(task.output !== 'text' && { schema: S().bare(task.output) }), task: own(task) }, over) : null;
   };
 
   return { LIMIT, ID, define, add, get, run, prepare, list: () => [...all.keys()] };

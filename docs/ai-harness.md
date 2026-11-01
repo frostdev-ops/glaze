@@ -16,13 +16,17 @@ until the student has turned AI on, chosen a model for that feature and allowed 
 | `ai/providers.js` | The provider registry and `run`, the one way to call a model. |
 | `ai/providers/openai.js` | Any Chat Completions server. A request's `effort` goes as OpenRouter's `reasoning.effort` there and as `reasoning_effort` elsewhere; a model that refuses it gets the next level up (none, minimal, low), then none at all, remembered an hour for that model. `mock.js` is for tests and evals only; the worker never loads it. |
 | `ai/providers/device.js` | Chrome's Prompt API (Chrome 138+), in the worker itself. Chrome chooses its built-in model; Glaze retains `gemini-nano` as its compatibility id. Unavailable elsewhere. |
+| `ai/providers/local.js` | Glaze's own model on this computer (Rime, Frostdev's fine-tune of LFM3-1.7B, on Glaze's WebGPU engine), Chrome and Firefox; unavailable in Safari. Below. |
+| `ai/local/` | Its formatter (`format.js`), the link to its engine host (`link.js`), the host (`host.js`, `host.html`, `offscreen.js`), the store, GGUF reader, tokenizer, engine, picture encoder (`vision.js`), grammar and ladder. |
 | `ai/providers/apple.js` | Safari only: Apple's Foundation Models on this device, through the extension's native handler, `GlazeAI.swift`. One reply per request; no tools, no streaming. |
 | `ai/tools.js` | Tool definitions, `aiTools` (adds the required `reason`), `invokeReadTool`. |
 | `ai/loop.js` | The agent loop: rounds, batch triage, approvals, receipts, repair. |
 | `ai/task.js` | Task definitions and `run`. Tasks live in `ai/tasks/<id>.js`. |
 | `ai/tasks/syllabus-read.js` | `syllabus.read`: a syllabus's values as written, each with its quote; `planner/syllabus-ai.js` reads them with `planner/syllabus.js` and merges them into the import dialog's review. |
 | `ai/tasks/writer-*.js` | Glaze Writer's tasks (below); `writer-context.js` cleans the page's context and writes it as the request's reusable context. |
-| `ai/settings.js` | storage.local `ai`: `{ on, outline, sources, mode, model, models, tune, features }` (below), the providers Settings names (`PRESETS`), and `migrate` for an older store. Features: `syllabus`, `completion` (the writer's ghost text), `writing` (its review, feedback, requirements, citations and autocorrect calls). |
+| `ai/tasks/study-help.js`, `ai/tasks/agent-tools.js` | `study.help` and `agent.tools` (below), which Ask Rime runs. `wording.js`: the wording-offer rules they share with Feedback. |
+| `ai/ask.js`, `ai/page/ask.js` | Ask Rime (below): the routing rule, the step loop over Agents' tools and the panel's port in the worker; the panel on the school's page, loaded on demand. |
+| `ai/settings.js` | storage.local `ai`: `{ on, outline, sources, mode, model, models, tune, features }` (below), the providers Settings names (`PRESETS`), and `migrate` for an older store. Features: `syllabus`, `completion` (the writer's ghost text), `writing` (its review, feedback, requirements, citations and autocorrect calls), `ask` (Ask Rime). |
 | `ai/broker.js` | The worker's broker: the port, admission, connections (IndexedDB), Settings' config messages. |
 
 ## Chrome's built-in model
@@ -37,7 +41,7 @@ The [Chrome 156 flag](https://chromium.googlesource.com/chromium/src/+/156.0.807
 
 storage.local `ai` (`ai/settings.js`) is `{ on, outline, sources, mode, model, models, tune, features }`. `model` is the overall model,
 `{ use, model, effort? }`: `use` a connection's id (a provider's: `openai`, `anthropic`, `gemini`, `openrouter`, `xai`,
-`mistral`, `groq`, `deepseek`; `device`, the model on this device; or `custom-1` and on, an endpoint the student added),
+`mistral`, `groq`, `deepseek`; `device`, the model on this device; `local`, Glaze's own model; or `custom-1` and on, an endpoint the student added),
 `model` its id at that provider (`''` on this device), `effort` the student's. `models` holds a feature's own model in that
 shape. A feature runs on its own model, else the overall one (`resolve`); with neither, or a connection with no model id,
 none is chosen (`chosen`), its status says `why: 'setup'` and Writer says "No AI model is chosen". `mode` is `simple` or
@@ -115,7 +119,7 @@ Outline generations are stored in bounded `paper.outline` metadata (64 content e
 
 Feedback errors distinguish criteria, attachment, material and planned-request limits from estimated fit failures and native context failures. Count-only metadata retains the relevant limits without retaining prompts; native failures also distinguish measured input overflow from a context failure while producing a response.
 
-Assignment pictures first pass through `writer.image` (Feedback's route), one image at a time, with a 512-token requested ceiling and a separately validated 512-estimated-token JSON bound. A confirmed output-size cutoff or a completed response contradicting its own completeness flag permits one regeneration from the same image/context, counted against the task's two-call budget or Feedback's shared budget. A complete reading must have an empty limitation reason; a repeated contradiction remains incomplete. Transport failures and native truncation do not trigger this retry. The pass preserves visible requirements, scales, tables and diagram relationships and classifies relevance against compact assignment context. Descriptions can be shorter; omitted facts must still mark the reading incomplete. All subsequent Feedback calls are text only, including the fitting cloud path. Visual formatting requirements receive the same uncertainty checks as textual requirements.
+Assignment pictures first pass through `writer.image` (Feedback's route), one image at a time, with a 512-token requested ceiling and a separately validated 512-estimated-token JSON bound. A confirmed output-size cutoff or a completed response contradicting its own completeness flag permits one regeneration from the same image/context, counted against the task's two-call budget or Feedback's shared budget. A complete reading must have an empty limitation reason; a repeated contradiction remains incomplete. Transport failures and native truncation do not trigger this retry. The pass preserves visible requirements, scales, tables and diagram relationships and classifies relevance against compact assignment context. Descriptions can be shorter; omitted facts must still mark the reading incomplete. All subsequent Feedback calls are text only, including the fitting cloud path. Visual formatting requirements receive the same uncertainty checks as textual requirements. `requirements` holds only text visible in the picture: a requirement that is an exact copy of the picture's file name (with or without its extension) or of a whole line of the context block (spacing, wrapping quotes and a final period aside) is dropped from the reading; similar wording stays. A model on this computer (the stock picture model, which copied both) is told the file name is not in the picture and to copy every requirement the picture shows, even when the context says something like it.
 
 `writer-ai.js` prefetches these readings for visible, verified paper assignments only when Feedback is enabled, ready and vision capable. Foreground Feedback joins matching preparation. `ai/visual-cache.js` persists complete readings for 30 days, at most 128, keyed by SHA-256 over the verified school/account/assignment, full task-context fingerprint, image bytes/MIME and reader version. The worker refreshes `/learn/api/v1/users/me` and rechecks the host route before binding cache authority; a stale paper identity cannot read that cache. Raw pictures, account identifiers and assignment context are not persisted by this cache. Incomplete readings have only a bounded memory guard against immediate automatic replay; active task leases preserve it across slow batches. Settings/context changes, hiding the tab, cancellation and teardown stop pending work.
 
@@ -130,6 +134,66 @@ began; `GZ_WRITER_AI.feedbackView(container)` is the Feedback panel; `GZ_WRITER_
 choice an index into the candidates (-1 with keep). `GZ_WRITER_AI.requirements(prompt)` and `cite({ text, url })` give the other parts of the
 writer those tasks' outputs, or null. `writer/writer-tools.js` declares editor tools (read: document, issues, sources,
 assignment; confirm: insert a citation, apply a fix). `agents/writer.js` exposes them to apps allowed in **Settings → AI → Agents**. Stored-document reads use opaque session keys; reading issues and making changes require an open Writer page, and each change waits for approval in Glaze.
+
+## Study help and agent tools
+
+Ask Rime runs both (below); the worker loads them with the harness (`aiFiles`). Both have a token in `GLAZE_TOKENS` (ids
+125047, 125048); `glaze-plans/lfm-tune/FORMAT-new-tasks.md` gives their training layouts.
+
+- `study.help`: help with a question about coursework that never gives the answer. Input `{ question, attempt?, subject
+  (math, science, code, essay, reading, other), locale? (en, pt-BR, es, fr, de, nl), material?, context? }` (context as
+  `writer-context.js` cleans it). Output `{ kind: hint | question | concept | check-my-step, step: correct | mistake |
+  unclear | null, reply, followUp }`. `check` refuses a reply that states the answer (each locale's "the answer is…", the
+  correct option, including a bare number or option letter), gives a result one step of arithmetic on the problem's numbers makes or a new equation in its
+  variables, writes code with the student's own names, offers wording (`wording.js`, Feedback's rules but "for example,"),
+  quotes three words no source holds, or (essay, reading, other) makes a statement that neither speaks to the student nor
+  is about their work; `why(output, input)` names the rule, and `hands(text, input)` gives only the answer-giving ones
+  (answer, solves, code, wording) for a text that isn't a tutor's reply. Symbolic rearrangements count as steps too; a number merely
+  appearing in the attempt does not excuse a new result. Quotations may come from any context block shown to the model,
+  including the discussion prompt.
+- `agent.tools`: one turn of a small model's tool loop over twelve of Agents' tools (`SPECS`: accounts, courses,
+  assignments, an assignment, to-do, schedule, grades, a course's grades, documents, a document, a document's assignment,
+  and `todo_mark_done`, the one write, which waits for the student's approval as in Agents). `SPECS.parameters` are
+  Agents' `inputSchema` with shorter words (the test holds them equal). Input `{ question, tools (names), steps: [{ call,
+  result }], now, zone, locale? }`; each result is fenced data, its times in the student's zone (`readable`). Output
+  `{ call, answer }`, one null: `check` validates a call against its tool's schema and refuses one whose ids no result value or
+  the question holds, a repeat, or a call after six steps; an answer's quotes must be in a result and its numbers in a
+  result value, the question or the time, preserving signs and the locale's number formatting. Single-character grades
+  and scores are valid quotes when they are whole values. History accepts the checked call (including its derived `kind`)
+  and normalizes it to `{ name, arguments }`. Unserializable or oversized results, results deeper than 12 levels and
+  clocks outside JavaScript's Date range are refused as input. Ask Rime runs each call through Agents' call path and runs the task again
+  with the step added (`rate.perMinute` 42: six questions of seven runs a minute in a tab). Glaze's model reads it in LFM3's
+  own tool syntax (`layout`, `native`): `ai/local/format.js` writes a run's request in those turns (`fromRequest` reads
+  build()'s request back into `layout()`'s parts), each earlier assistant turn opened by FORMAT v2's direct prefill and the
+  turn being written by its mode's; the host's grammar holds the turn to the answer's schema or one native call to an
+  offered tool (`constraint()`), and the provider reads a native call back as the task's JSON. A stock model reads the
+  harness's messages, held to the task's schema.
+
+## Ask Rime
+
+Rime is Glaze's assistant; its voice comes from the fine-tune alone, so no task's instructions name it. Internal ids keep
+`ask`: the feature, `#gz-ask`, the port `glaze:ask`. Settings → AI → Ask Rime (`ask`, off by default, its own model or the
+overall one). The command palette on Canvas and
+Ultra offers **Ask Rime** while AI and Ask are on; it opens a dialog over the page (`ai/page/ask.js`, loaded on demand;
+styles beside Insights' in `core/page/apps.css`) for the student's own click or key, and every control acts only on a
+trusted event, sending also on user activation. The question goes on the port `glaze:ask` (`background/background.js`,
+the AI port's sender rules) in the page's language; nothing is kept, and Ask or AI turned off closes it.
+
+`ai/ask.js` `route(question, { attempt, locale })`: agent.tools only for a question about the student's own records (to-dos
+and due dates, grades, assignments, Writer documents: word lists in English and the student's locale) that asks for no help
+with work and comes with no attempt; else study.help, its subject by symbols and words (code, math, science, essay,
+reading, other). agent.tools gets the tools its topics need, at most six (the 4,096-token window of Glaze's own model
+holds no more, and training offered three to six). `episode()` runs agent.tools, runs each call, appends the step and
+runs again; a seventh call ends it as `steps`. Model runs go to the broker over a channel in the worker, as the feature
+`ask` and this sender's: admission, rates and the call record are the broker's. Tool calls go through `agents/calls.js`
+with Agents' tools (`mcpCore`; the native link stays off): Ask's switch is the grant of Agents' groups, a result reaches
+the model as the tool gave it (calls.js's note, source and age left out, as agent.tools was trained), a failure as
+`{ ok: false, error }`, and the one write, `todo_mark_done`, waits for the student in Agents' approval window, with
+Glaze's own sentence for it (the window names the asker Ask Rime); any answer but Allow ends the question with nothing changed and no further model run. The
+sender is checked again before each call. An agent answer must also pass study.help's `hands()`, so no path hands over
+work. Port: `{ id, op: 'ask', question, attempt?, locale }`, `cancel`, `status` (the broker's for `ask`); events
+`route { task }`, `look`, `approve`, `keepalive` (a local run's and the approval window's), then `end` (`output`,
+`answer { text }` or `declined: true`) or `error`.
 
 ## Add a provider
 
@@ -279,7 +343,7 @@ For a connection that goes over the network it reports `to`, the host the text g
 | Device status / download | 20 s / 4 minutes per shared attempt |
 | Answers | 10 MB across the entire response, including SSE; 64 KB of an error body is read |
 
-While an admitted Chrome device run is active, the broker sends `{ id, type: 'keepalive' }` on its existing port every
+While an admitted run on a model that downloads to this computer (a provider with `prepare`: `device`, `local`) is active, the broker sends `{ id, type: 'keepalive' }` on its existing port every
 20 seconds. Chrome's [worker lifecycle](https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle)
 allows a silent asynchronous operation to stop after 30 seconds; keeping a port open alone does not reset that timer.
 The pulse covers session setup, token measurement and non-streaming inference, including the quiet gaps within staged
@@ -374,3 +438,137 @@ Native Apple requests use the reported context size and preflight complete text 
 macOS 27.0.1, Apple's token counter throws for image attachments even when inference can read them. Image requests count
 their text separately and reserve an estimated 1,024 tokens per image; this estimate is not an exact measured image count.
 If the system refuses token counting, the request retains its output ceiling and the model's own context-size check.
+
+## Glaze's own model
+
+`ai/providers/local.js` (`local`, Settings' **Rime**) runs Rime, Frostdev's fine-tune of LiquidAI's LFM3-1.7B
+(`frostdev-ops/Rime-1.7B-GGUF`: Q4_K_M, Q6_K and Q8_0 at tiers 1, 3 and 4, tier 2 kept for a Q5_K_M), from
+`ai/local/models.json` on Glaze's WebGPU engine. caps: `{ text, json, stream, local: true, tools: false, images, context }` (`context`, the window
+below; `images` below), so `writer.complete`'s brief path and Feedback's local orchestration apply. Settings, `ai/settings.js`
+`HERE` and `writer-ai.js` treat `device`, `apple` and `local` alike as models on this computer: no model id, no key.
+
+Where it runs: Chrome, an offscreen document (`ai/local/host.html`, reason WORKERS, the `offscreen` permission) whose
+`offscreen.js` runs `ai/local/host.js` in a dedicated Worker and connects a port `glaze:local` to the worker
+(`background/background.js` takes it only from that page of this extension, with no tab); Firefox, `host.js` in a Worker of
+the background event page, and while anything is in flight the page calls `runtime.getPlatformInfo()` every 20 s; Safari,
+nowhere: status `unavailable`, reason `browser`, and Settings lists no card (Apple Intelligence stays). The host keeps the
+weights loaded between requests and, after five minutes with nothing in flight, releases them and says `idle`: Chrome's
+document is closed, Firefox's Worker ended. A port that goes ends its calls as `provider-unavailable`, reason `host`; nothing
+is replayed. The host page's CSP: `default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src
+'self' https://huggingface.co https://*.huggingface.co https://*.hf.co`; the Worker itself runs under the manifest's
+`extension_pages` policy, which leaves `connect-src` open, and `ai/local/store.js` refuses any host but Hugging Face's.
+
+`status` is the worker's and starts nothing: the browser, `navigator.gpu`, a reason a run met (`engine`, `webgpu`,
+`hardware`, until a connection changes), then the store: `ready` when the model it runs is downloaded, else `download`,
+`downloading` while its prepare runs. The model: the tier Settings' Advanced keeps on the `local` connection (`{ provider:
+'local', tier }`), if the catalog still offers it; otherwise Auto: the one downloaded (ready, then partial), else at Download
+the ladder's pick. Settings' ops:
+`test { provider: 'local' }` → `{ ok, state, reason?, size, tier, tiers: [{ tier, size }], progress?, stale? }`; `stale: true`
+means files from a replaced catalog remain, and Settings offers Delete even before Download or when the model is unavailable. `prepare` from the
+Download click (progress events as the device's; it answers `downloading` after four minutes while the download goes on in
+the host); `delete { provider: 'local' }` removes every downloaded model and ends a download. A failed download answers
+`download` with reason `quota` or `network`, so Download stays.
+
+Pictures are a second, optional download on the same card: models.json's `role: 'pictures'` entry (LFM3-VL-2B's own
+language model, Q4_K_M, the smallest tier's quant and the one C9b checked end to end) and the `role: 'projector'` file it
+names (its mmproj, F16: `vision.js` reads F16 and F32 matrices), fetched and removed together, never a tier and never the
+ladder's. Settings' ops take `part: 'pictures'` (`prepare` and `delete`; progress events carry it), and `test` answers
+`pictures: { state, size, progress? }`. `status` says `caps.images` and `catalog` says `vision` from it, so the broker's
+`cfg.images` and Writer's `caps.images` are true only while both files are here; then `writer.image` (and Feedback's
+picture reading) run on Glaze's model. A request with pictures goes to LFM3-VL in its own chat template (`chatml`, it is
+stock), each picture after its line as `<|vision_start|>`, its embeddings, `<|vision_end|>`; the host releases the text
+model first (one model is loaded at a time), loads LFM3-VL and its projector on the engine's device, decodes each picture
+in the Worker (the header checked before `createImageBitmap`, unknown dimensions or over 60 MP refused as in the document
+reader; an `OffscreenCanvas` of at most 16.8 MP and 16,384 pixels per side), sizes it (`prepare`; a prompt over the window
+is refused before encoding), encodes it and feeds it as prefill `embeds`, then decodes with the JSON grammar as for text.
+A cancel ends it at the next encoder stage, prefill chunk or token. A projector that isn't there, or isn't one: reason
+`pictures` (Writer: "Picture reading isn’t downloaded."). The text model's next run brings it back.
+
+A run: `ai/local/format.js` writes the request as `[{ special } | { text }]` parts, which the host tokenizes with
+`encodeWith` (page text never makes a control token). `ai/task.js` puts `task: { id, version, call? }` on every request (call: an orchestrated request's kind, as `ask`
+was given it; writer.feedback's scan, decide, explain, summary) and
+`ai/text.js` `fenced: { context, data }`; `ai/request.js` keeps both, no provider sends them, and `estimateTokens` leaves them
+out. Dialects: `glaze` (the fine-tune; agent.tools in its own turns, above: `<|startoftext|><|im_start|>system\n<|gz_task:ID|>{system}\n\n{TRUST}[\n\n{schema in
+words}]<|im_end|>\n<|im_start|>user\n<|gz_ctx|>label\ntext<|/gz_ctx|>\n…<|gz_data|>label\ntext<|/gz_data|><|im_end|>\n<|im_start|>
+assistant\n` and the mode's prefill: direct `<think></think>`, think `<think>\n`), and `chatml` for a `stock: true` model,
+whose weights never learnt Glaze's tokens (the harness's messages as written, the schema in words, `<think></think>` after
+the assistant header; never think mode). A models.json entry without `stock` (Rime;
+`tools/vendor/model-manifest.js` without `--stock`) reads `glaze`. `test/ai/local-format-ids.test.js` holds `glaze` to
+`glaze-plans/lfm-tune/FORMAT-v2.md` id for id: for requests each trained task builds, the ids its `train/format.js`
+`promptV2` and LFM3's tokenizer give, direct and, for a think task, think (fixture: `tools/dev/local-format-fixture.js`).
+
+Think mode (FORMAT-v2): a Glaze-tuned model reasons before it answers for the requests `THINK` in `ai/providers/local.js`
+gives a budget (256 tokens: agent.tools only; D4 measured p3dpo thinking worse than answering directly on writer.review,
+study.help and each writer.feedback call, so they and every other task answer directly; the numbers are beside `THINK`), once this computer decodes that model at `THINK_TPS` (40 tokens a second) or faster; any other run answers directly.
+The rate is the host's measure of the model's decoding over a run of at least 16 tokens (a run's `rate`, averaged with the
+last), else the ladder's estimate for the model it picked at Download (`tps`); none yet: direct. It is kept per model id in
+`storage.session` `aiLocalRates`, and which of them were measured in `aiLocalMeasured`, so they outlive the worker until the
+browser closes. 40: a full budget then costs at most 6.4 s, and every machine the ladder measured (79 to 133 tokens a second, Q8_0 to Q4_K_M) thinks at every tier. The host
+decodes the reasoning unconstrained but for its own mask (text tokens and `</think>`: never the end token or another
+control token) until the model writes `</think>` or the budget is spent, where it feeds `\n</think>` itself; then the
+answer, with the JSON grammar as any run. The reasoning is never decoded to text, posted or returned; `maxTokens` counts the
+answer only. A Glaze-tuned model's trained window holds the prompt, the close, the reasoning and the answer, think mode or
+not: the reasoning keeps its budget while the answer is left at least 256 tokens (or its `maxTokens`, if fewer), and the
+answer is cut to the rest (a request asking 4,096 still thinks its 256); a prompt that leaves the answer less runs
+as planned in the engine's room (a request whose close that room can't hold is refused before prefill); `usage.output` counts both. `test/ai/local-think.test.js` holds it with a stub engine.
+The window a run plans for is its model's: 4,096 tokens for a model without `stock` (FORMAT.md's inference window; the
+training data was made at caps.context 4096), 14,400 (16,000 less a tenth) for a stock one, the picture model included.
+`catalog` says the window of the text model the connection runs (its tier's, else the one here) and that model's store id
+(`weights`), and, while pictures are here, `pictures.context`; the broker sets `cfg.context` from the first (from the
+second for a task that only reads pictures, `writer.image`) and `cfg.weights`, and a text request runs on that model
+only (undiscovered, missing or not ready: `provider-unavailable`, `assets`), so a request is never planned for one model and read by
+another. A catalog without a selected text model is not cached; the next run discovers a completed download or a recovered
+store read. A picture request goes to the picture model whatever the window: its own is the larger. In Advanced a feature's
+context replaces the window up to the model's own: a Glaze-tuned model never gets more than its 4,096. A status and a
+warm-up use the same window as the run (the broker's `sized`), so Writer's status says 4,096 for a tuned model. `test/ai/local-window.test.js` holds `writer.review` and `syllabus.read` through the
+broker to lfm-tune's training examples (fixture: `tools/dev/local-window-fixture.js`). The system turn is the prefix kept
+warm: up to three per loaded model, as snapshots. Sampling: the request's temperature, else LFM3's GGUF defaults
+(temperature 0.1, top-k 50); output up to the request's `maxTokens` (1,024 by default) and refused before reading when the
+prompt and output exceed the window (`request-rejected`, `context`).
+
+### The engine, grammar and ladder the host uses
+
+`ai/local/engine.js` (`GZ_AI_ENGINE`), loaded in the host's Worker after `quant.js` and `reference.js`:
+
+```js
+GZ_AI_ENGINE.load(gguf, { context, signal, onProgress? }) → Promise<model>
+  // gguf: GZ_AI_GGUF.open(store.open(id)); context: positions a sequence may hold (16000)
+model.context                                   // the positions it holds
+model.prefill(ids, { snapshot?, signal }) → Promise<snap | undefined>
+  // ids: Uint32Array fed at the next positions; afterwards the model holds the logits for the next one.
+  // snapshot: true → resolves to a snapshot of the state after them.
+model.decode({ sampler: { temperature, topK, topP?, repetitionPenalty? }, mask?, signal }) → Promise<id>
+  // samples one id from the held logits (temperature 0: greedy), with mask: a Uint32Array, token i allowed when bit
+  // i & 31 of word i >> 5 is set, never written; then feeds that id (the engine may defer it to its next call).
+model.snapshot() → Promise<snap>;  model.restore(snap) → Promise<void>  // positions after snap.pos are dropped
+snap: { pos, drop() }                           // drop frees what it holds; the host drops each one it lets go
+model.release()                                 // frees every GPU resource; the model is not used again
+// load rejects with signal.reason on abort, else an Error whose reason is 'webgpu' | 'memory' | 'lost' | 'model'
+// (the provider says webgpu | hardware | engine | assets).
+```
+
+`ai/local/grammar.js` (`GZ_AI_GRAMMAR`): per model `vocab(tokenizer.byteStrings(), { eos: [id], marks })` (`marks`, the
+ids of LFM3's tool tags, `TOOL_MARKS`), per schema `compile(schema, vocab, { tools?, sources? })` (a refusal: `request-rejected`,
+reason `unsupported`), per run `matcher()` with `mask()`, `advance(id)`, `complete`, `done`; the mask allows the end token
+only once the JSON is whole, so a run stops at the end token. What it lets through `validate()` accepts, an anchored ASCII
+`pattern` included (one it can't hold leaves `exact: false`). A run's `tools` (`agent.tools`' `constraint(input)`) make the
+answer either that JSON or one native call to a listed tool, each parameter held to its own schema, so a turn the engine
+writes is one `fromNative()` reads and `OUTPUT` takes; `test/ai/agent-tools-grammar.test.js` holds it. A string with
+`span: { source, min?, word? }` (`ai/schema.js`) is held to words of `compile`'s `sources[source]`, cut where `ai/text.js`
+folds them alike: `providers/local.js` finds the task's own schema by `task.id` (a request carries it `bare()`, so no
+provider is sent the keyword) and passes the data block of that label as the model reads it; writer.review's and
+writer.feedback's quotes, syllabus.read's and every writer.cite value use it (`test/ai/local-grammar-span.test.js`). `ai/local/ladder.js`
+(`GZ_AI_LADDER`): `pick({ adapter, models }) → { id } | { reason }`, `adapter` the Worker's `requestAdapter()` (null without
+one), `models` the store's list. The grammar and `ai/schema.js`, which it reads as it loads, are the host's required imports
+(`IMPORTS` in `host.js`; `test/ai/local-host-worker.test.js` runs them as the Worker does): a run with a schema and no grammar
+is `provider-unavailable`, reason `engine`, never a run in words only. The others are optional until they ship: no engine is
+`unavailable`, reason `engine`; no ladder, the smallest tier where there is an adapter.
+
+The host's messages (`host.js` header): `prepare { tier?, part? }`, `run { model, parts, stable, schema?, sources?, sampler, maxTokens,
+projector?, images?, think?: { budget, close, after }, window? }`, `warm { model, parts }`, `remove { part? }`, `release`, `cancel`; it answers `progress`, `delta`, `done` or `error`, `tick` every 20 s
+while anything is in flight, and `idle`.
+
+What needs a real GPU or browser: the engine's numbers and speed, the ladder's tiers, Firefox's event page staying while its
+Worker works (measured nowhere yet), and Chrome closing an idle offscreen document. `checks/ai/local-provider-check.js`
+covers the rest in Chromium with a stub engine.
+

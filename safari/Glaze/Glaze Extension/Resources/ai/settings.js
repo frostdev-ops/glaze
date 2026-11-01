@@ -14,15 +14,20 @@ var GZ_AI_SETTINGS = globalThis.GZ_AI_SETTINGS || (() => {
   const E = () => (typeof GZ_AI_ENDPOINT !== 'undefined' ? GZ_AI_ENDPOINT : require('./endpoint.js'));
   const KEY = 'ai';
   // Features that may ask, each off until the student allows it. A feature's id is the one its port messages carry.
-  // completion: the writer's ghost text; writing: its review, feedback, requirements, citations and autocorrect calls.
-  const FEATURES = ['syllabus', 'completion', 'writing'];
+  // completion: the writer's ghost text; writing: its review, feedback, requirements, citations and autocorrect calls;
+  // ask: Ask Rime (ai/ask.js), study help and questions about the student's own courses.
+  const FEATURES = ['syllabus', 'completion', 'writing', 'ask'];
   // The providers a connection may use, as Glaze ships them (the mock is for tests and the eval only).
   const safari = (() => { try { return new URL((typeof globalThis.browser?.runtime?.getURL === 'function' ? globalThis.browser.runtime : globalThis.chrome?.runtime).getURL('')).protocol === 'safari-web-extension:'; } catch { return false; } })();
-  const PROVIDERS = ['openai', 'device', ...(safari ? ['apple'] : [])];
+  // Glaze's own model (local) runs where Glaze's engine has a host, Chrome and Firefox; Safari keeps Apple Intelligence.
+  const PROVIDERS = ['openai', 'device', ...(safari ? ['apple'] : ['local'])];
+  // The connections whose model runs on this computer: On this device (Chrome's or Apple's) and Glaze's own. They need
+  // no model id and no key.
+  const HERE = Object.freeze(['device', 'apple', 'local']);
   const CONNECTION = /^[a-z0-9][a-z0-9-]{0,39}$/;
   // The providers Settings offers by name, each an OpenAI-compatible Chat Completions server (ai/providers/openai.js)
   // at its own address, kept under its own id with only a key: base, and keys, the page that gives one. Any other id but
-  // 'device' and 'apple' is an endpoint the student added (Advanced), with its own address.
+  // HERE's is an endpoint the student added (Advanced), with its own address.
   const PRESETS = Object.freeze({
     openai: Object.freeze({ base: 'https://api.openai.com/v1', keys: 'https://platform.openai.com/settings/organization/api-keys' }),
     anthropic: Object.freeze({ base: 'https://api.anthropic.com/v1', keys: 'https://platform.claude.com/settings/keys' }),
@@ -78,7 +83,7 @@ var GZ_AI_SETTINGS = globalThis.GZ_AI_SETTINGS || (() => {
   const tuning = (s, feature) => (s?.mode === 'advanced' && isObj(s.tune?.[feature]) ? s.tune[feature] : {});
   // Whether `feature` may ask now: AI on, the feature allowed, a model chosen for it.
   const allowed = (s, feature) => s.on === true && s.features?.[feature] === true && chosen(resolve(s, feature));
-  const kind = (id) => (Object.hasOwn(PRESETS, id) ? 'preset' : id === 'device' || id === 'apple' ? 'device' : 'custom');
+  const kind = (id) => (Object.hasOwn(PRESETS, id) ? 'preset' : HERE.includes(id) ? 'device' : 'custom');
 
   // The models a provider's first key fills in, so it works without a trip through a list of hundreds: main for the
   // overall model and Feedback, fast for Tab completion, which asks far more often. Each is the first entry the provider
@@ -110,14 +115,14 @@ var GZ_AI_SETTINGS = globalThis.GZ_AI_SETTINGS || (() => {
     return '';
   };
   // What connecting `id` fills in (ids: the models it lists): the overall model when none is chosen; Feedback's own when
-  // it would run on this device, whose model is too small for it; Tab completion's own fast model when the overall one is
+  // it would run on the browser's or Apple's model, which is too small for it (Glaze's own is tuned for it and stays); Tab completion's own fast model when the overall one is
   // now this provider's. Nothing chosen on another connection changes, and no feature turns on. → a patch, or null.
   const suggest = (s, id, ids) => {
     const main = listed(SUGGEST[id]?.main, ids), fast = listed(SUGGEST[id]?.fast, ids);
     if (!main) return null;
     const sel = { use: id, model: main }, model = chosen(s.model) ? s.model : sel, models = { ...s.models };
     let changed = model !== s.model;
-    if (kind(resolve({ model, models }, 'writing')?.use) === 'device') { models.writing = sel; changed = true; }
+    if (['device', 'apple'].includes(resolve({ model, models }, 'writing')?.use)) { models.writing = sel; changed = true; }
     if (!models.completion && model.use === id && model.model === main && fast && fast !== main) { models.completion = { use: id, model: fast }; changed = true; }
     return changed ? { model, models } : null;
   };
@@ -153,6 +158,6 @@ var GZ_AI_SETTINGS = globalThis.GZ_AI_SETTINGS || (() => {
     }
     return { settings, connections: all, changed };
   };
-  return { KEY, FEATURES, PROVIDERS, CONNECTION, PRESETS, EFFORTS, TUNE, DEFAULTS, SUGGEST, clean, resolve, chosen, tuning, allowed, kind, suggest, migrate };
+  return { KEY, FEATURES, PROVIDERS, HERE, CONNECTION, PRESETS, EFFORTS, TUNE, DEFAULTS, SUGGEST, clean, resolve, chosen, tuning, allowed, kind, suggest, migrate };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_SETTINGS; else GZ_AI_SETTINGS;

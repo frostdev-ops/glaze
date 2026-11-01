@@ -207,6 +207,28 @@ const storage = () => {
 };
 const persistent = (store, context = raw().context) => V.create({ store, context, scope: { school: 'https://school.example', account: 'student-1', assignment: 'assignment-1' }, crypto: webcrypto, locks: null });
 
+test('the corrected picture reader rereads v1 cached omissions for prefetch and Feedback', async () => {
+  for (const route of ['prefetch', 'feedback']) {
+    const store = storage(), input = raw(), inp = I.input(input);
+    const legacy = V.create({ store, context: input.context, version: 'writer-image-v1',
+      scope: { school: 'https://school.example', account: 'student-1', assignment: 'assignment-1' }, crypto: webcrypto, locks: null });
+    assert.equal(await legacy.set(inp, { ...reading(), requirements: [] }), true);
+    const cache = persistent(store);
+    const cfg = { caps: { context: 8192, images: true, local: true }, replies: [{ json: reading() }], seen: [] };
+    let result;
+    if (route === 'prefetch') result = (await T.run(I.task, input, { provider: 'mock', cfg, imageCache: cache })).output;
+    else {
+      const out = await I.prepare([picture()], { context: input.context, caps: cfg.caps, cache, fits: () => true,
+        ask: async (req, { check }) => { cfg.seen.push(req); return check(reading()); } });
+      assert.deepEqual(out.limitations, []);
+      result = out.readings[0];
+    }
+    assert.equal(cfg.seen.length, 1, `${route}: the old reading must not suppress inference`);
+    assert.deepEqual(result.requirements, reading().requirements, route);
+    assert.deepEqual((await persistent(store).get(inp)).requirements, reading().requirements, 'the corrected reading is reusable');
+  }
+});
+
 test('separate standalone image runs reuse persistent readings and miss when image or assignment context changes', async () => {
   let sets = 0;
   const store = storage(), cfg = { caps: { context: 8192, images: true }, replies: () => ({ json: reading() }), seen: [] };
@@ -253,4 +275,76 @@ test('the standalone visual request stays within 512 tokens despite a larger Adv
     assert.equal((await T.run(I.task, raw(), { provider: 'mock', cfg, over: { maxTokens } })).output.complete, true);
     assert.equal(cfg.seen[0].maxTokens, Math.min(maxTokens, I.LIMIT.tokens));
   }
+});
+
+// The stock picture model (Glaze's own, LFM3-VL) put the picture's file name, and once the context line, into requirements
+// (glaze-plans/release-4.0.1/c9c omarchy-real-final/pictures.json): requirements hold only text visible in the picture.
+test('a requirement that is the picture\'s file name or copies a context line is dropped; real ones stay', async () => {
+  const inp = I.input({ ...raw(), name: 'c9a-table.png', context: 'Read the attached picture for this assignment.' });
+  const got = I.check({ ...reading(), requirements: ['c9a-table.png', 'c9a-table', 'Complete task context: Read the attached picture for this assignment.', 'Read the attached picture for this assignment', 'Submit one PDF.'] }, inp);
+  assert.deepEqual(got.requirements, ['Submit one PDF.']);
+  assert.equal(got.complete, true);
+  const labelled = I.input(raw());
+  assert.deepEqual(I.check({ ...reading(), requirements: ['Task.png', 'Instructions: Explain plant growth.', 'Explain plant growth.'] }, labelled).requirements, ['Explain plant growth.'],
+    'a requirement the picture shows stays even when the instructions say it too');
+  const cfg = { caps: { context: 8192, images: true }, replies: [{ json: { ...reading(), requirements: ['Task.png', 'Explain plant growth.'] } }], seen: [] };
+  assert.deepEqual((await T.run(I.task, raw(), { provider: 'mock', cfg })).output.requirements, ['Explain plant growth.']);
+});
+
+// D4 (glaze-plans/release-4.0.1/c9c/runpod-real-f2c5c199/pictures/pictures.json): told that no line of the context may be
+// a requirement and that requirements is [] without requirement text, LFM3-VL read syn-assignment.png's four requirements
+// into its description and left requirements empty. Its reading before that prompt (c9c/omarchy-real-final) had them.
+const SYN = { name: 'syn-assignment.png', context: 'Read the attached picture for this assignment.' };
+const SYN_REQUIREMENTS = ['Write the catalase experiment from Week 6. Your report must: Be 4–6 pages, double-spaced, in 12-pt Times New Roman.',
+  'Include a graph of reaction rate against substrate concentration.', 'Cite at least 3 peer-reviewed sources in APA format.', 'Be submitted as a single PDF.'];
+test('Glaze\'s picture model is told to keep every requirement the picture shows, and only the file name out', async () => {
+  const local = { caps: { context: 8192, images: true, local: true }, replies: [{ json: { ...reading(), requirements: SYN_REQUIREMENTS } }], seen: [] };
+  const out = await T.run(I.task, { ...raw(), ...SYN }, { provider: 'mock', cfg: local });
+  assert.deepEqual(out.output.requirements, SYN_REQUIREMENTS);
+  const system = local.seen[0].messages[0].content[0].text;
+  assert.doesNotMatch(system, /requirements is \[\]/, 'nothing pushes an empty list');
+  assert.doesNotMatch(system, /any line of the brief assignment context/, 'similar context wording never bars a requirement');
+  assert.match(system, /every requirement the picture shows/i);
+});
+
+test('only exact copies of the file name or a whole context line are dropped; similar wording stays', () => {
+  const inp = I.input({ ...raw(), name: 'Rubric.png', context: 'Read the attached picture for this assignment.\ncite at least 3 peer-reviewed sources in apa format' });
+  const kept = ['Cite at least 3 peer-reviewed sources in APA format.', 'Cite at least 3 peer-reviewed sources in APA format!', 'RUBRIC', 'Read the attached picture'];
+  const copies = ['Rubric.png', 'Rubric', ' Read the attached picture for this assignment. ', '"Read the attached picture for this assignment"',
+    'cite at least 3 peer-reviewed sources in apa format', 'Complete task context: Read the attached picture for this assignment.'];
+  assert.deepEqual(I.check({ ...reading(), requirements: [...copies, ...kept] }, inp).requirements, kept);
+});
+
+test('quoted metadata copies are dropped with a final period inside or outside the quotes', () => {
+  const inp = I.input({ ...raw(), name: 'Rubric.png', context: 'Use two sources.' });
+  const copies = ['"Rubric.png".', '“Rubric.png”.', "'Rubric'.", '"Use two sources".', '“Use two sources”.',
+    '"Use two sources."', '"Use two sources.".', '“Use two sources” .'];
+  const kept = ['Use two sources!', 'use two sources.', 'Use two sources?', 'Use two sources..'];
+  assert.deepEqual(I.check({ ...reading(), requirements: [...copies, ...kept] }, inp).requirements, kept);
+});
+
+test('on a model on this computer the reader is told the file name is not in the picture', async () => {
+  const local = { caps: { context: 8192, images: true, local: true }, replies: [{ json: reading() }], seen: [] };
+  await T.run(I.task, raw(), { provider: 'mock', cfg: local });
+  const system = local.seen[0].messages[0].content[0].text;
+  assert.match(system, /file name/i);
+  assert.match(system, /never .*requirements/i);
+  assert.ok(contents(local.seen[0]).includes('Task.png'), 'the name still says which picture it is');
+  const cloud = { caps: { context: 8192, images: true }, replies: [{ json: reading() }], seen: [] };
+  await T.run(I.task, raw(), { provider: 'mock', cfg: cloud });
+  assert.doesNotMatch(cloud.seen[0].messages[0].content[0].text, /file name/i, 'other models keep their prompt');
+});
+
+test('metadata filtering cannot bring an oversized completed JSON response under the accepted bound', async () => {
+  const lines = Array.from({ length: 10 }, (_, i) => `${i}: ${'x'.repeat(90)}`);
+  const input = { ...raw(), context: lines.join('\n') };
+  const answer = { ...reading(), requirements: lines.map((line) => ` ${line}${' '.repeat(180)}`) };
+  assert.ok(X.estimateTokens(answer) > I.LIMIT.tokens, 'the whole response exceeds 512 estimated tokens');
+  assert.equal(I.check(answer, I.input(input)), null);
+  assert.match(I.problem(answer, I.input(input)), /512-token estimated bound/);
+  const cfg = { caps: { context: 8192, images: true }, replies: [{ json: answer }], seen: [] };
+  const result = await T.run(I.task, input, { provider: 'mock', cfg });
+  assert.equal(result.output.complete, false);
+  assert.match(result.output.reason, /512-token estimated bound/);
+  assert.equal(cfg.seen.length, 1);
 });

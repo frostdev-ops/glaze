@@ -38,6 +38,11 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   const keep = () => Promise.resolve().then(() => need('looks/looks.js', () => globalThis.GZ_CATALOG)).then(() => chrome.storage.local.get(GZ_CATALOG.KEY)).then((r) => { kept = GZ_CATALOG.looks(r?.[GZ_CATALOG.KEY]); }, () => {});
   let keeping = keep();
   try { chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c.lookCatalog) keeping = keep(); }); } catch { /* extension reloaded under the tab */ }
+  // Ask Rime (ai/page/ask.js) is offered while AI and Ask are on (storage.local ai, ai/settings.js), as they change.
+  let askOn = false;
+  const askRead = () => Promise.resolve().then(() => chrome.storage.local.get('ai')).then((r) => { askOn = r?.ai?.on === true && r.ai.features?.ask === true; }, () => {});
+  let asking = askRead();
+  try { chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c.ai) asking = askRead(); }); } catch { /* extension reloaded under the tab */ }
   const wear = (id) => () => { try { chrome.runtime.sendMessage({ type: 'glaze:looks', op: 'wear', id }).catch(() => {}); } catch { /* extension reloaded under the tab */ } };
   // A built-in Look comes with its own extras (parts) in place of the one before's, in the same write (looks/lookparts.js).
   const store = (patch, look) => () => { try { if (look) chrome.runtime.sendMessage({ type: 'glaze:look', parts: null, look: look.name, patch: { version: 2, ...patch } }).catch(() => {}); else chrome.storage.sync.set({ version: 2, ...patch }); } catch { /* extension reloaded under the tab */ } };
@@ -98,10 +103,12 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   const documents = () => (ctx.settings().enhance.writer === false ? [] : [{ label: t('Documents'), hint: 'Glaze', group: 'Glaze', run: (e) => {
     if (e?.isTrusted) need('settings/page/settingspage.js', () => globalThis.GZ_SETTINGS_PAGE).then(() => globalThis.GZ_SETTINGS_PAGE.open('', 'papers')).then((opened) => { if (!opened) papersTab(); }, papersTab);
   } }]);
-  // Canvas and Ultra alike: Documents, the notes app (planner/page/notes.js: the library, a new note, and this course's notes),
+  // Canvas and Ultra alike: Documents, Ask Rime, the notes app (planner/page/notes.js: the library, a new note, and this course's notes),
   // Glaze's own commands, and every extra with its switch (core/page/widgets.js), whether or not the widgets are on.
   const apps = (cid) => [
     ...documents(),
+    // Ask Rime opens only for the student's own click or Enter on its row, as Notes does.
+    ...(askOn ? [{ label: t('Ask Rime'), hint: 'Glaze', group: 'Glaze', run: (e) => e?.isTrusted && need('ai/page/ask.js', () => globalThis.GZ_ASK_UI).then(() => GZ_ASK_UI.open({ event: e }), () => {}) }] : []),
     ...(ctx.settings().enhance.pet ? [{ label: t('Pet habitat'), hint: 'Glaze', group: 'Glaze', run: () => need('core/page/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => need('pet/page/pet.js', () => globalThis.GZ_PET_UI)).then(() => GZ_PET_UI.open(), () => {}) }] : []),
     ...(ctx.settings().enhance.notes ? [
       { label: t('Notes'), hint: 'Glaze', group: 'Glaze', run: (e) => notes({ event: e }) },
@@ -119,7 +126,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     // Stickers, pointers and Look rotation (looks/page/lookx.js) bring their own switches (glazeCmds), the pointer picture's
     // once lookx knows there is one.
     await need('looks/page/lookx.js', () => globalThis.GZ_LOOKX).then(() => globalThis.GZ_LOOKX?.ready(), () => {});
-    await keeping;
+    await Promise.all([keeping, asking]);
     if (moodle) {
       // A failed Moodle loader or course list leaves Glaze's own commands available, as well as the cached due items.
       const [rows, due] = await Promise.all([moodleIn().then((m) => m.commands(go)).catch(() => []), dueWeek()]);

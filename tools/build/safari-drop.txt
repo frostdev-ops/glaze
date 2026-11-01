@@ -1,0 +1,23 @@
+# Files the Chrome package ships that Safari's never carries: tools/build/safari-manifest.sh removes each from every staged
+# copy (the release staging and the direct Xcode mirror). A path ending in / is a folder.
+# Code mods need a manifest sandbox, which Safari lacks.
+mods/boot.js
+mods/host.html
+mods/host.js
+mods/page/mods.js
+# Glaze's own model is unavailable in Safari (ai/settings.js PROVIDERS): its engine, kernels and host go. The worker imports
+# ai/local/store.js, format.js and link.js on every browser, so they stay.
+ai/local/engine.js
+ai/local/gguf.js
+ai/local/grammar.js
+ai/local/host.html
+ai/local/host.js
+ai/local/kernels/
+ai/local/ladder.js
+ai/local/models.json
+ai/local/offscreen.js
+ai/local/quant.js
+ai/local/reference.js
+ai/local/tokenizer.js
+ai/local/vision-reference.js
+ai/local/vision.js

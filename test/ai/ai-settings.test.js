@@ -13,6 +13,7 @@ const B = require('../../extension/ai/broker.js');
 const M = require('../../extension/ai/models.js');
 require('../../extension/ai/providers/openai.js');
 const D = require('../../extension/ai/providers/device.js');
+require('../../extension/ai/providers/local.js');
 
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
@@ -30,7 +31,7 @@ const kept = (id, more = {}) => ({ provider: 'openai', base: AS.PRESETS[id].base
 // page({ ai, calls, conns, granted, device, providers, features, server }): Settings with the AI tab mounted.
 //   conns: the worker's kept connections; device(m, gesture): the device provider's worker side; server(url, init): the
 //   providers' servers.
-const page = ({ ai, calls, conns, granted = true, device, providers, features, embedded = false, save = true, shared, locks, server = SERVERS } = {}) => {
+const page = ({ ai, calls, conns, granted = true, device, local: own, providers, features, embedded = false, save = true, shared, locks, server = SERVERS } = {}) => {
   const ids = new Map(), sent = [], asked = [], reads = [], onChanged = shared?.listeners || [], onMessage = [], held = new Set(), vault = new Map(), fetched = [], docOn = {};
   if (conns) vault.set('connections', structuredClone(conns));
   const data = shared?.data || { ...(ai && { ai: structuredClone(ai) }), ...(calls && { aiCalls: structuredClone(calls) }) };
@@ -79,6 +80,7 @@ const page = ({ ai, calls, conns, granted = true, device, providers, features, e
         if (m.type === 'glaze:allow') return { ok: true };
         if (m.type !== 'glaze:ai-config') return undefined;
         if (device && (m.id === 'device' || m.provider === 'device')) return device(m, gesture);
+        if (own && (m.id === 'local' || m.provider === 'local')) return own(m, gesture);
         const r = await B.config(m, env);
         return m.op === 'get' && providers ? { ...r, providers } : r;
       },
@@ -108,6 +110,7 @@ const page = ({ ai, calls, conns, granted = true, device, providers, features, e
     key: async (x, key) => { fire(x, 'keydown', { key }); await settle(); },
     outside: async () => { for (const f of docOn.pointerdown || []) f({ target: { closest: () => null } }); await settle(); },
     progress: async (m, sender = { id: 'glaze' }) => { for (const f of onMessage) f({ type: 'glaze:ai-config', event: 'progress', provider: 'device', ...m }, sender); await settle(); },
+    note: () => walk(byId('ai-drawer')).find((x) => x.className === 'note'),
     // The page's parts: a provider's card, a button by its words, a feature's row and its parts.
     card: (name) => $('ai-providers').children.find((b) => b.children[1]?.textContent === name),
     cards: () => $('ai-providers').children.map((b) => b.children[1].textContent),
@@ -134,7 +137,7 @@ test('off by default: the switch is off, only it shows, and the worker is asked 
   assert.deepEqual(p.asked, []);
   assert.deepEqual(p.data, {}, 'opening Settings writes nothing');
   assert.match(read('options.html'), /<input type="checkbox" role="switch" id="ai-on" aria-label="Use AI" data-local>/, 'the switch is not checked in the page');
-  assert.deepEqual(AS.clean(undefined), { on: false, outline: true, sources: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false } });
+  assert.deepEqual(AS.clean(undefined), { on: false, outline: true, sources: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false, ask: false } });
 });
 
 test('embedded Settings does not initialize AI controls or read its connections and activity', async () => {
@@ -149,15 +152,15 @@ test('embedded Settings does not initialize AI controls or read its connections 
 test('the switch, the mode and the models are kept in storage.local ai, cleaned; the features stay off until each is turned on', async () => {
   const p = await open();
   await p.change('ai-on', true);
-  assert.deepEqual(p.data.ai, { on: true, outline: true, sources: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false } });
+  assert.deepEqual(p.data.ai, { on: true, outline: true, sources: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false, ask: false } });
   assert.ok(shown(p.$('ai-connection')) && shown(p.$('ai-features')) && shown(p.$('ai-mode')));
   assert.equal(p.$('ai-mode-simple').checked, true);
   // The overall model first, then each feature: the gray text, Feedback, then the rest.
-  assert.deepEqual(p.$('ai-feature-list').children.map((w) => text(w.children[0].children[0])), ['Default', 'Tab completion', 'Feedback', 'Syllabus import']);
+  assert.deepEqual(p.$('ai-feature-list').children.map((w) => text(w.children[0].children[0])), ['Default', 'Tab completion', 'Feedback', 'Syllabus import', 'Ask Rime']);
   assert.equal(p.$('ai-feature-syllabus').checked, false, 'off until the student turns it on');
   p.$('ai-feature-syllabus').focus();
   await p.change('ai-feature-syllabus', true);
-  assert.deepEqual(p.data.ai.features, { syllabus: true, completion: false, writing: false });
+  assert.deepEqual(p.data.ai.features, { syllabus: true, completion: false, writing: false, ask: false });
   assert.equal(p.doc.activeElement, p.$('ai-feature-syllabus'), 'the row drawn again keeps the focus on its switch');
   await p.change('ai-mode-advanced', true);
   assert.equal(p.data.ai.mode, 'advanced');
@@ -172,8 +175,8 @@ test('features turned on in quick succession are all kept: no switch is written 
   const boxes = AS.FEATURES.map((f) => p.$(`ai-feature-${f}`));
   for (const b of boxes) { b.checked = true; p.fire(b, 'change'); }
   await settle();
-  assert.deepEqual(p.data.ai.features, { syllabus: true, completion: true, writing: true });
-  assert.deepEqual(AS.FEATURES.map((f) => p.$(`ai-feature-${f}`).checked), [true, true, true]);
+  assert.deepEqual(p.data.ai.features, { syllabus: true, completion: true, writing: true, ask: true });
+  assert.deepEqual(AS.FEATURES.map((f) => p.$(`ai-feature-${f}`).checked), [true, true, true, true]);
 });
 
 test('AI outline defaults on under Feedback and can be opted out independently', async () => {
@@ -195,7 +198,7 @@ test('features are one row each, from ai/settings.js FEATURES, after the overall
 
 test('the providers\' cards: on this device first where the browser has a model, then each provider by name; endpoints in Advanced only', async () => {
   const p = await open({ ai: { on: true } });
-  assert.deepEqual(p.cards(), ['Chrome on-device AI', 'OpenAI', 'Anthropic', 'Google Gemini', 'OpenRouter', 'xAI', 'Mistral', 'Groq', 'DeepSeek']);
+  assert.deepEqual(p.cards(), ['Chrome on-device AI', 'Rime', 'OpenAI', 'Anthropic', 'Google Gemini', 'OpenRouter', 'xAI', 'Mistral', 'Groq', 'DeepSeek']);
   const none = await open({ ai: { on: true }, providers: ['openai'] });
   assert.equal(none.cards()[0], 'OpenAI', 'no model on this device: no card for it');
   const adv = await open({ ai: { on: true, mode: 'advanced' }, conns: { 'custom-1': { provider: 'openai', name: 'Ollama', base: 'http://localhost:11434/v1', generation: 'g' } } });
@@ -343,9 +346,9 @@ test('the model picker lists each connected provider\'s catalog; search, arrows 
   await p.click('ai-pick-model');
   assert.equal(p.picking(), 'model');
   assert.equal(p.$('ai-pick-model').attrs['aria-haspopup'], 'dialog');
-  assert.deepEqual(p.side().map(text), ['Chrome on-device AI', 'OpenAI', 'Groq'], 'the overall model is always one: no "Same as default"');
+  assert.deepEqual(p.side().map(text), ['Chrome on-device AI', 'Rime', 'OpenAI', 'Groq'], 'the overall model is always one: no "Same as default"');
   assert.equal(p.doc.activeElement, p.$('ai-pick-search'));
-  await p.click(p.side()[1]);
+  await p.click(p.side()[2]);
   assert.deepEqual(p.options(), ['gpt-4.1', 'gpt-5', 'gpt-5-mini']);
   assert.equal(p.$('ai-pick-list').attrs.role, 'listbox');
   await p.type('ai-pick-search', 'mini');
@@ -510,12 +513,12 @@ test('the owner\'s older endpoint shows as OpenRouter connected with its key, it
   const server = async (url) => (url === M.OPENROUTER ? new Response(routed, { headers: { 'content-type': 'application/json' } }) : json({ data: { label: 'x' } }));
   const p = await open({ ai: { on: true, use: 'endpoint', features: { syllabus: true, completion: true, writing: true } }, server,
     conns: { endpoint: { provider: 'openai', base: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-v4.1-flash-1017', key: OWNER, generation: 'g-1' } } });
-  assert.deepEqual(p.data.ai, { on: true, outline: true, sources: true, mode: 'simple', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: {}, tune: {}, features: { syllabus: true, completion: true, writing: true } });
+  assert.deepEqual(p.data.ai, { on: true, outline: true, sources: true, mode: 'simple', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: {}, tune: {}, features: { syllabus: true, completion: true, writing: true, ask: false } });
   assert.deepEqual(p.vault.get('connections'), { openrouter: { provider: 'openai', base: 'https://openrouter.ai/api/v1', key: OWNER, generation: 'g-1' } });
   assert.equal(p.card('OpenRouter').children[2].className, 'st ok');
   assert.equal(text(p.$('ai-pick-model')), 'DeepSeek: DeepSeek V4.1 Flash 1017 · OpenRouter');
   assert.deepEqual(p.stops('model').map(text), ['Off', 'Low', 'High'], 'the efforts its catalog lists');
-  assert.deepEqual(AS.FEATURES.map((f) => text(p.$(`ai-pick-${f}`))), ['Same as default', 'Same as default', 'Same as default']);
+  assert.deepEqual(AS.FEATURES.map((f) => text(p.$(`ai-pick-${f}`))), ['Same as default', 'Same as default', 'Same as default', 'Same as default']);
   assert.ok(!p.all().some((x) => String(x).includes(OWNER)));
   await p.click(p.card('OpenRouter'));
   assert.ok(p.walk(p.$('ai-drawer')).some((x) => x.textContent === 'sk-o••••0000'));
@@ -792,7 +795,7 @@ test('two Settings tabs preserve simultaneous feature changes in the same extens
   first.checked = true; last.checked = true;
   a.fire(first, 'change'); b.fire(last, 'change');
   await settle();
-  assert.deepEqual(shared.data.ai.features, { syllabus: true, completion: false, writing: true });
+  assert.deepEqual(shared.data.ai.features, { syllabus: true, completion: false, writing: true, ask: false });
   assert.equal(a.$('ai-feature-syllabus').checked, true); assert.equal(b.$('ai-feature-writing').checked, true);
 });
 
@@ -864,4 +867,127 @@ test('completion does not label its unsupported task effort as the provider defa
     conns: { openrouter: kept('openrouter') }, server: async () => json(require('../fixtures/openrouter-models.json')) });
   assert.deepEqual(p.stops('completion').filter((b) => b.attrs['aria-checked'] === 'true').map(text), ['Default'], 'the task asks none; the provider default Medium is not sent');
   assert.equal(p.data.ai.models.completion.effort, undefined);
+});
+
+test('Glaze\'s own model is a card after On this device, where the browser offers it; Safari\'s list has none', async () => {
+  const p = await open({ ai: { on: true }, providers: ['openai', 'device', 'local'] });
+  assert.deepEqual(p.cards(), ['Chrome on-device AI', 'Rime', 'OpenAI', 'Anthropic', 'Google Gemini', 'OpenRouter', 'xAI', 'Mistral', 'Groq', 'DeepSeek']);
+  assert.equal(p.card('Rime').children[0].attrs['data-p'], 'local');
+  const safari = await open({ ai: { on: true }, providers: ['openai', 'device', 'apple'] });
+  assert.ok(!safari.cards().includes('Rime'));
+});
+
+test('Glaze\'s model\'s card: its state and size, Download from the click, its progress, Delete; nothing downloads without the click', async () => {
+  const TIERS = [{ tier: 1, size: 1099627808 }, { tier: 2, size: 1846238496 }];
+  let state = 'download', tier, deleted = 0;
+  const sent = [];
+  const local = async (m, gesture) => {
+    sent.push({ op: m.op, gesture, ...(m.cfg && { cfg: m.cfg }) });
+    if (m.op === 'set') { tier = m.cfg.tier; return { ok: true }; }
+    if (m.op === 'delete') { deleted++; state = 'download'; }
+    if (['test', 'prepare', 'delete'].includes(m.op)) return { ok: true, state, size: tier === 2 ? TIERS[1].size : TIERS[0].size, tier: tier || 1, tiers: TIERS };
+    return { ok: false, error: 'op' };
+  };
+  const p = await open({ ai: { on: true }, providers: ['openai', 'device', 'local'], local, conns: { local: { provider: 'local', generation: 'g' } } });
+  assert.deepEqual(sent, [], 'opening Settings asks nothing of it');
+  await p.click(p.card('Rime'));
+  assert.deepEqual(sent.map((m) => m.op), ['test'], 'its state (the connection is kept)');
+  assert.deepEqual([p.note().textContent, p.note().attrs.role], ['Needs a download · 1.1 GB', 'status']);
+  assert.equal(p.button('Delete', p.$('ai-drawer')), undefined);
+  assert.equal(p.$('ai-local-tier').tagName, 'DIV', 'no size choice in Simple');
+  state = 'downloading';
+  await p.click(p.button('Download', p.$('ai-drawer')));
+  assert.deepEqual(sent.at(-1), { op: 'prepare', gesture: true }, 'prepare is sent from the click itself');
+  assert.equal(p.button('Download', p.$('ai-drawer')), undefined);
+  for (const f of [0.25]) await p.progress({ provider: 'local', loaded: f });
+  assert.equal(p.note().textContent, '25% · 1.1 GB');
+  const bar = () => p.walk(p.$('ai-drawer')).find((x) => x.tagName === 'PROGRESS');
+  assert.deepEqual([bar().value, bar().attrs['aria-label']], [0.25, 'Rime']);
+  assert.deepEqual([p.card('Rime').children[2].textContent, p.card('Rime').children[3].className], ['25%', 'bar']);
+  await p.progress({ loaded: 0.9 }, { id: 'glaze' });
+  assert.equal(bar().value, 0.25, 'the browser\'s model\'s progress is not this one\'s');
+  assert.ok(p.button('Delete', p.$('ai-drawer')), 'a download can be stopped and deleted');
+  state = 'ready';
+  await p.progress({ provider: 'local', loaded: 1 });
+  assert.equal(p.note().textContent, 'Ready · 1.1 GB');
+  assert.equal(p.card('Rime').children[2].className, 'st ok');
+  await p.click(p.button('Delete', p.$('ai-drawer')));
+  assert.equal(deleted, 1);
+  assert.equal(p.note().textContent, 'Needs a download · 1.1 GB');
+  // Advanced: the size to use, Auto by default; a choice is the connection's.
+  await p.change('ai-mode-advanced', true);
+  const pick = p.$('ai-local-tier');
+  assert.deepEqual([pick.tagName, pick.attrs['aria-label'], pick.children.map((o) => o.textContent)], ['SELECT', 'Model size', ['Auto', '1.1 GB', '1.8 GB']]);
+  pick.value = '2'; p.fire(pick, 'change'); await settle();
+  assert.ok(sent.some((m) => m.op === 'set' && m.cfg.tier === 2 && m.gesture === true), JSON.stringify(sent));
+  assert.equal(p.note().textContent, 'Needs a download · 1.8 GB');
+});
+
+for (const state of ['download', 'unavailable']) test(`old stock files have a Delete button while Rime is ${state}`, async () => {
+  let stale = true, deleted = 0;
+  const local = async (m) => {
+    if (m.op === 'delete') { stale = false; deleted++; }
+    return { ok: true, state, ...(state === 'unavailable' && { reason: 'webgpu' }), ...(stale && { stale: true }) };
+  };
+  const p = await open({ ai: { on: true }, providers: ['local'], local, conns: { local: { provider: 'local' } } });
+  await p.click(p.card('Rime'));
+  const remove = p.button('Delete', p.$('ai-drawer'));
+  assert.ok(remove, 'old weights must be removable without downloading Rime first');
+  await p.click(remove);
+  assert.equal(deleted, 1);
+  assert.equal(p.button('Delete', p.$('ai-drawer')), undefined, 'the button clears when the old files are gone');
+  assert.ok(!p.ops().includes('prepare'));
+});
+
+test('long local downloads leave Downloading after completion or failure without another progress event', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const terminal of ['ready', 'download']) {
+    let state = 'download', prepares = 0;
+    const local = async (m) => {
+      if (m.op === 'prepare') { prepares++; state = 'downloading'; }
+      return { ok: true, state, size: 1099627808 };
+    };
+    const p = await open({ ai: { on: true }, providers: ['local'], local, conns: { local: { provider: 'local' } } });
+    await p.click(p.card('Rime'));
+    await p.click(p.button('Download', p.$('ai-drawer')));
+    // The last byte event can precede verification and the host's terminal result.
+    if (terminal === 'ready') await p.progress({ provider: 'local', loaded: 1 });
+    state = terminal;
+    t.mock.timers.tick(5000); await settle();
+    assert.match(p.note().textContent, terminal === 'ready' ? /^Ready/ : /^Needs a download/);
+    assert.equal(prepares, 1, 'checking progress never starts another download');
+    assert.equal(!!p.button('Download', p.$('ai-drawer')), terminal === 'download');
+  }
+});
+
+test('Glaze\'s model in the picker needs no model id; a download that stopped says why and keeps Download; Activity names it', async () => {
+  const local = async (m) => (m.op === 'set' ? { ok: true } : { ok: true, state: 'download', reason: 'quota', size: 1099627808, tiers: [{ tier: 1, size: 1099627808 }] });
+  const p = await open({ ai: { on: true, model: { use: 'local', model: '' } }, providers: ['openai', 'device', 'local'], local,
+    calls: [{ id: 'r1', startedAt: 5, task: 'writer.complete', feature: 'completion', provider: 'local', state: 'completed' }] });
+  assert.equal(text(p.$('ai-pick-model')), 'Rime');
+  await p.click(p.card('Rime'));
+  assert.equal(p.note().textContent, 'There isn’t enough free space for the model. · 1.1 GB');
+  assert.ok(p.button('Download', p.$('ai-drawer')));
+  await p.click('ai-pick-completion');
+  assert.deepEqual(p.side().map((b) => text(b)), ['Same as default', 'Chrome on-device AI', 'Rime']);
+  assert.match(text(p.$('ai-calls').children[0]), /^Tab completion · Rime/);
+  const t = (k, v) => I.t(k, v, 'en'), E = require('../../extension/settings/editor-ai.js');
+  assert.equal(E.localText({ state: 'unavailable', reason: 'webgpu' }, t, String), 'This browser has no WebGPU, which Glaze’s on-device model needs.');
+  assert.equal(E.localText({ state: 'unavailable', reason: 'browser' }, t, String), 'Not available in this browser');
+  assert.equal(E.gb(1846238496, t), '1.8 GB');
+});
+
+test('a failed picture download keeps its failure reason beside its own Download button', async () => {
+  for (const reason of ['quota', 'network']) {
+    const local = async (m) => m.op === 'prepare'
+      ? { ok: true, state: 'download', reason }
+      : { ok: true, state: 'ready', size: 1100000000, pictures: { state: 'download', size: 1500000000 } };
+    const p = await open({ ai: { on: true }, providers: ['local'], local, conns: { local: { provider: 'local' } } });
+    await p.click(p.card('Rime'));
+    await p.click(p.button('Download', p.$('ai-local-pictures')));
+    assert.ok(p.sent.some((m) => m.op === 'prepare' && m.part === 'pictures'));
+    assert.match(text(p.$('ai-local-pictures')), reason === 'quota' ? /enough free space/ : /lost its connection/);
+    assert.ok(p.button('Download', p.$('ai-local-pictures')));
+    assert.equal(p.note().textContent, 'Ready · 1.1 GB', 'the text model remains ready');
+  }
 });

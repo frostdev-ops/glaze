@@ -14,10 +14,11 @@ var GZ_AI_TASK_WRITER_CITE = globalThis.GZ_AI_TASK_WRITER_CITE || (() => {
   const LIMIT = { raw: 2000000, text: 30000, authors: 12, value: 400, url: 2000 };
   const TYPES = ['article-journal', 'article-newspaper', 'article-magazine', 'book', 'chapter', 'webpage', 'report', 'motion_picture'];
   const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
-  const maybe = (description, maxLength = LIMIT.value) => ({ type: ['string', 'null'], description, maxLength });
+  // Every string is words of the page, whole words as check() matches them (schema.js span).
+  const maybe = (description, maxLength = LIMIT.value, min = 1) => ({ type: ['string', 'null'], description, maxLength, span: { source: 'page text', min, word: true } });
   const OUTPUT = S.obj({
     type: { enum: TYPES },
-    title: maybe('The work\'s title as written'),
+    title: maybe('The work\'s title as written', LIMIT.value, 3),
     authors: { type: 'array', maxItems: LIMIT.authors, items: S.obj({ given: maybe('Given names as written', 120), family: maybe('Family name as written', 120), literal: maybe('An organisation as author, as written', 200) }, ['given', 'family', 'literal']) },
     date: S.obj({ year: { type: ['integer', 'null'], minimum: 1000, maximum: 2999 }, month: { type: ['integer', 'null'], minimum: 1, maximum: 12 }, day: { type: ['integer', 'null'], minimum: 1, maximum: 31 }, quote: maybe('The words of the text that give the date, copied', 120) }, ['year', 'month', 'day', 'quote']),
     container: maybe('The journal, newspaper, site or book it is part of, as written'),

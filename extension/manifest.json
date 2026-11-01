@@ -10,7 +10,8 @@
     "scripting",
     "unlimitedStorage",
     "activeTab",
-    "declarativeContent"
+    "declarativeContent",
+    "offscreen"
   ],
   "optional_permissions": [
     "identity",
