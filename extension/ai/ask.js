@@ -434,7 +434,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     const ownContext = async (args, mine) => {
       const page = mine?.page || {}, accounts = await env.accounts().catch(() => []);
       const here = (() => { try { return new URL(page.url).origin; } catch { return ''; } })();
-      const account = typeof args?.account === 'string' ? args.account : accounts.find((a) => a.origin === here)?.account;
+      const matches = accounts.filter((a) => a.origin === here);
+      const account = typeof args?.account === 'string' ? args.account : matches.length === 1 ? matches[0].account : undefined;
       return { account, zone: mine?.zone, locale: mine?.locale, page, writer: await env.own.writer().catch(() => false), text: mine?.text,
         courses: async () => (account ? (await env.own.read('courses_list', {}, account))?.items || [] : []),
         ui: { actions: mine?.actions || [], push: (a) => mine?.actions.push(a) },
