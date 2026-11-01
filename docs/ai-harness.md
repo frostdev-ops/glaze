@@ -24,8 +24,9 @@ until the student has turned AI on, chosen a model for that feature and allowed 
 | `ai/task.js` | Task definitions and `run`. Tasks live in `ai/tasks/<id>.js`. |
 | `ai/tasks/syllabus-read.js` | `syllabus.read`: a syllabus's values as written, each with its quote; `planner/syllabus-ai.js` reads them with `planner/syllabus.js` and merges them into the import dialog's review. |
 | `ai/tasks/writer-*.js` | Glaze Writer's tasks (below); `writer-context.js` cleans the page's context and writes it as the request's reusable context. |
-| `ai/tasks/study-help.js`, `ai/tasks/agent-tools.js` | `study.help` and `agent.tools` (below), defined and tested; no feature runs them, so the worker doesn't load them. `wording.js`: the wording-offer rules they share with Feedback. |
-| `ai/settings.js` | storage.local `ai`: `{ on, outline, sources, mode, model, models, tune, features }` (below), the providers Settings names (`PRESETS`), and `migrate` for an older store. Features: `syllabus`, `completion` (the writer's ghost text), `writing` (its review, feedback, requirements, citations and autocorrect calls). |
+| `ai/tasks/study-help.js`, `ai/tasks/agent-tools.js` | `study.help` and `agent.tools` (below), which Ask Glaze runs. `wording.js`: the wording-offer rules they share with Feedback. |
+| `ai/ask.js`, `ai/page/ask.js` | Ask Glaze (below): the routing rule, the step loop over Agents' tools and the panel's port in the worker; the panel on the school's page, loaded on demand. |
+| `ai/settings.js` | storage.local `ai`: `{ on, outline, sources, mode, model, models, tune, features }` (below), the providers Settings names (`PRESETS`), and `migrate` for an older store. Features: `syllabus`, `completion` (the writer's ghost text), `writing` (its review, feedback, requirements, citations and autocorrect calls), `ask` (Ask Glaze). |
 | `ai/broker.js` | The worker's broker: the port, admission, connections (IndexedDB), Settings' config messages. |
 
 ## Chrome's built-in model
@@ -134,11 +135,10 @@ choice an index into the candidates (-1 with keep). `GZ_WRITER_AI.requirements(p
 writer those tasks' outputs, or null. `writer/writer-tools.js` declares editor tools (read: document, issues, sources,
 assignment; confirm: insert a citation, apply a fix). `agents/writer.js` exposes them to apps allowed in **Settings → AI → Agents**. Stored-document reads use opaque session keys; reading issues and making changes require an open Writer page, and each change waits for approval in Glaze.
 
-## Tasks no feature runs yet
+## Study help and agent tools
 
-Defined, tested and trained for, unused until a feature adopts them: name the file in `aiFiles` then (and
-`test/ai/ai-worker.test.js`'s `unused` loses it). Both have a token in `GLAZE_TOKENS` (ids 125047, 125048);
-`glaze-plans/lfm-tune/FORMAT-new-tasks.md` gives their training layouts.
+Ask Glaze runs both (below); the worker loads them with the harness (`aiFiles`). Both have a token in `GLAZE_TOKENS` (ids
+125047, 125048); `glaze-plans/lfm-tune/FORMAT-new-tasks.md` gives their training layouts.
 
 - `study.help`: help with a question about coursework that never gives the answer. Input `{ question, attempt?, subject
   (math, science, code, essay, reading, other), locale? (en, pt-BR, es, fr, de, nl), material?, context? }` (context as
@@ -147,7 +147,8 @@ Defined, tested and trained for, unused until a feature adopts them: name the fi
   correct option, including a bare number or option letter), gives a result one step of arithmetic on the problem's numbers makes or a new equation in its
   variables, writes code with the student's own names, offers wording (`wording.js`, Feedback's rules but "for example,"),
   quotes three words no source holds, or (essay, reading, other) makes a statement that neither speaks to the student nor
-  is about their work; `why(output, input)` names the rule. Symbolic rearrangements count as steps too; a number merely
+  is about their work; `why(output, input)` names the rule, and `hands(text, input)` gives only the answer-giving ones
+  (answer, solves, code, wording) for a text that isn't a tutor's reply. Symbolic rearrangements count as steps too; a number merely
   appearing in the attempt does not excuse a new result. Quotations may come from any context block shown to the model,
   including the discussion prompt.
 - `agent.tools`: one turn of a small model's tool loop over twelve of Agents' tools (`SPECS`: accounts, courses,
@@ -160,9 +161,37 @@ Defined, tested and trained for, unused until a feature adopts them: name the fi
   result value, the question or the time, preserving signs and the locale's number formatting. Single-character grades
   and scores are valid quotes when they are whole values. History accepts the checked call (including its derived `kind`)
   and normalizes it to `{ name, arguments }`. Unserializable or oversized results, results deeper than 12 levels and
-  clocks outside JavaScript's Date range are refused as input. The feature runs each call through Agents' grants and approvals and runs the task again
-  with the step added. Glaze's model reads it in LFM3's own tool syntax (`layout`, `native`); `ai/local/format.js` refuses
-  it in the one-turn layout.
+  clocks outside JavaScript's Date range are refused as input. Ask Glaze runs each call through Agents' call path and runs the task again
+  with the step added (`rate.perMinute` 42: six questions of seven runs a minute in a tab). Glaze's model reads it in LFM3's
+  own tool syntax (`layout`, `native`): `ai/local/format.js` writes a run's request in those turns (`fromRequest` reads
+  build()'s request back into `layout()`'s parts), each earlier assistant turn opened by FORMAT v2's direct prefill and the
+  turn being written by its mode's; the host's grammar holds the turn to the answer's schema or one native call to an
+  offered tool (`constraint()`), and the provider reads a native call back as the task's JSON. A stock model reads the
+  harness's messages, held to the task's schema.
+
+## Ask Glaze
+
+Settings → AI → Ask Glaze (`ask`, off by default, its own model or the overall one). The command palette on Canvas and
+Ultra offers **Ask Glaze** while AI and Ask are on; it opens a dialog over the page (`ai/page/ask.js`, loaded on demand;
+styles beside Insights' in `core/page/apps.css`) for the student's own click or key, and every control acts only on a
+trusted event, sending also on user activation. The question goes on the port `glaze:ask` (`background/background.js`,
+the AI port's sender rules) in the page's language; nothing is kept, and Ask or AI turned off closes it.
+
+`ai/ask.js` `route(question, { attempt, locale })`: agent.tools only for a question about the student's own records (to-dos
+and due dates, grades, assignments, Writer documents: word lists in English and the student's locale) that asks for no help
+with work and comes with no attempt; else study.help, its subject by symbols and words (code, math, science, essay,
+reading, other). agent.tools gets the tools its topics need, at most six (the 4,096-token window of Glaze's own model
+holds no more, and training offered three to six). `episode()` runs agent.tools, runs each call, appends the step and
+runs again; a seventh call ends it as `steps`. Model runs go to the broker over a channel in the worker, as the feature
+`ask` and this sender's: admission, rates and the call record are the broker's. Tool calls go through `agents/calls.js`
+with Agents' tools (`mcpCore`; the native link stays off): Ask's switch is the grant of Agents' groups, a result reaches
+the model as the tool gave it (calls.js's note, source and age left out, as agent.tools was trained), a failure as
+`{ ok: false, error }`, and the one write, `todo_mark_done`, waits for the student in Agents' approval window, with
+Glaze's own sentence for it; any answer but Allow ends the question with nothing changed and no further model run. The
+sender is checked again before each call. An agent answer must also pass study.help's `hands()`, so no path hands over
+work. Port: `{ id, op: 'ask', question, attempt?, locale }`, `cancel`, `status` (the broker's for `ask`); events
+`route { task }`, `look`, `approve`, `keepalive` (a local run's and the approval window's), then `end` (`output`,
+`answer { text }` or `declined: true`) or `error`.
 
 ## Add a provider
 
@@ -454,7 +483,7 @@ A run: `ai/local/format.js` writes the request as `[{ special } | { text }]` par
 `encodeWith` (page text never makes a control token). `ai/task.js` puts `task: { id, version, call? }` on every request (call: an orchestrated request's kind, as `ask`
 was given it; writer.feedback's scan, decide, explain, summary) and
 `ai/text.js` `fenced: { context, data }`; `ai/request.js` keeps both, no provider sends them, and `estimateTokens` leaves them
-out. Dialects: `glaze` (the fine-tune: `<|startoftext|><|im_start|>system\n<|gz_task:ID|>{system}\n\n{TRUST}[\n\n{schema in
+out. Dialects: `glaze` (the fine-tune; agent.tools in its own turns, above: `<|startoftext|><|im_start|>system\n<|gz_task:ID|>{system}\n\n{TRUST}[\n\n{schema in
 words}]<|im_end|>\n<|im_start|>user\n<|gz_ctx|>label\ntext<|/gz_ctx|>\n…<|gz_data|>label\ntext<|/gz_data|><|im_end|>\n<|im_start|>
 assistant\n` and the mode's prefill: direct `<think></think>`, think `<think>\n`), and `chatml` for a `stock: true` model,
 whose weights never learnt Glaze's tokens (the harness's messages as written, the schema in words, `<think></think>` after

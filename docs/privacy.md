@@ -35,6 +35,11 @@ Settings → AI, to the model you chose for it: Tab completion sends the text ar
 or assignment, and in a discussion your classmates' posts with their names; Feedback sends your draft with the
 assignment's instructions and rubric. Nothing goes to AI from a test.
 
+[Ask Glaze](../PRIVACY.md#ask-glaze) (Settings → AI → Ask Glaze, off by default) sends your question, and your work when
+you add it, to the model you chose for it. For a question about your own courses it also sends what Glaze reads to
+answer it: your to-dos, schedule, grades, assignments or Writer documents, as Glaze already keeps them on this device.
+Marking a to-do done waits for your OK in Glaze's window. Nothing of the conversation is kept.
+
 [Agent access](../PRIVACY.md#agent-access) (Settings → AI → Agents) is off by default. Apps on this computer connect
 through a local helper: `glaze-mcp`, or the downloaded Glaze Mac app on Safari. Glaze asks you to allow each app
 identity and data group: Courses, to-dos and schedule; Grades; Assignments and rubrics; Writer documents; each mod's
