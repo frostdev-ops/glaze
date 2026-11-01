@@ -173,8 +173,8 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     system: `${instructions(inp.locale)}\n\n<tools>\n${offered(inp.tools).map(line).join('\n')}\n</tools>`,
     context: [{ label: 'now', text: nowText(inp) }],
     data: [{ label: 'question', text: inp.question }, ...inp.steps.flatMap((s, i) => [{ label: `call ${i + 1}`, text: JSON.stringify(s.call) }, { label: label(i, s.call.name), text: s.result }])],
-    // D4: answers ran to 497 tokens and two were cut at 512; 768 with a full think budget fits the 99th-percentile prompt
-    // (3,059 tokens) in the 4,096 window.
+    // D4: p3dpo's answers ran to 469 tokens, LFM2.5 350M's to 497 with two cut at 512; 768 with a full think budget fits
+    // the 99th-percentile prompt (3,059 tokens) in the 4,096 window.
     temperature: 0, maxTokens: 768,
   });
 

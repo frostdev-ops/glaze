@@ -288,8 +288,8 @@ test('Glaze\'s formatter refuses agent.tools in its one-turn layout; the task\'s
   assert.ok(F.format(req, { dialect: 'chatml' }).parts.length > 0, 'a stock model reads the harness\'s messages');
 });
 
-// D4 (glaze-plans/lfm-tune runs/d4-pod2/small, runs/d4-p3/p3dpo): answers ran to 497 tokens and two were cut at 512
-// (finish length); the longest real prompt that answered was 3,059 tokens at the 99th percentile.
+// D4 (glaze-plans/lfm-tune runs/d4-p3/p3dpo, runs/d4-pod2/small): p3dpo's answers ran to 469 tokens, LFM2.5 350M's to 497
+// with two cut at 512 (finish length); prompts reached 3,059 tokens at the 99th percentile.
 test('the answer may run to 768 tokens, and with the 99th-percentile prompt and a full think budget it fits the 4,096 window', () => {
   const req = A.task.build(withTodo(), { text: X });
   assert.equal(req.maxTokens, 768);
