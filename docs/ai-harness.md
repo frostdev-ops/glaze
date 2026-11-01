@@ -464,9 +464,8 @@ the assistant header; never think mode). A models.json entry without `stock` (th
 `promptV2` and LFM3's tokenizer give, direct and, for a think task, think (fixture: `tools/dev/local-format-fixture.js`).
 
 Think mode (FORMAT-v2): a Glaze-tuned model reasons before it answers for the requests `THINK` in `ai/providers/local.js`
-gives a budget (256 tokens each: writer.review, study.help, agent.tools, and writer.feedback's `decide`, `explain` and
-`summary` calls; its `scan` calls 0, their think-mode training too thin to trust; every other task, and a Feedback request
-without a call, 0), once this computer decodes that model at `THINK_TPS` (40 tokens a second) or faster; any other run answers directly.
+gives a budget (256 tokens: agent.tools only; D4 measured p3dpo thinking worse than answering directly on writer.review,
+study.help and each writer.feedback call, so they and every other task answer directly; the numbers are beside `THINK`), once this computer decodes that model at `THINK_TPS` (40 tokens a second) or faster; any other run answers directly.
 The rate is the host's measure of the model's decoding over a run of at least 16 tokens (a run's `rate`, averaged with the
 last), else the ladder's estimate for the model it picked at Download (`tps`); none yet: direct. It is kept per model id in
 `storage.session` `aiLocalRates`, and which of them were measured in `aiLocalMeasured`, so they outlive the worker until the
@@ -476,7 +475,7 @@ control token) until the model writes `</think>` or the budget is spent, where i
 answer, with the JSON grammar as any run. The reasoning is never decoded to text, posted or returned; `maxTokens` counts the
 answer only. A Glaze-tuned model's trained window holds the prompt, the close, the reasoning and the answer, think mode or
 not: the reasoning keeps its budget while the answer is left at least 256 tokens (or its `maxTokens`, if fewer), and the
-answer is cut to the rest (writer.review asks 4,096 and still thinks its 256); a prompt that leaves the answer less runs
+answer is cut to the rest (a request asking 4,096 still thinks its 256); a prompt that leaves the answer less runs
 as planned in the engine's room (a request whose close that room can't hold is refused before prefill); `usage.output` counts both. `test/ai/local-think.test.js` holds it with a stub engine.
 The window a run plans for is its model's: 4,096 tokens for a model without `stock` (FORMAT.md's inference window; the
 training data was made at caps.context 4096), 14,400 (16,000 less a tenth) for a stock one, the picture model included.
