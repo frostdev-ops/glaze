@@ -354,6 +354,13 @@ test('run_js: the engine\'s whole heap is capped, so many small allocations end 
   assert.equal((await run('6 * 7')).value, 42, 'and the engine works after');
 });
 
+test('run_js: small allocations cannot together exceed the 32 MB run budget', async () => {
+  const r = await run('const a = []; for (let i = 0; i < 35; i++) a.push("x".repeat(1 << 20)); a.length');
+  assert.equal(r.ok, false);
+  assert.equal(r.error, 'The code ran out of memory.');
+  assert.equal((await run('6 * 7')).value, 42);
+});
+
 test('run_js: nothing outside ECMAScript reaches the code, and each run starts from a fresh context', async () => {
   const names = ['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'importScripts', 'setTimeout', 'setInterval', 'indexedDB', 'localStorage', 'caches', 'Worker', 'postMessage',
     'navigator', 'location', 'document', 'window', 'self', 'chrome', 'browser', 'require', 'process', 'std', 'os', 'WebAssembly'];
