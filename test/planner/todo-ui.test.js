@@ -115,6 +115,7 @@ const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, d
 };
 const planner = (calls) => calls.filter((u) => u.includes('/planner/items')).length;
 const summaries = (calls) => calls.filter((u) => u.includes('submission_summary')).length;
+const elements = (e) => [e, ...(e.children || []).flatMap(elements)].filter((x) => x && typeof x === 'object');
 
 test('a late sharing loader for an old To Do mount cannot leave a port after teardown', async () => {
   const f = feature(), loaders = [];
@@ -682,3 +683,19 @@ test('a forced redraw with nothing new leaves the list as drawn; a change still 
   f.p.render(true);
   assert.notEqual(body.children, b, 'a new item is drawn');
 });
+
+for (const isTrusted of [false, true]) {
+  test(`a rejected native control change restores what is stored (${isTrusted ? 'refused save' : 'scripted event'})`, async () => {
+    const f = feature({ setOk: false });
+    f.p.seed({ prefs: O, cache: { key: 'todo:https://canvas.test/3', at: Date.now(), items: [item()], grading: [], sums: {} } });
+    f.p.render(true);
+    const { body } = f.p.parts();
+    const checkbox = () => elements(body).find((e) => e.dataset?.act === 'done');
+    const el = Object.assign(checkbox(), tick());
+    assert.equal(el.checked, true, 'the native checkbox toggled before change fired');
+    f.p.onChange({ target: el, isTrusted });
+    await settle();
+    assert.equal(checkbox().checked, false, isTrusted ? 'a refused save puts the checkbox back' : 'a script cannot leave an unsaved tick on screen');
+    assert.deepEqual({ ...f.p.get().data.items }, {});
+  });
+}
