@@ -242,6 +242,32 @@ test('page_highlight: words on this page, or on the place just opened; never wor
 // The engine Glaze vendors (extension/vendor/quickjs/), loaded on the first run, in node as in the extension's background.
 const run = (code, o) => J.run(code, o).then(({ ms: _, ...r }) => r);
 
+test('run_js: promise inspection releases every result handle before disposing the runtime', async () => {
+  require('../../extension/vendor/quickjs/quickjs.js');
+  const handles = [], disposed = [];
+  const sandbox = { process, require, __dirname: path.join(ROOT, 'extension/ai/agent'), WebAssembly,
+    GZ_QUICKJS: { load: async (...args) => {
+      const q = await globalThis.GZ_QUICKJS.load(...args), create = q.newRuntime.bind(q);
+      q.newRuntime = () => {
+        const rt = create(), context = rt.newContext.bind(rt), dispose = rt.dispose.bind(rt);
+        rt.dispose = () => { disposed.push(true); return dispose(); };
+        rt.newContext = () => {
+          const ctx = context(), state = ctx.getPromiseState.bind(ctx);
+          ctx.getPromiseState = (h) => { const s = state(h); if (!s.notAPromise && s.type !== 'pending') handles.push(s.value || s.error); return s; };
+          return ctx;
+        };
+        return rt;
+      };
+      return q;
+    } } };
+  vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'extension/ai/agent/js.js'), 'utf8'), sandbox);
+  for (const code of ['Promise.resolve({ n: 42 })', 'Promise.reject(new Error("no"))', 'Promise.resolve().then(() => 42)']) {
+    await sandbox.GZ_AI_RIME_JS.run(code);
+    assert.ok(handles.every((h) => !h.alive), code);
+  }
+  assert.equal(disposed.length, 3);
+});
+
 test('run_js: the last expression\'s value and console lines; errors and promises as the browser\'s sandbox gave them', async () => {
   assert.deepEqual(await run('const g = [81, 92, 77]; console.log("n", g.length); (g.reduce((x, y) => x + y) / g.length).toFixed(2)'), { ok: true, value: '83.33', logs: ['n 3'] });
   assert.equal((await run('3.2 * 1.609344')).value, 3.2 * 1.609344);
