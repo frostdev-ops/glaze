@@ -281,10 +281,12 @@ test('from 16K up the tools offered are the chat\'s union, so later turns share 
   const small = await chat(4096, Q);
   assert.deepEqual([...toolsOf(small, 1)].sort(), [...second].sort(), 'below 16K, the question\'s own');
   // Many topics: the union stays within its budget and keeps the newest question's tools.
-  const many = ["What's due this week?", 'Any new announcements in BIO 1100?', 'What does the BIO 1100 syllabus say about late work?', 'What discussions are open in BIO 1100?', 'What is my grade in BIO 1100?', 'Remind me tomorrow at 9 pm to study', 'Take me to my BIO 1100 assignments', 'What is 18 / 20 as a percent?'];
+  const many = ["What's due this week?", 'Any new announcements in BIO 1100?', 'What does the BIO 1100 syllabus say about late work?', 'What discussions are open in BIO 1100?', 'What is my grade in BIO 1100?', 'Remind me tomorrow at 9 pm to study', 'Take me to my BIO 1100 assignments'];
   const h = await chat(16384, many);
   const last = toolsOf(h, many.length - 1), mine = K.route(many.at(-1), { locale: 'en', level: 3 }).tools;
   assert.ok(mine.every((t) => last.includes(t)));
   assert.ok(K.UNION.budget >= K.unionCost(last), `${K.unionCost(last)} tokens`);
-  assert.ok(!last.includes('todo_list') || K.unionCost([...last, 'todo_list']) <= K.UNION.budget, 'the oldest go first');
+  const all = [...new Set(many.flatMap((q) => K.route(q, { locale: 'en', level: 3 }).tools))];
+  assert.ok(K.unionCost(all) > K.UNION.budget, 'this chat needs trimming');
+  assert.ok(!last.includes('announcements_list') || last.includes('syllabus_read'), 'an older topic goes before a newer one');
 });
