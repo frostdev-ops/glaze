@@ -38,15 +38,17 @@ const CORPUS = {
 };
 
 // ---- the gate -----------------------------------------------------------------------------------------------------------
-test('gate: Rime r5\'s models.json entries say no tools level, so a local model gets level 1', () => {
+test('gate: Rime r5\'s models.json entries run at tools level 3 (owner, untrained); a list without the flag gets level 1', () => {
   const list = JSON.parse(fs.readFileSync(path.join(ROOT, 'extension/ai/local/models.json'), 'utf8')).models;
   assert.ok(list.filter((m) => !m.role).length >= 3);
-  for (const m of list) assert.equal(m.tools, undefined, `${m.id} is r5's: never trained on Rime's own tools`);
+  for (const m of list.filter((m) => !m.role)) assert.equal(m.tools, 3, `${m.id}: the owner turned Rime's own tools on before a round trained them`);
+  for (const m of list.filter((m) => m.role)) assert.equal(m.tools, undefined, `${m.id}: the picture model runs no tools`);
   const tiers = list.filter((m) => !m.role).map((m, i) => ({ ...m, state: i === 0 ? 'ready' : 'missing' }));
-  assert.equal(L.levelOf(tiers), 1);
+  assert.equal(L.levelOf(tiers), 3);
+  assert.equal(L.levelOf(tiers.map(({ tools, ...m }) => m)), 1, 'no flag: level 1');
   // The round that trains them sets `tools: 3` on its entries; the model the provider runs decides.
   assert.equal(L.levelOf(tiers.map((m) => ({ ...m, tools: 3 }))), 3);
-  assert.equal(L.levelOf([{ ...tiers[0], tools: 3, state: 'missing' }, { ...tiers[1], state: 'ready' }]), 1, 'the one it runs, not any');
+  assert.equal(L.levelOf([{ ...tiers[0], tools: 3, state: 'missing' }, { ...tiers[1], tools: undefined, state: 'ready' }]), 1, 'the one it runs, not any');
   assert.equal(L.levelOf([]), 1);
 });
 

@@ -259,10 +259,11 @@ their capacity before creation, and stored records are validated and bounded bef
 
 In Ask Rime (`ai/ask.js`, `ai/page/ask.js`):
 
-- **The gate.** Rime's own tools go only to a model trained on them: a local model's models.json entry says `tools: 3`
-  (`ai/providers/local.js` `toolsLevel`, the entry the provider runs); Rime r5's entries say nothing, so Ask Rime offers it
-  Agents' twelve as before, and its routing, tools and requests are byte for byte the chat port's (test/ai/rime-ask.test.js
-  compares them with that router). Every other model (an endpoint, Chrome's, Apple's) gets level 3.
+- **The gate.** A local model gets Rime's own tools when its models.json entry says `tools: 3` (`ai/providers/local.js`
+  `toolsLevel`, the entry the provider runs). Without it Ask Rime offers Agents' twelve as before, and its routing, tools and
+  requests are byte for byte the chat port's (test/ai/rime-ask.test.js compares them with that router). Rime r5's entries
+  say `tools: 3` although no round trained it on them: the owner turned them on to try before release (2026-11-01).
+  Every other model (an endpoint, Chrome's, Apple's) gets level 3.
 - **Tool first at level 3.** Every agent.tools run carries `first`: `check()` refuses an answer with no tool result
   behind it (`first`) and, where any result holds facts (`rich`), an answer quoting none of them (`ground`); an empty or
   failed result holds none, so the answer says only that. Help with work that names the student's records (a course code,
