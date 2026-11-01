@@ -1239,6 +1239,8 @@
   "Rime couldn’t answer that. Try asking another way.": "Rime kon dat niet beantwoorden. Stel de vraag anders.",
   "That question is too long.": "Die vraag is te lang.",
   "Something went wrong. Try again.": "Er ging iets mis. Probeer het opnieuw.",
+  "{n}% of the context window used": "{n}% van het contextvenster gebruikt",
+  "Earlier messages summarized": "Eerdere berichten samengevat",
   "New chat": "Nieuwe chat",
   "Copied": "Gekopieerd",
   "Jump to latest": "Naar nieuwste",

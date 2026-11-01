@@ -1239,6 +1239,8 @@
   "Rime couldn’t answer that. Try asking another way.": "Rime n’a pas pu répondre. Pose la question autrement.",
   "That question is too long.": "Cette question est trop longue.",
   "Something went wrong. Try again.": "Un problème est survenu. Réessaie.",
+  "{n}% of the context window used": "{n} % de la fenêtre de contexte utilisée",
+  "Earlier messages summarized": "Messages précédents résumés",
   "New chat": "Nouvelle discussion",
   "Copied": "Copié",
   "Jump to latest": "Aller au plus récent",

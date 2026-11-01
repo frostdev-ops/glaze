@@ -813,103 +813,103 @@ html[data-gz-bg="solid"] #gz-ask::backdrop { backdrop-filter: none; }
   #gz-ask { background: var(--gz-surface-fill, var(--gz-surface)); backdrop-filter: none; }
   #gz-ask::backdrop { backdrop-filter: none; }
 }
-#gz-ask [hidden] { display: none !important; }
-#gz-ask p, #gz-ask h2, #gz-ask ol, #gz-ask ul, #gz-ask pre, #gz-ask blockquote { margin: 0; }
-#gz-ask .gz-ask-icon { flex: none; width: 1.1em; height: 1.1em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-#gz-ask .gz-ask-i-stop { fill: currentColor; }
-#gz-ask .gz-ask-i-dot { stroke-width: 7; }
-#gz-ask button { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; margin: 0; padding: 0.3rem 0.6rem; font: inherit; font-size: 13px; color: var(--gz-ink-muted); background: transparent; border: 1px solid transparent; border-radius: 0.6rem; cursor: pointer; box-shadow: none; }
-#gz-ask button:hover:not(:disabled) { color: var(--gz-ink); background: var(--gz-surface-fill-2, var(--gz-surface-2)); border-color: var(--gz-border-line, var(--gz-line)); }
-#gz-ask button:disabled { opacity: 0.4; cursor: default; }
-#gz-ask button:focus-visible, #gz-ask textarea:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
-#gz-ask .gz-ask-mark { display: grid; place-items: center; flex: none; width: 2.1rem; height: 2.1rem; color: var(--gz-accent); background: var(--gz-accent-soft, color-mix(in srgb, var(--gz-accent) 14%, transparent)); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: 0.7rem; }
-#gz-ask .gz-ask-mark .gz-ask-icon { width: 1.25rem; height: 1.25rem; }
-#gz-ask .gz-ask-gap { flex: 1; }
+:is(#gz-ask, .gz-ask-tile) [hidden] { display: none !important; }
+:is(#gz-ask, .gz-ask-tile) p, :is(#gz-ask, .gz-ask-tile) h2, :is(#gz-ask, .gz-ask-tile) ol, :is(#gz-ask, .gz-ask-tile) ul, :is(#gz-ask, .gz-ask-tile) pre, :is(#gz-ask, .gz-ask-tile) blockquote { margin: 0; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-icon { flex: none; width: 1.1em; height: 1.1em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-i-stop { fill: currentColor; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-i-dot { stroke-width: 7; }
+:is(#gz-ask, .gz-ask-tile) button { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; margin: 0; padding: 0.3rem 0.6rem; font: inherit; font-size: 13px; color: var(--gz-ink-muted); background: transparent; border: 1px solid transparent; border-radius: 0.6rem; cursor: pointer; box-shadow: none; }
+:is(#gz-ask, .gz-ask-tile) button:hover:not(:disabled) { color: var(--gz-ink); background: var(--gz-surface-fill-2, var(--gz-surface-2)); border-color: var(--gz-border-line, var(--gz-line)); }
+:is(#gz-ask, .gz-ask-tile) button:disabled { opacity: 0.4; cursor: default; }
+:is(#gz-ask, .gz-ask-tile) button:focus-visible, :is(#gz-ask, .gz-ask-tile) textarea:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-mark { display: grid; place-items: center; flex: none; width: 2.1rem; height: 2.1rem; color: var(--gz-accent); background: var(--gz-accent-soft, color-mix(in srgb, var(--gz-accent) 14%, transparent)); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: 0.7rem; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-mark .gz-ask-icon { width: 1.25rem; height: 1.25rem; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-gap { flex: 1; }
 /* The head: Rime's mark, the title, New chat and Close. */
-#gz-ask .gz-ask-head { display: flex; align-items: center; gap: 0.7rem; flex: none; padding: 0.75rem 0.9rem 0.75rem 1.1rem; padding-inline: 1.1rem 0.9rem; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); }
-#gz-ask h2 { font: 600 16px/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); }
-#gz-ask h2:focus { outline: none; }
-#gz-ask .gz-ask-close { width: 2rem; height: 2rem; padding: 0; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-head { display: flex; align-items: center; gap: 0.7rem; flex: none; padding: 0.75rem 0.9rem 0.75rem 1.1rem; padding-inline: 1.1rem 0.9rem; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); }
+:is(#gz-ask, .gz-ask-tile) h2 { font: 600 16px/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); }
+:is(#gz-ask, .gz-ask-tile) h2:focus { outline: none; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-close { width: 2rem; height: 2rem; padding: 0; }
 /* The conversation. */
-#gz-ask .gz-ask-stage { position: relative; display: flex; flex: 1 1 auto; min-height: 0; }
-#gz-ask .gz-ask-log { display: flex; flex-direction: column; gap: 1rem; flex: 1; min-width: 0; min-height: 0; padding: 1.5rem max(1rem, calc((100% - 44rem) / 2)) 1rem; overflow: auto; overscroll-behavior: contain; overflow-anchor: none; scrollbar-gutter: stable; scrollbar-width: thin; list-style: none; overflow-wrap: anywhere; }
-#gz-ask .gz-ask-q { align-self: flex-end; max-width: 85%; }
-#gz-ask .gz-ask-q .gz-ask-body { padding: 0.6rem 0.95rem; white-space: pre-wrap; background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: 1.1rem; border-end-end-radius: 0.35rem; }
-#gz-ask .gz-ask-a { align-self: stretch; line-height: 1.7; }
-#gz-ask .gz-ask-md { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.75em; }
-#gz-ask .gz-ask-follow { margin-top: 0.75em; }
-#gz-ask .gz-ask-md h3, #gz-ask .gz-ask-md h4, #gz-ask .gz-ask-md h5, #gz-ask .gz-ask-md h6 { margin: 0.4em 0 0; font: 600 1.05em/1.4 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); }
-#gz-ask .gz-ask-md ul, #gz-ask .gz-ask-md ol { padding-inline-start: 1.3rem; }
-#gz-ask .gz-ask-md li + li { margin-top: 0.25em; }
-#gz-ask .gz-ask-md code { padding: 0.05em 0.3em; font: 0.88em/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--gz-surface-fill-2, var(--gz-surface-2)); border-radius: 0.3rem; }
-#gz-ask .gz-ask-md pre { padding: 0.8rem 0.9rem; overflow-x: auto; white-space: pre; background: var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: 0.6rem; }
-#gz-ask .gz-ask-md pre code { padding: 0; background: none; }
-#gz-ask .gz-ask-md a { color: var(--gz-accent); text-decoration: underline; text-underline-offset: 2px; }
-#gz-ask .gz-ask-md blockquote { padding-inline-start: 0.75rem; color: var(--gz-ink-muted); border-inline-start: 2px solid var(--gz-border-strong, var(--gz-line-strong)); }
-#gz-ask .gz-ask-md hr { border: 0; border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
-#gz-ask .gz-ask-table { overflow-x: auto; }
-#gz-ask .gz-ask-md table { width: 100%; font-size: 13px; border-collapse: collapse; text-align: start; }
-#gz-ask .gz-ask-md th, #gz-ask .gz-ask-md td { padding: 0.4rem 0.6rem; text-align: start; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); }
-#gz-ask .gz-ask-follow { color: var(--gz-ink-muted); }
-#gz-ask .gz-ask-acts { display: flex; gap: 0.3rem; margin-top: 0.3rem; }
-#gz-ask .gz-ask-copy { min-height: 28px; padding: 0.2rem 0.4rem; font-size: 12px; opacity: 0; }
-#gz-ask .gz-ask-a:hover .gz-ask-copy, #gz-ask .gz-ask-a:focus-within .gz-ask-copy { opacity: 1; }
-#gz-ask .gz-ask-a[data-streaming] .gz-ask-acts { visibility: hidden; }
-@media (hover: none) { #gz-ask .gz-ask-copy { opacity: 1; } }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-stage { position: relative; display: flex; flex: 1 1 auto; min-height: 0; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-log { display: flex; flex-direction: column; gap: 1rem; flex: 1; min-width: 0; min-height: 0; padding: 1.5rem max(1rem, calc((100% - 44rem) / 2)) 1rem; overflow: auto; overscroll-behavior: contain; overflow-anchor: none; scrollbar-gutter: stable; scrollbar-width: thin; list-style: none; overflow-wrap: anywhere; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-q { align-self: flex-end; max-width: 85%; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-q .gz-ask-body { padding: 0.6rem 0.95rem; white-space: pre-wrap; background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: 1.1rem; border-end-end-radius: 0.35rem; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-a { align-self: stretch; line-height: 1.7; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-md { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.75em; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-follow { margin-top: 0.75em; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-md h3, :is(#gz-ask, .gz-ask-tile) .gz-ask-md h4, :is(#gz-ask, .gz-ask-tile) .gz-ask-md h5, :is(#gz-ask, .gz-ask-tile) .gz-ask-md h6 { margin: 0.4em 0 0; font: 600 1.05em/1.4 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-md ul, :is(#gz-ask, .gz-ask-tile) .gz-ask-md ol { padding-inline-start: 1.3rem; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-md li + li { margin-top: 0.25em; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-md code { padding: 0.05em 0.3em; font: 0.88em/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--gz-surface-fill-2, var(--gz-surface-2)); border-radius: 0.3rem; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-md pre { padding: 0.8rem 0.9rem; overflow-x: auto; white-space: pre; background: var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: 0.6rem; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-md pre code { padding: 0; background: none; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-md a { color: var(--gz-accent); text-decoration: underline; text-underline-offset: 2px; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-md blockquote { padding-inline-start: 0.75rem; color: var(--gz-ink-muted); border-inline-start: 2px solid var(--gz-border-strong, var(--gz-line-strong)); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-md hr { border: 0; border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-table { overflow-x: auto; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-md table { width: 100%; font-size: 13px; border-collapse: collapse; text-align: start; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-md th, :is(#gz-ask, .gz-ask-tile) .gz-ask-md td { padding: 0.4rem 0.6rem; text-align: start; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-follow { color: var(--gz-ink-muted); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-acts { display: flex; gap: 0.3rem; margin-top: 0.3rem; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-copy { min-height: 28px; padding: 0.2rem 0.4rem; font-size: 12px; opacity: 0; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-a:hover .gz-ask-copy, :is(#gz-ask, .gz-ask-tile) .gz-ask-a:focus-within .gz-ask-copy { opacity: 1; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-a[data-streaming] .gz-ask-acts { visibility: hidden; }
+@media (hover: none) { :is(#gz-ask, .gz-ask-tile) .gz-ask-copy { opacity: 1; } }
 /* Empty: Rime's mark and four starters. */
-#gz-ask .gz-ask-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; margin-block: auto; }
-#gz-ask .gz-ask-empty .gz-ask-mark { width: 3rem; height: 3rem; border-radius: 0.9rem; }
-#gz-ask .gz-ask-empty .gz-ask-mark .gz-ask-icon { width: 1.6rem; height: 1.6rem; }
-#gz-ask .gz-ask-starters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; width: 100%; }
-#gz-ask .gz-ask-starter { justify-content: flex-start; min-height: 3rem; padding: 0.8rem 0.9rem; font-size: 13.5px; line-height: 1.45; text-align: start; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border-color: var(--gz-border-line, var(--gz-line)); border-radius: 0.75rem; }
-#gz-ask .gz-ask-starter:hover:not(:disabled) { border-color: var(--gz-border-strong, var(--gz-line-strong)); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; margin-block: auto; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-empty .gz-ask-mark { width: 3rem; height: 3rem; border-radius: 0.9rem; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-empty .gz-ask-mark .gz-ask-icon { width: 1.6rem; height: 1.6rem; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-starters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; width: 100%; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-starter { justify-content: flex-start; min-height: 3rem; padding: 0.8rem 0.9rem; font-size: 13.5px; line-height: 1.45; text-align: start; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border-color: var(--gz-border-line, var(--gz-line)); border-radius: 0.75rem; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-starter:hover:not(:disabled) { border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 /* A run: the thinking line, then its tool calls on a rail, each a card; a change waits in a card of its own. */
-#gz-ask .gz-ask-busy { display: flex; align-items: center; gap: 0.6rem; min-height: 2rem; font-size: 13px; color: var(--gz-ink-muted); }
-#gz-ask .gz-ask-busy .gz-ask-mark, #gz-ask .gz-ask-step-mark { position: relative; z-index: 1; display: inline-grid; place-items: center; flex: none; width: 1.4rem; height: 1.4rem; color: var(--gz-accent); background: var(--gz-surface-fill, var(--gz-surface)); border: 0; border-radius: 50%; }
-#gz-ask .gz-ask-busy .gz-ask-mark .gz-ask-icon { width: 1.1rem; height: 1.1rem; }
-#gz-ask .gz-ask-steps { position: relative; display: grid; gap: 0.15rem; padding-inline-start: 0.2rem; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-busy { display: flex; align-items: center; gap: 0.6rem; min-height: 2rem; font-size: 13px; color: var(--gz-ink-muted); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-busy .gz-ask-mark, :is(#gz-ask, .gz-ask-tile) .gz-ask-step-mark { position: relative; z-index: 1; display: inline-grid; place-items: center; flex: none; width: 1.4rem; height: 1.4rem; color: var(--gz-accent); background: var(--gz-surface-fill, var(--gz-surface)); border: 0; border-radius: 50%; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-busy .gz-ask-mark .gz-ask-icon { width: 1.1rem; height: 1.1rem; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-steps { position: relative; display: grid; gap: 0.15rem; padding-inline-start: 0.2rem; }
 /* The rail runs from the first card's mark to the last's (a mark is 1.4rem, centred in a 2.25rem card). */
-#gz-ask .gz-ask-steps::before, #gz-ask .gz-ask-steps::after { content: ''; position: absolute; inset-inline-start: calc(0.9rem - 1px); top: 1.85rem; bottom: 1.85rem; width: 2px; pointer-events: none; }
-#gz-ask .gz-ask-steps::before { background: color-mix(in srgb, var(--gz-accent) 22%, transparent); }
-#gz-ask .gz-ask-steps::after { opacity: 0.28; background: repeating-linear-gradient(to bottom, var(--gz-accent) 0 6px, transparent 6px 20px); }
-#gz-ask .gz-ask-steps[data-running]::after { opacity: 0.6; }
-#gz-ask .gz-ask-step { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.65rem; min-height: 2.25rem; padding: 0.3rem 0.4rem; padding-inline-start: 0; font-size: 13px; color: var(--gz-ink-muted); border: 1px solid transparent; border-radius: 0.6rem; }
-#gz-ask .gz-ask-step-label { flex: 1; min-width: 0; }
-#gz-ask .gz-ask-step-time { flex: none; font-size: 11.5px; font-variant-numeric: tabular-nums; }
-#gz-ask .gz-ask-step[data-state="done"] .gz-ask-step-mark { color: var(--gz-ok, var(--gz-accent)); }
-#gz-ask .gz-ask-step[data-state="fail"] { color: var(--gz-err, var(--gz-ink)); }
-#gz-ask .gz-ask-step[data-state="fail"] .gz-ask-step-mark { color: var(--gz-err, var(--gz-ink)); }
-#gz-ask .gz-ask-step[data-state="no"] .gz-ask-step-mark { color: var(--gz-ink-muted); }
-#gz-ask .gz-ask-step[data-kind="write"] { position: relative; z-index: 1; margin: 0.3rem 0; margin-inline-start: -0.5rem; padding: 0.55rem 0.8rem; padding-inline-start: 0.5rem; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border-color: var(--gz-warn, var(--gz-border-strong, var(--gz-line-strong))); border-radius: 0.75rem; }
-#gz-ask .gz-ask-step[data-kind="write"][data-state="done"] { border-color: var(--gz-border-line, var(--gz-line)); }
-#gz-ask .gz-ask-step[data-kind="write"][data-state="no"] { border-color: var(--gz-border-line, var(--gz-line)); color: var(--gz-ink-muted); }
-#gz-ask .gz-ask-step-note { flex-basis: 100%; padding-inline-start: 2.05rem; font-size: 12.5px; color: var(--gz-ink-muted); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-steps::before, :is(#gz-ask, .gz-ask-tile) .gz-ask-steps::after { content: ''; position: absolute; inset-inline-start: calc(0.9rem - 1px); top: 1.85rem; bottom: 1.85rem; width: 2px; pointer-events: none; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-steps::before { background: color-mix(in srgb, var(--gz-accent) 22%, transparent); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-steps::after { opacity: 0.28; background: repeating-linear-gradient(to bottom, var(--gz-accent) 0 6px, transparent 6px 20px); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-steps[data-running]::after { opacity: 0.6; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-step { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.65rem; min-height: 2.25rem; padding: 0.3rem 0.4rem; padding-inline-start: 0; font-size: 13px; color: var(--gz-ink-muted); border: 1px solid transparent; border-radius: 0.6rem; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-step-label { flex: 1; min-width: 0; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-step-time { flex: none; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-step[data-state="done"] .gz-ask-step-mark { color: var(--gz-ok, var(--gz-accent)); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-step[data-state="fail"] { color: var(--gz-err, var(--gz-ink)); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-step[data-state="fail"] .gz-ask-step-mark { color: var(--gz-err, var(--gz-ink)); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-step[data-state="no"] .gz-ask-step-mark { color: var(--gz-ink-muted); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-step[data-kind="write"] { position: relative; z-index: 1; margin: 0.3rem 0; margin-inline-start: -0.5rem; padding: 0.55rem 0.8rem; padding-inline-start: 0.5rem; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border-color: var(--gz-warn, var(--gz-border-strong, var(--gz-line-strong))); border-radius: 0.75rem; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-step[data-kind="write"][data-state="done"] { border-color: var(--gz-border-line, var(--gz-line)); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-step[data-kind="write"][data-state="no"] { border-color: var(--gz-border-line, var(--gz-line)); color: var(--gz-ink-muted); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-step-note { flex-basis: 100%; padding-inline-start: 2.05rem; font-size: 12.5px; color: var(--gz-ink-muted); }
 /* Notes and failures. */
-#gz-ask .gz-ask-note, #gz-ask .gz-ask-err { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.6rem; padding: 0.6rem 0.8rem; font-size: 13px; color: var(--gz-ink-muted); border-inline-start: 2px solid var(--gz-border-strong, var(--gz-line-strong)); }
-#gz-ask .gz-ask-note p, #gz-ask .gz-ask-err p { flex: 1; min-width: 12rem; }
-#gz-ask .gz-ask-err { color: var(--gz-err, var(--gz-ink)); background: color-mix(in srgb, var(--gz-err, #c33) 8%, transparent); border: 1px solid color-mix(in srgb, var(--gz-err, #c33) 45%, transparent); border-inline-start-width: 2px; border-radius: 0.5rem; }
-#gz-ask .gz-ask-retry { color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
-#gz-ask .gz-ask-jump { position: absolute; bottom: 0.7rem; left: 50%; translate: -50% 0; width: 2.1rem; height: 2.1rem; padding: 0; color: var(--gz-ink); background: var(--gz-surface-fill, var(--gz-surface)); border-color: var(--gz-border-strong, var(--gz-line-strong)); border-radius: 50%; box-shadow: 0 3px 12px rgb(0 0 0 / 0.16); }
-#gz-ask .gz-ask-say { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-note, :is(#gz-ask, .gz-ask-tile) .gz-ask-err { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.6rem; padding: 0.6rem 0.8rem; font-size: 13px; color: var(--gz-ink-muted); border-inline-start: 2px solid var(--gz-border-strong, var(--gz-line-strong)); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-note p, :is(#gz-ask, .gz-ask-tile) .gz-ask-err p { flex: 1; min-width: 12rem; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-err { color: var(--gz-err, var(--gz-ink)); background: color-mix(in srgb, var(--gz-err, #c33) 8%, transparent); border: 1px solid color-mix(in srgb, var(--gz-err, #c33) 45%, transparent); border-inline-start-width: 2px; border-radius: 0.5rem; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-retry { color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-jump { position: absolute; bottom: 0.7rem; left: 50%; translate: -50% 0; width: 2.1rem; height: 2.1rem; padding: 0; color: var(--gz-ink); background: var(--gz-surface-fill, var(--gz-surface)); border-color: var(--gz-border-strong, var(--gz-line-strong)); border-radius: 50%; box-shadow: 0 3px 12px rgb(0 0 0 / 0.16); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-say { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 /* The composer: the question, the student's work when they add it, Your work, Stop and Ask. */
-#gz-ask .gz-ask-form { flex: none; padding: 0.5rem max(1rem, calc((100% - 44rem) / 2)) 1rem; }
-#gz-ask .gz-ask-composer { padding: 0.5rem 0.55rem 0.45rem; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 1rem; }
-#gz-ask .gz-ask-composer:focus-within { border-color: var(--gz-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gz-accent) 16%, transparent), 0 0 18px color-mix(in srgb, var(--gz-accent) 14%, transparent); }
-#gz-ask textarea { display: block; box-sizing: border-box; width: 100%; min-height: 2.4rem; max-height: 200px; margin: 0; padding: 0.3rem 0.4rem; overflow-y: auto; resize: none; font: inherit; font-size: 14.5px; color: var(--gz-ink); background: transparent; border: 0; outline: 0; box-shadow: none; }
-#gz-ask textarea:focus-visible { outline: none; }
-#gz-ask textarea::placeholder { color: var(--gz-ink-muted); opacity: 1; }
-#gz-ask #gz-ask-work { min-height: 4.5rem; margin-top: 0.3rem; border-top: 1px dashed var(--gz-border-line, var(--gz-line)); }
-#gz-ask .gz-ask-row { display: flex; align-items: center; gap: 0.35rem; }
-#gz-ask .gz-ask-more { padding: 0.25rem 0.65rem; font-size: 12.5px; border-color: var(--gz-border-line, var(--gz-line)); border-radius: 999px; }
-#gz-ask .gz-ask-more[aria-expanded="true"] { color: var(--gz-accent); border-color: var(--gz-accent); }
-#gz-ask .gz-ask-send, #gz-ask .gz-ask-stop { width: 2.2rem; height: 2.2rem; padding: 0; border-radius: 0.65rem; }
-#gz-ask .gz-ask-send { color: var(--gz-accent-ink); background: var(--gz-accent); }
-#gz-ask .gz-ask-send:hover:not(:disabled) { color: var(--gz-accent-ink); background: var(--gz-accent-hi, var(--gz-accent)); border-color: transparent; }
-#gz-ask .gz-ask-stop { color: var(--gz-ink); background: var(--gz-surface-fill-2, var(--gz-surface-2)); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-form { flex: none; padding: 0.5rem max(1rem, calc((100% - 44rem) / 2)) 1rem; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-composer { padding: 0.5rem 0.55rem 0.45rem; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 1rem; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-composer:focus-within { border-color: var(--gz-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gz-accent) 16%, transparent), 0 0 18px color-mix(in srgb, var(--gz-accent) 14%, transparent); }
+:is(#gz-ask, .gz-ask-tile) textarea { display: block; box-sizing: border-box; width: 100%; min-height: 2.4rem; max-height: 200px; margin: 0; padding: 0.3rem 0.4rem; overflow-y: auto; resize: none; font: inherit; font-size: 14.5px; color: var(--gz-ink); background: transparent; border: 0; outline: 0; box-shadow: none; }
+:is(#gz-ask, .gz-ask-tile) textarea:focus-visible { outline: none; }
+:is(#gz-ask, .gz-ask-tile) textarea::placeholder { color: var(--gz-ink-muted); opacity: 1; }
+:is(#gz-ask, .gz-ask-tile) #gz-ask-work { min-height: 4.5rem; margin-top: 0.3rem; border-top: 1px dashed var(--gz-border-line, var(--gz-line)); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-row { display: flex; align-items: center; gap: 0.35rem; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-more { padding: 0.25rem 0.65rem; font-size: 12.5px; border-color: var(--gz-border-line, var(--gz-line)); border-radius: 999px; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-more[aria-expanded="true"] { color: var(--gz-accent); border-color: var(--gz-accent); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-send, :is(#gz-ask, .gz-ask-tile) .gz-ask-stop { width: 2.2rem; height: 2.2rem; padding: 0; border-radius: 0.65rem; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-send { color: var(--gz-accent-ink); background: var(--gz-accent); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-send:hover:not(:disabled) { color: var(--gz-accent-ink); background: var(--gz-accent-hi, var(--gz-accent)); border-color: transparent; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-stop { color: var(--gz-ink); background: var(--gz-surface-fill-2, var(--gz-surface-2)); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 /* A tool card's result (run_js's value or error, the place opened), and an answer's Show on the page. */
-#gz-ask .gz-ask-step-detail { flex-basis: 100%; padding-inline-start: 2.05rem; font: 12.5px/1.45 var(--gz-mono, ui-monospace, monospace); color: var(--gz-ink-muted); overflow-wrap: anywhere; }
-#gz-ask .gz-ask-step[data-state="fail"] .gz-ask-step-detail { color: var(--gz-err, var(--gz-ink-muted)); }
-#gz-ask .gz-ask-show { min-height: 28px; padding: 0.2rem 0.55rem; font-size: 12px; color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-step-detail { flex-basis: 100%; padding-inline-start: 2.05rem; font: 12.5px/1.45 var(--gz-mono, ui-monospace, monospace); color: var(--gz-ink-muted); overflow-wrap: anywhere; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-step[data-state="fail"] .gz-ask-step-detail { color: var(--gz-err, var(--gz-ink-muted)); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-show { min-height: 28px; padding: 0.2rem 0.55rem; font-size: 12px; color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 /* Words Ask Rime marked on the page, and the reminders and watches that fired, in a corner of it. */
 mark.gz-ask-spot { color: inherit; background: color-mix(in srgb, var(--gz-accent, #f5c400) 32%, transparent); border-radius: 0.2em; box-shadow: 0 0 0 2px color-mix(in srgb, var(--gz-accent, #f5c400) 55%, transparent); }
 #gz-ask-fired { position: fixed; z-index: 2147483000; inset: auto 1rem 1rem auto; width: min(22rem, calc(100vw - 2rem)); font: 14px/1.5 var(--gz-font, system-ui); color: var(--gz-ink, #222); }
@@ -928,28 +928,28 @@ mark.gz-ask-spot { color: inherit; background: color-mix(in srgb, var(--gz-accen
 /* Phones and narrow windows: the whole screen, one starter column. */
 @media (max-width: 639px) {
   #gz-ask { width: 100vw; height: 100vh; height: 100dvh; margin: 0; border: 0; border-radius: 0; }
-  #gz-ask .gz-ask-starters { grid-template-columns: minmax(0, 1fr); }
-  #gz-ask .gz-ask-new span { display: none; }
-  #gz-ask .gz-ask-log { padding: 1rem 0.8rem; }
-  #gz-ask .gz-ask-form { padding: 0.4rem 0.6rem 0.75rem; }
-  #gz-ask textarea { font-size: 16px; }
+  :is(#gz-ask, .gz-ask-tile) .gz-ask-starters { grid-template-columns: minmax(0, 1fr); }
+  :is(#gz-ask, .gz-ask-tile) .gz-ask-new span { display: none; }
+  :is(#gz-ask, .gz-ask-tile) .gz-ask-log { padding: 1rem 0.8rem; }
+  :is(#gz-ask, .gz-ask-tile) .gz-ask-form { padding: 0.4rem 0.6rem 0.75rem; }
+  :is(#gz-ask, .gz-ask-tile) textarea { font-size: 16px; }
   #gz-ask-fired { inset: auto 0.5rem 0.5rem 0.5rem; width: auto; }
 }
 /* Ultra's global button transition is important and may still have a duration when its Look ignores system motion. */
-html[data-gz-motion="off"] #gz-ask button { transition: none !important; }
+html[data-gz-motion="off"] :is(#gz-ask, .gz-ask-tile) button { transition: none !important; }
 @media (prefers-reduced-motion: reduce) {
-  #gz-ask button { transition: none !important; }
+  :is(#gz-ask, .gz-ask-tile) button { transition: none !important; }
 }
 @media (prefers-reduced-motion: no-preference) {
   html:not([data-gz-motion="off"]) #gz-ask[open] { animation: gz-ask-in 0.24s var(--gz-spring, ease-out) both; }
   html:not([data-gz-motion="off"]) #gz-ask[open]::backdrop { animation: gz-ask-fade 0.2s ease-out both; }
-  html:not([data-gz-motion="off"]) #gz-ask [data-arrive] { animation: gz-ask-arrive 0.2s var(--gz-ease, ease-out) both; }
-  html:not([data-gz-motion="off"]) #gz-ask .gz-ask-busy .gz-ask-mark, html:not([data-gz-motion="off"]) #gz-ask .gz-ask-step[data-state="run"] .gz-ask-step-mark { animation: gz-ask-breathe 1.8s ease-in-out infinite; }
-  html:not([data-gz-motion="off"]) #gz-ask .gz-ask-busy-words { color: transparent; background: linear-gradient(90deg, var(--gz-ink-muted) 35%, var(--gz-ink) 50%, var(--gz-ink-muted) 65%) 0 0 / 250% 100%; -webkit-background-clip: text; background-clip: text; animation: gz-ask-shine 2.2s linear infinite; }
-  html:not([data-gz-motion="off"]) #gz-ask .gz-ask-steps[data-running]::after { animation: gz-ask-rail 1.1s linear infinite; }
-  html:not([data-gz-motion="off"]) #gz-ask .gz-ask-step[data-state="ask"] { animation: gz-ask-wait 2s ease-in-out infinite; }
-  html:not([data-gz-motion="off"]) #gz-ask .gz-ask-composer { transition: border-color var(--gz-t, 0.16s), box-shadow var(--gz-t, 0.16s); }
-  html:not([data-gz-motion="off"]) #gz-ask button { transition: background-color var(--gz-t, 0.14s), border-color var(--gz-t, 0.14s), color var(--gz-t, 0.14s), opacity var(--gz-t, 0.14s); }
+  html:not([data-gz-motion="off"]) :is(#gz-ask, .gz-ask-tile) [data-arrive] { animation: gz-ask-arrive 0.2s var(--gz-ease, ease-out) both; }
+  html:not([data-gz-motion="off"]) :is(#gz-ask, .gz-ask-tile) .gz-ask-busy .gz-ask-mark, html:not([data-gz-motion="off"]) :is(#gz-ask, .gz-ask-tile) .gz-ask-step[data-state="run"] .gz-ask-step-mark { animation: gz-ask-breathe 1.8s ease-in-out infinite; }
+  html:not([data-gz-motion="off"]) :is(#gz-ask, .gz-ask-tile) .gz-ask-busy-words { color: transparent; background: linear-gradient(90deg, var(--gz-ink-muted) 35%, var(--gz-ink) 50%, var(--gz-ink-muted) 65%) 0 0 / 250% 100%; -webkit-background-clip: text; background-clip: text; animation: gz-ask-shine 2.2s linear infinite; }
+  html:not([data-gz-motion="off"]) :is(#gz-ask, .gz-ask-tile) .gz-ask-steps[data-running]::after { animation: gz-ask-rail 1.1s linear infinite; }
+  html:not([data-gz-motion="off"]) :is(#gz-ask, .gz-ask-tile) .gz-ask-step[data-state="ask"] { animation: gz-ask-wait 2s ease-in-out infinite; }
+  html:not([data-gz-motion="off"]) :is(#gz-ask, .gz-ask-tile) .gz-ask-composer { transition: border-color var(--gz-t, 0.16s), box-shadow var(--gz-t, 0.16s); }
+  html:not([data-gz-motion="off"]) :is(#gz-ask, .gz-ask-tile) button { transition: background-color var(--gz-t, 0.14s), border-color var(--gz-t, 0.14s), color var(--gz-t, 0.14s), opacity var(--gz-t, 0.14s); }
   @keyframes gz-ask-in { from { opacity: 0; translate: 0 10px; scale: 0.98; } }
   @keyframes gz-ask-fade { from { opacity: 0; } }
   @keyframes gz-ask-arrive { from { opacity: 0; translate: 0 4px; } }
@@ -1333,12 +1333,41 @@ html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="stretch"] .gz-gam
   .gz-w[data-tile="todo"] #gz-todo .gz-todo-head button,
   .gz-w[data-tile="todo"] #gz-todo .gz-todo-head a { padding-inline: 0.4rem; }
 }
-/* Ask Rime as a widget (ai/page/ask-tile.js): the chat in a tile's body, its own block apart from #gz-ask's dialog. The
-   body is the chat's height by the tile's size until the student drags its corner (the widget system sets that height
-   inline); the log scrolls inside it. */
+/* Ask Rime as a widget (ai/page/ask-tile.js), and what the chat (ai/page/ask-chat.js) is in either of its hosts: the
+   chat's rules above serve the dialog (#gz-ask) and the tile's body (.gz-ask-tile) alike. In a tile the body is the chat's
+   height by the tile's size until the student drags its corner (the widget system sets that height inline), and the log
+   scrolls inside it; the chat lays out by its own width (gz-ask), so a small tile and a 320 px window get the compact one. */
+:is(#gz-ask, .gz-ask-tile) .gz-ask-chat { container: gz-ask / inline-size; display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0; }
 .gz-w[data-tile="ask"] .gz-w-body { display: flex; flex-direction: column; min-height: 0; padding: 0; overflow: hidden; }
 .gz-w[data-tile="ask"][data-size="s"] .gz-w-body { height: 320px; }
 .gz-w[data-tile="ask"][data-size="m"] .gz-w-body { height: 420px; }
 .gz-w[data-tile="ask"][data-size="l"] .gz-w-body { height: 560px; }
 .gz-w[data-tile="ask"][data-fold] .gz-w-body { height: 0; }
+.gz-ask-tile .gz-ask-chat { font-size: 13px; }
+.gz-ask-tile .gz-ask-head { padding: 0.35rem 0.5rem; padding-inline: 0.75rem 0.5rem; }
+.gz-ask-tile .gz-ask-log { gap: 0.75rem; padding: 0.75rem; }
+.gz-ask-tile .gz-ask-form { padding: 0.35rem 0.5rem 0.6rem; }
+.gz-ask-tile .gz-ask-empty .gz-ask-mark { width: 2.4rem; height: 2.4rem; }
+/* The context meter: a ring and its percentage; warm from 70%, the Look's warning colour from 90%. */
+:is(#gz-ask, .gz-ask-tile) .gz-ask-meter { display: inline-flex; align-items: center; gap: 0.3rem; flex: none; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--gz-ink-muted); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-meter-ring { width: 1.05rem; height: 1.05rem; fill: none; stroke-width: 4; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-meter-t { stroke: var(--gz-border-line, var(--gz-line)); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-meter-v { stroke: currentColor; stroke-linecap: round; stroke-dasharray: 0 100; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-meter[data-band="warm"] { color: color-mix(in srgb, var(--gz-warn, #d97706) 60%, var(--gz-ink-muted)); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-meter[data-band="warn"] { color: var(--gz-warn, #d97706); }
+/* Turns folded into a summary: one quiet line where they were, opened to read it. */
+:is(#gz-ask, .gz-ask-tile) .gz-ask-fold { font-size: 12px; color: var(--gz-ink-muted); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-fold summary { display: flex; align-items: center; gap: 0.6rem; cursor: pointer; list-style: none; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-fold summary::-webkit-details-marker { display: none; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-fold summary::before, :is(#gz-ask, .gz-ask-tile) .gz-ask-fold summary::after { content: ''; flex: 1; border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-fold summary:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+:is(#gz-ask, .gz-ask-tile) .gz-ask-fold .gz-ask-md { margin-top: 0.5rem; padding: 0.6rem 0.8rem; font-size: 13px; color: var(--gz-ink); background: var(--gz-surface-fill-2, var(--gz-surface-2)); border-radius: 0.6rem; }
+@container gz-ask (width < 480px) {
+  :is(#gz-ask, .gz-ask-tile) .gz-ask-starters { grid-template-columns: minmax(0, 1fr); }
+  :is(#gz-ask, .gz-ask-tile) .gz-ask-new span { display: none; }
+  :is(#gz-ask, .gz-ask-tile) .gz-ask-q { max-width: 92%; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  html:not([data-gz-motion="off"]) :is(#gz-ask, .gz-ask-tile) .gz-ask-meter-v { transition: stroke-dasharray var(--gz-t, 0.25s) var(--gz-ease, ease-out); }
+}
 /* end Ask Rime as a widget */

@@ -26,7 +26,7 @@ until the student has turned AI on, chosen a model for that feature and allowed 
 | `ai/tasks/writer-*.js` | Glaze Writer's tasks (below); `writer-context.js` cleans the page's context and writes it as the request's reusable context. |
 | `ai/tasks/study-help.js`, `ai/tasks/agent-tools.js` | `study.help` and `agent.tools` (below), which Ask Rime runs. `wording.js`: the wording-offer rules they share with Feedback. |
 | `ai/agent/js.js`, `places.js`, `wakes.js`; `vendor/quickjs/` | Rime's own tools (below): run_js and its engine, the places map and the panel's actions, wakes and monitors. |
-| `ai/ask.js`, `ai/page/ask.js` | Ask Rime (below): the routing rule, the step loop over Agents' tools and the panel's port in the worker; the panel on the school's page, loaded on demand. |
+| `ai/ask.js`, `ai/page/ask.js`, `ai/page/ask-chat.js`, `ai/page/ask-tile.js` | Ask Rime (below): the routing rule, the step loop over Agents' tools and the panel's port in the worker; the chat component, its dialog and its widget tile on the school's page, loaded on demand. |
 | `ai/settings.js` | storage.local `ai`: `{ on, outline, sources, mode, model, models, tune, features }` (below), the providers Settings names (`PRESETS`), and `migrate` for an older store. Features: `syllabus`, `completion` (the writer's ghost text), `writing` (its review, feedback, requirements, citations and autocorrect calls), `ask` (Ask Rime). |
 | `ai/broker.js` | The worker's broker: the port, admission, connections (IndexedDB), Settings' config messages. |
 
@@ -187,6 +187,23 @@ port `glaze:ask` (`background/background.js`, the AI port's sender rules) in the
 questions and answers for a follow-up; nothing is kept after the panel closes, and Ask or AI turned off closes it.
 `GZ_ASK_UI.on(kind, handler)` takes the UI actions a run sends (`{ type: 'action', action: { kind, … } }`) while its
 question runs, and `run({ event, question })` asks a question the student didn't type, for their own click only.
+
+The chat itself is one component, `ai/page/ask-chat.js` (`GZ_ASK_CHAT.mount(host, { variant })` → `{ focus, ask, stop }`),
+with its own conversation and port per mount: the dialog (`ai/page/ask.js`, variant `dialog`, which keeps the ids
+`#gz-ask-q`, `#gz-ask-work`, `#gz-ask-title`) and the **Ask Rime widget** (`ai/page/ask-tile.js`, variant `tile`, no ids),
+a tile the widget system (`core/page/widgets.js` MORE `ask`, size l) draws on every surface it has: Ultra's Dashboard and
+Courses boards, Canvas's Dashboard, floating over every page, and the sidebar's dock. It is offered, drawn and loaded only
+while AI and Ask Rime are on (storage.local `ai`, read with the layout and as it changes); its body is 320, 420 or 560 px
+tall by its size until the student drags its corner; it folds and stacks like any tile, and lays out compact below 480 px
+of its own width (`@container gz-ask`). Each tile keeps its conversation while the page lives; its layout persists like any
+tile's. ⌘K's Ask Rime row asks the widget system to `reveal('ask')` (a tile shown on this page, not folded: scrolled into
+view and its question focused) and opens the dialog only where there is none. The chat's head carries the **context
+meter**: a ring and the percentage of the model's window the request about to go takes (each `context` event's `used` /
+`window`), neutral, warm from 70% and the Look's warning colour from 90% (the band read from the exact share), its words
+only in its `aria-label`; New chat puts it back at the chat's own share (the smallest a first question took). Turns the
+worker folded (below) are one line in the log, "Earlier messages summarized", opened to read the summary: the worker tells
+the chat `{ id, type: 'summary', text, turns }` after a question's end, and since each question may come on a new port, the
+chat sends that `summary` with its later questions and only the turns after the folded ones.
 
 `ai/ask.js` `route(question, { attempt, locale })`: agent.tools only for a question about the student's own records (to-dos
 and due dates, grades, assignments, Writer documents: word lists in English and the student's locale) that asks for no help
