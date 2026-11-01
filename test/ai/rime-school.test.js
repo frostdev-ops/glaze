@@ -165,6 +165,14 @@ test('the help turn: a help block before the question, its round trip, and no an
   assert.ok(!('first' in plain) && !('help' in plain));
 });
 
+test('study help refuses to solve a problem supplied only by the school reader', () => {
+  const help = require('../../extension/ai/tasks/study-help.js');
+  const inp = help.task.input({ question: 'Help me solve the problem in my assignment', subject: 'math',
+    material: JSON.stringify({ instructions: 'Solve 3x + 5 = 20.' }) });
+  assert.equal(help.why({ kind: 'hint', step: null, reply: 'Subtract 5 and divide by 3: x = 5.', followUp: null }, inp), 'solves');
+  assert.equal(help.why({ kind: 'hint', step: null, reply: 'What operation would isolate the term with your variable?', followUp: null }, inp), '');
+});
+
 // ---- routing -----------------------------------------------------------------------------------------------------------
 const OLD = (() => {
   const file = path.join(ROOT, 'extension/ai/ask-ec74ace13.js'), m = new Module(file, module);
