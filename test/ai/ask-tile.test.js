@@ -117,6 +117,18 @@ test('Edit layout offers Ask Rime to add only while AI and Ask Rime are on', asy
   assert.ok(!(await offered(AI(false, true))).includes('+ Ask Rime'));
 });
 
+test('disabling Ask stops and removes its chat even while the page is hidden', async () => {
+  const p = page({ site: 'canvas' });
+  p.ui.sync(true);
+  await settle();
+  assert.ok(p.tile());
+  p.doc.visibilityState = 'hidden';
+  p.setAi(AI(true, false));
+  await settle();
+  assert.equal(p.mounts[0].stopped, 1, 'cancel the hidden chat immediately');
+  assert.equal(p.tile(), null, 'remove its conversation without waiting for visibility');
+});
+
 test('reveal(\'ask\') brings a shown tile to the student and focuses its chat; folded, hidden or absent, it says no', async () => {
   const p = page({ site: 'canvas' });
   assert.equal(p.ui.reveal('ask'), false, 'nothing drawn yet');
