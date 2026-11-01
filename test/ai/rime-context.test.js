@@ -260,3 +260,27 @@ test('a rejected oversized question cannot clear the accepted chat summary', asy
   await settle();
   assert.equal(h.seen.runs.filter((m) => m.task === 'agent.tools').at(-1).input.summary, summary);
 });
+
+// The chat's side of folding (ai/page/ask-chat.js): each question may come on a new port, so the panel hears the summary
+// and carries it back with only the turns after the folded ones.
+test('a fold is told to the chat as a summary event, with how many of the turns it was sent it folded', async () => {
+  const summary = '- Asked: Which courses am I in?\n- **BIO 1100**.';
+  const h = harness({ count: (m) => ({ used: m.input.history?.length >= 3 ? 2400 : 900, window: 4096, reserve: 768, exact: true }),
+    script: { 'agent.tools': [said('BIO 1100 has nothing due.', ['BIO 1100'])], 'chat.compact': [{ text: summary, quotes: ['Which courses am I in?', 'BIO 1100'] }] } });
+  h.say({ id: 1, op: 'ask', question: "What's due in BIO 1100 this week?", history: H3 });
+  await settle(120);
+  const told = h.got.filter((m) => m.type === 'summary');
+  assert.deepEqual(told, [{ id: 1, type: 'summary', text: summary, turns: 1 }]);
+  assert.ok(h.got.findIndex((m) => m.type === 'end') < h.got.findIndex((m) => m.type === 'summary'), 'after its question ends');
+});
+
+test('a question on a new port carries the chat\'s summary: the next request has it; a bad one is refused', async () => {
+  const summary = '- Asked: Which courses am I in?\n- **BIO 1100**.';
+  const h = harness({ script: { 'agent.tools': [said('Still nothing.', ['BIO 1100'])] } });
+  h.say({ id: 1, op: 'ask', question: 'And next week?', history: H3.slice(1), summary });
+  await settle(120);
+  assert.equal(h.seen.runs.filter((r) => r.task === 'agent.tools').at(-1).input.summary, summary);
+  for (const [id, bad] of [[2, 5], [3, 'x'.repeat(4001)]]) h.say({ id, op: 'ask', question: 'And next week?', history: H3, summary: bad });
+  await settle(60);
+  assert.deepEqual(h.got.filter((m) => m.id >= 2 && m.type === 'error').map((m) => [m.id, m.error]), [[2, 'request'], [3, 'request']]);
+});

@@ -48,6 +48,8 @@ const page = ({ ai = { on: true, model: { use: 'openai', model: 'm' }, features:
     chrome: { runtime: { connect, lastError: undefined }, storage: { local: { get: (k, cb) => env.read(cb) }, onChanged: { addListener: (f) => env.changed.push(f) } } },
   });
   setup?.(env, context);
+  // The chat component first, as ai/page/ask.js loads it beside itself.
+  vm.runInContext(read('ai/page/ask-chat.js'), context);
   env.ui = vm.runInContext(read('ai/page/ask.js'), context);
   env.context = context;
   env.box = () => doc.getElementById('gz-ask');
@@ -502,7 +504,7 @@ test('run() asks a question the student didn\'t type, for their own click only',
 });
 
 test('every word the panel shows is in all five translations', () => {
-  const src = read('ai/page/ask.js');
+  const src = read('ai/page/ask-chat.js') + read('ai/page/ask.js');
   const literals = [...src.matchAll(/\bt\(\s*'((?:\\.|[^'\\])*)'/g)].map((m) => m[1].replace(/\\(.)/g, '$1'));
   const P = page();
   const all = [...new Set([...literals, ...Object.values(P.ui.STEPS)])];
@@ -525,7 +527,7 @@ test('the panel\'s sheet moves nothing with reduced motion or Glaze\'s Motion of
   assert.doesNotMatch(rest.replace(/(?:animation(?:-name)?|transition):\s*none/g, ''), /animation|transition|@keyframes/, 'nothing moves outside the motion block');
   for (const [, selectors] of motion[1].matchAll(/(?:^|\})\s*([^{}@]+?)\s*\{/g)) {
     if (/^(from|to|\d+%)/.test(selectors)) continue;
-    for (const sel of selectors.split(',')) assert.match(sel.trim(), /^html:not\(\[data-gz-motion="off"\]\) /, sel);
+    for (const sel of selectors.split(/,(?![^(]*\))/)) assert.match(sel.trim(), /^html:not\(\[data-gz-motion="off"\]\) /, sel);
   }
   assert.match(sheet, /html\[data-gz-bg="solid"\] #gz-ask[^{]*\{[^}]*backdrop-filter: none/);
   assert.match(sheet, /prefers-reduced-transparency: reduce[\s\S]*#gz-ask[^{]*\{[^}]*backdrop-filter: none/);
@@ -535,8 +537,8 @@ test('the panel suppresses the host sheet\'s important button transitions when m
   assert.match(read('content/theme.css'), /button, \.MuiButtonBase-root\s*\{[^}]*transition:[^}]*!important/, 'Ultra gives every button an important transition');
   const css = read('core/page/apps.css');
   // A gated animation rule alone cannot reset an unrelated transition from the host page.
-  const off = /html\[data-gz-motion="off"\][^{]*#gz-ask button[^{}]*\{([^}]*)\}/.exec(css)?.[1] || '';
-  const reduce = /@media \(prefers-reduced-motion: reduce\)\s*\{\s*#gz-ask button\s*\{([^}]*)\}/.exec(css)?.[1] || '';
+  const off = /html\[data-gz-motion="off"\][^{]*(?:#gz-ask|:is\(#gz-ask, \.gz-ask-tile\)) button[^{}]*\{([^}]*)\}/.exec(css)?.[1] || '';
+  const reduce = /@media \(prefers-reduced-motion: reduce\)\s*\{\s*(?:#gz-ask|:is\(#gz-ask, \.gz-ask-tile\)) button\s*\{([^}]*)\}/.exec(css)?.[1] || '';
   for (const [mode, declarations] of [['Motion off', off], ['reduced motion', reduce]]) {
     assert.match(declarations, /transition:\s*none\s*!important/, mode);
   }
@@ -695,4 +697,88 @@ test('a new question cancels navigation waiting behind the preceding answer reve
   for (let i = 0; i < 100 && P.frames.size; i++) P.flushFrame();
   assert.deepEqual(performed, [], 'an earlier action must not navigate away during a new question');
   P.box().close();
+});
+
+// ---- the context meter, folded turns, and the chat in a tile --------------------------------------------------------------
+const meterOf = (P, root = P.box()) => { const m = root.querySelector('.gz-ask-meter'); return { hidden: m.hidden, n: m.querySelector('.gz-ask-meter-n').textContent, band: m.dataset.band || '', label: m.getAttribute('aria-label'), text: m.textContent }; };
+
+test('the context meter shows the share of the window the request takes, as a ring and its number, in three bands; New chat puts back the chat\'s own share', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  assert.equal(meterOf(P).hidden, true, 'nothing known yet');
+  P.ask('Explain mitosis');
+  await settle();
+  const ctx = (used) => answer(P, { type: 'context', task: 'study.help', used, window: 1000, reserve: 100, exact: true });
+  ctx(300);
+  await settle();
+  assert.deepEqual(meterOf(P), { hidden: false, n: '30%', band: '', label: '30% of the context window used', text: '30%' }, 'no word beside the number');
+  for (const [used, band] of [[690, ''], [700, 'warm'], [899, 'warm'], [900, 'warn'], [1500, 'warn']]) {
+    ctx(used);
+    await settle();
+    assert.equal(meterOf(P).band, band, String(used));
+  }
+  assert.equal(meterOf(P).n, '100%', 'never past the whole window');
+  answer(P, study('What happens first?'));
+  await settle();
+  P.doc.fire(P.box().querySelector('.gz-ask-new'), 'click');
+  assert.deepEqual([meterOf(P).n, meterOf(P).band], ['30%', ''], 'the chat\'s own share again');
+});
+
+test('turns the worker folded show as one line where they were, opened to read the summary; later questions carry it with only the newer turns', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  for (let i = 1; i <= 3; i++) { P.ask(`Question ${i}`); await settle(); answer(P, study(`Answer ${i}`)); await settle(); }
+  const last = asked(P).at(-1);
+  P.ports.at(-1).answer({ id: last.id - 1, type: 'summary', text: '- stale', turns: 2 });
+  await settle();
+  assert.equal(P.box().querySelector('.gz-ask-fold'), null, 'only the last question\'s summary');
+  P.ports.at(-1).answer({ id: last.id, type: 'summary', text: '- **Mitosis**: asked twice', turns: 2 });
+  await settle();
+  const fold = P.box().querySelector('.gz-ask-fold');
+  assert.ok(fold);
+  const items = P.box().querySelector('.gz-ask-log').children;
+  assert.equal(items.indexOf(fold), items.indexOf(P.box().querySelectorAll('.gz-ask-a')[1]) + 1, 'right after the second answer');
+  assert.equal(fold.querySelector('summary').textContent, 'Earlier messages summarized');
+  assert.equal(fold.querySelector('details').open, undefined, 'closed until the student opens it');
+  assert.equal(fold.querySelector('details strong').textContent, 'Mitosis', 'the summary, drawn as the answers are');
+  P.ask('Question 4');
+  await settle();
+  assert.equal(asked(P).at(-1).summary, '- **Mitosis**: asked twice');
+  assert.deepEqual([...asked(P).at(-1).history.map((h) => h.question)], ['Question 3']);
+  P.doc.fire(P.box().querySelector('.gz-ask-stop'), 'click');
+  answer(P, { type: 'error', error: 'cancelled' });
+  await settle();
+  P.doc.fire(P.box().querySelector('.gz-ask-new'), 'click');
+  assert.equal(P.box().querySelector('.gz-ask-fold'), null);
+  P.ask('Question 5');
+  await settle();
+  assert.equal(asked(P).at(-1).summary, undefined, 'a new chat carries nothing');
+});
+
+test('the chat mounts in a tile with its own port and conversation, no ids, its meter and New chat in its head, beside the dialog', async () => {
+  const P = page({ reply: ready });
+  const host = P.doc.createElement('div');
+  P.doc.body.append(host);
+  const chat = P.context.GZ_ASK_CHAT.mount(host, { variant: 'tile' });
+  await settle();
+  const root = host.querySelector('.gz-ask-chat');
+  assert.equal(root.dataset.variant, 'tile');
+  assert.ok(root.querySelector('.gz-ask-meter') && root.querySelector('.gz-ask-new'));
+  assert.equal(root.querySelector('.gz-ask-close'), null);
+  assert.equal(root.querySelector('h2'), null, 'the tile\'s own head names it');
+  assert.equal(root.all().filter((e) => e.id).length, 0, 'no ids');
+  await P.ui.open({ event: { isTrusted: true } });
+  assert.equal(P.doc.root.all().filter((e) => e.id === 'gz-ask-q').length, 1, 'the dialog\'s ids stay unique');
+  const input = root.querySelector('.gz-ask-input');
+  input.value = 'From the tile';
+  P.doc.fire(input, 'keydown', { key: 'Enter' });
+  await settle();
+  const sent = asked(P).find((m) => m.question === 'From the tile');
+  assert.ok(sent);
+  chat.focus();
+  assert.equal(P.doc.activeElement, input);
+  chat.stop();
+  assert.equal(host.querySelector('.gz-ask-chat'), null, 'gone with stop');
+  assert.ok(P.ports.filter((p) => p.posted.includes(sent))[0].hungUp, 'its port with it');
+  assert.ok(P.box()?.open, 'the dialog untouched');
 });
