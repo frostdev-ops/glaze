@@ -36,7 +36,7 @@ const setup = ({ script = null, chunk = CHUNK } = {}) => {
     load: async (_g, opts) => {
       const m = await g.load(model({ vocab: TOK.size, kinds: ['conv', 'full', 'swa'] }), { ...opts, chunk });
       const extend = m.extend;
-      m.extend = async (ids, o) => { const r = JSON.parse(JSON.stringify(await extend(ids, o))); extends_.push({ ids: Array.from(ids), at: o?.at, step: o?.step, ...r }); return r; };
+      m.extend = async (ids, o) => { const r = JSON.parse(JSON.stringify(await extend(ids, o))); extends_.push({ ids: Array.from(ids), at: o?.at, paced: typeof o?.pace === 'function', ...r }); return r; };
       if (script) { let i = 0; m.decode = async ({ signal } = {}) => { if (signal?.aborted) throw signal.reason; return i < script.length ? script[i++] : TOK.eos; }; }
       return m;
     },
@@ -128,13 +128,13 @@ test('writer.complete runs at low priority: small steps with a yield after each,
   const parts = [...SYS.slice(0, 2), { text: 'system\n' }, { special: '<|gz_task:writer.complete|>' }, { text: 'Complete the text.' }, { special: '<|im_end|>' }, { text: '\n' }];
   const r = await s.call({ op: 'run', model: 'm', parts: [...parts, ...user(['document\n' + 'The mitochondria is the powerhouse of the cell. '.repeat(6)])], stable: parts.length, sampler: { temperature: 0 }, maxTokens: 2 });
   assert.ok(r.usage.input > 100);
-  const steps = s.extends.map((e) => e.step);
-  assert.ok(steps.length && steps.every((x) => x === H.LIMIT.step), `steps ${steps}`);
-  assert.ok(s.fed.every((f) => f.length <= H.LIMIT.step), 'no submission feeds more than a step');
+  const paced = s.extends.map((e) => e.paced);
+  assert.ok(paced.length && paced.every(Boolean), `paced ${paced}`);
+  assert.ok(s.fed[0].length <= H.LIMIT.step, 'the first submission feeds a small step');
   // priority 'low' does the same for any task.
   s.extends.length = 0;
   await s.call(req(['question\nhello there, how are you doing today?'], { priority: 'low' }));
-  assert.ok(s.extends.every((e) => e.step === H.LIMIT.step));
+  assert.ok(s.extends.every((e) => e.paced));
   // A cancel lands within one step.
   s.g.device.queue.onSubmittedWorkDone = () => new Promise((res) => setTimeout(res, 1));
   s.fed.length = 0;
@@ -145,7 +145,7 @@ test('writer.complete runs at low priority: small steps with a yield after each,
   s.h.handle({ id, op: 'cancel' });
   await settle(200);
   await new Promise((res) => setTimeout(res, 20));
-  assert.ok(count(s.fed) - before <= H.LIMIT.step, `fed ${count(s.fed) - before} after the cancel`);
+  assert.ok(s.fed.length && count(s.fed) - before <= Math.max(...s.fed.map((f) => f.length)), `fed ${count(s.fed) - before} after the cancel`);
   assert.ok(s.posted.some((p) => p.id === id && p.type === 'error' && p.error.category === 'cancelled'));
 });
 

@@ -41,7 +41,12 @@ const setup = (perToken) => {
     }
     return submit.call(this, commands);
   };
-  g.device.queue.onSubmittedWorkDone = () => new Promise((r) => setTimeout(r, Math.max(0, until - performance.now())));
+  // Resolves once the simulated GPU is idle (a timer can fire a fraction of a ms early: wait again).
+  const idle = (r) => { const left = until - performance.now(); if (left <= 0) r(); else setTimeout(() => idle(r), Math.ceil(left)); };
+  g.device.queue.onSubmittedWorkDone = () => new Promise(idle);
+  // A readback waits for the GPU too, as mapAsync does.
+  const map = g.context.GPUBuffer.prototype.mapAsync;
+  g.context.GPUBuffer.prototype.mapAsync = async function (...a) { await g.device.queue.onSubmittedWorkDone(); return map.apply(this, a); };
   const E = { load: async (_g, opts) => g.load(model({ vocab: TOK.size, kinds: ['conv', 'full', 'swa'] }), { ...opts, chunk: 512 }) };
   const store = { list: async () => [{ id: 'm', tier: 1, state: 'ready' }], status: async () => ({ state: 'ready' }), open: async () => ({ size: 1, read: async () => new Uint8Array(0) }) };
   const h = H.create({ store, gguf: { open: async () => ({ kv: {} }) }, tokenizer: { ...K, fromGGUF: () => K.load(VOCAB) }, engine: () => E, grammar: () => null, ladder: () => null,
