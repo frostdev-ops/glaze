@@ -112,24 +112,24 @@ var GZ_AI_MODEL_UPDATES = globalThis.GZ_AI_MODEL_UPDATES || (() => {
     const r = await verify(m.doc, { key: ctx.key, serial: held?.serial || 0 });
     if (r.ok) {
       const cat = await store.catalog(), ready = (await store.list()).filter((x) => !x.role && x.state === 'ready').map((x) => cat.entries.get(x.id)).filter(Boolean);
-      await store.edit((st) => ((st?.serial || 0) >= r.list.serial ? undefined : accept(st, r.list, { glaze: m.glaze, ready })));
+      await store.edit((st) => (signal?.aborted || (st?.serial || 0) >= r.list.serial ? undefined : accept(st, r.list, { glaze: m.glaze, ready })));
     } else if (r.error !== 'replay') return { state: 'refused', reason: r.error };
     const cat = await store.catalog(), st = cat.state, cur = cat.entries.get(m.id), next = cat.latest.get(m.id);
     if (!cur || (await store.status(m.id)).state !== 'ready') return { state: 'none' };
     if (st?.trial) return { state: 'trial' };
     if (!next || next.total === cur.total) return { state: 'current', ...(cur.version && { version: cur.version }) };
-    await store.edit((s) => (s?.keep?.[m.id]?.some((x) => x.total === next.total) ? undefined : begin(s, next)));
+    await store.edit((s) => (signal?.aborted || s?.keep?.[m.id]?.some((x) => x.total === next.total) ? undefined : begin(s, next)));
     try {
       await store.download(m.id, { total: next.total, whole: true, signal, pause: ctx.idle, onProgress: ctx.progress });
     } catch (e) {
-      if (e?.reason === 'hash') { await store.edit((s) => reject(s, next)); await store.drop(m.id, next.total).catch(() => {}); return { state: 'failed', reason: 'hash' }; }
+      if (e?.reason === 'hash' && !signal?.aborted) { await store.edit((s) => signal?.aborted ? undefined : reject(s, next)); await store.drop(m.id, next.total).catch(() => {}); return { state: 'failed', reason: 'hash' }; }
       return { state: 'download', reason: typeof e?.reason === 'string' ? e.reason : 'network' };
     }
     let swapped = false;
     await ctx.between(async () => {
       if (signal?.aborted) return;
       await store.edit((s) => {
-        if (!s?.keep?.[m.id]?.some((x) => x.total === next.total) || s.pins?.[m.id]?.total !== cur.total) return undefined; // removed meanwhile
+        if (signal?.aborted || !s?.keep?.[m.id]?.some((x) => x.total === next.total) || s.pins?.[m.id]?.total !== cur.total) return undefined; // removed meanwhile
         swapped = true;
         return swap(s, m.id, next, cur);
       });
