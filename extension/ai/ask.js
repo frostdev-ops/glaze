@@ -35,6 +35,26 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const SET = () => (typeof GZ_AI_SETTINGS !== 'undefined' ? GZ_AI_SETTINGS : require('./settings.js'));
   const AT = () => (typeof GZ_AI_TASK_AGENT_TOOLS !== 'undefined' ? GZ_AI_TASK_AGENT_TOOLS : require('./tasks/agent-tools.js'));
   const SH = () => (typeof GZ_AI_TASK_STUDY_HELP !== 'undefined' ? GZ_AI_TASK_STUDY_HELP : require('./tasks/study-help.js'));
+  const CC = () => (typeof GZ_AI_TASK_CHAT_COMPACT !== 'undefined' ? GZ_AI_TASK_CHAT_COMPACT : require('./tasks/chat-compact.js'));
+  // Compaction (tools level 3): once the next request would pass this share of the model's window, the turns before the last
+  // KEEP are folded into the chat's summary (chat.compact) between turns.
+  const COMPACT = { share: 0.7, keep: 2 };
+  // A result the model has already used, cut to a digest when a run's results would overflow the window: its items' titles,
+  // ids and dates, at most DIGEST of them.
+  const DIGEST = 12;
+  const digest = (result) => {
+    const items = [];
+    const walk = (v) => {
+      if (Array.isArray(v)) return v.forEach(walk);
+      if (!isObj(v)) return;
+      const title = typeof v.title === 'string' ? v.title : typeof v.name === 'string' ? v.name : null;
+      if (title !== null) items.push({ title: title.slice(0, 120), ...(typeof v.id === 'string' && { id: v.id }), ...(typeof v.course === 'string' && { course: v.course.slice(0, 60) }),
+        ...(Number.isFinite(v.due) && { due: v.due }), ...(Number.isFinite(v.at) && !Number.isFinite(v.due) && { at: v.at }) });
+      else Object.values(v).forEach(walk);
+    };
+    walk(result);
+    return { digest: items.slice(0, DIGEST), ...(items.length > DIGEST && { more: items.length - DIGEST }) };
+  };
   const CALLS = () => (typeof GZ_MCP_CALLS !== 'undefined' ? GZ_MCP_CALLS : require('../agents/calls.js'));
   const F = () => (typeof GZ_AI_FAILURE !== 'undefined' ? GZ_AI_FAILURE : require('./failure.js'));
   const TL = () => (typeof GZ_AI_TOOLS !== 'undefined' ? GZ_AI_TOOLS : require('./tools.js'));
@@ -283,11 +303,18 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
 
   // ---- the step loop ---------------------------------------------------------------------------------------------------
   const cancelled = () => Object.assign(R().error('cancelled'), { category: 'cancelled' });
-  const episode = async ({ question, tools, locale, now, zone, run, call, signal, fired, first, help, history }) => {
+  const episode = async ({ question, tools, locale, now, zone, run, call, signal, fired, first, help, history, summary, measure }) => {
     const steps = [];
+    const inputOf = () => ({ question, tools, steps: steps.map((s) => ({ call: s.call, result: s.result })), now, zone, locale, ...(fired && { fired }), ...(first && { first: true }), ...(help && { help }),
+      ...(first && history?.length && { history }), ...(first && summary && { summary }) });
     for (;;) {
       if (signal?.aborted) throw cancelled();
-      const out = await run('agent.tools', { question, tools, steps: steps.map((s) => ({ call: s.call, result: s.result })), now, zone, locale, ...(fired && { fired }), ...(first && { first: true }), ...(help && { help }), ...(first && history?.length && { history }) });
+      // Results that would overflow the window: those the model has used become digests, the latest never.
+      if (measure && steps.length > 1) {
+        const fit = await measure('agent.tools', inputOf());
+        if (fit && fit.used + fit.reserve > fit.window) for (const s of steps.slice(0, -1)) if (!s.digested) Object.assign(s, { result: digest(s.result), digested: true });
+      }
+      const out = await run('agent.tools', inputOf());
       if (signal?.aborted) throw cancelled();
       if (out?.answer) return { answer: out.answer, steps };
       if (!isObj(out?.call)) throw R().error('check');
@@ -368,6 +395,35 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       });
       try { mine.postMessage({ id, ...m }); } catch { waits.delete(id); reject(R().error('connection-lost')); }
     });
+
+    // ---- the context window ---------------------------------------------------------------------------------------------
+    // measure(task, input) → { used, window, reserve, exact } for the request a run would send (the broker's count), or null.
+    // env.counts: the broker answers count (background/background.js); without it nothing is measured.
+    const measure = async (task, input) => {
+      if (env.counts !== true) return null;
+      try { const a = await broker({ op: 'count', feature: FEATURE, task, input }); return Number.isSafeInteger(a.used) && Number.isSafeInteger(a.window) ? { used: a.used, window: a.window, reserve: Number.isSafeInteger(a.reserve) ? a.reserve : 0, exact: a.exact === true } : null; }
+      catch { return null; }
+    };
+    // The chat's summary of its older turns (chat.compact) and the turns it covers; New chat (a question with no history)
+    // clears it. A compaction still running when the next question comes gives way to its fallback, so asking never waits.
+    const CHAT = { summary: '', covered: new Set(), gen: 0, pending: null };
+    const keyOf = (h) => `${h.question.trim()}\u0000${h.answer.trim().slice(0, 200)}`;
+    const compact = async ({ open, turn, locale, tools, zone }) => {
+      const turns = [...open, turn];
+      if (turns.length <= COMPACT.keep) return;
+      let need = turns.length > AT().HISTORY.turns;
+      if (!need) {
+        const fit = await measure('agent.tools', { question: turn.question, tools, steps: [], now: env.now(), zone, locale, first: true, history: turns, ...(CHAT.summary && { summary: CHAT.summary }) });
+        need = !!fit && fit.used + fit.reserve > COMPACT.share * fit.window;
+      }
+      if (!need) return;
+      const older = turns.slice(0, -COMPACT.keep), gen = ++CHAT.gen;
+      const input = { turns: older.slice(-CC().LIMIT.turns), ...(CHAT.summary && { summary: CHAT.summary }), locale };
+      const apply = (out) => { if (gen !== CHAT.gen || !out?.text) return; CHAT.summary = out.text; for (const h of older) CHAT.covered.add(keyOf(h)); CHAT.pending = null; };
+      const fallback = () => { const inp = CC().task.input(input); if (inp) apply(CC().fallback(inp)); };
+      CHAT.pending = { now: () => { fallback(); CHAT.gen++; CHAT.pending = null; } };
+      try { apply((await broker({ op: 'run', feature: FEATURE, task: 'chat.compact', input })).output); } catch { fallback(); }
+    };
 
     // Ask's tool calls, through Agents' one call path, as an app of Glaze's own that Ask's switch has granted every group.
     const live = async () => SET().allowed(SET().clean(await env.settings()), FEATURE) && (await env.enabled()) === true
@@ -489,6 +545,9 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         || (m.history !== undefined && !(Array.isArray(m.history) && m.history.length <= LIMIT.turns && m.history.every(turn)))
         || (m.site !== undefined && !SITES.includes(m.site)) || (m.text !== undefined && typeof m.text !== 'string') || (m.fired !== undefined && typeof m.fired !== 'string')) return fail('request');
       const history = (m.history || []).filter((h) => h.question.trim() && h.answer.trim());
+      if (!history.length) { CHAT.summary = ''; CHAT.covered.clear(); CHAT.gen++; CHAT.pending = null; } else CHAT.pending?.now();
+      // The turns the summary doesn't cover yet, verbatim.
+      const open = history.filter((h) => !CHAT.covered.has(keyOf(h)));
       const question = m.question.trim(), attempt = (m.attempt || '').trim();
       if (question.length > LIMIT.question || attempt.length > LIMIT.attempt) return fail('size');
       if (current) return fail('busy');
@@ -500,6 +559,9 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       let level = 1;
       const run = async (task, input) => {
         if (level >= 3 && (await env.level?.().catch(() => 1) ?? 1) < 3) throw R().error('changed');
+        // { id, type: 'context', task, used, window, reserve, exact }: the request about to go, against the model's window.
+        const fit = await measure(task, input);
+        if (fit && !signal.aborted) post({ id, type: 'context', task, ...fit });
         return (await broker({ op: 'run', feature: FEATURE, task, input }, signal, keep)).output;
       };
       try {
@@ -525,10 +587,14 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
             if (seen?.declined) return post({ id, type: 'end', task: r.task, declined: true });
             if (seen) material = seen.steps.map((st) => AT().readable(st.result, zone) || '').join('\n').slice(0, LIMIT.material);
           }
-          const output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...(history.length && { history }), ...(material && { material }) });
-          return post({ id, type: 'end', task: r.task, output });
+          // Level 3: the summary as the conversation's first turn, then the turns it doesn't cover (a cloud model reads them).
+          const past = level >= 3 ? [...(CHAT.summary ? [{ question: 'Earlier in this chat', answer: CHAT.summary }] : []), ...open].slice(-LIMIT.turns) : history;
+          const output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...(past.length && { history: past }), ...(material && { material }) });
+          post({ id, type: 'end', task: r.task, output });
+          if (level >= 3 && isObj(output)) void compact({ open, turn: { question, answer: [output.reply, output.followUp].filter((x) => typeof x === 'string' && x).join('\n\n') }, locale, tools: ['accounts_list'], zone }).catch(() => {});
+          return;
         }
-        const res = await episode({ question, tools: r.tools, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal, ...(level >= 3 && { first: true, ...(history.length && { history }) }),
+        const res = await episode({ question, tools: r.tools, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal, ...(level >= 3 && { first: true, ...(open.length && { history: open }), ...(CHAT.summary && { summary: CHAT.summary }), measure }),
           ...(record && { fired: { what: record.what, ...(record.watch && { watch: record.watch }), say: question, at: record.at, ...(record.fact && { fact: record.fact }) } }) });
         if (res.declined) return post({ id, type: 'end', task: r.task, declined: true });
         // The study rule on this path too: an answer about records never gives the answer to work.
@@ -542,6 +608,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         if (signal.aborted) throw cancelled();
         for (const a of current.actions) { const { action, ...rest } = a; post({ id, type: 'action', action: { kind: action, ...rest } }); }
         post({ id, type: 'end', task: r.task, answer: { text: res.answer.text } });
+        if (level >= 3) void compact({ open, turn: { question, answer: res.answer.text }, locale, tools: r.tools, zone }).catch(() => {});
       } catch (e) {
         fail(signal.aborted ? 'cancelled' : R().code(e));
       } finally { if (current?.control === control) current = null; }
