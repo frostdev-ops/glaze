@@ -276,3 +276,27 @@ test('a newer list withdrawing a pending version frees its partially downloaded 
   assert.equal(tags(t.fs).length, 1, 'the obsolete partial version is deleted');
   assert.equal((await t.store.status('rime-q4')).state, 'ready');
 });
+
+test('an overlapping update cannot overwrite a trial or delete its rollback version', async () => {
+  let entered, release;
+  const downloading = new Promise((r) => { entered = r; });
+  const gate = new Promise((r) => { release = r; });
+  const t = setup({ onChunk: async (url, n) => { if (url === broken.url && n === 0) { entered(); await gate; } } });
+  await ready(t);
+  const edit = t.store.edit;
+  let edits = 0, first;
+  t.store.edit = async (fn) => {
+    // Let the first swap finish after the second request has inspected the old pin, before its begin edit acquires the lock.
+    if (++edits === 3) { release(); await first.done; }
+    return edit(fn);
+  };
+  first = update(t, sign(listOf(3, [broken])));
+  await downloading;
+  const second = update(t, sign(listOf(3, [broken])));
+  assert.equal((await first.done).result.state, 'swapped');
+  await second.done;
+  const r = t.run();
+  assert.equal((await r.done).type, 'done', 'the failed trial can still roll back');
+  assert.equal(t.text(r.id), 'answer from OLD!');
+  assert.equal((await t.store.catalog()).entries.get('rime-q4').total, old.total);
+});
