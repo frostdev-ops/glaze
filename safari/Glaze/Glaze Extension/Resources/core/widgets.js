@@ -106,11 +106,11 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     const start = { cdash: tiles.map((x) => ({ id: x.id, on: x.on && !x.float, size: x.size })), courses: tiles.map((x) => ({ id: x.id, on: x.on, size: 's' })), dash: TILES.map((id) => ({ id, on: starts.includes(id) || id === 'todo' })) };
     const boards = Object.fromEntries(BOARDS.map((b) => {
       const list = Array.isArray(raw?.boards?.[b]) ? raw.boards[b] : start[b];
-      const courses = [];
+      const courses = [], counts = new Map();
       for (const x of list) {
         const c = course(x?.id);
-        if (!c || c.canvas !== (b === 'cdash') || courses.includes(x.id) || courses.length >= COURSE_TOTAL) continue;
-        courses.push(x.id);
+        if (!c || c.canvas !== (b === 'cdash') || courses.includes(x.id) || courses.length >= COURSE_TOTAL || (c.canvas && (counts.get(c.origin) || 0) >= COURSE_MAX)) continue;
+        courses.push(x.id); counts.set(c.origin, (counts.get(c.origin) || 0) + 1);
       }
       const empty = Array.isArray(raw?.boards?.[b]) && !raw.boards[b].length;
       return [b, each(list, [...ids, ...courses], (x) => btile(x, more, empty ? [] : starts))];
@@ -411,7 +411,8 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
         if (course(o.id).canvas ? o.s !== 'cdash' : !['courses', 'dash'].includes(o.s)) continue;
         const rows = l.boards[o.s];
         if (o.remove === true) { l = { ...l, boards: { ...l.boards, [o.s]: rows.filter((x) => x.id !== o.id) } }; continue; }
-        if (!rows.some((x) => x.id === o.id) && o.set && rows.filter((x) => course(x.id)).length < COURSE_TOTAL)
+        if (!rows.some((x) => x.id === o.id) && o.set && rows.filter((x) => course(x.id)).length < COURSE_TOTAL
+          && (!course(o.id).canvas || rows.filter((x) => course(x.id)?.origin === course(o.id).origin).length < COURSE_MAX))
           l = { ...l, boards: { ...l.boards, [o.s]: [...rows, btile({ id: o.id, ...patch }, more)] } };
       }
       if (o.set) l = bset(l, o.s, o.id, patch, more);
