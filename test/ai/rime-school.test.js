@@ -627,3 +627,13 @@ test('Ultra discussion privacy also covers names and peer blockquotes embedded i
   assert.match(r.mine[0].text, /I study nursing/);
   assert.doesNotMatch(JSON.stringify(r), /CLASSMATE-PRIVATE-WORDS|More quoted words|Classmate One|Student Self|Instructor Example/);
 });
+
+test('Ultra discussions only return and count messages confirmed Published', async () => {
+  const messages = structuredClone(PROBED.messages);
+  delete messages.results[0].status;
+  delete messages.results[1].status;
+  const tab = probedTab({ routes: { '/learn/api/public/v1/courses/_101_1/discussions/_911_1/messages': messages } });
+  const r = await tool('discussion_read').run({ course: '_101_1', id: '_911_1' }, ctxFor(UL, tabsOf([tab])));
+  assert.deepEqual(r.mine, []);
+  assert.equal(r.others, 1);
+});
