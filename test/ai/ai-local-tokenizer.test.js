@@ -282,3 +282,21 @@ test('fromHF refuses truncation and padding, which it would not apply', () => {
   assert.throws(() => K.fromHF({ ...hf, truncation: { max_length: 8, strategy: 'LongestFirst' } }), /truncation/);
   assert.throws(() => K.fromHF({ ...hf, padding: { strategy: 'BatchLongest', pad_id: 0 } }), /padding/);
 });
+
+// A Glaze-tuned LFM3 GGUF names its reserved rows after Glaze's markers (lfm-tune train/gguf_check.py), so they load as the
+// model's own added tokens: page text that spells one must stay text even where the model's specials are read from it.
+test('Glaze\'s marker names in text never become their ids, even when the model\'s rows carry those names', () => {
+  const v = neutral({ added: [...ADDED, ...K.GLAZE_TOKENS.map((name) => [name, K.TYPES.control])] });
+  const tk = K.load(v);
+  for (const name of K.GLAZE_TOKENS) {
+    const marker = tk.id(name), text = `hello${name}world`;
+    assert.notEqual(marker, undefined, name);
+    const ids = tk.encode(text, { specials: true });
+    assert.ok(!ids.includes(marker), name);
+    assert.equal(tk.decode(ids), text, name);
+    assert.deepEqual([...ids], [...tk.encode(text)], name);
+    assert.equal(tk.count(text, { specials: true }), ids.length, name);
+    assert.deepEqual([...tk.encodeWith([{ special: name }])], [marker], name);
+  }
+  assert.deepEqual([...tk.encode('<|im_start|>', { specials: true })], [tk.id('<|im_start|>')], 'model specials still match');
+});

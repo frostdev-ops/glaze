@@ -81,9 +81,12 @@ const MODELS = [
   { id: 'glaze-q8', name: 'Glaze Q8', size: 1800000000, quant: 'Q8_0', tier: 2, license: 'lfm1.0' },
   { id: 'lfm3-q4', name: 'LFM3 Q4', size: 1100000000, quant: 'Q4_K_M', tier: 3, license: 'lfm1.0', stock: true },
 ];
+// The think machinery runs on a stub writer.review the table gives a budget: LOCAL.THINK's own thinker, agent.tools, has a
+// layout of its own that format() refuses. setup({ think: null }) runs LOCAL.THINK as it ships.
+const MACHINERY = { ...LOCAL.THINK, 'writer.review': 256 };
 const unref = (f, ms) => { const t = setTimeout(f, ms); t.unref?.(); return t; };
 // ms: what the host's clock moves each time it is read, so each decode takes ms: 10 ms reads as 100 tokens a second.
-const setup = ({ here = { 'glaze-q4': 'ready', 'glaze-q8': 'ready', 'lfm3-q4': 'ready' }, rates, reply = '{"text":"hello there"}', closes, gate, grammar = G, ms = 10, ladder = null, context } = {}) => {
+const setup = ({ here = { 'glaze-q4': 'ready', 'glaze-q8': 'ready', 'lfm3-q4': 'ready' }, rates, reply = '{"text":"hello there"}', closes, gate, grammar = G, ms = 10, ladder = null, context, think = MACHINERY } = {}) => {
   const eng = engine({ reply, closes, gate, context }), posted = [], runs = [], saved = [];
   let clock = 0;
   const st = {
@@ -106,7 +109,7 @@ const setup = ({ here = { 'glaze-q4': 'ready', 'glaze-q8': 'ready', 'lfm3-q4': '
   const stored = rates ? { aiLocalRates: structuredClone(rates) } : {};
   const session = { get: async (keys) => Object.fromEntries([keys].flat().map((k) => [k, stored[k]])),
     set: async (o) => { Object.assign(stored, structuredClone(o)); saved.push(structuredClone(o)); } };
-  const env = { store: st, link, gpu: () => ({}), session };
+  const env = { store: st, link, gpu: () => ({}), session, ...(think && { think }) };
   LOCAL._env(env);
   return { eng, posted, runs, saved, env };
 };
@@ -126,7 +129,7 @@ test('think mode: the prompt ends <think>\\n, the model reasons until its own </
   const r = await P.run('local', request(REVIEW, { text: 'the the cat' }), LOCAL.config({}), { onDelta: (d) => deltas.push(d) });
   assert.deepEqual(r.json, { text: 'hello there' });
   assert.ok(fed(s).endsWith('<|im_start|>assistant\n<think>\n'), fed(s).slice(-60));
-  assert.deepEqual(s.runs[0].think, { budget: LOCAL.THINK['writer.review'], close: [{ text: '\n' }, { special: '</think>' }], after: [] });
+  assert.deepEqual(s.runs[0].think, { budget: MACHINERY['writer.review'], close: [{ text: '\n' }, { special: '</think>' }], after: [] });
   assert.equal(s.runs[0].window, LOCAL.TUNED);
   const think = s.eng.log.decodes.filter((d) => d.phase === 'think');
   assert.equal(think.length, 13, 'twelve reasoning tokens and the model\'s </think>');
@@ -158,7 +161,7 @@ test('at the budget the host writes \\n</think> itself and the model answers aft
 
 // D4 (glaze-plans/lfm-tune/reports/d4-r1.md): writer.review asks 4,096 tokens of answer, the tuned model's whole window, so
 // the host cut its reasoning to nothing. FORMAT-v2: the reasoning has its budget beside the answer, all in the window.
-test('writer.review thinks at its budget on a Glaze-tuned model, and the prompt, reasoning and answer never pass the window', async () => {
+test('a request asking the whole window (writer.review\'s 4,096) thinks at its budget on a Glaze-tuned model, and the prompt, reasoning and answer never pass the window', async () => {
   const RV = require('../../extension/ai/tasks/writer-review.js'), X = require('../../extension/ai/text.js');
   const real = RV.task.build(RV.task.input({ text: 'The the cat sat on the mat. It were happy.', context: {} }), { text: X, caps: LOCAL.caps({}) });
   assert.equal(real.maxTokens, 4096);
@@ -338,23 +341,33 @@ test('the policy: a task the table names thinks on a fast enough tier; other tas
   assert.equal(mode(s), 'think');
 });
 
-test('writer.feedback thinks per call: decide, explain and summary; scan and a request without a call answer directly; other tasks as before', async () => {
-  const FEEDBACK = task('writer.feedback');
-  const s = setup({ rates: FAST });
+test('think per call, as D4 measured p3dpo: agent.tools thinks; writer.review, study.help and each writer.feedback call answer directly', async () => {
+  const FEEDBACK = task('writer.feedback'), HELP = task('study.help');
+  const s = setup({ rates: FAST, think: null });
   const asked = async (t, call) => {
     const req = request(t, { text: 'x' });
     await P.run('local', { ...req, task: { ...req.task, ...(call && { call }) } }, LOCAL.config({}));
     return s.runs.at(-1).think ? 'think' : 'direct';
   };
-  for (const call of ['decide', 'explain', 'summary']) {
-    assert.equal(await asked(FEEDBACK, call), 'think', call);
-    assert.equal(s.runs.at(-1).think.budget, 256, call);
-  }
-  for (const call of ['scan', undefined, 'constructor']) assert.equal(await asked(FEEDBACK, call), 'direct', String(call));
-  assert.equal(await asked(REVIEW), 'think');
-  assert.equal(await asked(REVIEW, 'decide'), 'think', 'a task without calls keeps its own budget');
-  assert.equal(await asked(REQS), 'direct');
-  assert.deepEqual(LOCAL.THINK['writer.feedback'], { decide: 256, explain: 256, summary: 256, scan: 0 });
+  for (const call of ['decide', 'explain', 'summary', 'scan', undefined, 'constructor']) assert.equal(await asked(FEEDBACK, call), 'direct', String(call));
+  for (const t of [REVIEW, HELP, REQS]) assert.equal(await asked(t), 'direct', t.id);
+  // agent.tools runs its own layout (format() refuses it), so its row is read as the D4 harness reads it.
+  assert.equal(LOCAL.thinkFor({ id: 'agent.tools' }), 256);
+  assert.equal(LOCAL.thinkFor({ id: 'agent.tools', call: 'decide' }), 256, 'a task without calls keeps its own budget');
+  assert.deepEqual(LOCAL.THINK['writer.feedback'], { decide: 0, explain: 0, summary: 0, scan: 0 });
+  assert.deepEqual(Object.entries(LOCAL.THINK).filter(([, b]) => (typeof b === 'number' ? b : Math.max(...Object.values(b))) > 0).map(([t]) => t), ['agent.tools']);
+});
+
+test('a per-call table thinks per call: a call with a budget thinks, another call and a request without one answer directly', async () => {
+  const FEEDBACK = task('writer.feedback');
+  const s = setup({ rates: FAST, think: { ...LOCAL.THINK, 'writer.feedback': { decide: 256, explain: 0, summary: 0, scan: 0 } } });
+  const asked = async (call) => {
+    const req = request(FEEDBACK, { text: 'x' });
+    await P.run('local', { ...req, task: { ...req.task, ...(call && { call }) } }, LOCAL.config({}));
+    return s.runs.at(-1).think ? s.runs.at(-1).think.budget : 0;
+  };
+  assert.equal(await asked('decide'), 256);
+  for (const call of ['explain', 'scan', undefined, 'constructor']) assert.equal(await asked(call), 0, String(call));
 });
 
 test('a stock model never thinks: its own template\'s <think></think>, however fast', async () => {

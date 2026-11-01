@@ -68,9 +68,10 @@ test('think mode as trained: the host\'s force-close is FORMAT-v2\'s `\\n</think
   assert.deepEqual([...tok.encodeWith(think.close)], THINK.close);
   assert.deepEqual(THINK.close, [...tok.encode('\n'), tok.id('</think>')]);
   assert.deepEqual(think.after, [], 'the answer right after </think>');
-  // A task's budget, or each of its calls' (writer.feedback's): only tasks training thought on think, at its budget.
+  // A task's budget, or each of its calls' (writer.feedback's): only tasks training thought may think, at its budget; D4
+  // picks which of them do.
   const budgets = (t) => (typeof LOCAL.THINK[t] === 'number' ? [LOCAL.THINK[t]] : Object.values(LOCAL.THINK[t]));
-  assert.deepEqual(Object.keys(LOCAL.THINK).filter((t) => budgets(t).some((b) => b > 0)).sort(), [...THINK.tasks].sort());
+  for (const t of Object.keys(LOCAL.THINK).filter((x) => budgets(x).some((b) => b > 0))) assert.ok(THINK.tasks.includes(t), `${t} thinks untrained`);
   for (const t of THINK.tasks) assert.ok(budgets(t).every((b) => b === 0 || b === THINK.budget), t);
   assert.deepEqual(Object.keys(LOCAL.THINK).sort(), [...F.TASKS].sort(), 'one row for each task');
   assert.throws(() => F.format(requestOf(c), { dialect: 'chatml', think: true }), /think/, 'a stock model never thinks');
