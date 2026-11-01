@@ -2555,9 +2555,10 @@ chrome.runtime.onConnect.addListener((p) => {
 // so its requests stay what it was gated on); every other model gets Rime's own tools.
 const rimeLevel = async () => {
   const sel = GZ_AI_SETTINGS.resolve(GZ_AI_SETTINGS.clean((await chrome.storage.local.get('ai')).ai), 'ask');
-  if (sel?.use !== 'local') return 3;
   const all = (await aiEnv().vault.get('connections')) || {};
-  const { provider: _p, name: _n, ...raw } = all.local || {};
+  const rec = all[sel?.use] || (sel?.use === 'local' ? { provider: 'local' } : null);
+  if (rec?.provider !== 'local' || !GZ_AI_SETTINGS.PROVIDERS.includes('local')) return 3;
+  const { provider: _p, name: _n, ...raw } = rec;
   const cfg = GZ_AI_LOCAL.config(raw);
   return cfg ? GZ_AI_LOCAL.toolsLevel(cfg) : 1;
 };
