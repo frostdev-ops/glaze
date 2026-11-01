@@ -379,3 +379,11 @@ test('port: a help turn that fails its check still lets study help answer, witho
   assert.equal(runs[1].input.material, undefined);
   assert.deepEqual(got.filter((m) => ['end', 'error'].includes(m.type)).map((m) => [m.type, m.output?.reply]), [['end', 'Start with what the lab asks you to measure.']]);
 });
+
+test('"where is" opens a place only for the student\'s own things; a general question stays study help', () => {
+  for (const q of ['Where is the Golgi apparatus?', 'Where are mitochondria found?']) assert.equal(K.route(q, { level: 3 }).task, 'study.help', q);
+  for (const q of ['Where are my grades?', 'Where is my BIO 1100 syllabus?', 'Where can I find the assignments?']) {
+    const r = K.route(q, { level: 3 });
+    assert.ok(r.task === 'agent.tools' && r.tools.includes('places_list'), `${q}: ${JSON.stringify(r)}`);
+  }
+});
