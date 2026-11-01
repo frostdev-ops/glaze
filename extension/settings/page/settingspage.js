@@ -15,6 +15,7 @@ var GZ_SETTINGS_PAGE = globalThis.GZ_SETTINGS_PAGE || (() => {
   const visits = [];
   // The entries (by gzAt) added for a document opened from the list: the list is the entry under each.
   const overList = new Set();
+  let listBack = false; // one Close traversal until its asynchronous popstate
   // The page under it, children of <body> and <html> alike and what comes while it's open: out of reach (Tab, a screen
   // reader's reading, the pointer) and unseen. An overlay of the page's, Glaze's own too (the pet's world, the sidebar's
   // buttons, floating tiles), drew over Settings from above its z-index and took its clicks. Glaze's bar stays in use.
@@ -87,8 +88,9 @@ var GZ_SETTINGS_PAGE = globalThis.GZ_SETTINGS_PAGE || (() => {
   };
   // Back over the document's entry when the list is the one under it; else the list takes its entry's place.
   const toList = () => {
+    if (listBack) return;
     const ours = back && history.state?.gzPage === 'papers';
-    if (ours && overList.has(history.state.gzAt)) { history.back(); return; }
+    if (ours && overList.has(history.state.gzAt)) { listBack = true; history.back(); return; }
     if (ours) try { history.replaceState(mark(depth(), 'papers'), ''); } catch { /* the entry stays as it was */ }
     go();
   };
@@ -115,6 +117,7 @@ var GZ_SETTINGS_PAGE = globalThis.GZ_SETTINGS_PAGE || (() => {
   // Back leaves it, as it would leave a page; within Documents it goes where the entry says (the list, a document), and
   // between Glaze's pages to the one it was.
   const onPop = () => {
+    listBack = false;
     if (!host) return;
     const s = history.state;
     if (!s?.gzSettings) { back = false; close(); return; }
@@ -127,7 +130,7 @@ var GZ_SETTINGS_PAGE = globalThis.GZ_SETTINGS_PAGE || (() => {
     // Focus in Settings (or nowhere) goes back to what opened it; a place picked in the bar keeps it.
     const from = [host, document.body, null].includes(document.activeElement) ? opener : null;
     port?.close();
-    host.remove(); host = root = frame = opener = port = null; shown = spare = ''; turn++; going = resent = false;
+    host.remove(); host = root = frame = opener = port = null; shown = spare = ''; turn++; going = resent = listBack = false;
     watch?.disconnect();
     sizes?.disconnect();
     for (const e of stilled) e.inert = false;
