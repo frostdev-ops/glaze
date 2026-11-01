@@ -261,3 +261,18 @@ test('Delete before list acceptance cannot be undone by the cancelled update', a
   assert.equal(st?.keep?.['rime-q4'], undefined);
   assert.ok(!t.fs.root.kids.get('glaze-models').kids.has('rime-q4'));
 });
+
+test('a newer list withdrawing a pending version frees its partially downloaded files', async () => {
+  const t = setup();
+  await ready(t);
+  await t.store.edit(() => U.begin(U.accept(null, listOf(3, [fresh]), { glaze: '4.0.1', ready: [old] }), fresh));
+  const ctl = new AbortController();
+  await assert.rejects(t.store.download('rime-q4', { total: fresh.total, signal: ctl.signal,
+    onProgress: (p) => { if (p > 0) ctl.abort(); } }), (e) => e.reason === 'aborted');
+  await settle();
+  assert.equal((await t.store.status('rime-q4', { total: fresh.total })).state, 'partial');
+  assert.equal((await update(t, sign(listOf(4, [{ ...fresh, minGlaze: '99.0.0' }]))).done).result.state, 'current');
+  assert.deepEqual((await t.store.catalog()).state.keep, {}, 'the obsolete download is no longer pending');
+  assert.equal(tags(t.fs).length, 1, 'the obsolete partial version is deleted');
+  assert.equal((await t.store.status('rime-q4')).state, 'ready');
+});
