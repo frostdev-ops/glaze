@@ -46,3 +46,13 @@ test('Dashboard bar buttons keep their hover and pressed borders over their surf
   const main = chain(...PAGE, 'section#gz-dash', 'div.gz-dash-bar', 'button.gz-w-btn.gz-w-main');
   assert.equal(winner(apps, main, 'background(?:-color)?')[0], 'var(--gz-accent)');
 });
+
+test('compact Activity panels keep Show more beside their items at desktop viewport widths', () => {
+  // Ultra's stream chunk removes its 12.5rem padding inset in .stream-panel.force-small-with-dashboard even at >=40em.
+  // The backer replaces that padding with a margin, so it must honor the same compact layout.
+  for (const compact of [false, true]) {
+    const button = chain(...PAGE, `div.stream-panel${compact ? '.force-small-with-dashboard' : ''}`, 'div.base-recent-activity',
+      'div#activity-stream.activity-stream', 'div.activity-group', 'button.js-show-more.expand.button.button--text');
+    assert.equal(winner(theme, button, 'margin-inline-start')?.[0] || '0', compact ? '0' : '12.5rem');
+  }
+});
