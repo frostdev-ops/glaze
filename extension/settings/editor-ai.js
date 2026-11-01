@@ -738,9 +738,13 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     const localStatus = async () => {
       if (!offers() || !await localConn()) return;
       if (fetching && ours?.state === 'downloading') return;
-      const [r, u] = await Promise.all([send({ op: 'test', provider: OWN }), send({ op: 'updates', provider: OWN }).catch(() => null)]);
-      updates = u?.ok ? { version: typeof u.version === 'string' ? u.version : null, ...(u.update && { update: { version: u.update.version || null, progress: progress({ loaded: u.update.progress }) ?? 0 } }) } : null;
+      const [r] = await Promise.all([send({ op: 'test', provider: OWN }), versions()]);
       localResult(r);
+    };
+    // The version in use and an update's progress (the worker's ai/local/updates.js about).
+    const versions = async () => {
+      const u = await send({ op: 'updates', provider: OWN }).catch(() => null);
+      updates = u?.ok ? { version: typeof u.version === 'string' ? u.version : null, ...(u.update && { update: { version: u.update.version || null, progress: progress({ loaded: u.update.progress }) ?? 0 } }) } : null;
     };
     const fetchModel = (e) => {
       if (!e?.isTrusted || fetching || !offers() || ours?.state !== 'download') return;
@@ -750,7 +754,9 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       render();
       send({ op: 'prepare', provider: OWN }).then(async (r) => {
         fetching = false;
-        if (r.ok) localResult(r); else await localStatus();
+        if (!r.ok) return localStatus();
+        if (r.state === 'ready') await versions();
+        localResult(r);
       }, () => { fetching = false; });
     };
     const deleteModel = (e) => {
