@@ -393,6 +393,14 @@ test('run_js: setup faults are contained, and context disposal faults still rele
   }
 });
 
+test('run_js: an exhausted heap does not misclassify later user exceptions as memory failures', async () => {
+  const r = await run('const a = []; while (true) a.push("x".repeat(1e6));');
+  assert.equal(r.error, 'The code ran out of memory.');
+  assert.equal((await run('throw null')).error, 'Thrown: null');
+  assert.equal((await run('throw {}')).error, 'Thrown: {}');
+  assert.equal((await run('6 * 7')).value, 42);
+});
+
 test('run_js: nothing outside ECMAScript reaches the code, and each run starts from a fresh context', async () => {
   const names = ['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'importScripts', 'setTimeout', 'setInterval', 'indexedDB', 'localStorage', 'caches', 'Worker', 'postMessage',
     'navigator', 'location', 'document', 'window', 'self', 'chrome', 'browser', 'require', 'process', 'std', 'os', 'WebAssembly'];
