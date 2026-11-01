@@ -228,7 +228,7 @@ of them is the same, byte for byte. Every parameter is a string or an integer (t
 | `announcements_list` | read | `course?`, `account?` | Canvas: the to-do list's announcements (storage.local todoCache, its range: `covers`), every course or one; Ultra: one course's, as Ultra search lists them (needs `course`). → `{ items: [{ id, title, … }], more? }`. |
 | `announcement_read` | read | `course`, `id`, `page?` | One, as Glaze's pop-up reads it (courses/announce.js; Canvas's topic, Ultra's public announcement), never the read mark: `{ title, author?, at, text, page, pages, files? }`. |
 | `content_list` | read | `course` | Canvas: its modules' items (no headers, unpublished or locked); Ultra: what the student may see now (Ultra search's documents, folders, files, links). `{ items: [{ id, title, kind, module? }] }`. |
-| `content_read` | read | `course`, `id`, `page?` | An Ultra document's text, paged; Canvas pages and files are refused until a reader exists. |
+| `content_read` | read | `course`, `id`, `page?` | An Ultra document's text, paged. Canvas pages and files are refused: unverified, since no Canvas page, syllabus or file response has been captured yet (the local Canvas is down), and nothing is built against a guess. Canvas syllabus text is unverified the same way; `syllabus_read` gives only what an import kept. |
 | `syllabus_read` | read | `course` | What Glaze kept from a syllabus import (planner/syllabus.js): instructor, hours, meetings, dates, scale, weights; else how to import. |
 | `discussions_list`, `discussion_read` | read | `course`; `id`, `page?` | Canvas's topics (the list palette search asks for) and one prompt (the topic read); Ultra's published, available ones and a prompt (Ultra search). |
 
