@@ -951,6 +951,10 @@ you import) are bundled. It makes requests in these cases:
   nothing about you, your courses or your work: only the file's address and the part of it being fetched, with the
   connection metadata, including your IP address, any download has. Each file is checked against its SHA-256 and kept in
   Glaze's storage on this device until you click Delete. Rime runs on this computer; what a feature gives it stays there.
+  While a Rime model is downloaded, Glaze checks `huggingface.co` about once a day, and a few minutes after the browser
+  starts, for Frostdev's signed list of Rime models, and downloads a newer version of your model from there and its CDN
+  in the background, checked the same way, before it replaces the old one. The check is the same request for everyone and
+  sends nothing about you; with Data Saver on it waits. **Update automatically** (Settings → AI → Rime, Advanced) turns it off.
 - **Agent access** (Settings → AI → Agents, off by default; Canvas and Blackboard Ultra). For an app you allowed, in the
   account's school tab open in this browser, signed in as you: your profile, to check whose tab it is; the planner and
   Insights reads Better To Do and Insights make; one assignment with its rubric (on Canvas

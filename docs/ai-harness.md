@@ -623,6 +623,64 @@ warm: up to three per loaded model, as snapshots. Sampling: the request's temper
 (temperature 0.1, top-k 50); output up to the request's `maxTokens` (1,024 by default) and refused before reading when the
 prompt and output exceed the window (`request-rejected`, `context`).
 
+### Model updates
+
+Glaze ships before Rime is final and takes newer versions without the student doing anything (`ai/local/updates.js`).
+Frostdev publishes a signed list beside the weights, `https://huggingface.co/frostdev-ops/Rime-1.7B-GGUF/resolve/main/glaze-models.json`:
+
+```json
+{ "list": { "v": 1, "serial": 2, "issued": "2026-11-20T09:00:00Z", "models": [
+    { "id": "rime-1.7b-q4_k_m", "name": "Rime 1.7B Q4_K_M", "repo": "frostdev-ops/Rime-1.7B-GGUF", "commit": "<40-hex>",
+      "file": "Rime-1.7B-Q4_K_M.gguf", "url": "https://huggingface.co/frostdev-ops/Rime-1.7B-GGUF/resolve/<commit>/Rime-1.7B-Q4_K_M.gguf",
+      "size": 1099627200, "chunk": 67108864, "sha256": ["<64-hex per 64 MB chunk>"], "total": "<64-hex>", "license": "lfm1.0",
+      "quant": "Q4_K_M", "tier": 1, "tools": 3, "minGlaze": "4.0.2", "version": "r6" } ] },
+  "sig": "<Ed25519 over utf8('glaze-models-1|' + canon(list)), base64url>" }
+```
+
+`canon` is JSON with keys sorted and no spaces. Glaze takes a list only if the signature verifies (WebCrypto Ed25519)
+against `updates.js` `KEY` (SHA-256 `070eb5374fb18fe2b5880643eb7d5c42bf517667c9d3b0c08447b338b2891e7c`), its serial is above
+the one held, and every entry is a models.json text entry with `tools`, `minGlaze` and `version`, ids and tiers once each;
+entries needing a newer Glaze or a tools level above `TOOLS` (3) are skipped. A newer version keeps its size's id (a new id
+may only add a tier models.json doesn't hold). models.json stays the starting list and the fallback; offline, or with
+Hugging Face down, everything runs on what's stored.
+
+State: `glaze-models/~updates.json` in OPFS beside the models (`store.js` `edit`, under the Web Lock `glaze-model-updates`):
+the accepted list's usable entries, `pins` (each downloaded id stays on its version until a swap), `keep` (versions kept
+beside it), `trial` and `failed`. `store.js` `compose` makes every context's catalog from models.json and that file; each
+version of an id is its own tag folder, so the old one stays while the new one downloads.
+
+Schedule and guards (`background/background.js`): the alarm `gz-models:daily` (every 1,440 minutes, made once), and
+`gz-models:start` 2 to 10 minutes after the browser starts (skipped when a check ran in the last 20 hours, unless a download
+waits to resume). A check does nothing, and asks nothing of the network, unless this browser holds a downloaded Rime model,
+`ai.updates` (Settings → AI → Rime, Advanced: **Update automatically**, on by default) is on, it isn't Safari, and Data Saver
+is off. It fetches the list without cookies or cache, verifies it, and when the model in use (Advanced's tier if
+downloaded, else the downloaded one) has a newer version, hands the list to the engine host (op `update`). The host verifies
+again, downloads the version beside the old one through the store (Range resume across restarts, per-chunk and whole-file
+SHA-256, the quota checked first: reason `quota` and the next check tries again), waiting before each chunk while a run or
+warm-up is in flight, then swaps at the next idle moment (after the runs queued before it) and lets the engine go. The old
+version stays until the new one has loaded and answered once, then goes. If the new one fails to load or run (`assets`,
+`engine`, or an engine error of its own), the old one comes back, the run goes again on it when nothing of its answer was
+sent, and that version isn't tried until a newer serial. A version whose chunk fails twice, or whose whole hash is wrong,
+is dropped the same way. The tools level follows the version in use (`levelOf` reads its entry). Settings asks `{ op:
+'updates', provider: 'local' }` → `{ auto, version?, update?: { version, progress } }`; progress events carry `part:
+'update'`. Delete removes every version and the state's pins and spares; the serial and failures stay.
+
+### Publishing a model
+
+Every publish happens only after the owner's go.
+
+1. Upload the GGUFs to `frostdev-ops/Rime-1.7B-GGUF` and note the commit.
+2. Build each size's entry: `node tools/vendor/model-manifest.js --repo frostdev-ops/Rime-1.7B-GGUF --commit <sha> --file
+   Rime-1.7B-Q4_K_M.gguf --tier 1 --tools 3 --version r6 --min-glaze 4.0.2 --out ~/glaze-models/entries.json` (once per
+   quant, into the same file; keep each size's id).
+3. Sign: `node tools/vendor/model-manifest.js --sign --entries ~/glaze-models/entries.json --key ~/.glaze-signing/models.key
+   --out ~/glaze-models/glaze-models.json`. The serial is one above the published list's (`--serial` to set it, `--offline`
+   without the fetch); it refuses a key other than `KEY`, a serial at or below the live one, and entries out of the schema.
+4. Upload `glaze-models.json` to the repo's `main`. Browsers with Rime take it within a day.
+
+The key pair was made with `--keygen ~/.glaze-signing/models.key` (mode 600, outside the repo); its private half is never
+printed, committed or logged.
+
 ### The engine, grammar and ladder the host uses
 
 `ai/local/engine.js` (`GZ_AI_ENGINE`), loaded in the host's Worker after `quant.js` and `reference.js`:
