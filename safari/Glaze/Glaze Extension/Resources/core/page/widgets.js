@@ -1577,7 +1577,9 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // frame Canvas's pages outside a course open in (the Dashboard over a course page), the page around has the floats.
   // With the sidebar, each in its one destination (navigation/sidebar.js resolve), and the dock's in the dock's order.
   const placement = () => (placedAt = side ? GZ_SIDEBAR.resolve(lay, side.rec(), { site: ctx.site, board, enabled: true, allowed, dockable }) : new Map());
-  const wanted = (hasGrid, floatsOnly = false) => (side ? (() => {
+  const wanted = (hasGrid, floatsOnly = false) => {
+    let courses = 0;
+    return (side ? (() => {
     const at = placement();
     return [
       ...(board && hasGrid ? lay.boards[board].filter((x) => at.get(x.id)?.where === 'board' && !(boardless() && dockable(x.id))) : []),
@@ -1591,7 +1593,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   ]).filter((x) => {
     if (floatsOnly && !x.float) return false;
     if (!x.on || !allowed(x.id)) return false;
-    if (W.course(x.id)) { loadCourses(); return !!globalThis.GZ_COURSE_CARDS?.shows(x.id); }
+    if (W.course(x.id)) { loadCourses(); return !!globalThis.GZ_COURSE_CARDS?.shows(x.id) && courses++ < W.COURSE_MAX; }
     if (WIDGETS[x.id] || added.has(x.id)) return true;
     if (MORE[x.id] && !(loadingMore.get(x.id) > Date.now())) {
       loadingMore.set(x.id, Infinity);
@@ -1599,6 +1601,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     }
     return false;
   });
+  };
   // What a tile from another file is given besides its body.
   const account = () => who().then(() => ({ ...me }));
   // surface(): where it shows now ('dock', 'float' or 'board'): no page, account or LMS data with it, so mods get it too.
