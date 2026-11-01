@@ -1645,6 +1645,18 @@ test('Reset layout preserves hidden course positions until ownership is confirme
   assert.deepEqual([on(p, 'courses', own).x, on(p, 'courses', own).y, on(p, 'courses', own).w], [null, null, undefined]);
 });
 
+test('shared Ultra boards keep all saved cards but draw at most 48 courses', async () => {
+  const courses = Array.from({ length: 80 }, (_, n) => ({ id: `_${500 + n}_1`, name: `Course ${n}`, term: '', slot: 1 }));
+  const board = [...OTHER.map((id) => ({ id: ckey(id), on: true })), ...courses.map((c, n) => ({ id: ckey(c.id), on: n >= 3 }))];
+  for (const at of ['courses', 'dash']) {
+    const p = asStudent(cardsPage({ at, courses, local: { widgetLayout: { todo: true, filled: ['dash'], boards: { [at]: board } } } }), Promise.resolve(members(courses)));
+    p.ui.sync(true); await settle();
+    const visible = courses.filter((c) => p.tile(ckey(c.id))).map((c) => c.id);
+    assert.deepEqual(visible, courses.slice(3, 3 + W.COURSE_MAX).map((c) => c.id), `${at}: only enabled owned courses use the visible room`);
+    assert.equal(lay(p).boards[at].filter((x) => W.course(x.id)).length, board.length, 'hidden cards remain saved');
+  }
+});
+
 test('Reset layout reaches every confirmed card on a shared board larger than one layout message', async () => {
   // Different students' saved course sets can overlap this student's larger membership list.
   const courses = Array.from({ length: 80 }, (_, n) => ({ id: `_${500 + n}_1`, name: `Course ${n}`, term: '', slot: 1 }));
