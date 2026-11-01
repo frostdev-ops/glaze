@@ -465,6 +465,7 @@ const STYLE_READS = [
   ['writer/page/writer.js', 'getComputedStyle(html)', 1], // The root's Look tokens, when a Writer box opens or <html>'s Look attributes change.
   ['courses/page/bbpreview.js', 'getComputedStyle(html)', 1], // The root's Look tokens, once as Glaze's viewer opens for a Blackboard preview.
   ['courses/page/canvasopen.js', 'getComputedStyle(html)', 1], // The root's Look tokens, once as Glaze's viewer opens for a Canvas file.
+  ['navigation/page/sticky-fold.js', 'getComputedStyle(parent)', 1], // A sticky band's parent's overflow, once per band and kept with its place until a resize.
   ['writer/writer-paginate.js', 'getComputedStyle(view.dom)', 1], // One editor root per batched layout pass: its fractional width gives the exact zoom without a descendant sweep.
   ['settings/editor.js', 'getComputedStyle(doc.documentElement)', 1], // One root direction read per category keypress, never on scroll or an LMS page.
   ['looks/scene-host.js', 'getComputedStyle(c)', 1], // only direct siblings of the course/routed shell, when deciding whether it covers visible content
