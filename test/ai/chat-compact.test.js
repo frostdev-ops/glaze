@@ -53,3 +53,11 @@ test('fallback: the older questions and the items their answers named, newest ke
   assert.ok(f.text.split('\n').length <= CC.LIMIT.lines && f.text.length <= CC.LIMIT.summary);
   assert.equal(CC.why(f, inputOf({ summary: '- Asked about grades in ENG1001.' })), '', 'the fallback passes the check itself');
 });
+
+test('fallback quotes remain valid when a listed title exceeds the quote limit', () => {
+  const title = 'A'.repeat(CC.LIMIT.quote + 100);
+  const inp = inputOf({ turns: [{ question: 'What is due?', answer: `- **${title}** (BIO): Monday, November 2, 11:59 PM` }] });
+  const fallback = CC.fallback(inp);
+  assert.equal(CC.why(fallback, inp), '');
+  assert.ok(fallback.quotes.every((q) => q.length <= CC.LIMIT.quote));
+});
