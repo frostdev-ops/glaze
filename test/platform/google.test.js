@@ -590,6 +590,32 @@ test('Safari: a token is held until a minute before it expires, and after Safari
   assert.equal(tokens().length, 4, 'Disconnect forgets the held token: nothing asked once disconnected');
 });
 
+test('Safari: a late token mint cannot put a refused token back over its replacement', async () => {
+  const h = handler(), local = { google: { email: 'student@icloud.com', sub: 'S1', flow: 'native', at: 1 } };
+  let minted = 0, release, entered;
+  const waiting = new Promise((ok) => { entered = ok; });
+  const gate = new Promise((ok) => { release = ok; });
+  const native = h.native;
+  h.native = async (m) => {
+    if (m.type !== 'google.token') return native(m);
+    const n = ++minted;
+    if (n === 2) { entered(); await gate; }
+    return { ok: true, token: n <= 2 ? 'refused' : 'replacement', expiresAt: h.clock + 3600e3 };
+  };
+  const w = nativeWorker(h, local);
+  const first = w.token(), late = w.token();
+  try {
+    assert.equal(await first, 'refused');
+    await waiting;
+    await w.drop('refused');
+    assert.equal(await w.token(), 'replacement');
+    release();
+    await late;
+    assert.equal(await w.token(), 'replacement', 'the late reply must not poison the token cache');
+    assert.equal(minted, 3, 'the replacement stays cached');
+  } finally { release(); await late; }
+});
+
 test('Safari: a grant committed before the worker lost its finish reply is recovered from the handler', async () => {
   for (const old of [null, { email: 'old@school.edu', sub: 'OLD', flow: 'native', at: 1 }]) {
     const h = handler(), local = old ? { google: old } : {};
