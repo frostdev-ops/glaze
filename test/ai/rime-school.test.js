@@ -94,12 +94,28 @@ test('content: Canvas\'s module items (no headers, unpublished or locked ones); 
   assert.match((await tool('content_read').run({ course: '_101_1', id: folder.id }, ctxFor(UL, ultra))).error, /holds no text/);
 });
 
-test('discussions: Canvas topics are listed but prompt reads fail closed without verified instructor authorship', async () => {
+test('discussions: Canvas lists and prompt reads fail closed without verified instructor authorship', async () => {
   const canvas = tabsOf([canvasTab()]);
-  assert.deepEqual((await tool('discussions_list').run({ course: '25' }, ctxFor(ACC, canvas))).items, [{ id: '81', title: 'Cell questions' }, { id: '82', title: 'Week 2 reflections' }]);
+  assert.match((await tool('discussions_list').run({ course: '25' }, ctxFor(ACC, canvas))).error, /authorship/);
   const r = await tool('discussion_read').run({ course: '25', id: '81' }, ctxFor(ACC, canvas));
   assert.equal(r.ok, false);
   assert.match(r.error, /authorship/);
+});
+
+test('Canvas discussion lists keep classmates\' titles inside the tab and return only verified staff topics', async () => {
+  const tab = canvasTab({ routes: {
+    '/api/v1/courses/25/enrollments': [{ user_id: 900, type: 'TeacherEnrollment' }, { user_id: 901, type: 'TaEnrollment' }],
+    '/api/v1/courses/25/discussion_topics': [
+      { id: 81, title: 'Teacher prompt', author: { id: 900 } },
+      { id: 82, title: 'TA prompt', user_id: 901 },
+      { id: 83, title: 'Kim Classmate: PRIVATE-TITLE-WORDS', author: { id: 77, display_name: 'Kim Classmate' } },
+      { id: 84, title: 'PRIVATE-UNKNOWN-AUTHOR' },
+    ],
+  } });
+  const r = await tool('discussions_list').run({ course: '25' }, ctxFor(ACC, tabsOf([tab])));
+  assert.deepEqual(r.items, [{ id: '81', title: 'Teacher prompt' }, { id: '82', title: 'TA prompt' }]);
+  assert.doesNotMatch(JSON.stringify(r), /Kim|Classmate|PRIVATE/);
+  assert.ok(tab.page.asked.every((req) => req.method === 'GET' && new URL(req.url).origin === C.CANVAS));
 });
 
 test('a Canvas peer-authored discussion cannot send the peer name or prompt to the worker', async () => {
