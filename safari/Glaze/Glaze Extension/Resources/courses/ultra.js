@@ -828,8 +828,15 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
       writing = setTimeout(() => { writing = 0; if (page.active()) pageSend({ type: 'glaze:ultraMine', op: 'invalidate' }); }, 300);
     };
     const changed = (e) => {
-      const el = e.target;
-      if (!page.active() || !native(el) || e.type === 'click' && !el.closest('button, [role="checkbox"], [aria-checked]')) return;
+      const el = e.target?.nodeType === 3 ? e.target.parentElement : e.target;
+      if (!page.active() || !native(el)) return;
+      if (e.type === 'click') {
+        const control = el.closest('button, [role="checkbox"], [role="switch"], [aria-checked]');
+        if (!control) return;
+        // Opening a folder or menu writes nothing. A check, toggle or submit can write even while opening something.
+        const opens = control.hasAttribute('aria-expanded') || /^(true|menu|listbox|tree|grid|dialog)$/.test(control.getAttribute('aria-haspopup'));
+        if (opens && !control.matches('[role="checkbox"], [role="switch"], [aria-checked], [aria-pressed], [type="submit"]')) return;
+      }
       writeWatch?.disconnect(); clearTimeout(writeCap);
       // Native writes may finish after the click. Ignore Glaze's own redraws and stop watching after this request window.
       writeWatch = new MutationObserver((rows) => {
