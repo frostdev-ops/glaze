@@ -18,6 +18,15 @@ const L = require('../../extension/ai/local/link.js');
 const FMT = require('../../extension/ai/local/format.js');
 const LOCAL = require('../../extension/ai/providers/local.js');
 
+test('the browser provider check uses a tokenizable miniature model vocabulary', () => {
+  const source = require('node:fs').readFileSync(require.resolve('../../checks/ai/local-provider-check.js'), 'utf8');
+  const constants = source.slice(source.indexOf('const BYTE ='), source.indexOf('const gguf ='));
+  const { tokens, types } = require('node:vm').runInNewContext(`${constants}\n({ tokens: TOKENS, types: TYPES })`);
+  const tok = K.load({ tokens, types, merges: [], pre: 'lfm2' });
+  for (const special of K.GLAZE_TOKENS) tok.add(special);
+  assert.equal(tok.decode(tok.encode('ready')), 'ready');
+});
+
 // ---- a small vocabulary: the 256 bytes, a few merges, LFM3's specials, reserved rows for Glaze's own ---------------------
 const BYTE = (() => {
   const keep = [];
