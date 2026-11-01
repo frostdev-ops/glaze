@@ -160,6 +160,18 @@ test('status asks nothing of the host: unavailable without a host, in Safari or 
   finally { globalThis.chrome = chrome; }
 });
 
+test('Safari, which ships no models.json, answers status without reading the store', async () => {
+  const chrome = globalThis.chrome;
+  globalThis.chrome = { runtime: { getURL: () => 'safari-web-extension://x/' } };
+  try {
+    const s = setup();
+    let lists = 0;
+    s.st.list = async () => { lists++; throw new Error('models.json is not in the Safari package'); };
+    for (let i = 0; i < 3; i++) assert.deepEqual(await LOCAL.status(LOCAL.config({})), { state: 'unavailable', reason: 'browser' });
+    assert.equal(lists, 0, 'no store read per status call');
+  } finally { globalThis.chrome = chrome; }
+});
+
 test('prepare downloads in the host with progress, once for callers that ask together; the ladder picks; an adapter-less computer is refused', async () => {
   const s = setup({ ladder: { pick: async ({ adapter, models }) => { assert.ok(adapter); assert.equal(models.length, 3); return { id: 'lfm3-q8' }; } } });
   const seen = [], also = [];
