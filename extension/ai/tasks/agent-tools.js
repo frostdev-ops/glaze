@@ -28,6 +28,8 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   const ISO = String.raw`^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(Z|([+-])(\d{2}):(\d{2}))?)?$`;
   const UID = String.raw`^(\d{1,20}|_\d{1,20}_\d{1,20})$`;
   // A moment on the student's own clock, as results show one (2026-10-31 21:00), or with a T.
+  // A page of a long text (ai/agent/school.js PAGE characters).
+  const PAGE = { type: 'integer', minimum: 1, maximum: 1000, description: 'Which page, from 1.' };
   const LOCAL_TIME = String.raw`^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})$`;
   const ACCOUNT = { type: 'string', minLength: 1, maxLength: 320, description: 'The account id from accounts_list; only when Glaze holds more than one.' };
   const DOCUMENT = { type: 'string', minLength: 1, maxLength: 320, description: 'The document key from documents_list.' };
@@ -75,10 +77,26 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     { name: 'wakes_list', kind: 'read', description: "The student's wakes and monitors still waiting: id (what wake_cancel takes), what (wake or monitor), at or watch, say.", parameters: params({}) },
     { name: 'wake_cancel', kind: 'confirm', description: 'Cancel one wake or monitor by its id from wakes_list. The student approves it first.',
       parameters: params({ id: { type: 'string', pattern: '^[wm]-[a-z0-9]{8}$', description: 'The id from wakes_list.' } }, ['id']) },
+    // Reading the student's school site (ai/agent/school.js), through Glaze's own readers in an open tab of it, or its caches.
+    { name: 'announcements_list', kind: 'read', description: "A course's announcements: id, title, and at (when posted, where the site says). On Canvas without course, every course's that Glaze's to-do range holds. On Blackboard name the course.",
+      parameters: params({ course: COURSE("Only this course's, by its id."), account: ACCOUNT }) },
+    { name: 'announcement_read', kind: 'read', description: 'One announcement: title, author, at, and its text a page at a time (about 2,500 characters).',
+      parameters: params({ course: COURSE('The course id.'), id: { type: 'string', pattern: UID, description: 'The announcement id from announcements_list.' }, page: PAGE, account: ACCOUNT }, ['course', 'id']) },
+    { name: 'content_list', kind: 'read', description: "A course's content as its site lists it: id, title, kind (Page, File, Assignment, Quiz, Discussion, Link, Document, Folder, Module, Test) and module.",
+      parameters: params({ course: COURSE('The course id.'), account: ACCOUNT }, ['course']) },
+    { name: 'content_read', kind: 'read', description: "One content item's text, a page at a time (about 2,500 characters): a Blackboard document. Glaze can't read Canvas pages or files yet.",
+      parameters: params({ course: COURSE('The course id.'), id: { type: 'string', pattern: UID, description: 'The id from content_list.' }, page: PAGE, account: ACCOUNT }, ['course', 'id']) },
+    { name: 'syllabus_read', kind: 'read', description: "What Glaze took from a course's syllabus when the student imported it: instructor, office hours, class meetings, dates, grading scale and grade weights.",
+      parameters: params({ course: COURSE('The course id.'), account: ACCOUNT }, ['course']) },
+    { name: 'discussions_list', kind: 'read', description: "A course's discussions: id and title.",
+      parameters: params({ course: COURSE('The course id.'), account: ACCOUNT }, ['course']) },
+    { name: 'discussion_read', kind: 'read', description: "One discussion's prompt as text, a page at a time (about 2,500 characters).",
+      parameters: params({ course: COURSE('The course id.'), id: { type: 'string', pattern: UID, description: 'The discussion id from discussions_list.' }, page: PAGE, account: ACCOUNT }, ['course', 'id']) },
   ].map((t) => Object.freeze(t)));
   const NAMES = SPECS.map((t) => t.name);
   // Agents' tools (agents/*.js) and Ask Rime's own.
-  const OWN = Object.freeze(['run_js', 'places_list', 'place_open', 'page_highlight', 'wake_create', 'monitor_create', 'wakes_list', 'wake_cancel']);
+  const OWN = Object.freeze(['run_js', 'places_list', 'place_open', 'page_highlight', 'wake_create', 'monitor_create', 'wakes_list', 'wake_cancel',
+    'announcements_list', 'announcement_read', 'content_list', 'content_read', 'syllabus_read', 'discussions_list', 'discussion_read']);
   const AGENTS = Object.freeze(NAMES.filter((n) => !OWN.includes(n)));
   const spec = (name) => SPECS.find((t) => t.name === name) || null;
   // Arguments that name something: they must come from the question or a result, never be made up.
@@ -213,7 +231,10 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     } catch { return false; }
   };
   const input = (raw) => {
-    if (!S.isObj(raw) || Object.keys(raw).some((k) => !['question', 'tools', 'steps', 'now', 'zone', 'locale', 'fired'].includes(k))) return null;
+    if (!S.isObj(raw) || Object.keys(raw).some((k) => !['question', 'tools', 'steps', 'now', 'zone', 'locale', 'fired', 'first', 'help'].includes(k))) return null;
+    // first: answer only from tool results (tools level 3: Ask Rime's tool-first rule, check() 'first' and 'ground'); help:
+    // study.help's subject, for a turn that reads what the student's help question names before study help answers it.
+    if ((raw.first !== undefined && raw.first !== true) || (raw.help !== undefined && !HELP.includes(raw.help))) return null;
     const { question, tools, steps = [], now, zone, locale = 'en' } = raw;
     if (typeof question !== 'string' || !question.trim() || question.length > LIMIT.question || !Array.isArray(tools) || !tools.length || new Set(tools).size !== tools.length
       || !tools.every((n) => NAMES.includes(n)) || !Array.isArray(steps) || steps.length > LIMIT.steps || !Number.isSafeInteger(now) || now <= 0 || now > 8640000000000000 || typeof zone !== 'string' || !zoneOk(zone)
@@ -223,14 +244,14 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     if (shown_.includes(null)) return null;
     const fired = Object.hasOwn(raw, 'fired') ? firedOf(raw.fired, zone) : undefined;
     if (fired === null) return null;
-    return { question: question.trim(), tools: offered(tools).map((t) => t.name), steps: steps.map((s, i) => ({ call: { name: s.call.name, arguments: s.call.arguments }, result: shown_[i] })), now, zone, locale, ...(fired && { fired }) };
+    return { question: question.trim(), tools: offered(tools).map((t) => t.name), steps: steps.map((s, i) => ({ call: { name: s.call.name, arguments: s.call.arguments }, result: shown_[i] })), now, zone, locale, ...(fired && { fired }), ...(raw.first === true && { first: true }), ...(raw.help && { help: raw.help }) };
   };
   const nowText = (inp) => `${local(inp.now, inp.zone, true)}, ${inp.zone}`;
   const label = (i, name) => `result ${i + 1} ${name}`;
   const build = (inp, { text }) => text.request({
     system: `${instructions(inp.locale)}\n\n<tools>\n${offered(inp.tools).map(line).join('\n')}\n</tools>`,
     context: [{ label: 'now', text: nowText(inp) }],
-    data: [...(inp.fired ? [{ label: 'fired', text: inp.fired }] : []), { label: 'question', text: inp.question }, ...inp.steps.flatMap((s, i) => [{ label: `call ${i + 1}`, text: JSON.stringify(s.call) }, { label: label(i, s.call.name), text: s.result }])],
+    data: [...(inp.fired ? [{ label: 'fired', text: inp.fired }] : []), ...(inp.help ? [{ label: 'help', text: inp.help }] : []), { label: 'question', text: inp.question }, ...inp.steps.flatMap((s, i) => [{ label: `call ${i + 1}`, text: JSON.stringify(s.call) }, { label: label(i, s.call.name), text: s.result }])],
     // D4: p3dpo's answers ran to 469 tokens, LFM2.5 350M's to 497 with two cut at 512; 768 with a full think budget fits
     // the 99th-percentile prompt (3,059 tokens) in the 4,096 window.
     temperature: 0, maxTokens: 768,
@@ -242,17 +263,18 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   const F = () => (typeof GZ_AI_LOCAL_FORMAT !== 'undefined' ? GZ_AI_LOCAL_FORMAT : require('../local/format.js'));
   // From its pieces as text: head, the instructions; lines, the <tools> lines; now, question; steps [{ call, result }];
   // fired, a fired wake's or monitor's record, as a data block of its own before the question (absent: the turns as before).
-  const draw = ({ head, lines, now, question, steps, fired }) => {
+  // help: study help's subject, a data block before the question (absent: as before).
+  const draw = ({ head, lines, now, question, steps, fired, help }) => {
     const turn = (role, ...parts) => [{ special: '<|im_start|>' }, { text: `${role}\n` }, ...parts, { special: '<|im_end|>' }, { text: '\n' }];
     const block = (kind, l, t) => [{ special: `<|${kind}|>` }, { text: `${l}\n${X().plain(t)}` }, { special: `<|/${kind}|>` }];
     return F().join([{ special: '<|startoftext|>' },
       ...turn('system', { special: '<|gz_task:agent.tools|>' }, { text: `${head}\n\n${X().TRUST}\n\n` }, { special: '<tools>' }, { text: `\n${lines}\n` }, { special: '</tools>' }),
-      ...turn('user', ...block('gz_ctx', 'now', now), { text: '\n' }, ...(fired ? [...block('gz_data', 'fired', fired), { text: '\n' }] : []), ...block('gz_data', 'question', question)),
+      ...turn('user', ...block('gz_ctx', 'now', now), { text: '\n' }, ...(fired ? [...block('gz_data', 'fired', fired), { text: '\n' }] : []), ...(help ? [...block('gz_data', 'help', help), { text: '\n' }] : []), ...block('gz_data', 'question', question)),
       ...steps.flatMap((s, i) => [...turn('assistant', ...native.parts(s.call)),
         ...turn('tool', { special: '<tool_response>' }, { text: '\n' }, ...block('gz_data', label(i, s.call.name), s.result), { text: '\n' }, { special: '</tool_response>' })]),
       { special: '<|im_start|>' }, { text: 'assistant\n' }]);
   };
-  const layout = (inp) => draw({ head: instructions(inp.locale), lines: offered(inp.tools).map(line).join('\n'), now: nowText(inp), question: inp.question, steps: inp.steps, fired: inp.fired });
+  const layout = (inp) => draw({ head: instructions(inp.locale), lines: offered(inp.tools).map(line).join('\n'), now: nowText(inp), question: inp.question, steps: inp.steps, fired: inp.fired, help: inp.help });
   // Glaze's own model gets a run's request, never its input: build()'s request read back (format.js parse) into the same
   // pieces → { parts: layout()'s, tools: the names offered }. A request build() didn't make is refused (code 'request').
   const fromRequest = (req) => {
@@ -265,7 +287,10 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     if (!tools.length || offered(tools.map((t) => t.name)).map(line).join('\n') !== lines) throw refuse('tools');
     const fired = blocks[1]?.kind === 'data' && blocks[1].label === 'fired' ? blocks[1].text : undefined;
     if (fired !== undefined && !firedText(fired)) throw refuse('fired');
-    const [now, question, ...rest] = fired === undefined ? blocks : [blocks[0], ...blocks.slice(2)];
+    const after = fired === undefined ? blocks : [blocks[0], ...blocks.slice(2)];
+    const help = after[1]?.kind === 'data' && after[1].label === 'help' ? after[1].text : undefined;
+    if (help !== undefined && !HELP.includes(help)) throw refuse('help');
+    const [now, question, ...rest] = help === undefined ? after : [after[0], ...after.slice(2)];
     if (now?.kind !== 'ctx' || now.label !== 'now' || question?.kind !== 'data' || question.label !== 'question' || rest.length % 2 || rest.length / 2 > LIMIT.steps) throw refuse('blocks');
     const steps = [];
     for (let i = 0; i < rest.length; i += 2) {
@@ -275,7 +300,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       if (rest[i].label !== `call ${n + 1}` || !validCall(c, tools.map((t) => t.name)) || rest[i + 1].label !== label(n, c.name)) throw refuse('step');
       steps.push({ call: { name: c.name, arguments: c.arguments }, result: rest[i + 1].text });
     }
-    return { parts: draw({ head, lines, now: now.text, question: question.text, steps, fired }), tools: offered(tools.map((t) => t.name)).map((t) => t.name) };
+    return { parts: draw({ head, lines, now: now.text, question: question.text, steps, fired, help }), tools: offered(tools.map((t) => t.name)).map((t) => t.name) };
   };
   // The answer Glaze's own model writes for an output: a native call, or the answer as compact JSON.
   const answerParts = (out) => (out.call ? native.parts(out.call) : [{ text: JSON.stringify({ text: out.answer.text, quotes: out.answer.quotes }) }]);
@@ -391,8 +416,22 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     return '';
   };
 
+  // study.help's subjects (ai/tasks/study-help.js SUBJECTS), a help turn's block.
+  const HELP = ['math', 'science', 'code', 'essay', 'reading', 'other'];
+  // A result that holds something: not a failure, nothing missing, and some words beyond who and when.
+  const META = new Set(['account', 'at', 'site', 'here', 'covers', 'from', 'to', 'complete', 'page', 'pages', 'ok', 'more']);
+  const rich = (r) => {
+    let v;
+    try { v = JSON.parse(r); } catch { return false; }
+    if (!S.isObj(v) || v.ok === false || v.error != null || typeof v.missing === 'string') return false;
+    let found = false;
+    const walk = (x, k) => { if (found) return; if (Array.isArray(x)) x.forEach((y) => walk(y)); else if (S.isObj(x)) for (const [kk, y] of Object.entries(x)) { if (!META.has(kk)) walk(y, kk); } else if ((typeof x === 'string' && x.trim().length >= 2) || typeof x === 'number') found = true; };
+    walk(v);
+    return found;
+  };
   // → '' when the output may be used, else why not: schema, one, tool, arguments, id, repeat, steps, quote, number; for
-  // Rime's own tools also work, place, text, time, monitor, asked (ownWhy).
+  // Rime's own tools also work, place, text, time, monitor, asked (ownWhy); with first or help, first (an answer with no
+  // result behind it) and ground (results that hold facts, an answer quoting none).
   const why = (out, inp) => {
     if (S.validate(out, OUTPUT).length) return 'schema';
     if ((out.call === null) === (out.answer === null)) return 'one';
@@ -414,6 +453,10 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     }
     const { text, quotes } = out.answer;
     if (!text.trim()) return 'schema';
+    // Tool first: an answer about the student's school stands on results Glaze read for it, never on nothing; facts from a
+    // result that holds any are quoted (empty and failed results hold none, so the answer says only that).
+    if ((inp.first || inp.help) && !inp.steps.length && !inp.fired) return 'first';
+    if (inp.first && !quotes.length && inp.steps.some((st) => rich(st.result))) return 'ground';
     const sources = data.map((r) => X().source(r, { min: 2 })), singles = new Set(data.map((r) => X().norm(r)));
     if (quotes.some((q) => !q.trim() || ([...X().norm(q)].length === 1 ? !singles.has(X().norm(q)) : !sources.some((x) => x.has(q))))) return 'quote';
     // Every number the reply says is in a result, the question or the time; or an hour of a result on a 12-hour clock,
@@ -433,6 +476,6 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // rate: Ask Glaze (ai/ask.js) runs a question's steps as runs of their own, at most seven (six calls, then the answer): six
   // questions a minute in a tab, where the broker's default would stop the first question's seventh run.
   const task = T.add(T.define({ id: 'agent.tools', version: 1, input, build, output: OUTPUT, check, limits: { ms: 60000 }, rate: { perMinute: 6 * (LIMIT.steps + 1) } }));
-  return { task, LIMIT, SPECS, NAMES, OWN, AGENTS, AHEAD, gradedWork, fold, LATER, moment, SYSTEM, OUTPUT, ANSWER, constraint, instructions, line, py, shown, native, fromNative, readable, layout, fromRequest, answerParts, why };
+  return { task, LIMIT, SPECS, NAMES, OWN, AGENTS, AHEAD, HELP, rich, gradedWork, fold, LATER, moment, SYSTEM, OUTPUT, ANSWER, constraint, instructions, line, py, shown, native, fromNative, readable, layout, fromRequest, answerParts, why };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_TASK_AGENT_TOOLS; else GZ_AI_TASK_AGENT_TOOLS;

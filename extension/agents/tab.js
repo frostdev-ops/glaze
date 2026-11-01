@@ -203,7 +203,55 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     } catch (e) { return { ...no('not confirmed'), uncertain: !/^4\d\d$/.test(e.message) }; }
   };
 
-  const OPS = { todo, insights, assignment, mark };
+  // ---- Ask Rime's reads of a course (ai/agent/school.js): what Glaze's own features read, read the same way --------------
+  // announcement: one announcement or discussion topic as Glaze's pop-up reads it (courses/announce.js SITES: Canvas's topic,
+  // Ultra's public announcement), never the read mark the pop-up may send. search (Ultra): a course's announcements,
+  // discussions or content, as Ultra search lists them (courses/ultra.js read().search: what the student may see now, each
+  // with its text). modules (Canvas): the course's modules and their items, as the progress and notes features ask for them.
+  // topics (Canvas): the course's discussions, as palette search asks Canvas for them, with no search term.
+  const KINDS = { announcements: 'Announcement', discussions: 'Discussion', contents: 'Document' };
+  const courseOk = (c) => (X().site === 'ultra' ? BB : ID).test(c || '');
+  const announcement = async (go, a) => {
+    const x = X(), site = x.site;
+    if (!['canvas', 'ultra'].includes(site) || !courseOk(a.course) || !(site === 'ultra' ? BB : ID).test(a.id || '')) return no('args');
+    // announce.js keeps an attachment's address only when it is this site's (core/popup.js own).
+    await libs(['core/popup.js', 'GZ_POPUP_LIB'], ['courses/announce.js', 'GZ_ANNOUNCE_LIB']);
+    const S = GZ_ANNOUNCE_LIB.SITES[site], r = { origin: go.origin, courseId: a.course, id: a.id };
+    const path = site === 'ultra' ? S.path(r) : S.get(r).url.slice(go.origin.length);
+    let j;
+    try { ({ j } = await req(path, go)); } catch (e) { if (/^(401|403|404)$/.test(e.message)) return no('none'); throw e; }
+    if (String(j?.id) !== a.id) return no('none');
+    const it = S.item(j, go.origin);
+    if (it.locked) return no('locked');
+    return { ok: true, title: it.title, author: it.author, at: it.at, text: text(it.html), files: it.files.map((f) => f.name) };
+  };
+  const search = async (go, a) => {
+    const x = X();
+    if (x.site !== 'ultra' || !BB.test(a.course || '') || !Object.hasOwn(KINDS, a.kind)) return no('args');
+    await libs(['courses/ultra.js', 'GZ_ULTRA'], ['core/doctext.js', 'GZ_DOCTEXT']);
+    const reader = GZ_ULTRA.read({ origin: go.origin, signal: go.signal, live: go, maxPages: 5 });
+    const k = GZ_ULTRA.SEARCH_KINDS.find((y) => y.kind === KINDS[a.kind]);
+    // Each item's text as palette search reads it (core/doctext.js).
+    const list = await reader.search({ id: a.course, name: '' }, k, (html) => GZ_DOCTEXT.html(html));
+    if (!go()) return no('late');
+    return { ok: true, complete: list.complete !== false, items: list.map((i) => ({ id: i.key.slice(i.key.lastIndexOf(':') + 1), title: i.title, kind: i.kind, text: i.text })) };
+  };
+  const modules = async (go, a) => {
+    if (X().site !== 'canvas' || !ID.test(a.course || '')) return no('args');
+    let rows;
+    try { rows = await pages(`/api/v1/courses/${a.course}/modules?include[]=items&per_page=100`, go, 20); } catch (e) { if (/^(401|403|404)$/.test(e.message)) return no('none'); throw e; }
+    const open = rows.filter((m) => m && m.published !== false && m.state !== 'locked');
+    return { ok: true, complete: !rows.more, items: open.flatMap((m) => (Array.isArray(m.items) ? m.items : []).filter((i) => i && i.type !== 'SubHeader' && i.published !== false && ID.test(String(i.id)))
+      .map((i) => ({ id: String(i.id), title: typeof i.title === 'string' ? i.title.slice(0, 300) : '', kind: String(i.type || '').replace('ExternalUrl', 'Link').replace('ExternalTool', 'Link'), module: typeof m.name === 'string' ? m.name.slice(0, 200) : '' }))) };
+  };
+  const topics = async (go, a) => {
+    if (X().site !== 'canvas' || !ID.test(a.course || '')) return no('args');
+    let rows;
+    try { rows = await pages(`/api/v1/courses/${a.course}/discussion_topics?per_page=50`, go, 4); } catch (e) { if (/^(401|403|404)$/.test(e.message)) return no('none'); throw e; }
+    return { ok: true, complete: !rows.more, items: rows.filter((t) => t && ID.test(String(t.id)) && typeof t.title === 'string').map((t) => ({ id: String(t.id), title: t.title.slice(0, 300) })) };
+  };
+
+  const OPS = { todo, insights, assignment, mark, announcement, search, modules, topics };
   const jobs = new Map();
   const cancel = (id) => {
     if (jobs.has(id)) jobs.get(id)?.abort();

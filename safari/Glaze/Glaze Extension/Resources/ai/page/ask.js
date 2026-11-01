@@ -54,6 +54,8 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
     document_assignment: 'Finding a document’s assignment', todo_mark_done: 'Mark a to-do done',
     run_js: 'Working it out', places_list: 'Finding the page', place_open: 'Opening the page', page_highlight: 'Marking it on the page',
     wake_create: 'Set a reminder', monitor_create: 'Watch for a change', wakes_list: 'Reading your reminders', wake_cancel: 'Cancel a reminder or watch',
+    announcements_list: 'Reading announcements', announcement_read: 'Reading an announcement', content_list: 'Reading the course content', content_read: 'Reading a course page',
+    syllabus_read: 'Reading the syllabus', discussions_list: 'Reading discussions', discussion_read: 'Reading a discussion',
   };
   const stepLabel = (s) => (Object.hasOwn(STEPS, s.name) ? t(STEPS[s.name]) : typeof s.reason === 'string' && s.reason.trim() ? s.reason.trim().slice(0, 200)
     : String(s.name || '').replace(/_/g, ' ').replace(/^\p{L}/u, (c) => c.toUpperCase()));

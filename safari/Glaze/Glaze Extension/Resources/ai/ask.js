@@ -41,6 +41,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const JS = () => (typeof GZ_AI_RIME_JS !== 'undefined' ? GZ_AI_RIME_JS : require('./agent/js.js'));
   const PLACES = () => (typeof GZ_AI_RIME_PLACES !== 'undefined' ? GZ_AI_RIME_PLACES : require('./agent/places.js'));
   const WAKES = () => (typeof GZ_AI_RIME_WAKES !== 'undefined' ? GZ_AI_RIME_WAKES : require('./agent/wakes.js'));
+  const SCHOOL = () => (typeof GZ_AI_RIME_SCHOOL !== 'undefined' ? GZ_AI_RIME_SCHOOL : require('./agent/school.js'));
   const SITES = ['canvas', 'ultra', 'moodle'];
   // Fired records the panel was shown, by id, until the click that asks about one (or an hour).
   const KEPT = new Map();
@@ -188,8 +189,38 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       nl: ['laat (?:me )?weten', 'houd in de gaten', 'waarschuw\\p{L}*'],
     },
   };
+  // The school's other records, read through Glaze's own readers (ai/agent/school.js).
+  Object.assign(TOPICS3, {
+    announcements: {
+      en: ['announcements?', 'news', 'what did (?:my )?(?:professor|teacher|instructor) (?:say|post)'], es: ['anuncios?', 'avisos?'], 'pt-BR': ['an[úu]ncios?', 'avisos?', 'comunicados?'],
+      fr: ['annonces?'], de: ['ank[üu]ndigung\\p{L}*', 'mitteilung\\p{L}*', 'neuigkeiten'], nl: ['aankondiging\\p{L}*', 'mededeling\\p{L}*'],
+    },
+    content: {
+      en: ['modules?', 'course (?:content|materials?)', 'lecture notes', 'slides', 'readings?', 'week \\d+'], es: ['m[óo]dulos?', 'contenido', 'materiales?', 'apuntes', 'diapositivas'],
+      'pt-BR': ['m[óo]dulos?', 'conte[úu]do', 'materiais?', 'apostilas?'], fr: ['modules?', 'contenu', 'supports? de cours', 'diapos'],
+      de: ['module?', 'kursinhalt\\p{L}*', 'materialien', 'folien', 'skript'], nl: ['modules?', 'lesmateriaal', 'inhoud', 'slides'],
+    },
+    syllabus: {
+      en: ['syllabus', 'office hours', 'grading (?:policy|scale)', 'grade weights?', 'weights?'], es: ['programa del curso', 's[íi]labo', 'horario de (?:atenci[óo]n|tutor[íi]as)', 'ponderaci[óo]n'],
+      'pt-BR': ['plano de ensino', 'ementa', 'hor[áa]rio de atendimento', 'pesos?'], fr: ['syllabus', 'plan de cours', 'permanences?', 'pond[ée]ration'],
+      de: ['syllabus', 'kursplan', 'sprechstunden?', 'gewichtung'], nl: ['syllabus', 'studiehandleiding', 'spreekuur', 'weging'],
+    },
+    discussions: {
+      en: ['discussions?', 'forums?', 'discussion board'], es: ['foros?', 'debates?'], 'pt-BR': ['f[óo]runs?', 'discuss[ãa]o', 'discuss[õo]es'], fr: ['forums?', 'discussions?'],
+      de: ['diskussion\\p{L}*', 'forum\\p{L}*'], nl: ['discussies?', 'forums?'],
+    },
+  });
   const TOOLS3 = { compute: ['run_js'], navigate: ['places_list', 'place_open', 'page_highlight'], remind: ['wake_create', 'wakes_list', 'wake_cancel'],
-    watch: ['monitor_create', 'wakes_list', 'todo_list', 'grades_list'] };
+    watch: ['monitor_create', 'wakes_list', 'todo_list', 'grades_list'], announcements: ['announcements_list', 'announcement_read', 'courses_list'],
+    content: ['content_list', 'content_read', 'courses_list'], syllabus: ['syllabus_read', 'courses_list'], discussions: ['discussions_list', 'discussion_read', 'courses_list'] };
+  // A help question naming a piece of the student's work or a course (a course code, a lab report, an essay…): its reads are
+  // the assignments' (route's read).
+  const NAMED = { en: ['lab reports?', 'projects?', 'papers?', 'essays?', 'homework', 'worksheets?', 'problem sets?', 'assignments?'], es: ['informes?', 'proyectos?', 'ensayos?', 'tareas?'],
+    'pt-BR': ['relat[óo]rios?', 'projetos?', 'trabalhos?', 'reda[çc][ãa]o', 'tarefas?'], fr: ['rapports?', 'projets?', 'dissertations?', 'devoirs?'],
+    de: ['berichte?', 'projekte?', 'hausarbeit\\p{L}*', 'aufs[äa]tze?', 'hausaufgaben?'], nl: ['verslag\\p{L}*', 'projecten', 'project', 'opdracht\\p{L}*', 'essays?', 'huiswerk'] };
+  const CODE = /(?<![\p{L}\p{N}])[A-Z]{2,5}[ -]?\d{3,4}[A-Z]?(?![\p{L}\p{N}])/u;
+  // The topics that read the student's records, which a help question naming one reads first (route's read).
+  const READS = ['todo', 'grades', 'assignments', 'documents', 'announcements', 'content', 'syllabus', 'discussions'];
   // WORK's computing verbs, which a compute question that isn't graded work may use: "Calculate my grade if…".
   const COMPUTING = ['calculat\\p{L}*', 'calcula\\p{L}*', 'calcul\\p{L}*', 'berechn\\p{L}*', 'bereken\\p{L}*'];
   const route = (question, { attempt = '', locale = 'en', level = 1 } = {}) => {
@@ -200,13 +231,21 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     // A compute question's own computing verb is no help request, unless it would work out graded work.
     const computing = own.includes('compute') && !AT().gradedWork(AT().fold(q));
     const working = computing ? words(lists(WORK, locale).filter((w) => !COMPUTING.includes(w))).test(q) : has(WORK);
-    if (work.trim() || working || (!on.length && !own.length)) return { task: 'study.help', subject: subjectOf(`${q}\n${work}`) };
+    const subject = () => subjectOf(`${q}\n${work}`);
+    // Tool first (level 3): help with work that names the student's records reads them first (read: agent.tools' help turn,
+    // its tools these topics' reads), then study.help answers with what was read; help naming nothing is study help alone.
+    if (work.trim() || working) {
+      const named = level >= 3 && (has(NAMED) || CODE.test(q)) && !on.includes('assignments') ? TOOLS.assignments : [];
+      const reads = level >= 3 ? [...on.filter((k) => READS.includes(k) && k !== 'mark').flatMap((k) => TOOLS[k]), ...own.filter((k) => READS.includes(k)).flatMap((k) => TOOLS3[k]), ...named] : [];
+      return reads.length ? { task: 'study.help', subject: subject(), read: [...new Set(reads)].slice(0, LIMIT.tools - 1).concat('accounts_list') } : { task: 'study.help', subject: subject() };
+    }
+    if (!on.length && !own.length) return { task: 'study.help', subject: subject() };
     if (on.includes('mark') && !on.includes('todo')) on.push('todo');
     // Rime's own topics first: their tools must fit the window before records' ones fill it.
     const tools = [...Object.keys(TOOLS3).filter((k) => own.includes(k) && (k !== 'compute' || computing)).flatMap((k) => TOOLS3[k]),
       ...Object.keys(TOOLS).filter((k) => on.includes(k)).flatMap((k) => TOOLS[k])];
     if (!tools.length) return { task: 'study.help', subject: subjectOf(`${q}\n${work}`) };
-    const accounts = on.some((k) => ACCOUNTS.includes(k)) || own.includes('watch');
+    const accounts = on.some((k) => ACCOUNTS.includes(k)) || own.some((k) => k === 'watch' || READS.includes(k));
     // Multiple topics may fill the window. Keep discovery available so a student with two accounts can still choose one.
     return { task: 'agent.tools', tools: [...new Set(tools)].slice(0, LIMIT.tools - (accounts ? 1 : 0)).concat(accounts ? ['accounts_list'] : []) };
   };
@@ -218,11 +257,11 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
 
   // ---- the step loop ---------------------------------------------------------------------------------------------------
   const cancelled = () => Object.assign(R().error('cancelled'), { category: 'cancelled' });
-  const episode = async ({ question, tools, locale, now, zone, run, call, signal, fired }) => {
+  const episode = async ({ question, tools, locale, now, zone, run, call, signal, fired, first, help }) => {
     const steps = [];
     for (;;) {
       if (signal?.aborted) throw cancelled();
-      const out = await run('agent.tools', { question, tools, steps: steps.map((s) => ({ call: s.call, result: s.result })), now, zone, locale, ...(fired && { fired }) });
+      const out = await run('agent.tools', { question, tools, steps: steps.map((s) => ({ call: s.call, result: s.result })), now, zone, locale, ...(fired && { fired }), ...(first && { first: true }), ...(help && { help }) });
       if (signal?.aborted) throw cancelled();
       if (out?.answer) return { answer: out.answer, steps };
       if (!isObj(out?.call)) throw R().error('check');
@@ -365,7 +404,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
           if (!reads.has(key)) reads.set(key, Promise.resolve(wakes.read(name, args, account)).then(structuredClone));
           return structuredClone(await reads.get(key));
         } };
-      return new Map([...JS().tools(), ...PLACES().tools(), ...WAKES().tools(snapshot)].map((d) => [d.name, TL().define(d)]));
+      return new Map([...JS().tools(), ...PLACES().tools(), ...WAKES().tools(snapshot), ...SCHOOL().tools()].map((d) => [d.name, TL().define(d)]));
     };
     const detail = (name, r) => (name === 'run_js' ? (r?.ok ? (typeof r.value === 'string' ? r.value : JSON.stringify(r.value)) : r?.error) : name === 'place_open' ? r?.title
       : name === 'page_highlight' ? r?.marked : undefined);
@@ -398,7 +437,9 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       const account = typeof args?.account === 'string' ? args.account : accounts.find((a) => a.origin === here)?.account;
       return { account, zone: mine?.zone, locale: mine?.locale, page, writer: await env.own.writer().catch(() => false), text: mine?.text,
         courses: async () => (account ? (await env.own.read('courses_list', {}, account))?.items || [] : []),
-        ui: { actions: mine?.actions || [], push: (a) => mine?.actions.push(a) } };
+        ui: { actions: mine?.actions || [], push: (a) => mine?.actions.push(a) },
+        // The school's reads: its caches (storage.local) and, for the rest, an open tab of this account's site.
+        local: env.local, tab: account && env.own.tab ? (op, a) => env.own.tab(account, op, a) : undefined };
     };
 
     // Wakes and monitors that fired, for the panel to show on this page; kept here by id (an hour) for the click that asks.
@@ -446,10 +487,18 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         const r = record ? routeFired(record) : route(question, { attempt, locale, level });
         post({ id, type: 'route', task: r.task });
         if (r.task === 'study.help') {
-          const output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...(history.length && { history }) });
+          // Help naming the student's records (level 3): agent.tools' help turn reads them; study.help then helps with what
+          // was read as its material, under its own rules. Its reader's answer is never shown.
+          let material = '';
+          if (r.read) {
+            const seen = await episode({ question, tools: r.read, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal, first: true, help: r.subject });
+            if (seen.declined) return post({ id, type: 'end', task: r.task, declined: true });
+            material = seen.steps.map((st) => AT().readable(st.result, zone) || '').join('\n').slice(0, LIMIT.material);
+          }
+          const output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...(history.length && { history }), ...(material && { material }) });
           return post({ id, type: 'end', task: r.task, output });
         }
-        const res = await episode({ question, tools: r.tools, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal,
+        const res = await episode({ question, tools: r.tools, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal, ...(level >= 3 && { first: true }),
           ...(record && { fired: { what: record.what, ...(record.watch && { watch: record.watch }), say: question, at: record.at, ...(record.fact && { fact: record.fact }) } }) });
         if (res.declined) return post({ id, type: 'end', task: r.task, declined: true });
         // The study rule on this path too: an answer about records never gives the answer to work.
@@ -489,6 +538,6 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     return { close };
   };
 
-  return { FEATURE, LIMIT, TOPICS, TOPICS3, WORK, TOOLS, TOOLS3, SUBJECTS, route, routeFired, episode, connect, channel, arrival };
+  return { FEATURE, LIMIT, TOPICS, TOPICS3, WORK, TOOLS, TOOLS3, READS, NAMED, SUBJECTS, route, routeFired, episode, connect, channel, arrival };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_ASK; else GZ_AI_ASK;
