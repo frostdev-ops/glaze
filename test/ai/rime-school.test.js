@@ -186,7 +186,10 @@ test('syllabus date limits disclose the omitted dates', async () => {
 
 test('school tab operations discard data when the signed-in account changes during the read', async (t) => {
   for (const op of ['announcement', 'modules', 'topics', 'search']) await t.test(op, async () => {
-    const ultra = op === 'search', tab = ultra ? ultraTab() : canvasTab();
+    const ultra = op === 'search', tab = ultra ? ultraTab() : canvasTab(op === 'topics' ? { routes: {
+      '/api/v1/courses/25/enrollments': [{ user_id: 900, type: 'TeacherEnrollment' }],
+      '/api/v1/courses/25/discussion_topics': [{ id: 81, title: 'Teacher prompt', author: { id: 900 } }],
+    } } : {});
     let uid = ultra ? C.ULTRA_UID : '5';
     const fetch = tab.context.fetch;
     tab.context.fetch = async (url, init) => {

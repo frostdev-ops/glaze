@@ -393,7 +393,11 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     if (X().site !== 'canvas' || !ID.test(a.course || '')) return no('args');
     let rows;
     try { rows = await pages(`/api/v1/courses/${a.course}/discussion_topics?per_page=50`, go, 4); } catch (e) { if (/^(401|403|404)$/.test(e.message)) return no('none'); throw e; }
-    return { ok: true, complete: !rows.more, items: rows.filter((t) => t && ID.test(String(t.id)) && typeof t.title === 'string').map((t) => ({ id: String(t.id), title: t.title.slice(0, 300) })) };
+    // A student can author a topic's title too. Apply the prompt read's authorship boundary before any title leaves the tab.
+    const set = await staff(go, a.course);
+    if (!set) return no('unverified');
+    return { ok: true, complete: !rows.more, items: rows.filter((t) => t && ID.test(String(t.id)) && typeof t.title === 'string' && set.has(String(t.author?.id ?? t.user_id ?? '')))
+      .map((t) => ({ id: String(t.id), title: t.title.slice(0, 300) })) };
   };
 
   // topic (Canvas): one discussion's prompt, only when a teacher or TA of the course wrote it (the course's enrollments, read
