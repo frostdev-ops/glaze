@@ -127,6 +127,17 @@ test('level 3: pushback and follow-ups go back to agent.tools with the earlier q
   assert.equal(K.route('What is mitosis?', { locale: 'en', level: 3, history }).task, 'study.help');
 });
 
+test('successive follow-ups retain the original records route', () => {
+  const history = [
+    { question: "What's due this week?", answer: 'Nothing is due this week.' },
+    { question: 'Are you sure?', answer: 'Nothing was listed.' },
+  ];
+  const original = K.route(history[0].question, { level: 3 });
+  const next = K.route('What about Monday?', { level: 3, history });
+  assert.equal(next.task, 'agent.tools');
+  assert.ok(original.tools.every((t) => next.tools.includes(t)));
+});
+
 test('level 3: an answer may say a friendly time\'s hour on either clock ("9:00 PM" as 21:00, "21:00" as 9 PM)', () => {
   const at = Date.parse('2026-11-02T21:00:00-05:00');
   const step = { call: { name: 'wake_create', arguments: { at: '2026-11-02 21:00', say: 'Finish the lab report' } }, result: { id: 'w-abcd1234', what: 'wake', at, say: 'Finish the lab report' } };
