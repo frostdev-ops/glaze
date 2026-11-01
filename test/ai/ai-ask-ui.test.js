@@ -197,3 +197,17 @@ test('an opening status that arrives after a question cannot replace its result 
   assert.equal(P.say(), message);
   assert.equal(message, 'Choose a model for Ask Glaze in Settings → AI.');
 });
+
+test('a script-requested form submit cannot spend another page click’s user activation', async () => {
+  const P = page();
+  await P.ui.open({ event: { isTrusted: true } });
+  P.q().value = 'A question planted by the page';
+  P.box().querySelector('form').requestSubmit();
+  await settle();
+  assert.equal(P.posted.filter((m) => m.op === 'ask').length, 0, 'requestSubmit produces a trusted SubmitEvent without a student choice');
+  P.q().value = 'My own question';
+  P.doc.fire(P.box().querySelector('.gz-ask-send'), 'click');
+  await settle();
+  assert.equal(P.posted.filter((m) => m.op === 'ask').length, 1, 'the student can still use the Ask button');
+  assert.equal(P.posted.find((m) => m.op === 'ask').question, 'My own question');
+});

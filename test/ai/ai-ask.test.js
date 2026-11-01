@@ -248,3 +248,12 @@ test('port: losing sender authority while the approval is open prevents the writ
   assert.equal(h.seen.runs.length, 2, 'no model run after losing authority');
   assert.equal(h.ends().at(-1)?.type, 'error');
 });
+
+test('route: mixed account topics always retain the account-discovery tool within the six-tool cap', () => {
+  for (const question of ['What are my grades and assignments due this week?', 'Mark my assignment done and show my grades and documents']) {
+    const names = agent(question);
+    assert.ok(names.length <= K.LIMIT.tools);
+    assert.ok(names.includes('accounts_list'), question);
+    if (question.startsWith('Mark')) assert.ok(names.includes('todo_mark_done'));
+  }
+});
