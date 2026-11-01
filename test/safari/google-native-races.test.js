@@ -61,7 +61,7 @@ async function run(program, { app = false } = {}) {
     const file = path.join(temp, 'Race.swift');
     const appSource = app ? signIn.replace(/\bASWebAuthenticationSession\b/g, 'TestSession')
       .replace(/\bASWebAuthenticationPresentationContextProviding\b/g, 'TestPresentation')
-      .replace('GlazeGoogle.GroupSlot.shared()', 'testSlot') : '';
+      .replace('GlazeGoogle.GroupSlot.shared().slot', 'testSlot') : '';
     fs.writeFileSync(file, google + fixtures + (app ? sessions + appSource : '') + program);
     proc = S.run(file, [group], { flags: ['-swift-version', '5', ...S.FEATURES, '-strict-concurrency=complete', ...(app ? ['-default-isolation', 'MainActor'] : [])] });
     const result = await proc.next();

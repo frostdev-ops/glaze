@@ -226,6 +226,30 @@ out["driveDisconnect"] = await ask2(["type": "google.disconnect"])
 out["calKeysDrive"] = vault2.items.keys.sorted().map { $0.replacingOccurrences(of: p.uuidString, with: "P") }
 out["calRevokes"] = google.sent.filter { $0["url"]?.hasSuffix("/revoke") == true }.count
 
+// Finding the app group's container, each step its own reason. writable is a real write: under the App Sandbox, access(2)
+// answers EPERM for the group container even where writing works (measured 2026-10-31 on macOS 27.0.1, a sandboxed probe
+// signed by team 22AAZFMTV8 with the group: isWritableFile false, a file written, read back and removed).
+let fm = FileManager.default
+let readOnly = group.appendingPathComponent("read-only"), fresh = group.appendingPathComponent("fresh")
+try! fm.createDirectory(at: readOnly, withIntermediateDirectories: true)
+try! fm.setAttributes([.posixPermissions: 0o500], ofItemAtPath: readOnly.path)
+func step(_ l: (slot: GlazeGoogle.GroupSlot?, missing: GlazeGoogle.Missing?)) -> String { l.missing?.rawValue ?? (l.slot.map { "slot:" + $0.folder.lastPathComponent } ?? "none") }
+out["locate"] = [
+    step(G.GroupSlot.locate(groups: nil) { _ in group }),
+    step(G.GroupSlot.locate(groups: ["a", "b"]) { _ in group }),
+    step(G.GroupSlot.locate(groups: ["22AAZFMTV8.io.frostdev.Glaze"]) { _ in nil }),
+    step(G.GroupSlot.locate(groups: ["22AAZFMTV8.io.frostdev.Glaze"]) { _ in readOnly }),
+    step(G.GroupSlot.locate(groups: ["22AAZFMTV8.io.frostdev.Glaze"]) { _ in fresh }),
+    step(G.GroupSlot.locate(groups: ["22AAZFMTV8.io.frostdev.Glaze"], container: { _ in group }, writable: { _ in false })),
+]
+out["locateAsked"] = { var asked = ""; _ = G.GroupSlot.locate(groups: ["22AAZFMTV8.io.frostdev.Glaze"]) { asked = $0; return group }; return asked }()
+out["probeLeft"] = (try? fm.contentsOfDirectory(atPath: group.path))?.filter { $0.hasPrefix(".google-write") }.count ?? -1
+try! fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: readOnly.path)
+let unwritable = G.Engine(vault: Memory(), slot: nil, transport: google, missing: .writable)
+out["setupStep"] = [await G.reply(to: G.Request(["type": "google.status"], profile: nil)!, engine: unwritable),
+                    await G.reply(to: G.Request(["type": "google.connect", "feature": "calendar"], profile: nil)!, engine: unwritable),
+                    await G.reply(to: G.Request(["type": "google.finish"], profile: nil)!, engine: unwritable)]
+
 out["unknown"] = await ask(["type": "google.nope"])
 out["notOurs"] = G.Request(["type": "ai.status"], profile: nil) == nil
 let noGroup = G.Engine(vault: Memory(), slot: nil, transport: google)
@@ -359,6 +383,13 @@ test('Calendar sync is a grant of its own: its sign-in URL says for=calendar, it
   assert.deepEqual(result.driveDisconnect, { ok: true, had: true });
   assert.deepEqual(result.calKeysDrive, ['calendar.refresh.P'], 'Drive\'s Disconnect leaves Calendar connected');
   assert.equal(result.calRevokes, 0);
+});
+test('the app group\'s container: each step that fails has its own fixed reason, and writable is a real write, never access(2)', { skip }, () => {
+  assert.deepEqual(result.locate, ['entitlement', 'entitlement', 'container', 'writable', 'slot:fresh', 'writable']);
+  assert.equal(result.locateAsked, '22AAZFMTV8.io.frostdev.Glaze');
+  assert.equal(result.probeLeft, 0, 'the write probe leaves nothing behind');
+  assert.deepEqual(result.setupStep, [{ ok: false, why: 'setup', step: 'writable' }, { ok: false, why: 'setup', step: 'writable' }, { ok: false, why: 'setup', step: 'writable' }]);
+  assert.doesNotMatch(fs.readFileSync(nativeFile, 'utf8'), /\.isWritableFile\(atPath|\baccess\([a-z]/, 'access(2) says EPERM for the group container under the sandbox even where writes work');
 });
 test('fixed reasons; a build without the app group answers setup', { skip }, () => {
   assert.deepEqual(result.unknown, { ok: false, why: 'request' });
