@@ -104,7 +104,7 @@ const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, d
   };
   c.globalThis = c;
   const src = read('planner/page/todo.js').replace('  return { sync, add, cmds, mount, unmount, suspend, resume };', `  return { sync, add, cmds, mount, unmount, suspend, resume, probe: {
-    refresh, keepDraft, onStore, onChange, onShow, onSubmit, onClick, form: (x) => { form = x; }, formNow: () => form, save, rowOf, render, get: () => ({ data, cache, fetching, note: line?.textContent, box, dead, who }),
+    refresh, keepDraft, onStore, onChange, onShow, onSubmit, onClick, coursesIn, form: (x) => { form = x; }, formNow: () => form, save, rowOf, render, get: () => ({ data, cache, fetching, note: line?.textContent, box, dead, who }), parts: () => ({ head, body }),
     seed(x) { L = GZ_TODO; who = { uid: '3', tz: 'America/New_York' }; sure = true; key = 'todo:https://canvas.test/3'; prefs = { ...x.prefs };
       data = x.data || { tasks: [], items: {} }; cache = x.cache || null; started = Promise.resolve(); courses = { cids: null, names: {}, list: [] };
       box = new E('section'); head = new E(); line = new E('p'); body = new E(); },
@@ -115,6 +115,7 @@ const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, d
 };
 const planner = (calls) => calls.filter((u) => u.includes('/planner/items')).length;
 const summaries = (calls) => calls.filter((u) => u.includes('submission_summary')).length;
+const elements = (e) => [e, ...(e.children || []).flatMap(elements)].filter((x) => x && typeof x === 'object');
 
 test('a late sharing loader for an old To Do mount cannot leave a port after teardown', async () => {
   const f = feature(), loaders = [];
@@ -664,4 +665,107 @@ test('an announcement opens through GZ_ANNOUNCE for a plain click; Ctrl, Cmd, Sh
   assert.equal(typeof r.from, 'function', 'focus goes back to the link as drawn after the list redraws');
   r.onRead();
   assert.equal(f.p.get().cache.items[0].read, true, 'read once Canvas has it');
+});
+
+// 2026-11-01, a real course: the list rebuilt its header and every row on each refresh of Ultra's kept data and each other
+// tab's To Do answer, though nothing in it changed.
+test('a forced redraw with nothing new leaves the list as drawn; a change still redraws it', () => {
+  const f = feature();
+  f.p.seed({ prefs: O, cache: { key: 'todo:https://canvas.test/3', at: Date.now(), items: [item()], grading: [], sums: {} } });
+  f.p.render(true);
+  const { head, body } = f.p.parts();
+  const h = head.children, b = body.children;
+  assert.ok(h.length && b.length);
+  f.p.render(true);
+  assert.equal(head.children, h, 'the header as it was');
+  assert.equal(body.children, b, 'the rows as they were');
+  f.p.get().cache.items.push(T.slim({ plannable_type: 'assignment', plannable_id: 4, course_id: 25, plannable_date: new Date(Date.now() + 72e5).toISOString(), plannable: { title: 'Lab' } }));
+  f.p.render(true);
+  assert.notEqual(body.children, b, 'a new item is drawn');
+});
+
+for (const isTrusted of [false, true]) {
+  test(`a rejected native control change restores what is stored (${isTrusted ? 'refused save' : 'scripted event'})`, async () => {
+    const f = feature({ setOk: false });
+    f.p.seed({ prefs: O, cache: { key: 'todo:https://canvas.test/3', at: Date.now(), items: [item()], grading: [], sums: {} } });
+    f.p.render(true);
+    const { body } = f.p.parts();
+    const checkbox = () => elements(body).find((e) => e.dataset?.act === 'done');
+    const el = Object.assign(checkbox(), tick());
+    assert.equal(el.checked, true, 'the native checkbox toggled before change fired');
+    f.p.onChange({ target: el, isTrusted });
+    await settle();
+    assert.equal(checkbox().checked, false, isTrusted ? 'a refused save puts the checkbox back' : 'a script cannot leave an unsaved tick on screen');
+    assert.deepEqual({ ...f.p.get().data.items }, {});
+  });
+}
+
+test('an open task form updates its course choices when confirmed courses arrive or are renamed', () => {
+  const f = feature();
+  f.p.seed({ prefs: O, cache: { items: [], grading: [], sums: {} } });
+  f.p.form({ cid: '' });
+  f.p.render(true);
+  const { body } = f.p.parts();
+  const choices = () => elements(body).filter((e) => e.tagName === 'OPTION').map((e) => e.textContent);
+  assert.deepEqual(choices(), ['No course']);
+  f.p.coursesIn([{ id: '25', name: 'Biology' }]);
+  f.p.render(true);
+  assert.deepEqual(choices(), ['No course', 'Biology'], 'courses can arrive after the list has drawn');
+  f.p.coursesIn([{ id: '25', name: 'Biology II' }, { id: '26', name: 'Chemistry' }]);
+  f.p.render(true);
+  assert.deepEqual(choices(), ['No course', 'Biology II', 'Chemistry']);
+  const drawn = body.children;
+  f.p.render(true);
+  assert.equal(body.children, drawn, 'unchanged choices leave the form alone');
+});
+
+test('a kept-data refresh updates relative due labels within the same clock minute', () => {
+  const f = feature(), start = Date.parse('2026-11-01T15:00:00Z');
+  let now = start;
+  f.c.Date = class extends Date { static now() { return now; } };
+  f.p.seed({ prefs: { ...O, rel: true }, cache: { items: [{ ...item(), at: start + 150e3 }], grading: [], sums: {} } });
+  f.p.render(true);
+  const { body } = f.p.parts();
+  const due = () => elements(body).find((e) => e.className === 'gz-todo-when').textContent;
+  assert.equal(due(), 'Due in 3 minutes');
+  now += 40e3;
+  f.p.render(true);
+  assert.equal(due(), 'Due in 2 minutes');
+  const drawn = body.children;
+  now += 1000;
+  f.p.render(true);
+  assert.equal(body.children, drawn, 'a second passing without a label change leaves the DOM alone');
+});
+
+test('a kept-data refresh advances the focus session and expires its detail within the same clock minute', () => {
+  const f = feature(), start = Date.parse('2026-11-01T15:00:00Z');
+  let now = start;
+  f.c.Date = class extends Date { static now() { return now; } };
+  const sessions = [{ at: start - 280e3, min: 5 }, { at: start + 900e3, min: 30 }];
+  f.p.seed({ prefs: O, cache: { items: [{ ...item(), at: start + 36e5 }], grading: [], sums: {} }, data: { tasks: [], items: { 'assignment:3': { sessions } } } });
+  const more = { tagName: 'BUTTON', dataset: { act: 'more' }, closest: () => ({ dataset: { key: 'assignment:3' } }) };
+  f.p.onClick({ target: { closest: () => more } });
+  const { body } = f.p.parts();
+  const plan = () => elements(body).find((e) => e.className === 'gz-todo-plan').textContent;
+  assert.match(plan(), /5 min$/);
+  assert.equal(elements(body).filter((e) => e.className === 'gz-todo-gone').length, 0);
+  now += 40e3;
+  f.p.render(true);
+  assert.match(plan(), /30 min$/, 'the next focus session replaces the finished one');
+  assert.equal(elements(body).filter((e) => e.className === 'gz-todo-gone').length, 1);
+});
+
+test('a kept-data refresh updates announcement ages within the same clock minute', () => {
+  const f = feature(), start = Date.parse('2026-11-01T15:00:00Z');
+  let now = start;
+  f.c.Date = class extends Date { static now() { return now; } };
+  const ann = { type: 'announcement', id: '7', cid: '25', title: 'Lab moved', at: start - 80e3, url: '/courses/25/discussion_topics/7', read: false };
+  f.p.seed({ prefs: { ...O, rel: true }, cache: { items: [ann], grading: [], sums: {} } });
+  f.p.render(true);
+  const { body } = f.p.parts();
+  const texts = () => elements(body).map((e) => e.textContent);
+  assert.ok(texts().includes('1 minute ago'));
+  now += 40e3;
+  f.p.render(true);
+  assert.ok(texts().includes('2 minutes ago'));
 });
