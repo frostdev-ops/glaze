@@ -30,7 +30,7 @@ const later = () => { let done; const p = new Promise((res, rej) => { done = { r
 // the worker's courses/cards.js ultraChange into `sync` and this computer's `local`.
 // Elements are compared with ===: an assertion message would print the whole stand-in document.
 const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, sync = {}, nav = 'navigate', path: where, hold = {}, header = true, landed = new Set(), tab = 1, acted = 0, history = 1, enhance = {}, holdReplies = false, courses = null } = {}) => {
-  const doc = { activeElement: null, root: null };
+  const doc = { activeElement: null, root: null }, events = new Map();
   const make = (t) => new El(t, doc);
   doc.root = make('html');
   doc.body = make('body');
@@ -74,7 +74,10 @@ const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, 
   };
   doc.fire = (target, type, { trusted = true } = {}) => { for (let p = target; p; p = p.parentNode) for (const l of p.listeners.filter((x) => x.type === type)) l.f({ type, target, isTrusted: trusted, preventDefault() {}, stopPropagation() {} }); };
   Object.assign(doc, { createElement: make, createTextNode: (data) => ({ data, textContent: data }), getElementById: (x) => doc.root.all().find((e) => e.id === x) || null,
-    querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s), addEventListener() {}, removeEventListener() {}, visibilityState: 'visible',
+    querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s),
+    addEventListener: (name, f) => { if (!events.has(name)) events.set(name, new Set()); events.get(name).add(f); },
+    removeEventListener: (name, f) => events.get(name)?.delete(f),
+    dispatchEvent: (e) => { for (const f of events.get(e.type) || []) f(e); }, visibilityState: 'visible',
     documentElement: doc.root, referrer: '' });
   const wrote = [], sent = [], loads = [], replies = [], listeners = [];
   const changed = (ch, a = 'local') => { for (const f of [...listeners]) f(ch, a); };
@@ -1597,6 +1600,20 @@ test("the first Dashboard fill waits for its student's identity and their remove
   const r = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: removed } }), Promise.resolve(members()), '_1_1');
   r.ui.sync(true); await settle();
   assert.deepEqual(lay(r).boards.dash.filter((x) => W.course(x.id)).map((x) => W.course(x.id).id), OTHER);
+});
+
+test('a Dashboard identity refresh uses the new student even with the sidebar off', async () => {
+  const otherCourses = OTHER.map((id) => ({ id, name: 'Previous student', term: '', slot: 1 }));
+  const seed = W.apply(W.fresh(), { fill: 'dash', account: 'https://school.blackboard.test/_1_1', ops: OTHER.map((id) => ({ s: 'dash', id: ckey(id), set: { on: true } })) });
+  const p = asStudent(cardsPage({ at: 'dash', enhance: { sidebar: false }, local: { widgetLayout: seed } }), Promise.resolve(members(otherCourses)), '_1_1');
+  p.ui.sync(true); await settle();
+  assert.equal((await p.ui.who()).uid, '_1_1');
+  asStudent(p, Promise.resolve(members()), '_2_1');
+  p.doc.dispatchEvent({ type: 'glaze:ultra-refresh', detail: { identity: true } });
+  p.ui.sync(true); await settle();
+  assert.equal((await p.ui.who()).uid, '_2_1', 'the old profile cannot own the new membership list');
+  for (const c of COURSES) assert.ok(p.tile(ckey(c.id)), 'the new student receives their first cards');
+  assert.ok(lay(p).filled.includes('dash https://school.blackboard.test/_2_1'));
 });
 
 test('a failed Dashboard identity read can be retried on the next page pass', async () => {
