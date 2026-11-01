@@ -45,6 +45,33 @@ test('a check failure says which rule: the task\'s why travels on the error and 
   assert.deepEqual(rows[0], { id: 'r1', task: 'agent.tools', state: 'check', toolSteps: 1, model: 'r5', why: 'ground' }, 'Activity keeps the code, never the answer');
 });
 
+test('the broker records the selected local weights with check diagnostics and sends raw only to the requester', { timeout: 5000 }, async () => {
+  const B = require('../../extension/ai/broker.js'), L = require('../../extension/ai/providers/local.js');
+  let receive, stored;
+  const recorded = new Promise((resolve) => { stored = resolve; });
+  const messages = [];
+  const port = { onMessage: { addListener: (f) => { receive = f; } }, onDisconnect: { addListener: () => {} }, postMessage: (m) => messages.push(m), disconnect: () => {} };
+  L._env({ store: { list: async () => [{ id: 'rime-q4', tier: 1, state: 'ready', tools: 3 }] }, gpu: () => ({}), session: null,
+    link: { kind: 'worker', up: true, call: async () => ({ text: JSON.stringify(BAD.prose.answer), finish: 'stop' }) } });
+  try {
+    B.connect(port, { who: 'recover-model', allowed: Promise.resolve(true), enabled: async () => true,
+      settings: async () => ({ on: true, model: { use: 'local', model: '' }, features: { ask: true } }),
+      vault: { get: async () => ({ local: { provider: 'local' } }) }, task: async () => A.task,
+      local: { get: async () => ({}), set: async (v) => stored(v.aiCalls) } });
+    receive({ id: 1, op: 'run', feature: 'ask', task: 'agent.tools', input: { question: 'Which assignments are coming up?', tools: ['schedule_list'], steps: [STEP], now: SUNDAY, zone: ZONE, first: true } });
+    const rows = await recorded;
+    const error = messages.find((m) => m.type === 'error');
+    assert.equal(error?.error, 'check');
+    assert.equal(error.why, 'ground');
+    assert.match(error.raw, /a few assignments coming up/);
+    assert.equal(rows[0].model, 'rime-q4');
+    assert.equal(rows[0].why, 'ground');
+    assert.equal(rows[0].toolSteps, 1);
+    assert.equal('raw' in rows[0], false);
+    assert.ok(!JSON.stringify(rows).includes('a few assignments'));
+  } finally { B._reset(); L._env(null); }
+});
+
 test('the corrective turn: a check block after the results naming the broken rule, in the trained format; build() and fromRequest() keep it; level 1 has none', () => {
   const inp = inputOf({ fix: 'ground' });
   assert.equal(inp.fix, 'ground');
