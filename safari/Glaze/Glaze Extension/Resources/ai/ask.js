@@ -154,7 +154,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   // routing, the tools offered and so every request are as before.
   const TOPICS3 = {
     compute: {
-      en: ['convert\\p{L}*', 'conversion', 'average of', 'mean of', 'median', 'standard deviation', 'how many days', 'days (?:until|till|left)', 'what (?:grade|score|average|do i need)\\b.{0,40}',
+      en: ['convert\\p{L}*', 'conversion', 'average of', 'mean of', 'median', 'standard deviation', 'how many days', 'days (?:until|till|left)', 'what (?:grade|score|average) do i need', 'what do i need on (?:my|the|an?) (?:exam|test|quiz|final|midterm)',
         'percent of', 'sum of', 'total of', 'table of', '(?:my|the) grade (?:if|would)', 'gpa'],
       es: ['convi[eé]rte\\p{L}*', 'convertir', 'promedio de', 'media de', 'cu[aá]ntos d[ií]as', 'qu[eé] nota necesito', 'por ciento de', 'mi promedio', 'mi nota si'],
       'pt-BR': ['convert\\p{L}*', 'm[ée]dia de', 'quantos dias', 'que nota preciso', 'por cento de', 'minha m[ée]dia', 'minha nota se'],
@@ -190,7 +190,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const TOOLS3 = { compute: ['run_js'], navigate: ['places_list', 'place_open', 'page_highlight'], remind: ['wake_create', 'wakes_list', 'wake_cancel'],
     watch: ['monitor_create', 'wakes_list', 'todo_list', 'grades_list'] };
   // WORK's computing verbs, which a compute question that isn't graded work may use: "Calculate my grade if…".
-  const COMPUTING = ['calculat\\p{L}*', 'calcul\\p{L}*', 'berechn\\p{L}*', 'bereken\\p{L}*'];
+  const COMPUTING = ['calculat\\p{L}*', 'calcula\\p{L}*', 'calcul\\p{L}*', 'berechn\\p{L}*', 'bereken\\p{L}*'];
   const route = (question, { attempt = '', locale = 'en', level = 1 } = {}) => {
     const q = String(question).replace(/[‘’]/g, "'"), work = typeof attempt === 'string' ? attempt : '';
     const has = (table) => words(lists(table, locale)).test(q);
