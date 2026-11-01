@@ -162,9 +162,21 @@ var GZ_AI_MODEL_UPDATES = globalThis.GZ_AI_MODEL_UPDATES || (() => {
     if (signal.aborted) stop();
     try {
       const r = await env.fetch(LIST, { credentials: 'omit', cache: 'no-store', redirect: 'follow', referrerPolicy: 'no-referrer', mode: 'cors', signal: t.signal });
-      if (!r.ok || (r.url && !ST().allowedHost(r.url))) return null;
-      const text = await r.text();
-      return text.length > CAP ? null : JSON.parse(text);
+      if (!r.ok || (r.url && !ST().allowedHost(r.url))) { await r.body?.cancel().catch(() => {}); return null; }
+      const reader = r.body?.getReader();
+      if (!reader) return null;
+      const decoder = new TextDecoder();
+      let bytes = 0, text = '';
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          bytes += value.byteLength;
+          if (bytes > CAP || t.signal.aborted) return null;
+          text += decoder.decode(value, { stream: true });
+        }
+        return t.signal.aborted ? null : JSON.parse(text + decoder.decode());
+      } finally { await reader.cancel().catch(() => {}); }
     } finally { clearTimeout(timer); signal.removeEventListener('abort', stop); }
   };
   // env: { store, settings(), tier(), fetch, host(op, args, { signal, onEvent }), local (storage area), now(), glaze, saveData(),
