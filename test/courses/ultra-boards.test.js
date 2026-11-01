@@ -1768,17 +1768,59 @@ test('a partial membership list cannot consume the first Dashboard fill before t
   assert.ok(lay(p).filled.includes('dash https://school.blackboard.test/_2_1'));
 });
 
-test('a full shared Dashboard waits for stored room before marking another student filled', async () => {
+test('a Dashboard fill drops only the oldest confirmed foreign cards needed for stored room, in the fill itself', async () => {
+  for (const free of [0, 2, 3]) {
+    const away = { id: 'course:https://another.school.test/_8_1', on: true };
+    const foreign = Array.from({ length: W.COURSE_TOTAL - free - 1 }, (_, n) => ({ id: ckey(`_${500 + n}_1`), on: true }));
+    const board = [away, ...foreign], list = later();
+    const seed = W.layout({ ...W.fresh(), filled: ['dash'], boards: { dash: board } });
+    const p = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: seed } }), list, '_2_1');
+    p.ui.sync(true); await settle();
+    assert.deepEqual(lay(p).boards.dash.filter((x) => W.course(x.id)).map((x) => x.id), board.map((x) => x.id), 'unknown ownership never permits a drop');
+    assert.equal(layoutSends(p).length, 0);
+    list.res(members()); await settle();
+    const dropped = Math.max(0, COURSES.length - free), sends = layoutSends(p);
+    assert.equal(sends.length, 1, 'no separate edit can opt the student out');
+    assert.equal(sends[0].fill, 'dash');
+    assert.deepEqual(sends[0].ops.filter((o) => o.remove).map((o) => o.id), foreign.slice(0, dropped).map((x) => x.id));
+    assert.deepEqual(lay(p).boards.dash.filter((x) => W.course(x.id)).map((x) => x.id), [away.id, ...foreign.slice(dropped).map((x) => x.id), ...COURSES.map((c) => ckey(c.id))]);
+    for (const c of COURSES) assert.ok(p.tile(ckey(c.id)), 'the new student gets their first cards');
+    assert.ok(lay(p).filled.includes('dash https://school.blackboard.test/_2_1'));
+  }
+});
+
+test('a full Dashboard can replace 48 foreign cards in one 96-operation fill', async () => {
+  const courses = Array.from({ length: W.COURSE_MAX }, (_, n) => ({ id: `_${900 + n}_1`, name: `Course ${n}`, term: '', slot: 1 }));
   const board = Array.from({ length: W.COURSE_TOTAL }, (_, n) => ({ id: ckey(`_${500 + n}_1`), on: true }));
   const seed = W.layout({ ...W.fresh(), filled: ['dash'], boards: { dash: board } });
-  const p = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: seed } }), Promise.resolve(members()), '_2_1');
-  p.ui.sync(true); await settle(); p.ui.sync(true); await settle();
-  assert.equal(lay(p).filled.includes('dash https://school.blackboard.test/_2_1'), false, 'an unsuccessful fill cannot consume the mark');
-  assert.equal(layoutSends(p).filter((m) => m.fill).length, 0, 'a full board sends no repeated fill attempts');
-  p.store.widgetLayout = W.apply(p.store.widgetLayout, { ops: board.slice(0, COURSES.length).map((x) => ({ s: 'dash', id: x.id, remove: true })) });
-  p.changed({ widgetLayout: { newValue: p.store.widgetLayout } }); p.ui.sync(true); await settle();
-  for (const c of COURSES) assert.ok(p.tile(ckey(c.id)), 'the first cards arrive once room is available');
-  assert.ok(lay(p).filled.includes('dash https://school.blackboard.test/_2_1'));
+  const p = asStudent(cardsPage({ at: 'dash', courses, local: { widgetLayout: seed } }), Promise.resolve(members(courses)), '_2_1');
+  p.ui.sync(true); await settle();
+  const sends = layoutSends(p);
+  assert.equal(sends.length, 1);
+  assert.equal(sends[0].fill, 'dash');
+  assert.equal(sends[0].ops.length, 96);
+  for (const c of courses) assert.ok(p.tile(ckey(c.id)));
+  assert.equal(lay(p).boards.dash.filter((x) => W.course(x.id)).length, W.COURSE_TOTAL);
+});
+
+test('the picker makes stored room with ordered batches, preserving owned and other-origin cards', async () => {
+  const courses = Array.from({ length: W.COURSE_MAX }, (_, n) => ({ id: `_${900 + n}_1`, name: `Course ${n}`, term: '', slot: 1 }));
+  const own = { id: ckey(courses[0].id), on: true, x: 200, y: 100, w: 420 };
+  const away = { id: 'course:https://another.school.test/_8_1', on: true, x: 400, y: 200 };
+  for (const free of [0, 48]) {
+    const foreign = Array.from({ length: W.COURSE_TOTAL - free - 2 }, (_, n) => ({ id: ckey(`_${500 + n}_1`), on: true }));
+    const p = asStudent(cardsPage({ courses, local: { widgetLayout: { todo: true, boards: { courses: [away, own, ...foreign] } } } }), Promise.resolve(members(courses)));
+    const { dlg } = await openCards(p);
+    assert.equal(dlg.querySelector('.gz-ccm-count').textContent, 'On this board: 1. Room for 47 more.');
+    p.doc.fire(buttonIn(dlg.querySelector('.gz-ccm-tools'), 'Select all'), 'click'); await settle();
+    const dropped = Math.max(0, 47 - free), sends = layoutSends(p), ops = sends.flatMap((m) => m.ops);
+    assert.ok(sends.every((m) => !m.fill && m.ops.length <= 64));
+    assert.deepEqual(ops.slice(0, dropped).map((o) => [o.id, o.remove]), foreign.slice(0, dropped).map((x) => [x.id, true]));
+    assert.ok(ops.slice(dropped).every((o) => o.set?.on === true), 'all removals precede every add');
+    assert.deepEqual(lay(p).boards.courses.filter((x) => W.course(x.id)).map((x) => x.id), [away.id, own.id, ...foreign.slice(dropped).map((x) => x.id), ...courses.slice(1).map((c) => ckey(c.id))]);
+    assert.equal(on(p, 'courses', own.id).x, 200);
+    assert.equal(on(p, 'courses', away.id).x, 400);
+  }
 });
 
 test("a tile's Fold, Remove and Float sit above its resize corner, which a folded tile brings up beside them", () => {

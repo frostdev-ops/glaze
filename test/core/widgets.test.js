@@ -799,6 +799,23 @@ test('a queued first fill cannot consume an account mark when the shared board h
   assert.ok(next.filled.includes(`dash ${account}`));
 });
 
+test('a marked Dashboard fill replaces old course records in one message and retries if queued room disappeared', () => {
+  const key = (n) => `course:https://bb.test/_${n}_1`, account = 'https://bb.test/_2_1';
+  const rows = Array.from({ length: W.COURSE_TOTAL }, (_, n) => ({ id: key(n + 1), on: true, size: 'l' }));
+  const full = W.layout({ ...W.fresh(), filled: ['dash'], boards: { dash: rows } });
+  const drops = rows.slice(0, W.COURSE_MAX).map((x) => ({ s: 'dash', id: x.id, remove: true }));
+  const adds = Array.from({ length: W.COURSE_MAX }, (_, n) => ({ s: 'dash', id: key(900 + n), set: { on: true, size: 's' } }));
+  const fill = { fill: 'dash', account, ops: [...drops, ...adds] };
+  const next = W.apply(full, fill);
+  assert.deepEqual(next.boards.dash.filter((x) => W.course(x.id)).map((x) => x.id), [...rows.slice(W.COURSE_MAX).map((x) => x.id), ...adds.map((x) => x.id)]);
+  assert.ok(next.filled.includes(`dash ${account}`));
+  assert.deepEqual(W.apply(next, fill), next, 'the account is filled once, even with drops in the message');
+  assert.equal(next.boards.dash.find((x) => x.id === key(49)).size, 'l', 'unrelated cards keep their settings');
+  assert.deepEqual(W.apply(full, { ...fill, ops: [...drops.slice(1), ...adds] }), full, 'insufficient queued room changes neither cards nor the fill mark');
+  const vanished = W.apply(full, { ops: [{ s: 'dash', id: key(1), remove: true }, { s: 'dash', id: key(800), set: { on: true } }] });
+  assert.deepEqual(W.apply(vanished, fill), vanished, 'a drop already consumed by another tab cannot be counted twice');
+});
+
 test('kept: an update keeps what a device without a stored layout showed, and adds nothing the widgets switch now turns on', () => {
   const on = (l, b) => (b ? l.boards[b] : l.tiles).filter((t) => t.on).map((t) => t.id);
   const four = ['notes', 'agenda', 'timer', 'quotes'];
