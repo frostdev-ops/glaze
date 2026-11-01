@@ -3899,5 +3899,6 @@
   "The document changed or was deleted. Remove it and pick it again. Nothing was submitted.": "Het document is gewijzigd of verwijderd. Verwijder het en selecteer het opnieuw. Er is niets ingeleverd.",
   "File: {name}.": "Bestand: {name}.",
   "Use Blackboard editor to review or remove these uploads: {names}.": "Gebruik de Blackboard-editor om deze uploads te controleren of te verwijderen: {names}.",
-  "Not attached": "Niet bijgevoegd"
+  "Not attached": "Niet bijgevoegd",
+  "Update automatically": "Automatisch bijwerken"
 };

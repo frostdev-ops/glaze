@@ -2788,6 +2788,22 @@ const aiVisualScope = async (s) => {
     || await aiAttempt(s.tab.id, host.documentId, page.href) !== 'assignment') return null;
   return { school: page.school, account: page.account, assignment: page.assignment };
 };
+// Background updates of Rime (ai/local/updates.js, docs/ai-harness.md "Model updates"): a daily alarm and one a few minutes
+// after the browser starts. Each check asks nothing of the network unless a Rime model is downloaded here and Settings'
+// Update automatically is on; a newer version downloads and swaps in through the engine host. Turning the switch off stops it.
+const modelUpdatesEnv = () => ({ store: GZ_AI_STORE, settings: async () => GZ_AI_SETTINGS.clean((await chrome.storage.local.get(GZ_AI_SETTINGS.KEY))[GZ_AI_SETTINGS.KEY]),
+  tier: async () => { const c = ((await aiEnv().vault.get('connections')) || {}).local; return Number.isSafeInteger(c?.tier) ? c.tier : 0; },
+  fetch: (u, i) => fetch(u, i), host: (op, args, o) => GZ_AI_LOCAL.link().call(op, args, o), local: chrome.storage.local, now: Date.now,
+  glaze: chrome.runtime.getManifest().version, saveData: () => globalThis.navigator?.connection?.saveData === true,
+  say: (m) => chrome.runtime.sendMessage?.(m)?.catch?.(() => {}), safari: SAFARI || !GZ_AI_SETTINGS.PROVIDERS.includes('local') });
+chrome.alarms?.onAlarm.addListener((a) => { if (!SAFARI && a?.name?.startsWith('gz-models:')) { ai(); GZ_AI_MODEL_UPDATES.alarm(modelUpdatesEnv(), a)?.catch(() => {}); } });
+// Scheduling loads updates.js alone, never the whole harness, at every browser start.
+const modelUpdatesPlan = (startup) => () => { if (SAFARI) return; if (typeof GZ_AI_MODEL_UPDATES === 'undefined') importScripts('../ai/local/updates.js'); GZ_AI_MODEL_UPDATES.schedule({ alarms: chrome.alarms }, { startup }).catch(() => {}); };
+chrome.runtime.onStartup.addListener(modelUpdatesPlan(true));
+chrome.runtime.onInstalled.addListener(modelUpdatesPlan(false));
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.ai?.newValue?.updates === false && typeof GZ_AI_MODEL_UPDATES !== 'undefined') GZ_AI_MODEL_UPDATES.stop();
+});
 // Glaze's own model's engine host (ai/local/link.js): Chrome's offscreen document of this extension, ai/local/host.html,
 // and nothing else.
 chrome.runtime.onConnect.addListener((p) => {
@@ -2904,21 +2920,6 @@ chrome.alarms?.onAlarm.addListener((a) => { if (a?.name?.startsWith('gz-rime:'))
 const rimeWakesSync = () => { ai(); return GZ_AI_RIME_WAKES.tick(rimeWakesEnv()).catch(() => {}); };
 chrome.runtime.onStartup.addListener(rimeWakesSync);
 chrome.runtime.onInstalled.addListener(rimeWakesSync);
-// Background updates of Rime (ai/local/updates.js, docs/ai-harness.md "Model updates"): a daily alarm and one a few minutes
-// after the browser starts. Each check asks nothing of the network unless a Rime model is downloaded here and Settings'
-// Update automatically is on; a newer version downloads and swaps in through the engine host. Turning the switch off stops it.
-const modelUpdatesEnv = () => ({ store: GZ_AI_STORE, settings: async () => GZ_AI_SETTINGS.clean((await chrome.storage.local.get(GZ_AI_SETTINGS.KEY))[GZ_AI_SETTINGS.KEY]),
-  tier: async () => { const c = ((await aiEnv().vault.get('connections')) || {}).local; return Number.isSafeInteger(c?.tier) ? c.tier : 0; },
-  fetch: (u, i) => fetch(u, i), host: (op, args, o) => GZ_AI_LOCAL.link().call(op, args, o), local: chrome.storage.local, now: Date.now,
-  glaze: chrome.runtime.getManifest().version, saveData: () => globalThis.navigator?.connection?.saveData === true,
-  say: (m) => chrome.runtime.sendMessage?.(m)?.catch?.(() => {}), safari: SAFARI || !GZ_AI_SETTINGS.PROVIDERS.includes('local') });
-chrome.alarms?.onAlarm.addListener((a) => { if (!SAFARI && a?.name?.startsWith('gz-models:')) { ai(); GZ_AI_MODEL_UPDATES.alarm(modelUpdatesEnv(), a)?.catch(() => {}); } });
-const modelUpdatesPlan = (startup) => () => { if (SAFARI) return; ai(); GZ_AI_MODEL_UPDATES.schedule({ alarms: chrome.alarms }, { startup }).catch(() => {}); };
-chrome.runtime.onStartup.addListener(modelUpdatesPlan(true));
-chrome.runtime.onInstalled.addListener(modelUpdatesPlan(false));
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes.ai?.newValue?.updates === false && typeof GZ_AI_MODEL_UPDATES !== 'undefined') GZ_AI_MODEL_UPDATES.stop();
-});
 chrome.storage.onChanged.addListener((changes, area) => {
   if ((area === 'local' && changes.ai) || (area === 'sync' && changes.enabled)) return rimeWakesSync();
 });

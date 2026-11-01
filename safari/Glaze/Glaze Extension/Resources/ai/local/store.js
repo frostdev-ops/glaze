@@ -1,16 +1,23 @@
 // The local model's weights in OPFS (navigator.storage.getDirectory()), for Glaze's own engine. A model comes from
 // ai/local/models.json (tools/vendor/model-manifest.js writes it): a Hugging Face file pinned to a commit, its size and the
 // SHA-256 of each 64 MB chunk. download() fetches it by Range from huggingface.co's resolve URL, which redirects to HF's
-// CDN, on the student's click only. Each chunk is checked before the next starts and kept as its own file, so a
+// CDN, on the student's click (or a background update's, ai/local/updates.js). Each chunk is checked before the next starts and kept as its own file, so a
 // cancelled or killed download resumes from its verified chunks (a writable commits on close; rewriting one 1 GB file in
 // place would copy it on every chunk). The folder is named by the file's hash, so another version never mixes in; an
 // empty `ready` file marks it complete. open() reads byte ranges, never the whole file.
+// Model updates (docs/ai-harness.md "Model updates"; ai/local/updates.js): an id names a model's place (a size of Rime),
+// and a newer version of it keeps the id. The state file beside the models (TOP/~updates.json, written by edit() under the
+// Web Lock STATE_LOCK) holds the accepted signed list's entries, the version each downloaded id stays on until a swap
+// (pins), versions kept beside it (keep: a download in progress, or the old one until the new one has answered), the trial
+// and the versions that failed. compose() makes the catalog from models.json and that file: entries (each id's version in
+// use), spares (kept versions) and latest (the version each id should run). A version is its own tag folder.
 // Plain script for the worker, an extension page or a Worker; node exports.
 var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
   const TOP = 'glaze-models';
   const HEX = /^[0-9a-f]{64}$/;
   const ID = /^[a-z0-9][a-z0-9._-]{0,63}$/;
   const STALL = 60000; // no bytes for this long: the network is gone
+  const STATE = '~updates.json', STATE_LOCK = 'glaze-model-updates'; // never an id: ID starts with a letter or digit
   const SHOW = 1 << 20; // progress at most once a MB, or a sixteenth of a smaller chunk
 
   const fail = (reason, message, extra) => Object.assign(new Error(message), { reason, ...extra });
@@ -44,6 +51,93 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
     // The picture download's files: its language model (role pictures, naming its projector) and the projector.
     && (m.role === undefined || m.role === 'projector' ? m.projector === undefined : m.role === 'pictures' && typeof m.projector === 'string' && ID.test(m.projector));
 
+  const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
+  const freeze = (m) => Object.freeze({ ...m, sha256: Object.freeze([...m.sha256]) });
+  // The catalog from models.json's entries and the state file (null: models.json alone). A list entry is a text model
+  // (a tier, no role) and never takes a tier a shipped model holds under another id, or moves a shipped id to another
+  // tier; one whose whole hash failed (failed) is never offered. → { entries, spares, latest, state }, each a Map by id
+  // (spares: id → [versions kept beside the one in use]).
+  const compose = (bundled, st) => {
+    const entries = new Map(), spares = new Map();
+    for (const m of bundled || []) if (valid(m) && !entries.has(m.id)) entries.set(m.id, freeze(m));
+    if (!isObj(st)) return { entries, spares, latest: new Map(entries), state: null };
+    const failed = isObj(st.failed) ? st.failed : {};
+    const base = new Map(entries), tiers = new Map();
+    for (const m of base.values()) if (!m.role) tiers.set(m.tier, m.id);
+    const text = (m) => valid(m) && m.role === undefined && Number.isSafeInteger(m.tier) && m.tier > 0;
+    // Where a shipped id is, a list's or pin's version must keep its tier; a new id must take a tier no shipped id holds.
+    const fits = (m) => (base.has(m.id) ? !base.get(m.id).role && base.get(m.id).tier === m.tier : !tiers.has(m.tier) || tiers.get(m.tier) === m.id);
+    for (const m of Array.isArray(st.models) ? st.models : []) {
+      if (!text(m) || !fits(m) || Object.hasOwn(failed, m.total) || (!base.has(m.id) && entries.has(m.id))) continue;
+      entries.set(m.id, freeze(m));
+      tiers.set(m.tier, m.id);
+    }
+    const latest = new Map(entries), offered = new Set(entries.keys());
+    for (const id of base.keys()) if (entries.get(id) === base.get(id)) offered.delete(id);
+    for (const [id, m] of Object.entries(isObj(st.pins) ? st.pins : {})) {
+      if (!text(m) || m.id !== id || !fits(m) || !(entries.has(id) ? entries.get(id).tier === m.tier : !tiers.has(m.tier))) continue;
+      entries.set(id, freeze(m));
+      // The list's version is the one to run; without one, a model stays on its version (never back to models.json's).
+      if (!offered.has(id)) latest.set(id, entries.get(id));
+    }
+    for (const [id, list] of Object.entries(isObj(st.keep) ? st.keep : {})) {
+      const use = entries.get(id);
+      if (!use || !Array.isArray(list)) continue;
+      const kept = list.filter((m) => text(m) && m.id === id && m.tier === use.tier && m.total !== use.total).map(freeze);
+      if (kept.length) spares.set(id, kept);
+    }
+    return { entries, spares, latest, state: st };
+  };
+
+  // SHA-256 over many buffers (WebCrypto's digest takes one): the whole file's hash, chunk by chunk.
+  const K = new Uint32Array([0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01,
+    0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa,
+    0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138,
+    0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624,
+    0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f,
+    0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2]);
+  const sha256 = () => {
+    const H = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
+    const W = new Uint32Array(64), tail = new Uint8Array(64);
+    let fill = 0, total = 0;
+    const block = (b, o) => {
+      for (let t = 0; t < 16; t++, o += 4) W[t] = (b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3];
+      for (let t = 16; t < 64; t++) {
+        const x = W[t - 15], y = W[t - 2];
+        W[t] = (((x >>> 7) | (x << 25)) ^ ((x >>> 18) | (x << 14)) ^ (x >>> 3)) + W[t - 7] + (((y >>> 17) | (y << 15)) ^ ((y >>> 19) | (y << 13)) ^ (y >>> 10)) + W[t - 16];
+      }
+      let a = H[0], b2 = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+      for (let t = 0; t < 64; t++) {
+        const t1 = (h + (((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7))) + ((e & f) ^ (~e & g)) + K[t] + W[t]) | 0;
+        const t2 = ((((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10))) + ((a & b2) ^ (a & c) ^ (b2 & c))) | 0;
+        h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b2; b2 = a; a = (t1 + t2) | 0;
+      }
+      H[0] += a; H[1] += b2; H[2] += c; H[3] += d; H[4] += e; H[5] += f; H[6] += g; H[7] += h;
+    };
+    return {
+      update(bytes) {
+        let i = 0;
+        total += bytes.length;
+        if (fill) {
+          i = Math.min(64 - fill, bytes.length);
+          tail.set(bytes.subarray(0, i), fill); fill += i;
+          if (fill < 64) return;
+          block(tail, 0); fill = 0;
+        }
+        for (; i + 64 <= bytes.length; i += 64) block(bytes, i);
+        if (i < bytes.length) { tail.set(bytes.subarray(i), 0); fill = bytes.length - i; }
+      },
+      hex() {
+        const bits = total * 8, end = new Uint8Array(fill + 9 <= 64 ? 64 - fill : 128 - fill);
+        end[0] = 0x80;
+        const v = new DataView(end.buffer);
+        v.setUint32(end.length - 8, Math.floor(bits / 2 ** 32)); v.setUint32(end.length - 4, bits >>> 0);
+        this.update(end);
+        return [...H].map((x) => x.toString(16).padStart(8, '0')).join('');
+      },
+    };
+  };
+
   const anySignal = (signals) => {
     if (AbortSignal.any) return AbortSignal.any(signals);
     const c = new AbortController();
@@ -64,23 +158,26 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
     if (locks === undefined) locks = globalThis.navigator?.locks || null;
     if (channel === undefined) channel = typeof BroadcastChannel === 'function' ? () => new BroadcastChannel('glaze-models') : null;
     const digest = (b) => (subtle || globalThis.crypto.subtle).digest('SHA-256', b);
-    const jobs = new Map(); // id → the download in progress, shared by its callers
+    const jobs = new Map(); // id (a kept version's: id@total) → the download in progress, shared by its callers
+    const jobsOf = (id) => [...jobs].filter(([k]) => k === id || k.startsWith(`${id}@`));
     const queue = new Map(); // id → the last of the writes to its folder, where there are no Web Locks
 
     // Stop this store's download of `id`, its callers told `err`'s reason.
     const cancel = (id, err) => {
-      const job = jobs.get(id);
-      if (job) { jobs.delete(id); job.controller.abort(err); }
+      for (const [k, job] of jobsOf(id)) { jobs.delete(k); job.controller.abort(err); }
     };
     let bus = null;
     const tell = () => {
       if (!bus && channel) {
         bus = channel();
         bus.onmessage = (e) => {
-          const d = e?.data, job = d?.type === 'remove' && typeof d.id === 'string' && Number.isSafeInteger(d.upto) && jobs.get(d.id);
-          if (!job) return;
-          if (job.gen === null) job.cut = Math.max(job.cut, d.upto); // not yet read: checked when it is
-          else if (job.gen <= d.upto) cancel(d.id, removed());
+          const d = e?.data;
+          if (d?.type === 'catalog') { catalog = null; return; } // another context changed the state file
+          if (d?.type !== 'remove' || typeof d.id !== 'string' || !Number.isSafeInteger(d.upto)) return;
+          for (const [k, job] of jobsOf(d.id)) {
+            if (job.gen === null) job.cut = Math.max(job.cut, d.upto); // not yet read: checked when it is
+            else if (job.gen <= d.upto) { jobs.delete(k); job.controller.abort(removed()); }
+          }
         };
         bus.unref?.(); // node: never what keeps a process alive
       }
@@ -88,19 +185,36 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
     };
 
     let catalog = null;
+    // The state file, or null when there is none or it isn't one.
+    const readState = async () => {
+      try {
+        const top = await (await root()).getDirectoryHandle(TOP);
+        const st = JSON.parse(await (await (await top.getFileHandle(STATE)).getFile()).text());
+        return isObj(st) && st.v === 1 ? st : null;
+      } catch { return null; }
+    };
     const load = () => (catalog ||= (async () => {
+      tell(); // hear other contexts' state changes
       let list = typeof models === 'function' ? await models() : models;
       if (!list) list = await (await globalThis.fetch(new URL('/ai/local/models.json', globalThis.location.origin).href)).json();
       if (list && !Array.isArray(list)) list = list.models;
-      const map = new Map();
-      for (const m of list || []) if (valid(m) && !map.has(m.id)) map.set(m.id, Object.freeze({ ...m, sha256: Object.freeze([...m.sha256]) }));
-      return map;
+      return compose(list, await readState());
     })().catch((e) => { catalog = null; throw e; }));
     const model = async (id) => {
-      const m = (await load()).get(id);
+      const m = (await load()).entries.get(id);
       if (!m) throw fail('unknown', `No model ${JSON.stringify(id)}`);
       return m;
     };
+    // The version of `id` with whole hash `total`: the one in use, or one kept beside it. Left out, the one in use.
+    const version = async (id, total) => {
+      if (total === undefined) return model(id);
+      const c = await load(), use = c.entries.get(id);
+      const m = use?.total === total ? use : (c.spares.get(id) || []).find((x) => x.total === total);
+      if (!m) throw fail('unknown', `No version ${String(total).slice(0, 16)} of ${JSON.stringify(id)}`);
+      return m;
+    };
+    // The tag folders of `id` a download must leave: its version in use and the ones kept.
+    const keeps = async (id) => { const c = await load(); return new Set([c.entries.get(id), ...(c.spares.get(id) || [])].filter(Boolean).map(tag)); };
 
     const exclusive = (id, fn) => {
       const run = (queue.get(id) || Promise.resolve()).then(fn);
@@ -152,9 +266,9 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
     const state = (s) => (s.ready ? (s.have.every(Boolean) ? { state: 'ready' } : { state: 'corrupt' })
       : s.bytes ? { state: 'partial', bytes: s.bytes } : { state: 'missing' });
 
-    // → { state: 'missing' | 'partial' (with bytes) | 'ready' | 'corrupt' }, from the files' sizes.
-    const status = async (id) => {
-      const m = await model(id);
+    // → { state: 'missing' | 'partial' (with bytes) | 'ready' | 'corrupt' }, from the files' sizes. total: a kept version's.
+    const status = async (id, { total } = {}) => {
+      const m = await version(id, total);
       const f = await folder(m, false);
       return f ? state(await scan(m, f.dir)) : { state: 'missing' };
     };
@@ -223,24 +337,26 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
       } finally { clearTimeout(timer); }
     };
 
-    const write = async (dir, name, body) => {
+    const write = async (dir, name, body, { preserve = false } = {}) => {
       const h = await dir.getFileHandle(name, { create: true });
       let w;
       try { w = await h.createWritable({ keepExistingData: false }); await w.write(body); await w.close(); }
       catch (e) {
         try { await w?.abort(); } catch { /* closed */ }
-        try { await dir.removeEntry(name); } catch { /* never made */ }
+        if (!preserve) { try { await dir.removeEntry(name); } catch { /* never made */ } }
         throw e;
       }
     };
 
-    const fetchAll = async (m, signal, say) => {
+    // pause(signal): awaited before each chunk (a background update waits while the model runs). whole: the file's own
+    // SHA-256 must be m.total before it is marked ready; if not, its chunks go (reason hash, whole).
+    const fetchAll = async (m, signal, say, { pause, whole } = {}) => {
       const { own, dir } = await folder(m, true);
-      const others = [];
-      for await (const name of own.keys()) if (name !== tag(m)) others.push(name);
+      const others = [], keep = await keeps(m.id);
+      for await (const name of own.keys()) if (name !== tag(m) && !keep.has(name)) others.push(name);
       for (const name of others) await own.removeEntry(name, { recursive: true });
       const s = await scan(m, dir);
-      if (s.ready && s.have.every(Boolean)) { say(1); return { state: 'ready' }; }
+      if (s.ready && s.have.every(Boolean) && !whole) { say(1); return { state: 'ready' }; }
       if (s.ready) await dir.removeEntry('ready');
       for (let i = 0; i < s.have.length; i++) if (s.exists[i] && !s.have[i]) await dir.removeEntry(String(i));
       let kept = s.bytes;
@@ -250,6 +366,7 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
       for (let i = 0; i < s.have.length; i++) {
         if (s.have[i]) continue;
         if (signal.aborted) throw why(signal);
+        if (pause) { await pause(signal); if (signal.aborted) throw why(signal); }
         let body;
         for (let attempt = 0; ; attempt++) {
           body = await fetchChunk(m, i, signal, (got) => say((kept + got) / m.size));
@@ -265,15 +382,26 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
         kept += len(m, i);
         say(kept / m.size);
       }
+      if (whole) {
+        const h = sha256();
+        for (let i = 0; i < m.sha256.length; i++) {
+          if (signal.aborted) throw why(signal);
+          h.update(new Uint8Array(await (await (await dir.getFileHandle(String(i))).getFile()).arrayBuffer()));
+        }
+        if (h.hex() !== m.total) {
+          for (let i = 0; i < m.sha256.length; i++) await dir.removeEntry(String(i));
+          throw fail('hash', 'The file failed its whole-file check', { whole: true });
+        }
+      }
       await dir.getFileHandle('ready', { create: true });
       say(1);
       return { state: 'ready' };
     };
 
-    // Registered before anything is awaited, so a remove that follows at once finds it.
-    const start = (id) => {
+    // Registered before anything is awaited, so a remove that follows at once finds it. key: id, or id@total for a kept version.
+    const start = (id, key, { total, pause, whole } = {}) => {
       const job = { listeners: new Set(), callers: 0, controller: new AbortController(), last: null, gen: null, cut: -1 };
-      jobs.set(id, job);
+      jobs.set(key, job);
       tell();
       const say = (p) => {
         p = Math.max(job.last ?? 0, Math.min(1, Math.max(0, p)));
@@ -286,14 +414,14 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
       job.done = held(id, signal, async () => {
         job.gen = await generation(id);
         if (job.gen <= job.cut) throw removed();
-        const r = await fetchAll(await model(id), signal, say);
+        const r = await fetchAll(await version(id, total), signal, say, { pause, whole });
         if (signal.aborted) throw why(signal); // a remove during the last write: its files are going
         return r;
-      }).finally(() => { if (jobs.get(id) === job) jobs.delete(id); });
+      }).finally(() => { if (jobs.get(key) === job) jobs.delete(key); });
       return job;
     };
     // A caller's cancel ends its own wait; the download stops when the last caller still waiting cancels.
-    const join = (id, job, signal, onProgress) => new Promise((resolve, reject) => {
+    const join = (key, job, signal, onProgress) => new Promise((resolve, reject) => {
       const listen = typeof onProgress === 'function' ? onProgress : null;
       job.callers++;
       let settled = false;
@@ -303,7 +431,7 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
       };
       const stop = () => {
         finish(reject, aborted());
-        if (--job.callers === 0) { if (jobs.get(id) === job) jobs.delete(id); job.controller.abort(); }
+        if (--job.callers === 0) { if (jobs.get(key) === job) jobs.delete(key); job.controller.abort(); }
       };
       signal?.addEventListener('abort', stop, { once: true });
       // Progress so far, replayed once the cancel is heard: a listener that cancels on it is cancelled.
@@ -311,11 +439,13 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
       job.done.then((v) => finish(resolve, v), (e) => finish(reject, e));
     });
 
-    // → { state: 'ready' }; or throws an Error whose `reason` is aborted, removed, network, hash (with chunk), quota (with
-    // needed and available bytes), redirect, server or unknown.
-    const download = (id, { signal, onProgress } = {}) => {
+    // → { state: 'ready' }; or throws an Error whose `reason` is aborted, removed, network, hash (with chunk, or whole),
+    // quota (with needed and available bytes), redirect, server or unknown. total: a version kept beside the one in use (a
+    // background update's); pause and whole as fetchAll takes them, from the call that starts the download.
+    const download = (id, { signal, onProgress, total, pause, whole } = {}) => {
       if (signal?.aborted) return Promise.reject(aborted());
-      return join(id, jobs.get(id) || start(id), signal, onProgress);
+      const key = total === undefined ? id : `${id}@${total}`;
+      return join(key, jobs.get(key) || start(id, key, { total, pause, whole }), signal, onProgress);
     };
 
     // → { id, size, read(offset, length) → Promise<Uint8Array> } over a ready model.
@@ -353,7 +483,7 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
       cancel(id, removed());
       const bus = tell();
       if (bus) bus.postMessage({ type: 'remove', id, upto: await generation(id) });
-      return held(id, null, async () => {
+      await held(id, null, async () => {
         const top = await (await root()).getDirectoryHandle(TOP, { create: true });
         const old = [];
         for await (const name of top.keys()) if (name.startsWith(stamp(id))) old.push(name);
@@ -361,7 +491,44 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
         for (const name of old) await top.removeEntry(name);
         try { await top.removeEntry(id, { recursive: true }); } catch (e) { if (!gone(e)) throw e; }
       });
+      // Its versions are gone: the state forgets them (a download takes the newest again); the serial and failures stay.
+      await edit((st) => {
+        if (!st || !(st.pins?.[id] || st.keep?.[id] || st.trial?.id === id)) return undefined;
+        const { [id]: _p, ...pins } = isObj(st.pins) ? st.pins : {}, { [id]: _k, ...keep } = isObj(st.keep) ? st.keep : {};
+        return { ...st, pins, keep, trial: st.trial?.id === id ? null : st.trial ?? null };
+      });
     };
+
+    // A kept version's folder goes (the old one once the new has answered, or the new one rolled back); never the one in use.
+    const drop = async (id, total) => {
+      if (typeof id !== 'string' || !ID.test(id) || typeof total !== 'string' || !HEX.test(total)) throw fail('unknown', 'No such version');
+      cancel(`${id}@${total}`, removed());
+      return held(id, null, () => lockState(async () => {
+        catalog = null;
+        const use = (await load()).entries.get(id);
+        if (use?.total === total) throw fail('in-use', 'That version is in use');
+        let own;
+        try { own = await (await (await root()).getDirectoryHandle(TOP)).getDirectoryHandle(id); } catch (e) { if (gone(e)) return; throw e; }
+        const names = [];
+        for await (const name of own.keys()) if (name.startsWith(`${total.slice(0, 16)}-`) && (!use || name !== tag(use))) names.push(name);
+        for (const name of names) await own.removeEntry(name, { recursive: true });
+      }));
+    };
+
+    // The state file, changed: fn(state or null) → the new state, or undefined for no change; under the origin's lock, so
+    // every context's changes apply in turn. Every store then reads its catalog again (this one now, others when told).
+    const lockState = (fn) => (locks ? locks.request(STATE_LOCK, fn) : exclusive('~state', fn));
+    const edit = (fn) => lockState(async () => {
+      const cur = await readState();
+      const next = await fn(cur ? structuredClone(cur) : null);
+      if (next === undefined) return cur;
+      if (!isObj(next) || next.v !== 1) throw new TypeError('not a state');
+      const top = await (await root()).getDirectoryHandle(TOP, { create: true });
+      await write(top, STATE, new TextEncoder().encode(JSON.stringify(next)), { preserve: true });
+      catalog = null;
+      tell()?.postMessage({ type: 'catalog' });
+      return next;
+    });
 
     const used = async (h) => {
       if (h.kind === 'file') return (await h.getFile()).size;
@@ -371,11 +538,12 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
     };
     // The manifest's models with their status; then any model kept here that it no longer offers, as `stale` with its bytes.
     const list = async () => {
-      const cat = await load();
+      const cat = (await load()).entries;
       const out = [];
       for (const m of cat.values()) {
-        const { id, name, size, quant, tier, license, stock, role, projector, tools } = m;
-        out.push({ id, name, size, quant, tier, license, ...(stock && { stock }), ...(role && { role }), ...(projector && { projector }), ...(Number.isSafeInteger(tools) && { tools }), ...(await status(id)) });
+        const { id, name, size, quant, tier, license, stock, role, projector, tools, version: v } = m;
+        out.push({ id, name, size, quant, tier, license, ...(stock && { stock }), ...(role && { role }), ...(projector && { projector }), ...(Number.isSafeInteger(tools) && { tools }),
+          ...(typeof v === 'string' && { version: v }), ...(await status(id)) });
       }
       let top = null;
       try { top = await (await root()).getDirectoryHandle(TOP); } catch (e) { if (!gone(e)) throw e; }
@@ -389,9 +557,9 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
       return out;
     };
 
-    return { status, download, open, remove, list, verify };
+    return { status, download, open, remove, list, verify, drop, edit, catalog: () => load(), refresh: () => { catalog = null; } };
   };
 
-  return { ...create(), create, valid, allowedHost };
+  return { ...create(), create, valid, allowedHost, compose };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_STORE; else GZ_AI_STORE;
