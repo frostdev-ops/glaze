@@ -23,7 +23,8 @@ GZ_AI_PROVIDERS.add({ id: 'stub', config: (raw) => (raw && typeof raw === 'objec
     const task = req.task?.id, next = (askCheck.script[task] || []).shift();
     const text = req.messages.map((m) => [].concat(m.content).map((c) => (typeof c === 'string' ? c : c.text || '')).join('')).join('\\n');
     const mark = /\\[result \\d+ todo_mark_done[^\\]]*\\]\\n<<<(DATA-[0-9a-f]+)\\n([\\s\\S]*?)\\n>>>\\1/.exec(text);
-    askCheck.seen.push({ task, steps: (text.match(/\\[result \\d+ /g) || []).length, ...(mark && { mark: JSON.parse(mark[2]) }) });
+    askCheck.seen.push({ task, steps: (text.match(/\\[result \\d+ /g) || []).length, ...(mark && { mark: JSON.parse(mark[2]) }), ...(/\\nthis week \\d{4}-\\d{2}-\\d{2} to /.test(text) && { windows: true }) });
+    askCheck.last = text;
     if (!next) throw Object.assign(new Error('script'), { category: 'invalid-response' });
     // { wait, out }: the answer after wait ms (a run caught mid-way for its screenshot).
     if (next.wait) await new Promise((r) => setTimeout(r, next.wait));
@@ -277,7 +278,7 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
             { call: null, answer: { text: 'Your newest BIO 1100 announcement, from Dr. Rivera: the lab meets in Room 204 this week. Bring goggles.', quotes: ['Lab moved to Room 204', 'Dr. Rivera'] } }]
           : [{ call: { name: 'courses_list', arguments: {} }, answer: null }, { call: { name: 'announcements_list', arguments: { course: '_101_1' } }, answer: null },
             { call: { name: 'announcement_read', arguments: { course: '_101_1', id: '_801_1' } }, answer: null },
-            { call: null, answer: { text: 'BIO 1100\'s newest announcement: the lab meets in Room 204 this week. Bring goggles.', quotes: ['Lab moved to Room 204'] } }] });
+            { call: null, answer: { text: 'BIO 1100\'s newest announcement, “Lab moved to Room 204”: the lab meets in Room 204 this week. Bring goggles.', quotes: ['Lab moved to Room 204'] } }] });
         const n = await ask('Any new announcements in BIO 1100?');
         const text = await answered(n, 'the tool-first answer');
         const labels = await page.locator('#gz-ask .gz-ask-steps').last().locator('.gz-ask-step-label').allTextContents();
@@ -306,12 +307,12 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
           { call: null, answer: { text: ['You have three things due soon, none handed in yet:', ...titles.map((t) => `- **${t}** (BIO 1100): ${due}, not submitted`)].join('\n'), quotes: [...titles, due] } }] });
         try {
           const n = await ask("What's due this week?");
-          const text = await answered(n, 'the Sunday answer');
+          const text = await answered(n, 'the Sunday answer').catch(async (e) => { throw new Error(`${e.message}; last request: ${(await worker.evaluate(() => askCheck.last)).slice(-1500)}`); });
           const bold = await answers().nth(n).locator('.gz-ask-md ul li strong').allTextContents();
           assert.deepEqual(bold, titles, 'a bulleted list with bold titles');
           assert.ok(text.includes(due), `the friendly date ${due}`);
           const runs = await seen();
-          assert.ok(runs.some((r) => /this week \d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}/.test(JSON.stringify(r))), 'the model saw the resolved windows');
+          assert.ok(runs.some((r) => r.windows), 'the model saw the resolved windows');
           return { text, due, files: await snap(site, 'sunday', '#gz-ask') };
         } finally { await records(site); }
       });

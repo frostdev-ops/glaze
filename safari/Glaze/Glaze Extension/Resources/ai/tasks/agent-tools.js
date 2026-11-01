@@ -549,7 +549,11 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     // Every number the reply says is in a result, the question or the time; or an hour of a result on a 12-hour clock,
     // or a count no longer than a result's longest list.
     const allowed = [...data.flatMap((v) => typeof v === 'number' ? [v] : nums(v, inp.locale)), ...nums(inp.question, inp.locale), ...nums(nowText(inp))];
-    for (const r of results) for (const m of r.matchAll(/ (\d{2}):\d{2}"/g)) allowed.push(Number(m[1]) % 12 || 12);
+    // A result's hour on either clock: "21:00" as 9, "9:00 PM" as 21.
+    for (const r of results) for (const m of r.matchAll(/(?<!\d)(\d{1,2}):\d{2}(?:\s?([AaPp])\.?\s?[Mm]\.?)?/g)) {
+      const h = Number(m[1]), pm = /p/i.test(m[2] || ''), am = /a/i.test(m[2] || '');
+      allowed.push(h % 12 || 12, ...(pm && h < 12 ? [h + 12] : []), ...(am && h === 12 ? [0] : []));
+    }
     const longest = Math.max(0, ...results.map((r) => { try { const lens = []; JSON.parse(r, (k, v) => { if (Array.isArray(v)) lens.push(v.length); return v; }); return Math.max(0, ...lens); } catch { return 0; } }));
     if (nums(text, inp.locale).some((n) => !allowed.includes(n) && !(Number.isInteger(n) && n >= 0 && n <= longest))) return 'number';
     return '';
