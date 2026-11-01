@@ -27,6 +27,7 @@ const page = ({ ai = { on: true, model: { use: 'openai', model: 'm' }, features:
   // A form's requestSubmit fires its submit, as the browser does, carrying no isTrusted of its own: the key that asked for it
   // is the student's (the panel checks that key).
   doc.createElement = (t) => { const e = new El(t, doc); if (t === 'form') e.requestSubmit = () => doc.fire(e, 'submit', { trusted: true }); return e; };
+  doc.createElementNS = (ns, t) => new El(t, doc);
   doc.getElementById = (x) => doc.root.all().find((e) => e.id === x) || null;
   doc.querySelector = (s) => doc.root.querySelector(s);
   const env = { doc, posted: [], ports: [], changed: [], activation: true, store: { ai }, reply: reply || ((m) => (m.op === 'status' ? { type: 'status', on: true, allowed: true, ready: true } : null)) };
@@ -51,7 +52,9 @@ const page = ({ ai = { on: true, model: { use: 'openai', model: 'm' }, features:
   env.box = () => doc.getElementById('gz-ask');
   env.q = () => doc.getElementById('gz-ask-q');
   env.ask = (text, trusted = true) => { env.q().value = text; doc.fire(env.q(), 'keydown', { key: 'Enter', trusted }); };
-  env.turns = () => env.box().querySelectorAll('.gz-ask-log li').map((li) => [li.className, li.textContent]);
+  // Each question and answer as the student reads it: its class and its words (an answer's text and its follow-up question).
+  env.turns = () => env.box().querySelectorAll('.gz-ask-log li').filter((li) => ['gz-ask-q', 'gz-ask-a'].includes(li.className))
+    .map((li) => [li.className, li.querySelectorAll('.gz-ask-text').map((x) => x.textContent).join('')]);
   env.say = () => env.box().querySelector('.gz-ask-say').textContent;
   env.setAi = (next) => { env.store.ai = next; for (const f of env.changed) f({ ai: { newValue: next } }, 'local'); };
   return env;
@@ -210,4 +213,192 @@ test('a script-requested form submit cannot spend another page click’s user ac
   await settle();
   assert.equal(P.posted.filter((m) => m.op === 'ask').length, 1, 'the student can still use the Ask button');
   assert.equal(P.posted.find((m) => m.op === 'ask').question, 'My own question');
+});
+
+// ---- the chat (ported from the agent chat Rime's panel was modelled on) ----------------------------------------------------
+const ready = (m) => (m.op === 'status' ? { type: 'status', on: true, allowed: true, ready: true } : null);
+const asked = (P) => P.posted.filter((m) => m.op === 'ask');
+const answer = (P, a) => P.ports.at(-1).answer({ id: asked(P).at(-1).id, ...a });
+const study = (reply, followUp = null) => ({ type: 'end', task: 'study.help', output: { kind: 'hint', step: null, reply, followUp } });
+
+test('the empty panel offers starters: one fills the question for the student\'s own click; New chat clears the conversation', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  const starters = P.box().querySelectorAll('.gz-ask-starter');
+  assert.equal(starters.length, 4);
+  P.doc.fire(starters[0], 'click', { trusted: false });
+  assert.equal(P.q().value, '', 'a page script\'s click fills nothing');
+  P.doc.fire(starters[0], 'click');
+  assert.equal(P.q().value, starters[0].textContent);
+  assert.equal(P.doc.activeElement, P.q());
+  P.ask('Explain mitosis');
+  await settle();
+  assert.equal(P.box().querySelector('.gz-ask-empty'), null, 'the starters give way to the conversation');
+  answer(P, study('What happens to the chromosomes first?'));
+  await settle();
+  assert.equal(P.turns().length, 2);
+  const fresh = P.box().querySelector('.gz-ask-new');
+  P.doc.fire(fresh, 'click', { trusted: false });
+  assert.equal(P.turns().length, 2);
+  P.doc.fire(fresh, 'click');
+  assert.deepEqual(P.turns(), []);
+  assert.ok(P.box().querySelector('.gz-ask-empty'), 'the starters again');
+  P.ask('Explain meiosis');
+  await settle();
+  assert.equal(asked(P).at(-1).history, undefined, 'a new chat carries nothing over');
+});
+
+test('answers are drawn from their markdown as elements, never markup; only https links, opened apart from the page', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('Explain mitosis');
+  await settle();
+  answer(P, study('**Bold** and `code` <img src=x onerror=alert(1)>\n\n- one\n- two\n\n[bad](javascript:alert(1)) [ok](https://example.com/a) [near](//evil.example)\n\n```\nlet x = 1;\n```'));
+  await settle();
+  const a = P.box().querySelector('.gz-ask-a');
+  assert.equal(a.querySelector('strong').textContent, 'Bold');
+  assert.equal(a.querySelectorAll('code').map((c) => c.textContent)[0], 'code');
+  assert.deepEqual(a.querySelectorAll('ul li').map((li) => li.textContent), ['one', 'two']);
+  assert.ok(a.querySelector('pre'), 'a fenced block');
+  const links = a.querySelectorAll('a');
+  assert.deepEqual(links.map((l) => [l.href, l.target, l.rel]), [['https://example.com/a', '_blank', 'noopener noreferrer']]);
+  assert.equal(a.querySelectorAll('img').length, 0);
+  assert.ok(P.box().all().every((e) => !e._html), 'nothing set as HTML');
+  assert.match(a.textContent, /<img src=x onerror=alert\(1\)>/, 'markup in the words stays words');
+});
+
+test('tool steps show as cards while they run; a write waits in an inline card for Glaze\'s window; an unknown tool shows its reason', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('Mark my lab report done');
+  await settle();
+  assert.ok(P.box().querySelector('.gz-ask-busy'), 'thinking, in the conversation');
+  const step = (s) => answer(P, { type: 'step', step: s });
+  step({ n: 1, name: 'todo_list', kind: 'read', state: 'run' });
+  await settle();
+  const cards = () => P.box().querySelectorAll('.gz-ask-step');
+  assert.equal(cards().length, 1);
+  assert.equal(cards()[0].dataset.state, 'run');
+  assert.equal(cards()[0].querySelector('.gz-ask-step-label').textContent, 'Reading your to-do list');
+  step({ n: 1, name: 'todo_list', kind: 'read', state: 'done', ms: 1240 });
+  step({ n: 2, name: 'todo_mark_done', kind: 'write', state: 'ask' });
+  await settle();
+  assert.equal(cards().length, 2, 'one card a step');
+  assert.equal(cards()[0].dataset.state, 'done');
+  assert.equal(cards()[0].querySelector('.gz-ask-step-time').textContent, '1.2s');
+  const write = cards()[1];
+  assert.equal(write.dataset.kind, 'write');
+  assert.equal(write.querySelector('.gz-ask-step-label').textContent, 'Mark a to-do done');
+  assert.match(write.textContent, /Waiting for your answer in Glaze’s window/);
+  assert.equal(write.querySelectorAll('button').length, 0, 'the answer is given in Glaze\'s window, never on the page');
+  step({ n: 2, name: 'todo_mark_done', kind: 'write', state: 'no' });
+  step({ n: 3, name: 'places_map', kind: 'read', state: 'run', reason: 'Finding the Grades page' });
+  await settle();
+  assert.equal(cards()[1].dataset.state, 'no');
+  assert.doesNotMatch(cards()[1].textContent, /Waiting/);
+  assert.equal(cards()[2].querySelector('.gz-ask-step-label').textContent, 'Finding the Grades page');
+  answer(P, { type: 'end', task: 'agent.tools', declined: true });
+  await settle();
+  assert.equal(P.box().querySelector('.gz-ask-busy'), null);
+  assert.equal(cards().length, 3, 'the steps stay in the conversation');
+});
+
+test('a failure shows in the conversation with Try again, which asks the same question again for the student\'s own click', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('What is due this week?');
+  await settle();
+  answer(P, { type: 'error', error: 'check' });
+  await settle();
+  const err = P.box().querySelector('.gz-ask-err');
+  assert.match(err.textContent, /Rime couldn’t answer that\. Try asking another way\./);
+  const retry = err.querySelector('.gz-ask-retry');
+  P.doc.fire(retry, 'click', { trusted: false });
+  await settle();
+  assert.equal(asked(P).length, 1);
+  P.doc.fire(retry, 'click');
+  await settle();
+  assert.equal(asked(P).length, 2);
+  assert.equal(asked(P)[1].question, 'What is due this week?');
+  assert.equal(P.box().querySelector('.gz-ask-err'), null, 'the failure gives way to the new try');
+  assert.equal(P.turns().filter(([c]) => c === 'gz-ask-q').length, 1, 'the question isn\'t shown twice');
+  answer(P, { type: 'end', task: 'agent.tools', answer: { text: 'Lab report, Friday.' } });
+  await settle();
+  assert.deepEqual(P.turns().map(([, t]) => t), ['What is due this week?', 'Lab report, Friday.']);
+});
+
+test('follow-ups carry the conversation so far, the last three questions and answers', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  for (let i = 1; i <= 4; i++) {
+    P.ask(`Question ${i}`);
+    await settle();
+    answer(P, study(`Answer ${i}`, i === 2 ? 'Which one?' : null));
+    await settle();
+  }
+  assert.equal(asked(P)[0].history, undefined);
+  assert.deepEqual(asked(P)[2].history, [{ question: 'Question 1', answer: 'Answer 1' }, { question: 'Question 2', answer: 'Answer 2\n\nWhich one?' }]);
+  P.ask('Question 5');
+  await settle();
+  assert.deepEqual(asked(P)[4].history.map((h) => h.question), ['Question 2', 'Question 3', 'Question 4']);
+});
+
+test('a UI action a run returns goes to the handler for its kind, only while its question runs', async () => {
+  const P = page({ reply: ready });
+  const got = [];
+  P.ui.on('highlight', (a) => got.push(a));
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('Where are my grades?');
+  await settle();
+  answer(P, { type: 'action', action: { kind: 'highlight', text: 'Grades' } });
+  answer(P, { type: 'action', action: { kind: 'nope' } });
+  await settle();
+  assert.deepEqual(got, [{ kind: 'highlight', text: 'Grades' }]);
+  answer(P, { type: 'end', task: 'agent.tools', answer: { text: 'Here.' } });
+  await settle();
+  P.ports.at(-1).answer({ id: asked(P)[0].id, type: 'action', action: { kind: 'highlight', text: 'late' } });
+  await settle();
+  assert.equal(got.length, 1, 'nothing after its end');
+});
+
+test('run() asks a question the student didn\'t type, for their own click only', async () => {
+  const P = page({ reply: ready });
+  await P.ui.run({ event: { isTrusted: false }, question: 'What is due?' });
+  assert.equal(P.box(), null);
+  await P.ui.run({ event: { isTrusted: true }, question: 'What is due?' });
+  await settle();
+  assert.ok(P.box()?.open);
+  assert.equal(asked(P).length, 1);
+  assert.equal(asked(P)[0].question, 'What is due?');
+  assert.deepEqual(P.turns(), [['gz-ask-q', 'What is due?']]);
+});
+
+test('every word the panel shows is in all five translations', () => {
+  const src = read('ai/page/ask.js');
+  const literals = [...src.matchAll(/\bt\(\s*'((?:\\.|[^'\\])*)'/g)].map((m) => m[1].replace(/\\(.)/g, '$1'));
+  const P = page();
+  const all = [...new Set([...literals, ...Object.values(P.ui.STEPS)])];
+  assert.ok(all.length > 20);
+  for (const lang of ['de', 'es', 'fr', 'nl', 'pt-BR']) {
+    const file = read(`i18n/${lang}.js`);
+    const missing = all.filter((k) => !file.includes(`${JSON.stringify(k)}:`));
+    assert.deepEqual(missing, [], lang);
+  }
+});
+
+test('the panel\'s sheet moves nothing with reduced motion or Glaze\'s Motion off, and is solid on a solid background', () => {
+  const css = read('core/page/apps.css');
+  const start = css.indexOf('/* Ask Rime'), end = css.indexOf('/* ---- syllabus import');
+  assert.ok(start > 0 && end > start);
+  const sheet = css.slice(start, end).replace(/\/\*[\s\S]*?\*\//g, '');
+  const motion = /@media \(prefers-reduced-motion: no-preference\) \{([\s\S]*)\}\s*$/.exec(sheet.trim());
+  assert.ok(motion, 'one motion block, last');
+  const rest = sheet.trim().slice(0, motion.index);
+  assert.doesNotMatch(rest.replace(/animation(?:-name)?:\s*none/g, ''), /animation|transition|@keyframes/, 'nothing moves outside the motion block');
+  for (const [, selectors] of motion[1].matchAll(/(?:^|\})\s*([^{}@]+?)\s*\{/g)) {
+    if (/^(from|to|\d+%)/.test(selectors)) continue;
+    for (const sel of selectors.split(',')) assert.match(sel.trim(), /^html:not\(\[data-gz-motion="off"\]\) /, sel);
+  }
+  assert.match(sheet, /html\[data-gz-bg="solid"\] #gz-ask[^{]*\{[^}]*backdrop-filter: none/);
+  assert.match(sheet, /prefers-reduced-transparency: reduce[\s\S]*#gz-ask[^{]*\{[^}]*backdrop-filter: none/);
 });

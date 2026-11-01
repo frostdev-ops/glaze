@@ -173,7 +173,11 @@ test('port: an agent question runs its steps through agents/calls.js; results as
   const h = harness({ script: { 'agent.tools': [asks('todo_list', { days: 7 }), asks('todo_mark_done', { type: 'assignment', id: '1' }, 'write'), said('Marked Lab report done.')] } });
   h.say({ id: 3, op: 'ask', question: 'Mark my Lab report done', locale: 'en' });
   await settle(60);
-  assert.deepEqual(h.got.map((m) => m.type).filter((t) => t !== 'keepalive'), ['route', 'look', 'approve', 'end']);
+  assert.deepEqual(h.got.map((m) => m.type).filter((t) => t !== 'keepalive'), ['route', 'step', 'step', 'step', 'approve', 'step', 'end']);
+  const steps = h.got.filter((m) => m.type === 'step').map((m) => m.step);
+  assert.ok(steps.every((s, i) => i % 2 === 0 || (Number.isSafeInteger(s.ms) && s.ms >= 0)), 'a finished step says how long it took');
+  assert.deepEqual(steps.map(({ ms: _, ...s }) => s), [{ n: 1, name: 'todo_list', kind: 'read', state: 'run' }, { n: 1, name: 'todo_list', kind: 'read', state: 'done' },
+    { n: 2, name: 'todo_mark_done', kind: 'write', state: 'ask' }, { n: 2, name: 'todo_mark_done', kind: 'write', state: 'done' }]);
   assert.deepEqual(h.ends(), [{ id: 3, type: 'end', task: 'agent.tools', answer: { text: 'Marked Lab report done.' } }]);
   const [, second, third] = h.seen.runs;
   assert.deepEqual(second.input.steps[0].result, { account: TODO.account, at: 5, items: TODO.items }, 'the tool\'s own answer, as training saw it: none of the wrapper\'s note, source or age');
@@ -189,6 +193,7 @@ test('port: a declined write runs nothing and asks the model nothing more', asyn
   h.say({ id: 4, op: 'ask', question: 'Mark my Lab report done', locale: 'en' });
   await settle(60);
   assert.deepEqual(h.ends(), [{ id: 4, type: 'end', task: 'agent.tools', declined: true }]);
+  assert.deepEqual(h.got.filter((m) => m.type === 'step').at(-1).step, { n: 2, name: 'todo_mark_done', kind: 'write', state: 'no' }, 'the card says it was not allowed');
   assert.deepEqual(h.wrote, []);
   assert.equal(h.seen.runs.length, 2);
 });
@@ -198,6 +203,7 @@ test('port: a tool\'s failure is the model\'s to read; an answer that hands over
   h.say({ id: 5, op: 'ask', question: 'What are my grades?', locale: 'en' });
   await settle(60);
   assert.deepEqual(h.seen.runs[1].input.steps[0].result, { ok: false, error: 'Glaze has no grades yet.' });
+  assert.equal(h.got.filter((m) => m.type === 'step').at(-1).step.state, 'fail', 'its card shows it failed');
   assert.deepEqual(h.ends(), [{ id: 5, type: 'error', error: 'check' }]);
 });
 
@@ -270,4 +276,21 @@ test('port: a sender check that never settles cannot hold later cancellation for
   const deadline = Date.now() + 6000;
   while (!h.ends().some((m) => m.id === 21) && Date.now() < deadline) await tick();
   assert.deepEqual(h.ends(), [{ id: 22, type: 'error', error: 'timeout' }, { id: 21, type: 'error', error: 'cancelled' }]);
+});
+
+test('port: a follow-up carries the conversation to study.help; never to agent.tools, whose trained turns hold none; a bad one is refused', async () => {
+  const history = [{ question: 'Explain mitosis', answer: 'What happens to the chromosomes first?' }];
+  const h = harness({ script: { 'study.help': [{ kind: 'hint', step: null, reply: 'Think about the second phase.', followUp: null }], 'agent.tools': [said('Nothing due.')] } });
+  h.say({ id: 30, op: 'ask', question: 'And then what?', locale: 'en', history });
+  await settle();
+  assert.deepEqual(h.seen.runs[0].input.history, history);
+  h.say({ id: 31, op: 'ask', question: 'What is due this week?', locale: 'en', history });
+  await settle(60);
+  assert.equal(h.seen.runs[1].task, 'agent.tools');
+  assert.equal('history' in h.seen.runs[1].input, false);
+  for (const [id, bad] of [[32, 'x'], [33, [{ question: 'a' }]], [34, Array(7).fill({ question: 'a', answer: 'b' })], [35, [{ question: 'a', answer: 'b'.repeat(2001) }]], [36, [{ question: 'a', answer: 'b', more: 1 }]]]) {
+    h.say({ id, op: 'ask', question: 'Explain', history: bad });
+  }
+  await settle();
+  assert.deepEqual(h.ends().filter((m) => m.id >= 32).map((m) => [m.id, m.error]), [[32, 'request'], [33, 'request'], [34, 'request'], [35, 'request'], [36, 'request']]);
 });
