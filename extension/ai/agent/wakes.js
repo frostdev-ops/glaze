@@ -26,7 +26,7 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
   const fail = (error) => ({ ok: false, error });
   const text = (v, n) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, n) : '');
-  const when = (v) => (Number.isSafeInteger(v) && v > 0 ? v : 0);
+  const when = (v) => (Number.isSafeInteger(v) && v > 0 && v <= 8640000000000000 ? v : 0);
   const clock = (env) => (typeof env.now === 'function' ? env.now() : Date.now());
   const accountOk = (v) => {
     if (typeof v !== 'string' || v.length > 320) return false;
@@ -36,12 +36,39 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
   const OFF = 'Reminders and watches are off in Glaze settings (AI, Ask Rime).';
 
   // ---- the store -------------------------------------------------------------------------------------------------------
+  const baseOf = (m) => {
+    const b = m.base;
+    if (!isObj(b)) return null;
+    const course = text(b.course, 120), title = text(b.title, 300);
+    if (['due', 'submitted'].includes(m.watch)) {
+      if (!isObj(m.item) || !TYPE.test(m.item.type) || !UID.test(m.item.id)) return null;
+      return m.watch === 'due' ? (b.due === null || when(b.due) ? { due: b.due, title, course } : null)
+        : typeof b.submitted === 'boolean' ? { submitted: b.submitted, title, course } : null;
+    }
+    if (m.item !== undefined) return null;
+    if (m.watch === 'grade') return UID.test(m.course) && (b.percent === null || Number.isFinite(b.percent)) && Number.isSafeInteger(b.points) && b.points >= 0 ? { percent: b.percent, points: b.points, course } : null;
+    if (!Array.isArray(b.ids) || !b.ids.every((id) => typeof id === 'string' && UID.test(id)) || !isObj(b.titles)) return null;
+    const ids = [...new Set(b.ids)].slice(0, 500);
+    return { ids, titles: Object.fromEntries(ids.map((id) => [id, text(b.titles[id], 300)])), course };
+  };
+  const factOf = (f) => {
+    if (!isObj(f)) return undefined;
+    return { ...Object.fromEntries(['title', 'course'].filter((k) => typeof f[k] === 'string').map((k) => [k, text(f[k], k === 'title' ? 300 : 120)])),
+      ...Object.fromEntries(['from', 'due', 'was', 'percent'].filter((k) => f[k] === null || Number.isFinite(f[k])).map((k) => [k, f[k]])),
+      ...(f.submitted === true && { submitted: true }), ...(Array.isArray(f.titles) && { titles: f.titles.slice(0, LIMIT.titles).map((v) => text(v, 300)) }) };
+  };
   const clean = (raw) => {
     const r = isObj(raw) ? raw : {}, list = (v) => (Array.isArray(v) ? v.filter(isObj) : []);
+    const unique = (v) => { const ids = new Set(); return v.filter((x) => !ids.has(x.id) && ids.add(x.id)); };
     return {
-      wakes: list(r.wakes).filter((w) => ID.test(w.id) && w.id[0] === 'w' && when(w.at) && text(w.say, LIMIT.say)).slice(0, LIMIT.wakes),
-      monitors: list(r.monitors).filter((m) => ID.test(m.id) && m.id[0] === 'm' && WATCHES.includes(m.watch) && typeof m.account === 'string' && when(m.until)).slice(0, LIMIT.monitors),
-      fired: list(r.fired).filter((f) => ID.test(f.id) && ['wake', 'monitor'].includes(f.what)).slice(-LIMIT.fired),
+      wakes: unique(list(r.wakes).filter((w) => ID.test(w.id) && w.id[0] === 'w' && when(w.at) && text(w.say, LIMIT.say)))
+        .slice(0, LIMIT.wakes).map((w) => ({ id: w.id, at: w.at, say: text(w.say, LIMIT.say), made: when(w.made) })),
+      monitors: unique(list(r.monitors).filter((m) => ID.test(m.id) && m.id[0] === 'm' && WATCHES.includes(m.watch) && accountOk(m.account) && when(m.until) && (m.course === undefined || UID.test(m.course)))
+        .map((m) => ({ id: m.id, watch: m.watch, account: m.account, ...(m.course !== undefined && { course: m.course }),
+          ...(isObj(m.item) && { item: { type: m.item.type, id: m.item.id } }), say: text(m.say, LIMIT.say), made: when(m.made), until: m.until, base: baseOf(m) })).filter((m) => m.base))
+        .slice(0, LIMIT.monitors),
+      fired: unique(list(r.fired).filter((f) => ID.test(f.id) && (f.what === 'wake' ? f.id[0] === 'w' : f.what === 'monitor' && f.id[0] === 'm') && when(f.at)))
+        .slice(-LIMIT.fired).map((f) => ({ id: f.id, what: f.what, ...(WATCHES.includes(f.watch) && { watch: f.watch }), say: text(f.say, LIMIT.say), at: f.at, ...(factOf(f.fact) && { fact: factOf(f.fact) }) })),
     };
   };
   // One change at a time: every write reads the store fresh inside the queue.
