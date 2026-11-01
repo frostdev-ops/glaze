@@ -172,7 +172,9 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
   const hands = (piece, inp) => {
     // A cloud follow-up can refer to the earlier problem without repeating it. Check against the student's earlier words
     // too; the assistant's examples are not the student's problem. This does not change any model's request.
-    const theirs = [...(inp.history || []).map((h) => h.question), inp.question, inp.attempt || ''].join('\n');
+    // Ask Rime can read the problem from school records before this turn. Those instructions are the student's work too,
+    // even when their question names it without repeating its numbers or variables.
+    const theirs = [...(inp.history || []).map((h) => h.question), inp.question, inp.attempt || '', inp.material || ''].join('\n');
     const texts = textsOf(inp), own = squash(theirs);
     const words_ = prose(piece), all = flat(piece);
     if (BARE.test(all) || ANSWERS.some((r) => r.test(all))) return 'answer';
