@@ -741,6 +741,25 @@ test('a cold course page waits for its own view; a generic page for its spinners
   }
 });
 
+test('a cold course load cannot settle on the base page or another course with the same tool', async (t) => {
+  const target = '_102_1';
+  for (const view of ['base page', 'another course']) await t.test(view, () => {
+    const s = site({ at: `/ultra/courses/${target}/outline`, boot: true });
+    s.sync();
+    s.ila.remove();
+    s.inner.append(s.layout);
+    if (view === 'another course') s.openCourse('outline', s.VIEW.outline()); // links still belong to _101_1
+    s.flush();
+    s.tick(3100);
+    s.flush();
+    assert.deepEqual(booted(s), { attr: true, box: true }, `${view} is not the requested course`);
+    s.openCourse('outline', s.VIEW.outline());
+    for (const a of Object.values(s.course.links)) a.setAttribute('href', a.getAttribute('href').replace(COURSE, target));
+    s.flush();
+    assert.deepEqual(booted(s), { attr: false, box: false }, 'the requested course is ready');
+  });
+});
+
 test('the page\'s instant copy takes the skeleton\'s place, and the boot goes with the copy, in the same frame', () => {
   const s = site({ at: '/ultra/grades', boot: true });
   s.sync();

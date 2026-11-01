@@ -316,6 +316,14 @@ var GZ_FEEDBACK = globalThis.GZ_FEEDBACK || (() => {
     x.copied = false;
     if (here() !== x.landed) Object.assign(x, { landed: here(), routedAt: performance.now(), spun: false });
     const m = front();
+    // These course tools must belong to the requested course, not the base page or a course Ultra is leaving.
+    const course = /^\/ultra\/courses\/(_\d+_\d+)\//.exec(location.pathname)?.[1];
+    if (course && pageOf(location.pathname)[2]) {
+      if (!m?.matches('main.course-main-content')) return;
+      const ids = [...m.querySelectorAll('.js-course-navigation a[href]')].filter((a) => !ours(a))
+        .map((a) => /\/ultra\/courses\/(_\d+_\d+)(?:\/|$)/.exec(a.getAttribute('href') || '')?.[1]).filter(Boolean);
+      if (ids.length && !ids.includes(course)) return;
+    }
     if (spinnersOf(m).length) x.spun = true;
     const ila = document.querySelector(BOOT);
     if (ila && !/(^|\s)fade-out(\s|$)/.test(ila.className)) return;
