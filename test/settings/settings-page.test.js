@@ -392,3 +392,43 @@ test("Close in a document shows Documents' list: back over the document's entry 
     for (const p of ports) p.close();
   }
 });
+
+test('repeated document Close requests queue only one Back before popstate', async () => {
+  const { El } = require('../stand-in-dom.js');
+  const doc = { activeElement: null }, html = new El('html', doc), body = new El('body', doc);
+  doc.root = html; html.append(body);
+  Object.assign(doc, { documentElement: html, body, createElement: (tag) => new El(tag, doc), getElementById: () => null });
+  const on = {}, pending = [], history = tabHistory(on), traverse = history.go.bind(history);
+  // Real history traversal runs asynchronously; both Close messages can arrive before popstate.
+  history.go = (n) => pending.push(n);
+  class Channel {
+    constructor() { this.port1 = { close() {}, postMessage() {} }; this.port2 = {}; channel = this.port1; }
+  }
+  let channel;
+  const page = vm.runInContext(read('settings/page/settingspage.js'), vm.createContext({ document: doc, matchMedia: () => ({ matches: true }), CSS: { escape: String }, crypto, MessageChannel: Channel,
+    history, addEventListener: (type, f) => { on[type] = f; }, removeEventListener: (type) => { delete on[type]; },
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, sendMessage: async () => ({ ok: true }) } } }));
+  await page.open('', 'papers');
+  const frame = body.querySelector('#gz-settings-page').shadowForTest.children[0];
+  frame.contentWindow = { postMessage() {} };
+  on.message({ source: frame.contentWindow, origin: 'chrome-extension://glaze', data: { type: 'glaze:papers:hello' } });
+  await tick();
+  const say = (data) => channel.onmessage({ data });
+  say({ type: 'opened', at: '' });
+  say({ type: 'opened', at: '?paper=doc%3Aabc' });
+  say({ type: 'list' });
+  say({ type: 'list' });
+  assert.deepEqual(pending, [-1], 'one traversal for a double click or two waits completing together');
+  traverse(pending.shift());
+  say({ type: 'opened', at: '' });
+  assert.deepEqual([page.showing(), history.at, history.entries.length], ['papers', 1, 3]);
+  // A later document Close still works after the first traversal.
+  say({ type: 'opened', at: '?paper=doc%3Adef' });
+  say({ type: 'list' });
+  assert.deepEqual(pending, [-1]);
+  traverse(pending.shift());
+  say({ type: 'opened', at: '' });
+  say({ type: 'leave' });
+  traverse(pending.shift());
+  assert.deepEqual([page.showing(), history.at], ['', 0]);
+});
