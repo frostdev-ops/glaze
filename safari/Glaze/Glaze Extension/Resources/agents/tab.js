@@ -338,11 +338,12 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     if (d.available !== true || d.topic?.status !== 'Published') return no('locked');
     // Replies the student may not read leave the prompt readable, without a count.
     let r = null;
-    try { r = await reader.list(`${base}/messages`, 'id,userId,status,body,postDate,createdDate'); } catch (e) { if (!/\b(401|403|404)\b/.test(e.message)) throw e; }
+    try { r = await reader.list(`${base}/messages`, 'id,parentId,userId,status,body,postDate,createdDate'); } catch (e) { if (!/\b(401|403|404)\b/.test(e.message)) throw e; }
     if (!go()) return no('late');
     if (!r) return { ok: true, title: String(d.title || '').trim().slice(0, 300), text: html(typeof d.topic.body === 'string' ? d.topic.body : '').slice(0, 20000), files: embedded(d.topic.body), gradable: d.gradable === true, at: ms(d.topic.postDate) ?? ms(d.createdDate), mine: [], others: null, complete: false };
     const live = r.items.filter((m) => m && m.status !== 'Deleted' && m.status !== 'Draft');
-    const mine = live.filter((m) => String(m.userId) === go.uid).map((m) => ({ at: ms(m.postDate) ?? ms(m.createdDate), text: html(typeof m.body === 'string' ? m.body : '').slice(0, 2000) }));
+    // reply: it answers a classmate's post rather than the prompt.
+    const mine = live.filter((m) => String(m.userId) === go.uid).map((m) => ({ at: ms(m.postDate) ?? ms(m.createdDate), reply: !!m.parentId && m.parentId !== d.topic.id, text: html(typeof m.body === 'string' ? m.body : '').slice(0, 2000) }));
     const body = typeof d.topic.body === 'string' ? d.topic.body : '';
     return { ok: true, title: String(d.title || '').trim().slice(0, 300), text: html(body).slice(0, 20000), files: embedded(body), gradable: d.gradable === true,
       at: ms(d.topic.postDate) ?? ms(d.createdDate), mine, others: live.length - mine.length, complete: r.complete, ...(body.length >= 100000 && { truncated: true }) };

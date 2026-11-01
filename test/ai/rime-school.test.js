@@ -503,7 +503,7 @@ test('Ultra discussions: the list as Ultra gives it (id and title); one gives it
   assert.equal(r.text, 'Tell the class your major and one book you liked.');
   assert.equal(r.gradable, true);
   assert.equal(r.at, Date.parse('2026-09-01T12:00:00.000Z'));
-  assert.deepEqual(r.mine, [{ at: Date.parse('2026-09-03T12:00:00.000Z'), text: 'I study nursing and liked Beloved.' }]);
+  assert.deepEqual(r.mine, [{ at: Date.parse('2026-09-03T12:00:00.000Z'), reply: false, text: 'I study nursing and liked Beloved.' }], 'an answer to the prompt, not a reply to a classmate');
   assert.equal(r.others, 2);
   assert.doesNotMatch(JSON.stringify(r), /CLASSMATE|Classmate|Instructor|Example/, 'no classmate\'s words or anyone\'s name');
 });
