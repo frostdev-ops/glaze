@@ -171,6 +171,22 @@ test('a summary that fails its check falls back to the deterministic one', async
   assert.match(next.summary, /- BIO 1100/);
 });
 
+test('a displayed summary cannot solve an earlier study question even when its compact check passes', async () => {
+  const compact = require('../../extension/ai/tasks/chat-compact.js');
+  const older = turn('How do I solve 3x + 5 = 20?', 'What could you do to both sides?');
+  const output = { text: '- For 3x + 5 = 20, x = 5.', quotes: ['3x + 5 = 20'] };
+  assert.ok(compact.task.check(output, compact.task.input({ turns: [older] })), 'the grounding check alone accepts this');
+  const h = harness({ count: () => ({ used: 3500, window: 4096, reserve: 768, exact: true }), script: {
+    'agent.tools': [said('BIO 1100.', ['BIO 1100'])], 'chat.compact': [output],
+  } });
+  h.say({ id: 1, op: 'ask', question: "What's due this week?", history: [older, H3[0]] });
+  await settle(120);
+  const summary = h.got.find((m) => m.type === 'summary');
+  assert.ok(summary, 'a safe deterministic summary can still be shown');
+  assert.doesNotMatch(summary.text, /x = 5/, 'the summary must obey the same study rule as an answer');
+  assert.match(summary.text, /How do I solve 3x \+ 5 = 20\?/);
+});
+
 test('within one run, results the model has used become digests when the next request would overflow; the latest never', async () => {
   const big = { account: ACC, items: Array.from({ length: 30 }, (_, i) => ({ id: String(i + 1), title: `Item ${i + 1}`, course: 'BIO 1100', due: C.NOW + i * 36e5, url: 'x'.repeat(200) })) };
   const h = harness({ count: (m) => ({ used: (m.input.steps?.length || 0) >= 2 ? 5000 : 1000, window: 4096, reserve: 768, exact: true }),
