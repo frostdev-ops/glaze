@@ -1117,11 +1117,16 @@ html:not([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap
 #site-wrap .layer-details .element-details,
 #site-wrap .layer-details [class*="makeStyleselementDetails-"] { border-bottom: 0 !important; }
 #site-wrap .layer-details .discussion-participants li::before { display: none !important; }
-/* Item pages' wells and lists (an assignment's due date, attempts and details; a test's results, which have no well; a
-   profile's lists; a group set with nothing in it): panels on Glaze's surface with the Look's corners. Ultra painted the
-   wells in the page's own colour, square, so they read as empty outlines. */
+/* Item pages' wells and lists (an assignment's due date, attempts and details; its Additional Information, such as
+   SafeAssign; a test's results, which have no well; a profile's lists; a group set with nothing in it), the Courses and
+   Organizations toolbar with its result chips, and a course's Messages: panels on Glaze's surface with the Look's corners.
+   Ultra painted the wells in the page's own colour, square, so they read as empty outlines, and left the rest bare on the
+   background. */
 #site-wrap :where(.section-well):is(.section-well, .assessment-details-section > ul.section-content),
 #site-wrap :is(.assessment-details-section > ul.section-content),
+#site-wrap .assessment-overview-grid > .overview-section > ul.section-content,
+#site-wrap course-overview-management.course-overview-management > div,
+#site-wrap bb-course-conversations > .messages-container,
 #site-wrap :where(.assessment-results-section > .section-content):is(.assessment-results-section > .section-content, .assessment-details-section > ul.section-content),
 #site-wrap :where(.base-profile section ul):is(.base-profile section ul, .assessment-details-section > ul.section-content),
 #site-wrap :where(.group-empty-state):is(.group-empty-state, .assessment-details-section > ul.section-content),
@@ -1150,6 +1155,9 @@ html[data-gz-bg="solid"] :where(#site-wrap .layer-details .discussion-settings):
 html[data-gz-bg="solid"] :where(#site-wrap .layer-details .discussion-participants):is(#site-wrap .layer-details .discussion-participants, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
 html[data-gz-bg="solid"] :where(#site-wrap .section-well):is(#site-wrap .section-well, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
 html[data-gz-bg="solid"] :where(#site-wrap :is(.assessment-details-section > ul.section-content)):is(#site-wrap :is(.assessment-details-section > ul.section-content), #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap :is(.assessment-overview-grid > .overview-section > ul.section-content)):is(#site-wrap :is(.assessment-overview-grid > .overview-section > ul.section-content), #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap :is(course-overview-management.course-overview-management > div)):is(#site-wrap :is(course-overview-management.course-overview-management > div), #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
+html[data-gz-bg="solid"] :where(#site-wrap :is(bb-course-conversations > .messages-container)):is(#site-wrap :is(bb-course-conversations > .messages-container), #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
 html[data-gz-bg="solid"] :where(#site-wrap :is(.assessment-results-section > .section-content)):is(#site-wrap :is(.assessment-results-section > .section-content), #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
 html[data-gz-bg="solid"] :where(#site-wrap :is(.base-profile section ul)):is(#site-wrap :is(.base-profile section ul), #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
 html[data-gz-bg="solid"] :where(#site-wrap .group-empty-state):is(#site-wrap .group-empty-state, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
@@ -1166,7 +1174,12 @@ html[data-gz-bg="solid"] :where(.bb-course-navigation [class*="makeStylestoolbar
 html[data-gz-bg="solid"] :where(bb-assignment-attempt-authoring-panel :is([class*="makeStylesbaseBody-"] > [class*="makeStylesfooterWrapper-"])):is(bb-assignment-attempt-authoring-panel :is([class*="makeStylesbaseBody-"] > [class*="makeStylesfooterWrapper-"]), #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),
 html[data-gz-bg="solid"] :where(bb-assignment-attempt-authoring-panel [class*="makeStylesdetails-"]):is(bb-assignment-attempt-authoring-panel [class*="makeStylesdetails-"], #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls) { backdrop-filter: none; }
 #site-wrap :is(.assessment-details-section > ul.section-content),
-#site-wrap :where(.assessment-results-section > .section-content):is(.assessment-results-section > .section-content, .assessment-details-section > ul.section-content) { padding: 0.75rem 1rem !important; }
+#site-wrap :where(.assessment-results-section > .section-content):is(.assessment-results-section > .section-content, .assessment-details-section > ul.section-content),
+#site-wrap .assessment-overview-grid > .overview-section > ul.section-content,
+#site-wrap course-overview-management.course-overview-management > div,
+#site-wrap bb-course-conversations > .messages-container { padding: 0.75rem 1rem !important; }
+#site-wrap .assessment-overview-grid > .overview-section > ul.section-content > li:last-child,
+#site-wrap .assessment-details-section > ul.section-content > li:last-child { margin-bottom: 0; }
 #site-wrap .base-profile section ul { overflow: hidden; } /* its rows paint their own fill: kept inside the corners */
 /* Item type at a glance: the type icon carries its name as aria-label. */
 #site-wrap .content-list-item svg[aria-label] { color: var(--gz-type, var(--gz-accent)) !important; }
@@ -1247,6 +1260,12 @@ html[data-gz-bg="solid"] :where(bb-assignment-attempt-authoring-panel [class*="m
 #site-wrap :is(.assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
 #site-wrap :is(.assessment-attempt-panel :is(.assessment-summary div.row > .settings-label)),
 #site-wrap :where(bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2):is(bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2, .assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
+#site-wrap .course-org-list > .course-card-term-name > h3,
+#site-wrap .base-grades .semester > ng-switch > h2,
+#site-wrap #activity-stream .js-show-more,
+#site-wrap label#streams-filter-label,
+#site-wrap .student-grade__header__overallGrade,
+#site-wrap .roster-select > button,
 #site-wrap .discussion-board .discussion-full-panel-detail-header,
 #site-wrap .discussion-board :where(discussion-refresh-button button):is(discussion-refresh-button button, .discussion-full-panel-detail-header),
 #site-wrap .discussion-board :where(discussion-follow-button button):is(discussion-follow-button button, .discussion-full-panel-detail-header),
@@ -1257,7 +1276,9 @@ html[data-gz-bg="solid"] :where(bb-assignment-attempt-authoring-panel [class*="m
   border: 1px solid var(--gz-border-line, var(--gz-line)) !important;
   border-radius: 999px !important;
 }
-/* Section-heading pills retain the native heading text and scale with the active Look. */
+/* Section-heading pills retain the native heading text and scale with the active Look. Ultra's other loose text on the
+   background (a term's heading on Courses and Grades, Activity's Show more and its filter's label, a gradebook's Current
+   Grade, the roster's member filter) wears the same pill; the filter's label stays its own size on the field's edge. */
 #site-wrap :where(.assessment-overview-grid > .overview-section > h2.section-label):is(.assessment-overview-grid > .overview-section > h2.section-label, .assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
 #site-wrap :is(.assessment-overview-grid > .assessment-results-section > .assessment-results-header > h2.section-label),
 #site-wrap :where(.activity-stream .activity-group-title):is(.activity-stream .activity-group-title, .assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
@@ -1268,7 +1289,16 @@ html[data-gz-bg="solid"] :where(bb-assignment-attempt-authoring-panel [class*="m
 #site-wrap :is(.assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
 #site-wrap :is(.assessment-attempt-panel :is(.assessment-summary div.row > .settings-label)),
 #site-wrap :where(bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2):is(bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2, .assessment-attempt-panel :is(.assessment-summary > .row.collapse h2)),
+#site-wrap .course-org-list > .course-card-term-name > h3,
+#site-wrap .base-grades .semester > ng-switch > h2,
+#site-wrap #activity-stream .js-show-more,
+#site-wrap .student-grade__header__overallGrade,
+#site-wrap .roster-select > button,
 #site-wrap .discussion-board .discussion-full-panel-detail-header { display: inline-flex; align-items: center; max-width: 100%; min-height: 2.25rem; padding: 0.35rem 0.85rem; }
+/* The gradebook's Current Grade pill is as wide as what it holds, at the header's end. */
+#site-wrap .student-grade__header > .student-grade__header__overallGrade { flex: 0 1 auto; margin-inline-start: auto; }
+/* Activity's Show more keeps Ultra's inset (its padding, from 40em up), under the items' text. */
+@media (min-width: 40em) { #site-wrap #activity-stream .js-show-more { margin-inline-start: 12.5rem; } }
 /* A test's Grading and Description labels head their own rows: the pill on its own line above the value. */
 #site-wrap .assessment-attempt-panel .assessment-summary div.row > .settings-label { display: flex; inline-size: fit-content; margin-block: 0.75rem 0.5rem; }
 #site-wrap .discussion-board :is(discussion-refresh-button, discussion-follow-button, bb-discussion-sorting-options, discussion-reply-button) button { min-width: 2.25rem; min-height: 2.25rem; padding: 0.35rem 0.85rem; }
