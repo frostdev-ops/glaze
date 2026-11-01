@@ -181,6 +181,21 @@ test('check, tool first: an answer with no result behind it fails; results that 
   assert.equal(A.rich(JSON.stringify({ account: ACC, items: [{ id: '1', title: 'Lab' }] })), true);
 });
 
+test('tool-first grounding requires a factual quote rather than an account metadata quote', () => {
+  const list = step('announcements_list', {}, { account: ACC, items: [{ id: '70', title: 'Lab moved' }] });
+  assert.equal(A.why(answer('The lab moved.', [ACC]), inputOf('Any announcements?', [list], { first: true })), 'ground');
+});
+
+test('tool-first grounding accepts boolean facts and does not require quotes of timing or an empty course id', () => {
+  const bool = step('run_js', { code: '2 > 1' }, { ok: true, value: true, logs: [] });
+  assert.equal(A.why(answer('The comparison is true.', ['true']), inputOf('Compare these values', [bool], { first: true })), '');
+  assert.equal(A.rich(JSON.stringify({ ok: true, value: true })), true);
+  assert.equal(A.rich(JSON.stringify({ items: [{ title: 'A' }] })), true);
+  assert.equal(A.rich(JSON.stringify({ ok: true, value: null, logs: [], ms: 25 })), false);
+  const empty = step('syllabus_read', { course: '25' }, { account: ACC, course: '25', at: 5, hours: [], meetings: [], dates: [], weights: [], scale: [] });
+  assert.equal(A.why(answer('No syllabus facts were retained.'), inputOf('Read the syllabus', [empty], { first: true })), '');
+});
+
 test('the help turn: a help block before the question, its round trip, and no answer before something is read', () => {
   const inp = inputOf('Help me start Lab report 3', [], { help: 'science', first: true });
   const text = A.layout(inp).map((p) => p.special ?? p.text).join('');
