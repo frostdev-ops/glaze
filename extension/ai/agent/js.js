@@ -50,16 +50,7 @@ var GZ_AI_RIME_JS = globalThis.GZ_AI_RIME_JS || (() => {
     return globalThis.GZ_QUICKJS.load(bytes, heap);
   })().catch((e) => { loading = null; throw e; }));
 
-  // A value as the code's console and result show it: strings as they are, the rest as JSON.
-  const show = (v) => (typeof v === 'string' ? v : v === undefined ? 'undefined' : JSON.stringify(v) ?? String(v));
-  // An error as words. Out of memory, QuickJS may have no room left to make the error or to read it out: anything but an
-  // error while the heap is at its maximum is that.
   const full = () => !!heap && heap.buffer.byteLength >= LIMIT.heap * 0.9;
-  const errorOf = (e) => {
-    if ((typeof e?.message === 'string' && /^out of memory$/i.test(e.message)) || ((e === null || e === '' || (typeof e === 'object' && !e.message)) && full())) return 'The code ran out of memory.';
-    if (e && typeof e === 'object' && typeof e.message === 'string') return `${e.name || 'Error'}: ${e.message}`;
-    return `Thrown: ${show(e)}`;
-  };
   const fail = (error, ms) => ({ ok: false, value: null, logs: [], error, ...(ms !== undefined && { ms }) });
 
   const run = async (code, { ms = LIMIT.ms } = {}) => {
@@ -74,46 +65,86 @@ var GZ_AI_RIME_JS = globalThis.GZ_AI_RIME_JS || (() => {
     rt.setMaxStackSize(LIMIT.stack);
     rt.setInterruptHandler(() => (Date.now() > deadline ? (stopped = true) : false));
     const vm = rt.newContext();
-    const logs = [];
+    const logs = [], handles = new Set();
+    const own = (h) => { handles.add(h); return h; };
     let size = 0, cut = false;
+    const end = (out) => tidy({ ...(stopped || Date.now() > deadline ? fail(`Stopped after ${ms / 1000} seconds.`) : out), logs, cut, ms: Date.now() - t0 });
     try {
-      // console: log, info, warn, error, debug and table, each a line held to the limits as it comes.
-      const log = vm.newFunction('log', (...args) => {
+      // Capture the guest's serializers before the code can replace its builtins. Only a bounded string crosses into
+      // the host, including for console arguments; getters and toJSON still run under the runtime's interrupt.
+      const serializer = vm.evalCode(`(() => {
+        const json = JSON.stringify, str = String, slice = Function.prototype.call.bind(String.prototype.slice);
+        return (v, n, error) => {
+          let s;
+          if (error && v && typeof v === 'object' && typeof v.message === 'string') {
+            s = (typeof v.name === 'string' ? v.name : 'Error') + ': ' + v.message;
+          } else {
+            s = typeof v === 'string' ? v : typeof v === 'bigint' || typeof v === 'symbol' ? str(v) : json(v);
+            if (s === undefined) s = str(v);
+            if (error) s = 'Thrown: ' + s;
+          }
+          return slice(s, 0, n + 1);
+        };
+      })()`);
+      if (serializer.error) { own(serializer.error); throw new Error('memory'); }
+      const display = own(serializer.value);
+      const read = (h, limit, error = false) => {
+        const n = vm.newNumber(limit);
+        const r = vm.callFunction(display, vm.undefined, h, n, error ? vm.true : vm.false);
+        n.dispose();
+        try {
+          if (r.error) throw new Error(full() ? 'memory' : 'serialization');
+          return vm.getString(r.value);
+        } finally { (r.error || r.value).dispose(); }
+      };
+      const error = (h) => {
+        const s = read(h, LIMIT.line, true);
+        return /^(?:Error|InternalError): out of memory$/i.test(s) || (full() && ['Thrown: null', 'Thrown: ""', 'Thrown: {}'].includes(s)) ? 'The code ran out of memory.' : s;
+      };
+      const log = own(vm.newFunction('log', (...args) => {
         if (logs.length >= LIMIT.lines || size >= LIMIT.output) { cut = true; return; }
-        const l = args.map((h) => show(vm.dump(h))).join(' ').slice(0, Math.min(LIMIT.line, LIMIT.output - size));
-        size += l.length; logs.push(l);
-      });
-      const console_ = vm.newObject();
+        const limit = Math.min(LIMIT.line, LIMIT.output - size);
+        let line = '';
+        for (let i = 0; i < args.length; i++) {
+          if (i) line += ' ';
+          if (line.length > limit) { cut = true; break; }
+          const s = read(args[i], limit - line.length);
+          line += s;
+          if (line.length > limit) { cut = true; break; }
+        }
+        line = line.slice(0, limit);
+        size += line.length; logs.push(line);
+      }));
+      const console_ = own(vm.newObject());
       for (const k of ['log', 'info', 'warn', 'error', 'debug', 'table']) vm.setProp(console_, k, log);
       vm.setProp(vm.global, 'console', console_);
-      console_.dispose(); log.dispose();
       const r = vm.evalCode(code, 'run_js.js');
-      const end = (out) => tidy({ ...out, logs, cut, ms: Date.now() - t0 });
-      if (r.error) { const e = vm.dump(r.error); r.error.dispose(); return end(stopped ? fail(`Stopped after ${ms / 1000} seconds.`) : { ok: false, value: null, error: errorOf(e) }); }
-      let h = r.value;
-      // A promise: its jobs run until it settles or the time is up. getPromiseState of anything else is that value itself.
-      let st = vm.getPromiseState(h);
+      if (r.error) return end({ ok: false, value: null, error: error(own(r.error)) });
+      let h = own(r.value), st = vm.getPromiseState(h);
+      // Inspect a settled promise once: each inspection creates an owned result handle.
       if (st.notAPromise !== true) {
         while (st.type === 'pending' && rt.hasPendingJob() && Date.now() <= deadline) {
           const j = rt.executePendingJobs();
-          if (j.error) { const e = vm.dump(j.error); j.error.dispose(); h.dispose(); return end(stopped ? fail(`Stopped after ${ms / 1000} seconds.`) : { ok: false, value: null, error: errorOf(e) }); }
+          if (j.error) return end({ ok: false, value: null, error: error(own(j.error)) });
           st = vm.getPromiseState(h);
         }
-        h.dispose();
-        if (st.type === 'pending') return end(stopped || Date.now() > deadline ? fail(`Stopped after ${ms / 1000} seconds.`) : { ok: false, value: null, error: "The code's promise never settled." });
-        if (st.type === 'rejected') { const e = vm.dump(st.error); st.error.dispose(); return end({ ok: false, value: null, error: errorOf(e) }); }
-        h = st.value;
+        if (st.type === 'pending') return end({ ok: false, value: null, error: "The code's promise never settled." });
+        if (st.type === 'rejected') return end({ ok: false, value: null, error: error(own(st.error)) });
+        h = own(st.value);
       }
-      const v = vm.dump(h);
-      h.dispose();
-      return end({ ok: true, value: typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' || v === null ? v : v === undefined ? 'undefined' : v });
+      const type = vm.typeof(h), s = read(h, LIMIT.output - size);
+      let value = s;
+      if (!['string', 'bigint', 'symbol'].includes(type) && s.length <= LIMIT.output - size) {
+        try { value = JSON.parse(s); } catch { /* undefined and non-JSON primitives remain words */ }
+      }
+      return end({ ok: true, value });
     } catch (e) {
-      // An engine fault (out of memory inside a call, a broken heap): this module is dropped and the next run loads afresh.
+      // An engine fault (out of memory inside a call, a broken heap): reload on the next run.
       loading = null;
       const out = String(e?.message || e);
-      return tidy({ ...fail(stopped ? `Stopped after ${ms / 1000} seconds.` : /memory/i.test(out) ? 'The code ran out of memory.' : 'The code engine failed.'), ms: Date.now() - t0 });
+      return end(fail(/memory/i.test(out) ? 'The code ran out of memory.' : 'The code engine failed.'));
     } finally {
-      try { vm.dispose(); rt.dispose(); } catch { loading = null; }
+      try { for (const h of handles) if (h.alive) h.dispose(); vm.dispose(); rt.dispose(); } catch { loading = null; }
     }
   };
 

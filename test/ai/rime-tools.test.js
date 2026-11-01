@@ -313,7 +313,7 @@ test('run_js: output crosses into the host only after bounding it, and serializa
   }
   assert.deepEqual(await run('console.log("x".repeat(501)); 42'), { ok: true, value: 42, logs: ['x'.repeat(500)], cut: true });
   assert.equal((await run('console.log.constructor("return typeof process")()')).value, 'undefined');
-  await run('Object.prototype.hostPolluted = true; JSON.parse("{\"__proto__\":{\"hostPolluted\":true}}")');
+  await run(`Object.prototype.hostPolluted = true; JSON.parse('{"__proto__":{"hostPolluted":true}}')`);
   assert.equal({}.hostPolluted, undefined);
   assert.equal((await run('6 * 7')).value, 42);
 });
