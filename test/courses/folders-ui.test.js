@@ -120,6 +120,26 @@ test('visiting the profile page keeps hidden folders hidden: content-ultra.js pa
   assert.ok(eye(e.parent), 'the eye buttons are back');
   assert.ok(e.document.getElementById('gz-folders-toggle'), 'and the show toggle');
 });
+// Each time Ultra's kept data is purged (a write, or a click Glaze takes for one) content-ultra.js asks /users/me again with a
+// new promise. Removing every eye and putting them back moved the outline under them by their height for a frame (2026-11-01:
+// a folder opened on a real course jumped 64 px and back).
+test('a renewed identity promise for the same student keeps the controls: none go and come back', async () => {
+  const e = fixture(); e.ui.sync(true, e.identity); await settle(); await e.click(eye(e.parent));
+  const before = eye(e.parent), toggle = e.document.getElementById('gz-folders-toggle'), status = e.document.getElementById('gz-folder-status');
+  assert.ok(before && toggle && status);
+  e.ui.sync(true, Promise.resolve('_900_1'));
+  assert.equal(eye(e.parent), before, 'kept while the new promise is out');
+  assert.equal(e.parent.getAttribute('data-gz-folder-hidden'), 'hide');
+  await settle();
+  assert.equal(eye(e.parent), before, 'the same button once it names the same student');
+  assert.equal(e.document.getElementById('gz-folders-toggle'), toggle);
+  assert.equal(e.document.getElementById('gz-folder-status'), status);
+  assert.equal(e.parent.getAttribute('data-gz-folder-hidden'), 'hide');
+  // No one (signed out): the page as Ultra drew it.
+  e.ui.sync(true, Promise.reject(Error('HTTP 401'))); await settle();
+  assert.equal(eye(e.parent), null);
+  assert.equal(e.parent.getAttribute('data-gz-folder-hidden'), null);
+});
 test('a storage result arriving after course navigation cannot hide the new outline', async () => {
   const e = fixture(); let release; e.hold(new Promise((r) => { release = r; }));
   e.ui.sync(true, e.identity); await settle();
