@@ -65,7 +65,10 @@ var GZ_AI_RIME_JS = globalThis.GZ_AI_RIME_JS || (() => {
     const logs = [], handles = new Set();
     const own = (h) => { handles.add(h); return h; };
     let size = 0, cut = false;
-    const end = (out) => tidy({ ...(stopped || Date.now() > deadline ? fail(`Stopped after ${ms / 1000} seconds.`) : out), logs, cut, ms: Date.now() - t0 });
+    const end = (out) => {
+      if (out.error === 'The code ran out of memory.') loading = null;
+      return tidy({ ...(stopped || Date.now() > deadline ? fail(`Stopped after ${ms / 1000} seconds.`) : out), logs, cut, ms: Date.now() - t0 });
+    };
     try {
       rt = Q.newRuntime();
       rt.setMemoryLimit(LIMIT.memory);
@@ -150,6 +153,9 @@ var GZ_AI_RIME_JS = globalThis.GZ_AI_RIME_JS || (() => {
       for (const resource of [...handles, vm, rt]) {
         try { if (resource?.alive) resource.dispose(); } catch { loading = null; }
       }
+      // WebAssembly memory cannot shrink when a context is freed. A previous run's high-water mark must not make
+      // an ordinary exception in a fresh context look like an allocation failure.
+      if (full()) loading = null;
     }
   };
 
