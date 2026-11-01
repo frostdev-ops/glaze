@@ -1549,6 +1549,21 @@ test('hiding cached foreign cards does not move or resize the remaining cards', 
   assert.equal(p.grid().style.height, height, 'content below the board stays in place too');
 });
 
+test('hiding the last foreign course card never reveals the native course list late', async () => {
+  const list = later(), courses = OTHER.map((id) => ({ id, name: 'Previous student', term: '', slot: 1 }));
+  const board = courses.map((c) => ({ id: ckey(c.id), on: true }));
+  const p = asStudent(cardsPage({ courses, local: { widgetLayout: { todo: true, boards: { courses: board } } } }), list);
+  p.ui.sync(true); await settle();
+  const toggle = p.doc.querySelector('.gz-course-native'), space = p.doc.querySelector('.gz-course-space');
+  assert.ok(toggle && space && p.doc.documentElement.hasAttribute('data-gz-course-tiles'));
+  const height = space.style.height;
+  list.res(members()); await settle();
+  assert.ok(OTHER.every((id) => !p.tile(ckey(id))), 'foreign cards are gone');
+  assert.ok(p.doc.documentElement.hasAttribute('data-gz-course-tiles'), 'the native list stays where the first paint put it');
+  assert.ok(p.doc.querySelector('.gz-course-native') === toggle && p.doc.querySelector('.gz-course-space') === space, 'the existing control and reserved space stay in place');
+  assert.equal(space.style.height, height);
+});
+
 test("a fresh Dashboard and its picker exclude the previous student's cached courses", async () => {
   const list = later();
   const p = asStudent(cardsPage({ at: 'dash', local: { widgetLayout: W.fresh() } }), list, '_2_1');
