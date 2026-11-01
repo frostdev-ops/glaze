@@ -835,7 +835,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
         if (!control) return;
         // Opening a folder or menu writes nothing. A check, toggle or submit can write even while opening something.
         const opens = control.hasAttribute('aria-expanded') || /^(true|menu|listbox|tree|grid|dialog)$/.test(control.getAttribute('aria-haspopup'));
-        if (opens && !control.matches('[role="checkbox"], [role="switch"], [aria-checked], [aria-pressed], [type="submit"]')) return;
+        if (opens && !control.matches('[role="checkbox"], [role="switch"], [aria-checked], [aria-pressed], [type="submit"]') && !(control.type === 'submit' && control.form)) return;
       }
       writeWatch?.disconnect(); clearTimeout(writeCap);
       // Native writes may finish after the click. Ignore Glaze's own redraws and stop watching after this request window.
