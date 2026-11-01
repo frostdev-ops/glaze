@@ -13,6 +13,8 @@ var GZ_SETTINGS_PAGE = globalThis.GZ_SETTINGS_PAGE || (() => {
   // Where Documents was, by each entry it added (history.state.gzAt): the page's scripts can read history.state, so the
   // address of the document opened stays here.
   const visits = [];
+  // The entries (by gzAt) added for a document opened from the list: the list is the entry under each.
+  const overList = new Set();
   // The page under it, children of <body> and <html> alike and what comes while it's open: out of reach (Tab, a screen
   // reader's reading, the pointer) and unseen. An overlay of the page's, Glaze's own too (the pet's world, the sidebar's
   // buttons, floating tiles), drew over Settings from above its z-index and took its clicks. Glaze's bar stays in use.
@@ -64,18 +66,31 @@ var GZ_SETTINGS_PAGE = globalThis.GZ_SETTINGS_PAGE || (() => {
   // Back or Forward within Documents: the frame goes where the entry says. Sent to a document already going, it is lost, so
   // `going` holds until the frame says it is there.
   const go = () => { going = true; port?.postMessage({ type: 'go', at: where() }); };
-  // Documents' frame, from its own document: it is at `at` (its query: '' for the list, '?paper=…' for a document), or asks
-  // to leave. Somewhere else after a link of its own is a page of its own in the tab's history. After Back or Forward it is
-  // sent on once more; still elsewhere (a document deleted since shows the list), the entry says where it is.
+  // Documents' frame, from its own document: it is at `at` (its query: '' for the list, '?paper=…' for a document), asks
+  // for the list (Close in a document) or to leave. Somewhere else after a link of its own is a page of its own in the tab's
+  // history. After Back or Forward it is sent on once more; still elsewhere (a document deleted since shows the list), the
+  // entry says where it is.
   const heard = (data) => {
     if (data?.type === 'leave') { close(); return; }
+    if (data?.type === 'list') { toList(); return; }
     if (data?.type !== 'opened' || typeof data.at !== 'string' || data.at.length > 600 || !back || history.state?.gzPage !== 'papers') return;
     try {
       if (data.at === where()) going = resent = false;
       else if (going && !resent) { resent = true; go(); }
       else if (going) { going = resent = false; history.replaceState(mark(depth(), 'papers', data.at), ''); }
-      else history.pushState(mark(depth() + 1, 'papers', data.at), '');
+      else {
+        const from = where(), s = mark(depth() + 1, 'papers', data.at);
+        if (from === '') overList.add(s.gzAt);
+        history.pushState(s, '');
+      }
     } catch { /* the tab keeps its entries */ }
+  };
+  // Back over the document's entry when the list is the one under it; else the list takes its entry's place.
+  const toList = () => {
+    const ours = back && history.state?.gzPage === 'papers';
+    if (ours && overList.has(history.state.gzAt)) { history.back(); return; }
+    if (ours) try { history.replaceState(mark(depth(), 'papers'), ''); } catch { /* the entry stays as it was */ }
+    go();
   };
   // Each document Documents' frame loads says hello (publicly, as Writer's does) and gets a one-use pass, which the worker
   // trusts its writes for, and this page's end of a MessageChannel. Whatever end the frame took is the one it answers on.
