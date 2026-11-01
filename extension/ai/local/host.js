@@ -183,7 +183,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       for (let i = from; i < ids.length; i++) { if (opens.includes(ids[i])) out.push(i); if (ends.includes(ids[i])) out.push(i + 1); }
       for (let p = from + LIMIT.spacing; p < ids.length; p += LIMIT.spacing) out.push(p);
       // The latest few matter most: older ones are inside what the next request shares anyway.
-      return [from, ...[...new Set(out)].filter((p) => p > from).sort((a, b) => a - b).slice(-12)];
+      return [from, ...[...new Set(out)].filter((p) => p > from).sort((a, b) => a - b).slice(-16)];
     };
     // The JSON grammar's matcher for a schema (grammar.js), with tools a turn that may instead call one of them in LFM3's
     // own syntax: its vocabulary once per model (with the tool tags' ids, where the model has them), each schema compiled

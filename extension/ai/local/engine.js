@@ -768,37 +768,35 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       // positions of each sliding ring (those layers keep window + chunk slots), and (logits) B.last. The caller keeps the
       // promise: rewind(mark) only while the sequence still holds the mark's positions unchanged (ai/local/engine.js load).
       const rings = state.map((st, i) => (c.layers[i] === 'swa' && st.ring ? c.nHeadKv[i] * hd * kvb : 0));
-      const markBytes = state.reduce((n, st, i) => n + (c.layers[i] === 'conv' ? st.conv.size : 2 * c.window * rings[i]), 0) + V * 4;
-      const marks = new Set(), spare = [];
+      // A mark's state and its logits are separate buffers from pools, made without an error scope (popErrorScope waits on
+      // the GPU process, which would cost every request several round trips); an allocation failure surfaces as a device
+      // error like any other.
+      const markBytes = Math.max(4, state.reduce((n, st, i) => n + (c.layers[i] === 'conv' ? st.conv.size : 2 * c.window * rings[i]), 0));
+      const marks = new Set(), spare = { state: [], logits: [] };
+      const take = (kind, size) => spare[kind].pop() || life.own(buffer(size));
+      const give = (kind, b) => { if (spare[kind].length < 8 && !life.closed()) spare[kind].push(b); else life.disown(b); };
       const mark = async ({ logits = false } = {}) => {
         if (life.closed()) fail('session destroyed');
         if (lost) fail(`device lost: ${lost.message}`, 'lost');
         if (busy) fail('a forward step is running');
-        let buf = spare.pop();
-        if (!buf) {
-          device.pushErrorScope?.('out-of-memory');
-          let oom;
-          try { buf = life.own(buffer(markBytes)); } finally { oom = await device.popErrorScope?.(); }
-          if (oom) { life.disown(buf); fail('out of memory for a mark', 'memory'); }
-          if (life.closed()) fail('session destroyed');
-        }
-        const items = []; // [buffer, offset in it, offset in buf, bytes]
+        const buf = take('state', markBytes), lbuf = logits ? take('logits', V * 4) : null;
+        const items = []; // [buffer, offset in it, mark buffer, offset there, bytes]
         let at = 0;
         state.forEach((st, i) => {
-          if (c.layers[i] === 'conv') { items.push([st.conv, 0, at, st.conv.size]); at += st.conv.size; return; }
+          if (c.layers[i] === 'conv') { items.push([st.conv, 0, buf, at, st.conv.size]); at += st.conv.size; return; }
           if (!rings[i]) return;
           const w = Math.min(c.window, pos), slots = st.ring, from = (pos - w) % slots, first = Math.min(w, slots - from);
           for (const kv of [st.K, st.V]) {
-            items.push([kv, from * rings[i], at, first * rings[i]]);
-            if (w > first) items.push([kv, 0, at + first * rings[i], (w - first) * rings[i]]);
+            items.push([kv, from * rings[i], buf, at, first * rings[i]]);
+            if (w > first) items.push([kv, 0, buf, at + first * rings[i], (w - first) * rings[i]]);
             at += c.window * rings[i];
           }
         });
-        if (logits) items.push([B.last, 0, at, V * 4]);
+        if (lbuf) items.push([B.last, 0, lbuf, 0, V * 4]);
         const enc = device.createCommandEncoder();
-        for (const [src, off, to, size] of items) if (size) enc.copyBufferToBuffer(src, off, buf, to, size);
+        for (const [src, off, dst, to, size] of items) if (size) enc.copyBufferToBuffer(src, off, dst, to, size);
         device.queue.submit([enc.finish()]);
-        const m = { pos, logits, buf, items, drop() { if (!marks.delete(m)) return; if (spare.length < 4 && !life.closed()) spare.push(buf); else life.disown(buf); } };
+        const m = { pos, logits, items, drop() { if (!marks.delete(m)) return; give('state', buf); if (lbuf) give('logits', lbuf); } };
         marks.add(m);
         return m;
       };
@@ -807,7 +805,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         if (busy) fail('a forward step is running');
         if (!marks.has(m)) fail('rewind: not a live mark of this session');
         const enc = device.createCommandEncoder();
-        for (const [dst, off, from, size] of m.items) if (size) enc.copyBufferToBuffer(m.buf, from, dst, off, size);
+        for (const [dst, off, src, from, size] of m.items) if (size) enc.copyBufferToBuffer(src, from, dst, off, size);
         device.queue.submit([enc.finish()]);
         pos = m.pos;
       };
@@ -861,7 +859,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       };
 
       const close = life.destroy;
-      life.destroy = () => { for (const snap of [...snaps]) snap.drop(); for (const m of [...marks]) m.drop(); spare.length = 0; close(); };
+      life.destroy = () => { for (const snap of [...snaps]) snap.drop(); for (const m of [...marks]) m.drop(); spare.state.length = spare.logits.length = 0; close(); };
 
       return {
         forward, pick, snapshot, restore, mark, rewind, grow,
@@ -979,15 +977,20 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       const pos = seq.length;
       const old = marks.findIndex((m) => m.pos === pos);
       if (old > 0 && (marks[old].logits || !logits)) { marks[old].used = ++clock; return; }
-      let inner;
-      try { inner = await s.mark({ logits: logits && ready }); } catch (e) { if (e?.reason === 'memory') return; throw e; }
+      const inner = await s.mark({ logits: logits && ready });
       if (old > 0) { marks[old].inner.drop(); marks.splice(old, 1); }
       marks.push({ pos, inner, logits: logits && ready, used: ++clock });
       marks.sort((a, b) => a.pos - b.pos);
+      // Over the cap: drop the mark closest to the one before it (the densest stretch loses one), never the start or the
+      // newest; ties go to the least recently used.
       while (marks.length > MARKS) {
-        let lru = 1;
-        for (let i = 2; i < marks.length; i++) if (marks[i].used < marks[lru].used) lru = i;
-        marks[lru].inner.drop(); marks.splice(lru, 1);
+        let drop = -1;
+        for (let i = 1; i < marks.length; i++) {
+          if (marks[i].used === clock) continue;
+          const gap = marks[i].pos - marks[i - 1].pos;
+          if (drop < 0 || gap < marks[drop].pos - marks[drop - 1].pos || (gap === marks[drop].pos - marks[drop - 1].pos && marks[i].used < marks[drop].used)) drop = i;
+        }
+        marks[drop].inner.drop(); marks.splice(drop, 1);
       }
     };
     const snapshot = async () => {
