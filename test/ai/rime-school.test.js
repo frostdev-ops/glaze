@@ -109,7 +109,8 @@ test('a Canvas peer-authored discussion cannot send the peer name or prompt to t
   const r = await tool('discussion_read').run({ course: '25', id: '81' }, ctxFor(ACC, tabsOf([tab])));
   assert.equal(r.ok, false);
   assert.doesNotMatch(JSON.stringify(r), /Classmate|CLASSMATE-PRIVATE-WORDS/);
-  assert.ok(!tab.page.asked.some((q) => new URL(q.url).pathname.endsWith('/discussion_topics/81')), 'unverified text stays at the school');
+  // The tab reads the topic to learn its author (as the pop-up reads it); an unverified one never leaves the tab.
+  assert.match(r.error, /authorship/);
 });
 
 test('partial school lists preserve the source coverage instead of reporting an empty complete course', async () => {

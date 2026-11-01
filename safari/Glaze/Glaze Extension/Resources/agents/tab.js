@@ -396,8 +396,40 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     return { ok: true, complete: !rows.more, items: rows.filter((t) => t && ID.test(String(t.id)) && typeof t.title === 'string').map((t) => ({ id: String(t.id), title: t.title.slice(0, 300) })) };
   };
 
-  const OPS = { todo, insights, assignment, mark, announcement, search, modules, topics, document: doc1, syllabus, discussion };
-  const SCHOOL_READS = new Set(['announcement', 'search', 'modules', 'topics', 'document', 'syllabus', 'discussion']);
+  // topic (Canvas): one discussion's prompt, only when a teacher or TA of the course wrote it (the course's enrollments, read
+  // once per course for this page); else 'unverified'. Like Ultra's: names omitted, the student's own replies, classmates'
+  // replies counted. Shapes from Canvas's API documentation, not yet captured live.
+  const STAFF = new Map();
+  const staff = (go, c) => {
+    if (!STAFF.has(c)) {
+      STAFF.set(c, pages(`/api/v1/courses/${c}/enrollments?type[]=TeacherEnrollment&type[]=TaEnrollment&per_page=100`, go, 4)
+        .then((rows) => (rows.more ? null : new Set(rows.filter((e) => e && ['TeacherEnrollment', 'TaEnrollment'].includes(e.type) && ID.test(String(e.user_id))).map((e) => String(e.user_id)))))
+        .catch(() => null).then((v) => { if (!v) STAFF.delete(c); return v; }));
+    }
+    return STAFF.get(c);
+  };
+  const person = (name) => { const t = typeof name === 'string' ? name.trim() : ''; const i = t.indexOf(' '); return i > 0 ? { givenName: t.slice(0, i), familyName: t.slice(i + 1) } : { givenName: t }; };
+  const topic = async (go, a) => {
+    if (X().site !== 'canvas' || !ID.test(a.course || '') || !ID.test(a.id || '')) return no('args');
+    let j;
+    try { ({ j } = await req(`/api/v1/courses/${a.course}/discussion_topics/${a.id}`, go)); } catch (e) { if (/^(401|403|404)$/.test(e.message)) return no('none'); throw e; }
+    if (String(j?.id) !== a.id) return no('none');
+    if (j.locked_for_user === true || j.published === false) return no('locked');
+    const author = String(j.author?.id ?? j.user_id ?? ''), set = await staff(go, a.course);
+    if (!set || !ID.test(author) || !set.has(author)) return no('unverified');
+    let rows = null;
+    try { rows = await pages(`/api/v1/courses/${a.course}/discussion_topics/${a.id}/entries?per_page=100`, go, 4); } catch (e) { if (!/^(401|403|404)$/.test(e.message)) throw e; }
+    if (!go()) return no('late');
+    const flat = (rows || []).flatMap((e) => [e, ...(Array.isArray(e?.recent_replies) ? e.recent_replies.map((x) => ({ ...x, parent: true })) : [])]).filter((e) => e && e.deleted !== true);
+    const hide = anonymous([person(j.author?.display_name), person(j.user_name), ...flat.map((e) => person(e.user_name))]);
+    const body = typeof j.message === 'string' ? j.message : '', prompt = text(body);
+    const mine = flat.filter((e) => String(e.user_id) === go.uid).map((e) => ({ at: Date.parse(e.created_at) || null, reply: e.parent === true || e.parent_id != null, text: text(unquoted(typeof e.message === 'string' ? e.message : '')).slice(0, 2000) }));
+    return hide({ ok: true, title: String(j.title || '').trim().slice(0, 300), text: prompt.slice(0, 20000), files: (Array.isArray(j.attachments) ? j.attachments : []).map((f) => ({ name: String(f?.display_name || f?.filename || '').slice(0, 200) })).filter((f) => f.name),
+      gradable: j.assignment_id != null || !!j.assignment, at: Date.parse(j.posted_at) || null, mine, others: rows ? flat.length - mine.length : null, complete: !!rows && !rows.more,
+      ...(prompt.length > 20000 && { truncated: true }) });
+  };
+  const OPS = { todo, insights, assignment, mark, announcement, search, modules, topics, document: doc1, syllabus, discussion, topic };
+  const SCHOOL_READS = new Set(['announcement', 'search', 'modules', 'topics', 'document', 'syllabus', 'discussion', 'topic']);
   // An address can also be an anchor's visible label, plain body text or a file's displayName. Strip it from every
   // returned string, after HTML decoding, so signed credentials never leave the tab through those alternate paths.
   const mapRead = (v, convert) => typeof v === 'string' ? convert(v) : Array.isArray(v) ? v.map((x) => mapRead(x, convert))
