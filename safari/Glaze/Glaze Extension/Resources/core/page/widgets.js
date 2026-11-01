@@ -1784,16 +1784,26 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     document.addEventListener('visibilitychange', onShow);
     addEventListener('resize', onResize);
   };
-  const forgetAccount = () => {
+  const forgetAccount = (destroy = true) => {
     identity++;
     me = asking = null;
     askedWho = false;
-    dashboardEdited = false;
-    teardown(true);
-    drawn = null;
+    if (destroy) { dashboardEdited = false; teardown(true); drawn = null; }
   };
   // The Ultra store can change identity without a sidebar context (including when the sidebar is switched off).
-  document.addEventListener('glaze:ultra-refresh', (e) => { if (ultra && (e.detail?.identity || e.detail?.retire)) forgetAccount(); });
+  // An ordinary refresh also rechecks the same student: retain the painted board until a different id is confirmed.
+  document.addEventListener('glaze:ultra-refresh', (e) => {
+    if (!ultra || !(e.detail?.identity || e.detail?.retire)) return;
+    const before = me;
+    forgetAccount(!!e.detail?.retire);
+    const n = identity;
+    if (before && !e.detail?.retire) who().then(() => {
+      if (n !== identity || before.uid === me?.uid) return;
+      dashboardEdited = false;
+      teardown(true); drawn = null;
+      if (on && W && lay) { draw(); fillCourses(); }
+    }, () => {});
+  });
   const contextChanged = () => {
     const account = globalThis.GZ_SIDEBAR_UI?.context().accountId || '';
     if (sideAccount && account !== sideAccount) forgetAccount();
