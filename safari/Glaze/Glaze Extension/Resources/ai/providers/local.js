@@ -27,16 +27,24 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const ID = /^[a-z0-9][a-z0-9._-]{0,63}$/;
   const windowOf = (m) => (m && !m.stock ? { window: TUNED, inputLimit: TUNED } : { window: CONTEXT, inputLimit: CONTEXT - CONTEXT / 10 });
   const LIMIT = { prepare: 240000 };
-  // Tokens a task's request may reason in before its answer; 0 answers directly. Judgement thinks; extraction and the
-  // latency-bound calls don't. A task with calls (its requests' task.call, ai/task.js ask) has a row per call, and a request
-  // without one answers directly. writer.feedback's decide, explain and summary think; scan answers directly: its 49
-  // think-mode training examples (lfm-tune FORMAT-v2) are too few to trust.
-  const THINK = Object.freeze({ 'writer.feedback': Object.freeze({ decide: 256, explain: 256, summary: 256, scan: 0 }),
-    'writer.review': 256, 'study.help': 256, 'agent.tools': 256,
+  // Tokens a task's request may reason in before its answer; 0 answers directly. A task with calls (its requests'
+  // task.call, ai/task.js ask) has a row per call, and a request without one answers directly. Each row is D4's p3dpo,
+  // think against direct at Q4_K_M / Q5_K_M / Q6_K / Q8_0 (glaze-plans/lfm-tune/reports/d4-p3dpo.md "Think versus direct"):
+  // agent.tools: thinks; check() 87→92, 97→95, 95→98, 93→98 %, facts in answer 79→84, 88→84, 87→87, 84→85 %.
+  // study.help: direct; step judged right 70→60, 67→59, 70→64, 71→76 % (Q5_K_M think fails the gate on it).
+  // writer.review: direct; planted errors found 88→81, 89→87, 87→85, 88→85 %.
+  // writer.feedback decide: direct; status in expected set 93→83, 84→79, 93→86, 91→86 %.
+  // writer.feedback explain: direct; status 93→90, 84→80, 93→90, 91→88 %, criteria covered 98→94, 97→95, 96→95, 97→97 %.
+  // writer.feedback summary: direct; status and criteria unchanged at every quant, judge 3.63→3.52 at Q4_K_M, ~0.4 s a call.
+  // writer.feedback scan: direct; its 49 think-mode training examples (lfm-tune FORMAT-v2) are too few to trust.
+  // The rest never trained thought (FORMAT-v2 THINK_TASKS).
+  const THINK = Object.freeze({ 'writer.feedback': Object.freeze({ decide: 0, explain: 0, summary: 0, scan: 0 }),
+    'writer.review': 0, 'study.help': 0, 'agent.tools': 256,
     'writer.complete': 0, 'writer.outline': 0, 'writer.requirements': 0, 'writer.cite': 0, 'writer.sources': 0, 'writer.decide': 0,
     'syllabus.read': 0, 'writer.image': 0 });
-  const thinkFor = (task) => {
-    const row = Object.hasOwn(THINK, task?.id || '') ? THINK[task.id] : 0;
+  // table: THINK, or a test's own (_env's think).
+  const thinkFor = (task, table = env?.think || THINK) => {
+    const row = Object.hasOwn(table, task?.id || '') ? table[task.id] : 0;
     return typeof row === 'number' ? row : (typeof task.call === 'string' && Object.hasOwn(row, task.call) ? row[task.call] : 0);
   };
   // Decode tokens a second below which every task answers directly: a full budget then costs at most 256 / 40 = 6.4 s. The
