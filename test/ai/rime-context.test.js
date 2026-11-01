@@ -260,3 +260,31 @@ test('a rejected oversized question cannot clear the accepted chat summary', asy
   await settle();
   assert.equal(h.seen.runs.filter((m) => m.task === 'agent.tools').at(-1).input.summary, summary);
 });
+
+test('from 16K up the tools offered are the chat\'s union, so later turns share the system turn; below 16K each question gets its own; the union stays under its budget, oldest dropped first', async () => {
+  const toolsOf = (h, n) => h.seen.runs.filter((r) => r.task === 'agent.tools')[n].input.tools;
+  const chat = async (window, questions) => {
+    const h = harness({ count: () => ({ used: 900, window, reserve: 768, exact: true }), script: { 'agent.tools': questions.map(() => said('Done.', [])) } });
+    const history = [];
+    for (const [i, q] of questions.entries()) {
+      h.say({ id: i + 1, op: 'ask', question: q, ...(history.length && { history: history.slice() }) });
+      await settle(120);
+      history.push(turn(q, 'Done.'));
+    }
+    return h;
+  };
+  const Q = ["What's due this week?", 'Any new announcements in BIO 1100?', 'Any new announcements in BIO 1100?'];
+  const big = await chat(16384, Q);
+  const first = K.route(Q[0], { locale: 'en', level: 3 }).tools, second = K.route(Q[1], { locale: 'en', level: 3 }).tools;
+  assert.ok([...first, ...second].every((t) => toolsOf(big, 1).includes(t)), 'turn 2 offers turn 1\'s tools too');
+  assert.deepEqual(toolsOf(big, 2), toolsOf(big, 1), 'turn 3 asks nothing new: the same tools, so the same system turn');
+  const small = await chat(4096, Q);
+  assert.deepEqual([...toolsOf(small, 1)].sort(), [...second].sort(), 'below 16K, the question\'s own');
+  // Many topics: the union stays within its budget and keeps the newest question's tools.
+  const many = ["What's due this week?", 'Any new announcements in BIO 1100?', 'What does the BIO 1100 syllabus say about late work?', 'What discussions are open in BIO 1100?', 'What is my grade in BIO 1100?', 'Remind me tomorrow at 9 pm to study', 'Take me to my BIO 1100 assignments', 'What is 18 / 20 as a percent?'];
+  const h = await chat(16384, many);
+  const last = toolsOf(h, many.length - 1), mine = K.route(many.at(-1), { locale: 'en', level: 3 }).tools;
+  assert.ok(mine.every((t) => last.includes(t)));
+  assert.ok(K.UNION.budget >= K.unionCost(last), `${K.unionCost(last)} tokens`);
+  assert.ok(!last.includes('todo_list') || K.unionCost([...last, 'todo_list']) <= K.UNION.budget, 'the oldest go first');
+});
