@@ -271,6 +271,27 @@ test('closing cancels every reveal frame, and New chat releases removed rows, co
   P.box().close();
 });
 
+for (const mode of ['reduced motion', 'Motion off']) test(`enabling ${mode} stops an ongoing reveal and smooth scroll`, async () => {
+  const P = movingPage();
+  await P.ui.open({ event: { isTrusted: true } });
+  const log = P.box().querySelector('.gz-ask-log');
+  Object.defineProperties(log, { scrollHeight: { value: 1000 }, clientHeight: { value: 100 } });
+  log.scrollTop = 0;
+  P.ask('Explain mitosis'); await settle();
+  const text = 'Look at the chromosomes. '.repeat(15);
+  answer(P, study(text)); await settle();
+  P.flushFrame();
+  const row = P.box().querySelector('.gz-ask-a');
+  assert.ok(row.dataset.streaming !== undefined, 'the reveal has started');
+  if (mode === 'Motion off') P.doc.root.dataset.gzMotion = 'off'; else P.reduced = true;
+  P.flushFrame();
+  assert.equal(row.querySelector('.gz-ask-md').textContent, text, 'show the whole checked answer at once');
+  assert.equal(row.dataset.streaming, undefined);
+  assert.equal(P.frames.size, 0, 'neither reveal nor eased scroll continues');
+  assert.ok(log.scrollTop >= 900, 'scroll directly to the bottom');
+  P.box().close();
+});
+
 test('the empty panel offers starters: one fills the question for the student\'s own click; New chat clears the conversation', async () => {
   const P = page({ reply: ready });
   await P.ui.open({ event: { isTrusted: true } });
