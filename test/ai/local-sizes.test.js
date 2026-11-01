@@ -167,3 +167,12 @@ test('switched on, a tuned model gets its window\'s size token (TUNED: 4k), the 
   assert.ok(!JSON.stringify(runs[1].parts).includes('gz_'), 'the stock model reads its own template');
   assert.equal(runs[1].think, undefined);
 });
+
+test('size tokens and reasoning follow the configured provider window below the model ceiling', async () => {
+  const runs = setup({ token: true, answer: true, think: { 'agent.tools': { '4k': true } } });
+  await T.run(A.task, raw(), { provider: LOCAL, cfg: { model: 'glaze-local', weights: 'glaze-q4', context: 2000 } });
+  const [sent] = runs;
+  assert.equal(sent.window, 2000);
+  assert.ok(!JSON.stringify(sent.parts).includes('gz_ctx:'), 'a sub-4K window cannot claim 4K');
+  assert.equal(sent.think, undefined, 'the 4K reasoning gate does not apply to a smaller window');
+});
