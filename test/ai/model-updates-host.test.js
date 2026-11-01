@@ -239,3 +239,25 @@ test('a run queued during a swap settles the version it actually runs', async ()
     assert.equal((await t.store.catalog()).state.trial, null, 'the version that answered was settled');
   }
 });
+
+test('Delete before list acceptance cannot be undone by the cancelled update', async () => {
+  const t = setup();
+  await ready(t);
+  const edit = t.store.edit;
+  let entered, proceed, first = true;
+  const accepting = new Promise((r) => { entered = r; });
+  const gate = new Promise((r) => { proceed = r; });
+  t.store.edit = async (fn) => {
+    if (first) { first = false; entered(); await gate; }
+    return edit(fn);
+  };
+  const u = update(t, sign(listOf(3, [fresh])));
+  await accepting;
+  assert.equal((await t.call('remove').done).type, 'done');
+  proceed();
+  await u.done;
+  const st = (await t.store.catalog()).state;
+  assert.equal(st?.pins?.['rime-q4'], undefined, 'a cancelled acceptance must not resurrect the deleted pin');
+  assert.equal(st?.keep?.['rime-q4'], undefined);
+  assert.ok(!t.fs.root.kids.get('glaze-models').kids.has('rime-q4'));
+});
