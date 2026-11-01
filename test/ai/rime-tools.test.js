@@ -783,6 +783,26 @@ test('monitor results and approval sentences speak the student\'s language, in a
   }
 });
 
+test('monitor translations load in a restarted worker as well as the Firefox event page', async () => {
+  const source = fs.readFileSync(path.join(ROOT, 'extension/ai/agent/wakes.js'), 'utf8');
+  const cached = new Set([...fs.readFileSync(path.join(ROOT, 'extension/background/background.js'), 'utf8').matchAll(/importScripts\(([^)]*)\)/g)]
+    .flatMap(([, args]) => [...args.matchAll(/'([^']+)'/g)].map(([, f]) => f)));
+  for (const preloaded of [false, true]) {
+    const sandbox = vm.createContext({ GZ_AI_TASK_AGENT_TOOLS: A });
+    const load = (f) => vm.runInContext(fs.readFileSync(path.join(ROOT, 'extension/background', f), 'utf8'), sandbox);
+    sandbox.importScripts = (...files) => { for (const f of files) { assert.ok(cached.has(f), `${f} must be cached at install`); if (!preloaded) load(f); } };
+    if (preloaded) for (const f of ['../core/i18n.js', ...['de', 'es', 'fr', 'nl', 'pt-BR'].map((l) => `../i18n/${l}.js`)]) load(f);
+    vm.runInContext(source, sandbox);
+    const env = wakesEnv({}); env.now = () => NOW;
+    const args = { at: '2026-10-31 21:00', say: 'Lab' };
+    const tool = sandbox.GZ_AI_RIME_WAKES.tools(env).find((t) => t.name === 'wake_create');
+    for (const locale of ['en', 'de', 'es', 'fr', 'nl', 'pt-BR']) {
+      const ctx = { zone: 'UTC', locale };
+      assert.equal(await tool.summarize(args, ctx), await wtool(env, 'wake_create').summarize(args, ctx), `${preloaded}: ${locale}`);
+    }
+  }
+});
+
 test('a fired wake or monitor is a turn of its own: a fired block before the question, the earlier turns unchanged', () => {
   const fired = { what: 'monitor', watch: 'grade', say: 'Tell me my new grade', at: NOW - 600e3, fact: { course: 'MATH 1350', was: 83.5, percent: 85.2 } };
   const inp = A.task.input({ question: 'Tell me my new grade', fired, tools: ['grades_list', 'course_grades', 'wakes_list'], now: NOW, zone: ZONE });
