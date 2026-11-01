@@ -383,6 +383,8 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       // destroy may be widened by the session (its snapshots); the engine calls whatever it is at the time.
       const life = {
         own: (b) => { if (closed) { b.destroy(); fail('session destroyed'); } owned.push(b); return b; },
+        // A buffer the session replaced (a grown cache) or let go (a mark's): destroyed now.
+        disown: (b) => { const i = owned.indexOf(b); if (i >= 0) owned.splice(i, 1); b.destroy(); },
         closed: () => closed,
         destroy: () => { closed = true; for (const b of owned) b.destroy(); owned.length = 0; sessions.delete(close); },
       };
@@ -399,7 +401,8 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         return s;
       } catch (e) { life.destroy(); throw e; }
     };
-    // ctx: positions it can hold; chunk: tokens per forward step (a longer feed goes in chunks).
+    // ctx: positions it holds now (grow() makes room for more, the sequence kept); chunk: tokens per forward step (a longer
+    // feed goes in chunks).
     const createSession = async ({ ctx = 4096, chunk = 128 } = {}, life) => {
       if (lost) fail(`device lost: ${lost.message}`);
       for (const [name, n] of Object.entries({ ctx, chunk })) {
@@ -413,6 +416,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       const mk = (n) => storage(n * 4);
       fits(ctx * c.nRot * 4, device.limits.maxStorageBufferBindingSize);
       fits(ctx * c.nRotSwa * 4, device.limits.maxStorageBufferBindingSize);
+      for (let i = 0; i < c.nLayer; i++) if (c.layers[i] !== 'conv') fits(ctx * c.nHeadKv[i] * hd * kvb, device.limits.maxStorageBufferBindingSize);
       const B = {
         ids: mk(chunk), x: mk(chunk * E), n: mk(chunk * E), a: mk(chunk * E), y: mk(chunk * E),
         big: mk(chunk * hidden), up: mk(chunk * F), q: mk(chunk * H * hd), k: mk(chunk * kvHeads * hd), v: mk(chunk * kvHeads * hd), g: mk(chunk * H),
@@ -431,8 +435,17 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         const slots = ring || ctx;
         return { ring, K: storage(slots * width * kvb), V: storage(slots * width * kvb) };
       });
-      const ropeFull = life.own(upload(ropeTable(0, ctx, c.nRot, c.ropeBase, ropeFreqs), S.STORAGE | S.COPY_DST));
-      const ropeSwa = life.own(upload(ropeTable(0, ctx, c.nRotSwa, c.ropeBaseSwa, null), S.STORAGE | S.COPY_DST));
+      // The RoPE tables' rows are written as positions come into use (ensureRope), so a long context costs nothing up front.
+      let ropeFull = storage(ctx * c.nRot * 4), ropeSwa = storage(ctx * c.nRotSwa * 4), ropeRows = 0;
+      const ensureRope = (upto) => {
+        if (upto <= ropeRows) return;
+        const to = Math.min(ctx, up(upto, 1024));
+        for (const [b, n, base, f] of [[ropeFull, c.nRot, c.ropeBase, ropeFreqs], [ropeSwa, c.nRotSwa, c.ropeBaseSwa, null]]) {
+          const rows = ropeTable(ropeRows, to - ropeRows, n, base, f);
+          device.queue.writeBuffer(b, ropeRows * n * 4, rows.buffer, rows.byteOffset, rows.byteLength);
+        }
+        ropeRows = to;
+      };
 
       // Every dispatch of a forward step owns a uniform slot; a step rewrites them all, then runs its list.
       const slots = [];
@@ -576,7 +589,9 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       // embeds: [{ at, tokens, buffer }]: the rows at positions at .. at + tokens − 1 of this feed come from buffer (a
       // GPUBuffer on this device with COPY_SRC, tokens × embedding_length f32, as a vision encoder writes them) instead of the
       // token embedding: one ordinary position each, causal.
-      const forward = async (tokens, { logits = 'last', argmax = false, topK: k = 0, onRows, profile = false, signal, embeds = [] } = {}) => {
+      // step: at most this many tokens a submission (≤ chunk); pace: after each submission's work is done, awaited before the
+      // next (a low-priority feed lets the page paint and a cancel land between small steps).
+      const forward = async (tokens, { logits = 'last', argmax = false, topK: k = 0, onRows, profile = false, signal, embeds = [], step = chunk, pace = null } = {}) => {
         if (life.closed()) fail('session destroyed');
         if (lost) fail(`device lost: ${lost.message}`);
         if (busy) fail('a forward step is running');
@@ -584,6 +599,9 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         if (pos + tokens.length > ctx) fail(`context of ${ctx} positions is full`);
         for (const id of tokens) if (!Number.isInteger(id) || id < 0 || id >= V) fail(`token ${id}`);
         if (!Number.isInteger(k) || k < 0 || k > 64) fail('topK: 0 or an integer from 1 to 64');
+        if (!Number.isInteger(step) || step < 1) fail('step: a positive integer');
+        if (pace !== null && typeof pace !== 'function') fail('pace: a function');
+        const per = Math.min(step, chunk);
         for (const e of embeds) {
           if (!Number.isInteger(e?.at) || !Number.isInteger(e.tokens) || e.at < 0 || e.tokens < 1 || e.at + e.tokens > tokens.length) fail('embeds: at and tokens inside the feed');
           if (!(e.buffer instanceof GPUBuffer) || e.buffer.size < e.tokens * E * 4 || !(e.buffer.usage & S.COPY_SRC)) fail(`embeds: a GPUBuffer with COPY_SRC of at least ${E * 4} bytes a token`);
@@ -593,10 +611,11 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         try {
           const rows = logits === 'all' && !onRows ? new Float32Array(tokens.length * V) : null;
           let res = { logits: null, id: null, top: null };
-          for (let i = 0; i < tokens.length; i += chunk) {
+          for (let i = 0; i < tokens.length; i += per) {
             if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
             if (lost) fail(`device lost: ${lost.message}`, 'lost');
-            const part = tokens.slice(i, i + chunk), T = part.length, lastChunk = i + chunk >= tokens.length;
+            const part = tokens.slice(i, i + per), T = part.length, lastChunk = i + per >= tokens.length;
+            ensureRope(pos + T);
             device.queue.writeBuffer(B.ids, 0, Uint32Array.from(part));
             lastT = T; topK = k || 1;
             const body = T === 1 ? P.one : T > 64 && P.manyBig.length ? P.manyBig : P.many;
@@ -631,7 +650,8 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
             pos += T;
             if (times) (res.profile ||= []).push(...await times());
             // With a signal, each chunk's work finishes before the next is checked: a cancel takes effect within a chunk.
-            if (signal && !lastChunk) await device.queue.onSubmittedWorkDone();
+            if ((signal || pace) && !lastChunk) await device.queue.onSubmittedWorkDone();
+            if (pace && !lastChunk) await pace();
             if (logits === 'all') {
               const got = new Float32Array(await read(all, 0, T * V * 4));
               if (onRows) onRows(i, got, T); else rows.set(got, i * V);
@@ -738,15 +758,114 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         device.queue.submit([enc.finish()]);
         pos = snap.pos;
       };
+
+      // Light marks: what a rewind to this position needs that later feeding overwrites. The full layers' keys and values
+      // below a position never change while the sequence keeps it, so a mark holds only the conv states, the last window
+      // positions of each sliding ring (those layers keep window + chunk slots), and (logits) B.last. The caller keeps the
+      // promise: rewind(mark) only while the sequence still holds the mark's positions unchanged (ai/local/engine.js load).
+      const rings = state.map((st, i) => (c.layers[i] === 'swa' && st.ring ? c.nHeadKv[i] * hd * kvb : 0));
+      const markBytes = state.reduce((n, st, i) => n + (c.layers[i] === 'conv' ? st.conv.size : 2 * c.window * rings[i]), 0) + V * 4;
+      const marks = new Set(), spare = [];
+      const mark = async ({ logits = false } = {}) => {
+        if (life.closed()) fail('session destroyed');
+        if (lost) fail(`device lost: ${lost.message}`, 'lost');
+        if (busy) fail('a forward step is running');
+        let buf = spare.pop();
+        if (!buf) {
+          device.pushErrorScope?.('out-of-memory');
+          let oom;
+          try { buf = life.own(buffer(markBytes)); } finally { oom = await device.popErrorScope?.(); }
+          if (oom) { life.disown(buf); fail('out of memory for a mark', 'memory'); }
+          if (life.closed()) fail('session destroyed');
+        }
+        const items = []; // [buffer, offset in it, offset in buf, bytes]
+        let at = 0;
+        state.forEach((st, i) => {
+          if (c.layers[i] === 'conv') { items.push([st.conv, 0, at, st.conv.size]); at += st.conv.size; return; }
+          if (!rings[i]) return;
+          const w = Math.min(c.window, pos), slots = st.ring, from = (pos - w) % slots, first = Math.min(w, slots - from);
+          for (const kv of [st.K, st.V]) {
+            items.push([kv, from * rings[i], at, first * rings[i]]);
+            if (w > first) items.push([kv, 0, at + first * rings[i], (w - first) * rings[i]]);
+            at += c.window * rings[i];
+          }
+        });
+        if (logits) items.push([B.last, 0, at, V * 4]);
+        const enc = device.createCommandEncoder();
+        for (const [src, off, to, size] of items) if (size) enc.copyBufferToBuffer(src, off, buf, to, size);
+        device.queue.submit([enc.finish()]);
+        const m = { pos, logits, buf, items, drop() { if (!marks.delete(m)) return; if (spare.length < 4 && !life.closed()) spare.push(buf); else life.disown(buf); } };
+        marks.add(m);
+        return m;
+      };
+      const rewind = async (m) => {
+        if (life.closed()) fail('session destroyed');
+        if (busy) fail('a forward step is running');
+        if (!marks.has(m)) fail('rewind: not a live mark of this session');
+        const enc = device.createCommandEncoder();
+        for (const [dst, off, from, size] of m.items) if (size) enc.copyBufferToBuffer(m.buf, from, dst, off, size);
+        device.queue.submit([enc.finish()]);
+        pos = m.pos;
+      };
+
+      // Room for `next` positions, the sequence kept: the full layers' caches (and a sliding layer's without a ring), the
+      // RoPE tables and the decode's partial sums grow; every dispatch binds the new buffers.
+      const grow = async (next) => {
+        if (life.closed()) fail('session destroyed');
+        if (lost) fail(`device lost: ${lost.message}`, 'lost');
+        if (busy) fail('a forward step is running');
+        if (!Number.isInteger(next) || next > 0xffffffff) fail('grow: a u32 expected');
+        if (next <= ctx) return ctx;
+        const lim = device.limits.maxStorageBufferBindingSize;
+        fits(next * c.nRot * 4, lim); fits(next * c.nRotSwa * 4, lim);
+        state.forEach((st, i) => { if (c.layers[i] !== 'conv' && !st.ring) fits(next * c.nHeadKv[i] * hd * kvb, lim); });
+        busy = true;
+        const made = new Map(); // old buffer → [new buffer, bytes to keep]
+        try {
+          device.pushErrorScope?.('out-of-memory');
+          let oom;
+          try {
+            state.forEach((st, i) => {
+              if (c.layers[i] === 'conv' || st.ring) return;
+              const width = c.nHeadKv[i] * hd * kvb;
+              for (const kv of [st.K, st.V]) made.set(kv, [buffer(next * width), pos * width]);
+            });
+            made.set(ropeFull, [buffer(next * c.nRot * 4), ropeRows * c.nRot * 4]);
+            made.set(ropeSwa, [buffer(next * c.nRotSwa * 4), ropeRows * c.nRotSwa * 4]);
+            made.set(B.apart, [buffer(H * Math.ceil(next / 128) * (hd + 2) * 4), 0]);
+          } finally { oom = await device.popErrorScope?.(); }
+          if (oom) fail('out of memory for a longer context', 'memory');
+          if (life.closed()) fail('session destroyed');
+          const enc = device.createCommandEncoder();
+          for (const [old, [b, keep]] of made) if (keep) enc.copyBufferToBuffer(old, 0, b, 0, keep);
+          device.queue.submit([enc.finish()]);
+          const swap = (b) => (made.has(b) ? made.get(b)[0] : b);
+          for (const st of state) if (st.K) { st.K = swap(st.K); st.V = swap(st.V); }
+          ropeFull = swap(ropeFull); ropeSwa = swap(ropeSwa); B.apart = swap(B.apart);
+          for (const [name, list] of Object.entries(P)) {
+            for (const d of list) for (const key of Object.keys(d.entries)) d.entries[key] = swap(d.entries[key]);
+            if (name !== 'allMany' || all) bindAll(list);
+          }
+          for (const [old, [b]] of made) { life.own(b); life.disown(old); }
+          made.clear();
+          ctx = next;
+          return ctx;
+        } finally {
+          for (const [, [b]] of made) b.destroy();
+          busy = false;
+        }
+      };
+
       const close = life.destroy;
-      life.destroy = () => { for (const snap of [...snaps]) snap.drop(); close(); };
+      life.destroy = () => { for (const snap of [...snaps]) snap.drop(); for (const m of [...marks]) m.drop(); spare.length = 0; close(); };
 
       return {
-        forward, pick, snapshot, restore,
+        forward, pick, snapshot, restore, mark, rewind, grow,
         // The greedy next token after feeding tokens.
         greedy: async (tokens) => (await forward(tokens, { logits: 'none', argmax: true })).id,
         get pos() { return pos; },
-        ctx, chunk, destroy: () => life.destroy(),
+        get ctx() { return ctx; },
+        chunk, destroy: () => life.destroy(),
       };
     };
 
@@ -787,22 +906,31 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
   };
 
   // ---- the model a host drives (ai/local/host.js): one sequence on the GPU ------------------------------------------------
-  // load(gguf, { context, chunk, signal, onProgress, ...create's options }) → { context, prefill, decode, snapshot, restore,
-  // release }. Load errors carry .reason: 'webgpu', 'memory', 'lost' or 'model'; an abort rejects with the signal's reason.
-  //   prefill(ids, { snapshot, signal, embeds }): feeds ids (after the token decode last chose, which is part of the sequence);
-  //     embeds [{ at, tokens, buffer }]: ids[at .. at + tokens − 1] take their rows from buffer (on model.device, COPY_SRC,
-  //     tokens × embedding_length f32: a picture's embeddings) instead of the token embedding;
-  //     → a snapshot of the state after them when snapshot is set, else undefined. The signal is checked before each chunk.
+  // load(gguf, { context, chunk, signal, onProgress, ...create's options }) → { context, prefill, extend, common, reserve,
+  // decode, snapshot, restore, release }. Load errors carry .reason: 'webgpu', 'memory', 'lost' or 'model'; an abort rejects
+  // with the signal's reason.
+  //   prefill(ids, { snapshot, signal, embeds, step, pace }): feeds ids (after the token decode last chose, which is part of
+  //     the sequence); embeds [{ at, tokens, buffer }]: ids[at .. at + tokens − 1] take their rows from buffer (on
+  //     model.device, COPY_SRC, tokens × embedding_length f32: a picture's embeddings) instead of the token embedding;
+  //     → a snapshot of the state after them when snapshot is set, else undefined. The signal is checked before each chunk;
+  //     step and pace as forward's.
+  //   extend(ids, { at, signal, step, pace }): the sequence becomes ids from position 0 on: the longest prefix the model
+  //     already holds is kept (rewound to the latest mark inside it when the rest differs) and only the remainder is fed;
+  //     marks are left at each position of `at` inside the fed part and at the end. → { reused, fed }. common(ids): the
+  //     length of that held prefix. Rows fed from embeds never match. reserve(n, most): room for n positions (the session
+  //     grows, at most to `most`, the sequence kept).
   //   decode({ sampler: { temperature, topK, topP, repetitionPenalty }, mask, signal, random }) → the next token's id,
   //     from the last fed position's logits: penalty (the last 64 tokens), then mask (a Uint32Array of ceil(vocab / 32)
   //     words, id i allowed when bit i & 31 of word i >> 5 is set), then temperature 0 or topK 1: the highest; else the
   //     topK (at most 64; 0: 64) highest, top-p, temperature, a draw. The id is fed by the next decode or prefill.
   //   snapshot() → snap (snap.drop() frees it); restore(snap): the sequence as it was. release(): all GPU memory goes.
+  const MARKS = 16;
   const load = async (gguf, { context = 4096, chunk = 512, signal, onProgress, ...opts } = {}) => {
     const engine = await create(gguf, { ...opts, onProgress, signal });
-    let s;
+    let s, base;
     try {
       s = await engine.session({ ctx: context, chunk });
+      base = await s.mark();
       if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
     } catch (e) {
       engine.destroy();
@@ -810,14 +938,21 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       throw e;
     }
     let pending = null, ready = false, released = false, running = false, recent = [];
-    const snaps = new Map(); // model snap → { inner, pending, ready, recent }
+    // seq: the id at each fed position (−1 where an embed's row went); marks: light marks along it, the start's first.
+    let seq = [], clock = 0;
+    const marks = [{ pos: 0, inner: base, logits: false, used: 0 }];
+    const snaps = new Map(); // model snap → { inner, pending, ready, recent, seq }
     const live = () => {
       if (released) fail('the model was released');
       if (engine.lost) fail(`device lost: ${engine.lost.message}`, 'lost');
     };
     const remember = (ids) => { recent = recent.concat(ids).slice(-64); };
     const halt = (sig) => { if (sig?.aborted) throw sig.reason ?? new DOMException('Aborted', 'AbortError'); };
-    const feed = async (ids, opt) => {
+    const held = () => (pending === null ? seq : seq.concat(pending));
+    const lcp = (a, b) => { const n = Math.min(a.length, b.length); let i = 0; while (i < n && a[i] === b[i]) i++; return i; };
+    // Marks past position p no longer hold the sequence: dropped.
+    const cut = (p) => { for (let i = marks.length - 1; i > 0; i--) if (marks[i].pos > p) { marks[i].inner.drop(); marks.splice(i, 1); } };
+    const feed = async (ids, opt, rows = null) => {
       const t = pending === null ? ids : [pending, ...ids];
       if (!t.length) return;
       const start = s.pos;
@@ -827,9 +962,28 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         // became part of the caches; retain the pending token and old logits when nothing was consumed.
         const consumed = s.pos - start;
         if (consumed) {
-          pending = null; ready = consumed === t.length;
+          const off = pending === null ? 0 : 1;
+          pending = null; ready = consumed === t.length && opt.logits !== 'none';
           remember(t.slice(0, consumed));
+          cut(start);
+          seq.length = start;
+          for (let i = 0; i < consumed; i++) seq.push(rows?.has(i - off) ? -1 : t[i]);
         }
+      }
+    };
+    const addMark = async (logits) => {
+      const pos = seq.length;
+      const old = marks.findIndex((m) => m.pos === pos);
+      if (old > 0 && (marks[old].logits || !logits)) { marks[old].used = ++clock; return; }
+      let inner;
+      try { inner = await s.mark({ logits: logits && ready }); } catch (e) { if (e?.reason === 'memory') return; throw e; }
+      if (old > 0) { marks[old].inner.drop(); marks.splice(old, 1); }
+      marks.push({ pos, inner, logits: logits && ready, used: ++clock });
+      marks.sort((a, b) => a.pos - b.pos);
+      while (marks.length > MARKS) {
+        let lru = 1;
+        for (let i = 2; i < marks.length; i++) if (marks[i].used < marks[lru].used) lru = i;
+        marks[lru].inner.drop(); marks.splice(lru, 1);
       }
     };
     const snapshot = async () => {
@@ -837,20 +991,22 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       const inner = await s.snapshot({ logits: ready });
       if (released) { inner.drop(); live(); }
       const snap = { drop() { const v = snaps.get(snap); if (!v) return; snaps.delete(snap); v.inner.drop(); } };
-      snaps.set(snap, { inner, pending, ready, recent });
+      snaps.set(snap, { inner, pending, ready, recent, seq: seq.slice() });
       return snap;
     };
     const model = {
-      context,
+      get context() { return s.ctx; },
       engine,
       // The device embeds buffers must be made on.
       get device() { return engine.device; },
-      async prefill(ids, { snapshot: snap = false, signal: sig, onRows, embeds } = {}) {
+      async prefill(ids, { snapshot: snap = false, signal: sig, onRows, embeds, step, pace } = {}) {
         live(); halt(sig);
         if (!Array.isArray(ids) && !ArrayBuffer.isView(ids)) fail('prefill: token ids');
         // embeds index ids; the pending token, fed first, moves them one along.
-        const shifted = embeds?.length ? embeds.map((e) => ({ ...e, at: e.at + (pending === null ? 0 : 1) })) : undefined;
-        await feed(Array.from(ids), { ...(onRows ? { logits: 'all', onRows } : { logits: 'keep' }), signal: sig, embeds: shifted });
+        const shift = pending === null ? 0 : 1;
+        const shifted = embeds?.length ? embeds.map((e) => ({ ...e, at: e.at + shift })) : undefined;
+        const rows = embeds?.length ? new Set(embeds.flatMap((e) => Array.from({ length: e.tokens }, (_, i) => e.at + i))) : null;
+        await feed(Array.from(ids), { ...(onRows ? { logits: 'all', onRows } : { logits: 'keep' }), signal: sig, embeds: shifted, ...(step && { step }), ...(pace && { pace }) }, rows);
         halt(sig);
         if (!snap) return undefined;
         try {
@@ -859,11 +1015,51 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
           return result;
         } catch (e) { halt(sig); if (e?.reason === 'memory') return null; throw e; }
       },
+      common(ids) { return lcp(Array.from(ids), held()); },
+      async extend(ids, { at = [], signal: sig, step, pace } = {}) {
+        live(); halt(sig);
+        if (!Array.isArray(ids) && !ArrayBuffer.isView(ids)) fail('extend: token ids');
+        const want = Array.from(ids);
+        if (!want.length) fail('extend: no tokens');
+        const have = held(), L = lcp(want, have);
+        let from;
+        if (L === have.length && (L < want.length || pending !== null || ready)) from = seq.length;
+        else {
+          // The latest mark inside the shared prefix; at the very end only one with the logits there will do.
+          let best = marks[0];
+          for (const m of marks) if (m.pos <= L && (m.pos < want.length || m.logits) && m.pos >= best.pos) best = m;
+          await s.rewind(best.inner);
+          cut(best.pos);
+          seq.length = best.pos; pending = null; ready = best.logits; recent = seq.slice(-64);
+          best.used = ++clock;
+          from = best.pos;
+        }
+        const reused = from;
+        const opt = { signal: sig, ...(step && { step }), ...(pace && { pace }) };
+        const stops = [...new Set(at)].filter((p) => Number.isInteger(p) && p > from && p < want.length).sort((a, b) => a - b);
+        let p = from;
+        for (const stop of [...stops, want.length]) {
+          const last = stop === want.length;
+          // The pending token is want[seq.length] here, and feed() puts it first.
+          if (stop > p || (last && !ready)) await feed(want.slice(seq.length + (pending === null ? 0 : 1), stop), { ...opt, logits: last ? 'keep' : 'none' });
+          halt(sig);
+          p = stop;
+          await addMark(last);
+        }
+        return { reused, fed: want.length - reused };
+      },
+      async reserve(n, most = n) {
+        live();
+        if (!Number.isInteger(n) || n < 1) fail('reserve: a positive integer');
+        if (n <= s.ctx) return s.ctx;
+        if (n > most) fail(`context of ${most} positions is full`);
+        return s.grow(Math.min(most, Math.max(n, up(2 * s.ctx, 1024))));
+      },
       async decode({ sampler, mask = null, signal: sig, random = Math.random } = {}) {
         live(); halt(sig);
         const sp = checkSampler(sampler);
         if (mask !== null && !(mask instanceof Uint32Array && mask.length === Math.ceil(engine.config.vocab / 32))) fail(`mask: a Uint32Array of ${Math.ceil(engine.config.vocab / 32)} words`);
-        if (model.pos >= context) fail(`context of ${context} positions is full`);
+        if (model.pos >= s.ctx) fail(`context of ${s.ctx} positions is full`);
         if (pending !== null) await feed([], { logits: 'keep', signal: sig });
         if (!ready) fail('decode: nothing fed to decode from');
         halt(sig);
@@ -882,7 +1078,10 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         const v = snaps.get(snap);
         if (!v) fail('restore: not a live snapshot of this model');
         await s.restore(v.inner);
+        // Marks inside what the old and the restored sequence share still hold; the rest go.
+        cut(Math.min(lcp(seq, v.seq), v.seq.length));
         ({ pending, ready, recent } = v);
+        seq = v.seq.slice();
       },
       release() {
         if (released) return;
@@ -893,7 +1092,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       get pos() { return s.pos + (pending === null ? 0 : 1); },
     };
     // A model operation spans several session calls and awaits. Lock the whole transaction, including its host state.
-    for (const name of ['prefill', 'decode', 'snapshot', 'restore']) {
+    for (const name of ['prefill', 'extend', 'reserve', 'decode', 'snapshot', 'restore']) {
       const action = model[name];
       model[name] = async (...args) => {
         live();
