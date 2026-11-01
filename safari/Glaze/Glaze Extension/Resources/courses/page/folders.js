@@ -178,8 +178,7 @@ var GZ_FOLDER_UI = globalThis.GZ_FOLDER_UI || (() => {
     if (path() !== route) { route = path(); generation++; dismiss(); pendingFocus = null; }
     watch(current());
     if (!current()) {
-      // Signing out or in, not the profile page: content-ultra.js passes one identity promise for the page's whole life, so a
-      // revoked one never comes back, and Ultra's sign-out is a full page load anyway.
+      // Signing out or in, not the profile page: the revoked identity never comes back.
       if ((canvas ? /^\/(?:logout|login)(?:\/|$)/ : /\/ultra\/(?:logout|login)(?:\/|$)/).test(location.pathname)) { revoked = identity; user = ''; }
       generation++; epoch++; key = ''; data = null; loading = false; clear(); return;
     }
@@ -189,7 +188,8 @@ var GZ_FOLDER_UI = globalThis.GZ_FOLDER_UI || (() => {
       identity = cached;
       const forget = () => { if (identity !== cached) return; user = ''; generation++; epoch++; key = ''; data = null; loading = false; clear(); };
       Promise.resolve(cached).then((id) => {
-        if (identity !== cached || revoked === cached || !current()) return;
+        // Identity can settle on the profile page or while disabled. Keep it for the next outline visit too.
+        if (identity !== cached || revoked === cached) return;
         if (typeof id !== 'string' || !GZ_FOLDERS.ID.test(id)) return forget();
         if (id !== user) { user = id; sync(active, cached); }
       }, forget);
