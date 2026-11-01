@@ -263,7 +263,7 @@ async function pass(scheme) {
     // download leaves them; nothing is fetched), and its size to use in Advanced. Its picture download's row the same way:
     // needing a download, downloading, ready, and its own Delete, which leaves the text model. Delete then removes them.
     await check('glaze', async () => {
-      const card = page.locator('#ai-providers .ai-prov', { hasText: 'Glaze on-device AI' });
+      const card = page.locator('#ai-providers .ai-prov', { hasText: 'Rime' });
       const note = page.locator('#ai-drawer .line.own:not(#ai-local-pictures) .note');
       const pics = page.locator('#ai-local-pictures'), picNote = page.locator('#ai-local-pictures .note');
       // The store's files for models.json's entries `pick` chooses, written sparse as a finished download leaves them.

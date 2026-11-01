@@ -198,7 +198,7 @@ test('features are one row each, from ai/settings.js FEATURES, after the overall
 
 test('the providers\' cards: on this device first where the browser has a model, then each provider by name; endpoints in Advanced only', async () => {
   const p = await open({ ai: { on: true } });
-  assert.deepEqual(p.cards(), ['Chrome on-device AI', 'Glaze on-device AI', 'OpenAI', 'Anthropic', 'Google Gemini', 'OpenRouter', 'xAI', 'Mistral', 'Groq', 'DeepSeek']);
+  assert.deepEqual(p.cards(), ['Chrome on-device AI', 'Rime', 'OpenAI', 'Anthropic', 'Google Gemini', 'OpenRouter', 'xAI', 'Mistral', 'Groq', 'DeepSeek']);
   const none = await open({ ai: { on: true }, providers: ['openai'] });
   assert.equal(none.cards()[0], 'OpenAI', 'no model on this device: no card for it');
   const adv = await open({ ai: { on: true, mode: 'advanced' }, conns: { 'custom-1': { provider: 'openai', name: 'Ollama', base: 'http://localhost:11434/v1', generation: 'g' } } });
@@ -346,7 +346,7 @@ test('the model picker lists each connected provider\'s catalog; search, arrows 
   await p.click('ai-pick-model');
   assert.equal(p.picking(), 'model');
   assert.equal(p.$('ai-pick-model').attrs['aria-haspopup'], 'dialog');
-  assert.deepEqual(p.side().map(text), ['Chrome on-device AI', 'Glaze on-device AI', 'OpenAI', 'Groq'], 'the overall model is always one: no "Same as default"');
+  assert.deepEqual(p.side().map(text), ['Chrome on-device AI', 'Rime', 'OpenAI', 'Groq'], 'the overall model is always one: no "Same as default"');
   assert.equal(p.doc.activeElement, p.$('ai-pick-search'));
   await p.click(p.side()[2]);
   assert.deepEqual(p.options(), ['gpt-4.1', 'gpt-5', 'gpt-5-mini']);
@@ -871,10 +871,10 @@ test('completion does not label its unsupported task effort as the provider defa
 
 test('Glaze\'s own model is a card after On this device, where the browser offers it; Safari\'s list has none', async () => {
   const p = await open({ ai: { on: true }, providers: ['openai', 'device', 'local'] });
-  assert.deepEqual(p.cards(), ['Chrome on-device AI', 'Glaze on-device AI', 'OpenAI', 'Anthropic', 'Google Gemini', 'OpenRouter', 'xAI', 'Mistral', 'Groq', 'DeepSeek']);
-  assert.equal(p.card('Glaze on-device AI').children[0].attrs['data-p'], 'local');
+  assert.deepEqual(p.cards(), ['Chrome on-device AI', 'Rime', 'OpenAI', 'Anthropic', 'Google Gemini', 'OpenRouter', 'xAI', 'Mistral', 'Groq', 'DeepSeek']);
+  assert.equal(p.card('Rime').children[0].attrs['data-p'], 'local');
   const safari = await open({ ai: { on: true }, providers: ['openai', 'device', 'apple'] });
-  assert.ok(!safari.cards().includes('Glaze on-device AI'));
+  assert.ok(!safari.cards().includes('Rime'));
 });
 
 test('Glaze\'s model\'s card: its state and size, Download from the click, its progress, Delete; nothing downloads without the click', async () => {
@@ -890,7 +890,7 @@ test('Glaze\'s model\'s card: its state and size, Download from the click, its p
   };
   const p = await open({ ai: { on: true }, providers: ['openai', 'device', 'local'], local, conns: { local: { provider: 'local', generation: 'g' } } });
   assert.deepEqual(sent, [], 'opening Settings asks nothing of it');
-  await p.click(p.card('Glaze on-device AI'));
+  await p.click(p.card('Rime'));
   assert.deepEqual(sent.map((m) => m.op), ['test'], 'its state (the connection is kept)');
   assert.deepEqual([p.note().textContent, p.note().attrs.role], ['Needs a download · 1.1 GB', 'status']);
   assert.equal(p.button('Delete', p.$('ai-drawer')), undefined);
@@ -902,15 +902,15 @@ test('Glaze\'s model\'s card: its state and size, Download from the click, its p
   for (const f of [0.25]) await p.progress({ provider: 'local', loaded: f });
   assert.equal(p.note().textContent, '25% · 1.1 GB');
   const bar = () => p.walk(p.$('ai-drawer')).find((x) => x.tagName === 'PROGRESS');
-  assert.deepEqual([bar().value, bar().attrs['aria-label']], [0.25, 'Glaze on-device AI']);
-  assert.deepEqual([p.card('Glaze on-device AI').children[2].textContent, p.card('Glaze on-device AI').children[3].className], ['25%', 'bar']);
+  assert.deepEqual([bar().value, bar().attrs['aria-label']], [0.25, 'Rime']);
+  assert.deepEqual([p.card('Rime').children[2].textContent, p.card('Rime').children[3].className], ['25%', 'bar']);
   await p.progress({ loaded: 0.9 }, { id: 'glaze' });
   assert.equal(bar().value, 0.25, 'the browser\'s model\'s progress is not this one\'s');
   assert.ok(p.button('Delete', p.$('ai-drawer')), 'a download can be stopped and deleted');
   state = 'ready';
   await p.progress({ provider: 'local', loaded: 1 });
   assert.equal(p.note().textContent, 'Ready · 1.1 GB');
-  assert.equal(p.card('Glaze on-device AI').children[2].className, 'st ok');
+  assert.equal(p.card('Rime').children[2].className, 'st ok');
   await p.click(p.button('Delete', p.$('ai-drawer')));
   assert.equal(deleted, 1);
   assert.equal(p.note().textContent, 'Needs a download · 1.1 GB');
@@ -932,7 +932,7 @@ test('long local downloads leave Downloading after completion or failure without
       return { ok: true, state, size: 1099627808 };
     };
     const p = await open({ ai: { on: true }, providers: ['local'], local, conns: { local: { provider: 'local' } } });
-    await p.click(p.card('Glaze on-device AI'));
+    await p.click(p.card('Rime'));
     await p.click(p.button('Download', p.$('ai-drawer')));
     // The last byte event can precede verification and the host's terminal result.
     if (terminal === 'ready') await p.progress({ provider: 'local', loaded: 1 });
@@ -948,13 +948,13 @@ test('Glaze\'s model in the picker needs no model id; a download that stopped sa
   const local = async (m) => (m.op === 'set' ? { ok: true } : { ok: true, state: 'download', reason: 'quota', size: 1099627808, tiers: [{ tier: 1, size: 1099627808 }] });
   const p = await open({ ai: { on: true, model: { use: 'local', model: '' } }, providers: ['openai', 'device', 'local'], local,
     calls: [{ id: 'r1', startedAt: 5, task: 'writer.complete', feature: 'completion', provider: 'local', state: 'completed' }] });
-  assert.equal(text(p.$('ai-pick-model')), 'Glaze on-device AI');
-  await p.click(p.card('Glaze on-device AI'));
+  assert.equal(text(p.$('ai-pick-model')), 'Rime');
+  await p.click(p.card('Rime'));
   assert.equal(p.note().textContent, 'There isn’t enough free space for the model. · 1.1 GB');
   assert.ok(p.button('Download', p.$('ai-drawer')));
   await p.click('ai-pick-completion');
-  assert.deepEqual(p.side().map((b) => text(b)), ['Same as default', 'Chrome on-device AI', 'Glaze on-device AI']);
-  assert.match(text(p.$('ai-calls').children[0]), /^Tab completion · Glaze on-device AI/);
+  assert.deepEqual(p.side().map((b) => text(b)), ['Same as default', 'Chrome on-device AI', 'Rime']);
+  assert.match(text(p.$('ai-calls').children[0]), /^Tab completion · Rime/);
   const t = (k, v) => I.t(k, v, 'en'), E = require('../../extension/settings/editor-ai.js');
   assert.equal(E.localText({ state: 'unavailable', reason: 'webgpu' }, t, String), 'This browser has no WebGPU, which Glaze’s on-device model needs.');
   assert.equal(E.localText({ state: 'unavailable', reason: 'browser' }, t, String), 'Not available in this browser');
@@ -967,7 +967,7 @@ test('a failed picture download keeps its failure reason beside its own Download
       ? { ok: true, state: 'download', reason }
       : { ok: true, state: 'ready', size: 1100000000, pictures: { state: 'download', size: 1500000000 } };
     const p = await open({ ai: { on: true }, providers: ['local'], local, conns: { local: { provider: 'local' } } });
-    await p.click(p.card('Glaze on-device AI'));
+    await p.click(p.card('Rime'));
     await p.click(p.button('Download', p.$('ai-local-pictures')));
     assert.ok(p.sent.some((m) => m.op === 'prepare' && m.part === 'pictures'));
     assert.match(text(p.$('ai-local-pictures')), reason === 'quota' ? /enough free space/ : /lost its connection/);

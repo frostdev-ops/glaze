@@ -156,6 +156,7 @@ test('caps.images and the catalog\'s vision follow the picture download: Downloa
   assert.deepEqual(await B.config({ op: 'test', provider: 'local' }, e), { ok: true, state: 'ready', size: 1100000000, tier: 1, tiers: [{ tier: 1, size: 1100000000 }], pictures: { state: 'download', size: 1500000000 } });
   assert.deepEqual((await LOCAL.status(cfg)).caps, { images: false });
   assert.equal((await LOCAL.catalog(cfg)).models[0].vision, false);
+  assert.equal((await LOCAL.catalog(cfg)).models[0].name, 'Rime');
   let st = await B.status({ feature: 'writing' }, e);
   assert.deepEqual([st.ready, st.caps.images], [true, false]);
 

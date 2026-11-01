@@ -222,9 +222,9 @@ const records = () => ({
     const note = () => settings.evaluate(() => document.querySelector('#ai-drawer .line.own:not(#ai-local-pictures) .note')?.textContent || '');
     const picNote = () => settings.evaluate(() => document.querySelector('#ai-local-pictures .note')?.textContent || '');
 
-    await step('the card: Glaze on-device AI after Chrome\'s, needing a download, its size shown; nothing fetched before the click', async () => {
+    await step('the card: Rime after Chrome\'s, needing a download, its size shown; nothing fetched before the click', async () => {
       const cards = await settings.evaluate(() => [...document.querySelectorAll('#ai-providers .ai-prov b')].map((b) => b.textContent));
-      assert.equal(cards[cards.indexOf('Glaze on-device AI') - 1], 'Chrome on-device AI', JSON.stringify(cards));
+      assert.equal(cards[cards.indexOf('Rime') - 1], 'Chrome on-device AI', JSON.stringify(cards));
       await settings.click('#ai-prov-local');
       assert.match(await until(async () => { const n = await note(); return n.startsWith('Needs a download') && n; }, 'its state'), REAL ? /^Needs a download · \d+\.\d GB$/ : /^Needs a download · 0\.0 GB$/);
       await pause(800);
@@ -290,10 +290,10 @@ const records = () => ({
       assert.ok(fed.includes('<|gz_data|>') && !fed.includes('<<<DATA-'), 'the fine-tune\'s fences, not the random one');
       assert.deepEqual(await offscreen(), [`${base}/ai/local/host.html`], 'the host started again for the run');
     });
-    await step('Activity names the run: Tab completion · Glaze on-device AI, done', async () => {
+    await step('Activity names the run: Tab completion · Rime, done', async () => {
       await settings.bringToFront();
-      const row = await until(() => settings.evaluate(() => [...document.querySelectorAll('#ai-calls li')].map((li) => li.textContent).find((t) => t.includes('Glaze on-device AI'))), 'the row');
-      assert.match(row, /^Tab completion · Glaze on-device AI/);
+      const row = await until(() => settings.evaluate(() => [...document.querySelectorAll('#ai-calls li')].map((li) => li.textContent).find((t) => t.includes(' · Rime'))), 'the row');
+      assert.match(row, /^Tab completion · Rime/);
       if (!REAL) assert.match(row, /Done/);
       await settings.screenshot({ path: path.join(out, 'activity.png') });
     });

@@ -87,5 +87,6 @@ test('the gray text shows where the task would run, Tab-word takes one word, typ
   const t = (k) => k;
   assert.equal(AI.providerName({ provider: 'device' }, t), 'Chrome on-device AI');
   assert.equal(AI.providerName({ provider: 'apple' }, t), 'Apple Intelligence');
+  assert.equal(AI.providerName({ provider: 'local' }, t), 'Rime');
   assert.equal(AI.providerName({ provider: 'openai', to: 'api.example.com' }, t), 'api.example.com');
 });
