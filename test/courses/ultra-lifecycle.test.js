@@ -83,6 +83,16 @@ test('aria-haspopup false does not exempt an ordinary write button', async () =>
   assert.equal(p.sent.filter((m) => m.op === 'invalidate').length, 1);
 });
 
+test('a form submit button keeps its write semantics without an explicit type attribute', async () => {
+  const p = page(), button = p.button({ 'aria-haspopup': 'dialog' });
+  // HTMLButtonElement exposes the default type and form even when no type attribute was written.
+  button.type = 'submit';
+  button.form = new NativeEl('form', {});
+  p.fire('click', button); p.run(300); await settle();
+  assert.equal(p.sent.filter((m) => m.op === 'invalidate').length, 1);
+  assert.ok(p.observers.some((o) => o.target === p.main), 'an asynchronous form handler is watched');
+});
+
 test('clicks dispatched on the document are ignored without throwing', () => {
   const p = page();
   assert.doesNotThrow(() => p.fire('click', p.doc));
