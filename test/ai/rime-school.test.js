@@ -228,6 +228,12 @@ test('tool-first grounding requires a factual quote rather than an account metad
   assert.equal(A.why(answer('The lab moved.', [ACC]), inputOf('Any announcements?', [list], { first: true })), 'ground');
 });
 
+test('tool-first grounding requires the factual quote in the visible answer, not only its hidden quotes list', () => {
+  const list = step('discussions_list', { course: '25' }, { items: [{ id: '81', title: 'Thesis workshop' }] });
+  assert.equal(A.why(answer('There are no open discussions.', ['Thesis workshop']), inputOf('Which discussions are open?', [list], { first: true })), 'ground');
+  assert.equal(A.why(answer('An open discussion: Thesis workshop.', ['Thesis workshop']), inputOf('Which discussions are open?', [list], { first: true })), '');
+});
+
 test('tool-first grounding accepts boolean facts and does not require quotes of timing or an empty course id', () => {
   const bool = step('run_js', { code: '2 > 1' }, { ok: true, value: true, logs: [] });
   assert.equal(A.why(answer('The comparison is true.', ['true']), inputOf('Compare these values', [bool], { first: true })), '');
