@@ -1005,6 +1005,18 @@ test('Rime\'s context size in Advanced: 4K by default to 128K, sizes this comput
   assert.deepEqual(sent.filter((m) => m.op === 'set').at(-1).cfg, { provider: 'local', tier: 1 }, '4K is the default, never stored');
 });
 
+test('Rime context refusals use the high-performance GPU that runs the model', async () => {
+  const p = await open({ ai: { on: true, mode: 'advanced' }, providers: ['local'],
+    conns: { local: { provider: 'local', tier: 4 } }, ladder: require('../../extension/ai/local/ladder.js'), deviceMemory: 4,
+    gpu: { requestAdapter: async (opts) => ({ features: new Set(opts?.powerPreference === 'high-performance' ? ['shader-f16'] : []) }) },
+    local: async (m) => m.op === 'updates' ? { ok: true, auto: true }
+      : { ok: true, state: 'ready', size: 1846237888, tier: 4, tiers: [{ tier: 4, size: 1846237888 }] } });
+  await p.click(p.card('Rime'));
+  const size = p.$('ai-local-window').children.find((o) => o.value === '16384');
+  assert.equal(size.disabled, false, '16K fits the engine GPU at f16');
+  assert.equal(size.textContent, '16K', 'the low-power GPU cannot add a no-f16 refusal');
+});
+
 test('Rime keeps tier and context changes made while the other choice is saving', async (t) => {
   for (const [first, second, expected] of [
     [['tier', '3'], ['window', '8192'], { tier: 3, window: 8192 }],
