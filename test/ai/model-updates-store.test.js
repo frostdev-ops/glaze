@@ -48,6 +48,13 @@ test('compose: a list\'s newer version of a model replaces it unless pinned; a p
   assert.equal(failed.latest.get('rime-q4').total, old.total, 'a version that failed is never the target again');
 });
 
+test('compose: with no usable list entry for a model, it stays on its pinned version, never back to the shipped one', () => {
+  const r7 = { ...fresh, commit: 'e'.repeat(40), total: 'e'.repeat(64), version: 'r7' };
+  const c = S.compose([old, big], { v: 1, serial: 3, models: [r7], pins: { 'rime-q4': fresh }, failed: { [r7.total]: 3 } });
+  assert.equal(c.entries.get('rime-q4').total, fresh.total);
+  assert.equal(c.latest.get('rime-q4').total, fresh.total, 'r7 failed and r5 is older: nothing to do');
+});
+
 test('compose: a list entry taking a shipped model\'s tier under another id, or changing a shipped id\'s tier, is skipped; a new tier is added', () => {
   const thief = { ...fresh, id: 'rime-other' };
   const moved = { ...fresh, tier: 2 };
