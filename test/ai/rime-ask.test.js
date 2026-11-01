@@ -48,7 +48,7 @@ test('gate: Rime r5\'s models.json entries run at tools level 3 (owner, untraine
   assert.equal(L.levelOf(tiers.map(({ tools, ...m }) => m)), 1, 'no flag: level 1');
   // The round that trains them sets `tools: 3` on its entries; the model the provider runs decides.
   assert.equal(L.levelOf(tiers.map((m) => ({ ...m, tools: 3 }))), 3);
-  assert.equal(L.levelOf([{ ...tiers[0], tools: 3, state: 'missing' }, { ...tiers[1], state: 'ready' }]), 1, 'the one it runs, not any');
+  assert.equal(L.levelOf([{ ...tiers[0], tools: 3, state: 'missing' }, { ...tiers[1], tools: undefined, state: 'ready' }]), 1, 'the one it runs, not any');
   assert.equal(L.levelOf([]), 1);
 });
 
