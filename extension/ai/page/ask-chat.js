@@ -597,6 +597,8 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
     };
     const clear = (e) => {
       if (!real(e) || current || pending || !alive_) return;
+      lastAsk = 0; sentFrom = 0;
+      port.hangUp();
       turns.length = 0;
       memo.summary = ''; memo.folded = 0;
       releaseView();
