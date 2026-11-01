@@ -674,7 +674,7 @@ Frostdev publishes a signed list beside the weights, `https://huggingface.co/fro
     { "id": "rime-1.7b-q4_k_m", "name": "Rime 1.7B Q4_K_M", "repo": "frostdev-ops/Rime-1.7B-GGUF", "commit": "<40-hex>",
       "file": "Rime-1.7B-Q4_K_M.gguf", "url": "https://huggingface.co/frostdev-ops/Rime-1.7B-GGUF/resolve/<commit>/Rime-1.7B-Q4_K_M.gguf",
       "size": 1099627200, "chunk": 67108864, "sha256": ["<64-hex per 64 MB chunk>"], "total": "<64-hex>", "license": "lfm1.0",
-      "quant": "Q4_K_M", "tier": 1, "tools": 3, "minGlaze": "4.0.2", "version": "r6" } ] },
+      "quant": "Q4_K_M", "tier": 1, "tools": 3, "minGlaze": "4.0.3", "version": "r6" } ] },
   "sig": "<Ed25519 over utf8('glaze-models-1|' + canon(list)), base64url>" }
 ```
 
@@ -712,7 +712,7 @@ Every publish happens only after the owner's go.
 
 1. Upload the GGUFs to `frostdev-ops/Rime-1.7B-GGUF` and note the commit.
 2. Build each size's entry: `node tools/vendor/model-manifest.js --repo frostdev-ops/Rime-1.7B-GGUF --commit <sha> --file
-   Rime-1.7B-Q4_K_M.gguf --tier 1 --tools 3 --version r6 --min-glaze 4.0.2 --out ~/glaze-models/entries.json` (once per
+   Rime-1.7B-Q4_K_M.gguf --tier 1 --tools 3 --version r6 --min-glaze 4.0.3 --out ~/glaze-models/entries.json` (once per
    quant, into the same file; keep each size's id).
 3. Sign: `node tools/vendor/model-manifest.js --sign --entries ~/glaze-models/entries.json --key ~/.glaze-signing/models.key
    --out ~/glaze-models/glaze-models.json`. The serial is one above the published list's (`--serial` to set it, `--offline`
