@@ -3,8 +3,8 @@
 // (data-gz-press), until the press is cancelled, the page doesn't change, or the site's own mark takes over. A page they open
 // shows a skeleton in the Look's surfaces over Ultra's main area (#gz-skel), in place of Ultra's spinners, until that page's
 // view is ready (its own markers, or its spinners gone and its content in), an instant copy (#gz-instant) takes over, or 20 s
-// pass. Never in the hidden standby (gz-ctab:standby). A page feature on Ultra's pages (content/routes.js); a second injection
-// keeps the first. sync(), off().
+// pass. A cold load shows the same from the document's first sync (#gz-boot, below). Never in the hidden standby
+// (gz-ctab:standby). A page feature on Ultra's pages (content/routes.js); a second injection keeps the first. sync(), off().
 var GZ_FEEDBACK = globalThis.GZ_FEEDBACK || (() => {
   const ctx = globalThis.GZ_CTX;
   if (!ctx) return null; // landed before its document's bootstrap: asked for again
@@ -32,7 +32,7 @@ var GZ_FEEDBACK = globalThis.GZ_FEEDBACK || (() => {
   const plain = (e) => !e.button && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
   const here = () => location.pathname + location.search;
   const shown = (e) => !!e?.getClientRects().length;
-  const ours = (e) => !!e.closest?.('#gz-skel, #gz-instant');
+  const ours = (e) => !!e.closest?.('#gz-skel, #gz-boot, #gz-instant');
 
   // ---- the press ----
   // What a press is on, from the innermost: a link or course tab in Glaze's bar (its open shadow root), a tab of the strip, a
@@ -197,7 +197,8 @@ var GZ_FEEDBACK = globalThis.GZ_FEEDBACK || (() => {
     if (mark && [...m.querySelectorAll(mark)].some((e) => shown(e) && !x.stale.has(e) && !ours(e))) return true;
     if (spinnersOf(m).length || !filled(m)) return false;
     const since = performance.now() - x.routedAt;
-    if (x.spun || since > 1000) return true;
+    if (x.spun || since > (x.boot ? 3000 : 1000)) return true;
+    if (x.boot) return false;
     const fresh = !x.old.has(m) || [...m.querySelectorAll('.route-view-container')].some((e) => !x.old.has(e)) || textOf(m) !== x.text;
     return fresh && since > 150;
   };
@@ -205,6 +206,7 @@ var GZ_FEEDBACK = globalThis.GZ_FEEDBACK || (() => {
     x.frame = 0;
     if (v !== x) return;
     if (!wanted()) { end(x); return; }
+    if (x.boot) { bootCheck(x); return; }
     if (copied(x)) { end(x); return; }
     if (here() !== x.at && !x.routed) {
       if (here() !== x.dest) { end(x); return; }
@@ -257,9 +259,9 @@ var GZ_FEEDBACK = globalThis.GZ_FEEDBACK || (() => {
   };
   const end = (x = v) => {
     if (!x) return;
-    if (v === x) { v = null; html.removeAttribute('data-gz-skel'); }
+    if (v === x) { v = null; html.removeAttribute(x.boot ? 'data-gz-boot' : 'data-gz-skel'); }
     x.mo?.disconnect();
-    x.ro.disconnect();
+    x.ro?.disconnect();
     clearTimeout(x.cap);
     clearTimeout(x.wait);
     clearTimeout(x.poll);
@@ -273,6 +275,50 @@ var GZ_FEEDBACK = globalThis.GZ_FEEDBACK || (() => {
   };
   const onHide = () => { end(); unpress(); };
 
+  // ---- a cold load ----
+  // A page Ultra is still booting when this first syncs (its boot screen, #initial-load-area, still in), in a document under
+  // BOOT_AGE old: from then until the page's own view is ready, Glaze's bar over the Look with one skeleton (#gz-boot), or
+  // the page's instant copy once it paints, and nothing of Ultra's: its boot screen, its first view of another page (its
+  // Institution page), its spinners and half-built views wait hidden (data-gz-boot, extras.css). Then one swap: the page at
+  // once, or as the copy goes (instant.js lets it go when the view is ready). A click on the way ends it for its own
+  // skeleton. Once a document.
+  const BOOT_AGE = 15000, BOOT = '#initial-load-area';
+  let booted = false;
+  const boot = () => {
+    booted = true;
+    if (performance.now() >= BOOT_AGE || !document.querySelector(BOOT)) return;
+    const at = here(), shape = pageOf(location.pathname)[1];
+    const x = { boot: true, at, dest: at, shape, routed: true, routedAt: performance.now(), landed: at, spun: false, copied: false,
+      stale: new Set(), spinners: new Set(), old: new Set(), text: -1, box: draw(shape), frame: 0 };
+    x.box.id = 'gz-boot';
+    v = x;
+    html.setAttribute('data-gz-boot', '');
+    (document.body || html).append(x.box);
+    // The copy going is seen in its own mutation, so the page shows in the frame it goes.
+    x.mo = new MutationObserver(() => { if (v === x && !bootCopy(x) && !x.frame) x.frame = requestAnimationFrame(() => check(x)); });
+    x.mo.observe(document.body || html, { childList: true, subtree: true });
+    x.mo.observe(html, { attributes: true, attributeFilter: ['data-gz-instant'] });
+    // Looked at without a frame too: a frame that is hidden draws none.
+    x.poll = setTimeout(function poll() { if (v !== x) return; cancelAnimationFrame(x.frame); check(x); if (v === x) x.poll = setTimeout(poll, 100); }, 100);
+    x.cap = setTimeout(() => end(x), LAST);
+  };
+  // The page's copy up: it shows, and the boot waits on it; gone, so is the boot.
+  const bootCopy = (x) => {
+    if (html.hasAttribute('data-gz-instant')) { x.copied = true; return true; }
+    if (x.copied) { end(x); return true; }
+    return false;
+  };
+  const bootCheck = (x) => {
+    if (bootCopy(x)) return;
+    if (here() !== x.landed) Object.assign(x, { landed: here(), routedAt: performance.now(), spun: false });
+    const m = front();
+    if (spinnersOf(m).length) x.spun = true;
+    const ila = document.querySelector(BOOT);
+    if (ila && !/(^|\s)fade-out(\s|$)/.test(ila.className)) return;
+    if (!/^\/ultra\/institution-page\/?$/.test(location.pathname) && [...(m?.querySelectorAll('section.institution-page-container') || [])].some(shown)) return;
+    if (ready(x, m)) end(x);
+  };
+
   const EVENTS = [['pointerdown', onDown], ['pointermove', onMove], ['pointerup', onUp], ['pointercancel', onCancel], ['contextmenu', onCancel], ['click', onClick]];
   const listen = (on) => {
     if (on === listening) return;
@@ -280,7 +326,7 @@ var GZ_FEEDBACK = globalThis.GZ_FEEDBACK || (() => {
     for (const [type, fn] of EVENTS) { if (on) addEventListener(type, fn, { capture: true, passive: true }); else removeEventListener(type, fn, { capture: true }); }
     if (on) addEventListener('pagehide', onHide); else removeEventListener('pagehide', onHide);
   };
-  const sync = () => { listen(wanted()); if (!listening) onHide(); };
+  const sync = () => { listen(wanted()); if (!listening) onHide(); else if (!booted) boot(); };
   const off = () => { listen(false); onHide(); };
   return { sync, off };
 })();

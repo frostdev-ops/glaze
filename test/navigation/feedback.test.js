@@ -653,8 +653,8 @@ test('its switch: on by default, in Blackboard\'s Dashboard section, short and t
 
 test('still under reduced motion', () => {
   const css = read('content/extras.css');
-  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{ #gz-skel > \* \{ animation: none; \} \}/);
-  assert.match(css, /html\[data-gz-motion="off"\] #gz-skel > \* \{ animation: none; \}/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{ #gz-skel > \*, #gz-boot > div \{ animation: none; \} \}/);
+  assert.match(css, /html\[data-gz-motion="off"\] #gz-skel > \*, html\[data-gz-motion="off"\] #gz-boot > div \{ animation: none; \}/);
 });
 
 test('pressed indicators remain visible when forced colors remove fills and shadows', () => {
