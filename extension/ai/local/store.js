@@ -1,7 +1,7 @@
 // The local model's weights in OPFS (navigator.storage.getDirectory()), for Glaze's own engine. A model comes from
 // ai/local/models.json (tools/vendor/model-manifest.js writes it): a Hugging Face file pinned to a commit, its size and the
 // SHA-256 of each 64 MB chunk. download() fetches it by Range from huggingface.co's resolve URL, which redirects to HF's
-// CDN, on the student's click only. Each chunk is checked before the next starts and kept as its own file, so a
+// CDN, on the student's click (or a background update's, ai/local/updates.js). Each chunk is checked before the next starts and kept as its own file, so a
 // cancelled or killed download resumes from its verified chunks (a writable commits on close; rewriting one 1 GB file in
 // place would copy it on every chunk). The folder is named by the file's hash, so another version never mixes in; an
 // empty `ready` file marks it complete. open() reads byte ranges, never the whole file.

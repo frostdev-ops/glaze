@@ -1,7 +1,7 @@
 // The AI harness's `local` provider (docs/ai-harness.md "Glaze's own model"): Glaze's own model on this computer, Rime
 // (Frostdev's fine-tune of LFM3-1.7B), run by Glaze's WebGPU engine in its host (ai/local/host.js, reached through
-// ai/local/link.js). Nothing goes over the network but the weights' download from Hugging Face, and that only from
-// Settings' Download click.
+// ai/local/link.js). Nothing goes over the network but the weights' download from Hugging Face, from Settings' Download
+// click, and, while a model is downloaded, its background updates (ai/local/updates.js).
 // status() is the worker's own and starts nothing: the browser (Safari keeps Apple Intelligence: unavailable, 'browser'),
 // WebGPU, and which model the store holds (ai/local/store.js). The model is the one with the tier Settings' Advanced
 // chose, else the one downloaded, else, at Download, the ladder's pick for this computer (host.js). prepare() downloads in
