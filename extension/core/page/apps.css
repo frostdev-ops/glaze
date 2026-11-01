@@ -7,8 +7,8 @@
 #gz-dash { margin: 0 0 calc(1.25rem * var(--gz-space)); font-size: 0.875rem; color: var(--gz-ink); }
 #gz-dash .gz-dash-bar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.4rem; margin-bottom: 0.4rem; }
 /* Over the page's background (in a header they sit on its surface). */
-#gz-dash > .gz-dash-bar > .gz-w-small:not(.gz-w-main),
-#gz-dash > .gz-dash-bar > .gz-w-btn:not(.gz-w-main) { background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border-color: var(--gz-border-line, var(--gz-line)); }
+#gz-dash > :where(.gz-dash-bar) > .gz-w-small:not(.gz-w-main),
+#gz-dash > :where(.gz-dash-bar) > .gz-w-btn:not(.gz-w-main) { background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border-color: var(--gz-border-line, var(--gz-line)); }
 /* Editing keeps the toolbar footprint; Add goes below the room so it cannot push the tiles. */
 .gz-dash-edit { box-sizing: border-box; }
 :is(#gz-dash, #gz-toolbar) .gz-dash-reset[hidden] { visibility: hidden; display: inline-flex !important; }
