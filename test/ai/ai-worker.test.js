@@ -118,6 +118,54 @@ test('a run from a page reaches only the connection\'s server, with the key, and
   assert.equal(calls.length, 2);
 });
 
+// Ask Glaze (ai/ask.js): its panel's port, from the same senders as the AI port's; its runs go through the broker as the
+// feature ask and its tool calls through Agents' tools, with agent access itself off.
+const askWorker = (fetch) => {
+  const w = make(fetch);
+  w.store.local.ai = { on: true, model: { use: 'main', model: 'gpt-x' }, features: { ask: true } };
+  return w;
+};
+test('Ask Glaze\'s port: Glaze in a page of a site it runs on may ask; a quiz, a tool, another site may not', async () => {
+  const w = askWorker();
+  live(w, lms());
+  const { port, say } = w.connect('glaze:ask', lms());
+  say({ id: 1, op: 'status' });
+  await w.settle();
+  assert.equal(port.hungUp, false);
+  assert.deepEqual(JSON.parse(JSON.stringify(port.posted[0])), { id: 1, type: 'status', on: true, allowed: true, ready: false, why: 'setup' }, 'the broker\'s status for the feature ask');
+  for (const sender of [lms('/courses/1/quizzes/3'), lms('/courses/1/external_tools/9'), { ...lms(), url: 'https://evil.example.com/', origin: 'https://evil.example.com', tab: { id: 4, url: 'https://evil.example.com/' } },
+    { ...lms(), id: 'another-extension' }]) {
+    live(w, sender);
+    const { port: p, say: s2 } = w.connect('glaze:ask', sender);
+    s2({ id: 1, op: 'ask', question: 'What is due this week?', locale: 'en' });
+    await w.settle();
+    assert.equal(p.hungUp, true, sender.url);
+    assert.deepEqual(p.posted, [], `${sender.url}: nothing run, nothing said`);
+  }
+});
+
+test('Ask Glaze in the worker: a question\'s steps run through the broker and Agents\' tools, with agent access off', async () => {
+  const replies = ['{"call":{"name":"todo_list","arguments":{}},"answer":null}', '{"call":null,"answer":{"text":"Glaze has nothing to show yet.","quotes":[]}}'];
+  const sent = [];
+  const w = askWorker(async (url, init) => {
+    if (url.endsWith('/models')) return new Response(JSON.stringify({ data: [{ id: 'gpt-x' }] }), { headers: { 'content-type': 'application/json' } });
+    sent.push(JSON.parse(init.body));
+    return new Response(JSON.stringify({ choices: [{ message: { content: replies[sent.length - 1] }, finish_reason: 'stop' }] }), { headers: { 'content-type': 'application/json' } });
+  });
+  await w.send({ type: 'glaze:ai-config', op: 'set', id: 'main', cfg: { provider: 'openai', base: 'https://api.example.com/v1', model: 'gpt-x', key: KEY } }, editor());
+  live(w, lms());
+  const { port, say } = w.connect('glaze:ask', lms());
+  say({ id: 1, op: 'ask', question: 'What is due this week?', locale: 'en' });
+  for (let i = 0; i < 10 && !port.posted.some((m) => ['end', 'error'].includes(m.type)); i++) await w.settle();
+  const said = JSON.parse(JSON.stringify(port.posted)).filter((m) => m.type !== 'keepalive');
+  assert.deepEqual(said.map((m) => m.type), ['route', 'look', 'end'], JSON.stringify(said));
+  assert.deepEqual(said.at(-1), { id: 1, type: 'end', task: 'agent.tools', answer: { text: 'Glaze has nothing to show yet.' } });
+  assert.equal(sent.length, 2);
+  assert.match([].concat(sent[1].messages.at(-1).content).map((c) => (typeof c === 'string' ? c : c.text)).join(''), /result 1 todo_list/, 'the tool\'s result went back as fenced data');
+  assert.equal(w.store.local.mcp, undefined, 'agent access stays as it was');
+  assert.deepEqual(w.store.local.aiCalls.map((r) => [r.feature, r.task, r.state]), [['ask', 'agent.tools', 'completed'], ['ask', 'agent.tools', 'completed']]);
+});
+
 test('AI is off by default: a fresh worker has no settings for it, and a page is told it may not ask', async () => {
   const w = worker({ globals: fakeIDB() });
   const { reply } = await status(w, lms());
@@ -160,10 +208,12 @@ test('Firefox\'s event page loads every file of the harness the worker would imp
   // files itself, and the worker never does.
   const host = ['local/host.js', 'local/offscreen.js', 'local/tokenizer.js', 'local/gguf.js', 'local/quant.js', 'local/reference.js', 'local/engine.js', 'local/grammar.js', 'local/ladder.js', 'local/vision-reference.js', 'local/vision.js'];
   for (const f of ['ai/local/store.js', 'ai/local/format.js', 'ai/local/link.js', 'ai/providers/local.js']) assert.ok(named.has(f), f);
-  // Tasks defined and tested that no feature runs yet stay out until one adopts them (docs/ai-harness.md).
-  const unused = ['tasks/study-help.js', 'tasks/agent-tools.js', 'tasks/wording.js'];
-  for (const f of unused) assert.ok(!named.has(`ai/${f}`), `${f} waits for a feature`);
-  const shipped = fs.readdirSync(path.join(__dirname, '../../extension/ai'), { recursive: true }).filter((f) => f.endsWith('.js') && f !== 'providers/mock.js' && !host.includes(f) && !unused.includes(f)).map((f) => `ai/${f}`);
+  // Ask Glaze runs study.help and agent.tools (ai/ask.js): the worker loads them with the harness. Its panel (ai/page/) runs
+  // on the school's page, loaded on demand (background/background.js LOADABLE), never in the worker.
+  for (const f of ['tasks/study-help.js', 'tasks/agent-tools.js', 'tasks/wording.js', 'ask.js']) assert.ok(named.has(`ai/${f}`), `${f} is the worker's`);
+  const page = (f) => f.split(path.sep).join('/').startsWith('page/');
+  for (const f of fs.readdirSync(path.join(__dirname, '../../extension/ai'), { recursive: true }).filter((f) => f.endsWith('.js') && page(f))) assert.ok(!named.has(`ai/${f.split(path.sep).join('/')}`), `${f} stays out of the worker`);
+  const shipped = fs.readdirSync(path.join(__dirname, '../../extension/ai'), { recursive: true }).filter((f) => f.endsWith('.js') && f !== 'providers/mock.js' && !host.includes(f) && !page(f)).map((f) => `ai/${f}`);
   assert.ok(shipped.length >= 14);
   for (const f of shipped) assert.ok(named.has(f), `${f} is named in an importScripts call`);
   for (const f of host) assert.ok(!named.has(`ai/${f}`), `${f} stays out of the worker`);

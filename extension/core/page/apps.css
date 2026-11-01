@@ -703,6 +703,37 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 #gz-ins .gz-ins-more > summary { cursor: pointer; color: var(--gz-accent); }
 #gz-ins .gz-ins-more .gz-ins-table { margin-top: 0.6rem; }
 #gz-ins .gz-ins-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
+/* Ask Glaze (ai/page/ask.js): the student's questions and Glaze's answers in a dialog over the page, in Insights' look. */
+#gz-ask {
+  box-sizing: border-box; width: min(640px, calc(100vw - 24px)); max-height: calc(100vh - 24px); padding: 0; overflow: hidden;
+  font: 13px/1.45 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface));
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+}
+#gz-ask[open] { display: flex; flex-direction: column; }
+#gz-ask::backdrop { background: rgb(0 0 0 / 0.35); }
+#gz-ask [hidden] { display: none !important; }
+#gz-ask :is(p, h2, ol) { margin: 0; }
+#gz-ask .gz-ask-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 1rem 1.25rem 0.6rem; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); }
+#gz-ask h2 { font: 600 18px/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); }
+#gz-ask h2:focus { outline: none; }
+#gz-ask .gz-ask-log { flex: 1 1 auto; min-height: 0; display: grid; align-content: start; gap: 0.6rem; padding: 1rem 1.25rem; overflow: auto; overscroll-behavior: contain; list-style: none; }
+#gz-ask .gz-ask-log li { display: grid; gap: 0.35rem; max-width: 85%; padding: 0.55rem 0.8rem; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: var(--gz-radius-sm); }
+#gz-ask .gz-ask-q { justify-self: end; color: var(--gz-accent-ink); background: var(--gz-accent); }
+#gz-ask .gz-ask-a { justify-self: start; background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); }
+#gz-ask .gz-ask-follow { color: var(--gz-ink-muted); }
+#gz-ask .gz-ask-say { padding: 0.5rem 1.25rem 0; font-size: 12px; color: var(--gz-ink-muted); }
+#gz-ask .gz-ask-say:empty { display: none; }
+#gz-ask .gz-ask-form { display: grid; gap: 0.5rem; padding: 0.75rem 1.25rem 1rem; }
+#gz-ask textarea { box-sizing: border-box; width: 100%; margin: 0; padding: 0.45rem 0.6rem; resize: vertical; font: inherit; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm); }
+#gz-ask textarea::placeholder { color: var(--gz-ink-muted); opacity: 1; }
+#gz-ask .gz-ask-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+#gz-ask .gz-ask-gap { flex: 1; }
+#gz-ask button { margin: 0; padding: 0.3rem 0.8rem; font: inherit; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; cursor: pointer; box-shadow: none; }
+#gz-ask button:hover:not(:disabled) { border-color: var(--gz-accent); }
+#gz-ask button:disabled { opacity: 0.45; cursor: default; }
+#gz-ask .gz-ask-send { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); font-weight: 600; }
+#gz-ask .gz-ask-more[aria-expanded="true"] { border-color: var(--gz-accent); }
+#gz-ask :focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 /* ---- syllabus import (planner/page/syllabus.js): a card on the course home (Ultra: on its outline), a line above Canvas's Syllabus, and the review dialog ---- */
 #gz-syl { margin: 0 0 1rem; padding: 0.75rem 0.9rem; font-size: 0.875rem; line-height: 1.45; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-panel); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); }
 #gz-syl.gz-syl-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
