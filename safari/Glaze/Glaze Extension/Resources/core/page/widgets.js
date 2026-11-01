@@ -137,11 +137,22 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // A change to the layout (core/widgets.js apply): shown here at once, and sent to the worker, which applies it to what
   // is stored then, so another tab's change made since is kept. While changes are on their way, the stored layout that
   // comes back is the worker's answer to the last one; one that couldn't be saved is put back as stored.
-  let flying = 0, layoutRead = 0;
+  let flying = 0, layoutRead = 0, dashboardEdited = false;
   const declared = () => Object.fromEntries(Object.entries(MORE).map(([k, v]) => [k, { size: v.size }]));
   let rawLay; // the layout as stored, read again when the tiles declared change
   const adopt = (raw) => { rawLay = raw; const next = W.layout(raw, MORE); if (JSON.stringify(next) !== JSON.stringify(lay)) { lay = next; draw(); } };
   const change = (m) => {
+    // An explicit Dashboard edit opts this student out too, even before their membership/profile reads finish.
+    if (ultra && lay?.starter && !m.fill && m.ops?.some((o) => o?.s === 'dash')) {
+      dashboardEdited = true;
+      const n = identity;
+      const mark = () => {
+        if (n !== identity || !me) return;
+        const account = `${location.origin}/${me.uid}`;
+        if (!lay.filled.includes(`dash ${account}`)) change({ fill: 'dash', account, ops: [] });
+      };
+      if (me) mark(); else who().then(mark, () => {});
+    }
     layoutRead++;
     lay = W.apply(lay, m, MORE);
     draw();
@@ -1179,13 +1190,28 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   };
   // Both Dashboards get their first course cards once (owner, 2026-10-20). The stored filled marker protects edits,
   // emptied boards and removed defaults; starter utilities share the board with its cards.
+  // Ultra: once per student on this device. A Dashboard filled for another student, with only their cards on it, gets
+  // this student's first cards once their course list is in (marked '<board> <site>/<id>', core/widgets.js apply).
+  let askedWho = false;
   const fillCourses = () => {
-    if (!['cdash', 'dash'].includes(board) || !on || !lay?.starter || lay.filled.includes(board) || editing || flying) return;
-    const C = globalThis.GZ_COURSE_CARDS;
+    if (!['cdash', 'dash'].includes(board) || !on || !lay?.starter || editing || flying) return;
+    const first = !lay.filled.includes(board), C = globalThis.GZ_COURSE_CARDS;
+    if (!first && !(ultra && C)) return;
     if (!C) { loadCourses(); return; }
-    const cards = ultra ? C.list() : C.shown();
-    if (!cards.length) return;
-    change({ fill: board, ops: cards.slice(0, W.COURSE_MAX).map((c) => ({ s: board, id: c.key, set: { on: true, size: 's', term: c.term || '' } })) });
+    let keep = ultra && dashboardEdited;
+    if (!first) {
+      const here = lay.boards[board].filter((x) => W.course(x.id)?.origin === location.origin);
+      keep ||= here.some((x) => C.own(x.id) === true);
+      if (!keep && (!here.length || here.some((x) => C.own(x.id) !== false))) return;
+    }
+    if (ultra && !me) { if (!askedWho) { askedWho = true; who().then(() => { askedWho = false; if (on) fillCourses(); }, () => { askedWho = false; }); } return; }
+    const account = ultra && me ? `${location.origin}/${me.uid}` : undefined;
+    if (!first && lay.filled.includes(`${board} ${account}`)) return;
+    if (keep) { change({ fill: board, account, ops: [] }); return; }
+    if (ultra && !C.complete()) return;
+    const cards = (ultra ? C.list().filter((c) => C.own(c.key) === true) : C.shown());
+    const room = Math.min(W.COURSE_MAX, W.COURSE_TOTAL - lay.boards[board].filter((x) => W.course(x.id)).length);
+    if (cards.length && room > 0) change({ fill: board, account, ops: cards.slice(0, room).map((c) => ({ s: board, id: c.key, set: { on: true, size: 's', term: c.term || '' } })) });
   };
   // The board's Course cards button: its dialog (courses/page/coursecards.js) ticks courses on and off this board, each
   // tick or Select all one change, with the cards new to it placed in the board's free room (arrange). It asks the
@@ -1195,13 +1221,15 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     if (!C) return;
     const b = board;
     const rows = () => (board === b && lay.boards[b]) || [];
-    const room = () => Math.max(0, Math.min(W.COURSE_MAX - rows().filter((x) => W.course(x.id)?.origin === location.origin).length, W.COURSE_TOTAL - rows().filter((x) => W.course(x.id)).length));
+    // Another student's cards (hidden here) take none of this student's room; all of them count against what is stored.
+    const here = (x) => W.course(x.id)?.origin === location.origin && C.own(x.id) !== false;
+    const room = () => Math.max(0, Math.min(W.COURSE_MAX - rows().filter(here).length, W.COURSE_TOTAL - rows().filter((x) => W.course(x.id)).length));
     const open = button(t('+ Course cards'), () => C.picker.open({
       board: b,
       has: (key) => rows().some((x) => x.id === key),
       on: (key) => rows().some((x) => x.id === key && x.on),
       room,
-      count: () => rows().filter((x) => x.on && W.course(x.id)?.origin === location.origin).length,
+      count: () => rows().filter((x) => x.on && here(x)).length,
       set: (keys, on) => {
         if (board !== b) return;
         if (on) nativeShown = false; // the cards show, not Ultra's list
@@ -1244,7 +1272,9 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const edit = button(t('Edit layout'), () => setEditing(!editing), { className: 'gz-w-small gz-dash-edit' });
     edit.setAttribute('aria-pressed', 'false');
     const reset = board && button(t('Reset layout'), () => {
-      change({ ops: lay.boards[board].filter((x) => !W.course(x.id) || W.course(x.id).origin === location.origin).map((x) => ({ s: board, id: x.id, set: { x: null, y: null, r: false, z: 0, fold: false, w: null, h: null } })), widths: { [board]: 0 } });
+      const ops = lay.boards[board].filter((x) => !W.course(x.id) || (W.course(x.id).origin === location.origin && globalThis.GZ_COURSE_CARDS?.own(x.id) === true)).map((x) => ({ s: board, id: x.id, set: { x: null, y: null, r: false, z: 0, fold: false, w: null, h: null } }));
+      // Shared course sets can exceed one message's 64 operations. Keep each patch within the worker's limit.
+      for (let i = 0; i < ops.length || i === 0; i += 64) change({ ops: ops.slice(i, i + 64), ...(i === 0 && { widths: { [board]: 0 } }) });
       say(t('Layout reset.'));
     }, { className: 'gz-w-small gz-dash-reset', hidden: true });
     const hubBtn = button(t('What Glaze can do'), () => hub(), { className: 'gz-w-small' });
@@ -1561,7 +1591,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   ]).filter((x) => {
     if (floatsOnly && !x.float) return false;
     if (!x.on || !allowed(x.id)) return false;
-    if (W.course(x.id)) { loadCourses(); return !!globalThis.GZ_COURSE_CARDS; }
+    if (W.course(x.id)) { loadCourses(); return !!globalThis.GZ_COURSE_CARDS?.shows(x.id); }
     if (WIDGETS[x.id] || added.has(x.id)) return true;
     if (MORE[x.id] && !(loadingMore.get(x.id) > Date.now())) {
       loadingMore.set(x.id, Infinity);
@@ -1753,6 +1783,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     if (sideAccount && account !== sideAccount) {
       identity++;
       me = asking = null;
+      askedWho = false;
+      dashboardEdited = false;
       teardown(true);
       drawn = null;
     }
