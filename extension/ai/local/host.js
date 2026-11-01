@@ -158,7 +158,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         const marks = Array.isArray(G.TOOL_MARKS) ? Object.fromEntries(G.TOOL_MARKS.map((n) => [n, job.tok.id(n)])) : {};
         job.vocab ||= G.vocab(job.tok.byteStrings(), { eos: [job.eos], marks: Object.values(marks).every(Number.isInteger) ? marks : {} });
       } catch { throw fail('provider-unavailable', 'engine'); }
-      const key = JSON.stringify([schema, tools ?? null]);
+      const key = JSON.stringify(tools === undefined ? [schema] : [schema, tools]);
       if (!job.schemas.has(key)) { let g = null; try { g = G.compile(schema, job.vocab, tools === undefined ? {} : { tools }); } catch { /* refused */ } job.schemas.set(key, g); if (job.schemas.size > 32) job.schemas.delete(job.schemas.keys().next().value); }
       const g = job.schemas.get(key);
       if (!g) throw fail('request-rejected', 'unsupported');
