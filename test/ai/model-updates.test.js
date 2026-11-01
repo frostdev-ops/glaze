@@ -218,3 +218,28 @@ test('turning the switch off stops a running update', async () => {
   assert.equal(signal.aborted, true);
   assert.equal((await running).state, 'stopped');
 });
+
+test('turning updates off while the list is fetching cancels the check before the host starts', async () => {
+  const w = worker();
+  await w.store.download('rime-q4');
+  let entered, release, signal;
+  const fetching = new Promise((r) => { entered = r; });
+  const gate = new Promise((r) => { release = r; });
+  w.env.fetch = async (url, init) => { signal = init.signal; entered(); await gate; return new Response(JSON.stringify(sign(listOf(3)))); };
+  const running = U.check(w.env);
+  await fetching;
+  U.stop();
+  release();
+  assert.equal((await running).state, 'stopped');
+  assert.equal(signal.aborted, true);
+  assert.equal(w.hosted.length, 0);
+});
+
+test('deleting the last model during a list fetch starts no host or weight download', async () => {
+  const w = worker();
+  await w.store.download('rime-q4');
+  const fetch = w.env.fetch;
+  w.env.fetch = async (...args) => { await w.store.remove('rime-q4'); return fetch(...args); };
+  assert.equal((await U.check(w.env)).state, 'none');
+  assert.equal(w.hosted.length, 0);
+});
