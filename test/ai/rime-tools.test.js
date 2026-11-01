@@ -232,6 +232,17 @@ test('sandbox: no network, no other scripts, no storage, no messaging and no ext
   for (const d of ["connect-src 'none'", "frame-src 'none'", "form-action 'none'", "default-src 'none'"]) assert.ok(m.content_security_policy.sandbox.includes(d), d);
 });
 
+test('sandbox: value and logs share one output budget, including at the worker boundary', async () => {
+  const size = (r) => r.logs.join('').length + (typeof r.value === 'string' ? r.value.length : JSON.stringify(r.value).length);
+  const mixed = await sandbox('console.log("x".repeat(500)); Array(1000).fill("abc")');
+  assert.ok(size(mixed) <= J.LIMIT.output, `sandbox sent ${size(mixed)} characters`);
+  assert.equal(mixed.cut, true);
+  const raw = { ok: true, logs: Array(40).fill('x'.repeat(500)), value: { text: 'y'.repeat(5000) } };
+  const bounded = J.tidy(raw);
+  assert.ok(size(bounded) <= J.LIMIT.output, `boundary kept ${size(bounded)} characters`);
+  assert.equal(bounded.cut, true);
+});
+
 test('run_js: through ctx.js where the sandbox is; refused cleanly where it isn\'t (Firefox, Safari)', async () => {
   const [js] = J.tools();
   assert.deepEqual(await js.run({ code: '1 + 1' }, {}), { ok: false, error: J.NONE });
