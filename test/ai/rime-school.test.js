@@ -457,6 +457,21 @@ const probedTab = (o = {}) => ultraTab({ routes: {
   '/learn/api/public/v1/courses/_101_1/discussions': PROBED.discussions, '/learn/api/public/v1/courses/_101_1/discussions/_911_1': PROBED.discussion,
   '/learn/api/public/v1/courses/_101_1/discussions/_911_1/messages': PROBED.messages, ...o.routes } });
 
+test('direct Ultra announcement reads enforce the same release and draft rules as the list', async (t) => {
+  const original = PROBED.announcements.results[0];
+  for (const [label, patch] of [
+    ['draft', { draft: true }],
+    ['future', { availability: { duration: { type: 'DateRange', start: '2099-01-01T00:00:00Z', end: null } } }],
+    ['expired', { availability: { duration: { type: 'DateRange', start: null, end: '2000-01-01T00:00:00Z' } } }],
+  ]) await t.test(label, async () => {
+    const tab = probedTab({ routes: { '/learn/api/public/v1/courses/_101_1/announcements/_811_1': { ...original, ...patch } } });
+    const r = await tool('announcement_read').run({ course: '_101_1', id: '_811_1' }, ctxFor(UL, tabsOf([tab])));
+    assert.equal(r.ok, false);
+    assert.doesNotMatch(JSON.stringify(r), /Review is Thursday/);
+    assert.ok(tab.page.asked.every((q) => q.method === 'GET' && new URL(q.url).origin === C.ULTRA && q.redirect === 'error'));
+  });
+});
+
 test('Ultra announcements: in Ultra\'s order, each dated by when the student could first see it (start, else modified, else created); no drafts', async () => {
   const r = await tool('announcements_list').run({ course: '_101_1' }, ctxFor(UL, tabsOf([probedTab()])));
   assert.deepEqual(r.items, [
