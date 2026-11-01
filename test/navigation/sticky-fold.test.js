@@ -26,7 +26,7 @@ const load = (kind = 'progress') => {
   });
   Object.assign(doc, { documentElement: doc.root, querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s), ...on('document') });
   // stretch: Safari's bounce past the top, scrollTop held at 0 while what it scrolls is drawn further down.
-  const state = { scroll: 0, stretch: 0 };
+  const state = { scroll: 0, stretch: 0, inset: kind === 'progress' ? 8 : 0, whole: kind === 'progress' ? 170.6 : 118.4 };
   let header, parent, scroller;
   if (kind === 'progress') {
     // The parent's top moves with the scroll; the band sits 8px into it, sticks at y 60, and is 170.6px tall (40.2 folded).
@@ -37,8 +37,8 @@ const load = (kind = 'progress') => {
       const top = 100 - state.scroll;
       if (e === parent) return { left: 0, top, width: 900, height: 1500 };
       if (e === header) {
-        const natural = top + 8;
-        return { left: 0, top: header.style.position === 'static' ? natural : Math.max(natural, 60), width: 900, height: header.hasAttribute('data-gz-stuck') ? 40.2 : 170.6 };
+        const natural = top + state.inset;
+        return { left: 0, top: header.style.position === 'static' ? natural : Math.max(natural, 60), width: 900, height: header.hasAttribute('data-gz-stuck') ? 40.2 : state.whole };
       }
       return null;
     };
@@ -53,8 +53,8 @@ const load = (kind = 'progress') => {
       const top = parent === scroller ? 0 : -state.scroll;
       if (e === parent) return { left: 0, top: parent === scroller ? 0 : top, width: 1280, height: parent === scroller ? 800 : 3000 };
       if (e === header) {
-        const natural = (parent === scroller ? -state.scroll : top) + state.stretch;
-        return { left: 0, top: header.style.position === 'static' ? natural : Math.max(natural, 0), width: 1280, height: header.hasAttribute('data-gz-stuck') ? 48.2 : 118.4 };
+        const natural = (parent === scroller ? -state.scroll : top) + state.stretch + state.inset;
+        return { left: 0, top: header.style.position === 'static' ? natural : Math.max(natural, 0), width: 1280, height: header.hasAttribute('data-gz-stuck') ? parseFloat(header.style.getPropertyValue('--gz-whole')) || state.whole : state.whole };
       }
       return null;
     };
@@ -71,7 +71,8 @@ const load = (kind = 'progress') => {
   const ui = vm.runInContext(read('navigation/page/sticky-fold.js'), c);
   const scrollTo = (y) => { state.scroll = y; for (const l of listeners.filter((x) => x.type === 'scroll')) l.f({ type: 'scroll', target: scroller }); flush(); };
   const stretchTo = (y) => { state.stretch = y; for (const l of listeners.filter((x) => x.type === 'scroll')) l.f({ type: 'scroll', target: scroller }); flush(); };
-  return { c, ui, header, listeners, scrollTo, stretchTo, flush, el };
+  const resize = (layout) => { Object.assign(state, layout); for (const l of listeners.filter((x) => x.type === 'resize')) l.f(); flush(); };
+  return { c, ui, header, listeners, scrollTo, stretchTo, resize, flush, el };
 };
 
 test('in its place the band stays whole; scrolled under, it folds and gives the fold back below', () => {
@@ -186,6 +187,26 @@ test('at its scroller\'s top the bar stays whole through Safari\'s bounce', () =
   assert.equal(header.hasAttribute('data-gz-stuck'), true);
   scrollTo(0); stretchTo(40);
   assert.equal(header.hasAttribute('data-gz-stuck'), false, 'arriving at the top with a bounce');
+});
+
+test('resizing a folded band refreshes the height it preserves without resetting hysteresis', () => {
+  for (const kind of ['progress', 'bar', 'bar in its scroller']) {
+    const { ui, header, scrollTo, resize } = load(kind);
+    const at = kind === 'progress' ? 48 : 0;
+    ui.sync(); scrollTo(400); scrollTo(at + 4);
+    resize({ whole: 210.8 });
+    assert.equal(header.hasAttribute('data-gz-stuck'), true, `${kind}: still folded inside the return threshold`);
+    const prop = kind === 'progress' ? '--gz-fold' : '--gz-whole';
+    const height = kind === 'progress' ? 210.8 - 40.2 : 210.8;
+    assert.equal(Number(header.style.getPropertyValue(prop).slice(0, -2)).toFixed(3), height.toFixed(3), `${kind}: preserves the resized height`);
+    resize({ inset: 40 });
+    assert.equal(header.hasAttribute('data-gz-stuck'), false, `${kind}: a resized band back in place unfolds`);
+    assert.equal(header.style.getPropertyValue('--gz-fold') + header.style.getPropertyValue('--gz-whole'), '');
+    scrollTo(400);
+    assert.equal(header.hasAttribute('data-gz-stuck'), true, `${kind}: folds at the new place`);
+    scrollTo(0);
+    assert.equal(header.hasAttribute('data-gz-stuck'), false, `${kind}: whole at the top`);
+  }
 });
 
 test('a course\'s bar holding Glaze\'s course strip folds as well, its strip kept', () => {
