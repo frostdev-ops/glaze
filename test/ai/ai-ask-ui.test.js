@@ -826,3 +826,45 @@ test('a tile answer preserves focus after the student moves to the host page', a
   assert.equal(P.doc.activeElement, other, 'the answer must not steal focus from another editor');
   chat.stop();
 });
+
+// ---- why a question failed, and Glaze's own answers (built) --------------------------------------------------------------
+test('a failure\'s card opens to the rule, the steps run and the model\'s raw answer, as text; without them, no detail', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('What is due this week?');
+  await settle();
+  answer(P, { type: 'error', error: 'check', why: 'hands', steps: 2, raw: '{"call":null,"answer":{"text":"<b>x = 5</b>"}}' });
+  await settle();
+  const why = P.box().querySelector('.gz-ask-err details.gz-ask-why');
+  assert.ok(why, 'a detail on the card');
+  assert.equal(why.open, undefined, 'closed until opened');
+  assert.equal(why.querySelector('summary').textContent, 'check: hands · 2');
+  assert.equal(why.querySelector('pre').textContent, '{"call":null,"answer":{"text":"<b>x = 5</b>"}}');
+  assert.equal(why.querySelectorAll('b').length, 0, 'the raw answer stays text');
+  P.doc.fire(P.box().querySelector('.gz-ask-retry'), 'click');
+  await settle();
+  answer(P, { type: 'error', error: 'busy' });
+  await settle();
+  assert.equal(P.box().querySelector('.gz-ask-err details.gz-ask-why'), null, 'nothing to show, no detail');
+});
+
+test('an answer Glaze built itself renders as any answer, with the same detail under it when it carries why and raw', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('Which assignments are coming up?');
+  await settle();
+  answer(P, { type: 'end', task: 'agent.tools', answer: { text: '- **Lab report** (BIO 1100)\n- **Reading response**', built: true, why: 'number', steps: 3, raw: 'Lab report is due on the 14th.' } });
+  await settle();
+  const a = P.box().querySelector('.gz-ask-a');
+  assert.deepEqual(a.querySelectorAll('.gz-ask-md li strong').map((x) => x.textContent), ['Lab report', 'Reading response']);
+  assert.equal(a.dataset.built, '');
+  const why = a.querySelector('details.gz-ask-why');
+  assert.equal(why.querySelector('summary').textContent, 'number · 3');
+  assert.equal(why.querySelector('pre').textContent, 'Lab report is due on the 14th.');
+  assert.deepEqual(P.turns().at(-1), ['gz-ask-a', 'Lab report (BIO 1100)Reading response'], 'the detail is not part of the answer\'s words');
+  P.ask('And next week?');
+  await settle();
+  answer(P, { type: 'end', task: 'agent.tools', answer: { text: '- **Essay**', built: true } });
+  await settle();
+  assert.equal(P.box().querySelectorAll('.gz-ask-a')[1].querySelector('details.gz-ask-why'), null, 'built, nothing more to show: no detail');
+});
