@@ -955,6 +955,20 @@ test('Rime\'s card: its version, an update downloading with its progress, and Up
   assert.equal(p.$('ai-local-auto').checked, false);
 });
 
+test('a download that ends Ready shows the version it brought', async () => {
+  let state = 'download';
+  const local = async (m) => {
+    if (m.op === 'updates') return { ok: true, auto: true, ...(state === 'ready' && { version: 'r5' }) };
+    if (m.op === 'prepare') state = 'ready';
+    return { ok: true, state, size: 1099627808, tier: 1, tiers: [{ tier: 1, size: 1099627808 }] };
+  };
+  const p = await open({ ai: { on: true }, providers: ['local'], local, conns: { local: { provider: 'local' } } });
+  await p.click(p.card('Rime'));
+  await p.click(p.button('Download', p.$('ai-drawer')));
+  await settle();
+  assert.equal(p.note().textContent, 'Ready · r5 · 1.1 GB');
+});
+
 test('Update automatically is kept in ai settings, on unless turned off', () => {
   assert.equal(AS.clean({}).updates, true);
   assert.equal(AS.clean({ updates: false }).updates, false);
