@@ -283,4 +283,88 @@ test('a question on a new port carries the chat\'s summary: the next request has
   for (const [id, bad] of [[2, 5], [3, 'x'.repeat(701)]]) h.say({ id, op: 'ask', question: 'And next week?', history: H3, summary: bad });
   await settle(60);
   assert.deepEqual(h.got.filter((m) => m.id >= 2 && m.type === 'error').map((m) => [m.id, m.error]), [[2, 'request'], [3, 'request']]);
+
+test('from 16K up the tools offered are the chat\'s union, so later turns share the system turn; below 16K each question gets its own; the union stays under its budget, oldest dropped first', async () => {
+  const toolsOf = (h, n) => h.seen.runs.filter((r) => r.task === 'agent.tools')[n].input.tools;
+  const chat = async (window, questions) => {
+    const h = harness({ count: () => ({ used: 900, window, reserve: 768, exact: true }), script: { 'agent.tools': questions.map(() => said('Done.', [])) } });
+    const history = [];
+    for (const [i, q] of questions.entries()) {
+      h.say({ id: i + 1, op: 'ask', question: q, ...(history.length && { history: history.slice() }) });
+      await settle(120);
+      history.push(turn(q, 'Done.'));
+    }
+    return h;
+  };
+  const Q = ["What's due this week?", 'Any new announcements in BIO 1100?', 'Any new announcements in BIO 1100?'];
+  const big = await chat(16384, Q);
+  const first = K.route(Q[0], { locale: 'en', level: 3 }).tools, second = K.route(Q[1], { locale: 'en', level: 3 }).tools;
+  assert.ok([...first, ...second].every((t) => toolsOf(big, 1).includes(t)), 'turn 2 offers turn 1\'s tools too');
+  assert.deepEqual(toolsOf(big, 2), toolsOf(big, 1), 'turn 3 asks nothing new: the same tools, so the same system turn');
+  const small = await chat(4096, Q);
+  assert.deepEqual([...toolsOf(small, 1)].sort(), [...second].sort(), 'below 16K, the question\'s own');
+  // Many topics: the union stays within its budget and keeps the newest question's tools.
+  const many = ["What's due this week?", 'Any new announcements in BIO 1100?', 'What does the BIO 1100 syllabus say about late work?', 'What discussions are open in BIO 1100?', 'What is my grade in BIO 1100?', 'Remind me tomorrow at 9 pm to study', 'Take me to my BIO 1100 assignments'];
+  const h = await chat(16384, many);
+  const last = toolsOf(h, many.length - 1), mine = K.route(many.at(-1), { locale: 'en', level: 3 }).tools;
+  assert.ok(mine.every((t) => last.includes(t)));
+  assert.ok(K.UNION.budget >= K.unionCost(last), `${K.unionCost(last)} tokens`);
+  const all = [...new Set(many.flatMap((q) => K.route(q, { locale: 'en', level: 3 }).tools))];
+  assert.ok(K.unionCost(all) > K.UNION.budget, 'this chat needs trimming');
+  assert.ok(!last.includes('announcements_list') || last.includes('syllabus_read'), 'an older topic goes before a newer one');
+});
+
+test('the tool union follows the current provider window when it changes during a chat', async () => {
+  const questions = ["What's due this week?", 'Any new announcements in BIO 1100?'];
+  for (const windows of [[32768, 8192], [8192, 32768]]) {
+    let window = windows[0];
+    const h = harness({ count: () => ({ used: 900, window, reserve: 768, exact: true }),
+      script: { 'agent.tools': questions.map(() => said('Done.')) } });
+    h.say({ id: 1, op: 'ask', question: questions[0] });
+    await settle();
+    window = windows[1];
+    h.say({ id: 2, op: 'ask', question: questions[1], history: [turn(questions[0], 'Done.')] });
+    await settle();
+    const routed = questions.map((q) => K.route(q, { locale: 'en', level: 3 }).tools);
+    const expected = window >= K.UNION.from ? [...new Set(routed.flat())] : routed[1];
+    assert.deepEqual([...h.seen.runs.filter((m) => m.task === 'agent.tools').at(-1).input.tools].sort(), expected.sort(), `window ${windows.join(' -> ')}`);
+  }
+});
+
+test('compaction includes the offered tool union in its context budget', async () => {
+  const questions = ["What's due this week?", 'Any new announcements in BIO 1100?', 'Any new announcements in BIO 1100?'];
+  const h = harness({ count: (m) => ({ used: m.input.history?.length >= 3 ? 10000 + K.unionCost(m.input.tools) : 900,
+    window: 16384, reserve: 768, exact: true }),
+    script: { 'agent.tools': questions.map(() => said('Done.')), 'chat.compact': [{ text: '- Due dates', quotes: [] }] } });
+  const history = [];
+  for (const [i, question] of questions.entries()) {
+    h.say({ id: i + 1, op: 'ask', question, ...(history.length && { history: history.slice() }) });
+    await settle();
+    history.push(turn(question, 'Done.'));
+  }
+  const offered = h.seen.runs.filter((m) => m.task === 'agent.tools').at(-1).input.tools;
+  assert.ok(10000 + K.unionCost(offered) + 768 > 16384 * 0.7, 'the union crosses the compaction threshold');
+  assert.ok(h.seen.runs.some((m) => m.task === 'chat.compact'), 'compaction must not budget only the smaller routed set');
+  assert.deepEqual(h.seen.counts.find((m) => m.input.history?.length === 3).input.tools, offered);
+});
+
+test('study-help readers share and extend the chat tool union, and New chat clears it', async () => {
+  const questions = ["What's due this week?", 'Help me understand the BIO 1100 syllabus', 'Any new announcements in BIO 1100?', 'What is my grade in BIO 1100?'];
+  const routes = questions.map((q) => K.route(q, { locale: 'en', level: 3 }));
+  for (const window of [16384, 8192]) {
+    const h = harness({ count: () => ({ used: 900, window, reserve: 768, exact: true }),
+      script: { 'agent.tools': questions.map(() => said('Done.')), 'study.help': [{ reply: 'Read the syllabus.', followUp: '' }] } });
+    const history = [];
+    for (const [i, question] of questions.entries()) {
+      h.say({ id: i + 1, op: 'ask', question, ...(i > 0 && i < 3 && { history: history.slice() }) });
+      await settle();
+      history.push(turn(question, 'Done.'));
+    }
+    const runs = h.seen.runs.filter((m) => m.task === 'agent.tools');
+    const expected = window >= K.UNION.from ? [...new Set([...routes[0].tools, ...routes[1].read])] : routes[1].read;
+    assert.deepEqual([...runs[1].input.tools].sort(), [...expected].sort(), `reader, window ${window}`);
+    const later = window >= K.UNION.from ? [...new Set([...expected, ...routes[2].tools])] : routes[2].tools;
+    assert.deepEqual([...runs[2].input.tools].sort(), [...later].sort(), `after the reader, window ${window}`);
+    assert.deepEqual([...runs[3].input.tools].sort(), [...routes[3].tools].sort(), 'New chat forgets every earlier tool');
+  }
 });

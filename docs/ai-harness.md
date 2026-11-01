@@ -309,6 +309,9 @@ In Ask Rime (`ai/ask.js`, `ai/page/ask.js`):
   before `earlier`; study.help (cloud only) as the conversation's first turn. Within one run, results the model has used
   become digests (titles, ids, dates) when the next request would overflow; the latest never does. A question with no
   history (New chat) clears it all. Compaction scales with the window. Level 1 sends nothing new.
+  From a 16K window up, a chat offers the union of the tools routed so far (the newest question's always, earlier ones most
+  recent first within about 2,000 tokens of `<tools>` lines), so the system turn stays cached across turns; below 16K each
+  question gets its own.
 - **Routing at level 3** (`TOPICS3`, six languages): announcements, content, syllabus and discussions (their reads), compute (`run_js`; a computing verb in the student's own grade math
   is no help request, but graded work still goes to study.help), navigate (`places_list`, `place_open`, `page_highlight`),
   remind (`wake_create`, `wakes_list`, `wake_cancel`) and watch (`monitor_create`, `wakes_list`, `todo_list`,

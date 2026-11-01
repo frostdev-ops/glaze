@@ -26,7 +26,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
   const LOCALES = ['en', 'pt-BR', 'es', 'fr', 'de', 'nl'];
   // turns: questions and answers a follow-up carries (ai/ask.js takes six at most), each cut to turn characters.
   // summary: the worker's summary of folded turns, carried back with a later question.
-  const LIMIT = { question: 2000, attempt: 12000, turns: 3, turn: 2000, grow: 200, text: 20000, summary: 4000 };
+  const LIMIT = { question: 2000, attempt: 12000, turns: 3, turn: 2000, grow: 200, text: 20000, summary: 700 };
   // The page's language, as the tasks take it (ai/tasks/study-help.js LOCALES): pt-PT reads Brazilian Portuguese, others English.
   const lang = () => { const tag = String(ctx.locale() || 'en'); return LOCALES.find((c) => c === tag) || LOCALES.find((c) => c.split('-')[0] === tag.split('-')[0]) || 'en'; };
   const on = (ai) => !!ai && ai.on === true && ai.features?.ask === true;
