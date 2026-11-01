@@ -652,13 +652,14 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
   let tray = null;
   const firedCard = (f) => {
     const label = f.what === 'wake' ? t('Reminder') : t('Something you asked Rime to watch changed');
+    const words = f.say.trim() || label;
     const go = make('button', { type: 'button', className: 'gz-ask-fired-go' }, make('span', { className: 'gz-ask-mark' }, icon('rime')), make('span', { textContent: t('Ask Rime') }));
     const no = make('button', { type: 'button', className: 'gz-ask-fired-no', title: t('Dismiss') }, icon('close'));
     no.setAttribute('aria-label', t('Dismiss'));
-    const li = make('li', { className: 'gz-ask-fired-card' }, make('p', { className: 'gz-ask-fired-what', textContent: label }), make('p', { className: 'gz-ask-fired-say', textContent: f.say, dir: 'auto' }),
+    const li = make('li', { className: 'gz-ask-fired-card' }, make('p', { className: 'gz-ask-fired-what', textContent: label }), f.say.trim() ? make('p', { className: 'gz-ask-fired-say', textContent: f.say, dir: 'auto' }) : null,
       make('div', { className: 'gz-ask-fired-acts' }, go, no));
     const gone = () => { li.remove(); if (tray && !tray.querySelector('li')) { tray.remove(); tray = null; } };
-    go.addEventListener('click', (e) => { if (!real(e)) return; gone(); void run({ event: e, question: f.say, fired: f.id }); });
+    go.addEventListener('click', (e) => { if (!real(e)) return; gone(); void run({ event: e, question: words, fired: f.id }); });
     no.addEventListener('click', (e) => { if (real(e)) gone(); });
     return li;
   };
@@ -674,16 +675,17 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
       }
       first?.scrollIntoView?.({ block: 'center', behavior: still() ? 'auto' : 'smooth' });
     }
-    if (!(fired > 0) || !(await alive())) return;
+    if (!(fired > 0) || !(await alive()) || (await read())?.wakes === false) return;
     const r = await send({ op: 'fired' });
-    const list = r.type === 'end' && Array.isArray(r.fired) ? r.fired.filter((f) => f && typeof f.id === 'string' && typeof f.say === 'string' && f.say.trim()) : [];
+    if (!(await alive()) || (await read())?.wakes === false) return;
+    const list = r.type === 'end' && Array.isArray(r.fired) ? r.fired.filter((f) => f && typeof f.id === 'string' && typeof f.say === 'string') : [];
     if (!list.length) return;
     if (!tray?.isConnected) {
       tray = make('aside', { id: 'gz-ask-fired' }, make('ul', {}));
       tray.setAttribute('aria-label', t('Ask Rime'));
       document.body.append(tray);
     }
-    tray.querySelector('ul').append(...list.slice(0, 5).map(firedCard));
+    tray.querySelector('ul').append(...list.slice(0, 20).map(firedCard));
   };
 
   try { document.addEventListener('visibilitychange', () => { if (box && !document.hidden) pin(true); }); } catch { /* no document events */ }
@@ -691,8 +693,9 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
   // Ask, AI or Glaze turned off: the panel goes.
   try {
     chrome.storage.onChanged.addListener((c, area) => {
-      if (!box) return;
-      if ((area === 'local' && c.ai && !on(c.ai.newValue)) || (area === 'sync' && c.enabled?.newValue === false)) box.close();
+      const off = (area === 'local' && c.ai && !on(c.ai.newValue)) || (area === 'sync' && c.enabled?.newValue === false);
+      if (off || (area === 'local' && c.ai?.newValue?.wakes === false)) { tray?.remove(); tray = null; }
+      if (off) box?.close();
     });
   } catch { /* extension reloaded under the tab */ }
 
