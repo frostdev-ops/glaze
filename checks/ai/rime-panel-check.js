@@ -293,7 +293,8 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
         return { text, labels, files: await snap(site, 'tool-first', '#gz-ask') };
       });
 
-      await check(`${site}: the owner's Sunday — what's due this week reads the week from today, and the answer is a markdown list with friendly dates`, async () => {
+      for (const scene of ['sunday', 'fallback']) await check(scene === 'sunday' ? `${site}: the owner's Sunday — what's due this week reads the week from today, and the answer is a markdown list with friendly dates`
+        : `${site}: an answer that fails its check twice becomes Glaze's own list from what was read`, async () => {
         await openPanel();
         await page.click('#gz-ask .gz-ask-new');
         const canvas = site === 'canvas', acct = canvas ? A : `${ULTRA}/_42_1`, cid = canvas ? '25' : '_101_1';
@@ -307,17 +308,22 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
         const due = JSON.parse(AT.readable({ due: monday }, 'UTC', { locale: 'en', now })).due;
         const from = new Date(now).toISOString().slice(0, 10), to = new Date(now + 7 * DAY).toISOString().slice(0, 10);
         const titles = ['Reflection Week 11', 'Behavior Change Project Step 5', 'Lab 8 worksheet'];
-        await script({ 'agent.tools': [{ call: { name: 'schedule_list', arguments: { from, to } }, answer: null },
+        // bad: the model's answer fails its check twice (ungrounded prose, then no date), so Glaze's own list shows.
+        const bad = process.env.RIME_SUNDAY_BAD === '1' || scene === 'fallback';
+        await script({ 'agent.tools': bad ? [{ call: { name: 'schedule_list', arguments: { from, to } }, answer: null },
+          { call: null, answer: { text: 'You have a few assignments coming up this week.', quotes: [] } }, { call: null, answer: { text: 'Reflection Week 11 and two more are coming up.', quotes: ['Reflection Week 11'] } }]
+          : [{ call: { name: 'schedule_list', arguments: { from, to } }, answer: null },
           { call: null, answer: { text: ['You have three things due soon, none handed in yet:', ...titles.map((t) => `- **${t}** (BIO 1100): ${due}, not submitted`)].join('\n'), quotes: [...titles, due] } }] });
         try {
           const n = await ask("What's due this week?");
           const text = await answered(n, 'the Sunday answer').catch(async (e) => { throw new Error(`${e.message}; last request: ${(await worker.evaluate(() => askCheck.last)).slice(-1500)}`); });
           const bold = await answers().nth(n).locator('.gz-ask-md ul li strong').allTextContents();
-          assert.deepEqual(bold, titles, 'a bulleted list with bold titles');
+          assert.deepEqual(bold.filter((b) => titles.includes(b)), titles, 'a bulleted list with bold titles');
           assert.ok(text.includes(due), `the friendly date ${due}`);
           const runs = await seen();
           assert.ok(runs.some((r) => r.windows), 'the model saw the resolved windows');
-          return { text, due, files: await snap(site, 'sunday', '#gz-ask') };
+          if (scene === 'fallback') assert.equal((await seen()).filter((r) => r.task === 'agent.tools').length, 3, 'the call, the answer, the corrected answer');
+          return { text, due, files: await snap(site, scene, '#gz-ask') };
         } finally { sunday = null; await records(site); }
       });
 
