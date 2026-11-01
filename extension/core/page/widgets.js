@@ -137,11 +137,22 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // A change to the layout (core/widgets.js apply): shown here at once, and sent to the worker, which applies it to what
   // is stored then, so another tab's change made since is kept. While changes are on their way, the stored layout that
   // comes back is the worker's answer to the last one; one that couldn't be saved is put back as stored.
-  let flying = 0, layoutRead = 0;
+  let flying = 0, layoutRead = 0, dashboardEdited = false;
   const declared = () => Object.fromEntries(Object.entries(MORE).map(([k, v]) => [k, { size: v.size }]));
   let rawLay; // the layout as stored, read again when the tiles declared change
   const adopt = (raw) => { rawLay = raw; const next = W.layout(raw, MORE); if (JSON.stringify(next) !== JSON.stringify(lay)) { lay = next; draw(); } };
   const change = (m) => {
+    // An explicit Dashboard edit opts this student out too, even before their membership/profile reads finish.
+    if (ultra && lay?.starter && !m.fill && m.ops?.some((o) => o?.s === 'dash')) {
+      dashboardEdited = true;
+      const n = identity;
+      const mark = () => {
+        if (n !== identity || !me) return;
+        const account = `${location.origin}/${me.uid}`;
+        if (!lay.filled.includes(`dash ${account}`)) change({ fill: 'dash', account, ops: [] });
+      };
+      if (me) mark(); else who().then(mark, () => {});
+    }
     layoutRead++;
     lay = W.apply(lay, m, MORE);
     draw();
@@ -1187,13 +1198,16 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const first = !lay.filled.includes(board), C = globalThis.GZ_COURSE_CARDS;
     if (!first && !(ultra && C)) return;
     if (!C) { loadCourses(); return; }
+    let keep = ultra && dashboardEdited;
     if (!first) {
       const here = lay.boards[board].filter((x) => W.course(x.id)?.origin === location.origin);
-      if (!here.length || here.some((x) => C.own(x.id) !== false)) return;
+      keep ||= here.some((x) => C.own(x.id) === true);
+      if (!keep && (!here.length || here.some((x) => C.own(x.id) !== false))) return;
     }
     if (ultra && !me) { if (!askedWho) { askedWho = true; who().then(() => { askedWho = false; if (on) fillCourses(); }, () => { askedWho = false; }); } return; }
     const account = ultra && me ? `${location.origin}/${me.uid}` : undefined;
     if (!first && lay.filled.includes(`${board} ${account}`)) return;
+    if (keep) { change({ fill: board, account, ops: [] }); return; }
     const cards = (ultra ? C.list().filter((c) => C.own(c.key) === true) : C.shown());
     if (cards.length) change({ fill: board, account, ops: cards.slice(0, W.COURSE_MAX).map((c) => ({ s: board, id: c.key, set: { on: true, size: 's', term: c.term || '' } })) });
   };
@@ -1766,6 +1780,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       identity++;
       me = asking = null;
       askedWho = false;
+      dashboardEdited = false;
       teardown(true);
       drawn = null;
     }
