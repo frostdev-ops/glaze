@@ -150,6 +150,22 @@ test('syllabus date limits disclose the omitted dates', async () => {
   assert.deepEqual(r.more, { dates: 10 });
 });
 
+test('school tab operations discard data when the signed-in account changes during the read', async (t) => {
+  for (const op of ['announcement', 'modules', 'topics', 'search']) await t.test(op, async () => {
+    const ultra = op === 'search', tab = ultra ? ultraTab() : canvasTab();
+    let uid = ultra ? C.ULTRA_UID : '5';
+    const fetch = tab.context.fetch;
+    tab.context.fetch = async (url, init) => {
+      if (new URL(url).pathname === (ultra ? '/learn/api/v1/users/me' : '/api/v1/users/self/profile')) return H.json({ id: uid });
+      const r = await fetch(url, init);
+      uid = ultra ? '_999_1' : '6';
+      return r;
+    };
+    const r = await tabsOf([tab]).run(ultra ? UL : ACC, op, { course: ultra ? '_101_1' : '25', id: '70', kind: 'contents' });
+    assert.deepEqual(r, { ok: false, error: 'profile' });
+  });
+});
+
 test('syllabus: what Glaze kept from an import; nothing kept says how to import; no tab, wrong ids and no account say so', async () => {
   const rec = SY.tidy({ prof: { name: 'Dr. Rivera', email: 'rivera@school.edu', office: 'Science 204' }, hours: [{ label: 'Office hours', days: ['Mon'], start: '13:00', end: '14:00' }],
     dates: [{ title: 'Midterm', day: '2026-10-20', kind: 'exam' }], scale: [['A', 90], ['B', 80]], weights: [{ name: 'Labs', weight: 30 }, { name: 'Exams', weight: 70 }], at: C.NOW });
