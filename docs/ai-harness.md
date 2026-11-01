@@ -614,6 +614,13 @@ the assistant header; never think mode). A models.json entry without `stock` (Ri
 `glaze-plans/lfm-tune/FORMAT-v2.md` id for id: for requests each trained task builds, the ids its `train/format.js`
 `promptV2` and LFM3's tokenizer give, direct and, for a think task, think (fixture: `tools/dev/local-format-fixture.js`).
 
+Context size (round 8 format): six specials `<|gz_ctx:4k|>` … `<|gz_ctx:128k|>` (ids 125049–125054; `<|gz_task:chat.compact|>`
+is 125055; all `[PAD]` rows of LFM3's GGUFs, never produced by text) name the window a glaze-dialect request runs with, right
+after the task token: the largest size at or under it. `SCALE` in `ai/providers/local.js` turns them on with the per-size
+think budget (`THINK_SIZED`: agent.tools and study.help 128/256/512/1024 at 4K/8K/16K/32K+) and answer reserve (`ANSWER`:
+512/768/1024/1536/2048 at 4K/8K/16K/32K/64K+), each capped by the room the window leaves; all off until a model trained
+with them ships, so Rime r5's requests are unchanged.
+
 Think mode (FORMAT-v2): a Glaze-tuned model reasons before it answers for the requests `THINK` in `ai/providers/local.js`
 gives a budget (256 tokens: agent.tools only; D4 measured p3dpo thinking worse than answering directly on writer.review,
 study.help and each writer.feedback call, so they and every other task answer directly; the numbers are beside `THINK`), once this computer decodes that model at `THINK_TPS` (40 tokens a second) or faster; any other run answers directly.
