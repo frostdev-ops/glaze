@@ -373,6 +373,10 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
 
   const OPS = { todo, insights, assignment, mark, announcement, search, modules, topics, document: doc1, syllabus, discussion };
   const SCHOOL_READS = new Set(['announcement', 'search', 'modules', 'topics', 'document', 'syllabus', 'discussion']);
+  // An address can also be an anchor's visible label, plain body text or a file's displayName. Strip it from every
+  // returned string, after HTML decoding, so signed credentials never leave the tab through those alternate paths.
+  const publicRead = (v) => typeof v === 'string' ? v.replace(/(?:https?:\/\/[^\s<>"'`]*|\/\/[^\s<>"'`]*)?\/(?:bbcswebdav|sessions)\/[^\s<>"'`]*/gi, '[file address omitted]')
+    : Array.isArray(v) ? v.map(publicRead) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, publicRead(x)])) : v;
   const jobs = new Map();
   const cancel = (id) => {
     if (jobs.has(id)) jobs.get(id)?.abort();
@@ -404,7 +408,7 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
         const { j: current } = await req(x.site === 'ultra' ? '/learn/api/v1/users/me' : '/api/v1/users/self/profile', go);
         if (String(current?.id) !== a.uid) return no('profile');
       }
-      return result;
+      return SCHOOL_READS.has(op) ? publicRead(result) : result;
     };
     try { return await Promise.race([work(), stopped]); } catch { return no(go() ? 'failed' : 'late'); }
     finally { clearTimeout(timer); ac.abort(); jobs.delete(id); }
