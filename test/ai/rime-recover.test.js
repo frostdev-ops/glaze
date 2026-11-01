@@ -215,6 +215,7 @@ test('the corrective block is included when measuring the retry against the prov
 test('when the retry fails too and the results hold a list, Glaze\'s own list is the answer; with nothing read, the error keeps its code and the raw answer', async () => {
   const { r } = await loop([call, { why: 'ground', raw: 'bad' }, { why: 'number', raw: JSON.stringify(BAD.nodate) }]);
   assert.equal(r.built, true, 'Glaze wrote it');
+  assert.deepEqual([r.why, r.raw], ['number', JSON.stringify(BAD.nodate)], 'the last failed answer and its code, for the panel');
   assert.match(r.answer.text, /- \*\*Reflection Week 11\*\* \(ENG 1100\): Monday, November 2, 11:59 PM, not submitted/);
   const none = await loop([{ why: 'first', raw: JSON.stringify(BAD.prose) }]);
   assert.equal(none.r.code, 'check');
@@ -227,4 +228,10 @@ test('when the retry fails too and the results hold a list, Glaze\'s own list is
 test('the worker\'s error to the panel carries the code, the step count and the raw answer', () => {
   const src = require('fs').readFileSync(require('path').join(__dirname, '../../extension/ai/ask.js'), 'utf8');
   assert.match(src, /type: 'error', error[^}]*why[^}]*steps[^}]*raw/);
+});
+
+test('a built answer reaches the panel with the last failed answer\'s code and raw; Activity never gets the raw', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '../../extension/ai/ask.js'), 'utf8');
+  assert.match(src, /type: 'end', task: r\.task, answer: \{ text: res\.answer\.text, \.\.\.\(res\.built && \{ built: true \}\) \}[^;]*why: res\.why[^;]*raw: res\.raw/);
+  assert.ok(!require('../../extension/ai/failure.js').diagnostic({ raw: 'x' }).raw);
 });
