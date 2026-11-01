@@ -1017,6 +1017,38 @@ test('Rime context refusals use the high-performance GPU that runs the model', a
   assert.equal(size.textContent, '16K', 'the low-power GPU cannot add a no-f16 refusal');
 });
 
+test('a late Rime memory probe cannot replace the current tier context refusals', async () => {
+  let kept, release, calls = 0, hold = false;
+  const adapter = { features: new Set() };
+  const pending = new Promise((resolve) => { release = resolve; });
+  const gpu = { requestAdapter: () => ++calls === 1 ? pending : hold ? new Promise(() => {}) : Promise.resolve(adapter) };
+  const local = async (m) => {
+    if (m.op === 'set') { kept.set('connections', { local: { ...m.cfg } }); return { ok: true }; }
+    if (m.op === 'updates') return { ok: true, auto: true };
+    const tier = kept.get('connections').local.tier;
+    return { ok: true, state: 'ready', tier, size: tier === 4 ? 1846237888 : 1099627200,
+      tiers: [{ tier: 1, size: 1099627200 }, { tier: 4, size: 1846237888 }] };
+  };
+  const p = await open({ ai: { on: true, mode: 'advanced' }, providers: ['local'], local, gpu, deviceMemory: 4,
+    conns: { local: { provider: 'local', tier: 1 } }, ladder: require('../../extension/ai/local/ladder.js') });
+  kept = p.vault;
+  await p.click(p.card('Rime'));
+  const pick = p.$('ai-local-tier');
+  pick.value = '4';
+  p.fire(pick, 'change');
+  await settle();
+  const size = () => p.$('ai-local-window').children.find((o) => o.value === '32768');
+  assert.equal(size().disabled, true, '32K does not fit the current Q8 tier');
+  assert.equal(size().textContent, '32K · Too large for this computer');
+  hold = true;
+  const before = calls;
+  release(adapter);
+  await settle();
+  assert.equal(size().disabled, true, 'the old Q4 result cannot enable 32K for Q8');
+  assert.equal(size().textContent, '32K · Too large for this computer');
+  assert.equal(calls, before, 'an old result cannot start another probe for the current tier');
+});
+
 test('Rime keeps tier and context changes made while the other choice is saving', async (t) => {
   for (const [first, second, expected] of [
     [['tier', '3'], ['window', '8192'], { tier: 3, window: 8192 }],
