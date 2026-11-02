@@ -10,7 +10,7 @@ const setup = async () => {
   const a = await store.save(A, { text: 'Use short paragraphs.', evidence: 'Use short paragraphs.', category: 'preference' }, { question: 'Use short paragraphs.' });
   const b = await store.save(B, { text: 'I study biology.', evidence: 'I study biology.' }, { question: 'I study biology.' });
   assert.equal(a.ok, true); assert.equal(b.ok, true);
-  const env = { store, state: async () => enabled, setEnabled: async (v) => { enabled = v; return true; } };
+  const env = { store, valid: async () => true, state: async () => enabled, setEnabled: async (v) => { enabled = v; return true; } };
   return { env, store, a: a.receipt, b: b.receipt, values };
 };
 const request = (op, rest = {}) => ({ type: 'glaze:memory', op, ...rest });
@@ -59,4 +59,24 @@ test('failed switch persistence reports failure and leaves durable memory untouc
   const { env } = await setup();
   const r = await UI.run(request('settings', { enabled: true }), { ...env, all: true, setEnabled: async () => false });
   assert.equal(r.ok, false); assert.equal((await env.store.listAll()).items.length, 2);
+});
+
+test('scoped reads require a live validator and revalidate after reading storage', async () => {
+  const { env, store, a } = await setup();
+  assert.deepEqual(await UI.run(request('read', { id: a.id }), { ...env, account: A, valid: undefined }), { ok: false, error: 'scope' });
+  let active = true;
+  const scoped = { ...env, account: A, valid: async () => active, store: { ...store, list: async (...args) => { const out = await store.list(...args); active = false; return out; } } };
+  assert.deepEqual(await UI.run(request('read', { id: a.id }), scoped), { ok: false, error: 'scope' });
+});
+
+test('scoped management passes live authority into the queued write', async () => {
+  const { env, store, a } = await setup();
+  let active = true, release, started;
+  const ready = new Promise((done) => { started = done; });
+  const held = M.queued({}, () => { started(); return new Promise((done) => { release = done; }); });
+  await ready;
+  const pending = UI.run(request('update', { id: a.id, revision: a.revision, markdown: 'Stale edit.' }), { ...env, account: A, valid: async () => active });
+  await new Promise(setImmediate); active = false; release(); await held;
+  assert.deepEqual(await pending, { ok: false, error: 'scope' });
+  assert.equal((await store.read(A, a.id)).text, 'Use short paragraphs.');
 });
