@@ -4,17 +4,20 @@
   const F = globalThis.GZ_WRITER_FRAME;
   if (!F || !globalThis.chrome?.runtime?.connect) return;
   const token = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
-  let revision = 0, previous = null, port = null, ready = false;
+  let revision = 0, previous = null, port = null, ready = false, owner = null;
+  const COMPOSE = new Set(['post', 'reply', 'message', 'journal']);
   const paper = () => globalThis.GZ_WRITER_PAPER?.current?.();
   const sample = () => {
-    const p = paper(), v = F.editor()?.view, context = F.context();
-    if (F.kind() === 'test' || context?.kind === 'test' || F.mode() !== 'paper' || p?.kind?.() !== 'paper' || !p.key?.() || !v?.state?.doc) { previous = null; return null; }
-    const { doc, selection } = v.state, key = p.key();
-    if (!previous || previous.doc !== doc || previous.key !== key || previous.from !== selection.from || previous.to !== selection.to) {
-      previous = { doc, key, from: selection.from, to: selection.to };
+    const kind = F.kind(), mode = F.mode(), p = mode === 'paper' ? paper() : null, v = F.editor()?.view, context = F.context();
+    const eligible = mode === 'paper' ? kind === 'assignment' && p?.kind?.() === 'paper' && !!p.key?.() : mode === 'compose' && COMPOSE.has(kind) && !!owner;
+    if (!eligible || (context?.kind && context.kind !== kind) || !v?.state?.doc) { previous = null; return null; }
+    const { doc, selection } = v.state, key = p ? p.key() : null;
+    const target = [context?.post?.id, context?.item?.id, context?.course?.id].map((id) => typeof id === 'string' ? id.slice(0, 120) : '').join('|');
+    if (!previous || previous.doc !== doc || previous.key !== key || previous.from !== selection.from || previous.to !== selection.to || previous.kind !== kind || previous.mode !== mode || previous.target !== target) {
+      previous = { doc, key, from: selection.from, to: selection.to, kind, mode, target };
       revision++;
     }
-    return { p, doc, key, selection, context };
+    return { p, doc, key, selection, context, kind, mode };
   };
   const refresh = () => {
     if (!ready) return;
@@ -29,12 +32,12 @@
     const end = Math.min(s.doc.content.size, 3073), selectedEnd = Math.min(s.selection.to, s.selection.from + 3073);
     const selected = s.selection.from === s.selection.to ? '' : s.doc.textBetween(s.selection.from, selectedEnd, '\n');
     const all = `${selected ? `Selected text:\n${selected}\n\n` : ''}Draft:\n${s.doc.textBetween(0, end, '\n')}`;
-    const title = s.p.paper?.()?.title;
-    return { value: { token, revision, key: s.key, context: s.context, ...(typeof title === 'string' && { title: title.slice(0, 240) }), text: all.slice(0, 3072), truncated: end < s.doc.content.size || selectedEnd < s.selection.to || all.length > 3072 } };
+    const title = s.p?.paper?.()?.title;
+    return { value: { token, revision, key: s.key, kind: s.kind, mode: s.mode, ...(owner && { owner }), context: s.context, ...(typeof title === 'string' && { title: title.slice(0, 240) }), text: all.slice(0, 3072), truncated: end < s.doc.content.size || selectedEnd < s.selection.to || all.length > 3072 } };
   };
   const close = () => { const old = port; port = null; try { old?.disconnect(); } catch { /* gone */ } };
   const open = () => {
-    if (!ready || port || F.mode() !== 'paper' || F.kind() === 'test' || F.context()?.kind === 'test') return;
+    if (!ready || port || !(F.mode() === 'paper' && F.kind() === 'assignment' || F.mode() === 'compose' && COMPOSE.has(F.kind())) || F.context()?.kind === 'test') return;
     try {
       const p = chrome.runtime.connect({ name: 'glaze:ask-writer' });
       port = p;
@@ -43,7 +46,12 @@
     } catch { /* worker unavailable */ }
   };
   globalThis.GZ_WRITER_CURRENT = { refresh: () => { open(); refresh(); } };
-  F.on('ready', () => { ready = true; open(); if (F.kind() !== 'test' && F.context()?.kind !== 'test') refresh(); });
+  F.on('ready', (editor, init) => {
+    if (ready) return;
+    // Fixed when this editor was created, never rebound from a later account or context refresh.
+    owner = typeof init?.askOwner === 'string' && init.askOwner.length <= 512 && /^https?:\/\/[^/\s]+\/_\d{1,20}_\d{1,20}$/.test(init.askOwner) ? init.askOwner : null;
+    ready = true; open(); if (F.kind() !== 'test' && F.context()?.kind !== 'test') refresh();
+  });
   F.on('change', refresh);
   F.on('context', () => { open(); refresh(); });
   // ProseMirror updates also cover a document loaded from storage, imports and caret movement.

@@ -97,6 +97,15 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // An assignment's paper key (writer/writer-papers.js keyOf: the school, the student, the course and the assignment), as
   // writer/writer-context-assignment.js builds it, from the student's id alone, so the frame opens the student's paper rather
   // than a stand-in while the rest of the context is read. null when the id isn't known within a few seconds.
+  const askOwnerOf = async () => {
+    const origin = location.origin;
+    let timer;
+    try {
+      const uid = await Promise.race([Promise.resolve().then(() => X.account()).then(String), new Promise((resolve) => { timer = setTimeout(resolve, 1500, ''); })]);
+      return uid.length <= 40 && /^_\d+_\d+$/.test(uid) ? `${origin}/${uid}` : null;
+    } catch { return null; }
+    finally { clearTimeout(timer); }
+  };
   const paperOf = async () => {
     const a = U().attemptAt(location.pathname);
     const uid = a ? await Promise.race([Promise.resolve().then(() => X.account()).then(String), new Promise((r) => setTimeout(r, 5000, ''))]).catch(() => '') : '';
@@ -107,7 +116,10 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     const box = { ...b, id: `gzw-${Date.now().toString(36)}-${(seq++).toString(36)}`, frame: null, port: null, text: squash(b.editor.textContent), latest: b.editor.innerHTML, delta: null, path: location.pathname, editorId: b.editor.id, destination: X.draftAt(b.editor), display: null,
       full: b.mode === 'paper' && X.settings().writer?.full === true, room: false, px: 0 };
     boxes.set(b.editor, box);
+    const owner = box.mode === 'compose' && SENDS.has(box.kind) ? askOwnerOf() : Promise.resolve(null);
     try { await drafts(); if (!await GZ_DRAFT_UI.ready(b.editor)) { declined.add(b.editor); drop(box); return; } } catch { drop(box); return; }
+    if (boxes.get(b.editor) !== box || !sameBox(box)) { drop(box); return; }
+    box.askOwner = await owner;
     if (boxes.get(b.editor) !== box || !sameBox(box)) { drop(box); return; }
     if (b.mode === 'paper') {
       const paper = await paperOf();
@@ -232,7 +244,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     box.ready = true;
     const selection = typing && box.mode === 'compose' && !box.recovered ? main('get', { id: box.id }).find((r) => r?.ok && r.html === ed.innerHTML && r.selection)?.selection : null;
     if (box.mode === 'paper') box.context = { ...box.context, recovery: location.origin + location.pathname };
-    box.port.postMessage({ type: 'init', mode: box.mode, kind: box.kind, html: box.latest, selection, placeholder: ed.getAttribute('data-placeholder') || '', look: l, context: box.context, locale: X.locale() });
+    box.port.postMessage({ type: 'init', mode: box.mode, kind: box.kind, askOwner: box.askOwner, html: box.latest, selection, placeholder: ed.getAttribute('data-placeholder') || '', look: l, context: box.context, locale: X.locale() });
     if (['post', 'reply', 'message', 'journal'].includes(box.kind)) X.need('writer/writer-context-discussion.js', () => globalThis.GZ_WRITER_CONTEXT_DISCUSSION).then(() => globalThis.GZ_WRITER_CONTEXT_DISCUSSION?.watch(box, X), () => {});
     if (box.kind === 'reply') X.need('writer/page/writer-quote.js', () => globalThis.GZ_WRITER_QUOTE).then(() => globalThis.GZ_WRITER_QUOTE?.arm(box), () => {});
     box.display ||= [box.root.style.getPropertyValue('display'), box.root.style.getPropertyPriority('display')];
