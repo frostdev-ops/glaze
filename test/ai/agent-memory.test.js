@@ -148,7 +148,12 @@ test('save forwards category, exact user evidence and runtime correction/lease s
   const args = { text: 'Prefers short answers.', evidence: 'I prefer short answers.', category: 'preference', id: ID, revision: REV };
   const before = structuredClone(args), out = await f.run('memory_save', args);
   assert.deepEqual(args, before);
-  assert.deepEqual(f.calls[0], ['save', ACCOUNT, args, { question: f.current.question, explicitCorrection: true, lease: f.current.lease }]);
+  const [operation, account, input, options] = f.calls[0], { guard, ...runtime } = options;
+  assert.deepEqual([operation, account, input, runtime], ['save', ACCOUNT, args, { question: f.current.question, explicitCorrection: true, lease: f.current.lease }]);
+  assert.equal(typeof guard, 'function');
+  assert.equal(await guard(), true);
+  f.current.account = OTHER;
+  assert.equal(await guard(), false, 'queued work cannot adopt a different active account');
   assert.deepEqual(out, receipt('updated'));
   assert.equal(Object.hasOwn(out, 'authorized'), false);
   assert.equal(Object.hasOwn(out, 'asked'), false);
@@ -209,7 +214,7 @@ test('writes emit no success until committed, and preserve core conflict/error r
   resolve(receipt('created'));
   assert.deepEqual(await saving, receipt('created'));
   const conflict = { ok: false, error: 'conflict', current: { id: ID, revision: REV } };
-  const g = fixture({ current: { question: 'Forget this saved memory.' }, store: { forget: async () => conflict } });
+  const g = fixture({ current: { question: 'Forget my saved source.' }, store: { forget: async () => conflict } });
   assert.deepEqual(await g.run('memory_forget', { id: SOURCE, revision: REV }), conflict);
   const bad = fixture({ store: { read: async () => { throw new Error('private error with account'); } } });
   assert.deepEqual(await bad.run('memory_read', { id: ID }), { ok: false, error: 'write' });
@@ -407,8 +412,12 @@ test('ingest uses the same enabled/verified account and forwards only canonical 
   const [op, account, record, options] = f.calls[0];
   assert.equal(op, 'ingest'); assert.equal(account, ACCOUNT);
   assert.deepEqual(record, M.material(content(), ACCOUNT, AT));
-  assert.deepEqual(options, { lease: f.current.lease });
+  const { guard, ...runtime } = options;
+  assert.deepEqual(runtime, { lease: f.current.lease });
+  assert.equal(typeof guard, 'function');
+  assert.equal(await guard(), true);
   f.on(false);
+  assert.equal(await guard(), false, 'queued ingestion rechecks Memory before committing');
   assert.deepEqual(await M.ingest(f.env, content(), {}), { ok: false, error: 'off' });
   assert.equal(f.calls.length, 1);
 });
