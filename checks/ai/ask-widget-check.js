@@ -150,7 +150,7 @@ const lay = (where, size) => {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-ask-widget-'));
   const out = path.resolve(process.argv[2] || path.join(os.tmpdir(), 'gz-ask-widget'));
   fs.mkdirSync(out, { recursive: true });
-  const lock = env.lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   let context, held = false;
   try {
     while (!held) { try { fs.mkdirSync(lock); held = true; } catch (e) { if (e.code !== 'EEXIST') throw e; await pause(1000); } }
@@ -161,7 +161,7 @@ const lay = (where, size) => {
     fs.writeFileSync(path.join(ext, 'background/background.js'), worker0 + SHIM);
     await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      ...env.chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC',
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking', '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-quic'],
     });
     env.noFirstRun(context);
