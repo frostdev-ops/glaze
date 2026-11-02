@@ -11,6 +11,7 @@ const area = (initial = {}) => {
   return { data, get fail() { return fail; }, set fail(v) { fail = v; },
     async get(keys) { if (fail) throw Error('storage'); return structuredClone(keys === null ? data : Object.fromEntries([].concat(keys).filter((k) => Object.hasOwn(data, k)).map((k) => [k, data[k]]))); },
     async set(patch) { if (fail) return false; Object.assign(data, structuredClone(patch)); return true; },
+    async remove(keys) { if (fail) return false; for (const key of [].concat(keys)) delete data[key]; return true; },
   };
 };
 const make = (local, extra = {}) => { let n = 1000; return M.create({ local, now: () => 1000, random: () => revision(++n), ...extra }); };
@@ -96,7 +97,7 @@ test('course source identities are deterministic, page aware and forgotten sourc
   assert.equal(first.receipt.id, again.receipt.id);
   assert.notEqual((await s.ingest(A, { ...material, source: source({ page: 2 }) })).receipt.id, first.receipt.id);
   const r = (await s.list(A, { kind: 'course' })).items.find((v) => v.id === first.receipt.id);
-  assert.equal((await s.forget(A, r)).ok, true);
+  assert.equal((await s.forget(A, { id: r.id, revision: r.revision })).ok, true);
   assert.equal((await s.ingest(A, material)).error, 'not-found');
   const partial = await s.ingest(A, { source: source({ id: '9', complete: false }), markdown: 'Partly read.' });
   assert.equal((await s.read(A, partial.receipt.id)).source.complete, false);
@@ -199,6 +200,20 @@ test('shared queue CAS rejects stale sync reads and recovers from failed writes'
   local.fail = false; assert.equal((await save(make(local), A, 'Use headings.')).ok, true);
 });
 
+test('save rejects non-string revisions before loading an existing memory', async () => {
+  const local = area(), s = make(local), saved = await save(s), before = structuredClone(local.data);
+  assert.deepEqual(await s.save(A, { id: saved.receipt.id, revision: [saved.receipt.revision], text: 'Use prose.', evidence: 'Use prose.' }, { question: 'Use prose.' }), { ok: false, error: 'scope' });
+  assert.deepEqual(local.data, before);
+});
+
+test('forget rejects additional properties without deleting the supplied record', async () => {
+  const local = area(), s = make(local), saved = await save(s), before = structuredClone(local.data);
+  for (const extra of [{ account: B }, { asked: 'yes' }, { markdown: 'Injected content.' }]) {
+    assert.deepEqual(await s.forget(A, { id: saved.receipt.id, revision: saved.receipt.revision, ...extra }), { ok: false, error: 'scope' });
+    assert.deepEqual(local.data, before);
+  }
+});
+
 test('restore publication invalidates held leases without reentering the memory queue', async () => {
   const local = area(), s = make(local), before = s.lease(A), other = s.lease(B);
   await M.queued({}, async () => {
@@ -206,4 +221,66 @@ test('restore publication invalidates held leases without reentering the memory 
   });
   assert.equal(s.validateLease(A, before), false);
   assert.equal(s.validateLease(B, other), true);
+});
+
+test('pre-turn recall caps matching preferences at two and keeps room for query facts', async () => {
+  const rows = [record(9, { markdown: 'Chemistry is my major.' }), ...Array.from({ length: 4 }, (_, n) => record(n + 1, { markdown: `Chemistry preference ${n + 1}.`, category: 'preference', updatedAt: 200 + n }))];
+  const s = make(area(Object.fromEntries(rows.map((r) => [M.keyOf(A, r.id), r]))));
+  const ordinary = await s.search(A, 'chemistry');
+  assert.equal(ordinary.items.filter((r) => r.category === 'preference').length, 4);
+  const recall = await s.search(A, 'chemistry', { limit: 3, includePreferences: true });
+  assert.equal(recall.items.filter((r) => r.category === 'preference').length, 2);
+  assert.equal(recall.items.some((r) => r.id === id(9)), true);
+  assert.equal(recall.items.length, 3);
+  assert.equal(recall.truncated, true);
+  const wider = await s.search(A, 'chemistry', { includePreferences: true });
+  assert.equal(wider.items.filter((r) => r.category === 'preference').length, 2);
+  assert.equal(wider.truncated, true);
+});
+
+test('clear retains a valid tombstone at the accepted timestamp ceiling and cannot revive a source', async () => {
+  const local = area(), s = make(local, { now: () => Number.MAX_SAFE_INTEGER });
+  const material = { source: source(), markdown: 'Course notes.' }, saved = await s.ingest(A, material);
+  assert.equal(saved.ok, true);
+  assert.equal((await s.clear(A)).ok, true);
+  assert.deepEqual(await s.ingest(A, material), { ok: false, error: 'not-found' });
+  const gone = local.data[M.keyOf(A, saved.receipt.id)];
+  assert.equal(gone.deleted, true);
+  assert.deepEqual(M.clean(gone), gone);
+});
+
+test('forget can retain a valid tombstone at the accepted timestamp ceiling', async () => {
+  const local = area(), s = make(local, { now: () => Number.MAX_SAFE_INTEGER }), saved = await save(s);
+  const forgotten = await s.forget(A, { id: saved.receipt.id, revision: saved.receipt.revision });
+  assert.equal(forgotten.ok, true);
+  const gone = local.data[M.keyOf(A, saved.receipt.id)];
+  assert.equal(gone.deleted, true);
+  assert.deepEqual(M.clean(gone), gone);
+});
+
+test('clearing course cache purges source suppression and permits fresh verified reads', async () => {
+  const local = area(), s = make(local), material = { source: source(), markdown: 'A chemistry chapter.' };
+  const saved = await save(s), read = await s.ingest(A, material), before = s.lease(A);
+  await s.forget(A, { id: read.receipt.id, revision: read.receipt.revision });
+  assert.equal((await s.ingest(A, material)).error, 'not-found');
+  const cleared = await s.clearAll({ kind: 'course', snapshot: [] });
+  assert.equal(cleared.ok, true);
+  assert.equal(local.data[M.keyOf(A, read.receipt.id)], undefined);
+  assert.equal(s.validateLease(A, before), false);
+  assert.equal((await s.ingest(A, material, { lease: s.lease(A) })).ok, true);
+  assert.equal((await s.read(A, saved.receipt.id)).ok, true);
+});
+
+test('site cache purge is origin scoped and snapshot clear preserves newer source revisions', async () => {
+  const local = area(), s = make(local), first = await s.ingest(A, { source: source(), markdown: 'First chapter.' });
+  await s.ingest(B, { source: source(), markdown: 'Other account.' });
+  await s.ingest(U, { source: source({ course: '_7_1' }), markdown: 'Other site.' });
+  const refreshed = await s.ingest(A, { source: source({ observedAt: 700 }), markdown: 'Revised chapter.' });
+  const cleared = await s.clear(A, { kind: 'course', snapshot: [{ id: first.receipt.id, revision: first.receipt.revision }] });
+  assert.equal(cleared.conflicts, 1);
+  assert.equal((await s.read(A, refreshed.receipt.id)).text, 'Revised chapter.');
+  assert.equal((await s.purgeCourses({ origin: 'https://school.example' })).ok, true);
+  assert.equal((await s.list(A, { kind: 'course' })).items.length, 0);
+  assert.equal((await s.list(B, { kind: 'course' })).items.length, 0);
+  assert.equal((await s.list(U, { kind: 'course' })).items.length, 1);
 });
