@@ -290,6 +290,10 @@ test('memory receipts stay out of school material passed to study help', async (
   const summary = 'Earlier in this chat: exclude practice work.';
   assert.equal((await h.ask(`Explain this assignment. ${text}`, { history, summary })).type, 'end');
   assert.ok(h.got.some((m) => m.type === 'memory'), 'save has its own durable receipt');
+  for (const run of h.state.runs.filter((r) => r.input.tools?.length === 1 && r.input.tools[0] === 'memory_save')) {
+    assert.equal(run.input.history, undefined, 'the automatic save prelude stays history-free');
+    assert.equal(run.input.summary, undefined, 'the automatic save prelude carries no compaction summary');
+  }
   const help = h.state.runs.find((r) => r.task === 'study.help');
   assert.match(help.input.material, /Compare two invented samples/);
   assert.doesNotMatch(help.input.material, /short bullet points|persistence|receipt|m-[0-9a-f]{32}/);

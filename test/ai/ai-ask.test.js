@@ -121,8 +121,11 @@ test('route: help with work goes to study.help, whatever records it mentions, wi
   assert.equal(K.route('Help me prioritize my assignments.', { level: 3, attempt: 'My answer is 4.' }).task, 'study.help', 'an attempt keeps tutoring priority');
   assert.equal(K.route('I am overwhelmed and lost track. Can you remind me what I just asked?', { level: 3 }).task, 'study.help');
   assert.ok(K.route('Remind me tomorrow at 9 to review what I just asked.', { level: 3 }).tools.includes('wake_create'), 'real future reminders remain available');
+  assert.ok(K.route('Set a reminder for 2027-07-20 to review my notes. Can you remind me what I just asked?', { level: 3 }).tools.includes('wake_create'), 'a separate scheduled request survives conversational recall');
+  assert.ok(K.route('At 10, can you remind me what I just asked?', { level: 3 }).tools.includes('wake_create'), 'a multi-digit scheduled time is not conversational recall');
   const current = { site: 'ultra', view: 'content', course: { id: '_25_1' }, content: { id: '_7_1', kind: 'document' } };
-  for (const question of ['Read the full item and solve this equation.', 'Explain how to read the whole item.', '"Read the whole item and list its materials."']) {
+  for (const question of ['Read the full item and solve this equation.', 'Explain how to read the whole item.', '"Read the whole item and list its materials."',
+    '"Find the course absence policy."', '"Who teaches Cedar Biology?"', '"Get the instructor contact details for Cedar Biology."']) {
     assert.equal(K.route(question, { level: 3, current }).task, 'study.help', question);
   }
   assert.equal(K.route('Read the whole item.', { level: 3, current, attempt: 'I think the answer is 4.' }).task, 'study.help');
