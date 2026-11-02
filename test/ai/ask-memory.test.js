@@ -113,3 +113,33 @@ test('exact request counts include recall and drop lower ranked records until th
   assert.ok(h.state.counts.some((c) => c.input.recall?.records.length), 'recall reached the exact count path');
   for (const run of h.state.runs) assert.ok(!run.input.recall?.records.length, 'recall is removed if even one record would overflow');
 });
+
+test('personal recall routes through a memory read tool before its final agent answer', async (t) => {
+  const h = harness({ script: { 'agent.tools': [call('memory_search', { query: 'preferences', kind: 'memory' }), said('Your saved preference asks for short bullet points.')] } }); t.after(h.close);
+  await preference(h.store);
+  const end = await h.ask('What do you remember about my preferences?');
+  assert.equal(end.type, 'end');
+  assert.equal(end.task, 'agent.tools');
+  assert.deepEqual(h.state.runs[0].input.tools, ['memory_search', 'memory_read', 'memory_save', 'memory_forget']);
+  assert.equal(h.state.runs[0].input.first, true, 'automatic recall does not bypass the tool-first policy');
+  assert.equal(h.state.runs[1].input.steps[0].call.name, 'memory_search');
+});
+
+test('records supplied by memory_search are revalidated even when absent from automatic recall', async (t) => {
+  let saved;
+  const h = harness({ script: { 'agent.tools': [call('memory_search', { query: 'night owl', kind: 'memory' }), async (_, __, store) => {
+    await store.forget(ACC, { id: saved.receipt.id, revision: saved.receipt.revision }); return said('Your saved fact says you are a night owl.');
+  }] } }); t.after(h.close);
+  saved = await h.store.save(ACC, { text: 'I am a night owl.', evidence: 'I am a night owl.' }, { question: 'I am a night owl.' });
+  assert.equal((await h.ask('What do you remember about me?')).type, 'error');
+  assert.equal(h.state.runs[0].input.recall, undefined, 'the explicit search result supplies the fact');
+});
+
+test('turns begun with Memory off use the existing study path without a save pass', async (t) => {
+  const h = harness({ script: { 'study.help': [study] } }); t.after(h.close);
+  await preference(h.store); h.state.on = false;
+  assert.equal((await h.ask('Explain photosynthesis.')).type, 'end');
+  assert.equal(h.state.searches.length, 0);
+  assert.deepEqual(h.state.runs.map((r) => r.task), ['study.help']);
+  assert.equal(h.got.some((m) => ['memory', 'recall'].includes(m.type)), false);
+});
