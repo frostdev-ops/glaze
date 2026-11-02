@@ -330,6 +330,7 @@ In Ask Rime (`ai/ask.js`, `ai/page/ask.js`):
   is no help request, but graded work still goes to study.help), navigate (`places_list`, `place_open`, `page_highlight`),
   remind (`wake_create`, `wakes_list`, `wake_cancel`) and watch (`monitor_create`, `wakes_list`, `todo_list`,
   `grades_list`), their tools before records' ones in the six.
+- **Navigation claims:** explicit completed-navigation statements must be supported by a matching successful `place_open` result. A refusal, an unperformed call, or a successful different destination cannot establish that the requested page opened. These answers use the existing `ground` correction; truthful failures, manual directions and quoted page titles remain data. This check recognizes explicit completion phrases in the six supported locales; it is not a general semantic proof of arbitrary prose.
 - **The call path.** Rime's tools run in the worker, never through `agents/calls.js`, with their `ctx`: the account (the
   call's, else the one on this school's site Glaze read last), zone, locale, the page (its site from the panel, its address
   from the sender), its courses, Writer's switch, the page's visible words (the question carries them, at most 20,000

@@ -3,8 +3,6 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const A = require('../../extension/ai/tasks/agent-tools.js');
 const P = require('../../extension/ai/agent/places.js');
-const text = require('../../extension/ai/text.js');
-const R = require('../../extension/ai/request.js');
 const TOOL = (name) => P.tools().find((tool) => tool.name === name);
 const PHRASES = {
   en: { question: 'Open my calendar', passive: 'The requested place was opened successfully.', active: "I have opened Calendar.", failure: 'I could not open Calendar. You can open Calendar from the menu.', manual: 'To open Calendar, click Calendar in the menu.', quote: 'The page title is “I opened Calendar”.' },
@@ -47,3 +45,26 @@ for (const [locale, words] of Object.entries(PHRASES)) {
     for (const claim of [words.passive, words.active]) assert.equal(A.why(answer(claim), input), '', claim);
   });
 }
+
+
+test('a different opened destination never proves the claimed target; an earlier named success remains truthful', async () => {
+  const { input } = await fixture('en');
+  const withSteps = (steps) => ({ ...input, steps: [...input.steps.slice(0, 1), ...steps.map(({ place, result }) => ({ call: { name: 'place_open', arguments: { place } }, result: JSON.stringify(result) }))] });
+  const grades = { place: 'grades', result: { opened: 'grades', title: 'Grades' } };
+  const calendar = { place: 'calendar', result: { ok: false, error: 'The page could not be opened.' } };
+  for (const steps of [[grades, calendar], [calendar, grades]]) {
+    const current = withSteps(steps);
+    assert.equal(A.why(answer('I opened Calendar.'), current), 'ground');
+    assert.equal(A.why({ call: null, answer: { text: 'I opened Grades. Calendar could not be opened.', quotes: ['Grades', 'Calendar'] } }, current), '');
+  }
+  assert.equal(A.why(answer('The requested place was opened successfully.'), withSteps([grades, calendar])), 'ground');
+});
+
+test('a course subpage claim uses the most specific listed destination, not the home-name prefix', () => {
+  const places = [{ place: 'course:25', title: 'BIO 1100' }, { place: 'course:25/grades', title: 'BIO 1100 grades' }];
+  const input = A.task.input({ question: 'Open BIO 1100 grades', tools: ['places_list', 'place_open'], now: 1793577600000, zone: 'UTC', first: true, steps: [
+    { call: { name: 'places_list', arguments: {} }, result: { places } },
+    { call: { name: 'place_open', arguments: { place: 'course:25/grades' } }, result: { opened: 'course:25/grades', title: 'BIO 1100 grades' } },
+  ] });
+  for (const name of ['BIO 1100 grades', 'course:25/grades']) assert.equal(A.why({ call: null, answer: { text: `I opened ${name}.`, quotes: [name] } }, input), '');
+});
