@@ -7,7 +7,7 @@ const Agent = require('../../extension/ai/tasks/agent-tools.js');
 const Tasks = require('../../extension/ai/task.js');
 const Tools = require('../../extension/ai/tools.js');
 const ACC = 'https://prelude.example.test/47', NOW = 1793653200000;
-const QUESTION = 'List my assignments.';
+const QUESTION = 'Show my due dates for tomorrow.';
 const REJECTED = 'SYNTHETIC_REJECTED_PERSONAL_FACT';
 const said = (text = 'No memory change is useful.', quotes = []) => ({ call: null, answer: { text, quotes } });
 const call = (name, args = {}) => ({ call: { name, arguments: args }, answer: null });
@@ -90,7 +90,7 @@ for (const [label, response, code] of [
   ['truncated task output', { output: said(), finish: 'length' }, 'refusal'],
 ]) test(`${label} in the optional pass permits the main school task`, async (t) => {
   const h = front({ prelude: () => response }); t.after(h.close);
-  assert.equal((await h.ask()).type, 'end');
+  const result = await h.ask(); assert.equal(result.type, 'end', JSON.stringify({ result, checks: h.state.checks, reads: h.state.reads }));
   assert.equal(h.state.checks[0].code, code);
   assert.ok(h.state.reads.includes('todo_list'));
   await noRejectedState(h);
@@ -99,7 +99,7 @@ for (const [label, response, code] of [
 test('a valid optional no-save answer remains invisible and permits the main task', async (t) => {
   const hidden = 'SYNTHETIC_PRIVATE_NO_SAVE_PROSE';
   const h = front({ prelude: () => ({ output: said(hidden) }) }); t.after(h.close);
-  assert.equal((await h.ask()).type, 'end');
+  const result = await h.ask(); assert.equal(result.type, 'end', JSON.stringify({ result, checks: h.state.checks, reads: h.state.reads }));
   assert.equal(h.state.checks.length, 0);
   assert.equal(JSON.stringify(h.mains()).includes(hidden), false);
   assert.equal(JSON.stringify(h.state.events).includes(hidden), false);
@@ -109,7 +109,7 @@ test('a valid optional no-save answer remains invisible and permits the main tas
 test('a durable automatic receipt survives a later invalid prelude output while the school task proceeds', async (t) => {
   const fact = 'I prefer labeled diagrams.';
   const h = front({ prelude: ({ index }) => index === 1 ? { output: call('memory_save', { text: fact, evidence: fact, category: 'preference' }) } : rejected() }); t.after(h.close);
-  assert.equal((await h.ask(`${fact} ${QUESTION}`)).type, 'end');
+  const result = await h.ask(`${fact} ${QUESTION}`); assert.equal(result.type, 'end', JSON.stringify({ result, checks: h.state.checks, reads: h.state.reads }));
   const receipts = h.state.events.filter((m) => m.type === 'memory');
   assert.equal(receipts.length, 1); assert.equal(receipts[0].receipt.operation, 'created');
   assert.equal((await h.store.read(ACC, receipts[0].receipt.id)).text, fact);
@@ -163,7 +163,7 @@ test('port disposal prevents a late rejected response from starting any main tas
 
 test('an optional pass that cannot fit is skipped before the main request', async (t) => {
   const h = front({ count: (m) => ({ used: m.input.tools?.length === 1 && m.input.tools[0] === 'memory_save' ? 4000 : 1000, window: 4096, reserve: 768, exact: true }) }); t.after(h.close);
-  assert.equal((await h.ask()).type, 'end');
+  const result = await h.ask(); assert.equal(result.type, 'end', JSON.stringify({ result, checks: h.state.checks, reads: h.state.reads }));
   assert.equal(h.state.runs.some((m) => m.input.tools?.includes('memory_save')), false);
   await noRejectedState(h);
 });
