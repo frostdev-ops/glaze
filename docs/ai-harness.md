@@ -170,6 +170,32 @@ Ask Rime runs both (below); the worker loads them with the harness (`aiFiles`). 
   offered tool (`constraint()`), and the provider reads a native call back as the task's JSON. A stock model reads the
   harness's messages, held to the task's schema.
 
+The prompts use the current question, `earlier` turns from this chat and, for `agent.tools`, `summary` to preserve the
+student's intent, requested items, filters, date windows and latest corrections. These chat blocks are distinct from
+scoped saved `recall`; neither supplies full logs of other chats. Ordinary chat follow-ups in `study.help` can be answered
+directly from supplied history, without inventing a tutoring exercise. Its coursework limits still apply, and it cannot
+call tools or claim to have checked school records without supplied material or results.
+
+`agent.tools` checks each result's success/error, matching identity, freshness and coverage before treating the student's
+request as complete. It reuses valid episode evidence and reads further when requested parts remain unverified. Failed
+reads may use a meaningful alternative query or discovery/read within offered tools and the existing six-step limit.
+A canonical call to an explicitly allowlisted built-in read may run once more after a root `ok:false` receipt whose
+error is exactly `timeout`, `connection-lost` or the school reader's timeout sentence. Successful, ambiguous and third
+attempts cannot repeat; navigation, highlighting, code execution, mutations and unknown tools are excluded. The task
+check and episode share this gate, decoding the task's serialized root once; JSON-looking source text is not a receipt.
+An execution timeout/connection loss becomes a failed receipt at the tool boundary, then crosses live binding and
+memory lease checks before reaching the model; access, lease and model/broker failures remain errors. Digests preserve
+failure receipts. Declined, disabled, out-of-scope and permission-blocked actions are not retry targets. Uncertain changes
+require a receipt or state check before further action; approval rules remain unchanged.
+After permitted recovery is exhausted, the answer gives verified partial results, what could not be checked and a
+practical next step. It never invents a failure cause or claims that a successful call alone completed the request.
+An attempted forbidden repeat enters the existing single corrective turn at tools level 3. If that correction fails in
+an episode containing only allowlisted reads, Glaze returns any verified list with an explicit incomplete-response
+caveat and a next step to check the relevant source; with no list it returns the caveat alone. Lower tool levels use that
+read-only fallback directly. That recovery state persists if the correction makes a useful different read. Episodes
+containing mutations retain the error rather than suggesting a replay or misrepresenting their outcome. A rejected
+repeat and the deterministic fallback execute no tool.
+
 ### Active context
 
 `agent.tools` accepts optional `current`, cleaned by the pure `ai/current.js` boundary (`GZ_AI_CURRENT.clean(raw, { caps })`). Missing context preserves the earlier request format. Context is captured again for each question/retry and worker-validated against the live page and active Writer binding; a failed or ambiguous binding is omitted. It never becomes a current identity in history or summary.

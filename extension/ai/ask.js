@@ -51,6 +51,12 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   // ids and dates, at most DIGEST of them.
   const DIGEST = 12;
   const digest = (result) => {
+    // Failure receipts retain their root status/error; a title or nested item must not erase retry evidence.
+    if (result?.ok === false || typeof result?.error === 'string') return {
+      ...(typeof result.ok === 'boolean' && { ok: result.ok }),
+      ...(typeof result.error === 'string' && { error: result.error.slice(0, 300) }),
+      ...(typeof result.account === 'string' && { account: result.account.slice(0, 320) }),
+    };
     const items = [];
     const walk = (v) => {
       if (Array.isArray(v)) return v.forEach(walk);
@@ -386,7 +392,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const cancelled = () => Object.assign(R().error('cancelled'), { category: 'cancelled' });
   const episode = async ({ question, tools, locale, now, zone, run, call, signal, fired, first, help, history, summary, measure, caps, current, recall }) => {
     const steps = [];
-    let fix, fixed = false;
+    let fix, fixed = false, repeated = false;
     const inputOf = () => ({ question, tools, steps: steps.map((s) => ({ call: s.call, result: s.result })), now, zone, locale, ...(fired && { fired }), ...(first && { first: true }), ...(help && { help }),
       ...(first && history?.length && { history }), ...(first && summary && { summary }), ...(fix && { fix }), ...(current && { current }), ...(recall && { recall }) });
     for (;;) {
@@ -399,13 +405,19 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       // An answer that fails its check after results came back gets one corrective turn naming the rule (FIX); if that fails
       // too, Glaze's own list from the results (built), when they hold one. The error says why (its code, the steps, the raw).
       let out, supplied;
-      try { out = await run('agent.tools', supplied = inputOf()); }
+      try {
+        out = await run('agent.tools', supplied = inputOf());
+        if (out?.call && AT().repeatWhy(out.call, steps)) throw Object.assign(R().error('check'), { why: 'repeat' });
+      }
       catch (e) {
         if (signal?.aborted) throw e;
-        const failed = R().code(e) === 'check' && first && steps.length;
-        if (failed && !fixed && AT().FIXES.includes(e.why)) { fixed = true; fix = e.why; continue; }
-        if (failed && fixed) {
-          const shown = AT().task.input(inputOf(), { caps })?.steps, text = shown && AT().listAnswer(shown, { locale });
+        const failed = R().code(e) === 'check' && (first || e.why === 'repeat') && steps.length;
+        if (failed && e.why === 'repeat') repeated = true;
+        if (failed && !fixed && first && AT().FIXES.includes(e.why)) { fixed = true; fix = e.why; continue; }
+        if (failed && (fixed || !first && e.why === 'repeat')) {
+          const shown = AT().task.input(inputOf(), { caps })?.steps;
+          const readsOnly = steps.every((s) => AT().RETRY_READS.includes(s.call.name));
+          const text = shown && (repeated ? readsOnly && AT().recoveryAnswer(shown, { locale }) : AT().listAnswer(shown, { locale }));
           if (text) return { answer: { text, quotes: [] }, steps, built: true, ...(typeof e.why === 'string' && { why: e.why }), ...(typeof e.raw === 'string' && { raw: e.raw }) };
         }
         throw Object.assign(e, { steps: steps.length });
@@ -416,6 +428,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       if (!isObj(out?.call)) throw R().error('check');
       if (steps.length >= AT().LIMIT.steps) throw R().error('steps');
       const { name, arguments: args, kind } = out.call;
+      // Execution failures are receipts from the tool boundary. Throws here also include access, lease and port failures.
       const r = await call({ name, arguments: args, kind }, supplied);
       if (signal?.aborted) throw cancelled();
       // A change the student didn't allow: nothing more is asked, so nothing can claim it was done.
@@ -679,7 +692,12 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       if (signal?.aborted) throw cancelled();
       if (!(await live()) || signal?.aborted) throw signal?.aborted ? cancelled() : R().error('off');
       let result;
-      try { result = await def.run(structuredClone(c.arguments), context); } catch (e) { result = { ok: false, error: e instanceof Error ? e.message : 'The tool failed.' }; }
+      try { result = await def.run(structuredClone(c.arguments), context); }
+      catch (e) {
+        if (signal?.aborted) throw cancelled();
+        const failure = { ok: false, error: R().code(e) };
+        result = AT().retryable(c.name, failure) ? failure : { ok: false, error: e instanceof Error ? e.message : 'The tool failed.' };
+      }
       const more = detail(c.name, result);
       step(result?.ok === false ? 'fail' : 'done', { ms: ms(), ...(typeof more === 'string' && more && { detail: more.slice(0, 120) }) });
       return { result, ...(def.kind === 'confirm' && { asked: 'yes' }), ...(memory && MEMORY().isWrite(c.name) && { authorization: 'memory-policy' }) };
@@ -799,6 +817,12 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         if (['document_read', 'document_assignment'].includes(c.name)) documents.push({ document: c.arguments.document,
           currentBound: !!supplied && AT().currentBound(c, supplied) });
         const out = await tool(bound, signal);
+        if (AT().retryable(c.name, out?.result)) {
+          // A recoverable execution failure still crosses the live identity/lease boundary before the model sees it.
+          await validate();
+          await memoryCurrent();
+          if (!(await live())) throw R().error('off');
+        }
         if (memory?.enabled) {
           const result = out?.result;
           if (c.name === 'memory_search' && result?.ok === true && Array.isArray(result.items)) refs(result.items);
