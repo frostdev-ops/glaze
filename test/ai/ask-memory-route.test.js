@@ -97,6 +97,37 @@ test('a reminder request retains reminder tools instead of direct memory managem
   assert.equal(main.input.tools.includes('memory_search'), false);
 });
 
+for (const [locale, question] of [
+  ['es', 'Explica cómo mis recuerdos se consolidan durante el sueño.'],
+  ['de', 'Erkläre, wie meine Erinnerungen biologisch entstehen.'],
+  ['nl', 'Leg uit hoe mijn herinneringen biologisch ontstaan.'],
+]) test(`${locale}: memory nouns in school explanations are not retrieval verbs`, async (t) => {
+  const h = front({ mode: 'none' }); t.after(h.close);
+  await h.ask(question, locale);
+  assert.equal(h.events.find((m) => m.type === 'route').task, 'study.help');
+  assert.equal(h.runs.some((m) => m.input.tools?.includes('memory_search')), false);
+});
+
+for (const [locale, question] of [
+  ['pt-BR', 'Mostre minhas lembranças pessoais.'], ['de', 'Zeige meine Erinnerung.'], ['nl', 'Toon mijn herinnering.'],
+]) test(`${locale}: singular and plural personal records retain direct read intent`, async (t) => {
+  const h = front(); t.after(h.close);
+  const end = await h.ask(question, locale);
+  assert.equal(end.type, 'end', JSON.stringify(end));
+  assert.equal(end.task, 'agent.tools');
+  assert.ok(h.toolResults.some((r) => r.name === 'memory_search'));
+});
+
+for (const [locale, question] of [
+  ['es', 'Recuérdame mañana leer mis apuntes de biología.'], ['pt-BR', 'Lembre-me amanhã de ler minhas anotações de biologia.'],
+  ['fr', 'Rappelle-moi demain de lire mes notes de biologie.'], ['de', 'Erinnere mich morgen daran, meine Biologienotizen zu lesen.'],
+  ['nl', 'Herinner me morgen eraan mijn biologienotities te lezen.'],
+]) test(`${locale}: reminder intent does not select personal memory management`, async (t) => {
+  const h = front({ mode: 'none' }); t.after(h.close);
+  await h.ask(question, locale);
+  assert.equal(h.runs.some((m) => m.input.tools?.includes('memory_search')), false);
+});
+
 // Exact failure-only questions and before-state from peer bundle SHA256 82eb8676205a6035aaae59efdcdd7712b75a0278e09f34033cc6bc9ab02cb244.
 // Only the 13 memory routing failures and six non-benchmark save controls are reproduced. No after-envelope is inferred.
 const REPLAY_READS = [
