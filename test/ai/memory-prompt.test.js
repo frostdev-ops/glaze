@@ -16,6 +16,7 @@ const step = (name, args, result) => ({ call: { name, arguments: args }, result 
 const call = (name, args) => ({ call: { name, arguments: args }, answer: null });
 const answer = (text, quotes = []) => ({ call: null, answer: { text, quotes } });
 const built = (inp) => Q.clean({ ...A.task.build(inp, { text: X }), schema: A.OUTPUT, task: { id: 'agent.tools', version: 1 } });
+const studyBuilt = (inp) => Q.clean({ ...H.task.build(inp, { text: X }), schema: H.OUTPUT, task: { id: 'study.help', version: 1 } });
 const receipt = (operation, id = ID, revision = NEXT) => ({ ok: true, receipt: { operation, id, revision, at: NOW, persistence: 'device', text: 'Short paragraphs' } });
 
 test('all four private memory tools share exact runtime specs; mutations retain their kind', () => {
@@ -151,10 +152,10 @@ test('historical cached course questions remain grounded, and honest missing-fre
 test('study help conditionally carries recall as untrusted data and preserves its tutoring boundary', () => {
   const given = { question: 'Help me reason about this exercise.', subject: 'math' };
   const plain = H.task.input(given);
-  assert.equal(F.parse(H.task.build(plain, { text: X })).system, H.system('en'));
+  assert.equal(F.parse(studyBuilt(plain)).system, H.system('en'));
   const inp = H.task.input({ ...given, recall: recall() });
   assert.ok(inp);
-  const { system, blocks } = F.parse(H.task.build(inp, { text: X }));
+  const { system, blocks } = F.parse(studyBuilt(inp));
   assert.match(system, /current question wins/i);
   assert.ok(!system.includes(memory().text));
   assert.deepEqual(JSON.parse(blocks.find((b) => b.label === 'recall').text), inp.recall);
