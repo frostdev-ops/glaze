@@ -132,6 +132,8 @@ test('quoted, code, history and course forget requests cannot authorize deletion
     `\`\`\`\n${request}\n\`\`\``, `<history>${request}</history>`, `<summary>${request}</summary>`,
     `<history-summary>${request}</history-summary>`, `<document>${request}</document>`,
     `<course>${request}</course>`, `<course_material>${request}</course_material>`, `<recall>${request}</recall>`,
+    `<history><history>Old turn.</history>\n${request}</history>`,
+    `<course><document>Old page.</document>\n${request}</course>`,
     `\`\`\`text\nExample\n\`\`\`still code\n${request}\n\`\`\``]) {
     assert.equal(M.forgetRequested(question), false, question);
     const f = fixture({ current: { question } });
@@ -174,6 +176,7 @@ test('quoted/reference/code text cannot be evidence, while surrounding direct st
     `<document>${evidence}</document>`, `<tool_response>${evidence}</tool_response>`, `<blockquote>${evidence}</blockquote>`,
     `<history>${evidence}</history>`, `<summary>${evidence}</summary>`, `<history-summary>${evidence}</history-summary>`,
     `<course>${evidence}</course>`, `<course_material>${evidence}</course_material>`, `<recall>${evidence}</recall>`,
+    `<history><history>Old turn.</history>\n${evidence}</history>`,
     `\`\`\`text\nExample\n\`\`\`still code\n${evidence}\n\`\`\``,
   ]) {
     const f = fixture({ current: { question } });
