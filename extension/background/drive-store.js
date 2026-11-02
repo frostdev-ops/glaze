@@ -490,6 +490,16 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       // Another device's file for the same record, made while this one made its own (first syncs that overlapped): every
       // device keeps the lowest id, met as a first meeting, so neither side's value is lost and each hears the other's after.
       if (was?.id && R?.id && !R.removed && R.id !== was.id) {
+        // A higher-id memory copy may be the only surviving receipt of a forget from a device that has since closed.
+        // Meet its value before following the canonical file. Keep that file's known sum until it is read below.
+        if (was.cat === 'memories' && R.appProperties?.cat === 'memories' && R.id > was.id && !R.trashed) {
+          const got = await fetchRec(ctx, R, h), value = await valueOf(was.area, was.key), next = L.memory().merge(value, got.value, was.key);
+          if (!next) throw new Fail('bad');
+          if (canon(next) !== canon(value)) {
+            await take(h, { ...got, value: next, sum: was.rsum, at: Math.max(was.at || 0, got.at) }, { id: was.id }, was, value, { pending: true });
+            was = await recOf(h);
+          }
+        }
         if (R.id < was.id && !R.trashed) await leave(); else R = undefined;
       }
       area ||= was?.area || left?.area; key ||= was?.key || left?.key;
@@ -695,11 +705,14 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     };
     // Every record, both sides, in ctx.data.
     const all = async (ctx) => {
-      const remote = new Map();
+      const remote = new Map(), memoryCopies = [];
       let page = null;
       do {
         const r = await ctx.D((c) => c.find(`'${ctx.data}' in parents and appProperties has { key='glaze' and value='rec' } and trashed=false`, { pageToken: page }));
-        for (const f of r.files) if (HASH.test(f.appProperties?.key || '') && (!remote.has(f.appProperties.key) || f.id < remote.get(f.appProperties.key).id)) remote.set(f.appProperties.key, f);
+        for (const f of r.files) if (HASH.test(f.appProperties?.key || '')) {
+          if (f.appProperties.cat === 'memories') memoryCopies.push(f);
+          if (!remote.has(f.appProperties.key) || f.id < remote.get(f.appProperties.key).id) remote.set(f.appProperties.key, f);
+        }
         page = r.nextPageToken || null;
       } while (page);
       ctx.known = remote;
@@ -715,6 +728,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         }
         for (const [h, R] of [...remote].sort(([, a], [, b]) => (ORDER[a.appProperties?.cat] || 0) - (ORDER[b.appProperties?.cat] || 0))) if (!seen.has(h)) { seen.add(h); await each(ctx, h, { R }); }
         for (const k of (await S.keys()).filter((x) => x.startsWith(REC))) if (!seen.has(k.slice(REC.length))) await each(ctx, k.slice(REC.length), {});
+        for (const R of memoryCopies) if ((await recOf(R.appProperties.key))?.id !== R.id) await each(ctx, R.appProperties.key, { R });
       } finally { ctx.listed = false; }
     };
     // A page of Drive's changes: the record files among them.
