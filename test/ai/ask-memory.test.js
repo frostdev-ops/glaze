@@ -37,7 +37,7 @@ const harness = ({ script = {}, counts, verified = true } = {}) => {
     accounts: async () => [{ account: state.account, origin: 'https://school.instructure.com' }], local, keys: async () => Object.keys(data), now: () => NOW, turn: (f) => f(), zone: 'UTC', level: async () => 3,
     page: () => ({ url: 'https://school.instructure.com/courses/25' }), counts: counts ? true : false,
     current: async () => ({ ...(verified && { account: state.account }), page: { site: 'canvas', url: 'https://school.instructure.com/courses/25' },
-      valid: async () => state.valid && state.account === ACC, bind: async (c, input) => input }),
+      valid: async () => state.valid && state.account === ACC, bind: (c) => c }),
     memory: { store, on: async () => state.on },
     approve: { ask: async (...args) => { state.approvals.push(args); return 'yes'; } },
     own: { writer: async () => true, read: async () => ({ items: [] }), wakes: { on: async () => false, local, read: async () => null } },
