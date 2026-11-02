@@ -2567,6 +2567,7 @@ const rimeMemoryCapable = async () => {
   return typeof model?.weights === 'string' && await GZ_AI_LOCAL.memoryVersion({ ...cfg, weights: model.weights }) === 1;
 };
 // Settings controls are local even with AI off or no school login. A school receipt reuses Ask's fresh account lease.
+globalThis.addEventListener?.('install', () => importScripts('../ai/memory-manager.js'));
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:memory') return;
   (async () => {
@@ -2579,6 +2580,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
       state: async () => (await chrome.storage.local.get('ai')).ai?.memory !== false,
       setEnabled: (enabled) => (brokerTurn ||= GZ_CARDS.queue())(async () => {
         const raw = (await chrome.storage.local.get('ai')).ai;
+        if (!enabled) GZ_MEMORY.invalidateHeld({ local: chrome.storage.local });
         await chrome.storage.local.set({ ai: { ...(raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}), memory: enabled } });
         await rimeMemory().invalidate();
         return true;
@@ -3110,6 +3112,10 @@ const rimeWakesSync = () => { ai(); return GZ_AI_RIME_WAKES.tick(rimeWakesEnv())
 chrome.runtime.onStartup.addListener(rimeWakesSync);
 chrome.runtime.onInstalled.addListener(rimeWakesSync);
 chrome.storage.onChanged.addListener((changes, area) => {
+  // Fence pending producers immediately: a queued invalidate would run after writes already waiting on that queue.
+  const off = (area === 'sync' && changes.enabled?.newValue === false) || (area === 'local' && changes.ai
+    && (changes.ai.newValue?.on !== true || changes.ai.newValue?.features?.ask !== true || changes.ai.newValue?.memory === false));
+  if (off && typeof GZ_MEMORY !== 'undefined') GZ_MEMORY.invalidateHeld({ local: chrome.storage.local });
   if (area === 'local' && changes.ai) {
     const withoutMemory = (raw) => { const { memory: _memory, ...rest } = raw || {}; return JSON.stringify(rest); };
     if (withoutMemory(changes.ai.oldValue) === withoutMemory(changes.ai.newValue)) return;

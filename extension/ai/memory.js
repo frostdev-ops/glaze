@@ -163,8 +163,9 @@ var GZ_MEMORY = globalThis.GZ_MEMORY || (() => {
       return !!l && l.local === env.local && l.account === account && l.all === e.all && l.generation === (e.accounts.get(account) || 0);
     };
     const authorized = async (account, options) => {
-      if (options?.lease !== undefined && !validateLease(account, options.lease)) return false;
-      try { return options?.guard === undefined || (typeof options.guard === 'function' && await options.guard() === true); } catch { return false; }
+      const held = options?.lease, current = () => held === undefined || validateLease(account, held);
+      if (!current()) return false;
+      try { return (options?.guard === undefined || (typeof options.guard === 'function' && await options.guard() === true)) && current(); } catch { return false; }
     };
     const mutate = (account, options, work) => {
       if (!accountOf(account)) return Promise.resolve(fail('scope'));
