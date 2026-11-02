@@ -10,7 +10,8 @@ var GZ_ASK_CURRENT = globalThis.GZ_ASK_CURRENT || (() => {
       if (el.getAttribute?.('hidden') != null || el.getAttribute?.('inert') != null || el.getAttribute?.('aria-hidden') === 'true') return null;
       if (!styles.has(el)) styles.set(el, getComputedStyle(el));
       const style = styles.get(el);
-      return style.display === 'none' || ['hidden', 'collapse'].includes(style.visibility) || style.opacity === '0' || style.contentVisibility === 'hidden' ? null : style;
+      return style.display === 'none' || ['hidden', 'collapse'].includes(style.visibility) || style.opacity === '0' || style.contentVisibility === 'hidden' ||
+        (style.display !== 'contents' && el.getClientRects && !el.getClientRects().length) ? null : style;
     };
     let ancestors = 0;
     for (let el = root; el; el = el.parentElement) if (++ancestors > 64 || !shown(el)) return null;
@@ -22,6 +23,7 @@ var GZ_ASK_CURRENT = globalThis.GZ_ASK_CURRENT || (() => {
       nodes++;
       if (node.nodeType === 3) { add(node.nodeValue || ''); return; }
       if (node.nodeType !== 1 || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/.test(node.tagName)) return;
+      if (node.tagName === 'DETAILS' && node.getAttribute('open') == null) return;
       const style = shown(node);
       if (!style) return;
       const block = !/^(inline|contents)/.test(style.display);

@@ -1759,6 +1759,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       if (!surface) { host.say?.({ type: 'native', reason: 'kind' }); return true; }
       parked = surface;
       current = surface;
+      globalThis.GZ_WRITER_CURRENT?.refresh?.();
       return true;
     };
     const api = {
@@ -1771,7 +1772,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       // gives them back if it didn't, hand(record) shows that kind's viewer, unpark() the paper again (a Word file brought
       // over the viewer).
       hold: () => { if (!parked) { parked = { holding: true }; clearTimeout(saveTimer); } }, release: () => { if (parked?.holding) parked = null; },
-      hand: (rec) => hand(rec, true), take: (surface) => { parked = surface; current = surface; }, unpark: () => { parked = null; current = api; },
+      hand: (rec) => hand(rec, true), take: (surface) => { parked = surface; current = surface; globalThis.GZ_WRITER_CURRENT?.refresh?.(); }, unpark: () => { parked = null; current = api; globalThis.GZ_WRITER_CURRENT?.refresh?.(); },
       // arriving(p): the file's stage while it arrives ({ name, text, spoken, fraction }), null once it has or hasn't. In
       // the compact box, the bar's line says it.
       arriving: (p) => {

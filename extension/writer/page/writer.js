@@ -166,6 +166,9 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // A crashed or navigated frame gets a fresh one-use channel, initialized from Writer's buffered document.
   const retire = (box) => {
     endFlush(box);
+    box.askBinding = null;
+    if (activeCurrent?.box === box) activeCurrent = null;
+    if (pinnedCurrent?.box === box) pinnedCurrent = null;
     if (box.focused) focusMode(box, false);
     clearTimeout(box.wait);
     box.unhello?.();
@@ -259,7 +262,11 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   };
   const hear = (box, m) => {
     if (m.type === 'ask:binding') {
-      if (typeof m.token !== 'string' || !/^[a-f0-9]{32}$/.test(m.token) || !Number.isSafeInteger(m.revision) || m.revision < 0) { box.askBinding = null; return; }
+      if (typeof m.token !== 'string' || !/^[a-f0-9]{32}$/.test(m.token) || !Number.isSafeInteger(m.revision) || m.revision < 0) {
+        box.askBinding = null;
+        if (box.frame === document.activeElement) { activeCurrent = null; pinnedCurrent = null; }
+        return;
+      }
       box.askBinding = { token: m.token, revision: m.revision };
       if (m.focused === true && box.frame === document.activeElement) activeCurrent = { box, frame: box.frame, ...box.askBinding };
       return;
