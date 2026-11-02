@@ -284,11 +284,27 @@ test('memory receipts stay out of school material passed to study help', async (
   const h = harness({ counts: () => ({ used: 1000, window: 8192, reserve: 768, exact: true }),
     script: { 'agent.tools': [call('memory_save', { text, evidence: text, category: 'preference' }, 'write'), said(), call('assignment_read', { course: '25', assignment: '41' }), said('Compare the samples.')], 'study.help': [study] },
     active: { site: 'canvas', view: 'assignment', course: { id: '25' }, assignment: { id: '41' } } }); t.after(h.close);
-  assert.equal((await h.ask(`Explain this assignment. ${text}`)).type, 'end');
+  const saved = await preference(h.store, 'I usually favor History.');
+  const history = [{ question: 'Earlier course 777, assignment 888 was discussed.', answer: 'No verified lookup yet.' },
+    { question: 'Use the current assignment instead, keeping my exclusions.', answer: 'The correction applies.' }];
+  const summary = 'Earlier in this chat: exclude practice work.';
+  assert.equal((await h.ask(`Explain this assignment. ${text}`, { history, summary })).type, 'end');
   assert.ok(h.got.some((m) => m.type === 'memory'), 'save has its own durable receipt');
   const help = h.state.runs.find((r) => r.task === 'study.help');
   assert.match(help.input.material, /Compare two invented samples/);
   assert.doesNotMatch(help.input.material, /short bullet points|persistence|receipt|m-[0-9a-f]{32}/);
+  const reader = h.state.runs.find((r) => r.input.help);
+  assert.deepEqual(reader.input.history, history); assert.equal(reader.input.summary, summary);
+  assert.equal(reader.input.first, true); assert.equal(reader.input.current.assignment.id, '41');
+  assert.ok(reader.input.recall.records.some((r) => r.id === saved.receipt.id));
+  for (const m of h.state.counts.filter((r) => r.input.help)) {
+    assert.deepEqual(m.input.history, history); assert.equal(m.input.summary, summary);
+  }
+  const input = A.task.input(reader.input, { caps: { context: 8192 } });
+  assert.ok(input); assert.equal(A.why({ call: { name: 'assignment_read', arguments: { course: '777', assignment: '888' } }, answer: null }, input), 'id', 'history supplies intent, not ID authority');
+  const X = require('../../extension/ai/text.js'), Q = require('../../extension/ai/request.js');
+  const req = Q.clean({ ...A.task.build(input, { text: X }), schema: A.OUTPUT, task: { id: 'agent.tools', version: 1 } });
+  assert.deepEqual(A.fromRequest(req, { window: 8192 }).parts, A.layout(input, { window: 8192 }), 'actual producer reader context survives native serialization');
 });
 
 test('4K, 8K and 16K school requests reserve room for late results with saving isolated in a prelude', async (t) => {

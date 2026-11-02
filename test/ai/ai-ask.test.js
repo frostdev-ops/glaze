@@ -50,6 +50,25 @@ test('route: the student\'s own records go to agent.tools with the tools their t
     assert.deepEqual(K.route('What should I do first?', { level: 3, history: [...history,
       { question: 'What should I do first?', answer: 'Request failed.' }, { question: 'Are you sure?', answer: 'Request failed.' }] }).tools, expected);
   }
+  const content = { site: 'ultra', view: 'content', course: { id: '_25_1' }, content: { id: '_7_1', kind: 'document' } };
+  for (const question of ['Read the whole item and list the required materials and delivery format.', 'Read the full item and summarize its materials and later instructions.']) {
+    const r = K.route(question, { level: 3, current: content });
+    assert.equal(r.task, 'agent.tools'); assert.ok(r.tools.includes('content_read'), question);
+  }
+  for (const question of ['Find the course absence policy.', 'Who teaches Cedar Biology?', 'Get the instructor contact details for this course.']) {
+    const r = K.route(question, { level: 3, current: content });
+    assert.equal(r.task, 'agent.tools'); assert.ok(r.tools.includes('syllabus_read') && r.tools.includes('courses_list'), question);
+    if (question.includes('absence')) assert.ok(r.tools.includes('content_list') && r.tools.includes('content_read'));
+  }
+  for (const [question, previous, required] of [
+    ['Use the course from my previous question, not the page currently open, and get its instructor contact details.', 'Who teaches Cedar Biology?', 'syllabus_read'],
+    ['The earlier lookup failed. Use a different read and keep my original filters.', 'Show only unsubmitted assignments for Cedar Biology, excluding quizzes and work already submitted.', 'todo_list'],
+  ]) {
+    const r = K.route(question, { level: 3, current: content, history: [{ question: previous, answer: 'No verified result was returned.' }] });
+    assert.equal(r.task, 'agent.tools'); assert.ok(r.tools.includes(required), question);
+  }
+  const dates = K.route('List only work not submitted in this course from 2027-07-20T00:00:00Z through 2027-07-25T23:59:59Z. Keep those filters if the read needs recovery.', { level: 3, current: content });
+  assert.equal(dates.task, 'agent.tools'); assert.ok(dates.tools.includes('schedule_list'));
 });
 
 test('route: in each of Glaze\'s languages, as the student\'s locale says', () => {
@@ -100,6 +119,15 @@ test('route: help with work goes to study.help, whatever records it mentions, wi
       'study.help', 'an explicit new work request keeps tutoring priority');
   }
   assert.equal(K.route('Help me prioritize my assignments.', { level: 3, attempt: 'My answer is 4.' }).task, 'study.help', 'an attempt keeps tutoring priority');
+  assert.equal(K.route('I am overwhelmed and lost track. Can you remind me what I just asked?', { level: 3 }).task, 'study.help');
+  assert.ok(K.route('Remind me tomorrow at 9 to review what I just asked.', { level: 3 }).tools.includes('wake_create'), 'real future reminders remain available');
+  const current = { site: 'ultra', view: 'content', course: { id: '_25_1' }, content: { id: '_7_1', kind: 'document' } };
+  for (const question of ['Read the full item and solve this equation.', 'Explain how to read the whole item.', '"Read the whole item and list its materials."']) {
+    assert.equal(K.route(question, { level: 3, current }).task, 'study.help', question);
+  }
+  assert.equal(K.route('Read the whole item.', { level: 3, current, attempt: 'I think the answer is 4.' }).task, 'study.help');
+  assert.equal(K.route('The earlier lookup failed. Use a different read and keep my original filters.', { level: 3,
+    history: [{ question: 'Help me solve this equation.', answer: 'Which operation could you undo?' }] }).task, 'study.help');
 });
 
 // ---- the step loop --------------------------------------------------------------------------------------------------------

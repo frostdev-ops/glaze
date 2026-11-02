@@ -395,13 +395,18 @@ test('study-help readers share and extend the chat tool union, and New chat clea
       script: { 'agent.tools': questions.map(() => said('Done.')), 'study.help': [{ reply: 'Read the syllabus.', followUp: '' }] } });
     const history = [];
     for (const [i, question] of questions.entries()) {
-      h.say({ id: i + 1, op: 'ask', question, ...(i > 0 && i < 3 && { history: history.slice() }) });
+      h.say({ id: i + 1, op: 'ask', question, ...(i > 0 && i < 3 && { history: history.slice() }), ...(i === 1 && { summary: 'Earlier plan: exclude practice work.' }) });
       await settle();
       history.push(turn(question, 'Done.'));
     }
     const runs = h.seen.runs.filter((m) => m.task === 'agent.tools');
     const expected = window >= K.UNION.from ? [...new Set([...routes[0].tools, ...routes[1].read])] : routes[1].read;
     assert.deepEqual([...runs[1].input.tools].sort(), [...expected].sort(), `reader, window ${window}`);
+    assert.deepEqual(runs[1].input.history, [history[0]], 'the actual reader receives the retained conversation');
+    assert.equal(runs[1].input.summary, 'Earlier plan: exclude practice work.');
+    const admission = h.seen.counts.filter((m) => m.input.help).at(-1).input;
+    assert.deepEqual(admission.history, [history[0]], 'reader admission counts the same conversation');
+    assert.equal(admission.summary, runs[1].input.summary);
     const later = window >= K.UNION.from ? [...new Set([...expected, ...routes[2].tools])] : routes[2].tools;
     assert.deepEqual([...runs[2].input.tools].sort(), [...later].sort(), `after the reader, window ${window}`);
     assert.deepEqual([...runs[3].input.tools].sort(), [...routes[3].tools].sort(), 'New chat forgets every earlier tool');
@@ -420,17 +425,23 @@ test('a large selected window carries more than six complete turns without prema
   assert.equal(h.seen.runs.some((r) => r.task === 'chat.compact'), false, 'available context retains those turns verbatim');
 });
 
-test('study-only follow-ups discover the current window before trimming history on a renewed port', async () => {
+test('study follow-ups and their readers discover the current window before trimming history on a renewed port', async () => {
   const history = Array.from({ length: 12 }, (_, i) => turn(`Reading topic ${i}: ${'source '.repeat(400)}`, 'Consider the repeated imagery. '.repeat(100)));
-  for (const window of [4096, 32768]) {
+  for (const window of [4096, 32768]) for (const reader of [false, true]) {
     const h = harness({ count: () => ({ used: 900, window, reserve: 600, exact: true }),
-      script: { 'study.help': [{ reply: 'Which image recurs?', followUp: null }] } });
-    h.say({ id: 1, op: 'ask', question: 'Explain metaphor', history });
+      script: { 'agent.tools': [said('Read the course material.')], 'study.help': [{ reply: 'Which image recurs?', followUp: null }] } });
+    h.say({ id: 1, op: 'ask', question: reader ? 'Explain the BIO 1100 syllabus' : 'Explain metaphor', history });
     await settle();
     const run = h.seen.runs.find((r) => r.task === 'study.help');
     assert.ok(run, JSON.stringify(h.got));
     assert.deepEqual(run.input.history, window === 4096 ? history.slice(-6).map((h) => ({ question: h.question.slice(0, 2000), answer: h.answer.slice(0, 2000) })) : history);
-    assert.equal(h.seen.runs.some((r) => r.task === 'agent.tools'), false, 'a study-only turn needs no tool request');
+    assert.equal(h.seen.runs.some((r) => r.task === 'agent.tools'), reader, 'only a reader needs a tool request');
+    if (reader) {
+      const expected = window === 4096 ? history.slice(-6).map((h) => ({ question: h.question.slice(0, 2000), answer: h.answer.slice(0, 2000) })) : history;
+      assert.deepEqual(h.seen.runs.find((r) => r.task === 'agent.tools').input.history, expected);
+      const readerCounts = h.seen.counts.filter((m) => m.input.help);
+      assert.deepEqual(readerCounts[1].input.history, expected, 'selected-window offer counts the full retained reader context');
+    }
   }
 });
 
