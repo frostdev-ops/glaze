@@ -38,6 +38,7 @@ test('route: the student\'s own records go to agent.tools with the tools their t
     'Help me prioritize my assignments based on how long it will take to do them.',
     'Compare my assignments by draft requirements and the time needed to complete them.',
     'Which assignment should I begin first, and why?', 'Which of my tasks should I tackle first, and why?',
+    'Which assignment should I begin first,\r\nand why?',
     'Prioritize my assignments by deadlines, and why?',
     'Which assignment should I tackle first, and why? Keep the deadline window and exclusions I already gave you.']) {
     assert.deepEqual(K.route(question, { level: 3 }).tools, expected, question);
