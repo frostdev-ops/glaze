@@ -988,6 +988,8 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
             for (const d of list) for (const key of Object.keys(d.entries)) d.entries[key] = swap(d.entries[key]);
             if (name !== 'allMany' || all) bindAll(list);
           }
+          // Snapshots keep their copied data, but restore must target the replacement live caches.
+          for (const snap of snaps) for (const item of snap.bufs) item[0] = swap(item[0]);
           for (const [old, [b]] of made) { life.own(b); life.disown(old); }
           made.clear();
           ctx = next;
