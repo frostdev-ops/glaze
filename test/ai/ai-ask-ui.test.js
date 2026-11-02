@@ -916,3 +916,22 @@ test('a built answer shows diagnostics from the worker end envelope, excluded fr
   assert.equal(P.posted.filter((m) => m.op === 'ask').at(-1).history[0].answer, '- Lab report');
   P.setAi({ on: false });
 });
+
+test('every question and retry captures the current page after asynchronous admission', async () => {
+  let generation = 1;
+  const P = page({ setup: (env, context) => { context.GZ_ASK_CURRENT = { pin() {}, capture: () => ({ currentPage: `https://school.test/courses/${generation}`, current: { site: 'canvas', view: 'course', course: { id: String(generation) } } }) }; },
+    reply: (m) => m.op === 'status' ? { type: 'status', ready: true } : m.op === 'ask' ? { type: 'error', error: 'check' } : null });
+  await P.ui.open({ event: { isTrusted: true } });
+  let release;
+  P.read = (cb) => { release = cb; };
+  P.ask('What is this course?');
+  generation = 2;
+  release({ ai: P.store.ai });
+  await settle();
+  assert.equal(P.posted.find((m) => m.op === 'ask').current.course.id, '2');
+  P.read = (cb) => cb({ ai: P.store.ai });
+  generation = 3;
+  P.doc.fire(P.box().querySelector('.gz-ask-retry'), 'click');
+  await settle();
+  assert.equal(P.posted.filter((m) => m.op === 'ask').at(-1).current.course.id, '3');
+});
