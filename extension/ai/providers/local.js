@@ -153,6 +153,14 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   // a missing capability or a version this harness does not understand cannot enable memory.
   const memoryOf = (list, cfg = {}) => modelOf(list, cfg)?.memory === 1 ? 1 : 0;
   const memoryVersion = async (cfg = {}) => memoryOf(await models(), cfg);
+  // Check the request again on the model selected for this operation: an update may have rolled the same id back since
+  // broker admission. These are the two tasks that can carry memory; all other tasks retain their existing formatter.
+  const memoryReady = (req, m) => {
+    if (m.memory === 1 || !['agent.tools', 'study.help'].includes(req.task?.id)) return;
+    const recall = FMT().parse(req, { images: true }).blocks.some((block) => block.kind === 'data' && block.label === 'recall');
+    const tools = !recall && req.task.id === 'agent.tools' && AGENT().fromRequest(req).tools.some((name) => name.startsWith('memory_'));
+    if (recall || tools) throw refuse('caps', 'This model does not support memory.');
+  };
   // The picture download: { model, projector, size, ready } when models.json offers it, else null.
   const pictures = (list) => {
     const model = list.find((m) => m.role === 'pictures'), projector = model && list.find((m) => m.role === 'projector' && m.id === model.projector);
@@ -225,10 +233,12 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
       const pics = pictures(list);
       if (!pics) throw refuse('caps', 'Glaze\'s own model does not take pictures.');
       if (!pics.ready || preparing.pictures) throw fail('provider-unavailable', 'pictures');
+      memoryReady(req, pics.model);
       return { m: pics.model, window: Math.min(cfg.context || CONTEXT, CONTEXT), projector: pics.projector.id, ...FMT().format(req, { dialect: 'chatml', images: true }) };
     }
     const m = modelOf(list, cfg);
     if (!m || m.state !== 'ready') throw fail('provider-unavailable', 'assets');
+    memoryReady(req, m);
     const window = Math.min(cfg.context || windowOf(m, cfg).window, windowOf(m, cfg).window);
     const think = await budget(req, m, window), sized = !m.stock && limits(req.task, window).size;
     // r5 never trained chat.compact's task token. Use the native prompt until its independent training gate is enabled.
