@@ -153,6 +153,25 @@ test('snapshots taken before growth restore into the live cache buffers after re
   assert.ok(h.buffers.every((b) => b.destroyed));
 });
 
+test('sliding layers admit contexts whose ring fits even when a full-length cache would exceed the binding limit', async () => {
+  const h = host(), g = model({ kinds: ['swa'] });
+  g.kv['lfm3.attention.head_count_kv'] = [2];
+  const tensor = g.tensor;
+  g.tensor = (name) => {
+    const t = tensor(name);
+    return /attn_[kv]\.weight$/.test(name) ? { ...t, dims: [256, 256], count: t.count * 2, bytes: t.bytes * 2 } : t;
+  };
+  h.device.limits.maxStorageBufferBindingSize = 256 * 1024;
+  const e = await h.create(g);
+  try {
+    const s = await e.session({ ctx: 512, chunk: CHUNK });
+    await s.forward([1, 2, 3], { logits: 'keep' });
+    assert.equal(s.ctx, 512);
+    s.destroy();
+  } finally { e.destroy(); }
+  assert.ok(h.buffers.every((b) => b.destroyed));
+});
+
 test('a feed in small steps pauses between them, and a cancel lands within a step', async () => {
   const h = host(), m = await h.load(model({ kinds: KINDS }), { context: 64, chunk: CHUNK });
   let paces = 0;
