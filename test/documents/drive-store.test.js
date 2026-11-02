@@ -187,6 +187,56 @@ test('rime a forgotten duplicate record is not lost when the deleting device sto
   assert.deepEqual(body(file).value, deleted, 'the canonical lowest-id file now holds the deletion');
 });
 
+test('rime regression: outgoing memories enforce active and retained-record aggregate caps', async () => {
+  const M = require('../../extension/ai/memory.js');
+  for (const deleted of [false, true]) {
+    const drive = standin(), a = device(drive), count = (deleted ? M.LIMIT.records : M.LIMIT.memories) + 1;
+    assert.ok((await a.on()).ok);
+    // Seed a damaged aggregate without thousands of unrelated storage events. Only this record is due to upload.
+    for (let n = 1; n <= count; n++) {
+      const value = memory(n, `Preference ${n}`);
+      a.local.m.set(memoryKey(n), deleted ? forgotten(value) : value);
+    }
+    const key = memoryKey(count), before = structuredClone(a.local.m.get(key));
+    await a.store.stamp({ [key]: { newValue: before } }, 'local');
+    assert.ok((await a.run({ push: true })).ok);
+    assert.equal(recFile(drive, 'local', key), undefined, 'an invalid aggregate is never acknowledged by Drive');
+    assert.deepEqual((await a.local.get(key))[key], before, 'refusal preserves the local record');
+  }
+});
+
+test('rime regression: a concurrent stale upload cannot erase the last Drive deletion receipt', { timeout: 10000 }, async () => {
+  const drive = standin(), a = device(drive), b = device(drive), key = memoryKey(8), live = memory(8, 'Original');
+  const deleted = forgotten(live), stale = memory(8, 'Offline edit', 9000);
+  await a.local.set({ [key]: live }); await a.on(); await b.on();
+  await a.local.set({ [key]: stale });
+  const fetch = drive.fetch;
+  let release, reached, paused = false;
+  const gate = new Promise((resolve) => { release = resolve; }), started = new Promise((resolve) => { reached = resolve; });
+  drive.fetch = async (url, init = {}) => {
+    if (!paused && url.includes('/upload/') && Buffer.from(init.body || '').includes(Buffer.from('Offline edit'))) {
+      paused = true; reached(); await gate;
+    }
+    return fetch(url, init);
+  };
+  const uploading = a.run({ push: true });
+  try {
+    await started;
+    await b.local.set({ [key]: deleted });
+    assert.ok((await b.run({ push: true })).ok);
+  } finally { release(); await uploading; drive.fetch = fetch; }
+  // Neither original device runs again. A new device must still find the deletion after the delayed edit lands.
+  const copies = () => [...drive.files.values()].filter((f) => f.meta.appProperties?.key === sha(`local\n${key}`).slice(0, 32));
+  assert.ok(copies().some((f) => body(f).value?.deleted), 'a content-free deletion receipt survives the overlapping upload');
+  const fresh = device(drive); assert.ok((await fresh.on()).ok);
+  assert.deepEqual((await fresh.local.get(key))[key], deleted);
+  const count = copies().length;
+  assert.ok((await fresh.run({ full: true })).ok);
+  assert.equal(copies().length, count, 'settled deletion receipts do not multiply');
+  for (const f of copies().filter((f) => body(f).value?.deleted)) assert.deepEqual(body(f).value, deleted);
+  noDeletes(drive);
+});
+
 test('a local change syncs when its timestamp equals or precedes the last agreed stamp', async () => {
   const drive = standin(), a = device(drive);
   await a.local.set({ writerWords: ['First'] });

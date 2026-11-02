@@ -196,6 +196,23 @@ test('rime atomic backup publication shares the memory mutation queue', { timeou
   assert.deepEqual(b.store[memoryKey], forgotten, 'the later queued forget remains after backup publication');
 });
 
+test('rime regression: restore invalidates earlier leases before a queued automatic save', async () => {
+  const M = require('../../extension/ai/memory.js');
+  for (const atomic of [false, true]) {
+    const b = device({ [memoryKey]: memory('Before') }), runtime = M.create({ local: b.local, now: () => 9000 });
+    try {
+      const lease = runtime.lease(memoryAccount), value = { memories: { [memoryKey]: forgotten } };
+      const restoring = atomic ? B.atomic([{ action: 'own', value }], { local: b.local, sync: b.local }) : B.apply(value, { local: b.local });
+      const saving = runtime.save(memoryAccount, { text: 'Before', evidence: 'Before' }, { question: 'Before', lease });
+      assert.equal((await restoring).ok, true);
+      assert.deepEqual(await saving, { ok: false, error: 'scope' }, 'a pre-restore turn cannot recreate a forgotten fact under a new ID');
+      assert.deepEqual(b.store, { [memoryKey]: forgotten });
+      const fresh = runtime.lease(memoryAccount);
+      assert.equal(runtime.validateLease(memoryAccount, fresh), true, 'new turns can proceed after restore');
+    } finally { b.stop(); }
+  }
+});
+
 test('Papers, their JSON documents, versions and presets survive a backup restore', async () => {
   const PA = require('../../extension/writer/writer-papers.js'), key = 'bb.school.test|_900_1|_101_1|_7_1';
   const doc = { type: 'doc', content: [{ type: 'paragraph', attrs: { first: 0 }, content: [{ type: 'text', text: 'Paper before backup.' }] }] };
