@@ -521,6 +521,63 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     return '';
   };
 
+  // A quoted page title is data, not an assertion by the assistant. Ignore quoted/code fragments when recognizing
+  // explicit completed navigation; apostrophes inside words (I've, j'ai) are not quote delimiters.
+  const actionWords = (text) => text.replace(/```[\s\S]*?```|`[^`\n]*`|"[^"\n]*"|“[^”\n]*”|„[^“\n]*“|«[^»\n]*»|‘[^’\n]*’|(?<![\p{L}])'[^'\n]*'/gu, (match) => ' '.repeat(match.length));
+  // Markdown emphasis may wrap only a course-name prefix. Remove paired delimiters without changing underscores in ids.
+  const destinationWords = (text) => fold(text.replace(/(?<![\p{L}\p{N}])(\*\*|__|\*|_)(?=\S)([^\n]*?\S)\1(?![\p{L}\p{N}])/gu, '$2'));
+  const NAV_CLAIMS = [
+    /\b(?:i(?:['’]ve| have)?|we(?:['’]ve| have)?|rime|glaze) (?:already |just |successfully )?opened\b|^(?:already |just |successfully )?opened\b|\b(?:was|were|has been|have been|is now|are now) (?:already |just |successfully )?opened\b/u,
+    /^(?:(?:yo )?(?:ya )?(?:he abierto|abrí))(?![\p{L}\p{N}])|\b(?:se (?:ha )?abrió|(?:fue|ha sido|está) (?:correctamente )?abiert[oa])(?![\p{L}\p{N}])/u,
+    /^(?:(?:eu )?(?:já )?abri)\b|\b(?:foi|está) (?:já )?abert[oa]\b/u,
+    /\bj['’]ai (?:déjà |bien )?ouvert\b|\b(?:a|ont) (?:bien )?été ouvert(?:e|s|es)?\b/u,
+    /\bich habe [^.!?;]{0,160}?geöffnet\b|\b(?:wurde|wurden|ist|sind) (?:erfolgreich |bereits |jetzt )?geöffnet\b/u,
+    /\bik heb [^.!?;]{0,160}?geopend\b|\b(?:is|zijn|werd|werden) (?:succesvol |al |nu )?geopend\b/u,
+  ];
+  const navigationClaims = (text) => {
+    // A new subject or negated action after a coordinator starts its own claim. Keep target lists ("Grades and
+    // Calendar") together, so one successful target cannot stand in for both.
+    const masked = actionWords(text), clauses = [], boundaries = [...masked.matchAll(/[.!?;\n]+|\b(?:but|pero|mas|mais|aber|maar)\b|\b(?:and|y|e|et|und|en)\b(?=\s+(?:i|we|rime|glaze|yo|no|he abierto|abrí|eu|não|abri|je|j['’]ai|ich|ik|(?:could|can|did) not)(?![\p{L}\p{N}]))/giu)];
+    let at = 0;
+    for (const boundary of [...boundaries, { index: masked.length, 0: '' }]) {
+      const clause = fold(masked.slice(at, boundary.index)).replace(/^\s*[-*]\s*/, '').trim();
+      if (!/^(?:if|si|se|wenn|als)\b/u.test(clause) && NAV_CLAIMS.some((pattern) => {
+        const match = pattern.exec(clause);
+        if (!match) return false;
+        // Negated completions and attempts do not claim success. A separate "but I opened it" remains a claim.
+        return !/\b(?:not|never|nothing|no|none|não|nunca|pas|jamais|nicht|nie|niet|nooit)\b/u.test(match[0])
+          && !/\b(?:not|never|no|não|nunca|pas|jamais|nicht|nie|niet|nooit)\s*$/u.test(clause.slice(0, match.index))
+          && !/^\s+(?:nothing|no\b|none\b|nada\b|rien\b|nichts\b|niets\b)/u.test(clause.slice(match.index + match[0].length));
+      })) clauses.push(text.slice(at, boundary.index));
+      at = boundary.index + boundary[0].length;
+    }
+    return clauses;
+  };
+  const navigationGrounded = (text, inp) => {
+    if (!inp.tools.some((name) => ['place_open', 'places_list'].includes(name)) && !inp.steps.some((step) => step.call.name === 'place_open')) return true;
+    const claims = navigationClaims(text);
+    if (!claims.length) return true;
+    const attempts = inp.steps.filter((step) => step.call.name === 'place_open').map((step) => {
+      let result; try { result = JSON.parse(step.result); } catch { /* no success evidence */ }
+      return { place: step.call.arguments.place, result, ok: S.isObj(result) && result.ok !== false && result.error == null && result.opened === step.call.arguments.place && typeof result.title === 'string' && !!result.title.trim() };
+    });
+    const known = new Map(attempts.map((attempt) => [attempt.place, attempt.place]));
+    for (const step of inp.steps) if (step.call.name === 'places_list') {
+      try { for (const place of JSON.parse(step.result).places || []) if (typeof place.place === 'string' && typeof place.title === 'string') { known.set(place.place, place.place); known.set(place.title, place.place); } } catch { /* no listed targets */ }
+    }
+    return claims.every((clause) => {
+      const normalized = destinationWords(clause);
+      const named = [...known].flatMap(([name, place]) => {
+        const match = new RegExp(`(?<![\\p{L}\\p{N}])${destinationWords(name).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'u').exec(normalized);
+        return match ? [{ place, at: match.index, end: match.index + match[0].length }] : [];
+      });
+      // A course home name/id can be a prefix of its Grades destination. Only the most specific name at that span counts.
+      const targets = named.filter((target) => !named.some((other) => other !== target && other.at <= target.at && other.end >= target.end && other.end - other.at > target.end - target.at)).map((target) => target.place);
+      // Explicit destinations need their own success; a generic completion rests on the latest navigation attempt.
+      return targets.length ? targets.every((place) => attempts.some((attempt) => attempt.ok && attempt.place === place)) : attempts.at(-1)?.ok === true;
+    });
+  };
+
   // study.help's subjects (ai/tasks/study-help.js SUBJECTS), a help turn's block.
   const HELP = ['math', 'science', 'code', 'essay', 'reading', 'other'];
   // A result that holds something: not a failure, nothing missing, and some words beyond who and when.
@@ -565,6 +622,8 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     }
     const { text, quotes } = out.answer;
     if (!text.trim()) return 'schema';
+    // Knowing a destination (or quoting another factual value) never proves that a navigation ran successfully.
+    if (!navigationGrounded(text, inp)) return 'ground';
     // Tool first: an answer about the student's school stands on results Glaze read for it, never on nothing; facts from a
     // result that holds any are quoted (empty and failed results hold none, so the answer says only that).
     if ((inp.first || inp.help) && !inp.steps.length && !inp.fired) return 'first';
