@@ -152,3 +152,36 @@ test('clearing or closing the chat invalidates pending memory work and late run 
     assert.equal(P.find('.gz-ask-memory'), null);
   }
 });
+
+test('Stop retains committed receipts and usable record controls', async () => {
+  const P = page(); await P.ask(); P.emit({ type: 'memory', receipt: receipt() });
+  P.click('.gz-ask-stop');
+  P.emit({ type: 'error', error: 'cancelled' }); await settle();
+  assert.equal(P.find('.gz-ask-memory summary').textContent, 'Memory saved on this device');
+  P.click('.gz-ask-memory-edit'); await settle();
+  assert.equal(P.find('.gz-ask-memory-input').value, 'Use short explanations.');
+});
+
+test('invalid receipts and recall records do not manufacture saved or supplied context', async () => {
+  const P = page(); await P.ask();
+  for (const change of [{ persistence: 'drive' }, { id: SOURCE }, { revision: 'bad' }, { operation: 'synced' }, { at: NaN }]) P.emit({ type: 'memory', receipt: receipt('created', change) });
+  assert.equal(P.find('.gz-ask-memory'), null);
+  P.emit({ type: 'recall', records: [{ id: ID, revision: 'bad', kind: 'memory', text: 'Bad revision' }, { id: SOURCE, revision: REV, kind: 'memory', text: 'Mismatched kind' }], truncated: false });
+  assert.equal(P.find('.gz-ask-recall'), null);
+});
+
+test('an edit stays intact when a broker response is malformed or exceeds the memory limit', async () => {
+  const P = page(); await P.ask(); P.emit({ type: 'memory', receipt: receipt() });
+  P.click('.gz-ask-memory-edit'); await settle();
+  const input = P.find('.gz-ask-memory-input'); input.value = 'x'.repeat(601);
+  const count = P.requests.length;
+  P.click('.gz-ask-memory-save'); await settle();
+  assert.equal(P.requests.length, count);
+  assert.equal(input.value.length, 601, 'oversized text is never silently truncated');
+  input.value = 'My draft.';
+  P.response = async () => ({ ok: true, receipt: receipt('updated', { id: `m-${'3'.repeat(32)}` }) });
+  P.click('.gz-ask-memory-save'); await settle();
+  assert.equal(P.find('.gz-ask-memory-input'), input);
+  assert.equal(input.value, 'My draft.');
+  assert.equal(P.find('.gz-ask-memory-status').textContent, 'Could not save. Try again.');
+});
