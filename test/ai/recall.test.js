@@ -24,7 +24,7 @@ test('recall rejects unknown envelope, record and source fields, malformed ident
     raw([memory(1, { id: 'm-short' })]), raw([memory(1, { id: id(1, 's') })]), raw([memory(1, { revision: 'A'.repeat(32) })]), raw([memory(1, { account: 'private' })]), raw([memory(1, { source: undefined })]),
     raw([memory(1, { source: { type: 'user-message', evidence: 'I like it.', authorized: true } })]), raw([memory(1, { source: { type: 'user-message', evidence: '' } })]), raw([memory(1, { text: ' ' })]),
     raw([course({ source: { ...course().source, observedAt: undefined } })]), raw([course({ source: { ...course().source, complete: undefined } })]), raw([course({ source: { ...course().source, account: 'private' } })]),
-    raw([course({ source: { ...course().source, page: 1001 } })]), raw([course({ source: { ...course().source, tool: 'run_js' } })]), raw([course({ source: { ...course().source, observedAt: Number.MAX_SAFE_INTEGER } })])]) assert.equal(R.clean(bad), null, JSON.stringify(bad));
+    raw([course({ source: { ...course().source, course: 'unverified-course' } })]), raw([course({ source: { ...course().source, id: 'unverified-resource' } })]), raw([course({ source: { ...course().source, page: 1001 } })]), raw([course({ source: { ...course().source, tool: 'run_js' } })]), raw([course({ source: { ...course().source, observedAt: Number.MAX_SAFE_INTEGER } })])]) assert.equal(R.clean(bad), null, JSON.stringify(bad));
 });
 
 test('recall bounds text, evidence and the entire serialized block; larger windows never multiply recall', () => {
