@@ -71,7 +71,8 @@ const check = async (name, test) => {
 };
 const settingsFor = (preset, bg = 'solid') => G.GZ_SANITIZE({ preset, colors: { ...G.GZ_PRESETS.find(([n]) => n === preset)[1] }, navbar: { on: false }, footer: false, bg: { kind: bg },
   enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), palette: true } });
-const AI = { on: true, model: { use: 'custom-1', model: 'stub' }, features: { ask: true } };
+// These queues script ordinary task turns; memory pre-passes have dedicated checks.
+const AI = { on: true, memory: false, model: { use: 'custom-1', model: 'stub' }, features: { ask: true } };
 // Tomorrow at 21:00 in UTC (the check's zone), as the student's clock shows it.
 const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
 

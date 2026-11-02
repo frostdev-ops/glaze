@@ -68,7 +68,8 @@ const check = async (name, test) => {
 };
 const settingsFor = (preset, bg = 'solid') => G.GZ_SANITIZE({ preset, colors: { ...G.GZ_PRESETS.find(([n]) => n === preset)[1] }, navbar: { on: false }, footer: false, bg: { kind: bg },
   enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), palette: true } });
-const AI = (ask) => ({ on: true, model: { use: 'custom-1', model: 'stub' }, features: { ask } });
+// These queues script ordinary task turns; memory pre-passes have dedicated checks.
+const AI = (ask) => ({ on: true, memory: false, model: { use: 'custom-1', model: 'stub' }, features: { ask } });
 
 (async () => {
   const lock = require('../../tools/dev/check-env.js').lockPath();

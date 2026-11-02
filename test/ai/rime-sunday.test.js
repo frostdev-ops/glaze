@@ -87,7 +87,7 @@ test('level 3: the system text asks for MARKDOWN.md\'s answer format; level 1\'s
   const sys = (inp) => /<\|im_start\|>system\n([\s\S]*?)<\|im_end\|>/.exec(text(A.layout(inp)))[1];
   const three = sys(inputOf('x?')), one = sys(A.task.input({ question: 'x?', tools: [...A.AGENTS], steps: [], now: SUNDAY, zone: ZONE, locale: 'en' }));
   assert.ok(three.includes('- **title** (course): friendly date, status'), three);
-  assert.ok(three.includes('the windows in now'), three);
+  assert.ok(three.includes("Use now's windows as from/to"), three);
   assert.ok(!one.includes('**title**') && one.includes(`${A.SYSTEM}\nReply in English.`));
   assert.ok(!one.includes(A.MEMORY), 'the legacy Agents-only tool set has no memory policy');
 });
