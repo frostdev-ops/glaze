@@ -503,7 +503,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       const fit = await count('agent.tools', input);
       if (signal.aborted) throw cancelled();
       let keep = [...CHAT.tools.filter((t) => !routed.includes(t)), ...routed]
-        .filter((t) => !t.startsWith('memory_') || current?.memory?.enabled === true);
+        .filter((t) => !t.startsWith('memory_') || current?.memory?.enabled === true && routed.includes(t));
       while (unionCost(keep) > UNION.budget && keep.length > routed.length) keep = keep.slice(1);
       CHAT.tools = keep;
       post({ id: current.id, type: 'tools', tools: keep });
@@ -849,15 +849,10 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
           // No first/history/help: this pass may choose no save, and its prose never reaches the answer or compaction.
           await episode({ question, tools: ['memory_save'], locale, now: env.now(), zone, run, call, signal, ...inRecall, caps: contextCaps });
         };
-        const withSave = async (tools, input) => {
+        const withSave = async (tools) => {
           if (!memory?.enabled || explicitMemory || record) return tools;
-          // In 4K, later school results can consume the room an initially fitting save schema/policy took. Keep the
-          // optional mutation and its receipts in their own episode, preserving every school tool and output reserve.
-          if (contextCaps.context > 4096 && tools.length < LIMIT.tools) {
-            const candidate = [...tools, 'memory_save'];
-            const fit = await fitInput('agent.tools', { ...input, tools: candidate, ...inRecall });
-            if (fit?.exact && fit.used + fit.reserve <= fit.window) return candidate;
-          }
+          // Later results can fill any window. Keep automatic mutations and their checked receipts in a separate
+          // episode, so every school tool, history turn and output reserve remains available to the main request.
           await optionalSave();
           return tools;
         };
@@ -869,7 +864,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
           if (r.read) {
             const reader = { question, tools: r.read, steps: [], now: env.now(), zone, locale, first: true, help: r.subject, ...inCurrent, ...inRecall };
             tools = await offer(r.read, reader, signal, count);
-            tools = await withSave(tools, reader);
+            tools = await withSave(tools);
             // A reader that can't finish (its turn refused, too many steps) leaves study help to answer without it.
             try { seen = await episode({ question, tools, locale, now: env.now(), zone, run, call, signal, first: true, help: r.subject, ...inCurrent, ...inRecall, caps: contextCaps }); }
             catch (e) { if (signal.aborted || !['check', 'steps', 'refusal', 'invalid-response'].includes(R().code(e))) throw e; }
@@ -892,7 +887,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         const reader = { question, tools: r.tools, steps: [], now: env.now(), zone, locale, first: true, ...inCurrent, ...inRecall,
           ...(open.length && { history: retained(open) }), ...(CHAT.summary && { summary: CHAT.summary }) };
         let tools = level >= 3 ? await offer(r.tools, reader, signal, count) : r.tools;
-        tools = await withSave(tools, reader);
+        tools = await withSave(tools);
         if (signal.aborted) throw cancelled();
         const res = await episode({ question, tools, locale, now: env.now(), zone, run, call, signal, ...inCurrent, ...inRecall, caps: contextCaps, ...(level >= 3 && { first: true, ...(open.length && { history: retained(open) }), ...(CHAT.summary && { summary: CHAT.summary }), measure: count }),
           ...(record && { fired: { what: record.what, ...(record.watch && { watch: record.watch }), say: question, at: record.at, ...(record.fact && { fact: record.fact }) } }) });
