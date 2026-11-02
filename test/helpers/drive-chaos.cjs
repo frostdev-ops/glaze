@@ -75,6 +75,13 @@ const BG_SOURCE = fs.readFileSync(path.join(BG, 'background.js'), 'utf8');
 const FIRST = [...BG_SOURCE.slice(0, BG_SOURCE.indexOf(');')).matchAll(/'([^']+\.js)'/g)].map((m) => m[1]);
 // What brokerIn('backup') loads (background.js BROKER_FILES.backup).
 const BACKUP_FILES = (() => { const m = /BROKER_FILES\.backup = \[([^\]]+)\]/.exec(BG_SOURCE); return m ? [...m[1].matchAll(/'([^']+\.js)'/g)].map((x) => x[1]) : []; })();
+// Shared worker helpers used by the Drive section. Keep the real singleton and lazy core import on each device boot.
+const MEMORY_HELPERS = new vm.Script((() => {
+  const keys = BG_SOURCE.match(/^const keysOf = .+;$/m)?.[0];
+  const from = BG_SOURCE.indexOf('let memoryStore = null;'), to = BG_SOURCE.indexOf('const rimeMemoryOn =', from);
+  if (!keys || from < 0 || to <= from) throw new Error('drive-chaos: background.js\'s memory helper markers moved');
+  return keys + '\n' + BG_SOURCE.slice(from, to);
+})(), { filename: 'background/background.js#memory-helpers' });
 // background.js's Drive section, as test/documents/drive-sync-background.test.js runs it.
 const SECTION_SOURCE = (() => {
   const from = BG_SOURCE.indexOf('// Sync to Google Drive (documents/drive-sync.js'), to = BG_SOURCE.indexOf('// A Download all wait owns', from);
@@ -398,6 +405,7 @@ class Device {
     this.ctx = ctx;
     vm.runInContext(`(${prelude.toString()})`, ctx)(host);
     for (const f of FIRST) host.load(f);
+    MEMORY_HELPERS.runInContext(ctx);
     SECTION.runInContext(ctx);
     // The device's own helpers in its context: what a page or Settings asks of the worker.
     this.api = vm.runInContext(`({
