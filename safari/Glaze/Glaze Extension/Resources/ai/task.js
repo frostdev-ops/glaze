@@ -99,7 +99,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
     if (signal?.aborted) throw Object.assign(Q.error('cancelled'), { category: 'cancelled' });
     // The loop's own default is 120 s (ai/loop.js LIMIT.ms).
     const reasoning = p.id === 'local' && p.limits?.({ id: task.id }, window, c).think > 0;
-    const ms = over.timeoutMs || (reasoning ? p.LIMIT.reasoning : task.limits.ms || LIMIT.ms);
+    const ms = over.timeoutMs || (reasoning ? p.LIMIT?.reasoning ?? 300000 : task.limits.ms || LIMIT.ms);
     const limits = { ...task.limits, tokens: tokenLimit, ...(reasoning || over.timeoutMs ? { ms } : {}) };
     const expires = Date.now() + ms;
     const timer = F.deadline(ms), both = F.anySignal([signal, timer.signal]);
