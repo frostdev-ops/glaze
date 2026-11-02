@@ -329,11 +329,31 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     'das stimmt (?:nicht|so nicht)|das ist (?:falsch|nicht richtig)|du hast [\\p{L} ]{0,30}vergessen|bist du sicher|was ist mit|und (?:n[äa]chste|morgen|montag|f[üu]r)|falsch',
     'dat klopt niet|dat is (?:niet waar|fout)|je bent [\\p{L} ]{0,30}vergeten|weet je het zeker|hoe zit het met|en (?:volgende|morgen|maandag|voor)|fout',
   ].join('|')})(?![\\p{L}])`, 'iu');
+  // Organizing a collection of records is not help doing an assessed step. Planning still yields to WORK below.
+  const PLAN_RECORDS = /\b(?:assignments|tasks|homework|coursework|to-?dos?|(?:which|what) (?:assignment|task))\b/iu;
+  const PLAN_INTENT = /\b(?:prioriti[sz]\p{L}*|compare|rank|order|plan|schedule|workload|difficulty|hardest|easiest|harder|easier|how (?:hard|difficult)|(?:what|which).{0,80}(?:do|start|work on) first)\b/iu;
+  const PLAN_WRAPPER = /\b(?:help me(?: to)?|how (?:do|can|could|would|should) i)\s+(?=(?:prioriti[sz]e|compare|rank|order|plan|schedule)\s+(?:(?:the )?(?:deadlines?|workloads?|difficulty|requirements) (?:of|for)\s+)?(?:(?!(?:in|of|for|from|with|to|and|or)\b)[\p{L}\p{N}'-]+\s+){0,4}(?:assignments|tasks|homework|coursework|to-?dos?)\b)/giu;
+  const PLAN_WORK = /(?:^|[.!?;,]\s*|\b(?:and(?:\s+then)?|then|also)\s+)(?:(?:(?:can|could|would|will) you(?: please)?|please|i (?:want|need|would like) you to)\s+)?(?:implement|debug|(?:draft|rewrite|finish|complete|write|code|do)\s+(?:it|them|me|my|the|this|that|these|those|an?|code|essays?|paragraphs?|replies|responses?|outlines?|functions?|programs?|reports?))\b/iu;
+  const PLAN_STEP = /\bfirst (?:in|for|on|with) (?:[\p{L}-]+\s+){0,3}(?:equation|essay|code|program|paragraph|proof|problem|question)\b/iu;
+  const PLAN_FOLLOW = /^(?:(?:okay|ok|so|then)[,\s]+)?(?:what (?:should|do|can) i (?:do|start|work on) first|which (?:one|assignment|task) should i (?:do|start|work on) first)[?!.\s]*$/iu;
+  const PLAN_TOOLS = [...TOOLS.todo, ...TOOLS.assignments, 'accounts_list'];
   const route = (question, { attempt = '', locale = 'en', level = 1, history, current } = {}) => {
     const q = String(question).replace(/[‘’]/g, "'");
     // Quoted titles can identify a record, but quoted requests cannot select a current reference or course discovery.
     const direct = level >= 3 ? MEMORY().userText(q) : q;
     const last = level >= 3 && Array.isArray(history) && history.length ? history[history.length - 1] : null;
+    if (last && !String(attempt).trim() && PLAN_FOLLOW.test(q.trim())) {
+      let previous = last, i = history.length - 1;
+      while (i > 0 && (PLAN_FOLLOW.test(String(previous.question).trim()) || FOLLOW.test(previous.question) && subjectOf(previous.question) === 'other')
+        && route(previous.question, { locale, level }).task !== 'agent.tools') previous = history[--i];
+      // Keep intervening questions' work guards, and require unquoted records intent. Answers/statuses prove no facts.
+      const antecedent = history.slice(i).filter((h) => !PLAN_FOLLOW.test(String(h.question).trim())).map((h) => h.question).join('\n');
+      const before = route(antecedent, { locale, level }), intent = route(MEMORY().userText(antecedent), { locale, level });
+      if (before.task === 'agent.tools' && intent.task === 'agent.tools'
+        && intent.tools.some((t) => ['todo_list', 'schedule_list', 'assignments_list', 'assignment_read'].includes(t))) {
+        return { task: 'agent.tools', tools: [...PLAN_TOOLS] };
+      }
+    }
     if (last && !String(attempt).trim() && FOLLOW.test(direct)) {
       // Follow-up-only questions carry no topic themselves. Walk back to the question that supplied their tools.
       let previous = last, i = history.length - 1;
@@ -342,6 +362,9 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       if (again.task === 'agent.tools') return again;
     }
     const work = typeof attempt === 'string' ? attempt : '';
+    const planning = level >= 3 && PLAN_RECORDS.test(direct) && PLAN_INTENT.test(direct);
+    // Exempt only a direct wrapper organizing records, preserving every other work cue, including quoted/code text.
+    const planningText = planning ? q.replace(PLAN_WRAPPER, (match, offset) => direct.slice(offset, offset + match.length) === match ? '' : match) : q;
     const has = (table) => words(lists(table, locale)).test(q);
     const on = Object.keys(TOPICS).filter((k) => has(TOPICS[k]));
     const school = CODE.test(q) || SCHOOL_WORDS.test(q) || /\b(?:my|our)\b/iu.test(q);
@@ -355,14 +378,18 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     else if (courseRequests.length) own.push('courses');
     // A compute question's own computing verb is no help request, unless it would work out graded work.
     const computing = own.includes('compute') && !AT().gradedWork(AT().fold(q));
-    const working = computing ? words(lists(WORK, locale).filter((w) => !COMPUTING.includes(w))).test(q) : has(WORK);
+    const working = words(lists(WORK, locale).filter((w) => !computing || !COMPUTING.includes(w))).test(planningText)
+      || planning && (PLAN_WORK.test(direct) || PLAN_STEP.test(direct));
+    const organizing = planning && !working && !work.trim();
+    if (organizing) for (const topic of ['todo', 'assignments']) if (!on.includes(topic)) on.push(topic);
     const subject = () => subjectOf(`${q}\n${work}`);
     // A deictic question names the active resource only when the worker independently captured one.
     const deictic = level >= 3 && words(['this', 'that', 'these', 'those', 'here', 'it', 'est[ea]s?', 'estos?', 'es[ea]s?', 'esos?', 'aqu[ií]', 'isso', 'isto', 'essa', 'esse',
       'ici', 'ceci', 'cela', 'ça', 'ce', 'cet(?:te)?', 'dies(?:e[nsrm]?)?', 'das', 'hier', 'dit', 'dat', 'deze']).test(direct);
-    const active = deictic && current?.document?.id ? TOOLS.documents : deictic && current?.course?.id ? current.assignment?.id ? TOOLS.assignments : current.content?.id
+    // An organizing request's incidental "that" must not crowd assignment requirements out of the tool window.
+    const active = organizing ? [] : deictic && current?.document?.id ? TOOLS.documents : deictic && current?.course?.id ? current.assignment?.id ? TOOLS.assignments : current.content?.id
       ? (current.view === 'discussion' ? TOOLS3.discussions : TOOLS3.content) : current.view === 'course' ? TOOLS.assignments : [] : [];
-    const contextualWork = deictic && /\b(?:what (?:do|should|can) i do|explain|help)\b/iu.test(q);
+    const contextualWork = deictic && !organizing && /\b(?:what (?:do|should|can) i do|explain|help)\b/iu.test(q);
     // Tool first (level 3): help with work that names the student's records reads them first (read: agent.tools' help turn,
     // its tools these topics' reads), then study.help answers with what was read; help naming nothing is study help alone.
     if (work.trim() || working || contextualWork) {

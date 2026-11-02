@@ -63,7 +63,9 @@ A model's efforts come from its catalog where the catalog says (OpenRouter's `re
 known is none offered, and Settings hides the slider; Anthropic's and Mistral's compatible endpoints offer none, and neither
 does a model on this device. The effort thumb shows the student's choice, else completion's `none` or the catalog's stated default; where no default is stated, it shows a separate Default stop without guessing a level. Opening Settings never saves an effort. A run takes the student's effort when its model lists it, else its task's own
 (`writer.complete` asks `none`). Reasoning counts against a request's output, so an effort above the task's own adds the
-room it thinks in (1,024 tokens for minimal to 8,192 for high, `ai/task.js` `mine`) unless the student set Max output. In Advanced a feature's temperature, max output and timeout replace its tasks' own, and its
+room it thinks in (1,024 tokens for minimal to 8,192 for high, `ai/task.js` `mine`) unless the student set Max output. This
+effort-based output expansion applies to endpoint providers; local Rime keeps thought separate and preserves the
+configured answer reserve. In Advanced a feature's temperature, max output and timeout replace its tasks' own, and its
 context is the window Glaze plans for.
 
 An older Settings kept `{ on, use, features }` and one `endpoint` connection `{ provider: 'openai', base, model, key }`.
@@ -252,6 +254,15 @@ question would drop older turns, and since each question may come on a new port,
 chat sends that `summary` with its later questions and only the turns after the folded ones. The worker also sends a bounded `{ id, type: 'tools', tools }` union before a tool run; the chat carries it across fresh ports with its history, and New chat clears it. The worker validates carried names and the token budget before restoring them. A failure's card (`{ type: 'error', error, why?, steps?, raw? }`)
 opens to the rule's code and the steps run, then the model's raw answer in a monospace block, as text; an answer Glaze built
 itself (`answer.built`) reads as any answer, with the same detail under it when it carries `why`, `steps` or `raw`.
+
+At tools level 3, explicit assignment planning and comparisons use the records loop: scheduling plus assignment
+discovery and `assignment_read` fit within the same six-tool cap, even with an incidental current-page reference.
+A difficulty comparison needs actual requirements; titles alone do not establish workload, and unknown effort remains
+uncertain. A bare "What should I do
+first?" uses this route only after an unquoted assignment/to-do records request in the supplied question history,
+including a failed request. Intervening work requests stop that carryover; app statuses establish no verified record
+facts. Only wrappers organizing records are exempt from the help guard. Attempts and direct requests to solve, write,
+explain or do assessed work retain the study-help path; planning words and quotations cannot override them.
 
 `ai/ask.js` `route(question, { attempt, locale })`: agent.tools only for a question about the student's own records (to-dos
 and due dates, grades, assignments, Writer documents: word lists in English and the student's locale) that asks for no help
@@ -705,29 +716,33 @@ Context size (round 8 format): six specials `<|gz_ctx:4k|>` … `<|gz_ctx:128k|>
 is 125055; all `[PAD]` rows of LFM3's GGUFs, never produced by text) name the window a glaze-dialect request runs with, right
 after the task token: the largest size at or under it. `SCALE` in `ai/providers/local.js` turns them on with the per-size
 think budget (`THINK_SIZED`: agent.tools and study.help 128/256/512/1024 at 4K/8K/16K/32K+) and answer reserve (`ANSWER`:
-512/768/1024/1536/2048 at 4K/8K/16K/32K/64K+), each capped by the room the window leaves; all off until a model trained
-with them ships, so Rime r5's trained requests are unchanged. The independent `SCALE.compact` switch also defaults to
+512/768/1024/1536/2048 at 4K/8K/16K/32K/64K+), each capped by the room the window leaves. These SCALE switches remain off;
+adaptive reasoning for selected larger windows is independent and sends no size token or changed answer limit. The 4K
+direct profile remains unchanged. The independent `SCALE.compact` switch also defaults to
 false: `chat.compact` uses native ChatML on tuned r5 weights, avoiding its untrained round 8 task token. Evaluation may
 explicitly set `scale.compact: true` to send the Glaze compact task token. This only selects that task's prompt dialect;
 the actual model, tuned window, budgets, sampler and count/run prompt agreement stay intact. Existing trained tasks keep
 their Glaze dialect; stock and picture models keep native ChatML.
 
-Think mode (FORMAT-v2): a Glaze-tuned model reasons before it answers for the requests `THINK` in `ai/providers/local.js`
-gives a budget (256 tokens: agent.tools only; D4 measured p3dpo thinking worse than answering directly on writer.review,
-study.help and each writer.feedback call, so they and every other task answer directly; the numbers are beside `THINK`), once this computer decodes that model at `THINK_TPS` (40 tokens a second) or faster; any other run answers directly.
-The rate is the host's measure of the model's decoding over a run of at least 16 tokens (a run's `rate`, averaged with the
-last), else the ladder's estimate for the model it picked at Download (`tps`); none yet: direct. It is kept per model id in
-`storage.session` `aiLocalRates`, and which of them were measured in `aiLocalMeasured`, so they outlive the worker until the
-browser closes. 40: a full budget then costs at most 6.4 s, and every machine the ladder measured (79 to 133 tokens a second, Q8_0 to Q4_K_M) thinks at every tier. The host
-decodes the reasoning unconstrained but for its own mask (text tokens and `</think>`: never the end token or another
-control token) until the model writes `</think>` or the budget is spent, where it feeds `\n</think>` itself; then the
-answer, with the JSON grammar as any run. The reasoning is never decoded to text, posted or returned; `maxTokens` counts the
-answer only. A Glaze-tuned model's trained window holds the prompt, the close, the reasoning and the answer, think mode or
-not: the reasoning keeps its budget while the answer is left at least 256 tokens (or its `maxTokens`, if fewer), and the
-answer is cut to the rest (a request asking 4,096 still thinks its 256); a prompt that leaves the answer less runs
-as planned in the engine's room (a request whose close that room can't hold is refused before prefill); `usage.output` counts both. `test/ai/local-think.test.js` holds it with a stub engine.
-The window a run plans for is its model's: 4,096 tokens for a model without `stock` (FORMAT.md's inference window; the
-training data was made at caps.context 4096), 131,072 for a stock one (with an input limit of 90% of that), the picture model included.
+Think mode (FORMAT-v2): the default 4K tuned profile answers directly. For tuned `agent.tools` and `study.help`, selecting
+a larger window enables an independent thought ceiling of one quarter of that window, capped at 32768 tokens (8K: 2048;
+16K: 4096; 32K: 8192; 64K: 16384; 128K: 32768). Other tasks and stock models remain direct. This does not enable SCALE's
+experimental tokens or answer limits. An absent stored local effort means automatic; explicit `none` turns thought off.
+Minimal, low and medium use one eighth, one quarter and one half of the automatic ceiling. Ordinary task effort does not
+disable this local policy.
+
+A positive local reasoning profile gets a 300-second whole-task deadline unless an explicit timeout supplies another
+value, including a shorter one. Thought is bounded by remaining time and measured decode throughput; an unknown tier
+uses a conservative 15 tokens/sec allowance. The host rechecks time after prefill and each thought token, preserving
+time for the full configured answer. Prompt, closing tokens, thought and the full answer reserve must fit the selected
+window; thought gives way first and the window never grows silently. The model may close thought early; otherwise the
+host closes it at its token or time allowance, then applies the answer's JSON grammar. Reasoning text is never posted or
+returned. `maxTokens` counts only the answer; `usage.output` counts thought plus answer. The fixtures in
+`test/ai/local-think.test.js` establish execution bounds, not model quality; that needs separate real-GGUF evaluation.
+
+The tuned model uses 4K by default or the 8K–128K window selected on its local connection. A context override may narrow
+that window and cannot enlarge it. Stock models retain their 131072-token ceiling and 90% input limit. Admission,
+counting and inference use the same effective selected window.
 `catalog` says the window of the text model the connection runs (its tier's, else the one here) and that model's store id
 (`weights`), and, while pictures are here, `pictures.context`; the broker sets `cfg.context` from the first (from the
 second for a task that only reads pictures, `writer.image`) and `cfg.weights`, and a text request runs on that model
@@ -859,8 +874,10 @@ is `provider-unavailable`, reason `engine`, never a run in words only. The other
 `unavailable`, reason `engine`; no ladder, the smallest tier where there is an adapter.
 
 The host's messages (`host.js` header): `prepare { tier?, part? }`, `run { model, parts, stable, schema?, sources?, sampler, maxTokens,
-projector?, images?, think?: { budget, close, after }, window?, priority?: 'low' }`, `warm { model, parts, stable?, window? }`, `remove { part? }`, `release`, `cancel`; it answers `progress`, `delta`, `done` or `error`, `tick` every 20 s
+projector?, images?, think?: { budget, close, after, preserveAnswer?, rate?, ms? }, window?, priority?: 'low' }`, `warm { model, parts, stable?, window? }`, `remove { part? }`, `release`, `cancel`; it answers `progress`, `delta`, `done` or `error`, `tick` every 20 s
 while anything is in flight, and `idle`.
+Adaptive runs set `preserveAnswer: true`, estimated `rate` and remaining `ms`; the host derives an internal monotonic
+deadline. `until` is not a caller-facing field.
 
 The host starts with 8,192 allocated positions and grows only when a request needs more, up to its requested window
 (at least 16,000 physical positions, at most 131,072). Text requests retain one sequence across runs: common history is
