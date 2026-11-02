@@ -50,7 +50,8 @@ const front = ({ mode = 'read', evidence = '', category = 'preference', query = 
     port.postMessage(checked ? { id: m.id, type: 'end', output: checked } : { id: m.id, type: 'error', error: 'check', why: m.task === 'agent.tools' ? Agent.why(output, input) : Study.why(output, input) });
   });
   const env = { allowed: async () => true, broker, settings: async () => ({ on: true, memory: on, model: { use: 'openai', model: 'fixture' }, features: { ask: true } }), enabled: async () => true,
-    registry, state: async () => ({}), refresh: async () => null, accounts: async () => [{ account, origin: new URL(account).origin }], local,
+    registry: { get: (name) => registry.get(name), describe: (tool) => ({ name: tool.name, inputSchema: tool.parameters }) },
+    state: async () => ({}), refresh: async () => null, accounts: async () => [{ account, origin: new URL(account).origin }], local,
     keys: async () => Object.keys(data), now: () => NOW, turn: (f) => f(), zone: 'UTC', level: async () => 3,
     page: () => ({ url: current?.url || new URL(account).origin + '/courses/25' }), current: async () => ({ account, ...(current && { current }), valid: async () => true }),
     memory: { store, on: async () => on, capable: async () => true }, approve: { ask: async () => assert.fail('private memory tools do not request generic approval') },
