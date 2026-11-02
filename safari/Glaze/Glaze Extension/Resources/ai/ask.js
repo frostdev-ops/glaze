@@ -889,7 +889,22 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
           const fit = await fitInput('agent.tools', input);
           if (fit && fit.used + fit.reserve > fit.window) return;
           // No first/history/help: this pass may choose no save, and its prose never reaches the answer or compaction.
-          await episode({ question, tools: ['memory_save'], locale, now: env.now(), zone, run, call, signal, ...inRecall, caps: contextCaps });
+          let rejected;
+          const saveRun = async (...args) => {
+            try { return await run(...args); }
+            catch (e) {
+              if (['check', 'invalid-response', 'refusal'].includes(R().code(e))) rejected = e;
+              throw e;
+            }
+          };
+          try { await episode({ question, tools: ['memory_save'], locale, now: env.now(), zone, run: saveRun, call, signal, ...inRecall, caps: contextCaps }); }
+          catch (e) {
+            // Only a rejected model response is optional. Tool failures, budgets and lifecycle changes still stop the turn.
+            if (e !== rejected || signal.aborted) throw e;
+            await validate();
+            await memoryCurrent();
+            if (!memory.store.validateLease(memory.account, memory.lease)) throw R().error('changed');
+          }
         };
         const withSave = async (tools) => {
           if (!memory?.enabled || explicitMemory || record) return tools;
