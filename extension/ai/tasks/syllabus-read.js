@@ -70,16 +70,17 @@ var GZ_AI_TASK_SYLLABUS = globalThis.GZ_AI_TASK_SYLLABUS || (() => {
       temperature: 0, maxTokens: answerTokens(caps),
     });
   };
-  // Parts of about a third of what the harness lets a part's data take (ai/task.js budget: 0.6 of the context), so the
-  // instructions, the schema and a long answer fit beside it on a small model (8k tokens on this computer). More than
-  // LIMIT.parts is refused before anything is sent.
-  const split = (inp, { budget, text }) => {
+  // Larger windows reserve the complete request's instructions, schema, pictures, answer and thinking by provider count.
+  // 4K keeps the established conservative split. More than LIMIT.parts is refused before anything is sent.
+  const split = (inp, kit) => {
+    const { budget, text, caps } = kit;
+    if (caps?.context > 4096 && kit.count) return T.splitText(inp, kit, { build: (part) => build(part, { caps, text }), parts: LIMIT.parts, overlap: 200 });
     // task.js gives data 0.6 of the context. Recover a conservative whole-context estimate, then reserve the actual
     // instructions, schema, names and answer before sizing data. This is an estimate, not a provider's tokenizer count.
-    const context = Math.floor(budget / 0.6), caps = { context: context + 2, images: true };
+    const context = Math.floor(budget / 0.6), legacyCaps = { context: context + 2, images: true };
     // Recovering context from its rounded budget can lose up to two tokens; reserve the larger answer allowance.
     const request = (part) => {
-      const req = R.clean({ ...build(part, { caps, text }), schema: OUTPUT });
+      const req = R.clean({ ...build(part, { caps: legacyCaps, text }), schema: OUTPUT });
       if (!req) throw R.error('request');
       return req;
     };

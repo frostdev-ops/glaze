@@ -269,9 +269,8 @@ test('hands(): the answer-giving rules alone, for a text that is not a tutor\'s 
   assert.equal(why(inp({ question: 'Why does the river matter in Beloved?', subject: 'reading' }), 'hint', 'The river stands for memory in the novel and the town.'), 'speaks');
 });
 
-// Follow-ups in Ask Rime: the conversation so far goes to a cloud model as data before the question. Glaze's own model was
-// trained without it, so a local model's request is exactly as before (FORMAT-new-tasks.md).
-test('history: a cloud model reads the conversation so far as data; a local model\'s request is unchanged', () => {
+// Follow-ups retain the student's earlier problem as fenced data on local and cloud models.
+test('history: local and cloud models read the conversation so far as data', () => {
   const X = require('../../extension/ai/text.js');
   const history = [{ question: 'Explain mitosis', answer: 'What happens to the chromosomes first?' }];
   const i = inp({ question: 'And then?', history });
@@ -280,7 +279,8 @@ test('history: a cloud model reads the conversation so far as data; a local mode
   assert.deepEqual(plain.history, undefined, 'none given, none kept');
   const fix = (r) => JSON.parse(JSON.stringify(r).replace(/DATA-[0-9a-f]+/g, 'DATA'));
   const local = fix(H.task.build(i, { text: X, caps: { local: true } })), before = fix(H.task.build(plain, { text: X, caps: { local: true } }));
-  assert.deepEqual(local, before);
+  assert.match(JSON.stringify(local), /Explain mitosis/);
+  assert.notDeepEqual(local, before);
   const cloud = H.task.build(i, { text: X, caps: { text: true } });
   const words = JSON.stringify(cloud);
   assert.match(words, /earlier/);

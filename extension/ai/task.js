@@ -2,7 +2,7 @@
 // run the same way on every provider. A task (ai/tasks/<id>.js, added with define):
 //   id: 'syllabus.read' (dotted lower-case words), version: 1 (raise it when its output changes; results carry it),
 //   caps: { images?, tools? } (what a provider must have; json always),
-//   input(raw) → the input cleaned, or null (refused: raw came from a page),
+//   input(raw, { caps }) → the input cleaned, or null (refused: raw came from a page); caps are provider-owned,
 //   build(input, { caps, text, fence }) → a request without its schema (ai/text.js request() fences the data),
 //   output: the answer's JSON Schema (an object at the root; ai/schema.js), or 'text': the model's words as they are
 //     (no schema; an answer cut off at maxTokens comes back as far as it got, meta.truncated); a request carries it
@@ -16,8 +16,8 @@
 //     being refused busy, and its runs share one call-record row a minute),
 //   disclose?: true (the feature shows the student where the text goes first: a run must carry status's `to`, and a
 //     connection over the network runs only to that host),
-//   split?(input, { budget, text }) → [input] and merge([output], input) → output: a long input in parts, each its own
-//     request, put back together before check. budget: tokens a part's data may take on this provider.
+//   split?(input, { budget, room, caps, text, count }) → [input] (or Promise) and merge([output], input) → output: a long input in parts, each its own
+//     request, put back together before check. budget: legacy data estimate; count(built) includes the real answer reserve.
 //   orchestrate?(input, { caps, text, ask, fits, signal, limits }) → a raw output, or undefined for the ordinary run.
 //     Trusted task code only. ask(request, { output?, check?, accept?, call? }) uses this run's provider, deadline and
 //     accounting (accept: providers.js run's, a looser schema the answer is checked against); it never retries. Calls are
@@ -84,20 +84,21 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
     const can = P().caps(p, c);
     const text = task.output === 'text';
     if (Object.entries(task.caps).some(([k, want]) => want && can[k] === false) || (!text && can.json === false) || (task.tools && can.tools === false)) throw Q.error('caps');
-    const input = task.input(raw);
+    const input = task.input(raw, { caps: can });
     if (input === null || input === undefined) throw Q.error('input');
     const kit = (task.tools || []).map((n) => tools.get(n) || (() => { throw Q.error('tool', n); })());
-    // A request's room: the model's window within the run's token budget (ai/loop.js limits.tokens: the task's own, else
-    // the loop's default), so what fits here and the parts split here are never refused there as a bare `limit`.
-    const room = Math.min(can.context || LIMIT.context, L().limit('tokens', task.limits.tokens));
+    // A local run's default accounting grows with the effective window (bounded at 128K). Explicit task budgets,
+    // deadlines and request counts remain authoritative; a large valid prompt must not trip the old 60K run default.
+    const window = Math.min(can.context || LIMIT.context, 131072);
+    const tokenLimit = task.limits.tokens || (can.local === true ? Math.max(L().LIMIT.tokens[0], window * 2) : L().LIMIT.tokens[0]);
+    const room = Math.min(window, L().limit('tokens', tokenLimit));
     const budget = Math.floor(room * 0.6);
-    const inputs = task.split ? task.split(input, { budget, text: X() }) : [input];
-    if (!Array.isArray(inputs) || !inputs.length || inputs.length > LIMIT.parts) throw Q.error('size', 'parts');
+    let inputs;
     // One deadline for the whole run, the caller's cancel within it.
     const F = typeof GZ_AI_FAILURE !== 'undefined' ? GZ_AI_FAILURE : require('./failure.js');
     if (signal?.aborted) throw Object.assign(Q.error('cancelled'), { category: 'cancelled' });
     // The loop's own default is 120 s (ai/loop.js LIMIT.ms).
-    const longer = over.timeoutMs > (task.limits.ms || 120000), limits = longer ? { ...task.limits, ms: over.timeoutMs } : task.limits;
+    const longer = over.timeoutMs > (task.limits.ms || 120000), limits = { ...task.limits, tokens: tokenLimit, ...(longer && { ms: over.timeoutMs }) };
     const timer = F.deadline(Math.max(task.limits.ms || LIMIT.ms, over.timeoutMs || 0)), both = F.anySignal([signal, timer.signal]);
     const outputs = [], steps = [], usage = { input: 0, output: 0 };
     let rounds = 0, finish = 'stop', pending, orchestrated, calls = 0, inFlight = false, active = true, releaseImages;
@@ -106,6 +107,15 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
       const request = mine({ ...built, ...(output !== 'text' && { schema: S().bare(output) }), ...(task.limits.maxTokens && built.maxTokens === undefined && { maxTokens: task.limits.maxTokens }), task: { ...own(task), ...(call && { call }) } }, over);
       if (Number.isSafeInteger(maxTokensCap) && maxTokensCap > 0 && maxTokensCap <= Q.LIMIT.maxTokens) request.maxTokens = Math.min(request.maxTokens || maxTokensCap, maxTokensCap);
       return request;
+    };
+    // Exact counts when offered; the same trusted request and answer/thinking reserve are used for splitting and inference.
+    const count = async (built) => {
+      const request = Q.clean(requestOf(built));
+      if (!request) throw Q.error('request');
+      const n = await F.wait(() => P().count(p, request, c, { signal: both.signal }), both.signal);
+      if (!n) throw Q.error('request');
+      const reserve = reserved(p, request, room);
+      return { ...n, used: n.tokens, reserve, window: room, available: room - reserve };
     };
     const fits = (built, { output = task.output, maxTokensCap } = {}) => {
       const request = requestOf(built, output, maxTokensCap), context = room;
@@ -123,7 +133,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
       emit({ type: 'note', part: calls, parts: task.limits.calls || LIMIT.parts, ...(Q.isObj(note) && ['evidence', 'criterion', 'summary'].includes(note.stage) && Number.isSafeInteger(note.part) && Number.isSafeInteger(note.parts) && note.part > 0 && note.part <= note.parts ? { stage: note.stage, part: note.part, parts: note.parts } : {}) });
       try {
         const request = requestOf(built, output, maxTokensCap, call);
-        const res = await L().run({ request, tools: [], call: (r, o) => P().run(p, r, c, { ...o, fetch, ...(accept && { accept }) }), policy, rounds: task.limits.steps, limits, headless, stream: false, signal: both.signal, emit, ctx, confirms });
+        const res = await L().run({ request, tools: [], call: (r, o) => P().run(p, r, c, { ...o, fetch, ...(accept && { accept }) }), policy, rounds: task.limits.steps, limits, count: can.local === true && room > 4096 ? (r, o) => P().count(p, r, c, o) : undefined, headless, stream: false, signal: both.signal, emit, ctx, confirms });
         steps.push(...res.steps); rounds += res.rounds;
         usage.input += res.usage?.input || 0; usage.output += res.usage?.output || 0;
         if (both.signal.aborted) throw both.signal.reason;
@@ -137,6 +147,8 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
       } finally { inFlight = false; }
     };
     try {
+      inputs = task.split ? await F.wait(() => task.split(input, { budget, room, caps: { ...can, context: room }, text: X(), count }), both.signal) : [input];
+      if (!Array.isArray(inputs) || !inputs.length || inputs.length > LIMIT.parts) throw Q.error('size', 'parts');
       let visuals;
       if (task.orchestrate && ['writer.image', 'writer.feedback'].includes(task.id) && imageCache) {
         try {
@@ -152,8 +164,12 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
         const built = task.build(part, { caps: can, text: X(), fence: X().fence() });
         if (!Q.isObj(built)) throw Q.error('input', 'build');
         const request = mine({ ...built, ...(!text && { schema: S().bare(task.output) }), ...(task.limits.maxTokens && built.maxTokens === undefined && { maxTokens: task.limits.maxTokens }), task: own(task) }, over);
+        if (can.local === true && room > 4096) {
+          const n = await count(built);
+          if (n.used + n.reserve > room) throw Object.assign(Q.error('size'), { reason: 'context' });
+        }
         const call = (r, o) => P().run(p, r, c, { ...o, fetch });
-        const res = await L().run({ request, tools: kit, call, policy, rounds: task.limits.steps, limits, headless, stream: task.stream, signal: both.signal, emit, ctx, confirms });
+        const res = await L().run({ request, tools: kit, call, policy, rounds: task.limits.steps, limits, count: can.local === true && room > 4096 ? (r, o) => P().count(p, r, c, o) : undefined, headless, stream: task.stream, signal: both.signal, emit, ctx, confirms });
         steps.push(...res.steps);
         rounds += res.rounds;
         usage.input += res.usage?.input || 0; usage.output += res.usage?.output || 0;
@@ -203,12 +219,46 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
     const p = typeof provider === 'string' ? P().get(provider) : provider;
     const c = p && p.config(cfg);
     if (!c || task.split || task.orchestrate) return null;
-    const input = task.input(raw);
+    const input = task.input(raw, { caps: P().caps(p, c) });
     if (input === null || input === undefined) return null;
     const built = task.build(input, { caps: P().caps(p, c), text: X(), fence: X().fence() });
     return R().isObj(built) ? mine({ ...built, ...(task.output !== 'text' && { schema: S().bare(task.output) }), task: own(task) }, over) : null;
   };
 
-  return { LIMIT, ID, define, add, get, run, prepare, list: () => [...all.keys()] };
+  // No page-controlled field selects the retention size. Missing caps retain the established 4K bounds.
+  const retention = (caps = {}) => {
+    const context = Math.max(4096, Math.min(131072, Number.isSafeInteger(caps.context) ? caps.context : 4096));
+    return { context, scale: context / 4096 };
+  };
+  const reserved = (provider, request, window) => {
+    const local = provider.id === 'local' && typeof provider.limits === 'function' ? provider.limits(request.task, window, { maxTokens: request.maxTokens }) : null;
+    // Keep the entire configured think allowance even when a slow machine currently answers directly.
+    return (local ? local.maxTokens + local.think : request.maxTokens || 1024) + R().images(request) * 1024;
+  };
+  // Partition supplied text by complete requests, including schema, instructions, answer and thinking. Nothing is lost:
+  // each character appears in a part; overlaps keep a boundary phrase together. A small guard covers changing part labels.
+  const splitText = async (inp, { count, text }, { build, parts: maxParts, overlap = 0 }) => {
+    const fits = async (value) => { const n = await count(build(value)); return n.used + n.reserve + 128 <= n.window; };
+    if (await fits(inp)) return [inp];
+    const parts = []; let at = 0;
+    while (at < inp.text.length) {
+      if (parts.length >= maxParts) throw R().error('size', 'parts');
+      const part = (end) => ({ ...inp, text: inp.text.slice(at, end), part: maxParts, parts: maxParts, whole: inp.text, ...(parts.length && { images: [] }) });
+      let lo = at, hi = inp.text.length;
+      while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (await fits(part(mid))) lo = mid; else hi = mid - 1; }
+      if (lo === at) throw R().error('size', 'context');
+      // Prefer a complete paragraph or word when it costs less than five percent of this part.
+      const span = inp.text.slice(at, lo), boundary = Math.max(span.lastIndexOf('\n'), span.lastIndexOf(' '));
+      const end = lo < inp.text.length && boundary > span.length * 0.95 ? at + boundary + 1 : lo;
+      parts.push(part(end));
+      if (end === inp.text.length) break;
+      at = Math.max(at + 1, end - overlap > at ? end - overlap : end);
+    }
+    const out = parts.map((part, i) => ({ ...part, part: i + 1, parts: parts.length }));
+    for (const part of out) if (!await fits(part)) throw R().error('size', 'context');
+    return out;
+  };
+
+  return { LIMIT, ID, retention, reserved, splitText, define, add, get, run, prepare, list: () => [...all.keys()] };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_TASKS; else GZ_AI_TASKS;

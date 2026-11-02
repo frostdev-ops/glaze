@@ -2,8 +2,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const T = require('../../extension/ai/task.js');
-const X = require('../../extension/ai/text.js');
-const P = require('../../extension/ai/providers.js');
 require('../../extension/ai/providers/mock.js');
 const H = require('../../extension/ai/tasks/study-help.js');
 const A = require('../../extension/ai/tasks/agent-tools.js');

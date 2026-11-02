@@ -3,8 +3,8 @@
 // example, or a check of their own step. Math, science, code, essays and reading, in Glaze's six locales. Defined and
 // tested; Ask Glaze runs it (ai/ask.js).
 // input: { question, attempt?, subject, locale?, material?, context? (writer-context.js: course, assignment), history? }.
-// history: Ask Rime's conversation so far, [{ question, answer }] (at most LIMIT.turns), read by a cloud model only, as data
-// before the question; Glaze's own model and the other local ones were trained without it, so their request never has it.
+// history: Ask Rime's conversation so far, [{ question, answer }], fenced as data. Effective windows above 4K
+// retain more material and history; 4K keeps its established size bounds.
 // output: { kind: hint | question | concept | check-my-step, step: correct | mistake | unclear | null, reply, followUp }.
 // check() refuses (null) a reply that states the answer, does the student's step, solves the exact problem given, writes
 // code with the student's own names, offers wording for their paper (wording.js) or, for essays and reading, makes a
@@ -39,22 +39,24 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
   const system = (locale) => `${SYSTEM}\nReply in ${LANGUAGES[locale]}.`;
 
   const text = (v, max) => (typeof v === 'string' && v.length <= max ? v.replace(/\r\n?/g, '\n').trim() : null);
-  const input = (raw) => {
+  const input = (raw, { caps } = {}) => {
+    const scale = T.retention(caps).scale;
+    const limit = (key) => Math.floor(LIMIT[key] * scale);
     if (!S.isObj(raw) || Object.keys(raw).some((k) => !['question', 'attempt', 'subject', 'locale', 'material', 'context', 'history'].includes(k))) return null;
-    const history = raw.history === undefined ? [] : Array.isArray(raw.history) && raw.history.length <= LIMIT.turns
-      && raw.history.every((h) => S.isObj(h) && Object.keys(h).sort().join() === 'answer,question') ? raw.history.map((h) => ({ question: text(h.question, LIMIT.turn), answer: text(h.answer, LIMIT.turn) })) : null;
+    const history = raw.history === undefined ? [] : Array.isArray(raw.history) && raw.history.length <= limit('turns')
+      && raw.history.every((h) => S.isObj(h) && Object.keys(h).sort().join() === 'answer,question') ? raw.history.map((h) => ({ question: text(h.question, limit('turn')), answer: text(h.answer, limit('turn')) })) : null;
     if (!history || history.some((h) => h.question === null || h.answer === null)) return null;
-    const question = text(raw.question, LIMIT.question), attempt = raw.attempt === undefined ? '' : text(raw.attempt, LIMIT.attempt);
-    const material = raw.material === undefined ? '' : text(raw.material, LIMIT.material), locale = raw.locale === undefined ? 'en' : raw.locale;
+    const question = text(raw.question, limit('question')), attempt = raw.attempt === undefined ? '' : text(raw.attempt, limit('attempt'));
+    const material = raw.material === undefined ? '' : text(raw.material, limit('material')), locale = raw.locale === undefined ? 'en' : raw.locale;
     if (!question || attempt === null || material === null || !SUBJECTS.includes(raw.subject) || !LOCALES.includes(locale)) return null;
     const context = W.clean(raw.context);
     return context ? { question, attempt, subject: raw.subject, locale, material, context, ...(history.length && { history }) } : null;
   };
-  const earlier = (inp, caps) => (inp.history && caps?.local !== true ? [{ label: 'earlier', text: inp.history.map((h) => `Student: ${h.question}\nGlaze: ${h.answer}`).join('\n\n') }] : []);
+  const earlier = (inp) => (inp.history ? [{ label: 'earlier', text: inp.history.map((h) => `Student: ${h.question}\nGlaze: ${h.answer}`).join('\n\n') }] : []);
   const build = (inp, { text: tx, caps }) => tx.request({
     system: system(inp.locale),
     context: [...W.blocks(inp.context, { thread: false, files: true }), { label: 'subject', text: inp.subject }],
-    data: [...(inp.material ? [{ label: 'material', text: inp.material }] : []), ...earlier(inp, caps), { label: 'question', text: inp.question }, ...(inp.attempt ? [{ label: 'attempt', text: inp.attempt }] : [])],
+    data: [...(inp.material ? [{ label: 'material', text: inp.material }] : []), ...earlier(inp), { label: 'question', text: inp.question }, ...(inp.attempt ? [{ label: 'attempt', text: inp.attempt }] : [])],
     temperature: 0.2, maxTokens: 600,
   });
 
