@@ -269,6 +269,34 @@ test('rime regression: overlapping memory uploads merge the winning active revis
   }
 });
 
+test('rime regression: a first memory connection re-reads the current head after a conditional upload loses', { timeout: 10000 }, async () => {
+  const drive = standin(), a = device(drive), b = device(drive), key = memoryKey(10);
+  const winner = memory(10, 'First connection winner', 9000), other = memory(10, 'Already connected edit', 5000);
+  await b.local.set({ [key]: memory(10, 'Original') }); assert.ok((await b.on()).ok);
+  await a.local.set({ [key]: winner });
+  const fetch = drive.fetch;
+  let release, reached, paused = false;
+  const gate = new Promise((resolve) => { release = resolve; }), started = new Promise((resolve) => { reached = resolve; });
+  drive.fetch = async (url, init = {}) => {
+    if (!paused && url.includes('/upload/') && Buffer.from(init.body || '').includes(Buffer.from(winner.markdown))) {
+      paused = true; reached(); await gate;
+    }
+    return fetch(url, init);
+  };
+  const connecting = a.on();
+  let result;
+  try {
+    await started;
+    await b.local.set({ [key]: other }); assert.ok((await b.run({ push: true })).ok);
+  } finally { release(); result = await connecting; drive.fetch = fetch; }
+  assert.ok(result.ok, 'the first connection retries with fresh Drive metadata');
+  const fresh = device(drive); assert.ok((await fresh.on()).ok);
+  assert.deepEqual((await fresh.local.get(key))[key], winner);
+  assert.deepEqual(body(recFile(drive, 'local', key)).value, winner);
+  assert.equal(drive.log.filter((x) => x.precondition === 412).length, 1);
+  noDeletes(drive);
+});
+
 test('a local change syncs when its timestamp equals or precedes the last agreed stamp', async () => {
   const drive = standin(), a = device(drive);
   await a.local.set({ writerWords: ['First'] });
