@@ -397,9 +397,11 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
     const memoryRead = async (s) => {
       if (!memoryLive(s) || s.busy || s.deleted) return;
       const token = ++s.token, epoch = memoryEpoch, active = focused(), restoreFocus = memoryFocus(s);
+      s.pendingFocus = restoreFocus;
       memoryBusy(s, true); memoryStatus(s);
       const r = await memorySend({ op: 'read', id: s.id });
       if (!memoryLive(s) || token !== s.token || epoch !== memoryEpoch) return;
+      s.pendingFocus = null;
       memoryBusy(s, false);
       if (r?.ok === true && memoryRecordValid(r.record, s.id)) {
         const restore = focused(), keepFocus = restore === active || restore === document.body;
@@ -412,9 +414,11 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
       const { input, revision, box } = s.editor, markdown = input.value;
       if (!memoryText(markdown)) return memoryStatus(s, t('Use 600 characters or fewer.'));
       const token = ++s.token, epoch = memoryEpoch, restoreFocus = memoryFocus(s);
+      s.pendingFocus = restoreFocus;
       memoryBusy(s, true); memoryStatus(s);
       const r = await memorySend({ op: 'update', id: s.id, revision, markdown });
       if (!memoryLive(s) || token !== s.token || epoch !== memoryEpoch) return;
+      s.pendingFocus = null;
       memoryBusy(s, false);
       if (r?.ok === true && memoryReceiptValid(r.receipt) && r.receipt.id === s.id && r.receipt.at >= s.at && ['updated', 'unchanged'].includes(r.receipt.operation) && typeof r.receipt.text === 'string') {
         const keepFocus = box.contains(focused()) || focused() === document.body;
@@ -429,9 +433,11 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
     const memoryForget = async (s) => {
       if (!memoryLive(s) || s.busy || s.deleted) return;
       const token = ++s.token, epoch = memoryEpoch, restoreFocus = memoryFocus(s);
+      s.pendingFocus = restoreFocus;
       memoryBusy(s, true); memoryStatus(s);
       const r = await memorySend({ op: 'forget', id: s.id, revision: s.revision });
       if (!memoryLive(s) || token !== s.token || epoch !== memoryEpoch) return;
+      s.pendingFocus = null;
       memoryBusy(s, false);
       if (r?.ok === true && memoryReceiptValid(r.receipt) && r.receipt.id === s.id && r.receipt.at >= s.at && ['forgotten', 'unchanged'].includes(r.receipt.operation) && r.receipt.text === undefined) {
         const keepFocus = s.line.contains(focused()) || focused() === document.body;
@@ -443,7 +449,8 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
       if (!memoryReceiptValid(r)) return;
       let s = memoryCards.get(r.id);
       if (s && (s.deleted && r.operation !== 'forgotten' || r.at < s.at)) return;
-      const restoreFocus = s ? memoryFocus(s) : () => {};
+      const restoreFocus = s ? s.pendingFocus || memoryFocus(s) : () => {};
+      if (s) s.pendingFocus = null;
       if (!s) {
         const summary = make('summary'), text = make('pre', { dir: 'auto', hidden: true }), controls = make('div', { className: 'gz-ask-memory-actions' });
         const details = make('details', {}, summary, text), status = make('p', { className: 'gz-ask-memory-status', hidden: true });
