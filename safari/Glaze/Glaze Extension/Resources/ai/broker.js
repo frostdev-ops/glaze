@@ -343,7 +343,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
       return { s, task, use };
     };
     const run = async (m, def) => {
-      const fail = (e) => post({ id: m.id, type: 'error', error: R().code(e), ...F().diagnostic(e), ...(e?.reference && { reference: e.reference }), ...(e?.status && { status: e.status }) });
+      const fail = (e) => post({ id: m.id, type: 'error', error: R().code(e), ...F().diagnostic(e), ...(typeof e?.raw === 'string' && { raw: e.raw }), ...(e?.reference && { reference: e.reference }), ...(e?.status && { status: e.status }) });
       if (mine.has(m.id) || typeof m.feature !== 'string' || !FEATURE.test(m.feature) || typeof m.task !== 'string' || !T().ID.test(m.task)
         || Object.keys(m).some((k) => !['id', 'op', 'feature', 'task', 'input', 'to'].includes(k))
         || (m.to !== undefined && (typeof m.to !== 'string' || m.to.length > 300))) return fail(R().error('request'));
@@ -373,6 +373,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         // connection change: a task that may carry pictures reads its catalog again; others (the gray text) keep theirs.
         const list = await catalog(env, use, control.signal, now(), use.p.id === 'local' && (task.caps.images === true || task.id === 'writer.feedback'));
         const { chosen, cfg } = sized(use, list, task);
+        if (use.p.id === 'local' && typeof cfg.weights === 'string') row.model = cfg.weights;
         // Ask's outer router can race a model change or this broker's cached catalog. Check the pinned weights before
         // any Rime tool or fired turn reaches the model, including requests on the ordinary AI port.
         if (task.id === 'agent.tools' && use.p.id === 'local') {
@@ -410,6 +411,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
       } catch (e) {
         const err = control.signal.aborted && R().code(e) !== 'timeout' ? (R().code(control.signal.reason) === 'changed' ? R().error('changed') : Object.assign(R().error('cancelled'), { category: 'cancelled' })) : e;
         forget(m.id);
+        if (Array.isArray(m.input?.steps)) row.toolSteps = m.input.steps.length;
         Object.assign(row, { state: R().code(err), ...F().diagnostic(err), ...(err?.category && { category: err.category }), ...(err?.status && { status: err.status }), ...(err?.reference && { id: err.reference }) });
         fail(err);
         if (!row.provider) row.provider = await named(env, m.feature);

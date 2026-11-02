@@ -287,7 +287,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     if (R.images(req) > 0) return false;
     let plan;
     try { plan = await ready(req, cfg); } catch { return false; }
-    try { return (await own().link.call('warm', { model: plan.m.id, parts: plan.parts.slice(0, plan.stable) }, { signal }))?.ok === true; } catch { return false; }
+    try { return (await own().link.call('warm', { model: plan.m.id, parts: plan.parts.slice(0, plan.stable), ...(plan.window > CONTEXT && { window: plan.window }) }, { signal }))?.ok === true; } catch { return false; }
   };
   // vision: whether the picture download is here (the broker sets cfg.images from it for a run). context: the window of the
   // text model this cfg runs, and weights its id (the broker sets cfg.context and cfg.weights from them); pictures.context,

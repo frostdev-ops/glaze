@@ -230,7 +230,7 @@ of them is the same, byte for byte. Every parameter is a string or an integer (t
 | `content_list` | read | `course` | Canvas: its modules' items (no headers, unpublished or locked); Ultra: what the student may see now (Ultra search's documents, folders, files, links). `{ items: [{ id, title, kind, module? }] }`. |
 | `content_read` | read | `course`, `id`, `page?` | An Ultra item's text, paged, with the names, types and sizes of the files its body embeds (`data-bbfile`: never the signed `resourceUrl`/`viewerUrl`); an Ultra document (a folder with `isBbPage`) is read from its `children`' `ultraDocumentBody` block; a body that is only a file gives `files` and a `note`. Canvas pages and files are refused: unverified, since no Canvas page, syllabus or file response has been captured yet (the local Canvas is down), and nothing is built against a guess. Canvas syllabus text is unverified the same way; `syllabus_read` gives only what an import kept there. |
 | `syllabus_read` | read | `course`, `page?` | What Glaze kept from a syllabus import (planner/syllabus.js): instructor, hours, meetings, dates, scale, weights; on Ultra also `document`: the shallowest visible document or file at most three folders down whose title names a syllabus in one of the six languages, read as `content_read` reads one; else how to import. An embedded PDF's text is not read. |
-| `discussions_list`, `discussion_read` | read | `course`; `id`, `page?` | Canvas: the topics are listed; a prompt is read only when its author is a teacher or TA of the course (the course's `enrollments?type[]=TeacherEnrollment&type[]=TaEnrollment`, one same-origin GET per course for the page; any failure keeps the refusal, so a classmate's topic never becomes a prompt), with the same reply rules as Ultra below (entries and their `recent_replies`; shapes from Canvas's API documentation, not yet captured live). Ultra: the list as Ultra answers it (id and title only, whatever fields are asked); one discussion's prompt (its `topic`, when available and published), `gradable`, `at`, the student's own replies (`userId` is theirs; at most 3, 300 characters each, page 1; `reply`: it answers a classmate's post, not the prompt) and `others`, the count of classmates' replies. Quoted blocks are removed from the student's replies, and participant names supplied by the topic/messages are redacted from returned text. Classmates' names and posts never leave the tab: they could otherwise reach a cloud provider. |
+| `discussions_list`, `discussion_read` | read | `course`; `id`, `page?` | Canvas: titles are listed and prompts read only when their author is a teacher or TA of the course (the course's `enrollments?type[]=TeacherEnrollment&type[]=TaEnrollment`, one same-origin GET per course for the page; any failure keeps the refusal, so a classmate's topic never becomes a prompt), with the same reply rules as Ultra below (entries and their `recent_replies`; shapes from Canvas's API documentation, not yet captured live). Ultra: the list as Ultra answers it (id and title only, whatever fields are asked); one discussion's prompt (its `topic`, when available and published), `gradable`, `at`, the student's own replies (`userId` is theirs; at most 3, 300 characters each, page 1; `reply`: it answers a classmate's post, not the prompt) and `others`, the count of classmates' replies. Quoted blocks are removed from the student's replies, and participant names supplied by the topic/messages are redacted from returned text. Classmates' names and posts never leave the tab: they could otherwise reach a cloud provider. |
 
 There is no fill tool: Glaze never fills in the student's work or a site's forms.
 
@@ -281,6 +281,10 @@ In Ask Rime (`ai/ask.js`, `ai/page/ask.js`):
   the question before it with fresh calls; the system text asks for glaze-plans' MARKDOWN.md answer format, which the
   panel renders. Reminder, notice, watch and cancel phrasings are one table (agent-tools.js `PHRASES`) the router and the
   check share. Level 1 is byte-identical.
+- **Known limit, Canvas announcements and discussion prompts:** both are read only when a teacher or TA of the course wrote
+  them (the course's enrollments). A course that hides its People list from students shows Glaze no teachers, so there
+  `announcement_read` and `discussion_read` refuse ("Glaze can't verify…") until a probe of a real Canvas shows a field that
+  marks an announcement on its own.
 - **The context window** (ai/ask.js; the owner, 2026-11-01): before each request Ask Rime asks the broker to `count` it
   (Glaze's own model: its tokenizer in the engine host, exactly; a cloud model: text.js's estimate) against the window the
   provider runs with (the configured context, never an assumed 4,096), and posts `{ id, type: 'context', task, used,
@@ -652,7 +656,8 @@ what it always did): `windowOf(m, cfg)` makes it the tuned model's window and in
 holds it, and each run sends it as `window`. A changed size is a new connection generation, so the broker's kept catalog
 goes. Settings refuses a size this computer can't hold with `ai/local/ladder.js` `windows` (its `footprint` at that size
 against half of `navigator.deviceMemory`: `memory`, or `no-f16` when only the f16 cache fits); the tier pick is unchanged.
-The engine host opens its session at 16,000 positions today, so a run over that is refused there until the host follows the size. A status and a
+The engine host opens its session at the selected size when it exceeds the default 16,000 positions; a warm-up uses the
+same size, and changing it releases the earlier session. A status and a
 warm-up use the same window as the run (the broker's `sized`), so Writer's status says 4,096 for a tuned model. `test/ai/local-window.test.js` holds `writer.review` and `syllabus.read` through the
 broker to lfm-tune's training examples (fixture: `tools/dev/local-window-fixture.js`). The system turn is the prefix kept
 warm: up to three per loaded model, as snapshots. Sampling: the request's temperature, else LFM3's GGUF defaults
@@ -669,7 +674,7 @@ Frostdev publishes a signed list beside the weights, `https://huggingface.co/fro
     { "id": "rime-1.7b-q4_k_m", "name": "Rime 1.7B Q4_K_M", "repo": "frostdev-ops/Rime-1.7B-GGUF", "commit": "<40-hex>",
       "file": "Rime-1.7B-Q4_K_M.gguf", "url": "https://huggingface.co/frostdev-ops/Rime-1.7B-GGUF/resolve/<commit>/Rime-1.7B-Q4_K_M.gguf",
       "size": 1099627200, "chunk": 67108864, "sha256": ["<64-hex per 64 MB chunk>"], "total": "<64-hex>", "license": "lfm1.0",
-      "quant": "Q4_K_M", "tier": 1, "tools": 3, "minGlaze": "4.0.2", "version": "r6" } ] },
+      "quant": "Q4_K_M", "tier": 1, "tools": 3, "minGlaze": "4.0.3", "version": "r6" } ] },
   "sig": "<Ed25519 over utf8('glaze-models-1|' + canon(list)), base64url>" }
 ```
 
@@ -707,7 +712,7 @@ Every publish happens only after the owner's go.
 
 1. Upload the GGUFs to `frostdev-ops/Rime-1.7B-GGUF` and note the commit.
 2. Build each size's entry: `node tools/vendor/model-manifest.js --repo frostdev-ops/Rime-1.7B-GGUF --commit <sha> --file
-   Rime-1.7B-Q4_K_M.gguf --tier 1 --tools 3 --version r6 --min-glaze 4.0.2 --out ~/glaze-models/entries.json` (once per
+   Rime-1.7B-Q4_K_M.gguf --tier 1 --tools 3 --version r6 --min-glaze 4.0.3 --out ~/glaze-models/entries.json` (once per
    quant, into the same file; keep each size's id).
 3. Sign: `node tools/vendor/model-manifest.js --sign --entries ~/glaze-models/entries.json --key ~/.glaze-signing/models.key
    --out ~/glaze-models/glaze-models.json`. The serial is one above the published list's (`--serial` to set it, `--offline`

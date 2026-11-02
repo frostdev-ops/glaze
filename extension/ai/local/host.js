@@ -15,7 +15,7 @@
 //   start, every LIMIT.spacing tokens and the prompt's end). A warm-up with `stable` reads its parts past the system turn too
 //   (the history, while the student types); a run arriving stops a warm-up between steps and keeps what it read. After a
 //   think run, the host reads the answer back as the next request will hold it (the turn's empty think block, the answer,
-//   the end token) while nothing else waits. window: the engine's room grows to it, up to LIMIT.most; without one,
+//   the end token) while nothing else waits. window: the engine's room grows to it, up to LIMIT.maxContext; without one,
 //   LIMIT.context. priority 'low' (and writer.complete's task token): the prompt goes in steps of about LIMIT.busy ms of GPU
 //   work each (sized from the last), each finished and followed by a yield, and decode yields between tokens, so typing
 //   paints and a cancel lands within a step.
@@ -46,7 +46,7 @@
 // The grammar's mask allows the end token only once the JSON is whole, so a run stops at the end token as any other.
 // Classic script; node exports (create), and in a Worker it starts itself.
 var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
-  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, most: 131072, first: 8192, step: 8, busy: 25, background: 128, spacing: 2048, rate: 16, answer: 256, spans: 2 };
+  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, maxContext: 131072, first: 8192, step: 8, busy: 25, background: 128, spacing: 2048, rate: 16, answer: 256, spans: 2 };
   // What the Worker loads, in order, beside this file: required ones throw at its start; optional ones until they ship.
   const IMPORTS = Object.freeze({ required: Object.freeze(['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', '../text.js', 'grammar.js', 'updates.js']),
     optional: Object.freeze(['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'ladder.js']) });
@@ -109,14 +109,15 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       } catch (e) { if (signal?.aborted) throw aborted(signal); throw fail('provider-unavailable', 'assets'); }
     };
     // The engine with model `id` (and, for pictures, its projector on the engine's device), loaded once and shared by the
-    // calls that ask together; another model releases it first.
-    const load = (id, projector = null) => {
-      const key = projector ? `${id}+${projector}` : id;
+    // calls that ask together; another model or session size releases it first.
+    const load = (id, projector = null, window) => {
+      const context = Math.max(LIMIT.context, Math.min(Number.isSafeInteger(window) && window > 0 ? window : LIMIT.context, LIMIT.maxContext));
+      const key = `${projector ? `${id}+${projector}` : id}:${context}`;
       if (loaded?.key === key) return loaded.ready;
       const retired = unload();
       const E = env.engine(), V = projector ? env.vision?.() : null;
       if (typeof E?.load !== 'function' || (projector && typeof V?.load !== 'function')) return Promise.reject(fail('provider-unavailable', 'engine'));
-      const job = { id, key, projector, control: new AbortController(), warm: [], schemas: new Map() };
+      const job = { id, key, projector, context, control: new AbortController(), warm: [], schemas: new Map() };
       job.ready = (async () => {
         await retired;
         if (job.control.signal.aborted) throw aborted(job.control.signal);
@@ -327,14 +328,14 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         const images = Array.isArray(m.images) ? m.images : [];
         if (images.length && typeof m.projector !== 'string') throw fail('request-rejected', 'unsupported');
         if (images.length && typeof env.decode !== 'function') throw fail('provider-unavailable', 'engine');
-        const job = await wait(load(m.model, images.length ? m.projector : null), signal);
+        const job = await wait(load(m.model, images.length ? m.projector : null, m.window), signal);
         const { model, tok } = job;
         const pictures = images.length ? await pixels(job, images, signal) : [];
         const head = encode(job, m.parts.slice(0, m.stable)), { rest, slots } = feed(job, m.parts.slice(m.stable), pictures);
-        // An engine that grows its session takes the window as its room (at least LIMIT.context, at most LIMIT.most).
+        // An engine that grows its session takes the window as its room (at least LIMIT.context, at most LIMIT.maxContext).
         const grows = typeof model.reserve === 'function', keeps = grows && typeof model.extend === 'function' && !slots.length;
-        const input = head.length + rest.length, room = grows ? Math.min(Math.max(LIMIT.context, Number.isSafeInteger(m.window) && m.window > 0 ? m.window : 0), LIMIT.most)
-          : Math.min(model.context || LIMIT.context, LIMIT.context);
+        const input = head.length + rest.length, room = grows ? Math.min(Math.max(LIMIT.context, Number.isSafeInteger(m.window) && m.window > 0 ? m.window : 0), LIMIT.maxContext)
+          : Math.min(model.context || job.context, job.context);
         if (input + m.maxTokens > room) throw fail('request-rejected', 'context', { tokens: input, context: room });
         // Think mode: </think>'s id, the parts the host may feed, and the budget the window leaves.
         let think = null, close = null;
@@ -488,7 +489,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
     const warm = async (m, signal) => {
       return queued(async () => {
         if ((await env.store.status(m.model)).state !== 'ready') return { ok: false };
-        const job = await wait(load(m.model), signal);
+        const job = await wait(load(m.model, null, m.window), signal);
         const stable = Number.isSafeInteger(m.stable) && m.stable > 0 && m.stable < m.parts.length ? m.stable : m.parts.length;
         const head = encode(job, m.parts.slice(0, stable)), pacing = { step: LIMIT.background };
         await prefix(job, head, signal, pacing);

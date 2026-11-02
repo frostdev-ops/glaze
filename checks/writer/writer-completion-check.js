@@ -11,7 +11,9 @@ const STUB = `(() => {
   const ai = window.__ai = { settings: { on: true, mode: 'advanced', tune: { completion: { pause: 100 } }, features: { completion: true, writing: false } },
     runs: [], cancels: [], held: [], hold: false, output: ' understand the formatting options clearly.' };
   const data = {}, local = { get: async () => ({ ...data, ai: ai.settings }), set: async (o) => Object.assign(data, o), remove: async (k) => { delete data[k]; } };
-  window.chrome = { storage: { local, onChanged: { addListener() {} } }, runtime: {
+  // Full writer on (storage.sync writer.full): the paper's pages, as a student who turned it on sees them.
+  const sync = { get: async () => ({ writer: { full: true } }), set: async () => {} };
+  window.chrome = { storage: { local, sync, onChanged: { addListener() {} } }, runtime: {
     sendMessage: async (m) => m.type === 'glaze:writerPapers' ? { ok: true, value: await GZ_WRITER_PAPERS.open(local)[m.op](...m.args) } : { ok: true },
     connect() {
       const on = [], post = (m) => setTimeout(() => on.forEach((f) => f(m)), 0);
@@ -57,7 +59,8 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
         html: `${filler.repeat(9)}<p>${base}</p><p>Works Cited</p><p>Sample source entry.</p>`,
         context: { kind: 'assignment', assignment: { id: 'synthetic-completion', title: 'Synthetic typing check' } }, look: { dark: false, motion: 'subtle' } }), 50);
     }, { base: BASE, filler });
-    await page.waitForFunction(() => GZ_WRITER_AI.allowed('completion') && GZ_WRITER_PAPER.current()?.key());
+    // The full paper drawn, its pages and all: focus given while it is still being laid out doesn't hold.
+    await page.waitForFunction(() => GZ_WRITER_AI.allowed('completion') && GZ_WRITER_PAPER.current()?.key() && document.querySelectorAll('.gp-sheet').length >= 5 && !document.querySelector('[inert]'));
     const text = () => page.evaluate(() => { const v = GZ_WRITER_FRAME.editor().view; return v.state.selection.$head.parent.textContent; });
     const ghost = () => page.evaluate(() => document.querySelector('.gz-ghost')?.firstChild?.textContent ?? null);
     const reset = async ({ hold = false, marked = false } = {}) => {
