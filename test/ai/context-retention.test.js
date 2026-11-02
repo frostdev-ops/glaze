@@ -49,3 +49,11 @@ test('split requests use exact prompt count and the actual output reserve at a l
   assert.ok(JSON.stringify(seen[0]).length > 26000, 'large material uses the available prompt capacity');
   for (const line of text.trim().split('\n')) assert.ok(seen.some((req) => JSON.stringify(req).includes(line)));
 });
+
+test('compaction reads all turns retained by the larger window before covering them', () => {
+  const C = require('../../extension/ai/tasks/chat-compact.js');
+  const turns = Array.from({ length: 12 }, (_, i) => ({ question: `Topic ${i}: ${'source '.repeat(100)}`, answer: 'Discuss the reading. '.repeat(60) }));
+  const input = C.task.input({ turns }, { caps: caps(32768) });
+  assert.deepEqual(input?.turns, turns);
+  assert.equal(C.task.input({ turns }, { caps: caps(4096) }), null);
+});
