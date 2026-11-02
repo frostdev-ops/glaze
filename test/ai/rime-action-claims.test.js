@@ -68,3 +68,27 @@ test('a course subpage claim uses the most specific listed destination, not the 
   ] });
   for (const name of ['BIO 1100 grades', 'course:25/grades']) assert.equal(A.why({ call: null, answer: { text: `I opened ${name}.`, quotes: [name] } }, input), '');
 });
+
+test('coordinated completions and failures each use their own destination', async () => {
+  const ctx = { page: { site: 'canvas', url: 'https://school.example.edu/' }, courses: async () => [], ui: { push() {} } };
+  const steps = [
+    { call: { name: 'places_list', arguments: {} }, result: await TOOL('places_list').run({}, ctx) },
+    { call: { name: 'place_open', arguments: { place: 'grades' } }, result: await TOOL('place_open').run({ place: 'grades' }, ctx) },
+    { call: { name: 'place_open', arguments: { place: 'calendar' } }, result: await TOOL('place_open').run({ place: 'calendar' }, { page: {} }) },
+  ];
+  const phrases = {
+    en: ['I opened Grades and I could not open Calendar.', 'I could not open Calendar and I opened Grades.', 'I never opened Calendar and I opened Calendar. Grades'],
+    es: ['He abierto Grades y no he abierto Calendar.', 'No he abierto Calendar y he abierto Grades.', 'No he abierto Calendar y he abierto Calendar. Grades'],
+    'pt-BR': ['Eu abri Grades e não abri Calendar.', 'Não abri Calendar e eu abri Grades.', 'Não abri Calendar e eu abri Calendar. Grades'],
+    fr: ['J’ai ouvert Grades et je n’ai pas ouvert Calendar.', 'Je n’ai pas ouvert Calendar et j’ai ouvert Grades.', 'Je n’ai pas ouvert Calendar et j’ai ouvert Calendar. Grades'],
+    de: ['Ich habe Grades geöffnet und ich habe Calendar nicht geöffnet.', 'Ich habe Calendar nicht geöffnet und ich habe Grades geöffnet.', 'Ich habe Calendar nicht geöffnet und ich habe Calendar geöffnet. Grades'],
+    nl: ['Ik heb Grades geopend en ik heb Calendar niet geopend.', 'Ik heb Calendar niet geopend en ik heb Grades geopend.', 'Ik heb Calendar niet geopend en ik heb Calendar geopend. Grades'],
+  };
+  for (const [locale, [successFirst, failureFirst, falseSuccess]] of Object.entries(phrases)) {
+    const input = A.task.input({ question: PHRASES[locale].question, tools: ['places_list', 'place_open'], locale, now: 1793577600000, zone: 'UTC', first: true, steps });
+    for (const text of [successFirst, failureFirst]) assert.equal(A.why({ call: null, answer: { text, quotes: ['Grades', 'Calendar'] } }, input), '', text);
+    assert.equal(A.why({ call: null, answer: { text: falseSuccess, quotes: ['Grades', 'Calendar'] } }, input), 'ground', falseSuccess);
+  }
+  const input = A.task.input({ question: 'Open Grades and Calendar', tools: ['places_list', 'place_open'], now: 1793577600000, zone: 'UTC', first: true, steps });
+  assert.equal(A.why({ call: null, answer: { text: 'I opened Grades and Calendar.', quotes: ['Grades', 'Calendar'] } }, input), 'ground', 'a coordinated target list still needs both successes');
+});
