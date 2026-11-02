@@ -6,6 +6,7 @@ const X = require('../../extension/ai/text.js');
 const F = require('../../extension/ai/local/format.js');
 const T = require('../../extension/ai/task.js');
 const R = require('../../extension/ai/request.js');
+const C = require('../../extension/ai/current.js');
 const built = (inp) => R.clean({ ...A.task.build(inp, { text: X }), schema: A.OUTPUT, task: { id: 'agent.tools', version: 1 } });
 require('../../extension/ai/providers/mock.js');
 const handle = `document:${'a'.repeat(32)}`;
@@ -78,4 +79,37 @@ test('worker binding distinguishes current-dependent reads from independently gr
   const prior = A.task.input(raw({ current: current(), steps: [{ call: { name: 'places_list', arguments: {} }, result: { courseId: '5521', assignment: '88121', account: 'https://other.example/1' } }] }));
   assert.equal(A.currentBound(c, prior), false);
   assert.equal(A.currentBound({ name: 'todo_mark_done', arguments: { type: 'assignment', id: '88121' } }, inp), false);
+});
+
+for (const field of ['title', 'course', 'assignment', 'content', 'document', 'material']) {
+  test(`current ${field} stays canonical when truncation ends on whitespace`, () => {
+    const text = `${'x'.repeat(239)} \ttrailing words`;
+    const fields = { title: text, course: { id: '5521', name: text }, assignment: { id: '88121', title: text },
+      content: { id: '88122', title: text }, document: { id: handle, title: text } };
+    for (const context of [4096, 32768, 131072]) {
+      const caps = { context };
+      const material = { source: 'instructions', text: `${'é'.repeat((C.materialLimit(caps) - 2) / 2)} \nrest`, truncated: false };
+      const inp = A.task.input(raw({ current: current({ [field]: field === 'material' ? material : fields[field] }) }), { caps });
+      assert.deepEqual(A.fromRequest(built(inp), { window: context }).parts, A.layout(inp, { window: context }));
+      assert.deepEqual(C.clean(inp.current, { caps }), inp.current);
+      assert.equal(inp.current.course.id, '5521');
+      assert.equal(inp.current.assignment.id, '88121');
+      if (field === 'material') {
+        assert.equal(inp.current.material.truncated, true);
+        assert.ok(Buffer.byteLength(inp.current.material.text) <= C.materialLimit(caps));
+      }
+    }
+  });
+}
+
+test('current URL bounds apply to the serialized URL without losing resource identity', () => {
+  for (const path of ['é'.repeat(250), '😀'.repeat(150)]) {
+    const inp = A.task.input(raw({ current: current({ url: `https://school.example/${path}?course_id=5521` }) }));
+    assert.equal(inp.current.url, undefined, 'omit a URL whose encoded form exceeds 1200 characters');
+    assert.equal(inp.current.course.id, '5521');
+    assert.equal(inp.current.assignment.id, '88121');
+    assert.deepEqual(A.fromRequest(built(inp)).parts, A.layout(inp));
+  }
+  const url = `https://school.example/${'x'.repeat(1200 - 'https://school.example/'.length)}`;
+  assert.equal(C.clean(current({ url })).url, url, 'the inclusive URL bound remains usable');
 });
