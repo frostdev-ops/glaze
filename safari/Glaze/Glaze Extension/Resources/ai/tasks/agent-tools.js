@@ -540,18 +540,30 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     const masked = actionWords(text), clauses = [], boundaries = [...masked.matchAll(/[.!?;\n]+|\b(?:but|pero|mas|mais|aber|maar)\b|\b(?:and|y|e|et|und|en)\b(?=\s+(?:i|we|rime|glaze|yo|no|he abierto|abrí|eu|não|abri|je|j['’]ai|ich|ik|(?:could|can|did) not)(?![\p{L}\p{N}]))/giu)];
     let at = 0;
     for (const boundary of [...boundaries, { index: masked.length, 0: '' }]) {
-      const clause = fold(masked.slice(at, boundary.index)).replace(/^\s*[-*]\s*/, '').trim();
-      if (!/^(?:if|si|se|wenn|als)\b/u.test(clause) && NAV_CLAIMS.some((pattern) => {
+      const original = destinationWords(text.slice(at, boundary.index)).replace(/^\s*[-*]\s*/, '').trim(), clause = actionWords(original);
+      if (!/^(?:if|si|se|wenn|als)\b/u.test(clause)) for (const pattern of NAV_CLAIMS) {
         const match = pattern.exec(clause);
-        if (!match) return false;
+        if (!match) continue;
         // Negated completions and attempts do not claim success. A separate "but I opened it" remains a claim.
-        return !/\b(?:not|never|nothing|no|none|não|nunca|pas|jamais|nicht|nie|niet|nooit)\b/u.test(match[0])
+        if (!/\b(?:not|never|nothing|no|none|não|nunca|pas|jamais|nicht|nie|niet|nooit)\b/u.test(match[0])
           && !/\b(?:not|never|no|não|nunca|pas|jamais|nicht|nie|niet|nooit)\s*$/u.test(clause.slice(0, match.index))
-          && !/^\s+(?:nothing|no\b|none\b|nada\b|rien\b|nichts\b|niets\b)/u.test(clause.slice(match.index + match[0].length));
-      })) clauses.push(text.slice(at, boundary.index));
+          && !/^\s+(?:nothing|no\b|none\b|nada\b|rien\b|nichts\b|niets\b)/u.test(clause.slice(match.index + match[0].length))) {
+          // Active claims start at their subject/verb, after any explanation. Passives keep the destination subject.
+          const passive = /^(?:was|were|has been|have been|is now|are now|se|fue|ha sido|está|foi|a|ont|wurde|wurden|ist|sind|is|zijn|werd|werden)\b/u.test(match[0]);
+          clauses.push(original.slice(passive ? 0 : match.index));
+          break;
+        }
+      }
       at = boundary.index + boundary[0].length;
     }
     return clauses;
+  };
+  const NAV_PAGES = {
+    grades: /\b(?:grades?|gradebook|calificaciones|notas|notes|noten|bewertungen|cijfers)\b/u,
+    assignments: /\b(?:assignments?|tasks?|homework|tareas?|deberes|tarefas?|devoirs?|aufgaben|opdrachten(?:pagina)?)\b/u,
+    announcements: /\b(?:announcements?|anuncios?|avisos?|annonces?|ankündigungen|aankondigingen)\b/u,
+    modules: /\b(?:modules?|módulos?|modulen?)\b/u,
+    home: /\b(?:home(?:page)?|course home|página (?:inicial|principal)|accueil|kursstartseite|kursübersicht|startpagina|hoofdpagina)\b/u,
   };
   const navigationGrounded = (text, inp) => {
     if (!inp.tools.some((name) => ['place_open', 'places_list'].includes(name)) && !inp.steps.some((step) => step.call.name === 'place_open')) return true;
@@ -561,20 +573,45 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       let result; try { result = JSON.parse(step.result); } catch { /* no success evidence */ }
       return { place: step.call.arguments.place, result, ok: S.isObj(result) && result.ok !== false && result.error == null && result.opened === step.call.arguments.place && typeof result.title === 'string' && !!result.title.trim() };
     });
-    const known = new Map(attempts.map((attempt) => [attempt.place, attempt.place]));
+    const known = new Map(attempts.map((attempt) => [attempt.place, { place: attempt.place, ...(attempt.ok && { title: attempt.result.title }) }]));
     for (const step of inp.steps) if (step.call.name === 'places_list') {
-      try { for (const place of JSON.parse(step.result).places || []) if (typeof place.place === 'string' && typeof place.title === 'string') { known.set(place.place, place.place); known.set(place.title, place.place); } } catch { /* no listed targets */ }
+      try { for (const place of JSON.parse(step.result).places || []) if (typeof place.place === 'string' && typeof place.title === 'string') known.set(place.place, place); } catch { /* no listed targets */ }
     }
+    const aliases = [...known.values()].flatMap(({ place, title }) => {
+      const out = [{ name: place, place, id: place.startsWith('course:') }];
+      if (title) out.push({ name: title, place });
+      // Course codes are common names for their scope, not a claim that its home page rather than a child opened.
+      if (/^course:[^/]+$/u.test(place) && title?.includes(':') && /\d/u.test(title.split(':')[0])) out.push({ name: title.split(':')[0], place });
+      return out;
+    });
+    const succeeded = (place) => attempts.some((attempt) => attempt.ok && attempt.place === place);
     return claims.every((clause) => {
       const normalized = destinationWords(clause);
-      const named = [...known].flatMap(([name, place]) => {
+      const named = aliases.flatMap(({ name, place, id }) => {
         const match = new RegExp(`(?<![\\p{L}\\p{N}])${destinationWords(name).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'u').exec(normalized);
-        return match ? [{ place, at: match.index, end: match.index + match[0].length }] : [];
+        return match ? [{ place, id, at: match.index, end: match.index + match[0].length }] : [];
       });
       // A course home name/id can be a prefix of its Grades destination. Only the most specific name at that span counts.
-      const targets = named.filter((target) => !named.some((other) => other !== target && other.at <= target.at && other.end >= target.end && other.end - other.at > target.end - target.at)).map((target) => target.place);
-      // Explicit destinations need their own success; a generic completion rests on the latest navigation attempt.
-      return targets.length ? targets.every((place) => attempts.some((attempt) => attempt.ok && attempt.place === place)) : attempts.at(-1)?.ok === true;
+      const targets = named.filter((target) => !named.some((other) => other !== target && other.at <= target.at && other.end >= target.end && other.end - other.at > target.end - target.at));
+      const scoped = targets.filter((target) => target.place.startsWith('course:'));
+      // Read page-kind words outside course titles. "The grades page for BIO 1100" names that course's Grades,
+      // while "the assignments page of BIO 1100" may use its translated label beside the listed home title.
+      let labels = normalized;
+      for (const target of scoped) labels = labels.slice(0, target.at) + ' '.repeat(target.end - target.at) + labels.slice(target.end);
+      const kinds = Object.entries(NAV_PAGES).filter(([, pattern]) => pattern.test(labels)).map(([kind]) => kind);
+      if (!targets.every((target) => {
+        if (target.id || target.place.includes('/')) return succeeded(target.place);
+        if (target.place.startsWith('course:')) return kinds.length
+          ? kinds.every((kind) => succeeded(kind === 'home' ? target.place : `${target.place}/${kind}`))
+          : attempts.some((attempt) => attempt.ok && (attempt.place === target.place || attempt.place.startsWith(`${target.place}/`)));
+        // A global page-kind word is a descriptor when a course scope and its corresponding child are named.
+        if (scoped.some((course) => known.has(`${course.place.split('/')[0]}/${target.place}`))) return true;
+        return succeeded(target.place);
+      })) return false;
+      // Explicit destinations need their own receipt. A generic completion rests on the latest navigation attempt.
+      return targets.length ? true : kinds.length
+        ? kinds.every((kind) => attempts.some((attempt) => attempt.ok && (kind === 'home' ? /^course:[^/]+$/u.test(attempt.place) : attempt.place === kind || attempt.place.endsWith(`/${kind}`))))
+        : attempts.at(-1)?.ok === true;
     });
   };
 
