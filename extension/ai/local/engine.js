@@ -929,7 +929,8 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
   //     grows, at most to `most`, the sequence kept).
   //   decode({ sampler: { temperature, topK, topP, repetitionPenalty }, mask, signal, random }) → the next token's id,
   //     from the last fed position's logits: penalty (the last 64 tokens), then mask (a Uint32Array of ceil(vocab / 32)
-  //     words, id i allowed when bit i & 31 of word i >> 5 is set), then temperature 0 or topK 1: the highest; else the
+  //     words, id i allowed when bit i & 31 of word i >> 5 is set; or a function giving one, called once the previous
+  //     token's forward is on the GPU), then temperature 0 or topK 1: the highest; else the
   //     topK (at most 64; 0: 64) highest, top-p, temperature, a draw. The id is fed by the next decode or prefill.
   //   snapshot() → snap (snap.drop() frees it); restore(snap): the sequence as it was. release(): all GPU memory goes.
   const MARKS = 16;
@@ -1071,11 +1072,15 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       async decode({ sampler, mask = null, signal: sig, random = Math.random } = {}) {
         live(); halt(sig);
         const sp = checkSampler(sampler);
-        if (mask !== null && !(mask instanceof Uint32Array && mask.length === Math.ceil(engine.config.vocab / 32))) fail(`mask: a Uint32Array of ${Math.ceil(engine.config.vocab / 32)} words`);
+        const words = Math.ceil(engine.config.vocab / 32);
+        const okMask = (x) => x === null || (x instanceof Uint32Array && x.length === words) || fail(`mask: a Uint32Array of ${words} words`);
+        if (typeof mask !== 'function') okMask(mask);
         if (model.pos >= s.ctx) fail(`context of ${s.ctx} positions is full`);
         if (pending !== null) await feed([], { logits: 'keep', signal: sig });
         if (!ready) fail('decode: nothing fed to decode from');
         halt(sig);
+        // A mask function runs now, while the GPU computes the decoded token's logits.
+        if (typeof mask === 'function') { mask = mask(); okMask(mask); }
         const penalty = sp.repetitionPenalty !== 1 ? { ids: recent, r: sp.repetitionPenalty } : null;
         const k = sp.temperature === 0 || sp.topK === 1 ? 1 : Math.min(sp.topK || 64, 64);
         const r = await s.pick({ k, mask, penalty });

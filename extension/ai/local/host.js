@@ -70,6 +70,13 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
   // post(message), setTimeout?, clearTimeout?, now? (ms) }.
   const create = (env) => {
     const later = env.setTimeout || setTimeout, cancelTimer = env.clearTimeout || clearTimeout, now = env.now || (() => performance.now());
+    // A task's yield without a timer's clamp (nested zero timeouts wait 4 ms): a message to ourselves; env.pause in tests.
+    const pause = env.pause || (typeof MessageChannel === 'function' ? (() => {
+      const ch = new MessageChannel(), waiting = [];
+      ch.port1.onmessage = () => waiting.shift()?.();
+      ch.port1.unref?.(); ch.port2.unref?.();
+      return () => new Promise((r) => { waiting.push(r); ch.port2.postMessage(0); });
+    })() : () => new Promise((r) => later(r, 0)));
     const ops = new Map(); // id → { control, kind }
     let idleMs = LIMIT.idle, idleTimer = null, tickTimer = null;
     let loaded = null; // { id, key, projector, control, ready, model, tok, eos, base, vision?, warm: [{ ids, snap }] }
@@ -358,11 +365,11 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         // Low priority (writer.complete, or the request says so): small steps, each done on the GPU and followed by a yield,
         // the first LIMIT.step tokens and each next sized to take about LIMIT.busy ms from the last one's time.
         const low = m.priority === 'low' || head.includes(tok.id('<|gz_task:writer.complete|>'));
-        const yieldNow = () => new Promise((r) => later(r, 0));
+        const yieldNow = pause;
         let steps = LIMIT.step;
         const pacing = !low ? {} : { step: () => steps, pace: async (ms, tokens) => {
-          // From this step's ms a token; at most four times the last step, so one slow reading can't stall a frame.
-          if (ms > 0 && tokens > 0) steps = Math.max(1, Math.min(512, 4 * steps, Math.floor(LIMIT.busy * tokens / ms)));
+          // From this step's ms a token; at most twice the last step, so one short reading can't stall a frame.
+          if (ms > 0 && tokens > 0) steps = Math.max(1, Math.min(512, 2 * steps, Math.floor(LIMIT.busy * tokens / ms)));
           await yieldNow();
         } };
         const read = await prefix(job, head, signal, pacing);
@@ -385,7 +392,8 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         let spent = 0; // ms in decode, for the rate
         const step = async (mask) => {
           if (signal.aborted) throw aborted(signal);
-          const t = now(), id = await model.decode({ sampler, ...(mask && { mask }), signal });
+          // An engine that keeps its sequence takes the mask lazily: the grammar's work overlaps the GPU's.
+          const t = now(), id = await model.decode({ sampler, ...(mask && { mask: grows && typeof mask === 'function' ? mask : typeof mask === 'function' ? mask() : mask }), signal });
           spent += now() - t;
           if (low) await yieldNow();
           if (signal.aborted) throw aborted(signal);
@@ -409,7 +417,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         let text = '', n = 0, finish = 'length';
         const said = [];
         while (n < answer) {
-          const id = await step(grammar ? grammar.mask() : null);
+          const id = await step(grammar ? () => grammar.mask() : null);
           n++;
           said.push(id);
           if (id === job.eos) { finish = 'stop'; break; }
