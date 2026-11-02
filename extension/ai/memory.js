@@ -171,7 +171,7 @@ var GZ_MEMORY = globalThis.GZ_MEMORY || (() => {
       });
     };
     const load = async (account, id) => { const key = keyOf(account, id); return key ? clean((await env.local.get(key))[key], key) : null; };
-    const stamp = (old) => { const at = now(); if (!time(at)) throw Error('clock'); return Math.max(at, old ? old.updatedAt + 1 : 0); };
+    const stamp = (old) => { const at = now(); if (!time(at)) throw Error('clock'); return Math.max(at, old ? Math.min(Number.MAX_SAFE_INTEGER, old.updatedAt + 1) : 0); };
     const commit = async (r, operation) => {
       const key = keyOf(r.account, r.id), next = clean(r, key);
       if (!next) return fail('scope');
@@ -182,7 +182,7 @@ var GZ_MEMORY = globalThis.GZ_MEMORY || (() => {
     const save = (account, raw, options = {}) => {
       if (!only(raw, ['text', 'evidence', 'id', 'revision', 'category'], ['text', 'evidence']) || !str(raw.text, LIMIT.memory)
         || !str(raw.evidence, LIMIT.evidence) || (raw.category !== undefined && !['fact', 'preference'].includes(raw.category))
-        || ((raw.id === undefined) !== (raw.revision === undefined)) || (raw.id !== undefined && (kindOf(raw.id) !== 'memory' || !HEX.test(raw.revision)))) return Promise.resolve(fail('scope'));
+        || ((raw.id === undefined) !== (raw.revision === undefined)) || (raw.id !== undefined && (kindOf(raw.id) !== 'memory' || typeof raw.revision !== 'string' || !HEX.test(raw.revision)))) return Promise.resolve(fail('scope'));
       if (typeof options.question !== 'string' || !options.question.includes(raw.evidence)) return Promise.resolve(fail('evidence'));
       const input = { ...raw }, explicit = options.explicitCorrection === true;
       return mutate(account, options, async () => {
@@ -218,7 +218,7 @@ var GZ_MEMORY = globalThis.GZ_MEMORY || (() => {
     };
     const tombstone = (old) => ({ v: 1, id: old.id, account: old.account, kind: old.kind, createdAt: old.createdAt, updatedAt: stamp(old), revision: token(old.revision), deleted: true });
     const forget = (account, raw) => {
-      if (!object(raw) || !kindOf(raw.id) || typeof raw.revision !== 'string' || !HEX.test(raw.revision)) return Promise.resolve(fail('scope'));
+      if (!only(raw, ['id', 'revision'], ['id', 'revision']) || !kindOf(raw.id) || typeof raw.revision !== 'string' || !HEX.test(raw.revision)) return Promise.resolve(fail('scope'));
       const input = { id: raw.id, revision: raw.revision };
       return mutate(account, null, async () => {
         const old = await load(account, input.id);
@@ -274,11 +274,40 @@ var GZ_MEMORY = globalThis.GZ_MEMORY || (() => {
       let found = ranked.filter((r) => r.score > 0), available = found.length;
       if (options.includePreferences === true && options.kind !== 'course') {
         const preference = ranked.filter((v) => v.r.kind === 'memory' && v.r.category === 'preference').sort((a, b) => b.r.updatedAt - a.r.updatedAt || a.r.id.localeCompare(b.r.id))[0];
-        if (preference) { available += found.includes(preference) ? 0 : 1; found = found.filter((v) => v !== preference).slice(0, limit - 1).concat(preference); }
+        if (preference) {
+          available += found.includes(preference) ? 0 : 1;
+          let preferences = 0;
+          found = found.filter((v) => v !== preference && (v.r.category !== 'preference' || ++preferences < 2)).slice(0, limit - 1).concat(preference);
+        }
       }
-      return { ok: true, items: found.slice(0, limit).map((h) => hitOf(h.r, h.text, h.score)), truncated: available > limit };
+      return { ok: true, items: found.slice(0, limit).map((h) => hitOf(h.r, h.text, h.score)), truncated: available > Math.min(limit, found.length) };
+    };
+    // Forget suppresses one source id. Explicit cache clearing/site removal releases that suppression so a later fresh
+    // verified read can populate the cache again. Snapshot revisions protect active reads that arrived after the UI list.
+    const purgeCourses = (options = {}) => {
+      if (!only(options, ['origin', 'account', 'snapshot']) || (options.account !== undefined && !accountOf(options.account))
+        || (options.snapshot !== undefined && (!Array.isArray(options.snapshot) || options.snapshot.some((r) => !only(r, ['id', 'revision'], ['id', 'revision']) || kindOf(r.id) !== 'course' || typeof r.revision !== 'string' || !HEX.test(r.revision))))) return Promise.resolve(fail('scope'));
+      let origin = options.origin;
+      if (origin !== undefined) { try { const u = new URL(origin); if (!/^https?:$/.test(u.protocol) || u.origin !== origin) return Promise.resolve(fail('scope')); } catch { return Promise.resolve(fail('scope')); } }
+      const account = options.account, snapshot = options.snapshot?.map((r) => ({ ...r }));
+      if (account && origin && accountOf(account).origin !== origin) return Promise.resolve(fail('scope'));
+      return queued(env, async () => {
+        try {
+          const rows = (await rowsOf(env, account)).filter((r) => r.kind === 'course' && (!origin || accountOf(r.account).origin === origin));
+          const selected = rows.filter((r) => r.deleted), receipts = []; let conflicts = 0;
+          if (snapshot) for (const ref of new Map(snapshot.map((r) => [r.id, r])).values()) {
+            const matches = rows.filter((r) => !r.deleted && r.id === ref.id);
+            if (matches.length === 1 && matches[0].revision === ref.revision) selected.push(matches[0]); else conflicts++;
+          } else selected.push(...rows.filter((r) => !r.deleted));
+          for (const r of selected) receipts.push(receipt('forgotten', tombstone(r)).receipt);
+          invalidateNow(env.local, account);
+          if (selected.length && (typeof env.local.remove !== 'function' || await env.local.remove(selected.map((r) => keyOf(r.account, r.id))) === false)) return fail('write');
+          return { ok: true, removed: selected.length, receipts, conflicts };
+        } catch { return fail('write'); }
+      });
     };
     const clearRecords = (account, options = {}) => {
+      if (options.kind === 'course') return purgeCourses({ ...(account !== undefined && { account }), ...(options.snapshot !== undefined && { snapshot: options.snapshot }) });
       if ((account !== undefined && !accountOf(account)) || (options.kind !== undefined && !['memory', 'course'].includes(options.kind))
         || (options.snapshot !== undefined && (!Array.isArray(options.snapshot) || options.snapshot.some((r) => !only(r, ['id', 'revision'], ['id', 'revision']) || !kindOf(r.id) || typeof r.revision !== 'string' || !HEX.test(r.revision))))) return Promise.resolve(fail('scope'));
       const snapshot = options.snapshot?.map((r) => ({ ...r })), kind = options.kind;
@@ -306,7 +335,7 @@ var GZ_MEMORY = globalThis.GZ_MEMORY || (() => {
       if (!accountOf(account) || !Array.isArray(refs) || refs.some((r) => !object(r) || !kindOf(r.id) || typeof r.revision !== 'string' || !HEX.test(r.revision))) return false;
       try { const got = await env.local.get(refs.map((r) => keyOf(account, r.id))); return refs.every((ref) => { const r = clean(got[keyOf(account, ref.id)], keyOf(account, ref.id)); return r && !r.deleted && r.revision === ref.revision; }); } catch { return false; }
     };
-    return { save, edit, forget, ingest, read, search, lease, validateLease, current,
+    return { save, edit, forget, ingest, read, search, lease, validateLease, current, purgeCourses,
       list: (account, options) => accountOf(account) ? listRecords(account, options) : Promise.resolve(fail('scope')),
       listAll: (options) => listRecords(undefined, options), resolveById,
       clear: (account, options) => accountOf(account) ? clearRecords(account, options) : Promise.resolve(fail('scope')), clearAll: (options) => clearRecords(undefined, options),
