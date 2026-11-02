@@ -6,6 +6,21 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [4.0.2] — 2026-11-01
+
+### Fixed
+
+- Blackboard: the course bar folds into its pill and back without jitter, on slower Macs and with Safari's bounce.
+- Blackboard: opening a folder, a learning module or a menu no longer makes the page jump or throws away Glaze's saved copies of your pages.
+- Blackboard Messages: Reply stays on screen under Glaze's top bar.
+- Blackboard Activity: each item's name comes first, in bold, with its course under it.
+- Blackboard: text left bare on your Look's background (SafeAssign, an assignment's Additional Information, the Courses and Organizations toolbars, Activity's filters, Grades, Messages, the roster filter and the Dashboard bar) gets a surface you can read, and To Do's ticks show.
+- Blackboard on a shared computer: another student's course no longer shows as a blank card, each student gets their own first Dashboard cards, and **Reset layout** moves every course card you see.
+- **Open Blackboard on the dashboard** never takes over a page you opened by its link, and goes there without loading the page again.
+- To Do no longer redraws every minute when nothing in it changed.
+- Writer in Safari: typing fast no longer loses a word's last letters or moves the caret back. macOS's inline predictions are off in Writer, which has its own gray text.
+- Safari: Google Drive and Calendar keep working after Google refuses an expired sign-in while other requests are waiting for it.
+
 ## [4.0.1] — 2026-10-31
 
 ### Added

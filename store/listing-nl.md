@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.1 (Dutch)
+# Chrome Web Store listing — Glaze 4.0.2 (Dutch)
 
 ## Short summary (132 character maximum)
 
@@ -73,18 +73,15 @@ Canvas is een handelsmerk van Instructure, Inc. Blackboard is een handelsmerk va
 
 ## Release notes
 
-NIEUW IN 4.0.1
+NIEUW IN 4.0.2
 
-• Blackboard Ultra: cursustabbladen openen vanuit een pagina die al geladen is en beginnen te laden zodra je op een tabblad drukt of eroverheen gaat (Instellingen › Cursustabbladen › Cursustabbladen vooraf openen).
-• Cursusinhoud klaarhouden: een item opent over de cursusinhoud, en teruggaan is meteen, op dezelfde plek.
-• Pagina's meteen openen: Cijfers, Cursussen, Activiteit en de inhoud, aankondigingen en cijfers van een cursus tonen je vorige bezoek terwijl Blackboard laadt. Laden van pagina’s meteen tonen: een klik is meteen te zien. De balk van Glaze staat er vanaf het eerste beeld, de voettekst en panelen verschuiven de pagina niet meer, en Taken, cijfers en de zijbalk verschijnen uit opgeslagen gegevens zodra Blackboard bevestigt wie er is ingelogd. Pagina's laden achter één laadweergave in je Look, zonder grijs scherm en gestapelde laadrondjes.
-• Cursusgegevens vooraf laden, minder verzoeken aan Blackboard en minder werk op tragere laptops.
-• Pdf's: markeren, pen, tekst, afbeeldingen, vormen en handtekeningen, en een paginapaneel om pagina's te verplaatsen, te draaien, te verwijderen en toe te voegen. Een pdf houdt één kopie, de laatste versie met markeringen.
-• Bijvoegen uit Documenten voegt je documenten toe aan de inlevering van een opdracht in Blackboard Ultra. Werkmappen uit .xlsm worden als .xlsm geëxporteerd en ingeleverd.
-• Canvas: Openen in Glaze bij pdf-, dia- en spreadsheetbestanden. Dia's krijgen Afdrukken met notities…, en kaarten in Documenten tonen de grafieken van een spreadsheet.
-• De feedback van Writer antwoordt in de taal van je concept, en de opmerkingen en controles bij bronvermeldingen werken in alle zes talen.
-• Haalt een opmerking van de feedback haar controles niet, dan toont Writer de gecontroleerde beoordeling volgens het beoordelingsschema in plaats van het cijfer achter te houden.
-• Firefox: Google Drive (Instellingen › Writer › Werkstukken) opent, bewaart, voegt bij en synchroniseert je documenten, ook grote bestanden. Uit tot je verbinding maakt.
-• Firefox: een site waarvan je de toegang hebt ingetrokken, wordt niet meer opnieuw geprobeerd.
-• Chrome: Synchronisatie met Google Agenda (Instellingen › Delen) houdt een agenda met de naam Glaze in je Google-account bij, en Google Drive (Instellingen › Writer › Werkstukken) opent, bewaart, voegt bij en synchroniseert je documenten, ook grote bestanden. Beide blijven uit tot je verbinding maakt.
-• Safari: Synchronisatie met Google Agenda (Instellingen › Delen) houdt een agenda met de naam Glaze in je Google-account bij, en Google Drive (Instellingen › Writer › Werkstukken) opent, bewaart, voegt bij en synchroniseert je documenten, ook grote bestanden. Beide blijven uit tot je verbinding maakt.
+• Blackboard Ultra: de cursusbalk klapt zonder trillen in tot een pil en weer uit, ook op tragere laptops.
+• Een map, een leermodule of een menu openen laat de pagina niet meer springen en gooit de bewaarde kopieën van je pagina's niet meer weg.
+• Berichten: Beantwoorden blijft in beeld onder de bovenbalk van Glaze.
+• Activiteit: de naam van elk item staat voorop, vetgedrukt, met de cursus eronder.
+• Tekst die Blackboard kaal op je achtergrond laat (SafeAssign, aanvullende informatie bij een opdracht, werkbalken, filters, cijfers, berichten) krijgt een leesbaar vlak, en de vinkjes in Taken zijn te zien.
+• Op een gedeelde computer staat de cursus van een andere student niet meer als lege kaart, elke student krijgt eigen eerste dashboardkaarten, en Indeling herstellen verplaatst elke cursuskaart die je ziet.
+• Blackboard openen op het dashboard neemt nooit een pagina over die je via de link hebt geopend.
+• Taken wordt niet meer elke minuut opnieuw getekend als er niets is veranderd.
+• Safari: snel typen in Writer verliest niet meer de laatste letters van een woord en zet de cursor niet meer terug.
+• Safari: Google Drive en Agenda blijven werken nadat Google een verlopen aanmelding heeft geweigerd.

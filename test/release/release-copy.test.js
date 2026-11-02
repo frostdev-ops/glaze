@@ -46,24 +46,24 @@ for (const [lang, expected] of Object.entries(access)) test(`listing ${lang || '
   assert.ok(!/(?:ten tabs|zehn Tabs|diez pestañas|dix onglets|tien tabbladen|dez abas)/.test(listing(lang)), 'no settings editor in ten tabs');
 });
 
-const release401 = {
-  '': ['NEW IN 4.0.1', 'first paint', 'slower laptops', 'Settings › Course tabs › Open course tabs ahead of time', 'Keep Course Content ready', 'Open pages instantly', 'Show pages loading at once', 'Load course data ahead of time'],
-  de: ['NEU IN 4.0.1', 'ersten Bild', 'langsameren Laptops', 'Einstellungen › Kurs-Tabs › Kurs-Tabs vorab öffnen', 'Kursinhalte bereithalten', 'Seiten sofort öffnen', 'Laden von Seiten sofort zeigen', 'Kursdaten vorab laden'],
-  es: ['NOVEDADES DE 4.0.1', 'primer dibujado', 'portátiles más lentos', 'Ajustes › Pestañas de cursos › Abrir las pestañas de cursos por adelantado', 'Mantener listo el contenido del curso', 'Abrir páginas al instante', 'Mostrar al instante que la página carga', 'Cargar los datos del curso por adelantado'],
-  fr: ['NOUVEAUTÉS DE LA VERSION 4.0.1', 'premier affichage', 'portables plus lents', 'Réglages › Onglets de cours › Ouvrir les onglets de cours à l’avance', 'Garder le contenu du cours prêt', 'Ouvrir les pages instantanément', 'Montrer tout de suite le chargement des pages', "Charger les données des cours à l'avance"],
-  nl: ['NIEUW IN 4.0.1', 'eerste beeld', 'tragere laptops', 'Instellingen › Cursustabbladen › Cursustabbladen vooraf openen', 'Cursusinhoud klaarhouden', "Pagina's meteen openen", 'Laden van pagina’s meteen tonen', 'Cursusgegevens vooraf laden'],
-  'pt-BR': ['NOVO NA 4.0.1', 'primeiro desenho', 'notebooks mais lentos', 'Configurações › Abas de cursos › Abrir as abas de cursos com antecedência', 'Manter o conteúdo do curso pronto', 'Abrir páginas na hora', 'Mostrar na hora que a página está carregando', 'Carregar os dados do curso com antecedência'],
+// 4.0.2 is fixes only: each listing's block names the settings it fixes by their names in that language, and labels the
+// Safari-only fixes so AMO leaves them out.
+const release402 = {
+  '': ['NEW IN 4.0.2', 'course bar', 'slower laptops'],
+  de: ['NEU IN 4.0.2', 'Kursleiste', 'langsameren Laptops'],
+  es: ['NOVEDADES DE 4.0.2', 'barra del curso', 'portátiles más lentos'],
+  fr: ['NOUVEAUTÉS DE LA VERSION 4.0.2', 'barre du cours', 'portables plus lents'],
+  nl: ['NIEUW IN 4.0.2', 'cursusbalk', 'tragere laptops'],
+  'pt-BR': ['NOVO NA 4.0.2', 'barra do curso', 'notebooks mais lentos'],
 };
-for (const [lang, expected] of Object.entries(release401)) test(`4.0.1 release notes ${lang || 'en'} name Blackboard's speed settings, Documents' new buttons, and Calendar and Drive for the browsers that have them`, () => {
+for (const [lang, expected] of Object.entries(release402)) test(`4.0.2 release notes ${lang || 'en'} name the fixed settings and label Safari's fixes`, () => {
   const text = listing(lang), block = part(text, 'Release notes');
   const context = {};
   if (lang) vm.runInNewContext(read(`i18n/${lang}.js`), context);
   const ui = (key) => lang ? context.GZ_LANGS[lang][key] : key;
-  // The four speed settings' names come with perf/ultra's strings, so they are written out here.
-  for (const key of ['Attach from Documents', 'Open in Glaze', 'Print with notes…']) assert.ok(block.toLowerCase().includes(ui(key).toLowerCase()), key);
-  assert.ok(block.includes(`${ui('Settings')} › ${ui('Writer')} › ${ui('Papers')}`), 'Google Drive by its UI path');
+  for (const key of ['Open Blackboard on the dashboard', 'Reset layout', 'Writer']) assert.ok(block.toLowerCase().includes(ui(key).toLowerCase()), key);
   for (const term of expected) assert.ok(block.toLowerCase().includes(term.toLowerCase()), term);
-  for (const line of block.split('\n').filter((l) => /Google/.test(l))) assert.match(line, /^•\s*(?:Chrome|Firefox|Safari)\s*:/, 'Google Calendar and Drive are labelled for the browsers that have them');
+  for (const line of block.split('\n').filter((l) => /Google|Writer/.test(l))) assert.match(line, /^•\s*Safari\s*:/, 'Safari\'s fixes are labelled');
   assert.ok(!/\b(?:CI|audit)\b/i.test(block), 'no internal process in store copy');
 });
 
@@ -81,12 +81,12 @@ for (const [lang, expected] of Object.entries(terms)) test(`listing ${lang || 'e
   for (const term of expected) assert.ok(text.includes(term), term);
 });
 
-test('4.0.1 versions agree and the exact pure notes transform fits Apple', () => {
-  assert.equal(JSON.parse(read('manifest.json')).version, '4.0.1');
-  assert.equal(JSON.parse(read('../safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '4.0.1');
-  // The helper and its Claude Desktop bundle, glaze-mcp-4.0.1.mcpb on the GitHub release, carry Glaze's version.
-  assert.equal(JSON.parse(read('../mcp/package.json')).version, '4.0.1');
-  assert.equal(JSON.parse(read('../mcp/mcpb/manifest.json')).version, '4.0.1');
+test('4.0.2 versions agree and the exact pure notes transform fits Apple', () => {
+  assert.equal(JSON.parse(read('manifest.json')).version, '4.0.2');
+  assert.equal(JSON.parse(read('../safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '4.0.2');
+  // The helper and its Claude Desktop bundle, glaze-mcp-4.0.2.mcpb on the GitHub release, carry Glaze's version.
+  assert.equal(JSON.parse(read('../mcp/package.json')).version, '4.0.2');
+  assert.equal(JSON.parse(read('../mcp/mcpb/manifest.json')).version, '4.0.2');
   // Extract only this synchronous reader. Do not import or execute the release command or its top-level operations.
   const script = read('../tools/release/store-release.mjs');
   const body = script.slice(script.indexOf('function notes(source) {'), script.indexOf('\nasync function build('));
@@ -98,7 +98,7 @@ test('4.0.1 versions agree and the exact pure notes transform fits Apple', () =>
   });
   const result = notes(path.join(root, '..'));
   assert.ok(result.length <= 4000, `${result.length} characters`);
-  assert.match(result, /^Added\n/);
+  assert.match(result, /^Fixed\n/);
   assert.ok(result.length <= 3000, `AMO: ${result.length} characters`);
   assert.ok(!result.includes('## [3.4.5]'));
 });

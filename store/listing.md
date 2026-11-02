@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.1
+# Chrome Web Store listing — Glaze 4.0.2
 
 ## Name
 
@@ -81,21 +81,18 @@ Canvas is a trademark of Instructure, Inc. Blackboard is a trademark of Antholog
 
 ## Release notes
 
-NEW IN 4.0.1
+NEW IN 4.0.2
 
-• Blackboard Ultra: course tabs open from a page that's already loaded, and start loading when you press or hover a tab (Settings › Course tabs › Open course tabs ahead of time).
-• Keep Course Content ready: an item opens over Course Content, and going back is instant, at the same place.
-• Open pages instantly: Grades, Courses, Activity and a course's Content, Announcements and Gradebook show your last visit while Blackboard loads. Show pages loading at once: a click shows at once. Glaze's bar is there at first paint, its footer and panels no longer push the page, and To Do, grades and the sidebar appear from saved data once Blackboard confirms who's signed in. Pages load behind one loading layout in your Look, not a grey screen and stacked spinners.
-• Load course data ahead of time, fewer requests to Blackboard and less work on slower laptops.
-• PDFs: highlight, pen, text, images, shapes and signatures, and a pages panel to move, turn, delete and add pages. A PDF keeps one copy, its latest marked-up version.
-• Attach from Documents adds your documents to a Blackboard Ultra assignment's submission. Workbooks from .xlsm export and submit as .xlsm.
-• Canvas: Open in Glaze on PDF, slide and spreadsheet files. Slides get Print with notes…, and Documents cards show a spreadsheet's charts.
-• Writer's Feedback answers in your draft's language, and its citation comments and checks work in all six languages.
-• When one of Feedback's comments fails its checks, Writer shows the rubric rating it checked instead of withholding the grade.
-• Firefox: Google Drive (Settings › Writer › Papers) opens, saves, attaches and syncs your documents, large files included. Off until you connect.
-• Firefox: a site whose access you took back is no longer retried.
-• Chrome: Google Calendar sync (Settings › Sharing) keeps a calendar named Glaze in your Google account up to date, and Google Drive (Settings › Writer › Papers) opens, saves, attaches and syncs your documents, large files included. Both stay off until you connect.
-• Safari: Google Calendar sync (Settings › Sharing) keeps a calendar named Glaze in your Google account up to date, and Google Drive (Settings › Writer › Papers) opens, saves, attaches and syncs your documents, large files included. Both stay off until you connect.
+• Blackboard Ultra: the course bar folds into its pill and back without jitter, even on slower laptops.
+• Opening a folder, a learning module or a menu no longer makes the page jump or throws away Glaze's saved copies of your pages.
+• Messages: Reply stays on screen under Glaze's top bar.
+• Activity: each item's name comes first, in bold, with its course under it.
+• Text Blackboard leaves bare on your Look's background (SafeAssign, an assignment's Additional Information, toolbars, filters, Grades, Messages) gets a surface you can read, and To Do's ticks show.
+• On a shared computer, another student's course no longer shows as a blank card, each student gets their own first Dashboard cards, and Reset layout moves every course card you see.
+• Open Blackboard on the dashboard never takes over a page you opened by its link.
+• To Do no longer redraws every minute when nothing in it changed.
+• Safari: typing fast in Writer no longer loses a word's last letters or moves the caret back.
+• Safari: Google Drive and Calendar keep working after Google refuses an expired sign-in.
 
 ## Single-purpose statement
 
