@@ -284,3 +284,29 @@ test('site cache purge is origin scoped and snapshot clear preserves newer sourc
   assert.equal((await s.list(B, { kind: 'course' })).items.length, 0);
   assert.equal((await s.list(U, { kind: 'course' })).items.length, 1);
 });
+
+test('scoped management rejects an account switch while waiting for the shared queue', async () => {
+  for (const op of ['edit', 'forget', 'clear', 'purgeCourses']) {
+    const local = area(), s = make(local), saved = await save(s), before = structuredClone(local.data);
+    let active = true, release, started;
+    const ready = new Promise((done) => { started = done; });
+    const held = M.queued({}, () => { started(); return new Promise((done) => { release = done; }); });
+    await ready;
+    const options = { guard: async () => active };
+    const pending = op === 'edit' ? s.edit(A, { id: saved.receipt.id, revision: saved.receipt.revision, markdown: 'Use examples.' }, options)
+      : op === 'forget' ? s.forget(A, { id: saved.receipt.id, revision: saved.receipt.revision }, options)
+        : op === 'clear' ? s.clear(A, { kind: 'memory', ...options }) : s.purgeCourses({ account: A, ...options });
+    active = false; release(); await held;
+    assert.deepEqual(await pending, { ok: false, error: 'scope' }, op);
+    assert.deepEqual(local.data, before, op);
+  }
+});
+
+test('scoped edits revalidate after storage reads and before publishing a write', async () => {
+  const local = area(), s = make(local), saved = await save(s), before = structuredClone(local.data), get = local.get;
+  let active = true;
+  local.get = async (keys) => { const out = await get(keys); active = false; return out; };
+  const edited = await s.edit(A, { id: saved.receipt.id, revision: saved.receipt.revision, markdown: 'Use examples.' }, { guard: async () => active });
+  assert.deepEqual(edited, { ok: false, error: 'scope' });
+  assert.deepEqual(local.data, before);
+});
