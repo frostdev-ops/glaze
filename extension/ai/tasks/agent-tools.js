@@ -548,10 +548,20 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       && (!!c.assignment || ['assignment', 'quiz', 'test'].includes(c.content?.kind) || c.document?.kind === 'assignment'
         || gradedWork(fold(c.material?.text || '')));
   };
+  const recalledWork = (inp) => {
+    const q = fold(inp.question);
+    if (!CURRENT_REF.test(q) || !(ASK.test(q) || WORK_THIS.test(q)) || gradeMath(q)) return false;
+    const records = [...(inp.recall?.records || [])];
+    for (const s of inp.steps) if (['memory_read', 'memory_search'].includes(s.call.name)) {
+      try { const r = JSON.parse(s.result); if (r?.ok === true) records.push(...(s.call.name === 'memory_search' && Array.isArray(r.items) ? r.items : [r])); } catch { /* no course snapshot */ }
+    }
+    return records.some((r) => r?.kind === 'course' && r.source?.type === 'course-read'
+      && (r.source.tool === 'assignment_read' || typeof r.text === 'string' && gradedWork(fold(r.text))));
+  };
   const ownWhy = (name, args, inp) => {
     if (name === 'memory_save') return typeof args.evidence === 'string' && args.evidence.trim() && inp.question.includes(args.evidence) && M().userText(inp.question).includes(args.evidence) ? '' : 'text';
     if (name === 'memory_forget') return M().forgetRequested(inp.question) ? '' : 'asked';
-    if (name === 'run_js') return gradedWork(fold(inp.question)) || currentWork(inp) || inp.steps.some((s) => ['assignment_read', 'document_read', 'announcement_read', 'content_read', 'discussion_read'].includes(s.call.name)) ? 'work' : '';
+    if (name === 'run_js') return gradedWork(fold(inp.question)) || currentWork(inp) || recalledWork(inp) || inp.steps.some((s) => ['assignment_read', 'document_read', 'announcement_read', 'content_read', 'discussion_read'].includes(s.call.name)) ? 'work' : '';
     if (name === 'place_open') return under(inp, 'places_list', ['place', 'here']).includes(args.place) ? '' : 'place';
     if (name === 'page_highlight') {
       const want = fold(args.text);
@@ -690,10 +700,11 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     if (!memoryOn(inp) && !inp.steps.some((s) => s.call.name.startsWith('memory_'))) return true;
     if (R().synced(text)) return false;
     const attempts = inp.steps.filter((s) => M().isWrite(s.call.name)).map(memoryAttempt);
-    return R().claims(text).every(({ clause, operation }) => {
+    return R().claims(text).every(({ clause, operation, present }) => {
       const saving = operation !== 'forgotten', ids = clause.match(/[ms]-[0-9a-f]{32}/g) || [];
       const relevant = attempts.filter((a) => (a.call.name === 'memory_save') === saving);
-      const valid = (a) => a?.ok && (operation !== 'updated' || a.call.arguments.id && ['updated', 'unchanged'].includes(a.receipt.operation));
+      const valid = (a) => a?.ok && (!present || attempts.filter((attempt) => attempt.id === a.id).at(-1) === a)
+        && (operation !== 'updated' || a.call.arguments.id && ['updated', 'unchanged'].includes(a.receipt.operation));
       return ids.length ? ids.every((id) => valid(relevant.filter((a) => a.id === id).at(-1))) : valid(relevant.at(-1));
     });
   };
@@ -705,9 +716,13 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   const memoryFresh = (text, inp) => {
     if (!inp.steps.some((s) => ['memory_read', 'memory_search'].includes(s.call.name)) && !inp.recall?.records.length) return true;
     const question = fold(M().userText(inp.question));
-    // Explicit questions about a past observation can use that observation, with its provenance intact.
-    if (/\b(?:saved|cached|historical|previous|as read|did (?:the|my)|last semester|last year|guardad[oa]|anterior|registrad[oa]|enregistré|gespeichert|opgeslagen)\b/u.test(question)) return true;
-    const topics = Object.values(FRESH).filter((topic) => topic.question.test(question));
+    // Only the historical part of a question can use a snapshot. A separate or explicitly current request still needs
+    // fresh school results, even when the same turn also asks what a saved observation reported.
+    const clauses = question.split(/[.!?;]+|\b(?:and|but|y|pero|e|mas|et|mais|und|aber|en|maar)\b/u);
+    const historical = (clause) => /\b(?:saved|cached|historical|as read|last semester|last year|guardad[oa]|registrad[oa]|enregistré|gespeichert|opgeslagen)\b/u.test(clause)
+      || /\b(?:previous|anterior)\b/u.test(clause) && /\b(?:was|were|had|era|eran|foi|était|war|waren)\b/u.test(clause);
+    const current = /\b(?:current|latest|now|today|still|actual|ahora|hoy|todavía|atual|agora|hoje|ainda|actuel|maintenant|encore|aktuell|jetzt|heute|noch|huidig|nu|vandaag|nog|when (?:is|are)|have i|did i)\b/u;
+    const topics = Object.values(FRESH).filter((topic) => clauses.some((clause) => topic.question.test(clause) && (!historical(clause) || current.test(clause))));
     const hasFresh = (topic) => inp.steps.some((s) => {
       if (!topic.tools.includes(s.call.name)) return false;
       try { const r = JSON.parse(s.result); return S.isObj(r) && r.ok !== false && r.error == null && r.missing == null && facts(s.result).length > 0; } catch { return false; }

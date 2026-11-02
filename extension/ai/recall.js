@@ -60,16 +60,27 @@ var GZ_AI_RECALL = globalThis.GZ_AI_RECALL || (() => {
     .replace(/```[\s\S]*?```|`[^`\n]*`|"[^"\n]*"|“[^”\n]*”|„[^“\n]*“|«[^»\n]*»|‘[^’\n]*’|(?<![\p{L}])'[^'\n]*'/gu, (match) => ' '.repeat(match.length));
   // Shared by tool answers and tutoring, which has no mutation receipts. Quoted/code phrases and negated,
   // conditional or future requests are data, not an explicit assistant completion.
-  const claims = (text) => prose(text).split(/[.!?;\n]+|\b(?:but|pero|mais|aber|maar)\b/u).flatMap((clause) => {
-    if (/^\s*(?:if|si|se|wenn|als)\b/u.test(clause)) return [];
-    const active = /\b(?:i(?:'ve| have)?|we(?:'ve| have)?|rime|glaze) (?:already |just |successfully |now )?(saved|stored|remembered|updated|changed|replaced|forgot|forgotten|deleted|removed|cleared)\b/u.exec(clause);
-    const passive = /\b(?:memory|memories|preference|preferences|fact|facts|it|that) (?:is |are |was |were |has been |have been |is now |are now )?(saved|stored|updated|changed|replaced|forgotten|deleted|removed|cleared)\b/u.exec(clause);
-    const foreign = /\b(?:he|hemos) (guardado|actualizado|olvidado|eliminado)|\b(?:yo )?(guardé|actualicé|olvidé|eliminé)|\b(?:eu )?(salvei|guardei|atualizei|esqueci|apaguei)|\bj'ai (enregistré|mémorisé|mis à jour|oublié|supprimé)|\bich habe[^.!?;]{0,80} (gespeichert|aktualisiert|vergessen|gelöscht)|\bik heb[^.!?;]{0,80} (opgeslagen|bijgewerkt|vergeten|verwijderd)/u.exec(clause);
-    const match = active || passive || foreign;
-    if (!match || /\b(?:not|never|no|não|nunca|pas|jamais|nicht|nie|niet|nooit)\b/u.test(match[0]) || /\bforgot to\b/u.test(match[0] + clause.slice(match.index + match[0].length, match.index + match[0].length + 5))) return [];
-    const verb = match.slice(1).find(Boolean), operation = /^(?:updated|changed|replaced|actualizado|actualicé|atualizei|mis à jour|aktualisiert|bijgewerkt)$/u.test(verb) ? 'updated'
-      : /^(?:forgot|forgotten|deleted|removed|cleared|olvidado|eliminado|olvidé|eliminé|esqueci|apaguei|oublié|supprimé|vergessen|gelöscht|vergeten|verwijderd)$/u.test(verb) ? 'forgotten' : 'saved';
-    return [{ clause, operation }];
+  const claims = (text) => prose(text).split(/[.!?;\n]+|\b(?:but|pero|mais|aber|maar)\b/u).flatMap((sentence) => {
+    if (/^\s*(?:if|si|se|wenn|als)\b/u.test(sentence)) return [];
+    let prior = null;
+    // Coordinated predicates can omit the repeated subject: "I saved it and deleted it" still claims two operations.
+    return sentence.split(/\b(?:and|y|e|et|und|en)\b|,\s*(?:then\s+)?/u).flatMap((clause) => {
+      if (/^\s*(?:if|si|se|wenn|als)\b/u.test(clause)) { prior = null; return []; }
+      const active = [...clause.matchAll(/\b(?:i(?:'ve| have)?|we(?:'ve| have)?|rime|glaze) (?:already |just |successfully |now )?(saved|stored|remembered|updated|changed|replaced|forgot|forgotten|deleted|removed|cleared)\b/gu)].map((match) => ({ match, verb: match[1] }));
+      const passive = [...clause.matchAll(/\b(?:memory|memories|preference|preferences|fact|facts|it|that) (?:(is|are|was|were|has been|have been|is now|are now) )?(saved|stored|updated|changed|replaced|forgotten|deleted|removed|cleared)\b/gu)].map((match) => ({ match, verb: match[2], present: /^(?:is|are)(?: now)?$/u.test(match[1] || '') }));
+      const foreign = [...clause.matchAll(/\b(?:he|hemos) (guardado|actualizado|olvidado|eliminado)|\b(?:yo )?(guardé|actualicé|olvidé|eliminé)|\b(?:eu )?(salvei|guardei|atualizei|esqueci|apaguei)|\bj'ai (enregistré|mémorisé|mis à jour|oublié|supprimé)|\bich habe[^.!?;]{0,80} (gespeichert|aktualisiert|vergessen|gelöscht)|\bik heb[^.!?;]{0,80} (opgeslagen|bijgewerkt|vergeten|verwijderd)/gu)].map((match) => ({ match, verb: match.slice(1).find(Boolean) }));
+      const matches = [...active, ...passive, ...foreign].sort((a, b) => a.match.index - b.match.index);
+      const coordinated = prior && /^\s*(?:then )?(saved|stored|remembered|updated|changed|replaced|forgot|forgotten|deleted|removed|cleared|guardado|actualizado|olvidado|eliminado|guardé|actualicé|olvidé|eliminé|salvei|guardei|atualizei|esqueci|apaguei|enregistré|mémorisé|mis à jour|oublié|supprimé|gespeichert|aktualisiert|vergessen|gelöscht|opgeslagen|bijgewerkt|vergeten|verwijderd)\b/u.exec(clause);
+      if (!matches.length && coordinated) matches.push({ match: coordinated, verb: coordinated[1], present: prior.present });
+      if (!matches.length) { prior = null; return []; }
+      return matches.flatMap(({ match, verb, present }, i) => {
+        if (/\b(?:not|never|no|não|nunca|pas|jamais|nicht|nie|niet|nooit)\b/u.test(match[0]) || /\bforgot to\b/u.test(match[0] + clause.slice(match.index + match[0].length, match.index + match[0].length + 5))) { prior = null; return []; }
+        const operation = /^(?:updated|changed|replaced|actualizado|actualicé|atualizei|mis à jour|aktualisiert|bijgewerkt)$/u.test(verb) ? 'updated'
+          : /^(?:forgot|forgotten|deleted|removed|cleared|olvidado|eliminado|olvidé|eliminé|esqueci|apaguei|oublié|supprimé|vergessen|gelöscht|vergeten|verwijderd)$/u.test(verb) ? 'forgotten' : 'saved';
+        prior = { clause: clause.slice(match.index, matches[i + 1]?.match.index), operation, ...(present && { present: true }) };
+        return [prior];
+      });
+    });
   });
   const synced = (text) => {
     const words = prose(text);
