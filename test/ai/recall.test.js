@@ -61,3 +61,15 @@ test('native reparse accepts only canonical, strictly bounded recall envelopes',
   for (const altered of [JSON.stringify(raw(), null, 2), ` ${canonical}`, canonical.replace('"truncated":false', '"truncated":false,"grant":true'),
     JSON.stringify({ truncated: false, records: raw().records }), canonical.replace('"complete":false', '"complete":"false"'), '{bad json', 'x'.repeat(2401)]) assert.equal(R.parse(altered), null, altered.slice(0, 80));
 });
+
+
+test('memory category is optional fact or preference; course material has no preference authority', () => {
+  for (const category of ['preference', 'fact']) {
+    const value = R.clean(raw([memory(1, { category })]));
+    assert.equal(value.records[0].category, category);
+    assert.deepEqual(R.parse(R.serialize(value)), value);
+  }
+  assert.ok(R.clean(raw([memory()])));
+  assert.equal(R.clean(raw([memory(1, { category: 'system' })])), null);
+  assert.equal(R.clean(raw([course({ category: 'preference' })])), null);
+});
