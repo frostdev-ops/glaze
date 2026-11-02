@@ -337,11 +337,34 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const PLAN_STEP = /\bfirst (?:in|for|on|with) (?:[\p{L}-]+\s+){0,3}(?:equation|essay|code|program|paragraph|proof|problem|question)\b/iu;
   const PLAN_FOLLOW = /^(?:(?:okay|ok|so|then)[,\s]+)?(?:what (?:should|do|can) i (?:do|start|work on) first|which (?:one|assignment|task) should i (?:do|start|work on) first)[?!.\s]*$/iu;
   const PLAN_TOOLS = [...TOOLS.todo, ...TOOLS.assignments, 'accounts_list'];
+  const CHAT_RECALL = /\bremind me what i (?:just|last|previously) asked(?: you)?[?!.\s]*$/iu;
+  const SCHEDULE_WHEN = /\b(?:tomorrow|tonight|next (?:week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|(?:at|in|on)\s+(?:\d+|noon|midnight|monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b/iu;
+  const FULL_ITEM_READ = /(?:^|[.!?;]\s*)(?:(?:can|could|would) you (?:please )?|please )?read\s+(?:the\s+)?(?:whole|full|entire)\s+item\b/iu;
+  const RECORD_CONTINUE = /\b(?:course from my (?:previous|earlier) question|(?:keep|use|preserve) my original filters)\b/iu;
+  const ISO_WORK_RANGE = /\bfrom\s+\d{4}-\d{2}-\d{2}(?:T[\d:.+-]+Z?)?\s+(?:through|to|until)\s+\d{4}-\d{2}-\d{2}/iu;
+  const COURSE_POLICY = /\b(?:course|class) (?:absence|attendance) policy\b/iu;
+  const COURSE_CONTACT = /\b(?:instructor contact details|who teaches (?!(?:you|me|us|them)\b)[\p{L}\p{N}][\p{L}\p{N}-]*)\b/iu;
   const route = (question, { attempt = '', locale = 'en', level = 1, history, current } = {}) => {
     const q = String(question).replace(/[‘’]/g, "'");
     // Quoted titles can identify a record, but quoted requests cannot select a current reference or course discovery.
     const direct = level >= 3 ? MEMORY().userText(q) : q;
     const last = level >= 3 && Array.isArray(history) && history.length ? history[history.length - 1] : null;
+    if (level >= 3 && CHAT_RECALL.test(direct) && !SCHEDULE_WHEN.test(direct)
+      && !words(lists(TOPICS3.remind, locale)).test(direct.replace(CHAT_RECALL, ''))) return { task: 'study.help', subject: subjectOf(`${q}\n${attempt}`) };
+    if (last && !String(attempt).trim() && RECORD_CONTINUE.test(direct)) {
+      const before = route(last.question, { locale, level });
+      const intent = route(MEMORY().userText(last.question), { locale, level });
+      if (before.task === 'agent.tools' && intent.task === 'agent.tools') {
+        const again = route(`${last.question}\n${question}`, { locale, level });
+        if (again.task === 'agent.tools') {
+          const tools = again.tools.filter((name) => AT().RETRY_READS.includes(name));
+          if (tools.some((name) => ['todo_list', 'schedule_list', 'assignments_list', 'assignment_read'].includes(name)) && /\boriginal filters\b/iu.test(direct)) {
+            return { task: 'agent.tools', tools: [...PLAN_TOOLS] };
+          }
+          if (tools.some((name) => ['courses_list', 'syllabus_read', 'content_read', 'assignment_read'].includes(name))) return { task: 'agent.tools', tools };
+        }
+      }
+    }
     if (last && !String(attempt).trim() && PLAN_FOLLOW.test(q.trim())) {
       let previous = last, i = history.length - 1;
       while (i > 0 && (PLAN_FOLLOW.test(String(previous.question).trim()) || FOLLOW.test(previous.question) && subjectOf(previous.question) === 'other')
@@ -371,6 +394,10 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     const own = level >= 3 ? Object.keys(TOPICS3).filter((k) => has(own3(k))
       && (!READS.includes(k) || school || !DEFINITION.test(q))
       && (k !== 'content' || school || subjectOf(q) !== 'code')) : [];
+    // These direct requests discover course records; quoted instructions supply no routing intent.
+    if (level >= 3 && (COURSE_POLICY.test(direct) || COURSE_CONTACT.test(direct)) && !own.includes('syllabus')) own.push('syllabus');
+    if (level >= 3 && COURSE_POLICY.test(direct) && !own.includes('content')) own.push('content');
+    if (level >= 3 && ISO_WORK_RANGE.test(direct) && /\b(?:work|assignments?|tasks?|submitted|unsubmitted|due)\b/iu.test(direct) && !on.includes('todo')) on.push('todo');
     const courseRequests = level >= 3 ? direct.split(/[\n.!?;]+/u).map((c) => c.trim()).filter((c) =>
       words(lists(RECORD_REQUEST, locale)).exec(c)?.index === 0 && words(lists(COURSE_RECORD, locale)).test(c)
       && !words(lists(GENERIC_COURSE, locale)).test(c)) : [];
@@ -387,7 +414,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     const deictic = level >= 3 && words(['this', 'that', 'these', 'those', 'here', 'it', 'est[ea]s?', 'estos?', 'es[ea]s?', 'esos?', 'aqu[ií]', 'isso', 'isto', 'essa', 'esse',
       'ici', 'ceci', 'cela', 'ça', 'ce', 'cet(?:te)?', 'dies(?:e[nsrm]?)?', 'das', 'hier', 'dit', 'dat', 'deze']).test(direct);
     // An organizing request's incidental "that" must not crowd assignment requirements out of the tool window.
-    const active = organizing ? [] : deictic && current?.document?.id ? TOOLS.documents : deictic && current?.course?.id ? current.assignment?.id ? TOOLS.assignments : current.content?.id
+    const fullItem = level >= 3 && FULL_ITEM_READ.test(direct);
+    const active = organizing ? [] : (deictic || fullItem) && current?.document?.id ? TOOLS.documents : (deictic || fullItem) && current?.course?.id ? current.assignment?.id ? TOOLS.assignments : current.content?.id
       ? (current.view === 'discussion' ? TOOLS3.discussions : TOOLS3.content) : current.view === 'course' ? TOOLS.assignments : [] : [];
     const contextualWork = deictic && !organizing && /\b(?:what (?:do|should|can) i do|explain|help)\b/iu.test(q);
     // Tool first (level 3): help with work that names the student's records reads them first (read: agent.tools' help turn,
@@ -968,11 +996,15 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
           // was read as its material, under its own rules. Its reader's answer is never shown.
           let seen = null, tools = ['accounts_list'];
           if (r.read) {
-            const reader = { question, tools: r.read, steps: [], now: env.now(), zone, locale, first: true, help: r.subject, ...inCurrent, ...inRecall };
+            const reading = () => ({ question, tools: r.read, steps: [], now: env.now(), zone, locale, first: true, help: r.subject, ...inCurrent, ...inRecall,
+              ...(open.length && { history: retained(open) }), ...(CHAT.summary && { summary: CHAT.summary }) });
+            // Discover the selected window before the offer's admission count, then rebuild its retained chat.
+            await count('agent.tools', reading());
+            const reader = reading();
             tools = await offer(r.read, reader, signal, count);
             tools = await withSave(tools);
             // A reader that can't finish (its turn refused, too many steps) leaves study help to answer without it.
-            try { seen = await episode({ question, tools, locale, now: env.now(), zone, run, call, signal, first: true, help: r.subject, ...inCurrent, ...inRecall, caps: contextCaps }); }
+            try { seen = await episode({ ...reading(), tools, run, call, signal, caps: contextCaps, measure: count }); }
             catch (e) { if (signal.aborted || !['check', 'steps', 'refusal', 'invalid-response'].includes(R().code(e))) throw e; }
             if (seen?.declined) return post({ id, type: 'end', task: r.task, declined: true });
           }
